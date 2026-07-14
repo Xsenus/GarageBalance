@@ -1,6 +1,6 @@
 import { Fragment, useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
 import type { FormEvent, KeyboardEvent, MouseEvent, ReactNode } from 'react'
-import { FileText, Pencil, Plus, RotateCcw, Save, Search, Trash2, X } from 'lucide-react'
+import { CalendarDays, FileText, Pencil, RotateCcw, Save, Search, Trash2, WalletCards, X } from 'lucide-react'
 import type { AuthResponse } from '../../services/authApi'
 import type { AccountingTypeDto, DictionaryClient, GarageDto, StaffMemberDto, SupplierDto, SupplierGroupDto, TariffDto } from '../../services/dictionariesApi'
 import type { AccrualDto, CreateAccrualRequest, CreateExpenseOperationRequest, CreateIncomeOperationRequest, CreateMeterReadingRequest, CreateSupplierAccrualRequest, ExpenseWorksheetDto, FinanceClient, FinancePagedResult, FinanceSummaryDto, FinancialOperationDto, GarageIncomeWorksheetDto, GenerateRegularAccrualsRequest, GenerateSupplierGroupSalaryAccrualsRequest, MeterReadingDto, MissingMeterReadingDto, SupplierAccrualDto } from '../../services/financeApi'
@@ -4243,6 +4243,12 @@ function PaymentsPrototypePanel({
                     >
                       <strong>Гараж {garage.number}</strong>
                       <small>{garage.ownerName}</small>
+                      <span className="payments-prototype-selected-metrics" aria-label={`Параметры гаража ${garage.number}`}>
+                        <span><small>Люди</small><b>{garage.peopleCount}</b></span>
+                        <span><small>Этажи</small><b>{garage.floorCount}</b></span>
+                        <span><small>Баланс</small><b>{formatPaymentPrototypeValue(Math.abs(garage.balance))}</b></span>
+                        <span><small>Долг</small><b>{formatPaymentPrototypeValue(garage.overdueDebt)}</b></span>
+                      </span>
                     </button>
                     <button
                       className="icon-button payments-prototype-selected-remove"
@@ -4294,18 +4300,20 @@ function PaymentsPrototypePanel({
             <div><span>Владелец</span><strong>{selectedGarage.ownerName}</strong></div>
             <div><span>Телефон</span><strong>{selectedGarage.phone}</strong></div>
             <div className="payments-prototype-actions">
-              <button className="secondary-button" type="button" aria-label="Добавить начисление гаражу" onClick={openGarageAccrualDialog}>
-                <Plus size={16} aria-hidden="true" />
+              <button className="secondary-button create-action-button" type="button" aria-label="Добавить начисление гаражу" onClick={openGarageAccrualDialog}>
+                <FileText size={16} aria-hidden="true" />
                 <span>Добавить начисление</span>
               </button>
-              <button className="secondary-button" type="button" onClick={openRegularAccrualDialog}>
-                <Plus size={16} aria-hidden="true" />
+              <button className="secondary-button create-action-button" type="button" onClick={openRegularAccrualDialog}>
+                <CalendarDays size={16} aria-hidden="true" />
                 <span>Сформировать начисления</span>
               </button>
               <button className="secondary-button" type="button" onClick={openDebtTransferDialog}>
+                <RotateCcw size={16} aria-hidden="true" />
                 <span>Перенести задолженность</span>
               </button>
               <button className="secondary-button" type="button" onClick={openFullPaymentDialog}>
+                <WalletCards size={16} aria-hidden="true" />
                 <span>Полная оплата</span>
               </button>
             </div>
@@ -4494,16 +4502,16 @@ function PaymentsPrototypePanel({
       ) : (
         <>
           <div className="payments-prototype-actions payments-prototype-actions--sheet">
-            <button className="secondary-button" type="button" onClick={(event) => openSupplierAccrualDialog(event)}>
-              <Plus size={16} aria-hidden="true" />
+            <button className="secondary-button create-action-button" type="button" onClick={(event) => openSupplierAccrualDialog(event)}>
+              <FileText size={16} aria-hidden="true" />
               <span>Добавить начисление</span>
             </button>
-            <button className="secondary-button" type="button" onClick={(event) => openExpenseDialog(event)}>
-              <Plus size={16} aria-hidden="true" />
+            <button className="secondary-button create-action-button" type="button" onClick={(event) => openExpenseDialog(event)}>
+              <WalletCards size={16} aria-hidden="true" />
               <span>Добавить выплату</span>
             </button>
-            <button className="secondary-button" type="button" onClick={(event) => openSalaryDialog(event)}>
-              <Plus size={16} aria-hidden="true" />
+            <button className="secondary-button create-action-button" type="button" onClick={(event) => openSalaryDialog(event)}>
+              <WalletCards size={16} aria-hidden="true" />
               <span>Начислить зарплату</span>
             </button>
           </div>

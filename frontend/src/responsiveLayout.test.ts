@@ -59,11 +59,21 @@ describe('responsive layout styles', () => {
   it('keeps garage multi-selection compact and responsive', () => {
     expect(normalizedAppCss).toContain('.payments-prototype-search-results {\n  position: absolute;')
     expect(appCss).toContain('grid-template-columns: repeat(3, minmax(190px, 1fr));')
-    expect(normalizedAppCss).toContain('.payments-prototype-selected-list {\n  display: grid;\n  grid-template-columns: minmax(0, 1fr);')
+    expect(normalizedAppCss).toContain('.payments-prototype-selected-list {\n  display: grid;\n  grid-template-columns: repeat(3, minmax(0, 1fr));')
     expect(normalizedAppCss).toContain('.payments-prototype-garage-summary-value {\n  justify-self: end;\n  text-align: right;')
-    expect(normalizedAppCss).toContain('.payments-prototype-owner-row .payments-prototype-actions {\n  flex-wrap: nowrap;')
+    expect(normalizedAppCss).toContain('.payments-prototype-owner-row .payments-prototype-actions {\n  display: grid;\n  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));')
+    expect(normalizedAppCss).toContain('.payments-prototype-selected-list,\n  .payments-prototype-garage-summary {\n    grid-template-columns: repeat(2, minmax(0, 1fr));')
     expect(normalizedAppCss).toContain('.payments-prototype-search-results {\n    grid-template-columns: repeat(2, minmax(190px, 1fr));')
     expect(normalizedAppCss).toContain('.payments-prototype-search-results {\n    grid-template-columns: minmax(0, 1fr);\n    width: calc(100vw - 32px);')
+  })
+
+  it('keeps settings navigation full-height and settings forms compact', () => {
+    expect(normalizedAppCss).toContain('.settings-layout {\n  display: grid;\n  grid-template-columns: 240px minmax(0, 1fr);\n  gap: 18px;\n  min-height: calc(100dvh - 210px);')
+    expect(normalizedAppCss).toContain('.settings-section-nav {\n  position: sticky;\n  top: 18px;\n  display: grid;\n  min-height: 100%;')
+    expect(normalizedAppCss).toContain('.settings-card {\n  width: min(980px, 100%);')
+    expect(normalizedAppCss).toContain('.settings-card--security {\n  grid-template-columns: minmax(220px, 0.55fr) minmax(440px, 1fr);')
+    expect(normalizedAppCss).toContain('.settings-display-switch > span:first-child {\n  display: grid;')
+    expect(normalizedAppCss).toContain('.settings-layout {\n    grid-template-columns: 1fr;\n    min-height: 0;')
   })
 
   it('keeps the garage editor wide, compact and responsive', () => {

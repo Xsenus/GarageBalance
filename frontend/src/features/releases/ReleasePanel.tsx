@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { FormEvent } from 'react'
-import { BookOpenCheck, Pencil, Plus, Save } from 'lucide-react'
+import { BookOpenCheck, FileText, Pencil, Save } from 'lucide-react'
 import type { AuthResponse } from '../../services/authApi'
 import type { AppReleaseDto, AppReleaseItemDto, ReleaseClient, UpsertAppReleaseRequest } from '../../services/releasesApi'
 import { hasPermission, permissions } from '../../shared/accessControl'
@@ -170,8 +170,8 @@ export function ReleasePanel({ auth, releaseClient }: { auth: AuthResponse; rele
         <div className="release-heading-actions">
           <span>{releases.length} версий</span>
           {canManageReleases && showManualReleaseEditing ? (
-            <button className="secondary-button" type="button" onClick={openCreateEditor}>
-              <Plus size={17} />
+            <button className="secondary-button create-action-button" type="button" onClick={openCreateEditor}>
+              <BookOpenCheck size={17} aria-hidden="true" />
               <span>Добавить запись</span>
             </button>
           ) : null}
@@ -204,7 +204,10 @@ export function ReleasePanel({ auth, releaseClient }: { auth: AuthResponse; rele
           <div className="release-editor__items">
             <div className="release-editor__items-heading">
               <strong>Пункты обновления</strong>
-              <button className="ghost-button" type="button" onClick={addEditorItem}>Добавить пункт</button>
+              <button className="ghost-button create-action-button create-action-button--subtle" type="button" onClick={addEditorItem}>
+                <FileText size={16} aria-hidden="true" />
+                <span>Добавить пункт</span>
+              </button>
             </div>
             {editor.items.map((item, index) => (
               <div className="release-editor__item" key={`${index}-${item.type}`}>

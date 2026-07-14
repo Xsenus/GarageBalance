@@ -572,7 +572,7 @@ export function FundsPrototypePanel({ auth, fundsClient }: { auth: AuthResponse;
               {operationError ? <p className="form-error" role="alert">{operationError}</p> : null}
               <div className="detail-dialog-actions">
                 <button ref={operationCancelRef} className="ghost-button" type="button" onClick={closeFundOperation} disabled={savingOperation}>Отмена</button>
-                <button className="secondary-button" type="submit" disabled={savingOperation}>
+                <button className="secondary-button create-action-button" type="submit" disabled={savingOperation}>
                   <Save size={16} />
                   <span>{savingOperation ? 'Сохраняем...' : 'Подтвердить операцию'}</span>
                 </button>

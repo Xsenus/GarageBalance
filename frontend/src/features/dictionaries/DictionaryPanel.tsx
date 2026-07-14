@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { FormEvent, MouseEvent, ReactNode } from 'react'
-import { FileText, Plus, RotateCcw, Save, Search, Trash2, X } from 'lucide-react'
+import { FileText, RotateCcw, Save, Search, Trash2, X } from 'lucide-react'
 import type { AuthResponse } from '../../services/authApi'
 import { DictionaryApiError } from '../../services/dictionariesApi'
 import type { AccountingTypeDto, DictionaryClient, GarageDto, OwnerDto, PagedResult, SupplierGroupDto, SupplierDto, TariffDto, UpsertGarageRequest, UpsertOwnerRequest, UpsertSupplierRequest, UpsertTariffRequest } from '../../services/dictionariesApi'
@@ -1005,8 +1005,8 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, initi
               <input aria-label="Показывать архивные" type="checkbox" checked={showArchived} onChange={(event) => setShowArchived(event.target.checked)} />
               <span>Показывать архивные</span>
             </label>
-            <button className="secondary-button" type="button" disabled={!canWriteActiveSection} onClick={() => openEditor(activeSection, 'create')}>
-              <Plus size={16} />
+            <button className="secondary-button create-action-button" type="button" disabled={!canWriteActiveSection} onClick={() => openEditor(activeSection, 'create')}>
+              <FileText size={16} aria-hidden="true" />
               <span>Добавить</span>
             </button>
           </div>
@@ -1058,7 +1058,7 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, initi
         <div className="context-menu" style={{ left: contextMenu.x, top: contextMenu.y }} role="menu" aria-label="Операции со справочником" onClick={(event) => event.stopPropagation()}>
           <div className="context-menu-group" role="group">
             <button type="button" role="menuitem" onClick={() => openEditor(contextMenu.section, 'create')}>
-              <Plus size={15} />
+              <FileText size={15} aria-hidden="true" />
               <span>Добавить</span>
             </button>
           </div>
@@ -1809,8 +1809,8 @@ export function DictionaryPanel({ auth, dictionaryClient }: { auth: AuthResponse
           <input aria-label="Имя владельца" placeholder="Имя" value={ownerForm.firstName} onChange={(event) => setOwnerForm({ ...ownerForm, firstName: event.target.value })} required />
           <input aria-label="Телефон владельца" placeholder="Телефон" value={ownerForm.phone} onChange={(event) => setOwnerForm({ ...ownerForm, phone: event.target.value })} />
           <FormValidationSummary title="Проверьте владельца" items={ownerValidationErrors} />
-          <button className="secondary-button" type="submit" disabled={!canWriteDictionaries || saving === 'owner'}>
-            <Plus size={16} />
+          <button className="secondary-button create-action-button" type="submit" disabled={!canWriteDictionaries || saving === 'owner'}>
+            <FileText size={16} aria-hidden="true" />
             <span>Добавить</span>
           </button>
           <DictionaryList
@@ -1868,8 +1868,8 @@ export function DictionaryPanel({ auth, dictionaryClient }: { auth: AuthResponse
             ))}
           </select>
           <FormValidationSummary title="Проверьте гараж" items={garageValidationErrors} />
-          <button className="secondary-button" type="submit" disabled={!canWriteDictionaries || saving === 'garage'}>
-            <Plus size={16} />
+          <button className="secondary-button create-action-button" type="submit" disabled={!canWriteDictionaries || saving === 'garage'}>
+            <FileText size={16} aria-hidden="true" />
             <span>Добавить</span>
           </button>
           <DictionaryList
@@ -1912,7 +1912,7 @@ export function DictionaryPanel({ auth, dictionaryClient }: { auth: AuthResponse
           <form className="compact-form" onSubmit={saveSupplierGroup}>
             <input aria-label="Группа поставщиков" placeholder="Группа" value={supplierGroupName} onChange={(event) => setSupplierGroupName(event.target.value)} required />
             <button className="icon-button" type="submit" aria-label="Добавить группу" disabled={!canWriteDictionaries || saving === 'group'}>
-              <Plus size={17} />
+              <FileText size={17} aria-hidden="true" />
             </button>
           </form>
           <FormValidationSummary title="Проверьте группу поставщиков" items={supplierGroupValidationErrors} />
@@ -1931,8 +1931,8 @@ export function DictionaryPanel({ auth, dictionaryClient }: { auth: AuthResponse
             <input aria-label="ИНН поставщика" placeholder="ИНН" value={supplierForm.inn} onChange={(event) => setSupplierForm({ ...supplierForm, inn: event.target.value })} />
             <input aria-label="Стартовый баланс поставщика" type="number" step="0.01" value={supplierForm.startingBalance} onChange={(event) => setSupplierForm({ ...supplierForm, startingBalance: Number(event.target.value) })} />
             <FormValidationSummary title="Проверьте поставщика" items={supplierValidationErrors} />
-            <button className="secondary-button" type="submit" disabled={!canWriteDictionaries || !defaultGroupId || saving === 'supplier'}>
-              <Plus size={16} />
+            <button className="secondary-button create-action-button" type="submit" disabled={!canWriteDictionaries || !defaultGroupId || saving === 'supplier'}>
+              <FileText size={16} aria-hidden="true" />
               <span>Добавить</span>
             </button>
           </form>
@@ -1958,8 +1958,8 @@ export function DictionaryPanel({ auth, dictionaryClient }: { auth: AuthResponse
           <input aria-label="Название вида поступления" placeholder="Членский взнос" value={incomeTypeForm.name} onChange={(event) => setIncomeTypeForm({ ...incomeTypeForm, name: event.target.value })} required />
           <input aria-label="Код вида поступления" placeholder="Код" value={incomeTypeForm.code} onChange={(event) => setIncomeTypeForm({ ...incomeTypeForm, code: event.target.value })} />
           <FormValidationSummary title="Проверьте вид поступления" items={incomeTypeValidationErrors} />
-          <button className="secondary-button" type="submit" disabled={!canWriteDictionaries || saving === 'income-type'}>
-            <Plus size={16} />
+          <button className="secondary-button create-action-button" type="submit" disabled={!canWriteDictionaries || saving === 'income-type'}>
+            <FileText size={16} aria-hidden="true" />
             <span>Добавить</span>
           </button>
           <DictionaryList
@@ -1982,8 +1982,8 @@ export function DictionaryPanel({ auth, dictionaryClient }: { auth: AuthResponse
           <input aria-label="Название вида выплаты" placeholder="Электроэнергия" value={expenseTypeForm.name} onChange={(event) => setExpenseTypeForm({ ...expenseTypeForm, name: event.target.value })} required />
           <input aria-label="Код вида выплаты" placeholder="Код" value={expenseTypeForm.code} onChange={(event) => setExpenseTypeForm({ ...expenseTypeForm, code: event.target.value })} />
           <FormValidationSummary title="Проверьте вид выплаты" items={expenseTypeValidationErrors} />
-          <button className="secondary-button" type="submit" disabled={!canWriteDictionaries || saving === 'expense-type'}>
-            <Plus size={16} />
+          <button className="secondary-button create-action-button" type="submit" disabled={!canWriteDictionaries || saving === 'expense-type'}>
+            <FileText size={16} aria-hidden="true" />
             <span>Добавить</span>
           </button>
           <DictionaryList
@@ -2024,8 +2024,8 @@ export function DictionaryPanel({ auth, dictionaryClient }: { auth: AuthResponse
           {editingTariffId && hasUnsavedTariffChanges() ? <p className="form-hint" role="status" aria-live="polite">Есть несохраненные изменения тарифа.</p> : null}
           <FormValidationSummary title="Проверьте тариф" items={tariffValidationErrors} />
           <div className="inline-actions">
-            <button className="secondary-button" type="submit" disabled={!canManageTariffs || saving === 'tariff'}>
-              {editingTariffId ? <Save size={16} /> : <Plus size={16} />}
+            <button className={editingTariffId ? 'secondary-button' : 'secondary-button create-action-button'} type="submit" disabled={!canManageTariffs || saving === 'tariff'}>
+              {editingTariffId ? <Save size={16} /> : <FileText size={16} aria-hidden="true" />}
               <span>{editingTariffId ? 'Сохранить' : 'Добавить'}</span>
             </button>
             {editingTariffId ? (

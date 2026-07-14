@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useState } from 'react'
 import type { FormEvent, MouseEvent } from 'react'
-import { Pencil, Plus, RotateCcw, Save, Trash2, X } from 'lucide-react'
+import { FileSpreadsheet, FileText, Pencil, RotateCcw, Save, Trash2, X } from 'lucide-react'
 import type { AuthResponse } from '../../services/authApi'
 import { DictionaryApiError } from '../../services/dictionariesApi'
 import type { AccountingTypeDto, ChargeServiceSettingDto, DictionaryClient, FeeCampaignDto, GarageDto, IrregularPaymentDto, TariffDto, UpsertChargeServiceSettingRequest, UpsertFeeCampaignRequest, UpsertIrregularPaymentRequest, UpsertTariffRequest } from '../../services/dictionariesApi'
@@ -1552,12 +1552,12 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
           {tariffPersistenceError ? <FormError>{tariffPersistenceError}</FormError> : null}
         </div>
         <div className="contractors-actions">
-          <button className="secondary-button tariffs-action-button" type="button" disabled={tariffReferencesLoading} onClick={() => setModal('service')}>
-            <Plus size={17} />
+          <button className="secondary-button create-action-button tariffs-action-button" type="button" disabled={tariffReferencesLoading} onClick={() => setModal('service')}>
+            <FileSpreadsheet size={17} aria-hidden="true" />
             <span>Добавить услугу</span>
           </button>
-          <button className="primary-button contractors-primary-action tariffs-action-button" type="button" disabled={tariffReferencesLoading} onClick={() => setModal('fee')}>
-            <Plus size={17} />
+          <button className="primary-button contractors-primary-action create-action-button tariffs-action-button" type="button" disabled={tariffReferencesLoading} onClick={() => setModal('fee')}>
+            <FileText size={17} aria-hidden="true" />
             <span>Объявить сбор</span>
           </button>
         </div>
@@ -1715,8 +1715,9 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
                 {row.id === lastElectricityThresholdRowId ? (
                   <div className="contractors-sheet-row contractors-sheet-action-row" role="row">
                     <span role="cell">
-                      <button className="link-button" type="button" onClick={addElectricityThreshold} disabled={!canManageTariffs}>
-                        Добавить порог
+                      <button className="link-button create-action-button create-action-button--subtle" type="button" onClick={addElectricityThreshold} disabled={!canManageTariffs}>
+                        <FileSpreadsheet size={15} aria-hidden="true" />
+                        <span>Добавить порог</span>
                       </button>
                     </span>
                     <span role="cell" />
@@ -1851,7 +1852,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
                           setFeeCampaignGenerateMonth(getCurrentMonthInputValue())
                           setFeeCampaignGenerateComment('')
                         }}>
-                          <Plus size={16} />
+                          <FileText size={16} aria-hidden="true" />
                           <span>Начислить</span>
                         </button>
                         <button className="icon-button" type="button" aria-label={`Изменить сбор ${campaign.name}`} disabled={!canManageTariffs || feeCampaignSavingId === campaign.id} onClick={() => setFeeCampaignEditTarget(campaign)}>
@@ -2448,7 +2449,10 @@ function AddServicePrototypeDialog({
                     <span>Цена за ед.</span>
                     <input aria-label="Цена за единицу 2" />
                   </div>
-                  <button className="link-button" type="button">Добавить порог</button>
+                  <button className="link-button create-action-button create-action-button--subtle" type="button">
+                    <FileSpreadsheet size={15} aria-hidden="true" />
+                    <span>Добавить порог</span>
+                  </button>
                 </>
               ) : null}
             </>

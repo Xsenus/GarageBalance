@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { FormEvent } from 'react'
-import { Plus, RotateCcw, Save, Search, ShieldCheck, Trash2, X } from 'lucide-react'
+import { RotateCcw, Save, Search, ShieldCheck, Trash2, UserPlus, X } from 'lucide-react'
 import type { AuthResponse } from '../../services/authApi'
 import type { CreateManagedUserRequest, ManagedRoleDto, ManagedUserDto, PagedManagedUsersDto, UpdateManagedUserRequest, UserManagementClient } from '../../services/usersApi'
 import { permissions, rolePermissionGroups } from '../../shared/accessControl'
@@ -404,8 +404,8 @@ export function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; 
 
           <div className="dictionary-toolbar users-toolbar-actions">
             <span className="form-hint">Действия по строкам доступны через ПКМ.</span>
-            <button className="secondary-button" type="button" onClick={() => openEditor('create')} disabled={roles.length === 0}>
-              <Plus size={16} />
+            <button className="secondary-button create-action-button" type="button" onClick={() => openEditor('create')} disabled={roles.length === 0}>
+              <UserPlus size={16} aria-hidden="true" />
               <span>Добавить</span>
             </button>
           </div>
@@ -471,7 +471,7 @@ export function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; 
         <div className="context-menu" role="menu" style={{ left: contextMenu.x, top: contextMenu.y }} onClick={(event) => event.stopPropagation()}>
           <div className="context-menu-group" role="group">
             <button type="button" role="menuitem" onClick={() => openEditor('create')}>
-              <Plus size={15} />
+              <UserPlus size={15} aria-hidden="true" />
               <span>Добавить</span>
             </button>
           </div>

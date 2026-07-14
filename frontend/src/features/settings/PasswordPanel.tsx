@@ -385,13 +385,13 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
           aria-labelledby={activeSettingsTab === 'security' ? 'settings-security-tab' : activeSettingsTab === 'display' ? 'settings-display-tab' : 'settings-integrations-tab'}
         >
       {activeSettingsTab === 'security' ? (
-      <section className="password-panel" aria-label="Безопасность аккаунта">
-        <div>
+      <section className="password-panel settings-card settings-card--security" aria-label="Безопасность аккаунта">
+        <div className="settings-card-intro">
           <p className="eyebrow">Безопасность</p>
           <h2>Смена пароля</h2>
           <p>Пользователь может обновить свой пароль без участия администратора. Текущий пароль нужен для подтверждения действия.</p>
         </div>
-        <form className="dictionary-form" onSubmit={handleSubmit}>
+        <form className="dictionary-form settings-card-form" onSubmit={handleSubmit}>
           <label>
             Текущий пароль
             <input aria-label="Текущий пароль" type="password" value={form.currentPassword} onChange={(event) => setForm({ ...form, currentPassword: event.target.value })} minLength={8} required />
@@ -418,14 +418,14 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
       </section>
       ) : null}
       {canManageApplicationSettings && activeSettingsTab === 'display' ? (
-      <section className="password-panel" aria-label="Настройки отображения платежей">
-        <div>
+      <section className="password-panel settings-card settings-card--display" aria-label="Настройки отображения платежей">
+        <div className="settings-card-intro">
           <p className="eyebrow">Отображение</p>
           <h2>Платежи при открытии раздела</h2>
           <p>По умолчанию раздел ожидает поиск гаража. При включении общей ведомости поступления и выплаты показываются сразу, но загружаются постранично.</p>
         </div>
-        <div className="dictionary-form">
-          <label className="contractors-switch-row">
+        <div className="dictionary-form settings-card-form settings-display-form">
+          <label className="contractors-switch-row settings-display-switch">
             <span>
               <strong>Показывать общую ведомость платежей</strong>
               <small>Поиск по гаражу продолжит работать в любом режиме.</small>

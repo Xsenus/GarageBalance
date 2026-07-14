@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { CSSProperties, FormEvent, MouseEvent, RefObject } from 'react'
-import { FileText, Pencil, RotateCcw, Save, Search, Trash2, X } from 'lucide-react'
+import { FileText, Gauge, Pencil, RotateCcw, Save, Search, Trash2, UserPlus, UsersRound, X } from 'lucide-react'
 import type { AuthResponse } from '../../services/authApi'
 import type { DictionaryClient, GarageDto, OwnerDto, StaffDepartmentDto, StaffMemberDto, SupplierContactDto, SupplierDto, SupplierGroupDto, UpsertGarageRequest, UpsertOwnerRequest, UpsertStaffMemberRequest, UpsertSupplierContactRequest, UpsertSupplierRequest } from '../../services/dictionariesApi'
 import type { FinanceClient, GarageBalanceHistoryDto } from '../../services/financeApi'
@@ -1738,20 +1738,35 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
           {activeSection === 'garages' ? (
             <>
               <button className="secondary-button" type="button" onClick={() => toggleDebtorsFilter('garages')}>{debtorsButtonLabel}</button>
-              <button className="secondary-button" type="button" onClick={() => setModal({ type: 'garage' })}>Добавить гараж</button>
+              <button className="secondary-button create-action-button" type="button" onClick={() => setModal({ type: 'garage' })}>
+                <Gauge size={17} aria-hidden="true" />
+                <span>Добавить гараж</span>
+              </button>
             </>
           ) : null}
           {activeSection === 'suppliers' ? (
             <>
               <button className="secondary-button" type="button" onClick={() => toggleDebtorsFilter('suppliers')}>{debtorsButtonLabel}</button>
-              <button className="secondary-button" type="button" onClick={() => setModal({ type: 'supplier' })}>Добавить поставщика</button>
-              <button className="secondary-button" type="button" onClick={() => setModal({ type: 'service' })}>Добавить услугу</button>
+              <button className="secondary-button create-action-button" type="button" onClick={() => setModal({ type: 'supplier' })}>
+                <UsersRound size={17} aria-hidden="true" />
+                <span>Добавить поставщика</span>
+              </button>
+              <button className="secondary-button create-action-button" type="button" onClick={() => setModal({ type: 'service' })}>
+                <FileText size={17} aria-hidden="true" />
+                <span>Добавить услугу</span>
+              </button>
             </>
           ) : null}
           {activeSection === 'staff' ? (
             <>
-              <button className="secondary-button" type="button" onClick={() => setModal({ type: 'department' })}>Добавить отдел</button>
-              <button className="secondary-button" type="button" onClick={() => setModal({ type: 'employee' })}>Добавить сотрудника</button>
+              <button className="secondary-button create-action-button" type="button" onClick={() => setModal({ type: 'department' })}>
+                <UsersRound size={17} aria-hidden="true" />
+                <span>Добавить отдел</span>
+              </button>
+              <button className="secondary-button create-action-button" type="button" onClick={() => setModal({ type: 'employee' })}>
+                <UserPlus size={17} aria-hidden="true" />
+                <span>Добавить сотрудника</span>
+              </button>
             </>
           ) : null}
         </div>
@@ -1910,61 +1925,11 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
       ) : null}
 
       {activeSection === 'staff' ? (
-        <>
-          <section className="contractors-directory-card" aria-label="Отделы персонала">
+        <div className="contractors-staff-directory-grid">
+          <section className="contractors-directory-card contractors-staff-directory-card" aria-label="Персонал">
             <div className="contractors-directory-card-header">
-              <h2>Отделы</h2>
+              <h2>Сотрудники</h2>
             </div>
-            <div className="contractors-directory-table contractors-directory-table--departments" role="table" aria-label="Отделы персонала">
-              <div className="contractors-directory-row contractors-directory-row--header" role="row">
-                <span className="contractors-directory-header-cell" role="columnheader">Отдел</span>
-                <span className="contractors-directory-header-cell" role="columnheader">Статус</span>
-                <span className="contractors-directory-header-cell" role="columnheader">Действия</span>
-              </div>
-              {departmentPage.items.map((department) => (
-                <div className={department.isDeleted ? 'contractors-directory-row contractors-directory-row--deleted' : 'contractors-directory-row'} role="row" key={department.id} onContextMenu={(event) => openDepartmentContextMenu(event, department)}>
-                  <span role="cell">{department.name}</span>
-                  <span role="cell" className="contractors-directory-cell--center">{department.isDeleted ? 'Удален' : 'Активен'}</span>
-                  <span role="cell" className="contractors-row-actions">
-                    {department.isDeleted ? (
-                      <button className="icon-button" type="button" aria-label={`Восстановить отдел ${department.name}`} title="Восстановить" onClick={() => restoreDepartment(department)}>
-                        <RotateCcw size={16} />
-                      </button>
-                    ) : (
-                      <>
-                        <button className="icon-button" type="button" aria-label={`Изменить отдел ${department.name}`} title="Изменить" onClick={() => openDepartmentEditor(department)}>
-                          <Pencil size={16} />
-                        </button>
-                        <button className="icon-button contractors-delete-button" type="button" aria-label={`Удалить отдел ${department.name}`} title="Удалить" onClick={() => openDepartmentDeleteDialog(department)}>
-                          <Trash2 size={16} />
-                        </button>
-                      </>
-                    )}
-                  </span>
-                </div>
-              ))}
-              {departments.length === 0 ? (
-                <div className="contractors-directory-row contractors-directory-row--empty" role="row">
-                  <span className="contractors-directory-empty-cell" role="cell">Отделы пока не настроены.</span>
-                </div>
-              ) : null}
-            </div>
-            <TablePagination
-              ariaLabel="Пагинация отделов"
-              totalCount={departmentPage.totalCount}
-              offset={departmentPage.offset}
-              limit={departmentPage.limit}
-              visibleCount={departmentPage.items.length}
-              pageSizeLabel="Количество строк отделов"
-              onPageChange={setDepartmentPageNumber}
-              onPageSizeChange={(limit) => {
-                setDepartmentPageNumber(1)
-                setDepartmentPageSize(limit)
-              }}
-            />
-          </section>
-
-          <section className="contractors-directory-card" aria-label="Персонал">
             <div className="contractors-directory-table contractors-directory-table--staff" role="table" aria-label="Персонал" style={staffTableStyle}>
               <div className="contractors-directory-row contractors-directory-row--header" role="row">
                 {contractorStaffColumnDefinitions.map((column) => (
@@ -2025,7 +1990,61 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
               onPageSizeChange={(limit) => void loadStaffPage(0, limit)}
             />
           </section>
-        </>
+
+          <section className="contractors-directory-card contractors-staff-directory-card" aria-label="Отделы персонала">
+            <div className="contractors-directory-card-header">
+              <h2>Отделы</h2>
+            </div>
+            <div className="contractors-directory-table contractors-directory-table--departments" role="table" aria-label="Отделы персонала">
+              <div className="contractors-directory-row contractors-directory-row--header" role="row">
+                <span className="contractors-directory-header-cell" role="columnheader">Отдел</span>
+                <span className="contractors-directory-header-cell" role="columnheader">Статус</span>
+                <span className="contractors-directory-header-cell" role="columnheader">Действия</span>
+              </div>
+              {departmentPage.items.map((department) => (
+                <div className={department.isDeleted ? 'contractors-directory-row contractors-directory-row--deleted' : 'contractors-directory-row'} role="row" key={department.id} onContextMenu={(event) => openDepartmentContextMenu(event, department)}>
+                  <span role="cell">{department.name}</span>
+                  <span role="cell" className="contractors-directory-cell--center">{department.isDeleted ? 'Удален' : 'Активен'}</span>
+                  <span role="cell" className="contractors-row-actions">
+                    {department.isDeleted ? (
+                      <button className="icon-button" type="button" aria-label={`Восстановить отдел ${department.name}`} title="Восстановить" onClick={() => restoreDepartment(department)}>
+                        <RotateCcw size={16} />
+                      </button>
+                    ) : (
+                      <>
+                        <button className="icon-button" type="button" aria-label={`Изменить отдел ${department.name}`} title="Изменить" onClick={() => openDepartmentEditor(department)}>
+                          <Pencil size={16} />
+                        </button>
+                        <button className="icon-button contractors-delete-button" type="button" aria-label={`Удалить отдел ${department.name}`} title="Удалить" onClick={() => openDepartmentDeleteDialog(department)}>
+                          <Trash2 size={16} />
+                        </button>
+                      </>
+                    )}
+                  </span>
+                </div>
+              ))}
+              {departments.length === 0 ? (
+                <div className="contractors-directory-row contractors-directory-row--empty" role="row">
+                  <span className="contractors-directory-empty-cell" role="cell">Отделы пока не настроены.</span>
+                </div>
+              ) : null}
+            </div>
+            <TablePagination
+              ariaLabel="Пагинация отделов"
+              totalCount={departmentPage.totalCount}
+              offset={departmentPage.offset}
+              limit={departmentPage.limit}
+              visibleCount={departmentPage.items.length}
+              pageSizeLabel="Количество строк отделов"
+              onPageChange={setDepartmentPageNumber}
+              onPageSizeChange={(limit) => {
+                setDepartmentPageNumber(1)
+                setDepartmentPageSize(limit)
+              }}
+            />
+          </section>
+
+        </div>
       ) : null}
 
       {garageContextMenu ? (
@@ -3151,7 +3170,10 @@ function SupplierPrototypeDialog({ accessToken, integrationClient, item, service
             </div>
             <div className="contractors-contacts-toolbar">
               <span>Контакты</span>
-              <button className="secondary-button" type="button" onClick={addContact}>Добавить контакт</button>
+              <button className="secondary-button create-action-button" type="button" onClick={addContact}>
+                <UsersRound size={17} aria-hidden="true" />
+                <span>Добавить контакт</span>
+              </button>
             </div>
             <div className="contractors-contacts-preview contractors-contacts-preview--editable" role="table" aria-label="Контакты поставщика">
               <div className="contractors-contacts-row contractors-contacts-row--header contractors-contacts-row--editable" role="row">
