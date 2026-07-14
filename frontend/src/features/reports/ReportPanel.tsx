@@ -153,37 +153,49 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
   const [fundChangeReportError, setFundChangeReportError] = useState<string | null>(null)
 
   useEffect(() => {
+    if (garageFilter === appliedGarageFilter) {
+      return undefined
+    }
     const handle = window.setTimeout(() => {
       setAppliedGarageFilter(garageFilter)
       setGaragePageRequest((current) => current.offset === 0 ? current : { ...current, offset: 0 })
     }, 350)
     return () => window.clearTimeout(handle)
-  }, [garageFilter])
+  }, [appliedGarageFilter, garageFilter])
 
   useEffect(() => {
+    if (counterpartyFilter === appliedCounterpartyFilter) {
+      return undefined
+    }
     const handle = window.setTimeout(() => {
       setAppliedCounterpartyFilter(counterpartyFilter)
       setPayoutPageRequest((current) => current.offset === 0 ? current : { ...current, offset: 0 })
     }, 350)
     return () => window.clearTimeout(handle)
-  }, [counterpartyFilter])
+  }, [appliedCounterpartyFilter, counterpartyFilter])
 
   useEffect(() => {
+    if (incomeGarageFilter === appliedIncomeGarageFilter) {
+      return undefined
+    }
     const handle = window.setTimeout(() => {
       setAppliedIncomeGarageFilter(incomeGarageFilter)
       setIncomePageRequest((current) => current.offset === 0 ? current : { ...current, offset: 0 })
     }, 350)
     return () => window.clearTimeout(handle)
-  }, [incomeGarageFilter])
+  }, [appliedIncomeGarageFilter, incomeGarageFilter])
 
   useEffect(() => {
+    if (feeVariationFilter === appliedFeeVariationFilter) {
+      return undefined
+    }
     const handle = window.setTimeout(() => {
       setAppliedFeeVariationFilter(feeVariationFilter)
       setFeeSummaryPageNumber(1)
       setFeeDetailPageNumber(1)
     }, 350)
     return () => window.clearTimeout(handle)
-  }, [feeVariationFilter])
+  }, [appliedFeeVariationFilter, feeVariationFilter])
 
   useEffect(() => {
     let ignore = false

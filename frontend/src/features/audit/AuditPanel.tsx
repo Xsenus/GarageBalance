@@ -274,12 +274,21 @@ export function AuditPanel({ auth, auditClient, preset, onOpenSection }: { auth:
     setPage((current) => current.offset === 0 ? current : { ...current, offset: 0 })
   }, [])
   useEffect(() => {
+    if (
+      search === appliedTextFilters.search
+      && actorUserId === appliedTextFilters.actorUserId
+      && relatedGarage === appliedTextFilters.relatedGarage
+      && relatedCounterparty === appliedTextFilters.relatedCounterparty
+      && relatedDocument === appliedTextFilters.relatedDocument
+    ) {
+      return undefined
+    }
     const handle = window.setTimeout(() => {
       setAppliedTextFilters({ search, actorUserId, relatedGarage, relatedCounterparty, relatedDocument })
       resetAuditPageOffset()
     }, 350)
     return () => window.clearTimeout(handle)
-  }, [actorUserId, relatedCounterparty, relatedDocument, relatedGarage, resetAuditPageOffset, search])
+  }, [actorUserId, appliedTextFilters, relatedCounterparty, relatedDocument, relatedGarage, resetAuditPageOffset, search])
   const auditQuery = useMemo(() => ({
     search: appliedTextFilters.search.trim() || undefined,
     section: section || undefined,
