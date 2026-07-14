@@ -161,3 +161,14 @@ No database schema or cleanup-policy changes were required. This feature branch 
 - [x] Rechecked the authorized VPS without changing or deploying it: service active with zero restarts, nginx valid, direct/public health and frontend HTTP 200, zero warning-level journal lines, readable 435078-byte backup, nine tariffs and zero rows in all checked operational, staff, supplier, finance, fund, import and audit tables.
 
 No schema or cleanup-policy changes were introduced. The feature branch remains undeployed because the staging workflow is restricted to `master`.
+
+## Seventh deferred-table and partial-failure audit: 2026-07-14
+
+- [x] Rechecked every delayed payment preview against the shared loading-state rules. The four recent-item tables now show accessible table skeletons from the moment the overview is enabled until all background requests settle; empty states are suppressed throughout that interval.
+- [x] Added a safe visible error state for preview failures without blocking the paged finance workbench or its pagination. A failed preview no longer appears as a genuinely empty list.
+- [x] Replaced all-or-nothing preview loading with independent settled results. If one endpoint fails, the other successfully loaded operation, accrual, supplier-accrual and meter previews remain visible.
+- [x] Added workflow coverage for delayed preview completion, loader lifetime, hidden empty states, continued main-table availability and partial preview failure. Two complete clean runs passed with identical results: 1508 backend tests and 422 frontend tests.
+- [x] ESLint, production TypeScript build, bundle budget (`74.1 KiB` main JS, `16.9 KiB` CSS, `212.9 KiB` total gzip), backend formatting, Docker Compose, release/configuration JSON, whitespace checks and 114893-byte idempotent migration SQL generation passed.
+- [x] The authorized VPS was checked read-only again: service active with zero restarts, nginx valid, direct/public health and frontend HTTP 200, zero warning-level journal lines, readable 435078-byte backup, nine tariffs and zero checked operational, staff, supplier, finance, fund, import and audit rows.
+
+No schema, data-cleanup policy or deployment configuration changed. The feature branch remains undeployed until it reaches `master` through the configured workflow.
