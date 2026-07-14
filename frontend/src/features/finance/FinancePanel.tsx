@@ -5215,34 +5215,40 @@ function NewExpensePrototypeDialog({
         </div>
         <form className="dictionary-modal-form payments-prototype-modal-form" onSubmit={handleSubmit}>
           <FormField label="Поставщик">
-            <select aria-label="Поставщик выплаты" value={supplierId} onChange={(event) => {
-              setSupplierId(event.target.value)
-              setError(null)
-            }}>
-              {suppliers.length > 0 ? suppliers.map((supplier) => (
-                <option key={supplier.id} value={supplier.id}>{supplier.name}</option>
-              )) : <option value="">Нет поставщиков</option>}
-            </select>
+            <SelectControl
+              aria-label="Поставщик выплаты"
+              value={supplierId}
+              options={suppliers.length > 0
+                ? suppliers.map((supplier) => ({ value: supplier.id, label: supplier.name }))
+                : [{ value: '', label: 'Нет поставщиков' }]}
+              disabled={saving}
+              onChange={(nextSupplierId) => {
+                setSupplierId(nextSupplierId)
+                setError(null)
+              }} />
           </FormField>
           <FormField label="Вид выплаты">
-            <select aria-label="Вид выплаты" value={expenseTypeId} onChange={(event) => {
-              setExpenseTypeId(event.target.value)
-              setError(null)
-            }}>
-              {expenseTypes.length > 0 ? expenseTypes.map((expenseType) => (
-                <option key={expenseType.id} value={expenseType.id}>{expenseType.name}</option>
-              )) : <option value="">Нет видов выплат</option>}
-            </select>
+            <SelectControl
+              aria-label="Вид выплаты"
+              value={expenseTypeId}
+              options={expenseTypes.length > 0
+                ? expenseTypes.map((expenseType) => ({ value: expenseType.id, label: expenseType.name }))
+                : [{ value: '', label: 'Нет видов выплат' }]}
+              disabled={saving}
+              onChange={(nextExpenseTypeId) => {
+                setExpenseTypeId(nextExpenseTypeId)
+                setError(null)
+              }} />
           </FormField>
           <FormField label="Дата">
-            <input aria-label="Дата выплаты" type="date" value={operationDate} onChange={(event) => {
-              setOperationDate(event.target.value)
+            <LocalizedDatePicker ariaLabel="Дата выплаты" mode="date" value={operationDate} disabled={saving} onChange={(nextOperationDate) => {
+              setOperationDate(nextOperationDate)
               setError(null)
             }} />
           </FormField>
           <FormField label="Месяц">
-            <input aria-label="Месяц выплаты" type="month" value={accountingMonth} onChange={(event) => {
-              setAccountingMonth(event.target.value)
+            <LocalizedDatePicker ariaLabel="Месяц выплаты" mode="month" value={accountingMonth} disabled={saving} onChange={(nextAccountingMonth) => {
+              setAccountingMonth(nextAccountingMonth)
               setError(null)
             }} />
           </FormField>
