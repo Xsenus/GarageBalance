@@ -9803,6 +9803,56 @@ describe('App', () => {
     expect(await within(auditPanel).findByText('История изменений XLSX готова.')).toHaveAttribute('role', 'status')
   })
 
+  it('debounces audit text filters together and resets journal pagination', async () => {
+    const user = userEvent.setup()
+    const requests: Array<Parameters<AuditClient['getEventsPage']>[1]> = []
+    const auth = createAuthResponse()
+    const authClient = createAuthClient({
+      login: async () => ({
+        ...auth,
+        user: { ...auth.user, permissions: [...auth.user.permissions, 'audit.read'] },
+      }),
+    })
+    const auditClient = createAuditClient({
+      getEventsPage: async (_token, params) => {
+        requests.push(params)
+        return {
+          items: [createAuditEvent({ id: `audit-${requests.length}`, summary: 'Проверка фильтров журнала.' })],
+          totalCount: 30,
+          offset: params?.offset ?? 0,
+          limit: params?.limit ?? 25,
+        }
+      },
+    })
+    render(<App authClient={authClient} auditClient={auditClient} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'История изменений')
+    const auditPanel = await screen.findByRole('region', { name: 'История изменений' })
+    await waitFor(() => expect(requests.some((request) => request?.offset === 0)).toBe(true))
+    const pagination = within(auditPanel).getByRole('navigation', { name: 'Пагинация истории изменений' })
+    await user.click(within(pagination).getByRole('button', { name: 'Страница 2' }))
+    await waitFor(() => expect(requests.some((request) => request?.offset === 25)).toBe(true))
+
+    await user.type(within(auditPanel).getByLabelText('Поиск в истории изменений'), 'import')
+    await user.type(within(auditPanel).getByLabelText('ID пользователя истории изменений'), 'user-7')
+    await user.type(within(auditPanel).getByLabelText('Связанный гараж истории изменений'), '105')
+    await user.type(within(auditPanel).getByLabelText('Связанный контрагент истории изменений'), 'Иванов')
+    await user.type(within(auditPanel).getByLabelText('Связанный документ истории изменений'), 'PKO-7')
+
+    await waitFor(() => expect(requests).toContainEqual(expect.objectContaining({
+      search: 'import',
+      actorUserId: 'user-7',
+      relatedGarage: '105',
+      relatedCounterparty: 'Иванов',
+      relatedDocument: 'PKO-7',
+      offset: 0,
+    })))
+    const filteredRequests = requests.filter((request) => request?.search || request?.actorUserId || request?.relatedGarage || request?.relatedCounterparty || request?.relatedDocument)
+    expect(filteredRequests).toHaveLength(1)
+  })
+
   it('shows tariff changes in central audit and opens tariffs workspace', async () => {
     const user = userEvent.setup()
     const tariffEvent = createAuditEvent({
