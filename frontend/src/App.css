@@ -5955,6 +5955,14 @@ button.operation-row:focus-visible {
   width: min(680px, 100%);
 }
 
+.logout-confirmation-dialog {
+  width: min(480px, 100%);
+}
+
+.logout-confirmation-dialog .detail-dialog-actions {
+  justify-content: flex-end;
+}
+
 .dictionary-change-list {
   display: grid;
   gap: 10px;

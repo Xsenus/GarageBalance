@@ -4371,6 +4371,33 @@ describe('App', () => {
     expect(screen.getByRole('button', { name: 'Назад к выбору раздела' })).toHaveAttribute('title', 'Назад к выбору раздела')
   })
 
+  it('requires explicit confirmation before logging out', async () => {
+    const user = userEvent.setup()
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    expect(await screen.findByRole('region', { name: 'Панель' })).toBeInTheDocument()
+
+    const logoutButton = screen.getByRole('button', { name: 'Выйти' })
+    await user.click(logoutButton)
+    let dialog = await screen.findByRole('dialog', { name: 'Выйти из системы?' })
+    const cancelButton = within(dialog).getByRole('button', { name: 'Отмена' })
+    await waitFor(() => expect(cancelButton).toHaveFocus())
+
+    await user.keyboard('{Escape}')
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Выйти из системы?' })).not.toBeInTheDocument())
+    expect(screen.getByRole('region', { name: 'Панель' })).toBeInTheDocument()
+    await waitFor(() => expect(logoutButton).toHaveFocus())
+
+    await user.click(logoutButton)
+    dialog = await screen.findByRole('dialog', { name: 'Выйти из системы?' })
+    await user.click(within(dialog).getByRole('button', { name: 'Выйти' }))
+
+    expect(await screen.findByRole('button', { name: 'Войти' })).toBeInTheDocument()
+    expect(screen.queryByRole('region', { name: 'Панель' })).not.toBeInTheDocument()
+  })
+
   it('switches workspace sections without stacking panels', async () => {
     const user = userEvent.setup()
     render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
@@ -5493,6 +5520,8 @@ describe('App', () => {
     expect((await within(usersPanel).findAllByText('Оператор')).length).toBeGreaterThan(0)
 
     await user.click(screen.getByRole('button', { name: 'Выйти' }))
+    const logoutConfirmation = await screen.findByRole('dialog', { name: 'Выйти из системы?' })
+    await user.click(within(logoutConfirmation).getByRole('button', { name: 'Выйти' }))
     await user.clear(screen.getByLabelText('Email'))
     await user.type(screen.getByLabelText('Email'), 'operator@example.com')
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')

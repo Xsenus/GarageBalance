@@ -1,4 +1,5 @@
-import { ArrowLeft, Bell, LockKeyhole, LogOut } from 'lucide-react'
+import { useState } from 'react'
+import { ArrowLeft, Bell, LockKeyhole, LogOut, X } from 'lucide-react'
 import { PasswordPanel } from '../settings/PasswordPanel'
 import { FundsPrototypePanel } from '../funds/FundsPanel'
 import { ImportPanel } from '../import/ImportPanel'
@@ -24,6 +25,7 @@ import type { ReleaseClient } from '../../services/releasesApi'
 import type { UserManagementClient } from '../../services/usersApi'
 import type { ApplicationSettingsClient } from '../../services/settingsApi'
 import { hasAnyPermission, hasPermission, permissions } from '../../shared/accessControl'
+import { useEscapeKey, useFocusOnOpen, useFocusTrap, useRestoreFocusOnClose } from '../../shared/focusHooks'
 import type { AuditPanelPreset, WorkspaceOpenContext, WorkspaceSection } from '../../shared/workspaceNavigation'
 
 const dashboardTiles: { title: string; section: WorkspaceSection; requiredAny?: readonly string[] }[] = [
@@ -79,6 +81,12 @@ export function Workspace({
   onUserChanged: (user: CurrentUserDto) => void
   onLogout: () => void
 }) {
+  const [logoutConfirmationOpen, setLogoutConfirmationOpen] = useState(false)
+  useRestoreFocusOnClose(logoutConfirmationOpen)
+  const logoutConfirmationCancelRef = useFocusOnOpen<HTMLButtonElement>(logoutConfirmationOpen)
+  const logoutConfirmationDialogRef = useFocusTrap<HTMLElement>(logoutConfirmationOpen)
+  useEscapeKey(logoutConfirmationOpen, () => setLogoutConfirmationOpen(false))
+
   const canManageUsers = hasPermission(auth, permissions.usersManage)
   const canReadDictionaries = hasPermission(auth, permissions.dictionariesRead)
   const canReadPayments = hasPermission(auth, permissions.paymentsRead)
@@ -209,12 +217,54 @@ export function Workspace({
           <button className="icon-button" type="button" aria-label="Уведомления" title="Уведомления">
             <Bell size={19} />
           </button>
-          <button className="icon-button" type="button" aria-label="Выйти" title="Выйти" onClick={onLogout}>
+          <button className="icon-button" type="button" aria-label="Выйти" title="Выйти" onClick={() => setLogoutConfirmationOpen(true)}>
             <LogOut size={19} />
           </button>
         </div>
       </header>
       {renderActiveSection()}
+      {logoutConfirmationOpen ? (
+        <div className="modal-backdrop" role="presentation" onMouseDown={() => setLogoutConfirmationOpen(false)}>
+          <section
+            ref={logoutConfirmationDialogRef}
+            className="detail-dialog logout-confirmation-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="logout-confirmation-title"
+            aria-describedby="logout-confirmation-description"
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            <div className="detail-dialog-header">
+              <div>
+                <p className="eyebrow">Завершение работы</p>
+                <h3 id="logout-confirmation-title">Выйти из системы?</h3>
+              </div>
+              <button className="icon-button" type="button" aria-label="Остаться в системе" onClick={() => setLogoutConfirmationOpen(false)}>
+                <X size={18} aria-hidden="true" />
+              </button>
+            </div>
+            <p className="confirmation-text" id="logout-confirmation-description">
+              Текущий сеанс будет завершён. Чтобы продолжить работу, потребуется снова войти в систему.
+            </p>
+            <div className="detail-dialog-actions">
+              <button ref={logoutConfirmationCancelRef} className="ghost-button" type="button" onClick={() => setLogoutConfirmationOpen(false)}>
+                Отмена
+              </button>
+              <button
+                className="secondary-button"
+                type="button"
+                onClick={() => {
+                  setLogoutConfirmationOpen(false)
+                  onLogout()
+                }}
+              >
+                <LogOut size={16} aria-hidden="true" />
+                <span>Выйти</span>
+              </button>
+            </div>
+          </section>
+        </div>
+      ) : null}
     </>
   )
 }
