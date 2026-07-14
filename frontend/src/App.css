@@ -2425,6 +2425,26 @@ h1 {
   margin-top: 14px;
 }
 
+.release-list-skeleton {
+  margin-top: 14px;
+}
+
+.release-load-more {
+  min-height: 44px;
+  padding: 14px 0 4px;
+  color: #667085;
+  font-size: 13px;
+  text-align: center;
+}
+
+.release-load-more-error {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding-top: 12px;
+}
+
 @media (max-width: 1280px) {
   .release-list {
     grid-template-columns: repeat(2, minmax(0, 1fr));

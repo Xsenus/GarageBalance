@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
 import { BookOpenCheck, FileText, Pencil, Save } from 'lucide-react'
 import type { AuthResponse } from '../../services/authApi'
@@ -6,17 +6,27 @@ import type { AppReleaseDto, AppReleaseItemDto, ReleaseClient, UpsertAppReleaseR
 import { hasPermission, permissions } from '../../shared/accessControl'
 import { FormError } from '../../shared/formFeedback'
 import { formatReleaseDate } from '../../shared/formatters'
+import { LoadingSkeleton } from '../../shared/AsyncState'
 
 const showManualReleaseEditing = false
+const releasePageSize = 9
 
 export function ReleasePanel({ auth, releaseClient }: { auth: AuthResponse; releaseClient: ReleaseClient }) {
   const [releases, setReleases] = useState<AppReleaseDto[]>([])
   const [loading, setLoading] = useState(true)
+  const [loadingMore, setLoadingMore] = useState(false)
+  const [totalCount, setTotalCount] = useState(0)
+  const [hasMore, setHasMore] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [loadMoreError, setLoadMoreError] = useState<string | null>(null)
   const [successMessage, setSuccessMessage] = useState<string | null>(null)
   const [editor, setEditor] = useState<ReleaseEditorState | null>(null)
   const canManageReleases = hasPermission(auth, permissions.appReleasesManage)
+  const loadingMoreRef = useRef(false)
+  const getReleasePage = useCallback((offset: number) => canManageReleases
+    ? releaseClient.getManageableReleases(auth.accessToken, offset, releasePageSize)
+    : releaseClient.getReleases(auth.accessToken, offset, releasePageSize), [auth.accessToken, canManageReleases, releaseClient])
 
   useEffect(() => {
     let ignore = false
@@ -26,11 +36,11 @@ export function ReleasePanel({ auth, releaseClient }: { auth: AuthResponse; rele
       setError(null)
 
       try {
-        const nextReleases = canManageReleases
-          ? await releaseClient.getManageableReleases(auth.accessToken, 50)
-          : await releaseClient.getReleases(auth.accessToken, 10)
+        const page = await getReleasePage(0)
         if (!ignore) {
-          setReleases(nextReleases)
+          setReleases(page.items)
+          setTotalCount(page.totalCount)
+          setHasMore(page.hasMore)
         }
       } catch (caught) {
         if (!ignore) {
@@ -48,14 +58,52 @@ export function ReleasePanel({ auth, releaseClient }: { auth: AuthResponse; rele
     return () => {
       ignore = true
     }
-  }, [auth.accessToken, canManageReleases, releaseClient])
+  }, [getReleasePage])
 
   async function refreshReleases() {
-    const nextReleases = canManageReleases
-      ? await releaseClient.getManageableReleases(auth.accessToken, 50)
-      : await releaseClient.getReleases(auth.accessToken, 10)
-    setReleases(nextReleases)
+    const page = await getReleasePage(0)
+    setReleases(page.items)
+    setTotalCount(page.totalCount)
+    setHasMore(page.hasMore)
   }
+
+  const loadMoreReleases = useCallback(async () => {
+    if (!hasMore || loadingMoreRef.current) {
+      return
+    }
+
+    loadingMoreRef.current = true
+    setLoadingMore(true)
+    setLoadMoreError(null)
+    try {
+      const page = await getReleasePage(releases.length)
+      setReleases((current) => {
+        const knownIds = new Set(current.map((release) => release.releaseId))
+        return [...current, ...page.items.filter((release) => !knownIds.has(release.releaseId))]
+      })
+      setTotalCount(page.totalCount)
+      setHasMore(page.hasMore)
+    } catch (caught) {
+      setLoadMoreError(caught instanceof Error ? caught.message : 'Не удалось загрузить следующие новости.')
+    } finally {
+      loadingMoreRef.current = false
+      setLoadingMore(false)
+    }
+  }, [getReleasePage, hasMore, releases.length])
+
+  const loadMoreSentinelRef = useCallback((node: HTMLDivElement | null) => {
+    if (!node || !hasMore || typeof IntersectionObserver === 'undefined') {
+      return
+    }
+
+    const observer = new IntersectionObserver((entries) => {
+      if (entries.some((entry) => entry.isIntersecting)) {
+        void loadMoreReleases()
+      }
+    }, { rootMargin: '240px 0px' })
+    observer.observe(node)
+    return () => observer.disconnect()
+  }, [hasMore, loadMoreReleases])
 
   async function saveRelease(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -168,7 +216,7 @@ export function ReleasePanel({ auth, releaseClient }: { auth: AuthResponse; rele
           <h2>История обновлений</h2>
         </div>
         <div className="release-heading-actions">
-          <span>{releases.length} версий</span>
+          <span>{totalCount} версий</span>
           {canManageReleases && showManualReleaseEditing ? (
             <button className="secondary-button create-action-button" type="button" onClick={openCreateEditor}>
               <BookOpenCheck size={17} aria-hidden="true" />
@@ -178,7 +226,7 @@ export function ReleasePanel({ auth, releaseClient }: { auth: AuthResponse; rele
         </div>
       </div>
 
-      {loading ? <p className="muted" role="status" aria-live="polite">Загружаем историю обновлений...</p> : null}
+      {loading ? <LoadingSkeleton className="release-list-skeleton" label="Загружаем историю обновлений" rows={3} columns={3} /> : null}
       {error ? <FormError>{error}</FormError> : null}
       {successMessage ? <p className="success-text" role="status" aria-live="polite">{successMessage}</p> : null}
       {editor ? (
@@ -283,6 +331,19 @@ export function ReleasePanel({ auth, releaseClient }: { auth: AuthResponse; rele
               ) : null}
             </article>
           ))}
+        </div>
+      ) : null}
+      {!loading && !error && hasMore ? (
+        <div className="release-load-more" ref={loadMoreSentinelRef} role="status" aria-live="polite">
+          {loadingMore ? 'Загружаем следующие новости…' : 'Прокрутите ниже, чтобы увидеть более ранние новости'}
+        </div>
+      ) : null}
+      {loadMoreError ? (
+        <div className="release-load-more-error">
+          <FormError>{loadMoreError}</FormError>
+          <button className="ghost-button" type="button" onClick={() => void loadMoreReleases()} disabled={loadingMore}>
+            Повторить загрузку
+          </button>
         </div>
       ) : null}
     </section>

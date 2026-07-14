@@ -12,11 +12,11 @@ namespace GarageBalance.Api.Controllers;
 public sealed class AppReleasesController(IAppReleaseService appReleaseService) : ControllerBase
 {
     [HttpGet]
-    [ProducesResponseType<IReadOnlyList<AppReleaseDto>>(StatusCodes.Status200OK)]
+    [ProducesResponseType<AppReleasePageDto>(StatusCodes.Status200OK)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status500InternalServerError)]
-    public async Task<ActionResult<IReadOnlyList<AppReleaseDto>>> GetReleases([FromQuery] int? limit, CancellationToken cancellationToken)
+    public async Task<ActionResult<AppReleasePageDto>> GetReleases([FromQuery] int? offset, [FromQuery] int? limit, CancellationToken cancellationToken)
     {
-        var result = await appReleaseService.GetReleasesAsync(limit, cancellationToken);
+        var result = await appReleaseService.GetReleasesAsync(offset, limit, cancellationToken);
         return result.Succeeded
             ? Ok(result.Value)
             : StatusCode(StatusCodes.Status500InternalServerError, ApiProblemDetails.Create(result.ErrorCode, result.ErrorMessage, StatusCodes.Status500InternalServerError));
@@ -24,11 +24,11 @@ public sealed class AppReleasesController(IAppReleaseService appReleaseService) 
 
     [Authorize(Policy = SystemPermissions.AppReleasesManage)]
     [HttpGet("manage")]
-    [ProducesResponseType<IReadOnlyList<AppReleaseDto>>(StatusCodes.Status200OK)]
+    [ProducesResponseType<AppReleasePageDto>(StatusCodes.Status200OK)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status500InternalServerError)]
-    public async Task<ActionResult<IReadOnlyList<AppReleaseDto>>> GetManageableReleases([FromQuery] int? limit, CancellationToken cancellationToken)
+    public async Task<ActionResult<AppReleasePageDto>> GetManageableReleases([FromQuery] int? offset, [FromQuery] int? limit, CancellationToken cancellationToken)
     {
-        var result = await appReleaseService.GetManageableReleasesAsync(limit, cancellationToken);
+        var result = await appReleaseService.GetManageableReleasesAsync(offset, limit, cancellationToken);
         return result.Succeeded
             ? Ok(result.Value)
             : StatusCode(StatusCodes.Status500InternalServerError, ApiProblemDetails.Create(result.ErrorCode, result.ErrorMessage, StatusCodes.Status500InternalServerError));
@@ -47,7 +47,7 @@ public sealed class AppReleasesController(IAppReleaseService appReleaseService) 
             return ToWriteError(result);
         }
 
-        return CreatedAtAction(nameof(GetReleases), new { limit = 1 }, result.Value);
+        return CreatedAtAction(nameof(GetReleases), new { offset = 0, limit = 1 }, result.Value);
     }
 
     [Authorize(Policy = SystemPermissions.AppReleasesManage)]

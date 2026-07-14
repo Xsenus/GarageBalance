@@ -8,9 +8,10 @@ namespace GarageBalance.Api.Application.Releases;
 public sealed class AppReleaseService(
     IWebHostEnvironment environment,
     IApplicationUnitOfWork? unitOfWork = null,
-    IAuditEventWriter? auditEventWriter = null) : IAppReleaseService
+    IAuditEventWriter? auditEventWriter = null,
+    IAppReleaseRepository? releaseRepository = null) : IAppReleaseService
 {
-    private const int DefaultLimit = 10;
+    private const int DefaultLimit = 9;
     private const int MaxLimit = 50;
     private const string EntityType = "app_release";
 
@@ -41,35 +42,60 @@ public sealed class AppReleaseService(
         ["isPublished"] = "Опубликовано"
     };
 
-    public async Task<AppReleaseResult<IReadOnlyList<AppReleaseDto>>> GetReleasesAsync(int? limit, CancellationToken cancellationToken)
+    public async Task<AppReleaseResult<AppReleasePageDto>> GetReleasesAsync(int? offset, int? limit, CancellationToken cancellationToken)
     {
+        var normalizedOffset = NormalizeOffset(offset);
+        var normalizedLimit = NormalizeLimit(limit);
+        if (releaseRepository is not null)
+        {
+            var page = await releaseRepository.GetPageAsync(false, normalizedOffset, normalizedLimit, cancellationToken);
+            return AppReleaseResult<AppReleasePageDto>.Success(page);
+        }
+
         var result = await LoadReleasesAsync(cancellationToken);
         if (!result.Succeeded)
         {
-            return AppReleaseResult<IReadOnlyList<AppReleaseDto>>.Failure(result.ErrorCode!, result.ErrorMessage!);
+            return AppReleaseResult<AppReleasePageDto>.Failure(result.ErrorCode!, result.ErrorMessage!);
         }
 
         var sorted = SortReleases(result.Value!)
             .Where(release => release.IsPublished is not false)
-            .Take(NormalizeLimit(limit))
             .ToArray();
+        var items = sorted.Skip(normalizedOffset).Take(normalizedLimit).ToArray();
 
-        return AppReleaseResult<IReadOnlyList<AppReleaseDto>>.Success(sorted);
+        return AppReleaseResult<AppReleasePageDto>.Success(new AppReleasePageDto(
+            items,
+            sorted.Length,
+            normalizedOffset,
+            normalizedLimit,
+            normalizedOffset + items.Length < sorted.Length));
     }
 
-    public async Task<AppReleaseResult<IReadOnlyList<AppReleaseDto>>> GetManageableReleasesAsync(int? limit, CancellationToken cancellationToken)
+    public async Task<AppReleaseResult<AppReleasePageDto>> GetManageableReleasesAsync(int? offset, int? limit, CancellationToken cancellationToken)
     {
+        var normalizedOffset = NormalizeOffset(offset);
+        var normalizedLimit = NormalizeLimit(limit);
+        if (releaseRepository is not null)
+        {
+            var page = await releaseRepository.GetPageAsync(true, normalizedOffset, normalizedLimit, cancellationToken);
+            return AppReleaseResult<AppReleasePageDto>.Success(page);
+        }
+
         var result = await LoadReleasesAsync(cancellationToken);
         if (!result.Succeeded)
         {
-            return AppReleaseResult<IReadOnlyList<AppReleaseDto>>.Failure(result.ErrorCode!, result.ErrorMessage!);
+            return AppReleaseResult<AppReleasePageDto>.Failure(result.ErrorCode!, result.ErrorMessage!);
         }
 
-        var sorted = SortReleases(result.Value!)
-            .Take(NormalizeLimit(limit))
-            .ToArray();
+        var sorted = SortReleases(result.Value!).ToArray();
+        var items = sorted.Skip(normalizedOffset).Take(normalizedLimit).ToArray();
 
-        return AppReleaseResult<IReadOnlyList<AppReleaseDto>>.Success(sorted);
+        return AppReleaseResult<AppReleasePageDto>.Success(new AppReleasePageDto(
+            items,
+            sorted.Length,
+            normalizedOffset,
+            normalizedLimit,
+            normalizedOffset + items.Length < sorted.Length));
     }
 
     public async Task<AppReleaseResult<AppReleaseDto>> CreateReleaseAsync(UpsertAppReleaseRequest request, Guid? actorUserId, CancellationToken cancellationToken)
@@ -102,6 +128,7 @@ public sealed class AppReleaseService(
 
             releases.Add(normalized.Value!);
             await SaveReleasesAsync(releases, cancellationToken);
+            await SynchronizeDatabaseAsync(releases, cancellationToken);
             await AddAuditAsync(
                 actorUserId,
                 "app_releases.release_created",
@@ -162,6 +189,7 @@ public sealed class AppReleaseService(
 
             releases[index] = normalized.Value!;
             await SaveReleasesAsync(releases, cancellationToken);
+            await SynchronizeDatabaseAsync(releases, cancellationToken);
             await AddAuditAsync(
                 actorUserId,
                 "app_releases.release_updated",
@@ -212,6 +240,7 @@ public sealed class AppReleaseService(
 
             releases[index] = published;
             await SaveReleasesAsync(releases, cancellationToken);
+            await SynchronizeDatabaseAsync(releases, cancellationToken);
             await AddAuditAsync(
                 actorUserId,
                 "app_releases.release_published",
@@ -349,6 +378,11 @@ public sealed class AppReleaseService(
         File.Move(tempPath, path, overwrite: true);
     }
 
+    private Task SynchronizeDatabaseAsync(IReadOnlyList<AppReleaseDto> releases, CancellationToken cancellationToken)
+    {
+        return releaseRepository?.SynchronizeAsync(releases, cancellationToken) ?? Task.CompletedTask;
+    }
+
     private async Task AddAuditAsync(
         Guid? actorUserId,
         string action,
@@ -437,4 +471,6 @@ public sealed class AppReleaseService(
 
         return Math.Min(limit.Value, MaxLimit);
     }
+
+    private static int NormalizeOffset(int? offset) => Math.Max(offset ?? 0, 0);
 }

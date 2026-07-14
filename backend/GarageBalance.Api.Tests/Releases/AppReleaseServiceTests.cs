@@ -38,10 +38,12 @@ public sealed class AppReleaseServiceTests
             """);
         var service = new AppReleaseService(directory.Environment);
 
-        var result = await service.GetReleasesAsync(1, CancellationToken.None);
+        var result = await service.GetReleasesAsync(0, 1, CancellationToken.None);
 
         Assert.True(result.Succeeded);
-        var release = Assert.Single(result.Value!);
+        var release = Assert.Single(result.Value!.Items);
+        Assert.Equal(2, result.Value.TotalCount);
+        Assert.True(result.Value.HasMore);
         Assert.Equal("new", release.ReleaseId);
         Assert.Equal("Новый релиз", release.Title);
         Assert.Equal("Второй пункт.", Assert.Single(release.Items).Text);
@@ -76,13 +78,41 @@ public sealed class AppReleaseServiceTests
             """);
         var service = new AppReleaseService(directory.Environment);
 
-        var publicResult = await service.GetReleasesAsync(10, CancellationToken.None);
-        var manageResult = await service.GetManageableReleasesAsync(10, CancellationToken.None);
+        var publicResult = await service.GetReleasesAsync(0, 10, CancellationToken.None);
+        var manageResult = await service.GetManageableReleasesAsync(0, 10, CancellationToken.None);
 
         Assert.True(publicResult.Succeeded);
-        Assert.Equal("published", Assert.Single(publicResult.Value!).ReleaseId);
+        Assert.Equal("published", Assert.Single(publicResult.Value!.Items).ReleaseId);
         Assert.True(manageResult.Succeeded);
-        Assert.Equal(2, manageResult.Value!.Count);
+        Assert.Equal(2, manageResult.Value!.Items.Count);
+    }
+
+    [Fact]
+    public async Task GetReleasesAsync_UsesDatabaseRepositoryForRequestedPage()
+    {
+        using var directory = new TempContentRoot();
+        await using var database = await TestDatabase.CreateAsync();
+        var repository = new EfAppReleaseRepository(database.Context);
+        var releases = Enumerable.Range(1, 12)
+            .Select(index => new AppReleaseDto(
+                $"release-{index}",
+                $"0.{index}.0",
+                DateTimeOffset.Parse("2026-07-14T10:00:00+07:00").AddMinutes(index),
+                $"Обновление {index}",
+                "Описание.",
+                [new AppReleaseItemDto("improved", "Изменение.")],
+                true))
+            .ToArray();
+        await repository.SynchronizeAsync(releases, CancellationToken.None);
+        var service = new AppReleaseService(directory.Environment, releaseRepository: repository);
+
+        var result = await service.GetReleasesAsync(9, 9, CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+        Assert.Equal(12, result.Value!.TotalCount);
+        Assert.Equal(3, result.Value.Items.Count);
+        Assert.Equal(9, result.Value.Offset);
+        Assert.False(result.Value.HasMore);
     }
 
     [Fact]
@@ -188,7 +218,7 @@ public sealed class AppReleaseServiceTests
         directory.WriteReleasesJson("{ invalid");
         var service = new AppReleaseService(directory.Environment);
 
-        var result = await service.GetReleasesAsync(null, CancellationToken.None);
+        var result = await service.GetReleasesAsync(null, null, CancellationToken.None);
 
         Assert.False(result.Succeeded);
         Assert.Equal("releases_file_invalid", result.ErrorCode);
@@ -200,7 +230,7 @@ public sealed class AppReleaseServiceTests
         using var directory = new TempContentRoot();
         var service = new AppReleaseService(directory.Environment);
 
-        var result = await service.GetReleasesAsync(null, CancellationToken.None);
+        var result = await service.GetReleasesAsync(null, null, CancellationToken.None);
 
         Assert.False(result.Succeeded);
         Assert.Equal("releases_file_missing", result.ErrorCode);

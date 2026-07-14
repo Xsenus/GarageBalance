@@ -11,6 +11,13 @@ public sealed record AppReleaseDto(
 
 public sealed record AppReleaseItemDto(string Type, string Text);
 
+public sealed record AppReleasePageDto(
+    IReadOnlyList<AppReleaseDto> Items,
+    int TotalCount,
+    int Offset,
+    int Limit,
+    bool HasMore);
+
 public sealed record UpsertAppReleaseRequest(
     string? ReleaseId,
     string Version,

@@ -35,7 +35,7 @@ import type { CreateFundOperationRequest, FundDto, FundOperationDto, FundsClient
 import type { AccessImportCreatedRecordDto, AccessImportQuarantineItemDto, AccessImportReaderStatusDto, AccessImportRunDto, AccessImportRunLogEntryDto, ImportClient } from './services/importApi'
 import type { IntegrationClient, IntegrationSecretSettingDto, OneCFreshIntegrationStatusDto, OneCFreshSyncDto, OneCFreshSyncPreviewDto, OneCFreshSyncRequest, ReceiptPrintingActionDto, ReceiptPrintingActionRequest, ReceiptPrintingIntegrationStatusDto } from './services/integrationsApi'
 import type { BankDepositReportDto, CashPaymentReportDto, ConsolidatedReportDto, ExpenseReportDto, FeeReportDto, FundChangeReportDto, GarageDetailReportDto, IncomeReportDto, ReportClient } from './services/reportsApi'
-import type { AppReleaseDto, ReleaseClient } from './services/releasesApi'
+import type { AppReleaseDto, AppReleasePageDto, ReleaseClient } from './services/releasesApi'
 import type { ManagedRoleDto, ManagedUserDto, UpdateManagedUserRequest, UserManagementClient } from './services/usersApi'
 
 describe('App', () => {
@@ -57,6 +57,7 @@ describe('App', () => {
 
   afterEach(() => {
     vi.useRealTimers()
+    vi.unstubAllGlobals()
   })
 
   async function openSection(user: ReturnType<typeof userEvent.setup>, name: string) {
@@ -11131,7 +11132,7 @@ describe('App', () => {
 
   it('announces empty release notes for authenticated users', async () => {
     const user = userEvent.setup()
-    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient({ getReleases: async () => [] })} userClient={createUserClient()} />)
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient({ getReleases: async () => createReleasePage([]) })} userClient={createUserClient()} />)
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
     await user.click(screen.getByRole('button', { name: 'Войти' }))
@@ -11144,8 +11145,8 @@ describe('App', () => {
 
   it('announces release notes loading status for authenticated users', async () => {
     const user = userEvent.setup()
-    let resolveReleases: (releases: AppReleaseDto[]) => void = () => {}
-    const releasePromise = new Promise<AppReleaseDto[]>((resolve) => {
+    let resolveReleases: (releases: AppReleasePageDto) => void = () => {}
+    const releasePromise = new Promise<AppReleasePageDto>((resolve) => {
       resolveReleases = resolve
     })
     render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient({ getReleases: async () => releasePromise })} userClient={createUserClient()} />)
@@ -11156,9 +11157,9 @@ describe('App', () => {
     await openSection(user, 'Что нового')
 
     const releasePanel = await screen.findByRole('region', { name: 'Что нового' })
-    expect(await within(releasePanel).findByText('Загружаем историю обновлений...')).toHaveAttribute('role', 'status')
+    expect(await within(releasePanel).findByRole('status', { name: 'Загружаем историю обновлений' })).toBeInTheDocument()
 
-    resolveReleases([createAppRelease()])
+    resolveReleases(createReleasePage([createAppRelease()]))
     expect(await within(releasePanel).findByText('Добавлен консолидированный отчет')).toBeInTheDocument()
   })
 
@@ -11174,8 +11175,8 @@ describe('App', () => {
       }),
     ]
     const releaseClient = createReleaseClient({
-      getReleases: async () => storedReleases.filter((release) => release.isPublished !== false),
-      getManageableReleases: async () => storedReleases,
+      getReleases: async () => createReleasePage(storedReleases.filter((release) => release.isPublished !== false)),
+      getManageableReleases: async () => createReleasePage(storedReleases),
       publishRelease: async (_token, releaseId) => {
         const published = storedReleases.find((release) => release.releaseId === releaseId)
         if (!published) {
@@ -11202,6 +11203,50 @@ describe('App', () => {
 
     expect(await within(releasePanel).findByText(/Запись 0\.484\.0 опубликована\./)).toBeInTheDocument()
     expect(within(releasePanel).getByText(/v0\.484\.0/)).toBeInTheDocument()
+  })
+
+  it('loads release notes by nine when the scroll sentinel becomes visible', async () => {
+    const user = userEvent.setup()
+    const releases = Array.from({ length: 12 }, (_, index) => createAppRelease({
+      releaseId: `release-${index + 1}`,
+      version: `0.${index + 1}.0`,
+      title: `Обновление ${index + 1}`,
+    }))
+    const requests: Array<{ offset: number; limit: number }> = []
+    let observerCallback: IntersectionObserverCallback | null = null
+    vi.stubGlobal('IntersectionObserver', class {
+      constructor(callback: IntersectionObserverCallback) {
+        observerCallback = callback
+      }
+      observe() {}
+      disconnect() {}
+      unobserve() {}
+      takeRecords() { return [] }
+      root = null
+      rootMargin = ''
+      thresholds = []
+    })
+    const getPage = async (_token: string, offset = 0, limit = 9) => {
+      requests.push({ offset, limit })
+      return createReleasePage(releases.slice(offset, offset + limit), releases.length, offset, limit)
+    }
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient({ getManageableReleases: getPage })} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Что нового')
+
+    const releasePanel = await screen.findByRole('region', { name: 'Что нового' })
+    expect(await within(releasePanel).findByText('12 версий')).toBeInTheDocument()
+    expect(within(releasePanel).getAllByRole('article')).toHaveLength(9)
+
+    await act(async () => {
+      observerCallback?.([{ isIntersecting: true } as IntersectionObserverEntry], {} as IntersectionObserver)
+    })
+
+    await waitFor(() => expect(within(releasePanel).getAllByRole('article')).toHaveLength(12))
+    expect(requests).toEqual([{ offset: 0, limit: 9 }, { offset: 9, limit: 9 }])
+    expect(within(releasePanel).queryByText(/Прокрутите ниже/)).not.toBeInTheDocument()
   })
 
   it('shows workspace loading errors inside the related panel', async () => {
@@ -11301,7 +11346,7 @@ function createThrowingClient<TClient extends object>(): TClient {
 
 function createReleaseClient(overrides: Partial<ReleaseClient> = {}): ReleaseClient {
   const releases = [createAppRelease()]
-  const getReleases = overrides.getReleases ?? (async () => releases)
+  const getReleases = overrides.getReleases ?? (async () => createReleasePage(releases))
   const getManageableReleases = overrides.getManageableReleases ?? getReleases
   return {
     getReleases,
@@ -11329,6 +11374,15 @@ function createReleaseClient(overrides: Partial<ReleaseClient> = {}): ReleaseCli
       isPublished: true,
     })),
   }
+}
+
+function createReleasePage(
+  items: AppReleaseDto[],
+  totalCount = items.length,
+  offset = 0,
+  limit = 9,
+): AppReleasePageDto {
+  return { items, totalCount, offset, limit, hasMore: offset + items.length < totalCount }
 }
 
 function createSettingsClient(overrides: Partial<ApplicationSettingsClient> = {}): ApplicationSettingsClient {

@@ -106,6 +106,8 @@ builder.Services.AddHttpClient<IDadataSuggestionService, DadataSuggestionService
     client.Timeout = TimeSpan.FromSeconds(5);
 });
 builder.Services.AddScoped<IAppReleaseService, AppReleaseService>();
+builder.Services.AddScoped<IAppReleaseRepository, EfAppReleaseRepository>();
+builder.Services.AddHostedService<AppReleaseCatalogSynchronizer>();
 builder.Services.AddScoped<IReportService, ReportService>();
 builder.Services.AddScoped<ICashMovementReportQuery, EfCashMovementReportQuery>();
 builder.Services.AddScoped<IFundChangeReportQuery, EfFundChangeReportQuery>();

@@ -5,6 +5,7 @@ using GarageBalance.Api.Domain.Dictionaries;
 using GarageBalance.Api.Domain.Finance;
 using GarageBalance.Api.Domain.Import;
 using GarageBalance.Api.Domain.Integrations;
+using GarageBalance.Api.Domain.Releases;
 using GarageBalance.Api.Domain.Settings;
 using GarageBalance.Api.Domain.Workflows;
 using GarageBalance.Api.Domain.Users;
@@ -47,6 +48,7 @@ public sealed class GarageBalanceDbContext(DbContextOptions<GarageBalanceDbConte
     public DbSet<AccessImportCreatedRecord> AccessImportCreatedRecords => Set<AccessImportCreatedRecord>();
     public DbSet<IntegrationSecretSetting> IntegrationSecretSettings => Set<IntegrationSecretSetting>();
     public DbSet<ApplicationSetting> ApplicationSettings => Set<ApplicationSetting>();
+    public DbSet<AppReleaseRecord> AppReleases => Set<AppReleaseRecord>();
 
     void IAuditEventStore.Add(AuditEvent auditEvent)
     {
@@ -86,6 +88,19 @@ public sealed class GarageBalanceDbContext(DbContextOptions<GarageBalanceDbConte
             entity.HasKey(setting => setting.Id);
             entity.Property(setting => setting.Key).HasMaxLength(160).IsRequired();
             entity.HasIndex(setting => setting.Key).IsUnique();
+        });
+
+        modelBuilder.Entity<AppReleaseRecord>(entity =>
+        {
+            entity.ToTable("app_releases");
+            entity.HasKey(release => release.ReleaseId);
+            entity.Property(release => release.ReleaseId).HasMaxLength(180);
+            entity.Property(release => release.Version).HasMaxLength(80).IsRequired();
+            entity.Property(release => release.Title).HasMaxLength(300).IsRequired();
+            entity.Property(release => release.Summary).HasMaxLength(2000).IsRequired();
+            entity.Property(release => release.ItemsJson).HasColumnType("jsonb").IsRequired();
+            entity.HasIndex(release => release.Version).IsUnique();
+            entity.HasIndex(release => new { release.IsPublished, release.PublishedAt });
         });
 
         modelBuilder.Entity<AppRole>(entity =>

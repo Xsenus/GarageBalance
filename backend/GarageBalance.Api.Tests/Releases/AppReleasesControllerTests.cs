@@ -21,13 +21,14 @@ public sealed class AppReleasesControllerTests
         };
         var controller = new AppReleasesController(new FakeAppReleaseService
         {
-            Result = AppReleaseResult<IReadOnlyList<AppReleaseDto>>.Success(releases)
+            Result = AppReleaseResult<AppReleasePageDto>.Success(new AppReleasePageDto(releases, 1, 0, 9, false))
         });
 
-        var result = await controller.GetReleases(10, CancellationToken.None);
+        var result = await controller.GetReleases(0, 9, CancellationToken.None);
 
         var ok = Assert.IsType<OkObjectResult>(result.Result);
-        Assert.Same(releases, ok.Value);
+        var page = Assert.IsType<AppReleasePageDto>(ok.Value);
+        Assert.Same(releases, page.Items);
     }
 
     [Fact]
@@ -35,10 +36,10 @@ public sealed class AppReleasesControllerTests
     {
         var controller = new AppReleasesController(new FakeAppReleaseService
         {
-            Result = AppReleaseResult<IReadOnlyList<AppReleaseDto>>.Failure("releases_file_invalid", "Файл истории обновлений содержит некорректный JSON.")
+            Result = AppReleaseResult<AppReleasePageDto>.Failure("releases_file_invalid", "Файл истории обновлений содержит некорректный JSON.")
         });
 
-        var result = await controller.GetReleases(null, CancellationToken.None);
+        var result = await controller.GetReleases(null, null, CancellationToken.None);
 
         var objectResult = Assert.IsType<ObjectResult>(result.Result);
         Assert.Equal(500, objectResult.StatusCode);
@@ -92,11 +93,11 @@ public sealed class AppReleasesControllerTests
 
     private sealed class FakeAppReleaseService : IAppReleaseService
     {
-        public AppReleaseResult<IReadOnlyList<AppReleaseDto>> Result { get; init; } =
-            AppReleaseResult<IReadOnlyList<AppReleaseDto>>.Failure("not_configured", "Not configured.");
+        public AppReleaseResult<AppReleasePageDto> Result { get; init; } =
+            AppReleaseResult<AppReleasePageDto>.Failure("not_configured", "Not configured.");
 
-        public AppReleaseResult<IReadOnlyList<AppReleaseDto>> ManageResult { get; init; } =
-            AppReleaseResult<IReadOnlyList<AppReleaseDto>>.Failure("not_configured", "Not configured.");
+        public AppReleaseResult<AppReleasePageDto> ManageResult { get; init; } =
+            AppReleaseResult<AppReleasePageDto>.Failure("not_configured", "Not configured.");
 
         public AppReleaseResult<AppReleaseDto> CreateResult { get; init; } =
             AppReleaseResult<AppReleaseDto>.Failure("not_configured", "Not configured.");
@@ -107,12 +108,12 @@ public sealed class AppReleasesControllerTests
         public AppReleaseResult<AppReleaseDto> PublishResult { get; init; } =
             AppReleaseResult<AppReleaseDto>.Failure("not_configured", "Not configured.");
 
-        public Task<AppReleaseResult<IReadOnlyList<AppReleaseDto>>> GetReleasesAsync(int? limit, CancellationToken cancellationToken)
+        public Task<AppReleaseResult<AppReleasePageDto>> GetReleasesAsync(int? offset, int? limit, CancellationToken cancellationToken)
         {
             return Task.FromResult(Result);
         }
 
-        public Task<AppReleaseResult<IReadOnlyList<AppReleaseDto>>> GetManageableReleasesAsync(int? limit, CancellationToken cancellationToken)
+        public Task<AppReleaseResult<AppReleasePageDto>> GetManageableReleasesAsync(int? offset, int? limit, CancellationToken cancellationToken)
         {
             return Task.FromResult(ManageResult);
         }
