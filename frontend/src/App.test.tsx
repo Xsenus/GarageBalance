@@ -8479,10 +8479,13 @@ describe('App', () => {
     await openSection(user, 'Платежи')
     const financePanel = await screen.findByRole('region', { name: 'Платежи' })
 
-    fireEvent.contextMenu(within(financePanel).getAllByText('Членский взнос')[0].closest('tr')!)
+    const paymentTable = within(financePanel).getAllByRole('table').find((table) => table.tagName === 'TABLE')
+    expect(paymentTable).toBeDefined()
+    const paymentName = await within(paymentTable!).findByText('Членский взнос')
+    fireEvent.contextMenu(paymentName.closest('tr')!)
     expect(await screen.findByRole('menu', { name: 'Операции с платежами' })).toBeInTheDocument()
 
-    fireEvent.change(within(financePanel).getByLabelText('Период с'), { target: { value: '2026-06' } })
+    fireEvent.change(within(financePanel).getByLabelText('Период с'), { target: { value: '06.2026' } })
     await waitFor(() => expect(screen.queryByRole('menu', { name: 'Операции с платежами' })).not.toBeInTheDocument())
   })
 
@@ -8768,10 +8771,16 @@ describe('App', () => {
     await openSection(user, 'Платежи')
     const financePanel = await screen.findByRole('region', { name: 'Платежи' })
 
-    await user.type(within(financePanel).getByLabelText('Период с'), '2026-01')
-    await user.type(within(financePanel).getByLabelText('Период по'), '2026-02')
+    const periodFrom = within(financePanel).getByLabelText('Период с')
+    const periodTo = within(financePanel).getByLabelText('Период по')
+    await user.type(periodFrom, '01.2026')
+    await user.type(periodTo, '02.2026')
 
     await waitFor(() => expect(summaryRequests).toContainEqual({ monthFrom: '2026-01', monthTo: '2026-02', search: '' }))
+    expect(periodFrom).toHaveValue('01.2026')
+    expect(periodTo).toHaveValue('02.2026')
+    expect(within(financePanel).getByRole('button', { name: 'Открыть календарь: Период с' })).toBeInTheDocument()
+    expect(within(financePanel).getByRole('button', { name: 'Открыть календарь: Период по' })).toBeInTheDocument()
     const summaryStrip = within(financePanel).getByLabelText('Итоги платежей')
     expect(within(summaryStrip).getByText('1 200,00')).toBeInTheDocument()
     expect(within(summaryStrip).getByText('1 700,00')).toBeInTheDocument()

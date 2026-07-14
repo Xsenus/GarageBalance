@@ -2111,8 +2111,8 @@ export function FinancePanel({
 
         <div className="dictionary-toolbar finance-table-toolbar">
           <div className="finance-period-filter" aria-label={getFinanceToolbarLabel('periodFilter')}>
-            <input aria-label={getFinanceToolbarLabel('periodFrom')} type="month" value={financeFilter.monthFrom} onChange={(event) => setFinanceFilter((value) => ({ ...value, monthFrom: event.target.value }))} />
-            <input aria-label={getFinanceToolbarLabel('periodTo')} type="month" value={financeFilter.monthTo} onChange={(event) => setFinanceFilter((value) => ({ ...value, monthTo: event.target.value }))} />
+            <LocalizedDatePicker ariaLabel={getFinanceToolbarLabel('periodFrom')} mode="month" value={financeFilter.monthFrom} onChange={(monthFrom) => setFinanceFilter((current) => ({ ...current, monthFrom }))} />
+            <LocalizedDatePicker ariaLabel={getFinanceToolbarLabel('periodTo')} mode="month" value={financeFilter.monthTo} onChange={(monthTo) => setFinanceFilter((current) => ({ ...current, monthTo }))} />
           </div>
           <label className="dictionary-search">
             <Search size={16} aria-hidden="true" />
