@@ -8980,15 +8980,19 @@ describe('App', () => {
     await openSection(user, 'Платежи')
     const financePanel = await screen.findByRole('region', { name: 'Платежи' })
 
+    await waitFor(() => expect(within(financePanel).getByLabelText('Гараж для начисления')).toHaveValue('garage-1'))
+    await waitFor(() => expect(within(financePanel).getByLabelText('Вид начисления')).toHaveValue('income-type-1'))
     await user.clear(within(financePanel).getByLabelText('Сумма начисления'))
     await user.type(within(financePanel).getByLabelText('Сумма начисления'), '900')
     await user.type(within(financePanel).getByLabelText('Комментарий начисления'), 'Ручная корректировка')
-    await user.click(within(financePanel).getAllByRole('button', { name: 'Начислить' })[0])
+    const createAccrualButton = within(financePanel).getAllByRole('button', { name: 'Начислить' })[0]
+    await waitFor(() => expect(createAccrualButton).toBeEnabled())
+    await user.click(createAccrualButton)
 
-    expect((await within(financePanel).findAllByText('900,00')).length).toBeGreaterThan(0)
+    expect((await within(financePanel).findAllByText('900,00', {}, { timeout: 5000 })).length).toBeGreaterThan(0)
     const accrualTable = within(financePanel).getByRole('table', { name: 'Последние начисления' })
     expect(accrualTable).toBeInTheDocument()
-    expect(within(accrualTable).getByText('Ручное')).toBeInTheDocument()
+    expect(await within(accrualTable).findByText('Ручное')).toBeInTheDocument()
 
     const openBreakdownButton = within(accrualTable).getByLabelText(/Разбивка начисления/i)
     await user.dblClick(openBreakdownButton)
@@ -9043,16 +9047,20 @@ describe('App', () => {
     await openSection(user, 'Платежи')
     const financePanel = await screen.findByRole('region', { name: 'Платежи' })
 
+    await waitFor(() => expect(within(financePanel).getByLabelText('Поставщик для начисления')).toHaveValue('supplier-1'))
+    await waitFor(() => expect(within(financePanel).getByLabelText('Вид начисления поставщику')).toHaveValue('expense-type-1'))
     await user.clear(within(financePanel).getByLabelText('Сумма начисления поставщику'))
     await user.type(within(financePanel).getByLabelText('Сумма начисления поставщику'), '650')
     await user.type(within(financePanel).getByLabelText('Документ начисления поставщику'), 'INV-1')
     await user.type(within(financePanel).getByLabelText('Комментарий начисления поставщику'), 'Счет за воду')
-    await user.click(within(financePanel).getAllByRole('button', { name: 'Начислить' })[1])
+    const createSupplierAccrualButton = within(financePanel).getAllByRole('button', { name: 'Начислить' })[1]
+    await waitFor(() => expect(createSupplierAccrualButton).toBeEnabled())
+    await user.click(createSupplierAccrualButton)
 
-    expect((await within(financePanel).findAllByText('650,00')).length).toBeGreaterThan(0)
+    expect((await within(financePanel).findAllByText('650,00', {}, { timeout: 5000 })).length).toBeGreaterThan(0)
     const supplierAccrualTable = within(financePanel).getByRole('table', { name: 'Последние начисления поставщикам' })
     expect(supplierAccrualTable).toBeInTheDocument()
-    expect(within(supplierAccrualTable).getByText('Водоканал')).toBeInTheDocument()
+    expect(await within(supplierAccrualTable).findByText('Водоканал')).toBeInTheDocument()
     expect(within(supplierAccrualTable).getByText('Ручное')).toBeInTheDocument()
 
     const openBreakdownButton = within(supplierAccrualTable).getByLabelText(/Разбивка начисления поставщику/i)
@@ -9144,13 +9152,15 @@ describe('App', () => {
     const financePanel = await screen.findByRole('region', { name: 'Платежи' })
 
     await user.type(within(financePanel).getByLabelText('Комментарий регулярных начислений'), 'Начисление за месяц')
-    await user.click(within(financePanel).getByRole('button', { name: 'Создать месяц' }))
+    const createRegularAccrualsButton = within(financePanel).getByRole('button', { name: 'Создать месяц' })
+    await waitFor(() => expect(createRegularAccrualsButton).toBeEnabled())
+    await user.click(createRegularAccrualsButton)
 
     expect(await within(financePanel).findByText('Создано 1, пропущено 0')).toHaveAttribute('role', 'status')
-    expect((await within(financePanel).findAllByText('300,00')).length).toBeGreaterThan(0)
+    expect((await within(financePanel).findAllByText('300,00', {}, { timeout: 5000 })).length).toBeGreaterThan(0)
     expect(within(financePanel).getByText('Членский тариф · 300,00')).toBeInTheDocument()
     const accrualTable = within(financePanel).getByRole('table', { name: 'Последние начисления' })
-    expect(within(accrualTable).getByText('Авто')).toBeInTheDocument()
+    expect(await within(accrualTable).findByText('Авто')).toBeInTheDocument()
     const openBreakdownButton = within(accrualTable).getByLabelText(/Разбивка начисления/i)
     await user.dblClick(openBreakdownButton)
     const dialog = await screen.findByRole('dialog', { name: 'Разбивка начисления' })
@@ -9443,7 +9453,7 @@ describe('App', () => {
     await openSection(user, 'Импорт')
     const importPanel = await screen.findByRole('region', { name: 'Импорт Access' })
 
-    const applyButton = within(importPanel).getByRole('button', { name: 'Запросить фактический импорт ГСК.accdb' })
+    const applyButton = await within(importPanel).findByRole('button', { name: 'Запросить фактический импорт ГСК.accdb' })
     expect(applyButton).toHaveAttribute('title', 'Запросить фактический импорт ГСК.accdb')
     expect(applyButton).toHaveAttribute('data-tooltip', 'Запросить фактический импорт ГСК.accdb')
     await user.click(applyButton)
