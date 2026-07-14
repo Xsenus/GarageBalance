@@ -5671,8 +5671,8 @@ function RegularAccrualPrototypeDialog({
         </div>
         <form className="dictionary-modal-form payments-prototype-modal-form" onSubmit={handleSubmit}>
           <FormField label="Месяц">
-            <input aria-label="Месяц регулярного начисления" type="month" value={accountingMonth} onChange={(event) => {
-              setAccountingMonth(event.target.value)
+            <LocalizedDatePicker ariaLabel="Месяц регулярного начисления" mode="month" value={accountingMonth} onChange={(nextAccountingMonth) => {
+              setAccountingMonth(nextAccountingMonth)
               setError(null)
             }} />
           </FormField>
