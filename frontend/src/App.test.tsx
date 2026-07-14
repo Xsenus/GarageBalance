@@ -3182,6 +3182,8 @@ describe('App', () => {
     const secondGarageOption = await within(prototype).findByRole('option', { name: /Гараж\s*2\s*Иванов Петр/ })
     await user.click(secondGarageOption)
     const selectedGarageList = within(prototype).getByLabelText('Выбранные гаражи')
+    expect(selectedGarageList.closest('.payments-prototype-search-wrap')).toBeNull()
+    expect(selectedGarageList.parentElement).toHaveClass('payments-prototype-topline')
     expect(selectedGarageList).toHaveTextContent('Выбрано: 2')
     expect(selectedGarageList).toHaveTextContent('Гараж 1Иванов Иван')
     expect(selectedGarageList).toHaveTextContent('Гараж 2Иванов Петр')

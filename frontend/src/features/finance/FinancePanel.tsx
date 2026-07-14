@@ -4242,50 +4242,49 @@ function PaymentsPrototypePanel({
               )) : !garageSearchLoading && !garageSearchError ? <span className="payments-prototype-search-empty">Ничего не найдено</span> : null}
             </div>
           ) : null}
-          {selectedGarages.length > 0 ? (
-            <div className="payments-prototype-selected-garages" aria-label="Выбранные гаражи">
-              <div className="payments-prototype-selected-heading">
-                <span>Выбрано: {selectedGarages.length}</span>
-                <button className="ghost-button" type="button" onClick={clearGarageSelection}>Очистить</button>
-              </div>
-              <div className="payments-prototype-selected-list">
-                {selectedGarages.map((garage) => (
-                  <div className={`payments-prototype-selected-item${garage.id === selectedGarageId ? ' is-active' : ''}`} key={garage.id}>
-                    <button
-                      className="ghost-button payments-prototype-selected-activate"
-                      type="button"
-                      aria-label={`Гараж ${garage.number}`}
-                      aria-pressed={garage.id === selectedGarageId}
-                      onClick={() => {
-                        activateGarage(garage)
-                        setGarageSearchOpen(false)
-                      }}
-                    >
-                      <strong>Гараж {garage.number}</strong>
-                      <small>{garage.ownerName}</small>
-                      <span className="payments-prototype-selected-metrics" aria-label={`Параметры гаража ${garage.number}`}>
-                        <span><small>Люди</small><b>{garage.peopleCount}</b></span>
-                        <span><small>Этажи</small><b>{garage.floorCount}</b></span>
-                        <span><small>Баланс</small><b>{formatPaymentPrototypeValue(Math.abs(garage.balance))}</b></span>
-                        <span><small>Долг</small><b>{formatPaymentPrototypeValue(garage.overdueDebt)}</b></span>
-                      </span>
-                    </button>
-                    <button
-                      className="icon-button payments-prototype-selected-remove"
-                      type="button"
-                      aria-label={`Убрать гараж ${garage.number} из выбранных`}
-                      title="Убрать из выбранных"
-                      onClick={() => removeGarageSelection(garage)}
-                    >
-                      <X size={14} aria-hidden="true" />
-                    </button>
-                  </div>
-                ))}
-              </div>
-            </div>
-          ) : null}
         </div>
-
+        {selectedGarages.length > 0 ? (
+          <div className="payments-prototype-selected-garages" aria-label="Выбранные гаражи">
+            <div className="payments-prototype-selected-heading">
+              <span>Выбрано: {selectedGarages.length}</span>
+              <button className="ghost-button" type="button" onClick={clearGarageSelection}>Очистить</button>
+            </div>
+            <div className="payments-prototype-selected-list">
+              {selectedGarages.map((garage) => (
+                <div className={`payments-prototype-selected-item${garage.id === selectedGarageId ? ' is-active' : ''}`} key={garage.id}>
+                  <button
+                    className="ghost-button payments-prototype-selected-activate"
+                    type="button"
+                    aria-label={`Гараж ${garage.number}`}
+                    aria-pressed={garage.id === selectedGarageId}
+                    onClick={() => {
+                      activateGarage(garage)
+                      setGarageSearchOpen(false)
+                    }}
+                  >
+                    <strong>Гараж {garage.number}</strong>
+                    <small>{garage.ownerName}</small>
+                    <span className="payments-prototype-selected-metrics" aria-label={`Параметры гаража ${garage.number}`}>
+                      <span><small>Люди</small><b>{garage.peopleCount}</b></span>
+                      <span><small>Этажи</small><b>{garage.floorCount}</b></span>
+                      <span><small>Баланс</small><b>{formatPaymentPrototypeValue(Math.abs(garage.balance))}</b></span>
+                      <span><small>Долг</small><b>{formatPaymentPrototypeValue(garage.overdueDebt)}</b></span>
+                    </span>
+                  </button>
+                  <button
+                    className="icon-button payments-prototype-selected-remove"
+                    type="button"
+                    aria-label={`Убрать гараж ${garage.number} из выбранных`}
+                    title="Убрать из выбранных"
+                    onClick={() => removeGarageSelection(garage)}
+                  >
+                    <X size={14} aria-hidden="true" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : null}
       </div>
       {formStateError ? <FormError>{formStateError}</FormError> : null}
       {paymentError ? <FormError>{paymentError}</FormError> : null}

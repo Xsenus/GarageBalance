@@ -2829,18 +2829,21 @@ h1 {
 }
 
 .payments-prototype-topline {
-  width: min(680px, 100%);
+  display: grid;
+  gap: 10px;
+  width: 100%;
 }
 
 .payments-prototype-search-wrap {
   position: relative;
+  width: 100%;
   min-width: 0;
 }
 
 .payments-prototype-search {
   display: flex;
   align-items: center;
-  width: 100%;
+  width: min(680px, 100%);
   min-height: 44px;
   gap: 10px;
   border: 1px solid #d0d5dd;
@@ -2925,7 +2928,6 @@ h1 {
 .payments-prototype-selected-garages {
   display: grid;
   gap: 8px;
-  margin-top: 10px;
 }
 
 .payments-prototype-selected-heading {
@@ -2945,8 +2947,8 @@ h1 {
 }
 
 .payments-prototype-selected-list {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  display: flex;
+  flex-wrap: wrap;
   gap: 6px;
 }
 
@@ -2955,6 +2957,9 @@ h1 {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 30px;
   align-items: center;
+  width: 100%;
+  max-width: 220px;
+  flex: 0 1 220px;
   min-height: 78px;
   border: 1px solid #d0d5dd;
   border-radius: 8px;
@@ -6447,7 +6452,6 @@ button.operation-row:focus-visible {
     grid-template-columns: repeat(2, minmax(190px, 1fr));
   }
 
-  .payments-prototype-selected-list,
   .payments-prototype-garage-summary {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -6665,9 +6669,13 @@ button.operation-row:focus-visible {
     width: calc(100vw - 32px);
   }
 
-  .payments-prototype-selected-list,
   .payments-prototype-garage-summary {
     grid-template-columns: 1fr;
+  }
+
+  .payments-prototype-selected-item {
+    max-width: none;
+    flex-basis: 100%;
   }
 
   .payments-prototype-search-option:nth-child(odd) {
