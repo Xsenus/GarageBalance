@@ -14,6 +14,7 @@ import { FormError } from '../../shared/formFeedback'
 import { FormField } from '../../shared/FormField'
 import { formatDateOnly, formatMoney, getCurrentMonthInputValue, getLocalDateInputValue } from '../../shared/formatters'
 import { useEscapeKey, useFocusOnOpen, useFocusTrap, useRestoreFocusOnClose } from '../../shared/focusHooks'
+import { LocalizedDatePicker } from '../../shared/LocalizedDatePicker'
 import { formatPrototypeChangeValue, handleEditableInputKeyDown } from '../../shared/prototypeEditing'
 import { createClientPage } from '../../shared/pagination'
 import { SelectControl } from '../../shared/SelectControl'
@@ -2608,7 +2609,7 @@ function AddFeePrototypeDialog({
   return (
     <>
       <div className="modal-backdrop" role="presentation" onMouseDown={pendingConfirmation ? undefined : onClose}>
-        <section ref={dialogRef} className="detail-dialog contractors-dialog contractors-tariff-dialog" role="dialog" aria-modal="true" aria-labelledby="contractor-fee-title" onMouseDown={(event) => event.stopPropagation()}>
+        <section ref={dialogRef} className="detail-dialog contractors-dialog contractors-tariff-dialog contractors-fee-dialog" role="dialog" aria-modal="true" aria-labelledby="contractor-fee-title" onMouseDown={(event) => event.stopPropagation()}>
           <div className="detail-dialog-header">
             <h3 id="contractor-fee-title">{title}</h3>
             <button className="icon-button" type="button" aria-label="Закрыть форму сбора" onClick={onClose} disabled={Boolean(pendingConfirmation)}>
@@ -2622,16 +2623,19 @@ function AddFeePrototypeDialog({
               <input aria-label="Наименование сбора" value={name} onChange={(event) => setName(event.target.value)} />
             </FormField>
           <FormField label="Вид поступления">
-            <select aria-label="Вид поступления для сбора" value={incomeTypeId} onChange={(event) => setIncomeTypeId(event.target.value)}>
-              {incomeTypes.length > 0 ? incomeTypes.map((incomeType) => (
-                <option key={incomeType.id} value={incomeType.id}>{incomeType.name}</option>
-              )) : <option value="">Нет видов поступлений</option>}
-            </select>
+            <SelectControl
+              aria-label="Вид поступления для сбора"
+              value={incomeTypeId}
+              options={incomeTypes.length > 0
+                ? incomeTypes.map((incomeType) => ({ value: incomeType.id, label: incomeType.name }))
+                : [{ value: '', label: 'Нет видов поступлений' }]}
+              onChange={setIncomeTypeId}
+            />
           </FormField>
           <FormField label="Цель">
             <input aria-label="Цель сбора" value={goal} onChange={(event) => setGoal(event.target.value)} />
           </FormField>
-          <div className="contractors-service-period-grid">
+          <div className="contractors-fee-two-column-grid">
             <FormField label="Сумма взноса">
               <div className="contractors-inline-field">
                 <input aria-label="Сумма взноса" inputMode="decimal" value={contributionAmount} onChange={(event) => setContributionAmount(event.target.value)} />
@@ -2671,15 +2675,12 @@ function AddFeePrototypeDialog({
               )) : <p className="form-hint">Активные гаражи не найдены.</p>}
             </fieldset>
           ) : null}
-          <div className="contractors-service-period-grid">
+          <div className="contractors-fee-date-grid">
             <FormField label="Дата начала">
-              <div className="contractors-inline-field">
-                <input aria-label="Дата начала" type="date" value={startsOn} onChange={(event) => setStartsOn(event.target.value)} />
-                <button className="link-button" type="button" onClick={() => setStartsOn(getLocalDateInputValue())}>Сегодня</button>
-              </div>
+              <LocalizedDatePicker ariaLabel="Дата начала" mode="date" value={startsOn} onChange={setStartsOn} />
             </FormField>
             <FormField label="Дата окончания сбора">
-              <input aria-label="Дата окончания сбора" type="date" value={endsOn} onChange={(event) => setEndsOn(event.target.value)} />
+              <LocalizedDatePicker ariaLabel="Дата окончания сбора" mode="date" value={endsOn} onChange={setEndsOn} />
             </FormField>
           </div>
           <FormField label="Перенос долга по сбору в просроченный">

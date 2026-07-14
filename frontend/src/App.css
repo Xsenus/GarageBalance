@@ -1605,6 +1605,10 @@ h1 {
   width: min(1120px, calc(100vw - 48px));
 }
 
+.detail-dialog.contractors-fee-dialog {
+  width: min(1120px, calc(100vw - 48px));
+}
+
 .contractors-tariff-dialog .detail-dialog-header h3 {
   flex: 1;
   text-align: center;
@@ -1624,6 +1628,13 @@ h1 {
 
 .contractors-tariff-dialog .contractors-inline-field--date .select-control {
   flex: 1 1 auto;
+}
+
+.contractors-fee-two-column-grid,
+.contractors-fee-date-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
 }
 
 .contractors-dialog--garage .contractors-modal-form {
@@ -7003,6 +7014,8 @@ button.operation-row:focus-visible {
 
   .contractors-tariff-dialog .contractors-service-period-grid--catalogs,
   .contractors-tariff-dialog .contractors-service-period-grid--schedule,
+  .contractors-fee-two-column-grid,
+  .contractors-fee-date-grid,
   .contractors-service-period-grid,
   .contractors-service-flags {
     grid-template-columns: 1fr;

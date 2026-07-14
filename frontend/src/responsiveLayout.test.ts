@@ -139,7 +139,13 @@ describe('responsive layout styles', () => {
     expect(normalizedAppCss).toContain('.contractors-tariff-dialog .contractors-service-period-grid--catalogs {\n  grid-template-columns: repeat(2, minmax(0, 1fr));')
     expect(normalizedAppCss).toContain('.contractors-tariff-dialog .contractors-service-period-grid--schedule {\n  grid-template-columns: minmax(140px, 0.55fr) minmax(220px, 1fr) minmax(300px, 1.25fr);')
     expect(normalizedAppCss).toContain('.contractors-tariff-dialog .contractors-inline-field--date .select-control {\n  flex: 1 1 auto;')
-    expect(normalizedAppCss).toContain('.contractors-tariff-dialog .contractors-service-period-grid--catalogs,\n  .contractors-tariff-dialog .contractors-service-period-grid--schedule,\n  .contractors-service-period-grid,\n  .contractors-service-flags {\n    grid-template-columns: 1fr;')
+    expect(normalizedAppCss).toContain('.contractors-tariff-dialog .contractors-service-period-grid--catalogs,\n  .contractors-tariff-dialog .contractors-service-period-grid--schedule,\n  .contractors-fee-two-column-grid,\n  .contractors-fee-date-grid,\n  .contractors-service-period-grid,\n  .contractors-service-flags {\n    grid-template-columns: 1fr;')
+  })
+
+  it('keeps the fee dialog wide with separate responsive date columns', () => {
+    expect(normalizedAppCss).toContain('.detail-dialog.contractors-fee-dialog {\n  width: min(1120px, calc(100vw - 48px));')
+    expect(normalizedAppCss).toContain('.contractors-fee-two-column-grid,\n.contractors-fee-date-grid {\n  display: grid;\n  grid-template-columns: repeat(2, minmax(0, 1fr));\n  gap: 12px;')
+    expect(normalizedAppCss).toContain('.contractors-fee-two-column-grid,\n  .contractors-fee-date-grid,\n  .contractors-service-period-grid,\n  .contractors-service-flags {\n    grid-template-columns: 1fr;')
   })
 
   it('keeps the supplier editor wide, compact and responsive', () => {
