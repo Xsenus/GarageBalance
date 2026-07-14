@@ -1614,7 +1614,14 @@ public sealed class FinanceService(
 
         if (created.Count == 0)
         {
-            return FinanceResult<RegularAccrualGenerationResultDto>.Failure("regular_accruals_empty", "Не создано ни одного начисления.");
+            var visibleReasons = skipped.Count == 0
+                ? "Нет активных гаражей для начисления."
+                : string.Join(" ", skipped.Take(10));
+            var remainingReasonCount = Math.Max(0, skipped.Count - 10);
+            var remainingReasons = remainingReasonCount > 0 ? $" Еще причин: {remainingReasonCount}." : null;
+            return FinanceResult<RegularAccrualGenerationResultDto>.Failure(
+                "regular_accruals_empty",
+                $"Не создано ни одного начисления. Причины: {visibleReasons}{remainingReasons}");
         }
 
         AddAudit(
@@ -1659,7 +1666,9 @@ public sealed class FinanceService(
         var settings = await chargeServiceSettingRepository.GetActiveRegularAsync(cancellationToken);
         if (settings.Count == 0)
         {
-            return FinanceResult<RegularCatalogAccrualGenerationResultDto>.Failure("regular_catalog_empty", "В каталоге нет активных регулярных услуг.");
+            return FinanceResult<RegularCatalogAccrualGenerationResultDto>.Failure(
+                "regular_catalog_empty",
+                "Нет активных регулярных услуг. Откройте раздел «Тарифы и сборы», добавьте регулярную услугу и свяжите ее с видом начисления и тарифом.");
         }
 
         var serviceResults = new List<RegularAccrualGenerationResultDto>();
@@ -1695,7 +1704,12 @@ public sealed class FinanceService(
         var createdCount = serviceResults.Sum(result => result.CreatedCount);
         if (createdCount == 0)
         {
-            return FinanceResult<RegularCatalogAccrualGenerationResultDto>.Failure("regular_catalog_accruals_empty", "По каталогу услуг не создано ни одного начисления.");
+            var details = skippedServices.Count == 0
+                ? null
+                : $" Причины: {string.Join(" ", skippedServices)}";
+            return FinanceResult<RegularCatalogAccrualGenerationResultDto>.Failure(
+                "regular_catalog_accruals_empty",
+                $"По каталогу услуг не создано ни одного начисления.{details}");
         }
 
         var skippedCount = serviceResults.Sum(result => result.SkippedCount) + skippedServices.Count;

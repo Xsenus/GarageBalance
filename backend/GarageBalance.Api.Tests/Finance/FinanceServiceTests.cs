@@ -7,6 +7,8 @@ using GarageBalance.Api.Domain.Finance;
 using GarageBalance.Api.Infrastructure.Data;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
 
 namespace GarageBalance.Api.Tests.Finance;
 
@@ -2147,6 +2149,52 @@ public sealed class FinanceServiceTests
     }
 
     [Fact]
+    public async Task RegularAccrualAutomationRunner_CreatesCurrentBusinessMonthWithoutDuplicates()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        fixtures.IncomeType.Code = "membership";
+        var tariff = new Tariff
+        {
+            Name = "Ежемесячный членский тариф",
+            CalculationBase = "fixed",
+            Rate = 500m,
+            EffectiveFrom = new DateOnly(2026, 8, 1)
+        };
+        database.Context.ChargeServiceSettings.Add(new ChargeServiceSetting
+        {
+            Name = "Ежемесячный членский взнос",
+            IsRegular = true,
+            PeriodicityMonths = 1,
+            AccrualStartMonth = 1,
+            PaymentDueDay = 10,
+            PaymentDueMonth = 1,
+            OverdueGraceDays = 30,
+            IncomeType = fixtures.IncomeType,
+            Tariff = tariff,
+            UnitName = "руб."
+        });
+        await database.Context.SaveChangesAsync();
+
+        var runner = new RegularAccrualAutomationRunner(
+            FinanceServiceTestFactory.Create(database.Context),
+            new FixedTimeProvider(new DateTimeOffset(2026, 7, 31, 19, 30, 0, TimeSpan.Zero)),
+            Options.Create(new RegularAccrualAutomationOptions { TimeZoneId = "Asia/Novosibirsk" }),
+            NullLogger<RegularAccrualAutomationRunner>.Instance);
+
+        await runner.RunCurrentMonthAsync(CancellationToken.None);
+        await runner.RunCurrentMonthAsync(CancellationToken.None);
+
+        var accrual = Assert.Single(database.Context.Accruals);
+        Assert.Equal(new DateOnly(2026, 8, 1), accrual.AccountingMonth);
+        Assert.Equal(500m, accrual.Amount);
+        Assert.Contains("Автоматическое ежемесячное формирование", accrual.Comment, StringComparison.Ordinal);
+        Assert.Contains(
+            database.Context.AuditEvents,
+            item => item.Action == "finance.regular_catalog_accruals_generated" && item.ActorUserId == null);
+    }
+
+    [Fact]
     public async Task GenerateFeeCampaignAccrualsAsync_CreatesAccrualsForActiveGaragesAndWritesAudit()
     {
         await using var database = await TestDatabase.CreateAsync();
@@ -3130,4 +3178,9 @@ public sealed class FinanceServiceTests
     }
 
     private sealed record Fixtures(Garage Garage, Supplier Supplier, IncomeType IncomeType, ExpenseType ExpenseType);
+
+    private sealed class FixedTimeProvider(DateTimeOffset utcNow) : TimeProvider
+    {
+        public override DateTimeOffset GetUtcNow() => utcNow;
+    }
 }

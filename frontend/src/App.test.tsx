@@ -3269,6 +3269,7 @@ describe('App', () => {
     regularAccrualDialog = await screen.findByRole('dialog', { name: 'Сформировать начисления' })
     expect(within(regularAccrualDialog).queryByLabelText('Вид регулярного начисления')).not.toBeInTheDocument()
     expect(within(regularAccrualDialog).queryByLabelText('Тариф регулярного начисления')).not.toBeInTheDocument()
+    expect(within(regularAccrualDialog).getByText('Будут обработаны все активные регулярные услуги из раздела «Тарифы и сборы».')).toBeInTheDocument()
     expect(within(regularAccrualDialog).getByLabelText('Месяц регулярного начисления')).toHaveValue('2026-06')
     await user.type(within(regularAccrualDialog).getByLabelText('Комментарий регулярного начисления'), 'Автоначисление по каталогу')
     await user.click(within(regularAccrualDialog).getByRole('button', { name: 'Ок' }))
@@ -3279,6 +3280,7 @@ describe('App', () => {
     })
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Сформировать начисления' })).not.toBeInTheDocument())
     await waitFor(() => expect(regularAccrualButton).toHaveFocus())
+    expect(within(prototype).getByText('Начисления сформированы: создано 1, пропущено 0, сумма 1 250.')).toHaveAttribute('role', 'status')
 
     const fullPaymentButton = within(prototype).getByRole('button', { name: 'Полная оплата' })
     await user.click(fullPaymentButton)

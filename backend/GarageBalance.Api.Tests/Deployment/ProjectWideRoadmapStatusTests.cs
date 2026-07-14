@@ -801,6 +801,7 @@ public sealed class ProjectWideRoadmapStatusTests
         var historyText = string.Join('\n', roadmapLines.SkipWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal)));
         var verification = File.ReadAllText(Path.Combine(repositoryRoot, "docs", "monthly-accrual-rows-verification.md"));
         var financeServiceTestsText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api.Tests", "Finance", "FinanceServiceTests.cs"));
+        var regularAutomationText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "Application", "Finance", "RegularAccrualAutomationRunner.cs"));
         var financeControllerTestsText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api.Tests", "Finance", "FinanceControllerTests.cs"));
         var dbContextText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "Infrastructure", "Data", "GarageBalanceDbContext.cs"));
         var activeAccrualMigrationText = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "Infrastructure", "Data", "Migrations", "20260624070738_ActiveAccrualUniqueness.cs"));
@@ -820,11 +821,15 @@ public sealed class ProjectWideRoadmapStatusTests
 
         Assert.Contains("Backend хранит начисления владельцев", verification, StringComparison.Ordinal);
         Assert.Contains("Повторный запуск регулярных начислений за тот же месяц не создает дубли", verification, StringComparison.Ordinal);
+        Assert.Contains("Backend автоматически проверяет текущий месяц", verification, StringComparison.Ordinal);
         Assert.Contains("UI поддерживает перенос задолженности владельца на следующий месяц", verification, StringComparison.Ordinal);
         Assert.Contains("FinanceServiceTests", verification, StringComparison.Ordinal);
         Assert.Contains("FinanceControllerTests", verification, StringComparison.Ordinal);
         Assert.Contains("ActiveAccrualUniqueness", verification, StringComparison.Ordinal);
-        Assert.Contains("Новая запись \"Что нового\" не нужна", verification, StringComparison.Ordinal);
+        Assert.Contains("Пользовательская запись \"Что нового\" добавлена", verification, StringComparison.Ordinal);
+        Assert.Contains("RunCurrentMonthAsync", regularAutomationText, StringComparison.Ordinal);
+        Assert.Contains("часовой пояс Новосибирска", verification, StringComparison.Ordinal);
+        Assert.Contains("2026-07-14-automatic-monthly-regular-accruals", releaseText, StringComparison.Ordinal);
 
         Assert.Contains("CreateAccrualAsync_CreatesManualAccrualAndWritesAudit", financeServiceTestsText, StringComparison.Ordinal);
         Assert.Contains("CreateAccrualAsync_RejectsDuplicateGarageTypeMonthAndSource", financeServiceTestsText, StringComparison.Ordinal);

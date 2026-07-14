@@ -108,6 +108,17 @@ builder.Services.AddHttpClient<IDadataSuggestionService, DadataSuggestionService
 builder.Services.AddScoped<IAppReleaseService, AppReleaseService>();
 builder.Services.AddScoped<IAppReleaseRepository, EfAppReleaseRepository>();
 builder.Services.AddHostedService<AppReleaseCatalogSynchronizer>();
+builder.Services
+    .AddOptions<RegularAccrualAutomationOptions>()
+    .Bind(builder.Configuration.GetSection(RegularAccrualAutomationOptions.SectionName))
+    .ValidateDataAnnotations()
+    .Validate(
+        options => TryResolveTimeZone(options.TimeZoneId),
+        "Finance:RegularAccrualAutomation:TimeZoneId must contain a valid system time zone identifier.")
+    .ValidateOnStart();
+builder.Services.AddSingleton(TimeProvider.System);
+builder.Services.AddScoped<RegularAccrualAutomationRunner>();
+builder.Services.AddHostedService<RegularAccrualAutomationWorker>();
 builder.Services.AddScoped<IReportService, ReportService>();
 builder.Services.AddScoped<ICashMovementReportQuery, EfCashMovementReportQuery>();
 builder.Services.AddScoped<IFundChangeReportQuery, EfFundChangeReportQuery>();
@@ -203,3 +214,20 @@ app.UseAuthorization();
 app.MapControllers();
 
 app.Run();
+
+static bool TryResolveTimeZone(string timeZoneId)
+{
+    try
+    {
+        _ = TimeZoneInfo.FindSystemTimeZoneById(timeZoneId);
+        return true;
+    }
+    catch (TimeZoneNotFoundException)
+    {
+        return false;
+    }
+    catch (InvalidTimeZoneException)
+    {
+        return false;
+    }
+}

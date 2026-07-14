@@ -2875,6 +2875,7 @@ function PaymentsPrototypePanel({
   const [formStateLoaded, setFormStateLoaded] = useState(false)
   const [formStateError, setFormStateError] = useState<string | null>(null)
   const [paymentError, setPaymentError] = useState<string | null>(null)
+  const [regularAccrualStatus, setRegularAccrualStatus] = useState<string | null>(null)
   const [garageWorksheetLoadingId, setGarageWorksheetLoadingId] = useState<string | null>(null)
   const [garagePaymentHistoryLoadingId, setGaragePaymentHistoryLoadingId] = useState<string | null>(null)
   const [expenseWorksheetLoading, setExpenseWorksheetLoading] = useState(false)
@@ -3225,6 +3226,7 @@ function PaymentsPrototypePanel({
   function openRegularAccrualDialog(event: MouseEvent<HTMLButtonElement>) {
     regularAccrualTriggerRef.current = event.currentTarget
     setPaymentError(null)
+    setRegularAccrualStatus(null)
     setRegularAccrualDialogOpen(true)
   }
 
@@ -3917,6 +3919,21 @@ function PaymentsPrototypePanel({
       ? createdAccruals.filter((accrual) => accrual.garageId === selectedGarage.id)
       : createdAccruals
 
+    const selectedGarageTotal = selectedGarageAccruals.reduce((total, accrual) => total + accrual.amount, 0)
+    if (selectedGarageTotal > 0) {
+      setGarageWorksheetSummary((currentSummary) => currentSummary
+        ? {
+            ...currentSummary,
+            accrualTotal: currentSummary.accrualTotal + selectedGarageTotal,
+            closingDebt: currentSummary.closingDebt + selectedGarageTotal,
+          }
+        : currentSummary)
+    }
+
+    setRegularAccrualStatus(
+      `Начисления сформированы: создано ${result.createdCount}, пропущено ${result.skippedCount}, сумма ${formatPaymentPrototypeValue(result.totalAmount)}.`,
+    )
+
     setGarageRows((currentRows) => {
       let nextRows = currentRows
       selectedGarageAccruals.forEach((accrual) => {
@@ -4290,6 +4307,7 @@ function PaymentsPrototypePanel({
       </div>
       {formStateError ? <FormError>{formStateError}</FormError> : null}
       {paymentError ? <FormError>{paymentError}</FormError> : null}
+      {regularAccrualStatus ? <p className="form-status" role="status">{regularAccrualStatus}</p> : null}
       {receiptActionStatus ? <p className="form-status" role="status">{receiptActionStatus}</p> : null}
       {garageWorksheetLoadingId ? <TableLoadingState className="table-loading-state--compact" label="Загружаем поступления выбранного гаража" /> : null}
 
@@ -5672,6 +5690,7 @@ function RegularAccrualPrototypeDialog({
           </button>
         </div>
         <form className="dictionary-modal-form payments-prototype-modal-form" onSubmit={handleSubmit}>
+          <p className="form-hint">Будут обработаны все активные регулярные услуги из раздела «Тарифы и сборы».</p>
           <FormField label="Месяц">
             <input aria-label="Месяц регулярного начисления" type="month" value={accountingMonth} onChange={(event) => {
               setAccountingMonth(event.target.value)
