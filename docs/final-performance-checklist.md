@@ -139,3 +139,14 @@ This pass changes neither the database schema nor the cleanup policy. The optimi
 - [x] Rechecked the authorized VPS: `garagebalance-staging.service` is active with zero restarts, nginx is valid, public health and frontend return HTTP 200, the warning journal is empty, the verified backup remains readable, and PostgreSQL retains nine tariffs with zero operational rows in garages, owners, staff, suppliers, payments, accruals, meters, funds, import and audit tables.
 
 This audit introduces no schema or cleanup-policy changes. Feature-branch publication does not deploy staging because the deployment workflow remains intentionally restricted to `master`.
+
+## Fifth concurrency and loading-state audit: 2026-07-14
+
+- [x] Rechecked concurrent financial and dictionary writes. PostgreSQL unique-constraint races are now returned as a safe HTTP 409 conflict instead of an internal HTTP 500 error; unrelated database failures remain HTTP 500 and do not expose database details.
+- [x] Rechecked overlapping payment table requests. A delayed response from an older tab, page or filter can no longer replace the latest result or stop its loader; reference-data loading and active-table loading now have independent state.
+- [x] The active financial table keeps the shared accessible table skeleton while its latest request is pending. Previous rows and empty-state text are hidden until loading completes, and conflicting pagination actions remain disabled.
+- [x] Added regression tests for PostgreSQL unique-write conflicts, non-unique database failures, reversed finance response order and loader lifetime. Complete verification passed twice with identical results: 1508 backend tests and 421 frontend tests.
+- [x] ESLint, production TypeScript build, bundle budget (`74.1 KiB` main JS, `16.9 KiB` CSS, `212.5 KiB` total gzip), backend formatting, Docker Compose validation with process-local placeholder secrets, release JSON, whitespace checks and 114893-byte idempotent EF migration SQL generation passed.
+- [x] Rechecked the authorized VPS without changing it: `garagebalance-staging.service` is active with zero restarts, nginx is valid, direct and public health and the frontend return HTTP 200, the warning journal is empty, and the verified 435078-byte backup remains readable. PostgreSQL retains nine tariffs and zero operational rows in garages, owners, staff, staff departments, suppliers, supplier groups and contacts, payments, accruals, meters, funds, import and audit tables.
+
+No database schema or cleanup-policy changes were required. This feature branch remains intentionally undeployed until it reaches the deployment branch through the configured workflow.
