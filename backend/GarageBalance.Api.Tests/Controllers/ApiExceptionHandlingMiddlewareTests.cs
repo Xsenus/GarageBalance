@@ -2,7 +2,9 @@ using System.Text.Json;
 using GarageBalance.Api.Controllers;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.Features;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
+using Npgsql;
 
 namespace GarageBalance.Api.Tests.Controllers;
 
@@ -42,6 +44,52 @@ public sealed class ApiExceptionHandlingMiddlewareTests
 
         Assert.True(nextCalled);
         Assert.Equal(StatusCodes.Status200OK, context.Response.StatusCode);
+    }
+
+    [Fact]
+    public async Task InvokeAsync_ReturnsConflictForConcurrentUniqueWrite()
+    {
+        var context = CreateHttpContext();
+        context.Request.Method = HttpMethods.Post;
+        context.Request.Path = "/api/finance/accruals/regular";
+        var databaseException = new PostgresException(
+            "Sensitive duplicate value.",
+            "ERROR",
+            "ERROR",
+            PostgresErrorCodes.UniqueViolation,
+            constraintName: "IX_accruals_active_unique");
+        var middleware = new ApiExceptionHandlingMiddleware(
+            _ => throw new DbUpdateException("Sensitive database command.", databaseException),
+            NullLogger<ApiExceptionHandlingMiddleware>.Instance);
+
+        await middleware.InvokeAsync(context);
+
+        var problem = await ReadProblemAsync(context);
+        Assert.Equal(StatusCodes.Status409Conflict, context.Response.StatusCode);
+        Assert.Equal(ApiProblemDetails.ConcurrentWriteConflictCode, problem.GetProperty("title").GetString());
+        Assert.Equal(ApiProblemDetails.ConcurrentWriteConflictCode, problem.GetProperty(ApiProblemDetails.CodeExtensionKey).GetString());
+        Assert.DoesNotContain("Sensitive", problem.GetProperty("detail").GetString(), StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task InvokeAsync_KeepsNonUniqueDatabaseFailuresAsInternalErrors()
+    {
+        var context = CreateHttpContext();
+        var databaseException = new PostgresException(
+            "Sensitive foreign key value.",
+            "ERROR",
+            "ERROR",
+            PostgresErrorCodes.ForeignKeyViolation);
+        var middleware = new ApiExceptionHandlingMiddleware(
+            _ => throw new DbUpdateException("Sensitive database command.", databaseException),
+            NullLogger<ApiExceptionHandlingMiddleware>.Instance);
+
+        await middleware.InvokeAsync(context);
+
+        var problem = await ReadProblemAsync(context);
+        Assert.Equal(StatusCodes.Status500InternalServerError, context.Response.StatusCode);
+        Assert.Equal(ApiProblemDetails.InternalErrorCode, problem.GetProperty(ApiProblemDetails.CodeExtensionKey).GetString());
+        Assert.DoesNotContain("Sensitive", problem.GetProperty("detail").GetString(), StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]

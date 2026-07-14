@@ -1,6 +1,6 @@
 import { render, screen } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
-import { EmptyState, LoadingSkeleton } from './AsyncState'
+import { EmptyState, LoadingSkeleton, TableLoadingState } from './AsyncState'
 
 describe('AsyncState', () => {
   it('announces loading without exposing decorative skeleton rows', () => {
@@ -17,5 +17,15 @@ describe('AsyncState', () => {
 
     expect(screen.getByRole('status')).toHaveTextContent('Данных пока нет.')
     expect(screen.getByRole('status')).toHaveClass('empty-state--spacious')
+  })
+
+  it('renders the shared table-shaped skeleton loader', () => {
+    const { container } = render(<TableLoadingState label="Загружаем таблицу" />)
+
+    expect(screen.getByRole('status', { name: 'Загружаем таблицу' })).toBeInTheDocument()
+    expect(container.querySelectorAll('.loading-skeleton-row')).toHaveLength(4)
+    expect(container.querySelectorAll('.loading-skeleton-line')).toHaveLength(16)
+    expect(container.querySelector('.loading-skeleton-row')).toHaveAttribute('aria-hidden', 'true')
+    expect(container.querySelector('.table-loading-state-spinner')).not.toBeInTheDocument()
   })
 })

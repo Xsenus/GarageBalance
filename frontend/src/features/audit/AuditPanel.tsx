@@ -3,7 +3,7 @@ import { ArrowLeft, FileSpreadsheet, FileText, RefreshCw, X } from 'lucide-react
 import type { AuthResponse } from '../../services/authApi'
 import type { AuditClient, AuditEventDto } from '../../services/auditApi'
 import { hasPermission, permissions } from '../../shared/accessControl'
-import { LoadingSkeleton } from '../../shared/AsyncState'
+import { TableLoadingState } from '../../shared/AsyncState'
 import { buildAuditExportFileName, downloadBlob } from '../../shared/fileExports'
 import { FormField } from '../../shared/FormField'
 import { FormError, FormValidationSummary } from '../../shared/formFeedback'
@@ -244,6 +244,13 @@ export function AuditPanel({ auth, auditClient, preset, onOpenSection }: { auth:
   const [relatedAccountingMonth, setRelatedAccountingMonth] = useState('')
   const [relatedCounterparty, setRelatedCounterparty] = useState(preset?.relatedCounterparty ?? '')
   const [relatedDocument, setRelatedDocument] = useState('')
+  const [appliedTextFilters, setAppliedTextFilters] = useState(() => ({
+    search: '',
+    actorUserId: '',
+    relatedGarage: '',
+    relatedCounterparty: preset?.relatedCounterparty ?? '',
+    relatedDocument: '',
+  }))
   const [loading, setLoading] = useState(true)
   const [exporting, setExporting] = useState(false)
   const [error, setError] = useState<AuditPanelError | null>(null)
@@ -266,22 +273,38 @@ export function AuditPanel({ auth, auditClient, preset, onOpenSection }: { auth:
   const resetAuditPageOffset = useCallback(() => {
     setPage((current) => current.offset === 0 ? current : { ...current, offset: 0 })
   }, [])
+  useEffect(() => {
+    if (
+      search === appliedTextFilters.search
+      && actorUserId === appliedTextFilters.actorUserId
+      && relatedGarage === appliedTextFilters.relatedGarage
+      && relatedCounterparty === appliedTextFilters.relatedCounterparty
+      && relatedDocument === appliedTextFilters.relatedDocument
+    ) {
+      return undefined
+    }
+    const handle = window.setTimeout(() => {
+      setAppliedTextFilters({ search, actorUserId, relatedGarage, relatedCounterparty, relatedDocument })
+      resetAuditPageOffset()
+    }, 350)
+    return () => window.clearTimeout(handle)
+  }, [actorUserId, appliedTextFilters, relatedCounterparty, relatedDocument, relatedGarage, resetAuditPageOffset, search])
   const auditQuery = useMemo(() => ({
-    search: search.trim() || undefined,
+    search: appliedTextFilters.search.trim() || undefined,
     section: section || undefined,
     actionKind: actionKind || undefined,
     entityType: entityType || undefined,
-    actorUserId: actorUserId.trim() || undefined,
+    actorUserId: appliedTextFilters.actorUserId.trim() || undefined,
     quickFilter: quickFilter || undefined,
     dateFrom: dateFrom || undefined,
     dateTo: dateTo || undefined,
-    relatedGarage: relatedGarage.trim() || undefined,
+    relatedGarage: appliedTextFilters.relatedGarage.trim() || undefined,
     relatedAccountingMonth: relatedAccountingMonth || undefined,
-    relatedCounterparty: relatedCounterparty.trim() || undefined,
-    relatedDocument: relatedDocument.trim() || undefined,
+    relatedCounterparty: appliedTextFilters.relatedCounterparty.trim() || undefined,
+    relatedDocument: appliedTextFilters.relatedDocument.trim() || undefined,
     offset: page.offset,
     limit: page.limit,
-  }), [actionKind, actorUserId, dateFrom, dateTo, entityType, page.limit, page.offset, quickFilter, relatedAccountingMonth, relatedCounterparty, relatedDocument, relatedGarage, search, section])
+  }), [actionKind, appliedTextFilters, dateFrom, dateTo, entityType, page.limit, page.offset, quickFilter, relatedAccountingMonth, section])
   const auditExportQuery = useMemo(() => ({
     search: auditQuery.search,
     section: auditQuery.section,
@@ -445,7 +468,7 @@ export function AuditPanel({ auth, auditClient, preset, onOpenSection }: { auth:
           <h2>История изменений объектов и действий системы</h2>
         </div>
         <div className="section-actions">
-          <span>{loading ? 'Загрузка...' : `${page.totalCount} событий`}</span>
+          {!loading ? <span>{page.totalCount} событий</span> : null}
           <button className="secondary-button" type="button" disabled={exporting || auditHasValidationErrors} onClick={exportCurrentEventsCsv}>
             <FileSpreadsheet size={16} />
             Скачать CSV
@@ -471,7 +494,7 @@ export function AuditPanel({ auth, auditClient, preset, onOpenSection }: { auth:
 
       <form className="audit-filter-grid" onSubmit={(event) => event.preventDefault()} aria-label="Фильтры истории изменений">
         <FormField label="Поиск">
-          <input aria-label="Поиск в истории изменений" placeholder="Действие, объект или описание" value={search} onChange={(event) => { setSearch(event.target.value); resetAuditPageOffset() }} />
+          <input aria-label="Поиск в истории изменений" placeholder="Действие, объект или описание" value={search} onChange={(event) => setSearch(event.target.value)} />
         </FormField>
         <FormField label="Раздел">
           <SelectControl aria-label="Раздел истории изменений" value={section} options={auditSectionOptions} onChange={(value) => { setSection(value); resetAuditPageOffset() }} />
@@ -483,22 +506,22 @@ export function AuditPanel({ auth, auditClient, preset, onOpenSection }: { auth:
           <SelectControl aria-label="Тип объекта истории изменений" value={entityType} options={auditEntityTypeOptions} onChange={(value) => { setEntityType(value); resetAuditPageOffset() }} />
         </FormField>
         <FormField label="Пользователь">
-          <input aria-label="ID пользователя истории изменений" placeholder="ID пользователя" value={actorUserId} onChange={(event) => { setActorUserId(event.target.value); resetAuditPageOffset() }} />
+          <input aria-label="ID пользователя истории изменений" placeholder="ID пользователя" value={actorUserId} onChange={(event) => setActorUserId(event.target.value)} />
         </FormField>
         <FormField label="Быстрый фильтр">
           <SelectControl aria-label="Быстрый фильтр истории изменений" value={quickFilter} options={auditQuickFilterOptions} onChange={(value) => { setQuickFilter(value); resetAuditPageOffset() }} />
         </FormField>
         <FormField label="Гараж">
-          <input aria-label="Связанный гараж истории изменений" placeholder="Номер или ID гаража" value={relatedGarage} onChange={(event) => { setRelatedGarage(event.target.value); resetAuditPageOffset() }} />
+          <input aria-label="Связанный гараж истории изменений" placeholder="Номер или ID гаража" value={relatedGarage} onChange={(event) => setRelatedGarage(event.target.value)} />
         </FormField>
         <FormField label="Месяц">
           <LocalizedDatePicker ariaLabel="Связанный месяц истории изменений" mode="month" value={relatedAccountingMonth} onChange={(value) => { setRelatedAccountingMonth(value); resetAuditPageOffset() }} />
         </FormField>
         <FormField label="Контрагент">
-          <input aria-label="Связанный контрагент истории изменений" placeholder="Название или ID" value={relatedCounterparty} onChange={(event) => { setRelatedCounterparty(event.target.value); resetAuditPageOffset() }} />
+          <input aria-label="Связанный контрагент истории изменений" placeholder="Название или ID" value={relatedCounterparty} onChange={(event) => setRelatedCounterparty(event.target.value)} />
         </FormField>
         <FormField label="Документ">
-          <input aria-label="Связанный документ истории изменений" placeholder="Номер или ID документа" value={relatedDocument} onChange={(event) => { setRelatedDocument(event.target.value); resetAuditPageOffset() }} />
+          <input aria-label="Связанный документ истории изменений" placeholder="Номер или ID документа" value={relatedDocument} onChange={(event) => setRelatedDocument(event.target.value)} />
         </FormField>
         <FormField label="С даты">
           <LocalizedDatePicker ariaLabel="Начало периода истории изменений" mode="date" value={dateFrom} onChange={(value) => { setDateFrom(value); resetAuditPageOffset() }} />
@@ -521,7 +544,7 @@ export function AuditPanel({ auth, auditClient, preset, onOpenSection }: { auth:
           <span role="columnheader">Причина</span>
           <span role="columnheader">Карточка</span>
         </div>
-        {loading ? <LoadingSkeleton className="loading-skeleton--compact" label="Загружаем историю изменений" rows={6} columns={10} /> : null}
+        {loading ? <TableLoadingState label="Загружаем историю изменений" /> : null}
         {!loading && page.items.length === 0 ? <p className="empty-state" role="status" aria-live="polite">Событий пока нет</p> : null}
         {!loading ? page.items.map((auditEvent) => {
           const beforeAfter = getAuditBeforeAfter(auditEvent)
@@ -580,7 +603,7 @@ export function AuditPanel({ auth, auditClient, preset, onOpenSection }: { auth:
                 <X size={18} aria-hidden="true" />
               </button>
             </div>
-            {detailState.loading ? <p className="form-note" role="status" aria-live="polite">Загружаем карточку события...</p> : null}
+            {detailState.loading ? <TableLoadingState className="table-loading-state--compact" label="Загружаем карточку события" rows={3} columns={2} /> : null}
             {detailState.error ? (
               <div className="audit-error-state">
                 <FormError>{detailState.error}</FormError>

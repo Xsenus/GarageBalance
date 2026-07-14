@@ -6,6 +6,7 @@ namespace GarageBalance.Api.Controllers;
 public static class ApiProblemDetails
 {
     public const string CodeExtensionKey = "code";
+    public const string ConcurrentWriteConflictCode = "concurrent_write_conflict";
     public const string ForbiddenCode = "forbidden";
     public const string InternalErrorCode = "internal_error";
     public const string UnauthorizedCode = "unauthorized";
@@ -56,5 +57,13 @@ public static class ApiProblemDetails
     public static ProblemDetails CreateInternalError()
     {
         return Create(InternalErrorCode, "Произошла внутренняя ошибка сервера.", StatusCodes.Status500InternalServerError);
+    }
+
+    public static ProblemDetails CreateConcurrentWriteConflict()
+    {
+        return Create(
+            ConcurrentWriteConflictCode,
+            "Запись уже была добавлена или изменена другим запросом. Обновите данные и повторите действие.",
+            StatusCodes.Status409Conflict);
     }
 }

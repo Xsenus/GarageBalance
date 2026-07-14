@@ -4,7 +4,7 @@ import { FileSpreadsheet, FileText } from 'lucide-react'
 import type { AuthResponse } from '../../services/authApi'
 import type { AccountingTypeDto, DictionaryClient, GarageDto, SupplierDto } from '../../services/dictionariesApi'
 import type { BankDepositReportDto, CashPaymentReportDto, ConsolidatedReportDto, ExpenseReportDto, FeeReportDto, FundChangeReportDto, GarageDetailReportDto, IncomeReportDto, ReportClient } from '../../services/reportsApi'
-import { LoadingSkeleton } from '../../shared/AsyncState'
+import { TableLoadingState } from '../../shared/AsyncState'
 import { buildReportFileName, buildSnapshotReportFileName, downloadBlob } from '../../shared/fileExports'
 import { FormError } from '../../shared/formFeedback'
 import { formatMoney, formatMonth, formatOperationTime, getCurrentMonthInputValue, getLocalDateInputValue, getPreviousMonthInputValue } from '../../shared/formatters'
@@ -100,12 +100,17 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
   const [counterpartyFilter, setCounterpartyFilter] = useState('')
   const [incomeGarageFilter, setIncomeGarageFilter] = useState('')
   const [feeVariationFilter, setFeeVariationFilter] = useState('Сбор на ворота')
+  const [appliedGarageFilter, setAppliedGarageFilter] = useState('')
+  const [appliedCounterpartyFilter, setAppliedCounterpartyFilter] = useState('')
+  const [appliedIncomeGarageFilter, setAppliedIncomeGarageFilter] = useState('')
+  const [appliedFeeVariationFilter, setAppliedFeeVariationFilter] = useState('Сбор на ворота')
   const [garages, setGarages] = useState<GarageDto[]>([])
   const [suppliers, setSuppliers] = useState<SupplierDto[]>([])
   const [incomeTypes, setIncomeTypes] = useState<AccountingTypeDto[]>([])
   const [expenseTypes, setExpenseTypes] = useState<AccountingTypeDto[]>([])
   const [dictionaryError, setDictionaryError] = useState<string | null>(null)
   const [consolidatedReport, setConsolidatedReport] = useState<ConsolidatedReportDto | null>(null)
+  const [consolidatedReportLoading, setConsolidatedReportLoading] = useState(true)
   const [consolidatedPageNumber, setConsolidatedPageNumber] = useState(1)
   const [consolidatedPageSize, setConsolidatedPageSize] = useState(25)
   const [consolidatedIncomeBreakdown, setConsolidatedIncomeBreakdown] = useState<IncomeReportDto | null>(null)
@@ -131,6 +136,7 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
   const [bankDepositReportLoading, setBankDepositReportLoading] = useState(false)
   const [bankDepositReportError, setBankDepositReportError] = useState<string | null>(null)
   const [feeReport, setFeeReport] = useState<FeeReportDto | null>(null)
+  const [feeReportLoading, setFeeReportLoading] = useState(false)
   const [feeSummaryPageNumber, setFeeSummaryPageNumber] = useState(1)
   const [feeSummaryPageSize, setFeeSummaryPageSize] = useState(25)
   const [feeDetailPageNumber, setFeeDetailPageNumber] = useState(1)
@@ -145,6 +151,51 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
   const [fundChangePageRequest, setFundChangePageRequest] = useState({ offset: 0, limit: 25 })
   const [fundChangeReportLoading, setFundChangeReportLoading] = useState(false)
   const [fundChangeReportError, setFundChangeReportError] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (garageFilter === appliedGarageFilter) {
+      return undefined
+    }
+    const handle = window.setTimeout(() => {
+      setAppliedGarageFilter(garageFilter)
+      setGaragePageRequest((current) => current.offset === 0 ? current : { ...current, offset: 0 })
+    }, 350)
+    return () => window.clearTimeout(handle)
+  }, [appliedGarageFilter, garageFilter])
+
+  useEffect(() => {
+    if (counterpartyFilter === appliedCounterpartyFilter) {
+      return undefined
+    }
+    const handle = window.setTimeout(() => {
+      setAppliedCounterpartyFilter(counterpartyFilter)
+      setPayoutPageRequest((current) => current.offset === 0 ? current : { ...current, offset: 0 })
+    }, 350)
+    return () => window.clearTimeout(handle)
+  }, [appliedCounterpartyFilter, counterpartyFilter])
+
+  useEffect(() => {
+    if (incomeGarageFilter === appliedIncomeGarageFilter) {
+      return undefined
+    }
+    const handle = window.setTimeout(() => {
+      setAppliedIncomeGarageFilter(incomeGarageFilter)
+      setIncomePageRequest((current) => current.offset === 0 ? current : { ...current, offset: 0 })
+    }, 350)
+    return () => window.clearTimeout(handle)
+  }, [appliedIncomeGarageFilter, incomeGarageFilter])
+
+  useEffect(() => {
+    if (feeVariationFilter === appliedFeeVariationFilter) {
+      return undefined
+    }
+    const handle = window.setTimeout(() => {
+      setAppliedFeeVariationFilter(feeVariationFilter)
+      setFeeSummaryPageNumber(1)
+      setFeeDetailPageNumber(1)
+    }, 350)
+    return () => window.clearTimeout(handle)
+  }, [appliedFeeVariationFilter, feeVariationFilter])
 
   useEffect(() => {
     let ignore = false
@@ -184,31 +235,38 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
   useEffect(() => {
     let ignore = false
 
-    async function loadWorkbookReports() {
+    async function loadConsolidatedReport() {
+      setConsolidatedReportLoading(true)
       setReportDataError(null)
       try {
         const consolidatedFilter = monthlyFilters.consolidated
-        const [loadedConsolidated, loadedConsolidatedIncome, loadedConsolidatedExpenses, loadedFees] = await Promise.all([
-          reportClient.getConsolidatedReport(auth.accessToken, {
-            monthFrom: getReportMonthStart(consolidatedFilter.monthFrom),
-            monthTo: getReportMonthStart(consolidatedFilter.monthTo),
-            limit: 100,
-          }),
+        const monthFrom = getReportMonthStart(consolidatedFilter.monthFrom)
+        const monthTo = getReportMonthStart(consolidatedFilter.monthTo)
+        const loadedConsolidated = await reportClient.getConsolidatedReport(auth.accessToken, {
+          monthFrom,
+          monthTo,
+          limit: 100,
+        })
+
+        if (ignore) {
+          return
+        }
+
+        setConsolidatedReport(loadedConsolidated)
+        setConsolidatedReportLoading(false)
+
+        const [loadedConsolidatedIncome, loadedConsolidatedExpenses] = await Promise.all([
           reportClient.getIncomeReport(auth.accessToken, {
-            dateFrom: getReportMonthStart(consolidatedFilter.monthFrom),
+            dateFrom: monthFrom,
             dateTo: getReportMonthEnd(consolidatedFilter.monthTo),
             rowMode: 'payments',
             limit: 500,
           }),
           reportClient.getExpenseReport(auth.accessToken, {
-            dateFrom: getReportMonthStart(consolidatedFilter.monthFrom),
+            dateFrom: monthFrom,
             dateTo: getReportMonthEnd(consolidatedFilter.monthTo),
             rowMode: 'payments',
             limit: 500,
-          }),
-          reportClient.getFeeReport(auth.accessToken, {
-            variation: feeVariationFilter.trim() || undefined,
-            limit: 100,
           }),
         ])
 
@@ -216,23 +274,56 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
           return
         }
 
-        setConsolidatedReport(loadedConsolidated)
         setConsolidatedIncomeBreakdown(loadedConsolidatedIncome)
         setConsolidatedExpenseBreakdown(loadedConsolidatedExpenses)
-        setFeeReport(loadedFees)
       } catch (caught) {
         if (!ignore) {
           setReportDataError(caught instanceof Error ? caught.message : 'Не удалось загрузить расчетные данные отчетов.')
+          setConsolidatedReportLoading(false)
         }
       }
     }
 
-    void loadWorkbookReports()
+    void loadConsolidatedReport()
 
     return () => {
       ignore = true
     }
-  }, [auth.accessToken, feeVariationFilter, monthlyFilters.consolidated, reportClient])
+  }, [auth.accessToken, monthlyFilters.consolidated, reportClient])
+
+  useEffect(() => {
+    if (activeReportTab !== 'fees') {
+      return
+    }
+
+    let ignore = false
+    async function loadFeeReport() {
+      setFeeReportLoading(true)
+      setReportDataError(null)
+      try {
+        const report = await reportClient.getFeeReport(auth.accessToken, {
+          variation: appliedFeeVariationFilter.trim() || undefined,
+          limit: 100,
+        })
+        if (!ignore) {
+          setFeeReport(report)
+        }
+      } catch (caught) {
+        if (!ignore) {
+          setReportDataError(caught instanceof Error ? caught.message : 'Не удалось загрузить отчет по сборам.')
+        }
+      } finally {
+        if (!ignore) {
+          setFeeReportLoading(false)
+        }
+      }
+    }
+
+    void loadFeeReport()
+    return () => {
+      ignore = true
+    }
+  }, [activeReportTab, appliedFeeVariationFilter, auth.accessToken, reportClient])
 
   useEffect(() => {
     if (activeReportTab !== 'garages') {
@@ -249,7 +340,7 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
         const report = await reportClient.getGarageReport(auth.accessToken, {
           monthFrom: getReportMonthStart(filter.monthFrom),
           monthTo: getReportMonthStart(filter.monthTo),
-          search: garageFilter.trim() || undefined,
+          search: appliedGarageFilter.trim() || undefined,
           groupAccruals: garageAccrualsGrouped,
           offset: garagePageRequest.offset,
           limit: garagePageRequest.limit,
@@ -273,7 +364,7 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
     return () => {
       ignore = true
     }
-  }, [activeReportTab, auth.accessToken, garageAccrualsGrouped, garageFilter, garagePageRequest.limit, garagePageRequest.offset, monthlyFilters.garages, reportClient])
+  }, [activeReportTab, appliedGarageFilter, auth.accessToken, garageAccrualsGrouped, garagePageRequest.limit, garagePageRequest.offset, monthlyFilters.garages, reportClient])
 
   useEffect(() => {
     if (activeReportTab !== 'payouts') {
@@ -290,7 +381,7 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
         const report = await reportClient.getExpenseReport(auth.accessToken, {
           dateFrom: getReportMonthStart(filter.monthFrom),
           dateTo: getReportMonthEnd(filter.monthTo),
-          search: counterpartyFilter.trim() || undefined,
+          search: appliedCounterpartyFilter.trim() || undefined,
           offset: payoutPageRequest.offset,
           limit: payoutPageRequest.limit,
         })
@@ -313,7 +404,7 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
     return () => {
       ignore = true
     }
-  }, [activeReportTab, auth.accessToken, counterpartyFilter, monthlyFilters.payouts, payoutPageRequest.limit, payoutPageRequest.offset, reportClient])
+  }, [activeReportTab, appliedCounterpartyFilter, auth.accessToken, monthlyFilters.payouts, payoutPageRequest.limit, payoutPageRequest.offset, reportClient])
 
   useEffect(() => {
     if (activeReportTab !== 'income') {
@@ -330,7 +421,7 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
         const report = await reportClient.getIncomeReport(auth.accessToken, {
           dateFrom: filter.dateFrom,
           dateTo: filter.dateTo,
-          search: incomeGarageFilter.trim() || undefined,
+          search: appliedIncomeGarageFilter.trim() || undefined,
           rowMode: 'payments',
           offset: incomePageRequest.offset,
           limit: incomePageRequest.limit,
@@ -354,7 +445,7 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
     return () => {
       ignore = true
     }
-  }, [activeReportTab, auth.accessToken, dateFilters.income, incomeGarageFilter, incomePageRequest.limit, incomePageRequest.offset, reportClient])
+  }, [activeReportTab, appliedIncomeGarageFilter, auth.accessToken, dateFilters.income, incomePageRequest.limit, incomePageRequest.offset, reportClient])
 
   useEffect(() => {
     if (activeReportTab !== 'cashPayments') {
@@ -703,6 +794,7 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
       return (
         <ReportWorkbookSheet title="Консолидированный отчёт">
           {renderMonthlyFilter('consolidated', { from: 'Месяц с', to: 'Месяц по' })}
+          {consolidatedReportLoading ? <TableLoadingState label="Загружаем сводный отчёт" /> : null}
           {renderReportTable(
             'Консолидированный отчет',
             ['Месяц', 'Наименование', 'Поступления', 'Наименование', 'Выплаты', 'Разница', 'На начало месяца', 'На конец месяца'],
@@ -772,16 +864,13 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
                   aria-label="Гаражи"
                   list={garageOptionsId}
                   value={garageFilter}
-                  onChange={(event) => {
-                    setGaragePageRequest((current) => ({ ...current, offset: 0 }))
-                    setGarageFilter(event.target.value)
-                  }}
+                  onChange={(event) => setGarageFilter(event.target.value)}
                   placeholder="Гараж или номер"
                 />
               </label>
             ),
           })}
-          {garageReportLoading ? <LoadingSkeleton className="loading-skeleton--compact" label="Загружаем отчет по гаражам..." rows={6} columns={garageReportColumns.length} /> : null}
+          {garageReportLoading ? <TableLoadingState label="Загружаем отчет по гаражам..." /> : null}
           {garageReportError ? <FormError>{garageReportError}</FormError> : null}
           <div className="report-workbook-summary-row">
             <strong>ИТОГО начислений</strong>
@@ -840,16 +929,13 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
                   aria-label="Поставщики или сотрудники"
                   list={supplierOptionsId}
                   value={counterpartyFilter}
-                  onChange={(event) => {
-                    setPayoutPageRequest((current) => ({ ...current, offset: 0 }))
-                    setCounterpartyFilter(event.target.value)
-                  }}
+                  onChange={(event) => setCounterpartyFilter(event.target.value)}
                   placeholder="Поставщик или сотрудник"
                 />
               </label>
             ),
           })}
-          {payoutReportLoading ? <LoadingSkeleton className="loading-skeleton--compact" label="Загружаем выплаты..." rows={6} columns={6} /> : null}
+          {payoutReportLoading ? <TableLoadingState label="Загружаем выплаты..." /> : null}
           {payoutReportError ? <FormError>{payoutReportError}</FormError> : null}
           <div className="report-workbook-summary-row">
             <strong>ИТОГО начислений</strong>
@@ -894,16 +980,13 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
                   aria-label="Гаражи по поступлениям"
                   list={garageOptionsId}
                   value={incomeGarageFilter}
-                  onChange={(event) => {
-                    setIncomePageRequest((current) => ({ ...current, offset: 0 }))
-                    setIncomeGarageFilter(event.target.value)
-                  }}
+                  onChange={(event) => setIncomeGarageFilter(event.target.value)}
                   placeholder="Гараж или номер"
                 />
               </label>
             ),
           })}
-          {incomeReportLoading ? <LoadingSkeleton className="loading-skeleton--compact" label="Загружаем поступления..." rows={6} columns={6} /> : null}
+          {incomeReportLoading ? <TableLoadingState label="Загружаем поступления..." /> : null}
           {incomeReportError ? <FormError>{incomeReportError}</FormError> : null}
           <div className="report-workbook-summary-row report-workbook-summary-row--single"><strong>ИТОГО</strong></div>
           {renderReportTable(
@@ -934,7 +1017,7 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
       return (
         <ReportWorkbookSheet title="Отчёт по оплатам из кассы">
           {renderDateFilter('cashPayments', { from: 'С', to: 'По' })}
-          {cashPaymentReportLoading ? <LoadingSkeleton className="loading-skeleton--compact" label="Загружаем оплаты из кассы..." rows={6} columns={5} /> : null}
+          {cashPaymentReportLoading ? <TableLoadingState label="Загружаем оплаты из кассы..." /> : null}
           {cashPaymentReportError ? <FormError>{cashPaymentReportError}</FormError> : null}
           <div className="report-workbook-toolbar" role="group" aria-label="Выгрузка отчета по оплатам из кассы">
             {renderReportExportButton('xlsx', 'cashPayments-xlsx', () => void downloadCashOrBankReport('cashPayments', 'xlsx'))}
@@ -967,7 +1050,7 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
       return (
         <ReportWorkbookSheet title="Отчёт по сдаче кассы в банк">
           {renderDateFilter('bankDeposits', { from: 'С', to: 'По' })}
-          {bankDepositReportLoading ? <LoadingSkeleton className="loading-skeleton--compact" label="Загружаем сдачу кассы в банк..." rows={6} columns={3} /> : null}
+          {bankDepositReportLoading ? <TableLoadingState label="Загружаем сдачу кассы в банк..." /> : null}
           {bankDepositReportError ? <FormError>{bankDepositReportError}</FormError> : null}
           <div className="report-workbook-toolbar" role="group" aria-label="Выгрузка отчета по сдаче кассы в банк">
             {renderReportExportButton('xlsx', 'bankDeposits-xlsx', () => void downloadCashOrBankReport('bankDeposits', 'xlsx'))}
@@ -994,6 +1077,9 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
           aria-label={`Открыть детализацию сбора ${row.name}`}
           onClick={() => {
             setFeeVariationFilter(row.name)
+            setAppliedFeeVariationFilter(row.name)
+            setFeeSummaryPageNumber(1)
+            setFeeDetailPageNumber(1)
             setFeeDebtorsVisible(true)
             setFeeDetailMode('all')
           }}
@@ -1022,6 +1108,7 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
       const feeDetailTableName = feeDetailMode === 'debtors' ? 'Должники по сбору' : 'Гаражи по сбору'
       return (
         <ReportWorkbookSheet title="Отчёт по сборам">
+          {feeReportLoading ? <TableLoadingState label="Загружаем отчёт по сборам" /> : null}
           <div className="report-workbook-filter report-workbook-filter--single" aria-label="Фильтры отчета по сборам">
             <label className="report-workbook-filter-wide">
               <span>Вариация сбора</span>
@@ -1130,7 +1217,7 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
           {renderReportExportButton('xlsx', 'funds-xlsx', () => void downloadFundChangeReport('xlsx'))}
           {renderReportExportButton('pdf', 'funds-pdf', () => void downloadFundChangeReport('pdf'))}
         </div>
-        {fundChangeReportLoading ? <LoadingSkeleton className="loading-skeleton--compact" label="Загружаем изменения фондов..." rows={6} columns={8} /> : null}
+        {fundChangeReportLoading ? <TableLoadingState label="Загружаем изменения фондов..." /> : null}
         {fundChangeReportError ? <FormError>{fundChangeReportError}</FormError> : null}
         {fundChangeReport ? (
           <div className="report-workbook-summary-row">

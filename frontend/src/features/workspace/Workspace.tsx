@@ -1,17 +1,6 @@
-import { useState } from 'react'
+import { Component, lazy, Suspense, useState } from 'react'
+import type { ErrorInfo, ReactNode } from 'react'
 import { ArrowLeft, Bell, LockKeyhole, LogOut, X } from 'lucide-react'
-import { PasswordPanel } from '../settings/PasswordPanel'
-import { FundsPrototypePanel } from '../funds/FundsPanel'
-import { ImportPanel } from '../import/ImportPanel'
-import { MeterReadingsPrototypePanel } from '../meterReadings/MeterReadingsPanel'
-import { AuditPanel } from '../audit/AuditPanel'
-import { ReportPanel } from '../reports/ReportPanel'
-import { UserManagementPanel } from '../users/UserManagementPanel'
-import { DictionaryPanelV2 } from '../dictionaries/DictionaryPanel'
-import { TariffsAndFeesPrototypePanel } from '../tariffs/TariffsAndFeesPanel'
-import { ContractorsPrototypePanel } from '../contractors/ContractorsPanel'
-import { FinancePanel } from '../finance/FinancePanel'
-import { ReleasePanel } from '../releases/ReleasePanel'
 import type { AuthClient, AuthResponse, CurrentUserDto } from '../../services/authApi'
 import type { AuditClient } from '../../services/auditApi'
 import type { DictionaryClient } from '../../services/dictionariesApi'
@@ -27,6 +16,65 @@ import type { ApplicationSettingsClient } from '../../services/settingsApi'
 import { hasAnyPermission, hasPermission, permissions } from '../../shared/accessControl'
 import { useEscapeKey, useFocusOnOpen, useFocusTrap, useRestoreFocusOnClose } from '../../shared/focusHooks'
 import type { AuditPanelPreset, WorkspaceOpenContext, WorkspaceSection } from '../../shared/workspaceNavigation'
+import { TableLoadingState } from '../../shared/AsyncState'
+
+const PasswordPanel = lazy(() => import('../settings/PasswordPanel').then((module) => ({ default: module.PasswordPanel })))
+const FundsPrototypePanel = lazy(() => import('../funds/FundsPanel').then((module) => ({ default: module.FundsPrototypePanel })))
+const ImportPanel = lazy(() => import('../import/ImportPanel').then((module) => ({ default: module.ImportPanel })))
+const MeterReadingsPrototypePanel = lazy(() => import('../meterReadings/MeterReadingsPanel').then((module) => ({ default: module.MeterReadingsPrototypePanel })))
+const AuditPanel = lazy(() => import('../audit/AuditPanel').then((module) => ({ default: module.AuditPanel })))
+const ReportPanel = lazy(() => import('../reports/ReportPanel').then((module) => ({ default: module.ReportPanel })))
+const UserManagementPanel = lazy(() => import('../users/UserManagementPanel').then((module) => ({ default: module.UserManagementPanel })))
+const DictionaryPanelV2 = lazy(() => import('../dictionaries/DictionaryPanel').then((module) => ({ default: module.DictionaryPanelV2 })))
+const TariffsAndFeesPrototypePanel = lazy(() => import('../tariffs/TariffsAndFeesPanel').then((module) => ({ default: module.TariffsAndFeesPrototypePanel })))
+const ContractorsPrototypePanel = lazy(() => import('../contractors/ContractorsPanel').then((module) => ({ default: module.ContractorsPrototypePanel })))
+const FinancePanel = lazy(() => import('../finance/FinancePanel').then((module) => ({ default: module.FinancePanel })))
+const ReleasePanel = lazy(() => import('../releases/ReleasePanel').then((module) => ({ default: module.ReleasePanel })))
+
+const workspaceSectionPreloaders: Partial<Record<WorkspaceSection, () => Promise<unknown>>> = {
+  tariffsAndFees: () => import('../tariffs/TariffsAndFeesPanel'),
+  contractors: () => import('../contractors/ContractorsPanel'),
+  meterReadings: () => import('../meterReadings/MeterReadingsPanel'),
+  payments: () => import('../finance/FinancePanel'),
+  reports: () => import('../reports/ReportPanel'),
+  settings: () => import('../settings/PasswordPanel'),
+  funds: () => import('../funds/FundsPanel'),
+}
+
+function preloadWorkspaceSection(section: WorkspaceSection) {
+  const preloader = workspaceSectionPreloaders[section]
+  if (preloader) {
+    void preloader().catch(() => undefined)
+  }
+}
+
+export class WorkspaceSectionErrorBoundary extends Component<
+  { children: ReactNode },
+  { failed: boolean }
+> {
+  state = { failed: false }
+
+  static getDerivedStateFromError() {
+    return { failed: true }
+  }
+
+  componentDidCatch(error: Error, info: ErrorInfo) {
+    console.error('Не удалось загрузить рабочий раздел.', error, info.componentStack)
+  }
+
+  render() {
+    if (this.state.failed) {
+      return (
+        <section className="empty-state" role="alert" aria-label="Раздел не загрузился">
+          <p>Не удалось загрузить раздел. Проверьте соединение и обновите страницу.</p>
+          <button className="secondary-button" type="button" onClick={() => window.location.reload()}>Обновить страницу</button>
+        </section>
+      )
+    }
+
+    return this.props.children
+  }
+}
 
 const dashboardTiles: { title: string; section: WorkspaceSection; requiredAny?: readonly string[] }[] = [
   { title: 'Тарифы\nи сборы', section: 'tariffsAndFees', requiredAny: [permissions.dictionariesRead] },
@@ -111,6 +159,8 @@ export function Workspace({
                     title={tile.title.replace('\n', ' ')}
                     disabled={!canOpen}
                     onClick={() => onOpenSection(tile.section)}
+                    onFocus={() => preloadWorkspaceSection(tile.section)}
+                    onPointerEnter={() => preloadWorkspaceSection(tile.section)}
                   >
                     {tile.title.split('\n').map((line) => (
                       <span key={line}>{line}</span>
@@ -222,7 +272,11 @@ export function Workspace({
           </button>
         </div>
       </header>
-      {renderActiveSection()}
+      <WorkspaceSectionErrorBoundary key={activeSection}>
+        <Suspense fallback={<TableLoadingState label="Загружаем выбранный раздел" />}>
+          {renderActiveSection()}
+        </Suspense>
+      </WorkspaceSectionErrorBoundary>
       {logoutConfirmationOpen ? (
         <div className="modal-backdrop" role="presentation" onMouseDown={() => setLogoutConfirmationOpen(false)}>
           <section

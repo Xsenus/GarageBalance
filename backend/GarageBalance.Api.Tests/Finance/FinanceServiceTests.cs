@@ -1,3 +1,4 @@
+using System.Data.Common;
 using System.Text.Json;
 using GarageBalance.Api.Application.Dictionaries;
 using GarageBalance.Api.Application.Finance;
@@ -7,6 +8,9 @@ using GarageBalance.Api.Domain.Finance;
 using GarageBalance.Api.Infrastructure.Data;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
+using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
 
 namespace GarageBalance.Api.Tests.Finance;
 
@@ -1424,8 +1428,37 @@ public sealed class FinanceServiceTests
         Assert.Equal(1100m, result.Balance);
         Assert.Equal(500m, result.Debt);
         Assert.Equal(2, result.OperationCount);
+        Assert.Equal(1, result.IncomeCount);
+        Assert.Equal(1, result.ExpenseCount);
         Assert.Equal(1, result.AccrualCount);
+        Assert.Equal(0, result.SupplierAccrualCount);
         Assert.Equal(0, result.MeterReadingCount);
+    }
+
+    [Fact]
+    public async Task GetSummaryAsync_UsesFourAggregateSelectsAndReturnsSectionCounts()
+    {
+        var commandCounter = new SelectCommandCounter();
+        await using var database = await TestDatabase.CreateAsync(commandCounter);
+        var fixtures = await database.SeedAsync();
+        var service = FinanceServiceTestFactory.Create(database.Context);
+        await service.CreateIncomeAsync(new CreateIncomeOperationRequest(fixtures.Garage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 6, 19), new DateOnly(2026, 6, 1), 1500m, "IN-1", null), null, CancellationToken.None);
+        await service.CreateExpenseAsync(new CreateExpenseOperationRequest(fixtures.Supplier.Id, fixtures.ExpenseType.Id, new DateOnly(2026, 6, 20), new DateOnly(2026, 6, 1), 400m, "OUT-1", null), null, CancellationToken.None);
+        await service.CreateAccrualAsync(new CreateAccrualRequest(fixtures.Garage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 6, 1), 2000m, "regular", null), null, CancellationToken.None);
+        await service.CreateSupplierAccrualAsync(new CreateSupplierAccrualRequest(fixtures.Supplier.Id, fixtures.ExpenseType.Id, new DateOnly(2026, 6, 1), 400m, "regular", "SUP-1", null), null, CancellationToken.None);
+        await service.CreateMeterReadingAsync(new CreateMeterReadingRequest(fixtures.Garage.Id, "water", new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 20), 10m, null), null, CancellationToken.None);
+        commandCounter.Reset();
+
+        var result = await service.GetSummaryAsync(
+            new FinancialOperationListRequest(new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 30), null, null),
+            CancellationToken.None);
+
+        Assert.Equal(4, commandCounter.Count);
+        Assert.Equal(1, result.IncomeCount);
+        Assert.Equal(1, result.ExpenseCount);
+        Assert.Equal(1, result.AccrualCount);
+        Assert.Equal(1, result.SupplierAccrualCount);
+        Assert.Equal(1, result.MeterReadingCount);
     }
 
     [Fact]
@@ -2147,6 +2180,64 @@ public sealed class FinanceServiceTests
     }
 
     [Fact]
+    public async Task RegularAccrualAutomationRunner_CreatesCurrentBusinessMonthWithoutDuplicates()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        fixtures.IncomeType.Code = "membership";
+        var tariff = new Tariff
+        {
+            Name = "Ежемесячный членский тариф",
+            CalculationBase = "fixed",
+            Rate = 500m,
+            EffectiveFrom = new DateOnly(2026, 8, 1)
+        };
+        database.Context.ChargeServiceSettings.Add(new ChargeServiceSetting
+        {
+            Name = "Ежемесячный членский взнос",
+            IsRegular = true,
+            PeriodicityMonths = 1,
+            AccrualStartMonth = 1,
+            PaymentDueDay = 10,
+            PaymentDueMonth = 1,
+            OverdueGraceDays = 30,
+            IncomeType = fixtures.IncomeType,
+            Tariff = tariff,
+            UnitName = "руб."
+        });
+        await database.Context.SaveChangesAsync();
+
+        var runner = new RegularAccrualAutomationRunner(
+            FinanceServiceTestFactory.Create(database.Context),
+            new FixedTimeProvider(new DateTimeOffset(2026, 7, 31, 19, 30, 0, TimeSpan.Zero)),
+            Options.Create(new RegularAccrualAutomationOptions { TimeZoneId = "Asia/Novosibirsk" }),
+            NullLogger<RegularAccrualAutomationRunner>.Instance);
+
+        await runner.RunCurrentMonthAsync(CancellationToken.None);
+        await runner.RunCurrentMonthAsync(CancellationToken.None);
+
+        var accrual = Assert.Single(database.Context.Accruals);
+        Assert.Equal(new DateOnly(2026, 8, 1), accrual.AccountingMonth);
+        Assert.Equal(500m, accrual.Amount);
+        Assert.Contains("Автоматическое ежемесячное формирование", accrual.Comment, StringComparison.Ordinal);
+        Assert.Contains(
+            database.Context.AuditEvents,
+            item => item.Action == "finance.regular_catalog_accruals_generated" && item.ActorUserId == null);
+    }
+
+    [Fact]
+    public void RegularAccrualAutomationOptions_ChecksNewMonthlyDataWithinFifteenMinutesAndRetriesFailuresSooner()
+    {
+        var options = new RegularAccrualAutomationOptions
+        {
+            FailureRetryMinutes = 5
+        };
+
+        Assert.Equal(TimeSpan.FromMinutes(15), options.GetDelayAfterRun(failed: false));
+        Assert.Equal(TimeSpan.FromMinutes(5), options.GetDelayAfterRun(failed: true));
+    }
+
+    [Fact]
     public async Task GenerateFeeCampaignAccrualsAsync_CreatesAccrualsForActiveGaragesAndWritesAudit()
     {
         await using var database = await TestDatabase.CreateAsync();
@@ -2394,6 +2485,72 @@ public sealed class FinanceServiceTests
     }
 
     [Fact]
+    public async Task GenerateRegularAccrualsAsync_UsesConstantSelectCountForManyGaragesAndMeterReadings()
+    {
+        var commandCounter = new SelectCommandCounter();
+        await using var database = await TestDatabase.CreateAsync(commandCounter);
+        var fixtures = await database.SeedAsync();
+        fixtures.IncomeType.Code = "water";
+        var tariff = new Tariff
+        {
+            Name = "Массовый тариф воды",
+            CalculationBase = "meter_water",
+            Rate = 50m,
+            EffectiveFrom = new DateOnly(2026, 1, 1)
+        };
+        database.Context.Tariffs.Add(tariff);
+        var garages = new List<Garage> { fixtures.Garage };
+        for (var index = 1; index < 200; index++)
+        {
+            var garage = new Garage
+            {
+                Number = $"M-{index:D3}",
+                PeopleCount = 1,
+                FloorCount = 1,
+                Owner = fixtures.Garage.Owner
+            };
+            garages.Add(garage);
+            database.Context.Garages.Add(garage);
+        }
+        database.Context.MeterReadings.AddRange(garages.Select(garage => new MeterReading
+        {
+            Garage = garage,
+            MeterKind = MeterKinds.Water,
+            AccountingMonth = new DateOnly(2026, 6, 1),
+            ReadingDate = new DateOnly(2026, 6, 30),
+            PreviousValue = 10m,
+            CurrentValue = 12m,
+            Consumption = 2m
+        }));
+        await database.Context.SaveChangesAsync();
+        var service = FinanceServiceTestFactory.Create(database.Context);
+
+        commandCounter.Reset();
+        var firstRun = await service.GenerateRegularAccrualsAsync(
+            new GenerateRegularAccrualsRequest(fixtures.IncomeType.Id, tariff.Id, new DateOnly(2026, 6, 1), null),
+            null,
+            CancellationToken.None);
+        var firstRunSelectCount = commandCounter.Count;
+
+        commandCounter.Reset();
+        var secondRun = await service.GenerateRegularAccrualsAsync(
+            new GenerateRegularAccrualsRequest(fixtures.IncomeType.Id, tariff.Id, new DateOnly(2026, 6, 1), null),
+            null,
+            CancellationToken.None);
+        var secondRunSelectCount = commandCounter.Count;
+
+        Assert.True(firstRun.Succeeded, firstRun.ErrorMessage);
+        Assert.Equal(200, firstRun.Value!.CreatedCount);
+        Assert.Equal(20000m, firstRun.Value.TotalAmount);
+        Assert.InRange(firstRunSelectCount, 1, 5);
+        Assert.False(secondRun.Succeeded);
+        Assert.Equal("regular_accruals_empty", secondRun.ErrorCode);
+        Assert.InRange(secondRunSelectCount, 1, 4);
+        Assert.DoesNotContain(commandCounter.Commands, command => command.Contains("JOIN \"owners\"", StringComparison.OrdinalIgnoreCase));
+        Assert.Equal(200, database.Context.Accruals.Count());
+    }
+
+    [Fact]
     public async Task GenerateRegularAccrualsAsync_UsesReplacementMeterReadingAfterCancel()
     {
         await using var database = await TestDatabase.CreateAsync();
@@ -2452,6 +2609,37 @@ public sealed class FinanceServiceTests
         Assert.False(result.Succeeded);
         Assert.Equal("regular_accruals_empty", result.ErrorCode);
         Assert.Single(database.Context.Accruals);
+    }
+
+    [Fact]
+    public async Task GenerateRegularAccrualsAsync_CreatesRowsForGaragesAddedAfterTheFirstMonthlyRun()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        var tariff = new Tariff { Name = "Членский тариф", CalculationBase = "fixed", Rate = 300m, EffectiveFrom = new DateOnly(2026, 1, 1) };
+        database.Context.Tariffs.Add(tariff);
+        await database.Context.SaveChangesAsync();
+        var service = FinanceServiceTestFactory.Create(database.Context);
+        var request = new GenerateRegularAccrualsRequest(fixtures.IncomeType.Id, tariff.Id, new DateOnly(2026, 6, 1), null);
+        await service.GenerateRegularAccrualsAsync(request, null, CancellationToken.None);
+
+        var laterGarage = new Garage
+        {
+            Number = "NEW-001",
+            PeopleCount = 1,
+            FloorCount = 1,
+            Owner = fixtures.Garage.Owner
+        };
+        database.Context.Garages.Add(laterGarage);
+        await database.Context.SaveChangesAsync();
+
+        var result = await service.GenerateRegularAccrualsAsync(request, null, CancellationToken.None);
+
+        Assert.True(result.Succeeded, result.ErrorMessage);
+        Assert.Equal(1, result.Value!.CreatedCount);
+        Assert.Equal(1, result.Value.SkippedCount);
+        Assert.Equal(laterGarage.Id, Assert.Single(result.Value.CreatedAccruals).GarageId);
+        Assert.Equal(2, await database.Context.Accruals.CountAsync());
     }
 
     [Fact]
@@ -3085,13 +3273,18 @@ public sealed class FinanceServiceTests
 
         public GarageBalanceDbContext Context { get; }
 
-        public static async Task<TestDatabase> CreateAsync()
+        public static async Task<TestDatabase> CreateAsync(params IInterceptor[] interceptors)
         {
             var connection = new SqliteConnection("DataSource=:memory:");
             await connection.OpenAsync();
-            var options = new DbContextOptionsBuilder<GarageBalanceDbContext>()
-                .UseSqlite(connection)
-                .Options;
+            var optionsBuilder = new DbContextOptionsBuilder<GarageBalanceDbContext>()
+                .UseSqlite(connection);
+            if (interceptors.Length > 0)
+            {
+                optionsBuilder.AddInterceptors(interceptors);
+            }
+
+            var options = optionsBuilder.Options;
             var context = new GarageBalanceDbContext(options);
             await context.Database.EnsureCreatedAsync();
             return new TestDatabase(connection, context);
@@ -3130,4 +3323,36 @@ public sealed class FinanceServiceTests
     }
 
     private sealed record Fixtures(Garage Garage, Supplier Supplier, IncomeType IncomeType, ExpenseType ExpenseType);
+
+    private sealed class FixedTimeProvider(DateTimeOffset utcNow) : TimeProvider
+    {
+        public override DateTimeOffset GetUtcNow() => utcNow;
+    }
+
+    private sealed class SelectCommandCounter : DbCommandInterceptor
+    {
+        public int Count { get; private set; }
+        public List<string> Commands { get; } = [];
+
+        public void Reset()
+        {
+            Count = 0;
+            Commands.Clear();
+        }
+
+        public override ValueTask<InterceptionResult<DbDataReader>> ReaderExecutingAsync(
+            DbCommand command,
+            CommandEventData eventData,
+            InterceptionResult<DbDataReader> result,
+            CancellationToken cancellationToken = default)
+        {
+            if (command.CommandText.TrimStart().StartsWith("SELECT", StringComparison.OrdinalIgnoreCase))
+            {
+                Count++;
+                Commands.Add(command.CommandText);
+            }
+
+            return base.ReaderExecutingAsync(command, eventData, result, cancellationToken);
+        }
+    }
 }

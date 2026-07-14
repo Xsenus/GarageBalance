@@ -98,6 +98,9 @@ public sealed class EfGarageRepository(GarageBalanceDbContext dbContext) : IGara
             .OrderBy(garage => garage.Number)
             .ToListAsync(cancellationToken);
 
+    public Task<int> CountActiveAsync(CancellationToken cancellationToken) =>
+        dbContext.Garages.AsNoTracking().CountAsync(garage => !garage.IsArchived, cancellationToken);
+
     public async Task<IReadOnlyList<Garage>> GetActiveByIdsAsync(
         IReadOnlyCollection<Guid> ids,
         CancellationToken cancellationToken) =>

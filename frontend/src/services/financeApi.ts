@@ -45,6 +45,9 @@ export type FinanceSummaryDto = {
   operationCount: number
   accrualCount: number
   meterReadingCount: number
+  incomeCount?: number
+  expenseCount?: number
+  supplierAccrualCount?: number
 }
 
 export type FinancePagedResult<TItem> = {

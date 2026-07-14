@@ -5,7 +5,7 @@ import { AuthGate } from './features/auth/AuthGate'
 import { AuthenticatedAppShell } from './features/workspace/AppShell'
 import { auditApi } from './services/auditApi'
 import type { AuditClient } from './services/auditApi'
-import { dictionariesApi } from './services/dictionariesApi'
+import { clearDictionaryResponseCache, dictionariesApi } from './services/dictionariesApi'
 import type { DictionaryClient } from './services/dictionariesApi'
 import { financeApi } from './services/financeApi'
 import type { FinanceClient } from './services/financeApi'
@@ -66,6 +66,7 @@ function App({ authClient = authApi, auditClient = auditApi, dictionaryClient = 
   }
 
   function handleLogout() {
+    clearDictionaryResponseCache()
     clearStoredAuthSession(authSessionStorageKey)
     setAuth(null)
   }

@@ -9,7 +9,7 @@ import type { FormStateClient } from '../../services/formStatesApi'
 import type { IntegrationClient, ReceiptPrintingActionKind } from '../../services/integrationsApi'
 import type { ApplicationSettingsClient } from '../../services/settingsApi'
 import { hasPermission, permissions } from '../../shared/accessControl'
-import { LoadingSkeleton } from '../../shared/AsyncState'
+import { LoadingSkeleton, TableLoadingState } from '../../shared/AsyncState'
 import type { FinanceEditorKey, FinanceSectionKey } from '../../shared/financeWorkbench'
 import { financeSectionOptions, formatFinanceGarageLabel, formatFinanceIncomeGarageSearchStatus, formatFinanceOperationCount, formatFinanceVisibleListStatus, getFinanceContextMenuLabel, getFinanceEditorFieldLabel, getFinanceEditorSavingScope, getFinanceEditorSubmitLabel, getFinanceEditorTitle, getFinanceEditorUiLabel, getFinanceEditorValidationTitle, getFinanceFallbackLabel, getFinanceMeterKindLabel, getFinanceOptionalText, getFinancePanelLabel, getFinanceSectionDescription, getFinanceTableHeaders, getFinanceToolbarLabel, getFinanceVisibleListEmptyLabel, getFinanceVisibleListTableHeaders, getFinanceVisibleListTableLabel } from '../../shared/financeWorkbench'
 import type { ChangePreview } from '../../shared/changePreview'
@@ -26,10 +26,34 @@ type AccrualBreakdown =
   | { kind: 'supplier'; accrual: SupplierAccrualDto }
 
 const financeScreenRequestLimit = 50
+const financePreviewRequestLimit = 8
 const dictionaryScreenRequestLimit = 100
 const paymentsFormStateScope = 'payments-prototype'
 
 type FinanceRecord = FinancialOperationDto | AccrualDto | SupplierAccrualDto | MeterReadingDto
+type FinancePreviewStatuses = {
+  operations: boolean
+  accruals: boolean
+  supplierAccruals: boolean
+  meterReadings: boolean
+}
+
+class LatestRequestSequence {
+  private currentRequestId = 0
+
+  begin() {
+    this.currentRequestId += 1
+    return this.currentRequestId
+  }
+
+  invalidate() {
+    this.currentRequestId += 1
+  }
+
+  isLatest(requestId: number) {
+    return requestId === this.currentRequestId
+  }
+}
 type CancelFinanceTarget = {
   section: FinanceSectionKey
   record: FinanceRecord
@@ -338,6 +362,7 @@ export function FinancePanel({
   const financeEditorTriggerRef = useRef<HTMLElement | null>(null)
   const cancelFinanceTriggerRef = useRef<HTMLElement | null>(null)
   const restoreFinanceTriggerRef = useRef<HTMLElement | null>(null)
+  const [financeWorkbenchRequests] = useState(() => new LatestRequestSequence())
   const [paymentsPrototypeDialog, setPaymentsPrototypeDialog] = useState<PaymentsPrototypeDialogKey | null>(null)
   const paymentsPrototypeTriggerRef = useRef<HTMLButtonElement | null>(null)
   const [financeEditorCloseConfirmation, setFinanceEditorCloseConfirmation] = useState(false)
@@ -352,7 +377,11 @@ export function FinancePanel({
   const [salaryValidationErrors, setSalaryValidationErrors] = useState<string[]>([])
   const [meterValidationErrors, setMeterValidationErrors] = useState<string[]>([])
   const [accrualBreakdown, setAccrualBreakdown] = useState<AccrualBreakdown | null>(null)
-  const [loading, setLoading] = useState(true)
+  const [referencesLoading, setReferencesLoading] = useState(true)
+  const [workbenchLoading, setWorkbenchLoading] = useState(false)
+  const [financePreviewLoading, setFinancePreviewLoading] = useState<FinancePreviewStatuses>({ operations: true, accruals: true, supplierAccruals: true, meterReadings: true })
+  const [financePreviewFailures, setFinancePreviewFailures] = useState<FinancePreviewStatuses>({ operations: false, accruals: false, supplierAccruals: false, meterReadings: false })
+  const loading = referencesLoading || workbenchLoading
   const [paymentDisplaySettingsLoaded, setPaymentDisplaySettingsLoaded] = useState(false)
   const [showAllGarageOperations, setShowAllGarageOperations] = useState(false)
   const [paymentDisplaySettingsError, setPaymentDisplaySettingsError] = useState<string | null>(null)
@@ -482,16 +511,27 @@ export function FinancePanel({
   const visibleAccruals = accruals.slice(0, 8)
   const visibleSupplierAccruals = supplierAccruals.slice(0, 8)
   const visibleMeterReadings = meterReadings.slice(0, 8)
+  const operationPreviewTotal = summary.incomeCount !== undefined && summary.expenseCount !== undefined
+    ? summary.incomeCount + summary.expenseCount
+    : summary.operationCount
+  const supplierAccrualPreviewTotal = summary.supplierAccrualCount ?? supplierAccruals.length
+  const financePreviewPending = {
+    operations: showAllGarageOperations && financePreviewLoading.operations,
+    accruals: showAllGarageOperations && financePreviewLoading.accruals,
+    supplierAccruals: showAllGarageOperations && financePreviewLoading.supplierAccruals,
+    meterReadings: showAllGarageOperations && financePreviewLoading.meterReadings,
+  }
+  const financePreviewsError = Object.values(financePreviewFailures).some(Boolean)
   const compatibleRegularTariffs = getCompatibleRegularTariffs(regularForm.incomeTypeId, incomeTypes, tariffs)
 
   useEffect(() => {
     let ignore = false
     async function load() {
-      setLoading(true)
+      setReferencesLoading(true)
       setError(null)
       try {
-        const [loadedGarages, loadedSupplierGroups, loadedSuppliers, loadedStaffMembers, loadedIncomeTypes, loadedExpenseTypes, loadedTariffs] = await Promise.all([
-          dictionaryClient.getGarages(auth.accessToken, undefined, dictionaryScreenRequestLimit),
+        const garagesPromise = dictionaryClient.getGarages(auth.accessToken, undefined, dictionaryScreenRequestLimit)
+        const referencesPromise = Promise.all([
           dictionaryClient.getSupplierGroups(auth.accessToken, undefined, dictionaryScreenRequestLimit),
           dictionaryClient.getSuppliers(auth.accessToken, undefined, undefined, dictionaryScreenRequestLimit),
           dictionaryClient.getStaffMembers(auth.accessToken, undefined, undefined, dictionaryScreenRequestLimit),
@@ -499,18 +539,28 @@ export function FinancePanel({
           dictionaryClient.getExpenseTypes(auth.accessToken, undefined, dictionaryScreenRequestLimit),
           dictionaryClient.getTariffs(auth.accessToken, undefined, dictionaryScreenRequestLimit),
         ])
+        void referencesPromise.catch(() => undefined)
+        const loadedGarages = await garagesPromise
         if (!ignore) {
           setGarages(loadedGarages)
           setIncomeGarageOptions(loadedGarages)
+          setIncomeForm((value) => ({ ...value, garageId: value.garageId || loadedGarages[0]?.id || '' }))
+          setAccrualForm((value) => ({ ...value, garageId: value.garageId || loadedGarages[0]?.id || '' }))
+          setMeterForm((value) => ({ ...value, garageId: value.garageId || loadedGarages[0]?.id || '' }))
+          setReferencesLoading(false)
+        }
+
+        const [loadedSupplierGroups, loadedSuppliers, loadedStaffMembers, loadedIncomeTypes, loadedExpenseTypes, loadedTariffs] = await referencesPromise
+        if (!ignore) {
           setSupplierGroups(loadedSupplierGroups)
           setSuppliers(loadedSuppliers)
           setStaffMembers(loadedStaffMembers)
           setIncomeTypes(loadedIncomeTypes)
           setExpenseTypes(loadedExpenseTypes)
           setTariffs(loadedTariffs)
-          setIncomeForm((value) => ({ ...value, garageId: value.garageId || loadedGarages[0]?.id || '', incomeTypeId: value.incomeTypeId || loadedIncomeTypes[0]?.id || '' }))
+          setIncomeForm((value) => ({ ...value, incomeTypeId: value.incomeTypeId || loadedIncomeTypes[0]?.id || '' }))
           setExpenseForm((value) => ({ ...value, supplierId: value.supplierId || loadedSuppliers[0]?.id || '', expenseTypeId: value.expenseTypeId || loadedExpenseTypes[0]?.id || '' }))
-          setAccrualForm((value) => ({ ...value, garageId: value.garageId || loadedGarages[0]?.id || '', incomeTypeId: value.incomeTypeId || loadedIncomeTypes[0]?.id || '' }))
+          setAccrualForm((value) => ({ ...value, incomeTypeId: value.incomeTypeId || loadedIncomeTypes[0]?.id || '' }))
           setSupplierAccrualForm((value) => ({ ...value, supplierId: value.supplierId || loadedSuppliers[0]?.id || '', expenseTypeId: value.expenseTypeId || loadedExpenseTypes[0]?.id || '' }))
           setSalaryForm((value) => ({ ...value, supplierGroupId: value.supplierGroupId || loadedSupplierGroups[0]?.id || '' }))
           setRegularForm((value) => {
@@ -521,7 +571,6 @@ export function FinancePanel({
               tariffId: chooseRegularTariffId(incomeTypeId, value.tariffId, loadedIncomeTypes, loadedTariffs),
             }
           })
-          setMeterForm((value) => ({ ...value, garageId: value.garageId || loadedGarages[0]?.id || '' }))
         }
       } catch (caught) {
         if (!ignore) {
@@ -529,7 +578,7 @@ export function FinancePanel({
         }
       } finally {
         if (!ignore) {
-          setLoading(false)
+          setReferencesLoading(false)
         }
       }
     }
@@ -538,7 +587,7 @@ export function FinancePanel({
     return () => {
       ignore = true
     }
-  }, [auth.accessToken, dictionaryClient, financeClient, month])
+  }, [auth.accessToken, dictionaryClient])
 
   useEffect(() => {
     let ignore = false
@@ -573,21 +622,33 @@ export function FinancePanel({
 
     let ignore = false
     const handle = window.setTimeout(() => {
-      void Promise.all([
-        financeClient.getOperations(auth.accessToken, financeScreenRequestLimit),
-        financeClient.getAccruals(auth.accessToken, financeScreenRequestLimit),
-        financeClient.getSupplierAccruals(auth.accessToken, financeScreenRequestLimit),
-        financeClient.getMeterReadings(auth.accessToken, financeScreenRequestLimit),
-      ]).then(([loadedOperations, loadedAccruals, loadedSupplierAccruals, loadedMeterReadings]) => {
-        if (!ignore) {
-          setOperations(loadedOperations)
-          setAccruals(loadedAccruals)
-          setSupplierAccruals(loadedSupplierAccruals)
-          setMeterReadings(loadedMeterReadings)
-        }
-      }).catch(() => {
-        // Фоновые превью не должны задерживать или ломать основную форму платежей.
-      })
+      function loadPreview<T>(
+        key: keyof FinancePreviewStatuses,
+        request: Promise<T>,
+        applyResult: (result: T) => void,
+      ) {
+        void request
+          .then((result) => {
+            if (!ignore) {
+              applyResult(result)
+            }
+          })
+          .catch(() => {
+            if (!ignore) {
+              setFinancePreviewFailures((current) => ({ ...current, [key]: true }))
+            }
+          })
+          .finally(() => {
+            if (!ignore) {
+              setFinancePreviewLoading((current) => ({ ...current, [key]: false }))
+            }
+          })
+      }
+
+      loadPreview('operations', financeClient.getOperations(auth.accessToken, financePreviewRequestLimit), setOperations)
+      loadPreview('accruals', financeClient.getAccruals(auth.accessToken, financePreviewRequestLimit), setAccruals)
+      loadPreview('supplierAccruals', financeClient.getSupplierAccruals(auth.accessToken, financePreviewRequestLimit), setSupplierAccruals)
+      loadPreview('meterReadings', financeClient.getMeterReadings(auth.accessToken, financePreviewRequestLimit), setMeterReadings)
     }, 500)
 
     return () => {
@@ -611,8 +672,9 @@ export function FinancePanel({
   }, [financeSearchInput])
 
   const loadFinanceWorkbench = useCallback(async (section: FinanceSectionKey, offset: number, limit: number) => {
+    const requestId = financeWorkbenchRequests.begin()
     setFinanceContextMenu(null)
-    setLoading(true)
+    setWorkbenchLoading(true)
     setError(null)
     try {
       const params = {
@@ -623,47 +685,61 @@ export function FinancePanel({
         limit,
       }
       const missingMeterMonth = financeFilter.monthFrom || meterForm.accountingMonth
-      const [incomePage, expensePage, accrualsPage, supplierAccrualsPage, meterReadingsPage, loadedMissingMeterReadings, loadedSummary] = await Promise.all([
-        financeClient.getOperationsPage(auth.accessToken, { ...params, operationKind: 'income', limit: section === 'income' ? limit : 1, offset: section === 'income' ? offset : 0 }),
-        financeClient.getOperationsPage(auth.accessToken, { ...params, operationKind: 'expense', limit: section === 'expense' ? limit : 1, offset: section === 'expense' ? offset : 0 }),
-        financeClient.getAccrualsPage(auth.accessToken, { ...params, limit: section === 'accruals' ? limit : 1, offset: section === 'accruals' ? offset : 0 }),
-        financeClient.getSupplierAccrualsPage(auth.accessToken, { ...params, limit: section === 'supplierAccruals' ? limit : 1, offset: section === 'supplierAccruals' ? offset : 0 }),
-        financeClient.getMeterReadingsPage(auth.accessToken, { ...params, limit: section === 'meterReadings' ? limit : 1, offset: section === 'meterReadings' ? offset : 0 }),
-        financeClient.getMissingMeterReadings(auth.accessToken, { accountingMonth: missingMeterMonth, search: financeFilter.search, limit: financeScreenRequestLimit }),
+      const activePagePromise: Promise<FinancePagedResult<FinanceRecord>> = section === 'income'
+        ? financeClient.getOperationsPage(auth.accessToken, { ...params, operationKind: 'income' }) as Promise<FinancePagedResult<FinanceRecord>>
+        : section === 'expense'
+          ? financeClient.getOperationsPage(auth.accessToken, { ...params, operationKind: 'expense' }) as Promise<FinancePagedResult<FinanceRecord>>
+          : section === 'accruals'
+            ? financeClient.getAccrualsPage(auth.accessToken, params) as Promise<FinancePagedResult<FinanceRecord>>
+            : section === 'supplierAccruals'
+              ? financeClient.getSupplierAccrualsPage(auth.accessToken, params) as Promise<FinancePagedResult<FinanceRecord>>
+              : financeClient.getMeterReadingsPage(auth.accessToken, params) as Promise<FinancePagedResult<FinanceRecord>>
+      const missingMeterReadingsPromise = section === 'meterReadings'
+        ? financeClient.getMissingMeterReadings(auth.accessToken, { accountingMonth: missingMeterMonth, search: financeFilter.search, limit: financeScreenRequestLimit })
+        : Promise.resolve(null)
+      const [activePage, loadedMissingMeterReadings, loadedSummary] = await Promise.all([
+        activePagePromise,
+        missingMeterReadingsPromise,
         financeClient.getSummary(auth.accessToken, { monthFrom: financeFilter.monthFrom, monthTo: financeFilter.monthTo, search: financeFilter.search }),
       ])
 
-      setFinanceSectionCounts({
-        income: incomePage.totalCount,
-        expense: expensePage.totalCount,
-        accruals: accrualsPage.totalCount,
-        supplierAccruals: supplierAccrualsPage.totalCount,
-        meterReadings: meterReadingsPage.totalCount,
-      })
-      setSummary(loadedSummary)
-      if (section === 'income') {
-        setOperations(incomePage.items)
-        setFinancePage(incomePage as FinancePagedResult<FinanceRecord>)
-      } else if (section === 'expense') {
-        setOperations(expensePage.items)
-        setFinancePage(expensePage as FinancePagedResult<FinanceRecord>)
-      } else if (section === 'accruals') {
-        setAccruals(accrualsPage.items)
-        setFinancePage(accrualsPage as FinancePagedResult<FinanceRecord>)
-      } else if (section === 'supplierAccruals') {
-        setSupplierAccruals(supplierAccrualsPage.items)
-        setFinancePage(supplierAccrualsPage as FinancePagedResult<FinanceRecord>)
-      } else {
-        setMeterReadings(meterReadingsPage.items)
-        setFinancePage(meterReadingsPage as FinancePagedResult<FinanceRecord>)
+      if (!financeWorkbenchRequests.isLatest(requestId)) {
+        return
       }
-      setMissingMeterReadings(loadedMissingMeterReadings)
+
+      setFinanceSectionCounts((current) => ({
+        income: loadedSummary.incomeCount ?? (section === 'income' ? activePage.totalCount : current.income),
+        expense: loadedSummary.expenseCount ?? (section === 'expense' ? activePage.totalCount : current.expense),
+        accruals: loadedSummary.accrualCount,
+        supplierAccruals: loadedSummary.supplierAccrualCount ?? (section === 'supplierAccruals' ? activePage.totalCount : current.supplierAccruals),
+        meterReadings: loadedSummary.meterReadingCount,
+      }))
+      setSummary(loadedSummary)
+      setFinancePage(activePage)
+      // The working table renders financePage directly. These copies only keep the compact
+      // recent-item previews current after a mutation and cannot replace the paged result.
+      if (section === 'income' || section === 'expense') {
+        setOperations(activePage.items as FinancialOperationDto[])
+      } else if (section === 'accruals') {
+        setAccruals(activePage.items as AccrualDto[])
+      } else if (section === 'supplierAccruals') {
+        setSupplierAccruals(activePage.items as SupplierAccrualDto[])
+      } else {
+        setMeterReadings(activePage.items as MeterReadingDto[])
+      }
+      if (loadedMissingMeterReadings) {
+        setMissingMeterReadings(loadedMissingMeterReadings)
+      }
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : 'Не удалось загрузить страницу платежей.')
+      if (financeWorkbenchRequests.isLatest(requestId)) {
+        setError(caught instanceof Error ? caught.message : 'Не удалось загрузить страницу платежей.')
+      }
     } finally {
-      setLoading(false)
+      if (financeWorkbenchRequests.isLatest(requestId)) {
+        setWorkbenchLoading(false)
+      }
     }
-  }, [auth.accessToken, financeClient, financeFilter.monthFrom, financeFilter.monthTo, financeFilter.search, meterForm.accountingMonth])
+  }, [auth.accessToken, financeClient, financeFilter.monthFrom, financeFilter.monthTo, financeFilter.search, financeWorkbenchRequests, meterForm.accountingMonth])
 
   useEffect(() => {
     if (!paymentDisplaySettingsLoaded || !showAllGarageOperations) {
@@ -1043,6 +1119,7 @@ export function FinancePanel({
       }))
       setRegularStatus(`Создано ${result.createdCount}, пропущено ${result.skippedCount}`)
       setRegularForm((value) => ({ ...value, comment: '' }))
+      await loadFinanceWorkbench('accruals', 0, financePage.limit)
     })
     if (saved) {
       closeFinanceEditor({ skipConfirmation: true })
@@ -1481,7 +1558,14 @@ export function FinancePanel({
   }
 
   function selectFinanceSection(section: FinanceSectionKey) {
+    if (section === activeFinanceSection) {
+      return
+    }
+
+    financeWorkbenchRequests.invalidate()
     setFinanceContextMenu(null)
+    setWorkbenchLoading(true)
+    setFinancePage((current) => ({ items: [], totalCount: 0, offset: 0, limit: current.limit }))
     setActiveFinanceSection(section)
   }
 
@@ -1572,11 +1656,15 @@ export function FinancePanel({
     }
   }
 
-  const filteredIncomeOperations = operations.filter((operation) => operation.operationKind === 'income')
-  const filteredExpenseOperations = operations.filter((operation) => operation.operationKind === 'expense')
-  const filteredAccruals = accruals
-  const filteredSupplierAccruals = supplierAccruals
-  const filteredMeterReadings = meterReadings
+  const filteredIncomeOperations = activeFinanceSection === 'income'
+    ? (financePage.items as FinancialOperationDto[]).filter((operation) => operation.operationKind === 'income')
+    : []
+  const filteredExpenseOperations = activeFinanceSection === 'expense'
+    ? (financePage.items as FinancialOperationDto[]).filter((operation) => operation.operationKind === 'expense')
+    : []
+  const filteredAccruals = activeFinanceSection === 'accruals' ? financePage.items as AccrualDto[] : []
+  const filteredSupplierAccruals = activeFinanceSection === 'supplierAccruals' ? financePage.items as SupplierAccrualDto[] : []
+  const filteredMeterReadings = activeFinanceSection === 'meterReadings' ? financePage.items as MeterReadingDto[] : []
 
   function getActiveFinanceRowsCount() {
     return financePage.items.length
@@ -2038,9 +2126,7 @@ export function FinancePanel({
           <p className="eyebrow">{getFinancePanelLabel('section')}</p>
           <h2>{getFinancePanelLabel('title')}</h2>
         </div>
-        {loading || !paymentDisplaySettingsLoaded ? (
-          <span>{getFinancePanelLabel('loading')}</span>
-        ) : showAllGarageOperations ? (
+        {!loading && paymentDisplaySettingsLoaded && showAllGarageOperations ? (
           <span>{formatFinanceOperationCount(summary.operationCount)}</span>
         ) : null}
       </div>
@@ -2059,6 +2145,7 @@ export function FinancePanel({
         garages={garages}
         incomeTypes={incomeTypes}
         integrationClient={integrationClient}
+        loading={loading}
         supplierGroups={supplierGroups}
         suppliers={suppliers}
         staffMembers={staffMembers}
@@ -2134,7 +2221,7 @@ export function FinancePanel({
 
         <div className="dictionary-table-shell">
           <div
-            className="dictionary-table-scroll"
+            className={`dictionary-table-scroll${loading ? ' dictionary-table-scroll--loading' : ''}`}
             role="group"
             aria-label={getFinanceToolbarLabel('tableArea')}
             tabIndex={getActiveFinanceRowsCount() === 0 ? 0 : -1}
@@ -2142,7 +2229,8 @@ export function FinancePanel({
             onKeyDown={handleFinanceTableAreaKeyDown}
           >
             {renderFinanceTable()}
-            {getActiveFinanceRowsCount() === 0 ? <p className="empty-state" role="status" aria-live="polite">{getFinanceToolbarLabel('emptyState')}</p> : null}
+            {loading ? <TableLoadingState label="Загружаем таблицу платежей" /> : null}
+            {!loading && getActiveFinanceRowsCount() === 0 ? <p className="empty-state" role="status" aria-live="polite">{getFinanceToolbarLabel('emptyState')}</p> : null}
           </div>
           <TablePagination
             ariaLabel={getFinanceToolbarLabel('pagination')}
@@ -2381,12 +2469,15 @@ export function FinancePanel({
           </button>
         </form>
 
+        {financePreviewsError ? <FormError>Не удалось загрузить часть последних операций. Основная таблица платежей продолжает работать.</FormError> : null}
+
         <div className="operation-list" role="table" aria-label={getFinanceVisibleListTableLabel('operations')}>
           <div className="operation-row header" role="row">
             {getFinanceVisibleListTableHeaders('operations').map((header) => <span role="columnheader" key={header}>{header}</span>)}
           </div>
-          {operations.length === 0 ? <p className="empty-state" role="status" aria-live="polite">{getFinanceVisibleListEmptyLabel('operations')}</p> : null}
-          {visibleOperations.map((operation) => (
+          {financePreviewPending.operations ? <TableLoadingState label="Загружаем последние операции" rows={2} columns={3} /> : null}
+          {!financePreviewPending.operations && !financePreviewFailures.operations && operations.length === 0 ? <p className="empty-state" role="status" aria-live="polite">{getFinanceVisibleListEmptyLabel('operations')}</p> : null}
+          {!financePreviewPending.operations && !financePreviewFailures.operations ? visibleOperations.map((operation) => (
             <div className="operation-row" role="row" key={operation.id}>
               <span role="cell">{formatDateOnly(operation.operationDate)}</span>
               <span role="cell">
@@ -2407,16 +2498,17 @@ export function FinancePanel({
                 {formatMoney(operation.amount)}
               </span>
             </div>
-          ))}
-          {operations.length > visibleOperations.length ? <p className="empty-state" role="status" aria-live="polite">{formatFinanceVisibleListStatus(visibleOperations.length, operations.length, 'operations')}</p> : null}
+          )) : null}
+          {!financePreviewPending.operations && !financePreviewFailures.operations && operationPreviewTotal > visibleOperations.length ? <p className="empty-state" role="status" aria-live="polite">{formatFinanceVisibleListStatus(visibleOperations.length, operationPreviewTotal, 'operations')}</p> : null}
         </div>
 
         <div className="operation-list" role="table" aria-label={getFinanceVisibleListTableLabel('accruals')}>
           <div className="operation-row header" role="row">
             {getFinanceVisibleListTableHeaders('accruals').map((header) => <span role="columnheader" key={header}>{header}</span>)}
           </div>
-          {accruals.length === 0 ? <p className="empty-state" role="status" aria-live="polite">{getFinanceVisibleListEmptyLabel('accruals')}</p> : null}
-          {visibleAccruals.map((accrual) => (
+          {financePreviewPending.accruals ? <TableLoadingState label="Загружаем последние начисления" rows={2} columns={3} /> : null}
+          {!financePreviewPending.accruals && !financePreviewFailures.accruals && accruals.length === 0 ? <p className="empty-state" role="status" aria-live="polite">{getFinanceVisibleListEmptyLabel('accruals')}</p> : null}
+          {!financePreviewPending.accruals && !financePreviewFailures.accruals ? visibleAccruals.map((accrual) => (
             <div
               className="operation-row operation-row--interactive"
               role="row"
@@ -2436,16 +2528,17 @@ export function FinancePanel({
                 {formatMoney(accrual.amount)}
               </span>
             </div>
-          ))}
-          {accruals.length > visibleAccruals.length ? <p className="empty-state" role="status" aria-live="polite">{formatFinanceVisibleListStatus(visibleAccruals.length, accruals.length, 'accruals')}</p> : null}
+          )) : null}
+          {!financePreviewPending.accruals && !financePreviewFailures.accruals && summary.accrualCount > visibleAccruals.length ? <p className="empty-state" role="status" aria-live="polite">{formatFinanceVisibleListStatus(visibleAccruals.length, summary.accrualCount, 'accruals')}</p> : null}
         </div>
 
         <div className="operation-list" role="table" aria-label={getFinanceVisibleListTableLabel('supplierAccruals')}>
           <div className="operation-row header" role="row">
             {getFinanceVisibleListTableHeaders('supplierAccruals').map((header) => <span role="columnheader" key={header}>{header}</span>)}
           </div>
-          {supplierAccruals.length === 0 ? <p className="empty-state" role="status" aria-live="polite">{getFinanceVisibleListEmptyLabel('supplierAccruals')}</p> : null}
-          {visibleSupplierAccruals.map((accrual) => (
+          {financePreviewPending.supplierAccruals ? <TableLoadingState label="Загружаем последние начисления поставщикам" rows={2} columns={3} /> : null}
+          {!financePreviewPending.supplierAccruals && !financePreviewFailures.supplierAccruals && supplierAccruals.length === 0 ? <p className="empty-state" role="status" aria-live="polite">{getFinanceVisibleListEmptyLabel('supplierAccruals')}</p> : null}
+          {!financePreviewPending.supplierAccruals && !financePreviewFailures.supplierAccruals ? visibleSupplierAccruals.map((accrual) => (
             <div
               className="operation-row operation-row--interactive"
               role="row"
@@ -2465,16 +2558,17 @@ export function FinancePanel({
                 {formatMoney(accrual.amount)}
               </span>
             </div>
-          ))}
-          {supplierAccruals.length > visibleSupplierAccruals.length ? <p className="empty-state" role="status" aria-live="polite">{formatFinanceVisibleListStatus(visibleSupplierAccruals.length, supplierAccruals.length, 'supplierAccruals')}</p> : null}
+          )) : null}
+          {!financePreviewPending.supplierAccruals && !financePreviewFailures.supplierAccruals && supplierAccrualPreviewTotal > visibleSupplierAccruals.length ? <p className="empty-state" role="status" aria-live="polite">{formatFinanceVisibleListStatus(visibleSupplierAccruals.length, supplierAccrualPreviewTotal, 'supplierAccruals')}</p> : null}
         </div>
 
         <div className="operation-list" role="table" aria-label={getFinanceVisibleListTableLabel('meterReadings')}>
           <div className="operation-row header" role="row">
             {getFinanceVisibleListTableHeaders('meterReadings').map((header) => <span role="columnheader" key={header}>{header}</span>)}
           </div>
-          {meterReadings.length === 0 ? <p className="empty-state" role="status" aria-live="polite">{getFinanceVisibleListEmptyLabel('meterReadings')}</p> : null}
-          {visibleMeterReadings.map((reading) => (
+          {financePreviewPending.meterReadings ? <TableLoadingState label="Загружаем последние показания" rows={2} columns={3} /> : null}
+          {!financePreviewPending.meterReadings && !financePreviewFailures.meterReadings && meterReadings.length === 0 ? <p className="empty-state" role="status" aria-live="polite">{getFinanceVisibleListEmptyLabel('meterReadings')}</p> : null}
+          {!financePreviewPending.meterReadings && !financePreviewFailures.meterReadings ? visibleMeterReadings.map((reading) => (
             <div className="operation-row" role="row" key={reading.id}>
               <span role="cell">{formatMonth(reading.accountingMonth)}</span>
               <span role="cell">
@@ -2488,8 +2582,8 @@ export function FinancePanel({
                 {reading.consumption}
               </span>
             </div>
-          ))}
-          {meterReadings.length > visibleMeterReadings.length ? <p className="empty-state" role="status" aria-live="polite">{formatFinanceVisibleListStatus(visibleMeterReadings.length, meterReadings.length, 'meterReadings')}</p> : null}
+          )) : null}
+          {!financePreviewPending.meterReadings && !financePreviewFailures.meterReadings && summary.meterReadingCount > visibleMeterReadings.length ? <p className="empty-state" role="status" aria-live="polite">{formatFinanceVisibleListStatus(visibleMeterReadings.length, summary.meterReadingCount, 'meterReadings')}</p> : null}
         </div>
       </div>
       {financeContextMenu ? (
@@ -2824,6 +2918,7 @@ function PaymentsPrototypePanel({
   garages,
   incomeTypes,
   integrationClient,
+  loading,
   supplierGroups,
   suppliers,
   staffMembers,
@@ -2838,6 +2933,7 @@ function PaymentsPrototypePanel({
   garages: GarageDto[]
   incomeTypes: AccountingTypeDto[]
   integrationClient: IntegrationClient
+  loading: boolean
   supplierGroups: SupplierGroupDto[]
   suppliers: SupplierDto[]
   staffMembers: StaffMemberDto[]
@@ -2863,6 +2959,7 @@ function PaymentsPrototypePanel({
   const [formStateLoaded, setFormStateLoaded] = useState(false)
   const [formStateError, setFormStateError] = useState<string | null>(null)
   const [paymentError, setPaymentError] = useState<string | null>(null)
+  const [regularAccrualStatus, setRegularAccrualStatus] = useState<string | null>(null)
   const [garageWorksheetLoadingId, setGarageWorksheetLoadingId] = useState<string | null>(null)
   const [garagePaymentHistoryLoadingId, setGaragePaymentHistoryLoadingId] = useState<string | null>(null)
   const [expenseWorksheetLoading, setExpenseWorksheetLoading] = useState(false)
@@ -3213,6 +3310,7 @@ function PaymentsPrototypePanel({
   function openRegularAccrualDialog(event: MouseEvent<HTMLButtonElement>) {
     regularAccrualTriggerRef.current = event.currentTarget
     setPaymentError(null)
+    setRegularAccrualStatus(null)
     setRegularAccrualDialogOpen(true)
   }
 
@@ -3905,6 +4003,21 @@ function PaymentsPrototypePanel({
       ? createdAccruals.filter((accrual) => accrual.garageId === selectedGarage.id)
       : createdAccruals
 
+    const selectedGarageTotal = selectedGarageAccruals.reduce((total, accrual) => total + accrual.amount, 0)
+    if (selectedGarageTotal > 0) {
+      setGarageWorksheetSummary((currentSummary) => currentSummary
+        ? {
+            ...currentSummary,
+            accrualTotal: currentSummary.accrualTotal + selectedGarageTotal,
+            closingDebt: currentSummary.closingDebt + selectedGarageTotal,
+          }
+        : currentSummary)
+    }
+
+    setRegularAccrualStatus(
+      `Начисления сформированы: создано ${result.createdCount}, пропущено ${result.skippedCount}, сумма ${formatPaymentPrototypeValue(result.totalAmount)}.`,
+    )
+
     setGarageRows((currentRows) => {
       let nextRows = currentRows
       selectedGarageAccruals.forEach((accrual) => {
@@ -4278,8 +4391,9 @@ function PaymentsPrototypePanel({
       </div>
       {formStateError ? <FormError>{formStateError}</FormError> : null}
       {paymentError ? <FormError>{paymentError}</FormError> : null}
+      {regularAccrualStatus ? <p className="form-status" role="status">{regularAccrualStatus}</p> : null}
       {receiptActionStatus ? <p className="form-status" role="status">{receiptActionStatus}</p> : null}
-      {garageWorksheetLoadingId ? <LoadingSkeleton className="loading-skeleton--compact" label="Загружаем поступления выбранного гаража" rows={2} columns={4} /> : null}
+      {garageWorksheetLoadingId ? <TableLoadingState className="table-loading-state--compact" label="Загружаем поступления выбранного гаража" /> : null}
 
       <div className="payments-prototype-toolbar">
         <div className="payments-prototype-tabs" role="tablist" aria-label="Разделы формы платежей">
@@ -4293,7 +4407,9 @@ function PaymentsPrototypePanel({
       </div>
 
       {!selectedGarage ? (
-        <p className="empty-state" role="status">Выберите гараж через поиск, чтобы увидеть карточку, поступления, историю платежей и задолженность.</p>
+        loading
+          ? <TableLoadingState label="Загружаем раздел платежей" />
+          : <p className="empty-state" role="status">Выберите гараж через поиск, чтобы увидеть карточку, поступления, историю платежей и задолженность.</p>
       ) : activeTab === 'income' ? (
         <>
           <div className="payments-prototype-owner-row" aria-label="Выбранный гараж">
@@ -4335,7 +4451,7 @@ function PaymentsPrototypePanel({
               <tbody>
                 {garagePaymentHistoryLoadingId === selectedGarage.id ? (
                   <tr>
-                    <td colSpan={6}><LoadingSkeleton className="loading-skeleton--compact" label="Загружаем историю платежей" rows={4} columns={6} /></td>
+                    <td colSpan={6}><TableLoadingState label="Загружаем историю платежей" /></td>
                   </tr>
                 ) : historyRows.length > 0 ? historyRows.map((row) => (
                   <tr key={row.id}>
@@ -4482,7 +4598,7 @@ function PaymentsPrototypePanel({
                   })}
                   {groupedGarageRows.length === 0 ? (
                     <tr>
-                      <td colSpan={8}>{garageWorksheetLoadingId === selectedGarage.id ? <LoadingSkeleton className="loading-skeleton--compact" label="Загружаем начисления и поступления" rows={4} columns={8} /> : 'Начислений и поступлений за выбранный период пока нет.'}</td>
+                      <td colSpan={8}>{garageWorksheetLoadingId === selectedGarage.id ? <TableLoadingState label="Загружаем начисления и поступления" /> : 'Начислений и поступлений за выбранный период пока нет.'}</td>
                     </tr>
                   ) : null}
                   <tr className="payments-prototype-total-row">
@@ -4577,7 +4693,7 @@ function PaymentsPrototypePanel({
                   })}
                   {expenseRows.length === 0 ? (
                     <tr>
-                      <td colSpan={8}>{expenseWorksheetLoading ? <LoadingSkeleton className="loading-skeleton--compact" label="Загружаем форму выплат" rows={5} columns={8} /> : 'Начислений и выплат за выбранный месяц пока нет.'}</td>
+                      <td colSpan={8}>{expenseWorksheetLoading ? <TableLoadingState label="Загружаем форму выплат" /> : 'Начислений и выплат за выбранный месяц пока нет.'}</td>
                     </tr>
                   ) : null}
                   <tr className="payments-prototype-total-row">
@@ -5658,6 +5774,7 @@ function RegularAccrualPrototypeDialog({
           </button>
         </div>
         <form className="dictionary-modal-form payments-prototype-modal-form" onSubmit={handleSubmit}>
+          <p className="form-hint">Будут обработаны все активные регулярные услуги из раздела «Тарифы и сборы».</p>
           <FormField label="Месяц">
             <input aria-label="Месяц регулярного начисления" type="month" value={accountingMonth} onChange={(event) => {
               setAccountingMonth(event.target.value)
