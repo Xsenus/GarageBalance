@@ -1,17 +1,5 @@
-import { useState } from 'react'
+import { lazy, Suspense, useState } from 'react'
 import { ArrowLeft, Bell, LockKeyhole, LogOut, X } from 'lucide-react'
-import { PasswordPanel } from '../settings/PasswordPanel'
-import { FundsPrototypePanel } from '../funds/FundsPanel'
-import { ImportPanel } from '../import/ImportPanel'
-import { MeterReadingsPrototypePanel } from '../meterReadings/MeterReadingsPanel'
-import { AuditPanel } from '../audit/AuditPanel'
-import { ReportPanel } from '../reports/ReportPanel'
-import { UserManagementPanel } from '../users/UserManagementPanel'
-import { DictionaryPanelV2 } from '../dictionaries/DictionaryPanel'
-import { TariffsAndFeesPrototypePanel } from '../tariffs/TariffsAndFeesPanel'
-import { ContractorsPrototypePanel } from '../contractors/ContractorsPanel'
-import { FinancePanel } from '../finance/FinancePanel'
-import { ReleasePanel } from '../releases/ReleasePanel'
 import type { AuthClient, AuthResponse, CurrentUserDto } from '../../services/authApi'
 import type { AuditClient } from '../../services/auditApi'
 import type { DictionaryClient } from '../../services/dictionariesApi'
@@ -25,8 +13,22 @@ import type { ReleaseClient } from '../../services/releasesApi'
 import type { UserManagementClient } from '../../services/usersApi'
 import type { ApplicationSettingsClient } from '../../services/settingsApi'
 import { hasAnyPermission, hasPermission, permissions } from '../../shared/accessControl'
+import { LoadingSkeleton } from '../../shared/AsyncState'
 import { useEscapeKey, useFocusOnOpen, useFocusTrap, useRestoreFocusOnClose } from '../../shared/focusHooks'
 import type { AuditPanelPreset, WorkspaceOpenContext, WorkspaceSection } from '../../shared/workspaceNavigation'
+
+const PasswordPanel = lazy(() => import('../settings/PasswordPanel').then((module) => ({ default: module.PasswordPanel })))
+const FundsPrototypePanel = lazy(() => import('../funds/FundsPanel').then((module) => ({ default: module.FundsPrototypePanel })))
+const ImportPanel = lazy(() => import('../import/ImportPanel').then((module) => ({ default: module.ImportPanel })))
+const MeterReadingsPrototypePanel = lazy(() => import('../meterReadings/MeterReadingsPanel').then((module) => ({ default: module.MeterReadingsPrototypePanel })))
+const AuditPanel = lazy(() => import('../audit/AuditPanel').then((module) => ({ default: module.AuditPanel })))
+const ReportPanel = lazy(() => import('../reports/ReportPanel').then((module) => ({ default: module.ReportPanel })))
+const UserManagementPanel = lazy(() => import('../users/UserManagementPanel').then((module) => ({ default: module.UserManagementPanel })))
+const DictionaryPanelV2 = lazy(() => import('../dictionaries/DictionaryPanel').then((module) => ({ default: module.DictionaryPanelV2 })))
+const TariffsAndFeesPrototypePanel = lazy(() => import('../tariffs/TariffsAndFeesPanel').then((module) => ({ default: module.TariffsAndFeesPrototypePanel })))
+const ContractorsPrototypePanel = lazy(() => import('../contractors/ContractorsPanel').then((module) => ({ default: module.ContractorsPrototypePanel })))
+const FinancePanel = lazy(() => import('../finance/FinancePanel').then((module) => ({ default: module.FinancePanel })))
+const ReleasePanel = lazy(() => import('../releases/ReleasePanel').then((module) => ({ default: module.ReleasePanel })))
 
 const dashboardTiles: { title: string; section: WorkspaceSection; requiredAny?: readonly string[] }[] = [
   { title: 'Тарифы\nи сборы', section: 'tariffsAndFees', requiredAny: [permissions.dictionariesRead] },
@@ -222,7 +224,9 @@ export function Workspace({
           </button>
         </div>
       </header>
-      {renderActiveSection()}
+      <Suspense fallback={<LoadingSkeleton label="Загружаем раздел" rows={5} columns={4} />}>
+        {renderActiveSection()}
+      </Suspense>
       {logoutConfirmationOpen ? (
         <div className="modal-backdrop" role="presentation" onMouseDown={() => setLogoutConfirmationOpen(false)}>
           <section

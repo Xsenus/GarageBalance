@@ -38,6 +38,8 @@ export function LocalizedDatePicker({
   if (sourceChanged) setPickerState(synchronizedState)
   const { draft, viewDate } = synchronizedState
   const effectiveOpen = open && !disabled
+  const expectedDraftLength = mode === 'date' ? 10 : 7
+  const draftIsInvalid = draft.length >= expectedDraftLength && parseLocalizedValue(draft, mode) === null
 
   useEffect(() => {
     if (!effectiveOpen) return
@@ -111,9 +113,11 @@ export function LocalizedDatePicker({
       <input
         aria-label={ariaLabel}
         inputMode="numeric"
+        maxLength={expectedDraftLength}
         placeholder={mode === 'date' ? 'дд.мм.гггг' : 'мм.гггг'}
         value={draft}
         disabled={disabled}
+        aria-invalid={draftIsInvalid}
         onChange={(event) => commitDraft(event.target.value)}
         onBlur={() => setPickerState((current) => ({ ...current, sourceValue: value, sourceMode: mode, draft: formatLocalizedValue(value, mode) }))}
       />

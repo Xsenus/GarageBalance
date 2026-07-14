@@ -65,6 +65,26 @@ describe('styled form controls', () => {
     expect(screen.queryByRole('listbox')).not.toBeInTheDocument()
   })
 
+  it('finds a Cyrillic option with keyboard typeahead', async () => {
+    const user = userEvent.setup()
+    function Example() {
+      const [value, setValue] = useState('water')
+      return <SelectControl aria-label="Услуга" value={value} options={[
+        { value: 'water', label: 'Водоснабжение' },
+        { value: 'electricity', label: 'Электроэнергия' },
+        { value: 'waste', label: 'Вывоз мусора' },
+      ]} onChange={setValue} />
+    }
+
+    render(<Example />)
+    const control = screen.getByRole('combobox', { name: 'Услуга' })
+    control.focus()
+    await user.keyboard('э{Enter}')
+
+    expect(control).toHaveTextContent('Электроэнергия')
+    expect(control).toHaveAttribute('aria-expanded', 'false')
+  })
+
   it('accepts localized dates and returns an ISO filter value', async () => {
     const user = userEvent.setup()
     function Example() {
@@ -126,6 +146,17 @@ describe('styled form controls', () => {
     render(<LocalizedDatePicker ariaLabel="Некорректная дата" mode="date" value="2026-02-31" onChange={() => undefined} />)
 
     expect(screen.getByLabelText('Некорректная дата')).toHaveValue('')
+  })
+
+  it('marks a completed impossible localized date as invalid', async () => {
+    const user = userEvent.setup()
+    render(<LocalizedDatePicker ariaLabel="Проверяемая дата" mode="date" value="" onChange={() => undefined} />)
+
+    const input = screen.getByLabelText('Проверяемая дата')
+    await user.type(input, '31.02.2026')
+
+    expect(input).toHaveAttribute('aria-invalid', 'true')
+    expect(input).toHaveAttribute('maxlength', '10')
   })
 
   it('selects and clears the current localized period through project actions', async () => {

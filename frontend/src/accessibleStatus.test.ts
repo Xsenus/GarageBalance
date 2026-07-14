@@ -150,6 +150,16 @@ describe('accessible dynamic messages', () => {
     expect(financePanelSource).toContain('aria-label="Вид выплаты"')
     expect(financePanelSource).toContain('aria-label="Тариф для регулярного начисления"')
     expect(financePanelSource).toContain("pageSizeLabel={getFinanceToolbarLabel('pageSize')}")
+    expect(financePanelSource).toContain('<SelectControl aria-label="Месяц поступлений с"')
+    expect(financePanelSource).toContain('<SelectControl aria-label="Месяц поступлений по"')
+    expect(financePanelSource).toContain('aria-label="Месяц выплат"')
+    expect(financePanelSource).not.toContain('<select aria-label="Месяц поступлений с"')
+    expect(financePanelSource).not.toContain('<select aria-label="Месяц поступлений по"')
+    expect(financePanelSource).not.toContain('<select aria-label="Месяц выплат"')
+    expect(financePanelSource).toContain('<LocalizedDatePicker ariaLabel="Дата изменяемого платежа"')
+    expect(financePanelSource).toContain('<LocalizedDatePicker ariaLabel="Месяц изменяемого платежа"')
+    expect(financePanelSource).not.toContain('aria-label="Дата изменяемого платежа" type="date"')
+    expect(financePanelSource).not.toContain('aria-label="Месяц изменяемого платежа" type="month"')
   })
 
   it('keeps text inputs and textareas consistently styled and labeled', () => {

@@ -55,4 +55,29 @@ describe('shared loading-state coverage', () => {
     expect(component).toContain('aria-hidden="true"')
     expect(css).toContain('@media (prefers-reduced-motion: reduce)')
   })
+
+  it('loads workspace sections on demand behind the shared skeleton', () => {
+    const workspace = readFileSync(resolve(process.cwd(), 'src', 'features', 'workspace', 'Workspace.tsx'), 'utf8')
+    const lazySectionModules = [
+      'settings/PasswordPanel',
+      'funds/FundsPanel',
+      'import/ImportPanel',
+      'meterReadings/MeterReadingsPanel',
+      'audit/AuditPanel',
+      'reports/ReportPanel',
+      'users/UserManagementPanel',
+      'dictionaries/DictionaryPanel',
+      'tariffs/TariffsAndFeesPanel',
+      'contractors/ContractorsPanel',
+      'finance/FinancePanel',
+      'releases/ReleasePanel',
+    ]
+
+    expect(workspace).toContain("import { lazy, Suspense, useState } from 'react'")
+    expect(workspace).toContain('<Suspense fallback={<LoadingSkeleton label="Загружаем раздел" rows={5} columns={4} />}>')
+    for (const modulePath of lazySectionModules) {
+      expect(workspace).toContain(`lazy(() => import('../${modulePath}')`)
+      expect(workspace).not.toMatch(new RegExp(`^import .* from '../${modulePath.replace('/', '\\/')}'`, 'm'))
+    }
+  })
 })

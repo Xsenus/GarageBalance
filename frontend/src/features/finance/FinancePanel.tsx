@@ -4402,19 +4402,11 @@ function PaymentsPrototypePanel({
             <div className="payments-prototype-period-row">
               <label>
                 <span>Месяц с</span>
-                <select aria-label="Месяц поступлений с" value={incomeWorksheetMonthFrom} onChange={(event) => handleIncomeWorksheetMonthFromChange(event.target.value)}>
-                  {incomeWorksheetMonthOptions.map((option) => (
-                    <option key={option.value} value={option.value}>{option.label}</option>
-                  ))}
-                </select>
+                <SelectControl aria-label="Месяц поступлений с" value={incomeWorksheetMonthFrom} options={incomeWorksheetMonthOptions} onChange={handleIncomeWorksheetMonthFromChange} />
               </label>
               <label>
                 <span>Месяц по</span>
-                <select aria-label="Месяц поступлений по" value={incomeWorksheetMonthTo} onChange={(event) => handleIncomeWorksheetMonthToChange(event.target.value)}>
-                  {incomeWorksheetMonthOptions.map((option) => (
-                    <option key={option.value} value={option.value}>{option.label}</option>
-                  ))}
-                </select>
+                <SelectControl aria-label="Месяц поступлений по" value={incomeWorksheetMonthTo} options={incomeWorksheetMonthOptions} onChange={handleIncomeWorksheetMonthToChange} />
               </label>
               <button className="link-button" type="button" onClick={setCurrentIncomeWorksheetMonth}>Текущий</button>
             </div>
@@ -4541,11 +4533,16 @@ function PaymentsPrototypePanel({
             <div className="payments-prototype-period-row">
               <label>
                 <span>Месяц</span>
-                <select aria-label="Месяц выплат" value={expenseWorksheetMonth} onChange={(event) => handleExpenseWorksheetMonthChange(event.target.value)}>
-                  <option value="2026-06">июнь 2026</option>
-                  <option value="2026-05">май 2026</option>
-                  <option value="2026-04">апрель 2026</option>
-                </select>
+                <SelectControl
+                  aria-label="Месяц выплат"
+                  value={expenseWorksheetMonth}
+                  options={[
+                    { value: '2026-06', label: 'июнь 2026' },
+                    { value: '2026-05', label: 'май 2026' },
+                    { value: '2026-04', label: 'апрель 2026' },
+                  ]}
+                  onChange={handleExpenseWorksheetMonthChange}
+                />
               </label>
             </div>
             <div className="payments-prototype-table-scroll">
@@ -4802,10 +4799,10 @@ function GaragePaymentHistoryEditDialog({
             <input aria-label="Сумма изменяемого платежа" inputMode="decimal" value={state.amount} onChange={(event) => onChange({ amount: event.target.value })} disabled={saving} />
           </FormField>
           <FormField label="Дата">
-            <input aria-label="Дата изменяемого платежа" type="date" value={state.operationDate} onChange={(event) => onChange({ operationDate: event.target.value })} disabled={saving} />
+            <LocalizedDatePicker ariaLabel="Дата изменяемого платежа" mode="date" value={state.operationDate} onChange={(operationDate) => onChange({ operationDate })} disabled={saving} />
           </FormField>
           <FormField label="Месяц">
-            <input aria-label="Месяц изменяемого платежа" type="month" value={state.accountingMonth} onChange={(event) => onChange({ accountingMonth: event.target.value })} disabled={saving} />
+            <LocalizedDatePicker ariaLabel="Месяц изменяемого платежа" mode="month" value={state.accountingMonth} onChange={(accountingMonth) => onChange({ accountingMonth })} disabled={saving} />
           </FormField>
           <FormField label="Документ">
             <input aria-label="Документ изменяемого платежа" value={state.documentNumber} onChange={(event) => onChange({ documentNumber: event.target.value })} disabled={saving} />
