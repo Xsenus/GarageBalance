@@ -3369,7 +3369,16 @@ function EmployeePrototypeDialog({ departments, item, onClose, onOpenFinancialRe
           <form className="dictionary-modal-form contractors-modal-form" onSubmit={handleSubmit}>
             <FormField label="ФИО"><input aria-label="ФИО сотрудника" value={form.fullName} onChange={(event) => setForm({ ...form, fullName: event.target.value })} /></FormField>
             <div className="contractors-staff-fields">
-              <FormField label="Отдел"><select aria-label="Отдел сотрудника" value={form.department} onChange={(event) => setForm({ ...form, department: event.target.value })}>{selectableDepartments.map((department) => <option value={department.name} key={department.id}>{department.name}</option>)}</select></FormField>
+              <FormField label="Отдел">
+                <SelectControl
+                  aria-label="Отдел сотрудника"
+                  value={form.department}
+                  options={selectableDepartments.length > 0
+                    ? selectableDepartments.map((department) => ({ value: department.name, label: department.name }))
+                    : [{ value: '', label: 'Отделы не настроены' }]}
+                  onChange={(department) => setForm({ ...form, department })}
+                />
+              </FormField>
               <FormField label="Ставка"><div className="contractors-inline-field"><input aria-label="Ставка сотрудника" value={form.rate} onChange={(event) => setForm({ ...form, rate: event.target.value })} /><span>руб.</span></div></FormField>
             </div>
             <div className="detail-dialog-actions contractors-dialog-actions contractors-staff-actions">
