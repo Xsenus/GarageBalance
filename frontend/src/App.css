@@ -4723,6 +4723,10 @@ h1 {
   background: #ffffff;
 }
 
+.dictionary-table-scroll--loading > :not(.table-loading-state) {
+  display: none;
+}
+
 .dictionary-data-table {
   width: 100%;
   min-width: 720px;

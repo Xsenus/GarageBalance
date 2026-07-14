@@ -30,7 +30,7 @@ import type { AuditClient, AuditEventDto } from './services/auditApi'
 import type { AuthClient, AuthResponse } from './services/authApi'
 import { DictionaryApiError } from './services/dictionariesApi'
 import type { AccountingTypeDto, ChargeServiceSettingDto, DictionaryClient, FeeCampaignDto, GarageDto, IrregularPaymentDto, OwnerDto, StaffDepartmentDto, StaffMemberDto, SupplierContactDto, SupplierDto, SupplierGroupDto, TariffDto, UpsertGarageRequest, UpsertStaffMemberRequest, UpsertSupplierRequest, UpsertTariffRequest } from './services/dictionariesApi'
-import type { AccrualDto, CreateAccrualRequest, CreateDebtTransferRequest, CreateExpenseOperationRequest, CreateIncomeOperationRequest, CreateMeterReadingRequest, CreateStaffPaymentRequest, CreateSupplierAccrualRequest, ExpenseWorksheetDto, FeeCampaignAccrualGenerationResultDto, FinanceClient, FinanceSummaryDto, FinancialOperationDto, GarageBalanceHistoryDto, GarageIncomeWorksheetDto, GenerateFeeCampaignAccrualsRequest, GenerateRegularCatalogAccrualsRequest, GenerateSupplierGroupSalaryAccrualsRequest, MeterReadingDto, MeterReadingYearPageDto, MissingMeterReadingDto, RegularAccrualGenerationResultDto, RegularCatalogAccrualGenerationResultDto, SupplierAccrualDto, SupplierGroupSalaryAccrualGenerationResultDto } from './services/financeApi'
+import type { AccrualDto, CreateAccrualRequest, CreateDebtTransferRequest, CreateExpenseOperationRequest, CreateIncomeOperationRequest, CreateMeterReadingRequest, CreateStaffPaymentRequest, CreateSupplierAccrualRequest, ExpenseWorksheetDto, FeeCampaignAccrualGenerationResultDto, FinanceClient, FinancePagedResult, FinancePageParams, FinanceSummaryDto, FinancialOperationDto, GarageBalanceHistoryDto, GarageIncomeWorksheetDto, GenerateFeeCampaignAccrualsRequest, GenerateRegularCatalogAccrualsRequest, GenerateSupplierGroupSalaryAccrualsRequest, MeterReadingDto, MeterReadingYearPageDto, MissingMeterReadingDto, RegularAccrualGenerationResultDto, RegularCatalogAccrualGenerationResultDto, SupplierAccrualDto, SupplierGroupSalaryAccrualGenerationResultDto } from './services/financeApi'
 import type { CreateFundOperationRequest, FundDto, FundOperationDto, FundOperationPageDto, FundsClient } from './services/fundsApi'
 import type { AccessImportCreatedRecordDto, AccessImportQuarantineItemDto, AccessImportReaderStatusDto, AccessImportRunDto, AccessImportRunLogEntryDto, ImportClient } from './services/importApi'
 import type { IntegrationClient, IntegrationSecretSettingDto, OneCFreshIntegrationStatusDto, OneCFreshSyncDto, OneCFreshSyncPreviewDto, OneCFreshSyncRequest, ReceiptPrintingActionDto, ReceiptPrintingActionRequest, ReceiptPrintingIntegrationStatusDto } from './services/integrationsApi'
@@ -8600,6 +8600,70 @@ describe('App', () => {
     await waitFor(() => expect(requestedLimits.meterReadings).toBe(25))
     expect(requestedLimits).toEqual({ incomeOperations: 25, meterReadings: 25 })
     expect(getMissingMeterReadings).toHaveBeenCalledTimes(1)
+  })
+
+  it('keeps the latest payment table response and loader during overlapping requests', async () => {
+    const user = userEvent.setup()
+    let resolveIncomePage!: (page: FinancePagedResult<FinancialOperationDto>) => void
+    const incomePage = new Promise<FinancePagedResult<FinancialOperationDto>>((resolve) => {
+      resolveIncomePage = resolve
+    })
+    const expenseOperation = createFinancialOperation({
+      id: 'latest-expense',
+      operationKind: 'expense',
+      documentNumber: 'RKO-LATEST',
+      amount: 410,
+    })
+    const staleIncomeOperation = createFinancialOperation({
+      id: 'stale-income',
+      operationKind: 'income',
+      documentNumber: 'PKO-STALE',
+      amount: 820,
+    })
+    const getOperationsPage = vi.fn(async (_token: string, params?: FinancePageParams & { operationKind?: 'income' | 'expense' }) => {
+      if (params?.operationKind === 'income') {
+        return incomePage
+      }
+
+      return { items: [expenseOperation], totalCount: 1, offset: 0, limit: params?.limit ?? 25 }
+    })
+    const financeClient = createFinanceClient({
+      getOperations: async () => [],
+      getAccruals: async () => [],
+      getSupplierAccruals: async () => [],
+      getMeterReadings: async () => [],
+      getOperationsPage,
+      getSummary: async () => ({
+        incomeTotal: 0,
+        expenseTotal: 410,
+        accrualTotal: 0,
+        balance: -410,
+        debt: 0,
+        operationCount: 1,
+        accrualCount: 0,
+        meterReadingCount: 0,
+        incomeCount: 0,
+        expenseCount: 1,
+        supplierAccrualCount: 0,
+      }),
+    })
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={financeClient} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Платежи')
+    const financePanel = await screen.findByRole('region', { name: 'Платежи' })
+
+    await waitFor(() => expect(getOperationsPage).toHaveBeenCalledWith('token', expect.objectContaining({ operationKind: 'income' })))
+    expect(within(financePanel).getByLabelText('Загружаем таблицу платежей')).toHaveAttribute('role', 'status')
+    await user.click(within(financePanel).getByRole('tab', { name: /Расходы/ }))
+    expect(await within(financePanel).findByText('RKO-LATEST')).toBeInTheDocument()
+
+    await act(async () => resolveIncomePage({ items: [staleIncomeOperation], totalCount: 1, offset: 0, limit: 25 }))
+
+    expect(within(financePanel).getByText('RKO-LATEST')).toBeInTheDocument()
+    expect(within(financePanel).queryByText('PKO-STALE')).not.toBeInTheDocument()
+    expect(within(financePanel).queryByLabelText('Загружаем таблицу платежей')).not.toBeInTheDocument()
   })
 
   it('refreshes payment summary totals from server when period filter changes', async () => {

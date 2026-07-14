@@ -30,6 +30,19 @@ const dictionaryScreenRequestLimit = 100
 const paymentsFormStateScope = 'payments-prototype'
 
 type FinanceRecord = FinancialOperationDto | AccrualDto | SupplierAccrualDto | MeterReadingDto
+
+class LatestRequestSequence {
+  private currentRequestId = 0
+
+  begin() {
+    this.currentRequestId += 1
+    return this.currentRequestId
+  }
+
+  isLatest(requestId: number) {
+    return requestId === this.currentRequestId
+  }
+}
 type CancelFinanceTarget = {
   section: FinanceSectionKey
   record: FinanceRecord
@@ -338,6 +351,7 @@ export function FinancePanel({
   const financeEditorTriggerRef = useRef<HTMLElement | null>(null)
   const cancelFinanceTriggerRef = useRef<HTMLElement | null>(null)
   const restoreFinanceTriggerRef = useRef<HTMLElement | null>(null)
+  const [financeWorkbenchRequests] = useState(() => new LatestRequestSequence())
   const [paymentsPrototypeDialog, setPaymentsPrototypeDialog] = useState<PaymentsPrototypeDialogKey | null>(null)
   const paymentsPrototypeTriggerRef = useRef<HTMLButtonElement | null>(null)
   const [financeEditorCloseConfirmation, setFinanceEditorCloseConfirmation] = useState(false)
@@ -352,7 +366,9 @@ export function FinancePanel({
   const [salaryValidationErrors, setSalaryValidationErrors] = useState<string[]>([])
   const [meterValidationErrors, setMeterValidationErrors] = useState<string[]>([])
   const [accrualBreakdown, setAccrualBreakdown] = useState<AccrualBreakdown | null>(null)
-  const [loading, setLoading] = useState(true)
+  const [referencesLoading, setReferencesLoading] = useState(true)
+  const [workbenchLoading, setWorkbenchLoading] = useState(false)
+  const loading = referencesLoading || workbenchLoading
   const [paymentDisplaySettingsLoaded, setPaymentDisplaySettingsLoaded] = useState(false)
   const [showAllGarageOperations, setShowAllGarageOperations] = useState(false)
   const [paymentDisplaySettingsError, setPaymentDisplaySettingsError] = useState<string | null>(null)
@@ -487,7 +503,7 @@ export function FinancePanel({
   useEffect(() => {
     let ignore = false
     async function load() {
-      setLoading(true)
+      setReferencesLoading(true)
       setError(null)
       try {
         const garagesPromise = dictionaryClient.getGarages(auth.accessToken, undefined, dictionaryScreenRequestLimit)
@@ -507,7 +523,7 @@ export function FinancePanel({
           setIncomeForm((value) => ({ ...value, garageId: value.garageId || loadedGarages[0]?.id || '' }))
           setAccrualForm((value) => ({ ...value, garageId: value.garageId || loadedGarages[0]?.id || '' }))
           setMeterForm((value) => ({ ...value, garageId: value.garageId || loadedGarages[0]?.id || '' }))
-          setLoading(false)
+          setReferencesLoading(false)
         }
 
         const [loadedSupplierGroups, loadedSuppliers, loadedStaffMembers, loadedIncomeTypes, loadedExpenseTypes, loadedTariffs] = await referencesPromise
@@ -538,7 +554,7 @@ export function FinancePanel({
         }
       } finally {
         if (!ignore) {
-          setLoading(false)
+          setReferencesLoading(false)
         }
       }
     }
@@ -620,8 +636,9 @@ export function FinancePanel({
   }, [financeSearchInput])
 
   const loadFinanceWorkbench = useCallback(async (section: FinanceSectionKey, offset: number, limit: number) => {
+    const requestId = financeWorkbenchRequests.begin()
     setFinanceContextMenu(null)
-    setLoading(true)
+    setWorkbenchLoading(true)
     setError(null)
     try {
       const params = {
@@ -650,6 +667,10 @@ export function FinancePanel({
         financeClient.getSummary(auth.accessToken, { monthFrom: financeFilter.monthFrom, monthTo: financeFilter.monthTo, search: financeFilter.search }),
       ])
 
+      if (!financeWorkbenchRequests.isLatest(requestId)) {
+        return
+      }
+
       setFinanceSectionCounts((current) => ({
         income: loadedSummary.incomeCount ?? (section === 'income' ? activePage.totalCount : current.income),
         expense: loadedSummary.expenseCount ?? (section === 'expense' ? activePage.totalCount : current.expense),
@@ -674,11 +695,15 @@ export function FinancePanel({
         setMissingMeterReadings(loadedMissingMeterReadings)
       }
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : 'Не удалось загрузить страницу платежей.')
+      if (financeWorkbenchRequests.isLatest(requestId)) {
+        setError(caught instanceof Error ? caught.message : 'Не удалось загрузить страницу платежей.')
+      }
     } finally {
-      setLoading(false)
+      if (financeWorkbenchRequests.isLatest(requestId)) {
+        setWorkbenchLoading(false)
+      }
     }
-  }, [auth.accessToken, financeClient, financeFilter.monthFrom, financeFilter.monthTo, financeFilter.search, meterForm.accountingMonth])
+  }, [auth.accessToken, financeClient, financeFilter.monthFrom, financeFilter.monthTo, financeFilter.search, financeWorkbenchRequests, meterForm.accountingMonth])
 
   useEffect(() => {
     if (!paymentDisplaySettingsLoaded || !showAllGarageOperations) {
@@ -2148,7 +2173,7 @@ export function FinancePanel({
 
         <div className="dictionary-table-shell">
           <div
-            className="dictionary-table-scroll"
+            className={`dictionary-table-scroll${loading ? ' dictionary-table-scroll--loading' : ''}`}
             role="group"
             aria-label={getFinanceToolbarLabel('tableArea')}
             tabIndex={getActiveFinanceRowsCount() === 0 ? 0 : -1}
@@ -2156,7 +2181,8 @@ export function FinancePanel({
             onKeyDown={handleFinanceTableAreaKeyDown}
           >
             {renderFinanceTable()}
-            {getActiveFinanceRowsCount() === 0 ? <p className="empty-state" role="status" aria-live="polite">{getFinanceToolbarLabel('emptyState')}</p> : null}
+            {loading ? <TableLoadingState label="Загружаем таблицу платежей" /> : null}
+            {!loading && getActiveFinanceRowsCount() === 0 ? <p className="empty-state" role="status" aria-live="polite">{getFinanceToolbarLabel('emptyState')}</p> : null}
           </div>
           <TablePagination
             ariaLabel={getFinanceToolbarLabel('pagination')}
