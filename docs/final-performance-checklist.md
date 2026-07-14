@@ -150,3 +150,14 @@ This audit introduces no schema or cleanup-policy changes. Feature-branch public
 - [x] Rechecked the authorized VPS without changing it: `garagebalance-staging.service` is active with zero restarts, nginx is valid, direct and public health and the frontend return HTTP 200, the warning journal is empty, and the verified 435078-byte backup remains readable. PostgreSQL retains nine tariffs and zero operational rows in garages, owners, staff, staff departments, suppliers, supplier groups and contacts, payments, accruals, meters, funds, import and audit tables.
 
 No database schema or cleanup-policy changes were required. This feature branch remains intentionally undeployed until it reaches the deployment branch through the configured workflow.
+
+## Sixth background-load and monthly-latency audit: 2026-07-14
+
+- [x] Separated the paged finance workbench result from the four compact recent-item previews. A delayed preview response can no longer replace a filtered page while leaving unrelated pagination and totals on screen; switching a tab invalidates the previous request before the next effect runs.
+- [x] Reduced each delayed payment preview from 50 rows to the eight rows that are actually rendered. Exact totals still come from the compact server summary, reducing the maximum preview payload from 200 to 32 records without losing counters.
+- [x] Kept compact previews current immediately after create, edit, cancel, restore and generation flows while the main table continues to render only its protected paged result. The first complete frontend run exposed eight preview regressions; all were corrected and rerun before acceptance.
+- [x] Reduced the successful regular-accrual automation interval from six hours to 15 minutes. A garage or regular service added during the current month is now picked up within the next quarter-hour; the five-minute technical-failure retry and duplicate-safe generation remain unchanged.
+- [x] Two clean complete verification runs passed after the corrections with identical results: 1508 backend tests and 421 frontend tests. ESLint, production TypeScript build, bundle budget (`74.1 KiB` main JS, `16.9 KiB` CSS, `212.6 KiB` total gzip), backend formatting, Docker Compose, release/configuration JSON, whitespace checks and 114893-byte idempotent EF migration SQL generation also passed.
+- [x] Rechecked the authorized VPS without changing or deploying it: service active with zero restarts, nginx valid, direct/public health and frontend HTTP 200, zero warning-level journal lines, readable 435078-byte backup, nine tariffs and zero rows in all checked operational, staff, supplier, finance, fund, import and audit tables.
+
+No schema or cleanup-policy changes were introduced. The feature branch remains undeployed because the staging workflow is restricted to `master`.
