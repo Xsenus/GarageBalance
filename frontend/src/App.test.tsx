@@ -246,7 +246,7 @@ describe('App', () => {
     await openSection(user, 'Пользователи')
 
     const usersPanel = await screen.findByRole('region', { name: 'Пользователи' })
-    expect(within(usersPanel).getByText('Администратор ГСК')).toBeInTheDocument()
+    expect(await within(usersPanel).findByText('Администратор ГСК')).toBeInTheDocument()
     expect(within(usersPanel).getByText('admin@example.com')).toBeInTheDocument()
     const roleMatrix = within(usersPanel).getByRole('region', { name: 'Матрица ролей' })
     expect(within(roleMatrix).getByRole('table', { name: 'Матрица ролей и прав' })).toBeInTheDocument()
@@ -254,12 +254,12 @@ describe('App', () => {
     expect(within(roleMatrix).getByText('Бухгалтер')).toBeInTheDocument()
     expect(within(roleMatrix).getByText('История изменений')).toBeInTheDocument()
     expect(within(roleMatrix).getByRole('cell', { name: 'Бухгалтер: Тарифы - разрешено' })).toHaveTextContent('Да')
-    expect(within(roleMatrix).getByRole('cell', { name: 'Оператор: Отчеты - нет доступа' })).toHaveTextContent('Нет')
+    expect(await within(roleMatrix).findByRole('cell', { name: 'Оператор: Отчеты - нет доступа' })).toHaveTextContent('Нет')
 
     await openSection(user, 'Справочники')
 
     const dictionaryPanel = await screen.findByRole('region', { name: 'Справочники' })
-    expect(within(dictionaryPanel).getAllByText('Иванов Иван').length).toBeGreaterThan(0)
+    expect((await within(dictionaryPanel).findAllByText('Иванов Иван')).length).toBeGreaterThan(0)
     await openDictionarySubgroup(user, dictionaryPanel, 'Гаражи')
     expect(within(dictionaryPanel).getByText('12')).toBeInTheDocument()
     await openDictionarySubgroup(user, dictionaryPanel, 'Поставщики')
@@ -272,7 +272,7 @@ describe('App', () => {
     await openSection(user, 'Платежи')
 
     const financePanel = await screen.findByRole('region', { name: 'Платежи' })
-    expect(within(financePanel).getAllByText('1 500,00').length).toBeGreaterThan(0)
+    expect((await within(financePanel).findAllByText('1 500,00')).length).toBeGreaterThan(0)
     expect(within(financePanel).getAllByText('2 000,00').length).toBeGreaterThan(0)
     expect(within(financePanel).getByText('500,00')).toBeInTheDocument()
     expect(within(financePanel).getAllByText('1').length).toBeGreaterThan(0)
@@ -306,7 +306,7 @@ describe('App', () => {
 
     const usersPanel = await screen.findByRole('region', { name: 'Пользователи' })
     const roleMatrix = within(usersPanel).getByRole('region', { name: 'Матрица ролей' })
-    expect(within(roleMatrix).getByRole('cell', { name: 'Оператор: Отчеты - нет доступа' })).toHaveTextContent('Нет')
+    expect(await within(roleMatrix).findByRole('cell', { name: 'Оператор: Отчеты - нет доступа' })).toHaveTextContent('Нет')
 
     await user.click(within(roleMatrix).getByRole('button', { name: 'Изменить права роли Оператор' }))
     let roleDialog = await screen.findByRole('dialog', { name: 'Изменить права роли' })
@@ -383,8 +383,8 @@ describe('App', () => {
 
     const tariffsPanel = await screen.findByRole('region', { name: 'Тарифы и сборы' })
     expect(screen.queryByText('Поиск по гаражу, владельцу или поставщику')).not.toBeInTheDocument()
-    expect(within(tariffsPanel).getByRole('table', { name: 'Тарифы и сборы' })).toBeInTheDocument()
-    expect(within(tariffsPanel).getByText('Тариф воды')).toBeInTheDocument()
+    expect(await within(tariffsPanel).findByRole('table', { name: 'Тарифы и сборы' })).toBeInTheDocument()
+    expect(await within(tariffsPanel).findByText('Тариф воды')).toBeInTheDocument()
     expect(within(tariffsPanel).getByText('Нерегулярные платежи')).toBeInTheDocument()
     const bottomGrid = within(tariffsPanel).getByText('Нерегулярные платежи').closest('.contractors-bottom-grid')
     expect(bottomGrid).not.toBeNull()
@@ -541,7 +541,7 @@ describe('App', () => {
     await openSection(user, 'Тарифы и сборы')
     const tariffsPanel = await screen.findByRole('region', { name: 'Тарифы и сборы' })
     const feeCampaignsSection = within(tariffsPanel).getByLabelText('Объявленные сборы')
-    expect(within(feeCampaignsSection).getByText('Сбор на ворота')).toBeInTheDocument()
+    expect(await within(feeCampaignsSection).findByText('Сбор на ворота')).toBeInTheDocument()
     expect(within(feeCampaignsSection).getByText('Старый сбор')).toBeInTheDocument()
 
     await user.click(within(tariffsPanel).getAllByRole('button', { name: 'Объявить сбор' })[0])
@@ -1179,7 +1179,7 @@ describe('App', () => {
     expect(screen.queryByText('Поиск по гаражу, владельцу или поставщику')).not.toBeInTheDocument()
     expect(within(contractorsPanel).getByRole('table', { name: 'Гаражи' })).toBeInTheDocument()
     expect(within(contractorsPanel).getByRole('columnheader', { name: 'Просроченная задолженность' })).toBeInTheDocument()
-    expect(within(contractorsPanel).getByText('Иванов Иван')).toBeInTheDocument()
+    expect(await within(contractorsPanel).findByText('Иванов Иван')).toBeInTheDocument()
     const overdueDebtCell = within(contractorsPanel).getByText('1 300,00 руб.').closest('[role="cell"]')
     expect(overdueDebtCell).toHaveClass('contractors-directory-cell--right')
     expect(within(contractorsPanel).getByRole('button', { name: 'Показать должников' })).toBeInTheDocument()
@@ -2191,7 +2191,7 @@ describe('App', () => {
     await openSection(user, 'Тарифы и сборы')
     const tariffsPanel = await screen.findByRole('region', { name: 'Тарифы и сборы' })
 
-    const firstTierName = within(tariffsPanel).getByLabelText('Электроэнергия: От 0 кВт: наименование')
+    const firstTierName = await within(tariffsPanel).findByLabelText('Электроэнергия: От 0 кВт: наименование')
     await user.clear(firstTierName)
     await user.type(firstTierName, 'Льготный порог{Enter}')
     const confirmationDialog = await screen.findByRole('dialog', { name: 'Подтвердить изменение?' })
@@ -3170,7 +3170,7 @@ describe('App', () => {
     const garageSearchInput = within(prototype).getByLabelText('Поиск номера гаража или ФИО владельца')
     expect(garageSearchInput).toBeInTheDocument()
     expect(within(prototype).queryByRole('table', { name: /Поступления гаража/ })).not.toBeInTheDocument()
-    expect(within(prototype).getByRole('status')).toHaveTextContent('Выберите гараж через поиск')
+    await waitFor(() => expect(within(prototype).getByRole('status')).toHaveTextContent('Выберите гараж через поиск'))
 
     await user.type(garageSearchInput, 'Иванов')
     await waitFor(() => expect(searchGaragesPage).toHaveBeenCalledWith('token', 'Иванов', 0, 20))
@@ -4128,7 +4128,7 @@ describe('App', () => {
 
     const fundsPanel = await screen.findByRole('region', { name: 'Управление фондами' })
     expect(screen.queryByPlaceholderText('Поиск по гаражу, владельцу или поставщику')).not.toBeInTheDocument()
-    expect(within(fundsPanel).getByRole('table', { name: 'Фонды и собранные суммы' })).toBeInTheDocument()
+    expect(await within(fundsPanel).findByRole('table', { name: 'Фонды и собранные суммы' })).toBeInTheDocument()
     expect(await within(fundsPanel).findByText('Электроэнергия')).toBeInTheDocument()
     const withdrawElectricityButton = within(fundsPanel).getByRole('button', { name: 'Изъять из фонда Электроэнергия' })
     expect(withdrawElectricityButton.closest('td')).toHaveClass('funds-table-action-column')
@@ -9211,8 +9211,8 @@ describe('App', () => {
     await openSection(user, 'Импорт')
     const importPanel = await screen.findByRole('region', { name: 'Импорт Access' })
 
-    expect(within(importPanel).getByRole('table', { name: 'Проверки импорта' })).toBeInTheDocument()
-    expect(within(importPanel).getByText('Повторная проверка файла')).toBeInTheDocument()
+    expect(await within(importPanel).findByRole('table', { name: 'Проверки импорта' })).toBeInTheDocument()
+    expect(await within(importPanel).findByText('Повторная проверка файла')).toBeInTheDocument()
     expect(within(importPanel).getByText(/осознанная повторная загрузка/)).toBeInTheDocument()
     expect(within(importPanel).getAllByText('Предупреждение').length).toBeGreaterThan(1)
   })
@@ -9243,7 +9243,7 @@ describe('App', () => {
     await openSection(user, 'Импорт')
     const importPanel = await screen.findByRole('region', { name: 'Импорт Access' })
 
-    const rollbackButton = within(importPanel).getByRole('button', { name: 'Запросить rollback импорта ГСК.accdb' })
+    const rollbackButton = await within(importPanel).findByRole('button', { name: 'Запросить rollback импорта ГСК.accdb' })
     expect(rollbackButton).toHaveAttribute('title', 'Запросить rollback импорта ГСК.accdb')
     expect(rollbackButton).toHaveAttribute('data-tooltip', 'Запросить rollback импорта ГСК.accdb')
     await user.click(rollbackButton)

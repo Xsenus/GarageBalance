@@ -66,7 +66,7 @@ public sealed class FrontendFeatureModuleTests
         var repositoryRoot = FindRepositoryRoot();
         var appText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "App.tsx")) + File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "features", "workspace", "Workspace.tsx"));
         var featureText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "features", "finance", "FinancePanel.tsx"));
-        Assert.Contains("import { FinancePanel } from '../finance/FinancePanel'", appText, StringComparison.Ordinal);
+        AssertLazyFeatureImport(appText, "FinancePanel", "../finance/FinancePanel");
         Assert.Contains("<FinancePanel", appText, StringComparison.Ordinal);
         Assert.DoesNotContain("function FinancePanel(", appText, StringComparison.Ordinal);
         Assert.DoesNotContain("function PaymentsPrototypePanel(", appText, StringComparison.Ordinal);
@@ -84,7 +84,7 @@ public sealed class FrontendFeatureModuleTests
         var repositoryRoot = FindRepositoryRoot();
         var appText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "App.tsx")) + File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "features", "workspace", "Workspace.tsx"));
         var featureText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "features", "contractors", "ContractorsPanel.tsx"));
-        Assert.Contains("import { ContractorsPrototypePanel } from '../contractors/ContractorsPanel'", appText, StringComparison.Ordinal);
+        AssertLazyFeatureImport(appText, "ContractorsPrototypePanel", "../contractors/ContractorsPanel");
         Assert.Contains("<ContractorsPrototypePanel", appText, StringComparison.Ordinal);
         Assert.DoesNotContain("function ContractorsPrototypePanel(", appText, StringComparison.Ordinal);
         Assert.DoesNotContain("type ContractorGarageRow", appText, StringComparison.Ordinal);
@@ -111,7 +111,7 @@ public sealed class FrontendFeatureModuleTests
         var repositoryRoot = FindRepositoryRoot();
         var appText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "App.tsx")) + File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "features", "workspace", "Workspace.tsx"));
         var featureText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "features", "tariffs", "TariffsAndFeesPanel.tsx"));
-        Assert.Contains("import { TariffsAndFeesPrototypePanel } from '../tariffs/TariffsAndFeesPanel'", appText, StringComparison.Ordinal);
+        AssertLazyFeatureImport(appText, "TariffsAndFeesPrototypePanel", "../tariffs/TariffsAndFeesPanel");
         Assert.Contains("<TariffsAndFeesPrototypePanel", appText, StringComparison.Ordinal);
         Assert.DoesNotContain("function TariffsAndFeesPrototypePanel(", appText, StringComparison.Ordinal);
         Assert.DoesNotContain("type TariffPrototypePendingChange", appText, StringComparison.Ordinal);
@@ -133,7 +133,7 @@ public sealed class FrontendFeatureModuleTests
             .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
             .Single(line => line.Contains("Frontend разделять на feature-модули", StringComparison.Ordinal));
 
-        Assert.Contains("import { DictionaryPanelV2 } from '../dictionaries/DictionaryPanel'", appText, StringComparison.Ordinal);
+        AssertLazyFeatureImport(appText, "DictionaryPanelV2", "../dictionaries/DictionaryPanel");
         Assert.Contains("<DictionaryPanelV2", appText, StringComparison.Ordinal);
         Assert.DoesNotContain("function DictionaryPanelV2(", appText, StringComparison.Ordinal);
         Assert.DoesNotContain("type DictionaryEditorState", appText, StringComparison.Ordinal);
@@ -190,7 +190,7 @@ public sealed class FrontendFeatureModuleTests
             .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
             .Single(line => line.Contains("Frontend разделять на feature-модули", StringComparison.Ordinal));
 
-        Assert.Contains("import { UserManagementPanel } from '../users/UserManagementPanel'", appText, StringComparison.Ordinal);
+        AssertLazyFeatureImport(appText, "UserManagementPanel", "../users/UserManagementPanel");
         Assert.Contains("<UserManagementPanel", appText, StringComparison.Ordinal);
         Assert.DoesNotContain("function UserManagementPanel(", appText, StringComparison.Ordinal);
         Assert.DoesNotContain("type UserEditorState", appText, StringComparison.Ordinal);
@@ -222,7 +222,7 @@ public sealed class FrontendFeatureModuleTests
             .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
             .Single(line => line.Contains("Frontend разделять на feature-модули", StringComparison.Ordinal));
 
-        Assert.Contains("import { ReportPanel } from '../reports/ReportPanel'", appText, StringComparison.Ordinal);
+        AssertLazyFeatureImport(appText, "ReportPanel", "../reports/ReportPanel");
         Assert.Contains("<ReportPanel", appText, StringComparison.Ordinal);
         Assert.DoesNotContain("function ReportPanel(", appText, StringComparison.Ordinal);
         Assert.DoesNotContain("type ReportWorkbookTab", appText, StringComparison.Ordinal);
@@ -248,7 +248,7 @@ public sealed class FrontendFeatureModuleTests
             .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
             .Single(line => line.Contains("Frontend разделять на feature-модули", StringComparison.Ordinal));
 
-        Assert.Contains("import { AuditPanel } from '../audit/AuditPanel'", appText, StringComparison.Ordinal);
+        AssertLazyFeatureImport(appText, "AuditPanel", "../audit/AuditPanel");
         Assert.Contains("<AuditPanel", appText, StringComparison.Ordinal);
         Assert.DoesNotContain("function AuditPanel(", appText, StringComparison.Ordinal);
         Assert.DoesNotContain("getAuditEventSectionLabel", appText, StringComparison.Ordinal);
@@ -284,7 +284,7 @@ public sealed class FrontendFeatureModuleTests
             .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
             .Single(line => line.Contains("Frontend разделять на feature-модули", StringComparison.Ordinal));
 
-        Assert.Contains("import { MeterReadingsPrototypePanel } from '../meterReadings/MeterReadingsPanel'", appText, StringComparison.Ordinal);
+        AssertLazyFeatureImport(appText, "MeterReadingsPrototypePanel", "../meterReadings/MeterReadingsPanel");
         Assert.Contains("<MeterReadingsPrototypePanel", appText, StringComparison.Ordinal);
         Assert.DoesNotContain("function MeterReadingsPrototypePanel(", appText, StringComparison.Ordinal);
         Assert.DoesNotContain("const meterReadingMonths", appText, StringComparison.Ordinal);
@@ -317,7 +317,7 @@ public sealed class FrontendFeatureModuleTests
             .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
             .Single(line => line.Contains("Frontend разделять на feature-модули", StringComparison.Ordinal));
 
-        Assert.Contains("import { ImportPanel } from '../import/ImportPanel'", appText, StringComparison.Ordinal);
+        AssertLazyFeatureImport(appText, "ImportPanel", "../import/ImportPanel");
         Assert.Contains("<ImportPanel", appText, StringComparison.Ordinal);
         Assert.DoesNotContain("function ImportPanel(", appText, StringComparison.Ordinal);
         Assert.DoesNotContain("type ImportTab", appText, StringComparison.Ordinal);
@@ -349,7 +349,7 @@ public sealed class FrontendFeatureModuleTests
             .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
             .Single(line => line.Contains("Frontend разделять на feature-модули", StringComparison.Ordinal));
 
-        Assert.Contains("import { FundsPrototypePanel } from '../funds/FundsPanel'", appText, StringComparison.Ordinal);
+        AssertLazyFeatureImport(appText, "FundsPrototypePanel", "../funds/FundsPanel");
         Assert.Contains("<FundsPrototypePanel", appText, StringComparison.Ordinal);
         Assert.DoesNotContain("function FundsPrototypePanel(", appText, StringComparison.Ordinal);
         Assert.DoesNotContain("type FundOperationDraft", appText, StringComparison.Ordinal);
@@ -382,7 +382,7 @@ public sealed class FrontendFeatureModuleTests
             .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
             .Single(line => line.Contains("Frontend разделять на feature-модули", StringComparison.Ordinal));
 
-        Assert.Contains("import { PasswordPanel } from '../settings/PasswordPanel'", appText, StringComparison.Ordinal);
+        AssertLazyFeatureImport(appText, "PasswordPanel", "../settings/PasswordPanel");
         Assert.Contains("<PasswordPanel", appText, StringComparison.Ordinal);
         Assert.DoesNotContain("function PasswordPanel(", appText, StringComparison.Ordinal);
         Assert.DoesNotContain("getOneCFreshSyncConfirmationTitle", appText, StringComparison.Ordinal);
@@ -444,7 +444,7 @@ public sealed class FrontendFeatureModuleTests
             .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
             .Single(line => line.Contains("Frontend разделять на feature-модули", StringComparison.Ordinal));
 
-        Assert.Contains("import { ReleasePanel } from '../releases/ReleasePanel'", appText, StringComparison.Ordinal);
+        AssertLazyFeatureImport(appText, "ReleasePanel", "../releases/ReleasePanel");
         Assert.Contains("<ReleasePanel", appText, StringComparison.Ordinal);
         Assert.DoesNotContain("function ReleasePanel(", appText, StringComparison.Ordinal);
         Assert.DoesNotContain("createReleaseEditorState", appText, StringComparison.Ordinal);
@@ -455,6 +455,11 @@ public sealed class FrontendFeatureModuleTests
         Assert.Contains("hasPermission(auth, permissions.appReleasesManage)", releasePanelText, StringComparison.Ordinal);
         Assert.Contains("aria-label=\"Что нового\"", releasePanelText, StringComparison.Ordinal);
         Assert.Contains("frontend/src/features/releases/ReleasePanel.tsx", roadmapLine, StringComparison.Ordinal);
+    }
+
+    private static void AssertLazyFeatureImport(string source, string componentName, string modulePath)
+    {
+        Assert.Contains($"const {componentName} = lazy(() => import('{modulePath}')", source, StringComparison.Ordinal);
     }
 
     private static string FindRepositoryRoot()
