@@ -2226,15 +2226,14 @@ public sealed class FinanceServiceTests
     }
 
     [Fact]
-    public void RegularAccrualAutomationOptions_UsesShortRetryOnlyAfterTechnicalFailure()
+    public void RegularAccrualAutomationOptions_ChecksNewMonthlyDataWithinFifteenMinutesAndRetriesFailuresSooner()
     {
         var options = new RegularAccrualAutomationOptions
         {
-            CheckIntervalMinutes = 360,
             FailureRetryMinutes = 5
         };
 
-        Assert.Equal(TimeSpan.FromHours(6), options.GetDelayAfterRun(failed: false));
+        Assert.Equal(TimeSpan.FromMinutes(15), options.GetDelayAfterRun(failed: false));
         Assert.Equal(TimeSpan.FromMinutes(5), options.GetDelayAfterRun(failed: true));
     }
 

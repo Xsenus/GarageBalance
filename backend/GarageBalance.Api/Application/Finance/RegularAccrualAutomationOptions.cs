@@ -9,7 +9,7 @@ public sealed class RegularAccrualAutomationOptions
     public bool Enabled { get; set; } = true;
 
     [Range(5, 1440)]
-    public int CheckIntervalMinutes { get; set; } = 360;
+    public int CheckIntervalMinutes { get; set; } = 15;
 
     [Range(1, 60)]
     public int FailureRetryMinutes { get; set; } = 5;
