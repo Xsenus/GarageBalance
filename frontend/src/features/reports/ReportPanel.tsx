@@ -106,6 +106,7 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
   const [expenseTypes, setExpenseTypes] = useState<AccountingTypeDto[]>([])
   const [dictionaryError, setDictionaryError] = useState<string | null>(null)
   const [consolidatedReport, setConsolidatedReport] = useState<ConsolidatedReportDto | null>(null)
+  const [consolidatedReportLoading, setConsolidatedReportLoading] = useState(true)
   const [consolidatedPageNumber, setConsolidatedPageNumber] = useState(1)
   const [consolidatedPageSize, setConsolidatedPageSize] = useState(25)
   const [consolidatedIncomeBreakdown, setConsolidatedIncomeBreakdown] = useState<IncomeReportDto | null>(null)
@@ -131,6 +132,7 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
   const [bankDepositReportLoading, setBankDepositReportLoading] = useState(false)
   const [bankDepositReportError, setBankDepositReportError] = useState<string | null>(null)
   const [feeReport, setFeeReport] = useState<FeeReportDto | null>(null)
+  const [feeReportLoading, setFeeReportLoading] = useState(false)
   const [feeSummaryPageNumber, setFeeSummaryPageNumber] = useState(1)
   const [feeSummaryPageSize, setFeeSummaryPageSize] = useState(25)
   const [feeDetailPageNumber, setFeeDetailPageNumber] = useState(1)
@@ -184,31 +186,38 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
   useEffect(() => {
     let ignore = false
 
-    async function loadWorkbookReports() {
+    async function loadConsolidatedReport() {
+      setConsolidatedReportLoading(true)
       setReportDataError(null)
       try {
         const consolidatedFilter = monthlyFilters.consolidated
-        const [loadedConsolidated, loadedConsolidatedIncome, loadedConsolidatedExpenses, loadedFees] = await Promise.all([
-          reportClient.getConsolidatedReport(auth.accessToken, {
-            monthFrom: getReportMonthStart(consolidatedFilter.monthFrom),
-            monthTo: getReportMonthStart(consolidatedFilter.monthTo),
-            limit: 100,
-          }),
+        const monthFrom = getReportMonthStart(consolidatedFilter.monthFrom)
+        const monthTo = getReportMonthStart(consolidatedFilter.monthTo)
+        const loadedConsolidated = await reportClient.getConsolidatedReport(auth.accessToken, {
+          monthFrom,
+          monthTo,
+          limit: 100,
+        })
+
+        if (ignore) {
+          return
+        }
+
+        setConsolidatedReport(loadedConsolidated)
+        setConsolidatedReportLoading(false)
+
+        const [loadedConsolidatedIncome, loadedConsolidatedExpenses] = await Promise.all([
           reportClient.getIncomeReport(auth.accessToken, {
-            dateFrom: getReportMonthStart(consolidatedFilter.monthFrom),
+            dateFrom: monthFrom,
             dateTo: getReportMonthEnd(consolidatedFilter.monthTo),
             rowMode: 'payments',
             limit: 500,
           }),
           reportClient.getExpenseReport(auth.accessToken, {
-            dateFrom: getReportMonthStart(consolidatedFilter.monthFrom),
+            dateFrom: monthFrom,
             dateTo: getReportMonthEnd(consolidatedFilter.monthTo),
             rowMode: 'payments',
             limit: 500,
-          }),
-          reportClient.getFeeReport(auth.accessToken, {
-            variation: feeVariationFilter.trim() || undefined,
-            limit: 100,
           }),
         ])
 
@@ -216,23 +225,56 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
           return
         }
 
-        setConsolidatedReport(loadedConsolidated)
         setConsolidatedIncomeBreakdown(loadedConsolidatedIncome)
         setConsolidatedExpenseBreakdown(loadedConsolidatedExpenses)
-        setFeeReport(loadedFees)
       } catch (caught) {
         if (!ignore) {
           setReportDataError(caught instanceof Error ? caught.message : 'Не удалось загрузить расчетные данные отчетов.')
+          setConsolidatedReportLoading(false)
         }
       }
     }
 
-    void loadWorkbookReports()
+    void loadConsolidatedReport()
 
     return () => {
       ignore = true
     }
-  }, [auth.accessToken, feeVariationFilter, monthlyFilters.consolidated, reportClient])
+  }, [auth.accessToken, monthlyFilters.consolidated, reportClient])
+
+  useEffect(() => {
+    if (activeReportTab !== 'fees') {
+      return
+    }
+
+    let ignore = false
+    async function loadFeeReport() {
+      setFeeReportLoading(true)
+      setReportDataError(null)
+      try {
+        const report = await reportClient.getFeeReport(auth.accessToken, {
+          variation: feeVariationFilter.trim() || undefined,
+          limit: 100,
+        })
+        if (!ignore) {
+          setFeeReport(report)
+        }
+      } catch (caught) {
+        if (!ignore) {
+          setReportDataError(caught instanceof Error ? caught.message : 'Не удалось загрузить отчет по сборам.')
+        }
+      } finally {
+        if (!ignore) {
+          setFeeReportLoading(false)
+        }
+      }
+    }
+
+    void loadFeeReport()
+    return () => {
+      ignore = true
+    }
+  }, [activeReportTab, auth.accessToken, feeVariationFilter, reportClient])
 
   useEffect(() => {
     if (activeReportTab !== 'garages') {
@@ -703,6 +745,7 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
       return (
         <ReportWorkbookSheet title="Консолидированный отчёт">
           {renderMonthlyFilter('consolidated', { from: 'Месяц с', to: 'Месяц по' })}
+          {consolidatedReportLoading ? <LoadingSkeleton className="loading-skeleton--compact" label="Загружаем сводный отчёт" rows={6} columns={8} /> : null}
           {renderReportTable(
             'Консолидированный отчет',
             ['Месяц', 'Наименование', 'Поступления', 'Наименование', 'Выплаты', 'Разница', 'На начало месяца', 'На конец месяца'],
@@ -1022,6 +1065,7 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
       const feeDetailTableName = feeDetailMode === 'debtors' ? 'Должники по сбору' : 'Гаражи по сбору'
       return (
         <ReportWorkbookSheet title="Отчёт по сборам">
+          {feeReportLoading ? <LoadingSkeleton className="loading-skeleton--compact" label="Загружаем отчёт по сборам" rows={6} columns={4} /> : null}
           <div className="report-workbook-filter report-workbook-filter--single" aria-label="Фильтры отчета по сборам">
             <label className="report-workbook-filter-wide">
               <span>Вариация сбора</span>
