@@ -373,6 +373,8 @@ export function FinancePanel({
   const [accrualBreakdown, setAccrualBreakdown] = useState<AccrualBreakdown | null>(null)
   const [referencesLoading, setReferencesLoading] = useState(true)
   const [workbenchLoading, setWorkbenchLoading] = useState(false)
+  const [financePreviewsLoading, setFinancePreviewsLoading] = useState(true)
+  const [financePreviewsError, setFinancePreviewsError] = useState<string | null>(null)
   const loading = referencesLoading || workbenchLoading
   const [paymentDisplaySettingsLoaded, setPaymentDisplaySettingsLoaded] = useState(false)
   const [showAllGarageOperations, setShowAllGarageOperations] = useState(false)
@@ -507,6 +509,7 @@ export function FinancePanel({
     ? summary.incomeCount + summary.expenseCount
     : summary.operationCount
   const supplierAccrualPreviewTotal = summary.supplierAccrualCount ?? supplierAccruals.length
+  const financePreviewsPending = showAllGarageOperations && financePreviewsLoading
   const compatibleRegularTariffs = getCompatibleRegularTariffs(regularForm.incomeTypeId, incomeTypes, tariffs)
 
   useEffect(() => {
@@ -620,7 +623,13 @@ export function FinancePanel({
           setMeterReadings(loadedMeterReadings)
         }
       }).catch(() => {
-        // Фоновые превью не должны задерживать или ломать основную форму платежей.
+        if (!ignore) {
+          setFinancePreviewsError('Не удалось загрузить последние операции. Основная таблица платежей продолжает работать.')
+        }
+      }).finally(() => {
+        if (!ignore) {
+          setFinancePreviewsLoading(false)
+        }
       })
     }, 500)
 
@@ -2442,12 +2451,15 @@ export function FinancePanel({
           </button>
         </form>
 
+        {financePreviewsError ? <FormError>{financePreviewsError}</FormError> : null}
+
         <div className="operation-list" role="table" aria-label={getFinanceVisibleListTableLabel('operations')}>
           <div className="operation-row header" role="row">
             {getFinanceVisibleListTableHeaders('operations').map((header) => <span role="columnheader" key={header}>{header}</span>)}
           </div>
-          {operations.length === 0 ? <p className="empty-state" role="status" aria-live="polite">{getFinanceVisibleListEmptyLabel('operations')}</p> : null}
-          {visibleOperations.map((operation) => (
+          {financePreviewsPending ? <TableLoadingState label="Загружаем последние операции" rows={2} columns={3} /> : null}
+          {!financePreviewsPending && !financePreviewsError && operations.length === 0 ? <p className="empty-state" role="status" aria-live="polite">{getFinanceVisibleListEmptyLabel('operations')}</p> : null}
+          {!financePreviewsPending && !financePreviewsError ? visibleOperations.map((operation) => (
             <div className="operation-row" role="row" key={operation.id}>
               <span role="cell">{formatDateOnly(operation.operationDate)}</span>
               <span role="cell">
@@ -2468,16 +2480,17 @@ export function FinancePanel({
                 {formatMoney(operation.amount)}
               </span>
             </div>
-          ))}
-          {operationPreviewTotal > visibleOperations.length ? <p className="empty-state" role="status" aria-live="polite">{formatFinanceVisibleListStatus(visibleOperations.length, operationPreviewTotal, 'operations')}</p> : null}
+          )) : null}
+          {!financePreviewsPending && !financePreviewsError && operationPreviewTotal > visibleOperations.length ? <p className="empty-state" role="status" aria-live="polite">{formatFinanceVisibleListStatus(visibleOperations.length, operationPreviewTotal, 'operations')}</p> : null}
         </div>
 
         <div className="operation-list" role="table" aria-label={getFinanceVisibleListTableLabel('accruals')}>
           <div className="operation-row header" role="row">
             {getFinanceVisibleListTableHeaders('accruals').map((header) => <span role="columnheader" key={header}>{header}</span>)}
           </div>
-          {accruals.length === 0 ? <p className="empty-state" role="status" aria-live="polite">{getFinanceVisibleListEmptyLabel('accruals')}</p> : null}
-          {visibleAccruals.map((accrual) => (
+          {financePreviewsPending ? <TableLoadingState label="Загружаем последние начисления" rows={2} columns={3} /> : null}
+          {!financePreviewsPending && !financePreviewsError && accruals.length === 0 ? <p className="empty-state" role="status" aria-live="polite">{getFinanceVisibleListEmptyLabel('accruals')}</p> : null}
+          {!financePreviewsPending && !financePreviewsError ? visibleAccruals.map((accrual) => (
             <div
               className="operation-row operation-row--interactive"
               role="row"
@@ -2497,16 +2510,17 @@ export function FinancePanel({
                 {formatMoney(accrual.amount)}
               </span>
             </div>
-          ))}
-          {summary.accrualCount > visibleAccruals.length ? <p className="empty-state" role="status" aria-live="polite">{formatFinanceVisibleListStatus(visibleAccruals.length, summary.accrualCount, 'accruals')}</p> : null}
+          )) : null}
+          {!financePreviewsPending && !financePreviewsError && summary.accrualCount > visibleAccruals.length ? <p className="empty-state" role="status" aria-live="polite">{formatFinanceVisibleListStatus(visibleAccruals.length, summary.accrualCount, 'accruals')}</p> : null}
         </div>
 
         <div className="operation-list" role="table" aria-label={getFinanceVisibleListTableLabel('supplierAccruals')}>
           <div className="operation-row header" role="row">
             {getFinanceVisibleListTableHeaders('supplierAccruals').map((header) => <span role="columnheader" key={header}>{header}</span>)}
           </div>
-          {supplierAccruals.length === 0 ? <p className="empty-state" role="status" aria-live="polite">{getFinanceVisibleListEmptyLabel('supplierAccruals')}</p> : null}
-          {visibleSupplierAccruals.map((accrual) => (
+          {financePreviewsPending ? <TableLoadingState label="Загружаем последние начисления поставщикам" rows={2} columns={3} /> : null}
+          {!financePreviewsPending && !financePreviewsError && supplierAccruals.length === 0 ? <p className="empty-state" role="status" aria-live="polite">{getFinanceVisibleListEmptyLabel('supplierAccruals')}</p> : null}
+          {!financePreviewsPending && !financePreviewsError ? visibleSupplierAccruals.map((accrual) => (
             <div
               className="operation-row operation-row--interactive"
               role="row"
@@ -2526,16 +2540,17 @@ export function FinancePanel({
                 {formatMoney(accrual.amount)}
               </span>
             </div>
-          ))}
-          {supplierAccrualPreviewTotal > visibleSupplierAccruals.length ? <p className="empty-state" role="status" aria-live="polite">{formatFinanceVisibleListStatus(visibleSupplierAccruals.length, supplierAccrualPreviewTotal, 'supplierAccruals')}</p> : null}
+          )) : null}
+          {!financePreviewsPending && !financePreviewsError && supplierAccrualPreviewTotal > visibleSupplierAccruals.length ? <p className="empty-state" role="status" aria-live="polite">{formatFinanceVisibleListStatus(visibleSupplierAccruals.length, supplierAccrualPreviewTotal, 'supplierAccruals')}</p> : null}
         </div>
 
         <div className="operation-list" role="table" aria-label={getFinanceVisibleListTableLabel('meterReadings')}>
           <div className="operation-row header" role="row">
             {getFinanceVisibleListTableHeaders('meterReadings').map((header) => <span role="columnheader" key={header}>{header}</span>)}
           </div>
-          {meterReadings.length === 0 ? <p className="empty-state" role="status" aria-live="polite">{getFinanceVisibleListEmptyLabel('meterReadings')}</p> : null}
-          {visibleMeterReadings.map((reading) => (
+          {financePreviewsPending ? <TableLoadingState label="Загружаем последние показания" rows={2} columns={3} /> : null}
+          {!financePreviewsPending && !financePreviewsError && meterReadings.length === 0 ? <p className="empty-state" role="status" aria-live="polite">{getFinanceVisibleListEmptyLabel('meterReadings')}</p> : null}
+          {!financePreviewsPending && !financePreviewsError ? visibleMeterReadings.map((reading) => (
             <div className="operation-row" role="row" key={reading.id}>
               <span role="cell">{formatMonth(reading.accountingMonth)}</span>
               <span role="cell">
@@ -2549,8 +2564,8 @@ export function FinancePanel({
                 {reading.consumption}
               </span>
             </div>
-          ))}
-          {summary.meterReadingCount > visibleMeterReadings.length ? <p className="empty-state" role="status" aria-live="polite">{formatFinanceVisibleListStatus(visibleMeterReadings.length, summary.meterReadingCount, 'meterReadings')}</p> : null}
+          )) : null}
+          {!financePreviewsPending && !financePreviewsError && summary.meterReadingCount > visibleMeterReadings.length ? <p className="empty-state" role="status" aria-live="polite">{formatFinanceVisibleListStatus(visibleMeterReadings.length, summary.meterReadingCount, 'meterReadings')}</p> : null}
         </div>
       </div>
       {financeContextMenu ? (

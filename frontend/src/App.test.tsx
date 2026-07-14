@@ -8641,6 +8641,10 @@ describe('App', () => {
       incomeTypeName: 'Фоновое поступление для превью',
       amount: 120,
     })
+    let resolvePreviewOperations!: (operations: FinancialOperationDto[]) => void
+    const previewOperations = new Promise<FinancialOperationDto[]>((resolve) => {
+      resolvePreviewOperations = resolve
+    })
     const getOperationsPage = vi.fn(async (_token: string, params?: FinancePageParams & { operationKind?: 'income' | 'expense' }) => {
       if (params?.operationKind === 'income') {
         return incomePage
@@ -8649,7 +8653,7 @@ describe('App', () => {
       return { items: [expenseOperation], totalCount: 1, offset: 0, limit: params?.limit ?? 25 }
     })
     const financeClient = createFinanceClient({
-      getOperations: async () => [previewIncomeOperation],
+      getOperations: async () => previewOperations,
       getAccruals: async () => [],
       getSupplierAccruals: async () => [],
       getMeterReadings: async () => [],
@@ -8680,7 +8684,14 @@ describe('App', () => {
     await user.click(within(financePanel).getByRole('tab', { name: /Расходы/ }))
     const financeTableArea = within(financePanel).getByRole('group', { name: 'Рабочая область платежной таблицы' })
     expect(await within(financeTableArea).findByText('RKO-LATEST')).toBeInTheDocument()
+    const recentOperationsTable = within(financePanel).getByRole('table', { name: 'Последние платежи' })
+    expect(within(recentOperationsTable).getByLabelText('Загружаем последние операции')).toHaveAttribute('role', 'status')
+    expect(within(recentOperationsTable).queryByText('Операций пока нет.')).not.toBeInTheDocument()
+
+    await act(async () => resolvePreviewOperations([previewIncomeOperation]))
+
     expect(await within(financePanel).findByText('Фоновое поступление для превью')).toBeInTheDocument()
+    expect(within(recentOperationsTable).queryByLabelText('Загружаем последние операции')).not.toBeInTheDocument()
     expect(within(financeTableArea).queryByText('Фоновое поступление для превью')).not.toBeInTheDocument()
 
     await act(async () => resolveIncomePage({ items: [staleIncomeOperation], totalCount: 1, offset: 0, limit: 25 }))
@@ -8688,6 +8699,26 @@ describe('App', () => {
     expect(within(financeTableArea).getByText('RKO-LATEST')).toBeInTheDocument()
     expect(within(financeTableArea).queryByText('PKO-STALE')).not.toBeInTheDocument()
     expect(within(financePanel).queryByLabelText('Загружаем таблицу платежей')).not.toBeInTheDocument()
+  })
+
+  it('keeps the main payment table available when recent previews fail', async () => {
+    const user = userEvent.setup()
+    const financeClient = createFinanceClient({
+      getOperations: async () => {
+        throw new Error('preview unavailable')
+      },
+    })
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={financeClient} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Платежи')
+    const financePanel = await screen.findByRole('region', { name: 'Платежи' })
+
+    expect(await within(financePanel).findByText('Не удалось загрузить последние операции. Основная таблица платежей продолжает работать.')).toHaveAttribute('role', 'alert')
+    expect(within(financePanel).getByRole('group', { name: 'Рабочая область платежной таблицы' })).toBeInTheDocument()
+    expect(within(financePanel).getByRole('navigation', { name: 'Пагинация платежей' })).toBeInTheDocument()
+    expect(within(financePanel).queryByText('Операций пока нет.')).not.toBeInTheDocument()
   })
 
   it('refreshes payment summary totals from server when period filter changes', async () => {
