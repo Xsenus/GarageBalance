@@ -35,10 +35,10 @@ public sealed record FinancialOperationDto(
     decimal? SupplierDebtAfter,
     IReadOnlyList<PaymentAllocationDto> PaymentAllocations,
     bool IsCanceled,
+    DateTimeOffset CreatedAtUtc,
     Guid? StaffMemberId = null,
     string? StaffMemberName = null,
-    string? StaffDepartmentName = null,
-    DateTimeOffset CreatedAtUtc = default);
+    string? StaffDepartmentName = null);
 
 public sealed record CreateIncomeOperationRequest(
     Guid GarageId,

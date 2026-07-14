@@ -30,6 +30,12 @@ public sealed class EfAppReleaseRepositoryTests
             .ToArray();
         await repository.SynchronizeAsync(releases, CancellationToken.None);
 
+        var storedRelease = await context.AppReleases
+            .AsNoTracking()
+            .SingleAsync(release => release.ReleaseId == "release-1");
+        Assert.Equal(TimeSpan.Zero, storedRelease.PublishedAt.Offset);
+        Assert.Equal(DateTimeOffset.Parse("2026-07-14T03:01:00Z"), storedRelease.PublishedAt);
+
         var firstPage = await repository.GetPageAsync(false, 0, 9, CancellationToken.None);
         var secondPage = await repository.GetPageAsync(false, 9, 9, CancellationToken.None);
         var manageablePage = await repository.GetPageAsync(true, 0, 9, CancellationToken.None);

@@ -3049,10 +3049,10 @@ public sealed class FinanceService(
             supplierDebtAfter,
             paymentAllocations ?? [],
             operation.IsCanceled,
+            operation.CreatedAtUtc,
             operation.StaffMemberId,
             operation.StaffMember?.FullName,
-            operation.StaffMember?.Department?.Name,
-            operation.CreatedAtUtc);
+            operation.StaffMember?.Department?.Name);
     }
 
     private static string? InferMeterKind(string incomeTypeName, string? incomeTypeCode)

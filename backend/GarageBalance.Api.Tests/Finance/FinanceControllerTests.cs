@@ -1148,7 +1148,8 @@ public sealed class FinanceControllerTests
             null,
             null,
             [],
-            false);
+            false,
+            DateTimeOffset.UnixEpoch);
     }
 
     private static AccrualDto CreateAccrual(Guid? id = null, decimal amount = 100m, bool isCanceled = false)

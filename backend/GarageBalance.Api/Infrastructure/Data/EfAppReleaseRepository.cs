@@ -63,7 +63,7 @@ public sealed class EfAppReleaseRepository(GarageBalanceDbContext dbContext) : I
             }
 
             record.Version = release.Version;
-            record.PublishedAt = release.PublishedAt;
+            record.PublishedAt = release.PublishedAt.ToUniversalTime();
             record.Title = release.Title;
             record.Summary = release.Summary;
             record.ItemsJson = JsonSerializer.Serialize(release.Items, JsonOptions);
