@@ -490,8 +490,8 @@ export function FinancePanel({
       setLoading(true)
       setError(null)
       try {
-        const [loadedGarages, loadedSupplierGroups, loadedSuppliers, loadedStaffMembers, loadedIncomeTypes, loadedExpenseTypes, loadedTariffs] = await Promise.all([
-          dictionaryClient.getGarages(auth.accessToken, undefined, dictionaryScreenRequestLimit),
+        const garagesPromise = dictionaryClient.getGarages(auth.accessToken, undefined, dictionaryScreenRequestLimit)
+        const referencesPromise = Promise.all([
           dictionaryClient.getSupplierGroups(auth.accessToken, undefined, dictionaryScreenRequestLimit),
           dictionaryClient.getSuppliers(auth.accessToken, undefined, undefined, dictionaryScreenRequestLimit),
           dictionaryClient.getStaffMembers(auth.accessToken, undefined, undefined, dictionaryScreenRequestLimit),
@@ -499,18 +499,28 @@ export function FinancePanel({
           dictionaryClient.getExpenseTypes(auth.accessToken, undefined, dictionaryScreenRequestLimit),
           dictionaryClient.getTariffs(auth.accessToken, undefined, dictionaryScreenRequestLimit),
         ])
+        void referencesPromise.catch(() => undefined)
+        const loadedGarages = await garagesPromise
         if (!ignore) {
           setGarages(loadedGarages)
           setIncomeGarageOptions(loadedGarages)
+          setIncomeForm((value) => ({ ...value, garageId: value.garageId || loadedGarages[0]?.id || '' }))
+          setAccrualForm((value) => ({ ...value, garageId: value.garageId || loadedGarages[0]?.id || '' }))
+          setMeterForm((value) => ({ ...value, garageId: value.garageId || loadedGarages[0]?.id || '' }))
+          setLoading(false)
+        }
+
+        const [loadedSupplierGroups, loadedSuppliers, loadedStaffMembers, loadedIncomeTypes, loadedExpenseTypes, loadedTariffs] = await referencesPromise
+        if (!ignore) {
           setSupplierGroups(loadedSupplierGroups)
           setSuppliers(loadedSuppliers)
           setStaffMembers(loadedStaffMembers)
           setIncomeTypes(loadedIncomeTypes)
           setExpenseTypes(loadedExpenseTypes)
           setTariffs(loadedTariffs)
-          setIncomeForm((value) => ({ ...value, garageId: value.garageId || loadedGarages[0]?.id || '', incomeTypeId: value.incomeTypeId || loadedIncomeTypes[0]?.id || '' }))
+          setIncomeForm((value) => ({ ...value, incomeTypeId: value.incomeTypeId || loadedIncomeTypes[0]?.id || '' }))
           setExpenseForm((value) => ({ ...value, supplierId: value.supplierId || loadedSuppliers[0]?.id || '', expenseTypeId: value.expenseTypeId || loadedExpenseTypes[0]?.id || '' }))
-          setAccrualForm((value) => ({ ...value, garageId: value.garageId || loadedGarages[0]?.id || '', incomeTypeId: value.incomeTypeId || loadedIncomeTypes[0]?.id || '' }))
+          setAccrualForm((value) => ({ ...value, incomeTypeId: value.incomeTypeId || loadedIncomeTypes[0]?.id || '' }))
           setSupplierAccrualForm((value) => ({ ...value, supplierId: value.supplierId || loadedSuppliers[0]?.id || '', expenseTypeId: value.expenseTypeId || loadedExpenseTypes[0]?.id || '' }))
           setSalaryForm((value) => ({ ...value, supplierGroupId: value.supplierGroupId || loadedSupplierGroups[0]?.id || '' }))
           setRegularForm((value) => {
@@ -521,7 +531,6 @@ export function FinancePanel({
               tariffId: chooseRegularTariffId(incomeTypeId, value.tariffId, loadedIncomeTypes, loadedTariffs),
             }
           })
-          setMeterForm((value) => ({ ...value, garageId: value.garageId || loadedGarages[0]?.id || '' }))
         }
       } catch (caught) {
         if (!ignore) {
@@ -538,7 +547,7 @@ export function FinancePanel({
     return () => {
       ignore = true
     }
-  }, [auth.accessToken, dictionaryClient, financeClient, month])
+  }, [auth.accessToken, dictionaryClient])
 
   useEffect(() => {
     let ignore = false
