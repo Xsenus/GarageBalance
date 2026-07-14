@@ -413,7 +413,8 @@ export function FundsPrototypePanel({ auth, fundsClient }: { auth: AuthResponse;
         <h1>Управление фондами</h1>
       </div>
 
-      <div className="funds-sheet">
+      <div className="funds-left-column">
+        <div className="funds-sheet">
         {loadError ? <p className="form-error" role="alert">{loadError}</p> : null}
         {fundsLoading ? (
           <LoadingSkeleton className="funds-table-skeleton" label="Загружаем фонды" rows={7} columns={4} />
@@ -455,9 +456,9 @@ export function FundsPrototypePanel({ auth, fundsClient }: { auth: AuthResponse;
           </tbody>
           </table>
         )}
-      </div>
+        </div>
 
-      <div className="funds-distribution" aria-label="Сумма к распределению">
+        <div className="funds-distribution" aria-label="Сумма к распределению">
         {fundsLoading ? (
           <LoadingSkeleton className="loading-skeleton--compact funds-distribution-skeleton" label="Загружаем сумму к распределению" rows={1} columns={2} />
         ) : (
@@ -466,16 +467,17 @@ export function FundsPrototypePanel({ auth, fundsClient }: { auth: AuthResponse;
             <strong>{availableToDistribute === null || availableToDistribute === 0 ? '—' : `${formatMoney(availableToDistribute)} руб.`}</strong>
           </>
         )}
-      </div>
+        </div>
 
-      {operationMessage ? <p className="form-success" role="status">{operationMessage}</p> : null}
+        {operationMessage ? <p className="form-success" role="status">{operationMessage}</p> : null}
 
-      <div className="funds-sheet funds-operations-sheet">
+        <div className="funds-sheet funds-operations-sheet">
         {operationsLoading ? (
           <LoadingSkeleton className="funds-table-skeleton funds-operations-skeleton" label="Загружаем операции фондов" rows={5} columns={7} />
         ) : (
           <>
-            <table className="funds-table funds-operations-table" aria-label="Операции фондов">
+            <div className="funds-operations-table-scroll">
+              <table className="funds-table funds-operations-table" aria-label="Операции фондов">
           <thead>
             <tr>
               <th scope="col">Дата</th>
@@ -528,7 +530,8 @@ export function FundsPrototypePanel({ auth, fundsClient }: { auth: AuthResponse;
               </tr>
             )}
           </tbody>
-            </table>
+              </table>
+            </div>
             <TablePagination
               ariaLabel="Пагинация операций фондов"
               totalCount={operationPage.totalCount}
@@ -542,6 +545,7 @@ export function FundsPrototypePanel({ auth, fundsClient }: { auth: AuthResponse;
             />
           </>
         )}
+        </div>
       </div>
 
       {operation ? (

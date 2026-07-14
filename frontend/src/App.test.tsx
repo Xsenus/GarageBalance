@@ -4134,8 +4134,10 @@ describe('App', () => {
     await user.click(within(dashboardTiles).getByRole('button', { name: /Управление\s+фондами/i }))
 
     const fundsPanel = await screen.findByRole('region', { name: 'Управление фондами' })
+    expect(fundsPanel.closest('.workspace')).toHaveClass('workspace--funds')
     expect(screen.queryByPlaceholderText('Поиск по гаражу, владельцу или поставщику')).not.toBeInTheDocument()
     expect(within(fundsPanel).getByRole('table', { name: 'Фонды и собранные суммы' })).toBeInTheDocument()
+    expect((await within(fundsPanel).findByRole('table', { name: 'Операции фондов' })).parentElement).toHaveClass('funds-operations-table-scroll')
     expect(await within(fundsPanel).findByText('Электроэнергия')).toBeInTheDocument()
     const withdrawElectricityButton = within(fundsPanel).getByRole('button', { name: 'Изъять из фонда Электроэнергия' })
     expect(withdrawElectricityButton.closest('td')).toHaveClass('funds-table-action-column')

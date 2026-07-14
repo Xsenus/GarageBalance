@@ -214,6 +214,19 @@
   flex: 0 0 auto;
 }
 
+.workspace--funds {
+  display: flex;
+  height: 100dvh;
+  min-height: 0;
+  flex-direction: column;
+  overflow: hidden;
+  box-sizing: border-box;
+}
+
+.workspace--funds > .topbar {
+  flex: 0 0 auto;
+}
+
 .auth-entry {
   min-height: 100vh;
   background: #ffffff;
@@ -3563,7 +3576,10 @@ h1 {
 }
 
 .funds-page {
-  display: grid;
+  display: flex;
+  min-height: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
   gap: 18px;
 }
 
@@ -3580,9 +3596,39 @@ h1 {
   box-shadow: 0 18px 45px rgba(15, 23, 42, 0.08);
 }
 
-.funds-operations-sheet {
-  width: min(1180px, 100%);
-  overflow-x: auto;
+.funds-left-column {
+  display: flex;
+  width: min(760px, 100%);
+  min-height: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.funds-left-column > .funds-operations-sheet {
+  display: flex;
+  width: 100%;
+  min-height: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.funds-left-column > .funds-sheet:not(.funds-operations-sheet),
+.funds-left-column > .funds-distribution {
+  flex: 0 0 auto;
+}
+
+.funds-operations-table-scroll {
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+
+.funds-operations-sheet > .dictionary-pagination {
+  flex: 0 0 auto;
 }
 
 .funds-operations-table {
