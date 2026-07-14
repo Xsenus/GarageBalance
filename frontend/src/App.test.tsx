@@ -3255,6 +3255,9 @@ describe('App', () => {
     expect(electricityPaymentInput).toHaveValue('')
     await user.click(electricityPaymentInput)
     await user.type(electricityPaymentInput, '5674')
+    await user.tab()
+    await waitFor(() => expect(electricityPaymentInput).toHaveValue('5 674.00'))
+    await user.click(electricityPaymentInput)
     await user.keyboard('{Enter}')
     await waitFor(() => expect(savedIncomeRequests[0]).toMatchObject({
       garageId: garage.id,
@@ -3264,7 +3267,7 @@ describe('App', () => {
       amount: 5674,
     }))
     expect(electricityPaymentInput).toHaveValue('')
-    expect(within(prototype).getAllByText('5 674').length).toBeGreaterThanOrEqual(2)
+    expect(within(prototype).getAllByText('5 674.00').length).toBeGreaterThanOrEqual(2)
 
     const addGarageAccrualButton = within(prototype).getByRole('button', { name: 'Добавить начисление гаражу' })
     const garageActions = addGarageAccrualButton.parentElement
@@ -3755,8 +3758,8 @@ describe('App', () => {
     expect(await within(incomeTable).findByText('Серверная электроэнергия')).toBeInTheDocument()
     expect(within(incomeTable).getByLabelText('Платеж Серверная электроэнергия июн.26')).toHaveValue('')
     expect(within(incomeTable).getByText('86')).toBeInTheDocument()
-    expect(within(incomeTable).getByText('18')).toBeInTheDocument()
-    expect(within(incomeTable).getAllByText('4 674').length).toBeGreaterThan(0)
+    expect(within(incomeTable).getByText('18.00')).toBeInTheDocument()
+    expect(within(incomeTable).getAllByText('4 674.00').length).toBeGreaterThan(0)
     const periodSummary = within(prototype).getByLabelText('Итоги периода поступлений')
     expect(periodSummary).toHaveTextContent('Долг на начало')
     expect(periodSummary).toHaveTextContent('900')

@@ -22,6 +22,7 @@ import { LocalizedDatePicker } from '../../shared/LocalizedDatePicker'
 import { SelectControl } from '../../shared/SelectControl'
 import { TablePagination } from '../../shared/TablePagination'
 import { chooseRegularTariffId, getAccrualValidationErrors, getCompatibleRegularTariffs, getExpenseValidationErrors, getIncomeValidationErrors, getMeterReadingValidationErrors, getRegularAccrualValidationErrorsForCatalog, getSupplierAccrualValidationErrors, getSupplierGroupSalaryValidationErrors } from '../../shared/validation'
+import { formatPaymentMoney, parsePaymentMoney } from './paymentMoneyFormatting'
 
 type AccrualBreakdown =
   | { kind: 'garage'; accrual: AccrualDto }
@@ -3588,6 +3589,12 @@ function PaymentsPrototypePanel({
     setGarageRows((currentRows) => currentRows.map((row) => row.id === rowId ? { ...row, paymentDraft: value } : row))
   }
 
+  function formatPaymentDraft(rowId: string) {
+    setGarageRows((currentRows) => currentRows.map((row) => row.id === rowId
+      ? { ...row, paymentDraft: formatPaymentMoney(row.paymentDraft) }
+      : row))
+  }
+
   function findIncomeTypeForPayment(serviceName: string) {
     const normalizedService = serviceName.trim().toLocaleLowerCase('ru-RU')
     const activeIncomeTypes = incomeTypes.filter((incomeType) => !incomeType.isArchived)
@@ -3601,7 +3608,7 @@ function PaymentsPrototypePanel({
   }
 
   async function commitGaragePayment(row: GarageIncomePrototypeRow) {
-    const amount = Number(row.paymentDraft.trim().replace(',', '.'))
+    const amount = parsePaymentMoney(row.paymentDraft)
     if (!Number.isFinite(amount) || amount <= 0) {
       return
     }
@@ -4457,18 +4464,18 @@ function PaymentsPrototypePanel({
                           <td>ИТОГО</td>
                           <td />
                           <td />
-                          <td>{formatPaymentPrototypeValue(groupPayable)}</td>
+                          <td>{formatPaymentMoney(groupPayable)}</td>
                           <td />
-                          <td>{formatPaymentPrototypeValue(groupPaid)}</td>
-                          <td className={groupDebt > 0 ? 'money-expense' : undefined}>{formatPaymentPrototypeValue(groupDebt)}</td>
+                          <td>{formatPaymentMoney(groupPaid)}</td>
+                          <td className={groupDebt > 0 ? 'money-expense' : undefined}>{formatPaymentMoney(groupDebt)}</td>
                         </tr>
                         {group.rows.map((row) => (
                           <tr key={row.id}>
                             <td />
                             <td>{row.service}</td>
                             <td className={row.meterRequired && row.meter === null ? 'payments-prototype-required-cell' : undefined}>{formatPaymentPrototypeValue(row.meter ?? '')}</td>
-                            <td>{formatPaymentPrototypeValue(row.difference ?? '')}</td>
-                            <td>{formatPaymentPrototypeValue(row.payable)}</td>
+                            <td>{formatPaymentMoney(row.difference ?? '')}</td>
+                            <td>{formatPaymentMoney(row.payable)}</td>
                             <td>
                               <input
                                 className="payments-prototype-payment-input"
@@ -4477,6 +4484,7 @@ function PaymentsPrototypePanel({
                                 disabled={savingPaymentRowId === row.id}
                                 value={row.paymentDraft}
                                 onChange={(event) => handlePaymentDraftChange(row.id, event.target.value)}
+                                onBlur={() => formatPaymentDraft(row.id)}
                                 onKeyDown={(event) => {
                                   if (event.key === 'Enter') {
                                     event.preventDefault()
@@ -4485,8 +4493,8 @@ function PaymentsPrototypePanel({
                                 }}
                               />
                             </td>
-                            <td>{formatPaymentPrototypeValue(row.paid)}</td>
-                            <td className={row.debt > 0 ? 'money-expense' : undefined}>{formatPaymentPrototypeValue(row.debt)}</td>
+                            <td>{formatPaymentMoney(row.paid)}</td>
+                            <td className={row.debt > 0 ? 'money-expense' : undefined}>{formatPaymentMoney(row.debt)}</td>
                           </tr>
                         ))}
                       </Fragment>
@@ -4502,10 +4510,10 @@ function PaymentsPrototypePanel({
                     <td>ИТОГО</td>
                     <td />
                     <td />
-                    <td>{formatPaymentPrototypeValue(paymentTotal)}</td>
+                    <td>{formatPaymentMoney(paymentTotal)}</td>
                     <td />
-                    <td>{formatPaymentPrototypeValue(paidTotal)}</td>
-                    <td className={debtTotal > 0 ? 'money-expense' : undefined}>{formatPaymentPrototypeValue(debtTotal)}</td>
+                    <td>{formatPaymentMoney(paidTotal)}</td>
+                    <td className={debtTotal > 0 ? 'money-expense' : undefined}>{formatPaymentMoney(debtTotal)}</td>
                   </tr>
                 </tbody>
               </table>
