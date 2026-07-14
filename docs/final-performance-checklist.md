@@ -183,3 +183,15 @@ No schema, data-cleanup policy or deployment configuration changed. The feature 
 - [x] Rechecked the authorized VPS read-only: the service is active with zero restarts, nginx is valid, proxied/direct health and the frontend return HTTP 200, the warning journal is empty, and the verified 435078-byte backup remains readable. PostgreSQL retains nine tariffs and zero rows in every checked garage, owner, staff, supplier, payment, accrual, meter, fund, import, form-state, integration-setting and audit table.
 
 This audit introduces no schema, cleanup-policy or deployment-configuration changes. The feature branch remains undeployed because the staging workflow intentionally deploys only from `master`.
+
+## Ninth searchable-workload and pagination audit: 2026-07-14
+
+- [x] Rechecked the original tariff, garage, contractor, meter, payment, report, fund, database-cleanup and monthly-accrual requirements. Existing server pagination, bounded queries, deferred sections, shared skeleton states and duplicate-safe 15-minute regular-accrual automation remain intact.
+- [x] Removed per-keystroke report requests. Garage, payout, income and fee searches now apply once after 350 ms of idle input and reset their related server/client pagination only when the user actually changes a filter.
+- [x] Applied the same coordinated debounce to the large audit journal. Search, user, garage, counterparty and document text fields now produce one combined request instead of a request for every character, while select and date filters remain immediate.
+- [x] The first full frontend run exposed a timing race in the new debounce initialization: an initial no-op timer could reset a page selected immediately after opening a report. The run was rejected, the initial timer was removed, and the pre-existing quick-pagination scenario was added to the focused regression group before complete acceptance restarted.
+- [x] Two subsequent clean complete verification runs passed with identical results: 1508 backend tests and 424 frontend tests. Focused workflows prove final-only report filters, one combined audit query, offset reset after a real edit, and no initial pagination reset.
+- [x] ESLint, production TypeScript build, bundle budget (`74.1 KiB` main JS, `16.9 KiB` CSS, `213.2 KiB` total gzip), backend formatting, Docker Compose, strict release/configuration JSON, whitespace checks and 114893-byte idempotent migration SQL generation passed.
+- [x] Rechecked the authorized VPS read-only: the service is active with zero restarts, nginx is valid, direct/proxied/external health and the frontend return HTTP 200, the two-hour warning journal is empty, and the verified 435078-byte backup remains readable. PostgreSQL retains nine tariffs and zero rows in every checked garage, owner, staff, supplier, payment, accrual, meter, fund, import, form-state, integration-setting and audit table.
+
+This audit introduces no schema, cleanup-policy or deployment-configuration changes. The feature branch remains undeployed because the staging workflow intentionally deploys only from `master`.
