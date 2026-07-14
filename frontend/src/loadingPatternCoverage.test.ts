@@ -58,26 +58,34 @@ describe('shared loading-state coverage', () => {
 
   it('loads workspace sections on demand behind the shared skeleton', () => {
     const workspace = readFileSync(resolve(process.cwd(), 'src', 'features', 'workspace', 'Workspace.tsx'), 'utf8')
+    const loader = readFileSync(resolve(process.cwd(), 'src', 'features', 'workspace', 'workspaceSectionLoader.ts'), 'utf8')
+    const appShell = readFileSync(resolve(process.cwd(), 'src', 'features', 'workspace', 'AppShell.tsx'), 'utf8')
     const lazySectionModules = [
-      'settings/PasswordPanel',
-      'funds/FundsPanel',
-      'import/ImportPanel',
-      'meterReadings/MeterReadingsPanel',
-      'audit/AuditPanel',
-      'reports/ReportPanel',
-      'users/UserManagementPanel',
-      'dictionaries/DictionaryPanel',
-      'tariffs/TariffsAndFeesPanel',
-      'contractors/ContractorsPanel',
-      'finance/FinancePanel',
-      'releases/ReleasePanel',
+      ['loadPasswordPanel', 'settings/PasswordPanel'],
+      ['loadFundsPanel', 'funds/FundsPanel'],
+      ['loadImportPanel', 'import/ImportPanel'],
+      ['loadMeterReadingsPanel', 'meterReadings/MeterReadingsPanel'],
+      ['loadAuditPanel', 'audit/AuditPanel'],
+      ['loadReportPanel', 'reports/ReportPanel'],
+      ['loadUserManagementPanel', 'users/UserManagementPanel'],
+      ['loadDictionaryPanel', 'dictionaries/DictionaryPanel'],
+      ['loadTariffsPanel', 'tariffs/TariffsAndFeesPanel'],
+      ['loadContractorsPanel', 'contractors/ContractorsPanel'],
+      ['loadFinancePanel', 'finance/FinancePanel'],
+      ['loadReleasePanel', 'releases/ReleasePanel'],
     ]
 
-    expect(workspace).toContain("import { lazy, Suspense, useState } from 'react'")
+    expect(workspace).toContain("import { Suspense, useState } from 'react'")
     expect(workspace).toContain('<Suspense fallback={<LoadingSkeleton label="Загружаем раздел" rows={5} columns={4} />}>')
-    for (const modulePath of lazySectionModules) {
-      expect(workspace).toContain(`lazy(() => import('../${modulePath}')`)
-      expect(workspace).not.toMatch(new RegExp(`^import .* from '../${modulePath.replace('/', '\\/')}'`, 'm'))
+    expect(workspace).toContain('<AsyncErrorBoundary')
+    expect(workspace).toContain('onPointerEnter={() => preloadWorkspaceSection(tile.section)}')
+    expect(workspace).toContain('onFocus={() => preloadWorkspaceSection(tile.section)}')
+    expect(appShell).toContain('onPointerEnter={() => preloadWorkspaceSection(item.section)}')
+    expect(appShell).toContain('onFocus={() => preloadWorkspaceSection(item.section)}')
+    for (const [loaderName, modulePath] of lazySectionModules) {
+      expect(loader).toContain(`const ${loaderName} = () => import('../${modulePath}')`)
+      expect(loader).toContain(`lazy(${loaderName})`)
+      expect(loader).not.toMatch(new RegExp(`^import .* from '../${modulePath.replace('/', '\\/')}'`, 'm'))
     }
   })
 })

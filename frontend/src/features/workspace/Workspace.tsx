@@ -1,5 +1,5 @@
-import { lazy, Suspense, useState } from 'react'
-import { ArrowLeft, Bell, LockKeyhole, LogOut, X } from 'lucide-react'
+import { Suspense, useState } from 'react'
+import { AlertTriangle, ArrowLeft, Bell, LockKeyhole, LogOut, RotateCw, X } from 'lucide-react'
 import type { AuthClient, AuthResponse, CurrentUserDto } from '../../services/authApi'
 import type { AuditClient } from '../../services/auditApi'
 import type { DictionaryClient } from '../../services/dictionariesApi'
@@ -13,22 +13,10 @@ import type { ReleaseClient } from '../../services/releasesApi'
 import type { UserManagementClient } from '../../services/usersApi'
 import type { ApplicationSettingsClient } from '../../services/settingsApi'
 import { hasAnyPermission, hasPermission, permissions } from '../../shared/accessControl'
-import { LoadingSkeleton } from '../../shared/AsyncState'
+import { AsyncErrorBoundary, LoadingSkeleton } from '../../shared/AsyncState'
 import { useEscapeKey, useFocusOnOpen, useFocusTrap, useRestoreFocusOnClose } from '../../shared/focusHooks'
 import type { AuditPanelPreset, WorkspaceOpenContext, WorkspaceSection } from '../../shared/workspaceNavigation'
-
-const PasswordPanel = lazy(() => import('../settings/PasswordPanel').then((module) => ({ default: module.PasswordPanel })))
-const FundsPrototypePanel = lazy(() => import('../funds/FundsPanel').then((module) => ({ default: module.FundsPrototypePanel })))
-const ImportPanel = lazy(() => import('../import/ImportPanel').then((module) => ({ default: module.ImportPanel })))
-const MeterReadingsPrototypePanel = lazy(() => import('../meterReadings/MeterReadingsPanel').then((module) => ({ default: module.MeterReadingsPrototypePanel })))
-const AuditPanel = lazy(() => import('../audit/AuditPanel').then((module) => ({ default: module.AuditPanel })))
-const ReportPanel = lazy(() => import('../reports/ReportPanel').then((module) => ({ default: module.ReportPanel })))
-const UserManagementPanel = lazy(() => import('../users/UserManagementPanel').then((module) => ({ default: module.UserManagementPanel })))
-const DictionaryPanelV2 = lazy(() => import('../dictionaries/DictionaryPanel').then((module) => ({ default: module.DictionaryPanelV2 })))
-const TariffsAndFeesPrototypePanel = lazy(() => import('../tariffs/TariffsAndFeesPanel').then((module) => ({ default: module.TariffsAndFeesPrototypePanel })))
-const ContractorsPrototypePanel = lazy(() => import('../contractors/ContractorsPanel').then((module) => ({ default: module.ContractorsPrototypePanel })))
-const FinancePanel = lazy(() => import('../finance/FinancePanel').then((module) => ({ default: module.FinancePanel })))
-const ReleasePanel = lazy(() => import('../releases/ReleasePanel').then((module) => ({ default: module.ReleasePanel })))
+import { AuditPanel, ContractorsPrototypePanel, DictionaryPanelV2, FinancePanel, FundsPrototypePanel, ImportPanel, MeterReadingsPrototypePanel, PasswordPanel, preloadWorkspaceSection, ReleasePanel, ReportPanel, TariffsAndFeesPrototypePanel, UserManagementPanel } from './workspaceSectionLoader'
 
 const dashboardTiles: { title: string; section: WorkspaceSection; requiredAny?: readonly string[] }[] = [
   { title: 'Тарифы\nи сборы', section: 'tariffsAndFees', requiredAny: [permissions.dictionariesRead] },
@@ -112,6 +100,8 @@ export function Workspace({
                     aria-label={tile.title.replace('\n', ' ')}
                     title={tile.title.replace('\n', ' ')}
                     disabled={!canOpen}
+                    onPointerEnter={() => preloadWorkspaceSection(tile.section)}
+                    onFocus={() => preloadWorkspaceSection(tile.section)}
                     onClick={() => onOpenSection(tile.section)}
                   >
                     {tile.title.split('\n').map((line) => (
@@ -224,9 +214,30 @@ export function Workspace({
           </button>
         </div>
       </header>
-      <Suspense fallback={<LoadingSkeleton label="Загружаем раздел" rows={5} columns={4} />}>
-        {renderActiveSection()}
-      </Suspense>
+      <AsyncErrorBoundary
+        key={activeSection}
+        fallback={() => (
+          <section className="access-notice" role="alert" aria-label="Не удалось загрузить раздел">
+            <AlertTriangle size={20} aria-hidden="true" />
+            <div>
+              <p className="eyebrow">Ошибка загрузки</p>
+              <h2>Раздел временно недоступен</h2>
+              <p>Проверьте соединение и перезагрузите страницу. Введённые в других разделах данные не изменены.</p>
+              <div className="modal-actions">
+                <button className="secondary-button" type="button" onClick={() => onOpenSection('dashboard')}>К главному меню</button>
+                <button className="primary-button" type="button" onClick={() => window.location.reload()}>
+                  <RotateCw size={16} aria-hidden="true" />
+                  <span>Перезагрузить страницу</span>
+                </button>
+              </div>
+            </div>
+          </section>
+        )}
+      >
+        <Suspense fallback={<LoadingSkeleton label="Загружаем раздел" rows={5} columns={4} />}>
+          {renderActiveSection()}
+        </Suspense>
+      </AsyncErrorBoundary>
       {logoutConfirmationOpen ? (
         <div className="modal-backdrop" role="presentation" onMouseDown={() => setLogoutConfirmationOpen(false)}>
           <section

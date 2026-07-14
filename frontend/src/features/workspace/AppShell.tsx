@@ -27,6 +27,7 @@ import type { ApplicationSettingsClient } from '../../services/settingsApi'
 import { hasAnyPermission, isAdministrator, permissions } from '../../shared/accessControl'
 import type { AuditPanelPreset, WorkspaceOpenContext, WorkspaceSection } from '../../shared/workspaceNavigation'
 import { Workspace } from './Workspace'
+import { preloadWorkspaceSection } from './workspaceSectionLoader'
 
 const sidebarExpandedStorageKey = 'garagebalance.sidebar.expanded'
 
@@ -147,7 +148,7 @@ export function AuthenticatedAppShell({ auth, authClient, auditClient, dictionar
               const canOpen = hasAnyPermission(auth, item.requiredAny)
               const isActive = effectiveActiveSection === item.section
               return (
-                <button className={isActive ? 'nav-item active' : 'nav-item'} type="button" key={item.section} disabled={!canOpen} aria-label={item.label} title={item.label} aria-current={isActive ? 'page' : undefined} onClick={() => openWorkspaceSection(item.section)}>
+                <button className={isActive ? 'nav-item active' : 'nav-item'} type="button" key={item.section} disabled={!canOpen} aria-label={item.label} title={item.label} aria-current={isActive ? 'page' : undefined} onPointerEnter={() => preloadWorkspaceSection(item.section)} onFocus={() => preloadWorkspaceSection(item.section)} onClick={() => openWorkspaceSection(item.section)}>
                   <Icon size={18} />
                   <span>{item.label}</span>
                 </button>

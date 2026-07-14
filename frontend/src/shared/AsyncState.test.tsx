@@ -1,6 +1,6 @@
-import { render, screen } from '@testing-library/react'
-import { describe, expect, it } from 'vitest'
-import { EmptyState, LoadingSkeleton } from './AsyncState'
+import { fireEvent, render, screen } from '@testing-library/react'
+import { describe, expect, it, vi } from 'vitest'
+import { AsyncErrorBoundary, EmptyState, LoadingSkeleton } from './AsyncState'
 
 describe('AsyncState', () => {
   it('announces loading without exposing decorative skeleton rows', () => {
@@ -17,5 +17,36 @@ describe('AsyncState', () => {
 
     expect(screen.getByRole('status')).toHaveTextContent('Данных пока нет.')
     expect(screen.getByRole('status')).toHaveClass('empty-state--spacious')
+  })
+
+  it('isolates a failed async section and can reset without crashing the application shell', () => {
+    let shouldThrow = true
+    const onError = vi.fn()
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+
+    function UnstableSection() {
+      if (shouldThrow) throw new Error('Не удалось загрузить фрагмент')
+      return <p>Раздел восстановлен</p>
+    }
+
+    render(
+      <AsyncErrorBoundary
+        onError={onError}
+        fallback={(error, reset) => (
+          <div role="alert">
+            <span>{error.message}</span>
+            <button type="button" onClick={() => { shouldThrow = false; reset() }}>Повторить</button>
+          </div>
+        )}
+      >
+        <UnstableSection />
+      </AsyncErrorBoundary>,
+    )
+
+    expect(screen.getByRole('alert')).toHaveTextContent('Не удалось загрузить фрагмент')
+    expect(onError).toHaveBeenCalledTimes(1)
+    fireEvent.click(screen.getByRole('button', { name: 'Повторить' }))
+    expect(screen.getByText('Раздел восстановлен')).toBeInTheDocument()
+    consoleError.mockRestore()
   })
 })
