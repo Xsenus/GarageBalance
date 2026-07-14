@@ -172,6 +172,19 @@ public sealed class EfAccrualRepository(GarageBalanceDbContext dbContext) : IAcc
             .Select(accrual => accrual.GarageId)
             .ToHashSetAsync(cancellationToken);
 
+    public Task<int> CountActiveForGenerationAsync(
+        Guid incomeTypeId,
+        DateOnly accountingMonth,
+        string source,
+        CancellationToken cancellationToken) =>
+        dbContext.Accruals.AsNoTracking().CountAsync(accrual =>
+            !accrual.IsCanceled &&
+            !accrual.Garage.IsArchived &&
+            accrual.IncomeTypeId == incomeTypeId &&
+            accrual.AccountingMonth == accountingMonth &&
+            accrual.Source == source,
+            cancellationToken);
+
     public Task<bool> ActiveDuplicateExistsAsync(
         Guid? ignoredId,
         Guid garageId,

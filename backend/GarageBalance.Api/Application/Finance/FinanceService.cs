@@ -1572,12 +1572,30 @@ public sealed class FinanceService(
                 "Выбранный тариф не подходит для этого вида регулярного начисления.");
         }
 
-        var garages = await garageRepository.GetAllActiveWithOwnerAsync(cancellationToken);
-        var existingGarageIds = await accrualRepository.GetActiveGarageIdsAsync(
+        var existingAccrualCount = await accrualRepository.CountActiveForGenerationAsync(
             incomeType.Id,
             month,
             AccrualSources.Regular,
             cancellationToken);
+        if (existingAccrualCount > 0)
+        {
+            var activeGarageCount = await garageRepository.CountActiveAsync(cancellationToken);
+            if (activeGarageCount > 0 && existingAccrualCount >= activeGarageCount)
+            {
+                return FinanceResult<RegularAccrualGenerationResultDto>.Failure(
+                    "regular_accruals_empty",
+                    $"Регулярные начисления за {month:MM.yyyy} уже сформированы для всех активных гаражей ({activeGarageCount}).");
+            }
+        }
+
+        var garages = await garageRepository.GetAllActiveWithOwnerAsync(cancellationToken);
+        IReadOnlySet<Guid> existingGarageIds = existingAccrualCount == 0
+            ? new HashSet<Guid>()
+            : await accrualRepository.GetActiveGarageIdsAsync(
+                incomeType.Id,
+                month,
+                AccrualSources.Regular,
+                cancellationToken);
         var pendingGarageIds = garages
             .Where(garage => !existingGarageIds.Contains(garage.Id))
             .Select(garage => garage.Id)

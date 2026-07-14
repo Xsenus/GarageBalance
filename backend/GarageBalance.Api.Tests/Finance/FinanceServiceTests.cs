@@ -2533,7 +2533,8 @@ public sealed class FinanceServiceTests
         Assert.InRange(firstRunSelectCount, 1, 5);
         Assert.False(secondRun.Succeeded);
         Assert.Equal("regular_accruals_empty", secondRun.ErrorCode);
-        Assert.InRange(secondRunSelectCount, 1, 5);
+        Assert.InRange(secondRunSelectCount, 1, 4);
+        Assert.DoesNotContain(commandCounter.Commands, command => command.Contains("JOIN \"owners\"", StringComparison.OrdinalIgnoreCase));
         Assert.Equal(200, database.Context.Accruals.Count());
     }
 
@@ -2596,6 +2597,37 @@ public sealed class FinanceServiceTests
         Assert.False(result.Succeeded);
         Assert.Equal("regular_accruals_empty", result.ErrorCode);
         Assert.Single(database.Context.Accruals);
+    }
+
+    [Fact]
+    public async Task GenerateRegularAccrualsAsync_CreatesRowsForGaragesAddedAfterTheFirstMonthlyRun()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        var tariff = new Tariff { Name = "Членский тариф", CalculationBase = "fixed", Rate = 300m, EffectiveFrom = new DateOnly(2026, 1, 1) };
+        database.Context.Tariffs.Add(tariff);
+        await database.Context.SaveChangesAsync();
+        var service = FinanceServiceTestFactory.Create(database.Context);
+        var request = new GenerateRegularAccrualsRequest(fixtures.IncomeType.Id, tariff.Id, new DateOnly(2026, 6, 1), null);
+        await service.GenerateRegularAccrualsAsync(request, null, CancellationToken.None);
+
+        var laterGarage = new Garage
+        {
+            Number = "NEW-001",
+            PeopleCount = 1,
+            FloorCount = 1,
+            Owner = fixtures.Garage.Owner
+        };
+        database.Context.Garages.Add(laterGarage);
+        await database.Context.SaveChangesAsync();
+
+        var result = await service.GenerateRegularAccrualsAsync(request, null, CancellationToken.None);
+
+        Assert.True(result.Succeeded, result.ErrorMessage);
+        Assert.Equal(1, result.Value!.CreatedCount);
+        Assert.Equal(1, result.Value.SkippedCount);
+        Assert.Equal(laterGarage.Id, Assert.Single(result.Value.CreatedAccruals).GarageId);
+        Assert.Equal(2, await database.Context.Accruals.CountAsync());
     }
 
     [Fact]
@@ -3288,8 +3320,13 @@ public sealed class FinanceServiceTests
     private sealed class SelectCommandCounter : DbCommandInterceptor
     {
         public int Count { get; private set; }
+        public List<string> Commands { get; } = [];
 
-        public void Reset() => Count = 0;
+        public void Reset()
+        {
+            Count = 0;
+            Commands.Clear();
+        }
 
         public override ValueTask<InterceptionResult<DbDataReader>> ReaderExecutingAsync(
             DbCommand command,
@@ -3300,6 +3337,7 @@ public sealed class FinanceServiceTests
             if (command.CommandText.TrimStart().StartsWith("SELECT", StringComparison.OrdinalIgnoreCase))
             {
                 Count++;
+                Commands.Add(command.CommandText);
             }
 
             return base.ReaderExecutingAsync(command, eventData, result, cancellationToken);
