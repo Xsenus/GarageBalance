@@ -61,12 +61,15 @@ describe('responsive layout styles', () => {
   })
 
   it('keeps garage multi-selection compact and responsive', () => {
+    expect(normalizedAppCss).toContain('.payments-prototype-heading {\n  display: grid;\n  grid-template-columns: minmax(320px, 1fr) auto;')
+    expect(normalizedAppCss).toContain('.payments-prototype-garage-summary {\n  display: grid;\n  grid-template-columns: repeat(4, minmax(112px, 142px));')
     expect(normalizedAppCss).toContain('.payments-prototype-search-results {\n  position: absolute;')
     expect(appCss).toContain('grid-template-columns: repeat(3, minmax(190px, 1fr));')
     expect(normalizedAppCss).toContain('.payments-prototype-selected-list {\n  display: grid;\n  grid-template-columns: repeat(3, minmax(0, 1fr));')
     expect(normalizedAppCss).toContain('.payments-prototype-garage-summary-value {\n  justify-self: end;\n  text-align: right;')
     expect(normalizedAppCss).toContain('.payments-prototype-owner-row .payments-prototype-actions {\n  display: grid;\n  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));')
     expect(normalizedAppCss).toContain('.payments-prototype-selected-list,\n  .payments-prototype-garage-summary {\n    grid-template-columns: repeat(2, minmax(0, 1fr));')
+    expect(normalizedAppCss).toContain('@media (max-width: 1180px) {\n  .payments-prototype-heading {\n    grid-template-columns: minmax(0, 1fr);')
     expect(normalizedAppCss).toContain('.payments-prototype-search-results {\n    grid-template-columns: repeat(2, minmax(190px, 1fr));')
     expect(normalizedAppCss).toContain('.payments-prototype-search-results {\n    grid-template-columns: minmax(0, 1fr);\n    width: calc(100vw - 32px);')
   })

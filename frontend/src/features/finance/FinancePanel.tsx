@@ -2030,25 +2030,14 @@ export function FinancePanel({
   }
 
   const financeEditorHasUnsavedChanges = hasUnsavedFinanceEditorChanges()
+  const paymentsHeadingStatus = loading || !paymentDisplaySettingsLoaded
+    ? getFinancePanelLabel('loading')
+    : showAllGarageOperations
+      ? formatFinanceOperationCount(summary.operationCount)
+      : null
 
   return (
     <section className={showAllGarageOperations ? 'finance-panel finance-panel--show-overview' : 'finance-panel'} aria-label={getFinancePanelLabel('section')}>
-      <div className="section-heading">
-        <div>
-          <p className="eyebrow">{getFinancePanelLabel('section')}</p>
-          <h2>{getFinancePanelLabel('title')}</h2>
-        </div>
-        {loading || !paymentDisplaySettingsLoaded ? (
-          <span>{getFinancePanelLabel('loading')}</span>
-        ) : showAllGarageOperations ? (
-          <span>{formatFinanceOperationCount(summary.operationCount)}</span>
-        ) : null}
-      </div>
-
-      {error ? <FormError>{error}</FormError> : null}
-      {paymentDisplaySettingsError ? <FormError>{paymentDisplaySettingsError}</FormError> : null}
-      {!canWritePayments ? <p className="form-hint">{getFinancePanelLabel('readOnlyHint')}</p> : null}
-
       <PaymentsPrototypePanel
         auth={auth}
         canWritePayments={canWritePayments}
@@ -2062,6 +2051,14 @@ export function FinancePanel({
         supplierGroups={supplierGroups}
         suppliers={suppliers}
         staffMembers={staffMembers}
+        headingStatus={paymentsHeadingStatus}
+        headingNotices={(
+          <>
+            {error ? <FormError>{error}</FormError> : null}
+            {paymentDisplaySettingsError ? <FormError>{paymentDisplaySettingsError}</FormError> : null}
+            {!canWritePayments ? <p className="form-hint">{getFinancePanelLabel('readOnlyHint')}</p> : null}
+          </>
+        )}
         onOpenDialog={openPaymentsPrototypeDialog}
       />
 
@@ -2827,6 +2824,8 @@ function PaymentsPrototypePanel({
   supplierGroups,
   suppliers,
   staffMembers,
+  headingStatus,
+  headingNotices,
   onOpenDialog,
 }: {
   auth: AuthResponse
@@ -2841,6 +2840,8 @@ function PaymentsPrototypePanel({
   supplierGroups: SupplierGroupDto[]
   suppliers: SupplierDto[]
   staffMembers: StaffMemberDto[]
+  headingStatus: string | null
+  headingNotices: ReactNode
   onOpenDialog: (dialog: PaymentsPrototypeDialogKey, trigger?: HTMLButtonElement | null) => void
 }) {
   const [activeTab, setActiveTab] = useState<'income' | 'expense'>('income')
@@ -4174,6 +4175,24 @@ function PaymentsPrototypePanel({
 
   return (
     <section className="payments-prototype" aria-label="Форма платежей">
+      <div className="payments-prototype-heading">
+        <div className="section-heading payments-prototype-section-heading">
+          <div>
+            <p className="eyebrow">{getFinancePanelLabel('section')}</p>
+            <h2>{getFinancePanelLabel('title')}</h2>
+          </div>
+          {headingStatus ? <span>{headingStatus}</span> : null}
+        </div>
+        {selectedGarage ? (
+          <section className="payments-prototype-garage-summary" aria-label="Параметры выбранного гаража">
+            <div><span>Люди</span><strong className="payments-prototype-garage-summary-value">{selectedGarage.peopleCount}</strong></div>
+            <div><span>Баланс</span><strong className={`payments-prototype-garage-summary-value${selectedGarage.balance < 0 ? ' money-expense' : ''}`}>{formatPaymentPrototypeValue(Math.abs(selectedGarage.balance))}</strong></div>
+            <div><span>Этажи</span><strong className="payments-prototype-garage-summary-value">{selectedGarage.floorCount}</strong></div>
+            <div><span>Просроченная задолженность</span><strong className={`payments-prototype-garage-summary-value${selectedGarage.overdueDebt > 0 ? ' money-expense' : ''}`}>{formatPaymentPrototypeValue(selectedGarage.overdueDebt)}</strong></div>
+          </section>
+        ) : null}
+      </div>
+      {headingNotices}
       <div className="payments-prototype-topline">
         <div ref={garageSearchWrapRef} className="payments-prototype-search-wrap">
           <label className="payments-prototype-search">
@@ -4267,14 +4286,6 @@ function PaymentsPrototypePanel({
           ) : null}
         </div>
 
-        {selectedGarage ? (
-          <section className="payments-prototype-garage-summary" aria-label="Параметры выбранного гаража">
-            <div><span>Люди</span><strong className="payments-prototype-garage-summary-value">{selectedGarage.peopleCount}</strong></div>
-            <div><span>Баланс</span><strong className={`payments-prototype-garage-summary-value${selectedGarage.balance < 0 ? ' money-expense' : ''}`}>{formatPaymentPrototypeValue(Math.abs(selectedGarage.balance))}</strong></div>
-            <div><span>Этажи</span><strong className="payments-prototype-garage-summary-value">{selectedGarage.floorCount}</strong></div>
-            <div><span>Просроченная задолженность</span><strong className={`payments-prototype-garage-summary-value${selectedGarage.overdueDebt > 0 ? ' money-expense' : ''}`}>{formatPaymentPrototypeValue(selectedGarage.overdueDebt)}</strong></div>
-          </section>
-        ) : null}
       </div>
       {formStateError ? <FormError>{formStateError}</FormError> : null}
       {paymentError ? <FormError>{paymentError}</FormError> : null}

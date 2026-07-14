@@ -3203,6 +3203,7 @@ describe('App', () => {
     expect(selectedGarageList).not.toHaveTextContent('Гараж 2')
 
     const selectedGarageSummary = within(prototype).getByRole('region', { name: 'Параметры выбранного гаража' })
+    expect(selectedGarageSummary.closest('.payments-prototype-heading')).toContainElement(within(financePanel).getByRole('heading', { name: 'Поступления владельцев и выплаты поставщикам' }))
     expect(selectedGarageSummary).toHaveTextContent('Просроченная задолженность')
     const overdueDebtSummaryValue = within(selectedGarageSummary).getByText('Просроченная задолженность').parentElement?.querySelector('strong')
     expect(overdueDebtSummaryValue).toHaveClass('payments-prototype-garage-summary-value')

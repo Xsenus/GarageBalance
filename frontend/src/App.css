@@ -2816,11 +2816,20 @@ h1 {
   white-space: normal;
 }
 
-.payments-prototype-topline {
+.payments-prototype-heading {
   display: grid;
-  grid-template-columns: minmax(480px, 0.9fr) minmax(680px, 1.4fr);
+  grid-template-columns: minmax(320px, 1fr) auto;
   gap: 16px;
   align-items: start;
+  margin-bottom: 14px;
+}
+
+.payments-prototype-section-heading {
+  margin-bottom: 0;
+}
+
+.payments-prototype-topline {
+  width: min(680px, 100%);
 }
 
 .payments-prototype-search-wrap {
@@ -3041,10 +3050,10 @@ h1 {
 
 .payments-prototype-garage-summary {
   display: grid;
-  grid-template-columns: repeat(4, minmax(130px, 1fr));
+  grid-template-columns: repeat(4, minmax(112px, 142px));
   gap: 8px;
   justify-self: end;
-  width: 100%;
+  width: auto;
 }
 
 .payments-prototype-garage-summary div,
@@ -3077,6 +3086,18 @@ h1 {
 .payments-prototype-garage-summary-value {
   justify-self: end;
   text-align: right;
+}
+
+@media (max-width: 1180px) {
+  .payments-prototype-heading {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .payments-prototype-garage-summary {
+    grid-template-columns: repeat(2, minmax(130px, 1fr));
+    justify-self: stretch;
+    width: 100%;
+  }
 }
 
 .payments-prototype-toolbar {
