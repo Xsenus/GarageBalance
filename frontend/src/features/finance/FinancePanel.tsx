@@ -5359,24 +5359,27 @@ function StaffPaymentPrototypeDialog({
         </div>
         <form className="dictionary-modal-form payments-prototype-modal-form" onSubmit={handleSubmit}>
           <FormField label="Сотрудник">
-            <select aria-label="Сотрудник выплаты" value={staffMemberId} onChange={(event) => {
-              setStaffMemberId(event.target.value)
-              setError(null)
-            }}>
-              {staffMembers.length > 0 ? staffMembers.map((member) => (
-                <option key={member.id} value={member.id}>{member.fullName} · {member.departmentName}</option>
-              )) : <option value="">Нет сотрудников</option>}
-            </select>
+            <SelectControl
+              aria-label="Сотрудник выплаты"
+              value={staffMemberId}
+              options={staffMembers.length > 0
+                ? staffMembers.map((member) => ({ value: member.id, label: `${member.fullName} · ${member.departmentName}` }))
+                : [{ value: '', label: 'Нет сотрудников' }]}
+              disabled={saving}
+              onChange={(nextStaffMemberId) => {
+                setStaffMemberId(nextStaffMemberId)
+                setError(null)
+              }} />
           </FormField>
           <FormField label="Дата">
-            <input aria-label="Дата выплаты сотруднику" type="date" value={operationDate} onChange={(event) => {
-              setOperationDate(event.target.value)
+            <LocalizedDatePicker ariaLabel="Дата выплаты сотруднику" mode="date" value={operationDate} disabled={saving} onChange={(nextOperationDate) => {
+              setOperationDate(nextOperationDate)
               setError(null)
             }} />
           </FormField>
           <FormField label="Месяц">
-            <input aria-label="Месяц выплаты сотруднику" type="month" value={accountingMonth} onChange={(event) => {
-              setAccountingMonth(event.target.value)
+            <LocalizedDatePicker ariaLabel="Месяц выплаты сотруднику" mode="month" value={accountingMonth} disabled={saving} onChange={(nextAccountingMonth) => {
+              setAccountingMonth(nextAccountingMonth)
               setError(null)
             }} />
           </FormField>
@@ -5482,28 +5485,34 @@ function NewAccrualPrototypeDialog({
         </div>
         <form className="dictionary-modal-form payments-prototype-modal-form" onSubmit={handleSubmit}>
           <FormField label="Поставщик">
-            <select aria-label="Поставщик начисления" value={supplierId} onChange={(event) => {
-              setSupplierId(event.target.value)
-              setError(null)
-            }}>
-              {suppliers.length > 0 ? suppliers.map((supplier) => (
-                <option key={supplier.id} value={supplier.id}>{supplier.name}</option>
-              )) : <option value="">Нет поставщиков</option>}
-            </select>
+            <SelectControl
+              aria-label="Поставщик начисления"
+              value={supplierId}
+              options={suppliers.length > 0
+                ? suppliers.map((supplier) => ({ value: supplier.id, label: supplier.name }))
+                : [{ value: '', label: 'Нет поставщиков' }]}
+              disabled={saving}
+              onChange={(nextSupplierId) => {
+                setSupplierId(nextSupplierId)
+                setError(null)
+              }} />
           </FormField>
           <FormField label="Вид начисления">
-            <select aria-label="Вид начисления поставщику" value={expenseTypeId} onChange={(event) => {
-              setExpenseTypeId(event.target.value)
-              setError(null)
-            }}>
-              {expenseTypes.length > 0 ? expenseTypes.map((expenseType) => (
-                <option key={expenseType.id} value={expenseType.id}>{expenseType.name}</option>
-              )) : <option value="">Нет видов выплат</option>}
-            </select>
+            <SelectControl
+              aria-label="Вид начисления поставщику"
+              value={expenseTypeId}
+              options={expenseTypes.length > 0
+                ? expenseTypes.map((expenseType) => ({ value: expenseType.id, label: expenseType.name }))
+                : [{ value: '', label: 'Нет видов выплат' }]}
+              disabled={saving}
+              onChange={(nextExpenseTypeId) => {
+                setExpenseTypeId(nextExpenseTypeId)
+                setError(null)
+              }} />
           </FormField>
           <FormField label="Месяц">
-            <input aria-label="Месяц начисления поставщику" type="month" value={accountingMonth} onChange={(event) => {
-              setAccountingMonth(event.target.value)
+            <LocalizedDatePicker ariaLabel="Месяц начисления поставщику" mode="month" value={accountingMonth} disabled={saving} onChange={(nextAccountingMonth) => {
+              setAccountingMonth(nextAccountingMonth)
               setError(null)
             }} />
           </FormField>
@@ -5897,25 +5906,26 @@ function DebtTransferPrototypeDialog({
         <form className="dictionary-modal-form payments-prototype-modal-form" onSubmit={handleSubmit}>
           <div className="form-grid two-columns">
             <FormField label="Месяц с">
-              <select aria-label="Исходный месяц переноса задолженности" value={sourceMonth} onChange={(event) => handleSourceChange(event.target.value)} disabled={sourceOptions.length === 0}>
-                {sourceOptions.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label} · долг {formatPaymentPrototypeValue(option.debt)}
-                  </option>
-                ))}
-              </select>
+              <SelectControl
+                aria-label="Исходный месяц переноса задолженности"
+                value={sourceMonth}
+                options={sourceOptions.map((option) => ({
+                  value: option.value,
+                  label: `${option.label} · долг ${formatPaymentPrototypeValue(option.debt)}`,
+                }))}
+                disabled={saving || sourceOptions.length === 0}
+                onChange={handleSourceChange} />
             </FormField>
             <FormField label="Месяц по">
-              <select aria-label="Целевой месяц переноса задолженности" value={targetMonth} onChange={(event) => {
-                setTargetMonth(event.target.value)
-                setError(null)
-              }} disabled={availableTargets.length === 0}>
-                {availableTargets.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
+              <SelectControl
+                aria-label="Целевой месяц переноса задолженности"
+                value={targetMonth}
+                options={availableTargets}
+                disabled={saving || availableTargets.length === 0}
+                onChange={(nextTargetMonth) => {
+                  setTargetMonth(nextTargetMonth)
+                  setError(null)
+                }} />
             </FormField>
           </div>
           <FormField label="Сумма">
