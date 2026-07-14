@@ -83,7 +83,7 @@ describe('shared loading-state coverage', () => {
     expect(appShell).toContain('onPointerEnter={() => preloadWorkspaceSection(item.section)}')
     expect(appShell).toContain('onFocus={() => preloadWorkspaceSection(item.section)}')
     for (const [loaderName, modulePath] of lazySectionModules) {
-      expect(loader).toContain(`const ${loaderName} = () => import('../${modulePath}')`)
+      expect(loader).toContain(`const ${loaderName} = createRetryableLazyLoader(() => import('../${modulePath}')`)
       expect(loader).toContain(`lazy(${loaderName})`)
       expect(loader).not.toMatch(new RegExp(`^import .* from '../${modulePath.replace('/', '\\/')}'`, 'm'))
     }

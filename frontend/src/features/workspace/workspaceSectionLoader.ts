@@ -1,18 +1,19 @@
 import { lazy } from 'react'
+import { createRetryableLazyLoader } from '../../shared/retryableLazyLoader'
 import type { WorkspaceSection } from '../../shared/workspaceNavigation'
 
-const loadPasswordPanel = () => import('../settings/PasswordPanel').then((module) => ({ default: module.PasswordPanel }))
-const loadFundsPanel = () => import('../funds/FundsPanel').then((module) => ({ default: module.FundsPrototypePanel }))
-const loadImportPanel = () => import('../import/ImportPanel').then((module) => ({ default: module.ImportPanel }))
-const loadMeterReadingsPanel = () => import('../meterReadings/MeterReadingsPanel').then((module) => ({ default: module.MeterReadingsPrototypePanel }))
-const loadAuditPanel = () => import('../audit/AuditPanel').then((module) => ({ default: module.AuditPanel }))
-const loadReportPanel = () => import('../reports/ReportPanel').then((module) => ({ default: module.ReportPanel }))
-const loadUserManagementPanel = () => import('../users/UserManagementPanel').then((module) => ({ default: module.UserManagementPanel }))
-const loadDictionaryPanel = () => import('../dictionaries/DictionaryPanel').then((module) => ({ default: module.DictionaryPanelV2 }))
-const loadTariffsPanel = () => import('../tariffs/TariffsAndFeesPanel').then((module) => ({ default: module.TariffsAndFeesPrototypePanel }))
-const loadContractorsPanel = () => import('../contractors/ContractorsPanel').then((module) => ({ default: module.ContractorsPrototypePanel }))
-const loadFinancePanel = () => import('../finance/FinancePanel').then((module) => ({ default: module.FinancePanel }))
-const loadReleasePanel = () => import('../releases/ReleasePanel').then((module) => ({ default: module.ReleasePanel }))
+const loadPasswordPanel = createRetryableLazyLoader(() => import('../settings/PasswordPanel').then((module) => ({ default: module.PasswordPanel })))
+const loadFundsPanel = createRetryableLazyLoader(() => import('../funds/FundsPanel').then((module) => ({ default: module.FundsPrototypePanel })))
+const loadImportPanel = createRetryableLazyLoader(() => import('../import/ImportPanel').then((module) => ({ default: module.ImportPanel })))
+const loadMeterReadingsPanel = createRetryableLazyLoader(() => import('../meterReadings/MeterReadingsPanel').then((module) => ({ default: module.MeterReadingsPrototypePanel })))
+const loadAuditPanel = createRetryableLazyLoader(() => import('../audit/AuditPanel').then((module) => ({ default: module.AuditPanel })))
+const loadReportPanel = createRetryableLazyLoader(() => import('../reports/ReportPanel').then((module) => ({ default: module.ReportPanel })))
+const loadUserManagementPanel = createRetryableLazyLoader(() => import('../users/UserManagementPanel').then((module) => ({ default: module.UserManagementPanel })))
+const loadDictionaryPanel = createRetryableLazyLoader(() => import('../dictionaries/DictionaryPanel').then((module) => ({ default: module.DictionaryPanelV2 })))
+const loadTariffsPanel = createRetryableLazyLoader(() => import('../tariffs/TariffsAndFeesPanel').then((module) => ({ default: module.TariffsAndFeesPrototypePanel })))
+const loadContractorsPanel = createRetryableLazyLoader(() => import('../contractors/ContractorsPanel').then((module) => ({ default: module.ContractorsPrototypePanel })))
+const loadFinancePanel = createRetryableLazyLoader(() => import('../finance/FinancePanel').then((module) => ({ default: module.FinancePanel })))
+const loadReleasePanel = createRetryableLazyLoader(() => import('../releases/ReleasePanel').then((module) => ({ default: module.ReleasePanel })))
 
 export const PasswordPanel = lazy(loadPasswordPanel)
 export const FundsPrototypePanel = lazy(loadFundsPanel)
