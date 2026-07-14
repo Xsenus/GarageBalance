@@ -8154,7 +8154,7 @@ describe('App', () => {
     await user.click(within(restoreDialog).getByRole('button', { name: 'Вернуть запись' }))
     await waitFor(() => expect(restoreMeterReading).toHaveBeenCalledWith('token', 'meter-reading-canceled'))
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Вернуть показание счетчика?' })).not.toBeInTheDocument())
-    await waitFor(() => expect(getMeterReadingsPage).toHaveBeenCalledTimes(3))
+    await waitFor(() => expect(getMeterReadingsPage).toHaveBeenCalledTimes(2))
   })
 
   it('restores canceled payment and accrual records from payment context menu', async () => {
@@ -8533,6 +8533,7 @@ describe('App', () => {
       consumption: 401 + index,
     }))
     const requestedLimits: Record<string, number | undefined> = {}
+    const getMissingMeterReadings = vi.fn(async () => [] as MissingMeterReadingDto[])
     const toPage = <TItem,>(items: TItem[], offset = 0, limit = 25) => ({ items: items.slice(offset, offset + limit), totalCount: items.length, offset, limit })
     const financeClient = createFinanceClient({
       getOperations: async () => operations,
@@ -8556,7 +8557,20 @@ describe('App', () => {
         requestedLimits.meterReadings = params?.limit
         return toPage(meterReadings, params?.offset, params?.limit)
       },
-      getSummary: async () => ({ incomeTotal: 0, expenseTotal: 0, accrualTotal: 0, balance: 0, debt: 0, operationCount: operations.length, accrualCount: accruals.length, meterReadingCount: meterReadings.length }),
+      getMissingMeterReadings,
+      getSummary: async () => ({
+        incomeTotal: 0,
+        expenseTotal: 0,
+        accrualTotal: 0,
+        balance: 0,
+        debt: 0,
+        operationCount: operations.length,
+        accrualCount: accruals.length,
+        meterReadingCount: meterReadings.length,
+        incomeCount: operations.length,
+        expenseCount: 0,
+        supplierAccrualCount: supplierAccruals.length,
+      }),
     })
     render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={financeClient} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
 
@@ -8579,7 +8593,13 @@ describe('App', () => {
     expect(within(financePanel).getByRole('navigation', { name: 'Пагинация платежей' })).toBeInTheDocument()
     expect(within(operationsTable).getByText('Поступление 8')).toBeInTheDocument()
     expect(within(operationsTable).queryByText('Поступление 9')).not.toBeInTheDocument()
-    expect(requestedLimits).toEqual({ incomeOperations: 25, expenseOperations: 1, accruals: 1, supplierAccruals: 1, meterReadings: 1 })
+    expect(requestedLimits).toEqual({ incomeOperations: 25 })
+    expect(getMissingMeterReadings).not.toHaveBeenCalled()
+
+    await user.click(within(financePanel).getByRole('tab', { name: /Счетчики/ }))
+    await waitFor(() => expect(requestedLimits.meterReadings).toBe(25))
+    expect(requestedLimits).toEqual({ incomeOperations: 25, meterReadings: 25 })
+    expect(getMissingMeterReadings).toHaveBeenCalledTimes(1)
   })
 
   it('refreshes payment summary totals from server when period filter changes', async () => {

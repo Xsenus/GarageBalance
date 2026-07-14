@@ -55,6 +55,22 @@ public sealed class EfSupplierAccrualRepository(GarageBalanceDbContext dbContext
         return new SupplierAccrualPageData(items, totalCount);
     }
 
+    public async Task<int> CountActiveAsync(
+        DateOnly? monthFrom,
+        DateOnly? monthTo,
+        string? normalizedSearch,
+        CancellationToken cancellationToken)
+    {
+        var query = ApplyFilters(QueryActive(), monthFrom, monthTo, supplierId: null);
+        if (normalizedSearch is not null && IsSqliteProvider())
+        {
+            return (await query.ToListAsync(cancellationToken))
+                .Count(accrual => AccrualMatchesSearch(accrual, normalizedSearch));
+        }
+
+        return await ApplySearch(query, normalizedSearch).CountAsync(cancellationToken);
+    }
+
     public async Task<IReadOnlyList<SupplierAccrual>> GetActiveForMonthAsync(DateOnly accountingMonth, CancellationToken cancellationToken) =>
         await dbContext.SupplierAccruals.AsNoTracking()
             .Include(accrual => accrual.Supplier)

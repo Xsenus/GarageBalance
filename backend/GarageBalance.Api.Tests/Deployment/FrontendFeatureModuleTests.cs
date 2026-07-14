@@ -3,6 +3,20 @@ namespace GarageBalance.Api.Tests.Deployment;
 public sealed class FrontendFeatureModuleTests
 {
     [Fact]
+    public void FinanceWorkbench_LoadsOnlyTheActivePagedTableAndDefersMissingMeters()
+    {
+        var source = File.ReadAllText(Path.Combine(FindRepositoryRoot(), "frontend", "src", "features", "finance", "FinancePanel.tsx"));
+        var methodStart = source.IndexOf("const loadFinanceWorkbench = useCallback", StringComparison.Ordinal);
+        var methodEnd = source.IndexOf("useEffect(() =>", methodStart, StringComparison.Ordinal);
+        var method = source[methodStart..methodEnd];
+
+        Assert.Contains("const activePagePromise", method, StringComparison.Ordinal);
+        Assert.Contains("section === 'meterReadings'", method, StringComparison.Ordinal);
+        Assert.Contains("Promise.resolve(null)", method, StringComparison.Ordinal);
+        Assert.DoesNotContain("limit: section ===", method, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void FrontendCompositionRootRemainsThinAfterFeatureExtraction()
     {
         var repositoryRoot = FindRepositoryRoot();

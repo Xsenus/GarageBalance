@@ -536,6 +536,11 @@ public sealed class FinanceService(
             request.DateTo.HasValue ? MonthPeriod.Normalize(request.DateTo.Value) : null,
             NormalizeSearch(request.Search),
             cancellationToken);
+        var supplierAccrualCount = await supplierAccrualRepository.CountActiveAsync(
+            request.DateFrom.HasValue ? MonthPeriod.Normalize(request.DateFrom.Value) : null,
+            request.DateTo.HasValue ? MonthPeriod.Normalize(request.DateTo.Value) : null,
+            NormalizeSearch(request.Search),
+            cancellationToken);
         return new FinanceSummaryDto(
             operationSummary.IncomeTotal,
             operationSummary.ExpenseTotal,
@@ -544,7 +549,12 @@ public sealed class FinanceService(
             accrualSummary.TotalAmount - operationSummary.IncomeTotal,
             operationSummary.Count,
             accrualSummary.Count,
-            meterReadingCount);
+            meterReadingCount)
+        {
+            IncomeCount = operationSummary.IncomeCount,
+            ExpenseCount = operationSummary.ExpenseCount,
+            SupplierAccrualCount = supplierAccrualCount
+        };
     }
 
     public async Task<FinanceResult<FinancialOperationDto>> CreateIncomeAsync(CreateIncomeOperationRequest request, Guid? actorUserId, CancellationToken cancellationToken)

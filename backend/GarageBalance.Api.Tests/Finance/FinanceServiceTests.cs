@@ -1428,8 +1428,37 @@ public sealed class FinanceServiceTests
         Assert.Equal(1100m, result.Balance);
         Assert.Equal(500m, result.Debt);
         Assert.Equal(2, result.OperationCount);
+        Assert.Equal(1, result.IncomeCount);
+        Assert.Equal(1, result.ExpenseCount);
         Assert.Equal(1, result.AccrualCount);
+        Assert.Equal(0, result.SupplierAccrualCount);
         Assert.Equal(0, result.MeterReadingCount);
+    }
+
+    [Fact]
+    public async Task GetSummaryAsync_UsesFourAggregateSelectsAndReturnsSectionCounts()
+    {
+        var commandCounter = new SelectCommandCounter();
+        await using var database = await TestDatabase.CreateAsync(commandCounter);
+        var fixtures = await database.SeedAsync();
+        var service = FinanceServiceTestFactory.Create(database.Context);
+        await service.CreateIncomeAsync(new CreateIncomeOperationRequest(fixtures.Garage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 6, 19), new DateOnly(2026, 6, 1), 1500m, "IN-1", null), null, CancellationToken.None);
+        await service.CreateExpenseAsync(new CreateExpenseOperationRequest(fixtures.Supplier.Id, fixtures.ExpenseType.Id, new DateOnly(2026, 6, 20), new DateOnly(2026, 6, 1), 400m, "OUT-1", null), null, CancellationToken.None);
+        await service.CreateAccrualAsync(new CreateAccrualRequest(fixtures.Garage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 6, 1), 2000m, "regular", null), null, CancellationToken.None);
+        await service.CreateSupplierAccrualAsync(new CreateSupplierAccrualRequest(fixtures.Supplier.Id, fixtures.ExpenseType.Id, new DateOnly(2026, 6, 1), 400m, "regular", "SUP-1", null), null, CancellationToken.None);
+        await service.CreateMeterReadingAsync(new CreateMeterReadingRequest(fixtures.Garage.Id, "water", new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 20), 10m, null), null, CancellationToken.None);
+        commandCounter.Reset();
+
+        var result = await service.GetSummaryAsync(
+            new FinancialOperationListRequest(new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 30), null, null),
+            CancellationToken.None);
+
+        Assert.Equal(4, commandCounter.Count);
+        Assert.Equal(1, result.IncomeCount);
+        Assert.Equal(1, result.ExpenseCount);
+        Assert.Equal(1, result.AccrualCount);
+        Assert.Equal(1, result.SupplierAccrualCount);
+        Assert.Equal(1, result.MeterReadingCount);
     }
 
     [Fact]

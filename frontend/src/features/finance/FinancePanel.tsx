@@ -632,41 +632,47 @@ export function FinancePanel({
         limit,
       }
       const missingMeterMonth = financeFilter.monthFrom || meterForm.accountingMonth
-      const [incomePage, expensePage, accrualsPage, supplierAccrualsPage, meterReadingsPage, loadedMissingMeterReadings, loadedSummary] = await Promise.all([
-        financeClient.getOperationsPage(auth.accessToken, { ...params, operationKind: 'income', limit: section === 'income' ? limit : 1, offset: section === 'income' ? offset : 0 }),
-        financeClient.getOperationsPage(auth.accessToken, { ...params, operationKind: 'expense', limit: section === 'expense' ? limit : 1, offset: section === 'expense' ? offset : 0 }),
-        financeClient.getAccrualsPage(auth.accessToken, { ...params, limit: section === 'accruals' ? limit : 1, offset: section === 'accruals' ? offset : 0 }),
-        financeClient.getSupplierAccrualsPage(auth.accessToken, { ...params, limit: section === 'supplierAccruals' ? limit : 1, offset: section === 'supplierAccruals' ? offset : 0 }),
-        financeClient.getMeterReadingsPage(auth.accessToken, { ...params, limit: section === 'meterReadings' ? limit : 1, offset: section === 'meterReadings' ? offset : 0 }),
-        financeClient.getMissingMeterReadings(auth.accessToken, { accountingMonth: missingMeterMonth, search: financeFilter.search, limit: financeScreenRequestLimit }),
+      const activePagePromise: Promise<FinancePagedResult<FinanceRecord>> = section === 'income'
+        ? financeClient.getOperationsPage(auth.accessToken, { ...params, operationKind: 'income' }) as Promise<FinancePagedResult<FinanceRecord>>
+        : section === 'expense'
+          ? financeClient.getOperationsPage(auth.accessToken, { ...params, operationKind: 'expense' }) as Promise<FinancePagedResult<FinanceRecord>>
+          : section === 'accruals'
+            ? financeClient.getAccrualsPage(auth.accessToken, params) as Promise<FinancePagedResult<FinanceRecord>>
+            : section === 'supplierAccruals'
+              ? financeClient.getSupplierAccrualsPage(auth.accessToken, params) as Promise<FinancePagedResult<FinanceRecord>>
+              : financeClient.getMeterReadingsPage(auth.accessToken, params) as Promise<FinancePagedResult<FinanceRecord>>
+      const missingMeterReadingsPromise = section === 'meterReadings'
+        ? financeClient.getMissingMeterReadings(auth.accessToken, { accountingMonth: missingMeterMonth, search: financeFilter.search, limit: financeScreenRequestLimit })
+        : Promise.resolve(null)
+      const [activePage, loadedMissingMeterReadings, loadedSummary] = await Promise.all([
+        activePagePromise,
+        missingMeterReadingsPromise,
         financeClient.getSummary(auth.accessToken, { monthFrom: financeFilter.monthFrom, monthTo: financeFilter.monthTo, search: financeFilter.search }),
       ])
 
-      setFinanceSectionCounts({
-        income: incomePage.totalCount,
-        expense: expensePage.totalCount,
-        accruals: accrualsPage.totalCount,
-        supplierAccruals: supplierAccrualsPage.totalCount,
-        meterReadings: meterReadingsPage.totalCount,
-      })
+      setFinanceSectionCounts((current) => ({
+        income: loadedSummary.incomeCount ?? (section === 'income' ? activePage.totalCount : current.income),
+        expense: loadedSummary.expenseCount ?? (section === 'expense' ? activePage.totalCount : current.expense),
+        accruals: loadedSummary.accrualCount,
+        supplierAccruals: loadedSummary.supplierAccrualCount ?? (section === 'supplierAccruals' ? activePage.totalCount : current.supplierAccruals),
+        meterReadings: loadedSummary.meterReadingCount,
+      }))
       setSummary(loadedSummary)
       if (section === 'income') {
-        setOperations(incomePage.items)
-        setFinancePage(incomePage as FinancePagedResult<FinanceRecord>)
+        setOperations(activePage.items as FinancialOperationDto[])
       } else if (section === 'expense') {
-        setOperations(expensePage.items)
-        setFinancePage(expensePage as FinancePagedResult<FinanceRecord>)
+        setOperations(activePage.items as FinancialOperationDto[])
       } else if (section === 'accruals') {
-        setAccruals(accrualsPage.items)
-        setFinancePage(accrualsPage as FinancePagedResult<FinanceRecord>)
+        setAccruals(activePage.items as AccrualDto[])
       } else if (section === 'supplierAccruals') {
-        setSupplierAccruals(supplierAccrualsPage.items)
-        setFinancePage(supplierAccrualsPage as FinancePagedResult<FinanceRecord>)
+        setSupplierAccruals(activePage.items as SupplierAccrualDto[])
       } else {
-        setMeterReadings(meterReadingsPage.items)
-        setFinancePage(meterReadingsPage as FinancePagedResult<FinanceRecord>)
+        setMeterReadings(activePage.items as MeterReadingDto[])
       }
-      setMissingMeterReadings(loadedMissingMeterReadings)
+      setFinancePage(activePage)
+      if (loadedMissingMeterReadings) {
+        setMissingMeterReadings(loadedMissingMeterReadings)
+      }
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Не удалось загрузить страницу платежей.')
     } finally {

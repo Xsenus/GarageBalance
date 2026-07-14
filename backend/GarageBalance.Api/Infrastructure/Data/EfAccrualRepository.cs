@@ -128,9 +128,17 @@ public sealed class EfAccrualRepository(GarageBalanceDbContext dbContext) : IAcc
         }
 
         query = ApplySearch(query, normalizedSearch);
-        return new AccrualSummaryData(
-            await query.SumAsync(accrual => accrual.Amount, cancellationToken),
-            await query.CountAsync(cancellationToken));
+        var summary = await query
+            .GroupBy(_ => 1)
+            .Select(group => new
+            {
+                TotalAmount = group.Sum(accrual => (decimal?)accrual.Amount) ?? 0m,
+                Count = group.Count()
+            })
+            .SingleOrDefaultAsync(cancellationToken);
+        return summary is null
+            ? new AccrualSummaryData(0m, 0)
+            : new AccrualSummaryData(summary.TotalAmount, summary.Count);
     }
 
     public Task<Accrual?> FindForUpdateAsync(Guid id, CancellationToken cancellationToken) =>
