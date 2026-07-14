@@ -1,3 +1,4 @@
+using System.Data.Common;
 using System.Text.Json;
 using GarageBalance.Api.Application.Dictionaries;
 using GarageBalance.Api.Application.Finance;
@@ -7,6 +8,7 @@ using GarageBalance.Api.Domain.Finance;
 using GarageBalance.Api.Infrastructure.Data;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 
@@ -2442,6 +2444,71 @@ public sealed class FinanceServiceTests
     }
 
     [Fact]
+    public async Task GenerateRegularAccrualsAsync_UsesConstantSelectCountForManyGaragesAndMeterReadings()
+    {
+        var commandCounter = new SelectCommandCounter();
+        await using var database = await TestDatabase.CreateAsync(commandCounter);
+        var fixtures = await database.SeedAsync();
+        fixtures.IncomeType.Code = "water";
+        var tariff = new Tariff
+        {
+            Name = "Массовый тариф воды",
+            CalculationBase = "meter_water",
+            Rate = 50m,
+            EffectiveFrom = new DateOnly(2026, 1, 1)
+        };
+        database.Context.Tariffs.Add(tariff);
+        var garages = new List<Garage> { fixtures.Garage };
+        for (var index = 1; index < 200; index++)
+        {
+            var garage = new Garage
+            {
+                Number = $"M-{index:D3}",
+                PeopleCount = 1,
+                FloorCount = 1,
+                Owner = fixtures.Garage.Owner
+            };
+            garages.Add(garage);
+            database.Context.Garages.Add(garage);
+        }
+        database.Context.MeterReadings.AddRange(garages.Select(garage => new MeterReading
+        {
+            Garage = garage,
+            MeterKind = MeterKinds.Water,
+            AccountingMonth = new DateOnly(2026, 6, 1),
+            ReadingDate = new DateOnly(2026, 6, 30),
+            PreviousValue = 10m,
+            CurrentValue = 12m,
+            Consumption = 2m
+        }));
+        await database.Context.SaveChangesAsync();
+        var service = FinanceServiceTestFactory.Create(database.Context);
+
+        commandCounter.Reset();
+        var firstRun = await service.GenerateRegularAccrualsAsync(
+            new GenerateRegularAccrualsRequest(fixtures.IncomeType.Id, tariff.Id, new DateOnly(2026, 6, 1), null),
+            null,
+            CancellationToken.None);
+        var firstRunSelectCount = commandCounter.Count;
+
+        commandCounter.Reset();
+        var secondRun = await service.GenerateRegularAccrualsAsync(
+            new GenerateRegularAccrualsRequest(fixtures.IncomeType.Id, tariff.Id, new DateOnly(2026, 6, 1), null),
+            null,
+            CancellationToken.None);
+        var secondRunSelectCount = commandCounter.Count;
+
+        Assert.True(firstRun.Succeeded, firstRun.ErrorMessage);
+        Assert.Equal(200, firstRun.Value!.CreatedCount);
+        Assert.Equal(20000m, firstRun.Value.TotalAmount);
+        Assert.InRange(firstRunSelectCount, 1, 5);
+        Assert.False(secondRun.Succeeded);
+        Assert.Equal("regular_accruals_empty", secondRun.ErrorCode);
+        Assert.InRange(secondRunSelectCount, 1, 5);
+        Assert.Equal(200, database.Context.Accruals.Count());
+    }
+
+    [Fact]
     public async Task GenerateRegularAccrualsAsync_UsesReplacementMeterReadingAfterCancel()
     {
         await using var database = await TestDatabase.CreateAsync();
@@ -3133,13 +3200,18 @@ public sealed class FinanceServiceTests
 
         public GarageBalanceDbContext Context { get; }
 
-        public static async Task<TestDatabase> CreateAsync()
+        public static async Task<TestDatabase> CreateAsync(params IInterceptor[] interceptors)
         {
             var connection = new SqliteConnection("DataSource=:memory:");
             await connection.OpenAsync();
-            var options = new DbContextOptionsBuilder<GarageBalanceDbContext>()
-                .UseSqlite(connection)
-                .Options;
+            var optionsBuilder = new DbContextOptionsBuilder<GarageBalanceDbContext>()
+                .UseSqlite(connection);
+            if (interceptors.Length > 0)
+            {
+                optionsBuilder.AddInterceptors(interceptors);
+            }
+
+            var options = optionsBuilder.Options;
             var context = new GarageBalanceDbContext(options);
             await context.Database.EnsureCreatedAsync();
             return new TestDatabase(connection, context);
@@ -3182,5 +3254,26 @@ public sealed class FinanceServiceTests
     private sealed class FixedTimeProvider(DateTimeOffset utcNow) : TimeProvider
     {
         public override DateTimeOffset GetUtcNow() => utcNow;
+    }
+
+    private sealed class SelectCommandCounter : DbCommandInterceptor
+    {
+        public int Count { get; private set; }
+
+        public void Reset() => Count = 0;
+
+        public override ValueTask<InterceptionResult<DbDataReader>> ReaderExecutingAsync(
+            DbCommand command,
+            CommandEventData eventData,
+            InterceptionResult<DbDataReader> result,
+            CancellationToken cancellationToken = default)
+        {
+            if (command.CommandText.TrimStart().StartsWith("SELECT", StringComparison.OrdinalIgnoreCase))
+            {
+                Count++;
+            }
+
+            return base.ReaderExecutingAsync(command, eventData, result, cancellationToken);
+        }
     }
 }

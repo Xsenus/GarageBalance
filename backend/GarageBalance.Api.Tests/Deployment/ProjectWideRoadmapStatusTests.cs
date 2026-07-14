@@ -839,6 +839,8 @@ public sealed class ProjectWideRoadmapStatusTests
         Assert.Contains("RestoreAccrualAsync_RejectsDuplicateActiveAccrual", financeServiceTestsText, StringComparison.Ordinal);
         Assert.Contains("CreateDebtTransferAsync_CreatesAndAccumulatesSystemAccrualWithAudit", financeServiceTestsText, StringComparison.Ordinal);
         Assert.Contains("GenerateRegularAccrualsAsync_RejectsSecondRunForSameMonth", financeServiceTestsText, StringComparison.Ordinal);
+        Assert.Contains("GenerateRegularAccrualsAsync_UsesConstantSelectCountForManyGaragesAndMeterReadings", financeServiceTestsText, StringComparison.Ordinal);
+        Assert.Contains("2026-07-14-batched-regular-accrual-generation", releaseText, StringComparison.Ordinal);
         Assert.Contains("CreateSupplierAccrualAsync_AllowsReplacementAfterCancel", financeServiceTestsText, StringComparison.Ordinal);
         Assert.Contains("RestoreSupplierAccrualAsync_RejectsDuplicateActiveAccrual", financeServiceTestsText, StringComparison.Ordinal);
 
@@ -1260,8 +1262,8 @@ public sealed class ProjectWideRoadmapStatusTests
         Assert.Contains("\"trash\" => calculationBase == TariffCalculationBases.People", financeServiceText, StringComparison.Ordinal);
         Assert.Contains("\"electricity\" => calculationBase == TariffCalculationBases.MeterElectricity", financeServiceText, StringComparison.Ordinal);
         Assert.Contains("TariffCalculationBases.People => AmountCalculationResult.Success(MoneyMath.RoundMoney(tariff.Rate * garage.PeopleCount))", financeServiceText, StringComparison.Ordinal);
-        Assert.Contains("TariffCalculationBases.MeterWater => await CalculateMeterAmountAsync", financeServiceText, StringComparison.Ordinal);
-        Assert.Contains("TariffCalculationBases.MeterElectricity => await CalculateElectricityMeterAmountAsync", financeServiceText, StringComparison.Ordinal);
+        Assert.Contains("TariffCalculationBases.MeterWater => CalculateMeterAmount", financeServiceText, StringComparison.Ordinal);
+        Assert.Contains("TariffCalculationBases.MeterElectricity => CalculateElectricityMeterAmount", financeServiceText, StringComparison.Ordinal);
         Assert.Contains("HasGapWarning", financeServiceText, StringComparison.Ordinal);
         Assert.Contains("IsChargeServiceDueForMonth", financeServiceText, StringComparison.Ordinal);
         Assert.Contains("periodicity >= 12", financeServiceText, StringComparison.Ordinal);
