@@ -2984,7 +2984,7 @@ describe('App', () => {
 
   it('shows payments prototype and opens payment form modals', async () => {
     const user = userEvent.setup()
-    const garage = createGarage({ id: 'garage-1', number: '1', ownerName: 'Иванов Иван', peopleCount: 3, floorCount: 1, startingBalance: -5300 })
+    const garage = createGarage({ id: 'garage-1', number: '1', ownerName: 'Иванов Иван', peopleCount: 3, floorCount: 1, startingBalance: -5300, balance: 999999, overdueDebt: 999999 })
     const secondGarage = createGarage({ id: 'garage-2', number: '2', ownerName: 'Иванов Петр', peopleCount: 1, floorCount: 2, startingBalance: 0 })
     const incomeType = createAccountingType({ id: 'income-electricity', name: 'Электроэнергия', code: 'electricity' })
     const waterIncomeType = createAccountingType({ id: 'income-water', name: 'Водоснабжение', code: 'water' })
@@ -3389,6 +3389,8 @@ describe('App', () => {
     expect(selectedGarageList.querySelector('.payments-prototype-selected-list')).not.toBeNull()
     expect(within(selectedGarageList).getByLabelText('Параметры гаража 1')).toHaveTextContent('Люди')
     expect(within(selectedGarageList).getByLabelText('Параметры гаража 1')).toHaveTextContent('Баланс')
+    expect(within(selectedGarageList).getByLabelText('Параметры гаража 1')).toHaveTextContent('Баланс999 999.00')
+    expect(within(selectedGarageList).getByLabelText('Параметры гаража 1')).toHaveTextContent('Долг999 999.00')
     expect(within(selectedGarageList).getByLabelText('Параметры гаража 2')).toHaveTextContent('Этажи')
     expect(within(selectedGarageList).getByLabelText('Параметры гаража 2')).toHaveTextContent('Долг')
     expect(within(prototype).getByRole('listbox', { name: 'Найденные гаражи' })).toBeInTheDocument()

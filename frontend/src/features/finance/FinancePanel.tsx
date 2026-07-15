@@ -4397,8 +4397,8 @@ function PaymentsPrototypePanel({
                     <span className="payments-prototype-selected-metrics" aria-label={`Параметры гаража ${garage.number}`}>
                       <span><small>Люди</small><b>{garage.peopleCount}</b></span>
                       <span><small>Этажи</small><b>{garage.floorCount}</b></span>
-                      <span><small>Баланс</small><b>{formatPaymentPrototypeValue(Math.abs(garage.balance))}</b></span>
-                      <span><small>Долг</small><b>{formatPaymentPrototypeValue(garage.overdueDebt)}</b></span>
+                      <span><small>Баланс</small><b>{formatPaymentMoney(Math.abs(garage.balance))}</b></span>
+                      <span><small>Долг</small><b>{formatPaymentMoney(garage.overdueDebt)}</b></span>
                     </span>
                   </button>
                   <button

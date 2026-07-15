@@ -3046,8 +3046,8 @@ h1 {
   grid-template-columns: minmax(0, 1fr) 30px;
   align-items: center;
   width: 100%;
-  max-width: 220px;
-  flex: 0 1 220px;
+  max-width: 320px;
+  flex: 0 1 320px;
   min-height: 78px;
   border: 1px solid #d0d5dd;
   border-radius: 8px;
@@ -3108,6 +3108,7 @@ h1 {
   font-size: 0.72rem;
   font-variant-numeric: tabular-nums;
   text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .payments-prototype-selected-item.is-active .payments-prototype-selected-activate strong {
