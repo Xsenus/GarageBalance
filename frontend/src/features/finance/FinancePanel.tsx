@@ -3097,7 +3097,7 @@ function PaymentsPrototypePanel({
     let cancelled = false
     formStateClient
       .getState<PaymentsPrototypeSavedState>(auth.accessToken, paymentsFormStateScope)
-      .then((state) => {
+      .then(async (state) => {
         if (cancelled) {
           return
         }
@@ -3112,18 +3112,19 @@ function PaymentsPrototypePanel({
             : restoredGarageIds.at(-1) ?? null
           const restoredMonthFrom = state.payload.incomeWorksheetMonthFrom ?? getPreviousMonthInputValue(getCurrentMonthInputValue())
           const restoredMonthTo = state.payload.incomeWorksheetMonthTo ?? getCurrentMonthInputValue()
+          const restoredGarageSearch = state.payload.garageSearch ?? ''
           const isRestoredRealGarage = restoredGarageId !== null && realGarageIds.has(restoredGarageId)
           const restoredRealGarage = isRestoredRealGarage ? garageOptions.find((garage) => garage.id === restoredGarageId) ?? null : null
           setSelectedGarageId(isRestoredRealGarage ? restoredGarageId : null)
           setSelectedGarageIds(restoredGarageIds)
-          setGarageSearch(state.payload.garageSearch ?? '')
           setIncomeWorksheetMonthFrom(restoredMonthFrom)
           setIncomeWorksheetMonthTo(restoredMonthTo)
           setGarageRows([])
           setHistoryRows([])
+          const restoreRequests: Promise<void>[] = []
           if (restoredRealGarage) {
             setGarageWorksheetLoadingId(restoredRealGarage.id)
-            void financeClient
+            restoreRequests.push(financeClient
               .getGarageIncomeWorksheet(auth.accessToken, restoredRealGarage.id, {
                 monthFrom: `${restoredMonthFrom}-01`,
                 monthTo: `${restoredMonthTo}-01`,
@@ -3150,9 +3151,9 @@ function PaymentsPrototypePanel({
                 if (!cancelled) {
                   setGarageWorksheetLoadingId((currentId) => (currentId === restoredRealGarage.id ? null : currentId))
                 }
-              })
+              }))
             setGaragePaymentHistoryLoadingId(restoredRealGarage.id)
-            void financeClient
+            restoreRequests.push(financeClient
               .getOperationsPage(auth.accessToken, {
                 operationKind: 'income',
                 garageId: restoredRealGarage.id,
@@ -3172,7 +3173,12 @@ function PaymentsPrototypePanel({
                 if (!cancelled) {
                   setGaragePaymentHistoryLoadingId((currentId) => (currentId === restoredRealGarage.id ? null : currentId))
                 }
-              })
+              }))
+          }
+
+          await Promise.all(restoreRequests)
+          if (!cancelled) {
+            setGarageSearch(restoredGarageSearch)
           }
         }
       })

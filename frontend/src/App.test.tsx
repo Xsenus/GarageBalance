@@ -3890,6 +3890,87 @@ describe('App', () => {
     expect(within(prototype).getByRole('table', { name: 'История платежей гаража' })).not.toHaveTextContent('Старая история из сохраненного состояния')
   })
 
+  it('finishes restored payment tables loading after delayed backend responses', async () => {
+    const user = userEvent.setup()
+    const garageFromDictionary = createGarage({
+      id: 'garage-1',
+      number: '1',
+      ownerName: 'Иванов Иван',
+      peopleCount: 3,
+      floorCount: 1,
+    })
+    let resolveWorksheet!: (worksheet: GarageIncomeWorksheetDto) => void
+    let resolveHistory!: (page: FinancePagedResult<FinancialOperationDto>) => void
+    const worksheetPromise = new Promise<GarageIncomeWorksheetDto>((resolve) => {
+      resolveWorksheet = resolve
+    })
+    const historyPromise = new Promise<FinancePagedResult<FinancialOperationDto>>((resolve) => {
+      resolveHistory = resolve
+    })
+    vi.mocked(formStatesApi.getState).mockImplementation(async (_accessToken: string, scope: string) => scope === 'payments-prototype'
+      ? {
+          scope,
+          payload: {
+            selectedGarageId: garageFromDictionary.id,
+            garageSearch: 'Гараж 1 - Иванов Иван',
+            incomeWorksheetMonthFrom: '2026-05',
+            incomeWorksheetMonthTo: '2026-06',
+          },
+          updatedAtUtc: '2026-06-30T03:00:00Z',
+          updatedByUserId: 'admin-user',
+        }
+      : null)
+    render(
+      <App
+        authClient={createAuthClient()}
+        dictionaryClient={createDictionaryClient({ getGarages: async () => [garageFromDictionary] })}
+        financeClient={createFinanceClient({
+          getGarageIncomeWorksheet: async () => worksheetPromise,
+          getOperationsPage: async () => historyPromise,
+        })}
+        importClient={createImportClient()}
+        reportClient={createReportClient()}
+        releaseClient={createReleaseClient()}
+        userClient={createUserClient()}
+      />,
+    )
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Платежи')
+
+    const prototype = within(await screen.findByRole('region', { name: 'Платежи' })).getByRole('region', { name: 'Форма платежей' })
+    expect(await within(prototype).findByText('Загружаем историю платежей')).toBeInTheDocument()
+    expect(await within(prototype).findByText('Загружаем начисления и поступления')).toBeInTheDocument()
+
+    await act(async () => {
+      resolveWorksheet(createGarageIncomeWorksheet({
+        garageId: garageFromDictionary.id,
+        garageNumber: garageFromDictionary.number,
+        ownerName: garageFromDictionary.ownerName,
+      }))
+      resolveHistory({
+        items: [createFinancialOperation({
+          garageId: garageFromDictionary.id,
+          garageNumber: garageFromDictionary.number,
+          ownerName: garageFromDictionary.ownerName,
+          incomeTypeName: 'Тестовое поступление',
+        })],
+        totalCount: 1,
+        offset: 0,
+        limit: 100,
+      })
+      await Promise.all([worksheetPromise, historyPromise])
+    })
+
+    expect(await within(prototype).findByText('Электроэнергия')).toBeInTheDocument()
+    expect(await within(prototype).findByText('Тестовое поступление')).toBeInTheDocument()
+    await waitFor(() => {
+      expect(within(prototype).queryByText('Загружаем историю платежей')).not.toBeInTheDocument()
+      expect(within(prototype).queryByText('Загружаем начисления и поступления')).not.toBeInTheDocument()
+    })
+  })
+
   it('does not restore saved payment rows for a garage missing from the dictionary', async () => {
     const user = userEvent.setup()
     vi.mocked(formStatesApi.getState).mockImplementation(async (_accessToken: string, scope: string) => scope === 'payments-prototype'
