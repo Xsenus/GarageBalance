@@ -6189,6 +6189,39 @@ describe('App', () => {
     expect(await screen.findByText('Пользователь восстановлен.')).toHaveAttribute('role', 'status')
   })
 
+  it('reuses loaded roles while searching users and retries a failed role request', async () => {
+    const user = userEvent.setup()
+    const baseUserClient = createUserClient()
+    let roleAttempt = 0
+    const getRoles = vi.fn(async (token: string) => {
+      roleAttempt += 1
+      if (roleAttempt === 1) {
+        throw new Error('Роли временно недоступны.')
+      }
+      return baseUserClient.getRoles(token)
+    })
+    const getUsersPage = vi.fn(baseUserClient.getUsersPage)
+
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient({ getRoles, getUsersPage })} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Пользователи')
+    const usersPanel = await screen.findByRole('region', { name: 'Пользователи' })
+    expect(await within(usersPanel).findByText('Роли временно недоступны.')).toBeInTheDocument()
+
+    const search = within(usersPanel).getByLabelText('Поиск пользователей')
+    await user.type(search, 'admin')
+    await user.click(within(usersPanel).getByRole('button', { name: 'Найти' }))
+    await waitFor(() => expect(getRoles).toHaveBeenCalledTimes(2))
+    await waitFor(() => expect(within(usersPanel).getByRole('button', { name: 'Добавить' })).toBeEnabled())
+
+    await user.clear(search)
+    await user.click(within(usersPanel).getByRole('button', { name: 'Найти' }))
+    await waitFor(() => expect(getUsersPage.mock.calls.length).toBeGreaterThanOrEqual(3))
+    expect(getRoles).toHaveBeenCalledTimes(2)
+  })
+
   it('keeps restricted sections closed after administrator creates an operator', async () => {
     const user = userEvent.setup()
     let operatorSession = false

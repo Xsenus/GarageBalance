@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
 import { RotateCcw, Save, Search, ShieldCheck, Trash2, UserPlus, X } from 'lucide-react'
 import type { AuthResponse } from '../../services/authApi'
@@ -43,6 +43,7 @@ export function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; 
   const [deleteReason, setDeleteReason] = useState('')
   const [deleteReasonError, setDeleteReasonError] = useState<string | null>(null)
   const [form, setForm] = useState<UserFormState>({ email: '', displayName: '', password: '', passwordConfirmation: '', roleCode: 'operator', isActive: true, deactivationReason: '' })
+  const rolesRequestRef = useRef<{ accessToken: string; client: UserManagementClient; promise: Promise<ManagedRoleDto[]> } | null>(null)
   useRestoreFocusOnClose(Boolean(editor))
   const editorCloseRef = useFocusOnOpen<HTMLButtonElement>(Boolean(editor))
   const editorDialogRef = useFocusTrap<HTMLElement>(Boolean(editor) && !saveConfirmation)
@@ -78,17 +79,28 @@ export function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; 
     }, 3200)
   }
 
+  const getRolesOnce = useCallback(() => {
+    const cached = rolesRequestRef.current
+    if (cached?.accessToken === auth.accessToken && cached.client === userClient) {
+      return cached.promise
+    }
+
+    const request = userClient.getRoles(auth.accessToken)
+    rolesRequestRef.current = { accessToken: auth.accessToken, client: userClient, promise: request }
+    void request.catch(() => {
+      if (rolesRequestRef.current?.promise === request) {
+        rolesRequestRef.current = null
+      }
+    })
+    return request
+  }, [auth.accessToken, userClient])
+
   async function refreshUsers() {
     setLoading(true)
     setError(null)
     try {
-      const [loadedRoles, loadedPage] = await Promise.all([
-        userClient.getRoles(auth.accessToken),
-        userClient.getUsersPage(auth.accessToken, appliedSearch, offset, pageSize),
-      ])
-      setRoles(loadedRoles)
+      const loadedPage = await userClient.getUsersPage(auth.accessToken, appliedSearch, offset, pageSize)
       setPage(loadedPage)
-      setForm((value) => ({ ...value, roleCode: loadedRoles.find((role) => role.code === value.roleCode)?.code ?? loadedRoles[0]?.code ?? '' }))
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Не удалось загрузить пользователей.')
     } finally {
@@ -104,7 +116,7 @@ export function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; 
       setError(null)
       try {
         const [loadedRoles, loadedPage] = await Promise.all([
-          userClient.getRoles(auth.accessToken),
+          getRolesOnce(),
           userClient.getUsersPage(auth.accessToken, appliedSearch, offset, pageSize),
         ])
         if (!ignore) {
@@ -127,7 +139,7 @@ export function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; 
     return () => {
       ignore = true
     }
-  }, [appliedSearch, auth.accessToken, offset, pageSize, userClient])
+  }, [appliedSearch, auth.accessToken, getRolesOnce, offset, pageSize, userClient])
 
   function openEditor(mode: 'create' | 'edit', user?: ManagedUserDto) {
     setContextMenu(null)
