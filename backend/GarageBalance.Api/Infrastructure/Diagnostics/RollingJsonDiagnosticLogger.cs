@@ -1,5 +1,7 @@
 using System.IO.Compression;
+using System.Security;
 using System.Text;
+using System.Text.Encodings.Web;
 using System.Text.Json;
 using GarageBalance.Api.Application.Diagnostics;
 using Microsoft.Extensions.Options;
@@ -9,6 +11,15 @@ namespace GarageBalance.Api.Infrastructure.Diagnostics;
 public sealed class RollingJsonDiagnosticLoggerProvider : ILoggerProvider, IDiagnosticLogStore
 {
     private const string FilePrefix = "garagebalance-errors-";
+    private static readonly JsonSerializerOptions LogJsonOptions = new()
+    {
+        Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping
+    };
+    private static readonly JsonSerializerOptions ManifestJsonOptions = new()
+    {
+        Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
+        WriteIndented = true
+    };
     private readonly object _gate = new();
     private readonly DiagnosticLoggingOptions _options;
     private readonly TimeProvider _timeProvider;
@@ -30,19 +41,22 @@ public sealed class RollingJsonDiagnosticLoggerProvider : ILoggerProvider, IDiag
     {
         lock (_gate)
         {
-            _writer?.Flush();
-            var files = EnumerateManagedFiles().ToArray();
-            return new DiagnosticLogStatusDto(
-                _options.Enabled,
-                _options.RetentionDays,
-                _options.PackageDays,
-                _options.PackageMaxSizeMb,
-                files.Length,
-                files.Sum(file => file.Length),
-                files.FirstOrDefault()?.LastWriteTimeUtc is { } lastWrite
-                    ? new DateTimeOffset(lastWrite, TimeSpan.Zero)
-                    : null,
-                _lastWriteError);
+            try
+            {
+                _writer?.Flush();
+                var files = EnumerateManagedFiles().ToArray();
+                return CreateStatus(
+                    files.Length,
+                    files.Sum(file => file.Length),
+                    files.FirstOrDefault()?.LastWriteTimeUtc is { } lastWrite
+                        ? new DateTimeOffset(lastWrite, TimeSpan.Zero)
+                        : null);
+            }
+            catch (Exception exception) when (IsStorageException(exception))
+            {
+                SetStorageError("прочитать состояние", exception);
+                return CreateStatus(0, 0, null);
+            }
         }
     }
 
@@ -56,52 +70,61 @@ public sealed class RollingJsonDiagnosticLoggerProvider : ILoggerProvider, IDiag
 
         lock (_gate)
         {
-            _writer?.Flush();
-            var now = _timeProvider.GetUtcNow();
-            var cutoff = now.AddDays(-_options.PackageDays);
-            var maximumBytes = _options.PackageMaxSizeMb * 1024L * 1024L;
-            var selected = new List<FileInfo>();
-            long selectedBytes = 0;
-            foreach (var file in EnumerateManagedFiles().Where(file => file.LastWriteTimeUtc >= cutoff.UtcDateTime))
+            try
             {
-                if (file.Length > maximumBytes || selectedBytes + file.Length > maximumBytes)
+                _writer?.Flush();
+                var now = _timeProvider.GetUtcNow();
+                var cutoff = now.AddDays(-_options.PackageDays);
+                var maximumBytes = _options.PackageMaxSizeMb * 1024L * 1024L;
+                var selected = new List<FileInfo>();
+                long selectedBytes = 0;
+                foreach (var file in EnumerateManagedFiles().Where(file => file.LastWriteTimeUtc >= cutoff.UtcDateTime))
                 {
-                    continue;
-                }
-
-                selected.Add(file);
-                selectedBytes += file.Length;
-            }
-
-            using var output = new MemoryStream();
-            using (var archive = new ZipArchive(output, ZipArchiveMode.Create, leaveOpen: true, Encoding.UTF8))
-            {
-                var manifest = archive.CreateEntry("manifest.json", CompressionLevel.Optimal);
-                using (var manifestStream = manifest.Open())
-                {
-                    JsonSerializer.Serialize(manifestStream, new
+                    if (file.Length > maximumBytes || selectedBytes + file.Length > maximumBytes)
                     {
-                        createdAtUtc = now,
-                        application = "GarageBalance",
-                        formatVersion = 1,
-                        includedDays = _options.PackageDays,
-                        includedFiles = selected.Select(file => new { file.Name, file.Length }).ToArray(),
-                        note = "Пакет содержит только обезличенные журналы ошибок. База данных, .env, backup и пользовательские документы не включены."
-                    });
+                        continue;
+                    }
+
+                    selected.Add(file);
+                    selectedBytes += file.Length;
                 }
 
-                foreach (var file in selected)
+                using var output = new MemoryStream();
+                using (var archive = new ZipArchive(output, ZipArchiveMode.Create, leaveOpen: true, Encoding.UTF8))
                 {
-                    cancellationToken.ThrowIfCancellationRequested();
-                    var entry = archive.CreateEntry($"errors/{file.Name}", CompressionLevel.Optimal);
-                    using var source = file.Open(FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
-                    using var target = entry.Open();
-                    source.CopyTo(target);
-                }
-            }
+                    var manifest = archive.CreateEntry("manifest.json", CompressionLevel.Optimal);
+                    using (var manifestStream = manifest.Open())
+                    {
+                        JsonSerializer.Serialize(manifestStream, new
+                        {
+                            createdAtUtc = now,
+                            application = "GarageBalance",
+                            formatVersion = 1,
+                            encoding = "utf-8",
+                            includedDays = _options.PackageDays,
+                            includedFiles = selected.Select(file => new { file.Name, file.Length }).ToArray(),
+                            note = "Пакет содержит только обезличенные журналы ошибок. База данных, .env, backup и пользовательские документы не включены."
+                        }, ManifestJsonOptions);
+                    }
 
-            var name = $"garagebalance-diagnostics-{now:yyyyMMdd-HHmmss}.zip";
-            return Task.FromResult<DiagnosticPackage?>(new DiagnosticPackage(name, output.ToArray()));
+                    foreach (var file in selected)
+                    {
+                        cancellationToken.ThrowIfCancellationRequested();
+                        var entry = archive.CreateEntry($"errors/{file.Name}", CompressionLevel.Optimal);
+                        using var source = file.Open(FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+                        using var target = entry.Open();
+                        source.CopyTo(target);
+                    }
+                }
+
+                var name = $"garagebalance-diagnostics-{now:yyyyMMdd-HHmmss}.zip";
+                return Task.FromResult<DiagnosticPackage?>(new DiagnosticPackage(name, output.ToArray()));
+            }
+            catch (Exception exception) when (IsStorageException(exception))
+            {
+                SetStorageError("сформировать диагностический пакет", exception);
+                return Task.FromResult<DiagnosticPackage?>(null);
+            }
         }
     }
 
@@ -137,17 +160,35 @@ public sealed class RollingJsonDiagnosticLoggerProvider : ILoggerProvider, IDiag
                     eventId = eventId.Id,
                     message = DiagnosticLogSanitizer.Sanitize(message),
                     exception = exception is null ? null : DiagnosticLogSanitizer.SanitizeException(exception)
-                });
+                }, LogJsonOptions);
                 _writer!.WriteLine(entry);
                 _writer.Flush();
                 _lastWriteError = null;
             }
-            catch (Exception writeException) when (writeException is IOException or UnauthorizedAccessException)
+            catch (Exception writeException) when (IsStorageException(writeException))
             {
-                _lastWriteError = $"Не удалось записать диагностический журнал: {writeException.GetType().Name}.";
+                SetStorageError("записать диагностический журнал", writeException);
             }
         }
     }
+
+    private DiagnosticLogStatusDto CreateStatus(int fileCount, long totalSizeBytes, DateTimeOffset? lastEntryAtUtc) => new(
+        _options.Enabled,
+        _options.RetentionDays,
+        _options.PackageDays,
+        _options.PackageMaxSizeMb,
+        fileCount,
+        totalSizeBytes,
+        lastEntryAtUtc,
+        _lastWriteError);
+
+    private void SetStorageError(string operation, Exception exception)
+    {
+        _lastWriteError = $"Не удалось {operation}: {exception.GetType().Name}.";
+    }
+
+    private static bool IsStorageException(Exception exception) =>
+        exception is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException or SecurityException;
 
     private void EnsureWriter(DateTimeOffset now)
     {

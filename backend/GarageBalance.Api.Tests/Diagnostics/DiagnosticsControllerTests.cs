@@ -76,11 +76,17 @@ public sealed class DiagnosticsControllerTests
         Assert.Equal("application/zip", file.ContentType);
         Assert.Equal("diagnostics.zip", file.FileDownloadName);
 
-        var disabled = new DiagnosticsController(new FakePackageService(status, null), new CaptureLogger<DiagnosticsController>());
-        var unavailable = Assert.IsType<ObjectResult>(await disabled.CreatePackage(CancellationToken.None));
+        var unavailableController = new DiagnosticsController(new FakePackageService(status, null), new CaptureLogger<DiagnosticsController>());
+        var unavailable = Assert.IsType<ObjectResult>(await unavailableController.CreatePackage(CancellationToken.None));
         Assert.Equal(StatusCodes.Status503ServiceUnavailable, unavailable.StatusCode);
         var problem = Assert.IsType<ProblemDetails>(unavailable.Value);
-        Assert.Equal("diagnostic_logging_disabled", problem.Extensions[ApiProblemDetails.CodeExtensionKey]);
+        Assert.Equal("diagnostic_package_unavailable", problem.Extensions[ApiProblemDetails.CodeExtensionKey]);
+
+        var disabledStatus = status with { Enabled = false };
+        var disabledController = new DiagnosticsController(new FakePackageService(disabledStatus, null), new CaptureLogger<DiagnosticsController>());
+        var disabled = Assert.IsType<ObjectResult>(await disabledController.CreatePackage(CancellationToken.None));
+        var disabledProblem = Assert.IsType<ProblemDetails>(disabled.Value);
+        Assert.Equal("diagnostic_logging_disabled", disabledProblem.Extensions[ApiProblemDetails.CodeExtensionKey]);
     }
 
     private static DiagnosticsController CreateController(ILogger<DiagnosticsController> logger)

@@ -702,7 +702,7 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
       </section>
       ) : null}
       {canManageApplicationSettings && activeSettingsTab === 'diagnostics' ? (
-      <section className="password-panel settings-card" aria-label="Диагностика ошибок приложения">
+      <section className="password-panel settings-card settings-card--diagnostics" aria-label="Диагностика ошибок приложения">
         <div className="settings-card-intro">
           <p className="eyebrow">Диагностика</p>
           <h2>Журнал ошибок</h2>

@@ -42,9 +42,19 @@ public sealed class DiagnosticsController(
     public async Task<IActionResult> CreatePackage(CancellationToken cancellationToken)
     {
         var package = await packageService.CreatePackageAsync(GetActorUserId(), cancellationToken);
-        return package is null
-            ? StatusCode(StatusCodes.Status503ServiceUnavailable, ApiProblemDetails.Create("diagnostic_logging_disabled", "Сбор диагностических журналов отключен на сервере.", StatusCodes.Status503ServiceUnavailable))
-            : File(package.Content, "application/zip", package.FileName);
+        if (package is not null)
+        {
+            return File(package.Content, "application/zip", package.FileName);
+        }
+
+        var status = packageService.GetStatus();
+        var code = status.Enabled ? "diagnostic_package_unavailable" : "diagnostic_logging_disabled";
+        var detail = status.Enabled
+            ? "Не удалось сформировать диагностический пакет. Проверьте состояние папки журналов и повторите попытку."
+            : "Сбор диагностических журналов отключен на сервере.";
+        return StatusCode(
+            StatusCodes.Status503ServiceUnavailable,
+            ApiProblemDetails.Create(code, detail, StatusCodes.Status503ServiceUnavailable));
     }
 
     private Guid? GetActorUserId() =>

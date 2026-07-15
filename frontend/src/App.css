@@ -843,6 +843,22 @@ h1 {
   grid-template-columns: minmax(260px, 0.65fr) minmax(440px, 1fr);
 }
 
+.settings-card--backups,
+.settings-card--diagnostics {
+  grid-template-columns: minmax(280px, 0.65fr) minmax(0, 1fr);
+}
+
+.settings-card--backups .summary-strip,
+.settings-card--diagnostics .summary-strip {
+  grid-template-columns: repeat(2, minmax(140px, 1fr));
+}
+
+.settings-card--backups .summary-strip strong,
+.settings-card--diagnostics .summary-strip strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
 .settings-card-intro {
   align-self: center;
 }
@@ -7131,6 +7147,11 @@ button.operation-row:focus-visible {
 
 @media (max-width: 640px) {
   .audit-detail-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .settings-card--backups .summary-strip,
+  .settings-card--diagnostics .summary-strip {
     grid-template-columns: 1fr;
   }
 

@@ -68,6 +68,13 @@ describe('responsive layout styles', () => {
     expect(normalizedAppCss).toContain('.detail-dialog-actions button {\n    width: 100%;')
   })
 
+  it('keeps backup and diagnostic status cards readable in settings', () => {
+    expect(normalizedAppCss).toContain('.settings-card--backups,\n.settings-card--diagnostics {\n  grid-template-columns: minmax(280px, 0.65fr) minmax(0, 1fr);')
+    expect(normalizedAppCss).toContain('.settings-card--backups .summary-strip,\n.settings-card--diagnostics .summary-strip {\n  grid-template-columns: repeat(2, minmax(140px, 1fr));')
+    expect(normalizedAppCss).toContain('.settings-card--backups .summary-strip strong,\n.settings-card--diagnostics .summary-strip strong {\n  min-width: 0;\n  overflow-wrap: anywhere;')
+    expect(normalizedAppCss).toContain('.settings-card--backups .summary-strip,\n  .settings-card--diagnostics .summary-strip {\n    grid-template-columns: 1fr;')
+  })
+
   it('keeps garage multi-selection compact and responsive', () => {
     expect(normalizedAppCss).toContain('.payments-prototype-heading {\n  display: grid;\n  grid-template-columns: minmax(320px, 1fr) auto;')
     expect(normalizedAppCss).toContain('.payments-prototype-garage-summary {\n  display: grid;\n  grid-template-columns: repeat(4, minmax(112px, 142px));')
