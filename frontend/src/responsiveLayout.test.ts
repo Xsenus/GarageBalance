@@ -159,8 +159,12 @@ describe('responsive layout styles', () => {
     expect(normalizedAppCss).toContain('.settings-section-nav {\n  position: sticky;\n  top: 18px;\n  display: grid;\n  min-height: 100%;')
     expect(normalizedAppCss).toContain('.settings-card {\n  width: min(980px, 100%);')
     expect(normalizedAppCss).toContain('.settings-card--security {\n  grid-template-columns: minmax(220px, 0.55fr) minmax(440px, 1fr);')
+    expect(normalizedAppCss).toContain('.settings-card--backups,\n.settings-card--diagnostics {\n  width: 100%;')
+    expect(normalizedAppCss).toContain('.settings-card-body {\n  display: grid;\n  min-width: 0;\n  align-content: start;\n  gap: 12px;')
+    expect(normalizedAppCss).toContain('.settings-card-body > .summary-strip {\n  grid-template-columns: repeat(2, minmax(0, 1fr));')
     expect(normalizedAppCss).toContain('.settings-display-switch > span:first-child {\n  display: grid;')
     expect(normalizedAppCss).toContain('.settings-layout {\n    grid-template-columns: 1fr;\n    min-height: 0;')
+    expect(normalizedAppCss).toContain('.settings-card-body > .summary-strip {\n    grid-template-columns: 1fr;')
   })
 
   it('keeps the garage editor wide, compact and responsive', () => {
