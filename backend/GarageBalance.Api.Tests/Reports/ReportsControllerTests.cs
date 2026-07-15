@@ -748,7 +748,9 @@ public sealed class ReportsControllerTests
             0,
             [new MonthlyReportRowDto(month, 1500m, 400m, 2000m, 1100m, 500m, 2, 1, 0)],
             1,
-            [new GarageReportRowDto(Guid.NewGuid(), "12", "Иванов Иван", 1500m, 2000m, 500m, 0)]);
+            [new GarageReportRowDto(Guid.NewGuid(), "12", "Иванов Иван", 1500m, 2000m, 500m, 0)],
+            [new NamedAmountTotalDto(Guid.NewGuid(), "Членский взнос", 1500m)],
+            [new NamedAmountTotalDto(Guid.NewGuid(), "Вода", 400m)]);
     }
 
     private static GarageDetailReportDto CreateGarageReport()

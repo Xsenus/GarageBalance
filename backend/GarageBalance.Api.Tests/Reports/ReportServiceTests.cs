@@ -46,6 +46,57 @@ public sealed class ReportServiceTests
         Assert.Equal(2, result.Value.GarageRows.Count);
         Assert.Contains(result.Value.GarageRows, row => row.GarageNumber == "12" && row.Debt == 500m && row.MeterReadingCount == 1);
         Assert.Contains(result.Value.GarageRows, row => row.GarageNumber == "21" && row.Debt == 1000m);
+        var incomeBreakdown = Assert.Single(result.Value.IncomeBreakdown);
+        Assert.Equal(fixtures.IncomeType.Id, incomeBreakdown.TypeId);
+        Assert.Equal("Членский взнос", incomeBreakdown.Name);
+        Assert.Equal(1500m, incomeBreakdown.Amount);
+        var expenseBreakdown = Assert.Single(result.Value.ExpenseBreakdown);
+        Assert.Equal(fixtures.ExpenseType.Id, expenseBreakdown.TypeId);
+        Assert.Equal("Вода", expenseBreakdown.Name);
+        Assert.Equal(400m, expenseBreakdown.Amount);
+    }
+
+    [Fact]
+    public async Task GetConsolidatedReportAsync_ReturnsCompleteServerBreakdownsBeyondLegacyPageLimit()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        var month = new DateOnly(2026, 6, 1);
+        var operations = Enumerable.Range(0, 600)
+            .SelectMany(index => new[]
+            {
+                new FinancialOperation
+                {
+                    OperationKind = FinancialOperationKinds.Income,
+                    OperationDate = month.AddDays(index % 28),
+                    AccountingMonth = month,
+                    Amount = 10m,
+                    IncomeTypeId = fixtures.IncomeType.Id
+                },
+                new FinancialOperation
+                {
+                    OperationKind = FinancialOperationKinds.Expense,
+                    OperationDate = month.AddDays(index % 28),
+                    AccountingMonth = month,
+                    Amount = 4m,
+                    ExpenseTypeId = fixtures.ExpenseType.Id
+                }
+            })
+            .ToList();
+        database.Context.FinancialOperations.AddRange(operations);
+        await database.Context.SaveChangesAsync();
+        var service = CreateService(database.Context);
+
+        var result = await service.GetConsolidatedReportAsync(
+            new ConsolidatedReportRequest(month, month, null),
+            CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+        Assert.Equal(6000m, result.Value!.IncomeTotal);
+        Assert.Equal(2400m, result.Value.ExpenseTotal);
+        Assert.Equal(1200, result.Value.OperationCount);
+        Assert.Equal(6000m, Assert.Single(result.Value.IncomeBreakdown).Amount);
+        Assert.Equal(2400m, Assert.Single(result.Value.ExpenseBreakdown).Amount);
     }
 
     [Fact]

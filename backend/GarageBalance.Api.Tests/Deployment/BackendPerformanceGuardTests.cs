@@ -390,6 +390,9 @@ public sealed class BackendPerformanceGuardTests
 
         Assert.Contains("incomeReportQuery.GetRowsAsync", source, StringComparison.Ordinal);
         Assert.Contains("expenseReportQuery.GetRowsAsync", source, StringComparison.Ordinal);
+        Assert.Contains("monthlyData.IncomeByMonth.ToDictionary", source, StringComparison.Ordinal);
+        Assert.Contains("monthlyData.ExpenseByMonth.ToDictionary", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("monthlyData.IncomeByMonth.SingleOrDefault", source, StringComparison.Ordinal);
         Assert.Contains("GetRowsWithoutSearchAsync", garageSource, StringComparison.Ordinal);
         Assert.True(
             CountOccurrences(incomeSource, "ApplyLimit(") >= 3 &&
@@ -425,6 +428,13 @@ public sealed class BackendPerformanceGuardTests
         Assert.True(
             CountOccurrences(garageSource, ".GroupBy(") >= 3,
             "Search-compatible consolidated garage fallback must aggregate income, accrual and readings by garage.");
+        Assert.Matches(
+            BoundedQueryRegex(@"if \(IsNpgsql\(\)\)[\s\S]*?garageQuery[\s\S]*?\.Where\(garage =>[\s\S]*?\.ToListAsync\(cancellationToken\)"),
+            garageSource);
+        Assert.Contains("garage.Owner.LastName.ToLower().Contains(normalizedServerSearch)", garageSource, StringComparison.Ordinal);
+        Assert.Contains("incomeByGarage.ToDictionary", garageSource, StringComparison.Ordinal);
+        Assert.Contains("accrualByGarage.ToDictionary", garageSource, StringComparison.Ordinal);
+        Assert.Contains("readingsByGarage.ToDictionary", garageSource, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -489,14 +499,17 @@ public sealed class BackendPerformanceGuardTests
         var source = ReadApiSource("Infrastructure/Data/EfConsolidatedMonthlyReportQuery.cs");
 
         Assert.True(
-            CountOccurrences(source, ".GroupBy(") >= 4,
-            "Consolidated monthly query must group income, expense, accrual and meter rows in the database.");
+            CountOccurrences(source, ".GroupBy(") >= 5,
+            "Consolidated query must group monthly totals and complete income/expense breakdowns in the database.");
         Assert.True(
-            CountOccurrences(source, "group.Sum(") >= 3,
+            CountOccurrences(source, "group.Sum(") >= 4,
             "Consolidated monetary totals must be aggregated before materialization.");
         Assert.True(
-            CountOccurrences(source, "group.Count()") >= 4,
+            CountOccurrences(source, "group.Count()") >= 3,
             "Consolidated monthly row counts must be aggregated before materialization.");
+        Assert.Contains("new { operation.AccountingMonth, operation.OperationKind }", source, StringComparison.Ordinal);
+        Assert.Contains("operation.OperationKind == FinancialOperationKinds.Income", source, StringComparison.Ordinal);
+        Assert.Contains("operation.OperationKind == FinancialOperationKinds.Expense", source, StringComparison.Ordinal);
         Assert.Contains("SumAsync(garage => garage.StartingBalance, cancellationToken)", source, StringComparison.Ordinal);
     }
 

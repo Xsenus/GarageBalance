@@ -81,7 +81,14 @@ public sealed record ConsolidatedReportDto(
     int MeterReadingCount,
     IReadOnlyList<MonthlyReportRowDto> MonthlyRows,
     int GarageRowCount,
-    IReadOnlyList<GarageReportRowDto> GarageRows);
+    IReadOnlyList<GarageReportRowDto> GarageRows,
+    IReadOnlyList<NamedAmountTotalDto> IncomeBreakdown,
+    IReadOnlyList<NamedAmountTotalDto> ExpenseBreakdown);
+
+public sealed record NamedAmountTotalDto(
+    Guid? TypeId,
+    string Name,
+    decimal Amount);
 
 public sealed record MonthlyReportRowDto(
     DateOnly AccountingMonth,

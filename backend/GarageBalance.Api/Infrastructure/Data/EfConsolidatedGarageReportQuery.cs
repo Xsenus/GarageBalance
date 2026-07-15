@@ -81,16 +81,34 @@ public sealed class EfConsolidatedGarageReportQuery(GarageBalanceDbContext dbCon
         int? limit,
         CancellationToken cancellationToken)
     {
-        var garages = await dbContext.Garages.AsNoTracking()
-            .Include(garage => garage.Owner)
-            .Where(garage => !garage.IsArchived)
-            .OrderBy(garage => garage.Number)
-            .ToListAsync(cancellationToken);
         var normalized = search.Trim();
-        garages = garages.Where(garage =>
-                garage.Number.Contains(normalized, StringComparison.OrdinalIgnoreCase) ||
-                (garage.Owner?.FullName.Contains(normalized, StringComparison.OrdinalIgnoreCase) ?? false))
-            .ToList();
+        var garageQuery = dbContext.Garages.AsNoTracking()
+            .Include(garage => garage.Owner)
+            .Where(garage => !garage.IsArchived);
+        List<Domain.Dictionaries.Garage> garages;
+        if (IsNpgsql())
+        {
+            var normalizedServerSearch = normalized.ToLowerInvariant();
+            garages = await garageQuery
+                .Where(garage =>
+                    garage.Number.ToLower().Contains(normalizedServerSearch) ||
+                    (garage.Owner != null && (
+                        garage.Owner.LastName.ToLower().Contains(normalizedServerSearch) ||
+                        garage.Owner.FirstName.ToLower().Contains(normalizedServerSearch) ||
+                        (garage.Owner.MiddleName != null && garage.Owner.MiddleName.ToLower().Contains(normalizedServerSearch)) ||
+                        (garage.Owner.LastName + " " + garage.Owner.FirstName).ToLower().Contains(normalizedServerSearch) ||
+                        (garage.Owner.LastName + " " + garage.Owner.FirstName + " " + (garage.Owner.MiddleName ?? string.Empty)).ToLower().Contains(normalizedServerSearch))))
+                .OrderBy(garage => garage.Number)
+                .ToListAsync(cancellationToken);
+        }
+        else
+        {
+            garages = (await garageQuery.OrderBy(garage => garage.Number).ToListAsync(cancellationToken))
+                .Where(garage =>
+                    garage.Number.Contains(normalized, StringComparison.OrdinalIgnoreCase) ||
+                    (garage.Owner?.FullName.Contains(normalized, StringComparison.OrdinalIgnoreCase) ?? false))
+                .ToList();
+        }
         var garageIds = garages.Select(garage => garage.Id).ToList();
 
         var incomeByGarage = await dbContext.FinancialOperations.AsNoTracking()
@@ -122,12 +140,15 @@ public sealed class EfConsolidatedGarageReportQuery(GarageBalanceDbContext dbCon
             .GroupBy(reading => reading.GarageId)
             .Select(group => new CountByGarage(group.Key, group.Count()))
             .ToListAsync(cancellationToken);
+        var incomeLookup = incomeByGarage.ToDictionary(row => row.GarageId, row => row.Amount);
+        var accrualLookup = accrualByGarage.ToDictionary(row => row.GarageId, row => row.Amount);
+        var readingsLookup = readingsByGarage.ToDictionary(row => row.GarageId, row => row.Count);
 
         var rows = garages.Select(garage =>
             {
-                var income = incomeByGarage.SingleOrDefault(row => row.GarageId == garage.Id).Amount;
-                var accrual = accrualByGarage.SingleOrDefault(row => row.GarageId == garage.Id).Amount;
-                var readings = readingsByGarage.SingleOrDefault(row => row.GarageId == garage.Id).Count;
+                incomeLookup.TryGetValue(garage.Id, out var income);
+                accrualLookup.TryGetValue(garage.Id, out var accrual);
+                readingsLookup.TryGetValue(garage.Id, out var readings);
                 return new ConsolidatedGarageRowData(
                     garage.Id,
                     garage.Number,
@@ -148,4 +169,7 @@ public sealed class EfConsolidatedGarageReportQuery(GarageBalanceDbContext dbCon
 
     private static IEnumerable<T> ApplyLimit<T>(IEnumerable<T> rows, int? limit) =>
         limit is > 0 ? rows.Take(limit.Value) : rows;
+
+    private bool IsNpgsql() =>
+        dbContext.Database.ProviderName?.Contains("Npgsql", StringComparison.OrdinalIgnoreCase) ?? false;
 }

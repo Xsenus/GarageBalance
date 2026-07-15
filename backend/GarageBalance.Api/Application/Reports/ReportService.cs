@@ -35,15 +35,19 @@ public sealed class ReportService(
         }
 
         var monthlyData = await consolidatedMonthlyReportQuery.GetMonthlyDataAsync(periodFrom, periodTo, cancellationToken);
+        var incomeByMonth = monthlyData.IncomeByMonth.ToDictionary(row => row.Month);
+        var expenseByMonth = monthlyData.ExpenseByMonth.ToDictionary(row => row.Month);
+        var accrualByMonth = monthlyData.AccrualByMonth.ToDictionary(row => row.Month);
+        var readingsByMonth = monthlyData.MeterReadingsByMonth.ToDictionary(row => row.Month);
 
         var months = MonthPeriod.Enumerate(periodFrom, periodTo).ToList();
         var monthlyRows = months
             .Select(month =>
             {
-                var income = monthlyData.IncomeByMonth.SingleOrDefault(row => row.Month == month);
-                var expense = monthlyData.ExpenseByMonth.SingleOrDefault(row => row.Month == month);
-                var accrual = monthlyData.AccrualByMonth.SingleOrDefault(row => row.Month == month);
-                var readings = monthlyData.MeterReadingsByMonth.SingleOrDefault(row => row.Month == month);
+                incomeByMonth.TryGetValue(month, out var income);
+                expenseByMonth.TryGetValue(month, out var expense);
+                accrualByMonth.TryGetValue(month, out var accrual);
+                readingsByMonth.TryGetValue(month, out var readings);
                 var startingBalance = month == periodFrom ? monthlyData.GarageStartingBalanceTotal : 0m;
                 return new MonthlyReportRowDto(
                     month,
@@ -87,7 +91,13 @@ public sealed class ReportService(
             monthlyRows.Sum(row => row.MeterReadingCount),
             monthlyRows,
             garageData.RowCount,
-            garageRows);
+            garageRows,
+            monthlyData.IncomeBreakdown
+                .Select(row => new NamedAmountTotalDto(row.TypeId, row.Name, row.Amount))
+                .ToList(),
+            monthlyData.ExpenseBreakdown
+                .Select(row => new NamedAmountTotalDto(row.TypeId, row.Name, row.Amount))
+                .ToList());
 
         await AddReportAuditAsync(
             request.ActorUserId,
