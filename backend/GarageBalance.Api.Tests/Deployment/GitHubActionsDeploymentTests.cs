@@ -45,6 +45,9 @@ public sealed class GitHubActionsDeploymentTests
         Assert.Contains("curl -fsSk -H \"Host: ${PUBLIC_HOST}\" \"https://127.0.0.1/health\"", script, StringComparison.Ordinal);
         Assert.Contains("deployStatus=ok", script, StringComparison.Ordinal);
         Assert.Contains("garagebalance_${TIMESTAMP}_${release_id}.pgdump", script, StringComparison.Ordinal);
+        Assert.Contains("FRONTEND_ASSET_RETENTION_DAYS=30", script, StringComparison.Ordinal);
+        Assert.Contains("cp -a -n \"${APP_ROOT}/frontend/assets/.\" \"${NEXT_FRONTEND}/assets/\"", script, StringComparison.Ordinal);
+        Assert.Contains("-mtime \"+${FRONTEND_ASSET_RETENTION_DAYS}\" -delete", script, StringComparison.Ordinal);
     }
 
     private static string FindRepositoryRoot()

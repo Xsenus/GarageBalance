@@ -19,7 +19,7 @@ import { FormField } from '../../shared/FormField'
 import { formatAccrualSource, formatDateOnly, formatDebtAmount, formatDebtLabel, formatMissingMeterReadings, formatMoney, formatMonth, formatOperationTime, formatPaymentAllocations, getDebtClassName, getCurrentMonthInputValue, getLocalDateInputValue, getPreviousMonthInputValue } from '../../shared/formatters'
 import { useEscapeKey, useFocusOnOpen, useFocusTrap, useRestoreFocusOnClose } from '../../shared/focusHooks'
 import { LocalizedDatePicker } from '../../shared/LocalizedDatePicker'
-import { MoneyInput } from '../../shared/MoneyInput'
+import { MoneyInput, MoneyTextInput } from '../../shared/MoneyInput'
 import { SelectControl } from '../../shared/SelectControl'
 import { TablePagination } from '../../shared/TablePagination'
 import { chooseRegularTariffId, getAccrualValidationErrors, getCompatibleRegularTariffs, getExpenseValidationErrors, getIncomeValidationErrors, getMeterReadingValidationErrors, getRegularAccrualValidationErrorsForCatalog, getSupplierAccrualValidationErrors, getSupplierGroupSalaryValidationErrors } from '../../shared/validation'
@@ -1887,7 +1887,7 @@ export function FinancePanel({
             {financeField('incomeMonth', <input aria-label="Месяц поступления" type="month" value={incomeForm.accountingMonth.slice(0, 7)} onChange={(event) => setIncomeForm({ ...incomeForm, accountingMonth: `${event.target.value}-01` })} required />)}
           </div>
           <div className="inline-fields">
-            {financeField('incomeAmount', <input aria-label="Сумма поступления" type="number" min="0.01" step="0.01" value={incomeForm.amount} onChange={(event) => setIncomeForm({ ...incomeForm, amount: Number(event.target.value) })} required />)}
+            {financeField('incomeAmount', <MoneyInput aria-label="Сумма поступления" min="0.01" value={incomeForm.amount} onValueChange={(amount) => setIncomeForm({ ...incomeForm, amount })} required />)}
             {financeField('incomeDocument', <input aria-label="Документ поступления" placeholder="Номер документа" value={incomeForm.documentNumber} onChange={(event) => setIncomeForm({ ...incomeForm, documentNumber: event.target.value })} />)}
           </div>
           {financeField('incomeComment', <input aria-label="Комментарий поступления" placeholder="Комментарий платежа" value={incomeForm.comment} onChange={(event) => setIncomeForm({ ...incomeForm, comment: event.target.value })} />)}
@@ -1928,7 +1928,7 @@ export function FinancePanel({
             {financeField('expenseMonth', <input aria-label="Месяц выплаты" type="month" value={expenseForm.accountingMonth.slice(0, 7)} onChange={(event) => setExpenseForm({ ...expenseForm, accountingMonth: `${event.target.value}-01` })} required />)}
           </div>
           <div className="inline-fields">
-            {financeField('expenseAmount', <input aria-label="Сумма выплаты" type="number" min="0.01" step="0.01" value={expenseForm.amount} onChange={(event) => setExpenseForm({ ...expenseForm, amount: Number(event.target.value) })} required />)}
+            {financeField('expenseAmount', <MoneyInput aria-label="Сумма выплаты" min="0.01" value={expenseForm.amount} onValueChange={(amount) => setExpenseForm({ ...expenseForm, amount })} required />)}
             {financeField('expenseDocument', <input aria-label="Документ выплаты" placeholder="Номер документа" value={expenseForm.documentNumber} onChange={(event) => setExpenseForm({ ...expenseForm, documentNumber: event.target.value })} />)}
           </div>
           {financeField('expenseComment', <input aria-label="Комментарий выплаты" placeholder="Комментарий платежа" value={expenseForm.comment} onChange={(event) => setExpenseForm({ ...expenseForm, comment: event.target.value })} />)}
@@ -1966,7 +1966,7 @@ export function FinancePanel({
           ))}
           <div className="inline-fields">
             {financeField('accrualMonth', <input aria-label="Месяц начисления" type="month" value={accrualForm.accountingMonth.slice(0, 7)} onChange={(event) => setAccrualForm({ ...accrualForm, accountingMonth: `${event.target.value}-01` })} required />)}
-            {financeField('accrualAmount', <input aria-label="Сумма начисления" type="number" min="0.01" step="0.01" value={accrualForm.amount} onChange={(event) => setAccrualForm({ ...accrualForm, amount: Number(event.target.value) })} required />)}
+            {financeField('accrualAmount', <MoneyInput aria-label="Сумма начисления" min="0.01" value={accrualForm.amount} onValueChange={(amount) => setAccrualForm({ ...accrualForm, amount })} required />)}
           </div>
           {financeField('accrualSource', <input aria-label="Источник начисления" value={formatAccrualSource(accrualForm.source)} readOnly />)}
           {financeField('accrualComment', <input aria-label="Комментарий к начислению" placeholder="Комментарий" value={accrualForm.comment} onChange={(event) => setAccrualForm({ ...accrualForm, comment: event.target.value })} />)}
@@ -2047,7 +2047,7 @@ export function FinancePanel({
           ))}
           <div className="inline-fields">
             {financeField('supplierAccrualMonth', <input aria-label="Месяц начисления поставщику" type="month" value={supplierAccrualForm.accountingMonth.slice(0, 7)} onChange={(event) => setSupplierAccrualForm({ ...supplierAccrualForm, accountingMonth: `${event.target.value}-01` })} required />)}
-            {financeField('supplierAccrualAmount', <input aria-label="Сумма начисления поставщику" type="number" min="0.01" step="0.01" value={supplierAccrualForm.amount} onChange={(event) => setSupplierAccrualForm({ ...supplierAccrualForm, amount: Number(event.target.value) })} required />)}
+            {financeField('supplierAccrualAmount', <MoneyInput aria-label="Сумма начисления поставщику" min="0.01" value={supplierAccrualForm.amount} onValueChange={(amount) => setSupplierAccrualForm({ ...supplierAccrualForm, amount })} required />)}
           </div>
           {financeField('supplierAccrualSource', <input aria-label="Источник начисления поставщику" value={formatAccrualSource(supplierAccrualForm.source)} readOnly />)}
           <div className="inline-fields">
@@ -2076,7 +2076,7 @@ export function FinancePanel({
           ))}
           <div className="inline-fields">
             {financeField('salaryMonth', <input aria-label="Месяц зарплаты" type="month" value={salaryForm.accountingMonth.slice(0, 7)} onChange={(event) => setSalaryForm({ ...salaryForm, accountingMonth: `${event.target.value}-01` })} required />)}
-            {financeField('salaryAmount', <input aria-label="Сумма зарплаты" type="number" min="0.01" step="0.01" value={salaryForm.amount} onChange={(event) => setSalaryForm({ ...salaryForm, amount: Number(event.target.value) })} required />)}
+            {financeField('salaryAmount', <MoneyInput aria-label="Сумма зарплаты" min="0.01" value={salaryForm.amount} onValueChange={(amount) => setSalaryForm({ ...salaryForm, amount })} required />)}
           </div>
           <div className="inline-fields">
             {financeField('salaryDocument', <input aria-label="Документ зарплаты" placeholder="Номер документа" value={salaryForm.documentNumber} onChange={(event) => setSalaryForm({ ...salaryForm, documentNumber: event.target.value })} />)}
@@ -2287,7 +2287,7 @@ export function FinancePanel({
             <input aria-label="Месяц поступления" type="month" value={incomeForm.accountingMonth.slice(0, 7)} onChange={(event) => setIncomeForm({ ...incomeForm, accountingMonth: `${event.target.value}-01` })} required />
           </div>
           <div className="inline-fields">
-            <input aria-label="Сумма поступления" type="number" min="0.01" step="0.01" value={incomeForm.amount} onChange={(event) => setIncomeForm({ ...incomeForm, amount: Number(event.target.value) })} required />
+            <MoneyInput aria-label="Сумма поступления" min="0.01" value={incomeForm.amount} onValueChange={(amount) => setIncomeForm({ ...incomeForm, amount })} required />
             <input aria-label="Документ поступления" placeholder="Документ" value={incomeForm.documentNumber} onChange={(event) => setIncomeForm({ ...incomeForm, documentNumber: event.target.value })} />
           </div>
           <input aria-label="Комментарий поступления" placeholder="Комментарий платежа" value={incomeForm.comment} onChange={(event) => setIncomeForm({ ...incomeForm, comment: event.target.value })} />
@@ -2324,7 +2324,7 @@ export function FinancePanel({
             <input aria-label="Месяц выплаты" type="month" value={expenseForm.accountingMonth.slice(0, 7)} onChange={(event) => setExpenseForm({ ...expenseForm, accountingMonth: `${event.target.value}-01` })} required />
           </div>
           <div className="inline-fields">
-            <input aria-label="Сумма выплаты" type="number" min="0.01" step="0.01" value={expenseForm.amount} onChange={(event) => setExpenseForm({ ...expenseForm, amount: Number(event.target.value) })} required />
+            <MoneyInput aria-label="Сумма выплаты" min="0.01" value={expenseForm.amount} onValueChange={(amount) => setExpenseForm({ ...expenseForm, amount })} required />
             <input aria-label="Документ выплаты" placeholder="Документ" value={expenseForm.documentNumber} onChange={(event) => setExpenseForm({ ...expenseForm, documentNumber: event.target.value })} />
           </div>
           <input aria-label="Комментарий выплаты" placeholder="Комментарий платежа" value={expenseForm.comment} onChange={(event) => setExpenseForm({ ...expenseForm, comment: event.target.value })} />
@@ -2358,7 +2358,7 @@ export function FinancePanel({
           </select>
           <div className="inline-fields">
             <input aria-label="Месяц начисления" type="month" value={accrualForm.accountingMonth.slice(0, 7)} onChange={(event) => setAccrualForm({ ...accrualForm, accountingMonth: `${event.target.value}-01` })} required />
-            <input aria-label="Сумма начисления" type="number" min="0.01" step="0.01" value={accrualForm.amount} onChange={(event) => setAccrualForm({ ...accrualForm, amount: Number(event.target.value) })} required />
+            <MoneyInput aria-label="Сумма начисления" min="0.01" value={accrualForm.amount} onValueChange={(amount) => setAccrualForm({ ...accrualForm, amount })} required />
           </div>
           <input aria-label="Комментарий начисления" placeholder="Комментарий" value={accrualForm.comment} onChange={(event) => setAccrualForm({ ...accrualForm, comment: event.target.value })} required />
           <FormValidationSummary title={getFinanceEditorValidationTitle('accruals')} items={accrualValidationErrors} />
@@ -2391,7 +2391,7 @@ export function FinancePanel({
           </select>
           <div className="inline-fields">
             <input aria-label="Месяц начисления поставщику" type="month" value={supplierAccrualForm.accountingMonth.slice(0, 7)} onChange={(event) => setSupplierAccrualForm({ ...supplierAccrualForm, accountingMonth: `${event.target.value}-01` })} required />
-            <input aria-label="Сумма начисления поставщику" type="number" min="0.01" step="0.01" value={supplierAccrualForm.amount} onChange={(event) => setSupplierAccrualForm({ ...supplierAccrualForm, amount: Number(event.target.value) })} required />
+            <MoneyInput aria-label="Сумма начисления поставщику" min="0.01" value={supplierAccrualForm.amount} onValueChange={(amount) => setSupplierAccrualForm({ ...supplierAccrualForm, amount })} required />
           </div>
           <div className="inline-fields">
             <input aria-label="Документ начисления поставщику" placeholder="Документ" value={supplierAccrualForm.documentNumber} onChange={(event) => setSupplierAccrualForm({ ...supplierAccrualForm, documentNumber: event.target.value })} />
@@ -2859,7 +2859,7 @@ export function FinancePanel({
 }
 
 function formatPaymentPrototypeValue(value: number | string) {
-  return typeof value === 'number' ? value.toLocaleString('ru-RU') : value
+  return formatPaymentMoney(value)
 }
 
 function createGaragePaymentHistoryRowsFromOperations(operations: FinancialOperationDto[]): GaragePaymentHistoryPrototypeRow[] {
@@ -3086,8 +3086,8 @@ function PaymentsPrototypePanel({
       }
     }
 
-    document.addEventListener('pointerdown', closeGarageSearchOnOutsidePointer)
-    return () => document.removeEventListener('pointerdown', closeGarageSearchOnOutsidePointer)
+    document.addEventListener('pointerdown', closeGarageSearchOnOutsidePointer, true)
+    return () => document.removeEventListener('pointerdown', closeGarageSearchOnOutsidePointer, true)
   }, [garageSearchOpen])
 
   useEffect(() => {
@@ -3526,7 +3526,7 @@ function PaymentsPrototypePanel({
     }
 
     const operation = historyEdit.row.operation
-    const amount = Number(historyEdit.amount.trim().replace(',', '.'))
+    const amount = parsePaymentMoney(historyEdit.amount)
     if (!operation.garageId || !operation.incomeTypeId) {
       setHistoryEdit((state) => state ? { ...state, error: 'Платеж нельзя изменить: в операции не хватает гаража или вида поступления.' } : state)
       return
@@ -4451,19 +4451,19 @@ function PaymentsPrototypePanel({
             <div><span>Владелец</span><strong>{selectedGarage.ownerName}</strong></div>
             <div><span>Телефон</span><strong>{selectedGarage.phone}</strong></div>
             <div className="payments-prototype-actions">
-              <button className="secondary-button create-action-button" type="button" aria-label="Добавить начисление гаражу" onClick={openGarageAccrualDialog}>
+              <button className="secondary-button create-action-button payments-prototype-action-button" type="button" aria-label="Добавить начисление гаражу" onClick={openGarageAccrualDialog}>
                 <FileText size={16} aria-hidden="true" />
                 <span>Добавить начисление</span>
               </button>
-              <button className="secondary-button create-action-button" type="button" onClick={openRegularAccrualDialog}>
+              <button className="secondary-button create-action-button payments-prototype-action-button" type="button" onClick={openRegularAccrualDialog}>
                 <CalendarDays size={16} aria-hidden="true" />
                 <span>Сформировать начисления</span>
               </button>
-              <button className="secondary-button" type="button" onClick={openDebtTransferDialog} disabled={garageWorksheetLoadingId === selectedGarage.id}>
+              <button className="secondary-button payments-prototype-action-button" type="button" onClick={openDebtTransferDialog} disabled={garageWorksheetLoadingId === selectedGarage.id}>
                 <RotateCcw size={16} aria-hidden="true" />
                 <span>Перенести задолженность</span>
               </button>
-              <button className="secondary-button" type="button" onClick={openFullPaymentDialog} disabled={garageWorksheetLoadingId === selectedGarage.id}>
+              <button className="secondary-button payments-prototype-action-button" type="button" onClick={openFullPaymentDialog} disabled={garageWorksheetLoadingId === selectedGarage.id}>
                 <WalletCards size={16} aria-hidden="true" />
                 <span>Полная оплата</span>
               </button>
@@ -4596,17 +4596,16 @@ function PaymentsPrototypePanel({
                           <tr key={row.id}>
                             <td />
                             <td>{row.service}</td>
-                            <td className={row.meterRequired && row.meter === null ? 'payments-prototype-required-cell' : undefined}>{formatPaymentPrototypeValue(row.meter ?? '')}</td>
+                            <td className={row.meterRequired && row.meter === null ? 'payments-prototype-required-cell' : undefined}>{row.meter === null ? '' : row.meter.toLocaleString('ru-RU', { maximumFractionDigits: 3 })}</td>
                             <td>{formatPaymentMoney(row.difference ?? '')}</td>
                             <td>{formatPaymentMoney(row.payable)}</td>
                             <td>
-                              <input
+                              <MoneyTextInput
                                 className="payments-prototype-payment-input"
                                 aria-label={`Платеж ${row.service} ${row.monthLabel}`}
-                                inputMode="decimal"
                                 disabled={savingPaymentRowId === row.id}
                                 value={row.paymentDraft}
-                                onChange={(event) => handlePaymentDraftChange(row.id, event.target.value)}
+                                onValueChange={(paymentDraft) => handlePaymentDraftChange(row.id, paymentDraft)}
                                 onBlur={() => formatPaymentDraft(row.id)}
                                 onKeyDown={(event) => {
                                   if (event.key === 'Enter') {
@@ -4882,7 +4881,7 @@ function GaragePaymentHistoryEditDialog({
       return
     }
 
-    const amount = Number(state.amount.trim().replace(',', '.'))
+    const amount = parsePaymentMoney(state.amount)
     if (!Number.isFinite(amount) || amount <= 0) {
       onChange({ error: 'Укажите сумму платежа больше нуля.' })
       return
@@ -4927,7 +4926,7 @@ function GaragePaymentHistoryEditDialog({
         </div>
         <form className="dictionary-modal-form payments-prototype-modal-form" onSubmit={handleSubmit}>
           <FormField label="Сумма">
-            <input aria-label="Сумма изменяемого платежа" inputMode="decimal" value={state.amount} onChange={(event) => onChange({ amount: event.target.value })} disabled={saving} />
+            <MoneyTextInput aria-label="Сумма изменяемого платежа" value={state.amount} onValueChange={(amount) => onChange({ amount })} disabled={saving} />
           </FormField>
           <FormField label="Дата">
             <LocalizedDatePicker ariaLabel="Дата изменяемого платежа" mode="date" value={state.operationDate} onChange={(operationDate) => onChange({ operationDate })} disabled={saving} />
@@ -5157,7 +5156,7 @@ function BankDepositPrototypeDialog({
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    const parsedAmount = Number(amount.trim().replace(/\s/g, '').replace(',', '.'))
+    const parsedAmount = parsePaymentMoney(amount)
     if (!fundId) {
       setError('Выберите фонд для сдачи кассы в банк.')
       return
@@ -5226,10 +5225,10 @@ function BankDepositPrototypeDialog({
             label="Сумма"
             hint={availableToDistribute !== null ? `Доступно к распределению: ${formatPaymentMoney(availableToDistribute)} руб.` : undefined}
           >
-            <input aria-label="Сумма в банке" inputMode="decimal" value={amount} onChange={(event) => {
-              setAmount(event.target.value)
+            <MoneyTextInput aria-label="Сумма в банке" value={amount} onValueChange={(nextAmount) => {
+              setAmount(nextAmount)
               setError(null)
-            }} onBlur={() => setAmount(formatPaymentMoney(amount))} disabled={saving} />
+            }} disabled={saving} />
           </FormField>
           <FormField className="bank-deposit-form__date" label="Дата">
             <LocalizedDatePicker ariaLabel="Дата учета суммы в банке" mode="date" value={operationDate} disabled={saving} onChange={(nextOperationDate) => {
@@ -5283,7 +5282,7 @@ function NewExpensePrototypeDialog({
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    const parsedAmount = Number(amount.trim().replace(/\s/g, '').replace(',', '.'))
+    const parsedAmount = parsePaymentMoney(amount)
     if (!supplierId) {
       setError('Выберите поставщика из справочника.')
       return
@@ -5381,8 +5380,8 @@ function NewExpensePrototypeDialog({
             }} />
           </FormField>
           <FormField label="Сумма">
-            <input aria-label="Сумма выплаты" inputMode="decimal" value={amount} onChange={(event) => {
-              setAmount(event.target.value)
+            <MoneyTextInput aria-label="Сумма выплаты" value={amount} onValueChange={(nextAmount) => {
+              setAmount(nextAmount)
               setError(null)
             }} />
           </FormField>
@@ -5432,7 +5431,7 @@ function StaffPaymentPrototypeDialog({
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    const parsedAmount = Number(amount.trim().replace(/\s/g, '').replace(',', '.'))
+    const parsedAmount = parsePaymentMoney(amount)
     if (!staffMemberId) {
       setError('Выберите сотрудника из справочника персонала.')
       return
@@ -5512,8 +5511,8 @@ function StaffPaymentPrototypeDialog({
             }} />
           </FormField>
           <FormField label="Сумма">
-            <input aria-label="Сумма выплаты сотруднику" inputMode="decimal" value={amount} onChange={(event) => {
-              setAmount(event.target.value)
+            <MoneyTextInput aria-label="Сумма выплаты сотруднику" value={amount} onValueChange={(nextAmount) => {
+              setAmount(nextAmount)
               setError(null)
             }} />
           </FormField>
@@ -5559,7 +5558,7 @@ function NewAccrualPrototypeDialog({
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    const parsedAmount = Number(amount.trim().replace(/\s/g, '').replace(',', '.'))
+    const parsedAmount = parsePaymentMoney(amount)
     if (!supplierId) {
       setError('Выберите поставщика из справочника.')
       return
@@ -5645,8 +5644,8 @@ function NewAccrualPrototypeDialog({
             }} />
           </FormField>
           <FormField label="Сумма">
-            <input aria-label="Сумма начисления поставщику" inputMode="decimal" value={amount} onChange={(event) => {
-              setAmount(event.target.value)
+            <MoneyTextInput aria-label="Сумма начисления поставщику" value={amount} onValueChange={(nextAmount) => {
+              setAmount(nextAmount)
               setError(null)
             }} />
           </FormField>
@@ -5689,7 +5688,7 @@ function SalaryAccrualPrototypeDialog({
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    const parsedAmount = Number(amount.trim().replace(/\s/g, '').replace(',', '.'))
+    const parsedAmount = parsePaymentMoney(amount)
     if (!supplierGroupId) {
       setError('Выберите группу сотрудников или поставщиков.')
       return
@@ -5757,8 +5756,8 @@ function SalaryAccrualPrototypeDialog({
             }} />
           </FormField>
           <FormField label="Сумма">
-            <input aria-label="Сумма начисления зарплаты" inputMode="decimal" value={amount} onChange={(event) => {
-              setAmount(event.target.value)
+            <MoneyTextInput aria-label="Сумма начисления зарплаты" value={amount} onValueChange={(nextAmount) => {
+              setAmount(nextAmount)
               setError(null)
             }} />
           </FormField>
@@ -5887,7 +5886,7 @@ function GarageAccrualPrototypeDialog({
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    const parsedAmount = Number(amount.trim().replace(/\s/g, '').replace(',', '.'))
+    const parsedAmount = parsePaymentMoney(amount)
     if (!incomeTypeId) {
       setError('Выберите вид начисления из справочника поступлений.')
       return
@@ -5948,8 +5947,8 @@ function GarageAccrualPrototypeDialog({
             />
           </FormField>
           <FormField label="Сумма">
-            <input aria-label="Сумма начисления гаража" inputMode="decimal" value={amount} onChange={(event) => {
-              setAmount(event.target.value)
+            <MoneyTextInput aria-label="Сумма начисления гаража" value={amount} onValueChange={(nextAmount) => {
+              setAmount(nextAmount)
               setError(null)
             }} />
           </FormField>

@@ -69,7 +69,7 @@ describe('responsive layout styles', () => {
   })
 
   it('keeps backup and diagnostic status cards readable in settings', () => {
-    expect(normalizedAppCss).toContain('.settings-card--backups,\n.settings-card--diagnostics {\n  grid-template-columns: minmax(280px, 0.65fr) minmax(0, 1fr);')
+    expect(normalizedAppCss).toContain('.settings-card--backups,\n.settings-card--diagnostics {\n  width: 100%;\n  grid-template-columns: minmax(280px, 0.65fr) minmax(0, 1fr);')
     expect(normalizedAppCss).toContain('.settings-card--backups .summary-strip,\n.settings-card--diagnostics .summary-strip {\n  grid-template-columns: repeat(2, minmax(140px, 1fr));')
     expect(normalizedAppCss).toContain('.settings-card--backups .summary-strip strong,\n.settings-card--diagnostics .summary-strip strong {\n  min-width: 0;\n  overflow-wrap: anywhere;')
     expect(normalizedAppCss).toContain('.settings-card--backups .summary-strip,\n  .settings-card--diagnostics .summary-strip {\n    grid-template-columns: 1fr;')
@@ -87,7 +87,17 @@ describe('responsive layout styles', () => {
     expect(normalizedAppCss).toContain('.payments-prototype-selected-metrics b {\n  overflow: hidden;')
     expect(normalizedAppCss).toContain('font-variant-numeric: tabular-nums;\n  text-overflow: ellipsis;\n  white-space: nowrap;')
     expect(normalizedAppCss).toContain('.payments-prototype-garage-summary-value {\n  justify-self: end;\n  text-align: right;')
-    expect(normalizedAppCss).toContain('.payments-prototype-owner-row .payments-prototype-actions {\n  display: grid;\n  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));')
+    expect(normalizedAppCss).toContain('.payments-prototype-owner-row .payments-prototype-actions {\n  display: grid;\n  grid-template-columns: repeat(4, minmax(0, 1fr));\n  gap: 8px;')
+    expect(normalizedAppCss).toContain('.payments-prototype-owner-row .payments-prototype-action-button {\n  display: inline-flex;\n  align-items: center;\n  justify-content: center;\n  gap: 8px;\n  min-width: 0;\n  min-height: 58px;')
+    expect(normalizedAppCss).toContain('line-height: 1.2;\n  text-align: center;\n  white-space: normal;')
+    expect(normalizedAppCss).toContain('.payments-prototype-owner-row .payments-prototype-action-button span {\n  min-width: 0;\n  text-wrap: balance;')
+    expect(normalizedAppCss).toContain('.payments-prototype-owner-row .payments-prototype-action-button svg {\n  flex: 0 0 auto;')
+    expect(normalizedAppCss).toContain('@media (max-width: 1400px) {\n  .payments-prototype-owner-row {\n    grid-template-columns: minmax(90px, 0.35fr) minmax(220px, 0.8fr) minmax(180px, 0.7fr);')
+    expect(normalizedAppCss).toContain('.payments-prototype-owner-row .payments-prototype-actions {\n    grid-column: 1 / -1;')
+    expect(normalizedAppCss).toContain('@media (max-width: 980px) {')
+    expect(normalizedAppCss).toContain('.payments-prototype-owner-row .payments-prototype-actions {\n    grid-template-columns: repeat(2, minmax(0, 1fr));')
+    expect(normalizedAppCss).toContain('@media (max-width: 640px) {')
+    expect(normalizedAppCss).toContain('.payments-prototype-owner-row .payments-prototype-actions {\n    grid-template-columns: minmax(0, 1fr);')
     expect(normalizedAppCss).toContain('.payments-prototype-garage-summary {\n    grid-template-columns: repeat(2, minmax(0, 1fr));')
     expect(normalizedAppCss).toContain('@media (max-width: 1180px) {\n  .payments-prototype-heading {\n    grid-template-columns: minmax(0, 1fr);')
     expect(normalizedAppCss).toContain('.payments-prototype-search-results {\n    grid-template-columns: repeat(2, minmax(190px, 1fr));')
@@ -128,7 +138,8 @@ describe('responsive layout styles', () => {
   })
 
   it('widens the owner editor and keeps its identity fields responsive', () => {
-    expect(normalizedAppCss).toContain('.dictionary-editor-dialog--owners {\n  width: min(860px, 100%);\n  max-width: 860px;')
+    expect(normalizedAppCss).toContain('.dictionary-editor-dialog {\n  box-sizing: border-box;\n  max-width: min(620px, calc(100vw - 32px));\n  overflow-x: hidden;')
+    expect(normalizedAppCss).toContain('.dictionary-editor-dialog--owners {\n  width: min(860px, calc(100vw - 32px));\n  max-width: 860px;')
     expect(normalizedAppCss).toContain('.owner-name-grid,\n.owner-contact-grid {\n  display: grid;\n  grid-template-columns: repeat(2, minmax(0, 1fr));')
     expect(normalizedAppCss).toContain('.owner-name-grid__middle-name {\n  grid-column: 1 / -1;')
     expect(normalizedAppCss).toContain('.field-help:hover .field-help__tooltip,\n.field-help:focus .field-help__tooltip,\n.field-help:focus-within .field-help__tooltip {')
@@ -174,8 +185,12 @@ describe('responsive layout styles', () => {
     expect(normalizedAppCss).toContain('.settings-section-nav {\n  position: sticky;\n  top: 18px;\n  display: grid;\n  min-height: 100%;')
     expect(normalizedAppCss).toContain('.settings-card {\n  width: min(980px, 100%);')
     expect(normalizedAppCss).toContain('.settings-card--security {\n  grid-template-columns: minmax(220px, 0.55fr) minmax(440px, 1fr);')
+    expect(normalizedAppCss).toContain('.settings-card--backups,\n.settings-card--diagnostics {\n  width: 100%;')
+    expect(normalizedAppCss).toContain('.settings-card-body {\n  display: grid;\n  min-width: 0;\n  align-content: start;\n  gap: 12px;')
+    expect(normalizedAppCss).toContain('.settings-card-body > .summary-strip {\n  grid-template-columns: repeat(2, minmax(0, 1fr));')
     expect(normalizedAppCss).toContain('.settings-display-switch > span:first-child {\n  display: grid;')
     expect(normalizedAppCss).toContain('.settings-layout {\n    grid-template-columns: 1fr;\n    min-height: 0;')
+    expect(normalizedAppCss).toContain('.settings-card-body > .summary-strip {\n    grid-template-columns: 1fr;')
   })
 
   it('keeps the garage editor wide, compact and responsive', () => {

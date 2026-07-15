@@ -1,9 +1,10 @@
 import type { TariffDto } from '../services/dictionariesApi'
 import type { MissingMeterReadingDto, PaymentAllocationDto } from '../services/financeApi'
 import type { AccessImportCheckDto, AccessImportCreatedRecordDto, AccessImportReaderStatusDto, AccessImportRunDto, AccessImportRunLogEntryDto } from '../services/importApi'
+import { formatMoneyInput } from './moneyInputFormatting'
 
 export function formatMoney(value: number): string {
-  return new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 2, minimumFractionDigits: 2 }).format(value)
+  return formatMoneyInput(value)
 }
 
 export function formatTariffRateSummary(tariff: TariffDto): string {
@@ -17,7 +18,7 @@ export function formatTariffRateSummary(tariff: TariffDto): string {
     return formatMoney(tariff.rate)
   }
 
-  return `до ${formatMoney(tariff.electricityFirstThreshold!)} кВт: ${formatMoney(tariff.electricityFirstRate!)}, до ${formatMoney(tariff.electricitySecondThreshold!)} кВт: ${formatMoney(tariff.electricitySecondRate!)}, выше: ${formatMoney(tariff.electricityThirdRate!)}`
+  return `до ${formatNullableNumber(tariff.electricityFirstThreshold!)} кВт: ${formatMoney(tariff.electricityFirstRate!)}, до ${formatNullableNumber(tariff.electricitySecondThreshold!)} кВт: ${formatMoney(tariff.electricitySecondRate!)}, выше: ${formatMoney(tariff.electricityThirdRate!)}`
 }
 
 export function formatDebtLabel(value: number): string {

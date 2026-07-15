@@ -624,6 +624,7 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
           <h2>Защита данных PostgreSQL</h2>
           <p>Резервные копии работают как при обычном запуске, так и в Docker. Файлы сохраняются в постоянной папке компьютера и не зависят от обновления приложения.</p>
         </div>
+        <div className="settings-card-body">
         {backupLoading ? <LoadingSkeleton className="loading-skeleton--compact" label="Загружаем состояние резервного копирования" rows={3} columns={4} /> : null}
         {backupError ? (
           <div className="settings-backup-error">
@@ -699,6 +700,7 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
             </div>
           </>
         ) : null}
+        </div>
       </section>
       ) : null}
       {canManageApplicationSettings && activeSettingsTab === 'diagnostics' ? (
@@ -708,6 +710,7 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
           <h2>Журнал ошибок</h2>
           <p>Система сохраняет технические ошибки сервера и браузера с кодом для поиска. Пароли, токены, телефоны и адреса электронной почты маскируются; база данных и резервные копии в пакет не входят.</p>
         </div>
+        <div className="settings-card-body">
         {diagnosticLoading ? <LoadingSkeleton className="loading-skeleton--compact" label="Загружаем состояние журнала ошибок" rows={3} columns={4} /> : null}
         {diagnosticError ? (
           <div className="settings-backup-error">
@@ -747,6 +750,7 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
             </button>
           </>
         ) : null}
+        </div>
       </section>
       ) : null}
       {integrationTabVisible && activeSettingsTab === 'integrations' ? (

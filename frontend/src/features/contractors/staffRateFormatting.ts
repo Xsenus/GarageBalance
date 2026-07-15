@@ -1,9 +1,7 @@
-export function parseStaffRate(value: string) {
-  const normalized = value.replace(/\s/g, '').replace(',', '.')
-  const numericPart = normalized.match(/-?\d+(?:\.\d+)?/)?.[0]
-  const parsed = Number(numericPart)
+import { formatMoneyTextInput, parseMoneyInput } from '../../shared/moneyInputFormatting'
 
-  return Number.isFinite(parsed) ? parsed : Number.NaN
+export function parseStaffRate(value: string) {
+  return parseMoneyInput(value)
 }
 
 export function formatStaffRate(value: string | number | null | undefined) {
@@ -11,13 +9,5 @@ export function formatStaffRate(value: string | number | null | undefined) {
     return ''
   }
 
-  const numericValue = typeof value === 'number' ? value : parseStaffRate(value)
-  if (!Number.isFinite(numericValue)) {
-    return ''
-  }
-
-  return new Intl.NumberFormat('en-US', {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(numericValue).replace(/,/g, ' ')
+  return formatMoneyTextInput(value)
 }

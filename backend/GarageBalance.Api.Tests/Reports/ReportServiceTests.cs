@@ -814,7 +814,7 @@ public sealed class ReportServiceTests
         Assert.Equal("application/pdf", result.Value.ContentType);
         AssertPdfContains(result.Value.Content, "GarageBalance fund changes report");
         AssertPdfContains(result.Value.Content, "2026-06-10");
-        AssertPdfContains(result.Value.Content, "1500.00");
+        AssertPdfContains(result.Value.Content, "1 500.00");
         Assert.Contains(database.Context.AuditEvents, auditEvent =>
             auditEvent.Action == "reports.fund_changes_exported" &&
             auditEvent.ActorUserId == actorUserId &&

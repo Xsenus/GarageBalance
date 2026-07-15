@@ -10,6 +10,7 @@ import { hasPermission, permissions } from '../../shared/accessControl'
 import { TableLoadingState } from '../../shared/AsyncState'
 import { FormError } from '../../shared/formFeedback'
 import { FormField } from '../../shared/FormField'
+import { MoneyTextInput } from '../../shared/MoneyInput'
 import { formatDateOnly, formatDebtAmount, formatDebtLabel, formatMoney, formatMonth, getDebtClassName } from '../../shared/formatters'
 import { useEscapeKey, useFocusOnOpen, useFocusTrap, useRestoreFocusOnClose } from '../../shared/focusHooks'
 import { createClientPage, createFallbackPage } from '../../shared/pagination'
@@ -18,8 +19,8 @@ import { createDefaultGarageBalanceHistoryFilters } from '../../shared/reportFil
 import { SelectControl } from '../../shared/SelectControl'
 import { formatPrototypeChangeValue } from '../../shared/prototypeEditing'
 import type { AuditPanelPreset, ContractorOpenTarget } from '../../shared/workspaceNavigation'
-import { formatStaffRate } from './staffRateFormatting'
 import { AddServicePrototypeDialog } from '../tariffs/TariffsAndFeesPanel'
+import { formatStaffRate, parseStaffRate } from './staffRateFormatting'
 
 const contractorsFormStateScope = 'contractors-prototype'
 
@@ -255,17 +256,11 @@ function isBackendDictionaryId(id: string) {
 }
 
 function formatPrototypeMoney(value: number | null | undefined) {
-  if (!value) {
-    return ''
-  }
-
-  return new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 2 }).format(value)
+  return formatStaffRate(value)
 }
 
 function parsePrototypeMoney(value: string) {
-  const normalized = value.replace(/\s/g, '').replace(',', '.')
-  const numericPart = normalized.match(/-?\d+(?:\.\d+)?/)?.[0]
-  const parsed = Number(numericPart)
+  const parsed = parseStaffRate(value.replace(/\s*руб\.?$/i, ''))
   return Number.isFinite(parsed) ? parsed : 0
 }
 
@@ -2982,7 +2977,7 @@ function GaragePrototypeDialog({ accessToken, integrationClient, item, onClose, 
                 <FormField label="Этажи"><input aria-label="Этажи гаража" value={form.floorCount} onChange={(event) => setForm({ ...form, floorCount: event.target.value })} /></FormField>
               </div>
               <div className="contractors-garage-form-column contractors-garage-form-column--financial" role="group" aria-label="Финансовые показатели гаража">
-                <FormField label="Баланс"><input aria-label="Баланс гаража" value={form.balance || '0'} readOnly /></FormField>
+                <FormField label="Баланс"><input aria-label="Баланс гаража" value={form.balance ? formatStaffRate(form.balance) : '0.00'} readOnly /></FormField>
                 <FormField label="Просроченная задолженность"><input aria-label="Просроченная задолженность гаража" value={form.overdueDebt || 'Нет'} readOnly /></FormField>
                 <FormField label="Старт. зн. сч. за воду"><input aria-label="Стартовое значение счетчика воды" value={form.initialWater} onChange={(event) => setForm({ ...form, initialWater: event.target.value })} /></FormField>
                 <FormField label="Старт. зн. сч. за эл-во"><input aria-label="Стартовое значение счетчика электричества" value={form.initialElectricity} onChange={(event) => setForm({ ...form, initialElectricity: event.target.value })} /></FormField>
@@ -3231,7 +3226,7 @@ function SupplierPrototypeDialog({ accessToken, integrationClient, item, service
                 </div>
                 <SuggestionStatus id="supplier-party-suggestions-status" message={partySuggestionStatus} />
               </FormField>
-              <FormField label="Задолженность"><input aria-label="Задолженность поставщика" value={form.debt || 'Нет'} readOnly /></FormField>
+              <FormField label="Задолженность"><input aria-label="Задолженность поставщика" value={form.debt && form.debt !== 'Нет' ? formatStaffRate(form.debt) : 'Нет'} readOnly /></FormField>
               <DadataAddressField accessToken={accessToken} inputLabel="Юридический адрес поставщика" integrationClient={integrationClient} label="Юр. адрес" listboxLabel="Адреса DaData" suggestionsId="supplier-address-suggestions" value={form.legalAddress} onChange={(legalAddress) => setForm((currentForm) => ({ ...currentForm, legalAddress }))} />
             </div>
             <div className="contractors-contacts-toolbar">
@@ -3409,12 +3404,10 @@ function EmployeePrototypeDialog({ departments, item, onClose, onOpenFinancialRe
               </FormField>
               <FormField label="Ставка">
                 <div className="contractors-inline-field">
-                  <input
+                  <MoneyTextInput
                     aria-label="Ставка сотрудника"
-                    inputMode="decimal"
                     value={form.rate}
-                    onChange={(event) => setForm({ ...form, rate: event.target.value })}
-                    onBlur={() => setForm((current) => ({ ...current, rate: formatStaffRate(current.rate) }))}
+                    onValueChange={(rate) => setForm({ ...form, rate })}
                   />
                   <span>руб.</span>
                 </div>

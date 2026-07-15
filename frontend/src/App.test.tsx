@@ -288,9 +288,9 @@ describe('App', () => {
     await openSection(user, 'Платежи')
 
     const financePanel = await screen.findByRole('region', { name: 'Платежи' })
-    expect((await within(financePanel).findAllByText('1 500,00')).length).toBeGreaterThan(0)
-    expect(within(financePanel).getAllByText('2 000,00').length).toBeGreaterThan(0)
-    expect(within(financePanel).getByText('500,00')).toBeInTheDocument()
+    expect((await within(financePanel).findAllByText('1 500.00')).length).toBeGreaterThan(0)
+    expect(within(financePanel).getAllByText('2 000.00').length).toBeGreaterThan(0)
+    expect(within(financePanel).getByText('500.00')).toBeInTheDocument()
     expect(within(financePanel).getAllByText('1').length).toBeGreaterThan(0)
     expect(within(financePanel).getAllByText('19.06.2026').length).toBeGreaterThan(0)
     expect(within(financePanel).getAllByText('06.2026').length).toBeGreaterThan(0)
@@ -1328,16 +1328,16 @@ describe('App', () => {
     expect(within(contractorsPanel).getByRole('table', { name: 'Гаражи' })).toBeInTheDocument()
     expect(within(contractorsPanel).getByRole('columnheader', { name: 'Просроченная задолженность' })).toBeInTheDocument()
     expect(await within(contractorsPanel).findByText('Иванов Иван')).toBeInTheDocument()
-    const overdueDebtCell = within(contractorsPanel).getByText('1 300,00 руб.').closest('[role="cell"]')
+    const overdueDebtCell = within(contractorsPanel).getByText('1 300.00 руб.').closest('[role="cell"]')
     expect(overdueDebtCell).toHaveClass('contractors-directory-cell--right')
     expect(within(contractorsPanel).getByRole('button', { name: 'Показать должников' })).toBeInTheDocument()
 
     await user.click(within(contractorsPanel).getByRole('button', { name: 'Изменить гараж 1' }))
     const garageDialog = await screen.findByRole('dialog', { name: 'Гараж 1' })
     expect(within(garageDialog).getByLabelText('Баланс гаража')).toHaveAttribute('readonly')
-    expect(within(garageDialog).getByLabelText('Баланс гаража')).toHaveValue('5\u00A0300')
+    expect(within(garageDialog).getByLabelText('Баланс гаража')).toHaveValue('5 300.00')
     expect(within(garageDialog).getByLabelText('Просроченная задолженность гаража')).toHaveAttribute('readonly')
-    expect(within(garageDialog).getByLabelText('Просроченная задолженность гаража')).toHaveValue('1\u00A0300,00 руб.')
+    expect(within(garageDialog).getByLabelText('Просроченная задолженность гаража')).toHaveValue('1 300.00 руб.')
     const garageFinancialFields = within(garageDialog).getByRole('group', { name: 'Финансовые показатели гаража' })
     expect(within(garageFinancialFields).getByLabelText('Баланс гаража')).toBeInTheDocument()
     expect(within(garageFinancialFields).getByLabelText('Просроченная задолженность гаража')).toBeInTheDocument()
@@ -1422,7 +1422,7 @@ describe('App', () => {
     expect(within(garageFinancialReportDialog).getByText('Новый владелец')).toBeInTheDocument()
     expect(within(garageFinancialReportDialog).getByRole('table', { name: 'Финансовый отчет гаража' })).toBeInTheDocument()
     expect(within(garageFinancialReportDialog).getByText('07.2026')).toBeInTheDocument()
-    expect(within(garageFinancialReportDialog).getAllByText('500,00').length).toBeGreaterThan(0)
+    expect(within(garageFinancialReportDialog).getAllByText('500.00').length).toBeGreaterThan(0)
     expect(requestedGarageFinancialReportId).toBe(contractorGarage.id)
     expect(requestedGarageFinancialReportPeriod?.monthFrom).toMatch(/^\d{4}-\d{2}$/)
     expect(requestedGarageFinancialReportPeriod?.monthTo).toMatch(/^\d{4}-\d{2}$/)
@@ -3394,7 +3394,11 @@ describe('App', () => {
     expect(within(selectedGarageList).getByLabelText('Параметры гаража 2')).toHaveTextContent('Этажи')
     expect(within(selectedGarageList).getByLabelText('Параметры гаража 2')).toHaveTextContent('Долг')
     expect(within(prototype).getByRole('listbox', { name: 'Найденные гаражи' })).toBeInTheDocument()
-    await user.click(within(prototype).getByRole('region', { name: 'Параметры выбранного гаража' }))
+    const outsideSearchTarget = within(prototype).getByRole('region', { name: 'Параметры выбранного гаража' })
+    const stopOutsidePointer = (event: PointerEvent) => event.stopPropagation()
+    outsideSearchTarget.addEventListener('pointerdown', stopOutsidePointer)
+    await user.click(outsideSearchTarget)
+    outsideSearchTarget.removeEventListener('pointerdown', stopOutsidePointer)
     expect(within(prototype).queryByRole('listbox', { name: 'Найденные гаражи' })).not.toBeInTheDocument()
     await user.click(garageSearchInput)
     expect(within(prototype).getByRole('listbox', { name: 'Найденные гаражи' })).toBeInTheDocument()
@@ -3439,12 +3443,18 @@ describe('App', () => {
     expect(garageActions).toHaveClass('payments-prototype-actions')
     expect(garageActions).not.toHaveClass('payments-prototype-actions--stacked')
     expect(addGarageAccrualButton).toHaveClass('create-action-button')
+    expect(addGarageAccrualButton).toHaveClass('payments-prototype-action-button')
     expect(addGarageAccrualButton.querySelector('.lucide-file-text')).not.toBeNull()
     const regularAccrualAction = within(garageActions as HTMLElement).getByRole('button', { name: 'Сформировать начисления' })
     expect(regularAccrualAction).toHaveClass('create-action-button')
+    expect(regularAccrualAction).toHaveClass('payments-prototype-action-button')
     expect(regularAccrualAction.querySelector('.lucide-calendar-days')).not.toBeNull()
-    expect(within(garageActions as HTMLElement).getByRole('button', { name: 'Перенести задолженность' }).querySelector('.lucide-rotate-ccw')).not.toBeNull()
-    expect(within(garageActions as HTMLElement).getByRole('button', { name: 'Полная оплата' }).querySelector('.lucide-wallet-cards')).not.toBeNull()
+    const debtTransferAction = within(garageActions as HTMLElement).getByRole('button', { name: 'Перенести задолженность' })
+    const fullPaymentAction = within(garageActions as HTMLElement).getByRole('button', { name: 'Полная оплата' })
+    expect(debtTransferAction).toHaveClass('payments-prototype-action-button')
+    expect(debtTransferAction.querySelector('.lucide-rotate-ccw')).not.toBeNull()
+    expect(fullPaymentAction).toHaveClass('payments-prototype-action-button')
+    expect(fullPaymentAction.querySelector('.lucide-wallet-cards')).not.toBeNull()
     await user.click(addGarageAccrualButton)
     const garageAccrualDialog = await screen.findByRole('dialog', { name: 'Новое начисление' })
     const garageIncomeTypeCombobox = within(garageAccrualDialog).getByRole('combobox', { name: 'Вид начисления гаража' })
@@ -3512,7 +3522,7 @@ describe('App', () => {
     })
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Сформировать начисления' })).not.toBeInTheDocument())
     await waitFor(() => expect(regularAccrualButton).toHaveFocus())
-    expect(within(prototype).getByText('Начисления сформированы: создано 1, пропущено 0, сумма 1 250.')).toHaveAttribute('role', 'status')
+    expect(within(prototype).getByText('Начисления сформированы: создано 1, пропущено 0, сумма 1 250.00.')).toHaveAttribute('role', 'status')
 
     const fullPaymentButton = within(prototype).getByRole('button', { name: 'Полная оплата' })
     await user.click(fullPaymentButton)
@@ -3621,7 +3631,7 @@ describe('App', () => {
     const staffPaymentMonth = within(staffPaymentDialog).getByLabelText('Месяц выплаты сотруднику')
     expect(staffPaymentMonth).toHaveValue('06.2026')
     expect(staffPaymentMonth.closest('.localized-date-picker')).not.toBeNull()
-    expect(within(staffPaymentDialog).getByLabelText('Сумма выплаты сотруднику')).toHaveValue('40000')
+    expect(within(staffPaymentDialog).getByLabelText('Сумма выплаты сотруднику')).toHaveValue('40 000.00')
     await user.type(within(staffPaymentDialog).getByLabelText('Документ выплаты сотруднику'), 'STAFF-PAY-prototype')
     await user.type(within(staffPaymentDialog).getByLabelText('Комментарий к выплате сотруднику'), 'Выплата сотруднику из формы')
     await user.click(within(staffPaymentDialog).getByRole('button', { name: 'Провести' }))
@@ -4272,7 +4282,7 @@ describe('App', () => {
     expect(await within(historyTable).findByText('Серверная оплата')).toBeInTheDocument()
     expect(within(historyTable).getByText('10:24')).toBeInTheDocument()
     expect(within(historyTable).getByText('1 234.00')).toBeInTheDocument()
-    expect(within(historyTable).getByText('3 200')).toBeInTheDocument()
+    expect(within(historyTable).getByText('3 200.00')).toBeInTheDocument()
     const historyActions = within(historyTable).getByText('Серверная оплата').closest('tr')?.querySelector('.payments-prototype-history-actions')
     expect(historyActions).not.toBeNull()
     expect(within(historyActions as HTMLElement).getAllByRole('button')).toHaveLength(5)
@@ -4313,7 +4323,7 @@ describe('App', () => {
     const editPaymentButton = within(historyTable).getByRole('button', { name: 'Изменить платеж Серверная оплата' })
     await user.click(editPaymentButton)
     let editDialog = await screen.findByRole('dialog', { name: 'Изменить платеж' })
-    expect(within(editDialog).getByLabelText('Сумма изменяемого платежа')).toHaveValue('1234')
+    expect(within(editDialog).getByLabelText('Сумма изменяемого платежа')).toHaveValue('1 234.00')
     await user.keyboard('{Escape}')
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Изменить платеж' })).not.toBeInTheDocument())
     await waitFor(() => expect(editPaymentButton).toHaveFocus())
@@ -4334,8 +4344,8 @@ describe('App', () => {
     expect(updateIncome).not.toHaveBeenCalled()
     const paymentChangeList = within(paymentChangeDialog).getByRole('list', { name: 'Изменяемые поля платежа' })
     expect(within(paymentChangeList).getByText('Сумма')).toBeInTheDocument()
-    expect(within(paymentChangeList).getByText('1 234,00')).toBeInTheDocument()
-    expect(within(paymentChangeList).getByText('1 500,00')).toBeInTheDocument()
+    expect(within(paymentChangeList).getByText('1 234.00')).toBeInTheDocument()
+    expect(within(paymentChangeList).getByText('1 500.00')).toBeInTheDocument()
     expect(within(paymentChangeList).getByText('Комментарий')).toBeInTheDocument()
     expect(within(paymentChangeList).getByText('Исправление суммы')).toBeInTheDocument()
     await user.keyboard('{Escape}')
@@ -4423,8 +4433,8 @@ describe('App', () => {
     expect(within(expenseTable).getByText('Петрова Ольга')).toBeInTheDocument()
     expect(within(expenseTable).getAllByText('32 000.00').length).toBeGreaterThan(0)
     expect(within(expenseTable).getAllByText('47 000.00').length).toBeGreaterThan(0)
-    expect(within(prototype).getByText('12 000')).toBeInTheDocument()
-    expect(within(prototype).getByText('4 000')).toBeInTheDocument()
+    expect(within(prototype).getByText('12 000.00')).toBeInTheDocument()
+    expect(within(prototype).getByText('4 000.00')).toBeInTheDocument()
   })
 
   it('does not show prototype expense rows when expense worksheet is unavailable', async () => {
@@ -4673,24 +4683,24 @@ describe('App', () => {
 
     await user.click(depositTargetButton)
     const reopenedDepositDialog = await screen.findByRole('dialog', { name: 'Пополнить фонд' })
-    expect(within(reopenedDepositDialog).getByText(/Доступно к пополнению:\s*100[\s\u00A0]000,00 руб\./)).toBeInTheDocument()
+    expect(within(reopenedDepositDialog).getByText(/Доступно к пополнению:\s*100 000\.00 руб\./)).toBeInTheDocument()
     await user.click(within(reopenedDepositDialog).getByRole('button', { name: 'Подтвердить операцию' }))
     expect(within(reopenedDepositDialog).getByRole('alert')).toHaveTextContent('Укажите сумму больше нуля.')
     const reopenedAmountInput = within(reopenedDepositDialog).getByLabelText('Сумма операции фонда')
     await user.type(reopenedAmountInput, '100000,01')
     await user.type(within(reopenedDepositDialog).getByLabelText('Причина операции фонда'), 'Сверх лимита')
     await user.click(within(reopenedDepositDialog).getByRole('button', { name: 'Подтвердить операцию' }))
-    expect(within(reopenedDepositDialog).getByRole('alert')).toHaveTextContent('Сумма пополнения не может превышать доступную к распределению сумму 100 000,00 руб.')
+    expect(within(reopenedDepositDialog).getByRole('alert')).toHaveTextContent('Сумма пополнения не может превышать доступную к распределению сумму 100 000.00 руб.')
     await user.clear(reopenedAmountInput)
     await user.type(reopenedAmountInput, '1500')
     await user.clear(within(reopenedDepositDialog).getByLabelText('Причина операции фонда'))
     await user.type(within(reopenedDepositDialog).getByLabelText('Причина операции фонда'), 'Распределение средств')
-    expect(within(reopenedDepositDialog).getByText(/1[\s\u00A0]500,00 руб\./)).toBeInTheDocument()
+    expect(within(reopenedDepositDialog).getByText(/1 500\.00 руб\./)).toBeInTheDocument()
     await user.click(within(reopenedDepositDialog).getByRole('button', { name: 'Подтвердить операцию' }))
 
     expect(await within(fundsPanel).findByText(/Пополнение по фонду "Целевые взносы" сохранено и записано в историю изменений\./)).toHaveAttribute('role', 'status')
-    expect(within(fundsPanel).getAllByText(/1[\s\u00A0]500,00 руб\./).length).toBeGreaterThanOrEqual(1)
-    expect(within(fundsPanel).getByLabelText('Сумма к распределению')).toHaveTextContent('98 500,00 руб.')
+    expect(within(fundsPanel).getAllByText(/1 500\.00 руб\./).length).toBeGreaterThanOrEqual(1)
+    expect(within(fundsPanel).getByLabelText('Сумма к распределению')).toHaveTextContent('98 500.00 руб.')
 
     const fundOperationsTable = within(fundsPanel).getByRole('table', { name: 'Операции фондов' })
     const fundOperationsPagination = within(fundsPanel).getByRole('navigation', { name: 'Пагинация операций фондов' })
@@ -4723,13 +4733,13 @@ describe('App', () => {
     await user.type(editAmountInput, '1750')
     await user.clear(within(editFundOperationDialog).getByLabelText('Новое основание операции фонда'))
     await user.type(within(editFundOperationDialog).getByLabelText('Новое основание операции фонда'), 'Уточненное распределение')
-    expect(within(editFundOperationDialog).getByText(/1[\s\u00A0]750,00 руб\./)).toBeInTheDocument()
+    expect(within(editFundOperationDialog).getByText(/1 750\.00 руб\./)).toBeInTheDocument()
     await user.click(editSaveButton)
     let editConfirmationDialog = await screen.findByRole('dialog', { name: 'Подтвердить изменение операции фонда?' })
     const editChangeList = within(editConfirmationDialog).getByRole('list', { name: 'Изменяемые поля операции фонда' })
     expect(within(editChangeList).getByText('Сумма')).toBeInTheDocument()
-    expect(within(editChangeList).getByText('1 500,00')).toBeInTheDocument()
-    expect(within(editChangeList).getByText('1 750,00')).toBeInTheDocument()
+    expect(within(editChangeList).getByText('1 500.00')).toBeInTheDocument()
+    expect(within(editChangeList).getByText('1 750.00')).toBeInTheDocument()
     expect(within(editChangeList).getByText('Основание')).toBeInTheDocument()
     expect(within(editChangeList).getByText('Распределение средств')).toBeInTheDocument()
     expect(within(editChangeList).getByText('Уточненное распределение')).toBeInTheDocument()
@@ -4742,7 +4752,7 @@ describe('App', () => {
     editConfirmationDialog = await screen.findByRole('dialog', { name: 'Подтвердить изменение операции фонда?' })
     await user.click(within(editConfirmationDialog).getByRole('button', { name: 'Сохранить' }))
     expect(await within(fundsPanel).findByText(/Операция фонда "Целевые взносы" изменена и записана в историю изменений\./)).toHaveAttribute('role', 'status')
-    expect(within(fundOperationsTable).getAllByText(/1[\s\u00A0]750,00 руб\./).length).toBeGreaterThanOrEqual(1)
+    expect(within(fundOperationsTable).getAllByText(/1 750\.00 руб\./).length).toBeGreaterThanOrEqual(1)
 
     const cancelFundOperationButton = within(fundOperationsTable).getByRole('button', { name: 'Отменить операцию фонда Целевые взносы' })
     expect(cancelFundOperationButton).toHaveAttribute('data-tooltip', 'Отменить')
@@ -5277,9 +5287,13 @@ describe('App', () => {
     await user.click(within(settings).getByRole('tab', { name: 'Резервные копии' }))
 
     const backupsPanel = await within(settings).findByRole('region', { name: 'Резервное копирование базы данных' })
-    expect(await within(backupsPanel).findByLabelText('Состояние резервного копирования')).toHaveTextContent('каждые 24 ч.')
+    const backupSummary = await within(backupsPanel).findByLabelText('Состояние резервного копирования')
+    const backupTable = within(backupsPanel).getByRole('table', { name: 'Последние резервные копии' })
+    expect(backupSummary).toHaveTextContent('каждые 24 ч.')
+    expect(backupSummary.parentElement).toHaveClass('settings-card-body')
+    expect(backupTable.closest('.settings-card-body')).toBe(backupSummary.parentElement)
     expect(within(backupsPanel).getByText(/Папка хранения: \/backups/)).toHaveTextContent('При обычном запуске система выбирает постоянный локальный каталог автоматически')
-    expect(within(backupsPanel).getByRole('table', { name: 'Последние резервные копии' })).toHaveTextContent(existingBackup.fileName)
+    expect(backupTable).toHaveTextContent(existingBackup.fileName)
     const createButton = within(backupsPanel).getByRole('button', { name: 'Создать резервную копию' })
     await user.click(createButton)
     let confirmation = await screen.findByRole('dialog', { name: 'Создать резервную копию базы?' })
@@ -5370,7 +5384,10 @@ describe('App', () => {
     await user.click(within(settings).getByRole('tab', { name: 'Диагностика' }))
     const panel = await within(settings).findByRole('region', { name: 'Диагностика ошибок приложения' })
 
-    expect(await within(panel).findByLabelText('Состояние журнала ошибок')).toHaveTextContent('Включен')
+    const diagnosticSummary = await within(panel).findByLabelText('Состояние журнала ошибок')
+    expect(diagnosticSummary).toHaveTextContent('Включен')
+    expect(diagnosticSummary.parentElement).toHaveClass('settings-card-body')
+    expect(within(panel).getByRole('button', { name: 'Скачать диагностический пакет' }).closest('.settings-card-body')).toBe(diagnosticSummary.parentElement)
     expect(within(panel).getByText(/Пароли, токены, телефоны/)).toBeInTheDocument()
     await user.click(within(panel).getByRole('button', { name: 'Скачать диагностический пакет' }))
 
@@ -6663,9 +6680,9 @@ describe('App', () => {
       electricityThirdRate: 5,
     })
     expect(await screen.findByText('Запись добавлена.')).toBeInTheDocument()
-    expect(within(dictionaryPanel).getByText(/до 50,00 кВт: 2,00/)).toBeInTheDocument()
-    expect(within(dictionaryPanel).getByText(/до 100,00 кВт: 3,00/)).toBeInTheDocument()
-    expect(within(dictionaryPanel).getByText(/выше: 5,00/)).toBeInTheDocument()
+    expect(within(dictionaryPanel).getByText(/до 50 кВт: 2.00/)).toBeInTheDocument()
+    expect(within(dictionaryPanel).getByText(/до 100 кВт: 3.00/)).toBeInTheDocument()
+    expect(within(dictionaryPanel).getByText(/выше: 5.00/)).toBeInTheDocument()
   })
 
   it('adds owner, garage, supplier group and supplier from protected workspace', async () => {
@@ -6703,6 +6720,10 @@ describe('App', () => {
     expect(within(dictionaryPanel).queryByText('21')).not.toBeInTheDocument()
 
     garageCreateDialog = await openDictionaryCreateDialog(user, dictionaryPanel)
+    expect(within(garageCreateDialog).getByLabelText('Справка: Стартовый баланс')).toHaveAttribute('tabindex', '0')
+    expect(within(garageCreateDialog).getByRole('tooltip', { name: /Долг на начало учета/ })).toBeInTheDocument()
+    expect(within(garageCreateDialog).getByLabelText('Справка: Старт воды')).toHaveAttribute('tabindex', '0')
+    expect(within(garageCreateDialog).getByLabelText('Справка: Старт электричества')).toHaveAttribute('tabindex', '0')
     await user.type(within(garageCreateDialog).getByLabelText('Номер гаража'), '21')
     await user.clear(within(garageCreateDialog).getByLabelText('Количество людей'))
     await user.type(within(garageCreateDialog).getByLabelText('Количество людей'), '2')
@@ -6717,7 +6738,7 @@ describe('App', () => {
     await user.click(within(garageCreateDialog).getByRole('button', { name: 'Сохранить' }))
     expect(await within(dictionaryPanel).findByText('21')).toBeInTheDocument()
     expect(within(dictionaryPanel).getByText('Петров Петр')).toBeInTheDocument()
-    expect(within(dictionaryPanel).getByText('350,00')).toBeInTheDocument()
+    expect(within(dictionaryPanel).getByText('350.00')).toBeInTheDocument()
 
     await openDictionarySubgroup(user, dictionaryPanel, 'Группы поставщиков')
     const addSupplierGroupButton = within(dictionaryPanel).getByRole('button', { name: 'Добавить' })
@@ -6743,6 +6764,8 @@ describe('App', () => {
     expect(within(dictionaryPanel).queryByText('Сибирь Онлайн')).not.toBeInTheDocument()
 
     supplierDialog = await openDictionaryCreateDialog(user, dictionaryPanel)
+    expect(within(supplierDialog).getByLabelText('Справка: Стартовый баланс')).toHaveAttribute('tabindex', '0')
+    expect(within(supplierDialog).getByRole('tooltip', { name: /задолженность поставщику/ })).toBeInTheDocument()
     await user.type(within(supplierDialog).getByLabelText('Название поставщика'), 'Сибирь Онлайн')
     await selectStyledOption(user, supplierDialog, 'Группа для поставщика', 'Связь')
     await user.type(within(supplierDialog).getByLabelText('ИНН поставщика'), '5401000000')
@@ -6751,7 +6774,7 @@ describe('App', () => {
     await user.click(within(supplierDialog).getByRole('button', { name: 'Сохранить' }))
     expect(await within(dictionaryPanel).findByText('Сибирь Онлайн')).toBeInTheDocument()
     expect(within(dictionaryPanel).getByText('Связь')).toBeInTheDocument()
-    expect(within(dictionaryPanel).getByText('1 200,00')).toBeInTheDocument()
+    expect(within(dictionaryPanel).getByText('1 200.00')).toBeInTheDocument()
     return
 
     await user.type(within(dictionaryPanel).getByLabelText('Фамилия владельца'), 'Петров')
@@ -6774,7 +6797,7 @@ describe('App', () => {
     await user.click(within(dictionaryPanel).getAllByRole('button', { name: 'Добавить' })[1])
     expect(await within(dictionaryPanel).findByText('Гараж 21')).toBeInTheDocument()
     expect(within(dictionaryPanel).getAllByText('Петров Петр').length).toBeGreaterThan(0)
-    expect(within(dictionaryPanel).getByText(/старт 350,00/)).toBeInTheDocument()
+    expect(within(dictionaryPanel).getByText(/старт 350.00/)).toBeInTheDocument()
 
     const openGarageButton = within(dictionaryPanel).getByRole('button', { name: 'Открыть карточку гаража 21' })
     await user.click(openGarageButton)
@@ -6790,9 +6813,9 @@ describe('App', () => {
     expect(within(garageDialog).getAllByText('Петров Петр').length).toBeGreaterThan(0)
     expect(within(garageDialog).getByText('2')).toBeInTheDocument()
     expect(within(garageDialog).getByText('3')).toBeInTheDocument()
-    expect(within(garageDialog).getByText('350,00')).toBeInTheDocument()
+    expect(within(garageDialog).getByText('350.00')).toBeInTheDocument()
     expect(within(garageDialog).getByText('18,5')).toBeInTheDocument()
-    expect(within(garageDialog).getByText('412,75')).toBeInTheDocument()
+    expect(within(garageDialog).getByText('412.75')).toBeInTheDocument()
     expect(within(garageDialog).getByText('Старые счетчики внесены из Access')).toBeInTheDocument()
     fireEvent.mouseDown(garageDialog.parentElement!)
     await waitFor(() => {
@@ -6808,7 +6831,7 @@ describe('App', () => {
     await user.type(within(dictionaryPanel).getByLabelText('Стартовый баланс поставщика'), '1200')
     await user.click(within(dictionaryPanel).getAllByRole('button', { name: 'Добавить' })[2])
     expect(await within(dictionaryPanel).findByText('Сибирь Онлайн')).toBeInTheDocument()
-    expect(within(dictionaryPanel).getByText('Связь, ИНН 5401000000 · старт 1 200,00')).toBeInTheDocument()
+    expect(within(dictionaryPanel).getByText('Связь, ИНН 5401000000 · старт 1 200.00')).toBeInTheDocument()
   }, 30_000)
 
   it('confirms garage dictionary edits with owner label and money diff', async () => {
@@ -6876,8 +6899,8 @@ describe('App', () => {
     expect(changeList).toHaveTextContent('Иванов Иван')
     expect(changeList).toHaveTextContent('Петров Петр')
     expect(changeList).toHaveTextContent('Стартовый баланс')
-    expect(changeList).toHaveTextContent('100,00')
-    expect(changeList).toHaveTextContent('350,00')
+    expect(changeList).toHaveTextContent('100.00')
+    expect(changeList).toHaveTextContent('350.00')
     expect(updateGarage).not.toHaveBeenCalled()
     await waitFor(() => expect(within(confirmationDialog).getByRole('button', { name: 'Отмена' })).toHaveFocus())
     await user.keyboard('{Escape}')
@@ -6894,7 +6917,7 @@ describe('App', () => {
       startingBalance: 350,
     })))
     expect(await within(dictionaryPanel).findByText('Петров Петр')).toBeInTheDocument()
-    expect(within(dictionaryPanel).getByText('350,00')).toBeInTheDocument()
+    expect(within(dictionaryPanel).getByText('350.00')).toBeInTheDocument()
   })
 
   it('confirms supplier dictionary edits with group label and money diff', async () => {
@@ -6965,8 +6988,8 @@ describe('App', () => {
     expect(changeList).toHaveTextContent('Коммунальные услуги')
     expect(changeList).toHaveTextContent('Ремонтные работы')
     expect(changeList).toHaveTextContent('Стартовый баланс')
-    expect(changeList).toHaveTextContent('1 200,00')
-    expect(changeList).toHaveTextContent('2 500,00')
+    expect(changeList).toHaveTextContent('1 200.00')
+    expect(changeList).toHaveTextContent('2 500.00')
     expect(updateSupplier).not.toHaveBeenCalled()
     await waitFor(() => expect(within(confirmationDialog).getByRole('button', { name: 'Отмена' })).toHaveFocus())
     await user.keyboard('{Escape}')
@@ -6983,7 +7006,7 @@ describe('App', () => {
       startingBalance: 2500,
     })))
     expect(await within(dictionaryPanel).findByText('Ремонтные работы')).toBeInTheDocument()
-    expect(within(dictionaryPanel).getByText('2 500,00')).toBeInTheDocument()
+    expect(within(dictionaryPanel).getByText('2 500.00')).toBeInTheDocument()
   })
 
   it('confirms tariff dictionary edits with labels dates and electricity tier diff', async () => {
@@ -7102,7 +7125,7 @@ describe('App', () => {
     if (!updatedTariffRow) {
       throw new Error('Строка тарифа воды не найдена после подтверждения.')
     }
-    expect(updatedTariffRow).toHaveTextContent('до 100,00 кВт: 4,25, до 200,00 кВт: 5,25, выше: 6,75')
+    expect(updatedTariffRow).toHaveTextContent('до 100 кВт: 4.25, до 200 кВт: 5.25, выше: 6.75')
     expect(updatedTariffRow).toHaveTextContent('15.08.2026')
   })
 
@@ -7508,11 +7531,11 @@ describe('App', () => {
     await waitFor(() => expect(closeHistoryButton).toHaveFocus())
     expect(within(dialog).getByText('История баланса')).toBeInTheDocument()
     expect(within(dialog).getAllByText('Начислено').length).toBeGreaterThan(0)
-    expect(within(dialog).getByText(/1\s200,00/)).toBeInTheDocument()
+    expect(within(dialog).getByText(/1 200\.00/)).toBeInTheDocument()
     expect(within(dialog).getAllByText('Поступило').length).toBeGreaterThan(0)
-    expect(within(dialog).getAllByText('500,00').length).toBeGreaterThan(0)
+    expect(within(dialog).getAllByText('500.00').length).toBeGreaterThan(0)
     expect(within(dialog).getByText('07.2026')).toBeInTheDocument()
-    expect(within(dialog).getAllByText('800,00').length).toBeGreaterThan(0)
+    expect(within(dialog).getAllByText('800.00').length).toBeGreaterThan(0)
     expect(requestedGarageId).toBe('garage-1')
     expect(requestedPeriod?.monthFrom).toMatch(/^\d{4}-\d{2}$/)
     expect(requestedPeriod?.monthTo).toMatch(/^\d{4}-\d{2}$/)
@@ -8128,7 +8151,7 @@ describe('App', () => {
     await user.type(within(tariffDialog).getByLabelText('Ставка тарифа'), '150')
     await user.click(within(tariffDialog).getByRole('button', { name: 'Сохранить' }))
     expect(await within(dictionaryPanel).findByText('Мусор')).toBeInTheDocument()
-    expect(within(dictionaryPanel).getByText('150,00')).toBeInTheDocument()
+    expect(within(dictionaryPanel).getByText('150.00')).toBeInTheDocument()
     return
 
     await user.type(within(dictionaryPanel).getByLabelText('Название вида поступления'), 'Целевой взнос')
@@ -8147,7 +8170,7 @@ describe('App', () => {
     await user.type(within(dictionaryPanel).getByLabelText('Ставка тарифа'), '150')
     await user.click(within(dictionaryPanel).getAllByRole('button', { name: 'Добавить' })[5])
     expect(await within(dictionaryPanel).findByText('Мусор')).toBeInTheDocument()
-    expect(within(dictionaryPanel).getByText('150,00 с 01.07.2026')).toBeInTheDocument()
+    expect(within(dictionaryPanel).getByText('150.00 с 01.07.2026')).toBeInTheDocument()
   })
 
   it('does not call dictionary APIs when supplier and finance dictionary forms fail client validation', async () => {
@@ -8328,8 +8351,8 @@ describe('App', () => {
     await user.type(within(financePanel).getByLabelText('Комментарий поступления'), 'Оплата за июнь')
     await user.click(within(financePanel).getAllByRole('button', { name: 'Провести' })[0])
 
-    expect(await within(financePanel).findByText('+2 000,00')).toBeInTheDocument()
-    expect(within(financePanel).getAllByText('2 000,00').length).toBeGreaterThan(0)
+    expect(await within(financePanel).findByText('+2 000.00')).toBeInTheDocument()
+    expect(within(financePanel).getAllByText('2 000.00').length).toBeGreaterThan(0)
     expect(within(financePanel).getByText('Оплата за июнь')).toBeInTheDocument()
 
     await user.clear(within(financePanel).getByLabelText('Сумма выплаты'))
@@ -8338,8 +8361,8 @@ describe('App', () => {
     await user.type(within(financePanel).getByLabelText('Комментарий выплаты'), 'Оплата счета поставщика')
     await user.click(within(financePanel).getAllByRole('button', { name: 'Провести' })[1])
 
-    expect(await within(financePanel).findByText('-500,00')).toBeInTheDocument()
-    expect(within(financePanel).getByText('1 500,00')).toBeInTheDocument()
+    expect(await within(financePanel).findByText('-500.00')).toBeInTheDocument()
+    expect(within(financePanel).getByText('1 500.00')).toBeInTheDocument()
     expect(within(financePanel).getByText('Переплата')).toBeInTheDocument()
     await user.click(within(financePanel).getByRole('tab', { name: /Расходы/ }))
     expect(within(financePanel).getByText('Оплата счета поставщика')).toBeInTheDocument()
@@ -8417,8 +8440,8 @@ describe('App', () => {
     let paymentChangeDialog = await screen.findByRole('dialog', { name: 'Подтвердить изменение платежа?' })
     const paymentChangeList = within(paymentChangeDialog).getByRole('list', { name: 'Изменяемые поля платежа' })
     expect(within(paymentChangeList).getByText('Сумма')).toBeInTheDocument()
-    expect(within(paymentChangeList).getByText('2 000,00')).toBeInTheDocument()
-    expect(within(paymentChangeList).getByText('2 400,00')).toBeInTheDocument()
+    expect(within(paymentChangeList).getByText('2 000.00')).toBeInTheDocument()
+    expect(within(paymentChangeList).getByText('2 400.00')).toBeInTheDocument()
     expect(within(paymentChangeList).getByText('Документ')).toBeInTheDocument()
     expect(within(paymentChangeList).getByText('PKO-fixed')).toBeInTheDocument()
     await user.keyboard('{Escape}')
@@ -8432,7 +8455,7 @@ describe('App', () => {
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Новое поступление' })).not.toBeInTheDocument())
     expect(await within(financePanel).findByText('PKO-fixed')).toBeInTheDocument()
     expect(within(financePanel).getByText('После сверки')).toBeInTheDocument()
-    expect(within(financePanel).getAllByText('2 400,00').length).toBeGreaterThan(0)
+    expect(within(financePanel).getAllByText('2 400.00').length).toBeGreaterThan(0)
     expect(within(financePanel).queryByText('PKO-edit')).not.toBeInTheDocument()
   })
 
@@ -8469,8 +8492,8 @@ describe('App', () => {
     let expenseChangeDialog = await screen.findByRole('dialog', { name: 'Подтвердить изменение платежа?' })
     const expenseChangeList = within(expenseChangeDialog).getByRole('list', { name: 'Изменяемые поля платежа' })
     expect(within(expenseChangeList).getByText('Сумма')).toBeInTheDocument()
-    expect(within(expenseChangeList).getByText('700,00')).toBeInTheDocument()
-    expect(within(expenseChangeList).getByText('950,00')).toBeInTheDocument()
+    expect(within(expenseChangeList).getByText('700.00')).toBeInTheDocument()
+    expect(within(expenseChangeList).getByText('950.00')).toBeInTheDocument()
     expect(within(expenseChangeList).getByText('Документ')).toBeInTheDocument()
     expect(within(expenseChangeList).getByText('RKO-fixed')).toBeInTheDocument()
     await user.keyboard('{Escape}')
@@ -8485,7 +8508,7 @@ describe('App', () => {
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Новая выплата' })).not.toBeInTheDocument())
     expect(await within(financePanel).findByText('RKO-fixed')).toBeInTheDocument()
     expect(within(financePanel).getByText('После сверки выплаты')).toBeInTheDocument()
-    expect(within(financePanel).getAllByText('950,00').length).toBeGreaterThan(0)
+    expect(within(financePanel).getAllByText('950.00').length).toBeGreaterThan(0)
     expect(within(financePanel).queryByText('RKO-edit')).not.toBeInTheDocument()
   })
 
@@ -8521,8 +8544,8 @@ describe('App', () => {
     let accrualChangeDialog = await screen.findByRole('dialog', { name: 'Подтвердить изменение платежа?' })
     const accrualChangeList = within(accrualChangeDialog).getByRole('list', { name: 'Изменяемые поля платежа' })
     expect(within(accrualChangeList).getByText('Сумма')).toBeInTheDocument()
-    expect(within(accrualChangeList).getByText('1 100,00')).toBeInTheDocument()
-    expect(within(accrualChangeList).getByText('1 350,00')).toBeInTheDocument()
+    expect(within(accrualChangeList).getByText('1 100.00')).toBeInTheDocument()
+    expect(within(accrualChangeList).getByText('1 350.00')).toBeInTheDocument()
     expect(within(accrualChangeList).getByText('Комментарий')).toBeInTheDocument()
     expect(within(accrualChangeList).getByText('Начисление после сверки')).toBeInTheDocument()
     await user.keyboard('{Escape}')
@@ -8536,7 +8559,7 @@ describe('App', () => {
 
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Ручное начисление' })).not.toBeInTheDocument())
     expect(await within(financePanel).findByText('Начисление после сверки')).toBeInTheDocument()
-    expect(within(financePanel).getAllByText('1 350,00').length).toBeGreaterThan(0)
+    expect(within(financePanel).getAllByText('1 350.00').length).toBeGreaterThan(0)
     expect(within(financePanel).queryByText('Начисление edit')).not.toBeInTheDocument()
   })
 
@@ -8575,8 +8598,8 @@ describe('App', () => {
     let supplierAccrualChangeDialog = await screen.findByRole('dialog', { name: 'Подтвердить изменение платежа?' })
     const supplierAccrualChangeList = within(supplierAccrualChangeDialog).getByRole('list', { name: 'Изменяемые поля платежа' })
     expect(within(supplierAccrualChangeList).getByText('Сумма')).toBeInTheDocument()
-    expect(within(supplierAccrualChangeList).getByText('650,00')).toBeInTheDocument()
-    expect(within(supplierAccrualChangeList).getByText('820,00')).toBeInTheDocument()
+    expect(within(supplierAccrualChangeList).getByText('650.00')).toBeInTheDocument()
+    expect(within(supplierAccrualChangeList).getByText('820.00')).toBeInTheDocument()
     expect(within(supplierAccrualChangeList).getByText('Документ')).toBeInTheDocument()
     expect(within(supplierAccrualChangeList).getByText('BILL-fixed')).toBeInTheDocument()
     expect(within(supplierAccrualChangeList).getByText('Комментарий')).toBeInTheDocument()
@@ -8593,7 +8616,7 @@ describe('App', () => {
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Начисление поставщику' })).not.toBeInTheDocument())
     expect(await within(financePanel).findByText('BILL-fixed')).toBeInTheDocument()
     expect(within(financePanel).getByText('Начисление поставщику после сверки')).toBeInTheDocument()
-    expect(within(financePanel).getAllByText('820,00').length).toBeGreaterThan(0)
+    expect(within(financePanel).getAllByText('820.00').length).toBeGreaterThan(0)
     expect(within(financePanel).queryByText('BILL-edit')).not.toBeInTheDocument()
   })
 
@@ -8988,7 +9011,7 @@ describe('App', () => {
     await restoreRow({
       tabName: /Начисления владельцам/,
       rowText: 'Начисление к возврату',
-      restoredText: '333,00',
+      restoredText: '333.00',
       dialogName: 'Вернуть начисление владельцу?',
       assertRestored: () => expect(restoreAccrual).toHaveBeenLastCalledWith('token', 'accrual-canceled'),
     })
@@ -9122,8 +9145,8 @@ describe('App', () => {
     const financePanel = await screen.findByRole('region', { name: 'Платежи' })
     const cases = [
       { tab: /Расходы/, rowText: 'RKO-context-edit', dialog: 'Новая выплата' },
-      { tab: /Начисления владельцам/, rowText: '2 000,00', dialog: 'Ручное начисление' },
-      { tab: /Начисления поставщикам/, rowText: '650,00', dialog: 'Начисление поставщику' },
+      { tab: /Начисления владельцам/, rowText: '2 000.00', dialog: 'Ручное начисление' },
+      { tab: /Начисления поставщикам/, rowText: '650.00', dialog: 'Начисление поставщику' },
       { tab: /Счетчики/, rowText: '5.5', dialog: 'Показание счетчика' },
     ]
 
@@ -9478,10 +9501,10 @@ describe('App', () => {
     expect(within(financePanel).getByRole('button', { name: 'Открыть календарь: Период с' })).toBeInTheDocument()
     expect(within(financePanel).getByRole('button', { name: 'Открыть календарь: Период по' })).toBeInTheDocument()
     const summaryStrip = within(financePanel).getByLabelText('Итоги платежей')
-    expect(within(summaryStrip).getByText('1 200,00')).toBeInTheDocument()
-    expect(within(summaryStrip).getByText('1 700,00')).toBeInTheDocument()
-    expect(within(summaryStrip).getByText('300,00')).toBeInTheDocument()
-    expect(within(summaryStrip).getByText('900,00')).toBeInTheDocument()
+    expect(within(summaryStrip).getByText('1 200.00')).toBeInTheDocument()
+    expect(within(summaryStrip).getByText('1 700.00')).toBeInTheDocument()
+    expect(within(summaryStrip).getByText('300.00')).toBeInTheDocument()
+    expect(within(summaryStrip).getByText('900.00')).toBeInTheDocument()
     expect(within(summaryStrip).getByText('11')).toBeInTheDocument()
     expect(within(financePanel).getByText('7 операций')).toBeInTheDocument()
   })
@@ -9532,7 +9555,7 @@ describe('App', () => {
     await user.type(within(incomeForm).getByLabelText('Документ поступления'), 'PKO-cancel')
     await user.click(within(incomeForm).getByRole('button', { name: 'Провести' }))
 
-    expect(await within(financePanel).findByText('+700,00')).toBeInTheDocument()
+    expect(await within(financePanel).findByText('+700.00')).toBeInTheDocument()
     expect(within(financePanel).getByText('1 операций')).toBeInTheDocument()
     expect(within(financePanel).queryByRole('button', { name: /Отменить операцию/i })).not.toBeInTheDocument()
     const operationRow = within(financePanel).getByText('PKO-cancel').closest('tr')
@@ -9547,7 +9570,7 @@ describe('App', () => {
     await user.keyboard('{Escape}')
     expect(screen.queryByRole('dialog', { name: 'Отменить поступление?' })).not.toBeInTheDocument()
     await waitFor(() => expect(operationRow).toHaveFocus())
-    expect(within(financePanel).getByText('+700,00')).toBeInTheDocument()
+    expect(within(financePanel).getByText('+700.00')).toBeInTheDocument()
 
     const reopenedOperationMenu = await openFinanceContextMenuByCellText(financePanel, 'PKO-cancel')
     await user.click(within(reopenedOperationMenu).getByRole('menuitem', { name: 'Удалить' }))
@@ -9556,7 +9579,7 @@ describe('App', () => {
     expect(within(reopenedCancelDialog).getByRole('alert')).toHaveTextContent('Укажите причину отмены.')
     await user.type(within(reopenedCancelDialog).getByLabelText('Причина отмены финансовой записи'), 'Ошибочный документ')
     await user.click(within(reopenedCancelDialog).getByRole('button', { name: 'Отменить запись' }))
-    await waitFor(() => expect(within(financePanel).queryByText('+700,00')).not.toBeInTheDocument())
+    await waitFor(() => expect(within(financePanel).queryByText('+700.00')).not.toBeInTheDocument())
     expect(within(financePanel).getByText('0 операций')).toBeInTheDocument()
     expect(within(within(financePanel).getByRole('table', { name: 'Последние платежи' })).getByText('Операций пока нет')).toHaveAttribute('role', 'status')
   })
@@ -9621,23 +9644,23 @@ describe('App', () => {
     await user.type(within(accrualForm).getByLabelText('Комментарий начисления'), 'Ручная корректировка')
     await user.click(within(accrualForm).getByRole('button', { name: 'Начислить' }))
     const accrualTable = within(financePanel).getByRole('table', { name: 'Последние начисления' })
-    expect(await within(accrualTable).findByText('900,00')).toBeInTheDocument()
+    expect(await within(accrualTable).findByText('900.00')).toBeInTheDocument()
     expect(within(accrualTable).queryByRole('button', { name: /Отменить начисление/i })).not.toBeInTheDocument()
     await user.click(within(financePanel).getByRole('tab', { name: /Начисления владельцам/ }))
-    const accrualMenu = await openFinanceContextMenuByCellText(financePanel, '900,00')
+    const accrualMenu = await openFinanceContextMenuByCellText(financePanel, '900.00')
     await user.click(within(accrualMenu).getByRole('menuitem', { name: 'Удалить' }))
     let cancelDialog = await screen.findByRole('dialog', { name: 'Отменить начисление владельцу?' })
     await waitFor(() => expect(within(cancelDialog).getByLabelText('Причина отмены финансовой записи')).toHaveFocus())
     await user.keyboard('{Escape}')
     expect(screen.queryByRole('dialog', { name: 'Отменить начисление владельцу?' })).not.toBeInTheDocument()
-    expect(within(accrualTable).getByText('900,00')).toBeInTheDocument()
+    expect(within(accrualTable).getByText('900.00')).toBeInTheDocument()
 
-    const reopenedAccrualMenu = await openFinanceContextMenuByCellText(financePanel, '900,00')
+    const reopenedAccrualMenu = await openFinanceContextMenuByCellText(financePanel, '900.00')
     await user.click(within(reopenedAccrualMenu).getByRole('menuitem', { name: 'Удалить' }))
     cancelDialog = await screen.findByRole('dialog', { name: 'Отменить начисление владельцу?' })
     await user.type(within(cancelDialog).getByLabelText('Причина отмены финансовой записи'), 'Ошибочный ввод')
     await user.click(within(cancelDialog).getByRole('button', { name: 'Отменить запись' }))
-    await waitFor(() => expect(within(accrualTable).queryByText('900,00')).not.toBeInTheDocument())
+    await waitFor(() => expect(within(accrualTable).queryByText('900.00')).not.toBeInTheDocument())
     expect(within(accrualTable).getByText('Начислений пока нет')).toHaveAttribute('role', 'status')
   })
 
@@ -9658,23 +9681,23 @@ describe('App', () => {
     await user.type(within(supplierAccrualForm).getByLabelText('Комментарий начисления поставщику'), 'Счет за воду')
     await user.click(within(supplierAccrualForm).getByRole('button', { name: 'Начислить' }))
     const supplierAccrualTable = within(financePanel).getByRole('table', { name: 'Последние начисления поставщикам' })
-    expect(await within(supplierAccrualTable).findByText('650,00')).toBeInTheDocument()
+    expect(await within(supplierAccrualTable).findByText('650.00')).toBeInTheDocument()
     expect(within(supplierAccrualTable).queryByRole('button', { name: /Отменить начисление поставщику/i })).not.toBeInTheDocument()
     await user.click(within(financePanel).getByRole('tab', { name: /Начисления поставщикам/ }))
-    const supplierAccrualMenu = await openFinanceContextMenuByCellText(financePanel, '650,00')
+    const supplierAccrualMenu = await openFinanceContextMenuByCellText(financePanel, '650.00')
     await user.click(within(supplierAccrualMenu).getByRole('menuitem', { name: 'Удалить' }))
     let cancelDialog = await screen.findByRole('dialog', { name: 'Отменить начисление поставщику?' })
     await waitFor(() => expect(within(cancelDialog).getByLabelText('Причина отмены финансовой записи')).toHaveFocus())
     await user.keyboard('{Escape}')
     expect(screen.queryByRole('dialog', { name: 'Отменить начисление поставщику?' })).not.toBeInTheDocument()
-    expect(within(supplierAccrualTable).getByText('650,00')).toBeInTheDocument()
+    expect(within(supplierAccrualTable).getByText('650.00')).toBeInTheDocument()
 
-    const reopenedSupplierAccrualMenu = await openFinanceContextMenuByCellText(financePanel, '650,00')
+    const reopenedSupplierAccrualMenu = await openFinanceContextMenuByCellText(financePanel, '650.00')
     await user.click(within(reopenedSupplierAccrualMenu).getByRole('menuitem', { name: 'Удалить' }))
     cancelDialog = await screen.findByRole('dialog', { name: 'Отменить начисление поставщику?' })
     await user.type(within(cancelDialog).getByLabelText('Причина отмены финансовой записи'), 'Ошибочный ввод')
     await user.click(within(cancelDialog).getByRole('button', { name: 'Отменить запись' }))
-    await waitFor(() => expect(within(supplierAccrualTable).queryByText('650,00')).not.toBeInTheDocument())
+    await waitFor(() => expect(within(supplierAccrualTable).queryByText('650.00')).not.toBeInTheDocument())
     expect(within(supplierAccrualTable).getByText('Начислений поставщикам пока нет')).toHaveAttribute('role', 'status')
   })
 
@@ -9733,7 +9756,7 @@ describe('App', () => {
     await waitFor(() => expect(createAccrualButton).toBeEnabled())
     await user.click(createAccrualButton)
 
-    expect((await within(financePanel).findAllByText('900,00', {}, { timeout: 5000 })).length).toBeGreaterThan(0)
+    expect((await within(financePanel).findAllByText('900.00', {}, { timeout: 5000 })).length).toBeGreaterThan(0)
     const accrualTable = within(financePanel).getByRole('table', { name: 'Последние начисления' })
     expect(accrualTable).toBeInTheDocument()
     expect(await within(accrualTable).findByText('Ручное')).toBeInTheDocument()
@@ -9777,8 +9800,8 @@ describe('App', () => {
     await user.type(within(financePanel).getByLabelText('Документ поступления'), 'PKO-2')
     await user.click(within(financePanel).getAllByRole('button', { name: 'Провести' })[0])
 
-    expect(await within(financePanel).findByText('Долг: 900,00 → 600,00')).toBeInTheDocument()
-    expect(within(financePanel).getByText('Разбивка: 06.2026 300,00')).toBeInTheDocument()
+    expect(await within(financePanel).findByText('Долг: 900.00 → 600.00')).toBeInTheDocument()
+    expect(within(financePanel).getByText('Разбивка: 06.2026 300.00')).toBeInTheDocument()
   })
 
   it('creates supplier accrual from payments workspace', async () => {
@@ -9801,7 +9824,7 @@ describe('App', () => {
     await waitFor(() => expect(createSupplierAccrualButton).toBeEnabled())
     await user.click(createSupplierAccrualButton)
 
-    expect((await within(financePanel).findAllByText('650,00', {}, { timeout: 5000 })).length).toBeGreaterThan(0)
+    expect((await within(financePanel).findAllByText('650.00', {}, { timeout: 5000 })).length).toBeGreaterThan(0)
     const supplierAccrualTable = within(financePanel).getByRole('table', { name: 'Последние начисления поставщикам' })
     expect(supplierAccrualTable).toBeInTheDocument()
     expect(await within(supplierAccrualTable).findByText('Водоканал')).toBeInTheDocument()
@@ -9878,8 +9901,8 @@ describe('App', () => {
     await user.type(within(financePanel).getByLabelText('Документ выплаты'), 'RKO-2')
     await user.click(within(financePanel).getAllByRole('button', { name: 'Провести' })[1])
 
-    expect(await within(financePanel).findByText('Обязательство: 650,00 → 400,00')).toBeInTheDocument()
-    expect(within(financePanel).getByText('Разбивка: 06.2026 250,00')).toBeInTheDocument()
+    expect(await within(financePanel).findByText('Обязательство: 650.00 → 400.00')).toBeInTheDocument()
+    expect(within(financePanel).getByText('Разбивка: 06.2026 250.00')).toBeInTheDocument()
   })
 
   it('generates regular accruals from tariff in payments workspace', async () => {
@@ -9901,8 +9924,8 @@ describe('App', () => {
     await user.click(createRegularAccrualsButton)
 
     expect(await within(financePanel).findByText('Создано 1, пропущено 0')).toHaveAttribute('role', 'status')
-    expect((await within(financePanel).findAllByText('300,00', {}, { timeout: 5000 })).length).toBeGreaterThan(0)
-    expect(within(financePanel).getByText('Членский тариф · 300,00')).toBeInTheDocument()
+    expect((await within(financePanel).findAllByText('300.00', {}, { timeout: 5000 })).length).toBeGreaterThan(0)
+    expect(within(financePanel).getByText('Членский тариф · 300.00')).toBeInTheDocument()
     const accrualTable = within(financePanel).getByRole('table', { name: 'Последние начисления' })
     expect(await within(accrualTable).findByText('Авто')).toBeInTheDocument()
     const openBreakdownButton = within(accrualTable).getByLabelText(/Разбивка начисления/i)
@@ -9949,8 +9972,8 @@ describe('App', () => {
     const financePanel = await screen.findByRole('region', { name: 'Платежи' })
     const tariffSelect = within(financePanel).getByLabelText('Тариф регулярного начисления')
 
-    expect(within(tariffSelect).queryByRole('option', { name: 'Вода · 50,00' })).not.toBeInTheDocument()
-    expect(within(tariffSelect).getByRole('option', { name: 'Членский тариф · 300,00' })).toBeInTheDocument()
+    expect(within(tariffSelect).queryByRole('option', { name: 'Вода · 50.00' })).not.toBeInTheDocument()
+    expect(within(tariffSelect).getByRole('option', { name: 'Членский тариф · 300.00' })).toBeInTheDocument()
     await user.click(within(financePanel).getByRole('button', { name: 'Создать месяц' }))
 
     await within(financePanel).findByText('Создано 1, пропущено 0')
@@ -10619,8 +10642,8 @@ describe('App', () => {
       section: 'dictionary',
       actionKind: 'update',
       fieldName: 'Ставка',
-      oldValue: '50,00',
-      newValue: '55,00',
+      oldValue: '50.00',
+      newValue: '55.00',
       reason: 'Протокол собрания № 2',
     })
     const auditClient = createAuditClient({
@@ -10648,8 +10671,8 @@ describe('App', () => {
     const detailDialog = await screen.findByRole('dialog', { name: 'Изменение' })
     expect(within(detailDialog).getByText('dictionary.tariff_updated')).toBeInTheDocument()
     expect(within(detailDialog).getAllByText('Ставка').length).toBeGreaterThan(0)
-    expect(within(detailDialog).getByText('50,00')).toBeInTheDocument()
-    expect(within(detailDialog).getByText('55,00')).toBeInTheDocument()
+    expect(within(detailDialog).getByText('50.00')).toBeInTheDocument()
+    expect(within(detailDialog).getByText('55.00')).toBeInTheDocument()
     expect(within(detailDialog).getByText('Протокол собрания № 2')).toBeInTheDocument()
     await user.click(within(detailDialog).getByRole('button', { name: 'Открыть раздел: Тарифы и сборы' }))
 
@@ -11691,7 +11714,7 @@ describe('App', () => {
     await user.click(within(payoutPagination).getByRole('button', { name: 'Следующая страница' }))
     await waitFor(() => expect(payoutPageRequests).toContainEqual({ offset: 25, limit: 25 }))
     expect(await within(payoutReportTable).findByText('Электрик')).toBeInTheDocument()
-    expect(payoutReportTable).toHaveTextContent('2 600,00')
+    expect(payoutReportTable).toHaveTextContent('2 600.00')
     expect(within(payoutPagination).getByText('Показано 26-26 из 30')).toBeInTheDocument()
     expect(within(payoutPagination).getByRole('button', { name: 'Следующая страница' })).toBeDisabled()
 
@@ -11708,16 +11731,16 @@ describe('App', () => {
     const incomeReportTable = within(reportsPanel).getByRole('table', { name: 'Отчет по поступлениям' })
     expect(incomeReportTable).toBeInTheDocument()
     expect(incomeReportTable).toHaveTextContent('2026-06-10')
-    expect(incomeReportTable).toHaveTextContent('1 500,00')
+    expect(incomeReportTable).toHaveTextContent('1 500.00')
     expect(incomeReportTable).toHaveTextContent('Остаток долга после платежа')
-    expect(incomeReportTable).toHaveTextContent('500,00')
+    expect(incomeReportTable).toHaveTextContent('500.00')
     expect(incomeReportTable).not.toHaveTextContent('Начисление за июнь')
     const incomePagination = within(reportsPanel).getByRole('navigation', { name: 'Пагинация отчета по поступлениям' })
     expect(within(incomePagination).getByText('Показано 1-1 из 30')).toHaveAttribute('role', 'status')
     await user.click(within(incomePagination).getByRole('button', { name: 'Следующая страница' }))
     await waitFor(() => expect(incomePageRequests).toContainEqual({ offset: 25, limit: 25 }))
     expect(await within(incomeReportTable).findByText('2026-06-26')).toBeInTheDocument()
-    expect(incomeReportTable).toHaveTextContent('2 600,00')
+    expect(incomeReportTable).toHaveTextContent('2 600.00')
     expect(within(incomePagination).getByText('Показано 26-26 из 30')).toBeInTheDocument()
     expect(within(incomePagination).getByRole('button', { name: 'Следующая страница' })).toBeDisabled()
 
@@ -11726,7 +11749,7 @@ describe('App', () => {
     const cashPaymentsTable = within(reportsPanel).getByRole('table', { name: 'Отчет по оплатам из кассы' })
     expect(cashPaymentsTable).toHaveTextContent('Вода: Водоканал')
     expect(cashPaymentsTable).toHaveTextContent('Оплата воды')
-    expect(cashPaymentsTable).toHaveTextContent('400,00')
+    expect(cashPaymentsTable).toHaveTextContent('400.00')
     expect(cashPaymentsTable).not.toHaveTextContent('Назначение платежа')
     const cashPaymentPagination = within(reportsPanel).getByRole('navigation', { name: 'Пагинация отчета по оплатам из кассы' })
     expect(within(cashPaymentPagination).getByText('Показано 1-1 из 30')).toHaveAttribute('role', 'status')
@@ -11746,7 +11769,7 @@ describe('App', () => {
     expect(within(reportsPanel).getByText('Отчёт по сдаче кассы в банк')).toBeInTheDocument()
     const bankDepositsTable = within(reportsPanel).getByRole('table', { name: 'Отчет по сдаче кассы в банк' })
     expect(bankDepositsTable).toHaveTextContent('Сдача наличных в банк')
-    expect(bankDepositsTable).toHaveTextContent('3 000,00')
+    expect(bankDepositsTable).toHaveTextContent('3 000.00')
     const bankDepositPagination = within(reportsPanel).getByRole('navigation', { name: 'Пагинация отчета по сдаче кассы в банк' })
     expect(within(bankDepositPagination).getByText('Показано 1-1 из 30')).toHaveAttribute('role', 'status')
     await user.click(within(bankDepositPagination).getByRole('button', { name: 'Следующая страница' }))
@@ -11778,13 +11801,13 @@ describe('App', () => {
     await user.click(within(feeSummaryTable).getByRole('button', { name: 'Открыть детализацию сбора Членский взнос' }))
     const allFeeGaragesTable = within(reportsPanel).getByRole('table', { name: 'Гаражи по сбору' })
     expect(allFeeGaragesTable).toHaveTextContent('12')
-    expect(allFeeGaragesTable).toHaveTextContent('1 000,00')
+    expect(allFeeGaragesTable).toHaveTextContent('1 000.00')
     expect(showFeeDebtorsButton).toHaveAttribute('aria-expanded', 'true')
     expect(showFeeDebtorsButton).toHaveTextContent('Скрыть должников')
     await user.click(within(reportsPanel).getByRole('button', { name: 'Только должники' }))
     const feeDebtorsTableFromSelectedFee = within(reportsPanel).getByRole('table', { name: 'Должники по сбору' })
     expect(feeDebtorsTableFromSelectedFee).toHaveTextContent('12')
-    expect(feeDebtorsTableFromSelectedFee).toHaveTextContent('800,00')
+    expect(feeDebtorsTableFromSelectedFee).toHaveTextContent('800.00')
     await user.click(showFeeDebtorsButton)
     expect(showFeeDebtorsButton).toHaveAttribute('aria-expanded', 'false')
     await user.click(showFeeDebtorsButton)
@@ -11792,17 +11815,17 @@ describe('App', () => {
     expect(showFeeDebtorsButton).toHaveTextContent('Скрыть должников')
     const feeDebtorsTable = within(reportsPanel).getByRole('table', { name: 'Должники по сбору' })
     expect(feeDebtorsTable).toHaveTextContent('12')
-    expect(feeDebtorsTable).toHaveTextContent('800,00')
+    expect(feeDebtorsTable).toHaveTextContent('800.00')
 
     await openReportTab(user, reportsPanel, 'Изменение фондов')
     expect(within(reportsPanel).getByText('Отчёт по изменению фондов')).toBeInTheDocument()
-    expect(await within(reportsPanel).findByText(/Пополнено:\s*1\s*500,00/)).toBeInTheDocument()
-    expect(within(reportsPanel).getByText(/Изъято:\s*300,00/)).toBeInTheDocument()
+    expect(await within(reportsPanel).findByText(/Пополнено:\s*1 500\.00/)).toBeInTheDocument()
+    expect(within(reportsPanel).getByText(/Изъято:\s*300\.00/)).toBeInTheDocument()
     const fundChangesTable = within(reportsPanel).getByRole('table', { name: 'Отчет по изменению фондов' })
     expect(fundChangesTable).toHaveTextContent('Электроэнергия')
     expect(fundChangesTable).toHaveTextContent('Пополнение')
     expect(fundChangesTable).toHaveTextContent('Изъятие')
-    expect(fundChangesTable).toHaveTextContent('1 500,00')
+    expect(fundChangesTable).toHaveTextContent('1 500.00')
     expect(fundChangesTable).toHaveTextContent('Распределение средств')
     expect(fundChangesTable).toHaveTextContent('Администратор ГСК')
     expect(fundChangesTable).not.toHaveTextContent('Резервный фонд')

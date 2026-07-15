@@ -618,7 +618,7 @@ public sealed class ProjectWideRoadmapStatusTests
         Assert.Contains("\"version\": \"0.412.0\"", releaseText, StringComparison.Ordinal);
         Assert.Contains("\"version\": \"0.429.0\"", releaseText, StringComparison.Ordinal);
         Assert.Contains("\"version\": \"0.437.0\"", releaseText, StringComparison.Ordinal);
-        Assert.Contains("\"version\": \"0.663.0\"", releaseText, StringComparison.Ordinal);
+        Assert.Contains("\"version\": \"0.669.0\"", releaseText, StringComparison.Ordinal);
         Assert.Contains("Полная оплата использует рассчитанную сумму", releaseText, StringComparison.Ordinal);
         Assert.Contains("Полная оплата учитывает входящий долг периода", releaseText, StringComparison.Ordinal);
         Assert.Contains("Сумму оплаты теперь можно указать вручную", releaseText, StringComparison.Ordinal);
