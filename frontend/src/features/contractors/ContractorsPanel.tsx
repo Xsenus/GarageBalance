@@ -775,6 +775,9 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
   const [departmentDeleteReason, setDepartmentDeleteReason] = useState('')
   const openedInitialTargetRef = useRef<string | null>(null)
   const loadedContractorSectionsRef = useRef<Record<ContractorSection, boolean>>({ garages: false, suppliers: false, staff: false })
+  const loadedContractorReferencesRef = useRef<Record<'garages' | 'suppliers', boolean>>({ garages: false, suppliers: false })
+  const ownersRef = useRef<OwnerDto[]>([])
+  const supplierContactsRef = useRef<SupplierContactDto[]>([])
   useRestoreFocusOnClose(Boolean(restoreTarget))
   useRestoreFocusOnClose(Boolean(garageDeleteTarget))
   useRestoreFocusOnClose(Boolean(garageFinancialReportTarget))
@@ -839,37 +842,20 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
       setContractorPageLoading((current) => ({ ...current, [activeSection]: true }))
       try {
         if (activeSection === 'garages') {
-          const [ownerRows, garageRows] = await Promise.all([
-            dictionaryClient.getOwners(auth.accessToken, undefined, contractorsDictionaryListLimit, true),
-            dictionaryClient.getGaragesPage
-              ? dictionaryClient.getGaragesPage(auth.accessToken, undefined, 0, contractorsDefaultPageSize, true)
-              : dictionaryClient.getGarages(auth.accessToken, undefined, contractorsDictionaryListLimit, true).then((items) => createFallbackPage(items, 0, contractorsDefaultPageSize)),
-          ])
+          const garageRows = await (dictionaryClient.getGaragesPage
+            ? dictionaryClient.getGaragesPage(auth.accessToken, undefined, 0, contractorsDefaultPageSize, true)
+            : dictionaryClient.getGarages(auth.accessToken, undefined, contractorsDictionaryListLimit, true).then((items) => createFallbackPage(items, 0, contractorsDefaultPageSize)))
           if (!cancelled) {
-            setOwners(ownerRows)
-            setGarages(garageRows.items.map((garage) => createGarageRowFromDto(garage, ownerRows)))
+            setGarages(garageRows.items.map((garage) => createGarageRowFromDto(garage, ownersRef.current)))
             setGaragePage({ totalCount: garageRows.totalCount, offset: garageRows.offset, limit: garageRows.limit })
           }
         } else if (activeSection === 'suppliers') {
-          const [groups, supplierRows, supplierContactRows, loadedChargeServices, loadedIncomeTypes, loadedTariffs] = await Promise.all([
-            dictionaryClient.getSupplierGroups(auth.accessToken, undefined, contractorsDictionaryListLimit, true),
-            dictionaryClient.getSuppliersPage
-              ? dictionaryClient.getSuppliersPage(auth.accessToken, undefined, undefined, 0, contractorsDefaultPageSize, true)
-              : dictionaryClient.getSuppliers(auth.accessToken, undefined, undefined, contractorsDictionaryListLimit, true).then((items) => createFallbackPage(items, 0, contractorsDefaultPageSize)),
-            dictionaryClient.getSupplierContacts(auth.accessToken, undefined, undefined, contractorsDictionaryListLimit, true),
-            dictionaryClient.getChargeServiceSettings(auth.accessToken, undefined, contractorsDictionaryListLimit, true),
-            dictionaryClient.getIncomeTypes(auth.accessToken, undefined, contractorsDictionaryListLimit, true),
-            dictionaryClient.getTariffs(auth.accessToken, undefined, contractorsDictionaryListLimit, true),
-          ])
+          const supplierRows = await (dictionaryClient.getSuppliersPage
+            ? dictionaryClient.getSuppliersPage(auth.accessToken, undefined, undefined, 0, contractorsDefaultPageSize, true)
+            : dictionaryClient.getSuppliers(auth.accessToken, undefined, undefined, contractorsDictionaryListLimit, true).then((items) => createFallbackPage(items, 0, contractorsDefaultPageSize)))
           if (!cancelled) {
-            const nextSuppliers = supplierRows.items.map((supplier) => createSupplierRowFromDto(supplier, supplierContactRows))
-            setSupplierGroups(groups)
-            setSuppliers(nextSuppliers)
+            setSuppliers(supplierRows.items.map((supplier) => createSupplierRowFromDto(supplier, supplierContactsRef.current)))
             setSupplierPage({ totalCount: supplierRows.totalCount, offset: supplierRows.offset, limit: supplierRows.limit })
-            setSupplierContacts(supplierContactRows)
-            setChargeServices(loadedChargeServices)
-            setServiceIncomeTypes(loadedIncomeTypes)
-            setServiceTariffs(loadedTariffs)
           }
         } else {
           const [departmentRows, staffRows] = await Promise.all([
@@ -900,6 +886,67 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
     }
 
     void loadActiveContractorSection()
+    return () => {
+      cancelled = true
+    }
+  }, [activeSection, auth.accessToken, dictionaryClient])
+
+  useEffect(() => {
+    if (activeSection === 'staff' || loadedContractorReferencesRef.current[activeSection]) {
+      return
+    }
+
+    const referenceSection = activeSection
+    let cancelled = false
+    async function loadEditorReferences() {
+      try {
+        if (referenceSection === 'garages') {
+          const ownerRows = await dictionaryClient.getOwners(auth.accessToken, undefined, contractorsDictionaryListLimit, true)
+          if (!cancelled) {
+            ownersRef.current = ownerRows
+            setOwners(ownerRows)
+            setGarages((current) => current.map((garage) => {
+              const owner = garage.ownerId ? ownerRows.find((item) => item.id === garage.ownerId) : null
+              return owner
+                ? { ...garage, owner: garage.owner || owner.fullName, phone: owner.phone ?? '', address: owner.address ?? '', meters: owner.meterNotes ?? '' }
+                : garage
+            }))
+          }
+        } else {
+          const [groups, supplierContactRows, loadedChargeServices, loadedIncomeTypes, loadedTariffs] = await Promise.all([
+            dictionaryClient.getSupplierGroups(auth.accessToken, undefined, contractorsDictionaryListLimit, true),
+            dictionaryClient.getSupplierContacts(auth.accessToken, undefined, undefined, contractorsDictionaryListLimit, true),
+            dictionaryClient.getChargeServiceSettings(auth.accessToken, undefined, contractorsDictionaryListLimit, true),
+            dictionaryClient.getIncomeTypes(auth.accessToken, undefined, contractorsDictionaryListLimit, true),
+            dictionaryClient.getTariffs(auth.accessToken, undefined, contractorsDictionaryListLimit, true),
+          ])
+          if (!cancelled) {
+            supplierContactsRef.current = supplierContactRows
+            setSupplierGroups(groups)
+            setSupplierContacts(supplierContactRows)
+            setChargeServices(loadedChargeServices)
+            setServiceIncomeTypes(loadedIncomeTypes)
+            setServiceTariffs(loadedTariffs)
+            setSuppliers((current) => current.map((supplier) => ({
+              ...supplier,
+              contacts: supplierContactRows
+                .filter((contact) => contact.supplierId === supplier.id)
+                .map(createSupplierContactFromDto),
+            })))
+          }
+        }
+
+        if (!cancelled) {
+          loadedContractorReferencesRef.current[referenceSection] = true
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setFormStateError(error instanceof Error ? error.message : 'Не удалось загрузить данные для форм контрагентов.')
+        }
+      }
+    }
+
+    void loadEditorReferences()
     return () => {
       cancelled = true
     }

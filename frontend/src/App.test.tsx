@@ -1905,6 +1905,64 @@ describe('App', () => {
     expect(within(contractorsPanel).queryByLabelText('Раздел истории контрагентов')).not.toBeInTheDocument()
   }, 180000)
 
+  it('shows contractor pages without waiting for editor reference dictionaries', async () => {
+    const user = userEvent.setup()
+    let resolveOwners!: (owners: OwnerDto[]) => void
+    let resolveSupplierGroups!: (groups: SupplierGroupDto[]) => void
+    const ownersPromise = new Promise<OwnerDto[]>((resolve) => { resolveOwners = resolve })
+    const supplierGroupsPromise = new Promise<SupplierGroupDto[]>((resolve) => { resolveSupplierGroups = resolve })
+    const garage = createGarage({ id: 'garage-fast-page', number: '77', ownerName: 'Быстрый владелец' })
+    const supplier = createSupplier({ id: 'supplier-fast-page', name: 'Быстрый поставщик' })
+    const dictionaryClient = createDictionaryClient({
+      getOwners: vi.fn(() => ownersPromise),
+      getGaragesPage: async (_token, _search, offset = 0, limit = 25) => ({ items: [garage], totalCount: 1, offset, limit }),
+      getSupplierGroups: vi.fn(() => supplierGroupsPromise),
+      getSuppliersPage: async (_token, _groupId, _search, offset = 0, limit = 25) => ({ items: [supplier], totalCount: 1, offset, limit }),
+    })
+
+    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Контрагенты')
+    const contractorsPanel = await screen.findByRole('region', { name: 'Контрагенты' })
+
+    expect(await within(contractorsPanel).findByText('77')).toBeInTheDocument()
+    expect(within(contractorsPanel).queryByText('Загружаем гаражи')).not.toBeInTheDocument()
+
+    await act(async () => resolveOwners([]))
+    await user.click(within(contractorsPanel).getByRole('tab', { name: 'Поставщики' }))
+
+    expect(await within(contractorsPanel).findByText('Быстрый поставщик')).toBeInTheDocument()
+    expect(within(contractorsPanel).queryByText('Загружаем поставщиков')).not.toBeInTheDocument()
+
+    await act(async () => resolveSupplierGroups([]))
+  })
+
+  it('keeps a contractor page available when its editor references fail', async () => {
+    const user = userEvent.setup()
+    const dictionaryClient = createDictionaryClient({
+      getOwners: async () => { throw new Error('Справочник владельцев временно недоступен.') },
+      getGaragesPage: async (_token, _search, offset = 0, limit = 25) => ({
+        items: [createGarage({ id: 'garage-reference-error', number: '78', ownerName: 'Владелец из страницы' })],
+        totalCount: 1,
+        offset,
+        limit,
+      }),
+    })
+
+    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Контрагенты')
+    const contractorsPanel = await screen.findByRole('region', { name: 'Контрагенты' })
+
+    expect(await within(contractorsPanel).findByText('78')).toBeInTheDocument()
+    expect(await within(contractorsPanel).findByText('Справочник владельцев временно недоступен.')).toBeInTheDocument()
+    expect(within(contractorsPanel).queryByText('Загружаем гаражи')).not.toBeInTheDocument()
+  })
+
   it('pages garages, suppliers and staff through server dictionary pages', async () => {
     const user = userEvent.setup()
     const garagePageRequests: Array<{ offset: number; limit: number; includeArchived: boolean; sortBy?: string; sortDirection?: string }> = []
