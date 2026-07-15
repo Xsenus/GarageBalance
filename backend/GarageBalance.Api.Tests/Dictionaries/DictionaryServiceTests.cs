@@ -1267,6 +1267,35 @@ public sealed class DictionaryServiceTests
     }
 
     [Fact]
+    public void RegularAccrualCatalogRepairMigration_RestoresOnlyMissingDefaultsWithoutOverwritingCatalog()
+    {
+        var migration = File.ReadAllText(Path.Combine(
+            FindApiProjectRoot(),
+            "Infrastructure",
+            "Data",
+            "Migrations",
+            "20260715100229_RestoreRegularAccrualCatalogAfterCleanup.cs"));
+
+        string[] regularIncomeCodes = ["water", "trash", "electricity", "membership", "target"];
+        foreach (var code in regularIncomeCodes)
+        {
+            Assert.Contains($"'{code}'", migration, StringComparison.Ordinal);
+        }
+
+        Assert.Contains("FROM income_types existing", migration, StringComparison.Ordinal);
+        Assert.Contains("existing.\"Id\" = defaults.\"Id\"", migration, StringComparison.Ordinal);
+        Assert.Contains("LOWER(BTRIM(existing.\"Name\"))", migration, StringComparison.Ordinal);
+        Assert.Contains("LOWER(BTRIM(existing.\"Code\"))", migration, StringComparison.Ordinal);
+        Assert.Contains("INNER JOIN tariffs tariff", migration, StringComparison.Ordinal);
+        Assert.Contains("tariff.\"IsArchived\" = FALSE", migration, StringComparison.Ordinal);
+        Assert.Contains("FROM charge_service_settings existing", migration, StringComparison.Ordinal);
+        Assert.Contains("ON CONFLICT DO NOTHING", migration, StringComparison.Ordinal);
+        Assert.Contains("dictionary.regular_accrual_catalog_restored", migration, StringComparison.Ordinal);
+        Assert.DoesNotContain("UPDATE tariffs", migration, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("\"IsArchived\" = FALSE,", migration, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void DemoTariffCatalogMigration_SeedsOnlyEmptyCatalogWithCustomerFormValuesAndAudit()
     {
         var migration = File.ReadAllText(Path.Combine(
