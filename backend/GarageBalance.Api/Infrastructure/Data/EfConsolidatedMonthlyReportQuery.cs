@@ -18,7 +18,7 @@ public sealed class EfConsolidatedMonthlyReportQuery(GarageBalanceDbContext dbCo
         var meterReadings = dbContext.MeterReadings.AsNoTracking()
             .Where(reading => !reading.IsCanceled && reading.AccountingMonth >= periodFrom && reading.AccountingMonth <= periodTo);
 
-        var operationsByMonth = await operations
+        var operationMonthlyQuery = operations
             .Where(operation =>
                 operation.OperationKind == FinancialOperationKinds.Income ||
                 operation.OperationKind == FinancialOperationKinds.Expense)
@@ -29,13 +29,34 @@ public sealed class EfConsolidatedMonthlyReportQuery(GarageBalanceDbContext dbCo
                 Kind = group.Key.OperationKind,
                 Amount = group.Sum(item => item.Amount),
                 Count = group.Count()
-            })
+            });
+        var accrualMonthlyQuery = accruals
+            .GroupBy(accrual => accrual.AccountingMonth)
+            .Select(group => new
+            {
+                Month = group.Key,
+                Kind = "accrual",
+                Amount = group.Sum(item => item.Amount),
+                Count = group.Count()
+            });
+        var readingMonthlyQuery = meterReadings
+            .GroupBy(reading => reading.AccountingMonth)
+            .Select(group => new
+            {
+                Month = group.Key,
+                Kind = "meter-reading",
+                Amount = 0m,
+                Count = group.Count()
+            });
+        var monthlyRows = await operationMonthlyQuery
+            .Concat(accrualMonthlyQuery)
+            .Concat(readingMonthlyQuery)
             .ToListAsync(cancellationToken);
-        var incomeByMonth = operationsByMonth
+        var incomeByMonth = monthlyRows
             .Where(row => row.Kind == FinancialOperationKinds.Income)
             .Select(row => new AmountCountByMonth(row.Month, row.Amount, row.Count))
             .ToList();
-        var expenseByMonth = operationsByMonth
+        var expenseByMonth = monthlyRows
             .Where(row => row.Kind == FinancialOperationKinds.Expense)
             .Select(row => new AmountCountByMonth(row.Month, row.Amount, row.Count))
             .ToList();
@@ -80,14 +101,14 @@ public sealed class EfConsolidatedMonthlyReportQuery(GarageBalanceDbContext dbCo
             .Where(row => row.Kind == FinancialOperationKinds.Expense)
             .Select(row => new NamedAmountTotal(row.TypeId, row.Name, row.Amount))
             .ToList();
-        var accrualByMonth = await accruals
-            .GroupBy(accrual => accrual.AccountingMonth)
-            .Select(group => new AmountCountByMonth(group.Key, group.Sum(item => item.Amount), group.Count()))
-            .ToListAsync(cancellationToken);
-        var readingsByMonth = await meterReadings
-            .GroupBy(reading => reading.AccountingMonth)
-            .Select(group => new CountByMonth(group.Key, group.Count()))
-            .ToListAsync(cancellationToken);
+        var accrualByMonth = monthlyRows
+            .Where(row => row.Kind == "accrual")
+            .Select(row => new AmountCountByMonth(row.Month, row.Amount, row.Count))
+            .ToList();
+        var readingsByMonth = monthlyRows
+            .Where(row => row.Kind == "meter-reading")
+            .Select(row => new CountByMonth(row.Month, row.Count))
+            .ToList();
         var garageStartingBalanceTotal = await dbContext.Garages.AsNoTracking()
             .Where(garage => !garage.IsArchived && garage.StartingBalance != 0)
             .SumAsync(garage => garage.StartingBalance, cancellationToken);

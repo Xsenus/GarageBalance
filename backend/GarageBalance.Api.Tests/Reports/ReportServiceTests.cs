@@ -102,7 +102,7 @@ public sealed class ReportServiceTests
     }
 
     [Fact]
-    public async Task ConsolidatedMonthlyQuery_LoadsCompleteAggregatesInFiveSelects()
+    public async Task ConsolidatedMonthlyQuery_LoadsCompleteAggregatesInThreeSelects()
     {
         var commandCounter = new SelectCommandCounter();
         await using var database = await TestDatabase.CreateAsync(commandCounter);
@@ -110,6 +110,8 @@ public sealed class ReportServiceTests
         var finance = FinanceServiceTestFactory.Create(database.Context);
         await finance.CreateIncomeAsync(new CreateIncomeOperationRequest(fixtures.FirstGarage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 6, 10), new DateOnly(2026, 6, 1), 1500m, "IN-FAST", null), null, CancellationToken.None);
         await finance.CreateExpenseAsync(new CreateExpenseOperationRequest(fixtures.Supplier.Id, fixtures.ExpenseType.Id, new DateOnly(2026, 6, 11), new DateOnly(2026, 6, 1), 400m, "OUT-FAST", null), null, CancellationToken.None);
+        await finance.CreateAccrualAsync(new CreateAccrualRequest(fixtures.FirstGarage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 6, 1), 1800m, "regular", null), null, CancellationToken.None);
+        await finance.CreateMeterReadingAsync(new CreateMeterReadingRequest(fixtures.FirstGarage.Id, "water", new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 20), 15m, null), null, CancellationToken.None);
         commandCounter.Reset();
 
         var result = await new EfConsolidatedMonthlyReportQuery(database.Context).GetMonthlyDataAsync(
@@ -119,7 +121,9 @@ public sealed class ReportServiceTests
 
         Assert.Equal(1500m, Assert.Single(result.IncomeBreakdown).Amount);
         Assert.Equal(400m, Assert.Single(result.ExpenseBreakdown).Amount);
-        Assert.Equal(5, commandCounter.Count);
+        Assert.Equal(1800m, Assert.Single(result.AccrualByMonth).Amount);
+        Assert.Equal(1, Assert.Single(result.MeterReadingsByMonth).Count);
+        Assert.Equal(3, commandCounter.Count);
     }
 
     [Fact]
