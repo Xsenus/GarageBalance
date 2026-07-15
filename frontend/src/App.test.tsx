@@ -387,6 +387,44 @@ describe('App', () => {
     }
   })
 
+  it('shows ready tariff data without waiting for irregular payments or fee campaigns', async () => {
+    const user = userEvent.setup()
+    let resolveIrregularPayments!: (payments: IrregularPaymentDto[]) => void
+    let rejectFeeCampaigns!: (reason: Error) => void
+    const irregularPaymentsPromise = new Promise<IrregularPaymentDto[]>((resolve) => { resolveIrregularPayments = resolve })
+    const feeCampaignsPromise = new Promise<FeeCampaignDto[]>((_resolve, reject) => { rejectFeeCampaigns = reject })
+    const dictionaryClient = createDictionaryClient({
+      getTariffs: async () => [createTariff({ id: 'fast-tariff', name: 'Быстрый тариф воды', calculationBase: 'meter_water', rate: 450 })],
+      getChargeServiceSettings: async () => [],
+      getIrregularPayments: async () => irregularPaymentsPromise,
+      getFeeCampaigns: async () => feeCampaignsPromise,
+    })
+
+    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Тарифы и сборы')
+    const tariffsPanel = await screen.findByRole('region', { name: 'Тарифы и сборы' })
+
+    expect(await within(tariffsPanel).findByText('Быстрый тариф воды')).toBeInTheDocument()
+    expect(within(tariffsPanel).queryByText('Загружаем тарифы и услуги')).not.toBeInTheDocument()
+    expect(within(tariffsPanel).getByText('Загружаем нерегулярные платежи')).toBeInTheDocument()
+    expect(within(tariffsPanel).getByText('Загружаем объявленные сборы')).toBeInTheDocument()
+
+    await act(async () => resolveIrregularPayments([
+      createIrregularPayment({ id: 'fast-irregular', name: 'Быстрый нерегулярный платеж', amount: 700 }),
+    ]))
+    expect(await within(tariffsPanel).findByText('Быстрый нерегулярный платеж')).toBeInTheDocument()
+    expect(within(tariffsPanel).queryByText('Загружаем нерегулярные платежи')).not.toBeInTheDocument()
+
+    await act(async () => rejectFeeCampaigns(new Error('Объявленные сборы временно недоступны.')))
+    expect(await within(tariffsPanel).findByText('Объявленные сборы временно недоступны.')).toBeInTheDocument()
+    expect(within(tariffsPanel).getByText('Быстрый тариф воды')).toBeInTheDocument()
+    expect(within(tariffsPanel).getByText('Быстрый нерегулярный платеж')).toBeInTheDocument()
+    expect(within(tariffsPanel).queryByText('Загружаем объявленные сборы')).not.toBeInTheDocument()
+  })
+
   it('shows tariffs and fees prototype page and opens service and fee modals', async () => {
     const user = userEvent.setup()
     render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
@@ -2746,8 +2784,16 @@ describe('App', () => {
   it('shows table-shaped tariff skeletons and hides empty messages while critical data is loading', async () => {
     const user = userEvent.setup()
     let resolveTariffs!: (value: TariffDto[]) => void
+    let resolveIrregularPayments!: (value: IrregularPaymentDto[]) => void
+    let resolveFeeCampaigns!: (value: FeeCampaignDto[]) => void
     const tariffsPromise = new Promise<TariffDto[]>((resolve) => { resolveTariffs = resolve })
-    const dictionaryClient = createDictionaryClient({ getTariffs: async () => tariffsPromise })
+    const irregularPaymentsPromise = new Promise<IrregularPaymentDto[]>((resolve) => { resolveIrregularPayments = resolve })
+    const feeCampaignsPromise = new Promise<FeeCampaignDto[]>((resolve) => { resolveFeeCampaigns = resolve })
+    const dictionaryClient = createDictionaryClient({
+      getTariffs: async () => tariffsPromise,
+      getIrregularPayments: async () => irregularPaymentsPromise,
+      getFeeCampaigns: async () => feeCampaignsPromise,
+    })
 
     render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
 
@@ -2763,6 +2809,15 @@ describe('App', () => {
 
     await act(async () => resolveTariffs([]))
     expect(await within(tariffsPanel).findByText('Тарифы и услуги пока не настроены.')).toBeInTheDocument()
+    expect(within(tariffsPanel).getByRole('status', { name: 'Загружаем нерегулярные платежи' })).toBeInTheDocument()
+    expect(within(tariffsPanel).getByRole('status', { name: 'Загружаем объявленные сборы' })).toBeInTheDocument()
+
+    await act(async () => resolveIrregularPayments([]))
+    expect(await within(tariffsPanel).findByText('Нерегулярные платежи пока не настроены.')).toBeInTheDocument()
+    expect(within(tariffsPanel).getByRole('status', { name: 'Загружаем объявленные сборы' })).toBeInTheDocument()
+
+    await act(async () => resolveFeeCampaigns([]))
+    expect(await within(tariffsPanel).findByText('Объявленные сборы пока не настроены.')).toBeInTheDocument()
   })
 
   it('does not make tariff tables wait for auxiliary garage references', async () => {

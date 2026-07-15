@@ -552,6 +552,8 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
   const [tariffDateErrors, setTariffDateErrors] = useState<Record<string, string>>({})
   const [tariffPersistenceError, setTariffPersistenceError] = useState<string | null>(null)
   const [tariffsLoading, setTariffsLoading] = useState(true)
+  const [oneTimeLoading, setOneTimeLoading] = useState(true)
+  const [feeCampaignsLoading, setFeeCampaignsLoading] = useState(true)
   const [tariffReferencesLoading, setTariffReferencesLoading] = useState(true)
   const [tariffSavingRowId, setTariffSavingRowId] = useState<string | null>(null)
   const [oneTimeSavingRowId, setOneTimeSavingRowId] = useState<string | null>(null)
@@ -565,30 +567,24 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
   useEffect(() => {
     let ignore = false
 
-    async function loadTariffsAndFees() {
-      setTariffsLoading(true)
+    async function loadTariffsAndServices() {
       setTariffPersistenceError(null)
+      setTariffsLoading(true)
       try {
-        const [loadedTariffs, loadedIrregularPayments, loadedChargeServices, loadedFeeCampaigns] = await Promise.all([
+        const [loadedTariffs, loadedChargeServices] = await Promise.all([
           dictionaryClient.getTariffs(auth.accessToken, undefined, dictionaryScreenRequestLimit),
-          dictionaryClient.getIrregularPayments(auth.accessToken, undefined, dictionaryScreenRequestLimit, true),
           dictionaryClient.getChargeServiceSettings(auth.accessToken, undefined, dictionaryScreenRequestLimit, true),
-          dictionaryClient.getFeeCampaigns(auth.accessToken, undefined, dictionaryScreenRequestLimit, true),
         ])
         if (!ignore) {
           const mergedRows = createTariffRowsFromBackend(loadedTariffs, loadedChargeServices)
-          const mergedOneTimeRows = mergeIrregularPaymentsIntoPrototypeRows([], loadedIrregularPayments, true)
           setBackendTariffs(loadedTariffs)
           setBackendChargeServices(loadedChargeServices)
-          setFeeCampaigns(loadedFeeCampaigns)
           setTariffRows(mergedRows)
-          setOneTimeRows(mergedOneTimeRows)
           setTariffDrafts(createEditableDrafts(mergedRows))
-          setOneTimeDrafts(createEditableDrafts(mergedOneTimeRows))
         }
       } catch (caught) {
         if (!ignore) {
-          setTariffPersistenceError(caught instanceof Error ? caught.message : 'Не удалось загрузить тарифы и сборы.')
+          setTariffPersistenceError(caught instanceof Error ? caught.message : 'Не удалось загрузить тарифы и услуги.')
         }
       } finally {
         if (!ignore) {
@@ -597,7 +593,47 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
       }
     }
 
-    void loadTariffsAndFees()
+    async function loadIrregularPayments() {
+      setOneTimeLoading(true)
+      try {
+        const loadedIrregularPayments = await dictionaryClient.getIrregularPayments(auth.accessToken, undefined, dictionaryScreenRequestLimit, true)
+        if (!ignore) {
+          const mergedOneTimeRows = mergeIrregularPaymentsIntoPrototypeRows([], loadedIrregularPayments, true)
+          setOneTimeRows(mergedOneTimeRows)
+          setOneTimeDrafts(createEditableDrafts(mergedOneTimeRows))
+        }
+      } catch (caught) {
+        if (!ignore) {
+          setTariffPersistenceError(caught instanceof Error ? caught.message : 'Не удалось загрузить нерегулярные платежи.')
+        }
+      } finally {
+        if (!ignore) {
+          setOneTimeLoading(false)
+        }
+      }
+    }
+
+    async function loadFeeCampaigns() {
+      setFeeCampaignsLoading(true)
+      try {
+        const loadedFeeCampaigns = await dictionaryClient.getFeeCampaigns(auth.accessToken, undefined, dictionaryScreenRequestLimit, true)
+        if (!ignore) {
+          setFeeCampaigns(loadedFeeCampaigns)
+        }
+      } catch (caught) {
+        if (!ignore) {
+          setTariffPersistenceError(caught instanceof Error ? caught.message : 'Не удалось загрузить объявленные сборы.')
+        }
+      } finally {
+        if (!ignore) {
+          setFeeCampaignsLoading(false)
+        }
+      }
+    }
+
+    void loadTariffsAndServices()
+    void loadIrregularPayments()
+    void loadFeeCampaigns()
 
     async function loadTariffReferences() {
       setTariffReferencesLoading(true)
@@ -649,7 +685,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
   }, [auth.accessToken, formStateClient])
 
   useEffect(() => {
-    if (!formStateLoaded || tariffsLoading) {
+    if (!formStateLoaded || tariffsLoading || oneTimeLoading) {
       return
     }
 
@@ -663,7 +699,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
     }, 400)
 
     return () => window.clearTimeout(handle)
-  }, [auth.accessToken, formStateClient, formStateLoaded, oneTimeRows, tariffRows, tariffsLoading])
+  }, [auth.accessToken, formStateClient, formStateLoaded, oneTimeLoading, oneTimeRows, tariffRows, tariffsLoading])
 
   function closeOneTimeDeleteDialog() {
     setOneTimeDeleteTarget(null)
@@ -1806,8 +1842,8 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
                 <span>Основание</span>
                 <span>Сумма, руб.</span>
               </div>
-              {tariffsLoading ? <TableLoadingState className="table-loading-state--compact" label="Загружаем нерегулярные платежи" /> : null}
-              {!tariffsLoading ? oneTimePage.items.map((row) => (
+              {oneTimeLoading ? <TableLoadingState className="table-loading-state--compact" label="Загружаем нерегулярные платежи" /> : null}
+              {!oneTimeLoading ? oneTimePage.items.map((row) => (
                 <div
                   aria-label={`Нерегулярный платеж ${row.name}`}
                   className={[
@@ -1842,14 +1878,14 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
                   </span>
                 </div>
               )) : null}
-              {oneTimeRows.length === 0 && !tariffsLoading ? <EmptyState>Нерегулярные платежи пока не настроены.</EmptyState> : null}
+              {oneTimeRows.length === 0 && !oneTimeLoading ? <EmptyState>Нерегулярные платежи пока не настроены.</EmptyState> : null}
               <TablePagination
                 ariaLabel="Пагинация нерегулярных платежей"
                 totalCount={oneTimePage.totalCount}
                 offset={oneTimePage.offset}
                 limit={oneTimePage.limit}
                 visibleCount={oneTimePage.items.length}
-                disabled={tariffsLoading}
+                disabled={oneTimeLoading}
                 pageSizeLabel="Количество строк нерегулярных платежей"
                 onPageChange={setOneTimePageNumber}
                 onPageSizeChange={(limit) => {
@@ -1870,8 +1906,8 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
                 <span>Период</span>
                 <span>Действия</span>
               </div>
-              {tariffsLoading ? <TableLoadingState className="table-loading-state--compact" label="Загружаем объявленные сборы" /> : null}
-              {!tariffsLoading ? feeCampaignPage.items.map((campaign) => (
+              {feeCampaignsLoading ? <TableLoadingState className="table-loading-state--compact" label="Загружаем объявленные сборы" /> : null}
+              {!feeCampaignsLoading ? feeCampaignPage.items.map((campaign) => (
                 <div
                   aria-label={`Объявленный сбор ${campaign.name}`}
                   className={[
@@ -1918,14 +1954,14 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
                   </span>
                 </div>
               )) : null}
-              {feeCampaigns.length === 0 && !tariffsLoading ? <EmptyState>Объявленные сборы пока не настроены.</EmptyState> : null}
+              {feeCampaigns.length === 0 && !feeCampaignsLoading ? <EmptyState>Объявленные сборы пока не настроены.</EmptyState> : null}
               <TablePagination
                 ariaLabel="Пагинация объявленных сборов"
                 totalCount={feeCampaignPage.totalCount}
                 offset={feeCampaignPage.offset}
                 limit={feeCampaignPage.limit}
                 visibleCount={feeCampaignPage.items.length}
-                disabled={tariffsLoading}
+                disabled={feeCampaignsLoading}
                 pageSizeLabel="Количество строк объявленных сборов"
                 onPageChange={setFeeCampaignPageNumber}
                 onPageSizeChange={(limit) => {
