@@ -304,3 +304,17 @@ No schema, financial formula, business rule, production data, cleanup policy or 
 - [x] Production was checked read-only without deployment: five public health requests and the frontend returned HTTP 200. After the first TLS connection, health completed in 0.152-0.156 seconds and the frontend in 0.155 seconds.
 
 No schema, financial formula, business rule, production data, cleanup policy or deployment configuration changed in this pass. Local PostgreSQL project credentials remain unavailable; PostgreSQL behavior is protected by query-shape guards, EF integration tests and idempotent migration generation. End-user release note `0.677.0` describes the faster consolidated monthly report. Push and deployment remain intentionally pending because this task did not authorize publication.
+
+## Nineteenth finance-total round-trip audit: 2026-07-16
+
+- [x] Measured the remaining payment-summary path after section-count optimization. Operation totals and accrual totals still executed as two sequential aggregates before the combined section-count query.
+- [x] Added a dedicated application query that combines income, expense and accrual totals and counts into one PostgreSQL `UNION ALL` command. Together with the existing combined section counts, the full summary now requires two `SELECT` commands instead of three.
+- [x] Preserved the exact filter split: date, operation kind, garage, supplier and staff filters constrain operations, while month and search rules continue to govern accrual totals. A regression proves that selecting only income operations does not incorrectly hide accrual totals.
+- [x] Preserved case-insensitive Cyrillic search in the explicitly scoped SQLite test fallback. PostgreSQL filtering, grouping, conditional sums and counts remain server-side before materialization.
+- [x] Removed the obsolete repository summary methods and DTOs so there is one production calculation path. Architecture guards require the combined totals query and prevent reintroducing the retired repository method.
+- [x] The first complete backend gate correctly rejected one obsolete source guard that still required the removed repository method. The guard was changed to prohibit that method, its focused rerun passed 1/1, and the complete backend gate then passed.
+- [x] Complete verification passed: backend 1618/1618 with 88.92% line and 70.93% branch coverage; frontend 523/523 with 81.20% statements, 71.95% branches, 76.99% functions and 81.78% lines. ESLint, production build, backend formatting, privacy scan of 696 files, Docker Compose validation, whitespace checks and 128700-byte idempotent migration SQL generation passed.
+- [x] The production bundle remains within budget: main JavaScript 75.6 KiB gzip, main CSS 19.1 KiB gzip and total JavaScript/CSS 225.7/260.0 KiB gzip.
+- [x] Production was checked read-only without deployment: five public health requests and the frontend returned HTTP 200. After the first TLS connection, health completed in 0.159-0.245 seconds and the frontend in 0.160 seconds.
+
+No schema, financial formula, business rule, production data, cleanup policy or deployment configuration changed in this pass. Local PostgreSQL project credentials remain unavailable; PostgreSQL behavior is protected by query-shape guards, EF integration tests and idempotent migration generation. End-user release note `0.678.0` describes the faster financial summary. Push and deployment remain intentionally pending because this task did not authorize publication.
