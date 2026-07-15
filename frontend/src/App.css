@@ -2184,6 +2184,22 @@ h1 {
   flex: 1;
 }
 
+.contractors-service-cost-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.contractors-service-cost-field {
+  grid-column: 3;
+  min-width: 0;
+}
+
+.contractors-service-cost-field input {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
 .contractors-fee-money-field input {
   text-align: right;
   font-variant-numeric: tabular-nums;
@@ -7335,8 +7351,13 @@ button.operation-row:focus-visible {
   .contractors-fee-two-column-grid,
   .contractors-fee-date-grid,
   .contractors-service-period-grid,
-  .contractors-service-flags {
+  .contractors-service-flags,
+  .contractors-service-cost-grid {
     grid-template-columns: 1fr;
+  }
+
+  .contractors-service-cost-field {
+    grid-column: 1;
   }
 
   .import-tabs {

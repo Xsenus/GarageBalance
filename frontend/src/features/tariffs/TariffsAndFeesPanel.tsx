@@ -15,6 +15,7 @@ import { FormField } from '../../shared/FormField'
 import { formatDateOnly, formatMoney, getCurrentMonthInputValue, getLocalDateInputValue } from '../../shared/formatters'
 import { useEscapeKey, useFocusOnOpen, useFocusTrap, useRestoreFocusOnClose } from '../../shared/focusHooks'
 import { LocalizedDatePicker } from '../../shared/LocalizedDatePicker'
+import { MoneyInput } from '../../shared/MoneyInput'
 import { formatPrototypeChangeValue, handleEditableInputKeyDown } from '../../shared/prototypeEditing'
 import { createClientPage } from '../../shared/pagination'
 import { SelectControl } from '../../shared/SelectControl'
@@ -2305,6 +2306,7 @@ function AddServicePrototypeDialog({
   const [paymentDueMonth, setPaymentDueMonth] = useState(contractorTariffMonthOptions[6].value)
   const [overdueGraceDays, setOverdueGraceDays] = useState('30')
   const [unitName, setUnitName] = useState(unitOptions[0] ?? 'руб.')
+  const [cost, setCost] = useState(Number.NaN)
   const [error, setError] = useState<string | null>(null)
   const compatibleTariffs = getCompatibleRegularTariffs(incomeTypeId, incomeTypes, tariffs)
   useRestoreFocusOnClose(true)
@@ -2490,12 +2492,19 @@ function AddServicePrototypeDialog({
               ) : null}
             </>
           ) : (
-            <FormField label="Стоимость">
-              <div className="contractors-inline-field">
-                <input aria-label="Стоимость услуги" />
-                <span>руб.</span>
-              </div>
-            </FormField>
+            <div className="contractors-service-cost-grid">
+              <FormField label="Стоимость" className="contractors-service-cost-field">
+                <div className="contractors-inline-field">
+                  <MoneyInput
+                    aria-label="Стоимость услуги"
+                    placeholder="1 000 000.00"
+                    value={cost}
+                    onValueChange={setCost}
+                  />
+                  <span>руб.</span>
+                </div>
+              </FormField>
+            </div>
           )}
 
           <div className="detail-dialog-actions">
