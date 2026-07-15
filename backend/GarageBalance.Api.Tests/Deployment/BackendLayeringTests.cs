@@ -1031,7 +1031,8 @@ public sealed class BackendLayeringTests
         Assert.Contains("meterReadingRepository.GetListAsync", service, StringComparison.Ordinal);
         Assert.Contains("meterReadingRepository.GetPageAsync", service, StringComparison.Ordinal);
         Assert.Contains("meterReadingRepository.GetForGaragePeriodAsync", service, StringComparison.Ordinal);
-        Assert.Contains("meterReadingRepository.CountActiveAsync", service, StringComparison.Ordinal);
+        Assert.Contains("IFinanceSectionCountQuery financeSectionCountQuery", service, StringComparison.Ordinal);
+        Assert.Contains("financeSectionCountQuery.GetAsync", service, StringComparison.Ordinal);
         Assert.Contains("meterReadingRepository.ActiveDuplicateExistsAsync", service, StringComparison.Ordinal);
         Assert.Contains("meterReadingRepository.GetPreviousActiveAsync", service, StringComparison.Ordinal);
         Assert.Contains("meterReadingRepository.GetNextActiveAsync", service, StringComparison.Ordinal);
@@ -1042,6 +1043,7 @@ public sealed class BackendLayeringTests
         Assert.DoesNotContain("private IQueryable<MeterReading> QueryMeterReadings", service, StringComparison.Ordinal);
         Assert.DoesNotContain("ApplyMeterReadingFilters", service, StringComparison.Ordinal);
         Assert.Contains("AddScoped<IMeterReadingRepository, EfMeterReadingRepository>()", program, StringComparison.Ordinal);
+        Assert.Contains("AddScoped<IFinanceSectionCountQuery, EfFinanceSectionCountQuery>()", program, StringComparison.Ordinal);
     }
 
     [Fact]

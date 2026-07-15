@@ -12,6 +12,7 @@ public sealed class FinanceService(
     IStaffMemberRepository staffMemberRepository,
     IGarageRepository garageRepository,
     IMissingMeterReadingQuery missingMeterReadingQuery,
+    IFinanceSectionCountQuery financeSectionCountQuery,
     IMeterReadingRepository meterReadingRepository,
     IFinancialOperationRepository financialOperationRepository,
     IAccrualRepository accrualRepository,
@@ -531,12 +532,7 @@ public sealed class FinanceService(
             request.DateTo.HasValue ? MonthPeriod.Normalize(request.DateTo.Value) : null,
             NormalizeSearch(request.Search),
             cancellationToken);
-        var meterReadingCount = await meterReadingRepository.CountActiveAsync(
-            request.DateFrom.HasValue ? MonthPeriod.Normalize(request.DateFrom.Value) : null,
-            request.DateTo.HasValue ? MonthPeriod.Normalize(request.DateTo.Value) : null,
-            NormalizeSearch(request.Search),
-            cancellationToken);
-        var supplierAccrualCount = await supplierAccrualRepository.CountActiveAsync(
+        var sectionCounts = await financeSectionCountQuery.GetAsync(
             request.DateFrom.HasValue ? MonthPeriod.Normalize(request.DateFrom.Value) : null,
             request.DateTo.HasValue ? MonthPeriod.Normalize(request.DateTo.Value) : null,
             NormalizeSearch(request.Search),
@@ -549,11 +545,11 @@ public sealed class FinanceService(
             accrualSummary.TotalAmount - operationSummary.IncomeTotal,
             operationSummary.Count,
             accrualSummary.Count,
-            meterReadingCount)
+            sectionCounts.MeterReadingCount)
         {
             IncomeCount = operationSummary.IncomeCount,
             ExpenseCount = operationSummary.ExpenseCount,
-            SupplierAccrualCount = supplierAccrualCount
+            SupplierAccrualCount = sectionCounts.SupplierAccrualCount
         };
     }
 

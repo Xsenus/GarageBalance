@@ -1436,7 +1436,7 @@ public sealed class FinanceServiceTests
     }
 
     [Fact]
-    public async Task GetSummaryAsync_UsesFourAggregateSelectsAndReturnsSectionCounts()
+    public async Task GetSummaryAsync_UsesThreeAggregateSelectsAndReturnsSectionCounts()
     {
         var commandCounter = new SelectCommandCounter();
         await using var database = await TestDatabase.CreateAsync(commandCounter);
@@ -1453,12 +1453,35 @@ public sealed class FinanceServiceTests
             new FinancialOperationListRequest(new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 30), null, null),
             CancellationToken.None);
 
-        Assert.Equal(4, commandCounter.Count);
+        Assert.Equal(3, commandCounter.Count);
         Assert.Equal(1, result.IncomeCount);
         Assert.Equal(1, result.ExpenseCount);
         Assert.Equal(1, result.AccrualCount);
         Assert.Equal(1, result.SupplierAccrualCount);
         Assert.Equal(1, result.MeterReadingCount);
+    }
+
+    [Fact]
+    public async Task GetSummaryAsync_FiltersCombinedSectionCountsByPeriodAndSearch()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        var service = FinanceServiceTestFactory.Create(database.Context);
+        await service.CreateSupplierAccrualAsync(new CreateSupplierAccrualRequest(fixtures.Supplier.Id, fixtures.ExpenseType.Id, new DateOnly(2026, 6, 1), 400m, "regular", "SUP-MATCH", "supplier marker"), null, CancellationToken.None);
+        await service.CreateMeterReadingAsync(new CreateMeterReadingRequest(fixtures.Garage.Id, "water", new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 20), 10m, "meter marker"), null, CancellationToken.None);
+        await service.CreateMeterReadingAsync(new CreateMeterReadingRequest(fixtures.Garage.Id, "electricity", new DateOnly(2026, 5, 1), new DateOnly(2026, 5, 20), 20m, "meter marker"), null, CancellationToken.None);
+
+        var supplierResult = await service.GetSummaryAsync(
+            new FinancialOperationListRequest(new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 30), null, "supplier marker"),
+            CancellationToken.None);
+        var meterResult = await service.GetSummaryAsync(
+            new FinancialOperationListRequest(new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 30), null, "meter marker"),
+            CancellationToken.None);
+
+        Assert.Equal(1, supplierResult.SupplierAccrualCount);
+        Assert.Equal(0, supplierResult.MeterReadingCount);
+        Assert.Equal(0, meterResult.SupplierAccrualCount);
+        Assert.Equal(1, meterResult.MeterReadingCount);
     }
 
     [Fact]

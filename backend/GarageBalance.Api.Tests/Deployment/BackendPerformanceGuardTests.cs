@@ -42,15 +42,17 @@ public sealed class BackendPerformanceGuardTests
     {
         var operationSource = ReadApiSource("Infrastructure/Data/EfFinancialOperationRepository.cs");
         var accrualSource = ReadApiSource("Infrastructure/Data/EfAccrualRepository.cs");
-        var supplierAccrualSource = ReadApiSource("Infrastructure/Data/EfSupplierAccrualRepository.cs");
+        var sectionCountSource = ReadApiSource("Infrastructure/Data/EfFinanceSectionCountQuery.cs");
         var serviceSource = ReadApiSource("Application/Finance/FinanceService.cs");
 
         Assert.Contains("IncomeCount = group.Count(operation => operation.OperationKind == FinancialOperationKinds.Income)", operationSource, StringComparison.Ordinal);
         Assert.Contains("ExpenseCount = group.Count(operation => operation.OperationKind == FinancialOperationKinds.Expense)", operationSource, StringComparison.Ordinal);
         Assert.Contains(".SingleOrDefaultAsync(cancellationToken)", operationSource, StringComparison.Ordinal);
         Assert.Contains("TotalAmount = group.Sum(accrual => (decimal?)accrual.Amount) ?? 0m", accrualSource, StringComparison.Ordinal);
-        Assert.Contains("CountActiveAsync", supplierAccrualSource, StringComparison.Ordinal);
-        Assert.Contains("supplierAccrualRepository.CountActiveAsync", serviceSource, StringComparison.Ordinal);
+        Assert.Contains(".Concat(supplierAccruals", sectionCountSource, StringComparison.Ordinal);
+        Assert.Contains("financeSectionCountQuery.GetAsync", serviceSource, StringComparison.Ordinal);
+        Assert.DoesNotContain("meterReadingRepository.CountActiveAsync", serviceSource, StringComparison.Ordinal);
+        Assert.DoesNotContain("supplierAccrualRepository.CountActiveAsync", serviceSource, StringComparison.Ordinal);
     }
 
     [Fact]
