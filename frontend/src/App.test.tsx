@@ -6118,6 +6118,7 @@ describe('App', () => {
     const dictionaryPanel = await screen.findByRole('region', { name: 'Справочники' })
     await openDictionarySubgroup(user, dictionaryPanel, 'Тарифы')
     const tariffDialog = await openDictionaryCreateDialog(user, dictionaryPanel)
+    expect(within(tariffDialog).getByLabelText('Ставка тарифа')).toHaveValue('1.00')
 
     await user.type(within(tariffDialog).getByLabelText('Название тарифа'), 'Электроэнергия')
     await selectStyledOption(user, tariffDialog, 'База расчета тарифа', 'По счетчику электричества')

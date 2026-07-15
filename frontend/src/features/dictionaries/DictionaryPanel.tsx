@@ -18,6 +18,7 @@ import { FormField } from '../../shared/FormField'
 import { formatDateOnly, formatDebtAmount, formatDebtLabel, formatMoney, formatMonth, formatNullableNumber, formatTariffRateSummary, getDebtClassName } from '../../shared/formatters'
 import { useEscapeKey, useFocusOnOpen, useFocusTrap, useRestoreFocusOnClose } from '../../shared/focusHooks'
 import { LocalizedDatePicker } from '../../shared/LocalizedDatePicker'
+import { MoneyInput } from '../../shared/MoneyInput'
 import { createEmptyPage, createFallbackPage } from '../../shared/pagination'
 import { TablePagination } from '../../shared/TablePagination'
 import { createDefaultGarageBalanceHistoryFilters } from '../../shared/reportFilters'
@@ -1094,7 +1095,7 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, integ
           <SelectControl aria-label={fieldMeta('tariffCalculationBase').ariaLabel} value={tariffForm.calculationBase} options={getTariffCalculationBaseOptions()} onChange={(value) => setTariffForm(updateTariffCalculationBase(tariffForm, value))} />
         ))}
         <div className="inline-fields">
-          {dictionaryField('tariffRate', <input aria-label={fieldMeta('tariffRate').ariaLabel} type="number" min="0.0001" step="0.0001" value={tariffForm.rate} onChange={(event) => setTariffForm({ ...tariffForm, rate: Number(event.target.value) })} />)}
+          {dictionaryField('tariffRate', <MoneyInput aria-label={fieldMeta('tariffRate').ariaLabel} value={tariffForm.rate} onValueChange={(rate) => setTariffForm({ ...tariffForm, rate })} />)}
           {dictionaryField('tariffEffectiveFrom', <LocalizedDatePicker ariaLabel={fieldMeta('tariffEffectiveFrom').ariaLabel} mode="date" value={tariffForm.effectiveFrom} onChange={(value) => setTariffForm({ ...tariffForm, effectiveFrom: value })} />)}
         </div>
         {usesElectricityTariffTiers(tariffForm.calculationBase) ? (
@@ -2137,7 +2138,7 @@ export function DictionaryPanel({ auth, dictionaryClient }: { auth: AuthResponse
           <input aria-label="Название тарифа" placeholder="Вода" value={tariffForm.name} onChange={(event) => setTariffForm({ ...tariffForm, name: event.target.value })} required />
           <SelectControl aria-label="База расчета тарифа" value={tariffForm.calculationBase} options={getTariffCalculationBaseOptions()} onChange={(value) => setTariffForm(updateTariffCalculationBase(tariffForm, value))} />
           <div className="inline-fields">
-            <input aria-label="Ставка тарифа" type="number" min="0.0001" step="0.0001" value={tariffForm.rate} onChange={(event) => setTariffForm({ ...tariffForm, rate: Number(event.target.value) })} />
+            <MoneyInput aria-label="Ставка тарифа" value={tariffForm.rate} onValueChange={(rate) => setTariffForm({ ...tariffForm, rate })} />
             <LocalizedDatePicker ariaLabel="Дата начала тарифа" mode="date" value={tariffForm.effectiveFrom} onChange={(value) => setTariffForm({ ...tariffForm, effectiveFrom: value })} />
           </div>
           {usesElectricityTariffTiers(tariffForm.calculationBase) ? (
