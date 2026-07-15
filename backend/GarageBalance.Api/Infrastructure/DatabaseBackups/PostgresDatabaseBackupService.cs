@@ -12,6 +12,7 @@ public sealed partial class PostgresDatabaseBackupService(
     IConfiguration configuration,
     IOptions<DatabaseBackupOptions> options,
     IBackupCommandRunner commandRunner,
+    IBackupToolLocator toolLocator,
     IAuditEventWriter auditEventWriter,
     IApplicationUnitOfWork unitOfWork,
     TimeProvider timeProvider,
@@ -21,21 +22,23 @@ public sealed partial class PostgresDatabaseBackupService(
     private static DateTimeOffset? _lastSuccessfulBackupAtUtc;
     private static string? _lastError;
     private readonly DatabaseBackupOptions _options = options.Value;
+    private readonly string _directory = ResolveBackupDirectory(options.Value.Directory);
 
     public Task<DatabaseBackupStatusDto> GetStatusAsync(CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
         var backups = EnumerateBackups(20);
         var lastSuccessful = backups.FirstOrDefault()?.CreatedAtUtc ?? _lastSuccessfulBackupAtUtc;
+        var toolError = _options.Enabled ? GetToolAvailabilityError() : null;
         return Task.FromResult(new DatabaseBackupStatusDto(
             _options.Enabled,
             _options.AutomaticEnabled,
             _options.IntervalHours,
             _options.RetentionCount,
-            _options.Directory,
+            _directory,
             OperationLock.CurrentCount == 0,
             lastSuccessful,
-            _lastError,
+            toolError ?? _lastError,
             backups));
     }
 
@@ -70,6 +73,15 @@ public sealed partial class PostgresDatabaseBackupService(
             }
         }
 
+        var pgDumpPath = toolLocator.Resolve(_options.PgDumpPath);
+        var pgRestorePath = toolLocator.Resolve(_options.PgRestorePath);
+        if (pgDumpPath is null || pgRestorePath is null)
+        {
+            return Fail(
+                "database_backup_tools_unavailable",
+                "Не найдены утилиты PostgreSQL pg_dump и pg_restore. Установите клиентские инструменты PostgreSQL или задайте POSTGRESQL_BIN.");
+        }
+
         if (!await OperationLock.WaitAsync(0, cancellationToken))
         {
             return DatabaseBackupResult<DatabaseBackupFileDto>.Failure(
@@ -80,16 +92,16 @@ public sealed partial class PostgresDatabaseBackupService(
         string? temporaryPath = null;
         try
         {
-            Directory.CreateDirectory(_options.Directory);
+            Directory.CreateDirectory(_directory);
             var now = timeProvider.GetUtcNow();
             var kindName = FormatKind(kind);
             var fileName = $"garagebalance_{kindName}_{now:yyyyMMdd_HHmmss_fff}.pgdump";
-            var finalPath = Path.Combine(_options.Directory, fileName);
+            var finalPath = Path.Combine(_directory, fileName);
             temporaryPath = finalPath + ".tmp";
             var connection = BuildConnectionSettings();
 
             var dumpResult = await commandRunner.RunAsync(new BackupCommand(
-                _options.PgDumpPath,
+                pgDumpPath,
                 BuildDumpArguments(connection, temporaryPath),
                 BuildPasswordEnvironment(connection)), cancellationToken);
             if (dumpResult.ExitCode != 0)
@@ -104,7 +116,7 @@ public sealed partial class PostgresDatabaseBackupService(
             }
 
             var verifyResult = await commandRunner.RunAsync(new BackupCommand(
-                _options.PgRestorePath,
+                pgRestorePath,
                 ["--list", temporaryPath],
                 new Dictionary<string, string>()), cancellationToken);
             if (verifyResult.ExitCode != 0)
@@ -206,12 +218,12 @@ public sealed partial class PostgresDatabaseBackupService(
 
     private IReadOnlyList<DatabaseBackupFileDto> EnumerateBackups(int limit)
     {
-        if (!Directory.Exists(_options.Directory))
+        if (!Directory.Exists(_directory))
         {
             return [];
         }
 
-        return Directory.EnumerateFiles(_options.Directory, "garagebalance_*.pgdump", SearchOption.TopDirectoryOnly)
+        return Directory.EnumerateFiles(_directory, "garagebalance_*.pgdump", SearchOption.TopDirectoryOnly)
             .Select(path => new FileInfo(path))
             .Where(file => ManagedBackupName().IsMatch(file.Name))
             .OrderByDescending(file => file.LastWriteTimeUtc)
@@ -229,8 +241,31 @@ public sealed partial class PostgresDatabaseBackupService(
         var expired = EnumerateBackups(int.MaxValue).Skip(_options.RetentionCount);
         foreach (var backup in expired)
         {
-            File.Delete(Path.Combine(_options.Directory, backup.FileName));
+            File.Delete(Path.Combine(_directory, backup.FileName));
         }
+    }
+
+    private string? GetToolAvailabilityError()
+    {
+        return toolLocator.Resolve(_options.PgDumpPath) is not null && toolLocator.Resolve(_options.PgRestorePath) is not null
+            ? null
+            : "Не найдены утилиты PostgreSQL pg_dump и pg_restore. Установите клиентские инструменты PostgreSQL или задайте POSTGRESQL_BIN.";
+    }
+
+    private static string ResolveBackupDirectory(string configuredDirectory)
+    {
+        if (!string.Equals(configuredDirectory, "auto", StringComparison.OrdinalIgnoreCase))
+        {
+            return Path.GetFullPath(configuredDirectory);
+        }
+
+        var localData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+        if (string.IsNullOrWhiteSpace(localData))
+        {
+            localData = AppContext.BaseDirectory;
+        }
+
+        return Path.Combine(localData, "GarageBalance", "backups");
     }
 
     private DatabaseBackupResult<DatabaseBackupFileDto> Fail(string code, string message, string? diagnostic = null)

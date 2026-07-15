@@ -88,12 +88,18 @@ trap 'on_error "$LINENO"' ERR
 [[ -s "$MIGRATION_SQL" ]] || fail "migration SQL was not found or empty: $MIGRATION_SQL"
 
 install -d -o "${APP_USER}" -g "${APP_GROUP}" -m 750 "$DIAGNOSTIC_LOG_DIR"
+install -d -o "${APP_USER}" -g "${APP_GROUP}" -m 750 "$BACKUP_DIR"
 ensure_env_setting "DiagnosticLogging__Enabled" "true"
 ensure_env_setting "DiagnosticLogging__Directory" "$DIAGNOSTIC_LOG_DIR"
 ensure_env_setting "DiagnosticLogging__RetentionDays" "14"
 ensure_env_setting "DiagnosticLogging__MaxFileSizeMb" "10"
 ensure_env_setting "DiagnosticLogging__PackageDays" "7"
 ensure_env_setting "DiagnosticLogging__PackageMaxSizeMb" "20"
+ensure_env_setting "DatabaseBackup__Enabled" "true"
+ensure_env_setting "DatabaseBackup__AutomaticEnabled" "true"
+ensure_env_setting "DatabaseBackup__Directory" "$BACKUP_DIR"
+ensure_env_setting "DatabaseBackup__IntervalHours" "24"
+ensure_env_setting "DatabaseBackup__RetentionCount" "30"
 
 connection_string="$(
   grep -E '^(ConnectionStrings__DefaultConnection|ConnectionStrings__Postgres)=' "$ENV_FILE" \
@@ -117,7 +123,7 @@ if [[ -z "$backend_base_url" ]]; then
   fail "ASPNETCORE_URLS was not found in ${ENV_FILE}"
 fi
 
-mkdir -p "$BACKUP_DIR" "$RELEASE_DIR"
+mkdir -p "$RELEASE_DIR"
 rm -rf "$NEXT_API" "$NEXT_FRONTEND"
 mkdir -p "$NEXT_API" "$NEXT_FRONTEND"
 

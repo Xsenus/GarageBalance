@@ -53,6 +53,21 @@ public sealed class DockerComposeTests
     }
 
     [Fact]
+    public void NonDockerConfigurationEnablesPortableBackupsAndVpsKeepsWritableStorage()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var appSettings = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "appsettings.json"));
+        var deployScript = File.ReadAllText(Path.Combine(repositoryRoot, "infrastructure", "scripts", "vps-apply-release.sh"));
+
+        Assert.Contains("\"DatabaseBackup\"", appSettings, StringComparison.Ordinal);
+        Assert.Contains("\"Enabled\": true", appSettings, StringComparison.Ordinal);
+        Assert.Contains("\"AutomaticEnabled\": true", appSettings, StringComparison.Ordinal);
+        Assert.Contains("\"Directory\": \"auto\"", appSettings, StringComparison.Ordinal);
+        Assert.Contains("install -d -o \"${APP_USER}\" -g \"${APP_GROUP}\" -m 750 \"$BACKUP_DIR\"", deployScript, StringComparison.Ordinal);
+        Assert.Contains("ensure_env_setting \"DatabaseBackup__Directory\" \"$BACKUP_DIR\"", deployScript, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void StartupBackupRunsBeforeDatabaseMigration()
     {
         var repositoryRoot = FindRepositoryRoot();

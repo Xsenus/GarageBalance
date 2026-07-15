@@ -63,7 +63,7 @@ public sealed class SettingsController(
         var statusCode = result.ErrorCode switch
         {
             "database_backup_in_progress" => StatusCodes.Status409Conflict,
-            "database_backup_disabled" or "database_backup_dump_failed" or "database_backup_verification_failed" or "database_backup_failed" => StatusCodes.Status503ServiceUnavailable,
+            "database_backup_disabled" or "database_backup_tools_unavailable" or "database_backup_dump_failed" or "database_backup_verification_failed" or "database_backup_failed" => StatusCodes.Status503ServiceUnavailable,
             _ => StatusCodes.Status400BadRequest
         };
         return Problem(statusCode: statusCode, title: result.ErrorCode, detail: result.ErrorMessage);

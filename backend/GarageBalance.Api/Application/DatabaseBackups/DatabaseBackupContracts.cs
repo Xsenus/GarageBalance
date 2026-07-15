@@ -6,11 +6,11 @@ public sealed class DatabaseBackupOptions
 {
     public const string SectionName = "DatabaseBackup";
 
-    public bool Enabled { get; init; }
-    public bool AutomaticEnabled { get; init; }
+    public bool Enabled { get; init; } = true;
+    public bool AutomaticEnabled { get; init; } = true;
 
     [Required]
-    public string Directory { get; init; } = "/backups";
+    public string Directory { get; init; } = "auto";
 
     [Range(1, 168)]
     public int IntervalHours { get; init; } = 24;

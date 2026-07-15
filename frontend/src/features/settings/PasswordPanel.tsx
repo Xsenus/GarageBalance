@@ -622,7 +622,7 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
         <div className="settings-card-intro">
           <p className="eyebrow">Резервные копии</p>
           <h2>Защита данных PostgreSQL</h2>
-          <p>Автоматические копии сохраняются вне контейнера. При обновлении контейнеры заменяются, но база, ключи шифрования и файлы backup остаются в постоянных хранилищах.</p>
+          <p>Резервные копии работают как при обычном запуске, так и в Docker. Файлы сохраняются в постоянной папке компьютера и не зависят от обновления приложения.</p>
         </div>
         {backupLoading ? <LoadingSkeleton className="loading-skeleton--compact" label="Загружаем состояние резервного копирования" rows={3} columns={4} /> : null}
         {backupError ? (
@@ -655,7 +655,7 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
                 <strong>{backupStatus.lastSuccessfulBackupAtUtc ? formatDateTime(backupStatus.lastSuccessfulBackupAtUtc) : 'еще не создавалась'}</strong>
               </div>
             </div>
-            <p className="form-hint">Каталог внутри контейнера: {backupStatus.directory}. Фактическая папка компьютера задается параметром BACKUP_HOST_PATH в файле .env.</p>
+            <p className="form-hint">Папка хранения: {backupStatus.directory}. При обычном запуске система выбирает постоянный локальный каталог автоматически; путь можно переопределить параметром DatabaseBackup__Directory. В Docker используется BACKUP_HOST_PATH.</p>
             {backupStatus.lastError ? <FormError>{backupStatus.lastError}</FormError> : null}
             <button
               ref={backupTriggerRef}

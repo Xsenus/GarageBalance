@@ -106,6 +106,7 @@ public sealed class SettingsControllerTests
     [Theory]
     [InlineData("database_backup_in_progress", StatusCodes.Status409Conflict)]
     [InlineData("database_backup_disabled", StatusCodes.Status503ServiceUnavailable)]
+    [InlineData("database_backup_tools_unavailable", StatusCodes.Status503ServiceUnavailable)]
     [InlineData("database_backup_reason_required", StatusCodes.Status400BadRequest)]
     public async Task CreateDatabaseBackup_MapsServiceFailuresToSafeProblemDetails(string errorCode, int expectedStatus)
     {

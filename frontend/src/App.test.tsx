@@ -5158,7 +5158,7 @@ describe('App', () => {
     expect(await within(displayPanel).findByText('Настройка отображения платежей сохранена.')).toHaveAttribute('role', 'status')
   })
 
-  it('shows Docker backup status and creates a verified manual copy from settings', async () => {
+  it('shows portable backup status and creates a verified manual copy from settings', async () => {
     const user = userEvent.setup()
     const existingBackup = {
       fileName: 'garagebalance_automatic_20260714_020000_000.pgdump',
@@ -5199,6 +5199,7 @@ describe('App', () => {
 
     const backupsPanel = await within(settings).findByRole('region', { name: 'Резервное копирование базы данных' })
     expect(await within(backupsPanel).findByLabelText('Состояние резервного копирования')).toHaveTextContent('каждые 24 ч.')
+    expect(within(backupsPanel).getByText(/Папка хранения: \/backups/)).toHaveTextContent('При обычном запуске система выбирает постоянный локальный каталог автоматически')
     expect(within(backupsPanel).getByRole('table', { name: 'Последние резервные копии' })).toHaveTextContent(existingBackup.fileName)
     const createButton = within(backupsPanel).getByRole('button', { name: 'Создать резервную копию' })
     await user.click(createButton)

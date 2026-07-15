@@ -115,6 +115,57 @@ public sealed class PostgresDatabaseBackupServiceTests : IDisposable
     }
 
     [Fact]
+    public void BackupToolLocator_ResolvesConfiguredExecutableAndRejectsMissingAbsolutePath()
+    {
+        var executable = Environment.ProcessPath ?? throw new InvalidOperationException("Current process path is unavailable.");
+        var locator = new BackupToolLocator();
+
+        Assert.Equal(Path.GetFullPath(executable), locator.Resolve(executable));
+        Assert.Null(locator.Resolve(Path.Combine(_directory, "missing-pg-dump")));
+    }
+
+    [Fact]
+    public void BackupToolLocator_PrefersNewestInstalledPostgresVersion()
+    {
+        var installations = new[]
+        {
+            Path.Combine(_directory, "PostgreSQL", "9.6"),
+            Path.Combine(_directory, "PostgreSQL", "17"),
+            Path.Combine(_directory, "PostgreSQL", "10")
+        };
+
+        Assert.Equal(
+            [installations[1], installations[2], installations[0]],
+            BackupToolLocator.OrderPostgresInstallations(installations));
+    }
+
+    [Fact]
+    public async Task GetStatus_UsesPersistentOperatingSystemDirectoryForAutoMode()
+    {
+        var service = CreateService(new FakeCommandRunner(), directory: "auto");
+
+        var status = await service.GetStatusAsync(CancellationToken.None);
+
+        Assert.True(Path.IsPathFullyQualified(status.Directory));
+        Assert.EndsWith(Path.Combine("GarageBalance", "backups"), status.Directory, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task CreateBackup_ReportsMissingPostgresClientToolsWithoutStartingProcess()
+    {
+        var runner = new FakeCommandRunner();
+        var service = CreateService(runner, toolLocator: new FakeToolLocator(available: false));
+
+        var status = await service.GetStatusAsync(CancellationToken.None);
+        var result = await service.CreateAsync(DatabaseBackupKind.Manual, "Проверка локальной копии", null, CancellationToken.None);
+
+        Assert.Contains("pg_dump", status.LastError, StringComparison.Ordinal);
+        Assert.Equal("database_backup_tools_unavailable", result.ErrorCode);
+        Assert.Contains("POSTGRESQL_BIN", result.ErrorMessage, StringComparison.Ordinal);
+        Assert.Empty(runner.Commands);
+    }
+
+    [Fact]
     public async Task CreateBackup_KeepsOnlyConfiguredNumberOfManagedFilesAndNeverDeletesForeignFiles()
     {
         Directory.CreateDirectory(_directory);
@@ -159,7 +210,9 @@ public sealed class PostgresDatabaseBackupServiceTests : IDisposable
         CaptureAuditWriter? audit = null,
         CaptureUnitOfWork? unitOfWork = null,
         bool enabled = true,
-        int retentionCount = 30)
+        int retentionCount = 30,
+        string? directory = null,
+        IBackupToolLocator? toolLocator = null)
     {
         var configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
         {
@@ -169,7 +222,7 @@ public sealed class PostgresDatabaseBackupServiceTests : IDisposable
         {
             Enabled = enabled,
             AutomaticEnabled = true,
-            Directory = _directory,
+            Directory = directory ?? _directory,
             IntervalHours = 24,
             RetentionCount = retentionCount,
             PgDumpPath = "pg_dump",
@@ -179,10 +232,16 @@ public sealed class PostgresDatabaseBackupServiceTests : IDisposable
             configuration,
             options,
             runner,
+            toolLocator ?? new FakeToolLocator(available: true),
             audit ?? new CaptureAuditWriter(),
             unitOfWork ?? new CaptureUnitOfWork(),
             new FixedTimeProvider(_now),
             NullLogger<PostgresDatabaseBackupService>.Instance);
+    }
+
+    private sealed class FakeToolLocator(bool available) : IBackupToolLocator
+    {
+        public string? Resolve(string configuredPath) => available ? configuredPath : null;
     }
 
     public void Dispose()

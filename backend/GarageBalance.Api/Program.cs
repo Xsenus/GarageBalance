@@ -133,6 +133,7 @@ builder.Services
     .Bind(builder.Configuration.GetSection(DatabaseStartupOptions.SectionName))
     .ValidateOnStart();
 builder.Services.AddSingleton<IBackupCommandRunner, BackupCommandRunner>();
+builder.Services.AddSingleton<IBackupToolLocator, BackupToolLocator>();
 builder.Services.AddScoped<IDatabaseBackupService, PostgresDatabaseBackupService>();
 builder.Services.AddScoped<DatabaseBackupAutomationRunner>();
 builder.Services
