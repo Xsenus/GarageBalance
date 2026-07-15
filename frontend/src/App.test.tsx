@@ -7301,6 +7301,39 @@ describe('App', () => {
     expect(emptyDictionaryState).toHaveAttribute('aria-live', 'polite')
   })
 
+  it('loads only editor references required by the active dictionary section', async () => {
+    const user = userEvent.setup()
+    const baseDictionaryClient = createDictionaryClient()
+    const getOwners = vi.fn(baseDictionaryClient.getOwners)
+    const getGarages = vi.fn(baseDictionaryClient.getGarages)
+    const getSupplierGroups = vi.fn(baseDictionaryClient.getSupplierGroups)
+    const dictionaryClient = createDictionaryClient({ getOwners, getGarages, getSupplierGroups })
+    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Справочники')
+    const dictionaryPanel = await screen.findByRole('region', { name: 'Справочники' })
+    const referenceCallCount = (mock: typeof getOwners | typeof getGarages | typeof getSupplierGroups) =>
+      mock.mock.calls.filter((call) => call.length === 3 && call[2] === 500).length
+
+    await waitFor(() => expect(getGarages).toHaveBeenCalledWith(expect.any(String), undefined, 500))
+    expect(referenceCallCount(getOwners)).toBe(0)
+    expect(referenceCallCount(getSupplierGroups)).toBe(0)
+
+    await openDictionarySubgroup(user, dictionaryPanel, 'Гаражи')
+    await waitFor(() => expect(getOwners).toHaveBeenCalledWith(expect.any(String), undefined, 500))
+    expect(referenceCallCount(getSupplierGroups)).toBe(0)
+
+    await openDictionarySubgroup(user, dictionaryPanel, 'Поставщики')
+    await waitFor(() => expect(getSupplierGroups).toHaveBeenCalledWith(expect.any(String), undefined, 500))
+
+    await openDictionarySubgroup(user, dictionaryPanel, 'Виды поступлений')
+    expect(referenceCallCount(getGarages)).toBe(1)
+    expect(referenceCallCount(getOwners)).toBe(1)
+    expect(referenceCallCount(getSupplierGroups)).toBe(1)
+  })
+
   it('requests bounded dictionary lists from dictionaries workspace', async () => {
     const user = userEvent.setup()
     const requestedLimits: Record<string, number | undefined> = {}
@@ -7342,7 +7375,7 @@ describe('App', () => {
         return [createGarage()]
       },
       getSupplierGroups: async (_token, _search, limit) => {
-        requestedLimits.supplierGroups = limit
+        requestedLimits.supplierGroupReferences = limit
         return [createGroup()]
       },
       getSuppliers: async (_token, _groupId, _search, limit) => {
@@ -7379,6 +7412,7 @@ describe('App', () => {
       owners: 25,
       garages: 25,
       supplierGroups: 25,
+      supplierGroupReferences: 500,
       suppliers: 25,
       incomeTypes: 25,
       expenseTypes: 25,
@@ -11580,6 +11614,85 @@ describe('App', () => {
     expect(payoutReportTable).toHaveTextContent('Водоканал')
   })
 
+  it('loads report filter dictionaries only for the opened tab and keeps the consolidated report to one request', async () => {
+    const user = userEvent.setup()
+    const baseDictionaryClient = createDictionaryClient()
+    const getGarages = vi.fn(baseDictionaryClient.getGarages)
+    const getSuppliers = vi.fn(baseDictionaryClient.getSuppliers)
+    const getIncomeTypes = vi.fn(baseDictionaryClient.getIncomeTypes)
+    const getExpenseTypes = vi.fn(baseDictionaryClient.getExpenseTypes)
+    const dictionaryClient = createDictionaryClient({ getGarages, getSuppliers, getIncomeTypes, getExpenseTypes })
+    const baseReportClient = createReportClient()
+    const getConsolidatedReport = vi.fn(baseReportClient.getConsolidatedReport)
+    const getIncomeReport = vi.fn(baseReportClient.getIncomeReport)
+    const getExpenseReport = vi.fn(baseReportClient.getExpenseReport)
+    const reportClient = createReportClient({ getConsolidatedReport, getIncomeReport, getExpenseReport })
+    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={reportClient} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Отчеты')
+    const reportsPanel = await screen.findByRole('region', { name: 'Отчеты' })
+    const consolidatedTable = within(reportsPanel).getByRole('table', { name: 'Консолидированный отчет' })
+    await waitFor(() => expect(consolidatedTable).toHaveTextContent('Членский взнос'))
+
+    expect(getConsolidatedReport).toHaveBeenCalledTimes(1)
+    expect(getIncomeReport).not.toHaveBeenCalled()
+    expect(getExpenseReport).not.toHaveBeenCalled()
+    expect(getGarages).not.toHaveBeenCalled()
+    expect(getSuppliers).not.toHaveBeenCalled()
+    expect(getIncomeTypes).not.toHaveBeenCalled()
+    expect(getExpenseTypes).not.toHaveBeenCalled()
+
+    await openReportTab(user, reportsPanel, 'По гаражам')
+    await waitFor(() => expect(getGarages).toHaveBeenCalledTimes(1))
+    expect(getSuppliers).not.toHaveBeenCalled()
+    expect(getIncomeTypes).not.toHaveBeenCalled()
+    expect(getExpenseTypes).not.toHaveBeenCalled()
+
+    await openReportTab(user, reportsPanel, 'По выплатам')
+    await waitFor(() => {
+      expect(getSuppliers).toHaveBeenCalledTimes(1)
+      expect(getExpenseTypes).toHaveBeenCalledTimes(1)
+    })
+    expect(getIncomeTypes).not.toHaveBeenCalled()
+
+    await openReportTab(user, reportsPanel, 'Сборы')
+    await waitFor(() => expect(getIncomeTypes).toHaveBeenCalledTimes(1))
+
+    await openReportTab(user, reportsPanel, 'Поступления')
+    await waitFor(() => expect(getIncomeReport).toHaveBeenCalledTimes(1))
+    expect(getGarages).toHaveBeenCalledTimes(1)
+  })
+
+  it('shows a lazy report-filter error and retries the failed reference request when the tab is reopened', async () => {
+    const user = userEvent.setup()
+    let attempt = 0
+    const getGarages = vi.fn(async () => {
+      attempt += 1
+      if (attempt === 1) {
+        throw new Error('Справочник гаражей временно недоступен')
+      }
+
+      return [createGarage()]
+    })
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient({ getGarages })} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Отчеты')
+    const reportsPanel = await screen.findByRole('region', { name: 'Отчеты' })
+    expect(within(reportsPanel).queryByText('Справочник гаражей временно недоступен')).not.toBeInTheDocument()
+
+    await openReportTab(user, reportsPanel, 'По гаражам')
+    expect(await within(reportsPanel).findByText('Справочник гаражей временно недоступен')).toHaveAttribute('role', 'alert')
+
+    await openReportTab(user, reportsPanel, 'Консолидированный')
+    await openReportTab(user, reportsPanel, 'По гаражам')
+    await waitFor(() => expect(getGarages).toHaveBeenCalledTimes(2))
+    await waitFor(() => expect(within(reportsPanel).queryByText('Справочник гаражей временно недоступен')).not.toBeInTheDocument())
+  })
+
   it('shows daily, fee and fund report filters with quick period buttons', async () => {
     const user = userEvent.setup()
     const baseReportClient = createReportClient()
@@ -12407,6 +12520,8 @@ describe('App', () => {
 
     failReportDictionaries = true
     await openSection(user, 'Отчеты')
+    const reportsPanel = await screen.findByRole('region', { name: 'Отчеты' })
+    await openReportTab(user, reportsPanel, 'По гаражам')
     expect(await screen.findByText('Нет доступа к отчетам.')).toBeInTheDocument()
     expect(screen.getAllByRole('alert').map((alert) => alert.textContent)).toEqual(expect.arrayContaining(['Нет доступа к отчетам.']))
 
@@ -14881,6 +14996,8 @@ function createConsolidatedReport(overrides: Partial<ConsolidatedReportDto> = {}
         meterReadingCount: 1,
       },
     ],
+    incomeBreakdown: [{ typeId: 'income-type-1', name: 'Членский взнос', amount: 1500 }],
+    expenseBreakdown: [{ typeId: 'expense-type-1', name: 'Вода', amount: 400 }],
     ...overrides,
   }
 }

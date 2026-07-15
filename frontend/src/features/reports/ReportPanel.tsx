@@ -1,4 +1,4 @@
-import { useEffect, useId, useState } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
 import type { CSSProperties, ReactNode } from 'react'
 import { FileSpreadsheet, FileText } from 'lucide-react'
 import type { AuthResponse } from '../../services/authApi'
@@ -25,11 +25,6 @@ type ReportDateRange = {
   dateTo: string
 }
 
-type ReportNamedAmountRow = {
-  name: string
-  amount: number
-}
-
 const dictionaryScreenRequestLimit = 100
 
 const reportWorkbookTabs: Array<{ key: ReportWorkbookTab; label: string; meta: string }> = [
@@ -51,30 +46,6 @@ function getReportMonthEnd(monthValue: string) {
   const [yearText, monthText] = monthValue.split('-')
   const endDate = new Date(Number(yearText), Number(monthText), 0)
   return `${endDate.getFullYear()}-${String(endDate.getMonth() + 1).padStart(2, '0')}-${String(endDate.getDate()).padStart(2, '0')}`
-}
-
-function aggregateIncomePaymentsByName(report: IncomeReportDto | null): ReportNamedAmountRow[] {
-  const totals = new Map<string, number>()
-  report?.rows
-    .filter((row) => row.incomeAmount !== 0)
-    .forEach((row) => {
-      totals.set(row.incomeTypeName, (totals.get(row.incomeTypeName) ?? 0) + row.incomeAmount)
-    })
-  return Array.from(totals.entries())
-    .map(([name, amount]) => ({ name, amount }))
-    .sort((left, right) => left.name.localeCompare(right.name, 'ru'))
-}
-
-function aggregateExpensePaymentsByName(report: ExpenseReportDto | null): ReportNamedAmountRow[] {
-  const totals = new Map<string, number>()
-  report?.rows
-    .filter((row) => row.expenseAmount !== 0)
-    .forEach((row) => {
-      totals.set(row.expenseTypeName, (totals.get(row.expenseTypeName) ?? 0) + row.expenseAmount)
-    })
-  return Array.from(totals.entries())
-    .map(([name, amount]) => ({ name, amount }))
-    .sort((left, right) => left.name.localeCompare(right.name, 'ru'))
 }
 
 export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: AuthResponse; dictionaryClient: DictionaryClient; reportClient: ReportClient }) {
@@ -108,13 +79,12 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
   const [suppliers, setSuppliers] = useState<SupplierDto[]>([])
   const [incomeTypes, setIncomeTypes] = useState<AccountingTypeDto[]>([])
   const [expenseTypes, setExpenseTypes] = useState<AccountingTypeDto[]>([])
+  const loadedReportDictionaries = useRef({ garages: false, suppliers: false, incomeTypes: false, expenseTypes: false })
   const [dictionaryError, setDictionaryError] = useState<string | null>(null)
   const [consolidatedReport, setConsolidatedReport] = useState<ConsolidatedReportDto | null>(null)
   const [consolidatedReportLoading, setConsolidatedReportLoading] = useState(true)
   const [consolidatedPageNumber, setConsolidatedPageNumber] = useState(1)
   const [consolidatedPageSize, setConsolidatedPageSize] = useState(25)
-  const [consolidatedIncomeBreakdown, setConsolidatedIncomeBreakdown] = useState<IncomeReportDto | null>(null)
-  const [consolidatedExpenseBreakdown, setConsolidatedExpenseBreakdown] = useState<ExpenseReportDto | null>(null)
   const [garageReport, setGarageReport] = useState<GarageDetailReportDto | null>(null)
   const [garagePageRequest, setGaragePageRequest] = useState({ offset: 0, limit: 25 })
   const [garageReportLoading, setGarageReportLoading] = useState(false)
@@ -201,23 +171,52 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
     let ignore = false
 
     async function loadReportDictionaries() {
+      const needsGarages = activeReportTab === 'garages' || activeReportTab === 'income'
+      const needsSuppliers = activeReportTab === 'payouts'
+      const needsIncomeTypes = activeReportTab === 'fees'
+      const needsExpenseTypes = activeReportTab === 'payouts'
+      const requests: Promise<void>[] = []
+
+      if (needsGarages && !loadedReportDictionaries.current.garages) {
+        requests.push(dictionaryClient.getGarages(auth.accessToken, undefined, dictionaryScreenRequestLimit).then((loaded) => {
+          if (!ignore) {
+            setGarages(loaded.filter((garage) => !garage.isArchived))
+            loadedReportDictionaries.current.garages = true
+          }
+        }))
+      }
+      if (needsSuppliers && !loadedReportDictionaries.current.suppliers) {
+        requests.push(dictionaryClient.getSuppliers(auth.accessToken, undefined, undefined, dictionaryScreenRequestLimit).then((loaded) => {
+          if (!ignore) {
+            setSuppliers(loaded.filter((supplier) => !supplier.isArchived))
+            loadedReportDictionaries.current.suppliers = true
+          }
+        }))
+      }
+      if (needsIncomeTypes && !loadedReportDictionaries.current.incomeTypes) {
+        requests.push(dictionaryClient.getIncomeTypes(auth.accessToken, undefined, dictionaryScreenRequestLimit).then((loaded) => {
+          if (!ignore) {
+            setIncomeTypes(loaded.filter((item) => !item.isArchived))
+            loadedReportDictionaries.current.incomeTypes = true
+          }
+        }))
+      }
+      if (needsExpenseTypes && !loadedReportDictionaries.current.expenseTypes) {
+        requests.push(dictionaryClient.getExpenseTypes(auth.accessToken, undefined, dictionaryScreenRequestLimit).then((loaded) => {
+          if (!ignore) {
+            setExpenseTypes(loaded.filter((item) => !item.isArchived))
+            loadedReportDictionaries.current.expenseTypes = true
+          }
+        }))
+      }
+
+      if (requests.length === 0) {
+        return
+      }
+
       setDictionaryError(null)
       try {
-        const [loadedGarages, loadedSuppliers, loadedIncomeTypes, loadedExpenseTypes] = await Promise.all([
-          dictionaryClient.getGarages(auth.accessToken, undefined, dictionaryScreenRequestLimit),
-          dictionaryClient.getSuppliers(auth.accessToken, undefined, undefined, dictionaryScreenRequestLimit),
-          dictionaryClient.getIncomeTypes(auth.accessToken, undefined, dictionaryScreenRequestLimit),
-          dictionaryClient.getExpenseTypes(auth.accessToken, undefined, dictionaryScreenRequestLimit),
-        ])
-
-        if (ignore) {
-          return
-        }
-
-        setGarages(loadedGarages.filter((garage) => !garage.isArchived))
-        setSuppliers(loadedSuppliers.filter((supplier) => !supplier.isArchived))
-        setIncomeTypes(loadedIncomeTypes.filter((item) => !item.isArchived))
-        setExpenseTypes(loadedExpenseTypes.filter((item) => !item.isArchived))
+        await Promise.all(requests)
       } catch (caught) {
         if (!ignore) {
           setDictionaryError(caught instanceof Error ? caught.message : 'Не удалось загрузить подсказки для фильтров отчетов.')
@@ -230,7 +229,7 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
     return () => {
       ignore = true
     }
-  }, [auth.accessToken, dictionaryClient])
+  }, [activeReportTab, auth.accessToken, dictionaryClient])
 
   useEffect(() => {
     let ignore = false
@@ -254,28 +253,6 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
 
         setConsolidatedReport(loadedConsolidated)
         setConsolidatedReportLoading(false)
-
-        const [loadedConsolidatedIncome, loadedConsolidatedExpenses] = await Promise.all([
-          reportClient.getIncomeReport(auth.accessToken, {
-            dateFrom: monthFrom,
-            dateTo: getReportMonthEnd(consolidatedFilter.monthTo),
-            rowMode: 'payments',
-            limit: 500,
-          }),
-          reportClient.getExpenseReport(auth.accessToken, {
-            dateFrom: monthFrom,
-            dateTo: getReportMonthEnd(consolidatedFilter.monthTo),
-            rowMode: 'payments',
-            limit: 500,
-          }),
-        ])
-
-        if (ignore) {
-          return
-        }
-
-        setConsolidatedIncomeBreakdown(loadedConsolidatedIncome)
-        setConsolidatedExpenseBreakdown(loadedConsolidatedExpenses)
       } catch (caught) {
         if (!ignore) {
           setReportDataError(caught instanceof Error ? caught.message : 'Не удалось загрузить расчетные данные отчетов.')
@@ -767,8 +744,8 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
 
   function renderActiveReport() {
     if (activeReportTab === 'consolidated') {
-      const incomeBreakdown = aggregateIncomePaymentsByName(consolidatedIncomeBreakdown)
-      const expenseBreakdown = aggregateExpensePaymentsByName(consolidatedExpenseBreakdown)
+      const incomeBreakdown = consolidatedReport?.incomeBreakdown ?? []
+      const expenseBreakdown = consolidatedReport?.expenseBreakdown ?? []
       const rowCount = Math.max(incomeBreakdown.length, expenseBreakdown.length, 1)
       const periodLabel = monthlyFilters.consolidated.monthFrom === monthlyFilters.consolidated.monthTo
         ? formatMonth(getReportMonthStart(monthlyFilters.consolidated.monthFrom))

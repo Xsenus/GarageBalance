@@ -86,6 +86,8 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, integ
   const [ownerOptions, setOwnerOptions] = useState<OwnerDto[]>([])
   const [garageOptions, setGarageOptions] = useState<GarageDto[]>([])
   const [groupOptions, setGroupOptions] = useState<SupplierGroupDto[]>([])
+  const loadedEditorReferences = useRef({ owners: false, garages: false, suppliers: false })
+  const [editorReferencesLoading, setEditorReferencesLoading] = useState(false)
   const [pages, setPages] = useState<Record<DictionarySectionKey, PagedResult<DictionaryRecord>>>({
     owners: createEmptyPage<DictionaryRecord>(),
     garages: createEmptyPage<DictionaryRecord>(),
@@ -212,20 +214,42 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, integ
   useEffect(() => {
     let ignore = false
     async function loadReferences() {
+      const referenceSection = activeSection === 'owners' || activeSection === 'garages' || activeSection === 'suppliers'
+        ? activeSection
+        : null
+      if (!referenceSection || loadedEditorReferences.current[referenceSection]) {
+        setEditorReferencesLoading(false)
+        return
+      }
+
+      setEditorReferencesLoading(true)
       try {
-        const [loadedOwners, loadedGarages, loadedGroups] = await Promise.all([
-          dictionaryClient.getOwners(auth.accessToken, undefined, 500),
-          dictionaryClient.getGarages(auth.accessToken, undefined, 500),
-          dictionaryClient.getSupplierGroups(auth.accessToken, undefined, 500),
-        ])
+        if (referenceSection === 'owners') {
+          const loadedGarages = await dictionaryClient.getGarages(auth.accessToken, undefined, 500)
+          if (!ignore) {
+            setGarageOptions(loadedGarages)
+          }
+        } else if (referenceSection === 'garages') {
+          const loadedOwners = await dictionaryClient.getOwners(auth.accessToken, undefined, 500)
+          if (!ignore) {
+            setOwnerOptions(loadedOwners)
+          }
+        } else {
+          const loadedGroups = await dictionaryClient.getSupplierGroups(auth.accessToken, undefined, 500)
+          if (!ignore) {
+            setGroupOptions(loadedGroups)
+          }
+        }
         if (!ignore) {
-          setOwnerOptions(loadedOwners)
-          setGarageOptions(loadedGarages)
-          setGroupOptions(loadedGroups)
+          loadedEditorReferences.current[referenceSection] = true
         }
       } catch {
         if (!ignore) {
           setError('Не удалось загрузить справочные значения для форм.')
+        }
+      } finally {
+        if (!ignore) {
+          setEditorReferencesLoading(false)
         }
       }
     }
@@ -234,7 +258,7 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, integ
     return () => {
       ignore = true
     }
-  }, [auth.accessToken, dictionaryClient])
+  }, [activeSection, auth.accessToken, dictionaryClient])
 
   useEffect(() => {
     let ignore = false
@@ -376,6 +400,9 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, integ
   }
 
   function openEditor(section: DictionarySectionKey, mode: 'create' | 'edit', item?: DictionaryRecord) {
+    if (editorReferencesLoading && (section === 'owners' || section === 'garages' || section === 'suppliers')) {
+      return
+    }
     setValidationErrors([])
     setError(null)
     setContextMenu(null)
@@ -646,15 +673,26 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, integ
     const page = pages[section]
     await loadPage(section, Math.min(page.offset, Math.max(0, page.totalCount - 1)), page.limit)
     if (section === 'owners') {
-      setOwnerOptions(await dictionaryClient.getOwners(auth.accessToken, undefined, 500))
-      setGarageOptions(await dictionaryClient.getGarages(auth.accessToken, undefined, 500))
+      const [loadedOwners, loadedGarages] = await Promise.all([
+        dictionaryClient.getOwners(auth.accessToken, undefined, 500),
+        dictionaryClient.getGarages(auth.accessToken, undefined, 500),
+      ])
+      setOwnerOptions(loadedOwners)
+      setGarageOptions(loadedGarages)
+      loadedEditorReferences.current.owners = true
     }
     if (section === 'garages') {
-      setOwnerOptions(await dictionaryClient.getOwners(auth.accessToken, undefined, 500))
-      setGarageOptions(await dictionaryClient.getGarages(auth.accessToken, undefined, 500))
+      const [loadedOwners, loadedGarages] = await Promise.all([
+        dictionaryClient.getOwners(auth.accessToken, undefined, 500),
+        dictionaryClient.getGarages(auth.accessToken, undefined, 500),
+      ])
+      setOwnerOptions(loadedOwners)
+      setGarageOptions(loadedGarages)
+      loadedEditorReferences.current.garages = true
     }
     if (section === 'supplierGroups') {
       setGroupOptions(await dictionaryClient.getSupplierGroups(auth.accessToken, undefined, 500))
+      loadedEditorReferences.current.suppliers = true
     }
   }
 
@@ -1152,7 +1190,7 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, integ
               <input aria-label="Показывать архивные" type="checkbox" checked={showArchived} onChange={(event) => setShowArchived(event.target.checked)} />
               <span>Показывать архивные</span>
             </label>
-            <button className="secondary-button create-action-button" type="button" disabled={!canWriteActiveSection} onClick={() => openEditor(activeSection, 'create')}>
+            <button className="secondary-button create-action-button" type="button" disabled={!canWriteActiveSection || editorReferencesLoading} onClick={() => openEditor(activeSection, 'create')}>
               <FileText size={16} aria-hidden="true" />
               <span>Добавить</span>
             </button>
@@ -1166,7 +1204,7 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, integ
               <tbody>
                 {!loading ? rows.map((item) => (
                   <tr className={isArchivedRecord(item) ? 'dictionary-data-row-archived' : undefined} tabIndex={0} onContextMenu={(event) => openContextMenu(event, activeSection, item)} onDoubleClick={() => {
-                    if (!isArchivedRecord(item)) {
+                    if (!editorReferencesLoading && !isArchivedRecord(item)) {
                       openEditor(activeSection, 'edit', item)
                     }
                   }} key={`${activeSection}-${getDictionaryRecordTitle(activeSection, item)}-${'id' in item ? item.id : ''}`}>

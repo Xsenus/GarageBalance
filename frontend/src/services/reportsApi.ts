@@ -58,6 +58,14 @@ export type ConsolidatedReportDto = {
   monthlyRows: MonthlyReportRowDto[]
   garageRowCount: number
   garageRows: GarageReportRowDto[]
+  incomeBreakdown: NamedAmountTotalDto[]
+  expenseBreakdown: NamedAmountTotalDto[]
+}
+
+export type NamedAmountTotalDto = {
+  typeId: string | null
+  name: string
+  amount: number
 }
 
 export type IncomeReportRowDto = {
