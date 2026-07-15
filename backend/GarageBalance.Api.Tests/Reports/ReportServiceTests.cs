@@ -1181,6 +1181,55 @@ public sealed class ReportServiceTests
     }
 
     [Fact]
+    public async Task FeeReportQuery_ReusesGarageGroupsForTotalsAndLoadsOnlyPaymentOnlyGarageIdentity()
+    {
+        var commandCounter = new SelectCommandCounter();
+        await using var database = await TestDatabase.CreateAsync(commandCounter);
+        var fixtures = await database.SeedAsync();
+        var finance = FinanceServiceTestFactory.Create(database.Context);
+        Assert.True((await finance.CreateAccrualAsync(
+            new CreateAccrualRequest(fixtures.FirstGarage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 6, 1), 500m, "manual", "Сбор"),
+            null,
+            CancellationToken.None)).Succeeded);
+        Assert.True((await finance.CreateIncomeAsync(
+            new CreateIncomeOperationRequest(fixtures.FirstGarage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 6, 10), new DateOnly(2026, 6, 1), 200m, "PKO-1", "Частичная оплата"),
+            null,
+            CancellationToken.None)).Succeeded);
+        database.Context.FinancialOperations.Add(new FinancialOperation
+        {
+            OperationKind = FinancialOperationKinds.Income,
+            OperationDate = new DateOnly(2026, 6, 10),
+            AccountingMonth = new DateOnly(2026, 6, 1),
+            Amount = 25m,
+            IncomeTypeId = fixtures.IncomeType.Id,
+            DocumentNumber = "PKO-WITHOUT-GARAGE"
+        });
+        await database.Context.SaveChangesAsync();
+
+        var query = new EfFeeReportQuery(database.Context);
+        commandCounter.Reset();
+        var sameGarageData = await query.GetFeeDataAsync([fixtures.IncomeType.Id], CancellationToken.None);
+
+        Assert.Equal(2, commandCounter.Count);
+        Assert.Equal(500m, sameGarageData.AccrualTotals[fixtures.IncomeType.Id]);
+        Assert.Equal(225m, sameGarageData.CollectedTotals[fixtures.IncomeType.Id]);
+        Assert.Single(sameGarageData.PaymentsByGarage);
+        Assert.Equal(fixtures.FirstGarage.Number, sameGarageData.GaragesById[fixtures.FirstGarage.Id].GarageNumber);
+
+        Assert.True((await finance.CreateIncomeAsync(
+            new CreateIncomeOperationRequest(fixtures.SecondGarage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 6, 11), new DateOnly(2026, 6, 1), 75m, "PKO-2", "Оплата без начисления"),
+            null,
+            CancellationToken.None)).Succeeded);
+        commandCounter.Reset();
+        var paymentOnlyGarageData = await query.GetFeeDataAsync([fixtures.IncomeType.Id], CancellationToken.None);
+
+        Assert.Equal(3, commandCounter.Count);
+        Assert.Equal(500m, paymentOnlyGarageData.AccrualTotals[fixtures.IncomeType.Id]);
+        Assert.Equal(300m, paymentOnlyGarageData.CollectedTotals[fixtures.IncomeType.Id]);
+        Assert.Equal(fixtures.SecondGarage.Number, paymentOnlyGarageData.GaragesById[fixtures.SecondGarage.Id].GarageNumber);
+    }
+
+    [Fact]
     public async Task GetFeeReportAsync_UsesFeeCampaignGoalAndTargetAmountWhenCampaignExists()
     {
         await using var database = await TestDatabase.CreateAsync();

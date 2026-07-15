@@ -520,13 +520,14 @@ public sealed class BackendPerformanceGuardTests
 
         Assert.True(
             CountOccurrences(source, ".GroupBy(") >= 4,
-            "Fee report query must aggregate accrual totals, collected totals, garage accruals and garage payments in the database.");
+            "Fee report query must aggregate garage accruals/payments in the database and reuse those bounded groups for report totals.");
         Assert.True(
             CountOccurrences(source, "group.Sum(") >= 4,
-            "Fee monetary totals must be summed before materialization.");
-        Assert.True(
-            CountOccurrences(source, "ToDictionaryAsync(") >= 2,
-            "Fee summary totals must be materialized as bounded dictionaries from grouped database results.");
+            "Fee transaction rows must be summed into garage groups before materialization and those groups must supply final totals.");
+        Assert.DoesNotContain("ToDictionaryAsync(", source, StringComparison.Ordinal);
+        Assert.Contains("var accrualTotals = accrualsByGarage", source, StringComparison.Ordinal);
+        Assert.Contains("var collectedTotals = paymentGroups", source, StringComparison.Ordinal);
+        Assert.Contains("if (missingGarageIds.Count > 0)", source, StringComparison.Ordinal);
         Assert.Contains("group.Max(operation => (DateOnly?)operation.OperationDate)", source, StringComparison.Ordinal);
     }
 

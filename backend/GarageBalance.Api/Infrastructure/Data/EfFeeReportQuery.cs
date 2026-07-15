@@ -29,20 +29,6 @@ public sealed class EfFeeReportQuery(GarageBalanceDbContext dbContext) : IFeeRep
         IReadOnlyList<Guid> incomeTypeIds,
         CancellationToken cancellationToken)
     {
-        var accrualTotals = await dbContext.Accruals.AsNoTracking()
-            .Where(accrual => !accrual.IsCanceled && incomeTypeIds.Contains(accrual.IncomeTypeId))
-            .GroupBy(accrual => accrual.IncomeTypeId)
-            .Select(group => new { IncomeTypeId = group.Key, Amount = group.Sum(accrual => accrual.Amount) })
-            .ToDictionaryAsync(row => row.IncomeTypeId, row => row.Amount, cancellationToken);
-        var collectedTotals = await dbContext.FinancialOperations.AsNoTracking()
-            .Where(operation =>
-                !operation.IsCanceled &&
-                operation.OperationKind == FinancialOperationKinds.Income &&
-                operation.IncomeTypeId.HasValue &&
-                incomeTypeIds.Contains(operation.IncomeTypeId.Value))
-            .GroupBy(operation => operation.IncomeTypeId!.Value)
-            .Select(group => new { IncomeTypeId = group.Key, Amount = group.Sum(operation => operation.Amount) })
-            .ToDictionaryAsync(row => row.IncomeTypeId, row => row.Amount, cancellationToken);
         var accrualsByGarage = await dbContext.Accruals.AsNoTracking()
             .Include(accrual => accrual.Garage)
             .ThenInclude(garage => garage.Owner)
@@ -65,40 +51,76 @@ public sealed class EfFeeReportQuery(GarageBalanceDbContext dbContext) : IFeeRep
                 group.Key.IncomeTypeId,
                 group.Sum(accrual => accrual.Amount)))
             .ToListAsync(cancellationToken);
-        var paymentsByGarage = await dbContext.FinancialOperations.AsNoTracking()
+        var paymentGroups = await dbContext.FinancialOperations.AsNoTracking()
             .Where(operation =>
                 !operation.IsCanceled &&
                 operation.OperationKind == FinancialOperationKinds.Income &&
-                operation.GarageId.HasValue &&
                 operation.IncomeTypeId.HasValue &&
                 incomeTypeIds.Contains(operation.IncomeTypeId.Value))
-            .GroupBy(operation => new { GarageId = operation.GarageId!.Value, IncomeTypeId = operation.IncomeTypeId!.Value })
-            .Select(group => new FeePaymentByGarageData(
+            .GroupBy(operation => new { operation.GarageId, IncomeTypeId = operation.IncomeTypeId!.Value })
+            .Select(group => new
+            {
                 group.Key.GarageId,
                 group.Key.IncomeTypeId,
-                group.Sum(operation => operation.Amount),
-                group.Max(operation => (DateOnly?)operation.OperationDate)))
+                Paid = group.Sum(operation => operation.Amount),
+                LastPaymentDate = group.Max(operation => (DateOnly?)operation.OperationDate)
+            })
             .ToListAsync(cancellationToken);
-        var allGarageIds = accrualsByGarage.Select(row => row.GarageId)
-            .Concat(paymentsByGarage.Select(row => row.GarageId))
+        var paymentsByGarage = paymentGroups
+            .Where(row => row.GarageId.HasValue)
+            .Select(row => new FeePaymentByGarageData(
+                row.GarageId!.Value,
+                row.IncomeTypeId,
+                row.Paid,
+                row.LastPaymentDate))
+            .ToList();
+        var accrualTotals = accrualsByGarage
+            .GroupBy(row => row.IncomeTypeId)
+            .ToDictionary(group => group.Key, group => group.Sum(row => row.Accrued));
+        var collectedTotals = paymentGroups
+            .GroupBy(row => row.IncomeTypeId)
+            .ToDictionary(group => group.Key, group => group.Sum(row => row.Paid));
+        var garagesById = accrualsByGarage
+            .GroupBy(row => row.GarageId)
+            .ToDictionary(
+                group => group.Key,
+                group =>
+                {
+                    var row = group.First();
+                    return new FeeGarageIdentityData(
+                        row.GarageId,
+                        row.GarageNumber,
+                        row.OwnerLastName,
+                        row.OwnerFirstName,
+                        row.OwnerMiddleName);
+                });
+        var missingGarageIds = paymentsByGarage
+            .Select(row => row.GarageId)
+            .Where(garageId => !garagesById.ContainsKey(garageId))
             .Distinct()
             .ToList();
-        var garages = await dbContext.Garages.AsNoTracking()
-            .Include(garage => garage.Owner)
-            .Where(garage => allGarageIds.Contains(garage.Id))
-            .Select(garage => new FeeGarageIdentityData(
-                garage.Id,
-                garage.Number,
-                garage.Owner != null ? garage.Owner.LastName : null,
-                garage.Owner != null ? garage.Owner.FirstName : null,
-                garage.Owner != null ? garage.Owner.MiddleName : null))
-            .ToListAsync(cancellationToken);
+        if (missingGarageIds.Count > 0)
+        {
+            var paymentOnlyGarages = await dbContext.Garages.AsNoTracking()
+                .Where(garage => missingGarageIds.Contains(garage.Id))
+                .Select(garage => new FeeGarageIdentityData(
+                    garage.Id,
+                    garage.Number,
+                    garage.Owner != null ? garage.Owner.LastName : null,
+                    garage.Owner != null ? garage.Owner.FirstName : null,
+                    garage.Owner != null ? garage.Owner.MiddleName : null))
+                .ToListAsync(cancellationToken);
+            foreach (var garage in paymentOnlyGarages)
+            {
+                garagesById[garage.GarageId] = garage;
+            }
+        }
 
         return new FeeReportQueryData(
             accrualTotals,
             collectedTotals,
             accrualsByGarage,
             paymentsByGarage,
-            garages.ToDictionary(garage => garage.GarageId));
+            garagesById);
     }
 }
