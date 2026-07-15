@@ -49,8 +49,12 @@ public sealed class EfExpenseReportQuery(GarageBalanceDbContext dbContext) : IEx
 
                 if (!useClientSearch)
                 {
-                    accrualTotal += await startingBalanceQuery.SumAsync(supplier => supplier.StartingBalance, cancellationToken);
-                    rowCount += await startingBalanceQuery.CountAsync(cancellationToken);
+                    var totals = await startingBalanceQuery
+                        .GroupBy(_ => 1)
+                        .Select(group => new { Total = group.Sum(supplier => supplier.StartingBalance), Count = group.Count() })
+                        .SingleOrDefaultAsync(cancellationToken);
+                    accrualTotal += totals?.Total ?? 0m;
+                    rowCount += totals?.Count ?? 0;
                 }
 
                 var startingBalances = await ApplyLimit(startingBalanceQuery.OrderBy(supplier => supplier.Name).ThenBy(supplier => supplier.Id), fetchLimit)
@@ -97,8 +101,12 @@ public sealed class EfExpenseReportQuery(GarageBalanceDbContext dbContext) : IEx
 
             if (!useClientSearch)
             {
-                accrualTotal += await accrualsQuery.SumAsync(accrual => accrual.Amount, cancellationToken);
-                rowCount += await accrualsQuery.CountAsync(cancellationToken);
+                var totals = await accrualsQuery
+                    .GroupBy(_ => 1)
+                    .Select(group => new { Total = group.Sum(accrual => accrual.Amount), Count = group.Count() })
+                    .SingleOrDefaultAsync(cancellationToken);
+                accrualTotal += totals?.Total ?? 0m;
+                rowCount += totals?.Count ?? 0;
             }
 
             var accruals = await ApplyLimit(
@@ -152,8 +160,12 @@ public sealed class EfExpenseReportQuery(GarageBalanceDbContext dbContext) : IEx
 
             if (!useClientSearch)
             {
-                expenseTotal += await paymentsQuery.SumAsync(operation => operation.Amount, cancellationToken);
-                rowCount += await paymentsQuery.CountAsync(cancellationToken);
+                var totals = await paymentsQuery
+                    .GroupBy(_ => 1)
+                    .Select(group => new { Total = group.Sum(operation => operation.Amount), Count = group.Count() })
+                    .SingleOrDefaultAsync(cancellationToken);
+                expenseTotal += totals?.Total ?? 0m;
+                rowCount += totals?.Count ?? 0;
             }
 
             var payments = await ApplyLimit(

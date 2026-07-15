@@ -3516,11 +3516,11 @@ public sealed class ProjectWideRoadmapStatusTests
         Assert.Contains("expenseReportQuery.GetRowsAsync", reportService, StringComparison.Ordinal);
         Assert.Contains("NormalizeReportLimit(request.Limit.Value)", reportService, StringComparison.Ordinal);
         Assert.Contains("query.Take(limit.Value)", incomeReportQuery, StringComparison.Ordinal);
-        Assert.Contains("CountAsync(cancellationToken)", incomeReportQuery, StringComparison.Ordinal);
-        Assert.Contains("SumAsync(", incomeReportQuery, StringComparison.Ordinal);
+        Assert.Contains("Count = group.Count()", incomeReportQuery, StringComparison.Ordinal);
+        Assert.Contains("Total = group.Sum(", incomeReportQuery, StringComparison.Ordinal);
         Assert.Contains("query.Take(limit.Value)", expenseReportQuery, StringComparison.Ordinal);
-        Assert.Contains("CountAsync(cancellationToken)", expenseReportQuery, StringComparison.Ordinal);
-        Assert.Contains("SumAsync(", expenseReportQuery, StringComparison.Ordinal);
+        Assert.Contains("Count = group.Count()", expenseReportQuery, StringComparison.Ordinal);
+        Assert.Contains("Total = group.Sum(", expenseReportQuery, StringComparison.Ordinal);
         Assert.Contains("ScreenReportQueries_UseDatabaseLimitsForVisibleRows", performanceGuards, StringComparison.Ordinal);
 
         Assert.Contains("живого PostgreSQL-прогона", verification, StringComparison.Ordinal);

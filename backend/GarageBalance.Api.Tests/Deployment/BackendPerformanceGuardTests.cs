@@ -407,13 +407,13 @@ public sealed class BackendPerformanceGuardTests
             expenseSource.Contains("query.Take(limit.Value)", StringComparison.Ordinal),
             "Report visible-row queries must use the normalized server-side limit before ToListAsync.");
         Assert.True(
-            CountOccurrences(incomeSource, "CountAsync(cancellationToken)") >= 3 &&
-            CountOccurrences(expenseSource, "CountAsync(cancellationToken)") >= 3,
-            "Report totals must keep total row counts without materializing every visible-row candidate.");
+            CountOccurrences(incomeSource, "Count = group.Count()") >= 3 &&
+            CountOccurrences(expenseSource, "Count = group.Count()") >= 3,
+            "Report totals must keep total row counts in the combined database aggregate without materializing every visible-row candidate.");
         Assert.True(
-            CountOccurrences(incomeSource, "SumAsync(") >= 3 &&
-            CountOccurrences(expenseSource, "SumAsync(") >= 3,
-            "Report totals must be aggregated in the database instead of being derived only from materialized rows.");
+            CountOccurrences(incomeSource, "Total = group.Sum(") >= 3 &&
+            CountOccurrences(expenseSource, "Total = group.Sum(") >= 3,
+            "Report totals and counts must be aggregated together in the database instead of being derived from materialized rows or separate round trips.");
         Assert.Contains("useClientSearch = hasSearch && !", incomeSource, StringComparison.Ordinal);
         Assert.True(
             CountOccurrences(incomeSource, "ToLower().Contains(normalizedSearch!)") >= 6,

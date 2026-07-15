@@ -8,6 +8,8 @@ using GarageBalance.Api.Domain.Users;
 using GarageBalance.Api.Infrastructure.Data;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
+using System.Data.Common;
 using System.IO.Compression;
 using System.Text;
 
@@ -674,6 +676,75 @@ public sealed class ReportServiceTests
 
         Assert.False(result.Succeeded);
         Assert.Equal("period_invalid", result.ErrorCode);
+    }
+
+    [Fact]
+    public async Task IncomeAccrualQuery_LoadsTotalsAndPageInTwoSelects()
+    {
+        var commandCounter = new SelectCommandCounter();
+        await using var database = await TestDatabase.CreateAsync(commandCounter);
+        var fixtures = await database.SeedAsync();
+        database.Context.Accruals.Add(new Accrual
+        {
+            GarageId = fixtures.FirstGarage.Id,
+            IncomeTypeId = fixtures.IncomeType.Id,
+            AccountingMonth = new DateOnly(2026, 6, 1),
+            Amount = 125m,
+            Source = "manual"
+        });
+        await database.Context.SaveChangesAsync();
+        commandCounter.Reset();
+
+        var result = await new EfIncomeReportQuery(database.Context).GetRowsAsync(
+            new DateOnly(2026, 6, 1),
+            new DateOnly(2026, 6, 30),
+            "accruals",
+            new HashSet<Guid>(),
+            new HashSet<Guid>(),
+            new HashSet<Guid> { fixtures.IncomeType.Id },
+            null,
+            25,
+            0,
+            CancellationToken.None);
+
+        Assert.Equal(125m, result.AccrualTotal);
+        Assert.Equal(1, result.RowCount);
+        Assert.Single(result.Rows);
+        Assert.Equal(2, commandCounter.Count);
+    }
+
+    [Fact]
+    public async Task ExpenseAccrualQuery_LoadsTotalsAndPageInTwoSelects()
+    {
+        var commandCounter = new SelectCommandCounter();
+        await using var database = await TestDatabase.CreateAsync(commandCounter);
+        var fixtures = await database.SeedAsync();
+        database.Context.SupplierAccruals.Add(new SupplierAccrual
+        {
+            SupplierId = fixtures.Supplier.Id,
+            ExpenseTypeId = fixtures.ExpenseType.Id,
+            AccountingMonth = new DateOnly(2026, 6, 1),
+            Amount = 275m,
+            Source = "manual"
+        });
+        await database.Context.SaveChangesAsync();
+        commandCounter.Reset();
+
+        var result = await new EfExpenseReportQuery(database.Context).GetRowsAsync(
+            new DateOnly(2026, 6, 1),
+            new DateOnly(2026, 6, 30),
+            "accruals",
+            new HashSet<Guid> { fixtures.Supplier.Id },
+            new HashSet<Guid> { fixtures.ExpenseType.Id },
+            null,
+            25,
+            0,
+            CancellationToken.None);
+
+        Assert.Equal(275m, result.AccrualTotal);
+        Assert.Equal(1, result.RowCount);
+        Assert.Single(result.Rows);
+        Assert.Equal(2, commandCounter.Count);
     }
 
     [Fact]
@@ -1493,13 +1564,18 @@ public sealed class ReportServiceTests
 
         public GarageBalanceDbContext Context { get; }
 
-        public static async Task<TestDatabase> CreateAsync()
+        public static async Task<TestDatabase> CreateAsync(params IInterceptor[] interceptors)
         {
             var connection = new SqliteConnection("DataSource=:memory:");
             await connection.OpenAsync();
-            var options = new DbContextOptionsBuilder<GarageBalanceDbContext>()
-                .UseSqlite(connection)
-                .Options;
+            var optionsBuilder = new DbContextOptionsBuilder<GarageBalanceDbContext>()
+                .UseSqlite(connection);
+            if (interceptors.Length > 0)
+            {
+                optionsBuilder.AddInterceptors(interceptors);
+            }
+
+            var options = optionsBuilder.Options;
             var context = new GarageBalanceDbContext(options);
             await context.Database.EnsureCreatedAsync();
             return new TestDatabase(connection, context);
@@ -1540,6 +1616,27 @@ public sealed class ReportServiceTests
     }
 
     private sealed record Fixtures(Garage FirstGarage, Garage SecondGarage, Supplier Supplier, IncomeType IncomeType, ExpenseType ExpenseType);
+
+    private sealed class SelectCommandCounter : DbCommandInterceptor
+    {
+        public int Count { get; private set; }
+
+        public void Reset() => Count = 0;
+
+        public override ValueTask<InterceptionResult<DbDataReader>> ReaderExecutingAsync(
+            DbCommand command,
+            CommandEventData eventData,
+            InterceptionResult<DbDataReader> result,
+            CancellationToken cancellationToken = default)
+        {
+            if (command.CommandText.TrimStart().StartsWith("SELECT", StringComparison.OrdinalIgnoreCase))
+            {
+                Count++;
+            }
+
+            return base.ReaderExecutingAsync(command, eventData, result, cancellationToken);
+        }
+    }
 
     private static void AssertWorkbookContains(byte[] content, string expected)
     {
