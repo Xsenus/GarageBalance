@@ -1436,7 +1436,7 @@ public sealed class FinanceServiceTests
     }
 
     [Fact]
-    public async Task GetSummaryAsync_UsesThreeAggregateSelectsAndReturnsSectionCounts()
+    public async Task GetSummaryAsync_UsesTwoAggregateSelectsAndReturnsSectionCounts()
     {
         var commandCounter = new SelectCommandCounter();
         await using var database = await TestDatabase.CreateAsync(commandCounter);
@@ -1453,7 +1453,7 @@ public sealed class FinanceServiceTests
             new FinancialOperationListRequest(new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 30), null, null),
             CancellationToken.None);
 
-        Assert.Equal(3, commandCounter.Count);
+        Assert.Equal(2, commandCounter.Count);
         Assert.Equal(1, result.IncomeCount);
         Assert.Equal(1, result.ExpenseCount);
         Assert.Equal(1, result.AccrualCount);
@@ -1482,6 +1482,29 @@ public sealed class FinanceServiceTests
         Assert.Equal(0, supplierResult.MeterReadingCount);
         Assert.Equal(0, meterResult.SupplierAccrualCount);
         Assert.Equal(1, meterResult.MeterReadingCount);
+    }
+
+    [Fact]
+    public async Task GetSummaryAsync_AppliesOperationKindWithoutHidingAccrualTotals()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        var service = FinanceServiceTestFactory.Create(database.Context);
+        await service.CreateIncomeAsync(new CreateIncomeOperationRequest(fixtures.Garage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 6, 19), new DateOnly(2026, 6, 1), 1500m, "IN-FILTER", null), null, CancellationToken.None);
+        await service.CreateExpenseAsync(new CreateExpenseOperationRequest(fixtures.Supplier.Id, fixtures.ExpenseType.Id, new DateOnly(2026, 6, 20), new DateOnly(2026, 6, 1), 400m, "OUT-FILTER", null), null, CancellationToken.None);
+        await service.CreateAccrualAsync(new CreateAccrualRequest(fixtures.Garage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 6, 1), 2000m, "regular", null), null, CancellationToken.None);
+
+        var result = await service.GetSummaryAsync(
+            new FinancialOperationListRequest(new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 30), "income", null),
+            CancellationToken.None);
+
+        Assert.Equal(1500m, result.IncomeTotal);
+        Assert.Equal(0m, result.ExpenseTotal);
+        Assert.Equal(2000m, result.AccrualTotal);
+        Assert.Equal(1, result.OperationCount);
+        Assert.Equal(1, result.IncomeCount);
+        Assert.Equal(0, result.ExpenseCount);
+        Assert.Equal(1, result.AccrualCount);
     }
 
     [Fact]

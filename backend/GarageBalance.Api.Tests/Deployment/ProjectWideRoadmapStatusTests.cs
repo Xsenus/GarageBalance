@@ -845,7 +845,7 @@ public sealed class ProjectWideRoadmapStatusTests
         Assert.Contains("GenerateRegularAccrualsAsync_RejectsSecondRunForSameMonth", financeServiceTestsText, StringComparison.Ordinal);
         Assert.Contains("GenerateRegularAccrualsAsync_UsesConstantSelectCountForManyGaragesAndMeterReadings", financeServiceTestsText, StringComparison.Ordinal);
         Assert.Contains("2026-07-14-batched-regular-accrual-generation", releaseText, StringComparison.Ordinal);
-        Assert.Contains("GetSummaryAsync_UsesThreeAggregateSelectsAndReturnsSectionCounts", financeServiceTestsText, StringComparison.Ordinal);
+        Assert.Contains("GetSummaryAsync_UsesTwoAggregateSelectsAndReturnsSectionCounts", financeServiceTestsText, StringComparison.Ordinal);
         Assert.Contains("2026-07-14-active-finance-page-summary", releaseText, StringComparison.Ordinal);
         Assert.Contains("CreateSupplierAccrualAsync_AllowsReplacementAfterCancel", financeServiceTestsText, StringComparison.Ordinal);
         Assert.Contains("RestoreSupplierAccrualAsync_RejectsDuplicateActiveAccrual", financeServiceTestsText, StringComparison.Ordinal);

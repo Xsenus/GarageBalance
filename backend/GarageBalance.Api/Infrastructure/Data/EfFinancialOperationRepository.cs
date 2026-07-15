@@ -165,53 +165,6 @@ public sealed class EfFinancialOperationRepository(GarageBalanceDbContext dbCont
         return new FinancialOperationWorksheetData(expenses, incomes);
     }
 
-    public async Task<FinancialOperationSummaryData> GetSummaryAsync(
-        DateOnly? dateFrom,
-        DateOnly? dateTo,
-        string? operationKind,
-        string? normalizedSearch,
-        Guid? garageId,
-        Guid? supplierId,
-        Guid? staffMemberId,
-        CancellationToken cancellationToken)
-    {
-        var query = ApplyFilters(QueryActive(), dateFrom, dateTo, operationKind, garageId, supplierId, staffMemberId);
-        if (normalizedSearch is not null && IsSqliteProvider())
-        {
-            var filtered = (await query.ToListAsync(cancellationToken))
-                .Where(operation => OperationMatchesSearch(operation, normalizedSearch))
-                .ToList();
-            return new FinancialOperationSummaryData(
-                filtered.Where(operation => operation.OperationKind == FinancialOperationKinds.Income).Sum(operation => operation.Amount),
-                filtered.Where(operation => operation.OperationKind == FinancialOperationKinds.Expense).Sum(operation => operation.Amount),
-                filtered.Count)
-            {
-                IncomeCount = filtered.Count(operation => operation.OperationKind == FinancialOperationKinds.Income),
-                ExpenseCount = filtered.Count(operation => operation.OperationKind == FinancialOperationKinds.Expense)
-            };
-        }
-
-        query = ApplySearch(query, normalizedSearch);
-        var summary = await query
-            .GroupBy(_ => 1)
-            .Select(group => new
-            {
-                IncomeTotal = group.Where(operation => operation.OperationKind == FinancialOperationKinds.Income).Sum(operation => (decimal?)operation.Amount) ?? 0m,
-                ExpenseTotal = group.Where(operation => operation.OperationKind == FinancialOperationKinds.Expense).Sum(operation => (decimal?)operation.Amount) ?? 0m,
-                Count = group.Count(),
-                IncomeCount = group.Count(operation => operation.OperationKind == FinancialOperationKinds.Income),
-                ExpenseCount = group.Count(operation => operation.OperationKind == FinancialOperationKinds.Expense)
-            })
-            .SingleOrDefaultAsync(cancellationToken);
-        return summary is null
-            ? new FinancialOperationSummaryData(0m, 0m, 0)
-            : new FinancialOperationSummaryData(summary.IncomeTotal, summary.ExpenseTotal, summary.Count)
-            {
-                IncomeCount = summary.IncomeCount,
-                ExpenseCount = summary.ExpenseCount
-            };
-    }
-
     public async Task<decimal> GetOpeningDebtPaymentTotalAsync(
         Guid garageId,
         DateOnly accountingMonth,

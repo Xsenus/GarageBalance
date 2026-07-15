@@ -33,7 +33,6 @@ public interface IFinancialOperationRepository
     Task<IReadOnlyList<FinancialOperationBucketData>> GetIncomeMonthlyBucketsAsync(Guid garageId, DateOnly monthFrom, DateOnly monthTo, CancellationToken cancellationToken);
     Task<IReadOnlyList<FinancialOperationIncomeTypeBucketData>> GetIncomeTypeBucketsAsync(Guid garageId, DateOnly monthFrom, DateOnly monthTo, CancellationToken cancellationToken);
     Task<FinancialOperationWorksheetData> GetWorksheetDataAsync(DateOnly accountingMonth, CancellationToken cancellationToken);
-    Task<FinancialOperationSummaryData> GetSummaryAsync(DateOnly? dateFrom, DateOnly? dateTo, string? operationKind, string? normalizedSearch, Guid? garageId, Guid? supplierId, Guid? staffMemberId, CancellationToken cancellationToken);
     Task<decimal> GetOpeningDebtPaymentTotalAsync(Guid garageId, DateOnly accountingMonth, string incomeTypeCode, string incomeTypeName, CancellationToken cancellationToken);
     Task<decimal> GetBankExpenseTotalAsync(string[] cashExpenseTypeCodes, string[] cashExpenseTypeNames, CancellationToken cancellationToken);
     Task<FinancialOperationCashBalanceData> GetCashBalanceDataAsync(string[] cashExpenseTypeCodes, string[] cashExpenseTypeNames, CancellationToken cancellationToken);
@@ -47,10 +46,4 @@ public sealed record FinancialOperationPageData(IReadOnlyList<FinancialOperation
 public sealed record FinancialOperationBucketData(DateOnly AccountingMonth, decimal Amount);
 public sealed record FinancialOperationIncomeTypeBucketData(DateOnly AccountingMonth, Guid IncomeTypeId, string IncomeTypeName, string? IncomeTypeCode, decimal Amount);
 public sealed record FinancialOperationWorksheetData(IReadOnlyList<FinancialOperation> Expenses, IReadOnlyList<FinancialOperation> Incomes);
-public sealed record FinancialOperationSummaryData(decimal IncomeTotal, decimal ExpenseTotal, int Count)
-{
-    public int IncomeCount { get; init; }
-
-    public int ExpenseCount { get; init; }
-}
 public sealed record FinancialOperationCashBalanceData(decimal IncomeTotal, decimal CashExpenseTotal);

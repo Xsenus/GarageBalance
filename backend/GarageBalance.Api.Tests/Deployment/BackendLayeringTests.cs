@@ -1068,7 +1068,8 @@ public sealed class BackendLayeringTests
         Assert.Contains("financialOperationRepository.GetIncomeMonthlyBucketsAsync", service, StringComparison.Ordinal);
         Assert.Contains("financialOperationRepository.GetIncomeTypeBucketsAsync", service, StringComparison.Ordinal);
         Assert.Contains("financialOperationRepository.GetWorksheetDataAsync", service, StringComparison.Ordinal);
-        Assert.Contains("financialOperationRepository.GetSummaryAsync", service, StringComparison.Ordinal);
+        Assert.Contains("IFinanceTotalsQuery financeTotalsQuery", service, StringComparison.Ordinal);
+        Assert.Contains("financeTotalsQuery.GetAsync", service, StringComparison.Ordinal);
         Assert.Contains("financialOperationRepository.GetOpeningDebtPaymentTotalAsync", service, StringComparison.Ordinal);
         Assert.Contains("financialOperationRepository.GetBankExpenseTotalAsync", service, StringComparison.Ordinal);
         Assert.Contains("financialOperationRepository.GetCashBalanceDataAsync", service, StringComparison.Ordinal);
@@ -1083,6 +1084,7 @@ public sealed class BackendLayeringTests
         Assert.DoesNotContain("private IQueryable<FinancialOperation> QueryOperations", service, StringComparison.Ordinal);
         Assert.DoesNotContain("ApplyFilters", service, StringComparison.Ordinal);
         Assert.Contains("AddScoped<IFinancialOperationRepository, EfFinancialOperationRepository>()", program, StringComparison.Ordinal);
+        Assert.Contains("AddScoped<IFinanceTotalsQuery, EfFinanceTotalsQuery>()", program, StringComparison.Ordinal);
         Assert.Contains("AddScoped<IFinanceService>(services => new FinanceService(", program, StringComparison.Ordinal);
         Assert.Contains("class FinanceServiceTestFactory", testFactory, StringComparison.Ordinal);
         Assert.Contains("GarageBalanceDbContext dbContext", testFactory, StringComparison.Ordinal);
@@ -1106,7 +1108,7 @@ public sealed class BackendLayeringTests
         Assert.Contains("accrualRepository.GetTotalBeforeMonthAsync", service, StringComparison.Ordinal);
         Assert.Contains("accrualRepository.GetMonthlyBucketsAsync", service, StringComparison.Ordinal);
         Assert.Contains("accrualRepository.GetIncomeTypeBucketsAsync", service, StringComparison.Ordinal);
-        Assert.Contains("accrualRepository.GetSummaryAsync", service, StringComparison.Ordinal);
+        Assert.Contains("financeTotalsQuery.GetAsync", service, StringComparison.Ordinal);
         Assert.Contains("accrualRepository.FindForUpdateAsync", service, StringComparison.Ordinal);
         Assert.Contains("accrualRepository.FindActiveForUpdateAsync", service, StringComparison.Ordinal);
         Assert.Contains("accrualRepository.ActiveDuplicateExistsAsync", service, StringComparison.Ordinal);

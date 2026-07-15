@@ -22,7 +22,6 @@ public interface IAccrualRepository
     Task<decimal> GetTotalBeforeMonthAsync(Guid garageId, DateOnly accountingMonth, CancellationToken cancellationToken);
     Task<IReadOnlyList<AccrualBucketData>> GetMonthlyBucketsAsync(Guid garageId, DateOnly? monthFrom, DateOnly monthTo, CancellationToken cancellationToken);
     Task<IReadOnlyList<AccrualIncomeTypeBucketData>> GetIncomeTypeBucketsAsync(Guid garageId, DateOnly monthFrom, DateOnly monthTo, CancellationToken cancellationToken);
-    Task<AccrualSummaryData> GetSummaryAsync(DateOnly? monthFrom, DateOnly? monthTo, string? normalizedSearch, CancellationToken cancellationToken);
     Task<Accrual?> FindForUpdateAsync(Guid id, CancellationToken cancellationToken);
     Task<Accrual?> FindActiveForUpdateAsync(Guid garageId, Guid incomeTypeId, DateOnly accountingMonth, string source, CancellationToken cancellationToken);
     Task<int> CountActiveForGenerationAsync(Guid incomeTypeId, DateOnly accountingMonth, string source, CancellationToken cancellationToken);
@@ -35,4 +34,3 @@ public interface IAccrualRepository
 public sealed record AccrualPageData(IReadOnlyList<Accrual> Items, int TotalCount);
 public sealed record AccrualBucketData(DateOnly AccountingMonth, decimal Amount);
 public sealed record AccrualIncomeTypeBucketData(DateOnly AccountingMonth, Guid IncomeTypeId, string IncomeTypeName, string? IncomeTypeCode, decimal Amount);
-public sealed record AccrualSummaryData(decimal TotalAmount, int Count);

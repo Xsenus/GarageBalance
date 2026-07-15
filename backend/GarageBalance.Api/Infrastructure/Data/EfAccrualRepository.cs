@@ -112,35 +112,6 @@ public sealed class EfAccrualRepository(GarageBalanceDbContext dbContext) : IAcc
             .ToList();
     }
 
-    public async Task<AccrualSummaryData> GetSummaryAsync(
-        DateOnly? monthFrom,
-        DateOnly? monthTo,
-        string? normalizedSearch,
-        CancellationToken cancellationToken)
-    {
-        var query = ApplyPeriod(QueryActive(), monthFrom, monthTo);
-        if (normalizedSearch is not null && IsSqliteProvider())
-        {
-            var filtered = (await query.ToListAsync(cancellationToken))
-                .Where(accrual => AccrualMatchesSearch(accrual, normalizedSearch))
-                .ToList();
-            return new AccrualSummaryData(filtered.Sum(accrual => accrual.Amount), filtered.Count);
-        }
-
-        query = ApplySearch(query, normalizedSearch);
-        var summary = await query
-            .GroupBy(_ => 1)
-            .Select(group => new
-            {
-                TotalAmount = group.Sum(accrual => (decimal?)accrual.Amount) ?? 0m,
-                Count = group.Count()
-            })
-            .SingleOrDefaultAsync(cancellationToken);
-        return summary is null
-            ? new AccrualSummaryData(0m, 0)
-            : new AccrualSummaryData(summary.TotalAmount, summary.Count);
-    }
-
     public Task<Accrual?> FindForUpdateAsync(Guid id, CancellationToken cancellationToken) =>
         TrackedAggregate().SingleOrDefaultAsync(accrual => accrual.Id == id, cancellationToken);
 
