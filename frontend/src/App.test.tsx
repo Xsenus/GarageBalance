@@ -9494,6 +9494,19 @@ describe('App', () => {
     const requestedLimits: Record<string, number | undefined> = {}
     const requestedPreviewLimits: Record<string, number | undefined> = {}
     const getMissingMeterReadings = vi.fn(async () => [] as MissingMeterReadingDto[])
+    const getSummary = vi.fn(async () => ({
+      incomeTotal: 0,
+      expenseTotal: 0,
+      accrualTotal: 0,
+      balance: 0,
+      debt: 0,
+      operationCount: operations.length,
+      accrualCount: accruals.length,
+      meterReadingCount: meterReadings.length,
+      incomeCount: operations.length,
+      expenseCount: 0,
+      supplierAccrualCount: supplierAccruals.length,
+    }))
     const toPage = <TItem,>(items: TItem[], offset = 0, limit = 25) => ({ items: items.slice(offset, offset + limit), totalCount: items.length, offset, limit })
     const financeClient = createFinanceClient({
       getOperations: async (_token, limit) => {
@@ -9530,19 +9543,7 @@ describe('App', () => {
         return toPage(meterReadings, params?.offset, params?.limit)
       },
       getMissingMeterReadings,
-      getSummary: async () => ({
-        incomeTotal: 0,
-        expenseTotal: 0,
-        accrualTotal: 0,
-        balance: 0,
-        debt: 0,
-        operationCount: operations.length,
-        accrualCount: accruals.length,
-        meterReadingCount: meterReadings.length,
-        incomeCount: operations.length,
-        expenseCount: 0,
-        supplierAccrualCount: supplierAccruals.length,
-      }),
+      getSummary,
     })
     render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={financeClient} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
 
@@ -9573,6 +9574,7 @@ describe('App', () => {
     await waitFor(() => expect(requestedLimits.meterReadings).toBe(25))
     expect(requestedLimits).toEqual({ incomeOperations: 25, meterReadings: 25 })
     expect(getMissingMeterReadings).toHaveBeenCalledTimes(1)
+    expect(getSummary).toHaveBeenCalledTimes(1)
   })
 
   it('shows a ready payment page without waiting for the summary', async () => {
