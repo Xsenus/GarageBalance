@@ -155,14 +155,6 @@ export function AuthenticatedAppShell({ auth, authClient, auditClient, dictionar
               )
             })}
           </nav>
-
-          <div className="sidebar-footer" title="Безопасный старт">
-            <LockKeyhole size={18} />
-            <div>
-              <strong>Безопасный старт</strong>
-              <span>первый этап начинается с ролей и доступа</span>
-            </div>
-          </div>
         </aside>
       ) : null}
 

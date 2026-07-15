@@ -243,6 +243,8 @@ describe('App', () => {
     expect(within(dashboardTiles).queryByRole('button', { name: 'Что нового' })).not.toBeInTheDocument()
     expect(within(screen.getByRole('navigation', { name: 'Основные разделы' })).getByRole('button', { name: 'Настройки' })).toBeInTheDocument()
     expect(within(screen.getByRole('navigation', { name: 'Основные разделы' })).getByRole('button', { name: 'Справочники' })).toBeInTheDocument()
+    expect(screen.queryByText('Безопасный старт')).not.toBeInTheDocument()
+    expect(screen.queryByText('первый этап начинается с ролей и доступа')).not.toBeInTheDocument()
     expect(screen.queryByText('Поиск по гаражу, владельцу или поставщику')).not.toBeInTheDocument()
     expect(screen.getAllByText('Администратор').length).toBeGreaterThan(0)
     expect(screen.getAllByText('administrator').length).toBeGreaterThan(0)
