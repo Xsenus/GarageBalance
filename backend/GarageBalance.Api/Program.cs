@@ -1,5 +1,6 @@
 using System.Text;
 using GarageBalance.Api.Application.Audit;
+using GarageBalance.Api.Application.Backups;
 using GarageBalance.Api.Application.Auth;
 using GarageBalance.Api.Application.Common;
 using GarageBalance.Api.Application.Dictionaries;
@@ -16,6 +17,7 @@ using GarageBalance.Api.Application.Workflows;
 using GarageBalance.Api.Controllers;
 using GarageBalance.Api.Domain.Security;
 using GarageBalance.Api.Infrastructure.Data;
+using GarageBalance.Api.Infrastructure.Backups;
 using GarageBalance.Api.Infrastructure.Import;
 using GarageBalance.Api.Infrastructure.Integrations;
 using GarageBalance.Api.Infrastructure.Security;
@@ -107,7 +109,18 @@ builder.Services.AddHttpClient<IDadataSuggestionService, DadataSuggestionService
 });
 builder.Services.AddScoped<IAppReleaseService, AppReleaseService>();
 builder.Services.AddScoped<IAppReleaseRepository, EfAppReleaseRepository>();
-builder.Services.AddHostedService<AppReleaseCatalogSynchronizer>();
+builder.Services
+    .AddOptions<DatabaseBackupOptions>()
+    .Bind(builder.Configuration.GetSection(DatabaseBackupOptions.SectionName))
+    .ValidateDataAnnotations()
+    .ValidateOnStart();
+builder.Services
+    .AddOptions<DatabaseStartupOptions>()
+    .Bind(builder.Configuration.GetSection(DatabaseStartupOptions.SectionName))
+    .ValidateOnStart();
+builder.Services.AddSingleton<IBackupCommandRunner, BackupCommandRunner>();
+builder.Services.AddScoped<IDatabaseBackupService, PostgresDatabaseBackupService>();
+builder.Services.AddScoped<DatabaseBackupAutomationRunner>();
 builder.Services
     .AddOptions<RegularAccrualAutomationOptions>()
     .Bind(builder.Configuration.GetSection(RegularAccrualAutomationOptions.SectionName))
@@ -117,6 +130,9 @@ builder.Services
         "Finance:RegularAccrualAutomation:TimeZoneId must contain a valid system time zone identifier.")
     .ValidateOnStart();
 builder.Services.AddSingleton(TimeProvider.System);
+builder.Services.AddHostedService<DatabaseStartupHostedService>();
+builder.Services.AddHostedService<AppReleaseCatalogSynchronizer>();
+builder.Services.AddHostedService<DatabaseBackupWorker>();
 builder.Services.AddScoped<RegularAccrualAutomationRunner>();
 builder.Services.AddHostedService<RegularAccrualAutomationWorker>();
 builder.Services.AddScoped<IReportService, ReportService>();
