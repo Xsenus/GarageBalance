@@ -5115,8 +5115,12 @@ describe('App', () => {
     await user.click(within(settings).getByRole('tab', { name: 'Резервные копии' }))
 
     const backupsPanel = await within(settings).findByRole('region', { name: 'Резервное копирование базы данных' })
-    expect(await within(backupsPanel).findByLabelText('Состояние резервного копирования')).toHaveTextContent('каждые 24 ч.')
-    expect(within(backupsPanel).getByRole('table', { name: 'Последние резервные копии' })).toHaveTextContent(existingBackup.fileName)
+    const backupSummary = await within(backupsPanel).findByLabelText('Состояние резервного копирования')
+    const backupTable = within(backupsPanel).getByRole('table', { name: 'Последние резервные копии' })
+    expect(backupSummary).toHaveTextContent('каждые 24 ч.')
+    expect(backupSummary.parentElement).toHaveClass('settings-card-body')
+    expect(backupTable.closest('.settings-card-body')).toBe(backupSummary.parentElement)
+    expect(backupTable).toHaveTextContent(existingBackup.fileName)
     const createButton = within(backupsPanel).getByRole('button', { name: 'Создать резервную копию' })
     await user.click(createButton)
     let confirmation = await screen.findByRole('dialog', { name: 'Создать резервную копию базы?' })
@@ -5207,7 +5211,10 @@ describe('App', () => {
     await user.click(within(settings).getByRole('tab', { name: 'Диагностика' }))
     const panel = await within(settings).findByRole('region', { name: 'Диагностика ошибок приложения' })
 
-    expect(await within(panel).findByLabelText('Состояние журнала ошибок')).toHaveTextContent('Включен')
+    const diagnosticSummary = await within(panel).findByLabelText('Состояние журнала ошибок')
+    expect(diagnosticSummary).toHaveTextContent('Включен')
+    expect(diagnosticSummary.parentElement).toHaveClass('settings-card-body')
+    expect(within(panel).getByRole('button', { name: 'Скачать диагностический пакет' }).closest('.settings-card-body')).toBe(diagnosticSummary.parentElement)
     expect(within(panel).getByText(/Пароли, токены, телефоны/)).toBeInTheDocument()
     await user.click(within(panel).getByRole('button', { name: 'Скачать диагностический пакет' }))
 
