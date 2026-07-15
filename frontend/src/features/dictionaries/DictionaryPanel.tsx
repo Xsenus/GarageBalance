@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { FormEvent, MouseEvent, ReactNode } from 'react'
-import { FileText, RotateCcw, Save, Search, Trash2, X } from 'lucide-react'
+import { CircleHelp, FileText, RotateCcw, Save, Search, Trash2, X } from 'lucide-react'
 import type { AuthResponse } from '../../services/authApi'
 import { DictionaryApiError } from '../../services/dictionariesApi'
 import type { AccountingTypeDto, DictionaryClient, GarageDto, OwnerDto, PagedResult, SupplierGroupDto, SupplierDto, TariffDto, UpsertGarageRequest, UpsertOwnerRequest, UpsertSupplierRequest, UpsertTariffRequest } from '../../services/dictionariesApi'
 import type { FinanceClient, GarageBalanceHistoryDto } from '../../services/financeApi'
+import type { DadataAddressSuggestionDto, IntegrationClient } from '../../services/integrationsApi'
 import { hasPermission, permissions } from '../../shared/accessControl'
 import { TableLoadingState } from '../../shared/AsyncState'
 import type { DictionaryEditorFieldKey, DictionaryRecord, DictionarySectionKey } from '../../shared/dictionaryWorkbench'
@@ -58,7 +59,19 @@ type DictionaryEditorState = { section: DictionarySectionKey; mode: 'create' | '
 
 type DictionaryChangePreview = ChangePreview
 
-export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, initialSection }: { auth: AuthResponse; dictionaryClient: DictionaryClient; financeClient: FinanceClient; initialSection: DictionarySectionKey }) {
+function FieldHelpLabel({ id, label, help }: { id: string; label: string; help: string }) {
+  return (
+    <span className="field-label-with-help">
+      <span>{label}</span>
+      <span className="field-help" tabIndex={0} aria-label={`Справка: ${label}`} aria-describedby={id}>
+        <CircleHelp size={15} aria-hidden="true" />
+        <span className="field-help__tooltip" id={id} role="tooltip">{help}</span>
+      </span>
+    </span>
+  )
+}
+
+export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, integrationClient, initialSection }: { auth: AuthResponse; dictionaryClient: DictionaryClient; financeClient: FinanceClient; integrationClient: IntegrationClient; initialSection: DictionarySectionKey }) {
   const [activeSection, setActiveSection] = useState<DictionarySectionKey>(initialSection)
   const [owners, setOwners] = useState<OwnerDto[]>([])
   const [garages, setGarages] = useState<GarageDto[]>([])
@@ -100,6 +113,12 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, initi
   const balanceHistoryTriggerRef = useRef<HTMLElement | null>(null)
   const [ownerForm, setOwnerForm] = useState<UpsertOwnerRequest>(createEmptyOwnerForm())
   const [ownerGarageLinkForm, setOwnerGarageLinkForm] = useState<OwnerGarageLinkForm>(createEmptyOwnerGarageLinkForm())
+  const [ownerAddressSuggestions, setOwnerAddressSuggestions] = useState<DadataAddressSuggestionDto[]>([])
+  const [ownerAddressSuggestionsOpen, setOwnerAddressSuggestionsOpen] = useState(false)
+  const [ownerAddressSuggestionStatus, setOwnerAddressSuggestionStatus] = useState('')
+  const [ownerAddressActiveIndex, setOwnerAddressActiveIndex] = useState(0)
+  const ownerAddressRequestSequence = useRef(0)
+  const ownerAddressInputTouched = useRef(false)
   const [garageForm, setGarageForm] = useState(createEmptyGarageForm())
   const [supplierGroupName, setSupplierGroupName] = useState('')
   const [supplierForm, setSupplierForm] = useState(createEmptySupplierForm())
@@ -145,6 +164,38 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, initi
     const timeoutId = window.setTimeout(() => setToast(null), 3200)
     return () => window.clearTimeout(timeoutId)
   }, [toast])
+
+  useEffect(() => {
+    const query = ownerForm.address?.trim() ?? ''
+    const sequence = ++ownerAddressRequestSequence.current
+    if (editor?.section !== 'owners' || !ownerAddressInputTouched.current || query.length < 2) {
+      return undefined
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      setOwnerAddressSuggestionStatus('Ищем адрес...')
+      void integrationClient.suggestAddresses(auth.accessToken, query).then((suggestions) => {
+        if (sequence !== ownerAddressRequestSequence.current) {
+          return
+        }
+
+        setOwnerAddressSuggestions(suggestions)
+        setOwnerAddressActiveIndex(0)
+        setOwnerAddressSuggestionsOpen(suggestions.length > 0)
+        setOwnerAddressSuggestionStatus(suggestions.length > 0 ? `Найдено вариантов: ${suggestions.length}` : 'Подходящих адресов не найдено. Можно продолжить ввод вручную.')
+      }).catch(() => {
+        if (sequence !== ownerAddressRequestSequence.current) {
+          return
+        }
+
+        setOwnerAddressSuggestions([])
+        setOwnerAddressSuggestionsOpen(false)
+        setOwnerAddressSuggestionStatus('Подсказки DaData недоступны. Можно продолжить ввод вручную.')
+      })
+    }, 350)
+
+    return () => window.clearTimeout(timeoutId)
+  }, [auth.accessToken, editor?.section, integrationClient, ownerForm.address])
 
   useEffect(() => {
     function closeMenu() {
@@ -325,6 +376,7 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, initi
     setValidationErrors([])
     setError(null)
     setContextMenu(null)
+    resetOwnerAddressSuggestions()
     if (mode === 'edit' && item) {
       if (section === 'owners') {
         const owner = item as OwnerDto
@@ -359,9 +411,27 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, initi
   }
 
   function closeEditor() {
+    resetOwnerAddressSuggestions()
     setPendingEditorConfirmation(null)
     setEditor(null)
     setValidationErrors([])
+  }
+
+  function resetOwnerAddressSuggestions() {
+    ownerAddressRequestSequence.current += 1
+    ownerAddressInputTouched.current = false
+    setOwnerAddressSuggestions([])
+    setOwnerAddressSuggestionsOpen(false)
+    setOwnerAddressSuggestionStatus('')
+    setOwnerAddressActiveIndex(0)
+  }
+
+  function selectOwnerAddressSuggestion(suggestion: DadataAddressSuggestionDto) {
+    ownerAddressInputTouched.current = false
+    ownerAddressRequestSequence.current += 1
+    setOwnerForm((current) => ({ ...current, address: suggestion.unrestrictedValue || suggestion.value }))
+    setOwnerAddressSuggestionsOpen(false)
+    setOwnerAddressSuggestionStatus('Адрес выбран из DaData.')
   }
 
   async function saveEditor(event: FormEvent<HTMLFormElement>) {
@@ -845,19 +915,88 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, initi
 
   function renderEditorFields(section: DictionarySectionKey) {
     const fieldMeta = getDictionaryEditorFieldMeta
-    const dictionaryField = (key: DictionaryEditorFieldKey, children: ReactNode) => {
+    const dictionaryField = (key: DictionaryEditorFieldKey, children: ReactNode, options?: { className?: string; help?: string }) => {
       const meta = fieldMeta(key)
-      return <FormField label={meta.label} hint={meta.hint}>{children}</FormField>
+      const label = options?.help ? <FieldHelpLabel id={`${key}-help`} label={meta.label} help={options.help} /> : meta.label
+      return <FormField className={options?.className} label={label} hint={options?.help ? undefined : meta.hint}>{children}</FormField>
     }
 
     if (section === 'owners') {
       return (
         <>
-          {dictionaryField('ownerLastName', <input aria-label={fieldMeta('ownerLastName').ariaLabel} placeholder={fieldMeta('ownerLastName').placeholder} value={ownerForm.lastName} onChange={(event) => setOwnerForm({ ...ownerForm, lastName: event.target.value })} required />)}
-          {dictionaryField('ownerFirstName', <input aria-label={fieldMeta('ownerFirstName').ariaLabel} placeholder={fieldMeta('ownerFirstName').placeholder} value={ownerForm.firstName} onChange={(event) => setOwnerForm({ ...ownerForm, firstName: event.target.value })} required />)}
-          {dictionaryField('ownerMiddleName', <input aria-label={fieldMeta('ownerMiddleName').ariaLabel} placeholder={fieldMeta('ownerMiddleName').placeholder} value={ownerForm.middleName ?? ''} onChange={(event) => setOwnerForm({ ...ownerForm, middleName: event.target.value })} />)}
-          {dictionaryField('ownerPhone', <input aria-label={fieldMeta('ownerPhone').ariaLabel} placeholder={fieldMeta('ownerPhone').placeholder} value={ownerForm.phone ?? ''} onChange={(event) => setOwnerForm({ ...ownerForm, phone: event.target.value })} />)}
-          {dictionaryField('ownerAddress', <input aria-label={fieldMeta('ownerAddress').ariaLabel} placeholder={fieldMeta('ownerAddress').placeholder} value={ownerForm.address ?? ''} onChange={(event) => setOwnerForm({ ...ownerForm, address: event.target.value })} />)}
+          <div className="owner-name-grid">
+            {dictionaryField('ownerLastName', <input aria-label={fieldMeta('ownerLastName').ariaLabel} placeholder={fieldMeta('ownerLastName').placeholder} value={ownerForm.lastName} onChange={(event) => setOwnerForm({ ...ownerForm, lastName: event.target.value })} required />)}
+            {dictionaryField('ownerFirstName', <input aria-label={fieldMeta('ownerFirstName').ariaLabel} placeholder={fieldMeta('ownerFirstName').placeholder} value={ownerForm.firstName} onChange={(event) => setOwnerForm({ ...ownerForm, firstName: event.target.value })} required />)}
+            {dictionaryField('ownerMiddleName', <input aria-label={fieldMeta('ownerMiddleName').ariaLabel} placeholder={fieldMeta('ownerMiddleName').placeholder} value={ownerForm.middleName ?? ''} onChange={(event) => setOwnerForm({ ...ownerForm, middleName: event.target.value })} />, { className: 'owner-name-grid__middle-name' })}
+          </div>
+          <div className="owner-contact-grid">
+            {dictionaryField('ownerPhone', <input aria-label={fieldMeta('ownerPhone').ariaLabel} placeholder={fieldMeta('ownerPhone').placeholder} value={ownerForm.phone ?? ''} onChange={(event) => setOwnerForm({ ...ownerForm, phone: event.target.value })} />)}
+            {dictionaryField('ownerAddress', (
+              <>
+                <div className="suggestion-combobox">
+                  <input
+                    aria-label={fieldMeta('ownerAddress').ariaLabel}
+                    placeholder={fieldMeta('ownerAddress').placeholder}
+                    role="combobox"
+                    aria-autocomplete="list"
+                    aria-expanded={ownerAddressSuggestionsOpen}
+                    aria-controls="owner-address-suggestions"
+                    aria-activedescendant={ownerAddressSuggestionsOpen && ownerAddressSuggestions.length > 0 ? `owner-address-suggestion-${ownerAddressActiveIndex}` : undefined}
+                    autoComplete="off"
+                    value={ownerForm.address ?? ''}
+                    onFocus={() => setOwnerAddressSuggestionsOpen(ownerAddressSuggestions.length > 0)}
+                    onBlur={() => setOwnerAddressSuggestionsOpen(false)}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Escape') {
+                        setOwnerAddressSuggestionsOpen(false)
+                        return
+                      }
+
+                      if (ownerAddressSuggestions.length === 0 || !['ArrowDown', 'ArrowUp', 'Enter'].includes(event.key)) {
+                        return
+                      }
+
+                      if (event.key === 'Enter' && ownerAddressSuggestionsOpen) {
+                        event.preventDefault()
+                        selectOwnerAddressSuggestion(ownerAddressSuggestions[ownerAddressActiveIndex])
+                        return
+                      }
+
+                      if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+                        event.preventDefault()
+                        setOwnerAddressSuggestionsOpen(true)
+                        setOwnerAddressActiveIndex((current) => event.key === 'ArrowDown'
+                          ? (current + 1) % ownerAddressSuggestions.length
+                          : (current - 1 + ownerAddressSuggestions.length) % ownerAddressSuggestions.length)
+                      }
+                    }}
+                    onChange={(event) => {
+                      const value = event.target.value
+                      ownerAddressInputTouched.current = true
+                      setOwnerForm({ ...ownerForm, address: value })
+                      if (value.trim().length < 2) {
+                        setOwnerAddressSuggestions([])
+                        setOwnerAddressSuggestionsOpen(false)
+                        setOwnerAddressSuggestionStatus('')
+                        setOwnerAddressActiveIndex(0)
+                      }
+                    }}
+                  />
+                  {ownerAddressSuggestionsOpen ? (
+                    <div className="suggestion-options" id="owner-address-suggestions" role="listbox" aria-label="Адреса владельца DaData">
+                      {ownerAddressSuggestions.map((suggestion, index) => (
+                        <button className="ghost-button suggestion-option" type="button" role="option" id={`owner-address-suggestion-${index}`} aria-selected={index === ownerAddressActiveIndex} key={`${suggestion.fiasId ?? ''}-${suggestion.value}`} onMouseDown={(event) => event.preventDefault()} onMouseEnter={() => setOwnerAddressActiveIndex(index)} onClick={() => selectOwnerAddressSuggestion(suggestion)}>
+                          <strong>{suggestion.value}</strong>
+                          {suggestion.postalCode ? <span>Индекс {suggestion.postalCode}</span> : null}
+                        </button>
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
+                {ownerAddressSuggestionStatus ? <small className="suggestion-status" role="status" aria-live="polite">{ownerAddressSuggestionStatus}</small> : null}
+              </>
+            ), { className: 'owner-address-field' })}
+          </div>
           {dictionaryField('ownerMeterNotes', <textarea aria-label={fieldMeta('ownerMeterNotes').ariaLabel} placeholder={fieldMeta('ownerMeterNotes').placeholder} value={ownerForm.meterNotes ?? ''} onChange={(event) => setOwnerForm({ ...ownerForm, meterNotes: event.target.value })} />)}
           <div className="dictionary-form-section">
             <h4>Гараж владельца</h4>
@@ -877,9 +1016,9 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, initi
               {dictionaryField('ownerNewGarageFloorCount', <input aria-label={fieldMeta('ownerNewGarageFloorCount').ariaLabel} type="number" min="0" value={ownerGarageLinkForm.floorCount} onChange={(event) => setOwnerGarageLinkForm({ ...ownerGarageLinkForm, floorCount: Number(event.target.value) })} />)}
             </div>
             <div className="inline-fields">
-              {dictionaryField('ownerNewGarageStartingBalance', <input aria-label={fieldMeta('ownerNewGarageStartingBalance').ariaLabel} type="number" step="0.01" value={ownerGarageLinkForm.startingBalance} onChange={(event) => setOwnerGarageLinkForm({ ...ownerGarageLinkForm, startingBalance: Number(event.target.value) })} />)}
-              {dictionaryField('ownerNewGarageInitialWaterMeterValue', <input aria-label={fieldMeta('ownerNewGarageInitialWaterMeterValue').ariaLabel} type="number" min="0" step="0.001" value={ownerGarageLinkForm.initialWaterMeterValue} onChange={(event) => setOwnerGarageLinkForm({ ...ownerGarageLinkForm, initialWaterMeterValue: event.target.value })} />)}
-              {dictionaryField('ownerNewGarageInitialElectricityMeterValue', <input aria-label={fieldMeta('ownerNewGarageInitialElectricityMeterValue').ariaLabel} type="number" min="0" step="0.001" value={ownerGarageLinkForm.initialElectricityMeterValue} onChange={(event) => setOwnerGarageLinkForm({ ...ownerGarageLinkForm, initialElectricityMeterValue: event.target.value })} />)}
+              {dictionaryField('ownerNewGarageStartingBalance', <input aria-label={fieldMeta('ownerNewGarageStartingBalance').ariaLabel} type="number" step="0.01" value={ownerGarageLinkForm.startingBalance} onChange={(event) => setOwnerGarageLinkForm({ ...ownerGarageLinkForm, startingBalance: Number(event.target.value) })} />, { help: 'Долг на начало учета укажите положительным числом, переплату — отрицательным.' })}
+              {dictionaryField('ownerNewGarageInitialWaterMeterValue', <input aria-label={fieldMeta('ownerNewGarageInitialWaterMeterValue').ariaLabel} type="number" min="0" step="0.001" value={ownerGarageLinkForm.initialWaterMeterValue} onChange={(event) => setOwnerGarageLinkForm({ ...ownerGarageLinkForm, initialWaterMeterValue: event.target.value })} />, { help: 'Последнее показание счетчика воды на момент начала учета. Оставьте поле пустым, если показаний нет.' })}
+              {dictionaryField('ownerNewGarageInitialElectricityMeterValue', <input aria-label={fieldMeta('ownerNewGarageInitialElectricityMeterValue').ariaLabel} type="number" min="0" step="0.001" value={ownerGarageLinkForm.initialElectricityMeterValue} onChange={(event) => setOwnerGarageLinkForm({ ...ownerGarageLinkForm, initialElectricityMeterValue: event.target.value })} />, { help: 'Последнее показание счетчика электроэнергии на момент начала учета. Оставьте поле пустым, если показаний нет.' })}
             </div>
             {dictionaryField('ownerNewGarageComment', <textarea aria-label={fieldMeta('ownerNewGarageComment').ariaLabel} placeholder={fieldMeta('ownerNewGarageComment').placeholder} value={ownerGarageLinkForm.comment} onChange={(event) => setOwnerGarageLinkForm({ ...ownerGarageLinkForm, comment: event.target.value })} />)}
           </div>
@@ -1188,7 +1327,7 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, initi
 
       {editor ? (
         <div className="modal-backdrop" role="presentation" onMouseDown={closeEditor}>
-          <section ref={editorDialogRef} className="detail-dialog dictionary-editor-dialog" role="dialog" aria-modal="true" aria-labelledby="dictionary-editor-title" onMouseDown={(event) => event.stopPropagation()}>
+          <section ref={editorDialogRef} className={`detail-dialog dictionary-editor-dialog${editor.section === 'owners' ? ' dictionary-editor-dialog--owners' : ''}`} role="dialog" aria-modal="true" aria-labelledby="dictionary-editor-title" onMouseDown={(event) => event.stopPropagation()}>
             <div className="detail-dialog-header">
               <div>
                 <p className="eyebrow">{editor.mode === 'create' ? 'Добавление' : 'Изменение'}</p>

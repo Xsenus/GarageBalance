@@ -7167,7 +7167,7 @@ describe('App', () => {
     await openSection(user, 'Справочники')
     const dictionaryPanel = await screen.findByRole('region', { name: 'Справочники' })
 
-    const ownerRow = within(dictionaryPanel).getByText('Иванов Иван').closest('tr')!
+    const ownerRow = (await within(dictionaryPanel).findByText('Иванов Иван')).closest('tr')!
     fireEvent.contextMenu(ownerRow)
     await user.click(await screen.findByRole('menuitem', { name: 'Удалить' }))
     expect(archivedOwnerId).toBeNull()
@@ -7466,16 +7466,47 @@ describe('App', () => {
       getGarages: async () => [],
       updateOwner,
     })
-    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+    const suggestAddresses = vi.fn(async () => [{
+      value: 'г Новосибирск, ул Советская, д 2',
+      unrestrictedValue: '630000, г Новосибирск, ул Советская, д 2',
+      fiasId: 'owner-address-fias-1',
+      postalCode: '630000',
+    }])
+    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} importClient={createImportClient()} integrationClient={createIntegrationClient({ suggestAddresses })} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
     await user.click(screen.getByRole('button', { name: 'Войти' }))
     await openSection(user, 'Справочники')
     const dictionaryPanel = await screen.findByRole('region', { name: 'Справочники' })
-    const ownerRow = within(dictionaryPanel).getByText('Иванов Иван').closest('tr')!
+    const ownerRow = (await within(dictionaryPanel).findByText('Иванов Иван')).closest('tr')!
 
     fireEvent.doubleClick(ownerRow)
     let editorDialog = await screen.findByRole('dialog', { name: 'Владельцы' })
+    expect(editorDialog).toHaveClass('dictionary-editor-dialog--owners')
+    const ownerNameGrid = editorDialog.querySelector('.owner-name-grid')
+    expect(ownerNameGrid).not.toBeNull()
+    expect(within(editorDialog).getByLabelText('Фамилия владельца').closest('.form-field')?.parentElement).toBe(ownerNameGrid)
+    expect(within(editorDialog).getByLabelText('Имя владельца').closest('.form-field')?.parentElement).toBe(ownerNameGrid)
+    expect(within(editorDialog).getByLabelText('Отчество владельца').closest('.form-field')).toHaveClass('owner-name-grid__middle-name')
+
+    const ownerAddressInput = within(editorDialog).getByRole('combobox', { name: 'Адрес владельца' })
+    await user.type(ownerAddressInput, 'Советская')
+    await waitFor(() => expect(suggestAddresses).toHaveBeenCalledWith('token', 'Советская'))
+    expect(await within(editorDialog).findByRole('listbox', { name: 'Адреса владельца DaData' })).toBeInTheDocument()
+    await user.keyboard('{ArrowDown}{Enter}')
+    expect(ownerAddressInput).toHaveValue('630000, г Новосибирск, ул Советская, д 2')
+    expect(within(editorDialog).getByText('Адрес выбран из DaData.')).toHaveAttribute('role', 'status')
+
+    const startingBalanceHelp = within(editorDialog).getByLabelText('Справка: Стартовый баланс')
+    expect(startingBalanceHelp).toHaveAttribute('tabindex', '0')
+    startingBalanceHelp.focus()
+    expect(startingBalanceHelp).toHaveFocus()
+    const startingBalanceTooltip = within(editorDialog).getByRole('tooltip', { name: /Долг на начало учета/ })
+    expect(startingBalanceHelp).toHaveAttribute('aria-describedby', startingBalanceTooltip.id)
+    expect(within(editorDialog).getByLabelText('Справка: Старт воды')).toHaveAttribute('tabindex', '0')
+    expect(within(editorDialog).getByLabelText('Справка: Старт электричества')).toHaveAttribute('tabindex', '0')
+    expect(within(editorDialog).getByLabelText('Стартовый баланс нового гаража').closest('.form-field')?.querySelector('.form-field-hint')).toBeNull()
+
     await user.clear(within(editorDialog).getByLabelText('Телефон владельца'))
     await user.type(within(editorDialog).getByLabelText('Телефон владельца'), '+7 901')
     const editorSaveButton = within(editorDialog).getByRole('button', { name: 'Сохранить' })
@@ -7510,6 +7541,7 @@ describe('App', () => {
     await waitFor(() => expect(updateOwner).toHaveBeenCalledTimes(1))
     expect(updateOwner.mock.calls[0][1]).toBe('owner-1')
     expect(updateOwner.mock.calls[0][2].phone).toBe('+7 901')
+    expect(updateOwner.mock.calls[0][2].address).toBe('630000, г Новосибирск, ул Советская, д 2')
     expect(await screen.findByText('Изменения сохранены.')).toBeInTheDocument()
   })
 
@@ -7538,6 +7570,35 @@ describe('App', () => {
     expect(screen.queryByRole('dialog', { name: 'Подтвердите изменения' })).not.toBeInTheDocument()
     expect(screen.queryByRole('dialog', { name: 'Владельцы' })).not.toBeInTheDocument()
     expect(await screen.findByText('Изменений нет.')).toBeInTheDocument()
+  })
+
+  it('keeps manual owner address input available when DaData suggestions fail', async () => {
+    const user = userEvent.setup()
+    const owner = createOwner({ id: 'owner-1', lastName: 'Иванов', firstName: 'Иван' })
+    const suggestAddresses = vi.fn(async () => {
+      throw new Error('DaData unavailable')
+    })
+    const dictionaryClient = createDictionaryClient({
+      getOwners: async () => [owner],
+      getGarages: async () => [],
+    })
+    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} importClient={createImportClient()} integrationClient={createIntegrationClient({ suggestAddresses })} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Справочники')
+    const dictionaryPanel = await screen.findByRole('region', { name: 'Справочники' })
+    const ownerRow = (await within(dictionaryPanel).findByText('Иванов Иван')).closest('tr')!
+
+    fireEvent.doubleClick(ownerRow)
+    const editorDialog = await screen.findByRole('dialog', { name: 'Владельцы' })
+    const addressInput = within(editorDialog).getByRole('combobox', { name: 'Адрес владельца' })
+    await user.type(addressInput, 'Ручной адрес 10')
+
+    await waitFor(() => expect(suggestAddresses).toHaveBeenCalledWith('token', 'Ручной адрес 10'))
+    expect(await within(editorDialog).findByText('Подсказки DaData недоступны. Можно продолжить ввод вручную.')).toHaveAttribute('role', 'status')
+    expect(addressInput).toHaveValue('Ручной адрес 10')
+    expect(within(editorDialog).queryByRole('listbox', { name: 'Адреса владельца DaData' })).not.toBeInTheDocument()
   })
 
   it('adds income type, expense type and tariff from dictionaries workspace', async () => {

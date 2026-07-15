@@ -156,7 +156,7 @@ const dictionaryEditorFieldMeta: Record<DictionaryEditorFieldKey, DictionaryEdit
   ownerNewGarageNumber: { label: 'Новый гараж', ariaLabel: 'Номер нового гаража владельца', placeholder: 'Номер' },
   ownerNewGaragePeopleCount: { label: 'Людей', ariaLabel: 'Количество людей в новом гараже' },
   ownerNewGarageFloorCount: { label: 'Этажей', ariaLabel: 'Количество этажей в новом гараже' },
-  ownerNewGarageStartingBalance: { label: 'Стартовый баланс', ariaLabel: 'Стартовый баланс нового гаража', hint: 'Долг положительным числом, переплата отрицательным.' },
+  ownerNewGarageStartingBalance: { label: 'Стартовый баланс', ariaLabel: 'Стартовый баланс нового гаража' },
   ownerNewGarageInitialWaterMeterValue: { label: 'Старт воды', ariaLabel: 'Стартовый счетчик воды нового гаража' },
   ownerNewGarageInitialElectricityMeterValue: { label: 'Старт электричества', ariaLabel: 'Стартовый счетчик электричества нового гаража' },
   ownerNewGarageComment: { label: 'Комментарий по гаражу', ariaLabel: 'Комментарий нового гаража', placeholder: 'Особенности гаража, начислений или импорта' },

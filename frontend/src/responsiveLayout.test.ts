@@ -93,6 +93,14 @@ describe('responsive layout styles', () => {
     expect(normalizedAppCss).toContain('.regular-accrual-fields {\n    grid-template-columns: minmax(0, 1fr);')
   })
 
+  it('widens the owner editor and keeps its identity fields responsive', () => {
+    expect(normalizedAppCss).toContain('.dictionary-editor-dialog--owners {\n  width: min(860px, 100%);\n  max-width: 860px;')
+    expect(normalizedAppCss).toContain('.owner-name-grid,\n.owner-contact-grid {\n  display: grid;\n  grid-template-columns: repeat(2, minmax(0, 1fr));')
+    expect(normalizedAppCss).toContain('.owner-name-grid__middle-name {\n  grid-column: 1 / -1;')
+    expect(normalizedAppCss).toContain('.field-help:hover .field-help__tooltip,\n.field-help:focus .field-help__tooltip,\n.field-help:focus-within .field-help__tooltip {')
+    expect(normalizedAppCss).toContain('.owner-name-grid,\n  .owner-contact-grid {\n    grid-template-columns: minmax(0, 1fr);')
+  })
+
   it('keeps the yearly meter table inside the desktop workspace', () => {
     expect(normalizedAppCss).toContain('.workspace--meter-readings {\n  display: flex;\n  height: 100vh;')
     expect(normalizedAppCss).toContain('.meter-readings-page {\n  display: flex;\n  min-height: 0;\n  flex: 1 1 auto;')

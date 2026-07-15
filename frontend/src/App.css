@@ -5432,6 +5432,83 @@ h1 {
   max-width: 620px;
 }
 
+.dictionary-editor-dialog--owners {
+  width: min(860px, 100%);
+  max-width: 860px;
+}
+
+.owner-name-grid,
+.owner-contact-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
+  gap: 10px 16px;
+}
+
+.owner-name-grid__middle-name {
+  grid-column: 1 / -1;
+}
+
+.owner-contact-grid {
+  grid-template-columns: minmax(180px, 0.7fr) minmax(280px, 1.3fr);
+}
+
+.owner-address-field,
+.owner-address-field .suggestion-combobox {
+  min-width: 0;
+}
+
+.field-label-with-help {
+  display: inline-flex;
+  max-width: 100%;
+  align-items: center;
+  gap: 5px;
+}
+
+.field-help {
+  position: relative;
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  border-radius: 50%;
+  color: #155eef;
+  cursor: help;
+}
+
+.field-help:focus-visible {
+  outline: 3px solid rgba(46, 144, 250, 0.2);
+  outline-offset: 2px;
+}
+
+.field-help__tooltip {
+  position: absolute;
+  z-index: 30;
+  bottom: calc(100% + 8px);
+  left: 50%;
+  width: max-content;
+  max-width: min(280px, calc(100vw - 48px));
+  transform: translateX(-50%) translateY(3px);
+  border-radius: 8px;
+  background: #101828;
+  color: #ffffff;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.4;
+  opacity: 0;
+  padding: 8px 10px;
+  pointer-events: none;
+  text-align: left;
+  transition: opacity 140ms ease, transform 140ms ease;
+  white-space: normal;
+}
+
+.field-help:hover .field-help__tooltip,
+.field-help:focus .field-help__tooltip,
+.field-help:focus-within .field-help__tooltip {
+  transform: translateX(-50%) translateY(0);
+  opacity: 1;
+}
+
 .dictionary-modal-form {
   display: grid;
   gap: 10px;
@@ -7083,6 +7160,27 @@ button.operation-row:focus-visible {
   .payments-prototype-modal-form label {
     display: grid;
     gap: 6px;
+  }
+
+  .owner-name-grid,
+  .owner-contact-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .owner-name-grid__middle-name {
+    grid-column: 1;
+  }
+
+  .field-help__tooltip {
+    right: auto;
+    left: 0;
+    transform: translateY(3px);
+  }
+
+  .field-help:hover .field-help__tooltip,
+  .field-help:focus .field-help__tooltip,
+  .field-help:focus-within .field-help__tooltip {
+    transform: translateY(0);
   }
 
   .regular-accrual-fields {
