@@ -3337,6 +3337,10 @@ describe('App', () => {
 
     await user.click(regularAccrualButton)
     regularAccrualDialog = await screen.findByRole('dialog', { name: 'Сформировать начисления' })
+    expect(regularAccrualDialog).toHaveClass('regular-accrual-dialog')
+    expect(regularAccrualDialog.querySelector('.regular-accrual-form')).not.toBeNull()
+    expect(regularAccrualDialog.querySelector('.regular-accrual-fields')).not.toBeNull()
+    expect(regularAccrualDialog.querySelector('.regular-accrual-intro .lucide-calendar-days')).not.toBeNull()
     expect(within(regularAccrualDialog).queryByLabelText('Вид регулярного начисления')).not.toBeInTheDocument()
     expect(within(regularAccrualDialog).queryByLabelText('Тариф регулярного начисления')).not.toBeInTheDocument()
     expect(within(regularAccrualDialog).getByText('Будут обработаны все активные регулярные услуги из раздела «Тарифы и сборы».')).toBeInTheDocument()
@@ -3348,7 +3352,10 @@ describe('App', () => {
     expect(within(regularAccrualMonthPicker).getByRole('button', { name: 'Июн' })).toHaveClass('is-selected')
     await user.click(within(regularAccrualMonthPicker).getByRole('button', { name: 'Июн' }))
     await user.type(within(regularAccrualDialog).getByLabelText('Комментарий регулярного начисления'), 'Автоначисление по каталогу')
-    await user.click(within(regularAccrualDialog).getByRole('button', { name: 'Ок' }))
+    const submitRegularAccrualButton = within(regularAccrualDialog).getByRole('button', { name: 'Сформировать' })
+    expect(submitRegularAccrualButton.querySelector('.lucide-calendar-days')).not.toBeNull()
+    expect(within(regularAccrualDialog).getByRole('button', { name: 'Отмена' })).toHaveClass('ghost-button')
+    await user.click(submitRegularAccrualButton)
     await waitFor(() => expect(savedRegularAccrualRequests).toHaveLength(1))
     expect(savedRegularAccrualRequests[0]).toMatchObject({
       accountingMonth: '2026-06-01',

@@ -85,6 +85,14 @@ describe('responsive layout styles', () => {
     expect(normalizedAppCss).toContain('.payments-prototype-history-actions .icon-button {\n  width: 32px;\n  height: 32px;\n  flex: 0 0 32px;')
   })
 
+  it('keeps the regular accrual dialog aligned and stacks its fields on narrow screens', () => {
+    expect(normalizedAppCss).toContain('.regular-accrual-form {\n  grid-template-columns: minmax(0, 1fr);')
+    expect(normalizedAppCss).toContain('.regular-accrual-fields {\n  display: grid;\n  grid-template-columns: minmax(200px, 220px) minmax(0, 1fr);')
+    expect(normalizedAppCss).toContain('.payments-prototype-modal-form .regular-accrual-field {\n  display: grid;\n  gap: 6px;')
+    expect(normalizedAppCss).toContain('.regular-accrual-form > .form-error {\n  grid-column: 1;')
+    expect(normalizedAppCss).toContain('.regular-accrual-fields {\n    grid-template-columns: minmax(0, 1fr);')
+  })
+
   it('keeps the yearly meter table inside the desktop workspace', () => {
     expect(normalizedAppCss).toContain('.workspace--meter-readings {\n  display: flex;\n  height: 100vh;')
     expect(normalizedAppCss).toContain('.meter-readings-page {\n  display: flex;\n  min-height: 0;\n  flex: 1 1 auto;')

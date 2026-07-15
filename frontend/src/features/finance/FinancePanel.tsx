@@ -5809,7 +5809,7 @@ function RegularAccrualPrototypeDialog({
 
   return (
     <div className="modal-backdrop" role="presentation" onMouseDown={onClose}>
-      <section ref={dialogRef} className="detail-dialog payments-prototype-dialog payments-prototype-dialog--wide" role="dialog" aria-modal="true" aria-labelledby="regular-accrual-title" onMouseDown={(event) => event.stopPropagation()}>
+      <section ref={dialogRef} className="detail-dialog payments-prototype-dialog regular-accrual-dialog" role="dialog" aria-modal="true" aria-labelledby="regular-accrual-title" onMouseDown={(event) => event.stopPropagation()}>
         <div className="detail-dialog-header">
           <div>
             <h3 id="regular-accrual-title">Сформировать начисления</h3>
@@ -5818,21 +5818,34 @@ function RegularAccrualPrototypeDialog({
             <X size={18} />
           </button>
         </div>
-        <form className="dictionary-modal-form payments-prototype-modal-form" onSubmit={handleSubmit}>
-          <p className="form-hint">Будут обработаны все активные регулярные услуги из раздела «Тарифы и сборы».</p>
-          <FormField label="Месяц">
-            <LocalizedDatePicker ariaLabel="Месяц регулярного начисления" mode="month" value={accountingMonth} onChange={(nextAccountingMonth) => {
-              setAccountingMonth(nextAccountingMonth)
-              setError(null)
-            }} />
-          </FormField>
-          <FormField label="Комментарий">
-            <textarea aria-label="Комментарий регулярного начисления" rows={5} value={comment} onChange={(event) => setComment(event.target.value)} />
-          </FormField>
+        <form className="dictionary-modal-form payments-prototype-modal-form regular-accrual-form" onSubmit={handleSubmit}>
+          <div className="regular-accrual-intro">
+            <span className="regular-accrual-intro__icon" aria-hidden="true">
+              <CalendarDays size={20} />
+            </span>
+            <div>
+              <strong>Начисления по регулярным услугам</strong>
+              <p>Будут обработаны все активные регулярные услуги из раздела «Тарифы и сборы».</p>
+            </div>
+          </div>
+          <div className="regular-accrual-fields">
+            <FormField className="regular-accrual-field regular-accrual-field--month" label="Месяц начисления">
+              <LocalizedDatePicker ariaLabel="Месяц регулярного начисления" mode="month" value={accountingMonth} onChange={(nextAccountingMonth) => {
+                setAccountingMonth(nextAccountingMonth)
+                setError(null)
+              }} />
+            </FormField>
+            <FormField className="regular-accrual-field regular-accrual-field--comment" label="Комментарий">
+              <textarea aria-label="Комментарий регулярного начисления" rows={4} placeholder="Необязательно" value={comment} onChange={(event) => setComment(event.target.value)} />
+            </FormField>
+          </div>
           {error ? <FormError>{error}</FormError> : null}
           <div className="detail-dialog-actions">
-            <button className="secondary-button" type="submit" disabled={saving}>{saving ? 'Сохраняем...' : 'Ок'}</button>
-            <button ref={cancelRef} className="secondary-button" type="button" onClick={onClose} disabled={saving}>Отмена</button>
+            <button className="secondary-button" type="submit" disabled={saving}>
+              <CalendarDays size={16} aria-hidden="true" />
+              {saving ? 'Формируем...' : 'Сформировать'}
+            </button>
+            <button ref={cancelRef} className="ghost-button" type="button" onClick={onClose} disabled={saving}>Отмена</button>
           </div>
         </form>
       </section>
