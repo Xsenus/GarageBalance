@@ -165,6 +165,19 @@ function parseTariffAmount(value: string) {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : null
 }
 
+function isTariffMoneyAmount(row: ContractorTariffRow) {
+  if (row.serviceSettingKind === 'periodicity' || row.serviceSettingKind === 'overdue-days') {
+    return false
+  }
+
+  const unit = (row.unit ?? '').trim().toLocaleLowerCase('ru')
+  return Boolean(row.calculationBase) || unit.startsWith('руб')
+}
+
+function normalizeTariffDraftValue(row: ContractorTariffRow, field: 'title' | 'amount' | 'unit', value: string) {
+  return field === 'amount' && isTariffMoneyAmount(row) ? formatTariffDecimal(value) : value
+}
+
 function findTariffForPrototypeRow(tariffs: TariffDto[], row: ContractorTariffRow) {
   const lowerTitle = row.title.toLocaleLowerCase('ru')
   if (row.calculationBase === 'meter_electricity') {
@@ -1048,10 +1061,20 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
   }
 
   const commitTariffTextChange = async (row: ContractorTariffRow, field: 'title' | 'amount' | 'unit') => {
-    const nextValue = (tariffDrafts[row.id]?.[field] ?? '').trim()
+    const draftValue = (tariffDrafts[row.id]?.[field] ?? '').trim()
+    const nextValue = normalizeTariffDraftValue(row, field, draftValue)
     const previousValue = row[field] ?? ''
 
     if (nextValue.trim() === previousValue.trim()) {
+      if (draftValue !== nextValue) {
+        setTariffDrafts((drafts) => ({
+          ...drafts,
+          [row.id]: {
+            ...drafts[row.id],
+            [field]: nextValue,
+          },
+        }))
+      }
       return
     }
 
@@ -1166,9 +1189,19 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
   }
 
   const commitOneTimeAmountChange = async (row: ContractorOneTimeRow) => {
-    const nextValue = (oneTimeDrafts[row.id]?.amount ?? '').trim()
+    const draftValue = (oneTimeDrafts[row.id]?.amount ?? '').trim()
+    const nextValue = formatTariffDecimal(draftValue)
 
     if (nextValue.trim() === row.amount.trim()) {
+      if (draftValue !== nextValue) {
+        setOneTimeDrafts((drafts) => ({
+          ...drafts,
+          [row.id]: {
+            ...drafts[row.id],
+            amount: nextValue,
+          },
+        }))
+      }
       return
     }
 
@@ -1671,8 +1704,10 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
                         aria-label={`${row.category}: ${row.title}: значение`}
                         className="contractors-editable-input"
                         disabled={!canManageTariffs || isRowDisabled}
+                        inputMode="decimal"
                         value={tariffDrafts[row.id]?.amount ?? ''}
                         onChange={(event) => setTariffDrafts((drafts) => ({ ...drafts, [row.id]: { ...drafts[row.id], amount: event.target.value } }))}
+                        onBlur={() => void commitTariffTextChange(row, 'amount')}
                         onKeyDown={(event) => handleEditableInputKeyDown(event, () => commitTariffTextChange(row, 'amount'))}
                       />
                     )}
@@ -1787,8 +1822,10 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
                         aria-label={`Сумма: ${row.name}`}
                         className="contractors-editable-input"
                         disabled={!canManageTariffs || !row.isActive || oneTimeSavingRowId === row.id}
+                        inputMode="decimal"
                         value={oneTimeDrafts[row.id]?.amount ?? ''}
                         onChange={(event) => setOneTimeDrafts((drafts) => ({ ...drafts, [row.id]: { ...drafts[row.id], amount: event.target.value } }))}
+                        onBlur={() => void commitOneTimeAmountChange(row)}
                         onKeyDown={(event) => handleEditableInputKeyDown(event, () => commitOneTimeAmountChange(row))}
                       />
                     )}

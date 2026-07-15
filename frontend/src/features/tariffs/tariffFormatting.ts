@@ -1,6 +1,6 @@
 export function formatTariffDecimal(value: number | string) {
   const normalized = String(value).replace(/[\s\u00a0]+/g, '').replace(',', '.').trim()
-  if (!normalized || !/^\d+(?:\.\d+)?$/.test(normalized)) {
+  if (!normalized || !/^\d+(?:\.\d*)?$/.test(normalized)) {
     return String(value)
   }
 
