@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
-import { Eye, KeyRound, PlugZap, RefreshCw, ShieldCheck, SlidersHorizontal, X } from 'lucide-react'
+import { DatabaseBackup, Eye, KeyRound, PlugZap, RefreshCw, ShieldCheck, SlidersHorizontal, X } from 'lucide-react'
 import type { AuthClient, AuthResponse, CurrentUserDto } from '../../services/authApi'
 import type { IntegrationClient, OneCFreshIntegrationStatusDto, OneCFreshSyncDto, OneCFreshSyncPreviewDto, ReceiptPrintingIntegrationStatusDto } from '../../services/integrationsApi'
-import type { ApplicationSettingsClient } from '../../services/settingsApi'
+import type { ApplicationSettingsClient, DatabaseBackupStatusDto } from '../../services/settingsApi'
 import { hasPermission, permissions } from '../../shared/accessControl'
 import { LoadingSkeleton } from '../../shared/AsyncState'
 import { formatSensitiveChange } from '../../shared/changePreview'
@@ -17,7 +17,7 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
   const integrationSettingsVisible = import.meta.env.VITE_SHOW_INTEGRATION_SETTINGS === 'true'
   const dadataSettingsVisible = hasPermission(auth, permissions.usersManage)
   const integrationTabVisible = integrationSettingsVisible || dadataSettingsVisible
-  const [activeSettingsTab, setActiveSettingsTab] = useState<'security' | 'display' | 'integrations'>(() => (
+  const [activeSettingsTab, setActiveSettingsTab] = useState<'security' | 'display' | 'backups' | 'integrations'>(() => (
     integrationSettingsVisible && (hasPermission(auth, permissions.importRun) || hasPermission(auth, permissions.paymentsWrite))
       ? 'integrations'
       : 'security'
@@ -52,6 +52,14 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
   const [paymentDisplaySettingsSaving, setPaymentDisplaySettingsSaving] = useState(false)
   const [paymentDisplaySettingsMessage, setPaymentDisplaySettingsMessage] = useState<string | null>(null)
   const [paymentDisplaySettingsError, setPaymentDisplaySettingsError] = useState<string | null>(null)
+  const [backupStatus, setBackupStatus] = useState<DatabaseBackupStatusDto | null>(null)
+  const [backupLoading, setBackupLoading] = useState(false)
+  const [backupCreating, setBackupCreating] = useState(false)
+  const [backupError, setBackupError] = useState<string | null>(null)
+  const [backupMessage, setBackupMessage] = useState<string | null>(null)
+  const [backupReloadToken, setBackupReloadToken] = useState(0)
+  const [backupConfirmation, setBackupConfirmation] = useState<{ reason: string; error: string | null } | null>(null)
+  const backupTriggerRef = useRef<HTMLButtonElement | null>(null)
   const canViewIntegrationStatus = integrationSettingsVisible && hasPermission(auth, permissions.importRun)
   const canViewReceiptPrintingStatus = integrationSettingsVisible && hasPermission(auth, permissions.paymentsWrite)
   const canManageIntegrationSettings = integrationSettingsVisible && hasPermission(auth, permissions.usersManage)
@@ -62,8 +70,12 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
   const confirmationDialogRef = useFocusTrap<HTMLElement>(Boolean(pendingPasswordChange))
   const oneCFreshSyncCancelRef = useFocusOnOpen<HTMLButtonElement>(Boolean(oneCFreshSyncConfirmation))
   const oneCFreshSyncDialogRef = useFocusTrap<HTMLElement>(Boolean(oneCFreshSyncConfirmation))
+  useRestoreFocusOnClose(Boolean(backupConfirmation))
+  const backupConfirmationCancelRef = useFocusOnOpen<HTMLButtonElement>(Boolean(backupConfirmation))
+  const backupConfirmationDialogRef = useFocusTrap<HTMLElement>(Boolean(backupConfirmation))
   useEscapeKey(Boolean(pendingPasswordChange) && !saving, () => setPendingPasswordChange(null))
   useEscapeKey(Boolean(oneCFreshSyncConfirmation) && !oneCFreshSyncSaving, () => closeOneCFreshSyncConfirmation())
+  useEscapeKey(Boolean(backupConfirmation) && !backupCreating, () => setBackupConfirmation(null))
 
   useEffect(() => {
     if (!canManageApplicationSettings || activeSettingsTab !== 'display') {
@@ -94,6 +106,72 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
       ignore = true
     }
   }, [activeSettingsTab, auth.accessToken, canManageApplicationSettings, settingsClient])
+
+  useEffect(() => {
+    if (!canManageApplicationSettings || activeSettingsTab !== 'backups') {
+      return
+    }
+
+    let ignore = false
+    setBackupLoading(true)
+    setBackupError(null)
+    settingsClient.getDatabaseBackups(auth.accessToken)
+      .then((status) => {
+        if (!ignore) {
+          setBackupStatus(status)
+        }
+      })
+      .catch((caught: unknown) => {
+        if (!ignore) {
+          setBackupError(caught instanceof Error ? caught.message : 'Не удалось загрузить состояние резервного копирования.')
+        }
+      })
+      .finally(() => {
+        if (!ignore) {
+          setBackupLoading(false)
+        }
+      })
+
+    return () => {
+      ignore = true
+    }
+  }, [activeSettingsTab, auth.accessToken, backupReloadToken, canManageApplicationSettings, settingsClient])
+
+  async function createDatabaseBackup() {
+    if (!backupConfirmation) {
+      return
+    }
+
+    const reason = backupConfirmation.reason.trim()
+    if (reason.length < 3) {
+      setBackupConfirmation({ ...backupConfirmation, error: 'Укажите причину длиной не менее 3 символов.' })
+      return
+    }
+
+    setBackupCreating(true)
+    setBackupError(null)
+    setBackupMessage(null)
+    try {
+      const created = await settingsClient.createDatabaseBackup(auth.accessToken, { reason })
+      setBackupMessage(`Резервная копия ${created.fileName} создана и проверена.`)
+      setBackupConfirmation(null)
+      try {
+        const status = await settingsClient.getDatabaseBackups(auth.accessToken)
+        setBackupStatus(status)
+      } catch (caught) {
+        setBackupError(caught instanceof Error
+          ? `Копия создана, но список не обновился: ${caught.message}`
+          : 'Копия создана, но список резервных копий не обновился.')
+      }
+    } catch (caught) {
+      setBackupConfirmation((current) => current ? {
+        ...current,
+        error: caught instanceof Error ? caught.message : 'Не удалось создать резервную копию базы данных.',
+      } : current)
+    } finally {
+      setBackupCreating(false)
+    }
+  }
 
   async function savePaymentDisplaySettings() {
     setPaymentDisplaySettingsSaving(true)
@@ -366,6 +444,20 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
                 <span>Отображение</span>
               </button>
             ) : null}
+            {canManageApplicationSettings ? (
+              <button
+                id="settings-backups-tab"
+                className={activeSettingsTab === 'backups' ? 'settings-tab is-active' : 'settings-tab'}
+                type="button"
+                role="tab"
+                aria-controls="settings-backups-panel"
+                aria-selected={activeSettingsTab === 'backups'}
+                onClick={() => setActiveSettingsTab('backups')}
+              >
+                <DatabaseBackup size={17} aria-hidden="true" />
+                <span>Резервные копии</span>
+              </button>
+            ) : null}
             {integrationTabVisible ? (
               <button
                 id="settings-integrations-tab"
@@ -384,9 +476,9 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
         </aside>
         <div
           className="settings-section-content"
-          id={activeSettingsTab === 'security' ? 'settings-security-panel' : activeSettingsTab === 'display' ? 'settings-display-panel' : 'settings-integrations-panel'}
+          id={`settings-${activeSettingsTab}-panel`}
           role="tabpanel"
-          aria-labelledby={activeSettingsTab === 'security' ? 'settings-security-tab' : activeSettingsTab === 'display' ? 'settings-display-tab' : 'settings-integrations-tab'}
+          aria-labelledby={`settings-${activeSettingsTab}-tab`}
         >
       {activeSettingsTab === 'security' ? (
       <section className="password-panel settings-card settings-card--security" aria-label="Безопасность аккаунта">
@@ -455,6 +547,90 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
             <span>{paymentDisplaySettingsSaving ? 'Сохраняем...' : 'Сохранить отображение'}</span>
           </button>
         </div>
+      </section>
+      ) : null}
+      {canManageApplicationSettings && activeSettingsTab === 'backups' ? (
+      <section className="password-panel settings-card settings-card--backups" aria-label="Резервное копирование базы данных">
+        <div className="settings-card-intro">
+          <p className="eyebrow">Резервные копии</p>
+          <h2>Защита данных PostgreSQL</h2>
+          <p>Автоматические копии сохраняются вне контейнера. При обновлении контейнеры заменяются, но база, ключи шифрования и файлы backup остаются в постоянных хранилищах.</p>
+        </div>
+        {backupLoading ? <LoadingSkeleton className="loading-skeleton--compact" label="Загружаем состояние резервного копирования" rows={3} columns={4} /> : null}
+        {backupError ? (
+          <div className="settings-backup-error">
+            <FormError>{backupError}</FormError>
+            <button className="ghost-button" type="button" disabled={backupLoading} onClick={() => setBackupReloadToken((value) => value + 1)}>
+              <RefreshCw size={16} aria-hidden="true" />
+              <span>Повторить загрузку</span>
+            </button>
+          </div>
+        ) : null}
+        {backupMessage ? <div className="form-success" role="status" aria-live="polite">{backupMessage}</div> : null}
+        {backupStatus && !backupLoading ? (
+          <>
+            <div className="summary-strip" aria-label="Состояние резервного копирования">
+              <div>
+                <span>Резервное копирование</span>
+                <strong className={backupStatus.enabled ? 'status-active' : 'status-disabled'}>{backupStatus.enabled ? 'Включено' : 'Отключено'}</strong>
+              </div>
+              <div>
+                <span>Автоматически</span>
+                <strong>{backupStatus.automaticEnabled ? `каждые ${backupStatus.intervalHours} ч.` : 'отключено'}</strong>
+              </div>
+              <div>
+                <span>Хранится копий</span>
+                <strong>до {backupStatus.retentionCount}</strong>
+              </div>
+              <div>
+                <span>Последняя успешная</span>
+                <strong>{backupStatus.lastSuccessfulBackupAtUtc ? formatDateTime(backupStatus.lastSuccessfulBackupAtUtc) : 'еще не создавалась'}</strong>
+              </div>
+            </div>
+            <p className="form-hint">Каталог внутри контейнера: {backupStatus.directory}. Фактическая папка компьютера задается параметром BACKUP_HOST_PATH в файле .env.</p>
+            {backupStatus.lastError ? <FormError>{backupStatus.lastError}</FormError> : null}
+            <button
+              ref={backupTriggerRef}
+              className="secondary-button create-action-button"
+              type="button"
+              disabled={!backupStatus.enabled || backupStatus.isRunning || backupCreating}
+              onClick={() => {
+                setBackupMessage(null)
+                setBackupConfirmation({ reason: '', error: null })
+              }}
+            >
+              <DatabaseBackup size={17} aria-hidden="true" />
+              <span>{backupStatus.isRunning ? 'Копия создается...' : 'Создать резервную копию'}</span>
+            </button>
+            <div className="table-shell settings-backup-table-shell">
+              <table aria-label="Последние резервные копии">
+                <thead>
+                  <tr>
+                    <th>Дата</th>
+                    <th>Тип</th>
+                    <th>Файл</th>
+                    <th>Размер</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {backupStatus.backups.map((backup) => (
+                    <tr key={backup.fileName}>
+                      <td>{formatDateTime(backup.createdAtUtc)}</td>
+                      <td>{formatBackupKind(backup.kind)}</td>
+                      <td>{backup.fileName}</td>
+                      <td>{formatFileSize(backup.sizeBytes)}</td>
+                    </tr>
+                  ))}
+                  {backupStatus.backups.length === 0 ? (
+                    <tr>
+                      <td colSpan={4}><p className="empty-state" role="status">Резервные копии еще не создавались.</p></td>
+                    </tr>
+                  ) : null}
+                </tbody>
+              </table>
+            </div>
+          </>
+        ) : null}
       </section>
       ) : null}
       {integrationTabVisible && activeSettingsTab === 'integrations' ? (
@@ -648,6 +824,40 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
       ) : null}
         </div>
       </section>
+      {backupConfirmation ? (
+        <div className="modal-backdrop" role="presentation" onMouseDown={() => !backupCreating && setBackupConfirmation(null)}>
+          <section ref={backupConfirmationDialogRef} className="detail-dialog dictionary-confirmation-dialog" role="dialog" aria-modal="true" aria-labelledby="database-backup-confirmation-title" aria-describedby="database-backup-confirmation-description" onMouseDown={(event) => event.stopPropagation()}>
+            <div className="dialog-heading">
+              <div>
+                <p className="eyebrow">Резервные копии</p>
+                <h3 id="database-backup-confirmation-title">Создать резервную копию базы?</h3>
+              </div>
+              <button className="icon-button" type="button" aria-label="Закрыть создание резервной копии" onClick={() => setBackupConfirmation(null)} disabled={backupCreating}>
+                <X size={18} aria-hidden="true" />
+              </button>
+            </div>
+            <p className="confirmation-text" id="database-backup-confirmation-description">Система создаст PostgreSQL backup в отдельной папке, проверит его через pg_restore и запишет действие в историю изменений.</p>
+            <FormField label="Причина создания копии">
+              <textarea
+                aria-label="Причина создания резервной копии"
+                rows={3}
+                value={backupConfirmation.reason}
+                onChange={(event) => setBackupConfirmation({ reason: event.target.value, error: null })}
+                placeholder="Например: перед обновлением программы"
+                disabled={backupCreating}
+              />
+            </FormField>
+            {backupConfirmation.error ? <FormError>{backupConfirmation.error}</FormError> : null}
+            <div className="dialog-actions">
+              <button ref={backupConfirmationCancelRef} className="ghost-button" type="button" onClick={() => setBackupConfirmation(null)} disabled={backupCreating}>Отмена</button>
+              <button className="secondary-button" type="button" onClick={() => void createDatabaseBackup()} disabled={backupCreating}>
+                <DatabaseBackup size={16} aria-hidden="true" />
+                <span>{backupCreating ? 'Создаем и проверяем...' : 'Создать копию'}</span>
+              </button>
+            </div>
+          </section>
+        </div>
+      ) : null}
       {pendingPasswordChange ? (
         <div className="modal-backdrop" role="presentation" onMouseDown={() => !saving && setPendingPasswordChange(null)}>
           <section ref={confirmationDialogRef} className="detail-dialog dictionary-confirmation-dialog" role="dialog" aria-modal="true" aria-labelledby="password-change-confirmation-title" aria-describedby="password-change-confirmation-description" onMouseDown={(event) => event.stopPropagation()}>
@@ -724,6 +934,19 @@ function getOneCFreshSyncConfirmationTitle(mode: 'preview' | 'start' | 'retry') 
   return mode === 'retry'
     ? 'Повторить запрос синхронизации 1C Fresh?'
     : 'Запустить синхронизацию 1C Fresh?'
+}
+
+function formatBackupKind(kind: string) {
+  if (kind === 'manual') return 'Ручная'
+  if (kind === 'automatic') return 'Автоматическая'
+  if (kind === 'pre_update') return 'Перед обновлением'
+  return kind
+}
+
+function formatFileSize(sizeBytes: number) {
+  if (sizeBytes < 1024) return `${sizeBytes} Б`
+  if (sizeBytes < 1024 * 1024) return `${(sizeBytes / 1024).toFixed(1)} КБ`
+  return `${(sizeBytes / (1024 * 1024)).toFixed(1)} МБ`
 }
 
 function getOneCFreshSyncCancelLabel(mode: 'preview' | 'start' | 'retry') {

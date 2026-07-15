@@ -50,4 +50,40 @@ describe('settingsApi', () => {
 
     await expect(settingsApi.getPaymentDisplaySettings('token')).rejects.toThrow('Настройка недоступна.')
   })
+
+  it('loads backup status and creates a manual backup with an audit reason', async () => {
+    const status = {
+      enabled: true,
+      automaticEnabled: true,
+      intervalHours: 24,
+      retentionCount: 30,
+      directory: '/backups',
+      isRunning: false,
+      lastSuccessfulBackupAtUtc: null,
+      lastError: null,
+      backups: [],
+    }
+    const created = {
+      fileName: 'garagebalance_manual_20260715_120000_000.pgdump',
+      sizeBytes: 1024,
+      createdAtUtc: '2026-07-15T12:00:00Z',
+      kind: 'manual',
+    }
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify(status), { status: 200, headers: { 'Content-Type': 'application/json' } }))
+      .mockResolvedValueOnce(new Response(JSON.stringify(created), { status: 201, headers: { 'Content-Type': 'application/json' } }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await expect(settingsApi.getDatabaseBackups('token')).resolves.toEqual(status)
+    await expect(settingsApi.createDatabaseBackup('token', { reason: 'Перед обновлением' })).resolves.toEqual(created)
+
+    expect(fetchMock).toHaveBeenNthCalledWith(1, '/api/settings/backups', expect.objectContaining({
+      headers: expect.objectContaining({ Authorization: 'Bearer token' }),
+    }))
+    expect(fetchMock).toHaveBeenNthCalledWith(2, '/api/settings/backups', expect.objectContaining({
+      method: 'POST',
+      body: JSON.stringify({ reason: 'Перед обновлением' }),
+      headers: expect.objectContaining({ Authorization: 'Bearer token' }),
+    }))
+  })
 })

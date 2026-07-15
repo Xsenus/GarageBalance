@@ -5065,6 +5065,110 @@ describe('App', () => {
     expect(await within(displayPanel).findByText('Настройка отображения платежей сохранена.')).toHaveAttribute('role', 'status')
   })
 
+  it('shows Docker backup status and creates a verified manual copy from settings', async () => {
+    const user = userEvent.setup()
+    const existingBackup = {
+      fileName: 'garagebalance_automatic_20260714_020000_000.pgdump',
+      sizeBytes: 2048,
+      createdAtUtc: '2026-07-14T02:00:00Z',
+      kind: 'automatic' as const,
+    }
+    const createdBackup = {
+      fileName: 'garagebalance_manual_20260715_120000_000.pgdump',
+      sizeBytes: 1024 * 1024,
+      createdAtUtc: '2026-07-15T12:00:00Z',
+      kind: 'manual' as const,
+    }
+    let backupCreated = false
+    const getDatabaseBackups = vi.fn(async () => ({
+      enabled: true,
+      automaticEnabled: true,
+      intervalHours: 24,
+      retentionCount: 30,
+      directory: '/backups',
+      isRunning: false,
+      lastSuccessfulBackupAtUtc: backupCreated ? createdBackup.createdAtUtc : existingBackup.createdAtUtc,
+      lastError: null,
+      backups: backupCreated ? [createdBackup, existingBackup] : [existingBackup],
+    }))
+    const createDatabaseBackup = vi.fn(async () => {
+      backupCreated = true
+      return createdBackup
+    })
+    const settingsClient = createSettingsClient({ getDatabaseBackups, createDatabaseBackup })
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} integrationClient={createIntegrationClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} settingsClient={settingsClient} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Настройки')
+    const settings = await screen.findByRole('region', { name: 'Настройки' })
+    await user.click(within(settings).getByRole('tab', { name: 'Резервные копии' }))
+
+    const backupsPanel = await within(settings).findByRole('region', { name: 'Резервное копирование базы данных' })
+    expect(await within(backupsPanel).findByLabelText('Состояние резервного копирования')).toHaveTextContent('каждые 24 ч.')
+    expect(within(backupsPanel).getByRole('table', { name: 'Последние резервные копии' })).toHaveTextContent(existingBackup.fileName)
+    const createButton = within(backupsPanel).getByRole('button', { name: 'Создать резервную копию' })
+    await user.click(createButton)
+    let confirmation = await screen.findByRole('dialog', { name: 'Создать резервную копию базы?' })
+    await user.click(within(confirmation).getByRole('button', { name: 'Создать копию' }))
+    expect(within(confirmation).getByRole('alert')).toHaveTextContent('Укажите причину длиной не менее 3 символов.')
+    expect(createDatabaseBackup).not.toHaveBeenCalled()
+    await user.keyboard('{Escape}')
+    expect(screen.queryByRole('dialog', { name: 'Создать резервную копию базы?' })).not.toBeInTheDocument()
+    await waitFor(() => expect(createButton).toHaveFocus())
+
+    await user.click(createButton)
+    confirmation = await screen.findByRole('dialog', { name: 'Создать резервную копию базы?' })
+    await user.type(within(confirmation).getByLabelText('Причина создания резервной копии'), 'Перед обновлением Docker')
+    await user.click(within(confirmation).getByRole('button', { name: 'Создать копию' }))
+
+    await waitFor(() => expect(createDatabaseBackup).toHaveBeenCalledWith('token', { reason: 'Перед обновлением Docker' }))
+    expect(await within(backupsPanel).findByText(`Резервная копия ${createdBackup.fileName} создана и проверена.`)).toHaveAttribute('role', 'status')
+    expect(within(backupsPanel).getByRole('table', { name: 'Последние резервные копии' })).toHaveTextContent(createdBackup.fileName)
+    expect(within(backupsPanel).getByText('1.0 МБ')).toBeInTheDocument()
+  })
+
+  it('recovers backup status loading and keeps a failed manual backup inside its confirmation dialog', async () => {
+    const user = userEvent.setup()
+    const status = {
+      enabled: true,
+      automaticEnabled: true,
+      intervalHours: 24,
+      retentionCount: 30,
+      directory: '/backups',
+      isRunning: false,
+      lastSuccessfulBackupAtUtc: null,
+      lastError: null,
+      backups: [],
+    }
+    const getDatabaseBackups = vi.fn()
+      .mockRejectedValueOnce(new Error('Каталог резервных копий временно недоступен.'))
+      .mockResolvedValue(status)
+    const createDatabaseBackup = vi.fn().mockRejectedValue(new Error('Недостаточно места для резервной копии.'))
+    const settingsClient = createSettingsClient({ getDatabaseBackups, createDatabaseBackup })
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} integrationClient={createIntegrationClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} settingsClient={settingsClient} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Настройки')
+    const settings = await screen.findByRole('region', { name: 'Настройки' })
+    await user.click(within(settings).getByRole('tab', { name: 'Резервные копии' }))
+    const backupsPanel = await within(settings).findByRole('region', { name: 'Резервное копирование базы данных' })
+
+    expect(await within(backupsPanel).findByRole('alert')).toHaveTextContent('Каталог резервных копий временно недоступен.')
+    await user.click(within(backupsPanel).getByRole('button', { name: 'Повторить загрузку' }))
+    expect(await within(backupsPanel).findByLabelText('Состояние резервного копирования')).toHaveTextContent('еще не создавалась')
+    expect(within(backupsPanel).getByRole('status')).toHaveTextContent('Резервные копии еще не создавались.')
+
+    await user.click(within(backupsPanel).getByRole('button', { name: 'Создать резервную копию' }))
+    const confirmation = await screen.findByRole('dialog', { name: 'Создать резервную копию базы?' })
+    await user.type(within(confirmation).getByLabelText('Причина создания резервной копии'), 'Проверка перед обновлением')
+    await user.click(within(confirmation).getByRole('button', { name: 'Создать копию' }))
+
+    expect(await within(confirmation).findByRole('alert')).toHaveTextContent('Недостаточно места для резервной копии.')
+    expect(confirmation).toBeInTheDocument()
+  })
+
   it.each([
     ['администратора', createAuthResponse()],
     ['пользователя без административных прав', createAuthResponse({ user: { permissions: ['dictionaries.read'] } })],
@@ -5085,11 +5189,13 @@ describe('App', () => {
     expect(within(settings).getByRole('region', { name: 'Безопасность аккаунта' })).toBeInTheDocument()
     if (auth.user.permissions.includes('users.manage')) {
       expect(within(tabList).getByRole('tab', { name: 'Отображение' })).toBeInTheDocument()
+      expect(within(tabList).getByRole('tab', { name: 'Резервные копии' })).toBeInTheDocument()
       const integrationsTab = within(tabList).getByRole('tab', { name: 'Интеграции' })
       await user.click(integrationsTab)
       expect(within(settings).getByRole('region', { name: 'Подсказки DaData' })).toBeInTheDocument()
     } else {
       expect(within(tabList).queryByRole('tab', { name: 'Отображение' })).not.toBeInTheDocument()
+      expect(within(tabList).queryByRole('tab', { name: 'Резервные копии' })).not.toBeInTheDocument()
       expect(within(tabList).queryByRole('tab', { name: 'Интеграции' })).not.toBeInTheDocument()
       expect(within(settings).queryByRole('region', { name: 'Подсказки DaData' })).not.toBeInTheDocument()
     }
@@ -8450,7 +8556,7 @@ describe('App', () => {
       await user.click(within(closeDialog).getByRole('button', { name: 'Закрыть без сохранения' }))
       await waitFor(() => expect(screen.queryByRole('dialog', { name: item.dialog })).not.toBeInTheDocument())
     }
-  }, 30_000)
+  }, 60_000)
 
   it('opens payment context menu from focused row keyboard shortcut', async () => {
     const user = userEvent.setup()
@@ -12138,6 +12244,23 @@ function createSettingsClient(overrides: Partial<ApplicationSettingsClient> = {}
   return {
     getPaymentDisplaySettings: async () => ({ showAllGarageOperationsByDefault: false }),
     updatePaymentDisplaySettings: async (_accessToken, request) => request,
+    getDatabaseBackups: async () => ({
+      enabled: true,
+      automaticEnabled: true,
+      intervalHours: 24,
+      retentionCount: 30,
+      directory: '/backups',
+      isRunning: false,
+      lastSuccessfulBackupAtUtc: null,
+      lastError: null,
+      backups: [],
+    }),
+    createDatabaseBackup: async () => ({
+      fileName: 'garagebalance_manual_20260715_120000_000.pgdump',
+      sizeBytes: 1024,
+      createdAtUtc: '2026-07-15T12:00:00Z',
+      kind: 'manual',
+    }),
     ...overrides,
   }
 }
