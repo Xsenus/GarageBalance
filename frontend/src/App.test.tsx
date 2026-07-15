@@ -125,6 +125,15 @@ describe('App', () => {
     return screen.findByRole('dialog')
   }
 
+  async function selectStyledOption(user: ReturnType<typeof userEvent.setup>, container: HTMLElement, label: string, option: string) {
+    const combobox = within(container).getByRole('combobox', { name: label })
+    expect(combobox).toHaveClass('select-control__trigger')
+    await user.click(combobox)
+    const listbox = within(container).getByRole('listbox', { name: `${label}: варианты` })
+    expect(listbox).toHaveClass('select-control__list')
+    await user.click(within(listbox).getByRole('option', { name: option }))
+  }
+
   async function openReportTab(user: ReturnType<typeof userEvent.setup>, panel: HTMLElement, name: string) {
     const tab = within(panel).getByRole('tab', { name: new RegExp(name) })
     if (tab.getAttribute('aria-selected') !== 'true') {
@@ -6110,7 +6119,7 @@ describe('App', () => {
     const tariffDialog = await openDictionaryCreateDialog(user, dictionaryPanel)
 
     await user.type(within(tariffDialog).getByLabelText('Название тарифа'), 'Электроэнергия')
-    await user.selectOptions(within(tariffDialog).getByLabelText('База расчета тарифа'), 'meter_electricity')
+    await selectStyledOption(user, tariffDialog, 'База расчета тарифа', 'По счетчику электричества')
     await user.clear(within(tariffDialog).getByLabelText('Ставка тарифа'))
     await user.type(within(tariffDialog).getByLabelText('Ставка тарифа'), '0')
     await user.clear(within(tariffDialog).getByLabelText('Дата начала тарифа'))
@@ -6176,7 +6185,7 @@ describe('App', () => {
 
     await user.clear(within(tariffDialog).getByLabelText('Название тарифа'))
     await user.type(within(tariffDialog).getByLabelText('Название тарифа'), 'Электроэнергия 3 зоны')
-    await user.selectOptions(within(tariffDialog).getByLabelText('База расчета тарифа'), 'meter_electricity')
+    await selectStyledOption(user, tariffDialog, 'База расчета тарифа', 'По счетчику электричества')
     await user.clear(within(tariffDialog).getByLabelText('Ставка тарифа'))
     await user.type(within(tariffDialog).getByLabelText('Ставка тарифа'), '4')
     await user.type(within(tariffDialog).getByLabelText('Первый порог электроэнергии'), '50')
@@ -6247,7 +6256,7 @@ describe('App', () => {
     await user.type(within(garageCreateDialog).getByLabelText('Стартовый счетчик воды'), '18.5')
     await user.type(within(garageCreateDialog).getByLabelText('Стартовый счетчик электричества'), '412.75')
     await user.type(within(garageCreateDialog).getByLabelText('Комментарий по гаражу'), 'Старые счетчики внесены из Access')
-    await user.selectOptions(within(garageCreateDialog).getByLabelText('Владелец гаража'), within(garageCreateDialog).getByRole('option', { name: 'Петров Петр' }))
+    await selectStyledOption(user, garageCreateDialog, 'Владелец гаража', 'Петров Петр')
     await user.click(within(garageCreateDialog).getByRole('button', { name: 'Сохранить' }))
     expect(await within(dictionaryPanel).findByText('21')).toBeInTheDocument()
     expect(within(dictionaryPanel).getByText('Петров Петр')).toBeInTheDocument()
@@ -6278,7 +6287,7 @@ describe('App', () => {
 
     supplierDialog = await openDictionaryCreateDialog(user, dictionaryPanel)
     await user.type(within(supplierDialog).getByLabelText('Название поставщика'), 'Сибирь Онлайн')
-    await user.selectOptions(within(supplierDialog).getByLabelText('Группа для поставщика'), within(supplierDialog).getByRole('option', { name: 'Связь' }))
+    await selectStyledOption(user, supplierDialog, 'Группа для поставщика', 'Связь')
     await user.type(within(supplierDialog).getByLabelText('ИНН поставщика'), '5401000000')
     await user.clear(within(supplierDialog).getByLabelText('Стартовый баланс поставщика'))
     await user.type(within(supplierDialog).getByLabelText('Стартовый баланс поставщика'), '1200')
@@ -6304,7 +6313,7 @@ describe('App', () => {
     await user.type(within(dictionaryPanel).getByLabelText('Стартовый счетчик воды'), '18.5')
     await user.type(within(dictionaryPanel).getByLabelText('Стартовый счетчик электричества'), '412.75')
     await user.type(within(dictionaryPanel).getByLabelText('Комментарий по гаражу'), 'Старые счетчики внесены из Access')
-    await user.selectOptions(within(dictionaryPanel).getByLabelText('Владелец гаража'), within(dictionaryPanel).getByRole('option', { name: 'Петров Петр' }))
+    await selectStyledOption(user, dictionaryPanel, 'Владелец гаража', 'Петров Петр')
     await user.click(within(dictionaryPanel).getAllByRole('button', { name: 'Добавить' })[1])
     expect(await within(dictionaryPanel).findByText('Гараж 21')).toBeInTheDocument()
     expect(within(dictionaryPanel).getAllByText('Петров Петр').length).toBeGreaterThan(0)
@@ -6398,7 +6407,7 @@ describe('App', () => {
 
     fireEvent.doubleClick(garageRow)
     garageDialog = await screen.findByRole('dialog', { name: 'Гаражи' })
-    await user.selectOptions(within(garageDialog).getByLabelText('Владелец гаража'), nextOwner.id)
+    await selectStyledOption(user, garageDialog, 'Владелец гаража', 'Петров Петр')
     await user.clear(within(garageDialog).getByLabelText('Стартовый баланс гаража'))
     await user.type(within(garageDialog).getByLabelText('Стартовый баланс гаража'), '350')
     const saveButton = within(garageDialog).getByRole('button', { name: 'Сохранить' })
@@ -6487,7 +6496,7 @@ describe('App', () => {
 
     fireEvent.doubleClick(supplierRow)
     supplierDialog = await screen.findByRole('dialog', { name: /Поставщики/ })
-    await user.selectOptions(within(supplierDialog).getByLabelText('Группа для поставщика'), nextGroup.id)
+    await selectStyledOption(user, supplierDialog, 'Группа для поставщика', 'Ремонтные работы')
     await user.clear(within(supplierDialog).getByLabelText('Стартовый баланс поставщика'))
     await user.type(within(supplierDialog).getByLabelText('Стартовый баланс поставщика'), '2500')
     const saveButton = within(supplierDialog).getByRole('button', { name: 'Сохранить' })
@@ -6577,7 +6586,7 @@ describe('App', () => {
 
     fireEvent.doubleClick(tariffRow)
     tariffDialog = await screen.findByRole('dialog', { name: 'Тарифы' })
-    await user.selectOptions(within(tariffDialog).getByLabelText('База расчета тарифа'), 'meter_electricity')
+    await selectStyledOption(user, tariffDialog, 'База расчета тарифа', 'По счетчику электричества')
     await user.clear(within(tariffDialog).getByLabelText('Ставка тарифа'))
     await user.type(within(tariffDialog).getByLabelText('Ставка тарифа'), '6.5')
     await user.clear(within(tariffDialog).getByLabelText('Дата начала тарифа'))
@@ -7655,7 +7664,7 @@ describe('App', () => {
 
     tariffDialog = await openDictionaryCreateDialog(user, dictionaryPanel)
     await user.type(within(tariffDialog).getByLabelText('Название тарифа'), 'Мусор')
-    await user.selectOptions(within(tariffDialog).getByLabelText('База расчета тарифа'), 'people')
+    await selectStyledOption(user, tariffDialog, 'База расчета тарифа', 'По людям')
     await user.clear(within(tariffDialog).getByLabelText('Ставка тарифа'))
     await user.type(within(tariffDialog).getByLabelText('Ставка тарифа'), '150')
     await user.click(within(tariffDialog).getByRole('button', { name: 'Сохранить' }))
@@ -7674,7 +7683,7 @@ describe('App', () => {
     expect(await within(dictionaryPanel).findByText('Вывоз мусора')).toBeInTheDocument()
 
     await user.type(within(dictionaryPanel).getByLabelText('Название тарифа'), 'Мусор')
-    await user.selectOptions(within(dictionaryPanel).getByLabelText('База расчета тарифа'), 'people')
+    await selectStyledOption(user, dictionaryPanel, 'База расчета тарифа', 'По людям')
     await user.clear(within(dictionaryPanel).getByLabelText('Ставка тарифа'))
     await user.type(within(dictionaryPanel).getByLabelText('Ставка тарифа'), '150')
     await user.click(within(dictionaryPanel).getAllByRole('button', { name: 'Добавить' })[5])

@@ -146,6 +146,9 @@ describe('accessible dynamic messages', () => {
 
     expect(selectOpeningTags.length).toBeGreaterThan(0)
     expect(selectOpeningTags.filter((tag) => !/\saria-label=|\saria-labelledby=/.test(tag))).toEqual([])
+    expect(dictionaryPanelSource).toContain("from '../../shared/SelectControl'")
+    expect(dictionaryPanelSource).not.toContain('<select')
+    expect(dictionaryPanelSource.match(/<SelectControl\b/g)?.length).toBeGreaterThanOrEqual(7)
     expect(financePanelSource).toContain('aria-label="Гараж для поступления"')
     expect(financePanelSource).toContain('aria-label="Вид выплаты"')
     expect(financePanelSource).toContain('aria-label="Тариф для регулярного начисления"')

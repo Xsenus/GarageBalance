@@ -20,6 +20,7 @@ import { useEscapeKey, useFocusOnOpen, useFocusTrap, useRestoreFocusOnClose } fr
 import { createEmptyPage, createFallbackPage } from '../../shared/pagination'
 import { TablePagination } from '../../shared/TablePagination'
 import { createDefaultGarageBalanceHistoryFilters } from '../../shared/reportFilters'
+import { SelectControl } from '../../shared/SelectControl'
 import type { OwnerGarageLinkForm } from '../../shared/validation'
 import { createTariffFormFromDto, getAccountingTypeValidationErrors, getGarageValidationErrors, getOwnerGarageLinkValidationErrors, getOwnerValidationErrors, getSupplierGroupValidationErrors, getSupplierValidationErrors, getTariffValidationErrors, parseOptionalNumberInput, updateTariffCalculationBase, withoutElectricityTierFields } from '../../shared/validation'
 
@@ -1001,14 +1002,15 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, integ
           <div className="dictionary-form-section">
             <h4>Гараж владельца</h4>
             {dictionaryField('ownerExistingGarage', (
-              <select aria-label={fieldMeta('ownerExistingGarage').ariaLabel} value={ownerGarageLinkForm.existingGarageId} onChange={(event) => setOwnerGarageLinkForm({ ...ownerGarageLinkForm, existingGarageId: event.target.value })}>
-                <option value="">Не привязывать существующий гараж</option>
-                {ownerGarageOptions.map((garage) => (
-                  <option value={garage.id} key={garage.id}>
-                    {garage.ownerName ? `Гараж ${garage.number} - ${garage.ownerName}` : `Гараж ${garage.number}`}
-                  </option>
-                ))}
-              </select>
+              <SelectControl
+                aria-label={fieldMeta('ownerExistingGarage').ariaLabel}
+                value={ownerGarageLinkForm.existingGarageId}
+                options={[
+                  { value: '', label: 'Не привязывать существующий гараж' },
+                  ...ownerGarageOptions.map((garage) => ({ value: garage.id, label: garage.ownerName ? `Гараж ${garage.number} - ${garage.ownerName}` : `Гараж ${garage.number}` })),
+                ]}
+                onChange={(value) => setOwnerGarageLinkForm({ ...ownerGarageLinkForm, existingGarageId: value })}
+              />
             ))}
             <div className="inline-fields">
               {dictionaryField('ownerNewGarageNumber', <input aria-label={fieldMeta('ownerNewGarageNumber').ariaLabel} placeholder={fieldMeta('ownerNewGarageNumber').placeholder} value={ownerGarageLinkForm.newGarageNumber} onChange={(event) => setOwnerGarageLinkForm({ ...ownerGarageLinkForm, newGarageNumber: event.target.value })} />)}
@@ -1034,10 +1036,12 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, integ
             {dictionaryField('garageFloorCount', <input aria-label={fieldMeta('garageFloorCount').ariaLabel} type="number" min="0" value={garageForm.floorCount} onChange={(event) => setGarageForm({ ...garageForm, floorCount: Number(event.target.value) })} />)}
           </div>
           {dictionaryField('garageOwner', (
-            <select aria-label={fieldMeta('garageOwner').ariaLabel} value={garageForm.ownerId} onChange={(event) => setGarageForm({ ...garageForm, ownerId: event.target.value })}>
-              <option value="">Без владельца</option>
-              {ownerOptions.map((owner) => <option value={owner.id} key={owner.id}>{owner.fullName}</option>)}
-            </select>
+            <SelectControl
+              aria-label={fieldMeta('garageOwner').ariaLabel}
+              value={garageForm.ownerId}
+              options={[{ value: '', label: 'Без владельца' }, ...ownerOptions.map((owner) => ({ value: owner.id, label: owner.fullName }))]}
+              onChange={(value) => setGarageForm({ ...garageForm, ownerId: value })}
+            />
           ))}
           {dictionaryField('garageStartingBalance', <input aria-label={fieldMeta('garageStartingBalance').ariaLabel} type="number" step="0.01" value={garageForm.startingBalance} onChange={(event) => setGarageForm({ ...garageForm, startingBalance: Number(event.target.value) })} />)}
           <div className="inline-fields">
@@ -1056,10 +1060,13 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, integ
         <>
           {dictionaryField('supplierName', <input aria-label={fieldMeta('supplierName').ariaLabel} placeholder={fieldMeta('supplierName').placeholder} value={supplierForm.name} onChange={(event) => setSupplierForm({ ...supplierForm, name: event.target.value })} required />)}
           {dictionaryField('supplierGroup', (
-            <select aria-label={fieldMeta('supplierGroup').ariaLabel} value={supplierForm.groupId} onChange={(event) => setSupplierForm({ ...supplierForm, groupId: event.target.value })} required>
-              <option value="" disabled>Выберите группу</option>
-              {groupOptions.map((group) => <option value={group.id} key={group.id}>{group.name}</option>)}
-            </select>
+            <SelectControl
+              aria-label={fieldMeta('supplierGroup').ariaLabel}
+              value={supplierForm.groupId}
+              options={groupOptions.length > 0 ? groupOptions.map((group) => ({ value: group.id, label: group.name })) : [{ value: '', label: 'Группы пока не добавлены' }]}
+              disabled={groupOptions.length === 0}
+              onChange={(value) => setSupplierForm({ ...supplierForm, groupId: value })}
+            />
           ))}
           {dictionaryField('supplierInn', <input aria-label={fieldMeta('supplierInn').ariaLabel} placeholder={fieldMeta('supplierInn').placeholder} value={supplierForm.inn} onChange={(event) => setSupplierForm({ ...supplierForm, inn: event.target.value })} />)}
           {dictionaryField('supplierLegalAddress', <input aria-label={fieldMeta('supplierLegalAddress').ariaLabel} placeholder={fieldMeta('supplierLegalAddress').placeholder} value={supplierForm.legalAddress} onChange={(event) => setSupplierForm({ ...supplierForm, legalAddress: event.target.value })} />)}
@@ -1083,9 +1090,7 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, integ
       <>
         {dictionaryField('tariffName', <input aria-label={fieldMeta('tariffName').ariaLabel} placeholder={fieldMeta('tariffName').placeholder} value={tariffForm.name} onChange={(event) => setTariffForm({ ...tariffForm, name: event.target.value })} required />)}
         {dictionaryField('tariffCalculationBase', (
-          <select aria-label={fieldMeta('tariffCalculationBase').ariaLabel} value={tariffForm.calculationBase} onChange={(event) => setTariffForm(updateTariffCalculationBase(tariffForm, event.target.value))}>
-            {getTariffCalculationBaseOptions().map((option) => <option value={option.value} key={option.value}>{option.label}</option>)}
-          </select>
+          <SelectControl aria-label={fieldMeta('tariffCalculationBase').ariaLabel} value={tariffForm.calculationBase} options={getTariffCalculationBaseOptions()} onChange={(value) => setTariffForm(updateTariffCalculationBase(tariffForm, value))} />
         ))}
         <div className="inline-fields">
           {dictionaryField('tariffRate', <input aria-label={fieldMeta('tariffRate').ariaLabel} type="number" min="0.0001" step="0.0001" value={tariffForm.rate} onChange={(event) => setTariffForm({ ...tariffForm, rate: Number(event.target.value) })} />)}
@@ -2000,14 +2005,7 @@ export function DictionaryPanel({ auth, dictionaryClient }: { auth: AuthResponse
             <input aria-label="Стартовый счетчик электричества" type="number" min="0" step="0.001" value={garageForm.initialElectricityMeterValue} onChange={(event) => setGarageForm({ ...garageForm, initialElectricityMeterValue: event.target.value })} />
           </div>
           <textarea aria-label="Комментарий по гаражу" placeholder="Комментарий по счетчикам, особенностям начислений или импорта" value={garageForm.comment} onChange={(event) => setGarageForm({ ...garageForm, comment: event.target.value })} />
-          <select aria-label="Владелец гаража" value={garageForm.ownerId} onChange={(event) => setGarageForm({ ...garageForm, ownerId: event.target.value })}>
-            <option value="">Без владельца</option>
-            {owners.map((owner) => (
-              <option value={owner.id} key={owner.id}>
-                {owner.fullName}
-              </option>
-            ))}
-          </select>
+          <SelectControl aria-label="Владелец гаража" value={garageForm.ownerId} options={[{ value: '', label: 'Без владельца' }, ...owners.map((owner) => ({ value: owner.id, label: owner.fullName }))]} onChange={(value) => setGarageForm({ ...garageForm, ownerId: value })} />
           <FormValidationSummary title="Проверьте гараж" items={garageValidationErrors} />
           <button className="secondary-button create-action-button" type="submit" disabled={!canWriteDictionaries || saving === 'garage'}>
             <FileText size={16} aria-hidden="true" />
@@ -2059,16 +2057,7 @@ export function DictionaryPanel({ auth, dictionaryClient }: { auth: AuthResponse
           <FormValidationSummary title="Проверьте группу поставщиков" items={supplierGroupValidationErrors} />
           <form className="compact-stack" onSubmit={saveSupplier}>
             <input aria-label="Название поставщика" placeholder="Название" value={supplierForm.name} onChange={(event) => setSupplierForm({ ...supplierForm, name: event.target.value })} required />
-            <select aria-label="Группа для поставщика" value={defaultGroupId} onChange={(event) => setSupplierForm({ ...supplierForm, groupId: event.target.value })} required>
-              <option value="" disabled>
-                Выберите группу
-              </option>
-              {groups.map((group) => (
-                <option value={group.id} key={group.id}>
-                  {group.name}
-                </option>
-              ))}
-            </select>
+            <SelectControl aria-label="Группа для поставщика" value={defaultGroupId} options={groups.length > 0 ? groups.map((group) => ({ value: group.id, label: group.name })) : [{ value: '', label: 'Группы пока не добавлены' }]} disabled={groups.length === 0} onChange={(value) => setSupplierForm({ ...supplierForm, groupId: value })} />
             <input aria-label="ИНН поставщика" placeholder="ИНН" value={supplierForm.inn} onChange={(event) => setSupplierForm({ ...supplierForm, inn: event.target.value })} />
             <input aria-label="Стартовый баланс поставщика" type="number" step="0.01" value={supplierForm.startingBalance} onChange={(event) => setSupplierForm({ ...supplierForm, startingBalance: Number(event.target.value) })} />
             <FormValidationSummary title="Проверьте поставщика" items={supplierValidationErrors} />
@@ -2145,9 +2134,7 @@ export function DictionaryPanel({ auth, dictionaryClient }: { auth: AuthResponse
         <form className="dictionary-form" onSubmit={saveTariff}>
           <h3>{editingTariffId ? 'Изменение тарифа' : 'Тарифы'}</h3>
           <input aria-label="Название тарифа" placeholder="Вода" value={tariffForm.name} onChange={(event) => setTariffForm({ ...tariffForm, name: event.target.value })} required />
-          <select aria-label="База расчета тарифа" value={tariffForm.calculationBase} onChange={(event) => setTariffForm(updateTariffCalculationBase(tariffForm, event.target.value))}>
-            {getTariffCalculationBaseOptions().map((option) => <option value={option.value} key={option.value}>{option.label}</option>)}
-          </select>
+          <SelectControl aria-label="База расчета тарифа" value={tariffForm.calculationBase} options={getTariffCalculationBaseOptions()} onChange={(value) => setTariffForm(updateTariffCalculationBase(tariffForm, value))} />
           <div className="inline-fields">
             <input aria-label="Ставка тарифа" type="number" min="0.0001" step="0.0001" value={tariffForm.rate} onChange={(event) => setTariffForm({ ...tariffForm, rate: Number(event.target.value) })} />
             <input aria-label="Дата начала тарифа" type="date" value={tariffForm.effectiveFrom} onChange={(event) => setTariffForm({ ...tariffForm, effectiveFrom: event.target.value })} />
