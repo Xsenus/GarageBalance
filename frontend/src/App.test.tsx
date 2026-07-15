@@ -1127,6 +1127,7 @@ describe('App', () => {
     let archivedSupplierReason: string | null = null
     let deletedSupplierContactReason: string | null = null
     let archivedStaffMemberReason: string | null = null
+    let savedSupplierRequest: UpsertSupplierRequest | null = null
     const archivedStaffDepartmentRequests: Array<{ id: string; reason: string }> = []
     const updatedStaffDepartmentRequests: Array<{ id: string; name: string }> = []
     const restoredSupplierIds: string[] = []
@@ -1178,19 +1179,24 @@ describe('App', () => {
         ownerName: 'Новый владелец',
         isArchived: false,
       }),
-      createSupplier: async (_token, request) => createSupplier({
-        id: '22222222-2222-4222-8222-222222222222',
-        name: request.name,
-        groupId: request.groupId,
-        groupName: 'Коммунальные услуги',
-        inn: request.inn ?? null,
-        legalAddress: request.legalAddress ?? null,
-        contactPerson: request.contactPerson ?? null,
-        phone: request.phone ?? null,
-        email: request.email ?? null,
-        startingBalance: request.startingBalance,
-        comment: request.comment ?? null,
-      }),
+      createSupplier: async (_token, request) => {
+        savedSupplierRequest = request
+        return createSupplier({
+          id: '22222222-2222-4222-8222-222222222222',
+          name: request.name,
+          groupId: request.groupId,
+          groupName: 'Коммунальные услуги',
+          chargeServiceSettingId: request.chargeServiceSettingId ?? null,
+          chargeServiceSettingName: request.chargeServiceSettingId ? 'Уборка территории' : null,
+          inn: request.inn ?? null,
+          legalAddress: request.legalAddress ?? null,
+          contactPerson: request.contactPerson ?? null,
+          phone: request.phone ?? null,
+          email: request.email ?? null,
+          startingBalance: request.startingBalance,
+          comment: request.comment ?? null,
+        })
+      },
       createSupplierContact: async (_token, request) => createSupplierContact({
         id: '33333333-3333-4333-8333-333333333333',
         supplierId: request.supplierId,
@@ -1487,14 +1493,14 @@ describe('App', () => {
     const addContractorServiceButton = within(contractorsPanel).getByRole('button', { name: 'Добавить услугу' })
     await user.click(addContractorServiceButton)
     let serviceDialog = await screen.findByRole('dialog', { name: 'Добавить услугу' })
-    await user.type(within(serviceDialog).getByLabelText('Наименование услуги контрагента'), 'Черновая услуга')
+    await user.type(within(serviceDialog).getByLabelText('Наименование услуги'), 'Черновая услуга')
     await user.keyboard('{Escape}')
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Добавить услугу' })).not.toBeInTheDocument())
     await waitFor(() => expect(addContractorServiceButton).toHaveFocus())
 
     await user.click(addContractorServiceButton)
     serviceDialog = await screen.findByRole('dialog', { name: 'Добавить услугу' })
-    await user.type(within(serviceDialog).getByLabelText('Наименование услуги контрагента'), 'Уборка территории')
+    await user.type(within(serviceDialog).getByLabelText('Наименование услуги'), 'Уборка территории')
     await user.click(within(serviceDialog).getByRole('button', { name: /Сохранить/i }))
     await waitFor(() => expect(addContractorServiceButton).toHaveFocus())
 
@@ -1561,6 +1567,7 @@ describe('App', () => {
     await user.type(within(supplierDialog).getByLabelText('Контакт 1: комментарий'), 'Основной контакт')
     await user.click(within(supplierDialog).getByRole('button', { name: /Сохранить/i }))
     await waitFor(() => expect(within(within(contractorsPanel).getByRole('table', { name: 'Поставщики' })).getByText('Новый подрядчик')).toBeInTheDocument())
+    expect(savedSupplierRequest).toMatchObject({ chargeServiceSettingId: 'charge-service-new' })
     expect(addSupplierButton).toHaveFocus()
 
     const suppliersTable = within(contractorsPanel).getByRole('table', { name: 'Поставщики' })

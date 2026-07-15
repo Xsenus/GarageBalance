@@ -17,4 +17,6 @@ public sealed class Supplier
 
     public Guid GroupId { get; set; }
     public SupplierGroup Group { get; set; } = null!;
+    public Guid? ChargeServiceSettingId { get; set; }
+    public ChargeServiceSetting? ChargeServiceSetting { get; set; }
 }

@@ -785,6 +785,91 @@ public sealed class DictionaryServiceTests
     }
 
     [Fact]
+    public async Task CreateAndUpdateSupplierAsync_UsesUnifiedChargeServiceCatalog()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = DictionaryServiceTestFactory.Create(database.Context);
+        var group = await service.CreateSupplierGroupAsync(new UpsertSupplierGroupRequest("Коммунальные услуги"), null, CancellationToken.None);
+        var water = await service.CreateChargeServiceSettingAsync(
+            new UpsertChargeServiceSettingRequest("Вода", false, null, null, null, null, 0, false, false, "руб."),
+            null,
+            CancellationToken.None);
+        var electricity = await service.CreateChargeServiceSettingAsync(
+            new UpsertChargeServiceSettingRequest("Электроэнергия", false, null, null, null, null, 0, false, false, "руб."),
+            null,
+            CancellationToken.None);
+
+        var created = await service.CreateSupplierAsync(
+            new UpsertSupplierRequest("Ресурсоснабжающая организация", group.Value!.Id, null, null, null, null, null, 0, null, water.Value!.Id),
+            null,
+            CancellationToken.None);
+        var updated = await service.UpdateSupplierAsync(
+            created.Value!.Id,
+            new UpsertSupplierRequest(created.Value.Name, group.Value.Id, null, null, null, null, null, 0, null, electricity.Value!.Id),
+            Guid.NewGuid(),
+            CancellationToken.None);
+        var serviceSortedPage = await service.GetSuppliersPageAsync(
+            null,
+            null,
+            0,
+            10,
+            "service",
+            "asc",
+            CancellationToken.None);
+
+        Assert.True(created.Succeeded);
+        Assert.Equal(water.Value.Id, created.Value.ChargeServiceSettingId);
+        Assert.Equal("Вода", created.Value.ChargeServiceSettingName);
+        Assert.True(updated.Succeeded);
+        Assert.Equal(electricity.Value.Id, updated.Value!.ChargeServiceSettingId);
+        Assert.Equal("Электроэнергия", updated.Value.ChargeServiceSettingName);
+        var listedSupplier = Assert.Single(serviceSortedPage.Items);
+        Assert.Equal(created.Value.Id, listedSupplier.Id);
+        Assert.Equal(electricity.Value.Id, listedSupplier.ChargeServiceSettingId);
+        Assert.Equal("Электроэнергия", listedSupplier.ChargeServiceSettingName);
+        Assert.Contains(database.Context.AuditEvents, item => item.Action == "dictionary.supplier_updated");
+    }
+
+    [Fact]
+    public async Task CreateSupplierAsync_RejectsMissingOrArchivedChargeService()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = DictionaryServiceTestFactory.Create(database.Context);
+        var group = await service.CreateSupplierGroupAsync(new UpsertSupplierGroupRequest("Коммунальные услуги"), null, CancellationToken.None);
+        var archived = await service.CreateChargeServiceSettingAsync(
+            new UpsertChargeServiceSettingRequest("Архивная услуга", false, null, null, null, null, 0, false, false, null),
+            null,
+            CancellationToken.None);
+        var existingSupplier = await service.CreateSupplierAsync(
+            new UpsertSupplierRequest("Существующий поставщик", group.Value!.Id, null, null, null, null, null, 0, null, archived.Value!.Id),
+            null,
+            CancellationToken.None);
+        await service.ArchiveChargeServiceSettingAsync(archived.Value!.Id, "Услуга больше не используется", null, CancellationToken.None);
+
+        var missingResult = await service.CreateSupplierAsync(
+            new UpsertSupplierRequest("Первый поставщик", group.Value!.Id, null, null, null, null, null, 0, null, Guid.NewGuid()),
+            null,
+            CancellationToken.None);
+        var archivedResult = await service.CreateSupplierAsync(
+            new UpsertSupplierRequest("Второй поставщик", group.Value.Id, null, null, null, null, null, 0, null, archived.Value.Id),
+            null,
+            CancellationToken.None);
+        var existingSupplierUpdate = await service.UpdateSupplierAsync(
+            existingSupplier.Value!.Id,
+            new UpsertSupplierRequest(existingSupplier.Value.Name, group.Value.Id, null, null, null, "+7 900 000-00-00", null, 0, null, archived.Value.Id),
+            null,
+            CancellationToken.None);
+
+        Assert.False(missingResult.Succeeded);
+        Assert.Equal("charge_service_not_found", missingResult.ErrorCode);
+        Assert.False(archivedResult.Succeeded);
+        Assert.Equal("charge_service_not_found", archivedResult.ErrorCode);
+        Assert.True(existingSupplierUpdate.Succeeded);
+        Assert.Equal(archived.Value.Id, existingSupplierUpdate.Value!.ChargeServiceSettingId);
+        Assert.Equal("+7 900 000-00-00", existingSupplierUpdate.Value.Phone);
+    }
+
+    [Fact]
     public async Task CreateSupplierAsync_RejectsDuplicateNameInActiveGroup()
     {
         await using var database = await TestDatabase.CreateAsync();
@@ -1295,6 +1380,29 @@ public sealed class DictionaryServiceTests
         Assert.Contains("dictionary.regular_accrual_catalog_restored", migration, StringComparison.Ordinal);
         Assert.DoesNotContain("UPDATE tariffs", migration, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("\"IsArchived\" = FALSE,", migration, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void SupplierChargeServiceCatalogMigration_BackfillsOnlyMatchingActiveUnifiedServicesAndWritesAudit()
+    {
+        var migration = File.ReadAllText(Path.Combine(
+            FindApiProjectRoot(),
+            "Infrastructure",
+            "Data",
+            "Migrations",
+            "20260715112440_SupplierChargeServiceCatalog.cs"));
+
+        Assert.Contains("ADD", migration, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("ChargeServiceSettingId", migration, StringComparison.Ordinal);
+        Assert.Contains("lower(btrim(service.\"Name\")) = lower(btrim(supplier_group.\"Name\"))", migration, StringComparison.Ordinal);
+        Assert.Contains("WHERE NOT service.\"IsArchived\"", migration, StringComparison.Ordinal);
+        Assert.Contains("supplier.\"ChargeServiceSettingId\" IS NULL", migration, StringComparison.Ordinal);
+        Assert.Contains("dictionary.supplier_services_unified", migration, StringComparison.Ordinal);
+        Assert.Contains("linkedSupplierCount", migration, StringComparison.Ordinal);
+        Assert.Contains("ON CONFLICT (\"Id\") DO NOTHING", migration, StringComparison.Ordinal);
+        Assert.DoesNotContain("DELETE FROM suppliers", migration, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("DELETE FROM supplier_groups", migration, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("DELETE FROM charge_service_settings", migration, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]

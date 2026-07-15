@@ -223,10 +223,15 @@ public sealed class GarageBalanceDbContext(DbContextOptions<GarageBalanceDbConte
             entity.HasIndex(supplier => supplier.Inn);
             entity.HasIndex(supplier => supplier.ContactPerson);
             entity.HasIndex(supplier => supplier.GroupId);
+            entity.HasIndex(supplier => supplier.ChargeServiceSettingId);
             entity.HasOne(supplier => supplier.Group)
                 .WithMany(group => group.Suppliers)
                 .HasForeignKey(supplier => supplier.GroupId)
                 .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(supplier => supplier.ChargeServiceSetting)
+                .WithMany()
+                .HasForeignKey(supplier => supplier.ChargeServiceSettingId)
+                .OnDelete(DeleteBehavior.SetNull);
         });
 
         modelBuilder.Entity<SupplierContact>(entity =>

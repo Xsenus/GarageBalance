@@ -43,6 +43,7 @@ public sealed class DictionaryService(
         ["comment"] = "Комментарий",
         ["name"] = "Наименование",
         ["group"] = "Группа",
+        ["service"] = "Услуга",
         ["inn"] = "ИНН",
         ["legalAddress"] = "Юр. адрес",
         ["contactPerson"] = "Контактное лицо",
@@ -555,6 +556,14 @@ public sealed class DictionaryService(
             return DictionaryResult<SupplierDto>.Failure("supplier_group_not_found", "Группа поставщика не найдена.");
         }
 
+        var chargeService = request.ChargeServiceSettingId.HasValue
+            ? await chargeServiceSettingRepository.FindActiveAsync(request.ChargeServiceSettingId.Value, cancellationToken)
+            : null;
+        if (request.ChargeServiceSettingId.HasValue && chargeService is null)
+        {
+            return DictionaryResult<SupplierDto>.Failure("charge_service_not_found", "Услуга из раздела тарифов не найдена.");
+        }
+
         var name = request.Name.Trim();
         if (await supplierRepository.ActiveDuplicateExistsAsync(null, group.Id, name, cancellationToken))
         {
@@ -566,6 +575,8 @@ public sealed class DictionaryService(
             Name = name,
             GroupId = group.Id,
             Group = group,
+            ChargeServiceSettingId = chargeService?.Id,
+            ChargeServiceSetting = chargeService,
             Inn = NormalizeOptional(request.Inn),
             LegalAddress = NormalizeOptional(request.LegalAddress),
             ContactPerson = NormalizeOptional(request.ContactPerson),
@@ -595,6 +606,16 @@ public sealed class DictionaryService(
             return DictionaryResult<SupplierDto>.Failure("supplier_group_not_found", "Группа поставщика не найдена.");
         }
 
+        var chargeService = request.ChargeServiceSettingId == supplier.ChargeServiceSettingId
+            ? supplier.ChargeServiceSetting
+            : request.ChargeServiceSettingId.HasValue
+                ? await chargeServiceSettingRepository.FindActiveAsync(request.ChargeServiceSettingId.Value, cancellationToken)
+                : null;
+        if (request.ChargeServiceSettingId.HasValue && chargeService is null)
+        {
+            return DictionaryResult<SupplierDto>.Failure("charge_service_not_found", "Услуга из раздела тарифов не найдена.");
+        }
+
         var name = request.Name.Trim();
         var inn = NormalizeOptional(request.Inn);
         var legalAddress = NormalizeOptional(request.LegalAddress);
@@ -603,7 +624,7 @@ public sealed class DictionaryService(
         var email = NormalizeOptional(request.Email);
         var startingBalance = MoneyMath.RoundMoney(request.StartingBalance);
         var comment = NormalizeOptional(request.Comment);
-        if (SupplierMatches(supplier, name, group.Id, inn, legalAddress, contactPerson, phone, email, startingBalance, comment))
+        if (SupplierMatches(supplier, name, group.Id, chargeService?.Id, inn, legalAddress, contactPerson, phone, email, startingBalance, comment))
         {
             return DictionaryResult<SupplierDto>.Success(ToSupplierDto(supplier));
         }
@@ -617,6 +638,7 @@ public sealed class DictionaryService(
         {
             ["name"] = supplier.Name,
             ["group"] = supplier.Group.Name,
+            ["service"] = supplier.ChargeServiceSetting?.Name,
             ["inn"] = supplier.Inn,
             ["legalAddress"] = supplier.LegalAddress,
             ["contactPerson"] = supplier.ContactPerson,
@@ -629,6 +651,7 @@ public sealed class DictionaryService(
         {
             ["name"] = name,
             ["group"] = group.Name,
+            ["service"] = chargeService?.Name,
             ["inn"] = inn,
             ["legalAddress"] = legalAddress,
             ["contactPerson"] = contactPerson,
@@ -641,6 +664,8 @@ public sealed class DictionaryService(
         supplier.Name = name;
         supplier.GroupId = group.Id;
         supplier.Group = group;
+        supplier.ChargeServiceSettingId = chargeService?.Id;
+        supplier.ChargeServiceSetting = chargeService;
         supplier.Inn = inn;
         supplier.LegalAddress = legalAddress;
         supplier.ContactPerson = contactPerson;
@@ -2342,10 +2367,11 @@ public sealed class DictionaryService(
             StringEquals(garage.Comment, comment);
     }
 
-    private static bool SupplierMatches(Supplier supplier, string name, Guid groupId, string? inn, string? legalAddress, string? contactPerson, string? phone, string? email, decimal startingBalance, string? comment)
+    private static bool SupplierMatches(Supplier supplier, string name, Guid groupId, Guid? chargeServiceSettingId, string? inn, string? legalAddress, string? contactPerson, string? phone, string? email, decimal startingBalance, string? comment)
     {
         return StringEquals(supplier.Name, name) &&
             supplier.GroupId == groupId &&
+            supplier.ChargeServiceSettingId == chargeServiceSettingId &&
             StringEquals(supplier.Inn, inn) &&
             StringEquals(supplier.LegalAddress, legalAddress) &&
             StringEquals(supplier.ContactPerson, contactPerson) &&
@@ -2484,7 +2510,9 @@ public sealed class DictionaryService(
             supplier.StartingBalance,
             supplier.Comment,
             supplier.IsArchived,
-            debt ?? supplier.StartingBalance);
+            debt ?? supplier.StartingBalance,
+            supplier.ChargeServiceSettingId,
+            supplier.ChargeServiceSetting?.Name);
     }
 
     private static SupplierDto ToSupplierDto(Supplier supplier, SupplierPrimaryContactData? primaryContact, decimal? debt = null)

@@ -71,7 +71,9 @@ public sealed record SupplierDto(
     decimal StartingBalance,
     string? Comment,
     bool IsArchived,
-    decimal Debt = 0);
+    decimal Debt = 0,
+    Guid? ChargeServiceSettingId = null,
+    string? ChargeServiceSettingName = null);
 
 public sealed record UpsertSupplierRequest(
     [Required, MaxLength(240)] string Name,
@@ -82,7 +84,8 @@ public sealed record UpsertSupplierRequest(
     [MaxLength(80)] string? Phone,
     [EmailAddress, MaxLength(320)] string? Email,
     decimal StartingBalance,
-    [MaxLength(1000)] string? Comment);
+    [MaxLength(1000)] string? Comment,
+    Guid? ChargeServiceSettingId = null);
 
 public sealed record SupplierContactDto(
     Guid Id,

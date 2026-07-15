@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import type { CSSProperties, FormEvent, MouseEvent, RefObject } from 'react'
 import { FileText, Gauge, Pencil, RotateCcw, Save, Search, Trash2, UserPlus, UsersRound, X } from 'lucide-react'
 import type { AuthResponse } from '../../services/authApi'
-import type { DictionaryClient, GarageDto, OwnerDto, StaffDepartmentDto, StaffMemberDto, SupplierContactDto, SupplierDto, SupplierGroupDto, UpsertGarageRequest, UpsertOwnerRequest, UpsertStaffMemberRequest, UpsertSupplierContactRequest, UpsertSupplierRequest } from '../../services/dictionariesApi'
+import type { AccountingTypeDto, ChargeServiceSettingDto, DictionaryClient, GarageDto, OwnerDto, StaffDepartmentDto, StaffMemberDto, SupplierContactDto, SupplierDto, SupplierGroupDto, TariffDto, UpsertChargeServiceSettingRequest, UpsertGarageRequest, UpsertOwnerRequest, UpsertStaffMemberRequest, UpsertSupplierContactRequest, UpsertSupplierRequest } from '../../services/dictionariesApi'
 import type { FinanceClient, GarageBalanceHistoryDto } from '../../services/financeApi'
 import type { FormStateClient } from '../../services/formStatesApi'
 import type { DadataAddressSuggestionDto, DadataPartySuggestionDto, IntegrationClient } from '../../services/integrationsApi'
@@ -19,6 +19,7 @@ import { SelectControl } from '../../shared/SelectControl'
 import { formatPrototypeChangeValue } from '../../shared/prototypeEditing'
 import type { AuditPanelPreset, ContractorOpenTarget } from '../../shared/workspaceNavigation'
 import { formatStaffRate } from './staffRateFormatting'
+import { AddServicePrototypeDialog } from '../tariffs/TariffsAndFeesPanel'
 
 const contractorsFormStateScope = 'contractors-prototype'
 
@@ -89,6 +90,7 @@ type ContractorGarageRow = {
 type ContractorSupplierRow = {
   id: string
   name: string
+  serviceId?: string | null
   service: string
   inn: string
   legalAddress: string
@@ -231,10 +233,6 @@ function getDefaultContractorColumnWidths<TKey extends string>(definitions: Arra
     widths[column.key] = column.defaultWidth
     return widths
   }, {} as Record<TKey, number>)
-}
-
-function getSupplierServiceOptions(services: string[]) {
-  return Array.from(new Set(services.map((service) => service.trim()).filter(Boolean))).sort((left, right) => left.localeCompare(right, 'ru'))
 }
 
 function getSupplierPrimaryContact(supplier: ContractorSupplierRow) {
@@ -534,7 +532,8 @@ function createSupplierRowFromDto(supplier: SupplierDto, contacts: SupplierConta
   return normalizeSupplierPrototype({
     id: supplier.id,
     name: supplier.name,
-    service: supplier.groupName,
+    serviceId: supplier.chargeServiceSettingId ?? null,
+    service: supplier.chargeServiceSettingName ?? supplier.groupName,
     inn: supplier.inn ?? '',
     legalAddress: supplier.legalAddress ?? '',
     contactPerson: supplier.contactPerson ?? '',
@@ -595,6 +594,7 @@ function createSupplierRequestFromRow(row: ContractorSupplierRow, groupId: strin
     email: normalized.email.trim(),
     startingBalance: parsePrototypeMoney(normalized.startingBalance),
     comment: normalized.comment.trim(),
+    chargeServiceSettingId: normalized.serviceId,
   }
 }
 
@@ -726,7 +726,6 @@ type ContractorsPrototypeSavedState = {
   suppliers: ContractorSupplierRow[]
   staff: ContractorStaffRow[]
   departments: ContractorDepartmentRow[]
-  supplierServices: string[]
 }
 
 export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClient, formStateClient, integrationClient, initialTarget = null, onOpenAudit }: { auth: AuthResponse; dictionaryClient: DictionaryClient; financeClient: FinanceClient; formStateClient: FormStateClient; integrationClient: IntegrationClient; initialTarget?: ContractorOpenTarget | null; onOpenAudit: (preset: AuditPanelPreset) => void }) {
@@ -746,7 +745,10 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
   const [departmentPageNumber, setDepartmentPageNumber] = useState(1)
   const [departmentPageSize, setDepartmentPageSize] = useState(10)
   const [supplierGroups, setSupplierGroups] = useState<SupplierGroupDto[]>([])
-  const [supplierServices, setSupplierServices] = useState<string[]>([])
+  const [chargeServices, setChargeServices] = useState<ChargeServiceSettingDto[]>([])
+  const [serviceIncomeTypes, setServiceIncomeTypes] = useState<AccountingTypeDto[]>([])
+  const [serviceTariffs, setServiceTariffs] = useState<TariffDto[]>([])
+  const [serviceSaving, setServiceSaving] = useState(false)
   const [formStateLoaded, setFormStateLoaded] = useState(false)
   const [formStateError, setFormStateError] = useState<string | null>(null)
   const [modal, setModal] = useState<ContractorModal | null>(null)
@@ -854,12 +856,15 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
             setGaragePage({ totalCount: garageRows.totalCount, offset: garageRows.offset, limit: garageRows.limit })
           }
         } else if (activeSection === 'suppliers') {
-          const [groups, supplierRows, supplierContactRows] = await Promise.all([
+          const [groups, supplierRows, supplierContactRows, loadedChargeServices, loadedIncomeTypes, loadedTariffs] = await Promise.all([
             dictionaryClient.getSupplierGroups(auth.accessToken, undefined, contractorsDictionaryListLimit, true),
             dictionaryClient.getSuppliersPage
               ? dictionaryClient.getSuppliersPage(auth.accessToken, undefined, undefined, 0, contractorsDefaultPageSize, true)
               : dictionaryClient.getSuppliers(auth.accessToken, undefined, undefined, contractorsDictionaryListLimit, true).then((items) => createFallbackPage(items, 0, contractorsDefaultPageSize)),
             dictionaryClient.getSupplierContacts(auth.accessToken, undefined, undefined, contractorsDictionaryListLimit, true),
+            dictionaryClient.getChargeServiceSettings(auth.accessToken, undefined, contractorsDictionaryListLimit, true),
+            dictionaryClient.getIncomeTypes(auth.accessToken, undefined, contractorsDictionaryListLimit, true),
+            dictionaryClient.getTariffs(auth.accessToken, undefined, contractorsDictionaryListLimit, true),
           ])
           if (!cancelled) {
             const nextSuppliers = supplierRows.items.map((supplier) => createSupplierRowFromDto(supplier, supplierContactRows))
@@ -867,7 +872,9 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
             setSuppliers(nextSuppliers)
             setSupplierPage({ totalCount: supplierRows.totalCount, offset: supplierRows.offset, limit: supplierRows.limit })
             setSupplierContacts(supplierContactRows)
-            setSupplierServices(getSupplierServiceOptions([...groups.map((group) => group.name), ...nextSuppliers.map((supplier) => supplier.service)]))
+            setChargeServices(loadedChargeServices)
+            setServiceIncomeTypes(loadedIncomeTypes)
+            setServiceTariffs(loadedTariffs)
           }
         } else {
           const [departmentRows, staffRows] = await Promise.all([
@@ -965,14 +972,14 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
     const handle = window.setTimeout(() => {
       void formStateClient
         .saveState<ContractorsPrototypeSavedState>(auth.accessToken, contractorsFormStateScope, {
-          payload: { garages, suppliers, staff, departments, supplierServices },
+          payload: { garages, suppliers, staff, departments },
           summary: 'Сохранено состояние раздела контрагентов.'
         })
         .catch((error: unknown) => setFormStateError(error instanceof Error ? error.message : 'Не удалось сохранить состояние контрагентов.'))
     }, 400)
 
     return () => window.clearTimeout(handle)
-  }, [auth.accessToken, departments, formStateClient, formStateLoaded, garages, staff, supplierServices, suppliers])
+  }, [auth.accessToken, departments, formStateClient, formStateLoaded, garages, staff, suppliers])
 
   useEffect(() => {
     saveContractorColumnWidths(contractorGarageColumnStorageKey, garageColumnWidths)
@@ -1004,6 +1011,7 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
     }, {})
   }, [staffColumnWidths])
   const canReadContractorHistory = hasPermission(auth, permissions.auditRead)
+  const canManageTariffs = hasPermission(auth, permissions.tariffsManage)
 
   async function loadGaragePage(
     offset = garagePage.offset,
@@ -1043,7 +1051,6 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
       const nextSuppliers = page.items.map((supplier) => createSupplierRowFromDto(supplier, supplierContacts))
       setSuppliers(nextSuppliers)
       setSupplierPage({ totalCount: page.totalCount, offset: page.offset, limit: page.limit })
-      setSupplierServices((currentServices) => getSupplierServiceOptions([...currentServices, ...nextSuppliers.map((supplier) => supplier.service)]))
     } catch (error) {
       setFormStateError(error instanceof Error ? error.message : 'Не удалось загрузить страницу поставщиков.')
     } finally {
@@ -1316,10 +1323,6 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
   const saveSupplier = async (supplier: ContractorSupplierRow) => {
     const normalizedSupplier = normalizeSupplierPrototype(supplier)
     const currentSupplier = suppliers.find((item) => item.id === normalizedSupplier.id)
-
-    if (normalizedSupplier.service.trim()) {
-      setSupplierServices((currentServices) => getSupplierServiceOptions([...currentServices, normalizedSupplier.service]))
-    }
 
     try {
       const groups = [...supplierGroups]
@@ -1655,8 +1658,19 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
     }
   }
 
-  const saveService = (serviceName: string) => {
-    setSupplierServices((currentServices) => getSupplierServiceOptions([...currentServices, serviceName]))
+  const saveService = async (request: UpsertChargeServiceSettingRequest) => {
+    setServiceSaving(true)
+    setFormStateError(null)
+    try {
+      const savedService = await dictionaryClient.createChargeServiceSetting(auth.accessToken, request)
+      setChargeServices((currentServices) => [...currentServices.filter((service) => service.id !== savedService.id), savedService])
+      setModal(null)
+    } catch (error) {
+      setFormStateError(error instanceof Error ? error.message : 'Не удалось добавить услугу в единый каталог тарифов.')
+      throw error
+    } finally {
+      setServiceSaving(false)
+    }
   }
 
   const changeContractorSort = (section: ContractorSortableSection, key: ContractorSortKey) => {
@@ -1770,7 +1784,7 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
                 <UsersRound size={17} aria-hidden="true" />
                 <span>Добавить поставщика</span>
               </button>
-              <button className="secondary-button create-action-button" type="button" onClick={() => setModal({ type: 'service' })}>
+              <button className="secondary-button create-action-button" type="button" disabled={!canManageTariffs} title={!canManageTariffs ? 'Нужно право управления тарифами' : undefined} onClick={() => setModal({ type: 'service' })}>
                 <FileText size={17} aria-hidden="true" />
                 <span>Добавить услугу</span>
               </button>
@@ -2225,8 +2239,8 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
       ) : null}
 
       {modal?.type === 'garage' ? <GaragePrototypeDialog accessToken={auth.accessToken} integrationClient={integrationClient} item={modal.item} onClose={() => setModal(null)} onSave={saveGarage} onOpenFinancialReport={openGarageFinancialReport} /> : null}
-      {modal?.type === 'supplier' ? <SupplierPrototypeDialog accessToken={auth.accessToken} integrationClient={integrationClient} item={modal.item} services={supplierServices} onClose={() => setModal(null)} onOpenFinancialReport={openSupplierFinancialReport} onSave={saveSupplier} /> : null}
-      {modal?.type === 'service' ? <ContractorServicePrototypeDialog onClose={() => setModal(null)} onSave={saveService} /> : null}
+      {modal?.type === 'supplier' ? <SupplierPrototypeDialog accessToken={auth.accessToken} integrationClient={integrationClient} item={modal.item} services={chargeServices} onClose={() => setModal(null)} onOpenFinancialReport={openSupplierFinancialReport} onSave={saveSupplier} /> : null}
+      {modal?.type === 'service' ? <AddServicePrototypeDialog isSaving={serviceSaving} incomeTypes={serviceIncomeTypes.filter((item) => !item.isArchived)} onClose={() => setModal(null)} onSave={saveService} tariffs={serviceTariffs.filter((item) => !item.isArchived)} unitOptions={Array.from(new Set(chargeServices.map((item) => item.unitName).filter((unit): unit is string => Boolean(unit))))} /> : null}
       {modal?.type === 'employee' ? <EmployeePrototypeDialog departments={departments} item={modal.item} onClose={() => setModal(null)} onOpenFinancialReport={openEmployeeFinancialReport} onSave={saveEmployee} /> : null}
       {modal?.type === 'department' ? <DepartmentPrototypeDialog item={modal.item} onClose={() => setModal(null)} onSave={saveDepartment} /> : null}
 
@@ -2605,6 +2619,7 @@ function createEmptySupplierPrototype(): ContractorSupplierRow {
   return {
     id: `supplier-${Date.now()}`,
     name: '',
+    serviceId: null,
     service: '',
     inn: '',
     legalAddress: '',
@@ -3007,8 +3022,12 @@ function getDepartmentPrototypeChanges(previous: ContractorDepartmentRow, next: 
   ])
 }
 
-function SupplierPrototypeDialog({ accessToken, integrationClient, item, services, onClose, onOpenFinancialReport, onSave }: { accessToken: string; integrationClient: IntegrationClient; item?: ContractorSupplierRow; services: string[]; onClose: () => void; onOpenFinancialReport: (item: ContractorSupplierRow) => void; onSave: (item: ContractorSupplierRow) => void }) {
-  const [form, setForm] = useState<ContractorSupplierRow>(item ?? { ...createEmptySupplierPrototype(), service: services[0] ?? '' })
+function SupplierPrototypeDialog({ accessToken, integrationClient, item, services, onClose, onOpenFinancialReport, onSave }: { accessToken: string; integrationClient: IntegrationClient; item?: ContractorSupplierRow; services: ChargeServiceSettingDto[]; onClose: () => void; onOpenFinancialReport: (item: ContractorSupplierRow) => void; onSave: (item: ContractorSupplierRow) => void }) {
+  const activeServices = services.filter((service) => !service.isArchived || service.id === item?.serviceId)
+  const initialService = activeServices.find((service) => service.id === item?.serviceId) ?? activeServices.find((service) => service.name === item?.service) ?? activeServices[0] ?? null
+  const [form, setForm] = useState<ContractorSupplierRow>(item
+    ? { ...item, serviceId: initialService?.id ?? item.serviceId, service: initialService?.name ?? item.service }
+    : { ...createEmptySupplierPrototype(), serviceId: initialService?.id ?? null, service: initialService?.name ?? '' })
   const [saveChanges, setSaveChanges] = useState<PrototypeChangeEntry[]>([])
   const [partySuggestions, setPartySuggestions] = useState<DadataPartySuggestionDto[]>([])
   const [partySuggestionsOpen, setPartySuggestionsOpen] = useState(false)
@@ -3138,7 +3157,7 @@ function SupplierPrototypeDialog({ accessToken, integrationClient, item, service
     closeContactRestoreDialog()
   }
 
-  const availableServices = getSupplierServiceOptions([...services, form.service])
+  const availableServices = [...activeServices].sort((left, right) => left.name.localeCompare(right.name, 'ru'))
 
   function selectPartySuggestion(suggestion: DadataPartySuggestionDto) {
     partyInputTouched.current = false
@@ -3166,9 +3185,12 @@ function SupplierPrototypeDialog({ accessToken, integrationClient, item, service
               <FormField label="Услуга">
                 <SelectControl
                   aria-label="Услуга поставщика"
-                  value={form.service}
-                  options={[{ value: '', label: 'Выберите услугу' }, ...availableServices.map((service) => ({ value: service, label: service }))]}
-                  onChange={(service) => setForm({ ...form, service })}
+                  value={form.serviceId ?? ''}
+                  options={[{ value: '', label: 'Выберите услугу' }, ...availableServices.map((service) => ({ value: service.id, label: service.name }))]}
+                  onChange={(serviceId) => {
+                    const service = availableServices.find((itemService) => itemService.id === serviceId)
+                    setForm({ ...form, serviceId: service?.id ?? null, service: service?.name ?? '' })
+                  }}
                 />
               </FormField>
             </div>
@@ -3325,44 +3347,6 @@ function SupplierPrototypeDialog({ accessToken, integrationClient, item, service
         />
       ) : null}
     </>
-  )
-}
-
-function ContractorServicePrototypeDialog({ onClose, onSave }: { onClose: () => void; onSave: (serviceName: string) => void }) {
-  const [serviceName, setServiceName] = useState('')
-  const [isRegular, setIsRegular] = useState(true)
-  useRestoreFocusOnClose(true)
-  const dialogRef = useFocusTrap<HTMLElement>(true)
-  useEscapeKey(true, onClose)
-
-  return (
-    <div className="modal-backdrop" role="presentation" onMouseDown={onClose}>
-      <section ref={dialogRef} className="detail-dialog contractors-dialog" role="dialog" aria-modal="true" aria-labelledby="contractor-directory-service-title" onMouseDown={(event) => event.stopPropagation()}>
-        <div className="detail-dialog-header">
-          <h3 id="contractor-directory-service-title">Добавить услугу</h3>
-          <button className="icon-button" type="button" aria-label="Закрыть форму услуги" onClick={onClose}><X size={18} /></button>
-        </div>
-        <form className="dictionary-modal-form contractors-modal-form" onSubmit={(event) => {
-          event.preventDefault()
-          onSave(serviceName || 'Новая услуга')
-          onClose()
-        }}>
-          <FormField label="Наименование услуги"><input aria-label="Наименование услуги контрагента" value={serviceName} onChange={(event) => setServiceName(event.target.value)} /></FormField>
-          <label className="contractors-check-row"><input type="checkbox" aria-label="Регулярные платежи услуги" checked={isRegular} onChange={(event) => setIsRegular(event.target.checked)} /><span>Регулярные платежи</span></label>
-          <FormField label="Периодичность"><input aria-label="Периодичность услуги" defaultValue="12" /></FormField>
-          <FormField label="Учитывать платеж с"><input aria-label="Учитывать платеж услуги с" defaultValue="Январь" /></FormField>
-          <FormField label="Оплатить до"><input aria-label="Оплатить услугу до" defaultValue="Июль" /></FormField>
-          <FormField label="Перенос долга в просроченный"><input aria-label="Перенос долга услуги в просроченный" defaultValue="30" /></FormField>
-          <label className="contractors-check-row"><input type="checkbox" aria-label="По счетчику услуги" defaultChecked /><span>По счетчику</span></label>
-          <label className="contractors-check-row"><input type="checkbox" aria-label="Пороговая тарификация услуги" defaultChecked /><span>Пороговая тарификация</span></label>
-          <FormField label="Единица измерения"><input aria-label="Единица измерения услуги" /></FormField>
-          <div className="detail-dialog-actions">
-            <button className="secondary-button" type="submit"><Save size={17} /><span>Сохранить</span></button>
-            <button className="secondary-button" type="button" onClick={onClose}>Отмена</button>
-          </div>
-        </form>
-      </section>
-    </div>
   )
 }
 

@@ -46,6 +46,8 @@ export type SupplierDto = {
   email: string | null
   startingBalance: number
   debt: number
+  chargeServiceSettingId?: string | null
+  chargeServiceSettingName?: string | null
   comment: string | null
   isArchived: boolean
 }
@@ -187,6 +189,7 @@ export type UpsertSupplierRequest = {
   email?: string
   startingBalance: number
   comment?: string
+  chargeServiceSettingId?: string | null
 }
 
 export type UpsertSupplierContactRequest = {

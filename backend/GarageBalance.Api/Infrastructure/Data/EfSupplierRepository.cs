@@ -57,13 +57,13 @@ public sealed class EfSupplierRepository(GarageBalanceDbContext dbContext) : ISu
 
     public Task<Supplier?> FindActiveWithGroupAsync(Guid id, CancellationToken cancellationToken)
     {
-        return dbContext.Suppliers.Include(supplier => supplier.Group)
+        return dbContext.Suppliers.Include(supplier => supplier.Group).Include(supplier => supplier.ChargeServiceSetting)
             .SingleOrDefaultAsync(supplier => supplier.Id == id && !supplier.IsArchived, cancellationToken);
     }
 
     public Task<Supplier?> FindArchivedWithGroupAsync(Guid id, CancellationToken cancellationToken)
     {
-        return dbContext.Suppliers.Include(supplier => supplier.Group)
+        return dbContext.Suppliers.Include(supplier => supplier.Group).Include(supplier => supplier.ChargeServiceSetting)
             .SingleOrDefaultAsync(supplier => supplier.Id == id && supplier.IsArchived, cancellationToken);
     }
 
@@ -126,6 +126,7 @@ public sealed class EfSupplierRepository(GarageBalanceDbContext dbContext) : ISu
     {
         var query = dbContext.Suppliers.AsNoTracking()
             .Include(supplier => supplier.Group)
+            .Include(supplier => supplier.ChargeServiceSetting)
             .Where(supplier => includeArchived || !supplier.IsArchived);
         if (groupId is not null)
         {
@@ -136,6 +137,7 @@ public sealed class EfSupplierRepository(GarageBalanceDbContext dbContext) : ISu
         {
             query = query.Where(supplier =>
                 supplier.Name.ToLower().Contains(normalizedSearch) ||
+                (supplier.ChargeServiceSetting != null && supplier.ChargeServiceSetting.Name.ToLower().Contains(normalizedSearch)) ||
                 (supplier.Inn != null && supplier.Inn.ToLower().Contains(normalizedSearch)) ||
                 (supplier.ContactPerson != null && supplier.ContactPerson.ToLower().Contains(normalizedSearch)));
         }
@@ -193,8 +195,8 @@ public sealed class EfSupplierRepository(GarageBalanceDbContext dbContext) : ISu
                 .ThenBy(contact => contact.FullName)
                 .Select(contact => contact.Email)
                 .FirstOrDefault()),
-            (_, true) => query.OrderByDescending(supplier => supplier.Group.Name),
-            _ => query.OrderBy(supplier => supplier.Group.Name)
+            (_, true) => query.OrderByDescending(supplier => supplier.ChargeServiceSetting != null ? supplier.ChargeServiceSetting.Name : supplier.Group.Name),
+            _ => query.OrderBy(supplier => supplier.ChargeServiceSetting != null ? supplier.ChargeServiceSetting.Name : supplier.Group.Name)
         };
     }
 

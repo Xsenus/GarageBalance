@@ -2279,7 +2279,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
   )
 }
 
-function AddServicePrototypeDialog({
+export function AddServicePrototypeDialog({
   isSaving,
   incomeTypes,
   onClose,
