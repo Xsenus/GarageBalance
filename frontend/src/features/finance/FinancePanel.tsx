@@ -3086,8 +3086,8 @@ function PaymentsPrototypePanel({
       }
     }
 
-    document.addEventListener('pointerdown', closeGarageSearchOnOutsidePointer)
-    return () => document.removeEventListener('pointerdown', closeGarageSearchOnOutsidePointer)
+    document.addEventListener('pointerdown', closeGarageSearchOnOutsidePointer, true)
+    return () => document.removeEventListener('pointerdown', closeGarageSearchOnOutsidePointer, true)
   }, [garageSearchOpen])
 
   useEffect(() => {
