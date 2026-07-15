@@ -1233,6 +1233,19 @@ describe('App', () => {
     expect(within(garageDialog).getByLabelText('Комментарий гаража').closest('.contractors-garage-form-notes')).not.toBeNull()
     expect(within(garageDialog).getByRole('button', { name: 'Открыть фин. отчет' })).toHaveClass('contractors-report-button')
     expect(within(garageDialog).queryByRole('button', { name: 'Удалить гараж' })).not.toBeInTheDocument()
+    const garageAddressInput = within(garageDialog).getByRole('combobox', { name: 'Адрес гаража' })
+    await user.clear(garageAddressInput)
+    await user.type(garageAddressInput, 'Советская')
+    await waitFor(() => expect(suggestAddresses).toHaveBeenCalledWith('token', 'Советская'))
+    await user.click(await within(garageDialog).findByRole('option', { name: /Советская, д 2/ }))
+    expect(garageAddressInput).toHaveValue('630000, г Новосибирск, ул Советская, д 2')
+    expect(within(garageDialog).getByRole('status')).toHaveTextContent('Адрес выбран из DaData.')
+
+    suggestAddresses.mockRejectedValueOnce(new Error('DaData unavailable'))
+    await user.clear(garageAddressInput)
+    await user.type(garageAddressInput, 'Ручной адрес')
+    expect(await within(garageDialog).findByText('Подсказки DaData недоступны. Можно продолжить ввод вручную.')).toHaveAttribute('role', 'status')
+    expect(garageAddressInput).toHaveValue('Ручной адрес')
     await user.clear(within(garageDialog).getByLabelText('Владелец гаража'))
     await user.type(within(garageDialog).getByLabelText('Владелец гаража'), 'Новый владелец')
     await user.clear(within(garageDialog).getByLabelText('Счетчики гаража'))
@@ -4911,7 +4924,7 @@ describe('App', () => {
   it.each([
     ['администратора', createAuthResponse()],
     ['пользователя без административных прав', createAuthResponse({ user: { permissions: ['dictionaries.read'] } })],
-  ])('shows settings tabs and hides integrations for %s', async (_roleLabel, auth) => {
+  ])('shows settings tabs and limits integrations for %s', async (_roleLabel, auth) => {
     const user = userEvent.setup()
     const getOneCFreshStatus = vi.fn(async () => createOneCFreshStatus())
     const getReceiptPrintingStatus = vi.fn(async () => createReceiptPrintingStatus())
@@ -4925,16 +4938,19 @@ describe('App', () => {
     const settings = await screen.findByRole('region', { name: 'Настройки' })
     const tabList = within(settings).getByRole('tablist', { name: 'Разделы настроек' })
     expect(within(tabList).getByRole('tab', { name: 'Безопасность' })).toHaveAttribute('aria-selected', 'true')
+    expect(within(settings).getByRole('region', { name: 'Безопасность аккаунта' })).toBeInTheDocument()
     if (auth.user.permissions.includes('users.manage')) {
       expect(within(tabList).getByRole('tab', { name: 'Отображение' })).toBeInTheDocument()
+      const integrationsTab = within(tabList).getByRole('tab', { name: 'Интеграции' })
+      await user.click(integrationsTab)
+      expect(within(settings).getByRole('region', { name: 'Подсказки DaData' })).toBeInTheDocument()
     } else {
       expect(within(tabList).queryByRole('tab', { name: 'Отображение' })).not.toBeInTheDocument()
+      expect(within(tabList).queryByRole('tab', { name: 'Интеграции' })).not.toBeInTheDocument()
+      expect(within(settings).queryByRole('region', { name: 'Подсказки DaData' })).not.toBeInTheDocument()
     }
-    expect(within(tabList).queryByRole('tab', { name: 'Интеграции' })).not.toBeInTheDocument()
-    expect(within(settings).getByRole('region', { name: 'Безопасность аккаунта' })).toBeInTheDocument()
     expect(within(settings).queryByRole('region', { name: 'Интеграция 1C Fresh' })).not.toBeInTheDocument()
     expect(within(settings).queryByRole('region', { name: 'Печать чеков и квитанций' })).not.toBeInTheDocument()
-    expect(within(settings).queryByRole('region', { name: 'Подсказки DaData' })).not.toBeInTheDocument()
     await act(async () => Promise.resolve())
     expect(getOneCFreshStatus).not.toHaveBeenCalled()
     expect(getReceiptPrintingStatus).not.toHaveBeenCalled()

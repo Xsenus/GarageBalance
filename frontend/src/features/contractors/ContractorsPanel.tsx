@@ -2224,7 +2224,7 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
         </div>
       ) : null}
 
-      {modal?.type === 'garage' ? <GaragePrototypeDialog item={modal.item} onClose={() => setModal(null)} onSave={saveGarage} onOpenFinancialReport={openGarageFinancialReport} /> : null}
+      {modal?.type === 'garage' ? <GaragePrototypeDialog accessToken={auth.accessToken} integrationClient={integrationClient} item={modal.item} onClose={() => setModal(null)} onSave={saveGarage} onOpenFinancialReport={openGarageFinancialReport} /> : null}
       {modal?.type === 'supplier' ? <SupplierPrototypeDialog accessToken={auth.accessToken} integrationClient={integrationClient} item={modal.item} services={supplierServices} onClose={() => setModal(null)} onOpenFinancialReport={openSupplierFinancialReport} onSave={saveSupplier} /> : null}
       {modal?.type === 'service' ? <ContractorServicePrototypeDialog onClose={() => setModal(null)} onSave={saveService} /> : null}
       {modal?.type === 'employee' ? <EmployeePrototypeDialog departments={departments} item={modal.item} onClose={() => setModal(null)} onOpenFinancialReport={openEmployeeFinancialReport} onSave={saveEmployee} /> : null}
@@ -2826,7 +2826,88 @@ function SupplierContactRestoreConfirmationDialog({
   )
 }
 
-function GaragePrototypeDialog({ item, onClose, onOpenFinancialReport, onSave }: { item?: ContractorGarageRow; onClose: () => void; onOpenFinancialReport: (item: ContractorGarageRow) => void; onSave: (item: ContractorGarageRow) => void }) {
+function DadataAddressField({ accessToken, inputLabel, integrationClient, label, listboxLabel, suggestionsId, value, onChange }: { accessToken: string; inputLabel: string; integrationClient: IntegrationClient; label: string; listboxLabel: string; suggestionsId: string; value: string; onChange: (value: string) => void }) {
+  const [suggestions, setSuggestions] = useState<DadataAddressSuggestionDto[]>([])
+  const [suggestionsOpen, setSuggestionsOpen] = useState(false)
+  const [status, setStatus] = useState('')
+  const requestSequence = useRef(0)
+  const inputTouched = useRef(false)
+  const statusId = `${suggestionsId}-status`
+
+  useEffect(() => {
+    const query = value.trim()
+    const sequence = ++requestSequence.current
+    if (!inputTouched.current || query.length < 2) {
+      return
+    }
+
+    const timer = window.setTimeout(() => {
+      setStatus('Ищем адрес...')
+      void integrationClient.suggestAddresses(accessToken, query).then((items) => {
+        if (sequence !== requestSequence.current) return
+        setSuggestions(items)
+        setSuggestionsOpen(items.length > 0)
+        setStatus(items.length > 0 ? `Найдено вариантов: ${items.length}` : 'Подходящих адресов не найдено. Можно продолжить ввод вручную.')
+      }).catch(() => {
+        if (sequence !== requestSequence.current) return
+        setSuggestions([])
+        setSuggestionsOpen(false)
+        setStatus('Подсказки DaData недоступны. Можно продолжить ввод вручную.')
+      })
+    }, 350)
+
+    return () => window.clearTimeout(timer)
+  }, [accessToken, integrationClient, value])
+
+  function selectSuggestion(suggestion: DadataAddressSuggestionDto) {
+    inputTouched.current = false
+    onChange(suggestion.unrestrictedValue || suggestion.value)
+    setSuggestionsOpen(false)
+    setStatus('Адрес выбран из DaData.')
+  }
+
+  return (
+    <FormField label={label}>
+      <div className="suggestion-combobox">
+        <input
+          aria-label={inputLabel}
+          role="combobox"
+          aria-autocomplete="list"
+          aria-expanded={suggestionsOpen}
+          aria-controls={suggestionsId}
+          aria-describedby={status ? statusId : undefined}
+          autoComplete="off"
+          value={value}
+          onFocus={() => setSuggestionsOpen(suggestions.length > 0)}
+          onBlur={() => setSuggestionsOpen(false)}
+          onChange={(event) => {
+            const nextValue = event.target.value
+            inputTouched.current = true
+            if (nextValue.trim().length < 2) {
+              setSuggestions([])
+              setSuggestionsOpen(false)
+              setStatus('')
+            }
+            onChange(nextValue)
+          }}
+        />
+        {suggestionsOpen ? (
+          <div className="suggestion-options" id={suggestionsId} role="listbox" aria-label={listboxLabel}>
+            {suggestions.map((suggestion) => (
+              <button className="ghost-button suggestion-option" type="button" role="option" aria-selected="false" key={`${suggestion.fiasId ?? ''}-${suggestion.value}`} onMouseDown={(event) => event.preventDefault()} onClick={() => selectSuggestion(suggestion)}>
+                <strong>{suggestion.value}</strong>
+                {suggestion.postalCode ? <span>Индекс {suggestion.postalCode}</span> : null}
+              </button>
+            ))}
+          </div>
+        ) : null}
+      </div>
+      {status ? <small className="suggestion-status" id={statusId} role="status" aria-live="polite">{status}</small> : null}
+    </FormField>
+  )
+}
+
+function GaragePrototypeDialog({ accessToken, integrationClient, item, onClose, onOpenFinancialReport, onSave }: { accessToken: string; integrationClient: IntegrationClient; item?: ContractorGarageRow; onClose: () => void; onOpenFinancialReport: (item: ContractorGarageRow) => void; onSave: (item: ContractorGarageRow) => void }) {
   const [form, setForm] = useState<ContractorGarageRow>(item ?? createEmptyGaragePrototype())
   const [saveChanges, setSaveChanges] = useState<PrototypeChangeEntry[]>([])
   useRestoreFocusOnClose(true)
@@ -2881,7 +2962,7 @@ function GaragePrototypeDialog({ item, onClose, onOpenFinancialReport, onSave }:
             <div className="contractors-garage-form-details">
               <FormField label="Владелец"><input aria-label="Владелец гаража" value={form.owner} onChange={(event) => setForm({ ...form, owner: event.target.value })} /></FormField>
               <FormField label="Телефон"><input aria-label="Телефон владельца гаража" value={form.phone} onChange={(event) => setForm({ ...form, phone: event.target.value })} /></FormField>
-              <FormField label="Адрес"><input aria-label="Адрес гаража" value={form.address} onChange={(event) => setForm({ ...form, address: event.target.value })} /></FormField>
+              <DadataAddressField accessToken={accessToken} inputLabel="Адрес гаража" integrationClient={integrationClient} label="Адрес" listboxLabel="Адреса гаражей DaData" suggestionsId="garage-address-suggestions" value={form.address} onChange={(address) => setForm((currentForm) => ({ ...currentForm, address }))} />
             </div>
             <div className="contractors-garage-form-notes">
               <FormField label="Счётчики"><textarea aria-label="Счетчики гаража" maxLength={1000} value={form.meters} onChange={(event) => setForm({ ...form, meters: event.target.value })} /></FormField>
@@ -2916,15 +2997,10 @@ function SupplierPrototypeDialog({ accessToken, integrationClient, item, service
   const [form, setForm] = useState<ContractorSupplierRow>(item ?? { ...createEmptySupplierPrototype(), service: services[0] ?? '' })
   const [saveChanges, setSaveChanges] = useState<PrototypeChangeEntry[]>([])
   const [partySuggestions, setPartySuggestions] = useState<DadataPartySuggestionDto[]>([])
-  const [addressSuggestions, setAddressSuggestions] = useState<DadataAddressSuggestionDto[]>([])
   const [partySuggestionsOpen, setPartySuggestionsOpen] = useState(false)
-  const [addressSuggestionsOpen, setAddressSuggestionsOpen] = useState(false)
   const [partySuggestionStatus, setPartySuggestionStatus] = useState('')
-  const [addressSuggestionStatus, setAddressSuggestionStatus] = useState('')
   const partyRequestSequence = useRef(0)
-  const addressRequestSequence = useRef(0)
   const partyInputTouched = useRef(false)
-  const addressInputTouched = useRef(false)
   const [contactContextMenu, setContactContextMenu] = useState<{ contact: ContractorSupplierContact; x: number; y: number } | null>(null)
   const [contactDeleteTarget, setContactDeleteTarget] = useState<ContractorSupplierContact | null>(null)
   const [contactDeleteReason, setContactDeleteReason] = useState('')
@@ -2966,31 +3042,6 @@ function SupplierPrototypeDialog({ accessToken, integrationClient, item, service
 
     return () => window.clearTimeout(timer)
   }, [accessToken, form.inn, integrationClient])
-
-  useEffect(() => {
-    const query = form.legalAddress.trim()
-    const sequence = ++addressRequestSequence.current
-    if (!addressInputTouched.current || query.length < 2) {
-      return
-    }
-
-    const timer = window.setTimeout(() => {
-      setAddressSuggestionStatus('Ищем адрес...')
-      void integrationClient.suggestAddresses(accessToken, query).then((suggestions) => {
-        if (sequence !== addressRequestSequence.current) return
-        setAddressSuggestions(suggestions)
-        setAddressSuggestionsOpen(suggestions.length > 0)
-        setAddressSuggestionStatus(suggestions.length > 0 ? `Найдено вариантов: ${suggestions.length}` : 'Подходящих адресов не найдено. Можно продолжить ввод вручную.')
-      }).catch(() => {
-        if (sequence !== addressRequestSequence.current) return
-        setAddressSuggestions([])
-        setAddressSuggestionsOpen(false)
-        setAddressSuggestionStatus('Подсказки DaData недоступны. Можно продолжить ввод вручную.')
-      })
-    }, 350)
-
-    return () => window.clearTimeout(timer)
-  }, [accessToken, form.legalAddress, integrationClient])
 
   function saveAndClose() {
     onSave(normalizeSupplierPrototype(form))
@@ -3077,7 +3128,6 @@ function SupplierPrototypeDialog({ accessToken, integrationClient, item, service
 
   function selectPartySuggestion(suggestion: DadataPartySuggestionDto) {
     partyInputTouched.current = false
-    addressInputTouched.current = false
     setForm((currentForm) => ({
       ...currentForm,
       name: suggestion.value || currentForm.name,
@@ -3086,13 +3136,6 @@ function SupplierPrototypeDialog({ accessToken, integrationClient, item, service
     }))
     setPartySuggestionsOpen(false)
     setPartySuggestionStatus('Организация выбрана из DaData.')
-  }
-
-  function selectAddressSuggestion(suggestion: DadataAddressSuggestionDto) {
-    addressInputTouched.current = false
-    setForm((currentForm) => ({ ...currentForm, legalAddress: suggestion.unrestrictedValue || suggestion.value }))
-    setAddressSuggestionsOpen(false)
-    setAddressSuggestionStatus('Адрес выбран из DaData.')
   }
 
   return (
@@ -3153,42 +3196,7 @@ function SupplierPrototypeDialog({ accessToken, integrationClient, item, service
                 {partySuggestionStatus ? <small className="suggestion-status" role="status" aria-live="polite">{partySuggestionStatus}</small> : null}
               </FormField>
               <FormField label="Задолженность"><input aria-label="Задолженность поставщика" value={form.debt || 'Нет'} readOnly /></FormField>
-              <FormField label="Юр. адрес">
-                <div className="suggestion-combobox">
-                  <input
-                    aria-label="Юридический адрес поставщика"
-                    role="combobox"
-                    aria-autocomplete="list"
-                    aria-expanded={addressSuggestionsOpen}
-                    aria-controls="supplier-address-suggestions"
-                    autoComplete="off"
-                    value={form.legalAddress}
-                    onFocus={() => setAddressSuggestionsOpen(addressSuggestions.length > 0)}
-                    onBlur={() => setAddressSuggestionsOpen(false)}
-                    onChange={(event) => {
-                      const value = event.target.value
-                      addressInputTouched.current = true
-                      setForm({ ...form, legalAddress: value })
-                      if (value.trim().length < 2) {
-                        setAddressSuggestions([])
-                        setAddressSuggestionsOpen(false)
-                        setAddressSuggestionStatus('')
-                      }
-                    }}
-                  />
-                  {addressSuggestionsOpen ? (
-                    <div className="suggestion-options" id="supplier-address-suggestions" role="listbox" aria-label="Адреса DaData">
-                      {addressSuggestions.map((suggestion) => (
-                        <button className="ghost-button suggestion-option" type="button" role="option" aria-selected="false" key={`${suggestion.fiasId ?? ''}-${suggestion.value}`} onMouseDown={(event) => event.preventDefault()} onClick={() => selectAddressSuggestion(suggestion)}>
-                          <strong>{suggestion.value}</strong>
-                          {suggestion.postalCode ? <span>Индекс {suggestion.postalCode}</span> : null}
-                        </button>
-                      ))}
-                    </div>
-                  ) : null}
-                </div>
-                {addressSuggestionStatus ? <small className="suggestion-status" role="status" aria-live="polite">{addressSuggestionStatus}</small> : null}
-              </FormField>
+              <DadataAddressField accessToken={accessToken} inputLabel="Юридический адрес поставщика" integrationClient={integrationClient} label="Юр. адрес" listboxLabel="Адреса DaData" suggestionsId="supplier-address-suggestions" value={form.legalAddress} onChange={(legalAddress) => setForm((currentForm) => ({ ...currentForm, legalAddress }))} />
             </div>
             <div className="contractors-contacts-toolbar">
               <span>Контакты</span>

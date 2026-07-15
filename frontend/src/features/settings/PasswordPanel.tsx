@@ -15,6 +15,8 @@ import { getPasswordChangeValidationErrors } from '../../shared/validation'
 
 export function PasswordPanel({ auth, authClient, integrationClient, settingsClient, onUserChanged }: { auth: AuthResponse; authClient: AuthClient; integrationClient: IntegrationClient; settingsClient: ApplicationSettingsClient; onUserChanged: (user: CurrentUserDto) => void }) {
   const integrationSettingsVisible = import.meta.env.VITE_SHOW_INTEGRATION_SETTINGS === 'true'
+  const dadataSettingsVisible = hasPermission(auth, permissions.usersManage)
+  const integrationTabVisible = integrationSettingsVisible || dadataSettingsVisible
   const [activeSettingsTab, setActiveSettingsTab] = useState<'security' | 'display' | 'integrations'>(() => (
     integrationSettingsVisible && (hasPermission(auth, permissions.importRun) || hasPermission(auth, permissions.paymentsWrite))
       ? 'integrations'
@@ -53,6 +55,7 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
   const canViewIntegrationStatus = integrationSettingsVisible && hasPermission(auth, permissions.importRun)
   const canViewReceiptPrintingStatus = integrationSettingsVisible && hasPermission(auth, permissions.paymentsWrite)
   const canManageIntegrationSettings = integrationSettingsVisible && hasPermission(auth, permissions.usersManage)
+  const canManageDadataSettings = dadataSettingsVisible
   const canManageApplicationSettings = hasPermission(auth, permissions.usersManage)
   useRestoreFocusOnClose(Boolean(pendingPasswordChange))
   const confirmationCancelRef = useFocusOnOpen<HTMLButtonElement>(Boolean(pendingPasswordChange))
@@ -363,7 +366,7 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
                 <span>Отображение</span>
               </button>
             ) : null}
-            {integrationSettingsVisible ? (
+            {integrationTabVisible ? (
               <button
                 id="settings-integrations-tab"
                 className={activeSettingsTab === 'integrations' ? 'settings-tab is-active' : 'settings-tab'}
@@ -454,7 +457,7 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
         </div>
       </section>
       ) : null}
-      {integrationSettingsVisible && activeSettingsTab === 'integrations' ? (
+      {integrationTabVisible && activeSettingsTab === 'integrations' ? (
       <>
       {canViewIntegrationStatus ? (
         <section className="password-panel" aria-label="Интеграция 1C Fresh">
@@ -617,12 +620,12 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
           ) : null}
         </section>
       ) : null}
-      {canManageIntegrationSettings ? (
+      {canManageDadataSettings ? (
         <section className="password-panel" aria-label="Подсказки DaData">
           <div>
             <p className="eyebrow">Интеграции</p>
             <h2>DaData</h2>
-            <p>Ключ используется для подсказок организаций по ИНН и адресов в карточке поставщика.</p>
+            <p>Ключ используется для подсказок организаций по ИНН и адресов в карточках гаражей и поставщиков.</p>
           </div>
           <form className="dictionary-form" aria-label="Защищенная настройка DaData" onSubmit={(event) => {
             event.preventDefault()
