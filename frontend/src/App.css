@@ -31,8 +31,7 @@
   align-items: center;
 }
 
-.brand,
-.sidebar-footer {
+.brand {
   display: flex;
   align-items: center;
   gap: 12px;
@@ -73,14 +72,12 @@
   font-weight: 750;
 }
 
-.brand strong,
-.sidebar-footer strong {
+.brand strong {
   display: block;
   font-size: 14px;
 }
 
-.brand span,
-.sidebar-footer span {
+.brand span {
   display: block;
   margin-top: 2px;
   color: #667085;
@@ -150,25 +147,6 @@
 .nav-item:disabled {
   cursor: not-allowed;
   opacity: 0.48;
-}
-
-.sidebar-footer {
-  margin-top: auto;
-  border: 1px solid #dce3ee;
-  border-radius: 8px;
-  padding: 12px;
-  background: #f8fafc;
-}
-
-.sidebar--collapsed .sidebar-footer {
-  width: 48px;
-  height: 48px;
-  justify-content: center;
-  padding: 0;
-}
-
-.sidebar--collapsed .sidebar-footer div {
-  display: none;
 }
 
 .workspace {
@@ -1140,6 +1118,13 @@ h1 {
   grid-template-columns: minmax(180px, 1.35fr) minmax(84px, 0.55fr) minmax(84px, 0.55fr) minmax(130px, 0.75fr) minmax(140px, 0.9fr) minmax(190px, auto);
 }
 
+.contractors-mini-header--fees > span:nth-child(2),
+.contractors-mini-header--fees > span:nth-child(3),
+.contractors-mini-row--fees > .contractors-fee-money-cell {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
 .contractors-mini-header {
   background: #f8fafc;
   color: #344054;
@@ -1881,8 +1866,10 @@ h1 {
   right: 0;
   left: 0;
   display: grid;
-  max-height: 260px;
+  max-height: 284px;
   overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
   border: 1px solid #b2ccff;
   border-radius: 10px;
   background: #ffffff;
@@ -1890,9 +1877,17 @@ h1 {
   padding: 6px;
 }
 
+.suggestion-options--above {
+  top: auto;
+  bottom: calc(100% + 6px);
+}
+
 .suggestion-option {
   display: grid;
   width: 100%;
+  height: 54px;
+  min-height: 54px;
+  align-content: center;
   gap: 3px;
   border: 0;
   border-radius: 8px;
@@ -1911,7 +1906,16 @@ h1 {
 }
 
 .suggestion-option strong {
+  overflow: hidden;
   font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.suggestion-option span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .suggestion-option span,
@@ -1923,7 +1927,12 @@ h1 {
 
 .suggestion-status {
   display: block;
+  height: 17px;
+  min-width: 0;
+  overflow: hidden;
   margin-top: 5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .contractors-garage-form-columns {
@@ -1959,6 +1968,18 @@ h1 {
 }
 
 @media (max-width: 720px) {
+  .suggestion-options {
+    max-height: 176px;
+  }
+
+  .suggestion-status {
+    display: -webkit-box;
+    height: 33px;
+    white-space: normal;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+  }
+
   .detail-dialog.contractors-dialog--garage,
   .detail-dialog.contractors-dialog--supplier {
     width: 100%;
@@ -2161,6 +2182,11 @@ h1 {
 
 .contractors-inline-field input {
   flex: 1;
+}
+
+.contractors-fee-money-field input {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
 }
 
 .contractors-inline-field--date input {
@@ -4556,6 +4582,11 @@ h1 {
   background: #ffffff;
   box-shadow: 0 16px 32px rgba(16, 24, 40, 0.16);
   padding: 12px;
+}
+
+.localized-date-picker__popover--above {
+  top: auto;
+  bottom: calc(100% + 6px);
 }
 
 .localized-date-picker__heading {

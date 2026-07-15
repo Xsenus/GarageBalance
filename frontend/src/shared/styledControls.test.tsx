@@ -116,6 +116,27 @@ describe('styled form controls', () => {
     expect(screen.queryByRole('dialog', { name: 'Дата операции: календарь' })).not.toBeInTheDocument()
   })
 
+  it('closes localized calendars on an outside click and when another calendar opens', async () => {
+    const user = userEvent.setup()
+    render(
+      <div>
+        <LocalizedDatePicker ariaLabel="Дата начала проверки" mode="date" placement="above" value="2026-07-15" onChange={() => undefined} />
+        <LocalizedDatePicker ariaLabel="Дата окончания проверки" mode="date" placement="above" value="" onChange={() => undefined} />
+        <button type="button">Вне календаря</button>
+      </div>,
+    )
+
+    await user.click(screen.getByRole('button', { name: 'Открыть календарь: Дата начала проверки' }))
+    expect(screen.getByRole('dialog', { name: 'Дата начала проверки: календарь' })).toHaveClass('localized-date-picker__popover--above')
+
+    await user.click(screen.getByRole('button', { name: 'Открыть календарь: Дата окончания проверки' }))
+    expect(screen.queryByRole('dialog', { name: 'Дата начала проверки: календарь' })).not.toBeInTheDocument()
+    expect(screen.getByRole('dialog', { name: 'Дата окончания проверки: календарь' })).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Вне календаря' }))
+    expect(screen.queryByRole('dialog', { name: /календарь/ })).not.toBeInTheDocument()
+  })
+
   it('synchronizes an externally changed value and closes the calendar with Escape', async () => {
     const user = userEvent.setup()
     function Example() {

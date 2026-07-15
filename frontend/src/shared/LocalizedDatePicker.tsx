@@ -8,12 +8,14 @@ export function LocalizedDatePicker({
   ariaLabel,
   value,
   mode,
+  placement = 'below',
   disabled = false,
   onChange,
 }: {
   ariaLabel: string
   value: string
   mode: 'date' | 'month'
+  placement?: 'above' | 'below'
   disabled?: boolean
   onChange: (value: string) => void
 }) {
@@ -46,8 +48,8 @@ export function LocalizedDatePicker({
     const closeOnOutsidePointer = (event: MouseEvent) => {
       if (!rootRef.current?.contains(event.target as Node)) setOpen(false)
     }
-    document.addEventListener('mousedown', closeOnOutsidePointer)
-    return () => document.removeEventListener('mousedown', closeOnOutsidePointer)
+    document.addEventListener('mousedown', closeOnOutsidePointer, true)
+    return () => document.removeEventListener('mousedown', closeOnOutsidePointer, true)
   }, [effectiveOpen])
 
   useEffect(() => {
@@ -138,7 +140,7 @@ export function LocalizedDatePicker({
         <CalendarDays size={17} aria-hidden="true" />
       </button>
       {effectiveOpen ? (
-        <div className="localized-date-picker__popover" role="dialog" aria-label={`${ariaLabel}: календарь`}>
+        <div className={`localized-date-picker__popover${placement === 'above' ? ' localized-date-picker__popover--above' : ''}`} role="dialog" aria-label={`${ariaLabel}: календарь`}>
           <div className="localized-date-picker__heading">
             <button type="button" aria-label={mode === 'date' ? 'Предыдущий месяц' : 'Предыдущий год'} onClick={() => setPickerState((current) => ({ ...current, viewDate: new Date(viewDate.getFullYear() - (mode === 'month' ? 1 : 0), viewDate.getMonth() - (mode === 'date' ? 1 : 0), 1) }))}>
               <ChevronLeft size={17} aria-hidden="true" />
