@@ -1846,6 +1846,10 @@ h1 {
   gap: 12px;
 }
 
+.contractors-supplier-lookup-grid > .form-field {
+  align-content: start;
+}
+
 .contractors-supplier-footer-grid {
   grid-template-columns: minmax(180px, 0.7fr) minmax(220px, 0.8fr) minmax(320px, 1.5fr);
 }
