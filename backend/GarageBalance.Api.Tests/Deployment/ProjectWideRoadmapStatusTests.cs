@@ -2755,7 +2755,9 @@ public sealed class ProjectWideRoadmapStatusTests
         Assert.Contains("does not call finance APIs when payment forms fail client validation", appTestsText, StringComparison.Ordinal);
         Assert.Contains("cancels income operation with required reason from payments workspace", appTestsText, StringComparison.Ordinal);
         Assert.Contains("cancels expense operation with required reason from payments table context menu", appTestsText, StringComparison.Ordinal);
-        Assert.Contains("cancels accruals and meter readings with required reasons from payments workspace", appTestsText, StringComparison.Ordinal);
+        Assert.Contains("cancels garage accruals with required reasons from payments workspace", appTestsText, StringComparison.Ordinal);
+        Assert.Contains("cancels supplier accruals with required reasons from payments workspace", appTestsText, StringComparison.Ordinal);
+        Assert.Contains("cancels meter readings with required reasons from payments workspace", appTestsText, StringComparison.Ordinal);
         Assert.Contains("warns before closing changed payment editor", appTestsText, StringComparison.Ordinal);
         Assert.Contains("shows electricity gap warning returned by API", appTestsText, StringComparison.Ordinal);
         Assert.Contains("highlights garages without meter readings for selected month", appTestsText, StringComparison.Ordinal);

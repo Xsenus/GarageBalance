@@ -494,7 +494,7 @@ describe('App', () => {
     expect(within(tariffsPanel).queryByText('Черновой сбор')).not.toBeInTheDocument()
   })
 
-  it('creates, accrues, archives and restores announced fee campaigns from tariffs page', async () => {
+  it('creates and edits announced fee campaigns from tariffs page', async () => {
     const user = userEvent.setup()
     const targetIncomeType = createAccountingType({ id: 'income-type-target', name: 'Целевой взнос', code: 'target' })
     const participantGarage = createGarage({ id: 'garage-target', number: '27', ownerName: 'Сидорова Анна' })
@@ -668,6 +668,44 @@ describe('App', () => {
       },
     })
     expect(within(feeCampaignsSection).getByText('12, 27')).toBeInTheDocument()
+  })
+
+  it('generates announced fee campaign accruals from tariffs page', async () => {
+    const user = userEvent.setup()
+    const targetIncomeType = createAccountingType({ id: 'income-type-target', name: 'Целевой взнос', code: 'target' })
+    const campaign = createFeeCampaign({ id: 'fee-campaign-active', name: 'Сбор на ворота', incomeTypeId: targetIncomeType.id, incomeTypeName: targetIncomeType.name })
+    const generateRequests: GenerateFeeCampaignAccrualsRequest[] = []
+    const dictionaryClient = createDictionaryClient({
+      getGarages: async () => [],
+      getIncomeTypes: async () => [targetIncomeType],
+      getFeeCampaigns: async () => [campaign],
+    })
+    const financeClient = createFinanceClient({
+      generateFeeCampaignAccruals: async (_token, request) => {
+        generateRequests.push(request)
+        return createFeeCampaignAccrualGenerationResult({
+          accountingMonth: request.accountingMonth,
+          feeCampaignId: campaign.id,
+          feeCampaignName: campaign.name,
+          incomeTypeId: targetIncomeType.id,
+          incomeTypeName: targetIncomeType.name,
+          contributionAmount: 500,
+          createdCount: 3,
+          skippedCount: 1,
+          totalAmount: 1500,
+          createdAccruals: [createAccrual({ id: 'fee-accrual-1', amount: 500, source: 'fee_campaign' })],
+          skippedGarages: ['12'],
+        })
+      },
+    })
+
+    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={financeClient} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Тарифы и сборы')
+    const tariffsPanel = await screen.findByRole('region', { name: 'Тарифы и сборы' })
+    const feeCampaignsSection = within(tariffsPanel).getByLabelText('Объявленные сборы')
+    expect(await within(feeCampaignsSection).findByText(campaign.name)).toBeInTheDocument()
 
     await user.click(within(feeCampaignsSection).getAllByRole('button', { name: 'Начислить' })[0])
     const generateDialog = await screen.findByRole('dialog', { name: 'Начислить сбор?' })
@@ -693,6 +731,40 @@ describe('App', () => {
       comment: 'Решение правления',
     })
     expect(await within(feeCampaignsSection).findByText(/Создано начислений: 3/)).toBeInTheDocument()
+  })
+
+  it('archives and restores announced fee campaigns from tariffs page', async () => {
+    const user = userEvent.setup()
+    const targetIncomeType = createAccountingType({ id: 'income-type-target', name: 'Целевой взнос', code: 'target' })
+    let campaigns = [
+      createFeeCampaign({ id: 'fee-campaign-active', name: 'Сбор на ворота', incomeTypeId: targetIncomeType.id, incomeTypeName: targetIncomeType.name }),
+      createFeeCampaign({ id: 'fee-campaign-archived', name: 'Старый сбор', incomeTypeId: targetIncomeType.id, incomeTypeName: targetIncomeType.name, isArchived: true }),
+    ]
+    const archiveRequests: Array<{ id: string; reason: string }> = []
+    const restoredRequests: string[] = []
+    const dictionaryClient = createDictionaryClient({
+      getGarages: async () => [],
+      getIncomeTypes: async () => [targetIncomeType],
+      getFeeCampaigns: async () => campaigns,
+      archiveFeeCampaign: async (_token, id, reason) => {
+        archiveRequests.push({ id, reason })
+        campaigns = campaigns.map((campaign) => (campaign.id === id ? { ...campaign, isArchived: true } : campaign))
+      },
+      restoreFeeCampaign: async (_token, id) => {
+        restoredRequests.push(id)
+        const restoredCampaign = campaigns.find((campaign) => campaign.id === id)!
+        campaigns = campaigns.map((campaign) => (campaign.id === id ? { ...campaign, isArchived: false } : campaign))
+        return { ...restoredCampaign, isArchived: false }
+      },
+    })
+
+    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Тарифы и сборы')
+    const tariffsPanel = await screen.findByRole('region', { name: 'Тарифы и сборы' })
+    const feeCampaignsSection = within(tariffsPanel).getByLabelText('Объявленные сборы')
+    expect(await within(feeCampaignsSection).findByText('Сбор на ворота')).toBeInTheDocument()
 
     await user.click(within(feeCampaignsSection).getByRole('button', { name: 'Архивировать сбор Сбор на ворота' }))
     const archiveDialog = await screen.findByRole('dialog', { name: 'Архивировать сбор?' })
@@ -9212,7 +9284,7 @@ describe('App', () => {
     expect(within(within(financePanel).getByRole('table', { name: 'Последние платежи' })).getByText('Операций пока нет')).toHaveAttribute('role', 'status')
   })
 
-  it('cancels accruals and meter readings with required reasons from payments workspace', async () => {
+  it('cancels garage accruals with required reasons from payments workspace', async () => {
     const user = userEvent.setup()
     const financeClient = createStatefulFinanceClient()
     render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={financeClient} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
@@ -9247,6 +9319,17 @@ describe('App', () => {
     await user.click(within(cancelDialog).getByRole('button', { name: 'Отменить запись' }))
     await waitFor(() => expect(within(accrualTable).queryByText('900,00')).not.toBeInTheDocument())
     expect(within(accrualTable).getByText('Начислений пока нет')).toHaveAttribute('role', 'status')
+  })
+
+  it('cancels supplier accruals with required reasons from payments workspace', async () => {
+    const user = userEvent.setup()
+    const financeClient = createStatefulFinanceClient()
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={financeClient} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Платежи')
+    const financePanel = await screen.findByRole('region', { name: 'Платежи' })
 
     const supplierAccrualAmountInput = within(financePanel).getByLabelText('Сумма начисления поставщику')
     const supplierAccrualForm = supplierAccrualAmountInput.closest('form')!
@@ -9260,7 +9343,7 @@ describe('App', () => {
     await user.click(within(financePanel).getByRole('tab', { name: /Начисления поставщикам/ }))
     const supplierAccrualMenu = await openFinanceContextMenuByCellText(financePanel, '650,00')
     await user.click(within(supplierAccrualMenu).getByRole('menuitem', { name: 'Удалить' }))
-    cancelDialog = await screen.findByRole('dialog', { name: 'Отменить начисление поставщику?' })
+    let cancelDialog = await screen.findByRole('dialog', { name: 'Отменить начисление поставщику?' })
     await waitFor(() => expect(within(cancelDialog).getByLabelText('Причина отмены финансовой записи')).toHaveFocus())
     await user.keyboard('{Escape}')
     expect(screen.queryByRole('dialog', { name: 'Отменить начисление поставщику?' })).not.toBeInTheDocument()
@@ -9273,6 +9356,17 @@ describe('App', () => {
     await user.click(within(cancelDialog).getByRole('button', { name: 'Отменить запись' }))
     await waitFor(() => expect(within(supplierAccrualTable).queryByText('650,00')).not.toBeInTheDocument())
     expect(within(supplierAccrualTable).getByText('Начислений поставщикам пока нет')).toHaveAttribute('role', 'status')
+  })
+
+  it('cancels meter readings with required reasons from payments workspace', async () => {
+    const user = userEvent.setup()
+    const financeClient = createStatefulFinanceClient()
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={financeClient} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Платежи')
+    const financePanel = await screen.findByRole('region', { name: 'Платежи' })
 
     const meterValueInput = within(financePanel).getByLabelText('Новое показание')
     const meterForm = meterValueInput.closest('form')!
@@ -9285,7 +9379,7 @@ describe('App', () => {
     await user.click(within(financePanel).getByRole('tab', { name: /Счетчики/ }))
     const meterReadingMenu = await openFinanceContextMenuByCellText(financePanel, '5.5')
     await user.click(within(meterReadingMenu).getByRole('menuitem', { name: 'Удалить' }))
-    cancelDialog = await screen.findByRole('dialog', { name: 'Отменить показание счетчика?' })
+    let cancelDialog = await screen.findByRole('dialog', { name: 'Отменить показание счетчика?' })
     await waitFor(() => expect(within(cancelDialog).getByLabelText('Причина отмены финансовой записи')).toHaveFocus())
     await user.keyboard('{Escape}')
     expect(screen.queryByRole('dialog', { name: 'Отменить показание счетчика?' })).not.toBeInTheDocument()
@@ -10175,11 +10269,11 @@ describe('App', () => {
     await user.click(within(pagination).getByRole('button', { name: 'Страница 2' }))
     await waitFor(() => expect(requests.some((request) => request?.offset === 25)).toBe(true))
 
-    await user.type(within(auditPanel).getByLabelText('Поиск в истории изменений'), 'import')
-    await user.type(within(auditPanel).getByLabelText('ID пользователя истории изменений'), 'user-7')
-    await user.type(within(auditPanel).getByLabelText('Связанный гараж истории изменений'), '105')
-    await user.type(within(auditPanel).getByLabelText('Связанный контрагент истории изменений'), 'Иванов')
-    await user.type(within(auditPanel).getByLabelText('Связанный документ истории изменений'), 'PKO-7')
+    fireEvent.change(within(auditPanel).getByLabelText('Поиск в истории изменений'), { target: { value: 'import' } })
+    fireEvent.change(within(auditPanel).getByLabelText('ID пользователя истории изменений'), { target: { value: 'user-7' } })
+    fireEvent.change(within(auditPanel).getByLabelText('Связанный гараж истории изменений'), { target: { value: '105' } })
+    fireEvent.change(within(auditPanel).getByLabelText('Связанный контрагент истории изменений'), { target: { value: 'Иванов' } })
+    fireEvent.change(within(auditPanel).getByLabelText('Связанный документ истории изменений'), { target: { value: 'PKO-7' } })
 
     await waitFor(() => expect(requests).toContainEqual(expect.objectContaining({
       search: 'import',
