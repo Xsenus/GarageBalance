@@ -53,7 +53,14 @@ jobs:
         run: ./infrastructure/scripts/verify-package-privacy.ps1
 
       - name: Test backend
-        run: dotnet test GarageBalance.slnx --configuration Release --no-restore
+        shell: pwsh
+        run: |
+          dotnet test GarageBalance.slnx --configuration Release --no-restore `
+            --collect:"XPlat Code Coverage" `
+            --settings backend-coverage.runsettings `
+            --results-directory artifacts/coverage-backend
+          ./infrastructure/scripts/verify-backend-coverage.ps1 `
+            -ResultsDirectory artifacts/coverage-backend
 
       - name: Check backend formatting
         run: dotnet format GarageBalance.slnx --verify-no-changes --no-restore
@@ -64,7 +71,7 @@ jobs:
 
       - name: Test frontend
         working-directory: ${{ env.FRONTEND_DIR }}
-        run: npm run test:ci
+        run: npm run test:coverage
 
       - name: Lint frontend
         working-directory: ${{ env.FRONTEND_DIR }}

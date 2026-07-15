@@ -10,10 +10,11 @@ describe('frontend test acceleration', () => {
   const runner = readFileSync(resolve(process.cwd(), 'scripts', 'run-vitest.mjs'), 'utf8').replace(/\r\n/g, '\n')
   const workflow = readFileSync(resolve(process.cwd(), '..', '.github', 'workflows', 'deploy-staging.yml'), 'utf8')
 
-  it('uses the sharded runner locally and in CI', () => {
+  it('uses the sharded runner locally and enforces coverage in CI', () => {
     expect(packageJson.scripts.test).toBe('node scripts/run-vitest.mjs')
     expect(packageJson.scripts['test:ci']).toBe('node scripts/run-vitest.mjs --ci')
-    expect(workflow).toContain('run: npm run test:ci')
+    expect(packageJson.scripts['test:coverage']).toBe('node scripts/run-vitest.mjs --ci --coverage.enabled=true')
+    expect(workflow).toContain('run: npm run test:coverage')
   })
 
   it('keeps serial diagnostics and related-test development commands available', () => {

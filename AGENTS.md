@@ -42,6 +42,20 @@ For implementation tasks, proceed end to end unless the user explicitly asks onl
 
 When the user asks to check whether the last task is done, inspect the current code, active docs, tests, active roadmap when one exists, and release notes before deciding. Archived roadmaps must not be used to expand or resume the task unless the user explicitly orders work from the archive.
 
+## Mandatory Test Gate
+
+Every new or changed method, function, endpoint, component, hook, query, filter, sort, pagination path, permission branch, validation rule, save/edit operation, error state, and performance-sensitive path must be covered by an automated test at the closest practical level. When existing code is touched, inspect its success, empty, invalid, failure, cancellation/stale-response, and permission-denied branches and add missing regression coverage before considering the task complete.
+
+Tests are an execution gate, not optional documentation:
+
+- run the relevant focused tests while developing and the complete backend and frontend suites before committing or publishing;
+- run frontend lint, production build and bundle budget together with backend formatting, privacy and migration checks required by the task;
+- do not commit, merge, push or deploy while a required test, coverage threshold, build, lint, formatting, privacy or migration check is failing;
+- do not delete, skip, weaken or broaden a timeout merely to make a failing test green; fix the production defect or make the test deterministic while preserving the asserted behavior;
+- GitHub Actions must execute the complete backend and frontend suites and enforce the configured coverage thresholds before packaging or deployment steps;
+- when CI fails, inspect the exact failing logs, fix the cause, add or strengthen a regression test, push the correction and wait for a fully successful rerun;
+- report the exact local and CI test totals, coverage gates and any environment limitation in the final response.
+
 ## Roadmaps
 
 Active roadmaps live directly in `docs/` as human-readable Markdown documents. Before starting implementation that the user explicitly tied to an active roadmap, open that roadmap and update statuses as the work progresses.

@@ -11,5 +11,15 @@ export default defineConfig({
     fileParallelism: true,
     maxWorkers: process.env.VITEST_MAX_WORKERS ?? '50%',
     slowTestThreshold: 1000,
+    coverage: {
+      provider: 'v8',
+      reporter: ['text-summary', 'json-summary'],
+      thresholds: {
+        statements: 78,
+        branches: 69,
+        functions: 74,
+        lines: 79,
+      },
+    },
   },
 })
