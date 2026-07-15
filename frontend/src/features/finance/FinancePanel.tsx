@@ -383,14 +383,16 @@ export function FinancePanel({
   const [accrualBreakdown, setAccrualBreakdown] = useState<AccrualBreakdown | null>(null)
   const [referencesLoading, setReferencesLoading] = useState(true)
   const [workbenchLoading, setWorkbenchLoading] = useState(false)
+  const [workbenchLoaded, setWorkbenchLoaded] = useState(false)
   const [financePreviewLoading, setFinancePreviewLoading] = useState<FinancePreviewStatuses>({ operations: true, accruals: true, supplierAccruals: true, meterReadings: true })
   const [financePreviewFailures, setFinancePreviewFailures] = useState<FinancePreviewStatuses>({ operations: false, accruals: false, supplierAccruals: false, meterReadings: false })
-  const loading = referencesLoading || workbenchLoading
   const [paymentDisplaySettingsLoaded, setPaymentDisplaySettingsLoaded] = useState(false)
   const [showAllGarageOperations, setShowAllGarageOperations] = useState(false)
   const [paymentDisplaySettingsError, setPaymentDisplaySettingsError] = useState<string | null>(null)
   const [saving, setSaving] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const loading = workbenchLoading || !paymentDisplaySettingsLoaded || (showAllGarageOperations && !workbenchLoaded)
+  const paymentsPrototypeLoading = referencesLoading
   const closeCancelFinanceDialog = useCallback(() => {
     const trigger = cancelFinanceTriggerRef.current
     setCancelFinanceTarget(null)
@@ -701,25 +703,18 @@ export function FinancePanel({
       const missingMeterReadingsPromise = section === 'meterReadings'
         ? financeClient.getMissingMeterReadings(auth.accessToken, { accountingMonth: missingMeterMonth, search: financeFilter.search, limit: financeScreenRequestLimit })
         : Promise.resolve(null)
-      const [activePage, loadedMissingMeterReadings, loadedSummary] = await Promise.all([
-        activePagePromise,
-        missingMeterReadingsPromise,
-        financeClient.getSummary(auth.accessToken, { monthFrom: financeFilter.monthFrom, monthTo: financeFilter.monthTo, search: financeFilter.search }),
-      ])
+      const summaryPromise = financeClient.getSummary(auth.accessToken, { monthFrom: financeFilter.monthFrom, monthTo: financeFilter.monthTo, search: financeFilter.search })
+      void missingMeterReadingsPromise.catch(() => undefined)
+      void summaryPromise.catch(() => undefined)
+      const activePage = await activePagePromise
 
       if (!financeWorkbenchRequests.isLatest(requestId)) {
         return
       }
 
-      setFinanceSectionCounts((current) => ({
-        income: loadedSummary.incomeCount ?? (section === 'income' ? activePage.totalCount : current.income),
-        expense: loadedSummary.expenseCount ?? (section === 'expense' ? activePage.totalCount : current.expense),
-        accruals: loadedSummary.accrualCount,
-        supplierAccruals: loadedSummary.supplierAccrualCount ?? (section === 'supplierAccruals' ? activePage.totalCount : current.supplierAccruals),
-        meterReadings: loadedSummary.meterReadingCount,
-      }))
-      setSummary(loadedSummary)
+      setFinanceSectionCounts((current) => ({ ...current, [section]: activePage.totalCount }))
       setFinancePage(activePage)
+      setWorkbenchLoaded(true)
       // The working table renders financePage directly. These copies only keep the compact
       // recent-item previews current after a mutation and cannot replace the paged result.
       if (section === 'income' || section === 'expense') {
@@ -731,11 +726,37 @@ export function FinancePanel({
       } else {
         setMeterReadings(activePage.items as MeterReadingDto[])
       }
-      if (loadedMissingMeterReadings) {
-        setMissingMeterReadings(loadedMissingMeterReadings)
+      setWorkbenchLoading(false)
+
+      const [missingMeterReadingsResult, summaryResult] = await Promise.allSettled([missingMeterReadingsPromise, summaryPromise])
+      if (!financeWorkbenchRequests.isLatest(requestId)) {
+        return
+      }
+
+      if (summaryResult.status === 'fulfilled') {
+        const loadedSummary = summaryResult.value
+        setFinanceSectionCounts((current) => ({
+          income: loadedSummary.incomeCount ?? (section === 'income' ? activePage.totalCount : current.income),
+          expense: loadedSummary.expenseCount ?? (section === 'expense' ? activePage.totalCount : current.expense),
+          accruals: loadedSummary.accrualCount,
+          supplierAccruals: loadedSummary.supplierAccrualCount ?? (section === 'supplierAccruals' ? activePage.totalCount : current.supplierAccruals),
+          meterReadings: loadedSummary.meterReadingCount,
+        }))
+        setSummary(loadedSummary)
+      } else {
+        setError(summaryResult.reason instanceof Error ? summaryResult.reason.message : 'Не удалось загрузить сводные показатели платежей.')
+      }
+
+      if (missingMeterReadingsResult.status === 'fulfilled') {
+        if (missingMeterReadingsResult.value) {
+          setMissingMeterReadings(missingMeterReadingsResult.value)
+        }
+      } else {
+        setError(missingMeterReadingsResult.reason instanceof Error ? missingMeterReadingsResult.reason.message : 'Не удалось загрузить список отсутствующих показаний.')
       }
     } catch (caught) {
       if (financeWorkbenchRequests.isLatest(requestId)) {
+        setWorkbenchLoaded(true)
         setError(caught instanceof Error ? caught.message : 'Не удалось загрузить страницу платежей.')
       }
     } finally {
@@ -2122,7 +2143,7 @@ export function FinancePanel({
   }
 
   const financeEditorHasUnsavedChanges = hasUnsavedFinanceEditorChanges()
-  const paymentsHeadingStatus = loading || !paymentDisplaySettingsLoaded
+  const paymentsHeadingStatus = paymentsPrototypeLoading || !paymentDisplaySettingsLoaded
     ? getFinancePanelLabel('loading')
     : showAllGarageOperations
       ? formatFinanceOperationCount(summary.operationCount)
@@ -2140,7 +2161,7 @@ export function FinancePanel({
         garages={garages}
         incomeTypes={incomeTypes}
         integrationClient={integrationClient}
-        loading={loading}
+        loading={paymentsPrototypeLoading}
         supplierGroups={supplierGroups}
         suppliers={suppliers}
         staffMembers={staffMembers}

@@ -9480,6 +9480,64 @@ describe('App', () => {
     expect(getMissingMeterReadings).toHaveBeenCalledTimes(1)
   })
 
+  it('shows a ready payment page without waiting for the summary', async () => {
+    const user = userEvent.setup()
+    let resolveSummary!: (summary: FinanceSummaryDto) => void
+    const summaryPromise = new Promise<FinanceSummaryDto>((resolve) => { resolveSummary = resolve })
+    const fastOperation = createFinancialOperation({ id: 'fast-page-operation', documentNumber: 'PKO-FAST-PAGE', amount: 321 })
+    const financeClient = createFinanceClient({
+      getOperationsPage: async (_token, params) => ({ items: [fastOperation], totalCount: 1, offset: params?.offset ?? 0, limit: params?.limit ?? 25 }),
+      getSummary: async () => summaryPromise,
+    })
+
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={financeClient} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Платежи')
+    const financePanel = await screen.findByRole('region', { name: 'Платежи' })
+    const financeTableArea = within(financePanel).getByRole('group', { name: 'Рабочая область платежной таблицы' })
+
+    expect(await within(financeTableArea).findByText('PKO-FAST-PAGE')).toBeInTheDocument()
+    expect(within(financePanel).queryByLabelText('Загружаем таблицу платежей')).not.toBeInTheDocument()
+
+    await act(async () => resolveSummary({
+      incomeTotal: 321,
+      expenseTotal: 0,
+      accrualTotal: 500,
+      balance: 321,
+      debt: 179,
+      operationCount: 1,
+      accrualCount: 1,
+      meterReadingCount: 0,
+      incomeCount: 1,
+      expenseCount: 0,
+      supplierAccrualCount: 0,
+    }))
+    expect(await within(financePanel).findAllByText('321.00')).not.toHaveLength(0)
+  })
+
+  it('keeps a loaded payment page available when the summary fails', async () => {
+    const user = userEvent.setup()
+    const operation = createFinancialOperation({ id: 'summary-error-operation', documentNumber: 'PKO-SUMMARY-ERROR' })
+    const financeClient = createFinanceClient({
+      getOperationsPage: async (_token, params) => ({ items: [operation], totalCount: 1, offset: params?.offset ?? 0, limit: params?.limit ?? 25 }),
+      getSummary: async () => { throw new Error('Сводные показатели временно недоступны.') },
+    })
+
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={financeClient} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Платежи')
+    const financePanel = await screen.findByRole('region', { name: 'Платежи' })
+    const financeTableArea = within(financePanel).getByRole('group', { name: 'Рабочая область платежной таблицы' })
+
+    expect(await within(financeTableArea).findByText('PKO-SUMMARY-ERROR')).toBeInTheDocument()
+    expect(await within(financePanel).findByText('Сводные показатели временно недоступны.')).toBeInTheDocument()
+    expect(within(financePanel).queryByLabelText('Загружаем таблицу платежей')).not.toBeInTheDocument()
+  })
+
   it('keeps the latest payment table response and loader during overlapping requests', async () => {
     const user = userEvent.setup()
     let resolveIncomePage!: (page: FinancePagedResult<FinancialOperationDto>) => void
