@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using GarageBalance.Api.Domain.Security;
 using GarageBalance.Api.Infrastructure.Security;
 using Microsoft.AspNetCore.Authorization;
 
@@ -6,6 +7,46 @@ namespace GarageBalance.Api.Tests.Auth;
 
 public sealed class PermissionAuthorizationHandlerTests
 {
+    public static TheoryData<string, string[], string> RolePermissionCases
+    {
+        get
+        {
+            var data = new TheoryData<string, string[], string>();
+            var roles = new[]
+            {
+                (SystemRoles.Administrator, SystemPermissions.Administrator),
+                (SystemRoles.Accountant, SystemPermissions.Accountant),
+                (SystemRoles.Operator, SystemPermissions.Operator),
+                (SystemRoles.ReportsViewer, SystemPermissions.ReportsViewer)
+            };
+
+            foreach (var (role, permissions) in roles)
+            {
+                foreach (var permission in SystemPermissions.All)
+                {
+                    data.Add(role, permissions, permission);
+                }
+            }
+
+            return data;
+        }
+    }
+
+    [Theory]
+    [MemberData(nameof(RolePermissionCases))]
+    public async Task HandleAsync_EnforcesEveryBuiltInRolePermissionCombination(string role, string[] grantedPermissions, string requiredPermission)
+    {
+        var requirement = new PermissionRequirement(requiredPermission);
+        var claims = grantedPermissions.Select(permission => new Claim("permission", permission));
+        var principal = new ClaimsPrincipal(new ClaimsIdentity(claims, role));
+        var context = new AuthorizationHandlerContext([requirement], principal, resource: null);
+        var handler = new PermissionAuthorizationHandler();
+
+        await handler.HandleAsync(context);
+
+        Assert.Equal(grantedPermissions.Contains(requiredPermission, StringComparer.Ordinal), context.HasSucceeded);
+    }
+
     [Fact]
     public async Task HandleAsync_SucceedsWhenPermissionClaimExists()
     {
