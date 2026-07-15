@@ -12,12 +12,13 @@ const relatedMode = process.argv.includes('--related')
 const quickMode = process.argv.includes('--quick')
 const forwardedArgs = process.argv.slice(2).filter((argument) => !['--ci', '--quick', '--related'].includes(argument))
 const isCi = process.argv.includes('--ci') || process.env.CI === 'true'
-const defaultParallelism = Math.max(2, Math.min(4, Math.floor(availableParallelism() / 2)))
+const defaultParallelism = Math.max(1, Math.min(2, Math.floor(availableParallelism() / 2)))
+const ciParallelism = Math.max(1, Math.min(2, availableParallelism()))
 const quickParallelism = Math.max(2, Math.min(8, availableParallelism()))
 const shardCount = readPositiveInteger(process.env.VITEST_APP_SHARDS, defaultParallelism)
 const workerCount = readPositiveInteger(
   process.env.VITEST_MAX_WORKERS,
-  quickMode ? quickParallelism : isCi ? 4 : defaultParallelism,
+  quickMode ? quickParallelism : isCi ? ciParallelism : defaultParallelism,
 )
 let child
 
