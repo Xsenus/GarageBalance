@@ -3707,7 +3707,7 @@ h1 {
 }
 
 .funds-sheet {
-  width: min(760px, 100%);
+  width: 100%;
   overflow: hidden;
   border: 1px solid #d0d5dd;
   border-radius: 8px;
@@ -3715,25 +3715,34 @@ h1 {
   box-shadow: 0 18px 45px rgba(15, 23, 42, 0.08);
 }
 
-.funds-left-column {
-  display: flex;
-  width: min(760px, 100%);
+.funds-content {
+  display: grid;
   min-height: 0;
   flex: 1 1 auto;
-  flex-direction: column;
-  gap: 18px;
+  grid-template-columns: minmax(520px, 0.95fr) minmax(0, 1.05fr);
+  gap: 24px;
+  overflow: hidden;
 }
 
-.funds-left-column > .funds-operations-sheet {
+.funds-left-column {
   display: flex;
   width: 100%;
   min-height: 0;
-  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 18px;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+
+.funds-operations-sheet {
+  display: flex;
+  width: 100%;
+  min-height: 0;
   flex-direction: column;
   overflow: hidden;
 }
 
-.funds-left-column > .funds-sheet:not(.funds-operations-sheet),
+.funds-left-column > .funds-sheet,
 .funds-left-column > .funds-distribution {
   flex: 0 0 auto;
 }
@@ -3752,6 +3761,28 @@ h1 {
 
 .funds-operations-table {
   min-width: 980px;
+}
+
+@media (max-width: 1180px) {
+  .workspace--funds {
+    height: auto;
+    min-height: 100dvh;
+    overflow: visible;
+  }
+
+  .funds-content {
+    grid-template-columns: minmax(0, 1fr);
+    overflow: visible;
+  }
+
+  .funds-left-column {
+    overflow: visible;
+  }
+
+  .funds-operations-sheet {
+    height: min(70dvh, 720px);
+    min-height: 520px;
+  }
 }
 
 .funds-table-skeleton {

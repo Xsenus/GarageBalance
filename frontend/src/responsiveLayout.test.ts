@@ -125,12 +125,14 @@ describe('responsive layout styles', () => {
     expect(normalizedAppCss).toContain('.report-workbook-sheet > .dictionary-pagination {\n  flex: 0 0 auto;')
   })
 
-  it('keeps fund operations in the left column with visible pagination', () => {
+  it('keeps fund operations in the right column with visible pagination', () => {
     expect(normalizedAppCss).toContain('.workspace--funds {\n  display: flex;\n  height: 100dvh;\n  min-height: 0;\n  flex-direction: column;\n  overflow: hidden;\n  box-sizing: border-box;')
-    expect(normalizedAppCss).toContain('.funds-left-column {\n  display: flex;\n  width: min(760px, 100%);\n  min-height: 0;\n  flex: 1 1 auto;\n  flex-direction: column;')
-    expect(normalizedAppCss).toContain('.funds-left-column > .funds-operations-sheet {\n  display: flex;\n  width: 100%;\n  min-height: 0;\n  flex: 1 1 auto;\n  flex-direction: column;\n  overflow: hidden;')
+    expect(normalizedAppCss).toContain('.funds-content {\n  display: grid;\n  min-height: 0;\n  flex: 1 1 auto;\n  grid-template-columns: minmax(520px, 0.95fr) minmax(0, 1.05fr);')
+    expect(normalizedAppCss).toContain('.funds-left-column {\n  display: flex;\n  width: 100%;\n  min-height: 0;\n  flex-direction: column;')
+    expect(normalizedAppCss).toContain('.funds-operations-sheet {\n  display: flex;\n  width: 100%;\n  min-height: 0;\n  flex-direction: column;\n  overflow: hidden;')
     expect(normalizedAppCss).toContain('.funds-operations-table-scroll {\n  min-height: 0;\n  flex: 1 1 auto;\n  overflow: auto;')
     expect(normalizedAppCss).toContain('.funds-operations-sheet > .dictionary-pagination {\n  flex: 0 0 auto;')
+    expect(normalizedAppCss).toContain('@media (max-width: 1180px) {\n  .workspace--funds {\n    height: auto;\n    min-height: 100dvh;\n    overflow: visible;')
   })
 
   it('keeps settings navigation full-height and settings forms compact', () => {

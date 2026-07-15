@@ -413,8 +413,9 @@ export function FundsPrototypePanel({ auth, fundsClient }: { auth: AuthResponse;
         <h1>Управление фондами</h1>
       </div>
 
-      <div className="funds-left-column">
-        <div className="funds-sheet">
+      <div className="funds-content">
+        <div className="funds-left-column">
+          <div className="funds-sheet">
         {loadError ? <p className="form-error" role="alert">{loadError}</p> : null}
         {fundsLoading ? (
           <TableLoadingState label="Загружаем фонды" />
@@ -456,9 +457,9 @@ export function FundsPrototypePanel({ auth, fundsClient }: { auth: AuthResponse;
           </tbody>
           </table>
         )}
-        </div>
+          </div>
 
-        <div className="funds-distribution" aria-label="Сумма к распределению">
+          <div className="funds-distribution" aria-label="Сумма к распределению">
         {fundsLoading ? (
           <LoadingSkeleton className="loading-skeleton--compact funds-distribution-skeleton" label="Загружаем сумму к распределению" rows={1} columns={2} />
         ) : (
@@ -467,9 +468,10 @@ export function FundsPrototypePanel({ auth, fundsClient }: { auth: AuthResponse;
             <strong>{availableToDistribute === null || availableToDistribute === 0 ? '—' : `${formatMoney(availableToDistribute)} руб.`}</strong>
           </>
         )}
-        </div>
+          </div>
 
-        {operationMessage ? <p className="form-success" role="status">{operationMessage}</p> : null}
+          {operationMessage ? <p className="form-success" role="status">{operationMessage}</p> : null}
+        </div>
 
         <div className="funds-sheet funds-operations-sheet">
         {operationsLoading ? (
