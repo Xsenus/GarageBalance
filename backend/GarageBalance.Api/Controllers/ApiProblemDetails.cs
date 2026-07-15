@@ -6,6 +6,7 @@ namespace GarageBalance.Api.Controllers;
 public static class ApiProblemDetails
 {
     public const string CodeExtensionKey = "code";
+    public const string ErrorIdExtensionKey = "errorId";
     public const string ConcurrentWriteConflictCode = "concurrent_write_conflict";
     public const string ForbiddenCode = "forbidden";
     public const string InternalErrorCode = "internal_error";
@@ -54,9 +55,18 @@ public static class ApiProblemDetails
         return Create(ForbiddenCode, "Недостаточно прав для выполнения действия.", StatusCodes.Status403Forbidden);
     }
 
-    public static ProblemDetails CreateInternalError()
+    public static ProblemDetails CreateInternalError(string? errorId = null)
     {
-        return Create(InternalErrorCode, "Произошла внутренняя ошибка сервера.", StatusCodes.Status500InternalServerError);
+        var detail = string.IsNullOrWhiteSpace(errorId)
+            ? "Произошла внутренняя ошибка сервера. Сообщите код ошибки администратору."
+            : $"Произошла внутренняя ошибка сервера. Сообщите код ошибки {errorId} администратору.";
+        var problem = Create(InternalErrorCode, detail, StatusCodes.Status500InternalServerError);
+        if (!string.IsNullOrWhiteSpace(errorId))
+        {
+            problem.Extensions[ErrorIdExtensionKey] = errorId;
+        }
+
+        return problem;
     }
 
     public static ProblemDetails CreateConcurrentWriteConflict()

@@ -2,6 +2,7 @@ using System.Text.RegularExpressions;
 using GarageBalance.Api.Application.Audit;
 using GarageBalance.Api.Application.Backups;
 using GarageBalance.Api.Application.Common;
+using GarageBalance.Api.Application.Diagnostics;
 using Microsoft.Extensions.Options;
 using Npgsql;
 
@@ -150,7 +151,10 @@ public sealed partial class PostgresDatabaseBackupService(
         }
         catch (Exception exception)
         {
-            logger.LogError(exception, "Database backup failed.");
+            logger.LogError(
+                "Database backup failed. ExceptionType={ExceptionType}; Diagnostic={Diagnostic}",
+                exception.GetType().Name,
+                DiagnosticLogSanitizer.SanitizeException(exception));
             return Fail("database_backup_failed", "Не удалось создать резервную копию базы данных.");
         }
         finally

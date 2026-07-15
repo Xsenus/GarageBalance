@@ -1,9 +1,12 @@
 using System.Text;
+using System.Security.Claims;
+using System.Threading.RateLimiting;
 using GarageBalance.Api.Application.Audit;
 using GarageBalance.Api.Application.Backups;
 using GarageBalance.Api.Application.Auth;
 using GarageBalance.Api.Application.Common;
 using GarageBalance.Api.Application.Dictionaries;
+using GarageBalance.Api.Application.Diagnostics;
 using GarageBalance.Api.Application.Finance;
 using GarageBalance.Api.Application.Funds;
 using GarageBalance.Api.Application.Import;
@@ -18,10 +21,12 @@ using GarageBalance.Api.Controllers;
 using GarageBalance.Api.Domain.Security;
 using GarageBalance.Api.Infrastructure.Data;
 using GarageBalance.Api.Infrastructure.Backups;
+using GarageBalance.Api.Infrastructure.Diagnostics;
 using GarageBalance.Api.Infrastructure.Import;
 using GarageBalance.Api.Infrastructure.Integrations;
 using GarageBalance.Api.Infrastructure.Security;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Authorization.Policy;
 using Microsoft.AspNetCore.DataProtection;
@@ -110,6 +115,15 @@ builder.Services.AddHttpClient<IDadataSuggestionService, DadataSuggestionService
 builder.Services.AddScoped<IAppReleaseService, AppReleaseService>();
 builder.Services.AddScoped<IAppReleaseRepository, EfAppReleaseRepository>();
 builder.Services
+    .AddOptions<DiagnosticLoggingOptions>()
+    .Bind(builder.Configuration.GetSection(DiagnosticLoggingOptions.SectionName))
+    .ValidateDataAnnotations()
+    .ValidateOnStart();
+builder.Services.AddSingleton<RollingJsonDiagnosticLoggerProvider>();
+builder.Services.AddSingleton<ILoggerProvider>(provider => provider.GetRequiredService<RollingJsonDiagnosticLoggerProvider>());
+builder.Services.AddSingleton<IDiagnosticLogStore>(provider => provider.GetRequiredService<RollingJsonDiagnosticLoggerProvider>());
+builder.Services.AddScoped<IDiagnosticPackageService, DiagnosticPackageService>();
+builder.Services
     .AddOptions<DatabaseBackupOptions>()
     .Bind(builder.Configuration.GetSection(DatabaseBackupOptions.SectionName))
     .ValidateDataAnnotations()
@@ -179,6 +193,18 @@ builder.Services.AddCors(options =>
             .AllowAnyMethod();
     });
 });
+builder.Services.AddRateLimiter(options =>
+{
+    options.AddPolicy("client-diagnostics", context => RateLimitPartition.GetFixedWindowLimiter(
+        context.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? context.Connection.RemoteIpAddress?.ToString() ?? "anonymous",
+        _ => new FixedWindowRateLimiterOptions
+        {
+            PermitLimit = 10,
+            Window = TimeSpan.FromMinutes(1),
+            QueueLimit = 0
+        }));
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+});
 builder.Services
     .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
@@ -219,12 +245,14 @@ if (app.Environment.IsDevelopment())
     app.MapOpenApi();
 }
 
+app.UseMiddleware<RequestCorrelationMiddleware>();
 app.UseMiddleware<ApiExceptionHandlingMiddleware>();
 app.UseMiddleware<ApiSecurityHeadersMiddleware>();
 app.UseHttpsRedirection();
 app.UseCors("Frontend");
 
 app.UseAuthentication();
+app.UseRateLimiter();
 app.UseAuthorization();
 
 app.MapControllers();

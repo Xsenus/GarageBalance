@@ -13,6 +13,7 @@ import type { ReportClient } from '../../services/reportsApi'
 import type { ReleaseClient } from '../../services/releasesApi'
 import type { UserManagementClient } from '../../services/usersApi'
 import type { ApplicationSettingsClient } from '../../services/settingsApi'
+import { diagnosticsApi } from '../../services/diagnosticsApi'
 import { hasAnyPermission, hasPermission, permissions } from '../../shared/accessControl'
 import { AsyncErrorBoundary, TableLoadingState } from '../../shared/AsyncState'
 import { isLazyChunkLoadError, recoverFromLazyChunkError } from '../../shared/lazyChunkRecovery'
@@ -20,23 +21,33 @@ import { useEscapeKey, useFocusOnOpen, useFocusTrap, useRestoreFocusOnClose } fr
 import type { AuditPanelPreset, WorkspaceOpenContext, WorkspaceSection } from '../../shared/workspaceNavigation'
 import { AuditPanel, ContractorsPrototypePanel, DictionaryPanelV2, FinancePanel, FundsPrototypePanel, ImportPanel, MeterReadingsPrototypePanel, PasswordPanel, preloadWorkspaceSection, ReleasePanel, ReportPanel, TariffsAndFeesPrototypePanel, UserManagementPanel } from './workspaceSectionLoader'
 
-export function WorkspaceSectionErrorBoundary({ children, onReturn }: { children: ReactNode; onReturn?: () => void }) {
+export function WorkspaceSectionErrorBoundary({ children, onReturn, accessToken }: { children: ReactNode; onReturn?: () => void; accessToken?: string }) {
   return (
     <AsyncErrorBoundary
-      onError={(error, info) => {
-        console.error('Не удалось загрузить рабочий раздел.', error, info.componentStack)
+      onError={(error, info, errorId) => {
+        console.error('Не удалось загрузить рабочий раздел.', errorId)
         recoverFromLazyChunkError(error)
+        if (accessToken) {
+          void diagnosticsApi.reportClientError(accessToken, {
+            clientErrorId: errorId,
+            errorName: error.name || 'Error',
+            message: 'Ошибка интерфейса; подробности определяются по коду и стеку вызовов.',
+            componentStack: info.componentStack ?? null,
+            route: window.location.pathname,
+          }).catch(() => undefined)
+        }
       }}
-      fallback={(error, reset) => {
+      fallback={(error, reset, errorId) => {
         const chunkError = isLazyChunkLoadError(error)
         return (
           <section className="section-load-error" role="alert" aria-label="Не удалось загрузить раздел">
             <span className="section-load-error__icon" aria-hidden="true"><AlertTriangle size={22} /></span>
-            <p className="eyebrow">Раздел не открылся</p>
+            <p className="eyebrow">{chunkError ? 'Обновление приложения' : 'Ошибка загрузки'}</p>
             <h2>{chunkError ? 'Приложение было обновлено' : 'Не удалось открыть раздел'}</h2>
             <p>{chunkError
               ? 'Открыта предыдущая версия страницы. Обновите приложение, чтобы безопасно продолжить работу.'
               : 'Возникла временная ошибка. Повторите загрузку раздела — данные в других разделах не изменены.'}</p>
+            <p className="form-hint">Код ошибки: <strong>{errorId}</strong>. Сообщите его администратору.</p>
             <div className="section-load-error__actions">
               {onReturn ? <button className="secondary-button" type="button" onClick={onReturn}>На главную</button> : null}
               <button className="primary-button" type="button" onClick={chunkError ? () => window.location.reload() : reset}>
@@ -249,7 +260,7 @@ export function Workspace({
           </button>
         </div>
       </header>
-      <WorkspaceSectionErrorBoundary key={activeSection} onReturn={() => onOpenSection('dashboard')}>
+      <WorkspaceSectionErrorBoundary key={activeSection} accessToken={auth.accessToken} onReturn={() => onOpenSection('dashboard')}>
         <Suspense fallback={<TableLoadingState label="Загружаем выбранный раздел" />}>
           {renderActiveSection()}
         </Suspense>

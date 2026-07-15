@@ -70,7 +70,9 @@ public sealed class DatabaseBackupWorker(
             }
             catch (Exception exception)
             {
-                logger.LogError(exception, "Automatic database backup check failed.");
+                logger.LogError(
+                    "Automatic database backup check failed. ExceptionType={ExceptionType}",
+                    exception.GetType().Name);
             }
 
             try
