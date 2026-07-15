@@ -2824,8 +2824,9 @@ describe('App', () => {
     const user = userEvent.setup()
     let resolveGarages!: (value: GarageDto[]) => void
     const garagesPromise = new Promise<GarageDto[]>((resolve) => { resolveGarages = resolve })
+    const getGarages = vi.fn(async () => garagesPromise)
     const dictionaryClient = createDictionaryClient({
-      getGarages: async () => garagesPromise,
+      getGarages,
       getTariffs: async () => [createTariff({ id: 'fast-water', name: 'Быстрый тариф', calculationBase: 'meter_water', rate: 42 })],
     })
 
@@ -2837,10 +2838,49 @@ describe('App', () => {
     const tariffsPanel = await screen.findByRole('region', { name: 'Тарифы и сборы' })
 
     expect(await within(tariffsPanel).findByLabelText('Вода: Быстрый тариф: значение')).toHaveValue('42.00')
-    expect(within(tariffsPanel).getByRole('button', { name: 'Объявить сбор' })).toBeDisabled()
+    const openFeeCampaignButton = within(tariffsPanel).getByRole('button', { name: 'Объявить сбор' })
+    await waitFor(() => expect(openFeeCampaignButton).toBeEnabled())
+    expect(getGarages).not.toHaveBeenCalled()
+
+    await user.click(openFeeCampaignButton)
+    expect(getGarages).toHaveBeenCalledTimes(1)
+    expect(openFeeCampaignButton).toBeDisabled()
+    expect(screen.queryByRole('dialog', { name: 'Добавить сбор' })).not.toBeInTheDocument()
 
     await act(async () => resolveGarages([]))
-    await waitFor(() => expect(within(tariffsPanel).getByRole('button', { name: 'Объявить сбор' })).toBeEnabled())
+    const feeCampaignDialog = await screen.findByRole('dialog', { name: 'Добавить сбор' })
+    expect(feeCampaignDialog).toBeInTheDocument()
+    await waitFor(() => expect(openFeeCampaignButton).toBeEnabled())
+    await user.click(within(feeCampaignDialog).getByRole('button', { name: 'Закрыть форму сбора' }))
+    await user.click(openFeeCampaignButton)
+    expect(await screen.findByRole('dialog', { name: 'Добавить сбор' })).toBeInTheDocument()
+    expect(getGarages).toHaveBeenCalledTimes(1)
+  })
+
+  it('allows retrying garage references after the fee campaign form failed to load', async () => {
+    const user = userEvent.setup()
+    const getGarages = vi.fn()
+      .mockRejectedValueOnce(new Error('Справочник гаражей временно недоступен.'))
+      .mockResolvedValueOnce([])
+    const dictionaryClient = createDictionaryClient({ getGarages })
+
+    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Тарифы и сборы')
+    const tariffsPanel = await screen.findByRole('region', { name: 'Тарифы и сборы' })
+    const openFeeCampaignButton = within(tariffsPanel).getByRole('button', { name: 'Объявить сбор' })
+    await waitFor(() => expect(openFeeCampaignButton).toBeEnabled())
+
+    await user.click(openFeeCampaignButton)
+    expect(await within(tariffsPanel).findByText('Справочник гаражей временно недоступен.')).toBeInTheDocument()
+    expect(screen.queryByRole('dialog', { name: 'Добавить сбор' })).not.toBeInTheDocument()
+    await waitFor(() => expect(openFeeCampaignButton).toBeEnabled())
+
+    await user.click(openFeeCampaignButton)
+    expect(await screen.findByRole('dialog', { name: 'Добавить сбор' })).toBeInTheDocument()
+    expect(getGarages).toHaveBeenCalledTimes(2)
   })
 
   it('keeps backend contractor dictionaries above stale saved contractor form state', async () => {

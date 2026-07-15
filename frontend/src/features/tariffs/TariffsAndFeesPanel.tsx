@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useState } from 'react'
+import { Fragment, useEffect, useRef, useState } from 'react'
 import type { FormEvent, MouseEvent } from 'react'
 import { FileSpreadsheet, FileText, Pencil, RotateCcw, Save, Trash2, X } from 'lucide-react'
 import type { AuthResponse } from '../../services/authApi'
@@ -525,6 +525,8 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
   const [backendIncomeTypes, setBackendIncomeTypes] = useState<AccountingTypeDto[]>([])
   const [backendChargeServices, setBackendChargeServices] = useState<ChargeServiceSettingDto[]>([])
   const [feeCampaignGarageOptions, setFeeCampaignGarageOptions] = useState<GarageDto[]>([])
+  const feeCampaignGarageOptionsLoadedRef = useRef(false)
+  const feeCampaignGarageOptionsRequestRef = useRef<Promise<boolean> | null>(null)
   const [feeCampaigns, setFeeCampaigns] = useState<FeeCampaignDto[]>([])
   const [feeCampaignPageNumber, setFeeCampaignPageNumber] = useState(1)
   const [feeCampaignPageSize, setFeeCampaignPageSize] = useState(10)
@@ -555,6 +557,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
   const [oneTimeLoading, setOneTimeLoading] = useState(true)
   const [feeCampaignsLoading, setFeeCampaignsLoading] = useState(true)
   const [tariffReferencesLoading, setTariffReferencesLoading] = useState(true)
+  const [feeCampaignGarageOptionsLoading, setFeeCampaignGarageOptionsLoading] = useState(false)
   const [tariffSavingRowId, setTariffSavingRowId] = useState<string | null>(null)
   const [oneTimeSavingRowId, setOneTimeSavingRowId] = useState<string | null>(null)
   const [oneTimeDeleteTarget, setOneTimeDeleteTarget] = useState<ContractorOneTimeRow | null>(null)
@@ -638,13 +641,9 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
     async function loadTariffReferences() {
       setTariffReferencesLoading(true)
       try {
-        const [loadedIncomeTypes, loadedGarages] = await Promise.all([
-          dictionaryClient.getIncomeTypes(auth.accessToken, undefined, dictionaryScreenRequestLimit),
-          dictionaryClient.getGarages(auth.accessToken, undefined, dictionaryScreenRequestLimit),
-        ])
+        const loadedIncomeTypes = await dictionaryClient.getIncomeTypes(auth.accessToken, undefined, dictionaryScreenRequestLimit)
         if (!ignore) {
           setBackendIncomeTypes(loadedIncomeTypes)
-          setFeeCampaignGarageOptions(loadedGarages)
         }
       } catch (caught: unknown) {
         if (!ignore) {
@@ -717,6 +716,50 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
 
   function closeFeeCampaignEditDialog() {
     setFeeCampaignEditTarget(null)
+  }
+
+  function ensureFeeCampaignGarageOptions() {
+    if (feeCampaignGarageOptionsLoadedRef.current) {
+      return Promise.resolve(true)
+    }
+
+    if (feeCampaignGarageOptionsRequestRef.current) {
+      return feeCampaignGarageOptionsRequestRef.current
+    }
+
+    setFeeCampaignGarageOptionsLoading(true)
+    const request = dictionaryClient
+      .getGarages(auth.accessToken, undefined, dictionaryScreenRequestLimit)
+      .then((loadedGarages) => {
+        setFeeCampaignGarageOptions(loadedGarages)
+        feeCampaignGarageOptionsLoadedRef.current = true
+        return true
+      })
+      .catch((caught: unknown) => {
+        setTariffPersistenceError(caught instanceof Error ? caught.message : 'Не удалось загрузить гаражи для формы сбора.')
+        return false
+      })
+      .finally(() => {
+        feeCampaignGarageOptionsRequestRef.current = null
+        setFeeCampaignGarageOptionsLoading(false)
+      })
+
+    feeCampaignGarageOptionsRequestRef.current = request
+    return request
+  }
+
+  async function openFeeCampaignCreateDialog() {
+    setTariffPersistenceError(null)
+    if (await ensureFeeCampaignGarageOptions()) {
+      setModal('fee')
+    }
+  }
+
+  async function openFeeCampaignEditDialog(campaign: FeeCampaignDto) {
+    setTariffPersistenceError(null)
+    if (await ensureFeeCampaignGarageOptions()) {
+      setFeeCampaignEditTarget(campaign)
+    }
   }
 
   function closeFeeCampaignRestoreDialog() {
@@ -1628,7 +1671,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
             <FileSpreadsheet size={17} aria-hidden="true" />
             <span>Добавить услугу</span>
           </button>
-          <button className="primary-button contractors-primary-action create-action-button tariffs-action-button" type="button" disabled={tariffReferencesLoading} onClick={() => setModal('fee')}>
+          <button className="primary-button contractors-primary-action create-action-button tariffs-action-button" type="button" disabled={tariffReferencesLoading || feeCampaignGarageOptionsLoading} onClick={() => void openFeeCampaignCreateDialog()}>
             <FileText size={17} aria-hidden="true" />
             <span>Объявить сбор</span>
           </button>
@@ -1940,7 +1983,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
                           <FileText size={16} aria-hidden="true" />
                           <span>Начислить</span>
                         </button>
-                        <button className="icon-button" type="button" aria-label={`Изменить сбор ${campaign.name}`} disabled={!canManageTariffs || feeCampaignSavingId === campaign.id} onClick={() => setFeeCampaignEditTarget(campaign)}>
+                        <button className="icon-button" type="button" aria-label={`Изменить сбор ${campaign.name}`} disabled={!canManageTariffs || feeCampaignSavingId === campaign.id || feeCampaignGarageOptionsLoading} onClick={() => void openFeeCampaignEditDialog(campaign)}>
                           <Pencil size={16} />
                         </button>
                         <button className="icon-button" type="button" aria-label={`Архивировать сбор ${campaign.name}`} disabled={!canManageTariffs || feeCampaignSavingId === campaign.id} onClick={() => {
