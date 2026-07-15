@@ -6315,6 +6315,10 @@ describe('App', () => {
     expect(within(dictionaryPanel).queryByText('21')).not.toBeInTheDocument()
 
     garageCreateDialog = await openDictionaryCreateDialog(user, dictionaryPanel)
+    expect(within(garageCreateDialog).getByLabelText('Справка: Стартовый баланс')).toHaveAttribute('tabindex', '0')
+    expect(within(garageCreateDialog).getByRole('tooltip', { name: /Долг на начало учета/ })).toBeInTheDocument()
+    expect(within(garageCreateDialog).getByLabelText('Справка: Старт воды')).toHaveAttribute('tabindex', '0')
+    expect(within(garageCreateDialog).getByLabelText('Справка: Старт электричества')).toHaveAttribute('tabindex', '0')
     await user.type(within(garageCreateDialog).getByLabelText('Номер гаража'), '21')
     await user.clear(within(garageCreateDialog).getByLabelText('Количество людей'))
     await user.type(within(garageCreateDialog).getByLabelText('Количество людей'), '2')
@@ -6355,6 +6359,8 @@ describe('App', () => {
     expect(within(dictionaryPanel).queryByText('Сибирь Онлайн')).not.toBeInTheDocument()
 
     supplierDialog = await openDictionaryCreateDialog(user, dictionaryPanel)
+    expect(within(supplierDialog).getByLabelText('Справка: Стартовый баланс')).toHaveAttribute('tabindex', '0')
+    expect(within(supplierDialog).getByRole('tooltip', { name: /задолженность поставщику/ })).toBeInTheDocument()
     await user.type(within(supplierDialog).getByLabelText('Название поставщика'), 'Сибирь Онлайн')
     await selectStyledOption(user, supplierDialog, 'Группа для поставщика', 'Связь')
     await user.type(within(supplierDialog).getByLabelText('ИНН поставщика'), '5401000000')

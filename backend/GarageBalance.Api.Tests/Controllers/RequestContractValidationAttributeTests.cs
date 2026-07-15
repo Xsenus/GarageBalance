@@ -1,3 +1,7 @@
+using System.ComponentModel.DataAnnotations;
+using System.Globalization;
+using GarageBalance.Api.Application.Finance;
+
 namespace GarageBalance.Api.Tests.Controllers;
 
 public sealed class RequestContractValidationAttributeTests
@@ -13,6 +17,36 @@ public sealed class RequestContractValidationAttributeTests
             .ToList();
 
         Assert.Empty(offenders);
+    }
+
+    [Fact]
+    public void GarageDebtPaymentValidationIsCultureIndependent()
+    {
+        var originalCulture = CultureInfo.CurrentCulture;
+        var originalUiCulture = CultureInfo.CurrentUICulture;
+
+        try
+        {
+            CultureInfo.CurrentCulture = CultureInfo.GetCultureInfo("ru-RU");
+            CultureInfo.CurrentUICulture = CultureInfo.GetCultureInfo("ru-RU");
+            var request = new CreateGarageDebtPaymentRequest(
+                Guid.NewGuid(),
+                new DateOnly(2026, 7, 15),
+                new DateOnly(2026, 7, 1),
+                1_417.38m,
+                "Полное погашение");
+            var results = new List<ValidationResult>();
+
+            var isValid = Validator.TryValidateObject(request, new ValidationContext(request), results, validateAllProperties: true);
+
+            Assert.True(isValid);
+            Assert.Empty(results);
+        }
+        finally
+        {
+            CultureInfo.CurrentCulture = originalCulture;
+            CultureInfo.CurrentUICulture = originalUiCulture;
+        }
     }
 
     private static string FindApiProjectRoot()

@@ -5576,12 +5576,22 @@ h1 {
 }
 
 .dictionary-editor-dialog {
-  max-width: 620px;
+  box-sizing: border-box;
+  max-width: min(620px, calc(100vw - 32px));
+  overflow-x: hidden;
 }
 
 .dictionary-editor-dialog--owners {
-  width: min(860px, 100%);
+  width: min(860px, calc(100vw - 32px));
   max-width: 860px;
+}
+
+.dictionary-editor-dialog .dictionary-form,
+.dictionary-editor-dialog .dictionary-form-section,
+.dictionary-editor-dialog .inline-fields,
+.dictionary-editor-dialog .owner-name-grid,
+.dictionary-editor-dialog .owner-contact-grid {
+  min-width: 0;
 }
 
 .owner-name-grid,
