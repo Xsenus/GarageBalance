@@ -1118,6 +1118,13 @@ h1 {
   grid-template-columns: minmax(180px, 1.35fr) minmax(84px, 0.55fr) minmax(84px, 0.55fr) minmax(130px, 0.75fr) minmax(140px, 0.9fr) minmax(190px, auto);
 }
 
+.contractors-mini-header--fees > span:nth-child(2),
+.contractors-mini-header--fees > span:nth-child(3),
+.contractors-mini-row--fees > .contractors-fee-money-cell {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
 .contractors-mini-header {
   background: #f8fafc;
   color: #344054;
@@ -2175,6 +2182,11 @@ h1 {
 
 .contractors-inline-field input {
   flex: 1;
+}
+
+.contractors-fee-money-field input {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
 }
 
 .contractors-inline-field--date input {
@@ -4462,6 +4474,11 @@ h1 {
   background: #ffffff;
   box-shadow: 0 16px 32px rgba(16, 24, 40, 0.16);
   padding: 12px;
+}
+
+.localized-date-picker__popover--above {
+  top: auto;
+  bottom: calc(100% + 6px);
 }
 
 .localized-date-picker__heading {

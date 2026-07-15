@@ -9,7 +9,7 @@ import type { FormStateClient } from '../../services/formStatesApi'
 import { hasPermission, permissions } from '../../shared/accessControl'
 import { EmptyState, TableLoadingState } from '../../shared/AsyncState'
 import type { ChangePreview } from '../../shared/changePreview'
-import { appendChangePreview, formatChangeDate, formatChangeMoney, formatChangeNumber, formatChangeText } from '../../shared/changePreview'
+import { appendChangePreview, formatChangeDate, formatChangeNumber, formatChangeText } from '../../shared/changePreview'
 import { FormError } from '../../shared/formFeedback'
 import { FormField } from '../../shared/FormField'
 import { formatDateOnly, formatMoney, getCurrentMonthInputValue, getLocalDateInputValue } from '../../shared/formatters'
@@ -482,8 +482,8 @@ function getFeeCampaignChangePreview(
   appendChangePreview(changes, 'Наименование', formatChangeText(campaign.name), formatChangeText(request.name))
   appendChangePreview(changes, 'Вид поступления', formatIncomeType(campaign.incomeTypeId), formatIncomeType(request.incomeTypeId))
   appendChangePreview(changes, 'Цель', formatChangeText(campaign.goal), formatChangeText(request.goal))
-  appendChangePreview(changes, 'Сумма взноса', formatChangeMoney(campaign.contributionAmount), formatChangeMoney(request.contributionAmount))
-  appendChangePreview(changes, 'Сумма сбора', formatChangeMoney(campaign.targetAmount), formatChangeMoney(request.targetAmount))
+  appendChangePreview(changes, 'Сумма взноса', formatTariffDecimal(campaign.contributionAmount), formatTariffDecimal(request.contributionAmount))
+  appendChangePreview(changes, 'Сумма сбора', formatTariffDecimal(campaign.targetAmount), formatTariffDecimal(request.targetAmount))
   appendChangePreview(changes, 'Дата начала', formatChangeDate(campaign.startsOn), formatChangeDate(request.startsOn))
   appendChangePreview(changes, 'Дата окончания', formatChangeDate(campaign.endsOn), formatChangeDate(request.endsOn))
   appendChangePreview(
@@ -1837,8 +1837,8 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
                     <strong>{campaign.name}</strong>
                     <small>{campaign.incomeTypeName}{campaign.goal ? ` · ${campaign.goal}` : ''}</small>
                   </span>
-                  <span>{formatMoney(campaign.contributionAmount)}</span>
-                  <span>{formatMoney(campaign.targetAmount)}</span>
+                  <span className="contractors-fee-money-cell">{formatTariffDecimal(campaign.contributionAmount)}</span>
+                  <span className="contractors-fee-money-cell">{formatTariffDecimal(campaign.targetAmount)}</span>
                   <span>{formatFeeCampaignParticipantSummary(campaign)}</span>
                   <span>{formatDateOnly(campaign.startsOn)}{campaign.endsOn ? ` - ${formatDateOnly(campaign.endsOn)}` : ''}</span>
                   <span className="contractors-mini-actions">
@@ -2498,8 +2498,8 @@ function AddFeePrototypeDialog({
   const [name, setName] = useState(initialCampaign?.name ?? '')
   const [incomeTypeId, setIncomeTypeId] = useState(initialCampaign?.incomeTypeId ?? incomeTypes[0]?.id ?? '')
   const [goal, setGoal] = useState(initialCampaign?.goal ?? '')
-  const [contributionAmount, setContributionAmount] = useState(initialCampaign ? String(initialCampaign.contributionAmount) : '')
-  const [targetAmount, setTargetAmount] = useState(initialCampaign ? String(initialCampaign.targetAmount) : '')
+  const [contributionAmount, setContributionAmount] = useState(initialCampaign ? formatTariffDecimal(initialCampaign.contributionAmount) : '')
+  const [targetAmount, setTargetAmount] = useState(initialCampaign ? formatTariffDecimal(initialCampaign.targetAmount) : '')
   const [startsOn, setStartsOn] = useState(initialCampaign?.startsOn ?? getLocalDateInputValue())
   const [endsOn, setEndsOn] = useState(initialCampaign?.endsOn ?? '')
   const [appliesToAllGarages, setAppliesToAllGarages] = useState(initialCampaign?.appliesToAllGarages ?? true)
@@ -2642,14 +2642,14 @@ function AddFeePrototypeDialog({
           </FormField>
           <div className="contractors-fee-two-column-grid">
             <FormField label="Сумма взноса">
-              <div className="contractors-inline-field">
-                <input aria-label="Сумма взноса" inputMode="decimal" value={contributionAmount} onChange={(event) => setContributionAmount(event.target.value)} />
+              <div className="contractors-inline-field contractors-fee-money-field">
+                <input aria-label="Сумма взноса" inputMode="decimal" value={contributionAmount} onChange={(event) => setContributionAmount(event.target.value)} onBlur={() => setContributionAmount(formatTariffDecimal(contributionAmount))} />
                 <span>руб.</span>
               </div>
             </FormField>
             <FormField label="Сумма сбора">
-              <div className="contractors-inline-field">
-                <input aria-label="Сумма сбора" inputMode="decimal" value={targetAmount} onChange={(event) => setTargetAmount(event.target.value)} />
+              <div className="contractors-inline-field contractors-fee-money-field">
+                <input aria-label="Сумма сбора" inputMode="decimal" value={targetAmount} onChange={(event) => setTargetAmount(event.target.value)} onBlur={() => setTargetAmount(formatTariffDecimal(targetAmount))} />
                 <span>руб.</span>
               </div>
             </FormField>
@@ -2682,10 +2682,10 @@ function AddFeePrototypeDialog({
           ) : null}
           <div className="contractors-fee-date-grid">
             <FormField label="Дата начала">
-              <LocalizedDatePicker ariaLabel="Дата начала" mode="date" value={startsOn} onChange={setStartsOn} />
+              <LocalizedDatePicker ariaLabel="Дата начала" mode="date" placement="above" value={startsOn} onChange={setStartsOn} />
             </FormField>
             <FormField label="Дата окончания сбора">
-              <LocalizedDatePicker ariaLabel="Дата окончания сбора" mode="date" value={endsOn} onChange={setEndsOn} />
+              <LocalizedDatePicker ariaLabel="Дата окончания сбора" mode="date" placement="above" value={endsOn} onChange={setEndsOn} />
             </FormField>
           </div>
           <FormField label="Перенос долга по сбору в просроченный">
