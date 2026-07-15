@@ -8,6 +8,7 @@ DEPLOY_USER="garagebalance-deploy"
 APP_USER="garagebalance"
 APP_GROUP="garagebalance"
 PUBLIC_HOST="sgk.blagodaty.ru"
+FRONTEND_ASSET_RETENTION_DAYS=30
 
 release_id="${1:-}"
 
@@ -110,6 +111,14 @@ tar -xzf "$FRONTEND_ARCHIVE" -C "$NEXT_FRONTEND"
 
 [[ -f "${NEXT_API}/GarageBalance.Api" ]] || fail "published API executable was not found"
 [[ -f "${NEXT_FRONTEND}/index.html" ]] || fail "frontend index.html was not found"
+
+# Keep content-hashed assets from recent releases available for browser tabs that
+# were open during deployment. New files win; preserved files are pruned by age.
+if [[ -d "${APP_ROOT}/frontend/assets" ]]; then
+  mkdir -p "${NEXT_FRONTEND}/assets"
+  cp -a -n "${APP_ROOT}/frontend/assets/." "${NEXT_FRONTEND}/assets/"
+  find "${NEXT_FRONTEND}/assets" -type f -mtime "+${FRONTEND_ASSET_RETENTION_DAYS}" -delete
+fi
 
 chmod +x "${NEXT_API}/GarageBalance.Api"
 find "$NEXT_API" "$NEXT_FRONTEND" -type d -exec chmod 755 {} +

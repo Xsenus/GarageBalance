@@ -15,6 +15,7 @@ import type { UserManagementClient } from '../../services/usersApi'
 import type { ApplicationSettingsClient } from '../../services/settingsApi'
 import { hasAnyPermission, hasPermission, permissions } from '../../shared/accessControl'
 import { AsyncErrorBoundary, TableLoadingState } from '../../shared/AsyncState'
+import { isLazyChunkLoadError, recoverFromLazyChunkError } from '../../shared/lazyChunkRecovery'
 import { useEscapeKey, useFocusOnOpen, useFocusTrap, useRestoreFocusOnClose } from '../../shared/focusHooks'
 import type { AuditPanelPreset, WorkspaceOpenContext, WorkspaceSection } from '../../shared/workspaceNavigation'
 import { AuditPanel, ContractorsPrototypePanel, DictionaryPanelV2, FinancePanel, FundsPrototypePanel, ImportPanel, MeterReadingsPrototypePanel, PasswordPanel, preloadWorkspaceSection, ReleasePanel, ReportPanel, TariffsAndFeesPrototypePanel, UserManagementPanel } from './workspaceSectionLoader'
@@ -22,24 +23,30 @@ import { AuditPanel, ContractorsPrototypePanel, DictionaryPanelV2, FinancePanel,
 export function WorkspaceSectionErrorBoundary({ children, onReturn }: { children: ReactNode; onReturn?: () => void }) {
   return (
     <AsyncErrorBoundary
-      onError={(error, info) => console.error('Не удалось загрузить рабочий раздел.', error, info.componentStack)}
-      fallback={() => (
-        <section className="access-notice" role="alert" aria-label="Не удалось загрузить раздел">
-          <AlertTriangle size={20} aria-hidden="true" />
-          <div>
-            <p className="eyebrow">Ошибка загрузки</p>
-            <h2>Раздел временно недоступен</h2>
-            <p>Проверьте соединение и перезагрузите страницу. Введённые в других разделах данные не изменены.</p>
-            <div className="modal-actions">
-              {onReturn ? <button className="secondary-button" type="button" onClick={onReturn}>К главному меню</button> : null}
-              <button className="primary-button" type="button" onClick={() => window.location.reload()}>
+      onError={(error, info) => {
+        console.error('Не удалось загрузить рабочий раздел.', error, info.componentStack)
+        recoverFromLazyChunkError(error)
+      }}
+      fallback={(error, reset) => {
+        const chunkError = isLazyChunkLoadError(error)
+        return (
+          <section className="section-load-error" role="alert" aria-label="Не удалось загрузить раздел">
+            <span className="section-load-error__icon" aria-hidden="true"><AlertTriangle size={22} /></span>
+            <p className="eyebrow">Раздел не открылся</p>
+            <h2>{chunkError ? 'Приложение было обновлено' : 'Не удалось открыть раздел'}</h2>
+            <p>{chunkError
+              ? 'Открыта предыдущая версия страницы. Обновите приложение, чтобы безопасно продолжить работу.'
+              : 'Возникла временная ошибка. Повторите загрузку раздела — данные в других разделах не изменены.'}</p>
+            <div className="section-load-error__actions">
+              {onReturn ? <button className="secondary-button" type="button" onClick={onReturn}>На главную</button> : null}
+              <button className="primary-button" type="button" onClick={chunkError ? () => window.location.reload() : reset}>
                 <RotateCw size={16} aria-hidden="true" />
-                <span>Перезагрузить страницу</span>
+                <span>{chunkError ? 'Обновить приложение' : 'Повторить загрузку'}</span>
               </button>
             </div>
-          </div>
-        </section>
-      )}
+          </section>
+        )
+      }}
     >
       {children}
     </AsyncErrorBoundary>
