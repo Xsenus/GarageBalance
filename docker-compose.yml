@@ -1,3 +1,5 @@
+name: garagebalance
+
 services:
   postgres:
     image: postgres:17-alpine
@@ -23,6 +25,8 @@ services:
       context: .
       dockerfile: backend/GarageBalance.Api/Dockerfile
     container_name: garagebalance-api
+    restart: unless-stopped
+    init: true
     depends_on:
       postgres:
         condition: service_healthy
@@ -33,8 +37,18 @@ services:
       Jwt__SigningKey: ${JWT_SIGNING_KEY:?Set JWT_SIGNING_KEY in .env before running docker compose}
       DataProtection__KeysPath: ${DATA_PROTECTION_KEYS_PATH:-/var/lib/garagebalance/keys}
       Cors__AllowedOrigins__0: ${FRONTEND_ORIGIN:-http://127.0.0.1:5173}
+      Database__ApplyMigrationsOnStartup: ${APPLY_MIGRATIONS_ON_STARTUP:-true}
+      Database__RequirePreMigrationBackup: ${REQUIRE_PRE_MIGRATION_BACKUP:-true}
+      DatabaseBackup__Enabled: ${DATABASE_BACKUP_ENABLED:-true}
+      DatabaseBackup__AutomaticEnabled: ${DATABASE_BACKUP_AUTOMATIC_ENABLED:-true}
+      DatabaseBackup__Directory: /backups
+      DatabaseBackup__IntervalHours: ${DATABASE_BACKUP_INTERVAL_HOURS:-24}
+      DatabaseBackup__RetentionCount: ${DATABASE_BACKUP_RETENTION_COUNT:-30}
+      DatabaseBackup__PgDumpPath: pg_dump
+      DatabaseBackup__PgRestorePath: pg_restore
     volumes:
       - data-protection-keys:${DATA_PROTECTION_KEYS_PATH:-/var/lib/garagebalance/keys}
+      - ${BACKUP_HOST_PATH:-./backups}:/backups
     ports:
       - "${API_BIND_ADDRESS:-127.0.0.1}:${API_PORT:-5080}:8080"
     healthcheck:
@@ -42,12 +56,16 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+      start_period: 30s
+    stop_grace_period: 30s
 
   frontend:
     build:
       context: .
       dockerfile: frontend/Dockerfile
     container_name: garagebalance-frontend
+    restart: unless-stopped
+    init: true
     depends_on:
       api:
         condition: service_healthy
