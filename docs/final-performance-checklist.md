@@ -318,3 +318,16 @@ No schema, financial formula, business rule, production data, cleanup policy or 
 - [x] Production was checked read-only without deployment: five public health requests and the frontend returned HTTP 200. After the first TLS connection, health completed in 0.159-0.245 seconds and the frontend in 0.160 seconds.
 
 No schema, financial formula, business rule, production data, cleanup policy or deployment configuration changed in this pass. Local PostgreSQL project credentials remain unavailable; PostgreSQL behavior is protected by query-shape guards, EF integration tests and idempotent migration generation. End-user release note `0.678.0` describes the faster financial summary. Push and deployment remain intentionally pending because this task did not authorize publication.
+
+## Twentieth deferred payment-form reference audit: 2026-07-16
+
+- [x] Removed six unconditional dictionary requests from the normal payment-screen opening path when the extended financial overview is disabled: supplier groups, suppliers, staff members, income types, expense types and tariffs are now requested only when a form that needs them is opened.
+- [x] Preserved the extended overview mode. When that user setting is enabled, the same reference bundle is prepared automatically so its existing inline finance forms retain their initialized selections and calculations.
+- [x] Added in-flight reuse, successful-result caching and failure eviction. Concurrent form actions share one request, reopening a form does not reload successful dictionaries, and a failed request leaves the form closed with a visible error and can be retried by the user.
+- [x] Protected authentication/client changes and unmounts with a generation guard so an obsolete response cannot overwrite the current session's form dictionaries.
+- [x] Added a workflow regression covering the zero-request initial state, all six deferred calls, visible failure, user retry, successful dialog opening and cache reuse. Existing income, expense and payment-modal workflows passed separately before the complete suite.
+- [x] Complete verification passed: backend 1618/1618 with 88.92% line and 70.93% branch coverage; frontend 524/524 with 81.26% statements, 71.93% branches, 77.04% functions and 81.83% lines.
+- [x] ESLint, production build, backend formatting, privacy scan of 696 files, Docker Compose validation, standalone backend publish, strict release JSON/UTF-8 validation, whitespace checks and 128700-byte idempotent migration SQL generation passed. The production bundle remains within budget: main JavaScript 75.7 KiB gzip, main CSS 19.1 KiB gzip and total JavaScript/CSS 225.9/260.0 KiB gzip.
+- [x] Production was checked read-only without deployment: five public health requests and the frontend returned HTTP 200. After the first TLS connection, health completed in 0.161-0.171 seconds and the frontend in 0.168 seconds.
+
+No schema, financial formula, business rule, production data, cleanup policy or deployment configuration changed in this pass. Local PostgreSQL project credentials remain unavailable, so no local data mutation was attempted. End-user release note `0.679.0` describes the faster payment-screen opening and safe retry behavior. Push and deployment remain intentionally pending because this task did not authorize publication.
