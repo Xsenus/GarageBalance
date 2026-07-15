@@ -1330,6 +1330,27 @@ public sealed class DictionaryServiceTests
     }
 
     [Fact]
+    public void IrregularPaymentDefaultsMigration_RestoresCustomerPaymentsIdempotentlyAndWritesAudit()
+    {
+        var migration = File.ReadAllText(Path.Combine(
+            FindApiProjectRoot(),
+            "Infrastructure",
+            "Data",
+            "Migrations",
+            "20260715022028_RestoreIrregularPaymentDefaults.cs"));
+
+        Assert.Contains("'Вступительный взнос', 5000.00::numeric", migration, StringComparison.Ordinal);
+        Assert.Contains("'Подключение канализации', 10000.00::numeric", migration, StringComparison.Ordinal);
+        Assert.Contains("'Подключение к линии электросети', 15000.00::numeric", migration, StringComparison.Ordinal);
+        Assert.Contains("ON CONFLICT (\"Id\") DO UPDATE", migration, StringComparison.Ordinal);
+        Assert.Contains("LOWER(BTRIM(existing.\"Name\")) = LOWER(BTRIM(defaults.\"Name\"))", migration, StringComparison.Ordinal);
+        Assert.Contains("LOWER('Подключение линии электросети')", migration, StringComparison.Ordinal);
+        Assert.Contains("\"IsArchived\" = FALSE", migration, StringComparison.Ordinal);
+        Assert.Contains("dictionary.irregular_payment_defaults_restored", migration, StringComparison.Ordinal);
+        Assert.Contains("\"CreatedAtUtc\" = TIMESTAMPTZ '2026-07-15T02:20:28Z'", migration, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void DemoTariffCatalogNormalizationMigration_UpdatesOnlyKnownLightingRelationshipAndWritesAudit()
     {
         var migration = File.ReadAllText(Path.Combine(
