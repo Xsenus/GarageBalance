@@ -1506,7 +1506,7 @@ public sealed class DictionaryServiceTests
         Assert.Equal(actorUserId, audit.ActorUserId);
         Assert.Contains("Вода", audit.Summary, StringComparison.Ordinal);
         Assert.Contains("база meter_water", audit.Summary, StringComparison.Ordinal);
-        Assert.Contains("ставка 12.3456", audit.Summary, StringComparison.Ordinal);
+        Assert.Contains("ставка 12.35", audit.Summary, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -1539,9 +1539,9 @@ public sealed class DictionaryServiceTests
         Assert.Equal(5.3333m, result.Value.ElectricityThirdRate);
         var audit = Assert.Single(database.Context.AuditEvents, item => item.Action == "dictionary.tariff_created");
         Assert.Equal(actorUserId, audit.ActorUserId);
-        Assert.Contains("электричество: От 0 кВт до 50.556 кВт по 3.1111", audit.Summary, StringComparison.Ordinal);
-        Assert.Contains("От 50.556 кВт до 100.778 кВт по 4.2222", audit.Summary, StringComparison.Ordinal);
-        Assert.Contains("От 100.778 кВт по 5.3333", audit.Summary, StringComparison.Ordinal);
+        Assert.Contains("электричество: От 0 кВт до 50.556 кВт по 3.11", audit.Summary, StringComparison.Ordinal);
+        Assert.Contains("От 50.556 кВт до 100.778 кВт по 4.22", audit.Summary, StringComparison.Ordinal);
+        Assert.Contains("От 100.778 кВт по 5.33", audit.Summary, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -1591,7 +1591,7 @@ public sealed class DictionaryServiceTests
         Assert.Equal(actorUserId, audit.ActorUserId);
         Assert.Contains("Вода новая", audit.Summary, StringComparison.Ordinal);
         Assert.Contains("база people", audit.Summary, StringComparison.Ordinal);
-        Assert.Contains("ставка 20.5556", audit.Summary, StringComparison.Ordinal);
+        Assert.Contains("ставка 20.56", audit.Summary, StringComparison.Ordinal);
         using var metadata = JsonDocument.Parse(audit.MetadataJson!);
         Assert.Equal("tariff", metadata.RootElement.GetProperty("dictionaryEntityType").GetString());
         var changedFields = metadata.RootElement.GetProperty("changedFields").GetString();

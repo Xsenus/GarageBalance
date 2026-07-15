@@ -605,7 +605,7 @@ public sealed class ProjectWideRoadmapStatusTests
         Assert.StartsWith("- `[x]`", detailLine, StringComparison.Ordinal);
 
         Assert.Contains("<h3 id=\"full-payment-title\">Полная оплата</h3>", financePanelText, StringComparison.Ordinal);
-        Assert.Contains("aria-label=\"Сумма полной оплаты\" inputMode=\"decimal\" value={amount} readOnly", financePanelText, StringComparison.Ordinal);
+        Assert.Contains("<MoneyTextInput aria-label=\"Сумма полной оплаты\" value={amount} onValueChange={setAmount} readOnly", financePanelText, StringComparison.Ordinal);
         Assert.Contains("createGarageDebtPayment", financePanelText, StringComparison.Ordinal);
         Assert.Contains("shows payments prototype and opens payment form modals", appTestsText, StringComparison.Ordinal);
         Assert.Contains("pays opening debt through full payment when worksheet has no service rows", appTestsText, StringComparison.Ordinal);

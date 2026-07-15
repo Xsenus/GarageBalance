@@ -22,7 +22,7 @@ describe('change preview helpers', () => {
     expect(formatChangeNumber(Number.NaN)).toBe('пусто')
     expect(formatChangeNumber(undefined)).toBe('пусто')
 
-    expect(formatChangeMoney(1200.5)).toBe('1\u00a0200,50')
+    expect(formatChangeMoney(1200.5)).toBe('1 200.50')
     expect(formatChangeMoney(null)).toBe('пусто')
 
     expect(formatChangeDate('2026-07-03')).toBe('03.07.2026')
@@ -53,7 +53,7 @@ describe('change preview helpers', () => {
 
     expect(changes).toEqual([
       { field: 'Адрес', before: 'пусто', after: 'ул. Ленина' },
-      { field: 'Сумма', before: '0,00', after: '1\u00a0500,00' },
+      { field: 'Сумма', before: '0.00', after: '1 500.00' },
     ])
   })
 
@@ -85,7 +85,7 @@ describe('change preview helpers', () => {
     appendChangePreview(changes, 'Токен интеграции', formatSensitiveChange(''), formatSensitiveChange('fresh-secret'))
 
     expect(changes).toEqual([
-      { field: 'Сумма', before: '1\u00a0500,00', after: '1\u00a0750,00' },
+      { field: 'Сумма', before: '1 500.00', after: '1 750.00' },
       { field: 'Дата', before: '01.07.2026', after: '03.07.2026' },
       { field: 'Вид начисления', before: 'Водоснабжение', after: 'Электроэнергия' },
       { field: 'Токен интеграции', before: 'пусто', after: 'изменено' },

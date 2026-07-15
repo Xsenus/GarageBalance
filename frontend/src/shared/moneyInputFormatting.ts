@@ -17,3 +17,16 @@ export function formatMoneyInput(value: number): string {
     maximumFractionDigits: 2,
   }).format(value).replace(/,/g, ' ')
 }
+
+export function formatMoneyTextInput(value: string | number | null | undefined): string {
+  if (value === null || value === undefined || (typeof value === 'string' && value.trim() === '')) {
+    return ''
+  }
+
+  const numericValue = typeof value === 'number' ? value : parseMoneyInput(value)
+  if (!Number.isFinite(numericValue)) {
+    return typeof value === 'string' ? value : ''
+  }
+
+  return formatMoneyInput(numericValue)
+}

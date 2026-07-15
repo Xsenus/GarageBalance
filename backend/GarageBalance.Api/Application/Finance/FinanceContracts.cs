@@ -330,7 +330,7 @@ public sealed record CreateGarageDebtPaymentRequest(
     Guid GarageId,
     DateOnly OperationDate,
     DateOnly AccountingMonth,
-    [Range(typeof(decimal), "0.01", "79228162514264337593543950335")] decimal Amount,
+    [Range(0.01, 999999999)] decimal Amount,
     [MaxLength(1000)] string? Comment);
 
 public sealed record ExpenseWorksheetRequest(

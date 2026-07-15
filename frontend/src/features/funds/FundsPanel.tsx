@@ -8,6 +8,8 @@ import { appendChangePreview, formatChangeMoney, formatChangeText } from '../../
 import { LoadingSkeleton, TableLoadingState } from '../../shared/AsyncState'
 import { FormField } from '../../shared/FormField'
 import { formatDateTime, formatMoney } from '../../shared/formatters'
+import { MoneyTextInput } from '../../shared/MoneyInput'
+import { formatMoneyTextInput, parseMoneyInput } from '../../shared/moneyInputFormatting'
 import { useEscapeKey, useFocusOnOpen, useFocusTrap, useRestoreFocusOnClose } from '../../shared/focusHooks'
 import { createEmptyPage, createFallbackPage } from '../../shared/pagination'
 import { TablePagination } from '../../shared/TablePagination'
@@ -196,7 +198,7 @@ export function FundsPrototypePanel({ auth, fundsClient }: { auth: AuthResponse;
   function openFundOperationEdit(fundOperation: FundOperationDto) {
     setOperationEdit({
       operation: fundOperation,
-      amount: String(fundOperation.amount).replace('.', ','),
+      amount: formatMoneyTextInput(fundOperation.amount),
       reason: fundOperation.reason,
     })
     setOperationError(null)
@@ -239,12 +241,11 @@ export function FundsPrototypePanel({ auth, fundsClient }: { auth: AuthResponse;
   }
 
   function parseFundOperationAmount(value: string) {
-    const normalized = value.trim().replace(',', '.')
-    if (!normalized) {
+    if (!value.trim()) {
       return null
     }
 
-    const amount = Number(normalized)
+    const amount = parseMoneyInput(value)
     return Number.isFinite(amount) && amount > 0 ? amount : null
   }
 
@@ -566,17 +567,15 @@ export function FundsPrototypePanel({ auth, fundsClient }: { auth: AuthResponse;
             <p className="confirmation-text" id="fund-operation-description">Проверьте сумму и укажите причину. Операция будет сохранена и записана в историю изменений.</p>
             <form className="dictionary-modal-form" onSubmit={submitFundOperation}>
               <FormField label="Сумма">
-                <input
+                <MoneyTextInput
                   aria-label="Сумма операции фонда"
-                  inputMode="decimal"
                   value={operation.amount}
-                  onChange={(event) => {
-                    setOperation({ ...operation, amount: event.target.value })
+                  onValueChange={(amount) => {
+                    setOperation({ ...operation, amount })
                     if (operationError) {
                       setOperationError(null)
                     }
                   }}
-                  placeholder="0,00"
                 />
               </FormField>
               {operation.kind === 'deposit' && availableToDistribute !== null ? (
@@ -639,12 +638,11 @@ export function FundsPrototypePanel({ auth, fundsClient }: { auth: AuthResponse;
             <p className="confirmation-text" id="fund-operation-edit-description">Проверьте сумму и основание. Изменение пересчитает остаток фонда и попадет в историю изменений.</p>
             <form className="dictionary-modal-form" onSubmit={submitFundOperationEdit}>
               <FormField label="Сумма">
-                <input
+                <MoneyTextInput
                   aria-label="Новая сумма операции фонда"
-                  inputMode="decimal"
                   value={operationEdit.amount}
-                  onChange={(event) => {
-                    setOperationEdit({ ...operationEdit, amount: event.target.value })
+                  onValueChange={(amount) => {
+                    setOperationEdit({ ...operationEdit, amount })
                     if (operationError) {
                       setOperationError(null)
                     }

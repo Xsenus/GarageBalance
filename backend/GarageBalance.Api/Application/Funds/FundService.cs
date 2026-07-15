@@ -85,7 +85,7 @@ public sealed class FundService(IFundRepository repository, IAuditEventWriter au
             {
                 return FundResult<FundOperationDto>.Failure(
                     "fund_distribution_amount_exceeded",
-                    $"Сумма пополнения не может превышать доступную к распределению сумму {availableToDistribute:0.00} руб.");
+                    $"Сумма пополнения не может превышать доступную к распределению сумму {MoneyFormatting.Format(availableToDistribute)} руб.");
             }
         }
 
@@ -156,7 +156,7 @@ public sealed class FundService(IFundRepository repository, IAuditEventWriter au
             {
                 return FundResult<FundOperationDto>.Failure(
                     "fund_distribution_amount_exceeded",
-                    $"Сумма увеличения пополнения не может превышать доступную к распределению сумму {availableToDistribute:0.00} руб.");
+                    $"Сумма увеличения пополнения не может превышать доступную к распределению сумму {MoneyFormatting.Format(availableToDistribute)} руб.");
             }
         }
 
@@ -227,7 +227,7 @@ public sealed class FundService(IFundRepository repository, IAuditEventWriter au
             {
                 return FundResult<FundOperationDto>.Failure(
                     "fund_distribution_amount_exceeded",
-                    $"Сумма восстановления не может превышать доступную к распределению сумму {availableToDistribute:0.00} руб.");
+                    $"Сумма восстановления не может превышать доступную к распределению сумму {MoneyFormatting.Format(availableToDistribute)} руб.");
             }
         }
 
@@ -395,7 +395,7 @@ public sealed class FundService(IFundRepository repository, IAuditEventWriter au
             Action: operation.OperationKind == FundOperationKinds.Deposit ? "fund.operation_deposited" : "fund.operation_withdrawn",
             EntityType: "fund_operation",
             EntityId: operation.Id.ToString(),
-            Summary: $"{actionLabel} фонда {fund.Name} на сумму {operation.Amount:0.##} руб.",
+            Summary: $"{actionLabel} фонда {fund.Name} на сумму {MoneyFormatting.Format(operation.Amount)} руб.",
             Section: "funds",
             ActionKind: "create",
             EntityDisplayName: fund.Name,
@@ -429,7 +429,7 @@ public sealed class FundService(IFundRepository repository, IAuditEventWriter au
             actorUserId,
             "fund.operation_canceled",
             "cancel",
-            $"Отменена операция фонда {fund.Name}: {FormatOperationKind(operation.OperationKind)} на сумму {operation.Amount:0.##} руб.",
+            $"Отменена операция фонда {fund.Name}: {FormatOperationKind(operation.OperationKind)} на сумму {MoneyFormatting.Format(operation.Amount)} руб.",
             reason);
     }
 
@@ -441,7 +441,7 @@ public sealed class FundService(IFundRepository repository, IAuditEventWriter au
             actorUserId,
             "fund.operation_restored",
             "restore",
-            $"Восстановлена операция фонда {fund.Name}: {FormatOperationKind(operation.OperationKind)} на сумму {operation.Amount:0.##} руб.",
+            $"Восстановлена операция фонда {fund.Name}: {FormatOperationKind(operation.OperationKind)} на сумму {MoneyFormatting.Format(operation.Amount)} руб.",
             null);
     }
 
@@ -452,7 +452,7 @@ public sealed class FundService(IFundRepository repository, IAuditEventWriter au
             Action: "fund.operation_updated",
             EntityType: "fund_operation",
             EntityId: operation.Id.ToString(),
-            Summary: $"Изменена операция фонда {fund.Name}: {FormatOperationKind(operation.OperationKind)} на сумму {operation.Amount:0.##} руб.",
+            Summary: $"Изменена операция фонда {fund.Name}: {FormatOperationKind(operation.OperationKind)} на сумму {MoneyFormatting.Format(operation.Amount)} руб.",
             Section: "funds",
             ActionKind: "update",
             EntityDisplayName: fund.Name,

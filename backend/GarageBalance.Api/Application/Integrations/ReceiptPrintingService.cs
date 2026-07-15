@@ -1,4 +1,5 @@
 using GarageBalance.Api.Application.Audit;
+using GarageBalance.Api.Application.Common;
 using GarageBalance.Api.Domain.Finance;
 
 namespace GarageBalance.Api.Application.Integrations;
@@ -89,7 +90,7 @@ public sealed class ReceiptPrintingService(
             auditAction,
             "receipt_printing",
             operation.Id.ToString(),
-            Summary: $"{actionLabel}: поступление {documentNumber} на сумму {operation.Amount:0.00}.",
+            Summary: $"{actionLabel}: поступление {documentNumber} на сумму {MoneyFormatting.Format(operation.Amount)}.",
             Section: "integrations",
             ActionKind: actionKind,
             EntityDisplayName: isCopy ? $"Копия квитанции {documentNumber}" : $"Квитанция {documentNumber}",

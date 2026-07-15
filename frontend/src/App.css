@@ -362,6 +362,65 @@
   font-size: 12px;
 }
 
+.section-load-error {
+  width: min(100%, 620px);
+  margin: clamp(28px, 8vh, 80px) auto;
+  padding: 28px;
+  border: 1px solid #dce3ee;
+  border-radius: 14px;
+  background: #ffffff;
+  box-shadow: 0 18px 45px rgba(15, 23, 42, 0.08);
+  text-align: center;
+}
+
+.section-load-error__icon {
+  display: inline-grid;
+  place-items: center;
+  width: 46px;
+  height: 46px;
+  margin-bottom: 14px;
+  border-radius: 50%;
+  background: #fff4e5;
+  color: #b54708;
+}
+
+.section-load-error h2 {
+  margin: 4px 0 8px;
+  color: #101828;
+  font-size: 21px;
+}
+
+.section-load-error > p:not(.eyebrow) {
+  max-width: 500px;
+  margin: 0 auto;
+  color: #475467;
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+.section-load-error__actions {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  margin-top: 22px;
+}
+
+@media (max-width: 560px) {
+  .section-load-error {
+    margin: 20px auto;
+    padding: 22px 18px;
+  }
+
+  .section-load-error__actions {
+    flex-direction: column-reverse;
+  }
+
+  .section-load-error__actions button {
+    width: 100%;
+    justify-content: center;
+  }
+}
+
 .primary-button {
   border: 0;
   border-radius: 8px;
@@ -3266,21 +3325,47 @@ h1 {
 
 .payments-prototype-owner-row .payments-prototype-actions {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
   min-width: 0;
 }
 
-.payments-prototype-owner-row .payments-prototype-actions .secondary-button {
+.payments-prototype-owner-row .payments-prototype-action-button {
+  display: inline-flex;
+  align-items: center;
   justify-content: center;
+  gap: 8px;
   min-width: 0;
-  min-height: 42px;
+  min-height: 58px;
+  padding: 8px 10px;
   color: #ffffff;
-  white-space: nowrap;
+  line-height: 1.2;
+  text-align: center;
+  white-space: normal;
 }
 
-.payments-prototype-owner-row .payments-prototype-actions .secondary-button span,
-.payments-prototype-owner-row .payments-prototype-actions .secondary-button svg {
+.payments-prototype-owner-row .payments-prototype-action-button span {
+  min-width: 0;
+  text-wrap: balance;
+}
+
+.payments-prototype-owner-row .payments-prototype-action-button svg {
+  flex: 0 0 auto;
+}
+
+.payments-prototype-owner-row .payments-prototype-action-button span,
+.payments-prototype-owner-row .payments-prototype-action-button svg {
   color: #ffffff;
+}
+
+@media (max-width: 1400px) {
+  .payments-prototype-owner-row {
+    grid-template-columns: minmax(90px, 0.35fr) minmax(220px, 0.8fr) minmax(180px, 0.7fr);
+  }
+
+  .payments-prototype-owner-row .payments-prototype-actions {
+    grid-column: 1 / -1;
+  }
 }
 
 .payments-prototype-card {
@@ -5507,12 +5592,22 @@ h1 {
 }
 
 .dictionary-editor-dialog {
-  max-width: 620px;
+  box-sizing: border-box;
+  max-width: min(620px, calc(100vw - 32px));
+  overflow-x: hidden;
 }
 
 .dictionary-editor-dialog--owners {
-  width: min(860px, 100%);
+  width: min(860px, calc(100vw - 32px));
   max-width: 860px;
+}
+
+.dictionary-editor-dialog .dictionary-form,
+.dictionary-editor-dialog .dictionary-form-section,
+.dictionary-editor-dialog .inline-fields,
+.dictionary-editor-dialog .owner-name-grid,
+.dictionary-editor-dialog .owner-contact-grid {
+  min-width: 0;
 }
 
 .owner-name-grid,
@@ -6921,7 +7016,7 @@ button.operation-row:focus-visible {
   }
 
   .payments-prototype-owner-row .payments-prototype-actions {
-    flex-wrap: wrap;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .app-shell {
@@ -7132,6 +7227,10 @@ button.operation-row:focus-visible {
   .payments-prototype-selected-item {
     max-width: none;
     flex-basis: 100%;
+  }
+
+  .payments-prototype-owner-row .payments-prototype-actions {
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .payments-prototype-search-option:nth-child(odd) {

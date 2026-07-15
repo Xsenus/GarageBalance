@@ -8,9 +8,31 @@ function BrokenSection(): never {
   throw new Error('chunk unavailable')
 }
 
+function StaleChunkSection(): never {
+  throw new TypeError('Failed to fetch dynamically imported module: /assets/FinancePanel-old.js')
+}
+
 describe('WorkspaceSectionErrorBoundary', () => {
   afterEach(() => {
     vi.restoreAllMocks()
+    window.sessionStorage.clear()
+  })
+
+  it('explains a stale application version and offers an explicit update', () => {
+    vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    window.sessionStorage.setItem('garagebalance.lazy-chunk-reload-at', String(Date.now()))
+
+    render(
+      <WorkspaceSectionErrorBoundary onReturn={vi.fn()}>
+        <StaleChunkSection />
+      </WorkspaceSectionErrorBoundary>,
+    )
+
+    const alert = screen.getByRole('alert', { name: 'Не удалось загрузить раздел' })
+    expect(alert).toHaveTextContent('Приложение было обновлено')
+    expect(alert).toHaveTextContent('Открыта предыдущая версия страницы')
+    expect(screen.getByRole('button', { name: 'Обновить приложение' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'На главную' })).toBeInTheDocument()
   })
 
   it('shows a recoverable error instead of a blank workspace', () => {
@@ -22,8 +44,8 @@ describe('WorkspaceSectionErrorBoundary', () => {
       </WorkspaceSectionErrorBoundary>,
     )
 
-    expect(screen.getByRole('alert', { name: 'Не удалось загрузить раздел' })).toHaveTextContent('Проверьте соединение')
-    expect(screen.getByRole('button', { name: 'Перезагрузить страницу' })).toBeInTheDocument()
+    expect(screen.getByRole('alert', { name: 'Не удалось загрузить раздел' })).toHaveTextContent('Возникла временная ошибка')
+    expect(screen.getByRole('button', { name: 'Повторить загрузку' })).toBeInTheDocument()
   })
 
   it('keeps heavy sections lazy and preloads dashboard intent', () => {

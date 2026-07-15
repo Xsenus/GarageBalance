@@ -620,7 +620,7 @@ public sealed class FinanceService(
 
         if (amount > availableOpeningDebt)
         {
-            return FinanceResult<FinancialOperationDto>.Failure("debt_payment_amount_exceeds_opening_debt", $"Сумма оплаты входящего долга не может превышать {availableOpeningDebt.ToString("0.00", RussianCulture)}.");
+            return FinanceResult<FinancialOperationDto>.Failure("debt_payment_amount_exceeds_opening_debt", $"Сумма оплаты входящего долга не может превышать {MoneyFormatting.Format(availableOpeningDebt)}.");
         }
 
         var incomeType = await GetOrCreateDebtTransferIncomeTypeAsync(cancellationToken);
@@ -698,7 +698,7 @@ public sealed class FinanceService(
             {
                 return FinanceResult<FinancialOperationDto>.Failure(
                     "cash_amount_insufficient",
-                    $"Сумма выплаты превышает доступный остаток в кассе {availableCashAmount.ToString("0.00", RussianCulture)}.");
+                    $"Сумма выплаты превышает доступный остаток в кассе {MoneyFormatting.Format(availableCashAmount)}.");
             }
         }
         else
@@ -708,7 +708,7 @@ public sealed class FinanceService(
             {
                 return FinanceResult<FinancialOperationDto>.Failure(
                     "bank_amount_insufficient",
-                    $"Сумма выплаты превышает доступный остаток на банковском счете {availableBankAmount.ToString("0.00", RussianCulture)}.");
+                    $"Сумма выплаты превышает доступный остаток на банковском счете {MoneyFormatting.Format(availableBankAmount)}.");
             }
         }
 
@@ -758,7 +758,7 @@ public sealed class FinanceService(
         var availableAmount = MoneyMath.RoundMoney(staffMember.Rate - paidThisMonth);
         if (amount > availableAmount)
         {
-            return FinanceResult<FinancialOperationDto>.Failure("staff_payment_amount_exceeds_available", $"Сумма выплаты превышает доступный остаток по сотруднику {availableAmount.ToString("0.00", RussianCulture)}.");
+            return FinanceResult<FinancialOperationDto>.Failure("staff_payment_amount_exceeds_available", $"Сумма выплаты превышает доступный остаток по сотруднику {MoneyFormatting.Format(availableAmount)}.");
         }
 
         var availableBankAmount = await CalculateAvailableBankAmountAsync(cancellationToken);
@@ -766,7 +766,7 @@ public sealed class FinanceService(
         {
             return FinanceResult<FinancialOperationDto>.Failure(
                 "bank_amount_insufficient",
-                $"Сумма выплаты превышает доступный остаток на банковском счете {availableBankAmount.ToString("0.00", RussianCulture)}.");
+                $"Сумма выплаты превышает доступный остаток на банковском счете {MoneyFormatting.Format(availableBankAmount)}.");
         }
 
         var operation = new FinancialOperation
@@ -927,7 +927,7 @@ public sealed class FinanceService(
             {
                 return FinanceResult<FinancialOperationDto>.Failure(
                     "cash_amount_insufficient",
-                    $"Сумма выплаты превышает доступный остаток в кассе {availableCashAmount.ToString("0.00", RussianCulture)}.");
+                    $"Сумма выплаты превышает доступный остаток в кассе {MoneyFormatting.Format(availableCashAmount)}.");
             }
         }
         else
@@ -937,7 +937,7 @@ public sealed class FinanceService(
             {
                 return FinanceResult<FinancialOperationDto>.Failure(
                     "bank_amount_insufficient",
-                    $"Сумма выплаты превышает доступный остаток на банковском счете {availableBankAmount.ToString("0.00", RussianCulture)}.");
+                    $"Сумма выплаты превышает доступный остаток на банковском счете {MoneyFormatting.Format(availableBankAmount)}.");
             }
         }
 
@@ -1033,7 +1033,7 @@ public sealed class FinanceService(
                 var availableStaffAmount = MoneyMath.RoundMoney((operation.StaffMember?.Rate ?? 0m) - paidThisMonth);
                 if (operation.Amount > availableStaffAmount)
                 {
-                    return FinanceResult<FinancialOperationDto>.Failure("staff_payment_amount_exceeds_available", $"Сумма выплаты превышает доступный остаток по сотруднику {availableStaffAmount.ToString("0.00", RussianCulture)}.");
+                    return FinanceResult<FinancialOperationDto>.Failure("staff_payment_amount_exceeds_available", $"Сумма выплаты превышает доступный остаток по сотруднику {MoneyFormatting.Format(availableStaffAmount)}.");
                 }
             }
 
@@ -1044,7 +1044,7 @@ public sealed class FinanceService(
                 {
                     return FinanceResult<FinancialOperationDto>.Failure(
                         "cash_amount_insufficient",
-                        $"Сумма выплаты превышает доступный остаток в кассе {availableCashAmount.ToString("0.00", RussianCulture)}.");
+                        $"Сумма выплаты превышает доступный остаток в кассе {MoneyFormatting.Format(availableCashAmount)}.");
                 }
             }
             else
@@ -1054,7 +1054,7 @@ public sealed class FinanceService(
                 {
                     return FinanceResult<FinancialOperationDto>.Failure(
                         "bank_amount_insufficient",
-                        $"Сумма выплаты превышает доступный остаток на банковском счете {availableBankAmount.ToString("0.00", RussianCulture)}.");
+                        $"Сумма выплаты превышает доступный остаток на банковском счете {MoneyFormatting.Format(availableBankAmount)}.");
                 }
             }
         }
@@ -1759,7 +1759,7 @@ public sealed class FinanceService(
             "finance.regular_catalog_accruals_generated",
             "accrual",
             Guid.NewGuid(),
-            $"Сформированы регулярные начисления по каталогу услуг за {month:MM.yyyy}: услуг обработано {serviceResults.Count}, создано {createdCount}, на сумму {totalAmount.ToString("N2", CultureInfo.InvariantCulture)}, пропущено {skippedCount}.",
+            $"Сформированы регулярные начисления по каталогу услуг за {month:MM.yyyy}: услуг обработано {serviceResults.Count}, создано {createdCount}, на сумму {MoneyFormatting.Format(totalAmount)}, пропущено {skippedCount}.",
             relatedAccountingMonth: month,
             relatedDocumentNumber: $"Каталог услуг {month:MM.yyyy}",
             metadata: new Dictionary<string, object?>
@@ -2258,7 +2258,7 @@ public sealed class FinanceService(
 
     private static string BuildFeeCampaignAccrualComment(FeeCampaign campaign, string? comment)
     {
-        var snapshot = $"сбор {campaign.Name}: взнос {campaign.ContributionAmount.ToString("0.00", RussianCulture)}, цель {campaign.TargetAmount.ToString("0.00", RussianCulture)}, действует с {campaign.StartsOn:dd.MM.yyyy}";
+        var snapshot = $"сбор {campaign.Name}: взнос {MoneyFormatting.Format(campaign.ContributionAmount)}, цель {MoneyFormatting.Format(campaign.TargetAmount)}, действует с {campaign.StartsOn:dd.MM.yyyy}";
         if (campaign.EndsOn.HasValue)
         {
             snapshot = $"{snapshot} по {campaign.EndsOn.Value:dd.MM.yyyy}";
@@ -2329,12 +2329,12 @@ public sealed class FinanceService(
 
     private static string FormatDebtTransferCreatedAuditSummary(Accrual accrual, DateOnly sourceMonth, DateOnly targetMonth)
     {
-        return $"Создан перенос задолженности {accrual.Amount.ToString("0.00", RussianCulture)} по гаражу {accrual.Garage.Number} из {sourceMonth:MM.yyyy} в {targetMonth:MM.yyyy}.";
+        return $"Создан перенос задолженности {MoneyFormatting.Format(accrual.Amount)} по гаражу {accrual.Garage.Number} из {sourceMonth:MM.yyyy} в {targetMonth:MM.yyyy}.";
     }
 
     private static string FormatDebtTransferUpdatedAuditSummary(AccrualAuditSnapshot before, Accrual accrual, DateOnly sourceMonth, DateOnly targetMonth, decimal addedAmount)
     {
-        return $"Дополнен перенос задолженности по гаражу {accrual.Garage.Number} из {sourceMonth:MM.yyyy} в {targetMonth:MM.yyyy}: добавлено {addedAmount.ToString("0.00", RussianCulture)}; было {FormatAccrualSnapshot(before)}; стало {FormatAccrualSnapshot(AccrualAuditSnapshot.From(accrual))}.";
+        return $"Дополнен перенос задолженности по гаражу {accrual.Garage.Number} из {sourceMonth:MM.yyyy} в {targetMonth:MM.yyyy}: добавлено {MoneyFormatting.Format(addedAmount)}; было {FormatAccrualSnapshot(before)}; стало {FormatAccrualSnapshot(AccrualAuditSnapshot.From(accrual))}.";
     }
 
     private static string FormatIncomeCreatedAuditSummary(FinancialOperation operation)
@@ -2353,7 +2353,7 @@ public sealed class FinanceService(
 
     private static string FormatIncomeOperationSnapshot(FinancialOperation operation)
     {
-        var amount = operation.Amount.ToString("0.00", RussianCulture);
+        var amount = MoneyFormatting.Format(operation.Amount);
         var document = NormalizeOptional(operation.DocumentNumber) ?? "без документа";
         return $"{amount} по гаражу {operation.Garage?.Number} от {operation.OperationDate:dd.MM.yyyy} за {operation.AccountingMonth:MM.yyyy}; вид {operation.IncomeType?.Name}; документ {document}";
     }
@@ -2368,7 +2368,7 @@ public sealed class FinanceService(
     private static string FormatStaffPaymentCreatedAuditSummary(FinancialOperation operation, decimal availableBeforePayment)
     {
         var comment = NormalizeOptional(operation.Comment);
-        var summary = $"Создана выплата {FormatStaffPaymentSnapshot(operation)}; доступно до выплаты {availableBeforePayment.ToString("0.00", RussianCulture)}.";
+        var summary = $"Создана выплата {FormatStaffPaymentSnapshot(operation)}; доступно до выплаты {MoneyFormatting.Format(availableBeforePayment)}.";
         return comment is null ? summary : $"{summary} Комментарий: {comment}";
     }
 
@@ -2381,7 +2381,7 @@ public sealed class FinanceService(
 
     private static string FormatExpenseOperationSnapshot(FinancialOperation operation)
     {
-        var amount = operation.Amount.ToString("0.00", RussianCulture);
+        var amount = MoneyFormatting.Format(operation.Amount);
         var document = NormalizeOptional(operation.DocumentNumber) ?? "без документа";
         if (operation.StaffMember is not null)
         {
@@ -2393,14 +2393,14 @@ public sealed class FinanceService(
 
     private static string FormatStaffPaymentSnapshot(FinancialOperation operation)
     {
-        var amount = operation.Amount.ToString("0.00", RussianCulture);
+        var amount = MoneyFormatting.Format(operation.Amount);
         var document = NormalizeOptional(operation.DocumentNumber) ?? "без документа";
         return $"{amount} сотруднику {operation.StaffMember?.FullName} от {operation.OperationDate:dd.MM.yyyy} за {operation.AccountingMonth:MM.yyyy}; отдел {operation.StaffMember?.Department?.Name}; вид {operation.ExpenseType?.Name}; документ {document}";
     }
 
     private static string FormatOperationCanceledAuditSummary(FinancialOperation operation, string reason)
     {
-        var amount = operation.Amount.ToString("0.00", RussianCulture);
+        var amount = MoneyFormatting.Format(operation.Amount);
         var document = NormalizeOptional(operation.DocumentNumber) ?? "без документа";
         if (operation.OperationKind == FinancialOperationKinds.Income)
         {
@@ -2414,7 +2414,7 @@ public sealed class FinanceService(
 
     private static string FormatOperationRestoredAuditSummary(FinancialOperation operation)
     {
-        var amount = operation.Amount.ToString("0.00", RussianCulture);
+        var amount = MoneyFormatting.Format(operation.Amount);
         var document = NormalizeOptional(operation.DocumentNumber) ?? "без документа";
         if (operation.OperationKind == FinancialOperationKinds.Income)
         {
@@ -2428,7 +2428,7 @@ public sealed class FinanceService(
 
     private static string FormatAccrualCreatedAuditSummary(Accrual accrual)
     {
-        var amount = accrual.Amount.ToString("0.00", RussianCulture);
+        var amount = MoneyFormatting.Format(accrual.Amount);
         var comment = NormalizeOptional(accrual.Comment);
         var summary = $"Создано начисление {amount} по гаражу {accrual.Garage.Number} за {accrual.AccountingMonth:MM.yyyy}; вид {accrual.IncomeType.Name}; источник {accrual.Source}.";
         return comment is null ? summary : $"{summary} Комментарий: {comment}";
@@ -2441,19 +2441,19 @@ public sealed class FinanceService(
 
     private static string FormatAccrualCanceledAuditSummary(Accrual accrual, string reason)
     {
-        var amount = accrual.Amount.ToString("0.00", RussianCulture);
+        var amount = MoneyFormatting.Format(accrual.Amount);
         return $"Отменено начисление {amount} по гаражу {accrual.Garage.Number} за {accrual.AccountingMonth:MM.yyyy}; вид {accrual.IncomeType.Name}; источник {accrual.Source}. Причина: {reason}";
     }
 
     private static string FormatAccrualRestoredAuditSummary(Accrual accrual)
     {
-        var amount = accrual.Amount.ToString("0.00", RussianCulture);
+        var amount = MoneyFormatting.Format(accrual.Amount);
         return $"Восстановлено начисление {amount} по гаражу {accrual.Garage.Number} за {accrual.AccountingMonth:MM.yyyy}; вид {accrual.IncomeType.Name}; источник {accrual.Source}.";
     }
 
     private static string FormatSupplierAccrualCreatedAuditSummary(SupplierAccrual accrual)
     {
-        var amount = accrual.Amount.ToString("0.00", RussianCulture);
+        var amount = MoneyFormatting.Format(accrual.Amount);
         var document = NormalizeOptional(accrual.DocumentNumber) ?? "без документа";
         var comment = NormalizeOptional(accrual.Comment);
         var summary = $"Создано начисление {amount} поставщику {accrual.Supplier.Name} за {accrual.AccountingMonth:MM.yyyy}; вид {accrual.ExpenseType.Name}; источник {accrual.Source}; документ {document}.";
@@ -2467,7 +2467,7 @@ public sealed class FinanceService(
 
     private static string FormatAccrualSnapshot(AccrualAuditSnapshot snapshot)
     {
-        var amount = snapshot.Amount.ToString("0.00", RussianCulture);
+        var amount = MoneyFormatting.Format(snapshot.Amount);
         var comment = NormalizeOptional(snapshot.Comment);
         var summary = $"{amount} по гаражу {snapshot.GarageNumber} за {snapshot.AccountingMonth:MM.yyyy}; вид {snapshot.IncomeTypeName}; источник {snapshot.Source}";
         return comment is null ? summary : $"{summary}; комментарий {comment}";
@@ -2475,7 +2475,7 @@ public sealed class FinanceService(
 
     private static string FormatSupplierAccrualSnapshot(SupplierAccrualAuditSnapshot snapshot)
     {
-        var amount = snapshot.Amount.ToString("0.00", RussianCulture);
+        var amount = MoneyFormatting.Format(snapshot.Amount);
         var document = NormalizeOptional(snapshot.DocumentNumber) ?? "без документа";
         var comment = NormalizeOptional(snapshot.Comment);
         var summary = $"{amount} поставщику {snapshot.SupplierName} за {snapshot.AccountingMonth:MM.yyyy}; вид {snapshot.ExpenseTypeName}; источник {snapshot.Source}; документ {document}";
@@ -2484,14 +2484,14 @@ public sealed class FinanceService(
 
     private static string FormatSupplierAccrualCanceledAuditSummary(SupplierAccrual accrual, string reason)
     {
-        var amount = accrual.Amount.ToString("0.00", RussianCulture);
+        var amount = MoneyFormatting.Format(accrual.Amount);
         var document = NormalizeOptional(accrual.DocumentNumber) ?? "без документа";
         return $"Отменено начисление {amount} поставщику {accrual.Supplier.Name} за {accrual.AccountingMonth:MM.yyyy}; вид {accrual.ExpenseType.Name}; источник {accrual.Source}; документ {document}. Причина: {reason}";
     }
 
     private static string FormatSupplierAccrualRestoredAuditSummary(SupplierAccrual accrual)
     {
-        var amount = accrual.Amount.ToString("0.00", RussianCulture);
+        var amount = MoneyFormatting.Format(accrual.Amount);
         var document = NormalizeOptional(accrual.DocumentNumber) ?? "без документа";
         return $"Восстановлено начисление {amount} поставщику {accrual.Supplier.Name} за {accrual.AccountingMonth:MM.yyyy}; вид {accrual.ExpenseType.Name}; источник {accrual.Source}; документ {document}.";
     }
@@ -2524,19 +2524,19 @@ public sealed class FinanceService(
 
     private static string FormatRegularAccrualGenerationAuditSummary(DateOnly month, IncomeType incomeType, Tariff tariff, IReadOnlyCollection<AccrualDto> created, IReadOnlyCollection<string> skipped)
     {
-        var totalAmount = created.Sum(item => item.Amount).ToString("0.00", RussianCulture);
+        var totalAmount = MoneyFormatting.Format(created.Sum(item => item.Amount));
         return $"Создано регулярных начислений: {created.Count} на сумму {totalAmount} за {month:MM.yyyy}; вид {incomeType.Name}; тариф {tariff.Name}, база {tariff.CalculationBase}, {FormatTariffRateSnapshot(tariff)}; пропущено {skipped.Count}.";
     }
 
     private static string FormatFeeCampaignAccrualGenerationAuditSummary(DateOnly month, FeeCampaign campaign, IReadOnlyCollection<AccrualDto> created, IReadOnlyCollection<string> skipped)
     {
-        var totalAmount = created.Sum(item => item.Amount).ToString("0.00", RussianCulture);
-        return $"Создано начислений по сбору: {created.Count} на сумму {totalAmount} за {month:MM.yyyy}; сбор {campaign.Name}; вид {campaign.IncomeType.Name}; взнос {campaign.ContributionAmount.ToString("0.00", RussianCulture)}; пропущено {skipped.Count}.";
+        var totalAmount = MoneyFormatting.Format(created.Sum(item => item.Amount));
+        return $"Создано начислений по сбору: {created.Count} на сумму {totalAmount} за {month:MM.yyyy}; сбор {campaign.Name}; вид {campaign.IncomeType.Name}; взнос {MoneyFormatting.Format(campaign.ContributionAmount)}; пропущено {skipped.Count}.";
     }
 
     private static string FormatSupplierGroupSalaryAccrualGenerationAuditSummary(DateOnly month, string groupName, string expenseTypeName, IReadOnlyCollection<SupplierAccrualDto> created, IReadOnlyCollection<string> skipped)
     {
-        var totalAmount = created.Sum(item => item.Amount).ToString("0.00", RussianCulture);
+        var totalAmount = MoneyFormatting.Format(created.Sum(item => item.Amount));
         return $"Создано начислений зарплаты: {created.Count} на сумму {totalAmount} за {month:MM.yyyy}; группа {groupName}; вид {expenseTypeName}; пропущено {skipped.Count}.";
     }
 
@@ -2582,10 +2582,10 @@ public sealed class FinanceService(
     {
         if (!HasElectricityTiers(tariff))
         {
-            return $"ставка {tariff.Rate.ToString("0.####", RussianCulture)}";
+            return $"ставка {MoneyFormatting.Format(tariff.Rate)}";
         }
 
-        return $"пороги электроэнергии до {tariff.ElectricityFirstThreshold!.Value.ToString("0.####", RussianCulture)} кВт по {tariff.ElectricityFirstRate!.Value.ToString("0.####", RussianCulture)}, до {tariff.ElectricitySecondThreshold!.Value.ToString("0.####", RussianCulture)} кВт по {tariff.ElectricitySecondRate!.Value.ToString("0.####", RussianCulture)}, свыше по {tariff.ElectricityThirdRate!.Value.ToString("0.####", RussianCulture)}";
+        return $"пороги электроэнергии до {tariff.ElectricityFirstThreshold!.Value.ToString("0.####", RussianCulture)} кВт по {MoneyFormatting.Format(tariff.ElectricityFirstRate!.Value)}, до {tariff.ElectricitySecondThreshold!.Value.ToString("0.####", RussianCulture)} кВт по {MoneyFormatting.Format(tariff.ElectricitySecondRate!.Value)}, свыше по {MoneyFormatting.Format(tariff.ElectricityThirdRate!.Value)}";
     }
 
     private static bool HasElectricityTiers(Tariff tariff)
