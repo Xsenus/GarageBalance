@@ -2893,7 +2893,6 @@ function DadataAddressField({ accessToken, inputLabel, integrationClient, label,
           aria-describedby={status ? statusId : undefined}
           autoComplete="off"
           value={value}
-          onFocus={() => setSuggestionsOpen(suggestions.length > 0)}
           onBlur={() => setSuggestionsOpen(false)}
           onChange={(event) => {
             const nextValue = event.target.value
@@ -2907,9 +2906,9 @@ function DadataAddressField({ accessToken, inputLabel, integrationClient, label,
           }}
         />
         {suggestionsOpen ? (
-          <div className="suggestion-options" id={suggestionsId} role="listbox" aria-label={listboxLabel}>
+          <div className="suggestion-options suggestion-options--above" id={suggestionsId} role="listbox" aria-label={listboxLabel}>
             {suggestions.map((suggestion) => (
-              <button className="ghost-button suggestion-option" type="button" role="option" aria-selected="false" key={`${suggestion.fiasId ?? ''}-${suggestion.value}`} onMouseDown={(event) => event.preventDefault()} onClick={() => selectSuggestion(suggestion)}>
+              <button className="ghost-button suggestion-option" type="button" role="option" aria-selected="false" title={suggestion.unrestrictedValue || suggestion.value} key={`${suggestion.fiasId ?? ''}-${suggestion.value}`} onMouseDown={(event) => event.preventDefault()} onClick={() => selectSuggestion(suggestion)}>
                 <strong>{suggestion.value}</strong>
                 {suggestion.postalCode ? <span>Индекс {suggestion.postalCode}</span> : null}
               </button>
@@ -3185,7 +3184,6 @@ function SupplierPrototypeDialog({ accessToken, integrationClient, item, service
                     aria-describedby={partySuggestionStatus ? 'supplier-party-suggestions-status' : undefined}
                     autoComplete="off"
                     value={form.inn}
-                    onFocus={() => setPartySuggestionsOpen(partySuggestions.length > 0)}
                     onBlur={() => setPartySuggestionsOpen(false)}
                     onChange={(event) => {
                       const value = event.target.value
@@ -3201,7 +3199,7 @@ function SupplierPrototypeDialog({ accessToken, integrationClient, item, service
                   {partySuggestionsOpen ? (
                     <div className="suggestion-options" id="supplier-party-suggestions" role="listbox" aria-label="Организации DaData">
                       {partySuggestions.map((suggestion) => (
-                        <button className="ghost-button suggestion-option" type="button" role="option" aria-selected="false" key={`${suggestion.inn ?? ''}-${suggestion.kpp ?? ''}-${suggestion.value}`} onMouseDown={(event) => event.preventDefault()} onClick={() => selectPartySuggestion(suggestion)}>
+                        <button className="ghost-button suggestion-option" type="button" role="option" aria-selected="false" title={[suggestion.value, suggestion.inn ? `ИНН ${suggestion.inn}` : null, suggestion.legalAddress].filter(Boolean).join(' · ')} key={`${suggestion.inn ?? ''}-${suggestion.kpp ?? ''}-${suggestion.value}`} onMouseDown={(event) => event.preventDefault()} onClick={() => selectPartySuggestion(suggestion)}>
                           <strong>{suggestion.value}</strong>
                           <span>{[suggestion.inn ? `ИНН ${suggestion.inn}` : null, suggestion.legalAddress].filter(Boolean).join(' · ')}</span>
                         </button>

@@ -37,6 +37,14 @@ describe('responsive layout styles', () => {
     expect(normalizedAppCss).toContain('.detail-dialog-actions {\n  position: sticky;')
   })
 
+  it('opens address suggestions upward and limits the visible rows', () => {
+    expect(normalizedAppCss).toContain('.suggestion-options {\n  position: absolute;')
+    expect(normalizedAppCss).toContain('max-height: 284px;\n  overflow-y: auto;\n  overscroll-behavior: contain;\n  scrollbar-gutter: stable;')
+    expect(normalizedAppCss).toContain('.suggestion-options--above {\n  top: auto;\n  bottom: calc(100% + 6px);')
+    expect(normalizedAppCss).toContain('.suggestion-option {\n  display: grid;\n  width: 100%;\n  height: 54px;\n  min-height: 54px;')
+    expect(normalizedAppCss).toContain('@media (max-width: 720px) {\n  .suggestion-options {\n    max-height: 176px;')
+  })
+
   it('keeps the tariff threshold action at the left edge of its table cell', () => {
     expect(normalizedAppCss).toContain('.tariffs-add-threshold-button {\n  justify-self: start;')
   })
