@@ -510,6 +510,8 @@ public sealed class BackendPerformanceGuardTests
         Assert.Contains("new { operation.AccountingMonth, operation.OperationKind }", source, StringComparison.Ordinal);
         Assert.Contains("operation.OperationKind == FinancialOperationKinds.Income", source, StringComparison.Ordinal);
         Assert.Contains("operation.OperationKind == FinancialOperationKinds.Expense", source, StringComparison.Ordinal);
+        Assert.Contains("incomeBreakdownQuery", source, StringComparison.Ordinal);
+        Assert.Contains(".Concat(expenseBreakdownQuery)", source, StringComparison.Ordinal);
         Assert.Contains("SumAsync(garage => garage.StartingBalance, cancellationToken)", source, StringComparison.Ordinal);
     }
 

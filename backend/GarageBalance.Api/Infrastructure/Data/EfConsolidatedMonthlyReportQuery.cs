@@ -39,7 +39,7 @@ public sealed class EfConsolidatedMonthlyReportQuery(GarageBalanceDbContext dbCo
             .Where(row => row.Kind == FinancialOperationKinds.Expense)
             .Select(row => new AmountCountByMonth(row.Month, row.Amount, row.Count))
             .ToList();
-        var incomeBreakdownRows = await operations
+        var incomeBreakdownQuery = operations
             .Where(operation => operation.OperationKind == FinancialOperationKinds.Income)
             .GroupBy(operation => new
             {
@@ -48,16 +48,12 @@ public sealed class EfConsolidatedMonthlyReportQuery(GarageBalanceDbContext dbCo
             })
             .Select(group => new
             {
+                Kind = FinancialOperationKinds.Income,
                 TypeId = group.Key.IncomeTypeId,
                 group.Key.Name,
                 Amount = group.Sum(item => item.Amount)
-            })
-            .OrderBy(row => row.Name)
-            .ToListAsync(cancellationToken);
-        var incomeBreakdown = incomeBreakdownRows
-            .Select(row => new NamedAmountTotal(row.TypeId, row.Name, row.Amount))
-            .ToList();
-        var expenseBreakdownRows = await operations
+            });
+        var expenseBreakdownQuery = operations
             .Where(operation => operation.OperationKind == FinancialOperationKinds.Expense)
             .GroupBy(operation => new
             {
@@ -66,13 +62,22 @@ public sealed class EfConsolidatedMonthlyReportQuery(GarageBalanceDbContext dbCo
             })
             .Select(group => new
             {
+                Kind = FinancialOperationKinds.Expense,
                 TypeId = group.Key.ExpenseTypeId,
                 group.Key.Name,
                 Amount = group.Sum(item => item.Amount)
-            })
-            .OrderBy(row => row.Name)
+            });
+        var operationBreakdownRows = await incomeBreakdownQuery
+            .Concat(expenseBreakdownQuery)
+            .OrderBy(row => row.Kind)
+            .ThenBy(row => row.Name)
             .ToListAsync(cancellationToken);
-        var expenseBreakdown = expenseBreakdownRows
+        var incomeBreakdown = operationBreakdownRows
+            .Where(row => row.Kind == FinancialOperationKinds.Income)
+            .Select(row => new NamedAmountTotal(row.TypeId, row.Name, row.Amount))
+            .ToList();
+        var expenseBreakdown = operationBreakdownRows
+            .Where(row => row.Kind == FinancialOperationKinds.Expense)
             .Select(row => new NamedAmountTotal(row.TypeId, row.Name, row.Amount))
             .ToList();
         var accrualByMonth = await accruals
