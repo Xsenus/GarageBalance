@@ -29,6 +29,16 @@ public sealed class ApiProblemDetailsTests
     }
 
     [Fact]
+    public void CreateInternalError_ReturnsSafeSupportIdentifier()
+    {
+        var problem = ApiProblemDetails.CreateInternalError("error-20260715");
+
+        Assert.Equal("error-20260715", problem.Extensions[ApiProblemDetails.ErrorIdExtensionKey]);
+        Assert.Contains("Сообщите код ошибки", problem.Detail, StringComparison.Ordinal);
+        Assert.Contains("error-20260715", problem.Detail, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void CreateValidation_ReturnsValidationProblemContractWithErrors()
     {
         var modelState = new ModelStateDictionary();

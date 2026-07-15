@@ -28,6 +28,7 @@ TIMESTAMP="$(date +%Y%m%d-%H%M%S)"
 PREV_API="${APP_ROOT}/api.prev-${TIMESTAMP}-${release_id}"
 PREV_FRONTEND="${APP_ROOT}/frontend.prev-${TIMESTAMP}-${release_id}"
 BACKUP_DIR="${APP_ROOT}/backups"
+DIAGNOSTIC_LOG_DIR="${APP_ROOT}/logs"
 SERVICE_STOPPED=0
 SWAPPED=0
 
@@ -38,6 +39,14 @@ log() {
 fail() {
   log "deployStatus=failed; reason=$*"
   exit 1
+}
+
+ensure_env_setting() {
+  local name="$1"
+  local value="$2"
+  if ! grep -qE "^${name}=" "$ENV_FILE"; then
+    printf '%s=%s\n' "$name" "$value" >> "$ENV_FILE"
+  fi
 }
 
 restore_previous_release() {
@@ -77,6 +86,14 @@ trap 'on_error "$LINENO"' ERR
 [[ -s "$API_ARCHIVE" ]] || fail "API archive was not found or empty: $API_ARCHIVE"
 [[ -s "$FRONTEND_ARCHIVE" ]] || fail "frontend archive was not found or empty: $FRONTEND_ARCHIVE"
 [[ -s "$MIGRATION_SQL" ]] || fail "migration SQL was not found or empty: $MIGRATION_SQL"
+
+install -d -o "${APP_USER}" -g "${APP_GROUP}" -m 750 "$DIAGNOSTIC_LOG_DIR"
+ensure_env_setting "DiagnosticLogging__Enabled" "true"
+ensure_env_setting "DiagnosticLogging__Directory" "$DIAGNOSTIC_LOG_DIR"
+ensure_env_setting "DiagnosticLogging__RetentionDays" "14"
+ensure_env_setting "DiagnosticLogging__MaxFileSizeMb" "10"
+ensure_env_setting "DiagnosticLogging__PackageDays" "7"
+ensure_env_setting "DiagnosticLogging__PackageMaxSizeMb" "20"
 
 connection_string="$(
   grep -E '^(ConnectionStrings__DefaultConnection|ConnectionStrings__Postgres)=' "$ENV_FILE" \

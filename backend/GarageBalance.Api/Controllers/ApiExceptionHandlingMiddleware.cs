@@ -2,6 +2,7 @@ using System.Text.Json;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
+using GarageBalance.Api.Application.Diagnostics;
 
 namespace GarageBalance.Api.Controllers;
 
@@ -23,14 +24,21 @@ public sealed class ApiExceptionHandlingMiddleware(RequestDelegate next, ILogger
         }
         catch (Exception exception) when (!context.Response.HasStarted)
         {
-            logger.LogError(exception, "Unhandled API exception.");
-            await WriteProblemAsync(context, ApiProblemDetails.CreateInternalError());
+            logger.LogError(
+                "Unhandled API exception {ErrorId} ({ExceptionType}) for {Method} {Path}. Diagnostic={Diagnostic}",
+                context.TraceIdentifier,
+                exception.GetType().Name,
+                context.Request.Method,
+                context.Request.Path,
+                DiagnosticLogSanitizer.SanitizeException(exception));
+            await WriteProblemAsync(context, ApiProblemDetails.CreateInternalError(context.TraceIdentifier));
         }
     }
 
     private static Task WriteProblemAsync(HttpContext context, ProblemDetails problem)
     {
         context.Response.Clear();
+        context.Response.Headers[RequestCorrelationMiddleware.HeaderName] = context.TraceIdentifier;
         context.Response.StatusCode = problem.Status ?? StatusCodes.Status500InternalServerError;
         context.Response.ContentType = "application/problem+json; charset=utf-8";
         return JsonSerializer.SerializeAsync(context.Response.Body, problem, new JsonSerializerOptions(JsonSerializerDefaults.Web));

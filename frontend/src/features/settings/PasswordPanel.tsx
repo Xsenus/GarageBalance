@@ -1,15 +1,16 @@
 import { useEffect, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
-import { DatabaseBackup, Eye, KeyRound, PlugZap, RefreshCw, ShieldCheck, SlidersHorizontal, X } from 'lucide-react'
+import { DatabaseBackup, Download, Eye, FileWarning, KeyRound, PlugZap, RefreshCw, ShieldCheck, SlidersHorizontal, X } from 'lucide-react'
 import type { AuthClient, AuthResponse, CurrentUserDto } from '../../services/authApi'
 import type { IntegrationClient, OneCFreshIntegrationStatusDto, OneCFreshSyncDto, OneCFreshSyncPreviewDto, ReceiptPrintingIntegrationStatusDto } from '../../services/integrationsApi'
-import type { ApplicationSettingsClient, DatabaseBackupStatusDto } from '../../services/settingsApi'
+import type { ApplicationSettingsClient, DatabaseBackupStatusDto, DiagnosticLogStatusDto } from '../../services/settingsApi'
 import { hasPermission, permissions } from '../../shared/accessControl'
 import { LoadingSkeleton } from '../../shared/AsyncState'
 import { formatSensitiveChange } from '../../shared/changePreview'
 import { FormField } from '../../shared/FormField'
 import { FormError, FormValidationSummary } from '../../shared/formFeedback'
 import { formatDateTime } from '../../shared/formatters'
+import { downloadBlob } from '../../shared/fileExports'
 import { useEscapeKey, useFocusOnOpen, useFocusTrap, useRestoreFocusOnClose } from '../../shared/focusHooks'
 import { getPasswordChangeValidationErrors } from '../../shared/validation'
 
@@ -17,7 +18,7 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
   const integrationSettingsVisible = import.meta.env.VITE_SHOW_INTEGRATION_SETTINGS === 'true'
   const dadataSettingsVisible = hasPermission(auth, permissions.usersManage)
   const integrationTabVisible = integrationSettingsVisible || dadataSettingsVisible
-  const [activeSettingsTab, setActiveSettingsTab] = useState<'security' | 'display' | 'backups' | 'integrations'>(() => (
+  const [activeSettingsTab, setActiveSettingsTab] = useState<'security' | 'display' | 'backups' | 'diagnostics' | 'integrations'>(() => (
     integrationSettingsVisible && (hasPermission(auth, permissions.importRun) || hasPermission(auth, permissions.paymentsWrite))
       ? 'integrations'
       : 'security'
@@ -60,6 +61,12 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
   const [backupReloadToken, setBackupReloadToken] = useState(0)
   const [backupConfirmation, setBackupConfirmation] = useState<{ reason: string; error: string | null } | null>(null)
   const backupTriggerRef = useRef<HTMLButtonElement | null>(null)
+  const [diagnosticStatus, setDiagnosticStatus] = useState<DiagnosticLogStatusDto | null>(null)
+  const [diagnosticLoading, setDiagnosticLoading] = useState(false)
+  const [diagnosticExporting, setDiagnosticExporting] = useState(false)
+  const [diagnosticError, setDiagnosticError] = useState<string | null>(null)
+  const [diagnosticMessage, setDiagnosticMessage] = useState<string | null>(null)
+  const [diagnosticReloadToken, setDiagnosticReloadToken] = useState(0)
   const canViewIntegrationStatus = integrationSettingsVisible && hasPermission(auth, permissions.importRun)
   const canViewReceiptPrintingStatus = integrationSettingsVisible && hasPermission(auth, permissions.paymentsWrite)
   const canManageIntegrationSettings = integrationSettingsVisible && hasPermission(auth, permissions.usersManage)
@@ -136,6 +143,53 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
       ignore = true
     }
   }, [activeSettingsTab, auth.accessToken, backupReloadToken, canManageApplicationSettings, settingsClient])
+
+  useEffect(() => {
+    if (!canManageApplicationSettings || activeSettingsTab !== 'diagnostics') {
+      return
+    }
+
+    let ignore = false
+    setDiagnosticLoading(true)
+    setDiagnosticError(null)
+    settingsClient.getDiagnosticLogStatus(auth.accessToken)
+      .then((status) => {
+        if (!ignore) {
+          setDiagnosticStatus(status)
+        }
+      })
+      .catch((caught: unknown) => {
+        if (!ignore) {
+          setDiagnosticStatus(null)
+          setDiagnosticError(caught instanceof Error ? caught.message : 'Не удалось загрузить состояние журнала ошибок.')
+        }
+      })
+      .finally(() => {
+        if (!ignore) {
+          setDiagnosticLoading(false)
+        }
+      })
+
+    return () => {
+      ignore = true
+    }
+  }, [activeSettingsTab, auth.accessToken, canManageApplicationSettings, diagnosticReloadToken, settingsClient])
+
+  async function exportDiagnosticPackage() {
+    setDiagnosticExporting(true)
+    setDiagnosticError(null)
+    setDiagnosticMessage(null)
+    try {
+      const packageBlob = await settingsClient.createDiagnosticPackage(auth.accessToken)
+      downloadBlob(packageBlob, buildDiagnosticPackageFileName())
+      setDiagnosticMessage('Диагностический пакет подготовлен. Перед передачей проверьте, кому отправляется файл.')
+      setDiagnosticReloadToken((value) => value + 1)
+    } catch (caught) {
+      setDiagnosticError(caught instanceof Error ? caught.message : 'Не удалось сформировать диагностический пакет.')
+    } finally {
+      setDiagnosticExporting(false)
+    }
+  }
 
   async function createDatabaseBackup() {
     if (!backupConfirmation) {
@@ -458,6 +512,20 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
                 <span>Резервные копии</span>
               </button>
             ) : null}
+            {canManageApplicationSettings ? (
+              <button
+                id="settings-diagnostics-tab"
+                className={activeSettingsTab === 'diagnostics' ? 'settings-tab is-active' : 'settings-tab'}
+                type="button"
+                role="tab"
+                aria-controls="settings-diagnostics-panel"
+                aria-selected={activeSettingsTab === 'diagnostics'}
+                onClick={() => setActiveSettingsTab('diagnostics')}
+              >
+                <FileWarning size={17} aria-hidden="true" />
+                <span>Диагностика</span>
+              </button>
+            ) : null}
             {integrationTabVisible ? (
               <button
                 id="settings-integrations-tab"
@@ -629,6 +697,54 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
                 </tbody>
               </table>
             </div>
+          </>
+        ) : null}
+      </section>
+      ) : null}
+      {canManageApplicationSettings && activeSettingsTab === 'diagnostics' ? (
+      <section className="password-panel settings-card" aria-label="Диагностика ошибок приложения">
+        <div className="settings-card-intro">
+          <p className="eyebrow">Диагностика</p>
+          <h2>Журнал ошибок</h2>
+          <p>Система сохраняет технические ошибки сервера и браузера с кодом для поиска. Пароли, токены, телефоны и адреса электронной почты маскируются; база данных и резервные копии в пакет не входят.</p>
+        </div>
+        {diagnosticLoading ? <LoadingSkeleton className="loading-skeleton--compact" label="Загружаем состояние журнала ошибок" rows={3} columns={4} /> : null}
+        {diagnosticError ? (
+          <div className="settings-backup-error">
+            <FormError>{diagnosticError}</FormError>
+            <button className="ghost-button" type="button" disabled={diagnosticLoading} onClick={() => setDiagnosticReloadToken((value) => value + 1)}>
+              <RefreshCw size={16} aria-hidden="true" />
+              <span>Повторить загрузку</span>
+            </button>
+          </div>
+        ) : null}
+        {diagnosticMessage ? <div className="form-success" role="status" aria-live="polite">{diagnosticMessage}</div> : null}
+        {diagnosticStatus && !diagnosticLoading ? (
+          <>
+            <div className="summary-strip" aria-label="Состояние журнала ошибок">
+              <div>
+                <span>Журнал ошибок</span>
+                <strong className={diagnosticStatus.enabled ? 'status-active' : 'status-disabled'}>{diagnosticStatus.enabled ? 'Включен' : 'Отключен'}</strong>
+              </div>
+              <div>
+                <span>Срок хранения</span>
+                <strong>{diagnosticStatus.retentionDays} дн.</strong>
+              </div>
+              <div>
+                <span>Файлы</span>
+                <strong>{diagnosticStatus.fileCount} / {formatFileSize(diagnosticStatus.totalSizeBytes)}</strong>
+              </div>
+              <div>
+                <span>Последняя ошибка</span>
+                <strong>{diagnosticStatus.lastEntryAtUtc ? formatDateTime(diagnosticStatus.lastEntryAtUtc) : 'не зарегистрирована'}</strong>
+              </div>
+            </div>
+            <p className="form-hint">В пакет попадут журналы максимум за {diagnosticStatus.packageDays} дн. общим объемом до {diagnosticStatus.packageMaxSizeMb} МБ. Выгрузка доступна только администратору и фиксируется в истории изменений.</p>
+            {diagnosticStatus.lastWriteError ? <FormError>{diagnosticStatus.lastWriteError}</FormError> : null}
+            <button className="secondary-button" type="button" disabled={!diagnosticStatus.enabled || diagnosticExporting} onClick={() => void exportDiagnosticPackage()}>
+              <Download size={17} aria-hidden="true" />
+              <span>{diagnosticExporting ? 'Формируем пакет...' : 'Скачать диагностический пакет'}</span>
+            </button>
           </>
         ) : null}
       </section>
@@ -947,6 +1063,11 @@ function formatFileSize(sizeBytes: number) {
   if (sizeBytes < 1024) return `${sizeBytes} Б`
   if (sizeBytes < 1024 * 1024) return `${(sizeBytes / 1024).toFixed(1)} КБ`
   return `${(sizeBytes / (1024 * 1024)).toFixed(1)} МБ`
+}
+
+function buildDiagnosticPackageFileName(now = new Date()) {
+  const stamp = now.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}Z$/, 'Z')
+  return `garagebalance-diagnostics-${stamp}.zip`
 }
 
 function getOneCFreshSyncCancelLabel(mode: 'preview' | 'start' | 'retry') {

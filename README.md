@@ -10,6 +10,7 @@
 - Frontend: React + TypeScript + Vite.
 - Database: PostgreSQL.
 - Packaging: готовая локальная/VPS-установка через Docker Compose с постоянным хранилищем и резервным копированием PostgreSQL.
+- Diagnostics: коды ошибок, маскированный ротационный JSON-журнал и административная ZIP-выгрузка без базы и секретов.
 
 ## Структура
 
@@ -355,6 +356,8 @@ API Dockerfile собирает `net10.0` через `mcr.microsoft.com/dotnet/s
 Данные PostgreSQL и ключи защиты находятся в постоянных Docker volumes, а `.pgdump`-копии — в папке компьютера `BACKUP_HOST_PATH`. Обычные `build`, `up`, `restart` и `down` их не удаляют. Команды `docker compose down -v` и `docker volume rm` для рабочей установки запрещены: ключ `-v` явно удаляет постоянные volumes.
 
 Полная пошаговая инструкция для первого запуска, обновления, автоматических и ручных копий, проверочного восстановления, переноса и удаления установки: `docs/docker-install-update-guide.md`.
+
+Сбор пользовательских и серверных ошибок, безопасная выгрузка и постоянное хранение журналов: `docs/diagnostic-logging-guide.md`.
 
 Checklist для тестового размещения на VPS с доменом `sgk.blagodaty.ru`, TLS, nginx, systemd, backup, smoke-проверками и rollback описан в `docs/vps-deployment-checklist.md`. Документ проверяется backend-тестом, чтобы обязательные шаги deploy не потерялись при следующих изменениях.
 

@@ -13,23 +13,36 @@ import type { ReportClient } from '../../services/reportsApi'
 import type { ReleaseClient } from '../../services/releasesApi'
 import type { UserManagementClient } from '../../services/usersApi'
 import type { ApplicationSettingsClient } from '../../services/settingsApi'
+import { diagnosticsApi } from '../../services/diagnosticsApi'
 import { hasAnyPermission, hasPermission, permissions } from '../../shared/accessControl'
 import { AsyncErrorBoundary, TableLoadingState } from '../../shared/AsyncState'
 import { useEscapeKey, useFocusOnOpen, useFocusTrap, useRestoreFocusOnClose } from '../../shared/focusHooks'
 import type { AuditPanelPreset, WorkspaceOpenContext, WorkspaceSection } from '../../shared/workspaceNavigation'
 import { AuditPanel, ContractorsPrototypePanel, DictionaryPanelV2, FinancePanel, FundsPrototypePanel, ImportPanel, MeterReadingsPrototypePanel, PasswordPanel, preloadWorkspaceSection, ReleasePanel, ReportPanel, TariffsAndFeesPrototypePanel, UserManagementPanel } from './workspaceSectionLoader'
 
-export function WorkspaceSectionErrorBoundary({ children, onReturn }: { children: ReactNode; onReturn?: () => void }) {
+export function WorkspaceSectionErrorBoundary({ children, onReturn, accessToken }: { children: ReactNode; onReturn?: () => void; accessToken?: string }) {
   return (
     <AsyncErrorBoundary
-      onError={(error, info) => console.error('Не удалось загрузить рабочий раздел.', error, info.componentStack)}
-      fallback={() => (
+      onError={(error, info, errorId) => {
+        console.error('Не удалось загрузить рабочий раздел.', errorId)
+        if (accessToken) {
+          void diagnosticsApi.reportClientError(accessToken, {
+            clientErrorId: errorId,
+            errorName: error.name || 'Error',
+            message: 'Ошибка интерфейса; подробности определяются по коду и стеку вызовов.',
+            componentStack: info.componentStack ?? null,
+            route: window.location.pathname,
+          }).catch(() => undefined)
+        }
+      }}
+      fallback={(_error, _reset, errorId) => (
         <section className="access-notice" role="alert" aria-label="Не удалось загрузить раздел">
           <AlertTriangle size={20} aria-hidden="true" />
           <div>
             <p className="eyebrow">Ошибка загрузки</p>
             <h2>Раздел временно недоступен</h2>
             <p>Проверьте соединение и перезагрузите страницу. Введённые в других разделах данные не изменены.</p>
+            <p className="form-hint">Код ошибки: <strong>{errorId}</strong>. Сообщите его администратору.</p>
             <div className="modal-actions">
               {onReturn ? <button className="secondary-button" type="button" onClick={onReturn}>К главному меню</button> : null}
               <button className="primary-button" type="button" onClick={() => window.location.reload()}>
@@ -242,7 +255,7 @@ export function Workspace({
           </button>
         </div>
       </header>
-      <WorkspaceSectionErrorBoundary key={activeSection} onReturn={() => onOpenSection('dashboard')}>
+      <WorkspaceSectionErrorBoundary key={activeSection} accessToken={auth.accessToken} onReturn={() => onOpenSection('dashboard')}>
         <Suspense fallback={<TableLoadingState label="Загружаем выбранный раздел" />}>
           {renderActiveSection()}
         </Suspense>

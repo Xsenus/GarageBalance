@@ -5169,6 +5169,45 @@ describe('App', () => {
     expect(confirmation).toBeInTheDocument()
   })
 
+  it('shows diagnostic status and lets an administrator download a bounded package', async () => {
+    const user = userEvent.setup()
+    const getDiagnosticLogStatus = vi.fn(async () => ({
+      enabled: true,
+      retentionDays: 14,
+      packageDays: 7,
+      packageMaxSizeMb: 20,
+      fileCount: 2,
+      totalSizeBytes: 2048,
+      lastEntryAtUtc: '2026-07-15T05:00:00Z',
+      lastWriteError: null,
+    }))
+    const createDiagnosticPackage = vi.fn(async () => new Blob(['diagnostics'], { type: 'application/zip' }))
+    const createObjectUrl = vi.fn(() => 'blob:diagnostics')
+    const revokeObjectUrl = vi.fn()
+    Object.defineProperty(URL, 'createObjectURL', { configurable: true, value: createObjectUrl })
+    Object.defineProperty(URL, 'revokeObjectURL', { configurable: true, value: revokeObjectUrl })
+    const linkClick = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => undefined)
+    const settingsClient = createSettingsClient({ getDiagnosticLogStatus, createDiagnosticPackage })
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} integrationClient={createIntegrationClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} settingsClient={settingsClient} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Настройки')
+    const settings = await screen.findByRole('region', { name: 'Настройки' })
+    await user.click(within(settings).getByRole('tab', { name: 'Диагностика' }))
+    const panel = await within(settings).findByRole('region', { name: 'Диагностика ошибок приложения' })
+
+    expect(await within(panel).findByLabelText('Состояние журнала ошибок')).toHaveTextContent('Включен')
+    expect(within(panel).getByText(/Пароли, токены, телефоны/)).toBeInTheDocument()
+    await user.click(within(panel).getByRole('button', { name: 'Скачать диагностический пакет' }))
+
+    await waitFor(() => expect(createDiagnosticPackage).toHaveBeenCalledWith('token'))
+    expect(createObjectUrl).toHaveBeenCalledWith(expect.any(Blob))
+    expect(revokeObjectUrl).toHaveBeenCalledWith('blob:diagnostics')
+    expect(await within(panel).findByRole('status')).toHaveTextContent('Диагностический пакет подготовлен.')
+    linkClick.mockRestore()
+  })
+
   it.each([
     ['администратора', createAuthResponse()],
     ['пользователя без административных прав', createAuthResponse({ user: { permissions: ['dictionaries.read'] } })],
@@ -5190,12 +5229,14 @@ describe('App', () => {
     if (auth.user.permissions.includes('users.manage')) {
       expect(within(tabList).getByRole('tab', { name: 'Отображение' })).toBeInTheDocument()
       expect(within(tabList).getByRole('tab', { name: 'Резервные копии' })).toBeInTheDocument()
+      expect(within(tabList).getByRole('tab', { name: 'Диагностика' })).toBeInTheDocument()
       const integrationsTab = within(tabList).getByRole('tab', { name: 'Интеграции' })
       await user.click(integrationsTab)
       expect(within(settings).getByRole('region', { name: 'Подсказки DaData' })).toBeInTheDocument()
     } else {
       expect(within(tabList).queryByRole('tab', { name: 'Отображение' })).not.toBeInTheDocument()
       expect(within(tabList).queryByRole('tab', { name: 'Резервные копии' })).not.toBeInTheDocument()
+      expect(within(tabList).queryByRole('tab', { name: 'Диагностика' })).not.toBeInTheDocument()
       expect(within(tabList).queryByRole('tab', { name: 'Интеграции' })).not.toBeInTheDocument()
       expect(within(settings).queryByRole('region', { name: 'Подсказки DaData' })).not.toBeInTheDocument()
     }
@@ -12261,6 +12302,17 @@ function createSettingsClient(overrides: Partial<ApplicationSettingsClient> = {}
       createdAtUtc: '2026-07-15T12:00:00Z',
       kind: 'manual',
     }),
+    getDiagnosticLogStatus: async () => ({
+      enabled: true,
+      retentionDays: 14,
+      packageDays: 7,
+      packageMaxSizeMb: 20,
+      fileCount: 2,
+      totalSizeBytes: 2048,
+      lastEntryAtUtc: '2026-07-15T05:00:00Z',
+      lastWriteError: null,
+    }),
+    createDiagnosticPackage: async () => new Blob(['diagnostics'], { type: 'application/zip' }),
     ...overrides,
   }
 }

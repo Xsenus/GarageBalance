@@ -21,11 +21,24 @@ export type DatabaseBackupStatusDto = {
   backups: DatabaseBackupFileDto[]
 }
 
+export type DiagnosticLogStatusDto = {
+  enabled: boolean
+  retentionDays: number
+  packageDays: number
+  packageMaxSizeMb: number
+  fileCount: number
+  totalSizeBytes: number
+  lastEntryAtUtc: string | null
+  lastWriteError: string | null
+}
+
 export type ApplicationSettingsClient = {
   getPaymentDisplaySettings(accessToken: string): Promise<PaymentDisplaySettingsDto>
   updatePaymentDisplaySettings(accessToken: string, request: PaymentDisplaySettingsDto): Promise<PaymentDisplaySettingsDto>
   getDatabaseBackups(accessToken: string): Promise<DatabaseBackupStatusDto>
   createDatabaseBackup(accessToken: string, request: { reason: string }): Promise<DatabaseBackupFileDto>
+  getDiagnosticLogStatus(accessToken: string): Promise<DiagnosticLogStatusDto>
+  createDiagnosticPackage(accessToken: string): Promise<Blob>
 }
 
 const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? ''
@@ -48,6 +61,18 @@ async function requestJson<TResponse>(accessToken: string, path: string, init?: 
   return response.json()
 }
 
+async function requestBlob(accessToken: string, path: string, init?: RequestInit): Promise<Blob> {
+  const response = await fetch(`${apiBaseUrl}${path}`, {
+    ...init,
+    headers: { Authorization: `Bearer ${accessToken}`, ...init?.headers },
+  })
+  if (!response.ok) {
+    const problem = await response.json().catch(() => null)
+    throw new Error(problem?.detail ?? 'Не удалось сформировать диагностический пакет.')
+  }
+  return response.blob()
+}
+
 export const settingsApi: ApplicationSettingsClient = {
   getPaymentDisplaySettings(accessToken) {
     return requestJson(accessToken, '/api/settings/payments/display')
@@ -60,5 +85,11 @@ export const settingsApi: ApplicationSettingsClient = {
   },
   createDatabaseBackup(accessToken, request) {
     return requestJson(accessToken, '/api/settings/backups', { method: 'POST', body: JSON.stringify(request) })
+  },
+  getDiagnosticLogStatus(accessToken) {
+    return requestJson(accessToken, '/api/diagnostics/status')
+  },
+  createDiagnosticPackage(accessToken) {
+    return requestBlob(accessToken, '/api/diagnostics/package', { method: 'POST' })
   },
 }

@@ -26,6 +26,7 @@ import type { UserManagementClient } from './services/usersApi'
 import { settingsApi } from './services/settingsApi'
 import type { ApplicationSettingsClient } from './services/settingsApi'
 import { clearStoredAuthSession, loadStoredAuthSession, saveStoredAuthSession } from './shared/sessionStorage'
+import { useClientErrorReporting } from './shared/useClientErrorReporting'
 import './App.css'
 
 type AppProps = {
@@ -47,6 +48,7 @@ const authSessionStorageKey = 'garagebalance.auth.session'
 
 function App({ authClient = authApi, auditClient = auditApi, dictionaryClient = dictionariesApi, financeClient = financeApi, fundsClient = fundsApi, formStateClient = formStatesApi, importClient = importApi, integrationClient = integrationsApi, reportClient = reportsApi, releaseClient = releasesApi, settingsClient = settingsApi, userClient = usersApi }: AppProps) {
   const [auth, setAuth] = useState<AuthResponse | null>(() => loadStoredAuthSession(authSessionStorageKey))
+  useClientErrorReporting(auth?.accessToken ?? null)
 
   function handleAuthenticated(nextAuth: AuthResponse) {
     saveStoredAuthSession(authSessionStorageKey, nextAuth)

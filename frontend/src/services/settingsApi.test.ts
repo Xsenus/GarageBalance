@@ -86,4 +86,32 @@ describe('settingsApi', () => {
       headers: expect.objectContaining({ Authorization: 'Bearer token' }),
     }))
   })
+
+  it('loads diagnostic status and downloads the protected package', async () => {
+    const status = {
+      enabled: true,
+      retentionDays: 14,
+      packageDays: 7,
+      packageMaxSizeMb: 20,
+      fileCount: 2,
+      totalSizeBytes: 4096,
+      lastEntryAtUtc: '2026-07-15T05:00:00Z',
+      lastWriteError: null,
+    }
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify(status), { status: 200, headers: { 'Content-Type': 'application/json' } }))
+      .mockResolvedValueOnce(new Response('zip', { status: 200, headers: { 'Content-Type': 'application/zip' } }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await expect(settingsApi.getDiagnosticLogStatus('token')).resolves.toEqual(status)
+    const result = await settingsApi.createDiagnosticPackage('token')
+    expect(await result.text()).toBe('zip')
+    expect(fetchMock).toHaveBeenNthCalledWith(1, '/api/diagnostics/status', expect.objectContaining({
+      headers: expect.objectContaining({ Authorization: 'Bearer token' }),
+    }))
+    expect(fetchMock).toHaveBeenNthCalledWith(2, '/api/diagnostics/package', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer token' },
+    })
+  })
 })

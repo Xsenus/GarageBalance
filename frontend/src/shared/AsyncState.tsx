@@ -40,31 +40,35 @@ export function EmptyState({ children, className = '' }: { children: ReactNode; 
 
 type AsyncErrorBoundaryProps = {
   children: ReactNode
-  fallback: (error: Error, reset: () => void) => ReactNode
-  onError?: (error: Error, info: ErrorInfo) => void
+  fallback: (error: Error, reset: () => void, errorId: string) => ReactNode
+  onError?: (error: Error, info: ErrorInfo, errorId: string) => void
 }
 
 type AsyncErrorBoundaryState = {
   error: Error | null
+  errorId: string | null
 }
 
 export class AsyncErrorBoundary extends Component<AsyncErrorBoundaryProps, AsyncErrorBoundaryState> {
-  state: AsyncErrorBoundaryState = { error: null }
+  state: AsyncErrorBoundaryState = { error: null, errorId: null }
 
   static getDerivedStateFromError(error: Error): AsyncErrorBoundaryState {
-    return { error }
+    const errorId = typeof globalThis.crypto?.randomUUID === 'function'
+      ? globalThis.crypto.randomUUID()
+      : `client-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`
+    return { error, errorId }
   }
 
   componentDidCatch(error: Error, info: ErrorInfo) {
-    this.props.onError?.(error, info)
+    this.props.onError?.(error, info, this.state.errorId ?? 'client-error')
   }
 
   reset = () => {
-    this.setState({ error: null })
+    this.setState({ error: null, errorId: null })
   }
 
   render() {
-    if (this.state.error) return this.props.fallback(this.state.error, this.reset)
+    if (this.state.error) return this.props.fallback(this.state.error, this.reset, this.state.errorId ?? 'client-error')
     return this.props.children
   }
 }

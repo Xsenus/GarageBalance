@@ -2,6 +2,7 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json.Serialization;
 using GarageBalance.Api.Application.Integrations;
+using GarageBalance.Api.Application.Diagnostics;
 
 namespace GarageBalance.Api.Infrastructure.Integrations;
 
@@ -79,14 +80,21 @@ public sealed class DadataSuggestionService(
         }
         catch (HttpRequestException exception)
         {
-            logger.LogWarning(exception, "DaData suggestion request failed for resource {Resource}.", resource);
+            logger.LogWarning(
+                "DaData suggestion request failed for resource {Resource}. ExceptionType={ExceptionType}; Diagnostic={Diagnostic}",
+                resource,
+                exception.GetType().Name,
+                DiagnosticLogSanitizer.SanitizeException(exception));
             return DadataSuggestionResult<IReadOnlyList<T>>.Failure(
                 "dadata_unavailable",
                 "DaData временно недоступна. Можно продолжить ввод вручную.");
         }
         catch (TaskCanceledException exception) when (!cancellationToken.IsCancellationRequested)
         {
-            logger.LogWarning(exception, "DaData suggestion request timed out for resource {Resource}.", resource);
+            logger.LogWarning(
+                "DaData suggestion request timed out for resource {Resource}. ExceptionType={ExceptionType}",
+                resource,
+                exception.GetType().Name);
             return DadataSuggestionResult<IReadOnlyList<T>>.Failure(
                 "dadata_unavailable",
                 "DaData не ответила вовремя. Можно продолжить ввод вручную.");

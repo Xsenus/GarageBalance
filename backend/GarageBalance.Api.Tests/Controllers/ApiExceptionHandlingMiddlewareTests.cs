@@ -14,6 +14,7 @@ public sealed class ApiExceptionHandlingMiddlewareTests
     public async Task InvokeAsync_ReturnsInternalErrorProblemForUnhandledException()
     {
         var context = CreateHttpContext();
+        context.TraceIdentifier = "server-error-123";
         var middleware = new ApiExceptionHandlingMiddleware(
             _ => throw new InvalidOperationException("Database password leaked in exception message."),
             NullLogger<ApiExceptionHandlingMiddleware>.Instance);
@@ -26,6 +27,7 @@ public sealed class ApiExceptionHandlingMiddlewareTests
         Assert.Equal(ApiProblemDetails.InternalErrorCode, problem.GetProperty("title").GetString());
         Assert.Equal(StatusCodes.Status500InternalServerError, problem.GetProperty("status").GetInt32());
         Assert.Equal(ApiProblemDetails.InternalErrorCode, problem.GetProperty(ApiProblemDetails.CodeExtensionKey).GetString());
+        Assert.Equal("server-error-123", problem.GetProperty(ApiProblemDetails.ErrorIdExtensionKey).GetString());
         Assert.DoesNotContain("password", problem.GetProperty("detail").GetString(), StringComparison.OrdinalIgnoreCase);
     }
 
@@ -75,6 +77,7 @@ public sealed class ApiExceptionHandlingMiddlewareTests
     public async Task InvokeAsync_KeepsNonUniqueDatabaseFailuresAsInternalErrors()
     {
         var context = CreateHttpContext();
+        context.TraceIdentifier = "server-error-456";
         var databaseException = new PostgresException(
             "Sensitive foreign key value.",
             "ERROR",
@@ -88,7 +91,9 @@ public sealed class ApiExceptionHandlingMiddlewareTests
 
         var problem = await ReadProblemAsync(context);
         Assert.Equal(StatusCodes.Status500InternalServerError, context.Response.StatusCode);
+        Assert.Equal("server-error-456", context.Response.Headers[RequestCorrelationMiddleware.HeaderName]);
         Assert.Equal(ApiProblemDetails.InternalErrorCode, problem.GetProperty(ApiProblemDetails.CodeExtensionKey).GetString());
+        Assert.Equal("server-error-456", problem.GetProperty(ApiProblemDetails.ErrorIdExtensionKey).GetString());
         Assert.DoesNotContain("Sensitive", problem.GetProperty("detail").GetString(), StringComparison.OrdinalIgnoreCase);
     }
 

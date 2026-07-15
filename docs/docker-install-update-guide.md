@@ -15,6 +15,7 @@ Docker запускает три изолированных сервиса:
 - база хранится в постоянном volume `garagebalance_postgres-data`;
 - ключи защиты интеграционных настроек и cookies — в `garagebalance_data-protection-keys`;
 - резервные `.pgdump` — в обычной папке компьютера из `BACKUP_HOST_PATH`;
+- обезличенные журналы ошибок — в обычной папке компьютера из `LOG_HOST_PATH`;
 - конфигурация и секреты — в локальном `.env`, который не публикуется в Git.
 
 `docker compose build`, `up -d`, `restart`, `stop` и `down` не удаляют volumes и backup-папку. Никогда не выполняйте `docker compose down -v` и не удаляйте volumes вручную на рабочей установке: `-v` означает явное удаление постоянных данных.
@@ -39,6 +40,7 @@ docker compose version
 ```powershell
 Copy-Item .env.example .env
 New-Item -ItemType Directory -Force C:\GarageBalance\Backups
+New-Item -ItemType Directory -Force C:\GarageBalance\Logs
 ```
 
 Откройте `.env` и обязательно замените:
@@ -46,6 +48,7 @@ New-Item -ItemType Directory -Force C:\GarageBalance\Backups
 - `POSTGRES_PASSWORD` — длинный уникальный пароль PostgreSQL;
 - `JWT_SIGNING_KEY` — случайная строка минимум 32 символа;
 - `BACKUP_HOST_PATH` — абсолютный путь, например `C:/GarageBalance/Backups`.
+- `LOG_HOST_PATH` — отдельный абсолютный путь, например `C:/GarageBalance/Logs`.
 
 Случайные значения можно получить в PowerShell без внешнего сайта:
 
@@ -196,6 +199,8 @@ docker compose up -d
 Для переноса на другой компьютер перенесите проект без `.git`, защищенный `.env`, свежий проверенный `.pgdump` и архив volume ключей защиты. Разверните чистую установку, восстановите ключи до запуска API и затем восстановите `.pgdump`; секреты и backup передавайте только защищенным способом. Восстановление архива ключей — отдельная административная операция, которую сначала проверяют на тестовой установке.
 
 ## 10. Диагностика
+
+При ошибке сначала запишите показанный код, затем администратор может открыть `Настройки` → `Диагностика` и скачать ограниченный ZIP с маскированными техническими событиями. Полное описание состава, хранения и безопасной передачи: `docs/diagnostic-logging-guide.md`.
 
 ```powershell
 docker compose ps
