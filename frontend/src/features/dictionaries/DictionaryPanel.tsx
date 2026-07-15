@@ -1347,11 +1347,11 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, integ
               {renderEditorFields(editor.section)}
               <FormValidationSummary title="Проверьте запись" items={validationErrors} />
               <div className="detail-dialog-actions">
-                <button className="ghost-button" type="button" onClick={closeEditor}>Отмена</button>
                 <button className="secondary-button" type="submit" disabled={saving === 'dictionary-editor'}>
                   <Save size={16} />
                   <span>{saving === 'dictionary-editor' ? 'Сохраняем...' : 'Сохранить'}</span>
                 </button>
+                <button className="ghost-button" type="button" onClick={closeEditor}>Отмена</button>
               </div>
             </form>
           </section>

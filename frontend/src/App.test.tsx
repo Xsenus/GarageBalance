@@ -7493,6 +7493,8 @@ describe('App', () => {
     fireEvent.doubleClick(ownerRow)
     let editorDialog = await screen.findByRole('dialog', { name: 'Владельцы' })
     expect(editorDialog).toHaveClass('dictionary-editor-dialog--owners')
+    const editorActions = editorDialog.querySelector('.detail-dialog-actions')!
+    expect(within(editorActions).getAllByRole('button').map((button) => button.textContent?.trim())).toEqual(['Сохранить', 'Отмена'])
     const ownerNameGrid = editorDialog.querySelector('.owner-name-grid')
     expect(ownerNameGrid).not.toBeNull()
     expect(within(editorDialog).getByLabelText('Фамилия владельца').closest('.form-field')?.parentElement).toBe(ownerNameGrid)
