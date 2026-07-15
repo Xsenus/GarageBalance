@@ -3782,7 +3782,13 @@ function PaymentsPrototypePanel({
     if (totalDebtToPay <= 0) {
       return 'По выбранному периоду нет задолженности для оплаты.'
     }
-    let remainingAmount = rowsDebtToPay
+    if (!Number.isFinite(request.amount) || request.amount <= 0 || request.amount > totalDebtToPay) {
+      return `Сумма оплаты должна быть больше нуля и не выше долга ${formatPaymentMoney(totalDebtToPay)}.`
+    }
+
+    let remainingAmount = request.amount
+    const openingDebtPaymentAmount = Math.min(openingDebtToPay, remainingAmount)
+    remainingAmount -= openingDebtPaymentAmount
     const paymentPlan: Array<{ row: GarageIncomePrototypeRow; incomeType: AccountingTypeDto; amount: number }> = []
     for (const row of rowsToPay) {
       if (remainingAmount <= 0) {
@@ -3799,23 +3805,23 @@ function PaymentsPrototypePanel({
       remainingAmount -= rowAmount
     }
 
-    if (paymentPlan.length === 0 && openingDebtToPay <= 0) {
+    if (paymentPlan.length === 0 && openingDebtPaymentAmount <= 0) {
       return 'Укажите сумму полной оплаты больше нуля.'
     }
 
     const historyItems: Array<{ operation: FinancialOperationDto; purposeFallback: string; debtAfterFallback: number }> = []
-    if (openingDebtToPay > 0) {
+    if (openingDebtPaymentAmount > 0) {
       const operation = await financeClient.createGarageDebtPayment(auth.accessToken, {
         garageId: selectedGarage.id,
         operationDate: getLocalDateInputValue(),
         accountingMonth: incomeWorksheetMonthFrom.length === 7 ? `${incomeWorksheetMonthFrom}-01` : incomeWorksheetMonthFrom,
-        amount: openingDebtToPay,
+        amount: openingDebtPaymentAmount,
         comment: request.comment.trim() || undefined,
       })
       historyItems.push({
         operation,
         purposeFallback: 'Оплата входящего долга',
-        debtAfterFallback: Math.max(totalDebtToPay - openingDebtToPay, 0),
+        debtAfterFallback: Math.max(totalDebtToPay - openingDebtPaymentAmount, 0),
       })
     }
 
@@ -4453,11 +4459,11 @@ function PaymentsPrototypePanel({
                 <CalendarDays size={16} aria-hidden="true" />
                 <span>Сформировать начисления</span>
               </button>
-              <button className="secondary-button" type="button" onClick={openDebtTransferDialog}>
+              <button className="secondary-button" type="button" onClick={openDebtTransferDialog} disabled={garageWorksheetLoadingId === selectedGarage.id}>
                 <RotateCcw size={16} aria-hidden="true" />
                 <span>Перенести задолженность</span>
               </button>
-              <button className="secondary-button" type="button" onClick={openFullPaymentDialog}>
+              <button className="secondary-button" type="button" onClick={openFullPaymentDialog} disabled={garageWorksheetLoadingId === selectedGarage.id}>
                 <WalletCards size={16} aria-hidden="true" />
                 <span>Полная оплата</span>
               </button>
@@ -6114,24 +6120,30 @@ function FullPaymentPrototypeDialog({
   const dialogRef = useFocusTrap<HTMLElement>(true)
   const cancelRef = useFocusOnOpen<HTMLButtonElement>(true)
   const [period, setPeriod] = useState(periodOptions[0]?.value ?? 'full')
-  const [amount, setAmount] = useState(() => String(periodOptions[0]?.debt ?? 0))
+  const [amount, setAmount] = useState(() => periodOptions[0]?.debt ?? 0)
   const [comment, setComment] = useState('')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   useEscapeKey(true, onClose)
 
+  const selectedDebt = periodOptions.find((option) => option.value === period)?.debt ?? 0
+  const hasDebt = periodOptions.some((option) => option.debt > 0)
+
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    const parsedAmount = Number(amount.trim().replace(/\s/g, '').replace(',', '.'))
-    if (!Number.isFinite(parsedAmount) || parsedAmount <= 0) {
+    if (!Number.isFinite(amount) || amount <= 0) {
       setError('Укажите сумму полной оплаты больше нуля.')
+      return
+    }
+    if (amount > selectedDebt) {
+      setError(`Сумма оплаты не может превышать долг ${formatPaymentMoney(selectedDebt)}.`)
       return
     }
 
     setSaving(true)
     setError(null)
     try {
-      const submitError = await onSubmit({ period, amount: parsedAmount, comment })
+      const submitError = await onSubmit({ period, amount, comment })
       if (submitError) {
         setError(submitError)
         return
@@ -6146,40 +6158,63 @@ function FullPaymentPrototypeDialog({
 
   return (
     <div className="modal-backdrop" role="presentation" onMouseDown={onClose}>
-      <section ref={dialogRef} className="detail-dialog payments-prototype-dialog" role="dialog" aria-modal="true" aria-labelledby="full-payment-title" onMouseDown={(event) => event.stopPropagation()}>
+      <section ref={dialogRef} className="detail-dialog payments-prototype-dialog full-payment-dialog" role="dialog" aria-modal="true" aria-labelledby="full-payment-title" onMouseDown={(event) => event.stopPropagation()}>
         <div className="detail-dialog-header">
           <div>
             <h3 id="full-payment-title">Полная оплата</h3>
+            <p>Выберите расчетный период и укажите сумму оплаты задолженности.</p>
           </div>
           <button className="icon-button" type="button" aria-label="Закрыть полную оплату" onClick={onClose}>
             <X size={18} aria-hidden="true" />
           </button>
         </div>
-        <form className="dictionary-modal-form payments-prototype-modal-form" onSubmit={handleSubmit}>
-          <FormField label="Период">
-            <SelectControl
-              aria-label="Период полной оплаты"
-              value={period}
-              options={periodOptions.map((option) => ({ value: option.value, label: option.label }))}
-              onChange={(nextPeriod) => {
-                setPeriod(nextPeriod)
-                setAmount(String(periodOptions.find((option) => option.value === nextPeriod)?.debt ?? 0))
+        {!hasDebt ? (
+          <>
+            <div className="full-payment-empty" role="status" aria-live="polite">
+              <span className="full-payment-empty__icon" aria-hidden="true"><WalletCards size={22} /></span>
+              <div>
+                <strong>Задолженности для оплаты нет</strong>
+                <p>По выбранному гаражу нет долга за загруженный расчетный период.</p>
+              </div>
+            </div>
+            <div className="detail-dialog-actions">
+              <button ref={cancelRef} className="ghost-button" type="button" onClick={onClose}>Закрыть</button>
+            </div>
+          </>
+        ) : (
+        <form className="dictionary-modal-form payments-prototype-modal-form full-payment-form" onSubmit={handleSubmit}>
+          <div className="full-payment-fields">
+            <FormField className="full-payment-field" label="Расчетный период">
+              <SelectControl
+                aria-label="Период полной оплаты"
+                value={period}
+                options={periodOptions.filter((option) => option.debt > 0).map((option) => ({ value: option.value, label: option.label }))}
+                disabled={saving}
+                onChange={(nextPeriod) => {
+                  const nextDebt = periodOptions.find((option) => option.value === nextPeriod)?.debt ?? 0
+                  setPeriod(nextPeriod)
+                  setAmount(nextDebt)
+                  setError(null)
+                }}
+              />
+            </FormField>
+            <FormField className="full-payment-field full-payment-amount" label="Сумма оплаты" hint={`Доступный долг: ${formatPaymentMoney(selectedDebt)} руб.`}>
+              <MoneyInput aria-label="Сумма полной оплаты" value={amount} onValueChange={(nextAmount) => {
+                setAmount(nextAmount)
                 setError(null)
-              }}
-            />
-          </FormField>
-          <FormField label="Сумма">
-            <input aria-label="Сумма полной оплаты" inputMode="decimal" value={amount} readOnly />
-          </FormField>
-          <FormField label="Комментарий">
-            <textarea aria-label="Комментарий к полной оплате" rows={4} value={comment} onChange={(event) => setComment(event.target.value)} />
+              }} disabled={saving} />
+            </FormField>
+          </div>
+          <FormField className="full-payment-field" label="Комментарий" hint="Необязательно">
+            <textarea aria-label="Комментарий к полной оплате" rows={3} value={comment} onChange={(event) => setComment(event.target.value)} disabled={saving} />
           </FormField>
           {error ? <FormError>{error}</FormError> : null}
           <div className="detail-dialog-actions">
-            <button className="secondary-button" type="submit" disabled={saving}>{saving ? 'Сохраняем...' : 'Принять'}</button>
-            <button ref={cancelRef} className="secondary-button" type="button" onClick={onClose} disabled={saving}>Отмена</button>
+            <button className="secondary-button" type="submit" disabled={saving}>{saving ? 'Сохраняем...' : 'Провести оплату'}</button>
+            <button ref={cancelRef} className="ghost-button" type="button" onClick={onClose} disabled={saving}>Отмена</button>
           </div>
         </form>
+        )}
       </section>
     </div>
   )

@@ -116,7 +116,15 @@ describe('responsive layout styles', () => {
     expect(normalizedAppCss).toContain('.debt-transfer-periods {\n  display: grid;\n  grid-template-columns: minmax(0, 1fr) 36px minmax(0, 1fr);')
     expect(normalizedAppCss).toContain('.debt-transfer-details {\n  display: grid;\n  grid-template-columns: minmax(180px, 220px) minmax(0, 1fr);')
     expect(normalizedAppCss).toContain('.debt-transfer-amount input {\n  text-align: right;\n  font-variant-numeric: tabular-nums;')
-    expect(normalizedAppCss).toContain('.debt-transfer-periods,\n  .debt-transfer-details {\n    grid-template-columns: minmax(0, 1fr);')
+    expect(normalizedAppCss).toContain('.debt-transfer-periods,\n  .debt-transfer-details,\n  .full-payment-fields {\n    grid-template-columns: minmax(0, 1fr);')
+  })
+
+  it('keeps the full payment form and its error at a comfortable width', () => {
+    expect(normalizedAppCss).toContain('.full-payment-dialog {\n  width: min(660px, 100%);')
+    expect(normalizedAppCss).toContain('.full-payment-form {\n  grid-template-columns: minmax(0, 1fr);')
+    expect(normalizedAppCss).toContain('.full-payment-fields {\n  display: grid;\n  grid-template-columns: minmax(0, 1fr) minmax(200px, 240px);')
+    expect(normalizedAppCss).toContain('.full-payment-amount input {\n  text-align: right;\n  font-variant-numeric: tabular-nums;')
+    expect(normalizedAppCss).toContain('.full-payment-form > .form-error {\n  grid-column: 1;\n  width: 100%;')
   })
 
   it('widens the owner editor and keeps its identity fields responsive', () => {

@@ -605,19 +605,23 @@ public sealed class ProjectWideRoadmapStatusTests
         Assert.StartsWith("- `[x]`", detailLine, StringComparison.Ordinal);
 
         Assert.Contains("<h3 id=\"full-payment-title\">Полная оплата</h3>", financePanelText, StringComparison.Ordinal);
-        Assert.Contains("aria-label=\"Сумма полной оплаты\" inputMode=\"decimal\" value={amount} readOnly", financePanelText, StringComparison.Ordinal);
+        Assert.Contains("<MoneyInput aria-label=\"Сумма полной оплаты\" value={amount}", financePanelText, StringComparison.Ordinal);
+        Assert.Contains("request.amount > totalDebtToPay", financePanelText, StringComparison.Ordinal);
         Assert.Contains("createGarageDebtPayment", financePanelText, StringComparison.Ordinal);
         Assert.Contains("shows payments prototype and opens payment form modals", appTestsText, StringComparison.Ordinal);
         Assert.Contains("pays opening debt through full payment when worksheet has no service rows", appTestsText, StringComparison.Ordinal);
-        Assert.Contains("expect(fullPaymentAmount).toHaveAttribute('readonly')", appTestsText, StringComparison.Ordinal);
+        Assert.Contains("expect(fullPaymentAmount).not.toHaveAttribute('readonly')", appTestsText, StringComparison.Ordinal);
+        Assert.Contains("await user.type(fullPaymentAmount, '6000')", appTestsText, StringComparison.Ordinal);
         Assert.Contains("/api/finance/income/debt-payment", financeApiText, StringComparison.Ordinal);
         Assert.Contains("posts opening debt payment to the debt payment endpoint", financeApiTestsText, StringComparison.Ordinal);
 
         Assert.Contains("\"version\": \"0.412.0\"", releaseText, StringComparison.Ordinal);
         Assert.Contains("\"version\": \"0.429.0\"", releaseText, StringComparison.Ordinal);
         Assert.Contains("\"version\": \"0.437.0\"", releaseText, StringComparison.Ordinal);
+        Assert.Contains("\"version\": \"0.663.0\"", releaseText, StringComparison.Ordinal);
         Assert.Contains("Полная оплата использует рассчитанную сумму", releaseText, StringComparison.Ordinal);
         Assert.Contains("Полная оплата учитывает входящий долг периода", releaseText, StringComparison.Ordinal);
+        Assert.Contains("Сумму оплаты теперь можно указать вручную", releaseText, StringComparison.Ordinal);
 
         Assert.Contains("синхронизирован верхний пользовательский сценарий приемки", historyText, StringComparison.Ordinal);
         Assert.Contains("FullPaymentAcceptanceScenarioIsMarkedCompleteWhenRoadmapCodeTestsAndReleaseNotesExist", historyText, StringComparison.Ordinal);

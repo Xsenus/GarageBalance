@@ -3623,6 +3623,10 @@ h1 {
   width: min(680px, 100%);
 }
 
+.full-payment-dialog {
+  width: min(660px, 100%);
+}
+
 .payments-prototype-modal-form {
   display: grid;
   grid-template-columns: minmax(130px, 180px) minmax(0, 1fr);
@@ -3741,9 +3745,80 @@ h1 {
   line-height: 1.5;
 }
 
+.full-payment-form {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 18px;
+}
+
+.payments-prototype-modal-form .full-payment-field {
+  display: grid;
+  gap: 6px;
+}
+
+.full-payment-fields {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(200px, 240px);
+  align-items: start;
+  gap: 16px;
+  border: 1px solid #d6e4ff;
+  border-radius: 10px;
+  background: #f8faff;
+  padding: 14px;
+}
+
+.full-payment-amount input {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.full-payment-form textarea {
+  min-height: 86px;
+}
+
+.full-payment-form > .form-error {
+  grid-column: 1;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.full-payment-empty {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: 14px;
+  border: 1px solid #d6e4ff;
+  border-radius: 10px;
+  background: #f8faff;
+  padding: 18px;
+}
+
+.full-payment-empty__icon {
+  display: grid;
+  width: 42px;
+  height: 42px;
+  place-items: center;
+  border-radius: 10px;
+  background: #e8f0ff;
+  color: #175cd3;
+}
+
+.full-payment-empty strong {
+  display: block;
+  color: #101828;
+  font-size: 15px;
+}
+
+.full-payment-empty p {
+  margin: 5px 0 0;
+  color: #475467;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
 @media (max-width: 640px) {
   .debt-transfer-periods,
-  .debt-transfer-details {
+  .debt-transfer-details,
+  .full-payment-fields {
     grid-template-columns: minmax(0, 1fr);
   }
 
@@ -3754,7 +3829,8 @@ h1 {
     transform: rotate(90deg);
   }
 
-  .debt-transfer-empty {
+  .debt-transfer-empty,
+  .full-payment-empty {
     grid-template-columns: minmax(0, 1fr);
   }
 }

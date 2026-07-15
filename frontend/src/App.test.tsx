@@ -3525,17 +3525,28 @@ describe('App', () => {
     expect(fullPaymentPeriodOption).toHaveAttribute('aria-selected', 'true')
     await user.click(fullPaymentPeriodOption)
     const fullPaymentAmount = within(fullPaymentDialog).getByLabelText('Сумма полной оплаты')
-    expect(fullPaymentAmount).toHaveValue('6500')
-    expect(fullPaymentAmount).toHaveAttribute('readonly')
+    expect(fullPaymentAmount).toHaveValue('6 500.00')
+    expect(fullPaymentAmount).not.toHaveAttribute('readonly')
+    await user.click(fullPaymentAmount)
+    await user.clear(fullPaymentAmount)
+    await user.type(fullPaymentAmount, '7000')
+    await user.click(within(fullPaymentDialog).getByRole('button', { name: 'Провести оплату' }))
+    const fullPaymentError = within(fullPaymentDialog).getByRole('alert')
+    expect(fullPaymentError).toHaveTextContent('Сумма оплаты не может превышать долг 6 500.00.')
+    expect(fullPaymentError).toHaveClass('form-error')
+    expect(savedIncomeRequests).toHaveLength(1)
+    await user.click(fullPaymentAmount)
+    await user.clear(fullPaymentAmount)
+    await user.type(fullPaymentAmount, '6000')
     await user.type(within(fullPaymentDialog).getByLabelText('Комментарий к полной оплате'), 'Оплата остатка')
-    await user.click(within(fullPaymentDialog).getByRole('button', { name: 'Принять' }))
+    await user.click(within(fullPaymentDialog).getByRole('button', { name: 'Провести оплату' }))
     await waitFor(() => expect(savedIncomeRequests).toHaveLength(2))
     expect(savedIncomeRequests[1]).toMatchObject({
       garageId: garage.id,
       incomeTypeId: waterIncomeType.id,
       operationDate: '2026-06-30',
       accountingMonth: '2026-06-01',
-      amount: 6500,
+      amount: 6000,
       comment: 'Полная оплата Водоснабжение июн.26: Оплата остатка',
     })
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Полная оплата' })).not.toBeInTheDocument())
@@ -3954,6 +3965,8 @@ describe('App', () => {
     const prototype = within(await screen.findByRole('region', { name: 'Платежи' })).getByRole('region', { name: 'Форма платежей' })
     expect(await within(prototype).findByText('Загружаем историю платежей')).toBeInTheDocument()
     expect(await within(prototype).findByText('Загружаем начисления и поступления')).toBeInTheDocument()
+    expect(within(prototype).getByRole('button', { name: 'Полная оплата' })).toBeDisabled()
+    expect(within(prototype).getByRole('button', { name: 'Перенести задолженность' })).toBeDisabled()
 
     await act(async () => {
       resolveWorksheet(createGarageIncomeWorksheet({
@@ -3977,6 +3990,8 @@ describe('App', () => {
 
     expect(await within(prototype).findByText('Электроэнергия')).toBeInTheDocument()
     expect(await within(prototype).findByText('Тестовое поступление')).toBeInTheDocument()
+    expect(within(prototype).getByRole('button', { name: 'Полная оплата' })).toBeEnabled()
+    expect(within(prototype).getByRole('button', { name: 'Перенести задолженность' })).toBeEnabled()
     await waitFor(() => {
       expect(within(prototype).queryByText('Загружаем историю платежей')).not.toBeInTheDocument()
       expect(within(prototype).queryByText('Загружаем начисления и поступления')).not.toBeInTheDocument()
@@ -4128,7 +4143,7 @@ describe('App', () => {
       accountingMonth: request.accountingMonth,
       amount: request.amount,
       garageDebtBefore: 900,
-      garageDebtAfter: 0,
+      garageDebtAfter: 200,
     }))
     const createIncome = vi.fn(async () => createFinancialOperation({ id: 'unexpected-income' }))
     render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient({ getGarages: async () => [garageFromDictionary] })} financeClient={createFinanceClient({ getGarageIncomeWorksheet, createGarageDebtPayment, createIncome })} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
@@ -4154,14 +4169,18 @@ describe('App', () => {
 
     await user.click(fullPaymentButton)
     fullPaymentDialog = await screen.findByRole('dialog', { name: 'Полная оплата' })
-    expect(within(fullPaymentDialog).getByLabelText('Сумма полной оплаты')).toHaveValue('900')
+    const openingDebtAmount = within(fullPaymentDialog).getByLabelText('Сумма полной оплаты')
+    expect(openingDebtAmount).toHaveValue('900.00')
+    await user.click(openingDebtAmount)
+    await user.clear(openingDebtAmount)
+    await user.type(openingDebtAmount, '700')
     await user.type(within(fullPaymentDialog).getByLabelText('Комментарий к полной оплате'), 'Закрываем долг на начало')
-    await user.click(within(fullPaymentDialog).getByRole('button', { name: 'Принять' }))
+    await user.click(within(fullPaymentDialog).getByRole('button', { name: 'Провести оплату' }))
 
     await waitFor(() => expect(createGarageDebtPayment).toHaveBeenCalledWith('token', expect.objectContaining({
       garageId: 'garage-opening-debt',
       accountingMonth: expect.stringMatching(/^\d{4}-\d{2}-01$/),
-      amount: 900,
+      amount: 700,
       comment: 'Закрываем долг на начало',
     })))
     expect(createIncome).not.toHaveBeenCalled()
@@ -4470,6 +4489,12 @@ describe('App', () => {
     await waitFor(() => expect(closeButton).toHaveFocus())
     await user.click(closeButton)
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Перенести задолженность' })).not.toBeInTheDocument())
+
+    await user.click(within(prototype).getByRole('button', { name: 'Полная оплата' }))
+    const fullPaymentDialog = await screen.findByRole('dialog', { name: 'Полная оплата' })
+    expect(fullPaymentDialog).toHaveClass('full-payment-dialog')
+    expect(within(fullPaymentDialog).getByRole('status')).toHaveTextContent('Задолженности для оплаты нет')
+    expect(within(fullPaymentDialog).queryByLabelText('Сумма полной оплаты')).not.toBeInTheDocument()
   })
 
   it('moves garage debt to the next month and saves the transfer in form history', async () => {
