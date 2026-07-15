@@ -25,6 +25,7 @@ namespace GarageBalance.Api.Infrastructure.Data.Migrations
                             ('cfdbb49e-e6c8-4b91-8a10-f783cd55b4c8'::uuid, 'Целевой взнос', 'target'),
                             ('19b731c2-43a6-4dcd-9670-ba76a512b091'::uuid, 'Вступительный взнос', 'entry'),
                             ('95f18e62-7ac8-4aac-b80e-af371a6d9581'::uuid, 'Подключения', 'connection'),
+                            ('77f0502f-9e2d-47f5-8f1a-43f9563bf744'::uuid, 'Наружное освещение', 'outdoor_lighting'),
                             ('9e78f409-6a41-4073-a8af-8d5b4b80d85b'::uuid, 'Штраф', 'penalty'),
                             ('13965d6a-e589-42af-bf29-f44c704bdd61'::uuid, 'Предписание', 'notice')
                     )
@@ -56,7 +57,7 @@ namespace GarageBalance.Api.Infrastructure.Data.Migrations
                             ('f0d7ed2e-ec55-42b4-8a79-01b37c287103'::uuid, 'Членский взнос', 12, 1, 30, 6, 30, 'membership', '8a92bf70-9339-4bbc-8e5d-a05cda185103'::uuid, FALSE, FALSE, 'руб.'),
                             ('f0d7ed2e-ec55-42b4-8a79-01b37c287104'::uuid, 'Целевой взнос', 12, 1, 30, 6, 30, 'target', '8a92bf70-9339-4bbc-8e5d-a05cda185104'::uuid, FALSE, FALSE, 'руб.'),
                             ('f0d7ed2e-ec55-42b4-8a79-01b37c287105'::uuid, 'Мусор', 1, 1, NULL::integer, NULL::integer, 30, 'trash', '8a92bf70-9339-4bbc-8e5d-a05cda185105'::uuid, FALSE, FALSE, 'чел.'),
-                            ('f0d7ed2e-ec55-42b4-8a79-01b37c287106'::uuid, 'Наружное освещение', 12, 1, 31, 12, 0, NULL, '8a92bf70-9339-4bbc-8e5d-a05cda185106'::uuid, FALSE, FALSE, 'руб.')
+                            ('f0d7ed2e-ec55-42b4-8a79-01b37c287106'::uuid, 'Наружное освещение', 12, 1, 31, 12, 0, 'outdoor_lighting', '8a92bf70-9339-4bbc-8e5d-a05cda185106'::uuid, FALSE, FALSE, 'руб.')
                     )
                     INSERT INTO charge_service_settings (
                         "Id", "Name", "IsRegular", "PeriodicityMonths", "AccrualStartMonth", "PaymentDueDay",
@@ -82,6 +83,20 @@ namespace GarageBalance.Api.Infrastructure.Data.Migrations
                              OR LOWER(BTRIM(existing."Name")) = LOWER(BTRIM(defaults."Name"))
                       )
                     ON CONFLICT DO NOTHING;
+
+                    GET DIAGNOSTICS inserted_rows = ROW_COUNT;
+                    changed_rows := changed_rows + inserted_rows;
+
+                    UPDATE charge_service_settings service
+                    SET "IncomeTypeId" = income_type."Id",
+                        "UpdatedAtUtc" = TIMESTAMPTZ '2026-07-15T10:02:29Z'
+                    FROM income_types income_type
+                    WHERE service."Id" = 'f0d7ed2e-ec55-42b4-8a79-01b37c287106'
+                      AND service."Name" = 'Наружное освещение'
+                      AND service."IsArchived" = FALSE
+                      AND service."IncomeTypeId" IS NULL
+                      AND income_type."Code" = 'outdoor_lighting'
+                      AND income_type."IsArchived" = FALSE;
 
                     GET DIAGNOSTICS inserted_rows = ROW_COUNT;
                     changed_rows := changed_rows + inserted_rows;
@@ -127,6 +142,7 @@ namespace GarageBalance.Api.Infrastructure.Data.Migrations
                     'cfdbb49e-e6c8-4b91-8a10-f783cd55b4c8',
                     '19b731c2-43a6-4dcd-9670-ba76a512b091',
                     '95f18e62-7ac8-4aac-b80e-af371a6d9581',
+                    '77f0502f-9e2d-47f5-8f1a-43f9563bf744',
                     '9e78f409-6a41-4073-a8af-8d5b4b80d85b',
                     '13965d6a-e589-42af-bf29-f44c704bdd61')
                   AND "CreatedAtUtc" = TIMESTAMPTZ '2026-07-15T10:02:29Z'

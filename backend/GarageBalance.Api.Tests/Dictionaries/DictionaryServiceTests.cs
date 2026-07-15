@@ -1276,7 +1276,7 @@ public sealed class DictionaryServiceTests
             "Migrations",
             "20260715100229_RestoreRegularAccrualCatalogAfterCleanup.cs"));
 
-        string[] regularIncomeCodes = ["water", "trash", "electricity", "membership", "target"];
+        string[] regularIncomeCodes = ["water", "trash", "electricity", "membership", "target", "outdoor_lighting"];
         foreach (var code in regularIncomeCodes)
         {
             Assert.Contains($"'{code}'", migration, StringComparison.Ordinal);
@@ -1289,6 +1289,8 @@ public sealed class DictionaryServiceTests
         Assert.Contains("INNER JOIN tariffs tariff", migration, StringComparison.Ordinal);
         Assert.Contains("tariff.\"IsArchived\" = FALSE", migration, StringComparison.Ordinal);
         Assert.Contains("FROM charge_service_settings existing", migration, StringComparison.Ordinal);
+        Assert.Contains("service.\"IncomeTypeId\" IS NULL", migration, StringComparison.Ordinal);
+        Assert.Contains("income_type.\"Code\" = 'outdoor_lighting'", migration, StringComparison.Ordinal);
         Assert.Contains("ON CONFLICT DO NOTHING", migration, StringComparison.Ordinal);
         Assert.Contains("dictionary.regular_accrual_catalog_restored", migration, StringComparison.Ordinal);
         Assert.DoesNotContain("UPDATE tariffs", migration, StringComparison.OrdinalIgnoreCase);
