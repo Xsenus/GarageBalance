@@ -1946,13 +1946,13 @@ public sealed class DictionaryService(
 
     private static string FormatTariffAuditDetails(Tariff tariff)
     {
-        var baseDetails = $"{tariff.Name} с {tariff.EffectiveFrom:dd.MM.yyyy}, база {tariff.CalculationBase}, ставка {tariff.Rate.ToString("0.####", CultureInfo.InvariantCulture)}";
+        var baseDetails = $"{tariff.Name} с {tariff.EffectiveFrom:dd.MM.yyyy}, база {tariff.CalculationBase}, ставка {MoneyFormatting.Format(tariff.Rate)}";
         if (!HasElectricityTiers(tariff))
         {
             return baseDetails;
         }
 
-        return $"{baseDetails}, электричество: {tariff.ElectricityFirstTierName ?? "Порог 1"} до {tariff.ElectricityFirstThreshold!.Value.ToString("0.####", CultureInfo.InvariantCulture)} кВт по {tariff.ElectricityFirstRate!.Value.ToString("0.####", CultureInfo.InvariantCulture)}, {tariff.ElectricitySecondTierName ?? "Порог 2"} до {tariff.ElectricitySecondThreshold!.Value.ToString("0.####", CultureInfo.InvariantCulture)} кВт по {tariff.ElectricitySecondRate!.Value.ToString("0.####", CultureInfo.InvariantCulture)}, {tariff.ElectricityThirdTierName ?? "Порог 3"} по {tariff.ElectricityThirdRate!.Value.ToString("0.####", CultureInfo.InvariantCulture)}";
+        return $"{baseDetails}, электричество: {tariff.ElectricityFirstTierName ?? "Порог 1"} до {tariff.ElectricityFirstThreshold!.Value.ToString("0.####", CultureInfo.InvariantCulture)} кВт по {MoneyFormatting.Format(tariff.ElectricityFirstRate!.Value)}, {tariff.ElectricitySecondTierName ?? "Порог 2"} до {tariff.ElectricitySecondThreshold!.Value.ToString("0.####", CultureInfo.InvariantCulture)} кВт по {MoneyFormatting.Format(tariff.ElectricitySecondRate!.Value)}, {tariff.ElectricityThirdTierName ?? "Порог 3"} по {MoneyFormatting.Format(tariff.ElectricityThirdRate!.Value)}";
     }
 
     private static DictionaryResult<ElectricityTierConfig?> ValidateElectricityTiers(string calculationBase, UpsertTariffRequest request)

@@ -1457,7 +1457,7 @@ public sealed class ReportService(
 
     private static int NormalizeReportLimit(int limit) => Math.Clamp(limit, 1, 500);
 
-    private static string FormatAmount(decimal value) => value.ToString("0.00", CultureInfo.InvariantCulture);
+    private static string FormatAmount(decimal value) => MoneyFormatting.Format(value);
 
     private static string? FormatOwnerName(string? lastName, string? firstName, string? middleName)
     {

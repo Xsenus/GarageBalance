@@ -199,15 +199,15 @@ describe('dictionary workbench metadata', () => {
   it('returns table cell values for every dictionary section', () => {
     expect(getDictionaryRecordCells('owners', createOwner({ garageNumbers: ['1', '2'] }))).toEqual(['Иванов Иван', '1, 2', 'не указан', 'не указан'])
     expect(getDictionaryRecordCells('owners', createOwner({ phone: '+79990000000', address: 'ул. Ленина, 1' }))).toEqual(['Иванов Иван', 'без гаража', '+79990000000', 'ул. Ленина, 1'])
-    expect(getDictionaryRecordCells('garages', createGarage({ ownerName: 'Иванов Иван', startingBalance: 350 }))).toEqual(['42', 'Иванов Иван', 1, 1, '350,00'])
-    expect(getDictionaryRecordCells('garages', createGarage())).toEqual(['42', 'без владельца', 1, 1, '0,00'])
+    expect(getDictionaryRecordCells('garages', createGarage({ ownerName: 'Иванов Иван', startingBalance: 350 }))).toEqual(['42', 'Иванов Иван', 1, 1, '350.00'])
+    expect(getDictionaryRecordCells('garages', createGarage())).toEqual(['42', 'без владельца', 1, 1, '0.00'])
     expect(getDictionaryRecordCells('supplierGroups', createSupplierGroup({ isSystem: true }))).toEqual(['Банковские услуги', 'Системная'])
     expect(getDictionaryRecordCells('supplierGroups', createSupplierGroup())).toEqual(['Банковские услуги', 'Пользовательская'])
-    expect(getDictionaryRecordCells('suppliers', createSupplier({ inn: '5400000000', startingBalance: 250 }))).toEqual(['БАНК 12', 'Банковские услуги', '5400000000', '250,00'])
-    expect(getDictionaryRecordCells('suppliers', createSupplier())).toEqual(['БАНК 12', 'Банковские услуги', 'не указан', '0,00'])
+    expect(getDictionaryRecordCells('suppliers', createSupplier({ inn: '5400000000', startingBalance: 250 }))).toEqual(['БАНК 12', 'Банковские услуги', '5400000000', '250.00'])
+    expect(getDictionaryRecordCells('suppliers', createSupplier())).toEqual(['БАНК 12', 'Банковские услуги', 'не указан', '0.00'])
     expect(getDictionaryRecordCells('incomeTypes', createAccountingType({ code: 'MEMBER_FEE', isSystem: true }))).toEqual(['Членский взнос', 'MEMBER_FEE', 'Системный'])
     expect(getDictionaryRecordCells('expenseTypes', createAccountingType({ name: 'Вывоз мусора' }))).toEqual(['Вывоз мусора', 'не указан', 'Пользовательский'])
-    expect(getDictionaryRecordCells('tariffs', createTariff())).toEqual(['Тариф на воду', 'water', '1,00', '01.07.2026'])
+    expect(getDictionaryRecordCells('tariffs', createTariff())).toEqual(['Тариф на воду', 'water', '1.00', '01.07.2026'])
   })
 
   it('returns editor field metadata used by dictionary CRUD modals', () => {

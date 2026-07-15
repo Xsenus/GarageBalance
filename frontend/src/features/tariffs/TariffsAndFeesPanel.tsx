@@ -15,6 +15,7 @@ import { FormField } from '../../shared/FormField'
 import { formatDateOnly, formatMoney, getCurrentMonthInputValue, getLocalDateInputValue } from '../../shared/formatters'
 import { useEscapeKey, useFocusOnOpen, useFocusTrap, useRestoreFocusOnClose } from '../../shared/focusHooks'
 import { LocalizedDatePicker } from '../../shared/LocalizedDatePicker'
+import { MoneyTextInput } from '../../shared/MoneyInput'
 import { formatPrototypeChangeValue, handleEditableInputKeyDown } from '../../shared/prototypeEditing'
 import { createClientPage } from '../../shared/pagination'
 import { SelectControl } from '../../shared/SelectControl'
@@ -1699,12 +1700,22 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
                         </select>
                         {tariffDateErrors[row.id] ? <span id={`${row.id}-date-error`} className="contractors-field-error" role="alert">{tariffDateErrors[row.id]}</span> : null}
                       </div>
+                    ) : isTariffMoneyAmount(row) ? (
+                      <MoneyTextInput
+                        aria-label={`${row.category}: ${row.title}: значение`}
+                        className="contractors-editable-input"
+                        disabled={!canManageTariffs || isRowDisabled}
+                        value={tariffDrafts[row.id]?.amount ?? ''}
+                        onValueChange={(amount) => setTariffDrafts((drafts) => ({ ...drafts, [row.id]: { ...drafts[row.id], amount } }))}
+                        onBlur={() => void commitTariffTextChange(row, 'amount')}
+                        onKeyDown={(event) => handleEditableInputKeyDown(event, () => commitTariffTextChange(row, 'amount'))}
+                      />
                     ) : (
                       <input
                         aria-label={`${row.category}: ${row.title}: значение`}
                         className="contractors-editable-input"
                         disabled={!canManageTariffs || isRowDisabled}
-                        inputMode="decimal"
+                        inputMode="numeric"
                         value={tariffDrafts[row.id]?.amount ?? ''}
                         onChange={(event) => setTariffDrafts((drafts) => ({ ...drafts, [row.id]: { ...drafts[row.id], amount: event.target.value } }))}
                         onBlur={() => void commitTariffTextChange(row, 'amount')}
@@ -1818,13 +1829,12 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
                         </button>
                       </span>
                     ) : (
-                      <input
+                      <MoneyTextInput
                         aria-label={`Сумма: ${row.name}`}
                         className="contractors-editable-input"
                         disabled={!canManageTariffs || !row.isActive || oneTimeSavingRowId === row.id}
-                        inputMode="decimal"
                         value={oneTimeDrafts[row.id]?.amount ?? ''}
-                        onChange={(event) => setOneTimeDrafts((drafts) => ({ ...drafts, [row.id]: { ...drafts[row.id], amount: event.target.value } }))}
+                        onValueChange={(amount) => setOneTimeDrafts((drafts) => ({ ...drafts, [row.id]: { ...drafts[row.id], amount } }))}
                         onBlur={() => void commitOneTimeAmountChange(row)}
                         onKeyDown={(event) => handleEditableInputKeyDown(event, () => commitOneTimeAmountChange(row))}
                       />
@@ -2305,6 +2315,7 @@ function AddServicePrototypeDialog({
   const [paymentDueMonth, setPaymentDueMonth] = useState(contractorTariffMonthOptions[6].value)
   const [overdueGraceDays, setOverdueGraceDays] = useState('30')
   const [unitName, setUnitName] = useState(unitOptions[0] ?? 'руб.')
+  const [cost, setCost] = useState('')
   const [error, setError] = useState<string | null>(null)
   const compatibleTariffs = getCompatibleRegularTariffs(incomeTypeId, incomeTypes, tariffs)
   useRestoreFocusOnClose(true)
@@ -2492,7 +2503,7 @@ function AddServicePrototypeDialog({
           ) : (
             <FormField label="Стоимость">
               <div className="contractors-inline-field">
-                <input aria-label="Стоимость услуги" />
+                <MoneyTextInput aria-label="Стоимость услуги" value={cost} onValueChange={setCost} />
                 <span>руб.</span>
               </div>
             </FormField>
@@ -2680,13 +2691,13 @@ function AddFeePrototypeDialog({
           <div className="contractors-fee-two-column-grid">
             <FormField label="Сумма взноса">
               <div className="contractors-inline-field contractors-fee-money-field">
-                <input aria-label="Сумма взноса" inputMode="decimal" value={contributionAmount} onChange={(event) => setContributionAmount(event.target.value)} onBlur={() => setContributionAmount(formatTariffDecimal(contributionAmount))} />
+                <MoneyTextInput aria-label="Сумма взноса" value={contributionAmount} onValueChange={setContributionAmount} />
                 <span>руб.</span>
               </div>
             </FormField>
             <FormField label="Сумма сбора">
               <div className="contractors-inline-field contractors-fee-money-field">
-                <input aria-label="Сумма сбора" inputMode="decimal" value={targetAmount} onChange={(event) => setTargetAmount(event.target.value)} onBlur={() => setTargetAmount(formatTariffDecimal(targetAmount))} />
+                <MoneyTextInput aria-label="Сумма сбора" value={targetAmount} onValueChange={setTargetAmount} />
                 <span>руб.</span>
               </div>
             </FormField>

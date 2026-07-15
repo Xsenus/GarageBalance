@@ -45,7 +45,7 @@ public sealed class FinanceServiceTests
         Assert.Equal("Членский взнос", result.Value.IncomeTypeName);
         var audit = Assert.Single(database.Context.AuditEvents, item => item.Action == "finance.income_created");
         Assert.Equal(actorUserId, audit.ActorUserId);
-        Assert.Contains("Создано поступление 1500,50", audit.Summary, StringComparison.Ordinal);
+        Assert.Contains("Создано поступление 1 500.50", audit.Summary, StringComparison.Ordinal);
         Assert.Contains("по гаражу 12", audit.Summary, StringComparison.Ordinal);
         Assert.Contains("от 19.06.2026", audit.Summary, StringComparison.Ordinal);
         Assert.Contains("за 06.2026", audit.Summary, StringComparison.Ordinal);
@@ -214,8 +214,8 @@ public sealed class FinanceServiceTests
         Assert.Equal(actorUserId, audit.ActorUserId);
         Assert.Equal(staffMember.Id.ToString(), audit.RelatedCounterpartyId);
         Assert.Equal("Петрова Ольга", audit.RelatedCounterpartyName);
-        Assert.Contains("Создана выплата 25000,00 сотруднику Петрова Ольга", audit.Summary, StringComparison.Ordinal);
-        Assert.Contains("доступно до выплаты 40000,00", audit.Summary, StringComparison.Ordinal);
+        Assert.Contains("Создана выплата 25 000.00 сотруднику Петрова Ольга", audit.Summary, StringComparison.Ordinal);
+        Assert.Contains("доступно до выплаты 40 000.00", audit.Summary, StringComparison.Ordinal);
         using var metadata = JsonDocument.Parse(audit.MetadataJson!);
         Assert.Equal("Петрова Ольга", metadata.RootElement.GetProperty("staffMemberName").GetString());
         Assert.Equal("Бухгалтерия", metadata.RootElement.GetProperty("staffDepartmentName").GetString());
@@ -909,9 +909,9 @@ public sealed class FinanceServiceTests
         Assert.Equal(550m, updated.Value.GarageDebtAfter);
         var audit = Assert.Single(database.Context.AuditEvents, item => item.Action == "finance.income_updated");
         Assert.Equal(actorUserId, audit.ActorUserId);
-        Assert.Contains("было 300,00 по гаражу 12 от 19.06.2026 за 06.2026", audit.Summary, StringComparison.Ordinal);
+        Assert.Contains("было 300.00 по гаражу 12 от 19.06.2026 за 06.2026", audit.Summary, StringComparison.Ordinal);
         Assert.Contains("документ PKO-old", audit.Summary, StringComparison.Ordinal);
-        Assert.Contains("стало 450,00 по гаражу 12 от 20.06.2026 за 06.2026", audit.Summary, StringComparison.Ordinal);
+        Assert.Contains("стало 450.00 по гаражу 12 от 20.06.2026 за 06.2026", audit.Summary, StringComparison.Ordinal);
         Assert.Contains("документ PKO-new", audit.Summary, StringComparison.Ordinal);
         Assert.Contains("Комментарий: Исправлена сумма", audit.Summary, StringComparison.Ordinal);
         using var metadata = JsonDocument.Parse(audit.MetadataJson!);
@@ -950,7 +950,7 @@ public sealed class FinanceServiceTests
         Assert.Equal(0, summary.OperationCount);
         var audit = Assert.Single(database.Context.AuditEvents, item => item.Action == "finance.operation_canceled");
         Assert.Equal(actorUserId, audit.ActorUserId);
-        Assert.Contains("Отменено поступление 400,00", audit.Summary, StringComparison.Ordinal);
+        Assert.Contains("Отменено поступление 400.00", audit.Summary, StringComparison.Ordinal);
         Assert.Contains("по гаражу 12", audit.Summary, StringComparison.Ordinal);
         Assert.Contains("от 19.06.2026", audit.Summary, StringComparison.Ordinal);
         Assert.Contains("за 06.2026", audit.Summary, StringComparison.Ordinal);
@@ -1020,7 +1020,7 @@ public sealed class FinanceServiceTests
         var audit = Assert.Single(database.Context.AuditEvents, item => item.Action == "finance.operation_restored");
         Assert.Equal(actorUserId, audit.ActorUserId);
         Assert.Equal("restore", audit.ActionKind);
-        Assert.Contains("Восстановлено поступление 400,00", audit.Summary, StringComparison.Ordinal);
+        Assert.Contains("Восстановлено поступление 400.00", audit.Summary, StringComparison.Ordinal);
         Assert.Contains("по гаражу 12", audit.Summary, StringComparison.Ordinal);
         Assert.Contains("документ PKO-restore", audit.Summary, StringComparison.Ordinal);
     }
@@ -1109,7 +1109,7 @@ public sealed class FinanceServiceTests
         Assert.Equal("Вода", result.Value.ExpenseTypeName);
         var audit = Assert.Single(database.Context.AuditEvents, item => item.Action == "finance.expense_created");
         Assert.Equal(actorUserId, audit.ActorUserId);
-        Assert.Contains("Создана выплата 400,75", audit.Summary, StringComparison.Ordinal);
+        Assert.Contains("Создана выплата 400.75", audit.Summary, StringComparison.Ordinal);
         Assert.Contains("поставщику Vodokanal", audit.Summary, StringComparison.Ordinal);
         Assert.Contains("от 20.06.2026", audit.Summary, StringComparison.Ordinal);
         Assert.Contains("за 06.2026", audit.Summary, StringComparison.Ordinal);
@@ -1280,9 +1280,9 @@ public sealed class FinanceServiceTests
         Assert.Equal(800m, updated.Value.SupplierDebtAfter);
         var audit = Assert.Single(database.Context.AuditEvents, item => item.Action == "finance.expense_updated");
         Assert.Equal(actorUserId, audit.ActorUserId);
-        Assert.Contains("было 250,00 поставщику Vodokanal от 20.06.2026 за 06.2026", audit.Summary, StringComparison.Ordinal);
+        Assert.Contains("было 250.00 поставщику Vodokanal от 20.06.2026 за 06.2026", audit.Summary, StringComparison.Ordinal);
         Assert.Contains("документ RKO-old", audit.Summary, StringComparison.Ordinal);
-        Assert.Contains("стало 400,00 поставщику Vodokanal от 21.06.2026 за 06.2026", audit.Summary, StringComparison.Ordinal);
+        Assert.Contains("стало 400.00 поставщику Vodokanal от 21.06.2026 за 06.2026", audit.Summary, StringComparison.Ordinal);
         Assert.Contains("документ RKO-new", audit.Summary, StringComparison.Ordinal);
         Assert.Contains("Комментарий: Исправлена выплата", audit.Summary, StringComparison.Ordinal);
         using var metadata = JsonDocument.Parse(audit.MetadataJson!);
@@ -1501,7 +1501,7 @@ public sealed class FinanceServiceTests
         Assert.Equal("12", result.Value.GarageNumber);
         var audit = Assert.Single(database.Context.AuditEvents, item => item.Action == "finance.accrual_created");
         Assert.Equal(actorUserId, audit.ActorUserId);
-        Assert.Contains("Создано начисление 700,00", audit.Summary, StringComparison.Ordinal);
+        Assert.Contains("Создано начисление 700.00", audit.Summary, StringComparison.Ordinal);
         Assert.Contains("по гаражу 12", audit.Summary, StringComparison.Ordinal);
         Assert.Contains("за 06.2026", audit.Summary, StringComparison.Ordinal);
         Assert.Contains($"вид {fixtures.IncomeType.Name}", audit.Summary, StringComparison.Ordinal);
@@ -1539,9 +1539,9 @@ public sealed class FinanceServiceTests
         var updateAudit = Assert.Single(database.Context.AuditEvents, item => item.Action == "finance.debt_transfer_updated");
         Assert.Equal(actorUserId, createAudit.ActorUserId);
         Assert.Equal(actorUserId, updateAudit.ActorUserId);
-        Assert.Contains("Создан перенос задолженности 1700,00", createAudit.Summary, StringComparison.Ordinal);
+        Assert.Contains("Создан перенос задолженности 1 700.00", createAudit.Summary, StringComparison.Ordinal);
         Assert.Contains("из 06.2026 в 07.2026", createAudit.Summary, StringComparison.Ordinal);
-        Assert.Contains("добавлено 300,00", updateAudit.Summary, StringComparison.Ordinal);
+        Assert.Contains("добавлено 300.00", updateAudit.Summary, StringComparison.Ordinal);
         using var metadata = JsonDocument.Parse(updateAudit.MetadataJson!);
         Assert.Equal("debt_transfer", metadata.RootElement.GetProperty("source").GetString());
         Assert.Equal("2000", metadata.RootElement.GetProperty("amount").GetString());
@@ -1605,10 +1605,10 @@ public sealed class FinanceServiceTests
         Assert.True(result.Succeeded);
         var audit = Assert.Single(database.Context.AuditEvents, item => item.Action == "finance.accrual_updated");
         Assert.Equal(actorUserId, audit.ActorUserId);
-        Assert.Contains("было 700,00 по гаражу 12 за 06.2026", audit.Summary, StringComparison.Ordinal);
+        Assert.Contains("было 700.00 по гаражу 12 за 06.2026", audit.Summary, StringComparison.Ordinal);
         Assert.Contains($"вид {fixtures.IncomeType.Name}", audit.Summary, StringComparison.Ordinal);
         Assert.Contains("источник manual; комментарий Исходная ручная сумма", audit.Summary, StringComparison.Ordinal);
-        Assert.Contains("стало 750,00 по гаражу 12 за 07.2026", audit.Summary, StringComparison.Ordinal);
+        Assert.Contains("стало 750.00 по гаражу 12 за 07.2026", audit.Summary, StringComparison.Ordinal);
         Assert.Contains("источник manual; комментарий Исправили после сверки", audit.Summary, StringComparison.Ordinal);
         using var metadata = JsonDocument.Parse(audit.MetadataJson!);
         Assert.Equal("accrual", metadata.RootElement.GetProperty("financeEntityType").GetString());
@@ -1686,7 +1686,7 @@ public sealed class FinanceServiceTests
         Assert.Equal(0, summary.AccrualCount);
         var audit = Assert.Single(database.Context.AuditEvents, item => item.Action == "finance.accrual_canceled");
         Assert.Equal(actorUserId, audit.ActorUserId);
-        Assert.Contains("Отменено начисление 700,00", audit.Summary, StringComparison.Ordinal);
+        Assert.Contains("Отменено начисление 700.00", audit.Summary, StringComparison.Ordinal);
         Assert.Contains("по гаражу 12", audit.Summary, StringComparison.Ordinal);
         Assert.Contains("за 06.2026", audit.Summary, StringComparison.Ordinal);
         Assert.Contains($"вид {fixtures.IncomeType.Name}", audit.Summary, StringComparison.Ordinal);
@@ -1719,7 +1719,7 @@ public sealed class FinanceServiceTests
         var audit = Assert.Single(database.Context.AuditEvents, item => item.Action == "finance.accrual_restored");
         Assert.Equal(actorUserId, audit.ActorUserId);
         Assert.Equal("restore", audit.ActionKind);
-        Assert.Contains("Восстановлено начисление 700,00", audit.Summary, StringComparison.Ordinal);
+        Assert.Contains("Восстановлено начисление 700.00", audit.Summary, StringComparison.Ordinal);
         Assert.Contains("по гаражу 12", audit.Summary, StringComparison.Ordinal);
         Assert.Contains($"вид {fixtures.IncomeType.Name}", audit.Summary, StringComparison.Ordinal);
     }
@@ -1762,7 +1762,7 @@ public sealed class FinanceServiceTests
         Assert.Equal("INV-1", result.Value.DocumentNumber);
         var audit = Assert.Single(database.Context.AuditEvents, item => item.Action == "finance.supplier_accrual_created");
         Assert.Equal(actorUserId, audit.ActorUserId);
-        Assert.Contains("Создано начисление 1200,00", audit.Summary, StringComparison.Ordinal);
+        Assert.Contains("Создано начисление 1 200.00", audit.Summary, StringComparison.Ordinal);
         Assert.Contains("поставщику Vodokanal", audit.Summary, StringComparison.Ordinal);
         Assert.Contains("за 06.2026", audit.Summary, StringComparison.Ordinal);
         Assert.Contains($"вид {fixtures.ExpenseType.Name}", audit.Summary, StringComparison.Ordinal);
@@ -1849,10 +1849,10 @@ public sealed class FinanceServiceTests
         Assert.True(result.Succeeded);
         var audit = Assert.Single(database.Context.AuditEvents, item => item.Action == "finance.supplier_accrual_updated");
         Assert.Equal(actorUserId, audit.ActorUserId);
-        Assert.Contains("было 1200,00 поставщику Vodokanal за 06.2026", audit.Summary, StringComparison.Ordinal);
+        Assert.Contains("было 1 200.00 поставщику Vodokanal за 06.2026", audit.Summary, StringComparison.Ordinal);
         Assert.Contains($"вид {fixtures.ExpenseType.Name}", audit.Summary, StringComparison.Ordinal);
         Assert.Contains("источник manual; документ INV-old; комментарий Исходный счет", audit.Summary, StringComparison.Ordinal);
-        Assert.Contains("стало 1250,00 поставщику Vodokanal за 07.2026", audit.Summary, StringComparison.Ordinal);
+        Assert.Contains("стало 1 250.00 поставщику Vodokanal за 07.2026", audit.Summary, StringComparison.Ordinal);
         Assert.Contains("источник manual; документ INV-new; комментарий Уточненный счет", audit.Summary, StringComparison.Ordinal);
         using var metadata = JsonDocument.Parse(audit.MetadataJson!);
         Assert.Equal("supplier_accrual", metadata.RootElement.GetProperty("financeEntityType").GetString());
@@ -1925,7 +1925,7 @@ public sealed class FinanceServiceTests
         Assert.Empty(await service.GetSupplierAccrualsAsync(new SupplierAccrualListRequest(null, null, null), CancellationToken.None));
         var audit = Assert.Single(database.Context.AuditEvents, item => item.Action == "finance.supplier_accrual_canceled");
         Assert.Equal(actorUserId, audit.ActorUserId);
-        Assert.Contains("Отменено начисление 1200,00", audit.Summary, StringComparison.Ordinal);
+        Assert.Contains("Отменено начисление 1 200.00", audit.Summary, StringComparison.Ordinal);
         Assert.Contains("поставщику Vodokanal", audit.Summary, StringComparison.Ordinal);
         Assert.Contains("за 06.2026", audit.Summary, StringComparison.Ordinal);
         Assert.Contains($"вид {fixtures.ExpenseType.Name}", audit.Summary, StringComparison.Ordinal);
@@ -1956,7 +1956,7 @@ public sealed class FinanceServiceTests
         var audit = Assert.Single(database.Context.AuditEvents, item => item.Action == "finance.supplier_accrual_restored");
         Assert.Equal(actorUserId, audit.ActorUserId);
         Assert.Equal("restore", audit.ActionKind);
-        Assert.Contains("Восстановлено начисление 1200,00", audit.Summary, StringComparison.Ordinal);
+        Assert.Contains("Восстановлено начисление 1 200.00", audit.Summary, StringComparison.Ordinal);
         Assert.Contains("поставщику Vodokanal", audit.Summary, StringComparison.Ordinal);
         Assert.Contains("документ INV-restore", audit.Summary, StringComparison.Ordinal);
     }
@@ -2041,11 +2041,11 @@ public sealed class FinanceServiceTests
         Assert.Equal("regular", accrual.Source);
         Assert.Equal(300m, accrual.Amount);
         Assert.Equal(tariff.Id, accrual.TariffId);
-        Assert.Equal("Июнь; тариф Членский тариф: ставка 300, действует с 01.01.2026.", accrual.Comment);
+        Assert.Equal("Июнь; тариф Членский тариф: ставка 300.00, действует с 01.01.2026.", accrual.Comment);
         var audit = Assert.Single(database.Context.AuditEvents, item => item.Action == "finance.regular_accruals_generated");
         Assert.Equal(actorUserId, audit.ActorUserId);
         Assert.Contains("Создано регулярных начислений: 1", audit.Summary, StringComparison.Ordinal);
-        Assert.Contains("на сумму 300,00", audit.Summary, StringComparison.Ordinal);
+        Assert.Contains("на сумму 300.00", audit.Summary, StringComparison.Ordinal);
         Assert.Contains("за 06.2026", audit.Summary, StringComparison.Ordinal);
         Assert.Contains($"вид {fixtures.IncomeType.Name}", audit.Summary, StringComparison.Ordinal);
         Assert.Contains("тариф Членский тариф, база fixed, ставка 300", audit.Summary, StringComparison.Ordinal);
@@ -2174,7 +2174,7 @@ public sealed class FinanceServiceTests
         var accrual = Assert.Single(database.Context.Accruals);
         Assert.Equal(fixtures.IncomeType.Id, accrual.IncomeTypeId);
         Assert.Equal(tariff.Id, accrual.TariffId);
-        Assert.Equal("Каталог услуг: Членский взнос; Июнь; тариф Членский тариф: ставка 300, действует с 01.01.2026.", accrual.Comment);
+        Assert.Equal("Каталог услуг: Членский взнос; Июнь; тариф Членский тариф: ставка 300.00, действует с 01.01.2026.", accrual.Comment);
         Assert.Contains(database.Context.AuditEvents, item => item.Action == "finance.regular_accruals_generated" && item.ActorUserId == actorUserId);
         Assert.Contains(database.Context.AuditEvents, item => item.Action == "finance.regular_catalog_accruals_generated" && item.ActorUserId == actorUserId);
     }
@@ -2389,11 +2389,11 @@ public sealed class FinanceServiceTests
         Assert.Contains(accruals, item =>
             item.AccountingMonth == new DateOnly(2026, 6, 1) &&
             item.Amount == 300m &&
-            item.Comment == "Автоначисление; тариф Членский тариф: ставка 300, действует с 01.01.2026.");
+            item.Comment == "Автоначисление; тариф Членский тариф: ставка 300.00, действует с 01.01.2026.");
         Assert.Contains(accruals, item =>
             item.AccountingMonth == new DateOnly(2026, 7, 1) &&
             item.Amount == 500m &&
-            item.Comment == "Автоначисление; тариф Членский тариф: ставка 500, действует с 01.01.2026.");
+            item.Comment == "Автоначисление; тариф Членский тариф: ставка 500.00, действует с 01.01.2026.");
     }
 
     [Fact]
@@ -2479,9 +2479,9 @@ public sealed class FinanceServiceTests
         Assert.Equal(400m, result.Value!.TotalAmount);
         Assert.Equal(400m, result.Value.CreatedAccruals[0].Amount);
         Assert.Equal("meter_electricity", result.Value.CalculationBase);
-        Assert.Contains("пороги электроэнергии до 50 кВт по 2, до 100 кВт по 3, свыше по 5", result.Value.CreatedAccruals[0].Comment, StringComparison.Ordinal);
+        Assert.Contains("пороги электроэнергии до 50 кВт по 2.00, до 100 кВт по 3.00, свыше по 5.00", result.Value.CreatedAccruals[0].Comment, StringComparison.Ordinal);
         var audit = Assert.Single(database.Context.AuditEvents, item => item.Action == "finance.regular_accruals_generated");
-        Assert.Contains("пороги электроэнергии до 50 кВт по 2, до 100 кВт по 3, свыше по 5", audit.Summary, StringComparison.Ordinal);
+        Assert.Contains("пороги электроэнергии до 50 кВт по 2.00, до 100 кВт по 3.00, свыше по 5.00", audit.Summary, StringComparison.Ordinal);
     }
 
     [Fact]

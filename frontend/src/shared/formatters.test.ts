@@ -35,10 +35,10 @@ describe('shared formatters', () => {
   })
 
   it('formats money and debt labels for Russian UI', () => {
-    expect(formatMoney(1234.5)).toMatch(/^1\s234,50$/)
+    expect(formatMoney(1234.5)).toBe('1 234.50')
     expect(formatDebtLabel(15)).toBe('Задолженность')
     expect(formatDebtLabel(-15)).toBe('Переплата')
-    expect(formatDebtAmount(-15.5)).toBe('15,50')
+    expect(formatDebtAmount(-15.5)).toBe('15.50')
     expect(getDebtClassName(-1)).toBe('money-overpayment')
     expect(getDebtClassName(1)).toBe('money-accrual')
   })
@@ -74,8 +74,8 @@ describe('shared formatters', () => {
       electricityThirdRate: 5.3,
     })
 
-    expect(formatTariffRateSummary(fixedTariff)).toBe('250,00')
-    expect(formatTariffRateSummary(electricityTariff)).toBe('до 100,00 кВт: 3,10, до 250,00 кВт: 4,20, выше: 5,30')
+    expect(formatTariffRateSummary(fixedTariff)).toBe('250.00')
+    expect(formatTariffRateSummary(electricityTariff)).toBe('до 100 кВт: 3.10, до 250 кВт: 4.20, выше: 5.30')
   })
 
   it('formats allocations and meter reading gaps compactly', () => {
@@ -84,7 +84,7 @@ describe('shared formatters', () => {
       createAllocation('2026-02-01', 200),
       createAllocation('2026-03-01', 300),
       createAllocation('2026-04-01', 400),
-    ])).toBe('01.2026 100,00, 02.2026 200,00, 03.2026 300,00 и еще 1')
+    ])).toBe('01.2026 100.00, 02.2026 200.00, 03.2026 300.00 и еще 1')
 
     expect(formatMissingMeterReadings([
       { garageId: '1', garageNumber: '12', ownerName: 'Иванов', meterKind: 'water', accountingMonth: '2026-06-01' },
