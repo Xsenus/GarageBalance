@@ -1712,7 +1712,7 @@ h1 {
   color: #667085;
 }
 
-.contractors-contacts-row span {
+.contractors-contacts-row > span {
   min-width: 0;
   border-bottom: 1px solid #eaecf0;
   padding: 8px 10px;
