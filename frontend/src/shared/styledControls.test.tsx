@@ -85,6 +85,30 @@ describe('styled form controls', () => {
     expect(control).toHaveAttribute('aria-expanded', 'false')
   })
 
+  it('opens a limited option list above the trigger', async () => {
+    const user = userEvent.setup()
+    render(<SelectControl
+      aria-label="Отдел"
+      value="accounting"
+      placement="above"
+      maxVisibleOptions={3}
+      options={[
+        { value: 'accounting', label: 'Бухгалтерия' },
+        { value: 'security', label: 'Охрана' },
+        { value: 'management', label: 'Правление' },
+        { value: 'electricians', label: 'Электрики' },
+      ]}
+      onChange={() => undefined}
+    />)
+
+    await user.click(screen.getByRole('combobox', { name: 'Отдел' }))
+
+    const listbox = screen.getByRole('listbox', { name: 'Отдел: варианты' })
+    expect(listbox).toHaveClass('select-control__list--above', 'select-control__list--limited')
+    expect(listbox).toHaveStyle('--select-control-visible-options: 3')
+    expect(listbox.querySelectorAll('[role="option"]')).toHaveLength(4)
+  })
+
   it('accepts localized dates and returns an ISO filter value', async () => {
     const user = userEvent.setup()
     function Example() {

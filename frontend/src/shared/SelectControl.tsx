@@ -1,5 +1,6 @@
 import { Check, ChevronDown } from 'lucide-react'
 import { useEffect, useId, useRef, useState } from 'react'
+import type { CSSProperties } from 'react'
 
 export type SelectControlOption = {
   value: string
@@ -11,12 +12,16 @@ export function SelectControl({
   value,
   options,
   disabled = false,
+  placement = 'below',
+  maxVisibleOptions,
   onChange,
 }: {
   'aria-label': string
   value: string
   options: SelectControlOption[]
   disabled?: boolean
+  placement?: 'above' | 'below'
+  maxVisibleOptions?: number
   onChange: (value: string) => void
 }) {
   const [open, setOpen] = useState(false)
@@ -31,6 +36,10 @@ export function SelectControl({
   const optionIds = options.map((_, index) => `${listboxId}-option-${index}`)
   const effectiveOpen = open && !disabled && options.length > 0
   const safeActiveIndex = Math.min(Math.max(activeIndex, 0), Math.max(options.length - 1, 0))
+  const visibleOptionCount = maxVisibleOptions === undefined ? null : Math.max(1, Math.floor(maxVisibleOptions))
+  const listStyle = visibleOptionCount === null
+    ? undefined
+    : { '--select-control-visible-options': visibleOptionCount } as CSSProperties
 
   useEffect(() => {
     if (!effectiveOpen) return
@@ -138,7 +147,13 @@ export function SelectControl({
         <ChevronDown size={16} aria-hidden="true" />
       </button>
       {effectiveOpen ? (
-        <div className="select-control__list" id={listboxId} role="listbox" aria-label={`${ariaLabel}: варианты`}>
+        <div
+          className={`select-control__list${placement === 'above' ? ' select-control__list--above' : ''}${visibleOptionCount !== null ? ' select-control__list--limited' : ''}`}
+          id={listboxId}
+          role="listbox"
+          aria-label={`${ariaLabel}: варианты`}
+          style={listStyle}
+        >
           {options.map((option, index) => (
             <button
               className={index === safeActiveIndex ? 'select-control__option is-active' : 'select-control__option'}

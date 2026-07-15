@@ -4534,6 +4534,15 @@ h1 {
   padding: 6px;
 }
 
+.select-control__list--above {
+  top: auto;
+  bottom: calc(100% + 6px);
+}
+
+.select-control__list--limited {
+  max-height: calc((var(--select-control-visible-options) * 36px) + 14px);
+}
+
 .select-control__option {
   display: flex;
   width: 100%;

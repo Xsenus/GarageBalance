@@ -3399,6 +3399,8 @@ function EmployeePrototypeDialog({ departments, item, onClose, onOpenFinancialRe
                 <SelectControl
                   aria-label="Отдел сотрудника"
                   value={form.department}
+                  placement="above"
+                  maxVisibleOptions={3}
                   options={selectableDepartments.length > 0
                     ? selectableDepartments.map((department) => ({ value: department.name, label: department.name }))
                     : [{ value: '', label: 'Отделы не настроены' }]}
