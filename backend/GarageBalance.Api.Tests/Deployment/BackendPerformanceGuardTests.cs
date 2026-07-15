@@ -432,9 +432,11 @@ public sealed class BackendPerformanceGuardTests
             BoundedQueryRegex(@"if \(IsNpgsql\(\)\)[\s\S]*?garageQuery[\s\S]*?\.Where\(garage =>[\s\S]*?\.ToListAsync\(cancellationToken\)"),
             garageSource);
         Assert.Contains("garage.Owner.LastName.ToLower().Contains(normalizedServerSearch)", garageSource, StringComparison.Ordinal);
-        Assert.Contains("incomeByGarage.ToDictionary", garageSource, StringComparison.Ordinal);
-        Assert.Contains("accrualByGarage.ToDictionary", garageSource, StringComparison.Ordinal);
-        Assert.Contains("readingsByGarage.ToDictionary", garageSource, StringComparison.Ordinal);
+        Assert.Contains(".Concat(accrualByGarageQuery)", garageSource, StringComparison.Ordinal);
+        Assert.Contains(".Concat(readingsByGarageQuery)", garageSource, StringComparison.Ordinal);
+        Assert.True(
+            CountOccurrences(garageSource, "aggregateRows") >= 4,
+            "Consolidated garage search must reuse the single combined aggregate result for income, accrual and reading lookups.");
     }
 
     [Fact]
@@ -444,8 +446,9 @@ public sealed class BackendPerformanceGuardTests
 
         Assert.True(CountOccurrences(source, ".Concat(") >= 2, "Garage report sources must remain a SQL UNION ALL pipeline.");
         Assert.True(CountOccurrences(source, ".GroupBy(") >= 2, "Expanded and grouped garage modes must aggregate before paging.");
-        Assert.Contains("sourceRows.SumAsync(row => row.AccrualAmount, cancellationToken)", source, StringComparison.Ordinal);
-        Assert.Contains("sourceRows.SumAsync(row => row.IncomeAmount, cancellationToken)", source, StringComparison.Ordinal);
+        Assert.Contains("AccrualTotal = group.Sum(row => row.AccrualAmount)", source, StringComparison.Ordinal);
+        Assert.Contains("IncomeTotal = group.Sum(row => row.IncomeAmount)", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("sourceRows.SumAsync", source, StringComparison.Ordinal);
         Assert.Contains("groupedRows.CountAsync(cancellationToken)", source, StringComparison.Ordinal);
         Assert.Contains(".Skip(offset)", source, StringComparison.Ordinal);
         Assert.Contains(".Take(limit)", source, StringComparison.Ordinal);
@@ -459,8 +462,9 @@ public sealed class BackendPerformanceGuardTests
         var source = ReadApiSource("Infrastructure/Data/EfCashMovementReportQuery.cs");
 
         Assert.Matches(
-            BoundedQueryRegex(@"GetCashPaymentsAsync[\s\S]*?IsNpgsql\(\)[\s\S]*?CountAsync\(cancellationToken\)[\s\S]*?SumAsync\(operation => operation\.Amount, cancellationToken\)[\s\S]*?ApplyPage\(ordered, offset, limit\)\.ToListAsync\(cancellationToken\)"),
+            BoundedQueryRegex(@"GetCashPaymentsAsync[\s\S]*?IsNpgsql\(\)[\s\S]*?RowCount = group\.Count\(\)[\s\S]*?Total = group\.Sum\(operation => operation\.Amount\)[\s\S]*?ApplyPage\(ordered, offset, limit\)\.ToListAsync\(cancellationToken\)"),
             source);
+        Assert.DoesNotContain("query.CountAsync(cancellationToken)", source, StringComparison.Ordinal);
         Assert.Contains("query.Skip(offset)", source, StringComparison.Ordinal);
         Assert.Contains("operation.Supplier.Name.ToLower().Contains(normalizedSearch)", source, StringComparison.Ordinal);
         Assert.Contains("operation.ExpenseType.Name.ToLower().Contains(normalizedSearch)", source, StringComparison.Ordinal);
@@ -472,7 +476,7 @@ public sealed class BackendPerformanceGuardTests
         var source = ReadApiSource("Infrastructure/Data/EfCashMovementReportQuery.cs");
 
         Assert.Matches(
-            BoundedQueryRegex(@"GetBankDepositsAsync[\s\S]*?operation\.Fund\.Name\.ToLower\(\)\.Contains\(normalizedSearch\)[\s\S]*?CountAsync\(cancellationToken\)[\s\S]*?SumAsync\(operation => operation\.Amount, cancellationToken\)[\s\S]*?ApplyPage\(orderedQuery, offset, limit\)\.ToListAsync\(cancellationToken\)"),
+            BoundedQueryRegex(@"GetBankDepositsAsync[\s\S]*?operation\.Fund\.Name\.ToLower\(\)\.Contains\(normalizedSearch\)[\s\S]*?RowCount = group\.Count\(\)[\s\S]*?Total = group\.Sum\(operation => operation\.Amount\)[\s\S]*?ApplyPage\(orderedQuery, offset, limit\)\.ToListAsync\(cancellationToken\)"),
             source);
         Assert.Contains("query.Skip(offset)", source, StringComparison.Ordinal);
         Assert.Contains("operation.Reason.ToLower().Contains(normalizedSearch)", source, StringComparison.Ordinal);
@@ -484,8 +488,9 @@ public sealed class BackendPerformanceGuardTests
         var source = ReadApiSource("Infrastructure/Data/EfFundChangeReportQuery.cs");
 
         Assert.Matches(
-            BoundedQueryRegex(@"GetFundChangesAsync[\s\S]*?CountAsync\(cancellationToken\)[\s\S]*?FundOperationKinds\.Deposit[\s\S]*?SumAsync[\s\S]*?FundOperationKinds\.Withdraw[\s\S]*?SumAsync[\s\S]*?ApplyPage\(ordered, offset, limit\)\.ToListAsync\(cancellationToken\)"),
+            BoundedQueryRegex(@"GetFundChangesAsync[\s\S]*?GroupBy\(operation => operation\.OperationKind\)[\s\S]*?RowCount = group\.Count\(\)[\s\S]*?Total = group\.Sum\(operation => operation\.Amount\)[\s\S]*?ApplyPage\(ordered, offset, limit\)\.ToListAsync\(cancellationToken\)"),
             source);
+        Assert.DoesNotContain("query.CountAsync(cancellationToken)", source, StringComparison.Ordinal);
         Assert.Contains("query.Skip(offset)", source, StringComparison.Ordinal);
         Assert.Contains("operation.Fund.Name.ToLower().Contains(normalizedSearch)", source, StringComparison.Ordinal);
         Assert.Contains("operation.OperationKind.ToLower().Contains(normalizedSearch)", source, StringComparison.Ordinal);
@@ -513,6 +518,20 @@ public sealed class BackendPerformanceGuardTests
         Assert.Contains("incomeBreakdownQuery", source, StringComparison.Ordinal);
         Assert.Contains(".Concat(expenseBreakdownQuery)", source, StringComparison.Ordinal);
         Assert.Contains("SumAsync(garage => garage.StartingBalance, cancellationToken)", source, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void GarageReportQueries_CombineRelatedDatabaseAggregates()
+    {
+        var garageReport = ReadApiSource("Infrastructure/Data/EfGarageReportQuery.cs");
+        var consolidatedGarageReport = ReadApiSource("Infrastructure/Data/EfConsolidatedGarageReportQuery.cs");
+
+        Assert.Contains("AccrualTotal = group.Sum(row => row.AccrualAmount)", garageReport, StringComparison.Ordinal);
+        Assert.Contains("IncomeTotal = group.Sum(row => row.IncomeAmount)", garageReport, StringComparison.Ordinal);
+        Assert.DoesNotContain("sourceRows.SumAsync", garageReport, StringComparison.Ordinal);
+        Assert.Contains("incomeByGarageQuery", consolidatedGarageReport, StringComparison.Ordinal);
+        Assert.Contains(".Concat(accrualByGarageQuery)", consolidatedGarageReport, StringComparison.Ordinal);
+        Assert.Contains(".Concat(readingsByGarageQuery)", consolidatedGarageReport, StringComparison.Ordinal);
     }
 
     [Fact]

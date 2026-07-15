@@ -106,8 +106,16 @@ public sealed class EfGarageReportQuery(GarageBalanceDbContext dbContext) : IGar
             });
 
         var sourceRows = startingBalances.Concat(accruals).Concat(payments);
-        var accrualTotal = await sourceRows.SumAsync(row => row.AccrualAmount, cancellationToken);
-        var incomeTotal = await sourceRows.SumAsync(row => row.IncomeAmount, cancellationToken);
+        var totals = await sourceRows
+            .GroupBy(_ => 1)
+            .Select(group => new
+            {
+                AccrualTotal = group.Sum(row => row.AccrualAmount),
+                IncomeTotal = group.Sum(row => row.IncomeAmount)
+            })
+            .SingleOrDefaultAsync(cancellationToken);
+        var accrualTotal = totals?.AccrualTotal ?? 0m;
+        var incomeTotal = totals?.IncomeTotal ?? 0m;
         var groupedRows = groupAccruals
             ? sourceRows
                 .GroupBy(row => new

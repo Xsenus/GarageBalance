@@ -111,7 +111,7 @@ public sealed class EfConsolidatedGarageReportQuery(GarageBalanceDbContext dbCon
         }
         var garageIds = garages.Select(garage => garage.Id).ToList();
 
-        var incomeByGarage = await dbContext.FinancialOperations.AsNoTracking()
+        var incomeByGarageQuery = dbContext.FinancialOperations.AsNoTracking()
             .Where(operation =>
                 !operation.IsCanceled &&
                 operation.OperationKind == FinancialOperationKinds.Income &&
@@ -120,29 +120,54 @@ public sealed class EfConsolidatedGarageReportQuery(GarageBalanceDbContext dbCon
                 operation.AccountingMonth >= periodFrom &&
                 operation.AccountingMonth <= periodTo)
             .GroupBy(operation => operation.GarageId!.Value)
-            .Select(group => new AmountByGarage(group.Key, group.Sum(item => item.Amount)))
-            .ToListAsync(cancellationToken);
-        var accrualByGarage = await dbContext.Accruals.AsNoTracking()
+            .Select(group => new
+            {
+                GarageId = group.Key,
+                Kind = "income",
+                Amount = group.Sum(item => item.Amount),
+                Count = 0
+            });
+        var accrualByGarageQuery = dbContext.Accruals.AsNoTracking()
             .Where(accrual =>
                 !accrual.IsCanceled &&
                 garageIds.Contains(accrual.GarageId) &&
                 accrual.AccountingMonth >= periodFrom &&
                 accrual.AccountingMonth <= periodTo)
             .GroupBy(accrual => accrual.GarageId)
-            .Select(group => new AmountByGarage(group.Key, group.Sum(item => item.Amount)))
-            .ToListAsync(cancellationToken);
-        var readingsByGarage = await dbContext.MeterReadings.AsNoTracking()
+            .Select(group => new
+            {
+                GarageId = group.Key,
+                Kind = "accrual",
+                Amount = group.Sum(item => item.Amount),
+                Count = 0
+            });
+        var readingsByGarageQuery = dbContext.MeterReadings.AsNoTracking()
             .Where(reading =>
                 !reading.IsCanceled &&
                 garageIds.Contains(reading.GarageId) &&
                 reading.AccountingMonth >= periodFrom &&
                 reading.AccountingMonth <= periodTo)
             .GroupBy(reading => reading.GarageId)
-            .Select(group => new CountByGarage(group.Key, group.Count()))
+            .Select(group => new
+            {
+                GarageId = group.Key,
+                Kind = "reading",
+                Amount = 0m,
+                Count = group.Count()
+            });
+        var aggregateRows = await incomeByGarageQuery
+            .Concat(accrualByGarageQuery)
+            .Concat(readingsByGarageQuery)
             .ToListAsync(cancellationToken);
-        var incomeLookup = incomeByGarage.ToDictionary(row => row.GarageId, row => row.Amount);
-        var accrualLookup = accrualByGarage.ToDictionary(row => row.GarageId, row => row.Amount);
-        var readingsLookup = readingsByGarage.ToDictionary(row => row.GarageId, row => row.Count);
+        var incomeLookup = aggregateRows
+            .Where(row => row.Kind == "income")
+            .ToDictionary(row => row.GarageId, row => row.Amount);
+        var accrualLookup = aggregateRows
+            .Where(row => row.Kind == "accrual")
+            .ToDictionary(row => row.GarageId, row => row.Amount);
+        var readingsLookup = aggregateRows
+            .Where(row => row.Kind == "reading")
+            .ToDictionary(row => row.GarageId, row => row.Count);
 
         var rows = garages.Select(garage =>
             {

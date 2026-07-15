@@ -66,11 +66,22 @@ public sealed class EfFundChangeReportQuery(GarageBalanceDbContext dbContext) : 
                     operation.Reason.ToLower().Contains(normalizedSearch));
             }
 
-            rowCount = await query.CountAsync(cancellationToken);
-            depositTotal = await query.Where(operation => operation.OperationKind == FundOperationKinds.Deposit)
-                .SumAsync(operation => (decimal?)operation.Amount, cancellationToken) ?? 0m;
-            withdrawalTotal = await query.Where(operation => operation.OperationKind == FundOperationKinds.Withdraw)
-                .SumAsync(operation => (decimal?)operation.Amount, cancellationToken) ?? 0m;
+            var totalsByKind = await query
+                .GroupBy(operation => operation.OperationKind)
+                .Select(group => new
+                {
+                    OperationKind = group.Key,
+                    RowCount = group.Count(),
+                    Total = group.Sum(operation => operation.Amount)
+                })
+                .ToListAsync(cancellationToken);
+            rowCount = totalsByKind.Sum(row => row.RowCount);
+            depositTotal = totalsByKind
+                .Where(row => row.OperationKind == FundOperationKinds.Deposit)
+                .Sum(row => row.Total);
+            withdrawalTotal = totalsByKind
+                .Where(row => row.OperationKind == FundOperationKinds.Withdraw)
+                .Sum(row => row.Total);
             var ordered = query.OrderBy(operation => operation.CreatedAtUtc).ThenBy(operation => operation.Fund.Name).ThenBy(operation => operation.Id);
             operations = await ApplyPage(ordered, offset, limit).ToListAsync(cancellationToken);
         }

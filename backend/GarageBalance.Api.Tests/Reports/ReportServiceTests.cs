@@ -283,6 +283,58 @@ public sealed class ReportServiceTests
     }
 
     [Fact]
+    public async Task GarageReportQuery_LoadsTotalsCountAndPageInThreeSelects()
+    {
+        var commandCounter = new SelectCommandCounter();
+        await using var database = await TestDatabase.CreateAsync(commandCounter);
+        var fixtures = await database.SeedAsync();
+        var finance = FinanceServiceTestFactory.Create(database.Context);
+        await finance.CreateAccrualAsync(new CreateAccrualRequest(fixtures.FirstGarage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 6, 1), 900m, "regular", null), null, CancellationToken.None);
+        await finance.CreateIncomeAsync(new CreateIncomeOperationRequest(fixtures.FirstGarage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 6, 10), new DateOnly(2026, 6, 1), 400m, "GARAGE-FAST", null), null, CancellationToken.None);
+        commandCounter.Reset();
+
+        var result = await new EfGarageReportQuery(database.Context).GetRowsAsync(
+            new DateOnly(2026, 6, 1),
+            new DateOnly(2026, 6, 1),
+            null,
+            false,
+            0,
+            25,
+            CancellationToken.None);
+
+        Assert.Equal(900m, result.AccrualTotal);
+        Assert.Equal(400m, result.IncomeTotal);
+        Assert.NotEmpty(result.Rows);
+        Assert.Equal(3, commandCounter.Count);
+    }
+
+    [Fact]
+    public async Task ConsolidatedGarageSearch_LoadsIdentitiesAndAllAggregatesInTwoSelects()
+    {
+        var commandCounter = new SelectCommandCounter();
+        await using var database = await TestDatabase.CreateAsync(commandCounter);
+        var fixtures = await database.SeedAsync();
+        var finance = FinanceServiceTestFactory.Create(database.Context);
+        await finance.CreateAccrualAsync(new CreateAccrualRequest(fixtures.SecondGarage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 6, 1), 700m, "regular", null), null, CancellationToken.None);
+        await finance.CreateIncomeAsync(new CreateIncomeOperationRequest(fixtures.SecondGarage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 6, 12), new DateOnly(2026, 6, 1), 300m, "SEARCH-FAST", null), null, CancellationToken.None);
+        await finance.CreateMeterReadingAsync(new CreateMeterReadingRequest(fixtures.SecondGarage.Id, "water", new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 20), 12m, null), null, CancellationToken.None);
+        commandCounter.Reset();
+
+        var result = await new EfConsolidatedGarageReportQuery(database.Context).GetGarageRowsAsync(
+            fixtures.SecondGarage.Number,
+            new DateOnly(2026, 6, 1),
+            new DateOnly(2026, 6, 1),
+            25,
+            CancellationToken.None);
+
+        var row = Assert.Single(result.Rows);
+        Assert.Equal(300m, row.IncomeTotal);
+        Assert.Equal(700m + fixtures.SecondGarage.StartingBalance, row.AccrualTotal);
+        Assert.Equal(1, row.MeterReadingCount);
+        Assert.Equal(2, commandCounter.Count);
+    }
+
+    [Fact]
     public async Task GetGarageReportAsync_ReturnsEmptyPageForPeriodWithoutData()
     {
         await using var database = await TestDatabase.CreateAsync();

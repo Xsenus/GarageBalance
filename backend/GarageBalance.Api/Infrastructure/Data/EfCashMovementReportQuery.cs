@@ -35,8 +35,16 @@ public sealed class EfCashMovementReportQuery(GarageBalanceDbContext dbContext) 
                     (operation.Comment != null && operation.Comment.ToLower().Contains(normalizedSearch)));
             }
 
-            var rowCount = await query.CountAsync(cancellationToken);
-            var total = rowCount == 0 ? 0m : await query.SumAsync(operation => operation.Amount, cancellationToken);
+            var totals = await query
+                .GroupBy(_ => 1)
+                .Select(group => new
+                {
+                    RowCount = group.Count(),
+                    Total = group.Sum(operation => operation.Amount)
+                })
+                .SingleOrDefaultAsync(cancellationToken);
+            var rowCount = totals?.RowCount ?? 0;
+            var total = totals?.Total ?? 0m;
             var ordered = query.OrderBy(operation => operation.OperationDate).ThenBy(operation => operation.DocumentNumber).ThenBy(operation => operation.Id);
             var operations = await ApplyPage(ordered, offset, limit).ToListAsync(cancellationToken);
             return new CashPaymentReportData(operations, total, rowCount);
@@ -117,8 +125,16 @@ public sealed class EfCashMovementReportQuery(GarageBalanceDbContext dbContext) 
                 operation.Reason.ToLower().Contains(normalizedSearch));
         }
 
-        var rowCount = await query.CountAsync(cancellationToken);
-        var total = rowCount == 0 ? 0m : await query.SumAsync(operation => operation.Amount, cancellationToken);
+        var totals = await query
+            .GroupBy(_ => 1)
+            .Select(group => new
+            {
+                RowCount = group.Count(),
+                Total = group.Sum(operation => operation.Amount)
+            })
+            .SingleOrDefaultAsync(cancellationToken);
+        var rowCount = totals?.RowCount ?? 0;
+        var total = totals?.Total ?? 0m;
         var orderedQuery = query.OrderBy(operation => operation.CreatedAtUtc).ThenBy(operation => operation.Fund.Name).ThenBy(operation => operation.Id);
         var result = await ApplyPage(orderedQuery, offset, limit).ToListAsync(cancellationToken);
         return new BankDepositReportData(result, total, rowCount);
