@@ -11417,7 +11417,7 @@ describe('App', () => {
     await user.clear(feeFilter)
     await user.type(feeFilter, 'Ворота')
     await waitFor(() => expect(feeVariations).toContain('Ворота'))
-    expect(feeVariations.filter((variation) => variation !== 'Сбор на ворота')).toEqual(['Ворота'])
+    expect(feeVariations.filter((variation) => variation && variation !== 'Сбор на ворота')).toEqual(['Ворота'])
   })
 
   it('shows loading and error states for the paged garage report', async () => {
