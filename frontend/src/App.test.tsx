@@ -4429,6 +4429,49 @@ describe('App', () => {
     expect(within(prototype).getByText('Сумма в банке').closest('div')).toHaveTextContent('0')
   })
 
+  it('shows a clear empty state when the selected garage has no debt to transfer', async () => {
+    const user = userEvent.setup()
+    const garage = createGarage({ id: 'garage-without-debt', number: '31', ownerName: 'Орлова Мария', startingBalance: 0 })
+    render(<App
+      authClient={createAuthClient()}
+      dictionaryClient={createDictionaryClient({ getGarages: async () => [garage] })}
+      financeClient={createFinanceClient({
+        getGarageIncomeWorksheet: async () => createGarageIncomeWorksheet({
+          garageId: garage.id,
+          garageNumber: garage.number,
+          ownerName: garage.ownerName,
+          accrualTotal: 0,
+          incomeTotal: 0,
+          debtTotal: 0,
+          closingDebt: 0,
+          rows: [],
+        }),
+      })}
+      importClient={createImportClient()}
+      reportClient={createReportClient()}
+      releaseClient={createReleaseClient()}
+      userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Платежи')
+
+    const prototype = within(await screen.findByRole('region', { name: 'Платежи' })).getByRole('region', { name: 'Форма платежей' })
+    await user.type(within(prototype).getByLabelText('Поиск номера гаража или ФИО владельца'), garage.number)
+    await user.click(await within(prototype).findByRole('option', { name: /Гараж\s*31\s*Орлова Мария/ }))
+    await user.click(within(prototype).getByRole('button', { name: 'Перенести задолженность' }))
+
+    const transferDialog = await screen.findByRole('dialog', { name: 'Перенести задолженность' })
+    expect(transferDialog).toHaveClass('debt-transfer-dialog')
+    expect(within(transferDialog).getByRole('status')).toHaveTextContent('Задолженности для переноса нет')
+    expect(within(transferDialog).queryByRole('combobox')).not.toBeInTheDocument()
+    expect(within(transferDialog).queryByLabelText('Сумма переноса задолженности')).not.toBeInTheDocument()
+    const closeButton = within(transferDialog).getByRole('button', { name: 'Закрыть' })
+    await waitFor(() => expect(closeButton).toHaveFocus())
+    await user.click(closeButton)
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Перенести задолженность' })).not.toBeInTheDocument())
+  })
+
   it('moves garage debt to the next month and saves the transfer in form history', async () => {
     const user = userEvent.setup()
     const saveStateMock = vi.mocked(formStatesApi.saveState)
@@ -4500,9 +4543,20 @@ describe('App', () => {
     const targetMonth = within(transferDialog).getByRole('combobox', { name: 'Целевой месяц переноса задолженности' })
     expect(targetMonth).toHaveClass('select-control__trigger')
     expect(targetMonth).toHaveTextContent('июл.26')
-    expect(within(transferDialog).getByLabelText('Сумма переноса задолженности')).toHaveValue('1700')
+    expect(within(transferDialog).getByRole('group', { name: 'Период переноса задолженности' })).toBeInTheDocument()
+    const transferAmount = within(transferDialog).getByLabelText('Сумма переноса задолженности')
+    expect(transferAmount).toHaveValue('1 700.00')
+    await user.click(transferAmount)
+    await user.clear(transferAmount)
+    await user.type(transferAmount, '0')
+    await user.click(within(transferDialog).getByRole('button', { name: 'Перенести задолженность' }))
+    expect(within(transferDialog).getByRole('alert')).toHaveTextContent('Укажите сумму переноса больше нуля.')
+    expect(createDebtTransferMock).not.toHaveBeenCalled()
+    await user.click(transferAmount)
+    await user.clear(transferAmount)
+    await user.type(transferAmount, '1700')
     await user.type(within(transferDialog).getByLabelText('Комментарий к переносу задолженности'), 'Проверка переноса')
-    await user.click(within(transferDialog).getByRole('button', { name: 'Принять' }))
+    await user.click(within(transferDialog).getByRole('button', { name: 'Перенести задолженность' }))
 
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Перенести задолженность' })).not.toBeInTheDocument())
     expect(createDebtTransferMock).toHaveBeenCalledWith('token', {

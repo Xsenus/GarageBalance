@@ -1,6 +1,6 @@
 import { Fragment, useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
 import type { FormEvent, KeyboardEvent, MouseEvent, ReactNode } from 'react'
-import { CalendarDays, FileText, Pencil, RotateCcw, Save, Search, Trash2, WalletCards, X } from 'lucide-react'
+import { ArrowRight, CalendarDays, FileText, Pencil, RotateCcw, Save, Search, Trash2, WalletCards, X } from 'lucide-react'
 import type { AuthResponse } from '../../services/authApi'
 import type { AccountingTypeDto, DictionaryClient, GarageDto, StaffMemberDto, SupplierDto, SupplierGroupDto, TariffDto } from '../../services/dictionariesApi'
 import type { AccrualDto, CreateAccrualRequest, CreateExpenseOperationRequest, CreateIncomeOperationRequest, CreateMeterReadingRequest, CreateSupplierAccrualRequest, ExpenseWorksheetDto, FinanceClient, FinancePagedResult, FinanceSummaryDto, FinancialOperationDto, GarageIncomeWorksheetDto, GenerateRegularAccrualsRequest, GenerateSupplierGroupSalaryAccrualsRequest, MeterReadingDto, MissingMeterReadingDto, SupplierAccrualDto } from '../../services/financeApi'
@@ -19,6 +19,7 @@ import { FormField } from '../../shared/FormField'
 import { formatAccrualSource, formatDateOnly, formatDebtAmount, formatDebtLabel, formatMissingMeterReadings, formatMoney, formatMonth, formatOperationTime, formatPaymentAllocations, getDebtClassName, getCurrentMonthInputValue, getLocalDateInputValue, getPreviousMonthInputValue } from '../../shared/formatters'
 import { useEscapeKey, useFocusOnOpen, useFocusTrap, useRestoreFocusOnClose } from '../../shared/focusHooks'
 import { LocalizedDatePicker } from '../../shared/LocalizedDatePicker'
+import { MoneyInput } from '../../shared/MoneyInput'
 import { SelectControl } from '../../shared/SelectControl'
 import { TablePagination } from '../../shared/TablePagination'
 import { chooseRegularTariffId, getAccrualValidationErrors, getCompatibleRegularTariffs, getExpenseValidationErrors, getIncomeValidationErrors, getMeterReadingValidationErrors, getRegularAccrualValidationErrorsForCatalog, getSupplierAccrualValidationErrors, getSupplierGroupSalaryValidationErrors } from '../../shared/validation'
@@ -5982,29 +5983,28 @@ function DebtTransferPrototypeDialog({
   const initialSource = sourceOptions[0] ?? null
   const [sourceMonth, setSourceMonth] = useState(initialSource?.value ?? '')
   const [targetMonth, setTargetMonth] = useState(initialSource?.defaultTargetMonth ?? targetOptions[0]?.value ?? '')
-  const [amount, setAmount] = useState(() => String(initialSource?.debt ?? 0))
+  const [amount, setAmount] = useState(() => initialSource?.debt ?? 0)
   const [comment, setComment] = useState('')
   const [saving, setSaving] = useState(false)
-  const [error, setError] = useState<string | null>(sourceOptions.length === 0 ? 'Нет задолженности для переноса.' : null)
+  const [error, setError] = useState<string | null>(null)
   useEscapeKey(true, onClose)
 
   function handleSourceChange(value: string) {
     const nextSource = sourceOptions.find((option) => option.value === value) ?? null
     setSourceMonth(value)
-    setAmount(String(nextSource?.debt ?? 0))
+    setAmount(nextSource?.debt ?? 0)
     setTargetMonth(nextSource?.defaultTargetMonth ?? targetOptions.find((option) => option.value !== value)?.value ?? '')
     setError(null)
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    const parsedAmount = Number(amount.trim().replace(/\s/g, '').replace(',', '.'))
     if (!sourceMonth || !targetMonth) {
       setError('Выберите исходный и целевой месяц переноса.')
       return
     }
 
-    if (!Number.isFinite(parsedAmount) || parsedAmount <= 0) {
+    if (!Number.isFinite(amount) || amount <= 0) {
       setError('Укажите сумму переноса больше нуля.')
       return
     }
@@ -6012,7 +6012,7 @@ function DebtTransferPrototypeDialog({
     setSaving(true)
     setError(null)
     try {
-      const submitError = await onSubmit({ sourceMonth, targetMonth, amount: parsedAmount, comment })
+      const submitError = await onSubmit({ sourceMonth, targetMonth, amount, comment })
       if (submitError) {
         setError(submitError)
         return
@@ -6029,18 +6029,33 @@ function DebtTransferPrototypeDialog({
 
   return (
     <div className="modal-backdrop" role="presentation" onMouseDown={onClose}>
-      <section ref={dialogRef} className="detail-dialog payments-prototype-dialog" role="dialog" aria-modal="true" aria-labelledby="debt-transfer-title" onMouseDown={(event) => event.stopPropagation()}>
+      <section ref={dialogRef} className="detail-dialog payments-prototype-dialog debt-transfer-dialog" role="dialog" aria-modal="true" aria-labelledby="debt-transfer-title" onMouseDown={(event) => event.stopPropagation()}>
         <div className="detail-dialog-header">
           <div>
             <h3 id="debt-transfer-title">Перенести задолженность</h3>
+            <p>Переносит выбранную сумму долга в другой расчетный месяц.</p>
           </div>
           <button className="icon-button" type="button" aria-label="Закрыть перенос задолженности" onClick={onClose}>
             <X size={18} aria-hidden="true" />
           </button>
         </div>
-        <form className="dictionary-modal-form payments-prototype-modal-form" onSubmit={handleSubmit}>
-          <div className="form-grid two-columns">
-            <FormField label="Месяц с">
+        {sourceOptions.length === 0 ? (
+          <>
+            <div className="debt-transfer-empty" role="status" aria-live="polite">
+              <span className="debt-transfer-empty__icon" aria-hidden="true"><WalletCards size={22} /></span>
+              <div>
+                <strong>Задолженности для переноса нет</strong>
+                <p>У выбранного гаража нет долга за доступные расчетные месяцы. Когда задолженность появится, здесь можно будет выбрать период и сумму.</p>
+              </div>
+            </div>
+            <div className="detail-dialog-actions">
+              <button ref={cancelRef} className="ghost-button" type="button" onClick={onClose}>Закрыть</button>
+            </div>
+          </>
+        ) : (
+        <form className="dictionary-modal-form payments-prototype-modal-form debt-transfer-form" onSubmit={handleSubmit}>
+          <div className="debt-transfer-periods" role="group" aria-label="Период переноса задолженности">
+            <FormField className="debt-transfer-field" label="Перенести из месяца">
               <SelectControl
                 aria-label="Исходный месяц переноса задолженности"
                 value={sourceMonth}
@@ -6051,7 +6066,8 @@ function DebtTransferPrototypeDialog({
                 disabled={saving || sourceOptions.length === 0}
                 onChange={handleSourceChange} />
             </FormField>
-            <FormField label="Месяц по">
+            <span className="debt-transfer-periods__arrow" aria-hidden="true"><ArrowRight size={20} /></span>
+            <FormField className="debt-transfer-field" label="Перенести в месяц">
               <SelectControl
                 aria-label="Целевой месяц переноса задолженности"
                 value={targetMonth}
@@ -6063,21 +6079,24 @@ function DebtTransferPrototypeDialog({
                 }} />
             </FormField>
           </div>
-          <FormField label="Сумма">
-            <input aria-label="Сумма переноса задолженности" inputMode="decimal" value={amount} onChange={(event) => {
-              setAmount(event.target.value)
-              setError(null)
-            }} />
-          </FormField>
-          <FormField label="Комментарий">
-            <textarea aria-label="Комментарий к переносу задолженности" rows={4} value={comment} onChange={(event) => setComment(event.target.value)} />
-          </FormField>
+          <div className="debt-transfer-details">
+            <FormField className="debt-transfer-field debt-transfer-amount" label="Сумма переноса" hint="Сумма в рублях">
+              <MoneyInput aria-label="Сумма переноса задолженности" value={amount} onValueChange={(nextAmount) => {
+                setAmount(nextAmount)
+                setError(null)
+              }} />
+            </FormField>
+            <FormField className="debt-transfer-field" label="Комментарий" hint="Необязательно">
+              <textarea aria-label="Комментарий к переносу задолженности" rows={3} value={comment} onChange={(event) => setComment(event.target.value)} />
+            </FormField>
+          </div>
           {error ? <FormError>{error}</FormError> : null}
           <div className="detail-dialog-actions">
-            <button className="secondary-button" type="submit" disabled={saving || sourceOptions.length === 0}>{saving ? 'Сохраняем...' : 'Принять'}</button>
-            <button ref={cancelRef} className="secondary-button" type="button" onClick={onClose} disabled={saving}>Отмена</button>
+            <button className="secondary-button" type="submit" disabled={saving || sourceOptions.length === 0}>{saving ? 'Сохраняем...' : 'Перенести задолженность'}</button>
+            <button ref={cancelRef} className="ghost-button" type="button" onClick={onClose} disabled={saving}>Отмена</button>
           </div>
         </form>
+        )}
       </section>
     </div>
   )
