@@ -368,6 +368,9 @@ export function FinancePanel({
   const restoreFinanceTriggerRef = useRef<HTMLElement | null>(null)
   const [financeWorkbenchRequests] = useState(() => new LatestRequestSequence())
   const financeSummaryCacheRef = useRef<{ key: string; promise: Promise<FinanceSummaryDto> } | null>(null)
+  const financeReferenceBundlePromiseRef = useRef<Promise<void> | null>(null)
+  const financeReferenceBundleLoadedRef = useRef(false)
+  const financeReferenceBundleGenerationRef = useRef(0)
   const [paymentsPrototypeDialog, setPaymentsPrototypeDialog] = useState<PaymentsPrototypeDialogKey | null>(null)
   const paymentsPrototypeTriggerRef = useRef<HTMLButtonElement | null>(null)
   const [financeEditorCloseConfirmation, setFinanceEditorCloseConfirmation] = useState(false)
@@ -531,22 +534,77 @@ export function FinancePanel({
   const financePreviewsError = Object.values(financePreviewFailures).some(Boolean)
   const compatibleRegularTariffs = getCompatibleRegularTariffs(regularForm.incomeTypeId, incomeTypes, tariffs)
 
+  const ensureFinanceReferenceBundle = useCallback(async () => {
+    if (financeReferenceBundleLoadedRef.current) {
+      return true
+    }
+
+    if (!financeReferenceBundlePromiseRef.current) {
+      const generation = financeReferenceBundleGenerationRef.current
+      setReferencesLoading(true)
+      setError(null)
+      financeReferenceBundlePromiseRef.current = Promise.all([
+        dictionaryClient.getSupplierGroups(auth.accessToken, undefined, dictionaryScreenRequestLimit),
+        dictionaryClient.getSuppliers(auth.accessToken, undefined, undefined, dictionaryScreenRequestLimit),
+        dictionaryClient.getStaffMembers(auth.accessToken, undefined, undefined, dictionaryScreenRequestLimit),
+        dictionaryClient.getIncomeTypes(auth.accessToken, undefined, dictionaryScreenRequestLimit),
+        dictionaryClient.getExpenseTypes(auth.accessToken, undefined, dictionaryScreenRequestLimit),
+        dictionaryClient.getTariffs(auth.accessToken, undefined, dictionaryScreenRequestLimit),
+      ]).then(([loadedSupplierGroups, loadedSuppliers, loadedStaffMembers, loadedIncomeTypes, loadedExpenseTypes, loadedTariffs]) => {
+        if (generation !== financeReferenceBundleGenerationRef.current) {
+          return
+        }
+
+        setSupplierGroups(loadedSupplierGroups)
+        setSuppliers(loadedSuppliers)
+        setStaffMembers(loadedStaffMembers)
+        setIncomeTypes(loadedIncomeTypes)
+        setExpenseTypes(loadedExpenseTypes)
+        setTariffs(loadedTariffs)
+        setIncomeForm((value) => ({ ...value, incomeTypeId: value.incomeTypeId || loadedIncomeTypes[0]?.id || '' }))
+        setExpenseForm((value) => ({ ...value, supplierId: value.supplierId || loadedSuppliers[0]?.id || '', expenseTypeId: value.expenseTypeId || loadedExpenseTypes[0]?.id || '' }))
+        setAccrualForm((value) => ({ ...value, incomeTypeId: value.incomeTypeId || loadedIncomeTypes[0]?.id || '' }))
+        setSupplierAccrualForm((value) => ({ ...value, supplierId: value.supplierId || loadedSuppliers[0]?.id || '', expenseTypeId: value.expenseTypeId || loadedExpenseTypes[0]?.id || '' }))
+        setSalaryForm((value) => ({ ...value, supplierGroupId: value.supplierGroupId || loadedSupplierGroups[0]?.id || '' }))
+        setRegularForm((value) => {
+          const incomeTypeId = value.incomeTypeId || loadedIncomeTypes[0]?.id || ''
+          return {
+            ...value,
+            incomeTypeId,
+            tariffId: chooseRegularTariffId(incomeTypeId, value.tariffId, loadedIncomeTypes, loadedTariffs),
+          }
+        })
+        financeReferenceBundleLoadedRef.current = true
+      })
+    }
+
+    const request = financeReferenceBundlePromiseRef.current
+    try {
+      await request
+      return financeReferenceBundleLoadedRef.current
+    } catch (caught) {
+      if (request === financeReferenceBundlePromiseRef.current) {
+        setError(caught instanceof Error ? caught.message : 'Не удалось загрузить справочники для формы платежа.')
+      }
+      return false
+    } finally {
+      if (request === financeReferenceBundlePromiseRef.current) {
+        financeReferenceBundlePromiseRef.current = null
+        setReferencesLoading(false)
+      }
+    }
+  }, [auth.accessToken, dictionaryClient])
+
   useEffect(() => {
     let ignore = false
+    financeReferenceBundleGenerationRef.current += 1
+    financeReferenceBundleLoadedRef.current = false
+    financeReferenceBundlePromiseRef.current = null
     async function load() {
       setReferencesLoading(true)
       setError(null)
       try {
         const garagesPromise = dictionaryClient.getGarages(auth.accessToken, undefined, dictionaryScreenRequestLimit)
-        const referencesPromise = Promise.all([
-          dictionaryClient.getSupplierGroups(auth.accessToken, undefined, dictionaryScreenRequestLimit),
-          dictionaryClient.getSuppliers(auth.accessToken, undefined, undefined, dictionaryScreenRequestLimit),
-          dictionaryClient.getStaffMembers(auth.accessToken, undefined, undefined, dictionaryScreenRequestLimit),
-          dictionaryClient.getIncomeTypes(auth.accessToken, undefined, dictionaryScreenRequestLimit),
-          dictionaryClient.getExpenseTypes(auth.accessToken, undefined, dictionaryScreenRequestLimit),
-          dictionaryClient.getTariffs(auth.accessToken, undefined, dictionaryScreenRequestLimit),
-        ])
-        void referencesPromise.catch(() => undefined)
         const loadedGarages = await garagesPromise
         if (!ignore) {
           setGarages(loadedGarages)
@@ -557,28 +615,6 @@ export function FinancePanel({
           setReferencesLoading(false)
         }
 
-        const [loadedSupplierGroups, loadedSuppliers, loadedStaffMembers, loadedIncomeTypes, loadedExpenseTypes, loadedTariffs] = await referencesPromise
-        if (!ignore) {
-          setSupplierGroups(loadedSupplierGroups)
-          setSuppliers(loadedSuppliers)
-          setStaffMembers(loadedStaffMembers)
-          setIncomeTypes(loadedIncomeTypes)
-          setExpenseTypes(loadedExpenseTypes)
-          setTariffs(loadedTariffs)
-          setIncomeForm((value) => ({ ...value, incomeTypeId: value.incomeTypeId || loadedIncomeTypes[0]?.id || '' }))
-          setExpenseForm((value) => ({ ...value, supplierId: value.supplierId || loadedSuppliers[0]?.id || '', expenseTypeId: value.expenseTypeId || loadedExpenseTypes[0]?.id || '' }))
-          setAccrualForm((value) => ({ ...value, incomeTypeId: value.incomeTypeId || loadedIncomeTypes[0]?.id || '' }))
-          setSupplierAccrualForm((value) => ({ ...value, supplierId: value.supplierId || loadedSuppliers[0]?.id || '', expenseTypeId: value.expenseTypeId || loadedExpenseTypes[0]?.id || '' }))
-          setSalaryForm((value) => ({ ...value, supplierGroupId: value.supplierGroupId || loadedSupplierGroups[0]?.id || '' }))
-          setRegularForm((value) => {
-            const incomeTypeId = value.incomeTypeId || loadedIncomeTypes[0]?.id || ''
-            return {
-              ...value,
-              incomeTypeId,
-              tariffId: chooseRegularTariffId(incomeTypeId, value.tariffId, loadedIncomeTypes, loadedTariffs),
-            }
-          })
-        }
       } catch (caught) {
         if (!ignore) {
           setError(caught instanceof Error ? caught.message : 'Не удалось загрузить платежи.')
@@ -593,6 +629,7 @@ export function FinancePanel({
     void load()
     return () => {
       ignore = true
+      financeReferenceBundleGenerationRef.current += 1
     }
   }, [auth.accessToken, dictionaryClient])
 
@@ -621,6 +658,12 @@ export function FinancePanel({
       ignore = true
     }
   }, [auth.accessToken, settingsClient])
+
+  useEffect(() => {
+    if (paymentDisplaySettingsLoaded && showAllGarageOperations) {
+      void ensureFinanceReferenceBundle()
+    }
+  }, [ensureFinanceReferenceBundle, paymentDisplaySettingsLoaded, showAllGarageOperations])
 
   useEffect(() => {
     if (!paymentDisplaySettingsLoaded || !showAllGarageOperations) {
@@ -1461,10 +1504,14 @@ export function FinancePanel({
     }
   }
 
-  function openFinanceEditor(section: FinanceEditorKey, record?: FinanceRecord, trigger?: HTMLElement | null) {
+  async function openFinanceEditor(section: FinanceEditorKey, record?: FinanceRecord, trigger?: HTMLElement | null) {
     if (!canWritePayments) {
       setFinanceContextMenu(null)
       setError('Для записи платежей нужно право payments.write.')
+      return
+    }
+
+    if (section !== 'meterReadings' && !await ensureFinanceReferenceBundle()) {
       return
     }
 
@@ -1610,12 +1657,12 @@ export function FinancePanel({
   function editFinanceRecord(section: FinanceSectionKey, record: FinanceRecord, trigger?: HTMLElement | null) {
     setFinanceContextMenu(null)
     financeContextMenuTriggerRef.current = null
-    openFinanceEditor(section, record, trigger)
+    void openFinanceEditor(section, record, trigger)
   }
 
   function addFinanceRecord(section: FinanceSectionKey) {
     setFinanceContextMenu(null)
-    openFinanceEditor(section)
+    void openFinanceEditor(section)
   }
 
   function deleteFinanceRecord(section: FinanceSectionKey, record: FinanceRecord) {
@@ -2186,6 +2233,7 @@ export function FinancePanel({
             {!canWritePayments ? <p className="form-hint">{getFinancePanelLabel('readOnlyHint')}</p> : null}
           </>
         )}
+        onEnsureReferences={ensureFinanceReferenceBundle}
         onOpenDialog={openPaymentsPrototypeDialog}
       />
 
@@ -2244,12 +2292,12 @@ export function FinancePanel({
           </label>
           <div className="finance-toolbar-actions">
             {activeFinanceSection === 'accruals' ? (
-              <button className="ghost-button" type="button" disabled={!canWritePayments} onClick={() => openFinanceEditor('regularAccruals')}>
+              <button className="ghost-button" type="button" disabled={!canWritePayments} onClick={() => void openFinanceEditor('regularAccruals')}>
                 <span>{getFinanceToolbarLabel('regularAccruals')}</span>
               </button>
             ) : null}
             {activeFinanceSection === 'supplierAccruals' ? (
-              <button className="ghost-button" type="button" disabled={!canWritePayments} onClick={() => openFinanceEditor('supplierGroupSalaryAccruals')}>
+              <button className="ghost-button" type="button" disabled={!canWritePayments} onClick={() => void openFinanceEditor('supplierGroupSalaryAccruals')}>
                 <span>{getFinanceToolbarLabel('supplierGroupSalaryAccruals')}</span>
               </button>
             ) : null}
@@ -2961,6 +3009,7 @@ function PaymentsPrototypePanel({
   staffMembers,
   headingStatus,
   headingNotices,
+  onEnsureReferences,
   onOpenDialog,
 }: {
   auth: AuthResponse
@@ -2978,6 +3027,7 @@ function PaymentsPrototypePanel({
   staffMembers: StaffMemberDto[]
   headingStatus: string | null
   headingNotices: ReactNode
+  onEnsureReferences: () => Promise<boolean>
   onOpenDialog: (dialog: PaymentsPrototypeDialogKey, trigger?: HTMLButtonElement | null) => void
 }) {
   const [activeTab, setActiveTab] = useState<'income' | 'expense'>('income')
@@ -3303,10 +3353,12 @@ function PaymentsPrototypePanel({
     onOpenDialog(dialog, event.currentTarget)
   }
 
-  function openFullPaymentDialog(event: MouseEvent<HTMLButtonElement>) {
+  async function openFullPaymentDialog(event: MouseEvent<HTMLButtonElement>) {
     fullPaymentTriggerRef.current = event.currentTarget
     setPaymentError(null)
-    setFullPaymentDialogOpen(true)
+    if (await onEnsureReferences()) {
+      setFullPaymentDialogOpen(true)
+    }
   }
 
   function closeFullPaymentDialog() {
@@ -3337,10 +3389,12 @@ function PaymentsPrototypePanel({
     }, 0)
   }
 
-  function openGarageAccrualDialog(event: MouseEvent<HTMLButtonElement>) {
+  async function openGarageAccrualDialog(event: MouseEvent<HTMLButtonElement>) {
     garageAccrualTriggerRef.current = event.currentTarget
     setPaymentError(null)
-    setGarageAccrualDialogOpen(true)
+    if (await onEnsureReferences()) {
+      setGarageAccrualDialogOpen(true)
+    }
   }
 
   function closeGarageAccrualDialog() {
@@ -3372,10 +3426,12 @@ function PaymentsPrototypePanel({
     }, 0)
   }
 
-  function openSupplierAccrualDialog(event: MouseEvent<HTMLButtonElement>) {
+  async function openSupplierAccrualDialog(event: MouseEvent<HTMLButtonElement>) {
     supplierAccrualTriggerRef.current = event.currentTarget
     setPaymentError(null)
-    setSupplierAccrualDialogOpen(true)
+    if (await onEnsureReferences()) {
+      setSupplierAccrualDialogOpen(true)
+    }
   }
 
   function closeSupplierAccrualDialog() {
@@ -3389,10 +3445,12 @@ function PaymentsPrototypePanel({
     }, 0)
   }
 
-  function openSalaryDialog(event: MouseEvent<HTMLButtonElement>) {
+  async function openSalaryDialog(event: MouseEvent<HTMLButtonElement>) {
     salaryTriggerRef.current = event.currentTarget
     setPaymentError(null)
-    setSalaryDialogOpen(true)
+    if (await onEnsureReferences()) {
+      setSalaryDialogOpen(true)
+    }
   }
 
   function closeSalaryDialog() {
@@ -3406,10 +3464,12 @@ function PaymentsPrototypePanel({
     }, 0)
   }
 
-  function openExpenseDialog(event: MouseEvent<HTMLButtonElement>, preset?: ExpensePrototypeDialogPreset) {
+  async function openExpenseDialog(event: MouseEvent<HTMLButtonElement>, preset?: ExpensePrototypeDialogPreset) {
     expenseTriggerRef.current = event.currentTarget
     setPaymentError(null)
-    setExpenseDialogPreset(preset ?? {})
+    if (await onEnsureReferences()) {
+      setExpenseDialogPreset(preset ?? {})
+    }
   }
 
   function closeExpenseDialog() {
@@ -3423,10 +3483,12 @@ function PaymentsPrototypePanel({
     }, 0)
   }
 
-  function openStaffPaymentDialog(event: MouseEvent<HTMLButtonElement>, preset?: StaffPaymentPrototypeDialogPreset) {
+  async function openStaffPaymentDialog(event: MouseEvent<HTMLButtonElement>, preset?: StaffPaymentPrototypeDialogPreset) {
     staffPaymentTriggerRef.current = event.currentTarget
     setPaymentError(null)
-    setStaffPaymentDialogPreset(preset ?? {})
+    if (await onEnsureReferences()) {
+      setStaffPaymentDialogPreset(preset ?? {})
+    }
   }
 
   function closeStaffPaymentDialog() {

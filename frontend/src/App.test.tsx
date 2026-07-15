@@ -9577,6 +9577,67 @@ describe('App', () => {
     expect(getSummary).toHaveBeenCalledTimes(1)
   })
 
+  it('defers payment form dictionaries until a form opens, caches success and retries a failed load', async () => {
+    const user = userEvent.setup()
+    const baseDictionaryClient = createDictionaryClient()
+    let supplierAttempts = 0
+    const getSupplierGroups = vi.fn(baseDictionaryClient.getSupplierGroups)
+    const getSuppliers = vi.fn(async (...args: Parameters<DictionaryClient['getSuppliers']>) => {
+      supplierAttempts += 1
+      if (supplierAttempts === 1) {
+        throw new Error('Справочники форм временно недоступны.')
+      }
+
+      return baseDictionaryClient.getSuppliers(...args)
+    })
+    const getStaffMembers = vi.fn(baseDictionaryClient.getStaffMembers)
+    const getIncomeTypes = vi.fn(baseDictionaryClient.getIncomeTypes)
+    const getExpenseTypes = vi.fn(baseDictionaryClient.getExpenseTypes)
+    const getTariffs = vi.fn(baseDictionaryClient.getTariffs)
+    const dictionaryClient = createDictionaryClient({ getSupplierGroups, getSuppliers, getStaffMembers, getIncomeTypes, getExpenseTypes, getTariffs })
+
+    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient({ getExpenseWorksheet: async () => createExpenseWorksheet({}) })} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} settingsClient={createSettingsClient({ getPaymentDisplaySettings: async () => ({ showAllGarageOperationsByDefault: false }) })} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Платежи')
+    const financePanel = await screen.findByRole('region', { name: 'Платежи' })
+    await waitFor(() => expect(within(financePanel).queryByLabelText('Загружаем форму платежей')).not.toBeInTheDocument())
+
+    expect(getSupplierGroups).not.toHaveBeenCalled()
+    expect(getSuppliers).not.toHaveBeenCalled()
+    expect(getStaffMembers).not.toHaveBeenCalled()
+    expect(getIncomeTypes).not.toHaveBeenCalled()
+    expect(getExpenseTypes).not.toHaveBeenCalled()
+    expect(getTariffs).not.toHaveBeenCalled()
+
+    const prototype = within(financePanel).getByRole('region', { name: 'Форма платежей' })
+    const garageSearch = within(prototype).getByRole('combobox', { name: 'Поиск номера гаража или ФИО владельца' })
+    await user.type(garageSearch, '1')
+    const garageOptions = await within(prototype).findAllByRole('option')
+    await user.click(garageOptions[0])
+    await user.click(within(prototype).getByRole('tab', { name: 'Выплаты' }))
+    const addExpenseButton = within(prototype).getByRole('button', { name: 'Добавить выплату' })
+    await user.click(addExpenseButton)
+    expect(await within(financePanel).findByText('Справочники форм временно недоступны.')).toHaveAttribute('role', 'alert')
+    expect(screen.queryByRole('dialog', { name: 'Новая выплата' })).not.toBeInTheDocument()
+
+    await user.click(addExpenseButton)
+    expect(await screen.findByRole('dialog', { name: 'Новая выплата' })).toBeInTheDocument()
+    expect(getSupplierGroups).toHaveBeenCalledTimes(2)
+    expect(getSuppliers).toHaveBeenCalledTimes(2)
+    expect(getStaffMembers).toHaveBeenCalledTimes(2)
+    expect(getIncomeTypes).toHaveBeenCalledTimes(2)
+    expect(getExpenseTypes).toHaveBeenCalledTimes(2)
+    expect(getTariffs).toHaveBeenCalledTimes(2)
+
+    await user.keyboard('{Escape}')
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Новая выплата' })).not.toBeInTheDocument())
+    await user.click(addExpenseButton)
+    expect(await screen.findByRole('dialog', { name: 'Новая выплата' })).toBeInTheDocument()
+    expect(getSuppliers).toHaveBeenCalledTimes(2)
+  })
+
   it('shows a ready payment page without waiting for the summary', async () => {
     const user = userEvent.setup()
     let resolveSummary!: (summary: FinanceSummaryDto) => void
