@@ -4439,19 +4439,19 @@ function PaymentsPrototypePanel({
             <div><span>Владелец</span><strong>{selectedGarage.ownerName}</strong></div>
             <div><span>Телефон</span><strong>{selectedGarage.phone}</strong></div>
             <div className="payments-prototype-actions">
-              <button className="secondary-button create-action-button" type="button" aria-label="Добавить начисление гаражу" onClick={openGarageAccrualDialog}>
+              <button className="secondary-button create-action-button payments-prototype-action-button" type="button" aria-label="Добавить начисление гаражу" onClick={openGarageAccrualDialog}>
                 <FileText size={16} aria-hidden="true" />
                 <span>Добавить начисление</span>
               </button>
-              <button className="secondary-button create-action-button" type="button" onClick={openRegularAccrualDialog}>
+              <button className="secondary-button create-action-button payments-prototype-action-button" type="button" onClick={openRegularAccrualDialog}>
                 <CalendarDays size={16} aria-hidden="true" />
                 <span>Сформировать начисления</span>
               </button>
-              <button className="secondary-button" type="button" onClick={openDebtTransferDialog}>
+              <button className="secondary-button payments-prototype-action-button" type="button" onClick={openDebtTransferDialog}>
                 <RotateCcw size={16} aria-hidden="true" />
                 <span>Перенести задолженность</span>
               </button>
-              <button className="secondary-button" type="button" onClick={openFullPaymentDialog}>
+              <button className="secondary-button payments-prototype-action-button" type="button" onClick={openFullPaymentDialog}>
                 <WalletCards size={16} aria-hidden="true" />
                 <span>Полная оплата</span>
               </button>
