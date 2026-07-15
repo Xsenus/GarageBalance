@@ -2826,6 +2826,21 @@ function SupplierContactRestoreConfirmationDialog({
   )
 }
 
+function SuggestionStatus({ id, message }: { id: string; message: string }) {
+  return (
+    <small
+      className="suggestion-status"
+      id={id}
+      role={message ? 'status' : undefined}
+      aria-live={message ? 'polite' : undefined}
+      aria-hidden={message ? undefined : true}
+      title={message || undefined}
+    >
+      {message || '\u00a0'}
+    </small>
+  )
+}
+
 function DadataAddressField({ accessToken, inputLabel, integrationClient, label, listboxLabel, suggestionsId, value, onChange }: { accessToken: string; inputLabel: string; integrationClient: IntegrationClient; label: string; listboxLabel: string; suggestionsId: string; value: string; onChange: (value: string) => void }) {
   const [suggestions, setSuggestions] = useState<DadataAddressSuggestionDto[]>([])
   const [suggestionsOpen, setSuggestionsOpen] = useState(false)
@@ -2902,7 +2917,7 @@ function DadataAddressField({ accessToken, inputLabel, integrationClient, label,
           </div>
         ) : null}
       </div>
-      {status ? <small className="suggestion-status" id={statusId} role="status" aria-live="polite">{status}</small> : null}
+      <SuggestionStatus id={statusId} message={status} />
     </FormField>
   )
 }
@@ -3167,6 +3182,7 @@ function SupplierPrototypeDialog({ accessToken, integrationClient, item, service
                     aria-autocomplete="list"
                     aria-expanded={partySuggestionsOpen}
                     aria-controls="supplier-party-suggestions"
+                    aria-describedby={partySuggestionStatus ? 'supplier-party-suggestions-status' : undefined}
                     autoComplete="off"
                     value={form.inn}
                     onFocus={() => setPartySuggestionsOpen(partySuggestions.length > 0)}
@@ -3193,7 +3209,7 @@ function SupplierPrototypeDialog({ accessToken, integrationClient, item, service
                     </div>
                   ) : null}
                 </div>
-                {partySuggestionStatus ? <small className="suggestion-status" role="status" aria-live="polite">{partySuggestionStatus}</small> : null}
+                <SuggestionStatus id="supplier-party-suggestions-status" message={partySuggestionStatus} />
               </FormField>
               <FormField label="Задолженность"><input aria-label="Задолженность поставщика" value={form.debt || 'Нет'} readOnly /></FormField>
               <DadataAddressField accessToken={accessToken} inputLabel="Юридический адрес поставщика" integrationClient={integrationClient} label="Юр. адрес" listboxLabel="Адреса DaData" suggestionsId="supplier-address-suggestions" value={form.legalAddress} onChange={(legalAddress) => setForm((currentForm) => ({ ...currentForm, legalAddress }))} />

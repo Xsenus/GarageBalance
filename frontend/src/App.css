@@ -1923,7 +1923,12 @@ h1 {
 
 .suggestion-status {
   display: block;
+  height: 17px;
+  min-width: 0;
+  overflow: hidden;
   margin-top: 5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .contractors-garage-form-columns {
@@ -1959,6 +1964,14 @@ h1 {
 }
 
 @media (max-width: 720px) {
+  .suggestion-status {
+    display: -webkit-box;
+    height: 33px;
+    white-space: normal;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+  }
+
   .detail-dialog.contractors-dialog--garage,
   .detail-dialog.contractors-dialog--supplier {
     width: 100%;
