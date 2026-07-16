@@ -537,6 +537,24 @@ public sealed class BackendLayeringTests
     }
 
     [Fact]
+    public void FinancialOperationDisplayQuery_IsImplementedInInfrastructureAndRegisteredInCompositionRoot()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var service = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "Application", "Finance", "FinanceService.cs"));
+        var abstraction = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "Application", "Finance", "IFinancialOperationDisplayQuery.cs"));
+        var implementation = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "Infrastructure", "Data", "EfFinancialOperationDisplayQuery.cs"));
+        var program = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "Program.cs"));
+        var testFactory = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api.Tests", "Common", "FinanceServiceTestFactory.cs"));
+
+        Assert.Contains("interface IFinancialOperationDisplayQuery", abstraction, StringComparison.Ordinal);
+        Assert.DoesNotContain("Infrastructure", abstraction, StringComparison.Ordinal);
+        Assert.Contains(": IFinancialOperationDisplayQuery", implementation, StringComparison.Ordinal);
+        Assert.Contains("financialOperationDisplayQuery.GetAsync", service, StringComparison.Ordinal);
+        Assert.Contains("AddScoped<IFinancialOperationDisplayQuery, EfFinancialOperationDisplayQuery>()", program, StringComparison.Ordinal);
+        Assert.Contains("new EfFinancialOperationDisplayQuery(dbContext)", testFactory, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void ExpenseWorksheetQuery_IsImplementedInInfrastructureAndRegisteredInCompositionRoot()
     {
         var repositoryRoot = FindRepositoryRoot();

@@ -617,6 +617,112 @@ public sealed class FinanceServiceTests
     }
 
     [Fact]
+    public async Task GetOperationsPageAsync_LoadsDebtAndAllocationsInFourSelectsRegardlessOfRowCount()
+    {
+        var commandCounter = new SelectCommandCounter();
+        await using var database = await TestDatabase.CreateAsync(commandCounter);
+        var fixtures = await database.SeedAsync();
+        fixtures.Garage.StartingBalance = 100m;
+        fixtures.Supplier.StartingBalance = 200m;
+        await database.Context.SaveChangesAsync();
+        var service = FinanceServiceTestFactory.Create(database.Context);
+        var month = new DateOnly(2026, 6, 1);
+
+        database.Context.AddRange(
+            new Accrual
+            {
+                GarageId = fixtures.Garage.Id,
+                IncomeTypeId = fixtures.IncomeType.Id,
+                AccountingMonth = month,
+                Amount = 500m,
+                Source = "manual"
+            },
+            new SupplierAccrual
+            {
+                SupplierId = fixtures.Supplier.Id,
+                ExpenseTypeId = fixtures.ExpenseType.Id,
+                AccountingMonth = month,
+                Amount = 700m,
+                Source = "manual"
+            });
+        await database.Context.SaveChangesAsync();
+        for (var index = 0; index < 3; index++)
+        {
+            Assert.True((await service.CreateIncomeAsync(
+                new CreateIncomeOperationRequest(
+                    fixtures.Garage.Id,
+                    fixtures.IncomeType.Id,
+                    new DateOnly(2026, 6, 10 + index),
+                    month,
+                    100m,
+                    $"PKO-BATCH-{index}",
+                    null),
+                null,
+                CancellationToken.None)).Succeeded);
+            Assert.True((await service.CreateExpenseAsync(
+                new CreateExpenseOperationRequest(
+                    fixtures.Supplier.Id,
+                    fixtures.ExpenseType.Id,
+                    new DateOnly(2026, 6, 20 + index),
+                    month,
+                    50m,
+                    $"RKO-BATCH-{index}",
+                    null),
+                null,
+                CancellationToken.None)).Succeeded);
+        }
+
+        commandCounter.Reset();
+        var page = await service.GetOperationsPageAsync(
+            new FinancialOperationListRequest(null, null, null, null, 25, 0),
+            CancellationToken.None);
+
+        Assert.Equal(4, commandCounter.Count);
+        Assert.Equal(6, page.TotalCount);
+        Assert.Equal(6, page.Items.Count);
+        var firstIncome = Assert.Single(page.Items, item => item.DocumentNumber == "PKO-BATCH-0");
+        Assert.Equal(600m, firstIncome.GarageDebtBefore);
+        Assert.Equal(500m, firstIncome.GarageDebtAfter);
+        Assert.NotEmpty(firstIncome.PaymentAllocations);
+        var lastIncome = Assert.Single(page.Items, item => item.DocumentNumber == "PKO-BATCH-2");
+        Assert.Equal(400m, lastIncome.GarageDebtBefore);
+        Assert.Equal(300m, lastIncome.GarageDebtAfter);
+        var firstExpense = Assert.Single(page.Items, item => item.DocumentNumber == "RKO-BATCH-0");
+        Assert.Equal(900m, firstExpense.SupplierDebtBefore);
+        Assert.Equal(850m, firstExpense.SupplierDebtAfter);
+        var lastExpense = Assert.Single(page.Items, item => item.DocumentNumber == "RKO-BATCH-2");
+        Assert.Equal(800m, lastExpense.SupplierDebtBefore);
+        Assert.Equal(750m, lastExpense.SupplierDebtAfter);
+    }
+
+    [Fact]
+    public async Task FinancialOperationDisplayQuery_ReturnsEmptyWithoutDatabaseAccess()
+    {
+        var commandCounter = new SelectCommandCounter();
+        await using var database = await TestDatabase.CreateAsync(commandCounter);
+        var query = new EfFinancialOperationDisplayQuery(database.Context);
+        commandCounter.Reset();
+
+        var result = await query.GetAsync([], CancellationToken.None);
+
+        Assert.Equal(0, commandCounter.Count);
+        Assert.Empty(result.Calculations);
+        Assert.Empty(result.AccrualBuckets);
+    }
+
+    [Fact]
+    public async Task FinancialOperationDisplayQuery_PropagatesCancellation()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var query = new EfFinancialOperationDisplayQuery(database.Context);
+        using var cancellationSource = new CancellationTokenSource();
+        cancellationSource.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            query.GetAsync([Guid.NewGuid()], cancellationSource.Token));
+    }
+
+    [Fact]
     public async Task CreateIncomeAsync_ReturnsGarageDebtBeforeAndAfterPayment()
     {
         await using var database = await TestDatabase.CreateAsync();

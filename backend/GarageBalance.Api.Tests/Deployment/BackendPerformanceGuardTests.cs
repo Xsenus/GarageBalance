@@ -122,6 +122,20 @@ public sealed class BackendPerformanceGuardTests
     }
 
     [Fact]
+    public void FinancialOperationDisplayQuery_BatchesDebtAndAllocationDataBeforeMaterialization()
+    {
+        var source = ReadApiSource("Infrastructure/Data/EfFinancialOperationDisplayQuery.cs");
+
+        Assert.Contains("class EfFinancialOperationDisplayQuery", source, StringComparison.Ordinal);
+        Assert.Contains("operationIds.Contains(operation.Id)", source, StringComparison.Ordinal);
+        Assert.Contains("previous.OperationDate < operation.OperationDate", source, StringComparison.Ordinal);
+        Assert.Contains("garageIds.Contains(accrual.GarageId)", source, StringComparison.Ordinal);
+        Assert.Contains("supplierIds.Contains(accrual.SupplierId)", source, StringComparison.Ordinal);
+        Assert.Contains(".Concat(supplierBuckets)", source, StringComparison.Ordinal);
+        Assert.Equal(2, CountOccurrences(source, ".ToListAsync(cancellationToken)"));
+    }
+
+    [Fact]
     public void OwnerRepository_UsesDatabaseCountOffsetAndLimitBeforeMaterialization()
     {
         var source = ReadApiSource("Infrastructure/Data/EfOwnerRepository.cs");

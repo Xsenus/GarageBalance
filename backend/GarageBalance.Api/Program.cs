@@ -73,6 +73,7 @@ builder.Services.AddScoped<IGarageIncomeWorksheetQuery, EfGarageIncomeWorksheetQ
 builder.Services.AddScoped<IGarageBalanceHistoryQuery, EfGarageBalanceHistoryQuery>();
 builder.Services.AddScoped<IFinanceAvailableBalanceQuery, EfFinanceAvailableBalanceQuery>();
 builder.Services.AddScoped<IExpenseWorksheetQuery, EfExpenseWorksheetQuery>();
+builder.Services.AddScoped<IFinancialOperationDisplayQuery, EfFinancialOperationDisplayQuery>();
 builder.Services.AddScoped<IFinanceTotalsQuery, EfFinanceTotalsQuery>();
 builder.Services.AddScoped<IFinanceSectionCountQuery, EfFinanceSectionCountQuery>();
 builder.Services.AddScoped<IMeterReadingRepository, EfMeterReadingRepository>();
@@ -87,6 +88,7 @@ builder.Services.AddScoped<IFinanceService>(services => new FinanceService(
     services.GetRequiredService<IGarageBalanceHistoryQuery>(),
     services.GetRequiredService<IFinanceAvailableBalanceQuery>(),
     services.GetRequiredService<IExpenseWorksheetQuery>(),
+    services.GetRequiredService<IFinancialOperationDisplayQuery>(),
     services.GetRequiredService<IFinanceTotalsQuery>(),
     services.GetRequiredService<IFinanceSectionCountQuery>(),
     services.GetRequiredService<IMeterReadingRepository>(),

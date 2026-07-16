@@ -15,6 +15,7 @@ public sealed class FinanceService(
     IGarageBalanceHistoryQuery garageBalanceHistoryQuery,
     IFinanceAvailableBalanceQuery financeAvailableBalanceQuery,
     IExpenseWorksheetQuery expenseWorksheetQuery,
+    IFinancialOperationDisplayQuery financialOperationDisplayQuery,
     IFinanceTotalsQuery financeTotalsQuery,
     IFinanceSectionCountQuery financeSectionCountQuery,
     IMeterReadingRepository meterReadingRepository,
@@ -2879,10 +2880,56 @@ public sealed class FinanceService(
 
     private async Task<IReadOnlyList<FinancialOperationDto>> ToOperationDtosAsync(IReadOnlyList<FinancialOperation> operations, CancellationToken cancellationToken)
     {
+        var calculatedOperationIds = operations
+            .Where(operation =>
+                (operation.OperationKind == FinancialOperationKinds.Income && operation.GarageId is not null) ||
+                (operation.OperationKind == FinancialOperationKinds.Expense && operation.SupplierId is not null))
+            .Select(operation => operation.Id)
+            .ToArray();
+        var displayData = await financialOperationDisplayQuery.GetAsync(calculatedOperationIds, cancellationToken);
+        var calculationsByOperationId = displayData.Calculations.ToDictionary(item => item.OperationId);
+        var bucketsByCounterparty = displayData.AccrualBuckets
+            .GroupBy(item => (item.CounterpartyKind, item.CounterpartyId))
+            .ToDictionary(group => group.Key, group => group.OrderBy(item => item.AccountingMonth).ToList());
         var result = new List<FinancialOperationDto>(operations.Count);
         foreach (var operation in operations)
         {
-            result.Add(await ToDtoAsync(operation, cancellationToken));
+            if (!calculationsByOperationId.TryGetValue(operation.Id, out var calculation))
+            {
+                result.Add(ToDto(operation, null, null, null, null, []));
+                continue;
+            }
+
+            bucketsByCounterparty.TryGetValue(
+                (calculation.CounterpartyKind, calculation.CounterpartyId),
+                out var counterpartyBuckets);
+            var accrualBuckets = (counterpartyBuckets ?? [])
+                .Where(bucket => bucket.AccountingMonth <= operation.AccountingMonth)
+                .Select(bucket => new AllocationDebtBucket(
+                    "month",
+                    bucket.AccountingMonth,
+                    $"{bucket.AccountingMonth:MM.yyyy}",
+                    bucket.Amount))
+                .ToList();
+            var startingBalance = operation.OperationKind == FinancialOperationKinds.Income
+                ? operation.Garage!.StartingBalance
+                : operation.Supplier!.StartingBalance;
+            var accrualTotal = accrualBuckets.Sum(bucket => bucket.Amount);
+            var debtBefore = MoneyMath.RoundMoney(startingBalance + accrualTotal - calculation.PreviousPaymentTotal);
+            var allocationBuckets = new List<AllocationDebtBucket>(accrualBuckets.Count + 1);
+            if (startingBalance > 0)
+            {
+                allocationBuckets.Add(new AllocationDebtBucket("starting_balance", null, "Стартовый баланс", startingBalance));
+            }
+
+            allocationBuckets.AddRange(accrualBuckets);
+            var allocations = BuildPaymentAllocations(
+                allocationBuckets,
+                calculation.PreviousPaymentTotal + Math.Max(-startingBalance, 0),
+                operation.Amount);
+            result.Add(operation.OperationKind == FinancialOperationKinds.Income
+                ? ToDto(operation, debtBefore, debtBefore - operation.Amount, null, null, allocations)
+                : ToDto(operation, null, null, debtBefore, debtBefore - operation.Amount, allocations));
         }
 
         return result;
