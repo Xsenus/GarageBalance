@@ -102,7 +102,7 @@ public sealed class ReportServiceTests
     }
 
     [Fact]
-    public async Task ConsolidatedMonthlyQuery_LoadsCompleteAggregatesInTwoSelects()
+    public async Task ConsolidatedMonthlyQuery_LoadsCompleteAggregatesInOneSelect()
     {
         var commandCounter = new SelectCommandCounter();
         await using var database = await TestDatabase.CreateAsync(commandCounter);
@@ -126,7 +126,7 @@ public sealed class ReportServiceTests
         Assert.Equal(1800m, Assert.Single(result.AccrualByMonth).Amount);
         Assert.Equal(1, Assert.Single(result.MeterReadingsByMonth).Count);
         Assert.Equal(125m, result.GarageStartingBalanceTotal);
-        Assert.Equal(2, commandCounter.Count);
+        Assert.Equal(1, commandCounter.Count);
     }
 
     [Fact]

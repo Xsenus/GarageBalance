@@ -6,6 +6,13 @@ namespace GarageBalance.Api.Infrastructure.Data;
 
 public sealed class EfConsolidatedMonthlyReportQuery(GarageBalanceDbContext dbContext) : IConsolidatedMonthlyReportQuery
 {
+    private const int OperationMonthlyCategory = 1;
+    private const int AccrualMonthlyCategory = 2;
+    private const int MeterReadingMonthlyCategory = 3;
+    private const int StartingBalanceCategory = 4;
+    private const int IncomeBreakdownCategory = 5;
+    private const int ExpenseBreakdownCategory = 6;
+
     public async Task<ConsolidatedMonthlyReportData> GetMonthlyDataAsync(
         DateOnly periodFrom,
         DateOnly periodTo,
@@ -25,8 +32,11 @@ public sealed class EfConsolidatedMonthlyReportQuery(GarageBalanceDbContext dbCo
             .GroupBy(operation => new { operation.AccountingMonth, operation.OperationKind })
             .Select(group => new
             {
-                Month = group.Key.AccountingMonth,
-                Kind = group.Key.OperationKind,
+                Category = OperationMonthlyCategory,
+                Month = (DateOnly?)group.Key.AccountingMonth,
+                Kind = (string?)group.Key.OperationKind,
+                TypeId = (Guid?)null,
+                Name = (string?)null,
                 Amount = group.Sum(item => item.Amount),
                 Count = group.Count()
             });
@@ -34,8 +44,11 @@ public sealed class EfConsolidatedMonthlyReportQuery(GarageBalanceDbContext dbCo
             .GroupBy(accrual => accrual.AccountingMonth)
             .Select(group => new
             {
-                Month = group.Key,
-                Kind = "accrual",
+                Category = AccrualMonthlyCategory,
+                Month = (DateOnly?)group.Key,
+                Kind = (string?)null,
+                TypeId = (Guid?)null,
+                Name = (string?)null,
                 Amount = group.Sum(item => item.Amount),
                 Count = group.Count()
             });
@@ -43,8 +56,11 @@ public sealed class EfConsolidatedMonthlyReportQuery(GarageBalanceDbContext dbCo
             .GroupBy(reading => reading.AccountingMonth)
             .Select(group => new
             {
-                Month = group.Key,
-                Kind = "meter-reading",
+                Category = MeterReadingMonthlyCategory,
+                Month = (DateOnly?)group.Key,
+                Kind = (string?)null,
+                TypeId = (Guid?)null,
+                Name = (string?)null,
                 Amount = 0m,
                 Count = group.Count()
             });
@@ -53,24 +69,14 @@ public sealed class EfConsolidatedMonthlyReportQuery(GarageBalanceDbContext dbCo
             .GroupBy(_ => 1)
             .Select(group => new
             {
-                Month = periodFrom,
-                Kind = "starting-balance",
+                Category = StartingBalanceCategory,
+                Month = (DateOnly?)periodFrom,
+                Kind = (string?)null,
+                TypeId = (Guid?)null,
+                Name = (string?)null,
                 Amount = group.Sum(garage => garage.StartingBalance),
                 Count = group.Count()
             });
-        var monthlyRows = await operationMonthlyQuery
-            .Concat(accrualMonthlyQuery)
-            .Concat(readingMonthlyQuery)
-            .Concat(garageStartingBalanceQuery)
-            .ToListAsync(cancellationToken);
-        var incomeByMonth = monthlyRows
-            .Where(row => row.Kind == FinancialOperationKinds.Income)
-            .Select(row => new AmountCountByMonth(row.Month, row.Amount, row.Count))
-            .ToList();
-        var expenseByMonth = monthlyRows
-            .Where(row => row.Kind == FinancialOperationKinds.Expense)
-            .Select(row => new AmountCountByMonth(row.Month, row.Amount, row.Count))
-            .ToList();
         var incomeBreakdownQuery = operations
             .Where(operation => operation.OperationKind == FinancialOperationKinds.Income)
             .GroupBy(operation => new
@@ -80,10 +86,13 @@ public sealed class EfConsolidatedMonthlyReportQuery(GarageBalanceDbContext dbCo
             })
             .Select(group => new
             {
-                Kind = FinancialOperationKinds.Income,
+                Category = IncomeBreakdownCategory,
+                Month = (DateOnly?)null,
+                Kind = (string?)null,
                 TypeId = group.Key.IncomeTypeId,
-                group.Key.Name,
-                Amount = group.Sum(item => item.Amount)
+                Name = (string?)group.Key.Name,
+                Amount = group.Sum(item => item.Amount),
+                Count = 0
             });
         var expenseBreakdownQuery = operations
             .Where(operation => operation.OperationKind == FinancialOperationKinds.Expense)
@@ -94,36 +103,54 @@ public sealed class EfConsolidatedMonthlyReportQuery(GarageBalanceDbContext dbCo
             })
             .Select(group => new
             {
-                Kind = FinancialOperationKinds.Expense,
+                Category = ExpenseBreakdownCategory,
+                Month = (DateOnly?)null,
+                Kind = (string?)null,
                 TypeId = group.Key.ExpenseTypeId,
-                group.Key.Name,
-                Amount = group.Sum(item => item.Amount)
+                Name = (string?)group.Key.Name,
+                Amount = group.Sum(item => item.Amount),
+                Count = 0
             });
-        var operationBreakdownRows = incomeByMonth.Count == 0 && expenseByMonth.Count == 0
-            ? []
-            : await incomeBreakdownQuery
-                .Concat(expenseBreakdownQuery)
-                .OrderBy(row => row.Kind)
-                .ThenBy(row => row.Name)
-                .ToListAsync(cancellationToken);
-        var incomeBreakdown = operationBreakdownRows
-            .Where(row => row.Kind == FinancialOperationKinds.Income)
-            .Select(row => new NamedAmountTotal(row.TypeId, row.Name, row.Amount))
+
+        var rows = await operationMonthlyQuery
+            .Concat(accrualMonthlyQuery)
+            .Concat(readingMonthlyQuery)
+            .Concat(garageStartingBalanceQuery)
+            .Concat(incomeBreakdownQuery)
+            .Concat(expenseBreakdownQuery)
+            .ToListAsync(cancellationToken);
+        var incomeByMonth = rows
+            .Where(row => row.Category == OperationMonthlyCategory && row.Kind == FinancialOperationKinds.Income)
+            .OrderBy(row => row.Month)
+            .Select(row => new AmountCountByMonth(row.Month!.Value, row.Amount, row.Count))
             .ToList();
-        var expenseBreakdown = operationBreakdownRows
-            .Where(row => row.Kind == FinancialOperationKinds.Expense)
-            .Select(row => new NamedAmountTotal(row.TypeId, row.Name, row.Amount))
+        var expenseByMonth = rows
+            .Where(row => row.Category == OperationMonthlyCategory && row.Kind == FinancialOperationKinds.Expense)
+            .OrderBy(row => row.Month)
+            .Select(row => new AmountCountByMonth(row.Month!.Value, row.Amount, row.Count))
             .ToList();
-        var accrualByMonth = monthlyRows
-            .Where(row => row.Kind == "accrual")
-            .Select(row => new AmountCountByMonth(row.Month, row.Amount, row.Count))
+        var incomeBreakdown = rows
+            .Where(row => row.Category == IncomeBreakdownCategory)
+            .OrderBy(row => row.Name)
+            .Select(row => new NamedAmountTotal(row.TypeId, row.Name!, row.Amount))
             .ToList();
-        var readingsByMonth = monthlyRows
-            .Where(row => row.Kind == "meter-reading")
-            .Select(row => new CountByMonth(row.Month, row.Count))
+        var expenseBreakdown = rows
+            .Where(row => row.Category == ExpenseBreakdownCategory)
+            .OrderBy(row => row.Name)
+            .Select(row => new NamedAmountTotal(row.TypeId, row.Name!, row.Amount))
             .ToList();
-        var garageStartingBalanceTotal = monthlyRows
-            .Where(row => row.Kind == "starting-balance")
+        var accrualByMonth = rows
+            .Where(row => row.Category == AccrualMonthlyCategory)
+            .OrderBy(row => row.Month)
+            .Select(row => new AmountCountByMonth(row.Month!.Value, row.Amount, row.Count))
+            .ToList();
+        var readingsByMonth = rows
+            .Where(row => row.Category == MeterReadingMonthlyCategory)
+            .OrderBy(row => row.Month)
+            .Select(row => new CountByMonth(row.Month!.Value, row.Count))
+            .ToList();
+        var garageStartingBalanceTotal = rows
+            .Where(row => row.Category == StartingBalanceCategory)
             .Sum(row => row.Amount);
 
         return new ConsolidatedMonthlyReportData(
