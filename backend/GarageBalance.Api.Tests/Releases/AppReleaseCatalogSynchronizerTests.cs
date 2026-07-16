@@ -5,6 +5,7 @@ using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.FileProviders;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace GarageBalance.Api.Tests.Releases;
@@ -49,7 +50,15 @@ public sealed class AppReleaseCatalogSynchronizerTests
                 new FakeWebHostEnvironment(rootPath),
                 NullLogger<AppReleaseCatalogSynchronizer>.Instance);
             await synchronizer.StartAsync(CancellationToken.None);
-            await synchronizer.StartAsync(CancellationToken.None);
+
+            await WaitUntilAsync(async () =>
+            {
+                using var scope = provider.CreateScope();
+                var repository = scope.ServiceProvider.GetRequiredService<IAppReleaseRepository>();
+                return (await repository.GetPageAsync(false, 0, 9, CancellationToken.None)).TotalCount == 1;
+            });
+
+            await synchronizer.StopAsync(CancellationToken.None);
 
             using var verificationScope = provider.CreateScope();
             var repository = verificationScope.ServiceProvider.GetRequiredService<IAppReleaseRepository>();
@@ -60,6 +69,135 @@ public sealed class AppReleaseCatalogSynchronizerTests
         finally
         {
             Directory.Delete(rootPath, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task StartAsync_DoesNotWaitForDatabaseSynchronization()
+    {
+        var rootPath = Path.Combine(Path.GetTempPath(), $"garagebalance-release-sync-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(Path.Combine(rootPath, "AppReleases"));
+        await File.WriteAllTextAsync(
+            Path.Combine(rootPath, "AppReleases", "releases.json"),
+            "[]");
+
+        var synchronizationStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var allowSynchronizationToFinish = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        try
+        {
+            var services = new ServiceCollection();
+            services.AddSingleton<IAppReleaseRepository>(
+                new BlockingAppReleaseRepository(synchronizationStarted, allowSynchronizationToFinish));
+            await using var provider = services.BuildServiceProvider();
+            var synchronizer = new AppReleaseCatalogSynchronizer(
+                provider.GetRequiredService<IServiceScopeFactory>(),
+                new FakeWebHostEnvironment(rootPath),
+                NullLogger<AppReleaseCatalogSynchronizer>.Instance);
+
+            var startTask = synchronizer.StartAsync(CancellationToken.None);
+
+            await startTask.WaitAsync(TimeSpan.FromSeconds(1));
+            await synchronizationStarted.Task.WaitAsync(TimeSpan.FromSeconds(1));
+            Assert.True(startTask.IsCompletedSuccessfully);
+
+            allowSynchronizationToFinish.SetResult();
+            await synchronizer.StopAsync(CancellationToken.None);
+        }
+        finally
+        {
+            allowSynchronizationToFinish.TrySetResult();
+            Directory.Delete(rootPath, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task SynchronizationFailure_DoesNotStopApplicationStartup()
+    {
+        var rootPath = Path.Combine(Path.GetTempPath(), $"garagebalance-release-sync-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(Path.Combine(rootPath, "AppReleases"));
+        await File.WriteAllTextAsync(
+            Path.Combine(rootPath, "AppReleases", "releases.json"),
+            "[]");
+
+        try
+        {
+            var logger = new CapturingLogger();
+            var services = new ServiceCollection();
+            services.AddSingleton<IAppReleaseRepository>(new FailingAppReleaseRepository());
+            await using var provider = services.BuildServiceProvider();
+            var synchronizer = new AppReleaseCatalogSynchronizer(
+                provider.GetRequiredService<IServiceScopeFactory>(),
+                new FakeWebHostEnvironment(rootPath),
+                logger);
+
+            await synchronizer.StartAsync(CancellationToken.None).WaitAsync(TimeSpan.FromSeconds(1));
+            await logger.ErrorLogged.Task.WaitAsync(TimeSpan.FromSeconds(1));
+            await synchronizer.StopAsync(CancellationToken.None);
+
+            Assert.NotNull(logger.Exception);
+        }
+        finally
+        {
+            Directory.Delete(rootPath, recursive: true);
+        }
+    }
+
+    private static async Task WaitUntilAsync(Func<Task<bool>> predicate)
+    {
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        while (!await predicate())
+        {
+            await Task.Delay(20, timeout.Token);
+        }
+    }
+
+    private sealed class BlockingAppReleaseRepository(
+        TaskCompletionSource synchronizationStarted,
+        TaskCompletionSource allowSynchronizationToFinish) : IAppReleaseRepository
+    {
+        public Task<AppReleasePageDto> GetPageAsync(bool includeDrafts, int offset, int limit, CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+
+        public async Task SynchronizeAsync(IReadOnlyList<AppReleaseDto> releases, CancellationToken cancellationToken)
+        {
+            synchronizationStarted.SetResult();
+            await allowSynchronizationToFinish.Task.WaitAsync(cancellationToken);
+        }
+    }
+
+    private sealed class FailingAppReleaseRepository : IAppReleaseRepository
+    {
+        public Task<AppReleasePageDto> GetPageAsync(bool includeDrafts, int offset, int limit, CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+
+        public Task SynchronizeAsync(IReadOnlyList<AppReleaseDto> releases, CancellationToken cancellationToken) =>
+            throw new InvalidOperationException("Expected synchronization failure.");
+    }
+
+    private sealed class CapturingLogger : ILogger<AppReleaseCatalogSynchronizer>
+    {
+        public TaskCompletionSource ErrorLogged { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public Exception? Exception { get; private set; }
+
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+
+        public bool IsEnabled(LogLevel logLevel) => true;
+
+        public void Log<TState>(
+            LogLevel logLevel,
+            EventId eventId,
+            TState state,
+            Exception? exception,
+            Func<TState, Exception?, string> formatter)
+        {
+            if (logLevel != LogLevel.Error)
+            {
+                return;
+            }
+
+            Exception = exception;
+            ErrorLogged.TrySetResult();
         }
     }
 
