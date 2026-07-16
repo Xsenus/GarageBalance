@@ -962,6 +962,58 @@ public sealed class ReportServiceTests
     }
 
     [Fact]
+    public async Task ExpenseAllRowsQuery_LoadsThreeSectionsAndCombinedTotalsInFourSelects()
+    {
+        var commandCounter = new SelectCommandCounter();
+        await using var database = await TestDatabase.CreateAsync(commandCounter);
+        var fixtures = await database.SeedAsync();
+        fixtures.Supplier.StartingBalance = 100m;
+        for (var index = 0; index < 200; index++)
+        {
+            database.Context.SupplierAccruals.Add(new SupplierAccrual
+            {
+                SupplierId = fixtures.Supplier.Id,
+                ExpenseTypeId = fixtures.ExpenseType.Id,
+                AccountingMonth = new DateOnly(2026, 6, 1),
+                Amount = 50m,
+                Source = "performance-test",
+                DocumentNumber = $"INV-PERF-{index:000}"
+            });
+            database.Context.FinancialOperations.Add(new FinancialOperation
+            {
+                OperationKind = FinancialOperationKinds.Expense,
+                OperationDate = new DateOnly(2026, 6, 15),
+                AccountingMonth = new DateOnly(2026, 6, 1),
+                Amount = 20m,
+                DocumentNumber = $"RKO-PERF-{index:000}",
+                SupplierId = fixtures.Supplier.Id,
+                ExpenseTypeId = fixtures.ExpenseType.Id
+            });
+        }
+
+        await database.Context.SaveChangesAsync();
+        commandCounter.Reset();
+
+        var result = await new EfExpenseReportQuery(database.Context).GetRowsAsync(
+            new DateOnly(2026, 6, 1),
+            new DateOnly(2026, 6, 30),
+            "all",
+            new HashSet<Guid>(),
+            new HashSet<Guid>(),
+            null,
+            25,
+            0,
+            CancellationToken.None);
+
+        Assert.Equal(4, commandCounter.Count);
+        Assert.Equal(10100m, result.AccrualTotal);
+        Assert.Equal(4000m, result.ExpenseTotal);
+        Assert.Equal(401, result.RowCount);
+        Assert.Equal(25, result.Rows.Count);
+        Assert.All(result.Rows, row => Assert.Equal(fixtures.Supplier.Id, row.SupplierId));
+    }
+
+    [Fact]
     public async Task GetFundChangeReportAsync_ReturnsPagedFundOperationsAndWritesAudit()
     {
         await using var database = await TestDatabase.CreateAsync();

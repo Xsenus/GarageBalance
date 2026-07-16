@@ -464,12 +464,17 @@ public sealed class BackendPerformanceGuardTests
             "Report visible-row queries must use the normalized server-side limit before ToListAsync.");
         Assert.True(
             CountOccurrences(incomeSource, "Count = group.Count()") >= 3 &&
-            CountOccurrences(expenseSource, "Count = group.Count()") >= 3,
+            CountOccurrences(expenseSource, "group.Count()") >= 3,
             "Report totals must keep total row counts in the combined database aggregate without materializing every visible-row candidate.");
         Assert.True(
             CountOccurrences(incomeSource, "Total = group.Sum(") >= 3 &&
-            CountOccurrences(expenseSource, "Total = group.Sum(") >= 3,
+            CountOccurrences(expenseSource, "group.Sum(") >= 3,
             "Report totals and counts must be aggregated together in the database instead of being derived from materialized rows or separate round trips.");
+        Assert.Equal(3, CountOccurrences(expenseSource, "aggregateQuery = aggregateQuery.Concat("));
+        Assert.Equal(1, CountOccurrences(expenseSource, "aggregateQuery.ToListAsync(cancellationToken)"));
+        Assert.Contains("StartingBalanceTotalCategory", expenseSource, StringComparison.Ordinal);
+        Assert.Contains("AccrualTotalCategory", expenseSource, StringComparison.Ordinal);
+        Assert.Contains("ExpenseTotalCategory", expenseSource, StringComparison.Ordinal);
         var incomeDebtMethod = incomeSource[
             incomeSource.IndexOf("private async Task<IReadOnlyDictionary<Guid, decimal>> CalculateDebtAfterPaymentsAsync", StringComparison.Ordinal)..incomeSource.IndexOf("private static IQueryable<T> ApplyLimit", StringComparison.Ordinal)];
         Assert.Contains("startingBalanceQuery", incomeDebtMethod, StringComparison.Ordinal);
