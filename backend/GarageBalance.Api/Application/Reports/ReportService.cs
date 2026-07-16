@@ -418,22 +418,20 @@ public sealed class ReportService(
         var offset = Math.Max(request.Offset ?? 0, 0);
         int? limit = request.Limit is > 0 ? NormalizeReportLimit(request.Limit.Value) : null;
         var data = await fundChangeReportQuery.GetFundChangesAsync(dateFrom, dateTo, request.Search, offset, limit, cancellationToken);
-        var rows = data.Operations
-            .Select(operation => new FundChangeReportRowDto(
-                operation.Id,
-                operation.FundId,
-                operation.Fund.Name,
-                DateOnly.FromDateTime(operation.CreatedAtUtc.UtcDateTime),
-                operation.OperationKind,
-                FormatFundOperationKind(operation.OperationKind),
-                operation.Amount,
-                operation.BalanceBefore,
-                operation.BalanceAfter,
-                operation.ActorUserId,
-                operation.ActorUserId.HasValue && data.UsersById.TryGetValue(operation.ActorUserId.Value, out var displayName)
-                    ? displayName
-                    : operation.ActorUserId?.ToString(),
-                operation.Reason))
+        var rows = data.Rows
+            .Select(row => new FundChangeReportRowDto(
+                row.Id,
+                row.FundId,
+                row.FundName,
+                DateOnly.FromDateTime(row.CreatedAtUtc.UtcDateTime),
+                row.OperationKind,
+                FormatFundOperationKind(row.OperationKind),
+                row.Amount,
+                row.BalanceBefore,
+                row.BalanceAfter,
+                row.ActorUserId,
+                row.ActorDisplayName ?? row.ActorUserId?.ToString(),
+                row.Reason))
             .ToList();
         var report = new FundChangeReportDto(dateFrom, dateTo, data.DepositTotal, data.WithdrawalTotal, data.RowCount, offset, limit ?? data.RowCount, rows);
 

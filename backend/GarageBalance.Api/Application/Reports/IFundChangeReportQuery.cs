@@ -1,5 +1,3 @@
-using GarageBalance.Api.Domain.Finance;
-
 namespace GarageBalance.Api.Application.Reports;
 
 public interface IFundChangeReportQuery
@@ -14,8 +12,20 @@ public interface IFundChangeReportQuery
 }
 
 public sealed record FundChangeReportData(
-    IReadOnlyList<FundOperation> Operations,
+    IReadOnlyList<FundChangeReportQueryRow> Rows,
     decimal DepositTotal,
     decimal WithdrawalTotal,
-    int RowCount,
-    IReadOnlyDictionary<Guid, string> UsersById);
+    int RowCount);
+
+public sealed record FundChangeReportQueryRow(
+    Guid Id,
+    Guid FundId,
+    string FundName,
+    DateTimeOffset CreatedAtUtc,
+    string OperationKind,
+    decimal Amount,
+    decimal BalanceBefore,
+    decimal BalanceAfter,
+    Guid? ActorUserId,
+    string? ActorDisplayName,
+    string Reason);

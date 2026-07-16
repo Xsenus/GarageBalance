@@ -17,42 +17,40 @@ public sealed class EfFundChangeReportQuery(GarageBalanceDbContext dbContext) : 
         var fromUtc = new DateTimeOffset(dateFrom.ToDateTime(TimeOnly.MinValue), TimeSpan.Zero);
         var toExclusiveUtc = new DateTimeOffset(dateTo.AddDays(1).ToDateTime(TimeOnly.MinValue), TimeSpan.Zero);
         var query = dbContext.FundOperations.AsNoTracking()
-            .Include(operation => operation.Fund)
             .Where(operation =>
                 !operation.IsCanceled &&
                 operation.CreatedAtUtc >= fromUtc &&
                 operation.CreatedAtUtc < toExclusiveUtc);
 
-        IReadOnlyList<FundOperation> operations;
+        IReadOnlyList<FundChangeReportQueryRow> rows;
         int rowCount;
         decimal depositTotal;
         decimal withdrawalTotal;
         if (IsSqliteProvider())
         {
-            var filtered = (await dbContext.FundOperations.AsNoTracking()
-                    .Include(operation => operation.Fund)
-                    .ToListAsync(cancellationToken))
-                .Where(operation =>
-                    !operation.IsCanceled &&
-                    operation.CreatedAtUtc >= fromUtc &&
-                    operation.CreatedAtUtc < toExclusiveUtc);
+            var filtered = (await ProjectRows(dbContext.FundOperations.AsNoTracking()).ToListAsync(cancellationToken))
+                .Where(row =>
+                    !row.IsCanceled &&
+                    row.CreatedAtUtc >= fromUtc &&
+                    row.CreatedAtUtc < toExclusiveUtc);
             if (!string.IsNullOrWhiteSpace(search))
             {
                 var normalizedSearch = search.Trim();
-                filtered = filtered.Where(operation =>
-                    operation.Fund.Name.Contains(normalizedSearch, StringComparison.OrdinalIgnoreCase) ||
-                    operation.OperationKind.Contains(normalizedSearch, StringComparison.OrdinalIgnoreCase) ||
-                    operation.Reason.Contains(normalizedSearch, StringComparison.OrdinalIgnoreCase));
+                filtered = filtered.Where(row =>
+                    row.FundName.Contains(normalizedSearch, StringComparison.OrdinalIgnoreCase) ||
+                    row.OperationKind.Contains(normalizedSearch, StringComparison.OrdinalIgnoreCase) ||
+                    row.Reason.Contains(normalizedSearch, StringComparison.OrdinalIgnoreCase));
             }
 
             var filteredList = filtered.ToList();
             rowCount = filteredList.Count;
-            depositTotal = filteredList.Where(operation => operation.OperationKind == FundOperationKinds.Deposit).Sum(operation => operation.Amount);
-            withdrawalTotal = filteredList.Where(operation => operation.OperationKind == FundOperationKinds.Withdraw).Sum(operation => operation.Amount);
-            operations = ApplyPage(
-                    filteredList.OrderBy(operation => operation.CreatedAtUtc).ThenBy(operation => operation.Fund.Name).ThenBy(operation => operation.Id),
+            depositTotal = filteredList.Where(row => row.OperationKind == FundOperationKinds.Deposit).Sum(row => row.Amount);
+            withdrawalTotal = filteredList.Where(row => row.OperationKind == FundOperationKinds.Withdraw).Sum(row => row.Amount);
+            rows = ApplyPage(
+                    filteredList.OrderBy(row => row.CreatedAtUtc).ThenBy(row => row.FundName).ThenBy(row => row.Id),
                     offset,
                     limit)
+                .Select(row => row.ToQueryRow())
                 .ToList();
         }
         else
@@ -83,20 +81,31 @@ public sealed class EfFundChangeReportQuery(GarageBalanceDbContext dbContext) : 
                 .Where(row => row.OperationKind == FundOperationKinds.Withdraw)
                 .Sum(row => row.Total);
             var ordered = query.OrderBy(operation => operation.CreatedAtUtc).ThenBy(operation => operation.Fund.Name).ThenBy(operation => operation.Id);
-            operations = await ApplyPage(ordered, offset, limit).ToListAsync(cancellationToken);
+            var pageRows = await ProjectRows(ApplyPage(ordered, offset, limit)).ToListAsync(cancellationToken);
+            rows = pageRows.Select(row => row.ToQueryRow()).ToList();
         }
 
-        var actorIds = operations.Where(operation => operation.ActorUserId.HasValue)
-            .Select(operation => operation.ActorUserId!.Value)
-            .Distinct()
-            .ToList();
-        var usersById = actorIds.Count == 0
-            ? new Dictionary<Guid, string>()
-            : await dbContext.Users.AsNoTracking()
-                .Where(user => actorIds.Contains(user.Id))
-                .ToDictionaryAsync(user => user.Id, user => user.DisplayName, cancellationToken);
-        return new FundChangeReportData(operations, depositTotal, withdrawalTotal, rowCount, usersById);
+        return new FundChangeReportData(rows, depositTotal, withdrawalTotal, rowCount);
     }
+
+    private IQueryable<FundChangeProjectionRow> ProjectRows(IQueryable<FundOperation> operations) =>
+        from operation in operations
+        join actor in dbContext.Users.AsNoTracking()
+            on operation.ActorUserId equals (Guid?)actor.Id into actors
+        from actor in actors.DefaultIfEmpty()
+        select new FundChangeProjectionRow(
+            operation.Id,
+            operation.FundId,
+            operation.Fund.Name,
+            operation.CreatedAtUtc,
+            operation.OperationKind,
+            operation.Amount,
+            operation.BalanceBefore,
+            operation.BalanceAfter,
+            operation.ActorUserId,
+            actor == null ? null : actor.DisplayName,
+            operation.Reason,
+            operation.IsCanceled);
 
     private static IQueryable<T> ApplyPage<T>(IQueryable<T> query, int offset, int? limit)
     {
@@ -112,4 +121,22 @@ public sealed class EfFundChangeReportQuery(GarageBalanceDbContext dbContext) : 
 
     private bool IsSqliteProvider() =>
         dbContext.Database.ProviderName?.Contains("Sqlite", StringComparison.OrdinalIgnoreCase) == true;
+
+    private sealed record FundChangeProjectionRow(
+        Guid Id,
+        Guid FundId,
+        string FundName,
+        DateTimeOffset CreatedAtUtc,
+        string OperationKind,
+        decimal Amount,
+        decimal BalanceBefore,
+        decimal BalanceAfter,
+        Guid? ActorUserId,
+        string? ActorDisplayName,
+        string Reason,
+        bool IsCanceled)
+    {
+        public FundChangeReportQueryRow ToQueryRow() =>
+            new(Id, FundId, FundName, CreatedAtUtc, OperationKind, Amount, BalanceBefore, BalanceAfter, ActorUserId, ActorDisplayName, Reason);
+    }
 }

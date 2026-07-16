@@ -563,14 +563,16 @@ public sealed class BackendPerformanceGuardTests
         var source = ReadApiSource("Infrastructure/Data/EfFundChangeReportQuery.cs");
 
         Assert.Matches(
-            BoundedQueryRegex(@"GetFundChangesAsync[\s\S]*?GroupBy\(operation => operation\.OperationKind\)[\s\S]*?RowCount = group\.Count\(\)[\s\S]*?Total = group\.Sum\(operation => operation\.Amount\)[\s\S]*?ApplyPage\(ordered, offset, limit\)\.ToListAsync\(cancellationToken\)"),
+            BoundedQueryRegex(@"GetFundChangesAsync[\s\S]*?GroupBy\(operation => operation\.OperationKind\)[\s\S]*?RowCount = group\.Count\(\)[\s\S]*?Total = group\.Sum\(operation => operation\.Amount\)[\s\S]*?ProjectRows\(ApplyPage\(ordered, offset, limit\)\)\.ToListAsync\(cancellationToken\)"),
             source);
         Assert.DoesNotContain("query.CountAsync(cancellationToken)", source, StringComparison.Ordinal);
         Assert.Contains("query.Skip(offset)", source, StringComparison.Ordinal);
         Assert.Contains("operation.Fund.Name.ToLower().Contains(normalizedSearch)", source, StringComparison.Ordinal);
         Assert.Contains("operation.OperationKind.ToLower().Contains(normalizedSearch)", source, StringComparison.Ordinal);
         Assert.Contains("operation.Reason.ToLower().Contains(normalizedSearch)", source, StringComparison.Ordinal);
-        Assert.Contains("ToDictionaryAsync(user => user.Id, user => user.DisplayName", source, StringComparison.Ordinal);
+        Assert.Contains("join actor in dbContext.Users.AsNoTracking()", source, StringComparison.Ordinal);
+        Assert.Contains("from actor in actors.DefaultIfEmpty()", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("ToDictionaryAsync", source, StringComparison.Ordinal);
     }
 
     [Fact]

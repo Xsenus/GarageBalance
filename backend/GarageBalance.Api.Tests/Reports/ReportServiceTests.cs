@@ -1154,6 +1154,61 @@ public sealed class ReportServiceTests
     }
 
     [Fact]
+    public async Task FundChangeQuery_LoadsPagedRowsAndActorsInOneSqliteSelect()
+    {
+        var commandCounter = new SelectCommandCounter();
+        await using var database = await TestDatabase.CreateAsync(commandCounter);
+        var actor = new AppUser
+        {
+            Email = "fund-query@example.test",
+            NormalizedEmail = "FUND-QUERY@EXAMPLE.TEST",
+            DisplayName = "Fund operator",
+            PasswordHash = "hash"
+        };
+        var fund = new Fund { Name = "Reserve fund", NormalizedName = "RESERVE FUND", SortOrder = 10 };
+        database.Context.Users.Add(actor);
+        database.Context.Funds.Add(fund);
+        var createdAt = new DateTimeOffset(2026, 6, 1, 9, 0, 0, TimeSpan.Zero);
+        database.Context.FundOperations.AddRange(Enumerable.Range(0, 200).Select(index => new FundOperation
+        {
+            Fund = fund,
+            OperationKind = index % 2 == 0 ? FundOperationKinds.Deposit : FundOperationKinds.Withdraw,
+            Amount = 10m,
+            BalanceBefore = index * 10m,
+            BalanceAfter = (index + 1) * 10m,
+            Reason = $"Operation {index}",
+            ActorUserId = index == 0 ? null : actor.Id,
+            CreatedAtUtc = createdAt.AddMinutes(index)
+        }));
+        await database.Context.SaveChangesAsync();
+
+        commandCounter.Reset();
+        var result = await new EfFundChangeReportQuery(database.Context).GetFundChangesAsync(
+            new DateOnly(2026, 6, 1),
+            new DateOnly(2026, 6, 30),
+            null,
+            0,
+            25,
+            CancellationToken.None);
+
+        Assert.Equal(1, commandCounter.Count);
+        Assert.Equal(200, result.RowCount);
+        Assert.Equal(1000m, result.DepositTotal);
+        Assert.Equal(1000m, result.WithdrawalTotal);
+        Assert.Equal(25, result.Rows.Count);
+        var rowWithoutActor = result.Rows[0];
+        Assert.Null(rowWithoutActor.ActorUserId);
+        Assert.Null(rowWithoutActor.ActorDisplayName);
+        Assert.All(result.Rows.Skip(1), row =>
+        {
+            Assert.Equal(fund.Id, row.FundId);
+            Assert.Equal(fund.Name, row.FundName);
+            Assert.Equal(actor.Id, row.ActorUserId);
+            Assert.Equal(actor.DisplayName, row.ActorDisplayName);
+        });
+    }
+
+    [Fact]
     public async Task ExportFundChangeReportXlsxAsync_ReturnsWorkbookWithFilteredRows()
     {
         await using var database = await TestDatabase.CreateAsync();

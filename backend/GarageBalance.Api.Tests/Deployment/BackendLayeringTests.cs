@@ -632,7 +632,8 @@ public sealed class BackendLayeringTests
 
         Assert.Contains("IFundChangeReportQuery fundChangeReportQuery", service, StringComparison.Ordinal);
         Assert.Contains("fundChangeReportQuery.GetFundChangesAsync", service, StringComparison.Ordinal);
-        Assert.Contains("data.UsersById.TryGetValue", service, StringComparison.Ordinal);
+        Assert.Contains("row.ActorDisplayName ?? row.ActorUserId?.ToString()", service, StringComparison.Ordinal);
+        Assert.DoesNotContain("UsersById", service, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -657,6 +658,8 @@ public sealed class BackendLayeringTests
 
         Assert.Contains("interface IFundChangeReportQuery", abstraction, StringComparison.Ordinal);
         Assert.DoesNotContain("Infrastructure", abstraction, StringComparison.Ordinal);
+        Assert.DoesNotContain("Domain", abstraction, StringComparison.Ordinal);
+        Assert.Contains("FundChangeReportQueryRow", abstraction, StringComparison.Ordinal);
         Assert.Contains("class EfFundChangeReportQuery", implementation, StringComparison.Ordinal);
         Assert.Contains(": IFundChangeReportQuery", implementation, StringComparison.Ordinal);
         Assert.Contains("GarageBalanceDbContext dbContext", implementation, StringComparison.Ordinal);
