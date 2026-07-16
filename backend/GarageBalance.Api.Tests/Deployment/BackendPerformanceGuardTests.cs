@@ -129,10 +129,11 @@ public sealed class BackendPerformanceGuardTests
         Assert.Contains("class EfFinancialOperationDisplayQuery", source, StringComparison.Ordinal);
         Assert.Contains("operationIds.Contains(operation.Id)", source, StringComparison.Ordinal);
         Assert.Contains("previous.OperationDate < operation.OperationDate", source, StringComparison.Ordinal);
-        Assert.Contains("garageIds.Contains(accrual.GarageId)", source, StringComparison.Ordinal);
-        Assert.Contains("supplierIds.Contains(accrual.SupplierId)", source, StringComparison.Ordinal);
-        Assert.Contains(".Concat(supplierBuckets)", source, StringComparison.Ordinal);
-        Assert.Equal(2, CountOccurrences(source, ".ToListAsync(cancellationToken)"));
+        Assert.Contains("visibleOperations.Any(operation => operation.GarageId == accrual.GarageId)", source, StringComparison.Ordinal);
+        Assert.Contains("visibleOperations.Any(operation => operation.SupplierId == accrual.SupplierId)", source, StringComparison.Ordinal);
+        Assert.Contains(".Concat(garageBucketRows)", source, StringComparison.Ordinal);
+        Assert.Contains(".Concat(supplierBucketRows)", source, StringComparison.Ordinal);
+        Assert.Equal(1, CountOccurrences(source, ".ToListAsync(cancellationToken)"));
     }
 
     [Fact]

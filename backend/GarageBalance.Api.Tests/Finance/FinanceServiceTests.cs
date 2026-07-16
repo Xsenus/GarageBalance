@@ -617,7 +617,7 @@ public sealed class FinanceServiceTests
     }
 
     [Fact]
-    public async Task GetOperationsPageAsync_LoadsDebtAndAllocationsInFourSelectsRegardlessOfRowCount()
+    public async Task GetOperationsPageAsync_LoadsDebtAndAllocationsInThreeSelectsRegardlessOfRowCount()
     {
         var commandCounter = new SelectCommandCounter();
         await using var database = await TestDatabase.CreateAsync(commandCounter);
@@ -677,7 +677,7 @@ public sealed class FinanceServiceTests
             new FinancialOperationListRequest(null, null, null, null, 25, 0),
             CancellationToken.None);
 
-        Assert.Equal(4, commandCounter.Count);
+        Assert.Equal(3, commandCounter.Count);
         Assert.Equal(6, page.TotalCount);
         Assert.Equal(6, page.Items.Count);
         var firstIncome = Assert.Single(page.Items, item => item.DocumentNumber == "PKO-BATCH-0");
