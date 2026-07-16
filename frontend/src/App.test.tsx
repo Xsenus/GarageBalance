@@ -12002,6 +12002,30 @@ describe('App', () => {
     expect(getGarages).toHaveBeenCalledTimes(1)
   })
 
+  it('starts report filter dictionaries only after the visible report finishes loading', async () => {
+    const user = userEvent.setup()
+    let resolveGarageReport!: (report: GarageDetailReportDto) => void
+    const garageReportPromise = new Promise<GarageDetailReportDto>((resolve) => { resolveGarageReport = resolve })
+    const getGarageReport = vi.fn(() => garageReportPromise)
+    const getGarages = vi.fn(async () => [createGarage()])
+
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient({ getGarages })} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient({ getGarageReport })} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('\u041f\u0430\u0440\u043e\u043b\u044c'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: '\u0412\u043e\u0439\u0442\u0438' }))
+    await openSection(user, '\u041e\u0442\u0447\u0435\u0442\u044b')
+    const reportsPanel = await screen.findByRole('region', { name: '\u041e\u0442\u0447\u0435\u0442\u044b' })
+
+    await openReportTab(user, reportsPanel, '\u041f\u043e \u0433\u0430\u0440\u0430\u0436\u0430\u043c')
+    await waitFor(() => expect(getGarageReport).toHaveBeenCalledTimes(1))
+    expect(getGarages).not.toHaveBeenCalled()
+
+    await act(async () => resolveGarageReport(createGarageDetailReport()))
+
+    await waitFor(() => expect(getGarages).toHaveBeenCalledTimes(1))
+    expect(within(reportsPanel).getByRole('heading', { name: '\u041e\u0442\u0447\u0451\u0442 \u043f\u043e \u0433\u0430\u0440\u0430\u0436\u0430\u043c' })).toBeInTheDocument()
+  })
+
   it('shows a lazy report-filter error and retries the failed reference request when the tab is reopened', async () => {
     const user = userEvent.setup()
     let attempt = 0

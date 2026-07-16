@@ -80,6 +80,7 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
   const [incomeTypes, setIncomeTypes] = useState<AccountingTypeDto[]>([])
   const [expenseTypes, setExpenseTypes] = useState<AccountingTypeDto[]>([])
   const loadedReportDictionaries = useRef({ garages: false, suppliers: false, incomeTypes: false, expenseTypes: false })
+  const [reportDataSettled, setReportDataSettled] = useState<Partial<Record<ReportWorkbookTab, boolean>>>({})
   const [dictionaryError, setDictionaryError] = useState<string | null>(null)
   const [consolidatedReport, setConsolidatedReport] = useState<ConsolidatedReportDto | null>(null)
   const [consolidatedReportLoading, setConsolidatedReportLoading] = useState(true)
@@ -168,6 +169,11 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
   }, [appliedFeeVariationFilter, feeVariationFilter])
 
   useEffect(() => {
+    if ((activeReportTab === 'garages' || activeReportTab === 'payouts' || activeReportTab === 'income' || activeReportTab === 'fees')
+      && !reportDataSettled[activeReportTab]) {
+      return
+    }
+
     let ignore = false
 
     async function loadReportDictionaries() {
@@ -229,7 +235,7 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
     return () => {
       ignore = true
     }
-  }, [activeReportTab, auth.accessToken, dictionaryClient])
+  }, [activeReportTab, auth.accessToken, dictionaryClient, reportDataSettled])
 
   useEffect(() => {
     let ignore = false
@@ -275,6 +281,7 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
 
     let ignore = false
     async function loadFeeReport() {
+      setReportDataSettled((current) => ({ ...current, fees: false }))
       setFeeReportLoading(true)
       setReportDataError(null)
       try {
@@ -291,6 +298,7 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
         }
       } finally {
         if (!ignore) {
+          setReportDataSettled((current) => ({ ...current, fees: true }))
           setFeeReportLoading(false)
         }
       }
@@ -310,6 +318,7 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
     let ignore = false
 
     async function loadGarageReport() {
+      setReportDataSettled((current) => ({ ...current, garages: false }))
       setGarageReportLoading(true)
       setGarageReportError(null)
       try {
@@ -331,6 +340,7 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
         }
       } finally {
         if (!ignore) {
+          setReportDataSettled((current) => ({ ...current, garages: true }))
           setGarageReportLoading(false)
         }
       }
@@ -351,6 +361,7 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
     let ignore = false
 
     async function loadPayoutReport() {
+      setReportDataSettled((current) => ({ ...current, payouts: false }))
       setPayoutReportLoading(true)
       setPayoutReportError(null)
       try {
@@ -371,6 +382,7 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
         }
       } finally {
         if (!ignore) {
+          setReportDataSettled((current) => ({ ...current, payouts: true }))
           setPayoutReportLoading(false)
         }
       }
@@ -391,6 +403,7 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
     let ignore = false
 
     async function loadIncomeReport() {
+      setReportDataSettled((current) => ({ ...current, income: false }))
       setIncomeReportLoading(true)
       setIncomeReportError(null)
       try {
@@ -412,6 +425,7 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
         }
       } finally {
         if (!ignore) {
+          setReportDataSettled((current) => ({ ...current, income: true }))
           setIncomeReportLoading(false)
         }
       }
@@ -1242,7 +1256,12 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
             aria-selected={activeReportTab === tab.key}
             aria-controls={`report-panel-${tab.key}`}
             className={activeReportTab === tab.key ? 'is-active' : undefined}
-            onClick={() => setActiveReportTab(tab.key)}
+            onClick={() => {
+              if (tab.key !== activeReportTab && (tab.key === 'garages' || tab.key === 'payouts' || tab.key === 'income' || tab.key === 'fees')) {
+                setReportDataSettled((current) => ({ ...current, [tab.key]: false }))
+              }
+              setActiveReportTab(tab.key)
+            }}
             key={tab.key}
           >
             <span>{tab.label}</span>
