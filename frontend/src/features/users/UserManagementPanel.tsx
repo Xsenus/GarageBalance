@@ -288,8 +288,8 @@ export function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; 
     try {
       await userClient.restoreUser(auth.accessToken, restoreTarget.id)
       setRestoreTarget(null)
-      showToast('Пользователь восстановлен.')
       await refreshUsers()
+      showToast('Пользователь восстановлен.')
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Не удалось восстановить пользователя.')
     } finally {
