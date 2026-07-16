@@ -608,8 +608,12 @@ public sealed class BackendPerformanceGuardTests
             "Fee transaction rows must be summed into garage groups before materialization and those groups must supply final totals.");
         Assert.DoesNotContain("ToDictionaryAsync(", source, StringComparison.Ordinal);
         Assert.Contains("var accrualTotals = accrualsByGarage", source, StringComparison.Ordinal);
-        Assert.Contains("var collectedTotals = paymentGroups", source, StringComparison.Ordinal);
-        Assert.Contains("if (missingGarageIds.Count > 0)", source, StringComparison.Ordinal);
+        Assert.Contains("var collectedTotals = rows", source, StringComparison.Ordinal);
+        Assert.Contains("accrualQuery", source, StringComparison.Ordinal);
+        Assert.Contains(".Concat(paymentQuery)", source, StringComparison.Ordinal);
+        var feeDataSource = source[source.IndexOf("GetFeeDataAsync", StringComparison.Ordinal)..];
+        Assert.Equal(1, CountOccurrences(feeDataSource, ".ToListAsync(cancellationToken)"));
+        Assert.DoesNotContain("missingGarageIds", source, StringComparison.Ordinal);
         Assert.Contains("group.Max(operation => (DateOnly?)operation.OperationDate)", source, StringComparison.Ordinal);
     }
 

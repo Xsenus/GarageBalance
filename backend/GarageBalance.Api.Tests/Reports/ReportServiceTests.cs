@@ -1340,7 +1340,7 @@ public sealed class ReportServiceTests
     }
 
     [Fact]
-    public async Task FeeReportQuery_ReusesGarageGroupsForTotalsAndLoadsOnlyPaymentOnlyGarageIdentity()
+    public async Task FeeReportQuery_LoadsAccrualsPaymentsAndGarageIdentitiesInOneSelect()
     {
         var commandCounter = new SelectCommandCounter();
         await using var database = await TestDatabase.CreateAsync(commandCounter);
@@ -1369,7 +1369,7 @@ public sealed class ReportServiceTests
         commandCounter.Reset();
         var sameGarageData = await query.GetFeeDataAsync([fixtures.IncomeType.Id], CancellationToken.None);
 
-        Assert.Equal(2, commandCounter.Count);
+        Assert.Equal(1, commandCounter.Count);
         Assert.Equal(500m, sameGarageData.AccrualTotals[fixtures.IncomeType.Id]);
         Assert.Equal(225m, sameGarageData.CollectedTotals[fixtures.IncomeType.Id]);
         Assert.Single(sameGarageData.PaymentsByGarage);
@@ -1382,10 +1382,40 @@ public sealed class ReportServiceTests
         commandCounter.Reset();
         var paymentOnlyGarageData = await query.GetFeeDataAsync([fixtures.IncomeType.Id], CancellationToken.None);
 
-        Assert.Equal(3, commandCounter.Count);
+        Assert.Equal(1, commandCounter.Count);
         Assert.Equal(500m, paymentOnlyGarageData.AccrualTotals[fixtures.IncomeType.Id]);
         Assert.Equal(300m, paymentOnlyGarageData.CollectedTotals[fixtures.IncomeType.Id]);
         Assert.Equal(fixtures.SecondGarage.Number, paymentOnlyGarageData.GaragesById[fixtures.SecondGarage.Id].GarageNumber);
+    }
+
+    [Fact]
+    public async Task FeeReportQuery_ReturnsEmptyDataInOneSelect()
+    {
+        var commandCounter = new SelectCommandCounter();
+        await using var database = await TestDatabase.CreateAsync(commandCounter);
+        var query = new EfFeeReportQuery(database.Context);
+        commandCounter.Reset();
+
+        var result = await query.GetFeeDataAsync([Guid.NewGuid()], CancellationToken.None);
+
+        Assert.Equal(1, commandCounter.Count);
+        Assert.Empty(result.AccrualTotals);
+        Assert.Empty(result.CollectedTotals);
+        Assert.Empty(result.AccrualsByGarage);
+        Assert.Empty(result.PaymentsByGarage);
+        Assert.Empty(result.GaragesById);
+    }
+
+    [Fact]
+    public async Task FeeReportQuery_PropagatesCancellation()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var query = new EfFeeReportQuery(database.Context);
+        using var cancellationSource = new CancellationTokenSource();
+        cancellationSource.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            query.GetFeeDataAsync([Guid.NewGuid()], cancellationSource.Token));
     }
 
     [Fact]
