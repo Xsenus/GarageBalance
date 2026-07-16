@@ -41,15 +41,16 @@ public sealed class BackendPerformanceGuardTests
     public void FinanceSummary_UsesSingleAggregateQueryPerGrowingTable()
     {
         var totalsSource = ReadApiSource("Infrastructure/Data/EfFinanceTotalsQuery.cs");
-        var sectionCountSource = ReadApiSource("Infrastructure/Data/EfFinanceSectionCountQuery.cs");
         var serviceSource = ReadApiSource("Application/Finance/FinanceService.cs");
 
         Assert.Contains("IncomeCount = group.Count(operation => operation.OperationKind == FinancialOperationKinds.Income)", totalsSource, StringComparison.Ordinal);
         Assert.Contains("ExpenseCount = group.Count(operation => operation.OperationKind == FinancialOperationKinds.Expense)", totalsSource, StringComparison.Ordinal);
         Assert.Contains("AccrualTotal = group.Sum(accrual => (decimal?)accrual.Amount) ?? 0m", totalsSource, StringComparison.Ordinal);
         Assert.Contains(".Concat(accrualTotalsQuery)", totalsSource, StringComparison.Ordinal);
-        Assert.Contains(".Concat(supplierAccruals", sectionCountSource, StringComparison.Ordinal);
-        Assert.Contains("financeSectionCountQuery.GetAsync", serviceSource, StringComparison.Ordinal);
+        Assert.Contains(".Concat(meterReadingTotalsQuery)", totalsSource, StringComparison.Ordinal);
+        Assert.Contains(".Concat(supplierAccrualTotalsQuery)", totalsSource, StringComparison.Ordinal);
+        Assert.Contains("var rows = await operationTotalsQuery", totalsSource, StringComparison.Ordinal);
+        Assert.DoesNotContain("financeSectionCountQuery", serviceSource, StringComparison.Ordinal);
         Assert.Contains("financeTotalsQuery.GetAsync", serviceSource, StringComparison.Ordinal);
         Assert.DoesNotContain("meterReadingRepository.CountActiveAsync", serviceSource, StringComparison.Ordinal);
         Assert.DoesNotContain("supplierAccrualRepository.CountActiveAsync", serviceSource, StringComparison.Ordinal);

@@ -17,7 +17,6 @@ public sealed class FinanceService(
     IExpenseWorksheetQuery expenseWorksheetQuery,
     IFinancialOperationDisplayQuery financialOperationDisplayQuery,
     IFinanceTotalsQuery financeTotalsQuery,
-    IFinanceSectionCountQuery financeSectionCountQuery,
     IMeterReadingRepository meterReadingRepository,
     IFinancialOperationRepository financialOperationRepository,
     IAccrualRepository accrualRepository,
@@ -495,11 +494,6 @@ public sealed class FinanceService(
             request.SupplierId,
             request.StaffMemberId,
             cancellationToken);
-        var sectionCounts = await financeSectionCountQuery.GetAsync(
-            request.DateFrom.HasValue ? MonthPeriod.Normalize(request.DateFrom.Value) : null,
-            request.DateTo.HasValue ? MonthPeriod.Normalize(request.DateTo.Value) : null,
-            NormalizeSearch(request.Search),
-            cancellationToken);
         return new FinanceSummaryDto(
             totals.IncomeTotal,
             totals.ExpenseTotal,
@@ -508,11 +502,11 @@ public sealed class FinanceService(
             totals.AccrualTotal - totals.IncomeTotal,
             totals.OperationCount,
             totals.AccrualCount,
-            sectionCounts.MeterReadingCount)
+            totals.MeterReadingCount)
         {
             IncomeCount = totals.IncomeCount,
             ExpenseCount = totals.ExpenseCount,
-            SupplierAccrualCount = sectionCounts.SupplierAccrualCount
+            SupplierAccrualCount = totals.SupplierAccrualCount
         };
     }
 

@@ -20,4 +20,6 @@ public sealed record FinanceTotalsData(
     int OperationCount,
     int IncomeCount,
     int ExpenseCount,
-    int AccrualCount);
+    int AccrualCount,
+    int MeterReadingCount,
+    int SupplierAccrualCount);

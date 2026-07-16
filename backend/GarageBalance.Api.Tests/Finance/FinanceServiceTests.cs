@@ -1578,7 +1578,7 @@ public sealed class FinanceServiceTests
     }
 
     [Fact]
-    public async Task GetSummaryAsync_UsesTwoAggregateSelectsAndReturnsSectionCounts()
+    public async Task GetSummaryAsync_UsesOneAggregateSelectAndReturnsSectionCounts()
     {
         var commandCounter = new SelectCommandCounter();
         await using var database = await TestDatabase.CreateAsync(commandCounter);
@@ -1595,7 +1595,7 @@ public sealed class FinanceServiceTests
             new FinancialOperationListRequest(new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 30), null, null),
             CancellationToken.None);
 
-        Assert.Equal(2, commandCounter.Count);
+        Assert.Equal(1, commandCounter.Count);
         Assert.Equal(1, result.IncomeCount);
         Assert.Equal(1, result.ExpenseCount);
         Assert.Equal(1, result.AccrualCount);
