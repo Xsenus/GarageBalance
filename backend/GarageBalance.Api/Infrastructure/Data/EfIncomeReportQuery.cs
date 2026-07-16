@@ -7,6 +7,9 @@ namespace GarageBalance.Api.Infrastructure.Data;
 
 public sealed class EfIncomeReportQuery(GarageBalanceDbContext dbContext) : IIncomeReportQuery
 {
+    private const int StartingBalanceDebtCategory = 1;
+    private const int AccrualDebtCategory = 2;
+    private const int PaymentDebtCategory = 3;
     private const string AllRows = "all";
     private const string AccrualRows = "accruals";
     private const string PaymentRows = "payments";
@@ -263,31 +266,70 @@ public sealed class EfIncomeReportQuery(GarageBalanceDbContext dbContext) : IInc
         var targetAccountingMonths = operations.ToDictionary(operation => operation.Id, operation => operation.AccountingMonth);
         var maxOperationDate = operations.Max(operation => operation.OperationDate);
         var maxAccountingMonth = operations.Max(operation => operation.AccountingMonth);
-        var startingBalances = await dbContext.Garages.AsNoTracking()
+        var startingBalanceQuery = dbContext.Garages.AsNoTracking()
             .Where(garage => garageIds.Contains(garage.Id))
-            .Select(garage => new { garage.Id, garage.StartingBalance })
-            .ToDictionaryAsync(garage => garage.Id, garage => garage.StartingBalance, cancellationToken);
-        var accrualTotals = await dbContext.Accruals.AsNoTracking()
+            .Select(garage => new
+            {
+                Category = StartingBalanceDebtCategory,
+                GarageId = garage.Id,
+                OperationId = (Guid?)null,
+                AccountingMonth = (DateOnly?)null,
+                OperationDate = (DateOnly?)null,
+                CreatedAtUtc = (DateTimeOffset?)null,
+                Amount = garage.StartingBalance
+            });
+        var accrualQuery = dbContext.Accruals.AsNoTracking()
             .Where(accrual => !accrual.IsCanceled && garageIds.Contains(accrual.GarageId) && accrual.AccountingMonth <= maxAccountingMonth)
             .GroupBy(accrual => new { accrual.GarageId, accrual.AccountingMonth })
-            .Select(group => new IncomeDebtAccrualRow(group.Key.GarageId, group.Key.AccountingMonth, group.Sum(accrual => accrual.Amount)))
-            .ToListAsync(cancellationToken);
-        var accrualsByGarage = accrualTotals.GroupBy(row => row.GarageId)
-            .ToDictionary(group => group.Key, group => group.OrderBy(row => row.AccountingMonth).ToArray());
-        var relatedPayments = await dbContext.FinancialOperations.AsNoTracking()
+            .Select(group => new
+            {
+                Category = AccrualDebtCategory,
+                GarageId = group.Key.GarageId,
+                OperationId = (Guid?)null,
+                AccountingMonth = (DateOnly?)group.Key.AccountingMonth,
+                OperationDate = (DateOnly?)null,
+                CreatedAtUtc = (DateTimeOffset?)null,
+                Amount = group.Sum(accrual => accrual.Amount)
+            });
+        var paymentQuery = dbContext.FinancialOperations.AsNoTracking()
             .Where(operation =>
                 !operation.IsCanceled &&
                 operation.OperationKind == FinancialOperationKinds.Income &&
                 operation.GarageId != null &&
                 garageIds.Contains(operation.GarageId.Value) &&
                 operation.OperationDate <= maxOperationDate)
-            .Select(operation => new IncomeDebtPaymentRow(
-                operation.Id,
-                operation.GarageId!.Value,
-                operation.OperationDate,
-                operation.CreatedAtUtc,
-                operation.Amount))
+            .Select(operation => new
+            {
+                Category = PaymentDebtCategory,
+                GarageId = operation.GarageId!.Value,
+                OperationId = (Guid?)operation.Id,
+                AccountingMonth = (DateOnly?)null,
+                OperationDate = (DateOnly?)operation.OperationDate,
+                CreatedAtUtc = (DateTimeOffset?)operation.CreatedAtUtc,
+                operation.Amount
+            });
+
+        var debtRows = await startingBalanceQuery
+            .Concat(accrualQuery)
+            .Concat(paymentQuery)
             .ToListAsync(cancellationToken);
+        var startingBalances = debtRows
+            .Where(row => row.Category == StartingBalanceDebtCategory)
+            .ToDictionary(row => row.GarageId, row => row.Amount);
+        var accrualsByGarage = debtRows
+            .Where(row => row.Category == AccrualDebtCategory)
+            .Select(row => new IncomeDebtAccrualRow(row.GarageId, row.AccountingMonth!.Value, row.Amount))
+            .GroupBy(row => row.GarageId)
+            .ToDictionary(group => group.Key, group => group.OrderBy(row => row.AccountingMonth).ToArray());
+        var relatedPayments = debtRows
+            .Where(row => row.Category == PaymentDebtCategory)
+            .Select(row => new IncomeDebtPaymentRow(
+                row.OperationId!.Value,
+                row.GarageId,
+                row.OperationDate!.Value,
+                row.CreatedAtUtc!.Value,
+                row.Amount))
+            .ToList();
 
         var result = new Dictionary<Guid, decimal>();
         foreach (var garageGroup in relatedPayments.GroupBy(payment => payment.GarageId).OrderBy(group => group.Key))

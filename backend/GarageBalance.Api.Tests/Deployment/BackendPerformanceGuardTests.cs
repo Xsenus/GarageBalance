@@ -459,6 +459,13 @@ public sealed class BackendPerformanceGuardTests
             CountOccurrences(incomeSource, "Total = group.Sum(") >= 3 &&
             CountOccurrences(expenseSource, "Total = group.Sum(") >= 3,
             "Report totals and counts must be aggregated together in the database instead of being derived from materialized rows or separate round trips.");
+        var incomeDebtMethod = incomeSource[
+            incomeSource.IndexOf("private async Task<IReadOnlyDictionary<Guid, decimal>> CalculateDebtAfterPaymentsAsync", StringComparison.Ordinal)..incomeSource.IndexOf("private static IQueryable<T> ApplyLimit", StringComparison.Ordinal)];
+        Assert.Contains("startingBalanceQuery", incomeDebtMethod, StringComparison.Ordinal);
+        Assert.Contains("accrualQuery", incomeDebtMethod, StringComparison.Ordinal);
+        Assert.Contains("paymentQuery", incomeDebtMethod, StringComparison.Ordinal);
+        Assert.Equal(2, CountOccurrences(incomeDebtMethod, ".Concat("));
+        Assert.Equal(1, CountOccurrences(incomeDebtMethod, ".ToListAsync(cancellationToken)"));
         Assert.Contains("useClientSearch = hasSearch && !", incomeSource, StringComparison.Ordinal);
         Assert.True(
             CountOccurrences(incomeSource, "ToLower().Contains(normalizedSearch!)") >= 6,
