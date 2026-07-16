@@ -734,6 +734,7 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
   const [supplierPage, setSupplierPage] = useState<ContractorPageState>(createContractorPageState)
   const [supplierContacts, setSupplierContacts] = useState<SupplierContactDto[]>([])
   const [contractorPageLoading, setContractorPageLoading] = useState<Record<ContractorSection, boolean>>({ garages: true, suppliers: true, staff: true })
+  const activeContractorPageLoading = contractorPageLoading[activeSection]
   const [staff, setStaff] = useState<ContractorStaffRow[]>([])
   const [staffPage, setStaffPage] = useState<ContractorPageState>(createContractorPageState)
   const [departments, setDepartments] = useState<ContractorDepartmentRow[]>([])
@@ -892,7 +893,7 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
   }, [activeSection, auth.accessToken, dictionaryClient])
 
   useEffect(() => {
-    if (activeSection === 'staff' || loadedContractorReferencesRef.current[activeSection]) {
+    if (activeSection === 'staff' || activeContractorPageLoading || loadedContractorReferencesRef.current[activeSection]) {
       return
     }
 
@@ -950,7 +951,7 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
     return () => {
       cancelled = true
     }
-  }, [activeSection, auth.accessToken, dictionaryClient])
+  }, [activeContractorPageLoading, activeSection, auth.accessToken, dictionaryClient])
 
   useEffect(() => {
     if (!initialTarget) {

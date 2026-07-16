@@ -29,7 +29,7 @@ import type { ApplicationSettingsClient } from './services/settingsApi'
 import type { AuditClient, AuditEventDto } from './services/auditApi'
 import type { AuthClient, AuthResponse } from './services/authApi'
 import { DictionaryApiError } from './services/dictionariesApi'
-import type { AccountingTypeDto, ChargeServiceSettingDto, DictionaryClient, FeeCampaignDto, GarageDto, IrregularPaymentDto, OwnerDto, StaffDepartmentDto, StaffMemberDto, SupplierContactDto, SupplierDto, SupplierGroupDto, TariffDto, UpsertGarageRequest, UpsertStaffMemberRequest, UpsertSupplierRequest, UpsertTariffRequest } from './services/dictionariesApi'
+import type { AccountingTypeDto, ChargeServiceSettingDto, DictionaryClient, FeeCampaignDto, GarageDto, IrregularPaymentDto, OwnerDto, PagedResult, StaffDepartmentDto, StaffMemberDto, SupplierContactDto, SupplierDto, SupplierGroupDto, TariffDto, UpsertGarageRequest, UpsertStaffMemberRequest, UpsertSupplierRequest, UpsertTariffRequest } from './services/dictionariesApi'
 import type { AccrualDto, CreateAccrualRequest, CreateDebtTransferRequest, CreateExpenseOperationRequest, CreateIncomeOperationRequest, CreateMeterReadingRequest, CreateStaffPaymentRequest, CreateSupplierAccrualRequest, ExpenseWorksheetDto, FeeCampaignAccrualGenerationResultDto, FinanceClient, FinancePagedResult, FinancePageParams, FinanceSummaryDto, FinancialOperationDto, GarageBalanceHistoryDto, GarageIncomeWorksheetDto, GenerateFeeCampaignAccrualsRequest, GenerateRegularCatalogAccrualsRequest, GenerateSupplierGroupSalaryAccrualsRequest, MeterReadingDto, MeterReadingYearPageDto, MissingMeterReadingDto, RegularAccrualGenerationResultDto, RegularCatalogAccrualGenerationResultDto, SupplierAccrualDto, SupplierGroupSalaryAccrualGenerationResultDto } from './services/financeApi'
 import type { CreateFundOperationRequest, FundDto, FundOperationDto, FundOperationPageDto, FundsClient } from './services/fundsApi'
 import type { AccessImportCreatedRecordDto, AccessImportQuarantineItemDto, AccessImportReaderStatusDto, AccessImportRunDto, AccessImportRunLogEntryDto, ImportClient } from './services/importApi'
@@ -1975,6 +1975,36 @@ describe('App', () => {
     expect(within(contractorsPanel).queryByText('Загружаем поставщиков')).not.toBeInTheDocument()
 
     await act(async () => resolveSupplierGroups([]))
+  })
+
+  it('starts contractor editor references only after the visible page finishes loading', async () => {
+    const user = userEvent.setup()
+    let resolveGaragePage!: (page: PagedResult<GarageDto>) => void
+    const garagePagePromise = new Promise<PagedResult<GarageDto>>((resolve) => { resolveGaragePage = resolve })
+    const getOwners = vi.fn(async () => [] as OwnerDto[])
+    const getGaragesPage = vi.fn(() => garagePagePromise)
+    const dictionaryClient = createDictionaryClient({ getOwners, getGaragesPage })
+
+    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('\u041f\u0430\u0440\u043e\u043b\u044c'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: '\u0412\u043e\u0439\u0442\u0438' }))
+    await openSection(user, '\u041a\u043e\u043d\u0442\u0440\u0430\u0433\u0435\u043d\u0442\u044b')
+    const contractorsPanel = await screen.findByRole('region', { name: '\u041a\u043e\u043d\u0442\u0440\u0430\u0433\u0435\u043d\u0442\u044b' })
+
+    await waitFor(() => expect(getGaragesPage).toHaveBeenCalledTimes(1))
+    expect(getOwners).not.toHaveBeenCalled()
+    expect(within(contractorsPanel).getByText('\u0417\u0430\u0433\u0440\u0443\u0436\u0430\u0435\u043c \u0433\u0430\u0440\u0430\u0436\u0438')).toBeInTheDocument()
+
+    await act(async () => resolveGaragePage({
+      items: [createGarage({ id: 'garage-priority-page', number: '91' })],
+      totalCount: 1,
+      offset: 0,
+      limit: 25,
+    }))
+
+    expect(await within(contractorsPanel).findByText('91')).toBeInTheDocument()
+    await waitFor(() => expect(getOwners).toHaveBeenCalledTimes(1))
   })
 
   it('keeps a contractor page available when its editor references fail', async () => {
