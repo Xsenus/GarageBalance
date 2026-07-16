@@ -346,3 +346,16 @@ No schema, financial formula, business rule, production data, cleanup policy or 
 - [x] The production bundle remains within budget: main JavaScript 75.7 KiB gzip, main CSS 19.1 KiB gzip and total JavaScript/CSS 225.9/260.0 KiB gzip.
 
 No schema, financial formula, business rule, production data, cleanup policy or deployment configuration changed in this pass. Local PostgreSQL project credentials remain unavailable, so PostgreSQL behavior is protected by the combined-query source guard, EF integration tests and idempotent migration generation. End-user release note `0.680.0` describes the faster financial card for the selected garage. Push and deployment remain intentionally pending because this task did not authorize publication.
+
+## Twenty-second garage-balance-history round-trip audit: 2026-07-16
+
+- [x] Rechecked the remaining garage financial-report path and confirmed that balance history still executed five sequential `SELECT` commands: garage identity, opening accruals, opening income, monthly accruals and monthly income.
+- [x] Added a dedicated application query that combines both opening totals and both monthly bucket sets into one server-side `UNION ALL` command. Together with the garage lookup, the measured report contract is now two `SELECT` commands instead of five.
+- [x] Preserved the exact running-debt model: starting balance, transactions before the selected period, monthly accruals, monthly income, canceled-record exclusion and closing debt remain unchanged. Empty months are still emitted with zero values.
+- [x] Added regression coverage for previous-period debt, two populated months, an empty month, missing garage, reversed and oversized periods, cancellation propagation and the two-command contract. Invalid periods are confirmed to fail before any database access.
+- [x] Removed the obsolete monthly-income repository method and DTO. Architecture and performance guards require server grouping and one materialization in the combined query and prohibit the retired repository path.
+- [x] The first two complete backend attempts correctly rejected obsolete architecture and grouping guards. After moving those requirements to the new query, focused verification passed 12/12 and the complete coverage run passed 1628/1628 with 86.34% line and 70.06% branch coverage.
+- [x] Complete frontend verification passed 524/524 with 81.26% statements, 71.93% branches, 77.04% functions and 81.83% lines. ESLint, production build, backend formatting, privacy scan of 700 files, Docker Compose validation, standalone backend publish, whitespace checks and 128700-byte idempotent migration SQL generation passed.
+- [x] The production bundle remains within budget: main JavaScript 75.7 KiB gzip, main CSS 19.1 KiB gzip and total JavaScript/CSS 225.9/260.0 KiB gzip.
+
+No schema, financial formula, business rule, production data, cleanup policy or deployment configuration changed in this pass. Local PostgreSQL listens on port 5432, but project test credentials remain unavailable, so no local data mutation was attempted. PostgreSQL behavior is protected by combined-query source guards, EF integration tests and idempotent migration generation. End-user release note `0.681.0` describes the faster garage financial report. Push and deployment remain intentionally pending because this task did not authorize publication.
