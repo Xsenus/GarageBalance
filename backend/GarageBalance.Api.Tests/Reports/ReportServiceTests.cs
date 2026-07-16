@@ -876,6 +876,35 @@ public sealed class ReportServiceTests
     }
 
     [Fact]
+    public async Task ConsolidatedGarageQuery_BoundsTwoHundredRowsBeforeMaterialization()
+    {
+        var commandCounter = new SelectCommandCounter();
+        await using var database = await TestDatabase.CreateAsync(commandCounter);
+        database.Context.Garages.AddRange(Enumerable.Range(1, 200).Select(index => new Garage
+        {
+            Number = index.ToString("D4"),
+            StartingBalance = index
+        }));
+        await database.Context.SaveChangesAsync();
+        commandCounter.Reset();
+
+        var result = await new EfConsolidatedGarageReportQuery(database.Context).GetGarageRowsAsync(
+            null,
+            new DateOnly(2026, 6, 1),
+            new DateOnly(2026, 6, 1),
+            25,
+            CancellationToken.None);
+
+        Assert.Equal(2, commandCounter.Count);
+        Assert.Equal(200, result.RowCount);
+        Assert.Equal(25, result.Rows.Count);
+        Assert.Equal("0001", result.Rows[0].GarageNumber);
+        Assert.Equal(1m, result.Rows[0].AccrualTotal);
+        Assert.Equal("0025", result.Rows[^1].GarageNumber);
+        Assert.Equal(25m, result.Rows[^1].AccrualTotal);
+    }
+
+    [Fact]
     public async Task IncomePaymentQuery_LoadsPageAndDebtsInThreeSelectsRegardlessOfRowCount()
     {
         var commandCounter = new SelectCommandCounter();

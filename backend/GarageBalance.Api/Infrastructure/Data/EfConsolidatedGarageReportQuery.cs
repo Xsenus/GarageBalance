@@ -1,4 +1,5 @@
 using GarageBalance.Api.Application.Reports;
+using GarageBalance.Api.Domain.Dictionaries;
 using GarageBalance.Api.Domain.Finance;
 using Microsoft.EntityFrameworkCore;
 
@@ -13,9 +14,14 @@ public sealed class EfConsolidatedGarageReportQuery(GarageBalanceDbContext dbCon
         int? limit,
         CancellationToken cancellationToken)
     {
-        return string.IsNullOrWhiteSpace(search)
-            ? GetRowsWithoutSearchAsync(periodFrom, periodTo, limit, cancellationToken)
-            : GetRowsWithSearchAsync(search, periodFrom, periodTo, limit, cancellationToken);
+        if (string.IsNullOrWhiteSpace(search))
+        {
+            return GetRowsWithoutSearchAsync(periodFrom, periodTo, limit, cancellationToken);
+        }
+
+        return IsNpgsql()
+            ? GetRowsWithServerSearchAsync(search, periodFrom, periodTo, limit, cancellationToken)
+            : GetRowsWithClientSearchAsync(search, periodFrom, periodTo, limit, cancellationToken);
     }
 
     private async Task<ConsolidatedGarageRowsData> GetRowsWithoutSearchAsync(
@@ -24,8 +30,43 @@ public sealed class EfConsolidatedGarageReportQuery(GarageBalanceDbContext dbCon
         int? limit,
         CancellationToken cancellationToken)
     {
-        var query = dbContext.Garages.AsNoTracking()
-            .Where(garage => !garage.IsArchived)
+        var garages = dbContext.Garages.AsNoTracking().Where(garage => !garage.IsArchived);
+        return await ExecuteBoundedRowsAsync(
+            BuildRowsQuery(garages, periodFrom, periodTo),
+            limit,
+            cancellationToken);
+    }
+
+    private Task<ConsolidatedGarageRowsData> GetRowsWithServerSearchAsync(
+        string search,
+        DateOnly periodFrom,
+        DateOnly periodTo,
+        int? limit,
+        CancellationToken cancellationToken)
+    {
+        var normalizedServerSearch = search.Trim().ToLowerInvariant();
+        var garages = dbContext.Garages.AsNoTracking()
+            .Where(garage =>
+                !garage.IsArchived &&
+                (garage.Number.ToLower().Contains(normalizedServerSearch) ||
+                 (garage.Owner != null && (
+                     garage.Owner.LastName.ToLower().Contains(normalizedServerSearch) ||
+                     garage.Owner.FirstName.ToLower().Contains(normalizedServerSearch) ||
+                     (garage.Owner.MiddleName != null && garage.Owner.MiddleName.ToLower().Contains(normalizedServerSearch)) ||
+                     (garage.Owner.LastName + " " + garage.Owner.FirstName).ToLower().Contains(normalizedServerSearch) ||
+                     (garage.Owner.LastName + " " + garage.Owner.FirstName + " " + (garage.Owner.MiddleName ?? string.Empty)).ToLower().Contains(normalizedServerSearch)))));
+
+        return ExecuteBoundedRowsAsync(
+            BuildRowsQuery(garages, periodFrom, periodTo),
+            limit,
+            cancellationToken);
+    }
+
+    private IQueryable<ConsolidatedGarageProjectionRow> BuildRowsQuery(
+        IQueryable<Garage> garages,
+        DateOnly periodFrom,
+        DateOnly periodTo) =>
+        garages
             .Select(garage => new
             {
                 GarageId = garage.Id,
@@ -56,25 +97,30 @@ public sealed class EfConsolidatedGarageReportQuery(GarageBalanceDbContext dbCon
                         reading.AccountingMonth <= periodTo)
             })
             .Where(row => row.IncomeTotal != 0 || row.AccrualTotal != 0 || row.MeterReadingCount != 0)
-            .OrderBy(row => row.GarageNumber);
+            .OrderBy(row => row.GarageNumber)
+            .Select(row => new ConsolidatedGarageProjectionRow(
+                row.GarageId,
+                row.GarageNumber,
+                row.OwnerLastName,
+                row.OwnerFirstName,
+                row.OwnerMiddleName,
+                row.IncomeTotal,
+                row.AccrualTotal,
+                row.MeterReadingCount));
 
+    private static async Task<ConsolidatedGarageRowsData> ExecuteBoundedRowsAsync(
+        IQueryable<ConsolidatedGarageProjectionRow> query,
+        int? limit,
+        CancellationToken cancellationToken)
+    {
         var rowCount = await query.CountAsync(cancellationToken);
         var rows = await ApplyLimit(query, limit).ToListAsync(cancellationToken);
         return new ConsolidatedGarageRowsData(
             rowCount,
-            rows.Select(row => new ConsolidatedGarageRowData(
-                    row.GarageId,
-                    row.GarageNumber,
-                    row.OwnerLastName,
-                    row.OwnerFirstName,
-                    row.OwnerMiddleName,
-                    row.IncomeTotal,
-                    row.AccrualTotal,
-                    row.MeterReadingCount))
-                .ToList());
+            rows.Select(row => row.ToData()).ToList());
     }
 
-    private async Task<ConsolidatedGarageRowsData> GetRowsWithSearchAsync(
+    private async Task<ConsolidatedGarageRowsData> GetRowsWithClientSearchAsync(
         string search,
         DateOnly periodFrom,
         DateOnly periodTo,
@@ -85,30 +131,11 @@ public sealed class EfConsolidatedGarageReportQuery(GarageBalanceDbContext dbCon
         var garageQuery = dbContext.Garages.AsNoTracking()
             .Include(garage => garage.Owner)
             .Where(garage => !garage.IsArchived);
-        List<Domain.Dictionaries.Garage> garages;
-        if (IsNpgsql())
-        {
-            var normalizedServerSearch = normalized.ToLowerInvariant();
-            garages = await garageQuery
-                .Where(garage =>
-                    garage.Number.ToLower().Contains(normalizedServerSearch) ||
-                    (garage.Owner != null && (
-                        garage.Owner.LastName.ToLower().Contains(normalizedServerSearch) ||
-                        garage.Owner.FirstName.ToLower().Contains(normalizedServerSearch) ||
-                        (garage.Owner.MiddleName != null && garage.Owner.MiddleName.ToLower().Contains(normalizedServerSearch)) ||
-                        (garage.Owner.LastName + " " + garage.Owner.FirstName).ToLower().Contains(normalizedServerSearch) ||
-                        (garage.Owner.LastName + " " + garage.Owner.FirstName + " " + (garage.Owner.MiddleName ?? string.Empty)).ToLower().Contains(normalizedServerSearch))))
-                .OrderBy(garage => garage.Number)
-                .ToListAsync(cancellationToken);
-        }
-        else
-        {
-            garages = (await garageQuery.OrderBy(garage => garage.Number).ToListAsync(cancellationToken))
-                .Where(garage =>
-                    garage.Number.Contains(normalized, StringComparison.OrdinalIgnoreCase) ||
-                    (garage.Owner?.FullName.Contains(normalized, StringComparison.OrdinalIgnoreCase) ?? false))
-                .ToList();
-        }
+        var garages = (await garageQuery.OrderBy(garage => garage.Number).ToListAsync(cancellationToken))
+            .Where(garage =>
+                garage.Number.Contains(normalized, StringComparison.OrdinalIgnoreCase) ||
+                (garage.Owner?.FullName.Contains(normalized, StringComparison.OrdinalIgnoreCase) ?? false))
+            .ToList();
         var garageIds = garages.Select(garage => garage.Id).ToList();
 
         var incomeByGarageQuery = dbContext.FinancialOperations.AsNoTracking()
@@ -197,4 +224,18 @@ public sealed class EfConsolidatedGarageReportQuery(GarageBalanceDbContext dbCon
 
     private bool IsNpgsql() =>
         dbContext.Database.ProviderName?.Contains("Npgsql", StringComparison.OrdinalIgnoreCase) ?? false;
+
+    private sealed record ConsolidatedGarageProjectionRow(
+        Guid GarageId,
+        string GarageNumber,
+        string? OwnerLastName,
+        string? OwnerFirstName,
+        string? OwnerMiddleName,
+        decimal IncomeTotal,
+        decimal AccrualTotal,
+        int MeterReadingCount)
+    {
+        public ConsolidatedGarageRowData ToData() =>
+            new(GarageId, GarageNumber, OwnerLastName, OwnerFirstName, OwnerMiddleName, IncomeTotal, AccrualTotal, MeterReadingCount);
+    }
 }

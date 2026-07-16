@@ -496,14 +496,18 @@ public sealed class BackendPerformanceGuardTests
             CountOccurrences(expenseSource, "ToLower().Contains(normalizedSearch!)") >= 7,
             "PostgreSQL expense-report search must be applied to source queries before count, sum and page materialization.");
         Assert.Matches(
-            BoundedQueryRegex(@"GetRowsWithoutSearchAsync[\s\S]*?CountAsync\(cancellationToken\)[\s\S]*?ApplyLimit\(query, limit\)\.ToListAsync\(cancellationToken\)"),
+            BoundedQueryRegex(@"ExecuteBoundedRowsAsync[\s\S]*?CountAsync\(cancellationToken\)[\s\S]*?ApplyLimit\(query, limit\)\.ToListAsync\(cancellationToken\)"),
             garageSource);
         Assert.True(
             CountOccurrences(garageSource, ".GroupBy(") >= 3,
             "Search-compatible consolidated garage fallback must aggregate income, accrual and readings by garage.");
         Assert.Matches(
-            BoundedQueryRegex(@"if \(IsNpgsql\(\)\)[\s\S]*?garageQuery[\s\S]*?\.Where\(garage =>[\s\S]*?\.ToListAsync\(cancellationToken\)"),
+            BoundedQueryRegex(@"GetRowsWithServerSearchAsync[\s\S]*?\.Where\(garage =>[\s\S]*?BuildRowsQuery\(garages, periodFrom, periodTo\)[\s\S]*?ExecuteBoundedRowsAsync"),
             garageSource);
+        var serverSearchMethod = garageSource[
+            garageSource.IndexOf("private Task<ConsolidatedGarageRowsData> GetRowsWithServerSearchAsync", StringComparison.Ordinal)..garageSource.IndexOf("private IQueryable<ConsolidatedGarageProjectionRow> BuildRowsQuery", StringComparison.Ordinal)];
+        Assert.DoesNotContain("ToListAsync", serverSearchMethod, StringComparison.Ordinal);
+        Assert.DoesNotContain("ToList()", serverSearchMethod, StringComparison.Ordinal);
         Assert.Contains("garage.Owner.LastName.ToLower().Contains(normalizedServerSearch)", garageSource, StringComparison.Ordinal);
         Assert.Contains(".Concat(accrualByGarageQuery)", garageSource, StringComparison.Ordinal);
         Assert.Contains(".Concat(readingsByGarageQuery)", garageSource, StringComparison.Ordinal);
