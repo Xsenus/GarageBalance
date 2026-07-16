@@ -4,6 +4,8 @@ using GarageBalance.Api.Domain.Users;
 using GarageBalance.Api.Infrastructure.Data;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
+using System.Data.Common;
 using System.IO.Compression;
 using System.Text;
 using System.Xml.Linq;
@@ -259,6 +261,45 @@ public sealed class AuditServiceTests
         Assert.Equal(2, page.Items.Count);
         Assert.Equal("finance.income_created_3", page.Items[0].Action);
         Assert.Equal("finance.income_created_2", page.Items[1].Action);
+    }
+
+    [Fact]
+    public async Task GetEventsPageAsync_LoadsBoundedEventsAndActorsInOneSqliteSelect()
+    {
+        var commandCounter = new SelectCommandCounter();
+        await using var database = await TestDatabase.CreateAsync(commandCounter);
+        var actor = new AppUser
+        {
+            Email = "audit-page@example.test",
+            NormalizedEmail = "AUDIT-PAGE@EXAMPLE.TEST",
+            DisplayName = "Audit operator",
+            PasswordHash = "hash"
+        };
+        database.Context.Users.Add(actor);
+        database.Context.AuditEvents.AddRange(Enumerable.Range(0, 200).Select(index => new AuditEvent
+        {
+            CreatedAtUtc = new DateTimeOffset(2026, 6, 1, 0, 0, 0, TimeSpan.Zero).AddMinutes(index),
+            ActorUserId = index % 2 == 0 ? actor.Id : null,
+            Action = $"finance.audit_{index:D3}",
+            EntityType = "financial_operation",
+            EntityId = Guid.NewGuid().ToString(),
+            Summary = $"Audit event {index}"
+        }));
+        await database.Context.SaveChangesAsync();
+        commandCounter.Reset();
+
+        var page = await new AuditService(new EfAuditEventRepository(database.Context)).GetEventsPageAsync(
+            new AuditEventListRequest(null, null, null, null, 25, "finance"),
+            CancellationToken.None);
+
+        Assert.Equal(1, commandCounter.Count);
+        Assert.Equal(200, page.TotalCount);
+        Assert.Equal(25, page.Items.Count);
+        Assert.Equal("finance.audit_199", page.Items[0].Action);
+        Assert.Null(page.Items[0].ActorDisplayName);
+        Assert.Equal("finance.audit_198", page.Items[1].Action);
+        Assert.Equal(actor.DisplayName, page.Items[1].ActorDisplayName);
+        Assert.Equal(actor.Email, page.Items[1].ActorEmail);
     }
 
     [Fact]
@@ -613,13 +654,17 @@ public sealed class AuditServiceTests
 
         public GarageBalanceDbContext Context { get; }
 
-        public static async Task<TestDatabase> CreateAsync()
+        public static async Task<TestDatabase> CreateAsync(params IInterceptor[] interceptors)
         {
             var connection = new SqliteConnection("DataSource=:memory:");
             await connection.OpenAsync();
-            var options = new DbContextOptionsBuilder<GarageBalanceDbContext>()
-                .UseSqlite(connection)
-                .Options;
+            var optionsBuilder = new DbContextOptionsBuilder<GarageBalanceDbContext>().UseSqlite(connection);
+            if (interceptors.Length > 0)
+            {
+                optionsBuilder.AddInterceptors(interceptors);
+            }
+
+            var options = optionsBuilder.Options;
             var context = new GarageBalanceDbContext(options);
             await context.Database.EnsureCreatedAsync();
             return new TestDatabase(connection, context);
@@ -629,6 +674,27 @@ public sealed class AuditServiceTests
         {
             await Context.DisposeAsync();
             await connection.DisposeAsync();
+        }
+    }
+
+    private sealed class SelectCommandCounter : DbCommandInterceptor
+    {
+        public int Count { get; private set; }
+
+        public void Reset() => Count = 0;
+
+        public override ValueTask<InterceptionResult<DbDataReader>> ReaderExecutingAsync(
+            DbCommand command,
+            CommandEventData eventData,
+            InterceptionResult<DbDataReader> result,
+            CancellationToken cancellationToken = default)
+        {
+            if (command.CommandText.TrimStart().StartsWith("SELECT", StringComparison.OrdinalIgnoreCase))
+            {
+                Count++;
+            }
+
+            return base.ReaderExecutingAsync(command, eventData, result, cancellationToken);
         }
     }
 

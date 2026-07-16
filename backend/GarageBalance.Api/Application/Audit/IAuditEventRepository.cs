@@ -24,7 +24,8 @@ public interface IAuditEventRepository
 
 public sealed record AuditEventPageData(
     IReadOnlyList<AuditEvent> Items,
-    int TotalCount);
+    int TotalCount,
+    IReadOnlyDictionary<Guid, AuditActorInfo> ActorsById);
 
 public sealed record AuditActorInfo(
     Guid Id,

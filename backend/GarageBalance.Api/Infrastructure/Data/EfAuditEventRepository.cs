@@ -40,22 +40,53 @@ public sealed class EfAuditEventRepository(GarageBalanceDbContext dbContext) : I
         if (IsSqliteProvider())
         {
             query = ApplyNonDateFilters(query, request);
-            var events = ApplyDateFilters(await query.ToListAsync(cancellationToken), request).ToList();
-            return new AuditEventPageData(
-                events.OrderByDescending(auditEvent => auditEvent.CreatedAtUtc).Skip(offset).Take(limit).ToList(),
-                events.Count);
+            var sqliteRows = await ProjectPageRows(query).ToListAsync(cancellationToken);
+            var filteredRows = ApplyDateFilters(sqliteRows, request).ToList();
+            return CreatePageData(
+                filteredRows.OrderByDescending(row => row.Event.CreatedAtUtc).Skip(offset).Take(limit).ToList(),
+                filteredRows.Count);
         }
 
         query = ApplyDateFilters(query, request);
         query = ApplyNonDateFilters(query, request);
         var totalCount = await query.CountAsync(cancellationToken);
-        var items = await query
-            .OrderByDescending(auditEvent => auditEvent.CreatedAtUtc)
-            .Skip(offset)
-            .Take(limit)
+        var pageRows = await ProjectPageRows(query
+                .OrderByDescending(auditEvent => auditEvent.CreatedAtUtc)
+                .Skip(offset)
+                .Take(limit))
             .ToListAsync(cancellationToken);
-        return new AuditEventPageData(items, totalCount);
+        return CreatePageData(pageRows, totalCount);
     }
+
+    private IQueryable<AuditEventPageProjection> ProjectPageRows(IQueryable<AuditEvent> query) =>
+        from auditEvent in query
+        join actor in dbContext.Users.AsNoTracking()
+            on auditEvent.ActorUserId equals (Guid?)actor.Id into actors
+        from actor in actors.DefaultIfEmpty()
+        select new AuditEventPageProjection(
+            auditEvent,
+            actor == null ? null : actor.Id,
+            actor == null ? null : actor.DisplayName,
+            actor == null ? null : actor.Email);
+
+    private static AuditEventPageData CreatePageData(
+        IReadOnlyList<AuditEventPageProjection> rows,
+        int totalCount)
+    {
+        var actors = rows
+            .Where(row => row.ActorId.HasValue && row.ActorDisplayName != null && row.ActorEmail != null)
+            .GroupBy(row => row.ActorId!.Value)
+            .ToDictionary(
+                group => group.Key,
+                group => new AuditActorInfo(group.Key, group.First().ActorDisplayName!, group.First().ActorEmail!));
+        return new AuditEventPageData(rows.Select(row => row.Event).ToList(), totalCount, actors);
+    }
+
+    private sealed record AuditEventPageProjection(
+        AuditEvent Event,
+        Guid? ActorId,
+        string? ActorDisplayName,
+        string? ActorEmail);
 
     public Task<AuditEvent?> FindEventAsync(Guid id, CancellationToken cancellationToken)
     {
@@ -112,6 +143,23 @@ public sealed class EfAuditEventRepository(GarageBalanceDbContext dbContext) : I
         }
 
         return events;
+    }
+
+    private static IEnumerable<AuditEventPageProjection> ApplyDateFilters(
+        IEnumerable<AuditEventPageProjection> rows,
+        AuditEventListRequest request)
+    {
+        if (request.DateFrom is not null)
+        {
+            rows = rows.Where(row => row.Event.CreatedAtUtc >= request.DateFrom.Value);
+        }
+
+        if (request.DateTo is not null)
+        {
+            rows = rows.Where(row => row.Event.CreatedAtUtc <= request.DateTo.Value);
+        }
+
+        return rows;
     }
 
     private static IQueryable<AuditEvent> ApplyNonDateFilters(

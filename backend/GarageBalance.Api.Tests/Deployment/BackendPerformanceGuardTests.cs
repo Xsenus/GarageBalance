@@ -731,12 +731,16 @@ public sealed class BackendPerformanceGuardTests
         Assert.Contains("GetEventsPageAsync", source, StringComparison.Ordinal);
         Assert.Contains("CountAsync(cancellationToken)", source, StringComparison.Ordinal);
         Assert.Matches(
-            BoundedQueryRegex(@"ApplyNonDateFilters\(query, request\)[\s\S]*?CountAsync\(cancellationToken\)[\s\S]*?OrderByDescending\(auditEvent => auditEvent\.CreatedAtUtc\)[\s\S]*?\.Skip\(offset\)[\s\S]*?\.Take\(limit\)[\s\S]*?\.ToListAsync\(cancellationToken\)"),
+            BoundedQueryRegex(@"ApplyNonDateFilters\(query, request\)[\s\S]*?CountAsync\(cancellationToken\)[\s\S]*?ProjectPageRows\(query[\s\S]*?OrderByDescending\(auditEvent => auditEvent\.CreatedAtUtc\)[\s\S]*?\.Skip\(offset\)[\s\S]*?\.Take\(limit\)[\s\S]*?\.ToListAsync\(cancellationToken\)"),
             source);
         Assert.Matches(
             BoundedQueryRegex(@"OrderByDescending\(auditEvent => auditEvent\.CreatedAtUtc\)[\s\S]*?\.Take\(limit\)[\s\S]*?\.ToListAsync\(cancellationToken\)"),
             source);
         Assert.All(requiredFilters, filter => Assert.Contains(filter, source, StringComparison.Ordinal));
+        Assert.Contains("join actor in dbContext.Users.AsNoTracking()", source, StringComparison.Ordinal);
+        Assert.Contains("from actor in actors.DefaultIfEmpty()", source, StringComparison.Ordinal);
+        Assert.Contains("page.ActorsById", ReadApiSource("Application/Audit/AuditService.cs"), StringComparison.Ordinal);
+        Assert.DoesNotContain("GetActorsAsync(page.Items", ReadApiSource("Application/Audit/AuditService.cs"), StringComparison.Ordinal);
     }
 
     [Fact]

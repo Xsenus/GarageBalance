@@ -51,8 +51,7 @@ public sealed class AuditService(IAuditEventRepository repository) : IAuditServi
         var limit = NormalizeLimit(request.Limit);
         var offset = NormalizeOffset(request.Offset);
         var page = await repository.GetEventsPageAsync(request, offset, limit, cancellationToken);
-        var actors = await GetActorsAsync(page.Items, cancellationToken);
-        return new AuditEventPageDto(page.Items.Select(auditEvent => ToDto(auditEvent, actors)).ToList(), page.TotalCount, offset, limit);
+        return new AuditEventPageDto(page.Items.Select(auditEvent => ToDto(auditEvent, page.ActorsById)).ToList(), page.TotalCount, offset, limit);
     }
 
     private static AuditEventDto ToDto(
