@@ -114,23 +114,36 @@ export function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; 
     async function loadUsers() {
       setLoading(true)
       setError(null)
+      let pageFailed = false
       try {
-        const [loadedRoles, loadedPage] = await Promise.all([
-          getRolesOnce(),
-          userClient.getUsersPage(auth.accessToken, appliedSearch, offset, pageSize),
-        ])
+        const loadedPage = await userClient.getUsersPage(auth.accessToken, appliedSearch, offset, pageSize)
         if (!ignore) {
-          setRoles(loadedRoles)
           setPage(loadedPage)
-          setForm((value) => ({ ...value, roleCode: loadedRoles.find((role) => role.code === value.roleCode)?.code ?? loadedRoles[0]?.code ?? '' }))
         }
       } catch (caught) {
         if (!ignore) {
+          pageFailed = true
           setError(caught instanceof Error ? caught.message : 'Не удалось загрузить пользователей.')
         }
       } finally {
         if (!ignore) {
           setLoading(false)
+        }
+      }
+
+      if (ignore) {
+        return
+      }
+
+      try {
+        const loadedRoles = await getRolesOnce()
+        if (!ignore) {
+          setRoles(loadedRoles)
+          setForm((value) => ({ ...value, roleCode: loadedRoles.find((role) => role.code === value.roleCode)?.code ?? loadedRoles[0]?.code ?? '' }))
+        }
+      } catch (caught) {
+        if (!ignore && !pageFailed) {
+          setError(caught instanceof Error ? caught.message : 'Не удалось загрузить роли пользователей.')
         }
       }
     }
