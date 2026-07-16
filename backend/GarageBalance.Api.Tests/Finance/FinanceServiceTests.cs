@@ -741,15 +741,35 @@ public sealed class FinanceServiceTests
     [Fact]
     public async Task GetGarageBalanceHistoryAsync_ReturnsMonthlyRunningDebt()
     {
-        await using var database = await TestDatabase.CreateAsync();
+        var commandCounter = new SelectCommandCounter();
+        await using var database = await TestDatabase.CreateAsync(commandCounter);
         var fixtures = await database.SeedAsync();
         fixtures.Garage.StartingBalance = 100m;
+        database.Context.Accruals.Add(new Accrual
+        {
+            GarageId = fixtures.Garage.Id,
+            IncomeTypeId = fixtures.IncomeType.Id,
+            AccountingMonth = new DateOnly(2026, 5, 1),
+            Amount = 300m,
+            Source = "history-test"
+        });
+        database.Context.FinancialOperations.Add(new FinancialOperation
+        {
+            OperationKind = FinancialOperationKinds.Income,
+            OperationDate = new DateOnly(2026, 5, 20),
+            AccountingMonth = new DateOnly(2026, 5, 1),
+            Amount = 100m,
+            DocumentNumber = "PKO-history-opening",
+            GarageId = fixtures.Garage.Id,
+            IncomeTypeId = fixtures.IncomeType.Id
+        });
         await database.Context.SaveChangesAsync();
         var service = FinanceServiceTestFactory.Create(database.Context);
         Assert.True((await service.CreateAccrualAsync(new CreateAccrualRequest(fixtures.Garage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 6, 1), 500m, "regular", null), null, CancellationToken.None)).Succeeded);
         Assert.True((await service.CreateIncomeAsync(new CreateIncomeOperationRequest(fixtures.Garage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 6, 20), new DateOnly(2026, 6, 1), 200m, "PKO-history-1", null), null, CancellationToken.None)).Succeeded);
         Assert.True((await service.CreateAccrualAsync(new CreateAccrualRequest(fixtures.Garage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 7, 1), 700m, "regular", null), null, CancellationToken.None)).Succeeded);
         Assert.True((await service.CreateIncomeAsync(new CreateIncomeOperationRequest(fixtures.Garage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 7, 20), new DateOnly(2026, 7, 1), 300m, "PKO-history-2", null), null, CancellationToken.None)).Succeeded);
+        commandCounter.Reset();
 
         var result = await service.GetGarageBalanceHistoryAsync(
             fixtures.Garage.Id,
@@ -757,31 +777,47 @@ public sealed class FinanceServiceTests
             CancellationToken.None);
 
         Assert.True(result.Succeeded);
+        Assert.Equal(2, commandCounter.Count);
         Assert.Equal("12", result.Value!.GarageNumber);
         Assert.Equal(new DateOnly(2026, 6, 1), result.Value.MonthFrom);
         Assert.Equal(new DateOnly(2026, 7, 1), result.Value.MonthTo);
         Assert.Equal(100m, result.Value.StartingBalance);
         Assert.Equal(1200m, result.Value.AccrualTotal);
         Assert.Equal(500m, result.Value.IncomeTotal);
-        Assert.Equal(800m, result.Value.Debt);
+        Assert.Equal(1000m, result.Value.Debt);
         Assert.Collection(
             result.Value.Rows,
             first =>
             {
                 Assert.Equal(new DateOnly(2026, 6, 1), first.AccountingMonth);
-                Assert.Equal(100m, first.OpeningDebt);
+                Assert.Equal(300m, first.OpeningDebt);
                 Assert.Equal(500m, first.AccrualAmount);
                 Assert.Equal(200m, first.IncomeAmount);
-                Assert.Equal(400m, first.ClosingDebt);
+                Assert.Equal(600m, first.ClosingDebt);
             },
             second =>
             {
                 Assert.Equal(new DateOnly(2026, 7, 1), second.AccountingMonth);
-                Assert.Equal(400m, second.OpeningDebt);
+                Assert.Equal(600m, second.OpeningDebt);
                 Assert.Equal(700m, second.AccrualAmount);
                 Assert.Equal(300m, second.IncomeAmount);
-                Assert.Equal(800m, second.ClosingDebt);
+                Assert.Equal(1000m, second.ClosingDebt);
             });
+    }
+
+    [Fact]
+    public async Task GarageBalanceHistoryQuery_PropagatesCancellation()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var query = new EfGarageBalanceHistoryQuery(database.Context);
+        using var cancellationSource = new CancellationTokenSource();
+        cancellationSource.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => query.GetAsync(
+            Guid.NewGuid(),
+            new DateOnly(2026, 6, 1),
+            new DateOnly(2026, 6, 1),
+            cancellationSource.Token));
     }
 
     [Fact]
@@ -3241,6 +3277,60 @@ public sealed class FinanceServiceTests
             new DateOnly(2026, 6, 1),
             new DateOnly(2026, 6, 1),
             cancellationSource.Token));
+    }
+
+    [Fact]
+    public async Task GetGarageBalanceHistoryAsync_ReturnsZeroMonthWhenThereAreNoFinancialRows()
+    {
+        var commandCounter = new SelectCommandCounter();
+        await using var database = await TestDatabase.CreateAsync(commandCounter);
+        var fixtures = await database.SeedAsync();
+        fixtures.Garage.StartingBalance = 0m;
+        await database.Context.SaveChangesAsync();
+        var service = FinanceServiceTestFactory.Create(database.Context);
+        commandCounter.Reset();
+
+        var result = await service.GetGarageBalanceHistoryAsync(
+            fixtures.Garage.Id,
+            new GarageBalanceHistoryRequest(new DateOnly(2026, 8, 1), new DateOnly(2026, 8, 1)),
+            CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+        Assert.Equal(2, commandCounter.Count);
+        Assert.Equal(0m, result.Value!.AccrualTotal);
+        Assert.Equal(0m, result.Value.IncomeTotal);
+        Assert.Equal(0m, result.Value.Debt);
+        var row = Assert.Single(result.Value.Rows);
+        Assert.Equal(new DateOnly(2026, 8, 1), row.AccountingMonth);
+        Assert.Equal(0m, row.OpeningDebt);
+        Assert.Equal(0m, row.AccrualAmount);
+        Assert.Equal(0m, row.IncomeAmount);
+        Assert.Equal(0m, row.ClosingDebt);
+    }
+
+    [Theory]
+    [InlineData(2026, 7, 2026, 6, "balance_history_period_invalid")]
+    [InlineData(2021, 7, 2026, 7, "balance_history_period_too_large")]
+    public async Task GetGarageBalanceHistoryAsync_RejectsInvalidPeriodBeforeDatabaseAccess(
+        int fromYear,
+        int fromMonth,
+        int toYear,
+        int toMonth,
+        string expectedErrorCode)
+    {
+        var commandCounter = new SelectCommandCounter();
+        await using var database = await TestDatabase.CreateAsync(commandCounter);
+        var service = FinanceServiceTestFactory.Create(database.Context);
+        commandCounter.Reset();
+
+        var result = await service.GetGarageBalanceHistoryAsync(
+            Guid.NewGuid(),
+            new GarageBalanceHistoryRequest(new DateOnly(fromYear, fromMonth, 1), new DateOnly(toYear, toMonth, 1)),
+            CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Equal(expectedErrorCode, result.ErrorCode);
+        Assert.Equal(0, commandCounter.Count);
     }
 
     [Fact]

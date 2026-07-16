@@ -30,7 +30,6 @@ public interface IFinancialOperationRepository
     Task<FinancialOperation?> FindForUpdateAsync(Guid id, CancellationToken cancellationToken);
     Task<bool> ActiveDocumentDuplicateExistsAsync(Guid? ignoredId, string operationKind, DateOnly operationDate, string documentNumber, CancellationToken cancellationToken);
     Task<decimal> GetIncomeTotalBeforeMonthAsync(Guid garageId, DateOnly accountingMonth, CancellationToken cancellationToken);
-    Task<IReadOnlyList<FinancialOperationBucketData>> GetIncomeMonthlyBucketsAsync(Guid garageId, DateOnly monthFrom, DateOnly monthTo, CancellationToken cancellationToken);
     Task<FinancialOperationWorksheetData> GetWorksheetDataAsync(DateOnly accountingMonth, CancellationToken cancellationToken);
     Task<decimal> GetOpeningDebtPaymentTotalAsync(Guid garageId, DateOnly accountingMonth, string incomeTypeCode, string incomeTypeName, CancellationToken cancellationToken);
     Task<decimal> GetBankExpenseTotalAsync(string[] cashExpenseTypeCodes, string[] cashExpenseTypeNames, CancellationToken cancellationToken);
@@ -42,6 +41,5 @@ public interface IFinancialOperationRepository
 }
 
 public sealed record FinancialOperationPageData(IReadOnlyList<FinancialOperation> Items, int TotalCount);
-public sealed record FinancialOperationBucketData(DateOnly AccountingMonth, decimal Amount);
 public sealed record FinancialOperationWorksheetData(IReadOnlyList<FinancialOperation> Expenses, IReadOnlyList<FinancialOperation> Incomes);
 public sealed record FinancialOperationCashBalanceData(decimal IncomeTotal, decimal CashExpenseTotal);

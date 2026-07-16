@@ -88,25 +88,6 @@ public sealed class EfFinancialOperationRepository(GarageBalanceDbContext dbCont
                 operation.AccountingMonth < accountingMonth)
             .SumAsync(operation => operation.Amount, cancellationToken);
 
-    public async Task<IReadOnlyList<FinancialOperationBucketData>> GetIncomeMonthlyBucketsAsync(
-        Guid garageId,
-        DateOnly monthFrom,
-        DateOnly monthTo,
-        CancellationToken cancellationToken)
-    {
-        var rows = await dbContext.FinancialOperations.AsNoTracking()
-            .Where(operation =>
-                !operation.IsCanceled &&
-                operation.OperationKind == FinancialOperationKinds.Income &&
-                operation.GarageId == garageId &&
-                operation.AccountingMonth >= monthFrom &&
-                operation.AccountingMonth <= monthTo)
-            .GroupBy(operation => operation.AccountingMonth)
-            .Select(group => new { AccountingMonth = group.Key, Amount = group.Sum(operation => operation.Amount) })
-            .ToListAsync(cancellationToken);
-        return rows.Select(row => new FinancialOperationBucketData(row.AccountingMonth, row.Amount)).ToList();
-    }
-
     public async Task<FinancialOperationWorksheetData> GetWorksheetDataAsync(DateOnly accountingMonth, CancellationToken cancellationToken)
     {
         var expenses = await dbContext.FinancialOperations.AsNoTracking()

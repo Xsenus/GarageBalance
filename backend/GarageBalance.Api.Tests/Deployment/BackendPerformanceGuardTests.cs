@@ -90,7 +90,7 @@ public sealed class BackendPerformanceGuardTests
         Assert.Contains("ActiveDocumentDuplicateExistsAsync", source, StringComparison.Ordinal);
         Assert.Contains("AnyAsync(operation =>", source, StringComparison.Ordinal);
         Assert.Contains("GetIncomeTotalBeforeMonthAsync", source, StringComparison.Ordinal);
-        Assert.Contains("GetIncomeMonthlyBucketsAsync", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("GetIncomeMonthlyBucketsAsync", source, StringComparison.Ordinal);
         Assert.DoesNotContain("GetIncomeTypeBucketsAsync", source, StringComparison.Ordinal);
         Assert.Contains("GetWorksheetDataAsync", source, StringComparison.Ordinal);
         Assert.DoesNotContain("GetSummaryAsync", source, StringComparison.Ordinal);
@@ -100,7 +100,7 @@ public sealed class BackendPerformanceGuardTests
         Assert.Contains("GetStaffExpenseTotalAsync", source, StringComparison.Ordinal);
         Assert.Contains("GetPreviousGarageIncomeTotalAsync", source, StringComparison.Ordinal);
         Assert.Contains("GetPreviousSupplierExpenseTotalAsync", source, StringComparison.Ordinal);
-        Assert.Contains(".GroupBy(operation => operation.AccountingMonth)", source, StringComparison.Ordinal);
+        Assert.DoesNotContain(".GroupBy(operation => operation.AccountingMonth)", source, StringComparison.Ordinal);
         Assert.Contains(".SumAsync(operation => operation.Amount", source, StringComparison.Ordinal);
     }
 
@@ -539,6 +539,23 @@ public sealed class BackendPerformanceGuardTests
         Assert.Equal(4, CountOccurrences(source, ".Concat("));
         Assert.Equal(1, CountOccurrences(source, ".ToListAsync(cancellationToken)"));
         Assert.Contains("garageIncomeWorksheetQuery.GetAsync", serviceSource, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void GarageBalanceHistoryQuery_CombinesOpeningAndMonthlyTotalsIntoOneDatabaseCommand()
+    {
+        var source = ReadApiSource("Infrastructure/Data/EfGarageBalanceHistoryQuery.cs");
+        var serviceSource = ReadApiSource("Application/Finance/FinanceService.cs");
+
+        Assert.Contains("previousAccrualQuery", source, StringComparison.Ordinal);
+        Assert.Contains("previousIncomeQuery", source, StringComparison.Ordinal);
+        Assert.Contains("accrualBucketQuery", source, StringComparison.Ordinal);
+        Assert.Contains("incomeBucketQuery", source, StringComparison.Ordinal);
+        Assert.Contains(".GroupBy(accrual => accrual.AccountingMonth)", source, StringComparison.Ordinal);
+        Assert.Contains(".GroupBy(operation => operation.AccountingMonth)", source, StringComparison.Ordinal);
+        Assert.Equal(3, CountOccurrences(source, ".Concat("));
+        Assert.Equal(1, CountOccurrences(source, ".ToListAsync(cancellationToken)"));
+        Assert.Contains("garageBalanceHistoryQuery.GetAsync", serviceSource, StringComparison.Ordinal);
     }
 
     [Fact]

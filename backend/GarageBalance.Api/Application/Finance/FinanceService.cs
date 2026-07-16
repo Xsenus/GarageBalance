@@ -13,6 +13,7 @@ public sealed class FinanceService(
     IGarageRepository garageRepository,
     IMissingMeterReadingQuery missingMeterReadingQuery,
     IGarageIncomeWorksheetQuery garageIncomeWorksheetQuery,
+    IGarageBalanceHistoryQuery garageBalanceHistoryQuery,
     IFinanceTotalsQuery financeTotalsQuery,
     IFinanceSectionCountQuery financeSectionCountQuery,
     IMeterReadingRepository meterReadingRepository,
@@ -261,15 +262,14 @@ public sealed class FinanceService(
             return FinanceResult<GarageBalanceHistoryDto>.Failure("garage_not_found", "Гараж для истории баланса не найден.");
         }
 
-        var previousAccrualTotal = await accrualRepository.GetTotalBeforeMonthAsync(garageId, monthFrom, cancellationToken);
-        var previousIncomeTotal = await financialOperationRepository.GetIncomeTotalBeforeMonthAsync(garageId, monthFrom, cancellationToken);
-        var accrualBuckets = (await accrualRepository.GetMonthlyBucketsAsync(garageId, monthFrom, monthTo, cancellationToken))
+        var historyData = await garageBalanceHistoryQuery.GetAsync(garageId, monthFrom, monthTo, cancellationToken);
+        var accrualBuckets = historyData.AccrualBuckets
             .ToDictionary(item => item.AccountingMonth, item => item.Amount);
-        var incomeBuckets = (await financialOperationRepository.GetIncomeMonthlyBucketsAsync(garageId, monthFrom, monthTo, cancellationToken))
+        var incomeBuckets = historyData.IncomeBuckets
             .ToDictionary(item => item.AccountingMonth, item => item.Amount);
 
         var rows = new List<GarageBalanceHistoryRowDto>(monthCount);
-        var openingDebt = MoneyMath.RoundMoney(garage.StartingBalance + previousAccrualTotal - previousIncomeTotal);
+        var openingDebt = MoneyMath.RoundMoney(garage.StartingBalance + historyData.PreviousAccrualTotal - historyData.PreviousIncomeTotal);
         var accrualTotal = 0m;
         var incomeTotal = 0m;
         for (var month = monthFrom; month <= monthTo; month = month.AddMonths(1))
