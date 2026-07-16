@@ -6280,8 +6280,8 @@ describe('App', () => {
     expect(restoreConfirmButton).toHaveFocus()
     await user.click(within(restoreDialog).getByRole('button', { name: 'Вернуть' }))
 
-    expect(await within(usersPanel).findByText('Активен')).toBeInTheDocument()
     expect(await screen.findByText('Пользователь восстановлен.')).toHaveAttribute('role', 'status')
+    expect(await within(usersPanel).findByText('Активен')).toBeInTheDocument()
   })
 
   it('reuses loaded roles while searching users and retries a failed role request', async () => {
