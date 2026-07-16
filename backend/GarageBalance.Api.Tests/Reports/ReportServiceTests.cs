@@ -102,11 +102,13 @@ public sealed class ReportServiceTests
     }
 
     [Fact]
-    public async Task ConsolidatedMonthlyQuery_LoadsCompleteAggregatesInThreeSelects()
+    public async Task ConsolidatedMonthlyQuery_LoadsCompleteAggregatesInTwoSelects()
     {
         var commandCounter = new SelectCommandCounter();
         await using var database = await TestDatabase.CreateAsync(commandCounter);
         var fixtures = await database.SeedAsync();
+        fixtures.FirstGarage.StartingBalance = 125m;
+        await database.Context.SaveChangesAsync();
         var finance = FinanceServiceTestFactory.Create(database.Context);
         await finance.CreateIncomeAsync(new CreateIncomeOperationRequest(fixtures.FirstGarage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 6, 10), new DateOnly(2026, 6, 1), 1500m, "IN-FAST", null), null, CancellationToken.None);
         await finance.CreateExpenseAsync(new CreateExpenseOperationRequest(fixtures.Supplier.Id, fixtures.ExpenseType.Id, new DateOnly(2026, 6, 11), new DateOnly(2026, 6, 1), 400m, "OUT-FAST", null), null, CancellationToken.None);
@@ -123,7 +125,45 @@ public sealed class ReportServiceTests
         Assert.Equal(400m, Assert.Single(result.ExpenseBreakdown).Amount);
         Assert.Equal(1800m, Assert.Single(result.AccrualByMonth).Amount);
         Assert.Equal(1, Assert.Single(result.MeterReadingsByMonth).Count);
-        Assert.Equal(3, commandCounter.Count);
+        Assert.Equal(125m, result.GarageStartingBalanceTotal);
+        Assert.Equal(2, commandCounter.Count);
+    }
+
+    [Fact]
+    public async Task ConsolidatedMonthlyQuery_ReturnsEmptyDataInOneSelect()
+    {
+        var commandCounter = new SelectCommandCounter();
+        await using var database = await TestDatabase.CreateAsync(commandCounter);
+        var query = new EfConsolidatedMonthlyReportQuery(database.Context);
+        commandCounter.Reset();
+
+        var result = await query.GetMonthlyDataAsync(
+            new DateOnly(2026, 6, 1),
+            new DateOnly(2026, 6, 1),
+            CancellationToken.None);
+
+        Assert.Equal(1, commandCounter.Count);
+        Assert.Empty(result.IncomeByMonth);
+        Assert.Empty(result.ExpenseByMonth);
+        Assert.Empty(result.AccrualByMonth);
+        Assert.Empty(result.MeterReadingsByMonth);
+        Assert.Equal(0m, result.GarageStartingBalanceTotal);
+        Assert.Empty(result.IncomeBreakdown);
+        Assert.Empty(result.ExpenseBreakdown);
+    }
+
+    [Fact]
+    public async Task ConsolidatedMonthlyQuery_PropagatesCancellation()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var query = new EfConsolidatedMonthlyReportQuery(database.Context);
+        using var cancellationSource = new CancellationTokenSource();
+        cancellationSource.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => query.GetMonthlyDataAsync(
+            new DateOnly(2026, 6, 1),
+            new DateOnly(2026, 6, 1),
+            cancellationSource.Token));
     }
 
     [Fact]

@@ -48,9 +48,20 @@ public sealed class EfConsolidatedMonthlyReportQuery(GarageBalanceDbContext dbCo
                 Amount = 0m,
                 Count = group.Count()
             });
+        var garageStartingBalanceQuery = dbContext.Garages.AsNoTracking()
+            .Where(garage => !garage.IsArchived && garage.StartingBalance != 0)
+            .GroupBy(_ => 1)
+            .Select(group => new
+            {
+                Month = periodFrom,
+                Kind = "starting-balance",
+                Amount = group.Sum(garage => garage.StartingBalance),
+                Count = group.Count()
+            });
         var monthlyRows = await operationMonthlyQuery
             .Concat(accrualMonthlyQuery)
             .Concat(readingMonthlyQuery)
+            .Concat(garageStartingBalanceQuery)
             .ToListAsync(cancellationToken);
         var incomeByMonth = monthlyRows
             .Where(row => row.Kind == FinancialOperationKinds.Income)
@@ -88,11 +99,13 @@ public sealed class EfConsolidatedMonthlyReportQuery(GarageBalanceDbContext dbCo
                 group.Key.Name,
                 Amount = group.Sum(item => item.Amount)
             });
-        var operationBreakdownRows = await incomeBreakdownQuery
-            .Concat(expenseBreakdownQuery)
-            .OrderBy(row => row.Kind)
-            .ThenBy(row => row.Name)
-            .ToListAsync(cancellationToken);
+        var operationBreakdownRows = incomeByMonth.Count == 0 && expenseByMonth.Count == 0
+            ? []
+            : await incomeBreakdownQuery
+                .Concat(expenseBreakdownQuery)
+                .OrderBy(row => row.Kind)
+                .ThenBy(row => row.Name)
+                .ToListAsync(cancellationToken);
         var incomeBreakdown = operationBreakdownRows
             .Where(row => row.Kind == FinancialOperationKinds.Income)
             .Select(row => new NamedAmountTotal(row.TypeId, row.Name, row.Amount))
@@ -109,9 +122,9 @@ public sealed class EfConsolidatedMonthlyReportQuery(GarageBalanceDbContext dbCo
             .Where(row => row.Kind == "meter-reading")
             .Select(row => new CountByMonth(row.Month, row.Count))
             .ToList();
-        var garageStartingBalanceTotal = await dbContext.Garages.AsNoTracking()
-            .Where(garage => !garage.IsArchived && garage.StartingBalance != 0)
-            .SumAsync(garage => garage.StartingBalance, cancellationToken);
+        var garageStartingBalanceTotal = monthlyRows
+            .Where(row => row.Kind == "starting-balance")
+            .Sum(row => row.Amount);
 
         return new ConsolidatedMonthlyReportData(
             incomeByMonth,

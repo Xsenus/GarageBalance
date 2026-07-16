@@ -542,7 +542,10 @@ public sealed class BackendPerformanceGuardTests
         Assert.Contains("operationMonthlyQuery", source, StringComparison.Ordinal);
         Assert.Contains(".Concat(accrualMonthlyQuery)", source, StringComparison.Ordinal);
         Assert.Contains(".Concat(readingMonthlyQuery)", source, StringComparison.Ordinal);
-        Assert.Contains("SumAsync(garage => garage.StartingBalance, cancellationToken)", source, StringComparison.Ordinal);
+        Assert.Contains(".Concat(garageStartingBalanceQuery)", source, StringComparison.Ordinal);
+        Assert.Contains("group.Sum(garage => garage.StartingBalance)", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("SumAsync(garage => garage.StartingBalance, cancellationToken)", source, StringComparison.Ordinal);
+        Assert.Contains("incomeByMonth.Count == 0 && expenseByMonth.Count == 0", source, StringComparison.Ordinal);
     }
 
     [Fact]
