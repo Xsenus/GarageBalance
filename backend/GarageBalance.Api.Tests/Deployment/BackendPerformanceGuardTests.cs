@@ -592,13 +592,14 @@ public sealed class BackendPerformanceGuardTests
         var source = ReadApiSource("Infrastructure/Data/EfGarageBalanceHistoryQuery.cs");
         var serviceSource = ReadApiSource("Application/Finance/FinanceService.cs");
 
+        Assert.Contains("garageQuery", source, StringComparison.Ordinal);
         Assert.Contains("previousAccrualQuery", source, StringComparison.Ordinal);
         Assert.Contains("previousIncomeQuery", source, StringComparison.Ordinal);
         Assert.Contains("accrualBucketQuery", source, StringComparison.Ordinal);
         Assert.Contains("incomeBucketQuery", source, StringComparison.Ordinal);
         Assert.Contains(".GroupBy(accrual => accrual.AccountingMonth)", source, StringComparison.Ordinal);
         Assert.Contains(".GroupBy(operation => operation.AccountingMonth)", source, StringComparison.Ordinal);
-        Assert.Equal(3, CountOccurrences(source, ".Concat("));
+        Assert.Equal(4, CountOccurrences(source, ".Concat("));
         Assert.Equal(1, CountOccurrences(source, ".ToListAsync(cancellationToken)"));
         Assert.Contains("garageBalanceHistoryQuery.GetAsync", serviceSource, StringComparison.Ordinal);
     }

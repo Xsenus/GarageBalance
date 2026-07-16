@@ -256,20 +256,19 @@ public sealed class FinanceService(
             return FinanceResult<GarageBalanceHistoryDto>.Failure("balance_history_period_too_large", $"Историю баланса можно построить максимум за {MaxBalanceHistoryMonths} месяцев.");
         }
 
-        var garage = await garageRepository.FindActiveWithOwnerAsync(garageId, cancellationToken);
-        if (garage is null)
+        var historyData = await garageBalanceHistoryQuery.GetAsync(garageId, monthFrom, monthTo, cancellationToken);
+        if (historyData is null)
         {
             return FinanceResult<GarageBalanceHistoryDto>.Failure("garage_not_found", "Гараж для истории баланса не найден.");
         }
 
-        var historyData = await garageBalanceHistoryQuery.GetAsync(garageId, monthFrom, monthTo, cancellationToken);
         var accrualBuckets = historyData.AccrualBuckets
             .ToDictionary(item => item.AccountingMonth, item => item.Amount);
         var incomeBuckets = historyData.IncomeBuckets
             .ToDictionary(item => item.AccountingMonth, item => item.Amount);
 
         var rows = new List<GarageBalanceHistoryRowDto>(monthCount);
-        var openingDebt = MoneyMath.RoundMoney(garage.StartingBalance + historyData.PreviousAccrualTotal - historyData.PreviousIncomeTotal);
+        var openingDebt = MoneyMath.RoundMoney(historyData.StartingBalance + historyData.PreviousAccrualTotal - historyData.PreviousIncomeTotal);
         var accrualTotal = 0m;
         var incomeTotal = 0m;
         for (var month = monthFrom; month <= monthTo; month = month.AddMonths(1))
@@ -284,12 +283,12 @@ public sealed class FinanceService(
         }
 
         var dto = new GarageBalanceHistoryDto(
-            garage.Id,
-            garage.Number,
-            garage.Owner?.FullName,
+            historyData.GarageId,
+            historyData.GarageNumber,
+            historyData.OwnerName,
             monthFrom,
             monthTo,
-            garage.StartingBalance,
+            historyData.StartingBalance,
             accrualTotal,
             incomeTotal,
             rows.Count == 0 ? openingDebt : rows[^1].ClosingDebt,

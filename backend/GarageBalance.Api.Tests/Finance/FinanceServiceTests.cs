@@ -883,7 +883,7 @@ public sealed class FinanceServiceTests
             CancellationToken.None);
 
         Assert.True(result.Succeeded);
-        Assert.Equal(2, commandCounter.Count);
+        Assert.Equal(1, commandCounter.Count);
         Assert.Equal("12", result.Value!.GarageNumber);
         Assert.Equal(new DateOnly(2026, 6, 1), result.Value.MonthFrom);
         Assert.Equal(new DateOnly(2026, 7, 1), result.Value.MonthTo);
@@ -929,14 +929,17 @@ public sealed class FinanceServiceTests
     [Fact]
     public async Task GetGarageBalanceHistoryAsync_ReturnsFailureForMissingGarage()
     {
-        await using var database = await TestDatabase.CreateAsync();
+        var commandCounter = new SelectCommandCounter();
+        await using var database = await TestDatabase.CreateAsync(commandCounter);
         await database.SeedAsync();
         var service = FinanceServiceTestFactory.Create(database.Context);
+        commandCounter.Reset();
 
         var result = await service.GetGarageBalanceHistoryAsync(Guid.NewGuid(), new GarageBalanceHistoryRequest(new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 1)), CancellationToken.None);
 
         Assert.False(result.Succeeded);
         Assert.Equal("garage_not_found", result.ErrorCode);
+        Assert.Equal(1, commandCounter.Count);
     }
 
     [Fact]
@@ -3541,7 +3544,7 @@ public sealed class FinanceServiceTests
             CancellationToken.None);
 
         Assert.True(result.Succeeded);
-        Assert.Equal(2, commandCounter.Count);
+        Assert.Equal(1, commandCounter.Count);
         Assert.Equal(0m, result.Value!.AccrualTotal);
         Assert.Equal(0m, result.Value.IncomeTotal);
         Assert.Equal(0m, result.Value.Debt);
