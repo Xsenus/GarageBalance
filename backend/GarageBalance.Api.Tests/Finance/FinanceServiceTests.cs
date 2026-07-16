@@ -3321,6 +3321,50 @@ public sealed class FinanceServiceTests
     }
 
     [Fact]
+    public async Task GetMissingMeterReadingsAsync_UsesOneSelectForManyGaragesAndBothMeterKinds()
+    {
+        var commandCounter = new SelectCommandCounter();
+        await using var database = await TestDatabase.CreateAsync(commandCounter);
+        var fixtures = await database.SeedAsync();
+        for (var index = 1; index < 200; index++)
+        {
+            database.Context.Garages.Add(new Garage
+            {
+                Number = $"G-{index:D3}",
+                PeopleCount = 1,
+                FloorCount = 1,
+                Owner = fixtures.Garage.Owner
+            });
+        }
+
+        await database.Context.SaveChangesAsync();
+        var service = FinanceServiceTestFactory.Create(database.Context);
+
+        commandCounter.Reset();
+        var result = await service.GetMissingMeterReadingsAsync(
+            new MissingMeterReadingListRequest(new DateOnly(2026, 6, 1), null, null, 100),
+            CancellationToken.None);
+
+        Assert.Equal(100, result.Count);
+        Assert.Equal(1, commandCounter.Count);
+        Assert.All(result, item => Assert.Contains(item.MeterKind, new[] { MeterKinds.Water, MeterKinds.Electricity }));
+    }
+
+    [Fact]
+    public async Task GetMissingMeterReadingsAsync_PropagatesCancellation()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        await database.SeedAsync();
+        var service = FinanceServiceTestFactory.Create(database.Context);
+        using var cancellation = new CancellationTokenSource();
+        await cancellation.CancelAsync();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => service.GetMissingMeterReadingsAsync(
+            new MissingMeterReadingListRequest(new DateOnly(2026, 6, 1), null, null),
+            cancellation.Token));
+    }
+
+    [Fact]
     public async Task GetMissingMeterReadingsAsync_ReturnsEmptyForUnknownMeterKind()
     {
         await using var database = await TestDatabase.CreateAsync();

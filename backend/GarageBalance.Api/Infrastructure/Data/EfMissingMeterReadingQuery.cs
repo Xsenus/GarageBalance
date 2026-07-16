@@ -1,5 +1,6 @@
 using GarageBalance.Api.Application.Finance;
 using GarageBalance.Api.Domain.Dictionaries;
+using GarageBalance.Api.Domain.Finance;
 using Microsoft.EntityFrameworkCore;
 
 namespace GarageBalance.Api.Infrastructure.Data;
@@ -18,102 +19,117 @@ public sealed class EfMissingMeterReadingQuery(GarageBalanceDbContext dbContext)
             return [];
         }
 
-        var missingGarageIdsByKind = new Dictionary<string, HashSet<Guid>>(StringComparer.Ordinal);
-        foreach (var meterKind in meterKinds)
-        {
-            var query = dbContext.Garages.AsNoTracking()
-                .Where(garage => !garage.IsArchived)
-                .Where(garage => !dbContext.MeterReadings.Any(reading =>
+        var includeWater = meterKinds.Contains(MeterKinds.Water, StringComparer.Ordinal);
+        var includeElectricity = meterKinds.Contains(MeterKinds.Electricity, StringComparer.Ordinal);
+        var garagesQuery = dbContext.Garages.AsNoTracking()
+            .Where(garage => !garage.IsArchived)
+            .Where(garage =>
+                (includeWater && !dbContext.MeterReadings.Any(reading =>
                     !reading.IsCanceled &&
                     reading.GarageId == garage.Id &&
                     reading.AccountingMonth == accountingMonth &&
-                    reading.MeterKind == meterKind));
-            IReadOnlyList<Guid> garageIds;
-            if (normalizedSearch is not null && IsSqliteProvider())
-            {
-                garageIds = (await query
-                        .Include(garage => garage.Owner)
-                        .OrderBy(garage => garage.Number)
-                        .ToListAsync(cancellationToken))
-                    .Where(garage => GarageMatchesSearch(garage, normalizedSearch))
-                    .Take(limit)
-                    .Select(garage => garage.Id)
-                    .ToList();
-            }
-            else
-            {
-                garageIds = await ApplySearch(query, normalizedSearch)
-                    .OrderBy(garage => garage.Number)
-                    .Take(limit)
-                    .Select(garage => garage.Id)
-                    .ToListAsync(cancellationToken);
-            }
+                    reading.MeterKind == MeterKinds.Water)) ||
+                (includeElectricity && !dbContext.MeterReadings.Any(reading =>
+                    !reading.IsCanceled &&
+                    reading.GarageId == garage.Id &&
+                    reading.AccountingMonth == accountingMonth &&
+                    reading.MeterKind == MeterKinds.Electricity)));
 
-            missingGarageIdsByKind[meterKind] = garageIds.ToHashSet();
-        }
-
-        var candidateGarageIds = missingGarageIdsByKind.Values
-            .SelectMany(ids => ids)
-            .Distinct()
-            .ToArray();
-        if (candidateGarageIds.Length == 0)
+        if (normalizedSearch is not null && !IsSqliteProvider())
         {
-            return [];
+            garagesQuery = ApplySearch(garagesQuery, normalizedSearch);
         }
 
-        var garages = await dbContext.Garages.AsNoTracking()
-            .Include(garage => garage.Owner)
-            .Where(garage => candidateGarageIds.Contains(garage.Id))
+        var candidateQuery = garagesQuery
             .OrderBy(garage => garage.Number)
-            .Take(limit)
-            .ToListAsync(cancellationToken);
+            .Select(garage => new MissingMeterCandidate(
+                garage.Id,
+                garage.Number,
+                garage.Owner == null ? null : garage.Owner.LastName,
+                garage.Owner == null ? null : garage.Owner.FirstName,
+                garage.Owner == null ? null : garage.Owner.MiddleName,
+                dbContext.MeterReadings.Any(reading =>
+                    !reading.IsCanceled &&
+                    reading.GarageId == garage.Id &&
+                    reading.AccountingMonth == accountingMonth &&
+                    reading.MeterKind == MeterKinds.Water),
+                dbContext.MeterReadings.Any(reading =>
+                    !reading.IsCanceled &&
+                    reading.GarageId == garage.Id &&
+                    reading.AccountingMonth == accountingMonth &&
+                    reading.MeterKind == MeterKinds.Electricity)));
 
-        return garages
-            .SelectMany(garage => meterKinds
-                .Where(meterKind => missingGarageIdsByKind[meterKind].Contains(garage.Id))
+        IReadOnlyList<MissingMeterCandidate> candidates;
+        if (normalizedSearch is not null && IsSqliteProvider())
+        {
+            candidates = (await candidateQuery.ToListAsync(cancellationToken))
+                .Where(candidate => CandidateMatchesSearch(candidate, normalizedSearch))
+                .Take(limit)
+                .ToList();
+        }
+        else
+        {
+            candidates = await candidateQuery
+                .Take(limit)
+                .ToListAsync(cancellationToken);
+        }
+
+        return candidates
+            .SelectMany(candidate => meterKinds
+                .Where(meterKind => IsMissing(candidate, meterKind))
                 .Select(meterKind => new MissingMeterReadingData(
-                    garage.Id,
-                    garage.Number,
-                    garage.Owner?.FullName,
+                    candidate.GarageId,
+                    candidate.GarageNumber,
+                    BuildOwnerName(candidate),
                     meterKind)))
             .Take(limit)
             .ToList();
     }
 
-    private static IQueryable<Garage> ApplySearch(IQueryable<Garage> query, string? normalizedSearch)
-    {
-        if (normalizedSearch is null)
-        {
-            return query;
-        }
-
-        return query.Where(garage =>
+    private static IQueryable<Garage> ApplySearch(IQueryable<Garage> query, string normalizedSearch) =>
+        query.Where(garage =>
             garage.Number.ToLower().Contains(normalizedSearch) ||
             (garage.Owner != null && (
                 garage.Owner.LastName.ToLower().Contains(normalizedSearch) ||
                 garage.Owner.FirstName.ToLower().Contains(normalizedSearch) ||
                 (garage.Owner.MiddleName != null && garage.Owner.MiddleName.ToLower().Contains(normalizedSearch)) ||
                 (garage.Owner.LastName + " " + garage.Owner.FirstName + " " + (garage.Owner.MiddleName ?? string.Empty)).ToLower().Contains(normalizedSearch))));
-    }
 
-    private static bool GarageMatchesSearch(Garage garage, string normalizedSearch)
+    private static bool CandidateMatchesSearch(MissingMeterCandidate candidate, string normalizedSearch) =>
+        candidate.GarageNumber.Contains(normalizedSearch, StringComparison.OrdinalIgnoreCase) ||
+        (candidate.OwnerLastName?.Contains(normalizedSearch, StringComparison.OrdinalIgnoreCase) ?? false) ||
+        (candidate.OwnerFirstName?.Contains(normalizedSearch, StringComparison.OrdinalIgnoreCase) ?? false) ||
+        (candidate.OwnerMiddleName?.Contains(normalizedSearch, StringComparison.OrdinalIgnoreCase) ?? false) ||
+        (BuildOwnerName(candidate)?.Contains(normalizedSearch, StringComparison.OrdinalIgnoreCase) ?? false);
+
+    private static bool IsMissing(MissingMeterCandidate candidate, string meterKind) =>
+        meterKind switch
+        {
+            MeterKinds.Water => !candidate.HasWaterReading,
+            MeterKinds.Electricity => !candidate.HasElectricityReading,
+            _ => false
+        };
+
+    private static string? BuildOwnerName(MissingMeterCandidate candidate)
     {
-        if (garage.Number.Contains(normalizedSearch, StringComparison.OrdinalIgnoreCase))
+        if (candidate.OwnerLastName is null || candidate.OwnerFirstName is null)
         {
-            return true;
+            return null;
         }
 
-        if (garage.Owner is null)
-        {
-            return false;
-        }
-
-        return garage.Owner.LastName.Contains(normalizedSearch, StringComparison.OrdinalIgnoreCase) ||
-            garage.Owner.FirstName.Contains(normalizedSearch, StringComparison.OrdinalIgnoreCase) ||
-            (garage.Owner.MiddleName?.Contains(normalizedSearch, StringComparison.OrdinalIgnoreCase) ?? false) ||
-            garage.Owner.FullName.Contains(normalizedSearch, StringComparison.OrdinalIgnoreCase);
+        return string.Join(' ', new[] { candidate.OwnerLastName, candidate.OwnerFirstName, candidate.OwnerMiddleName }
+            .Where(part => !string.IsNullOrWhiteSpace(part)));
     }
 
     private bool IsSqliteProvider() =>
         dbContext.Database.ProviderName?.Contains("Sqlite", StringComparison.OrdinalIgnoreCase) == true;
+
+    private sealed record MissingMeterCandidate(
+        Guid GarageId,
+        string GarageNumber,
+        string? OwnerLastName,
+        string? OwnerFirstName,
+        string? OwnerMiddleName,
+        bool HasWaterReading,
+        bool HasElectricityReading);
 }

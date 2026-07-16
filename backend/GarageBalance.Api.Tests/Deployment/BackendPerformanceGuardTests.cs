@@ -172,7 +172,10 @@ public sealed class BackendPerformanceGuardTests
         Assert.True(CountOccurrences(source, ".ToListAsync(cancellationToken)") >= 2);
         Assert.Contains(".Where(garage => !garage.IsArchived)", source, StringComparison.Ordinal);
         Assert.Contains("normalizedSearch is not null && IsSqliteProvider()", source, StringComparison.Ordinal);
-        Assert.Contains("GarageMatchesSearch", source, StringComparison.Ordinal);
+        Assert.Contains("CandidateMatchesSearch", source, StringComparison.Ordinal);
+        Assert.Contains("HasWaterReading", source, StringComparison.Ordinal);
+        Assert.Contains("HasElectricityReading", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("foreach (var meterKind in meterKinds)", source, StringComparison.Ordinal);
     }
 
     [Fact]
