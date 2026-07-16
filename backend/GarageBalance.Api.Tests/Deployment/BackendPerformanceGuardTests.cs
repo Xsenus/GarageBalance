@@ -475,6 +475,11 @@ public sealed class BackendPerformanceGuardTests
         Assert.Contains("StartingBalanceTotalCategory", expenseSource, StringComparison.Ordinal);
         Assert.Contains("AccrualTotalCategory", expenseSource, StringComparison.Ordinal);
         Assert.Contains("ExpenseTotalCategory", expenseSource, StringComparison.Ordinal);
+        Assert.Equal(3, CountOccurrences(incomeSource, "aggregateQuery = aggregateQuery.Concat("));
+        Assert.Equal(1, CountOccurrences(incomeSource, "aggregateQuery.ToListAsync(cancellationToken)"));
+        Assert.Contains("StartingBalanceTotalCategory", incomeSource, StringComparison.Ordinal);
+        Assert.Contains("AccrualTotalCategory", incomeSource, StringComparison.Ordinal);
+        Assert.Contains("IncomeTotalCategory", incomeSource, StringComparison.Ordinal);
         var incomeDebtMethod = incomeSource[
             incomeSource.IndexOf("private async Task<IReadOnlyDictionary<Guid, decimal>> CalculateDebtAfterPaymentsAsync", StringComparison.Ordinal)..incomeSource.IndexOf("private static IQueryable<T> ApplyLimit", StringComparison.Ordinal)];
         Assert.Contains("startingBalanceQuery", incomeDebtMethod, StringComparison.Ordinal);

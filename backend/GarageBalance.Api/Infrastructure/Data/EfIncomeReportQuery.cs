@@ -10,6 +10,9 @@ public sealed class EfIncomeReportQuery(GarageBalanceDbContext dbContext) : IInc
     private const int StartingBalanceDebtCategory = 1;
     private const int AccrualDebtCategory = 2;
     private const int PaymentDebtCategory = 3;
+    private const int StartingBalanceTotalCategory = 4;
+    private const int AccrualTotalCategory = 5;
+    private const int IncomeTotalCategory = 6;
     private const string AllRows = "all";
     private const string AccrualRows = "accruals";
     private const string PaymentRows = "payments";
@@ -35,6 +38,10 @@ public sealed class EfIncomeReportQuery(GarageBalanceDbContext dbContext) : IInc
         var normalizedSearch = search?.Trim().ToLowerInvariant();
         var useClientSearch = hasSearch && !(dbContext.Database.ProviderName?.Contains("Npgsql", StringComparison.OrdinalIgnoreCase) ?? false);
         var fetchLimit = useClientSearch ? null : GetFetchLimit(offset, limit);
+        var aggregateQuery = dbContext.Accruals.AsNoTracking()
+            .Where(_ => false)
+            .Select(_ => new { Category = 0, Total = 0m, Count = 0 });
+        var hasAggregateQueries = false;
 
         if (rowMode is AllRows or AccrualRows)
         {
@@ -66,12 +73,16 @@ public sealed class EfIncomeReportQuery(GarageBalanceDbContext dbContext) : IInc
 
                 if (!useClientSearch)
                 {
-                    var totals = await startingBalanceQuery
+                    var startingBalanceAggregate = startingBalanceQuery
                         .GroupBy(_ => 1)
-                        .Select(group => new { Total = group.Sum(garage => garage.StartingBalance), Count = group.Count() })
-                        .SingleOrDefaultAsync(cancellationToken);
-                    accrualTotal += totals?.Total ?? 0m;
-                    rowCount += totals?.Count ?? 0;
+                        .Select(group => new
+                        {
+                            Category = StartingBalanceTotalCategory,
+                            Total = group.Sum(garage => garage.StartingBalance),
+                            Count = group.Count()
+                        });
+                    aggregateQuery = aggregateQuery.Concat(startingBalanceAggregate);
+                    hasAggregateQueries = true;
                 }
 
                 var startingBalances = await ApplyLimit(startingBalanceQuery.OrderBy(garage => garage.Number).ThenBy(garage => garage.Id), fetchLimit)
@@ -127,12 +138,16 @@ public sealed class EfIncomeReportQuery(GarageBalanceDbContext dbContext) : IInc
 
             if (!useClientSearch)
             {
-                var totals = await accrualsQuery
+                var accrualAggregate = accrualsQuery
                     .GroupBy(_ => 1)
-                    .Select(group => new { Total = group.Sum(accrual => accrual.Amount), Count = group.Count() })
-                    .SingleOrDefaultAsync(cancellationToken);
-                accrualTotal += totals?.Total ?? 0m;
-                rowCount += totals?.Count ?? 0;
+                    .Select(group => new
+                    {
+                        Category = AccrualTotalCategory,
+                        Total = group.Sum(accrual => accrual.Amount),
+                        Count = group.Count()
+                    });
+                aggregateQuery = aggregateQuery.Concat(accrualAggregate);
+                hasAggregateQueries = true;
             }
 
             var accruals = await ApplyLimit(
@@ -199,12 +214,16 @@ public sealed class EfIncomeReportQuery(GarageBalanceDbContext dbContext) : IInc
 
             if (!useClientSearch)
             {
-                var totals = await paymentsQuery
+                var incomeAggregate = paymentsQuery
                     .GroupBy(_ => 1)
-                    .Select(group => new { Total = group.Sum(operation => operation.Amount), Count = group.Count() })
-                    .SingleOrDefaultAsync(cancellationToken);
-                incomeTotal += totals?.Total ?? 0m;
-                rowCount += totals?.Count ?? 0;
+                    .Select(group => new
+                    {
+                        Category = IncomeTotalCategory,
+                        Total = group.Sum(operation => operation.Amount),
+                        Count = group.Count()
+                    });
+                aggregateQuery = aggregateQuery.Concat(incomeAggregate);
+                hasAggregateQueries = true;
             }
 
             var payments = await ApplyLimit(
@@ -231,7 +250,18 @@ public sealed class EfIncomeReportQuery(GarageBalanceDbContext dbContext) : IInc
                 debtAfterPayments.GetValueOrDefault(operation.Id))));
         }
 
-        if (useClientSearch)
+        if (!useClientSearch && hasAggregateQueries)
+        {
+            var aggregates = await aggregateQuery.ToListAsync(cancellationToken);
+            accrualTotal = aggregates
+                .Where(row => row.Category is StartingBalanceTotalCategory or AccrualTotalCategory)
+                .Sum(row => row.Total);
+            incomeTotal = aggregates
+                .Where(row => row.Category == IncomeTotalCategory)
+                .Sum(row => row.Total);
+            rowCount = aggregates.Sum(row => row.Count);
+        }
+        else if (useClientSearch)
         {
             var clientSearch = search!.Trim();
             rows = rows.Where(row =>

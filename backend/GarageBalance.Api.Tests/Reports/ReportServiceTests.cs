@@ -928,6 +928,59 @@ public sealed class ReportServiceTests
     }
 
     [Fact]
+    public async Task IncomeAllRowsQuery_LoadsThreeSectionsDebtAndCombinedTotalsInFiveSelects()
+    {
+        var commandCounter = new SelectCommandCounter();
+        await using var database = await TestDatabase.CreateAsync(commandCounter);
+        var fixtures = await database.SeedAsync();
+        fixtures.FirstGarage.StartingBalance = 100m;
+        for (var index = 0; index < 200; index++)
+        {
+            database.Context.Accruals.Add(new Accrual
+            {
+                GarageId = fixtures.FirstGarage.Id,
+                IncomeTypeId = fixtures.IncomeType.Id,
+                AccountingMonth = new DateOnly(2026, 6, 1),
+                Amount = 50m,
+                Source = $"performance-test-{index:000}"
+            });
+            database.Context.FinancialOperations.Add(new FinancialOperation
+            {
+                OperationKind = FinancialOperationKinds.Income,
+                OperationDate = new DateOnly(2026, 6, 15),
+                AccountingMonth = new DateOnly(2026, 6, 1),
+                Amount = 20m,
+                DocumentNumber = $"PKO-ALL-{index:000}",
+                GarageId = fixtures.FirstGarage.Id,
+                IncomeTypeId = fixtures.IncomeType.Id,
+                CreatedAtUtc = new DateTimeOffset(2026, 6, 15, 12, 0, 0, TimeSpan.Zero).AddTicks(index)
+            });
+        }
+
+        await database.Context.SaveChangesAsync();
+        commandCounter.Reset();
+
+        var result = await new EfIncomeReportQuery(database.Context).GetRowsAsync(
+            new DateOnly(2026, 6, 1),
+            new DateOnly(2026, 6, 30),
+            "all",
+            new HashSet<Guid>(),
+            new HashSet<Guid>(),
+            new HashSet<Guid>(),
+            null,
+            25,
+            0,
+            CancellationToken.None);
+
+        Assert.Equal(5, commandCounter.Count);
+        Assert.Equal(10100m, result.AccrualTotal);
+        Assert.Equal(4000m, result.IncomeTotal);
+        Assert.Equal(401, result.RowCount);
+        Assert.Equal(25, result.Rows.Count);
+        Assert.All(result.Rows, row => Assert.Equal(fixtures.FirstGarage.Id, row.GarageId));
+    }
+
+    [Fact]
     public async Task ExpenseAccrualQuery_LoadsTotalsAndPageInTwoSelects()
     {
         var commandCounter = new SelectCommandCounter();
