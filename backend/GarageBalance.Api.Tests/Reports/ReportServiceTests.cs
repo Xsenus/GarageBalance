@@ -287,7 +287,7 @@ public sealed class ReportServiceTests
     }
 
     [Fact]
-    public async Task GarageReportQuery_LoadsTotalsCountAndPageInThreeSelects()
+    public async Task GarageReportQuery_LoadsTotalsCountAndPageInTwoSelects()
     {
         var commandCounter = new SelectCommandCounter();
         await using var database = await TestDatabase.CreateAsync(commandCounter);
@@ -309,7 +309,49 @@ public sealed class ReportServiceTests
         Assert.Equal(900m, result.AccrualTotal);
         Assert.Equal(400m, result.IncomeTotal);
         Assert.NotEmpty(result.Rows);
-        Assert.Equal(3, commandCounter.Count);
+        Assert.Equal(2, commandCounter.Count);
+    }
+
+    [Fact]
+    public async Task GarageReportQuery_ReturnsEmptyDataInOneSelect()
+    {
+        var commandCounter = new SelectCommandCounter();
+        await using var database = await TestDatabase.CreateAsync(commandCounter);
+        var query = new EfGarageReportQuery(database.Context);
+        commandCounter.Reset();
+
+        var result = await query.GetRowsAsync(
+            new DateOnly(2026, 6, 1),
+            new DateOnly(2026, 6, 1),
+            null,
+            false,
+            0,
+            25,
+            CancellationToken.None);
+
+        Assert.Equal(1, commandCounter.Count);
+        Assert.Equal(0m, result.AccrualTotal);
+        Assert.Equal(0m, result.IncomeTotal);
+        Assert.Equal(0, result.RowCount);
+        Assert.Empty(result.Rows);
+    }
+
+    [Fact]
+    public async Task GarageReportQuery_PropagatesCancellation()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var query = new EfGarageReportQuery(database.Context);
+        using var cancellationSource = new CancellationTokenSource();
+        cancellationSource.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => query.GetRowsAsync(
+            new DateOnly(2026, 6, 1),
+            new DateOnly(2026, 6, 1),
+            null,
+            false,
+            0,
+            25,
+            cancellationSource.Token));
     }
 
     [Fact]

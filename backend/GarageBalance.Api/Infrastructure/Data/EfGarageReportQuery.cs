@@ -106,16 +106,6 @@ public sealed class EfGarageReportQuery(GarageBalanceDbContext dbContext) : IGar
             });
 
         var sourceRows = startingBalances.Concat(accruals).Concat(payments);
-        var totals = await sourceRows
-            .GroupBy(_ => 1)
-            .Select(group => new
-            {
-                AccrualTotal = group.Sum(row => row.AccrualAmount),
-                IncomeTotal = group.Sum(row => row.IncomeAmount)
-            })
-            .SingleOrDefaultAsync(cancellationToken);
-        var accrualTotal = totals?.AccrualTotal ?? 0m;
-        var incomeTotal = totals?.IncomeTotal ?? 0m;
         var groupedRows = groupAccruals
             ? sourceRows
                 .GroupBy(row => new
@@ -166,7 +156,20 @@ public sealed class EfGarageReportQuery(GarageBalanceDbContext dbContext) : IGar
                     IncomeAmount = group.Sum(row => row.IncomeAmount)
                 });
 
-        var rowCount = await groupedRows.CountAsync(cancellationToken);
+        var summary = await groupedRows
+            .GroupBy(_ => 1)
+            .Select(group => new
+            {
+                AccrualTotal = group.Sum(row => row.AccrualAmount),
+                IncomeTotal = group.Sum(row => row.IncomeAmount),
+                RowCount = group.Count()
+            })
+            .SingleOrDefaultAsync(cancellationToken);
+        if (summary is null)
+        {
+            return new GarageReportQueryData(0m, 0m, 0, []);
+        }
+
         var rows = await groupedRows
             .OrderBy(row => row.AccountingMonth)
             .ThenBy(row => row.GarageNumber)
@@ -177,9 +180,9 @@ public sealed class EfGarageReportQuery(GarageBalanceDbContext dbContext) : IGar
             .ToListAsync(cancellationToken);
 
         return new GarageReportQueryData(
-            accrualTotal,
-            incomeTotal,
-            rowCount,
+            summary.AccrualTotal,
+            summary.IncomeTotal,
+            summary.RowCount,
             rows.Select(row => new GarageReportQueryRow(
                     row.AccountingMonth,
                     row.GarageId,

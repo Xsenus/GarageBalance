@@ -468,8 +468,10 @@ public sealed class BackendPerformanceGuardTests
         Assert.True(CountOccurrences(source, ".GroupBy(") >= 2, "Expanded and grouped garage modes must aggregate before paging.");
         Assert.Contains("AccrualTotal = group.Sum(row => row.AccrualAmount)", source, StringComparison.Ordinal);
         Assert.Contains("IncomeTotal = group.Sum(row => row.IncomeAmount)", source, StringComparison.Ordinal);
+        Assert.Contains("RowCount = group.Count()", source, StringComparison.Ordinal);
         Assert.DoesNotContain("sourceRows.SumAsync", source, StringComparison.Ordinal);
-        Assert.Contains("groupedRows.CountAsync(cancellationToken)", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("groupedRows.CountAsync(cancellationToken)", source, StringComparison.Ordinal);
+        Assert.Contains("if (summary is null)", source, StringComparison.Ordinal);
         Assert.Contains(".Skip(offset)", source, StringComparison.Ordinal);
         Assert.Contains(".Take(limit)", source, StringComparison.Ordinal);
         Assert.Contains("if (IsNpgsql())", source, StringComparison.Ordinal);
