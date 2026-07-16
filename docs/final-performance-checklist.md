@@ -647,3 +647,14 @@ No schema, financial formula, business rule, permission rule, report contract, p
 - [x] ESLint, production build, bundle budget, backend formatting, Docker Compose validation with disposable validation secrets, standalone backend publish, release JSON, whitespace checks and idempotent migration SQL generation passed. The production bundle remains within budget: main JavaScript 75.6 KiB gzip, main CSS 19.1 KiB gzip and total JavaScript/CSS 226.0/260.0 KiB gzip.
 
 No schema, financial formula, business rule, permission rule, production data, cleanup policy or deployment configuration changed in this pass. Local PostgreSQL project credentials remain unavailable, so no local data mutation was attempted. The optimization is protected by workflow-level request-order tests and the complete backend/frontend suites. End-user release note `0.705.0` describes the faster dictionary tables. Push and deployment remain intentionally pending because this task did not authorize publication.
+
+## Forty-seventh user-page request-priority audit: 2026-07-16
+
+- [x] Rechecked user management and confirmed that its bounded visible user page waited for the independent role dictionary before leaving the loading state.
+- [x] Prioritized the user page and ended the table loading state as soon as that request settles. Roles now load afterward for create/edit and permission-management forms.
+- [x] Preserved role-request caching, retry after a temporary role failure, server pagination and search, create/edit/deactivate/restore workflows and every backend permission rule.
+- [x] Added a deterministic deferred-response regression proving that the role request does not start while the visible user page is pending and starts exactly once after the user row is rendered. Existing role-cache and retry scenarios remain green.
+- [x] Complete verification passed under parallel load: backend 1664/1664 with 86.86% line and 70.29% branch coverage; frontend 528/528 with 81.34% statements, 72.10% branches, 77.14% functions and 81.88% lines.
+- [x] ESLint, production build, bundle budget, backend formatting, Docker Compose validation with disposable validation secrets, standalone backend publish, release JSON, whitespace checks and idempotent migration SQL generation passed. The production bundle remains within budget: main JavaScript 75.6 KiB gzip, main CSS 19.1 KiB gzip and total JavaScript/CSS 226.1/260.0 KiB gzip.
+
+No schema, role, permission, business rule, production data, cleanup policy or deployment configuration changed in this pass. Local PostgreSQL project credentials remain unavailable, so no local data mutation was attempted. The optimization is protected by workflow-level request-order, cache and retry tests plus the complete backend/frontend suites. End-user release note `0.706.0` describes the faster user table. Push and deployment remain intentionally pending because this task did not authorize publication.
