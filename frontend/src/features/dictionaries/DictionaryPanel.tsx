@@ -214,6 +214,10 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, integ
   useEffect(() => {
     let ignore = false
     async function loadReferences() {
+      if (loading) {
+        return
+      }
+
       const referenceSection = activeSection === 'owners' || activeSection === 'garages' || activeSection === 'suppliers'
         ? activeSection
         : null
@@ -258,7 +262,7 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, integ
     return () => {
       ignore = true
     }
-  }, [activeSection, auth.accessToken, dictionaryClient])
+  }, [activeSection, auth.accessToken, dictionaryClient, loading])
 
   useEffect(() => {
     let ignore = false
@@ -1174,6 +1178,9 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, integ
               {dictionarySectionOptions.filter((section) => section.group === group.key).map((section) => (
                 <button className={section.key === activeSection ? 'is-active' : undefined} type="button" aria-label={`Подгруппа: ${section.label}`} aria-current={section.key === activeSection ? 'page' : undefined} onClick={() => {
                   setSearch('')
+                  if (section.key !== activeSection) {
+                    setLoading(true)
+                  }
                   setActiveSection(section.key)
                 }} key={section.key}>
                   {section.label}

@@ -7550,6 +7550,35 @@ describe('App', () => {
     expect(referenceCallCount(getSupplierGroups)).toBe(1)
   })
 
+  it('starts dictionary editor references only after the visible page finishes loading', async () => {
+    const user = userEvent.setup()
+    let resolveOwnerPage!: (page: PagedResult<OwnerDto>) => void
+    const ownerPagePromise = new Promise<PagedResult<OwnerDto>>((resolve) => { resolveOwnerPage = resolve })
+    const getOwnersPage = vi.fn(() => ownerPagePromise)
+    const getGarages = vi.fn(async () => [] as GarageDto[])
+    const dictionaryClient = createDictionaryClient({ getOwnersPage, getGarages })
+
+    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('\u041f\u0430\u0440\u043e\u043b\u044c'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: '\u0412\u043e\u0439\u0442\u0438' }))
+    await openSection(user, '\u0421\u043f\u0440\u0430\u0432\u043e\u0447\u043d\u0438\u043a\u0438')
+    const dictionaryPanel = await screen.findByRole('region', { name: '\u0421\u043f\u0440\u0430\u0432\u043e\u0447\u043d\u0438\u043a\u0438' })
+
+    await waitFor(() => expect(getOwnersPage).toHaveBeenCalledTimes(1))
+    expect(getGarages).not.toHaveBeenCalled()
+
+    await act(async () => resolveOwnerPage({
+      items: [createOwner({ id: 'owner-priority-page', lastName: '\u0411\u044b\u0441\u0442\u0440\u044b\u0439', firstName: '\u0412\u043b\u0430\u0434\u0435\u043b\u0435\u0446' })],
+      totalCount: 1,
+      offset: 0,
+      limit: 25,
+    }))
+
+    expect(await within(dictionaryPanel).findByText('\u0411\u044b\u0441\u0442\u0440\u044b\u0439 \u0412\u043b\u0430\u0434\u0435\u043b\u0435\u0446')).toBeInTheDocument()
+    await waitFor(() => expect(getGarages).toHaveBeenCalledWith(expect.any(String), undefined, 500))
+  })
+
   it('requests bounded dictionary lists from dictionaries workspace', async () => {
     const user = userEvent.setup()
     const requestedLimits: Record<string, number | undefined> = {}
