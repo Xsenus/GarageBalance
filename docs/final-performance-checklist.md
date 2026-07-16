@@ -386,3 +386,15 @@ No schema, financial formula, business rule, permission rule, production data, c
 - [x] The production bundle remains within budget: main JavaScript 75.7 KiB gzip, main CSS 19.1 KiB gzip and total JavaScript/CSS 225.9/260.0 KiB gzip.
 
 No schema, financial formula, business rule, permission rule, production data, cleanup policy or deployment configuration changed in this pass. Local PostgreSQL project credentials remain unavailable, so no local data mutation was attempted. PostgreSQL behavior is protected by combined-query source guards, EF integration tests and idempotent migration generation. End-user release note `0.683.0` describes the faster supplier-payment worksheet. Push and deployment remain intentionally pending because this task did not authorize publication.
+
+## Twenty-fifth garage-report summary audit: 2026-07-16
+
+- [x] Rechecked the remaining measured report paths and confirmed that the garage report still executed separate commands for financial totals, grouped-row count and the bounded visible page.
+- [x] Combined accrual total, income total and grouped-row count in one database aggregate. A populated report now needs two `SELECT` commands instead of three while the visible page remains bounded with `Skip` and `Take`.
+- [x] Added an empty-summary short circuit. A period without starting balances, accruals or payments returns after one aggregate command and does not execute an unnecessary page query.
+- [x] Preserved garage/owner search, expanded and grouped service modes, starting balances, canceled-record exclusion, period filters, sorting, pagination and financial totals. All aggregation remains in the database before materialization.
+- [x] Added regressions for the two-command populated contract, one-command empty contract and cancellation propagation. Existing report correctness, grouped counting, search, pagination and invalid-period tests passed in the focused 10/10 run.
+- [x] Complete verification passed: backend 1636/1636 with 86.44% line and 70.00% branch coverage; frontend 524/524 with 81.26% statements, 71.93% branches, 77.04% functions and 81.83% lines.
+- [x] ESLint, production build, backend formatting, privacy scan of 704 files, Docker Compose validation, standalone backend publish, whitespace checks and idempotent migration SQL generation passed. The production bundle remains within budget: main JavaScript 75.7 KiB gzip, main CSS 19.1 KiB gzip and total JavaScript/CSS 225.9/260.0 KiB gzip.
+
+No schema, financial formula, business rule, permission rule, production data, cleanup policy or deployment configuration changed in this pass. Local PostgreSQL project credentials remain unavailable, so no local data mutation was attempted. PostgreSQL behavior is protected by database-query source guards, EF integration tests and idempotent migration generation. End-user release note `0.684.0` describes the faster garage report. Push and deployment remain intentionally pending because this task did not authorize publication.
