@@ -11,8 +11,14 @@ public sealed class EfExpenseWorksheetQuery(GarageBalanceDbContext dbContext) : 
     private const int StaffMemberCategory = 3;
     private const int StaffExpenseCategory = 4;
     private const int IncomeCategory = 5;
+    private const int AvailableBalanceCategory = 6;
+    private const int BankDepositCategory = 7;
 
-    public async Task<ExpenseWorksheetData> GetAsync(DateOnly accountingMonth, CancellationToken cancellationToken)
+    public async Task<ExpenseWorksheetData> GetAsync(
+        DateOnly accountingMonth,
+        string[] cashExpenseTypeCodes,
+        string[] cashExpenseTypeNames,
+        CancellationToken cancellationToken)
     {
         var supplierAccruals = dbContext.SupplierAccruals.AsNoTracking()
             .Where(accrual => !accrual.IsCanceled && accrual.AccountingMonth == accountingMonth)
@@ -33,7 +39,11 @@ public sealed class EfExpenseWorksheetQuery(GarageBalanceDbContext dbContext) : 
                 TypeId = (Guid?)group.Key.ExpenseTypeId,
                 TypeName = (string?)group.Key.ExpenseTypeName,
                 TypeCode = group.Key.ExpenseTypeCode,
-                Amount = group.Sum(accrual => accrual.Amount)
+                Amount = group.Sum(accrual => accrual.Amount),
+                IncomeTotal = 0m,
+                BankDepositTotal = 0m,
+                CashExpenseTotal = 0m,
+                BankExpenseTotal = 0m
             });
 
         var supplierExpenses = dbContext.FinancialOperations.AsNoTracking()
@@ -60,7 +70,11 @@ public sealed class EfExpenseWorksheetQuery(GarageBalanceDbContext dbContext) : 
                 TypeId = (Guid?)group.Key.ExpenseTypeId,
                 TypeName = (string?)group.Key.ExpenseTypeName,
                 TypeCode = group.Key.ExpenseTypeCode,
-                Amount = group.Sum(operation => operation.Amount)
+                Amount = group.Sum(operation => operation.Amount),
+                IncomeTotal = 0m,
+                BankDepositTotal = 0m,
+                CashExpenseTotal = 0m,
+                BankExpenseTotal = 0m
             });
 
         var staffMembers = dbContext.StaffMembers.AsNoTracking()
@@ -74,7 +88,11 @@ public sealed class EfExpenseWorksheetQuery(GarageBalanceDbContext dbContext) : 
                 TypeId = (Guid?)null,
                 TypeName = (string?)member.Department.Name,
                 TypeCode = (string?)null,
-                Amount = member.Rate
+                Amount = member.Rate,
+                IncomeTotal = 0m,
+                BankDepositTotal = 0m,
+                CashExpenseTotal = 0m,
+                BankExpenseTotal = 0m
             });
 
         var staffExpenses = dbContext.FinancialOperations.AsNoTracking()
@@ -93,7 +111,11 @@ public sealed class EfExpenseWorksheetQuery(GarageBalanceDbContext dbContext) : 
                 TypeId = (Guid?)null,
                 TypeName = (string?)null,
                 TypeCode = (string?)null,
-                Amount = group.Sum(operation => operation.Amount)
+                Amount = group.Sum(operation => operation.Amount),
+                IncomeTotal = 0m,
+                BankDepositTotal = 0m,
+                CashExpenseTotal = 0m,
+                BankExpenseTotal = 0m
             });
 
         var incomes = dbContext.FinancialOperations.AsNoTracking()
@@ -116,7 +138,61 @@ public sealed class EfExpenseWorksheetQuery(GarageBalanceDbContext dbContext) : 
                 TypeId = (Guid?)null,
                 TypeName = (string?)group.Key.IncomeTypeName,
                 TypeCode = group.Key.IncomeTypeCode,
-                Amount = group.Sum(operation => operation.Amount)
+                Amount = group.Sum(operation => operation.Amount),
+                IncomeTotal = 0m,
+                BankDepositTotal = 0m,
+                CashExpenseTotal = 0m,
+                BankExpenseTotal = 0m
+            });
+
+        var availableBalance = dbContext.FinancialOperations.AsNoTracking()
+            .Where(operation => !operation.IsCanceled)
+            .GroupBy(_ => 1)
+            .Select(group => new
+            {
+                Category = AvailableBalanceCategory,
+                SupplierId = (Guid?)null,
+                StaffMemberId = (Guid?)null,
+                CounterpartyName = (string?)null,
+                TypeId = (Guid?)null,
+                TypeName = (string?)null,
+                TypeCode = (string?)null,
+                Amount = 0m,
+                IncomeTotal = group.Sum(operation => operation.OperationKind == FinancialOperationKinds.Income ? operation.Amount : 0m),
+                BankDepositTotal = 0m,
+                CashExpenseTotal = group.Sum(operation =>
+                    operation.OperationKind == FinancialOperationKinds.Expense &&
+                    operation.ExpenseType != null &&
+                    ((operation.ExpenseType.Code != null && cashExpenseTypeCodes.Contains(operation.ExpenseType.Code)) ||
+                        cashExpenseTypeNames.Contains(operation.ExpenseType.Name))
+                        ? operation.Amount
+                        : 0m),
+                BankExpenseTotal = group.Sum(operation =>
+                    operation.OperationKind == FinancialOperationKinds.Expense &&
+                    (operation.ExpenseType == null ||
+                        !((operation.ExpenseType.Code != null && cashExpenseTypeCodes.Contains(operation.ExpenseType.Code)) ||
+                            cashExpenseTypeNames.Contains(operation.ExpenseType.Name)))
+                        ? operation.Amount
+                        : 0m)
+            });
+
+        var bankDeposits = dbContext.FundOperations.AsNoTracking()
+            .Where(operation => !operation.IsCanceled && operation.OperationKind == FundOperationKinds.Deposit)
+            .GroupBy(_ => 1)
+            .Select(group => new
+            {
+                Category = BankDepositCategory,
+                SupplierId = (Guid?)null,
+                StaffMemberId = (Guid?)null,
+                CounterpartyName = (string?)null,
+                TypeId = (Guid?)null,
+                TypeName = (string?)null,
+                TypeCode = (string?)null,
+                Amount = 0m,
+                IncomeTotal = 0m,
+                BankDepositTotal = group.Sum(operation => operation.Amount),
+                CashExpenseTotal = 0m,
+                BankExpenseTotal = 0m
             });
 
         var rows = await supplierAccruals
@@ -124,6 +200,8 @@ public sealed class EfExpenseWorksheetQuery(GarageBalanceDbContext dbContext) : 
             .Concat(staffMembers)
             .Concat(staffExpenses)
             .Concat(incomes)
+            .Concat(availableBalance)
+            .Concat(bankDeposits)
             .ToListAsync(cancellationToken);
 
         return new ExpenseWorksheetData(
@@ -157,6 +235,11 @@ public sealed class EfExpenseWorksheetQuery(GarageBalanceDbContext dbContext) : 
                 .ToList(),
             rows.Where(row => row.Category == IncomeCategory)
                 .Select(row => new ExpenseWorksheetIncomeData(row.TypeName!, row.TypeCode, row.Amount))
-                .ToList());
+                .ToList(),
+            new FinanceAvailableBalanceData(
+                rows.Sum(row => row.IncomeTotal),
+                rows.Sum(row => row.BankDepositTotal),
+                rows.Sum(row => row.CashExpenseTotal),
+                rows.Sum(row => row.BankExpenseTotal)));
     }
 }

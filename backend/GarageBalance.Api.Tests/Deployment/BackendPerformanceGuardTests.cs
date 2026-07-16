@@ -70,7 +70,8 @@ public sealed class BackendPerformanceGuardTests
         Assert.Contains("operation.OperationKind == FundOperationKinds.Deposit", source, StringComparison.Ordinal);
         Assert.Equal(1, CountOccurrences(source, ".Concat("));
         Assert.Equal(1, CountOccurrences(source, ".ToListAsync(cancellationToken)"));
-        Assert.Contains("var availableAmounts = await CalculateAvailableAmountsAsync(cancellationToken);", serviceSource, StringComparison.Ordinal);
+        Assert.Contains("var availableAmounts = CalculateAvailableAmounts(worksheetData.AvailableBalance);", serviceSource, StringComparison.Ordinal);
+        Assert.Contains("var balance = await financeAvailableBalanceQuery.GetAsync", serviceSource, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -326,8 +327,10 @@ public sealed class BackendPerformanceGuardTests
         var source = ReadApiSource("Infrastructure/Data/EfExpenseWorksheetQuery.cs");
         Assert.Contains("class EfExpenseWorksheetQuery", source, StringComparison.Ordinal);
         Assert.Contains(".Where(member => !member.IsArchived)", source, StringComparison.Ordinal);
+        Assert.Contains("availableBalance", source, StringComparison.Ordinal);
+        Assert.Contains("bankDeposits", source, StringComparison.Ordinal);
         Assert.True(CountOccurrences(source, ".GroupBy(") >= 4);
-        Assert.True(CountOccurrences(source, ".Concat(") >= 4);
+        Assert.True(CountOccurrences(source, ".Concat(") >= 6);
         Assert.Equal(1, CountOccurrences(source, ".ToListAsync(cancellationToken)"));
     }
 

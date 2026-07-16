@@ -3763,7 +3763,7 @@ public sealed class FinanceServiceTests
         var result = await service.GetExpenseWorksheetAsync(new ExpenseWorksheetRequest(month), CancellationToken.None);
 
         Assert.True(result.Succeeded);
-        Assert.Equal(2, commandCounter.Count);
+        Assert.Equal(1, commandCounter.Count);
         Assert.Equal(month, result.Value!.AccountingMonth);
         Assert.Equal(72075m, result.Value.AccrualTotal);
         Assert.Equal(25100m, result.Value.ExpenseTotal);
@@ -3864,7 +3864,11 @@ public sealed class FinanceServiceTests
         var query = new EfExpenseWorksheetQuery(database.Context);
         commandCounter.Reset();
 
-        var result = await query.GetAsync(new DateOnly(2026, 6, 1), CancellationToken.None);
+        var result = await query.GetAsync(
+            new DateOnly(2026, 6, 1),
+            ["no_receipt"],
+            ["Выплата без чека"],
+            CancellationToken.None);
 
         Assert.Equal(1, commandCounter.Count);
         Assert.Empty(result.SupplierAccruals);
@@ -3872,6 +3876,31 @@ public sealed class FinanceServiceTests
         Assert.Empty(result.StaffMembers);
         Assert.Empty(result.StaffExpenses);
         Assert.Empty(result.Incomes);
+        Assert.Equal(0m, result.AvailableBalance.IncomeTotal);
+        Assert.Equal(0m, result.AvailableBalance.BankDepositTotal);
+        Assert.Equal(0m, result.AvailableBalance.CashExpenseTotal);
+        Assert.Equal(0m, result.AvailableBalance.BankExpenseTotal);
+    }
+
+    [Fact]
+    public async Task GetExpenseWorksheetAsync_ReturnsEmptyWorksheetInOneSelect()
+    {
+        var commandCounter = new SelectCommandCounter();
+        await using var database = await TestDatabase.CreateAsync(commandCounter);
+        var service = FinanceServiceTestFactory.Create(database.Context);
+        commandCounter.Reset();
+
+        var result = await service.GetExpenseWorksheetAsync(
+            new ExpenseWorksheetRequest(new DateOnly(2026, 6, 1)),
+            CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+        Assert.Equal(1, commandCounter.Count);
+        Assert.Equal(0m, result.Value!.AccrualTotal);
+        Assert.Equal(0m, result.Value.ExpenseTotal);
+        Assert.Equal(0m, result.Value.BankAmount);
+        Assert.Equal(0m, result.Value.CashAmount);
+        Assert.Empty(result.Value.Rows);
     }
 
     [Fact]
@@ -3883,7 +3912,11 @@ public sealed class FinanceServiceTests
         cancellationSource.Cancel();
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
-            query.GetAsync(new DateOnly(2026, 6, 1), cancellationSource.Token));
+            query.GetAsync(
+                new DateOnly(2026, 6, 1),
+                ["no_receipt"],
+                ["Выплата без чека"],
+                cancellationSource.Token));
     }
 
     [Fact]

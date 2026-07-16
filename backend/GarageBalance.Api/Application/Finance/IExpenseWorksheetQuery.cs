@@ -2,7 +2,11 @@ namespace GarageBalance.Api.Application.Finance;
 
 public interface IExpenseWorksheetQuery
 {
-    Task<ExpenseWorksheetData> GetAsync(DateOnly accountingMonth, CancellationToken cancellationToken);
+    Task<ExpenseWorksheetData> GetAsync(
+        DateOnly accountingMonth,
+        string[] cashExpenseTypeCodes,
+        string[] cashExpenseTypeNames,
+        CancellationToken cancellationToken);
 }
 
 public sealed record ExpenseWorksheetData(
@@ -10,7 +14,8 @@ public sealed record ExpenseWorksheetData(
     IReadOnlyList<ExpenseWorksheetSupplierData> SupplierExpenses,
     IReadOnlyList<ExpenseWorksheetStaffData> StaffMembers,
     IReadOnlyList<ExpenseWorksheetStaffExpenseData> StaffExpenses,
-    IReadOnlyList<ExpenseWorksheetIncomeData> Incomes);
+    IReadOnlyList<ExpenseWorksheetIncomeData> Incomes,
+    FinanceAvailableBalanceData AvailableBalance);
 
 public sealed record ExpenseWorksheetSupplierData(
     Guid SupplierId,

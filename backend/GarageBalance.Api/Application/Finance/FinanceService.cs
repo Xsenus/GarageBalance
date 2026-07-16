@@ -381,7 +381,11 @@ public sealed class FinanceService(
     {
         var accountingMonth = MonthPeriod.Normalize(request.AccountingMonth ?? MonthPeriod.CurrentLocalMonth());
 
-        var worksheetData = await expenseWorksheetQuery.GetAsync(accountingMonth, cancellationToken);
+        var worksheetData = await expenseWorksheetQuery.GetAsync(
+            accountingMonth,
+            CashExpenseTypeCodes,
+            CashExpenseTypeNames,
+            cancellationToken);
 
         var collectedByIncomeKey = worksheetData.Incomes
             .GroupBy(income => NormalizeFinanceLookupKey(income.IncomeTypeCode ?? income.IncomeTypeName))
@@ -452,7 +456,7 @@ public sealed class FinanceService(
         var balanceTotal = MoneyMath.RoundMoney(rows.Sum(row => row.Balance));
         var collectedTotal = MoneyMath.RoundMoney(rows.Sum(row => row.CollectedAmount ?? 0m));
         var differenceTotal = MoneyMath.RoundMoney(collectedTotal - accrualTotal);
-        var availableAmounts = await CalculateAvailableAmountsAsync(cancellationToken);
+        var availableAmounts = CalculateAvailableAmounts(worksheetData.AvailableBalance);
 
         return FinanceResult<ExpenseWorksheetDto>.Success(new ExpenseWorksheetDto(
             accountingMonth,
@@ -618,6 +622,11 @@ public sealed class FinanceService(
     private async Task<AvailableAmounts> CalculateAvailableAmountsAsync(CancellationToken cancellationToken)
     {
         var balance = await financeAvailableBalanceQuery.GetAsync(CashExpenseTypeCodes, CashExpenseTypeNames, cancellationToken);
+        return CalculateAvailableAmounts(balance);
+    }
+
+    private static AvailableAmounts CalculateAvailableAmounts(FinanceAvailableBalanceData balance)
+    {
         var bankAmount = MoneyMath.RoundMoney(Math.Max(balance.BankDepositTotal - balance.BankExpenseTotal, 0m));
         var cashAmount = MoneyMath.RoundMoney(Math.Max(balance.IncomeTotal - balance.BankDepositTotal - balance.CashExpenseTotal, 0m));
 
