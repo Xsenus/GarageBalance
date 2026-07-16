@@ -1787,18 +1787,16 @@ public sealed class FinanceService(
             return FinanceResult<FeeCampaignAccrualGenerationResultDto>.Failure("fee_campaign_no_garages", "Нет активных гаражей для начисления сбора.");
         }
 
+        var existingGarageIds = await accrualRepository.GetActiveGarageIdsAsync(
+            campaign.IncomeTypeId,
+            month,
+            AccrualSources.FeeCampaign,
+            cancellationToken);
         var created = new List<AccrualDto>();
         var skipped = new List<string>();
         foreach (var garage in garages)
         {
-            var duplicate = await accrualRepository.ActiveDuplicateExistsAsync(
-                null,
-                garage.Id,
-                campaign.IncomeTypeId,
-                month,
-                AccrualSources.FeeCampaign,
-                cancellationToken);
-            if (duplicate)
+            if (existingGarageIds.Contains(garage.Id))
             {
                 skipped.Add($"Гараж {garage.Number}: начисление сбора уже есть.");
                 continue;
@@ -1885,19 +1883,17 @@ public sealed class FinanceService(
             return FinanceResult<SupplierGroupSalaryAccrualGenerationResultDto>.Failure("supplier_group_empty", "В выбранной группе нет активных поставщиков или сотрудников.");
         }
 
+        var existingSupplierIds = await supplierAccrualRepository.GetActiveSupplierIdsAsync(
+            salaryExpenseType.Id,
+            month,
+            AccrualSources.Regular,
+            documentNumber,
+            cancellationToken);
         var created = new List<SupplierAccrualDto>();
         var skipped = new List<string>();
         foreach (var supplier in suppliers)
         {
-            var duplicate = await supplierAccrualRepository.ActiveDuplicateExistsAsync(
-                null,
-                supplier.Id,
-                salaryExpenseType.Id,
-                month,
-                AccrualSources.Regular,
-                documentNumber,
-                cancellationToken);
-            if (duplicate)
+            if (existingSupplierIds.Contains(supplier.Id))
             {
                 skipped.Add($"{supplier.Name}: зарплата за месяц уже начислена.");
                 continue;

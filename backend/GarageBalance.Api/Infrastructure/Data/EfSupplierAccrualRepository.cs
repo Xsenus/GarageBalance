@@ -71,6 +71,22 @@ public sealed class EfSupplierAccrualRepository(GarageBalanceDbContext dbContext
         return await ApplySearch(query, normalizedSearch).CountAsync(cancellationToken);
     }
 
+    public async Task<IReadOnlySet<Guid>> GetActiveSupplierIdsAsync(
+        Guid expenseTypeId,
+        DateOnly accountingMonth,
+        string source,
+        string? documentNumber,
+        CancellationToken cancellationToken) =>
+        await dbContext.SupplierAccruals.AsNoTracking()
+            .Where(accrual =>
+                !accrual.IsCanceled &&
+                accrual.ExpenseTypeId == expenseTypeId &&
+                accrual.AccountingMonth == accountingMonth &&
+                accrual.Source == source &&
+                accrual.DocumentNumber == documentNumber)
+            .Select(accrual => accrual.SupplierId)
+            .ToHashSetAsync(cancellationToken);
+
     public Task<bool> ActiveDuplicateExistsAsync(
         Guid? ignoredId,
         Guid supplierId,

@@ -247,6 +247,9 @@ public sealed class BackendPerformanceGuardTests
         Assert.Contains(".ThenBy(accrual => accrual.Supplier.Name)", source, StringComparison.Ordinal);
         Assert.Contains("GetTotalThroughMonthAsync", source, StringComparison.Ordinal);
         Assert.Contains(".SumAsync(accrual => accrual.Amount", source, StringComparison.Ordinal);
+        Assert.Contains("GetActiveSupplierIdsAsync", source, StringComparison.Ordinal);
+        Assert.Contains(".Select(accrual => accrual.SupplierId)", source, StringComparison.Ordinal);
+        Assert.Contains(".ToHashSetAsync(cancellationToken)", source, StringComparison.Ordinal);
         Assert.Contains("GetMonthlyBucketsThroughMonthAsync", source, StringComparison.Ordinal);
         Assert.Contains(".GroupBy(accrual => accrual.AccountingMonth)", source, StringComparison.Ordinal);
     }

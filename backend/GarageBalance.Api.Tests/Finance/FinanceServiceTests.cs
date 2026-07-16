@@ -2480,6 +2480,57 @@ public sealed class FinanceServiceTests
     }
 
     [Fact]
+    public async Task GenerateFeeCampaignAccrualsAsync_UsesConstantSelectCountForManyGarages()
+    {
+        var commandCounter = new SelectCommandCounter();
+        await using var database = await TestDatabase.CreateAsync(commandCounter);
+        var fixtures = await database.SeedAsync();
+        var campaign = new FeeCampaign
+        {
+            Name = "Mass fee",
+            IncomeTypeId = fixtures.IncomeType.Id,
+            IncomeType = fixtures.IncomeType,
+            ContributionAmount = 500m,
+            TargetAmount = 100000m,
+            StartsOn = new DateOnly(2026, 5, 1),
+            AppliesToAllGarages = true,
+            OverdueGraceDays = 30
+        };
+        for (var index = 1; index < 200; index++)
+        {
+            database.Context.Garages.Add(new Garage
+            {
+                Number = $"F-{index:D3}",
+                PeopleCount = 1,
+                FloorCount = 1,
+                Owner = fixtures.Garage.Owner
+            });
+        }
+
+        database.Context.FeeCampaigns.Add(campaign);
+        await database.Context.SaveChangesAsync();
+        var service = FinanceServiceTestFactory.Create(database.Context);
+        var request = new GenerateFeeCampaignAccrualsRequest(campaign.Id, new DateOnly(2026, 6, 1), null);
+
+        commandCounter.Reset();
+        var firstRun = await service.GenerateFeeCampaignAccrualsAsync(request, null, CancellationToken.None);
+        var firstRunSelectCount = commandCounter.Count;
+
+        commandCounter.Reset();
+        var secondRun = await service.GenerateFeeCampaignAccrualsAsync(request, null, CancellationToken.None);
+        var secondRunSelectCount = commandCounter.Count;
+
+        Assert.True(firstRun.Succeeded, firstRun.ErrorMessage);
+        Assert.Equal(200, firstRun.Value!.CreatedCount);
+        Assert.Equal(100000m, firstRun.Value.TotalAmount);
+        Assert.InRange(firstRunSelectCount, 1, 3);
+        Assert.False(secondRun.Succeeded);
+        Assert.Equal("fee_campaign_accruals_empty", secondRun.ErrorCode);
+        Assert.InRange(secondRunSelectCount, 1, 3);
+        Assert.Equal(200, database.Context.Accruals.Count());
+    }
+
+    [Fact]
     public async Task GenerateFeeCampaignAccrualsAsync_RejectsSecondRunForSameMonth()
     {
         await using var database = await TestDatabase.CreateAsync();
@@ -2870,6 +2921,50 @@ public sealed class FinanceServiceTests
         Assert.Equal(actorUserId, audit.ActorUserId);
         Assert.Contains("Создано начислений зарплаты: 2", audit.Summary, StringComparison.Ordinal);
         Assert.Contains("группа Коммунальные услуги", audit.Summary, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task GenerateSupplierGroupSalaryAccrualsAsync_UsesConstantSelectCountForManySuppliers()
+    {
+        var commandCounter = new SelectCommandCounter();
+        await using var database = await TestDatabase.CreateAsync(commandCounter);
+        var fixtures = await database.SeedAsync();
+        var salaryType = new ExpenseType { Name = "Salary", Code = "salary", IsSystem = true };
+        for (var index = 1; index < 200; index++)
+        {
+            database.Context.Suppliers.Add(new Supplier
+            {
+                Name = $"Employee {index:D3}",
+                GroupId = fixtures.Supplier.GroupId
+            });
+        }
+
+        database.Context.ExpenseTypes.Add(salaryType);
+        await database.Context.SaveChangesAsync();
+        var service = FinanceServiceTestFactory.Create(database.Context);
+        var request = new GenerateSupplierGroupSalaryAccrualsRequest(
+            fixtures.Supplier.GroupId,
+            new DateOnly(2026, 6, 1),
+            7000m,
+            "PAY-06",
+            null);
+
+        commandCounter.Reset();
+        var firstRun = await service.GenerateSupplierGroupSalaryAccrualsAsync(request, null, CancellationToken.None);
+        var firstRunSelectCount = commandCounter.Count;
+
+        commandCounter.Reset();
+        var secondRun = await service.GenerateSupplierGroupSalaryAccrualsAsync(request, null, CancellationToken.None);
+        var secondRunSelectCount = commandCounter.Count;
+
+        Assert.True(firstRun.Succeeded, firstRun.ErrorMessage);
+        Assert.Equal(200, firstRun.Value!.CreatedCount);
+        Assert.Equal(1400000m, firstRun.Value.TotalAmount);
+        Assert.InRange(firstRunSelectCount, 1, 4);
+        Assert.False(secondRun.Succeeded);
+        Assert.Equal("salary_accruals_empty", secondRun.ErrorCode);
+        Assert.InRange(secondRunSelectCount, 1, 4);
+        Assert.Equal(200, database.Context.SupplierAccruals.Count());
     }
 
     [Fact]
