@@ -91,7 +91,7 @@ public sealed class BackendPerformanceGuardTests
         Assert.Contains("AnyAsync(operation =>", source, StringComparison.Ordinal);
         Assert.Contains("GetIncomeTotalBeforeMonthAsync", source, StringComparison.Ordinal);
         Assert.Contains("GetIncomeMonthlyBucketsAsync", source, StringComparison.Ordinal);
-        Assert.Contains("GetIncomeTypeBucketsAsync", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("GetIncomeTypeBucketsAsync", source, StringComparison.Ordinal);
         Assert.Contains("GetWorksheetDataAsync", source, StringComparison.Ordinal);
         Assert.DoesNotContain("GetSummaryAsync", source, StringComparison.Ordinal);
         Assert.Contains("GetOpeningDebtPaymentTotalAsync", source, StringComparison.Ordinal);
@@ -154,7 +154,7 @@ public sealed class BackendPerformanceGuardTests
         Assert.True(CountOccurrences(source, ".Take(limit)") >= 4);
         Assert.Contains("normalizedSearch is not null && IsSqliteProvider()", source, StringComparison.Ordinal);
         Assert.Contains("ReadingMatchesSearch", source, StringComparison.Ordinal);
-        Assert.Contains("GetForGaragePeriodAsync", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("GetForGaragePeriodAsync", source, StringComparison.Ordinal);
         Assert.Contains("GetActiveByGarageIdsAsync", source, StringComparison.Ordinal);
         Assert.Contains("ToDictionaryAsync(reading => reading.GarageId", source, StringComparison.Ordinal);
         Assert.Contains("ActiveDuplicateExistsAsync", source, StringComparison.Ordinal);
@@ -198,7 +198,7 @@ public sealed class BackendPerformanceGuardTests
         Assert.Contains("ToHashSetAsync(cancellationToken)", source, StringComparison.Ordinal);
         Assert.Contains(".SumAsync(accrual => accrual.Amount", source, StringComparison.Ordinal);
         Assert.Contains("GetMonthlyBucketsAsync", source, StringComparison.Ordinal);
-        Assert.Contains("GetIncomeTypeBucketsAsync", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("GetIncomeTypeBucketsAsync", source, StringComparison.Ordinal);
         Assert.Contains(".GroupBy(accrual => accrual.AccountingMonth)", source, StringComparison.Ordinal);
     }
 
@@ -523,6 +523,22 @@ public sealed class BackendPerformanceGuardTests
         Assert.Contains(".Concat(accrualMonthlyQuery)", source, StringComparison.Ordinal);
         Assert.Contains(".Concat(readingMonthlyQuery)", source, StringComparison.Ordinal);
         Assert.Contains("SumAsync(garage => garage.StartingBalance, cancellationToken)", source, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void GarageIncomeWorksheetQuery_CombinesAllFinancialBucketsIntoOneDatabaseCommand()
+    {
+        var source = ReadApiSource("Infrastructure/Data/EfGarageIncomeWorksheetQuery.cs");
+        var serviceSource = ReadApiSource("Application/Finance/FinanceService.cs");
+
+        Assert.Contains("previousAccrualQuery", source, StringComparison.Ordinal);
+        Assert.Contains("previousIncomeQuery", source, StringComparison.Ordinal);
+        Assert.Contains("accrualBucketQuery", source, StringComparison.Ordinal);
+        Assert.Contains("incomeBucketQuery", source, StringComparison.Ordinal);
+        Assert.Contains("meterReadingQuery", source, StringComparison.Ordinal);
+        Assert.Equal(4, CountOccurrences(source, ".Concat("));
+        Assert.Equal(1, CountOccurrences(source, ".ToListAsync(cancellationToken)"));
+        Assert.Contains("garageIncomeWorksheetQuery.GetAsync", serviceSource, StringComparison.Ordinal);
     }
 
     [Fact]

@@ -79,39 +79,6 @@ public sealed class EfAccrualRepository(GarageBalanceDbContext dbContext) : IAcc
         return rows.Select(row => new AccrualBucketData(row.AccountingMonth, row.Amount)).ToList();
     }
 
-    public async Task<IReadOnlyList<AccrualIncomeTypeBucketData>> GetIncomeTypeBucketsAsync(
-        Guid garageId,
-        DateOnly monthFrom,
-        DateOnly monthTo,
-        CancellationToken cancellationToken)
-    {
-        var rows = await dbContext.Accruals.AsNoTracking()
-            .Where(accrual =>
-                !accrual.IsCanceled &&
-                accrual.GarageId == garageId &&
-                accrual.AccountingMonth >= monthFrom &&
-                accrual.AccountingMonth <= monthTo)
-            .GroupBy(accrual => new
-            {
-                accrual.AccountingMonth,
-                accrual.IncomeTypeId,
-                accrual.IncomeType.Name,
-                accrual.IncomeType.Code
-            })
-            .Select(group => new
-            {
-                group.Key.AccountingMonth,
-                group.Key.IncomeTypeId,
-                IncomeTypeName = group.Key.Name,
-                IncomeTypeCode = group.Key.Code,
-                Amount = group.Sum(accrual => accrual.Amount)
-            })
-            .ToListAsync(cancellationToken);
-        return rows
-            .Select(row => new AccrualIncomeTypeBucketData(row.AccountingMonth, row.IncomeTypeId, row.IncomeTypeName, row.IncomeTypeCode, row.Amount))
-            .ToList();
-    }
-
     public Task<Accrual?> FindForUpdateAsync(Guid id, CancellationToken cancellationToken) =>
         TrackedAggregate().SingleOrDefaultAsync(accrual => accrual.Id == id, cancellationToken);
 

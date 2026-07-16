@@ -1,0 +1,32 @@
+namespace GarageBalance.Api.Application.Finance;
+
+public interface IGarageIncomeWorksheetQuery
+{
+    Task<GarageIncomeWorksheetData> GetAsync(
+        Guid garageId,
+        DateOnly monthFrom,
+        DateOnly monthTo,
+        CancellationToken cancellationToken);
+}
+
+public sealed record GarageIncomeWorksheetData(
+    decimal PreviousAccrualTotal,
+    decimal PreviousIncomeTotal,
+    IReadOnlyList<GarageIncomeWorksheetBucketData> AccrualBuckets,
+    IReadOnlyList<GarageIncomeWorksheetBucketData> IncomeBuckets,
+    IReadOnlyList<GarageIncomeWorksheetMeterData> MeterReadings);
+
+public sealed record GarageIncomeWorksheetBucketData(
+    DateOnly AccountingMonth,
+    Guid IncomeTypeId,
+    string IncomeTypeName,
+    string? IncomeTypeCode,
+    decimal Amount);
+
+public sealed record GarageIncomeWorksheetMeterData(
+    DateOnly AccountingMonth,
+    string MeterKind,
+    DateOnly ReadingDate,
+    decimal CurrentValue,
+    decimal Consumption,
+    DateTimeOffset UpdatedAtUtc);

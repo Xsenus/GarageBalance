@@ -107,41 +107,6 @@ public sealed class EfFinancialOperationRepository(GarageBalanceDbContext dbCont
         return rows.Select(row => new FinancialOperationBucketData(row.AccountingMonth, row.Amount)).ToList();
     }
 
-    public async Task<IReadOnlyList<FinancialOperationIncomeTypeBucketData>> GetIncomeTypeBucketsAsync(
-        Guid garageId,
-        DateOnly monthFrom,
-        DateOnly monthTo,
-        CancellationToken cancellationToken)
-    {
-        var rows = await dbContext.FinancialOperations.AsNoTracking()
-            .Where(operation =>
-                !operation.IsCanceled &&
-                operation.OperationKind == FinancialOperationKinds.Income &&
-                operation.GarageId == garageId &&
-                operation.IncomeTypeId != null &&
-                operation.AccountingMonth >= monthFrom &&
-                operation.AccountingMonth <= monthTo)
-            .GroupBy(operation => new
-            {
-                operation.AccountingMonth,
-                IncomeTypeId = operation.IncomeTypeId!.Value,
-                operation.IncomeType!.Name,
-                operation.IncomeType.Code
-            })
-            .Select(group => new
-            {
-                group.Key.AccountingMonth,
-                group.Key.IncomeTypeId,
-                IncomeTypeName = group.Key.Name,
-                IncomeTypeCode = group.Key.Code,
-                Amount = group.Sum(operation => operation.Amount)
-            })
-            .ToListAsync(cancellationToken);
-        return rows
-            .Select(row => new FinancialOperationIncomeTypeBucketData(row.AccountingMonth, row.IncomeTypeId, row.IncomeTypeName, row.IncomeTypeCode, row.Amount))
-            .ToList();
-    }
-
     public async Task<FinancialOperationWorksheetData> GetWorksheetDataAsync(DateOnly accountingMonth, CancellationToken cancellationToken)
     {
         var expenses = await dbContext.FinancialOperations.AsNoTracking()

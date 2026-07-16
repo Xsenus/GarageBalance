@@ -12,6 +12,7 @@ public sealed class FinanceService(
     IStaffMemberRepository staffMemberRepository,
     IGarageRepository garageRepository,
     IMissingMeterReadingQuery missingMeterReadingQuery,
+    IGarageIncomeWorksheetQuery garageIncomeWorksheetQuery,
     IFinanceTotalsQuery financeTotalsQuery,
     IFinanceSectionCountQuery financeSectionCountQuery,
     IMeterReadingRepository meterReadingRepository,
@@ -318,30 +319,11 @@ public sealed class FinanceService(
             return FinanceResult<GarageIncomeWorksheetDto>.Failure("garage_not_found", "Гараж для формы поступлений не найден.");
         }
 
-        var previousAccrualTotal = await accrualRepository.GetTotalBeforeMonthAsync(garageId, monthFrom, cancellationToken);
-        var previousIncomeTotal = await financialOperationRepository.GetIncomeTotalBeforeMonthAsync(garageId, monthFrom, cancellationToken);
-        var openingDebt = MoneyMath.RoundMoney(Math.Max(garage.StartingBalance + previousAccrualTotal - previousIncomeTotal, 0m));
-
-        var accrualBuckets = (await accrualRepository.GetIncomeTypeBucketsAsync(garageId, monthFrom, monthTo, cancellationToken))
-            .Select(bucket => new IncomeWorksheetBucket(
-                bucket.AccountingMonth,
-                bucket.IncomeTypeId,
-                bucket.IncomeTypeName,
-                bucket.IncomeTypeCode,
-                bucket.Amount))
-            .ToList();
-
-        var incomeBuckets = (await financialOperationRepository.GetIncomeTypeBucketsAsync(garageId, monthFrom, monthTo, cancellationToken))
-            .Select(bucket => new IncomeWorksheetBucket(
-                bucket.AccountingMonth,
-                bucket.IncomeTypeId,
-                bucket.IncomeTypeName,
-                bucket.IncomeTypeCode,
-                bucket.Amount))
-            .ToList();
-
-        var meterReadings = await meterReadingRepository.GetForGaragePeriodAsync(garageId, monthFrom, monthTo, cancellationToken);
-        var meterReadingByMonthKind = meterReadings
+        var worksheetData = await garageIncomeWorksheetQuery.GetAsync(garageId, monthFrom, monthTo, cancellationToken);
+        var openingDebt = MoneyMath.RoundMoney(Math.Max(
+            garage.StartingBalance + worksheetData.PreviousAccrualTotal - worksheetData.PreviousIncomeTotal,
+            0m));
+        var meterReadingByMonthKind = worksheetData.MeterReadings
             .GroupBy(reading => (reading.AccountingMonth, reading.MeterKind))
             .ToDictionary(
                 group => group.Key,
@@ -350,10 +332,10 @@ public sealed class FinanceService(
                     .ThenByDescending(reading => reading.UpdatedAtUtc)
                     .First());
 
-        var accrualLookup = accrualBuckets.ToDictionary(bucket => (bucket.AccountingMonth, bucket.IncomeTypeId));
-        var incomeLookup = incomeBuckets.ToDictionary(bucket => (bucket.AccountingMonth, bucket.IncomeTypeId));
-        var keys = accrualBuckets
-            .Concat(incomeBuckets)
+        var accrualLookup = worksheetData.AccrualBuckets.ToDictionary(bucket => (bucket.AccountingMonth, bucket.IncomeTypeId));
+        var incomeLookup = worksheetData.IncomeBuckets.ToDictionary(bucket => (bucket.AccountingMonth, bucket.IncomeTypeId));
+        var keys = worksheetData.AccrualBuckets
+            .Concat(worksheetData.IncomeBuckets)
             .GroupBy(bucket => (bucket.AccountingMonth, bucket.IncomeTypeId))
             .Select(group => group.First())
             .OrderByDescending(bucket => bucket.AccountingMonth)
@@ -3140,8 +3122,6 @@ public sealed class FinanceService(
     {
         return value.Trim().ToLower(RussianCulture);
     }
-
-    private sealed record IncomeWorksheetBucket(DateOnly AccountingMonth, Guid IncomeTypeId, string IncomeTypeName, string? IncomeTypeCode, decimal Amount);
 
     private sealed record AllocationDebtBucket(string Kind, DateOnly? AccountingMonth, string Label, decimal Amount);
 

@@ -3153,6 +3153,97 @@ public sealed class FinanceServiceTests
     }
 
     [Fact]
+    public async Task GetGarageIncomeWorksheetAsync_UsesTwoSelectsForGarageAndCombinedWorksheetData()
+    {
+        var commandCounter = new SelectCommandCounter();
+        await using var database = await TestDatabase.CreateAsync(commandCounter);
+        var fixtures = await database.SeedAsync();
+        var electricityType = new IncomeType { Name = "Электроэнергия", Code = "electricity" };
+        database.Context.IncomeTypes.Add(electricityType);
+        database.Context.Accruals.AddRange(
+            new Accrual
+            {
+                GarageId = fixtures.Garage.Id,
+                IncomeTypeId = fixtures.IncomeType.Id,
+                AccountingMonth = new DateOnly(2026, 5, 1),
+                Amount = 300m,
+                Source = "manual"
+            },
+            new Accrual
+            {
+                GarageId = fixtures.Garage.Id,
+                IncomeTypeId = electricityType.Id,
+                AccountingMonth = new DateOnly(2026, 6, 1),
+                Amount = 500m,
+                Source = "regular"
+            });
+        database.Context.FinancialOperations.AddRange(
+            new FinancialOperation
+            {
+                OperationKind = FinancialOperationKinds.Income,
+                OperationDate = new DateOnly(2026, 5, 20),
+                AccountingMonth = new DateOnly(2026, 5, 1),
+                Amount = 100m,
+                DocumentNumber = "PKO-old-combined",
+                GarageId = fixtures.Garage.Id,
+                IncomeTypeId = fixtures.IncomeType.Id
+            },
+            new FinancialOperation
+            {
+                OperationKind = FinancialOperationKinds.Income,
+                OperationDate = new DateOnly(2026, 6, 20),
+                AccountingMonth = new DateOnly(2026, 6, 1),
+                Amount = 125m,
+                DocumentNumber = "PKO-current-combined",
+                GarageId = fixtures.Garage.Id,
+                IncomeTypeId = electricityType.Id
+            });
+        database.Context.MeterReadings.Add(new MeterReading
+        {
+            GarageId = fixtures.Garage.Id,
+            MeterKind = "electricity",
+            AccountingMonth = new DateOnly(2026, 6, 1),
+            ReadingDate = new DateOnly(2026, 6, 21),
+            PreviousValue = 100m,
+            CurrentValue = 118m,
+            Consumption = 18m
+        });
+        await database.Context.SaveChangesAsync();
+        var service = FinanceServiceTestFactory.Create(database.Context);
+        commandCounter.Reset();
+
+        var result = await service.GetGarageIncomeWorksheetAsync(
+            fixtures.Garage.Id,
+            new GarageIncomeWorksheetRequest(new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 1)),
+            CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+        Assert.Equal(2, commandCounter.Count);
+        Assert.Equal(200m, result.Value!.OpeningDebt);
+        var row = Assert.Single(result.Value.Rows);
+        Assert.Equal(electricityType.Id, row.IncomeTypeId);
+        Assert.Equal(500m, row.AccrualAmount);
+        Assert.Equal(125m, row.IncomeAmount);
+        Assert.Equal(118m, row.MeterValue);
+        Assert.Equal(18m, row.MeterConsumption);
+    }
+
+    [Fact]
+    public async Task GarageIncomeWorksheetQuery_PropagatesCancellation()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var query = new EfGarageIncomeWorksheetQuery(database.Context);
+        using var cancellationSource = new CancellationTokenSource();
+        cancellationSource.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => query.GetAsync(
+            Guid.NewGuid(),
+            new DateOnly(2026, 6, 1),
+            new DateOnly(2026, 6, 1),
+            cancellationSource.Token));
+    }
+
+    [Fact]
     public async Task GetGarageIncomeWorksheetAsync_CarriesOpeningDebtIntoPeriodTotals()
     {
         await using var database = await TestDatabase.CreateAsync();

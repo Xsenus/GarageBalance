@@ -1016,6 +1016,25 @@ public sealed class BackendLayeringTests
     }
 
     [Fact]
+    public void GarageIncomeWorksheetQuery_IsImplementedInInfrastructureAndRegisteredInCompositionRoot()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var abstraction = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "Application", "Finance", "IGarageIncomeWorksheetQuery.cs"));
+        var implementation = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "Infrastructure", "Data", "EfGarageIncomeWorksheetQuery.cs"));
+        var program = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "Program.cs"));
+        var service = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "Application", "Finance", "FinanceService.cs"));
+        var testFactory = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api.Tests", "Common", "FinanceServiceTestFactory.cs"));
+
+        Assert.Contains("interface IGarageIncomeWorksheetQuery", abstraction, StringComparison.Ordinal);
+        Assert.DoesNotContain("Infrastructure", abstraction, StringComparison.Ordinal);
+        Assert.Contains(": IGarageIncomeWorksheetQuery", implementation, StringComparison.Ordinal);
+        Assert.Contains("IGarageIncomeWorksheetQuery garageIncomeWorksheetQuery", service, StringComparison.Ordinal);
+        Assert.Contains("garageIncomeWorksheetQuery.GetAsync", service, StringComparison.Ordinal);
+        Assert.Contains("AddScoped<IGarageIncomeWorksheetQuery, EfGarageIncomeWorksheetQuery>()", program, StringComparison.Ordinal);
+        Assert.Contains("new EfGarageIncomeWorksheetQuery(dbContext)", testFactory, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void MeterReadingLists_DelegateToInfrastructureRepository()
     {
         var repositoryRoot = FindRepositoryRoot();
@@ -1030,7 +1049,7 @@ public sealed class BackendLayeringTests
         Assert.Contains("IMeterReadingRepository meterReadingRepository", service, StringComparison.Ordinal);
         Assert.Contains("meterReadingRepository.GetListAsync", service, StringComparison.Ordinal);
         Assert.Contains("meterReadingRepository.GetPageAsync", service, StringComparison.Ordinal);
-        Assert.Contains("meterReadingRepository.GetForGaragePeriodAsync", service, StringComparison.Ordinal);
+        Assert.DoesNotContain("meterReadingRepository.GetForGaragePeriodAsync", service, StringComparison.Ordinal);
         Assert.Contains("IFinanceSectionCountQuery financeSectionCountQuery", service, StringComparison.Ordinal);
         Assert.Contains("financeSectionCountQuery.GetAsync", service, StringComparison.Ordinal);
         Assert.Contains("meterReadingRepository.ActiveDuplicateExistsAsync", service, StringComparison.Ordinal);
@@ -1066,7 +1085,7 @@ public sealed class BackendLayeringTests
         Assert.Contains("financialOperationRepository.ActiveDocumentDuplicateExistsAsync", service, StringComparison.Ordinal);
         Assert.Contains("financialOperationRepository.GetIncomeTotalBeforeMonthAsync", service, StringComparison.Ordinal);
         Assert.Contains("financialOperationRepository.GetIncomeMonthlyBucketsAsync", service, StringComparison.Ordinal);
-        Assert.Contains("financialOperationRepository.GetIncomeTypeBucketsAsync", service, StringComparison.Ordinal);
+        Assert.DoesNotContain("financialOperationRepository.GetIncomeTypeBucketsAsync", service, StringComparison.Ordinal);
         Assert.Contains("financialOperationRepository.GetWorksheetDataAsync", service, StringComparison.Ordinal);
         Assert.Contains("IFinanceTotalsQuery financeTotalsQuery", service, StringComparison.Ordinal);
         Assert.Contains("financeTotalsQuery.GetAsync", service, StringComparison.Ordinal);
@@ -1107,7 +1126,7 @@ public sealed class BackendLayeringTests
         Assert.Contains("accrualRepository.GetPageAsync", service, StringComparison.Ordinal);
         Assert.Contains("accrualRepository.GetTotalBeforeMonthAsync", service, StringComparison.Ordinal);
         Assert.Contains("accrualRepository.GetMonthlyBucketsAsync", service, StringComparison.Ordinal);
-        Assert.Contains("accrualRepository.GetIncomeTypeBucketsAsync", service, StringComparison.Ordinal);
+        Assert.DoesNotContain("accrualRepository.GetIncomeTypeBucketsAsync", service, StringComparison.Ordinal);
         Assert.Contains("financeTotalsQuery.GetAsync", service, StringComparison.Ordinal);
         Assert.Contains("accrualRepository.FindForUpdateAsync", service, StringComparison.Ordinal);
         Assert.Contains("accrualRepository.FindActiveForUpdateAsync", service, StringComparison.Ordinal);

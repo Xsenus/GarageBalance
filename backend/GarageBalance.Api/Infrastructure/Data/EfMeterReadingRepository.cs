@@ -101,19 +101,6 @@ public sealed class EfMeterReadingRepository(GarageBalanceDbContext dbContext) :
         return new MeterReadingYearPageData(garages, readings, totalCount);
     }
 
-    public async Task<IReadOnlyList<MeterReading>> GetForGaragePeriodAsync(
-        Guid garageId,
-        DateOnly monthFrom,
-        DateOnly monthTo,
-        CancellationToken cancellationToken) =>
-        await dbContext.MeterReadings.AsNoTracking()
-            .Where(reading =>
-                !reading.IsCanceled &&
-                reading.GarageId == garageId &&
-                reading.AccountingMonth >= monthFrom &&
-                reading.AccountingMonth <= monthTo)
-            .ToListAsync(cancellationToken);
-
     public async Task<IReadOnlyDictionary<Guid, MeterReading>> GetActiveByGarageIdsAsync(
         IReadOnlyCollection<Guid> garageIds,
         string meterKind,
