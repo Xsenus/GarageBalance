@@ -109,7 +109,7 @@ public sealed class BackendPerformanceGuardTests
         Assert.Contains("GetIncomeTotalBeforeMonthAsync", source, StringComparison.Ordinal);
         Assert.DoesNotContain("GetIncomeMonthlyBucketsAsync", source, StringComparison.Ordinal);
         Assert.DoesNotContain("GetIncomeTypeBucketsAsync", source, StringComparison.Ordinal);
-        Assert.Contains("GetWorksheetDataAsync", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("GetWorksheetDataAsync", source, StringComparison.Ordinal);
         Assert.DoesNotContain("GetSummaryAsync", source, StringComparison.Ordinal);
         Assert.Contains("GetOpeningDebtPaymentTotalAsync", source, StringComparison.Ordinal);
         Assert.DoesNotContain("GetBankExpenseTotalAsync", source, StringComparison.Ordinal);
@@ -299,13 +299,14 @@ public sealed class BackendPerformanceGuardTests
     }
 
     [Fact]
-    public void StaffMemberRepository_ExpenseWorksheetQueryKeepsCompleteFilteredActiveSet()
+    public void ExpenseWorksheetQuery_AggregatesAllSourcesBeforeSingleMaterialization()
     {
-        var source = ReadApiSource("Infrastructure/Data/EfStaffMemberRepository.cs");
-        Assert.Contains("GetActiveForExpenseWorksheetAsync", source, StringComparison.Ordinal);
+        var source = ReadApiSource("Infrastructure/Data/EfExpenseWorksheetQuery.cs");
+        Assert.Contains("class EfExpenseWorksheetQuery", source, StringComparison.Ordinal);
         Assert.Contains(".Where(member => !member.IsArchived)", source, StringComparison.Ordinal);
-        Assert.Contains(".OrderBy(member => member.FullName)", source, StringComparison.Ordinal);
-        Assert.Contains(".ToListAsync(cancellationToken)", source, StringComparison.Ordinal);
+        Assert.True(CountOccurrences(source, ".GroupBy(") >= 4);
+        Assert.True(CountOccurrences(source, ".Concat(") >= 4);
+        Assert.Equal(1, CountOccurrences(source, ".ToListAsync(cancellationToken)"));
     }
 
     [Fact]

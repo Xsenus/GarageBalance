@@ -37,13 +37,6 @@ public sealed class EfStaffMemberRepository(GarageBalanceDbContext dbContext) : 
         return new StaffMemberPageData(items, totalCount);
     }
 
-    public async Task<IReadOnlyList<StaffMember>> GetActiveForExpenseWorksheetAsync(CancellationToken cancellationToken) =>
-        await dbContext.StaffMembers.AsNoTracking()
-            .Include(member => member.Department)
-            .Where(member => !member.IsArchived)
-            .OrderBy(member => member.FullName)
-            .ToListAsync(cancellationToken);
-
     public Task<StaffMember?> FindActiveAsync(Guid id, CancellationToken cancellationToken) =>
         dbContext.StaffMembers.Include(member => member.Department)
             .SingleOrDefaultAsync(member => member.Id == id && !member.IsArchived, cancellationToken);

@@ -14,6 +14,7 @@ public sealed class FinanceService(
     IGarageIncomeWorksheetQuery garageIncomeWorksheetQuery,
     IGarageBalanceHistoryQuery garageBalanceHistoryQuery,
     IFinanceAvailableBalanceQuery financeAvailableBalanceQuery,
+    IExpenseWorksheetQuery expenseWorksheetQuery,
     IFinanceTotalsQuery financeTotalsQuery,
     IFinanceSectionCountQuery financeSectionCountQuery,
     IMeterReadingRepository meterReadingRepository,
@@ -382,55 +383,39 @@ public sealed class FinanceService(
     {
         var accountingMonth = MonthPeriod.Normalize(request.AccountingMonth ?? MonthPeriod.CurrentLocalMonth());
 
-        var supplierAccruals = await supplierAccrualRepository.GetActiveForMonthAsync(accountingMonth, cancellationToken);
+        var worksheetData = await expenseWorksheetQuery.GetAsync(accountingMonth, cancellationToken);
 
-        var worksheetData = await financialOperationRepository.GetWorksheetDataAsync(accountingMonth, cancellationToken);
-        var expenseOperations = worksheetData.Expenses;
-        var incomeBuckets = worksheetData.Incomes;
-
-        var activeStaffMembers = await staffMemberRepository.GetActiveForExpenseWorksheetAsync(cancellationToken);
-
-        var collectedByIncomeKey = incomeBuckets
-            .Where(operation => operation.IncomeType is not null)
-            .GroupBy(operation => NormalizeFinanceLookupKey(operation.IncomeType!.Code ?? operation.IncomeType.Name))
-            .ToDictionary(group => group.Key, group => MoneyMath.RoundMoney(group.Sum(operation => operation.Amount)), StringComparer.Ordinal);
+        var collectedByIncomeKey = worksheetData.Incomes
+            .GroupBy(income => NormalizeFinanceLookupKey(income.IncomeTypeCode ?? income.IncomeTypeName))
+            .ToDictionary(group => group.Key, group => MoneyMath.RoundMoney(group.Sum(income => income.Amount)), StringComparer.Ordinal);
 
         var rows = new List<ExpenseWorksheetRowDto>();
-        var supplierKeys = supplierAccruals
-            .Select(accrual => (accrual.SupplierId, accrual.ExpenseTypeId))
-            .Concat(expenseOperations
-                .Where(operation => operation.SupplierId is not null && operation.ExpenseTypeId is not null)
-                .Select(operation => (SupplierId: operation.SupplierId!.Value, ExpenseTypeId: operation.ExpenseTypeId!.Value)))
+        var supplierAccruals = worksheetData.SupplierAccruals
+            .ToDictionary(item => (item.SupplierId, item.ExpenseTypeId));
+        var supplierExpenses = worksheetData.SupplierExpenses
+            .ToDictionary(item => (item.SupplierId, item.ExpenseTypeId));
+        var supplierKeys = supplierAccruals.Keys
+            .Concat(supplierExpenses.Keys)
             .Distinct()
             .ToList();
 
         foreach (var key in supplierKeys)
         {
-            var accrualGroup = supplierAccruals
-                .Where(accrual => accrual.SupplierId == key.SupplierId && accrual.ExpenseTypeId == key.ExpenseTypeId)
-                .ToList();
-            var expenseGroup = expenseOperations
-                .Where(operation => operation.SupplierId == key.SupplierId && operation.ExpenseTypeId == key.ExpenseTypeId)
-                .ToList();
-            var sampleAccrual = accrualGroup.FirstOrDefault();
-            var sampleExpense = expenseGroup.FirstOrDefault();
-            var supplierId = sampleAccrual?.SupplierId ?? sampleExpense!.SupplierId!.Value;
-            var supplierName = sampleAccrual?.Supplier.Name ?? sampleExpense!.Supplier!.Name;
-            var expenseTypeId = sampleAccrual?.ExpenseTypeId ?? sampleExpense!.ExpenseTypeId!.Value;
-            var expenseTypeName = sampleAccrual?.ExpenseType.Name ?? sampleExpense!.ExpenseType!.Name;
-            var expenseTypeCode = sampleAccrual?.ExpenseType.Code ?? sampleExpense!.ExpenseType?.Code;
-            var accrualAmount = MoneyMath.RoundMoney(accrualGroup.Sum(accrual => accrual.Amount));
-            var expenseAmount = MoneyMath.RoundMoney(expenseGroup.Sum(operation => operation.Amount));
+            supplierAccruals.TryGetValue(key, out var accrual);
+            supplierExpenses.TryGetValue(key, out var expense);
+            var sample = accrual ?? expense!;
+            var accrualAmount = MoneyMath.RoundMoney(accrual?.Amount ?? 0m);
+            var expenseAmount = MoneyMath.RoundMoney(expense?.Amount ?? 0m);
             var balance = MoneyMath.RoundMoney(Math.Max(accrualAmount - expenseAmount, 0m));
-            var collected = TryGetCollectedAmount(collectedByIncomeKey, expenseTypeName, expenseTypeCode);
+            var collected = TryGetCollectedAmount(collectedByIncomeKey, sample.ExpenseTypeName, sample.ExpenseTypeCode);
             decimal? difference = collected.HasValue ? MoneyMath.RoundMoney(collected.Value - accrualAmount) : null;
             rows.Add(new ExpenseWorksheetRowDto(
                 "supplier",
-                supplierId,
+                sample.SupplierId,
                 null,
-                supplierName,
-                expenseTypeId,
-                expenseTypeName,
+                sample.SupplierName,
+                sample.ExpenseTypeId,
+                sample.ExpenseTypeName,
                 accrualAmount,
                 expenseAmount,
                 balance,
@@ -438,18 +423,19 @@ public sealed class FinanceService(
                 difference));
         }
 
-        foreach (var staffMember in activeStaffMembers)
+        var staffExpenses = worksheetData.StaffExpenses.ToDictionary(item => item.StaffMemberId, item => item.Amount);
+        foreach (var staffMember in worksheetData.StaffMembers)
         {
-            var payments = expenseOperations.Where(operation => operation.StaffMemberId == staffMember.Id).ToList();
+            staffExpenses.TryGetValue(staffMember.StaffMemberId, out var staffExpenseAmount);
             var accrualAmount = MoneyMath.RoundMoney(staffMember.Rate);
-            var expenseAmount = MoneyMath.RoundMoney(payments.Sum(operation => operation.Amount));
+            var expenseAmount = MoneyMath.RoundMoney(staffExpenseAmount);
             rows.Add(new ExpenseWorksheetRowDto(
                 "staff",
                 null,
-                staffMember.Id,
+                staffMember.StaffMemberId,
                 staffMember.FullName,
                 null,
-                staffMember.Department.Name,
+                staffMember.DepartmentName,
                 accrualAmount,
                 expenseAmount,
                 MoneyMath.RoundMoney(Math.Max(accrualAmount - expenseAmount, 0m)),

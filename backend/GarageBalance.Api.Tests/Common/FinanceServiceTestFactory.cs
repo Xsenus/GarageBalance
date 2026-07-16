@@ -17,6 +17,7 @@ internal static class FinanceServiceTestFactory
             new EfGarageIncomeWorksheetQuery(dbContext),
             new EfGarageBalanceHistoryQuery(dbContext),
             new EfFinanceAvailableBalanceQuery(dbContext),
+            new EfExpenseWorksheetQuery(dbContext),
             new EfFinanceTotalsQuery(dbContext),
             new EfFinanceSectionCountQuery(dbContext),
             new EfMeterReadingRepository(dbContext),

@@ -3382,14 +3382,21 @@ public sealed class FinanceServiceTests
         var service = FinanceServiceTestFactory.Create(database.Context);
         var month = new DateOnly(2026, 6, 1);
         var waterIncomeType = new IncomeType { Name = "Водоснабжение", Code = "water" };
+        var unmatchedIncomeType = new IncomeType { Name = "Пожертвование" };
         var salaryExpenseType = new ExpenseType { Name = "Зарплата", Code = "salary" };
+        var expenseOnlyType = new ExpenseType { Name = "Ремонт", Code = "repair" };
+        var accrualOnlyType = new ExpenseType { Name = "Охрана", Code = "security" };
         var staffDepartment = new StaffDepartment { Name = "Бухгалтерия" };
         var staffMember = new StaffMember { FullName = "Петрова Ольга", Department = staffDepartment, Rate = 40000m };
-        database.Context.AddRange(waterIncomeType, salaryExpenseType, staffDepartment, staffMember);
+        database.Context.AddRange(waterIncomeType, unmatchedIncomeType, salaryExpenseType, expenseOnlyType, accrualOnlyType, staffDepartment, staffMember);
         await database.Context.SaveChangesAsync();
 
         Assert.True((await service.CreateSupplierAccrualAsync(
             new CreateSupplierAccrualRequest(fixtures.Supplier.Id, fixtures.ExpenseType.Id, month, 32000m, "manual", "INV-water", "Счет за воду"),
+            null,
+            CancellationToken.None)).Succeeded);
+        Assert.True((await service.CreateSupplierAccrualAsync(
+            new CreateSupplierAccrualRequest(fixtures.Supplier.Id, accrualOnlyType.Id, month, 75m, "manual", "INV-security", "Счет за охрану"),
             null,
             CancellationToken.None)).Succeeded);
         Assert.True((await service.CreateExpenseAsync(
@@ -3400,8 +3407,16 @@ public sealed class FinanceServiceTests
             new CreateStaffPaymentRequest(staffMember.Id, new DateOnly(2026, 6, 21), month, 15000m, "RKO-staff", "Частичная зарплата"),
             null,
             CancellationToken.None)).Succeeded);
+        Assert.True((await service.CreateExpenseAsync(
+            new CreateExpenseOperationRequest(fixtures.Supplier.Id, expenseOnlyType.Id, new DateOnly(2026, 6, 22), month, 100m, "RKO-repair", "Оплата ремонта"),
+            null,
+            CancellationToken.None)).Succeeded);
         Assert.True((await service.CreateIncomeAsync(
             new CreateIncomeOperationRequest(fixtures.Garage.Id, waterIncomeType.Id, new DateOnly(2026, 6, 19), month, 29000m, "PKO-water", "Поступление за воду"),
+            null,
+            CancellationToken.None)).Succeeded);
+        Assert.True((await service.CreateIncomeAsync(
+            new CreateIncomeOperationRequest(fixtures.Garage.Id, unmatchedIncomeType.Id, new DateOnly(2026, 6, 23), month, 50m, "PKO-donation", "Пожертвование"),
             null,
             CancellationToken.None)).Succeeded);
         commandCounter.Reset();
@@ -3409,17 +3424,17 @@ public sealed class FinanceServiceTests
         var result = await service.GetExpenseWorksheetAsync(new ExpenseWorksheetRequest(month), CancellationToken.None);
 
         Assert.True(result.Succeeded);
-        Assert.Equal(5, commandCounter.Count);
+        Assert.Equal(2, commandCounter.Count);
         Assert.Equal(month, result.Value!.AccountingMonth);
-        Assert.Equal(72000m, result.Value.AccrualTotal);
-        Assert.Equal(25000m, result.Value.ExpenseTotal);
-        Assert.Equal(47000m, result.Value.BalanceTotal);
+        Assert.Equal(72075m, result.Value.AccrualTotal);
+        Assert.Equal(25100m, result.Value.ExpenseTotal);
+        Assert.Equal(47075m, result.Value.BalanceTotal);
         Assert.Equal(29000m, result.Value.CollectedTotal);
-        Assert.Equal(-43000m, result.Value.DifferenceTotal);
+        Assert.Equal(-43075m, result.Value.DifferenceTotal);
         Assert.Equal(0m, result.Value.CashAmount);
-        Assert.Equal(SeededBankAmount - 25000m, result.Value.BankAmount);
+        Assert.Equal(SeededBankAmount - 25100m, result.Value.BankAmount);
 
-        var supplierRow = Assert.Single(result.Value.Rows, row => row.RowKind == "supplier");
+        var supplierRow = Assert.Single(result.Value.Rows, row => row.ExpenseTypeId == fixtures.ExpenseType.Id);
         Assert.Equal(fixtures.Supplier.Id, supplierRow.SupplierId);
         Assert.Equal("Vodokanal", supplierRow.CounterpartyName);
         Assert.Equal(fixtures.ExpenseType.Id, supplierRow.ExpenseTypeId);
@@ -3428,6 +3443,17 @@ public sealed class FinanceServiceTests
         Assert.Equal(22000m, supplierRow.Balance);
         Assert.Equal(29000m, supplierRow.CollectedAmount);
         Assert.Equal(-3000m, supplierRow.Difference);
+
+        var expenseOnlyRow = Assert.Single(result.Value.Rows, row => row.ExpenseTypeId == expenseOnlyType.Id);
+        Assert.Equal(0m, expenseOnlyRow.AccrualAmount);
+        Assert.Equal(100m, expenseOnlyRow.ExpenseAmount);
+        Assert.Equal(0m, expenseOnlyRow.Balance);
+        Assert.Null(expenseOnlyRow.CollectedAmount);
+
+        var accrualOnlyRow = Assert.Single(result.Value.Rows, row => row.ExpenseTypeId == accrualOnlyType.Id);
+        Assert.Equal(75m, accrualOnlyRow.AccrualAmount);
+        Assert.Equal(0m, accrualOnlyRow.ExpenseAmount);
+        Assert.Equal(75m, accrualOnlyRow.Balance);
 
         var staffRow = Assert.Single(result.Value.Rows, row => row.RowKind == "staff");
         Assert.Equal(staffMember.Id, staffRow.StaffMemberId);
@@ -3489,6 +3515,36 @@ public sealed class FinanceServiceTests
         Assert.Equal(350m, result.Value.ExpenseTotal);
         Assert.Equal(650m, result.Value.CashAmount + result.Value.BankAmount);
         Assert.Equal(1000m - result.Value.ExpenseTotal, result.Value.CashAmount + result.Value.BankAmount);
+    }
+
+    [Fact]
+    public async Task ExpenseWorksheetQuery_ReturnsEmptyDataInOneSelect()
+    {
+        var commandCounter = new SelectCommandCounter();
+        await using var database = await TestDatabase.CreateAsync(commandCounter);
+        var query = new EfExpenseWorksheetQuery(database.Context);
+        commandCounter.Reset();
+
+        var result = await query.GetAsync(new DateOnly(2026, 6, 1), CancellationToken.None);
+
+        Assert.Equal(1, commandCounter.Count);
+        Assert.Empty(result.SupplierAccruals);
+        Assert.Empty(result.SupplierExpenses);
+        Assert.Empty(result.StaffMembers);
+        Assert.Empty(result.StaffExpenses);
+        Assert.Empty(result.Incomes);
+    }
+
+    [Fact]
+    public async Task ExpenseWorksheetQuery_PropagatesCancellation()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var query = new EfExpenseWorksheetQuery(database.Context);
+        using var cancellationSource = new CancellationTokenSource();
+        cancellationSource.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            query.GetAsync(new DateOnly(2026, 6, 1), cancellationSource.Token));
     }
 
     [Fact]

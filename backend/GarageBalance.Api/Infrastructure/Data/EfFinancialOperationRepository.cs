@@ -88,29 +88,6 @@ public sealed class EfFinancialOperationRepository(GarageBalanceDbContext dbCont
                 operation.AccountingMonth < accountingMonth)
             .SumAsync(operation => operation.Amount, cancellationToken);
 
-    public async Task<FinancialOperationWorksheetData> GetWorksheetDataAsync(DateOnly accountingMonth, CancellationToken cancellationToken)
-    {
-        var expenses = await dbContext.FinancialOperations.AsNoTracking()
-            .Include(operation => operation.Supplier)
-            .Include(operation => operation.StaffMember)
-                .ThenInclude(staffMember => staffMember!.Department)
-            .Include(operation => operation.ExpenseType)
-            .Where(operation =>
-                !operation.IsCanceled &&
-                operation.OperationKind == FinancialOperationKinds.Expense &&
-                operation.AccountingMonth == accountingMonth)
-            .ToListAsync(cancellationToken);
-        var incomes = await dbContext.FinancialOperations.AsNoTracking()
-            .Include(operation => operation.IncomeType)
-            .Where(operation =>
-                !operation.IsCanceled &&
-                operation.OperationKind == FinancialOperationKinds.Income &&
-                operation.AccountingMonth == accountingMonth &&
-                operation.IncomeTypeId != null)
-            .ToListAsync(cancellationToken);
-        return new FinancialOperationWorksheetData(expenses, incomes);
-    }
-
     public async Task<decimal> GetOpeningDebtPaymentTotalAsync(
         Guid garageId,
         DateOnly accountingMonth,
