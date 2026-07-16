@@ -1,11 +1,16 @@
 using GarageBalance.Api.Application.Dictionaries;
 using GarageBalance.Api.Domain.Dictionaries;
+using GarageBalance.Api.Domain.Finance;
 using Microsoft.EntityFrameworkCore;
 
 namespace GarageBalance.Api.Infrastructure.Data;
 
 public sealed class EfSupplierRepository(GarageBalanceDbContext dbContext) : ISupplierRepository
 {
+    private const int StartingBalanceDebtCategory = 1;
+    private const int AccrualDebtCategory = 2;
+    private const int PaymentDebtCategory = 3;
+
     public async Task<IReadOnlyList<Supplier>> GetListAsync(
         Guid? groupId,
         string? normalizedSearch,
@@ -86,20 +91,45 @@ public sealed class EfSupplierRepository(GarageBalanceDbContext dbContext) : ISu
             return new Dictionary<Guid, decimal>();
         }
 
-        var startingBalances = await dbContext.Suppliers.AsNoTracking()
+        var startingBalanceQuery = dbContext.Suppliers.AsNoTracking()
             .Where(supplier => ids.Contains(supplier.Id))
-            .Select(supplier => new { supplier.Id, supplier.StartingBalance })
-            .ToDictionaryAsync(item => item.Id, item => item.StartingBalance, cancellationToken);
-        var accruals = await dbContext.SupplierAccruals.AsNoTracking()
+            .Select(supplier => new
+            {
+                Category = StartingBalanceDebtCategory,
+                SupplierId = supplier.Id,
+                Amount = supplier.StartingBalance
+            });
+        var accrualQuery = dbContext.SupplierAccruals.AsNoTracking()
             .Where(accrual => ids.Contains(accrual.SupplierId) && !accrual.IsCanceled)
             .GroupBy(accrual => accrual.SupplierId)
-            .Select(group => new { SupplierId = group.Key, Amount = group.Sum(item => item.Amount) })
-            .ToDictionaryAsync(item => item.SupplierId, item => item.Amount, cancellationToken);
-        var payments = await dbContext.FinancialOperations.AsNoTracking()
-            .Where(operation => operation.SupplierId != null && ids.Contains(operation.SupplierId.Value) && !operation.IsCanceled && operation.OperationKind == "expense")
+            .Select(group => new
+            {
+                Category = AccrualDebtCategory,
+                SupplierId = group.Key,
+                Amount = group.Sum(item => item.Amount)
+            });
+        var paymentQuery = dbContext.FinancialOperations.AsNoTracking()
+            .Where(operation => operation.SupplierId != null && ids.Contains(operation.SupplierId.Value) && !operation.IsCanceled && operation.OperationKind == FinancialOperationKinds.Expense)
             .GroupBy(operation => operation.SupplierId!.Value)
-            .Select(group => new { SupplierId = group.Key, Amount = group.Sum(item => item.Amount) })
-            .ToDictionaryAsync(item => item.SupplierId, item => item.Amount, cancellationToken);
+            .Select(group => new
+            {
+                Category = PaymentDebtCategory,
+                SupplierId = group.Key,
+                Amount = group.Sum(item => item.Amount)
+            });
+        var rows = await startingBalanceQuery
+            .Concat(accrualQuery)
+            .Concat(paymentQuery)
+            .ToListAsync(cancellationToken);
+        var startingBalances = rows
+            .Where(row => row.Category == StartingBalanceDebtCategory)
+            .ToDictionary(row => row.SupplierId, row => row.Amount);
+        var accruals = rows
+            .Where(row => row.Category == AccrualDebtCategory)
+            .ToDictionary(row => row.SupplierId, row => row.Amount);
+        var payments = rows
+            .Where(row => row.Category == PaymentDebtCategory)
+            .ToDictionary(row => row.SupplierId, row => row.Amount);
 
         return startingBalances.ToDictionary(
             item => item.Key,

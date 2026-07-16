@@ -162,7 +162,11 @@ public sealed class BackendPerformanceGuardTests
         Assert.Contains(".Skip(offset)", source, StringComparison.Ordinal);
         Assert.True(CountOccurrences(source, ".Take(limit)") >= 4);
         Assert.True(CountOccurrences(source, ".GroupBy(") >= 2);
-        Assert.True(CountOccurrences(source, ".ToDictionaryAsync(") >= 2);
+        var balanceMethod = source[
+            source.IndexOf("public async Task<GarageBalanceTotalsData> GetBalanceTotalsAsync", StringComparison.Ordinal)..source.IndexOf("public Task<Garage?> FindActiveWithOwnerAsync", StringComparison.Ordinal)];
+        Assert.Contains("accrualQuery", balanceMethod, StringComparison.Ordinal);
+        Assert.Contains(".Concat(incomeQuery)", balanceMethod, StringComparison.Ordinal);
+        Assert.Equal(1, CountOccurrences(balanceMethod, ".ToListAsync(cancellationToken)"));
     }
 
     [Fact]
@@ -290,6 +294,13 @@ public sealed class BackendPerformanceGuardTests
             source);
         Assert.Contains(".Select(supplier => supplier.StartingBalance)", source, StringComparison.Ordinal);
         Assert.Contains(".SingleAsync(cancellationToken)", source, StringComparison.Ordinal);
+        var debtMethod = source[
+            source.IndexOf("public async Task<IReadOnlyDictionary<Guid, decimal>> GetDebtTotalsAsync", StringComparison.Ordinal)..source.IndexOf("public Task<bool> ActiveDuplicateExistsAsync", StringComparison.Ordinal)];
+        Assert.Contains("startingBalanceQuery", debtMethod, StringComparison.Ordinal);
+        Assert.Contains("accrualQuery", debtMethod, StringComparison.Ordinal);
+        Assert.Contains("paymentQuery", debtMethod, StringComparison.Ordinal);
+        Assert.Equal(2, CountOccurrences(debtMethod, ".Concat("));
+        Assert.Equal(1, CountOccurrences(debtMethod, ".ToListAsync(cancellationToken)"));
     }
 
     [Fact]

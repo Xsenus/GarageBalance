@@ -7,6 +7,9 @@ namespace GarageBalance.Api.Infrastructure.Data;
 
 public sealed class EfGarageRepository(GarageBalanceDbContext dbContext) : IGarageRepository
 {
+    private const int AccrualBalanceCategory = 1;
+    private const int IncomeBalanceCategory = 2;
+
     public async Task<IReadOnlyList<Garage>> GetListAsync(
         string? normalizedSearch,
         bool includeArchived,
@@ -66,20 +69,42 @@ public sealed class EfGarageRepository(GarageBalanceDbContext dbContext) : IGara
         IReadOnlyCollection<Guid> garageIds,
         CancellationToken cancellationToken)
     {
-        var accrualTotals = await dbContext.Accruals.AsNoTracking()
+        if (garageIds.Count == 0)
+        {
+            return new GarageBalanceTotalsData(new Dictionary<Guid, decimal>(), new Dictionary<Guid, decimal>());
+        }
+
+        var accrualQuery = dbContext.Accruals.AsNoTracking()
             .Where(accrual => !accrual.IsCanceled && garageIds.Contains(accrual.GarageId))
             .GroupBy(accrual => accrual.GarageId)
-            .Select(group => new { GarageId = group.Key, Amount = group.Sum(accrual => accrual.Amount) })
-            .ToDictionaryAsync(item => item.GarageId, item => item.Amount, cancellationToken);
-        var incomeTotals = await dbContext.FinancialOperations.AsNoTracking()
+            .Select(group => new
+            {
+                Category = AccrualBalanceCategory,
+                GarageId = group.Key,
+                Amount = group.Sum(accrual => accrual.Amount)
+            });
+        var incomeQuery = dbContext.FinancialOperations.AsNoTracking()
             .Where(operation =>
                 !operation.IsCanceled &&
                 operation.OperationKind == FinancialOperationKinds.Income &&
                 operation.GarageId.HasValue &&
                 garageIds.Contains(operation.GarageId.Value))
             .GroupBy(operation => operation.GarageId!.Value)
-            .Select(group => new { GarageId = group.Key, Amount = group.Sum(operation => operation.Amount) })
-            .ToDictionaryAsync(item => item.GarageId, item => item.Amount, cancellationToken);
+            .Select(group => new
+            {
+                Category = IncomeBalanceCategory,
+                GarageId = group.Key,
+                Amount = group.Sum(operation => operation.Amount)
+            });
+        var rows = await accrualQuery
+            .Concat(incomeQuery)
+            .ToListAsync(cancellationToken);
+        var accrualTotals = rows
+            .Where(row => row.Category == AccrualBalanceCategory)
+            .ToDictionary(row => row.GarageId, row => row.Amount);
+        var incomeTotals = rows
+            .Where(row => row.Category == IncomeBalanceCategory)
+            .ToDictionary(row => row.GarageId, row => row.Amount);
         return new GarageBalanceTotalsData(accrualTotals, incomeTotals);
     }
 

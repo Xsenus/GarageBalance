@@ -1,3 +1,4 @@
+using System.Data.Common;
 using System.Text.Json;
 using GarageBalance.Api.Application.Dictionaries;
 using GarageBalance.Api.Tests.Common;
@@ -6,6 +7,7 @@ using GarageBalance.Api.Domain.Finance;
 using GarageBalance.Api.Infrastructure.Data;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 
 namespace GarageBalance.Api.Tests.Dictionaries;
 
@@ -2421,6 +2423,132 @@ public sealed class DictionaryServiceTests
         Assert.Contains("participantGarageIds", audit.MetadataJson, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public async Task GaragePage_LoadsBalancesInThreeSelectsRegardlessOfPageSize()
+    {
+        var commandCounter = new SelectCommandCounter();
+        await using var database = await TestDatabase.CreateAsync(commandCounter);
+        var incomeType = new IncomeType { Name = "Performance income", Code = "performance_income" };
+        database.Context.IncomeTypes.Add(incomeType);
+        for (var index = 0; index < 200; index++)
+        {
+            var garage = new Garage
+            {
+                Number = $"G-{index:000}",
+                PeopleCount = 1,
+                FloorCount = 1,
+                StartingBalance = 100m
+            };
+            database.Context.Garages.Add(garage);
+            database.Context.Accruals.Add(new Accrual
+            {
+                Garage = garage,
+                IncomeType = incomeType,
+                AccountingMonth = new DateOnly(2026, 6, 1),
+                Amount = 50m,
+                Source = "performance-test"
+            });
+            database.Context.FinancialOperations.Add(new FinancialOperation
+            {
+                OperationKind = FinancialOperationKinds.Income,
+                OperationDate = new DateOnly(2026, 6, 15),
+                AccountingMonth = new DateOnly(2026, 6, 1),
+                Amount = 20m,
+                Garage = garage
+            });
+        }
+
+        await database.Context.SaveChangesAsync();
+        commandCounter.Reset();
+
+        var result = await DictionaryServiceTestFactory.Create(database.Context).GetGaragesPageAsync(
+            null,
+            0,
+            25,
+            "number",
+            "asc",
+            CancellationToken.None);
+
+        Assert.Equal(3, commandCounter.Count);
+        Assert.Equal(200, result.TotalCount);
+        Assert.Equal(25, result.Items.Count);
+        Assert.All(result.Items, garage =>
+        {
+            Assert.Equal(130m, garage.Balance);
+            Assert.Equal(130m, garage.OverdueDebt);
+        });
+    }
+
+    [Fact]
+    public async Task SupplierPage_LoadsDebtsInFourSelectsRegardlessOfPageSize()
+    {
+        var commandCounter = new SelectCommandCounter();
+        await using var database = await TestDatabase.CreateAsync(commandCounter);
+        var group = new SupplierGroup { Name = "Performance suppliers" };
+        var expenseType = new ExpenseType { Name = "Performance expense", Code = "performance_expense" };
+        database.Context.AddRange(group, expenseType);
+        for (var index = 0; index < 200; index++)
+        {
+            var supplier = new Supplier
+            {
+                Name = $"Supplier {index:000}",
+                Group = group,
+                StartingBalance = 100m
+            };
+            database.Context.Suppliers.Add(supplier);
+            database.Context.SupplierAccruals.Add(new SupplierAccrual
+            {
+                Supplier = supplier,
+                ExpenseType = expenseType,
+                AccountingMonth = new DateOnly(2026, 6, 1),
+                Amount = 50m,
+                Source = "performance-test"
+            });
+            database.Context.FinancialOperations.Add(new FinancialOperation
+            {
+                OperationKind = FinancialOperationKinds.Expense,
+                OperationDate = new DateOnly(2026, 6, 15),
+                AccountingMonth = new DateOnly(2026, 6, 1),
+                Amount = 20m,
+                Supplier = supplier,
+                ExpenseType = expenseType
+            });
+        }
+
+        await database.Context.SaveChangesAsync();
+        commandCounter.Reset();
+
+        var result = await DictionaryServiceTestFactory.Create(database.Context).GetSuppliersPageAsync(
+            group.Id,
+            null,
+            0,
+            25,
+            "name",
+            "asc",
+            CancellationToken.None);
+
+        Assert.Equal(4, commandCounter.Count);
+        Assert.Equal(200, result.TotalCount);
+        Assert.Equal(25, result.Items.Count);
+        Assert.All(result.Items, supplier => Assert.Equal(130m, supplier.Debt));
+    }
+
+    [Fact]
+    public async Task BalanceAggregates_WithEmptyIdentifiers_DoNotQueryDatabase()
+    {
+        var commandCounter = new SelectCommandCounter();
+        await using var database = await TestDatabase.CreateAsync(commandCounter);
+        commandCounter.Reset();
+
+        var garageTotals = await new EfGarageRepository(database.Context).GetBalanceTotalsAsync([], CancellationToken.None);
+        var supplierTotals = await new EfSupplierRepository(database.Context).GetDebtTotalsAsync([], CancellationToken.None);
+
+        Assert.Equal(0, commandCounter.Count);
+        Assert.Empty(garageTotals.AccrualTotals);
+        Assert.Empty(garageTotals.IncomeTotals);
+        Assert.Empty(supplierTotals);
+    }
+
     private sealed class TestDatabase : IAsyncDisposable
     {
         private readonly SqliteConnection connection;
@@ -2433,13 +2561,18 @@ public sealed class DictionaryServiceTests
 
         public GarageBalanceDbContext Context { get; }
 
-        public static async Task<TestDatabase> CreateAsync()
+        public static async Task<TestDatabase> CreateAsync(DbCommandInterceptor? interceptor = null)
         {
             var connection = new SqliteConnection("DataSource=:memory:");
             await connection.OpenAsync();
-            var options = new DbContextOptionsBuilder<GarageBalanceDbContext>()
-                .UseSqlite(connection)
-                .Options;
+            var optionsBuilder = new DbContextOptionsBuilder<GarageBalanceDbContext>()
+                .UseSqlite(connection);
+            if (interceptor is not null)
+            {
+                optionsBuilder.AddInterceptors(interceptor);
+            }
+
+            var options = optionsBuilder.Options;
             var context = new GarageBalanceDbContext(options);
             await context.Database.EnsureCreatedAsync();
             return new TestDatabase(connection, context);
@@ -2449,6 +2582,40 @@ public sealed class DictionaryServiceTests
         {
             await Context.DisposeAsync();
             await connection.DisposeAsync();
+        }
+    }
+
+    private sealed class SelectCommandCounter : DbCommandInterceptor
+    {
+        public int Count { get; private set; }
+
+        public void Reset() => Count = 0;
+
+        public override InterceptionResult<DbDataReader> ReaderExecuting(
+            DbCommand command,
+            CommandEventData eventData,
+            InterceptionResult<DbDataReader> result)
+        {
+            CountSelect(command);
+            return result;
+        }
+
+        public override ValueTask<InterceptionResult<DbDataReader>> ReaderExecutingAsync(
+            DbCommand command,
+            CommandEventData eventData,
+            InterceptionResult<DbDataReader> result,
+            CancellationToken cancellationToken = default)
+        {
+            CountSelect(command);
+            return ValueTask.FromResult(result);
+        }
+
+        private void CountSelect(DbCommand command)
+        {
+            if (command.CommandText.TrimStart().StartsWith("SELECT", StringComparison.OrdinalIgnoreCase))
+            {
+                Count++;
+            }
         }
     }
 
