@@ -2,7 +2,6 @@ using System.Globalization;
 using GarageBalance.Api.Application.Audit;
 using GarageBalance.Api.Application.Common;
 using GarageBalance.Api.Application.Dictionaries;
-using GarageBalance.Api.Application.Funds;
 using GarageBalance.Api.Domain.Dictionaries;
 using GarageBalance.Api.Domain.Finance;
 
@@ -14,6 +13,7 @@ public sealed class FinanceService(
     IMissingMeterReadingQuery missingMeterReadingQuery,
     IGarageIncomeWorksheetQuery garageIncomeWorksheetQuery,
     IGarageBalanceHistoryQuery garageBalanceHistoryQuery,
+    IFinanceAvailableBalanceQuery financeAvailableBalanceQuery,
     IFinanceTotalsQuery financeTotalsQuery,
     IFinanceSectionCountQuery financeSectionCountQuery,
     IMeterReadingRepository meterReadingRepository,
@@ -27,7 +27,6 @@ public sealed class FinanceService(
     ITariffRepository tariffRepository,
     IFeeCampaignRepository feeCampaignRepository,
     IChargeServiceSettingRepository chargeServiceSettingRepository,
-    IFundRepository fundRepository,
     IApplicationUnitOfWork unitOfWork,
     IAuditEventWriter auditEventWriter) : IFinanceService
 {
@@ -469,8 +468,7 @@ public sealed class FinanceService(
         var balanceTotal = MoneyMath.RoundMoney(rows.Sum(row => row.Balance));
         var collectedTotal = MoneyMath.RoundMoney(rows.Sum(row => row.CollectedAmount ?? 0m));
         var differenceTotal = MoneyMath.RoundMoney(collectedTotal - accrualTotal);
-        var bankAmount = await CalculateAvailableBankAmountAsync(cancellationToken);
-        var cashAmount = await CalculateAvailableCashAmountAsync(cancellationToken);
+        var availableAmounts = await CalculateAvailableAmountsAsync(cancellationToken);
 
         return FinanceResult<ExpenseWorksheetDto>.Success(new ExpenseWorksheetDto(
             accountingMonth,
@@ -479,8 +477,8 @@ public sealed class FinanceService(
             balanceTotal,
             collectedTotal,
             differenceTotal,
-            bankAmount,
-            cashAmount,
+            availableAmounts.BankAmount,
+            availableAmounts.CashAmount,
             rows));
     }
 
@@ -630,18 +628,21 @@ public sealed class FinanceService(
 
     private async Task<decimal> CalculateAvailableBankAmountAsync(CancellationToken cancellationToken)
     {
-        var bankDepositsTotal = await fundRepository.GetActiveDepositTotalAsync(cancellationToken);
-        var bankExpenseTotal = await financialOperationRepository.GetBankExpenseTotalAsync(CashExpenseTypeCodes, CashExpenseTypeNames, cancellationToken);
-
-        return MoneyMath.RoundMoney(Math.Max(bankDepositsTotal - bankExpenseTotal, 0m));
+        return (await CalculateAvailableAmountsAsync(cancellationToken)).BankAmount;
     }
 
     private async Task<decimal> CalculateAvailableCashAmountAsync(CancellationToken cancellationToken)
     {
-        var cashBalance = await financialOperationRepository.GetCashBalanceDataAsync(CashExpenseTypeCodes, CashExpenseTypeNames, cancellationToken);
-        var bankDepositsTotal = await fundRepository.GetActiveDepositTotalAsync(cancellationToken);
+        return (await CalculateAvailableAmountsAsync(cancellationToken)).CashAmount;
+    }
 
-        return MoneyMath.RoundMoney(Math.Max(cashBalance.IncomeTotal - bankDepositsTotal - cashBalance.CashExpenseTotal, 0m));
+    private async Task<AvailableAmounts> CalculateAvailableAmountsAsync(CancellationToken cancellationToken)
+    {
+        var balance = await financeAvailableBalanceQuery.GetAsync(CashExpenseTypeCodes, CashExpenseTypeNames, cancellationToken);
+        var bankAmount = MoneyMath.RoundMoney(Math.Max(balance.BankDepositTotal - balance.BankExpenseTotal, 0m));
+        var cashAmount = MoneyMath.RoundMoney(Math.Max(balance.IncomeTotal - balance.BankDepositTotal - balance.CashExpenseTotal, 0m));
+
+        return new AvailableAmounts(bankAmount, cashAmount);
     }
 
     public async Task<FinanceResult<FinancialOperationDto>> CreateExpenseAsync(CreateExpenseOperationRequest request, Guid? actorUserId, CancellationToken cancellationToken)
@@ -3124,6 +3125,8 @@ public sealed class FinanceService(
     }
 
     private sealed record AllocationDebtBucket(string Kind, DateOnly? AccountingMonth, string Label, decimal Amount);
+
+    private sealed record AvailableAmounts(decimal BankAmount, decimal CashAmount);
 
     private sealed record AccrualAuditSnapshot(
         string GarageNumber,

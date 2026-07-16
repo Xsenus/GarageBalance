@@ -56,12 +56,29 @@ public sealed class BackendPerformanceGuardTests
     }
 
     [Fact]
+    public void FinanceAvailableBalanceQuery_CombinesIncomeExpensesAndBankDepositsIntoOneDatabaseCommand()
+    {
+        var source = ReadApiSource("Infrastructure/Data/EfFinanceAvailableBalanceQuery.cs");
+        var serviceSource = ReadApiSource("Application/Finance/FinanceService.cs");
+
+        Assert.Contains("financialOperationQuery", source, StringComparison.Ordinal);
+        Assert.Contains("bankDepositQuery", source, StringComparison.Ordinal);
+        Assert.Contains("operation.OperationKind == FinancialOperationKinds.Income", source, StringComparison.Ordinal);
+        Assert.Contains("CashExpenseTotal = group.Sum", source, StringComparison.Ordinal);
+        Assert.Contains("BankExpenseTotal = group.Sum", source, StringComparison.Ordinal);
+        Assert.Contains("operation.OperationKind == FundOperationKinds.Deposit", source, StringComparison.Ordinal);
+        Assert.Equal(1, CountOccurrences(source, ".Concat("));
+        Assert.Equal(1, CountOccurrences(source, ".ToListAsync(cancellationToken)"));
+        Assert.Contains("var availableAmounts = await CalculateAvailableAmountsAsync(cancellationToken);", serviceSource, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void FundDashboard_ReusesLoadedFundsAndAggregatesTotalsInOneDatabaseCommand()
     {
         var serviceSource = ReadApiSource("Application/Funds/FundService.cs");
         var repositorySource = ReadApiSource("Infrastructure/Data/EfFundRepository.cs");
         var totalsMethod = repositorySource[
-            repositorySource.IndexOf("public async Task<FundTotalsData> GetTotalsAsync", StringComparison.Ordinal)..repositorySource.IndexOf("public async Task<decimal> GetActiveDepositTotalAsync", StringComparison.Ordinal)];
+            repositorySource.IndexOf("public async Task<FundTotalsData> GetTotalsAsync", StringComparison.Ordinal)..repositorySource.IndexOf("public async Task<IReadOnlyList<FundOperation>> GetOperationsOrderedAsync", StringComparison.Ordinal)];
 
         Assert.Contains("var funds = (await repository.GetFundsAsync(cancellationToken)).ToList();", serviceSource, StringComparison.Ordinal);
         Assert.Contains("EnsureDefaultFundsAsync(funds, cancellationToken)", serviceSource, StringComparison.Ordinal);
@@ -95,8 +112,8 @@ public sealed class BackendPerformanceGuardTests
         Assert.Contains("GetWorksheetDataAsync", source, StringComparison.Ordinal);
         Assert.DoesNotContain("GetSummaryAsync", source, StringComparison.Ordinal);
         Assert.Contains("GetOpeningDebtPaymentTotalAsync", source, StringComparison.Ordinal);
-        Assert.Contains("GetBankExpenseTotalAsync", source, StringComparison.Ordinal);
-        Assert.Contains("GetCashBalanceDataAsync", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("GetBankExpenseTotalAsync", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("GetCashBalanceDataAsync", source, StringComparison.Ordinal);
         Assert.Contains("GetStaffExpenseTotalAsync", source, StringComparison.Ordinal);
         Assert.Contains("GetPreviousGarageIncomeTotalAsync", source, StringComparison.Ordinal);
         Assert.Contains("GetPreviousSupplierExpenseTotalAsync", source, StringComparison.Ordinal);
@@ -718,12 +735,13 @@ public sealed class BackendPerformanceGuardTests
     }
 
     [Fact]
-    public void FundDepositTotal_IsFilteredAndAggregatedByDatabase()
+    public void FundDepositTotal_IsFilteredAndAggregatedByAvailableBalanceQuery()
     {
-        var source = ReadApiSource("Infrastructure/Data/EfFundRepository.cs");
+        var source = ReadApiSource("Infrastructure/Data/EfFinanceAvailableBalanceQuery.cs");
 
         Assert.Contains("!operation.IsCanceled && operation.OperationKind == FundOperationKinds.Deposit", source, StringComparison.Ordinal);
-        Assert.Contains(".SumAsync(operation => (decimal?)operation.Amount, cancellationToken)", source, StringComparison.Ordinal);
+        Assert.Contains("BankDepositTotal = group.Sum(operation => operation.Amount)", source, StringComparison.Ordinal);
+        Assert.Equal(1, CountOccurrences(source, ".ToListAsync(cancellationToken)"));
     }
 
     [Fact]

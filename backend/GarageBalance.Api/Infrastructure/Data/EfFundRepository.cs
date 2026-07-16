@@ -104,13 +104,6 @@ public sealed class EfFundRepository(GarageBalanceDbContext dbContext) : IFundRe
             : new FundTotalsData(totals.IncomeTotal, totals.ExpenseTotal, totals.AllocatedFundTotal);
     }
 
-    public async Task<decimal> GetActiveDepositTotalAsync(CancellationToken cancellationToken)
-    {
-        return await dbContext.FundOperations.AsNoTracking()
-            .Where(operation => !operation.IsCanceled && operation.OperationKind == FundOperationKinds.Deposit)
-            .SumAsync(operation => (decimal?)operation.Amount, cancellationToken) ?? 0m;
-    }
-
     public async Task<IReadOnlyList<FundOperation>> GetOperationsOrderedAsync(
         Guid fundId,
         bool trackChanges,

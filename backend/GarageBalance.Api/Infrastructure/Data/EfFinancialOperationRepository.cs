@@ -127,39 +127,6 @@ public sealed class EfFinancialOperationRepository(GarageBalanceDbContext dbCont
                 (operation.IncomeType.Code == incomeTypeCode || operation.IncomeType.Name == incomeTypeName))
             .SumAsync(operation => operation.Amount, cancellationToken);
 
-    public async Task<decimal> GetBankExpenseTotalAsync(
-        string[] cashExpenseTypeCodes,
-        string[] cashExpenseTypeNames,
-        CancellationToken cancellationToken) =>
-        await dbContext.FinancialOperations.AsNoTracking()
-            .Where(operation =>
-                !operation.IsCanceled &&
-                operation.OperationKind == FinancialOperationKinds.Expense &&
-                (operation.ExpenseType == null ||
-                    !(
-                        (operation.ExpenseType.Code != null && cashExpenseTypeCodes.Contains(operation.ExpenseType.Code)) ||
-                        cashExpenseTypeNames.Contains(operation.ExpenseType.Name))))
-            .SumAsync(operation => (decimal?)operation.Amount, cancellationToken) ?? 0m;
-
-    public async Task<FinancialOperationCashBalanceData> GetCashBalanceDataAsync(
-        string[] cashExpenseTypeCodes,
-        string[] cashExpenseTypeNames,
-        CancellationToken cancellationToken)
-    {
-        var incomeTotal = await dbContext.FinancialOperations.AsNoTracking()
-            .Where(operation => !operation.IsCanceled && operation.OperationKind == FinancialOperationKinds.Income)
-            .SumAsync(operation => (decimal?)operation.Amount, cancellationToken) ?? 0m;
-        var cashExpenseTotal = await dbContext.FinancialOperations.AsNoTracking()
-            .Where(operation =>
-                !operation.IsCanceled &&
-                operation.OperationKind == FinancialOperationKinds.Expense &&
-                operation.ExpenseType != null &&
-                ((operation.ExpenseType.Code != null && cashExpenseTypeCodes.Contains(operation.ExpenseType.Code)) ||
-                    cashExpenseTypeNames.Contains(operation.ExpenseType.Name)))
-            .SumAsync(operation => (decimal?)operation.Amount, cancellationToken) ?? 0m;
-        return new FinancialOperationCashBalanceData(incomeTotal, cashExpenseTotal);
-    }
-
     public async Task<decimal> GetStaffExpenseTotalAsync(Guid staffMemberId, DateOnly accountingMonth, CancellationToken cancellationToken) =>
         await dbContext.FinancialOperations.AsNoTracking()
             .Where(operation =>

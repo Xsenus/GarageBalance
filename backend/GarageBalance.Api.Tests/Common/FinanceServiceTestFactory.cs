@@ -16,6 +16,7 @@ internal static class FinanceServiceTestFactory
             new EfMissingMeterReadingQuery(dbContext),
             new EfGarageIncomeWorksheetQuery(dbContext),
             new EfGarageBalanceHistoryQuery(dbContext),
+            new EfFinanceAvailableBalanceQuery(dbContext),
             new EfFinanceTotalsQuery(dbContext),
             new EfFinanceSectionCountQuery(dbContext),
             new EfMeterReadingRepository(dbContext),
@@ -29,7 +30,6 @@ internal static class FinanceServiceTestFactory
             new EfTariffRepository(dbContext),
             new EfFeeCampaignRepository(dbContext),
             new EfChargeServiceSettingRepository(dbContext),
-            new EfFundRepository(dbContext),
             new EfApplicationUnitOfWork(dbContext),
             new AuditEventWriter(dbContext));
 }

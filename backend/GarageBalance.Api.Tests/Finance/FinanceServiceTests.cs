@@ -3376,7 +3376,8 @@ public sealed class FinanceServiceTests
     [Fact]
     public async Task GetExpenseWorksheetAsync_BuildsRowsFromSupplierAccrualsExpensesStaffAndCollections()
     {
-        await using var database = await TestDatabase.CreateAsync();
+        var commandCounter = new SelectCommandCounter();
+        await using var database = await TestDatabase.CreateAsync(commandCounter);
         var fixtures = await database.SeedAsync();
         var service = FinanceServiceTestFactory.Create(database.Context);
         var month = new DateOnly(2026, 6, 1);
@@ -3403,10 +3404,12 @@ public sealed class FinanceServiceTests
             new CreateIncomeOperationRequest(fixtures.Garage.Id, waterIncomeType.Id, new DateOnly(2026, 6, 19), month, 29000m, "PKO-water", "Поступление за воду"),
             null,
             CancellationToken.None)).Succeeded);
+        commandCounter.Reset();
 
         var result = await service.GetExpenseWorksheetAsync(new ExpenseWorksheetRequest(month), CancellationToken.None);
 
         Assert.True(result.Succeeded);
+        Assert.Equal(5, commandCounter.Count);
         Assert.Equal(month, result.Value!.AccountingMonth);
         Assert.Equal(72000m, result.Value.AccrualTotal);
         Assert.Equal(25000m, result.Value.ExpenseTotal);
@@ -3486,6 +3489,37 @@ public sealed class FinanceServiceTests
         Assert.Equal(350m, result.Value.ExpenseTotal);
         Assert.Equal(650m, result.Value.CashAmount + result.Value.BankAmount);
         Assert.Equal(1000m - result.Value.ExpenseTotal, result.Value.CashAmount + result.Value.BankAmount);
+    }
+
+    [Fact]
+    public async Task FinanceAvailableBalanceQuery_ReturnsZeroForEmptyDatabaseInOneSelect()
+    {
+        var commandCounter = new SelectCommandCounter();
+        await using var database = await TestDatabase.CreateAsync(commandCounter);
+        var query = new EfFinanceAvailableBalanceQuery(database.Context);
+        commandCounter.Reset();
+
+        var result = await query.GetAsync(["no_receipt"], ["Без чека"], CancellationToken.None);
+
+        Assert.Equal(1, commandCounter.Count);
+        Assert.Equal(0m, result.IncomeTotal);
+        Assert.Equal(0m, result.BankDepositTotal);
+        Assert.Equal(0m, result.CashExpenseTotal);
+        Assert.Equal(0m, result.BankExpenseTotal);
+    }
+
+    [Fact]
+    public async Task FinanceAvailableBalanceQuery_PropagatesCancellation()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var query = new EfFinanceAvailableBalanceQuery(database.Context);
+        using var cancellationSource = new CancellationTokenSource();
+        cancellationSource.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => query.GetAsync(
+            ["no_receipt"],
+            ["Без чека"],
+            cancellationSource.Token));
     }
 
     private sealed class TestDatabase : IAsyncDisposable
