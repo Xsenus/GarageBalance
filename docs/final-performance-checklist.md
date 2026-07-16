@@ -493,3 +493,15 @@ No schema, financial formula, business rule, permission rule, production data, c
 - [x] ESLint, production build, backend formatting, privacy tests, Docker Compose validation, standalone backend publish, whitespace checks and idempotent migration SQL generation passed. The production bundle remains within budget: main JavaScript 75.7 KiB gzip, main CSS 19.1 KiB gzip and total JavaScript/CSS 225.9/260.0 KiB gzip.
 
 No schema, financial formula, business rule, permission rule, production data, cleanup policy or deployment configuration changed in this pass. Local PostgreSQL project credentials remain unavailable, so no local data mutation was attempted. PostgreSQL behavior is protected by the one-command integration regressions, combined-query source guard and idempotent migration generation. End-user release note `0.692.0` describes the faster garage balance history. Push and deployment remain intentionally pending because this task did not authorize publication.
+
+## Thirty-fourth garage-income worksheet identity audit: 2026-07-16
+
+- [x] Rechecked the garage income worksheet and confirmed that it loaded the active garage identity and starting balance separately before requesting its combined financial and meter data.
+- [x] Added active garage identity, owner name parts and starting balance to the existing server-side `UNION ALL` pipeline. The complete worksheet now needs one `SELECT` command instead of two.
+- [x] Preserved previous-period debt, nonnegative debt rules, monthly accruals and incomes, latest meter-reading selection, canceled-record exclusion, row ordering and exact money rounding.
+- [x] Added one-command regressions for populated and empty periods, missing and archived garages, plus zero-command validation for reversed and oversized periods. Cancellation propagation remains covered.
+- [x] Kept ordinary garage point-lookups on the shared repository while explicitly guarding the dedicated balance-history and income-worksheet aggregate application ports.
+- [x] Complete verification passed: backend 1654/1654 with 86.67% line and 70.10% branch coverage; frontend 524/524 with 81.26% statements, 71.93% branches, 77.04% functions and 81.83% lines.
+- [x] ESLint, production build, backend formatting, privacy tests, Docker Compose validation, standalone backend publish, whitespace checks and idempotent migration SQL generation passed. The production bundle remains within budget: main JavaScript 75.7 KiB gzip, main CSS 19.1 KiB gzip and total JavaScript/CSS 225.9/260.0 KiB gzip.
+
+No schema, financial formula, business rule, permission rule, production data, cleanup policy or deployment configuration changed in this pass. Local PostgreSQL project credentials remain unavailable, so no local data mutation was attempted. PostgreSQL behavior is protected by one-command integration regressions, aggregate-query and architecture source guards, and idempotent migration generation. End-user release note `0.693.0` describes the faster garage income worksheet. Push and deployment remain intentionally pending because this task did not authorize publication.
