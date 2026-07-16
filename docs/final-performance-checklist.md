@@ -434,3 +434,15 @@ No schema, financial formula, business rule, permission rule, production data, c
 - [x] ESLint, production build, backend formatting, privacy scan of 706 files, Docker Compose validation, standalone backend publish, whitespace checks and idempotent migration SQL generation passed. The production bundle remains within budget: main JavaScript 75.7 KiB gzip, main CSS 19.1 KiB gzip and total JavaScript/CSS 225.9/260.0 KiB gzip.
 
 No schema, financial formula, business rule, permission rule, production data, cleanup policy or deployment configuration changed in this pass. Local PostgreSQL project credentials remain unavailable, so no local data mutation was attempted. PostgreSQL behavior is protected by bounded batch-query guards, EF integration tests and idempotent migration generation. End-user release note `0.687.0` describes the faster financial-operation history. Push and deployment remain intentionally pending because this task did not authorize publication.
+
+## Twenty-ninth bulk-accrual generation N+1 audit: 2026-07-16
+
+- [x] Rechecked the remaining sequential database calls in finance workflows and found per-record duplicate queries in fee-campaign accrual generation and supplier-group salary generation.
+- [x] Replaced garage-by-garage duplicate checks with one bounded query returning the existing garage identifiers for the selected income type, month and fee-campaign source.
+- [x] Added the equivalent supplier identifier query scoped by expense type, month, source and document number, preserving the exact duplicate key used before the optimization.
+- [x] Preserved active/archived filtering, selected campaign participants, money rounding, comments, audit events, duplicate prevention and the existing empty-result behavior.
+- [x] Added 200-record regressions proving constant query counts and exact totals for both first and repeated runs: at most three `SELECT` commands for fee campaigns and four for supplier-group salaries.
+- [x] Complete verification passed: backend 1647/1647 with 86.54% line and 70.08% branch coverage; frontend 524/524 with 81.26% statements, 71.93% branches, 77.04% functions and 81.83% lines.
+- [x] ESLint, production build, backend formatting, privacy scan of 706 files, Docker Compose validation, standalone backend publish, whitespace checks and idempotent migration SQL generation passed. The production bundle remains within budget: main JavaScript 75.7 KiB gzip, main CSS 19.1 KiB gzip and total JavaScript/CSS 225.9/260.0 KiB gzip.
+
+No schema, financial formula, business rule, permission rule, production data, cleanup policy or deployment configuration changed in this pass. Local PostgreSQL project credentials remain unavailable, so no local data mutation was attempted. PostgreSQL behavior is protected by constant-query regressions, repository source guards, EF integration tests and idempotent migration generation. End-user release note `0.688.0` describes faster bulk accrual generation. Push and deployment remain intentionally pending because this task did not authorize publication.
