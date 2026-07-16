@@ -1032,8 +1032,12 @@ public sealed class BackendLayeringTests
 
         Assert.Contains("IGarageRepository garageRepository", service, StringComparison.Ordinal);
         Assert.True(
-            service.Split("garageRepository.FindActiveWithOwnerAsync", StringSplitOptions.None).Length - 1 >= 9,
-            "Finance workflows must share the active garage lookup instead of querying the DbSet directly.");
+            service.Split("garageRepository.FindActiveWithOwnerAsync", StringSplitOptions.None).Length - 1 >= 8,
+            "Finance point-lookups must share the active garage repository instead of querying the DbSet directly.");
+        Assert.Contains("IGarageBalanceHistoryQuery garageBalanceHistoryQuery", service, StringComparison.Ordinal);
+        Assert.Contains("IGarageIncomeWorksheetQuery garageIncomeWorksheetQuery", service, StringComparison.Ordinal);
+        Assert.Contains("garageBalanceHistoryQuery.GetAsync", service, StringComparison.Ordinal);
+        Assert.Contains("garageIncomeWorksheetQuery.GetAsync", service, StringComparison.Ordinal);
         Assert.Equal(2, service.Split("garageRepository.GetAllActiveWithOwnerAsync(cancellationToken)", StringSplitOptions.None).Length - 1);
         Assert.Equal(2, service.Split("garageRepository.GetStartingBalanceAsync(garageId, cancellationToken)", StringSplitOptions.None).Length - 1);
         Assert.DoesNotContain("dbContext.Garages", service, StringComparison.Ordinal);

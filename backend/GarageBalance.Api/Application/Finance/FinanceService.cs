@@ -312,15 +312,14 @@ public sealed class FinanceService(
             return FinanceResult<GarageIncomeWorksheetDto>.Failure("income_worksheet_period_too_large", $"Форму поступлений можно построить максимум за {MaxBalanceHistoryMonths} месяцев.");
         }
 
-        var garage = await garageRepository.FindActiveWithOwnerAsync(garageId, cancellationToken);
-        if (garage is null)
+        var worksheetData = await garageIncomeWorksheetQuery.GetAsync(garageId, monthFrom, monthTo, cancellationToken);
+        if (worksheetData is null)
         {
             return FinanceResult<GarageIncomeWorksheetDto>.Failure("garage_not_found", "Гараж для формы поступлений не найден.");
         }
 
-        var worksheetData = await garageIncomeWorksheetQuery.GetAsync(garageId, monthFrom, monthTo, cancellationToken);
         var openingDebt = MoneyMath.RoundMoney(Math.Max(
-            garage.StartingBalance + worksheetData.PreviousAccrualTotal - worksheetData.PreviousIncomeTotal,
+            worksheetData.StartingBalance + worksheetData.PreviousAccrualTotal - worksheetData.PreviousIncomeTotal,
             0m));
         var meterReadingByMonthKind = worksheetData.MeterReadings
             .GroupBy(reading => (reading.AccountingMonth, reading.MeterKind))
@@ -365,9 +364,9 @@ public sealed class FinanceService(
         var closingDebt = MoneyMath.RoundMoney(Math.Max(openingDebt + accrualTotal - incomeTotal, 0m));
         var debtTotal = closingDebt;
         return FinanceResult<GarageIncomeWorksheetDto>.Success(new GarageIncomeWorksheetDto(
-            garage.Id,
-            garage.Number,
-            garage.Owner?.FullName,
+            worksheetData.GarageId,
+            worksheetData.GarageNumber,
+            worksheetData.OwnerName,
             monthFrom,
             monthTo,
             openingDebt,

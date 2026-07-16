@@ -3437,7 +3437,7 @@ public sealed class FinanceServiceTests
     }
 
     [Fact]
-    public async Task GetGarageIncomeWorksheetAsync_UsesTwoSelectsForGarageAndCombinedWorksheetData()
+    public async Task GetGarageIncomeWorksheetAsync_UsesOneSelectForGarageAndCombinedWorksheetData()
     {
         var commandCounter = new SelectCommandCounter();
         await using var database = await TestDatabase.CreateAsync(commandCounter);
@@ -3502,7 +3502,9 @@ public sealed class FinanceServiceTests
             CancellationToken.None);
 
         Assert.True(result.Succeeded);
-        Assert.Equal(2, commandCounter.Count);
+        Assert.Equal(1, commandCounter.Count);
+        Assert.Equal(fixtures.Garage.Number, result.Value!.GarageNumber);
+        Assert.Equal(fixtures.Garage.Owner?.FullName, result.Value.OwnerName);
         Assert.Equal(200m, result.Value!.OpeningDebt);
         var row = Assert.Single(result.Value.Rows);
         Assert.Equal(electricityType.Id, row.IncomeTypeId);
@@ -3510,6 +3512,95 @@ public sealed class FinanceServiceTests
         Assert.Equal(125m, row.IncomeAmount);
         Assert.Equal(118m, row.MeterValue);
         Assert.Equal(18m, row.MeterConsumption);
+    }
+
+    [Fact]
+    public async Task GetGarageIncomeWorksheetAsync_ReturnsEmptyPeriodInOneSelect()
+    {
+        var commandCounter = new SelectCommandCounter();
+        await using var database = await TestDatabase.CreateAsync(commandCounter);
+        var fixtures = await database.SeedAsync();
+        fixtures.Garage.StartingBalance = 0m;
+        await database.Context.SaveChangesAsync();
+        var service = FinanceServiceTestFactory.Create(database.Context);
+        commandCounter.Reset();
+
+        var result = await service.GetGarageIncomeWorksheetAsync(
+            fixtures.Garage.Id,
+            new GarageIncomeWorksheetRequest(new DateOnly(2027, 1, 1), new DateOnly(2027, 1, 1)),
+            CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+        Assert.Equal(1, commandCounter.Count);
+        Assert.Equal(0m, result.Value!.OpeningDebt);
+        Assert.Equal(0m, result.Value.AccrualTotal);
+        Assert.Equal(0m, result.Value.IncomeTotal);
+        Assert.Equal(0m, result.Value.ClosingDebt);
+        Assert.Empty(result.Value.Rows);
+    }
+
+    [Fact]
+    public async Task GetGarageIncomeWorksheetAsync_ReturnsFailureForMissingGarageInOneSelect()
+    {
+        var commandCounter = new SelectCommandCounter();
+        await using var database = await TestDatabase.CreateAsync(commandCounter);
+        var service = FinanceServiceTestFactory.Create(database.Context);
+        commandCounter.Reset();
+
+        var result = await service.GetGarageIncomeWorksheetAsync(
+            Guid.NewGuid(),
+            new GarageIncomeWorksheetRequest(new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 1)),
+            CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Equal("garage_not_found", result.ErrorCode);
+        Assert.Equal(1, commandCounter.Count);
+    }
+
+    [Fact]
+    public async Task GetGarageIncomeWorksheetAsync_ReturnsFailureForArchivedGarageInOneSelect()
+    {
+        var commandCounter = new SelectCommandCounter();
+        await using var database = await TestDatabase.CreateAsync(commandCounter);
+        var fixtures = await database.SeedAsync();
+        fixtures.Garage.IsArchived = true;
+        await database.Context.SaveChangesAsync();
+        var service = FinanceServiceTestFactory.Create(database.Context);
+        commandCounter.Reset();
+
+        var result = await service.GetGarageIncomeWorksheetAsync(
+            fixtures.Garage.Id,
+            new GarageIncomeWorksheetRequest(new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 1)),
+            CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Equal("garage_not_found", result.ErrorCode);
+        Assert.Equal(1, commandCounter.Count);
+    }
+
+    [Theory]
+    [InlineData(2026, 7, 2026, 6, "income_worksheet_period_invalid")]
+    [InlineData(2021, 7, 2026, 7, "income_worksheet_period_too_large")]
+    public async Task GetGarageIncomeWorksheetAsync_RejectsInvalidPeriodBeforeDatabaseAccess(
+        int fromYear,
+        int fromMonth,
+        int toYear,
+        int toMonth,
+        string expectedErrorCode)
+    {
+        var commandCounter = new SelectCommandCounter();
+        await using var database = await TestDatabase.CreateAsync(commandCounter);
+        var service = FinanceServiceTestFactory.Create(database.Context);
+        commandCounter.Reset();
+
+        var result = await service.GetGarageIncomeWorksheetAsync(
+            Guid.NewGuid(),
+            new GarageIncomeWorksheetRequest(new DateOnly(fromYear, fromMonth, 1), new DateOnly(toYear, toMonth, 1)),
+            CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Equal(expectedErrorCode, result.ErrorCode);
+        Assert.Equal(0, commandCounter.Count);
     }
 
     [Fact]

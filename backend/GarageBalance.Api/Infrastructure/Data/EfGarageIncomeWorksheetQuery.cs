@@ -6,24 +6,51 @@ namespace GarageBalance.Api.Infrastructure.Data;
 
 public sealed class EfGarageIncomeWorksheetQuery(GarageBalanceDbContext dbContext) : IGarageIncomeWorksheetQuery
 {
+    private const int GarageCategory = 0;
     private const int PreviousAccrualCategory = 1;
     private const int PreviousIncomeCategory = 2;
     private const int AccrualBucketCategory = 3;
     private const int IncomeBucketCategory = 4;
     private const int MeterReadingCategory = 5;
 
-    public async Task<GarageIncomeWorksheetData> GetAsync(
+    public async Task<GarageIncomeWorksheetData?> GetAsync(
         Guid garageId,
         DateOnly monthFrom,
         DateOnly monthTo,
         CancellationToken cancellationToken)
     {
+        var garageQuery = dbContext.Garages.AsNoTracking()
+            .Where(garage => garage.Id == garageId && !garage.IsArchived)
+            .Select(garage => new
+            {
+                Category = GarageCategory,
+                GarageId = (Guid?)garage.Id,
+                GarageNumber = (string?)garage.Number,
+                OwnerLastName = garage.Owner == null ? null : garage.Owner.LastName,
+                OwnerFirstName = garage.Owner == null ? null : garage.Owner.FirstName,
+                OwnerMiddleName = garage.Owner == null ? null : garage.Owner.MiddleName,
+                AccountingMonth = (DateOnly?)null,
+                IncomeTypeId = (Guid?)null,
+                IncomeTypeName = (string?)null,
+                IncomeTypeCode = (string?)null,
+                Amount = garage.StartingBalance,
+                MeterKind = (string?)null,
+                ReadingDate = (DateOnly?)null,
+                CurrentValue = (decimal?)null,
+                Consumption = (decimal?)null,
+                UpdatedAtUtc = (DateTimeOffset?)null
+            });
         var previousAccrualQuery = dbContext.Accruals.AsNoTracking()
             .Where(accrual => !accrual.IsCanceled && accrual.GarageId == garageId && accrual.AccountingMonth < monthFrom)
             .GroupBy(_ => 1)
             .Select(group => new
             {
                 Category = PreviousAccrualCategory,
+                GarageId = (Guid?)null,
+                GarageNumber = (string?)null,
+                OwnerLastName = (string?)null,
+                OwnerFirstName = (string?)null,
+                OwnerMiddleName = (string?)null,
                 AccountingMonth = (DateOnly?)null,
                 IncomeTypeId = (Guid?)null,
                 IncomeTypeName = (string?)null,
@@ -45,6 +72,11 @@ public sealed class EfGarageIncomeWorksheetQuery(GarageBalanceDbContext dbContex
             .Select(group => new
             {
                 Category = PreviousIncomeCategory,
+                GarageId = (Guid?)null,
+                GarageNumber = (string?)null,
+                OwnerLastName = (string?)null,
+                OwnerFirstName = (string?)null,
+                OwnerMiddleName = (string?)null,
                 AccountingMonth = (DateOnly?)null,
                 IncomeTypeId = (Guid?)null,
                 IncomeTypeName = (string?)null,
@@ -72,6 +104,11 @@ public sealed class EfGarageIncomeWorksheetQuery(GarageBalanceDbContext dbContex
             .Select(group => new
             {
                 Category = AccrualBucketCategory,
+                GarageId = (Guid?)null,
+                GarageNumber = (string?)null,
+                OwnerLastName = (string?)null,
+                OwnerFirstName = (string?)null,
+                OwnerMiddleName = (string?)null,
                 AccountingMonth = (DateOnly?)group.Key.AccountingMonth,
                 IncomeTypeId = (Guid?)group.Key.IncomeTypeId,
                 IncomeTypeName = (string?)group.Key.Name,
@@ -102,6 +139,11 @@ public sealed class EfGarageIncomeWorksheetQuery(GarageBalanceDbContext dbContex
             .Select(group => new
             {
                 Category = IncomeBucketCategory,
+                GarageId = (Guid?)null,
+                GarageNumber = (string?)null,
+                OwnerLastName = (string?)null,
+                OwnerFirstName = (string?)null,
+                OwnerMiddleName = (string?)null,
                 AccountingMonth = (DateOnly?)group.Key.AccountingMonth,
                 IncomeTypeId = group.Key.IncomeTypeId,
                 IncomeTypeName = (string?)group.Key.Name,
@@ -122,6 +164,11 @@ public sealed class EfGarageIncomeWorksheetQuery(GarageBalanceDbContext dbContex
             .Select(reading => new
             {
                 Category = MeterReadingCategory,
+                GarageId = (Guid?)null,
+                GarageNumber = (string?)null,
+                OwnerLastName = (string?)null,
+                OwnerFirstName = (string?)null,
+                OwnerMiddleName = (string?)null,
                 AccountingMonth = (DateOnly?)reading.AccountingMonth,
                 IncomeTypeId = (Guid?)null,
                 IncomeTypeName = (string?)null,
@@ -134,14 +181,27 @@ public sealed class EfGarageIncomeWorksheetQuery(GarageBalanceDbContext dbContex
                 UpdatedAtUtc = (DateTimeOffset?)reading.UpdatedAtUtc
             });
 
-        var rows = await previousAccrualQuery
+        var rows = await garageQuery
+            .Concat(previousAccrualQuery)
             .Concat(previousIncomeQuery)
             .Concat(accrualBucketQuery)
             .Concat(incomeBucketQuery)
             .Concat(meterReadingQuery)
             .ToListAsync(cancellationToken);
+        var garage = rows.SingleOrDefault(row => row.Category == GarageCategory);
+        if (garage is null)
+        {
+            return null;
+        }
+
+        var ownerName = string.Join(' ', new[] { garage.OwnerLastName, garage.OwnerFirstName, garage.OwnerMiddleName }
+            .Where(part => !string.IsNullOrWhiteSpace(part)));
 
         return new GarageIncomeWorksheetData(
+            garage.GarageId!.Value,
+            garage.GarageNumber!,
+            string.IsNullOrWhiteSpace(ownerName) ? null : ownerName,
+            garage.Amount,
             rows.Where(row => row.Category == PreviousAccrualCategory).Sum(row => row.Amount),
             rows.Where(row => row.Category == PreviousIncomeCategory).Sum(row => row.Amount),
             rows.Where(row => row.Category == AccrualBucketCategory)

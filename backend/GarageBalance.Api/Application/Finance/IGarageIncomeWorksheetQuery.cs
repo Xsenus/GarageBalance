@@ -2,7 +2,7 @@ namespace GarageBalance.Api.Application.Finance;
 
 public interface IGarageIncomeWorksheetQuery
 {
-    Task<GarageIncomeWorksheetData> GetAsync(
+    Task<GarageIncomeWorksheetData?> GetAsync(
         Guid garageId,
         DateOnly monthFrom,
         DateOnly monthTo,
@@ -10,6 +10,10 @@ public interface IGarageIncomeWorksheetQuery
 }
 
 public sealed record GarageIncomeWorksheetData(
+    Guid GarageId,
+    string GarageNumber,
+    string? OwnerName,
+    decimal StartingBalance,
     decimal PreviousAccrualTotal,
     decimal PreviousIncomeTotal,
     IReadOnlyList<GarageIncomeWorksheetBucketData> AccrualBuckets,
