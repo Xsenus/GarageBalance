@@ -877,6 +877,71 @@ public sealed class FinanceServiceTests
     }
 
     [Fact]
+    public async Task IncomeAllocation_RebuildsEarlyExcessPaymentAfterPartialFullUpdateAndCancel()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        var service = FinanceServiceTestFactory.Create(database.Context);
+        var request = new CreateIncomeOperationRequest(
+            fixtures.Garage.Id,
+            fixtures.IncomeType.Id,
+            new DateOnly(2026, 5, 20),
+            new DateOnly(2026, 7, 1),
+            1500m,
+            "PKO-early-excess",
+            "Досрочная оплата до начислений");
+
+        var payment = await service.CreateIncomeAsync(request, null, CancellationToken.None);
+        Assert.True(payment.Succeeded);
+        Assert.Empty(await ActiveAllocationsAsync());
+
+        Assert.True((await service.CreateAccrualAsync(
+            new CreateAccrualRequest(fixtures.Garage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 6, 1), 500m, "manual", "Июнь"),
+            null,
+            CancellationToken.None)).Succeeded);
+        Assert.True((await service.CreateAccrualAsync(
+            new CreateAccrualRequest(fixtures.Garage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 7, 1), 700m, "manual", "Июль"),
+            null,
+            CancellationToken.None)).Succeeded);
+
+        var excessAllocations = await ActiveAllocationsAsync();
+        Assert.Equal([500m, 700m], excessAllocations.Select(item => item.Amount));
+        Assert.Equal(300m, payment.Value!.Amount - excessAllocations.Sum(item => item.Amount));
+
+        var partial = await service.UpdateIncomeAsync(
+            payment.Value.Id,
+            request with { Amount = 800m, Comment = "Частичная оплата двух начислений" },
+            null,
+            CancellationToken.None);
+        Assert.True(partial.Succeeded);
+        Assert.Equal([500m, 300m], (await ActiveAllocationsAsync()).Select(item => item.Amount));
+
+        var full = await service.UpdateIncomeAsync(
+            payment.Value.Id,
+            request with { Amount = 1200m, Comment = "Полная оплата двух начислений" },
+            null,
+            CancellationToken.None);
+        Assert.True(full.Succeeded);
+        Assert.Equal([500m, 700m], (await ActiveAllocationsAsync()).Select(item => item.Amount));
+
+        var canceled = await service.CancelOperationAsync(
+            payment.Value.Id,
+            new CancelFinanceEntryRequest("Отмена проверочного платежа"),
+            null,
+            CancellationToken.None);
+        Assert.True(canceled.Succeeded);
+        Assert.Empty(await ActiveAllocationsAsync());
+        Assert.Equal(7, await database.Context.AccrualPaymentAllocations.CountAsync(item => !item.IsActive));
+
+        Task<List<AccrualPaymentAllocation>> ActiveAllocationsAsync() =>
+            database.Context.AccrualPaymentAllocations
+                .AsNoTracking()
+                .Where(item => item.IsActive)
+                .OrderBy(item => item.Accrual.DueDate)
+                .ToListAsync();
+    }
+
+    [Fact]
     public async Task GetGarageOverdueDebtAsync_ReturnsOnlyOutstandingMaturedDebtInOldestFirstOrder()
     {
         await using var database = await TestDatabase.CreateAsync();
