@@ -75,6 +75,7 @@ type PaymentPrototypeRow = {
   staffMemberId?: string | null
   item: string
   counterparty?: string
+  openingBalance: number
   cost: number | string
   paid: number | string
   balance: number | string
@@ -294,6 +295,7 @@ function createExpenseRowsFromWorksheet(worksheet: ExpenseWorksheetDto): Payment
     staffMemberId: row.staffMemberId,
     counterparty: row.counterpartyName ?? '',
     item: row.expenseTypeName,
+    openingBalance: row.openingBalance ?? 0,
     cost: row.accrualAmount,
     paid: row.expenseAmount,
     balance: row.balance,
@@ -4331,6 +4333,7 @@ function PaymentsPrototypePanel({
         ...nextRows,
         {
           item: accrual.expenseTypeName,
+          openingBalance: 0,
           cost: accrual.amount,
           paid: 0,
           balance: accrual.amount,
@@ -4383,6 +4386,7 @@ function PaymentsPrototypePanel({
             {
               item: accrual.expenseTypeName,
               counterparty: accrual.supplierName,
+              openingBalance: 0,
               cost: accrual.amount,
               paid: 0,
               balance: accrual.amount,
@@ -4432,6 +4436,7 @@ function PaymentsPrototypePanel({
     .sort()
     .map((month) => ({ value: month, label: formatPaymentPrototypeMonthLabel(month) }))
   const expenseAccrualTotal = expenseRows.reduce((sum, row) => sum + (typeof row.cost === 'number' ? row.cost : 0), 0)
+  const expenseOpeningBalanceTotal = expenseRows.reduce((sum, row) => sum + row.openingBalance, 0)
   const expensePaidTotal = expenseRows.reduce((sum, row) => sum + (typeof row.paid === 'number' ? row.paid : 0), 0)
   const expenseBalanceTotal = expenseRows.reduce((sum, row) => sum + (typeof row.balance === 'number' ? row.balance : 0), 0)
   const expenseCollectedTotal = expenseRows.reduce((sum, row) => sum + (typeof row.collected === 'number' ? row.collected : 0), 0)
@@ -4869,6 +4874,7 @@ function PaymentsPrototypePanel({
                   <tr>
                     <th scope="col">Поставщик</th>
                     <th scope="col">Услуга</th>
+                    <th scope="col">Входящий долг/аванс</th>
                     <th scope="col">Стоимость</th>
                     <th scope="col">Оплачено</th>
                     <th scope="col">Остаток</th>
@@ -4886,6 +4892,7 @@ function PaymentsPrototypePanel({
                       <tr key={`${row.item}-${index}`}>
                         <td>{supplier}</td>
                         <td>{row.item}</td>
+                        <td className={row.openingBalance > 0 ? 'money-expense' : row.openingBalance < 0 ? 'money-income' : undefined}>{formatPaymentMoney(row.openingBalance)}</td>
                         <td className={row.cost ? 'money-income' : undefined}>{formatPaymentMoney(row.cost)}</td>
                         <td>{formatPaymentMoney(row.paid)}</td>
                         <td>{formatPaymentMoney(row.balance)}</td>
@@ -4912,12 +4919,13 @@ function PaymentsPrototypePanel({
                   })}
                   {expenseRows.length === 0 ? (
                     <tr>
-                      <td colSpan={8}>{expenseWorksheetLoading ? <TableLoadingState label="Загружаем форму выплат" /> : 'Начислений и выплат за выбранный месяц пока нет.'}</td>
+                      <td colSpan={9}>{expenseWorksheetLoading ? <TableLoadingState label="Загружаем форму выплат" /> : 'Начислений и выплат за выбранный месяц пока нет.'}</td>
                     </tr>
                   ) : null}
                   <tr className="payments-prototype-total-row">
                     <td>ИТОГО</td>
                     <td />
+                    <td>{formatPaymentMoney(expenseOpeningBalanceTotal)}</td>
                     <td>{formatPaymentMoney(expenseAccrualTotal)}</td>
                     <td>{formatPaymentMoney(expensePaidTotal)}</td>
                     <td>{formatPaymentMoney(expenseBalanceTotal)}</td>

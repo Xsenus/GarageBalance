@@ -379,7 +379,10 @@ public sealed record ExpenseWorksheetRowDto(
     decimal ExpenseAmount,
     decimal Balance,
     decimal? CollectedAmount,
-    decimal? Difference);
+    decimal? Difference)
+{
+    public decimal OpeningBalance { get; init; }
+}
 
 public sealed record ExpenseWorksheetDto(
     DateOnly AccountingMonth,
@@ -390,7 +393,10 @@ public sealed record ExpenseWorksheetDto(
     decimal DifferenceTotal,
     decimal BankAmount,
     decimal CashAmount,
-    IReadOnlyList<ExpenseWorksheetRowDto> Rows);
+    IReadOnlyList<ExpenseWorksheetRowDto> Rows)
+{
+    public decimal OpeningBalanceTotal { get; init; }
+}
 
 public sealed record FinanceSummaryDto(
     decimal IncomeTotal,

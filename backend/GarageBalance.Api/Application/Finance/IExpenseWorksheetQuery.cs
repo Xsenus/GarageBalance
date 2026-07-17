@@ -15,7 +15,14 @@ public sealed record ExpenseWorksheetData(
     IReadOnlyList<ExpenseWorksheetStaffData> StaffMembers,
     IReadOnlyList<ExpenseWorksheetStaffExpenseData> StaffExpenses,
     IReadOnlyList<ExpenseWorksheetIncomeData> Incomes,
-    FinanceAvailableBalanceData AvailableBalance);
+    FinanceAvailableBalanceData AvailableBalance)
+{
+    public IReadOnlyList<ExpenseWorksheetSupplierData> SupplierOpeningAccruals { get; init; } = [];
+
+    public IReadOnlyList<ExpenseWorksheetSupplierData> SupplierOpeningExpenses { get; init; } = [];
+
+    public IReadOnlyList<ExpenseWorksheetStaffExpenseData> StaffOpeningExpenses { get; init; } = [];
+}
 
 public sealed record ExpenseWorksheetSupplierData(
     Guid SupplierId,
@@ -28,9 +35,21 @@ public sealed record ExpenseWorksheetSupplierData(
 public sealed record ExpenseWorksheetStaffData(
     Guid StaffMemberId,
     string FullName,
-    string DepartmentName,
-    decimal Rate);
+    string ExpenseTypeName,
+    decimal Rate)
+{
+    public Guid ExpenseTypeId { get; init; }
 
-public sealed record ExpenseWorksheetStaffExpenseData(Guid StaffMemberId, decimal Amount);
+    public string? ExpenseTypeCode { get; init; }
+
+    public DateTimeOffset CreatedAtUtc { get; init; }
+}
+
+public sealed record ExpenseWorksheetStaffExpenseData(Guid StaffMemberId, decimal Amount)
+{
+    public Guid ExpenseTypeId { get; init; }
+
+    public DateOnly? FirstAccountingMonth { get; init; }
+}
 
 public sealed record ExpenseWorksheetIncomeData(string IncomeTypeName, string? IncomeTypeCode, decimal Amount);

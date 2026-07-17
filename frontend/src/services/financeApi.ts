@@ -229,6 +229,7 @@ export type ExpenseWorksheetRowDto = {
   counterpartyName: string | null
   expenseTypeId: string | null
   expenseTypeName: string
+  openingBalance: number
   accrualAmount: number
   expenseAmount: number
   balance: number
@@ -238,6 +239,7 @@ export type ExpenseWorksheetRowDto = {
 
 export type ExpenseWorksheetDto = {
   accountingMonth: string
+  openingBalanceTotal: number
   accrualTotal: number
   expenseTotal: number
   balanceTotal: number

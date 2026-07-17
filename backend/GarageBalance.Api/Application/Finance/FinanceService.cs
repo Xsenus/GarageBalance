@@ -482,8 +482,14 @@ public sealed class FinanceService(
             .ToDictionary(item => (item.SupplierId, item.ExpenseTypeId));
         var supplierExpenses = worksheetData.SupplierExpenses
             .ToDictionary(item => (item.SupplierId, item.ExpenseTypeId));
+        var supplierOpeningAccruals = worksheetData.SupplierOpeningAccruals
+            .ToDictionary(item => (item.SupplierId, item.ExpenseTypeId));
+        var supplierOpeningExpenses = worksheetData.SupplierOpeningExpenses
+            .ToDictionary(item => (item.SupplierId, item.ExpenseTypeId));
         var supplierKeys = supplierAccruals.Keys
             .Concat(supplierExpenses.Keys)
+            .Concat(supplierOpeningAccruals.Keys)
+            .Concat(supplierOpeningExpenses.Keys)
             .Distinct()
             .ToList();
 
@@ -491,10 +497,13 @@ public sealed class FinanceService(
         {
             supplierAccruals.TryGetValue(key, out var accrual);
             supplierExpenses.TryGetValue(key, out var expense);
-            var sample = accrual ?? expense!;
+            supplierOpeningAccruals.TryGetValue(key, out var openingAccrual);
+            supplierOpeningExpenses.TryGetValue(key, out var openingExpense);
+            var sample = accrual ?? expense ?? openingAccrual ?? openingExpense!;
             var accrualAmount = MoneyMath.RoundMoney(accrual?.Amount ?? 0m);
             var expenseAmount = MoneyMath.RoundMoney(expense?.Amount ?? 0m);
             var balance = MoneyMath.RoundMoney(Math.Max(accrualAmount - expenseAmount, 0m));
+            var openingBalance = MoneyMath.RoundMoney((openingAccrual?.Amount ?? 0m) - (openingExpense?.Amount ?? 0m));
             var collected = TryGetCollectedAmount(collectedByIncomeKey, sample.ExpenseTypeName, sample.ExpenseTypeCode);
             decimal? difference = collected.HasValue ? MoneyMath.RoundMoney(collected.Value - accrualAmount) : null;
             rows.Add(new ExpenseWorksheetRowDto(
@@ -508,27 +517,50 @@ public sealed class FinanceService(
                 expenseAmount,
                 balance,
                 collected,
-                difference));
+                difference)
+            {
+                OpeningBalance = openingBalance
+            });
         }
 
-        var staffExpenses = worksheetData.StaffExpenses.ToDictionary(item => item.StaffMemberId, item => item.Amount);
+        var staffExpenses = worksheetData.StaffExpenses
+            .ToDictionary(item => (item.StaffMemberId, item.ExpenseTypeId), item => item.Amount);
+        var staffOpeningExpenses = worksheetData.StaffOpeningExpenses
+            .ToDictionary(item => (item.StaffMemberId, item.ExpenseTypeId));
         foreach (var staffMember in worksheetData.StaffMembers)
         {
-            staffExpenses.TryGetValue(staffMember.StaffMemberId, out var staffExpenseAmount);
+            var key = (staffMember.StaffMemberId, staffMember.ExpenseTypeId);
+            staffExpenses.TryGetValue(key, out var staffExpenseAmount);
+            staffOpeningExpenses.TryGetValue(key, out var staffOpeningExpense);
             var accrualAmount = MoneyMath.RoundMoney(staffMember.Rate);
             var expenseAmount = MoneyMath.RoundMoney(staffExpenseAmount);
+            var staffCreatedMonth = new DateOnly(
+                staffMember.CreatedAtUtc.UtcDateTime.Year,
+                staffMember.CreatedAtUtc.UtcDateTime.Month,
+                1);
+            var historyStartMonth = staffOpeningExpense?.FirstAccountingMonth is { } firstExpenseMonth && firstExpenseMonth < staffCreatedMonth
+                ? firstExpenseMonth
+                : staffCreatedMonth;
+            var historyMonthCount = Math.Max(
+                0,
+                ((accountingMonth.Year - historyStartMonth.Year) * 12) + accountingMonth.Month - historyStartMonth.Month);
+            var openingBalance = MoneyMath.RoundMoney(
+                (staffMember.Rate * historyMonthCount) - (staffOpeningExpense?.Amount ?? 0m));
             rows.Add(new ExpenseWorksheetRowDto(
                 "staff",
                 null,
                 staffMember.StaffMemberId,
                 staffMember.FullName,
-                null,
-                staffMember.DepartmentName,
+                staffMember.ExpenseTypeId,
+                staffMember.ExpenseTypeName,
                 accrualAmount,
                 expenseAmount,
                 MoneyMath.RoundMoney(Math.Max(accrualAmount - expenseAmount, 0m)),
                 null,
-                null));
+                null)
+            {
+                OpeningBalance = openingBalance
+            });
         }
 
         rows = rows
@@ -540,6 +572,7 @@ public sealed class FinanceService(
         var accrualTotal = MoneyMath.RoundMoney(rows.Sum(row => row.AccrualAmount));
         var expenseTotal = MoneyMath.RoundMoney(rows.Sum(row => row.ExpenseAmount));
         var balanceTotal = MoneyMath.RoundMoney(rows.Sum(row => row.Balance));
+        var openingBalanceTotal = MoneyMath.RoundMoney(rows.Sum(row => row.OpeningBalance));
         var collectedTotal = MoneyMath.RoundMoney(rows.Sum(row => row.CollectedAmount ?? 0m));
         var differenceTotal = MoneyMath.RoundMoney(collectedTotal - accrualTotal);
         var availableAmounts = CalculateAvailableAmounts(worksheetData.AvailableBalance);
@@ -553,7 +586,10 @@ public sealed class FinanceService(
             differenceTotal,
             availableAmounts.BankAmount,
             availableAmounts.CashAmount,
-            rows));
+            rows)
+        {
+            OpeningBalanceTotal = openingBalanceTotal
+        });
     }
 
     private static int NormalizeListLimit(int? limit)

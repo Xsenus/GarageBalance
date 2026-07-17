@@ -4737,6 +4737,7 @@ describe('App', () => {
           counterpartyName: 'Серверный водоканал',
           expenseTypeId: 'expense-water',
           expenseTypeName: 'Водоснабжение',
+          openingBalance: 7500,
           accrualAmount: 32000,
           expenseAmount: 10000,
           balance: 22000,
@@ -4750,6 +4751,7 @@ describe('App', () => {
           counterpartyName: 'Петрова Ольга',
           expenseTypeId: null,
           expenseTypeName: 'Бухгалтерия',
+          openingBalance: -2500,
           accrualAmount: 40000,
           expenseAmount: 15000,
           balance: 25000,
@@ -4774,6 +4776,9 @@ describe('App', () => {
     const expenseTable = within(prototype).getByRole('table', { name: 'Форма выплат за июнь 2026' })
     expect(await within(expenseTable).findByText('Серверный водоканал')).toBeInTheDocument()
     expect(within(expenseTable).getByText('Петрова Ольга')).toBeInTheDocument()
+    expect(within(expenseTable).getByRole('columnheader', { name: 'Входящий долг/аванс' })).toBeInTheDocument()
+    expect(within(expenseTable).getByText('7 500.00')).toHaveClass('money-expense')
+    expect(within(expenseTable).getByText('-2 500.00')).toHaveClass('money-income')
     expect(within(expenseTable).getAllByText('32 000.00').length).toBeGreaterThan(0)
     expect(within(expenseTable).getAllByText('47 000.00').length).toBeGreaterThan(0)
     expect(within(prototype).getByText('12 000.00')).toBeInTheDocument()
@@ -15236,6 +15241,7 @@ function createGarageIncomeWorksheet(overrides: Partial<GarageIncomeWorksheetDto
 function createExpenseWorksheet(overrides: Partial<ExpenseWorksheetDto>): ExpenseWorksheetDto {
   return {
     accountingMonth: '2026-06-01',
+    openingBalanceTotal: 0,
     accrualTotal: 72000,
     expenseTotal: 25000,
     balanceTotal: 47000,
@@ -15251,6 +15257,7 @@ function createExpenseWorksheet(overrides: Partial<ExpenseWorksheetDto>): Expens
         counterpartyName: 'Водоканал',
         expenseTypeId: 'expense-water',
         expenseTypeName: 'Водоснабжение',
+        openingBalance: 0,
         accrualAmount: 32000,
         expenseAmount: 10000,
         balance: 22000,
@@ -15264,6 +15271,7 @@ function createExpenseWorksheet(overrides: Partial<ExpenseWorksheetDto>): Expens
         counterpartyName: 'Петрова Ольга',
         expenseTypeId: null,
         expenseTypeName: 'Бухгалтерия',
+        openingBalance: 0,
         accrualAmount: 40000,
         expenseAmount: 15000,
         balance: 25000,

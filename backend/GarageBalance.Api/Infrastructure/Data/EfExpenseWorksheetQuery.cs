@@ -13,6 +13,9 @@ public sealed class EfExpenseWorksheetQuery(GarageBalanceDbContext dbContext) : 
     private const int IncomeCategory = 5;
     private const int AvailableBalanceCategory = 6;
     private const int BankDepositCategory = 7;
+    private const int SupplierOpeningAccrualCategory = 8;
+    private const int SupplierOpeningExpenseCategory = 9;
+    private const int StaffOpeningExpenseCategory = 10;
 
     public async Task<ExpenseWorksheetData> GetAsync(
         DateOnly accountingMonth,
@@ -43,7 +46,9 @@ public sealed class EfExpenseWorksheetQuery(GarageBalanceDbContext dbContext) : 
                 IncomeTotal = 0m,
                 BankDepositTotal = 0m,
                 CashExpenseTotal = 0m,
-                BankExpenseTotal = 0m
+                BankExpenseTotal = 0m,
+                HistoryStartMonth = (DateOnly?)null,
+                StaffCreatedAtUtc = (DateTimeOffset?)null
             });
 
         var supplierExpenses = dbContext.FinancialOperations.AsNoTracking()
@@ -74,48 +79,64 @@ public sealed class EfExpenseWorksheetQuery(GarageBalanceDbContext dbContext) : 
                 IncomeTotal = 0m,
                 BankDepositTotal = 0m,
                 CashExpenseTotal = 0m,
-                BankExpenseTotal = 0m
+                BankExpenseTotal = 0m,
+                HistoryStartMonth = (DateOnly?)null,
+                StaffCreatedAtUtc = (DateTimeOffset?)null
             });
 
         var staffMembers = dbContext.StaffMembers.AsNoTracking()
             .Where(member => !member.IsArchived)
-            .Select(member => new
-            {
-                Category = StaffMemberCategory,
-                SupplierId = (Guid?)null,
-                StaffMemberId = (Guid?)member.Id,
-                CounterpartyName = (string?)member.FullName,
-                TypeId = (Guid?)null,
-                TypeName = (string?)member.Department.Name,
-                TypeCode = (string?)null,
-                Amount = member.Rate,
-                IncomeTotal = 0m,
-                BankDepositTotal = 0m,
-                CashExpenseTotal = 0m,
-                BankExpenseTotal = 0m
-            });
+            .SelectMany(
+                _ => dbContext.ExpenseTypes.AsNoTracking()
+                    .Where(expenseType => !expenseType.IsArchived && expenseType.Code == "salary"),
+                (member, expenseType) => new
+                {
+                    Category = StaffMemberCategory,
+                    SupplierId = (Guid?)null,
+                    StaffMemberId = (Guid?)member.Id,
+                    CounterpartyName = (string?)member.FullName,
+                    TypeId = (Guid?)expenseType.Id,
+                    TypeName = (string?)expenseType.Name,
+                    TypeCode = expenseType.Code,
+                    Amount = member.Rate,
+                    IncomeTotal = 0m,
+                    BankDepositTotal = 0m,
+                    CashExpenseTotal = 0m,
+                    BankExpenseTotal = 0m,
+                    HistoryStartMonth = (DateOnly?)null,
+                    StaffCreatedAtUtc = (DateTimeOffset?)member.CreatedAtUtc
+                });
 
         var staffExpenses = dbContext.FinancialOperations.AsNoTracking()
             .Where(operation =>
                 !operation.IsCanceled &&
                 operation.OperationKind == FinancialOperationKinds.Expense &&
                 operation.AccountingMonth == accountingMonth &&
-                operation.StaffMemberId != null)
-            .GroupBy(operation => operation.StaffMemberId!.Value)
+                operation.StaffMemberId != null &&
+                operation.ExpenseTypeId != null)
+            .GroupBy(operation => new
+            {
+                StaffMemberId = operation.StaffMemberId!.Value,
+                ExpenseTypeId = operation.ExpenseTypeId!.Value,
+                ExpenseTypeName = operation.ExpenseType!.Name,
+                ExpenseTypeCode = operation.ExpenseType.Code
+            })
             .Select(group => new
             {
                 Category = StaffExpenseCategory,
                 SupplierId = (Guid?)null,
-                StaffMemberId = (Guid?)group.Key,
+                StaffMemberId = (Guid?)group.Key.StaffMemberId,
                 CounterpartyName = (string?)null,
-                TypeId = (Guid?)null,
-                TypeName = (string?)null,
-                TypeCode = (string?)null,
+                TypeId = (Guid?)group.Key.ExpenseTypeId,
+                TypeName = (string?)group.Key.ExpenseTypeName,
+                TypeCode = group.Key.ExpenseTypeCode,
                 Amount = group.Sum(operation => operation.Amount),
                 IncomeTotal = 0m,
                 BankDepositTotal = 0m,
                 CashExpenseTotal = 0m,
-                BankExpenseTotal = 0m
+                BankExpenseTotal = 0m,
+                HistoryStartMonth = (DateOnly?)null,
+                StaffCreatedAtUtc = (DateTimeOffset?)null
             });
 
         var incomes = dbContext.FinancialOperations.AsNoTracking()
@@ -142,7 +163,102 @@ public sealed class EfExpenseWorksheetQuery(GarageBalanceDbContext dbContext) : 
                 IncomeTotal = 0m,
                 BankDepositTotal = 0m,
                 CashExpenseTotal = 0m,
-                BankExpenseTotal = 0m
+                BankExpenseTotal = 0m,
+                HistoryStartMonth = (DateOnly?)null,
+                StaffCreatedAtUtc = (DateTimeOffset?)null
+            });
+
+        var supplierOpeningAccruals = dbContext.SupplierAccruals.AsNoTracking()
+            .Where(accrual => !accrual.IsCanceled && accrual.AccountingMonth < accountingMonth)
+            .GroupBy(accrual => new
+            {
+                accrual.SupplierId,
+                SupplierName = accrual.Supplier.Name,
+                accrual.ExpenseTypeId,
+                ExpenseTypeName = accrual.ExpenseType.Name,
+                ExpenseTypeCode = accrual.ExpenseType.Code
+            })
+            .Select(group => new
+            {
+                Category = SupplierOpeningAccrualCategory,
+                SupplierId = (Guid?)group.Key.SupplierId,
+                StaffMemberId = (Guid?)null,
+                CounterpartyName = (string?)group.Key.SupplierName,
+                TypeId = (Guid?)group.Key.ExpenseTypeId,
+                TypeName = (string?)group.Key.ExpenseTypeName,
+                TypeCode = group.Key.ExpenseTypeCode,
+                Amount = group.Sum(accrual => accrual.Amount),
+                IncomeTotal = 0m,
+                BankDepositTotal = 0m,
+                CashExpenseTotal = 0m,
+                BankExpenseTotal = 0m,
+                HistoryStartMonth = (DateOnly?)null,
+                StaffCreatedAtUtc = (DateTimeOffset?)null
+            });
+
+        var supplierOpeningExpenses = dbContext.FinancialOperations.AsNoTracking()
+            .Where(operation =>
+                !operation.IsCanceled &&
+                operation.OperationKind == FinancialOperationKinds.Expense &&
+                operation.AccountingMonth < accountingMonth &&
+                operation.SupplierId != null &&
+                operation.ExpenseTypeId != null)
+            .GroupBy(operation => new
+            {
+                SupplierId = operation.SupplierId!.Value,
+                SupplierName = operation.Supplier!.Name,
+                ExpenseTypeId = operation.ExpenseTypeId!.Value,
+                ExpenseTypeName = operation.ExpenseType!.Name,
+                ExpenseTypeCode = operation.ExpenseType.Code
+            })
+            .Select(group => new
+            {
+                Category = SupplierOpeningExpenseCategory,
+                SupplierId = (Guid?)group.Key.SupplierId,
+                StaffMemberId = (Guid?)null,
+                CounterpartyName = (string?)group.Key.SupplierName,
+                TypeId = (Guid?)group.Key.ExpenseTypeId,
+                TypeName = (string?)group.Key.ExpenseTypeName,
+                TypeCode = group.Key.ExpenseTypeCode,
+                Amount = group.Sum(operation => operation.Amount),
+                IncomeTotal = 0m,
+                BankDepositTotal = 0m,
+                CashExpenseTotal = 0m,
+                BankExpenseTotal = 0m,
+                HistoryStartMonth = (DateOnly?)null,
+                StaffCreatedAtUtc = (DateTimeOffset?)null
+            });
+
+        var staffOpeningExpenses = dbContext.FinancialOperations.AsNoTracking()
+            .Where(operation =>
+                !operation.IsCanceled &&
+                operation.OperationKind == FinancialOperationKinds.Expense &&
+                operation.AccountingMonth < accountingMonth &&
+                operation.StaffMemberId != null &&
+                operation.ExpenseTypeId != null)
+            .GroupBy(operation => new
+            {
+                StaffMemberId = operation.StaffMemberId!.Value,
+                ExpenseTypeId = operation.ExpenseTypeId!.Value,
+                ExpenseTypeName = operation.ExpenseType!.Name,
+                ExpenseTypeCode = operation.ExpenseType.Code
+            })
+            .Select(group => new
+            {
+                Category = StaffOpeningExpenseCategory,
+                SupplierId = (Guid?)null,
+                StaffMemberId = (Guid?)group.Key.StaffMemberId,
+                CounterpartyName = (string?)null,
+                TypeId = (Guid?)group.Key.ExpenseTypeId,
+                TypeName = (string?)group.Key.ExpenseTypeName,
+                TypeCode = group.Key.ExpenseTypeCode,
+                Amount = group.Sum(operation => operation.Amount),
+                IncomeTotal = 0m,
+                BankDepositTotal = 0m,
+                CashExpenseTotal = 0m,
+                BankExpenseTotal = 0m,
+                HistoryStartMonth = (DateOnly?)group.Min(operation => operation.AccountingMonth),
+                StaffCreatedAtUtc = (DateTimeOffset?)null
             });
 
         var availableBalance = dbContext.FinancialOperations.AsNoTracking()
@@ -173,7 +289,9 @@ public sealed class EfExpenseWorksheetQuery(GarageBalanceDbContext dbContext) : 
                         !((operation.ExpenseType.Code != null && cashExpenseTypeCodes.Contains(operation.ExpenseType.Code)) ||
                             cashExpenseTypeNames.Contains(operation.ExpenseType.Name)))
                         ? operation.Amount
-                        : 0m)
+                        : 0m),
+                HistoryStartMonth = (DateOnly?)null,
+                StaffCreatedAtUtc = (DateTimeOffset?)null
             });
 
         var bankDeposits = dbContext.FundOperations.AsNoTracking()
@@ -192,7 +310,9 @@ public sealed class EfExpenseWorksheetQuery(GarageBalanceDbContext dbContext) : 
                 IncomeTotal = 0m,
                 BankDepositTotal = group.Sum(operation => operation.Amount),
                 CashExpenseTotal = 0m,
-                BankExpenseTotal = 0m
+                BankExpenseTotal = 0m,
+                HistoryStartMonth = (DateOnly?)null,
+                StaffCreatedAtUtc = (DateTimeOffset?)null
             });
 
         var rows = await supplierAccruals
@@ -200,6 +320,9 @@ public sealed class EfExpenseWorksheetQuery(GarageBalanceDbContext dbContext) : 
             .Concat(staffMembers)
             .Concat(staffExpenses)
             .Concat(incomes)
+            .Concat(supplierOpeningAccruals)
+            .Concat(supplierOpeningExpenses)
+            .Concat(staffOpeningExpenses)
             .Concat(availableBalance)
             .Concat(bankDeposits)
             .ToListAsync(cancellationToken);
@@ -228,10 +351,18 @@ public sealed class EfExpenseWorksheetQuery(GarageBalanceDbContext dbContext) : 
                     row.StaffMemberId!.Value,
                     row.CounterpartyName!,
                     row.TypeName!,
-                    row.Amount))
+                    row.Amount)
+                {
+                    ExpenseTypeId = row.TypeId!.Value,
+                    ExpenseTypeCode = row.TypeCode,
+                    CreatedAtUtc = row.StaffCreatedAtUtc!.Value
+                })
                 .ToList(),
             rows.Where(row => row.Category == StaffExpenseCategory)
-                .Select(row => new ExpenseWorksheetStaffExpenseData(row.StaffMemberId!.Value, row.Amount))
+                .Select(row => new ExpenseWorksheetStaffExpenseData(row.StaffMemberId!.Value, row.Amount)
+                {
+                    ExpenseTypeId = row.TypeId!.Value
+                })
                 .ToList(),
             rows.Where(row => row.Category == IncomeCategory)
                 .Select(row => new ExpenseWorksheetIncomeData(row.TypeName!, row.TypeCode, row.Amount))
@@ -240,6 +371,33 @@ public sealed class EfExpenseWorksheetQuery(GarageBalanceDbContext dbContext) : 
                 rows.Sum(row => row.IncomeTotal),
                 rows.Sum(row => row.BankDepositTotal),
                 rows.Sum(row => row.CashExpenseTotal),
-                rows.Sum(row => row.BankExpenseTotal)));
+                rows.Sum(row => row.BankExpenseTotal)))
+        {
+            SupplierOpeningAccruals = rows.Where(row => row.Category == SupplierOpeningAccrualCategory)
+                .Select(row => new ExpenseWorksheetSupplierData(
+                    row.SupplierId!.Value,
+                    row.CounterpartyName!,
+                    row.TypeId!.Value,
+                    row.TypeName!,
+                    row.TypeCode,
+                    row.Amount))
+                .ToList(),
+            SupplierOpeningExpenses = rows.Where(row => row.Category == SupplierOpeningExpenseCategory)
+                .Select(row => new ExpenseWorksheetSupplierData(
+                    row.SupplierId!.Value,
+                    row.CounterpartyName!,
+                    row.TypeId!.Value,
+                    row.TypeName!,
+                    row.TypeCode,
+                    row.Amount))
+                .ToList(),
+            StaffOpeningExpenses = rows.Where(row => row.Category == StaffOpeningExpenseCategory)
+                .Select(row => new ExpenseWorksheetStaffExpenseData(row.StaffMemberId!.Value, row.Amount)
+                {
+                    ExpenseTypeId = row.TypeId!.Value,
+                    FirstAccountingMonth = row.HistoryStartMonth
+                })
+                .ToList()
+        };
     }
 }

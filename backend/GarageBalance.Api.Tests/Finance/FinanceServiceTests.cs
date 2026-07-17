@@ -4123,13 +4123,151 @@ public sealed class FinanceServiceTests
         var staffRow = Assert.Single(result.Value.Rows, row => row.RowKind == "staff");
         Assert.Equal(staffMember.Id, staffRow.StaffMemberId);
         Assert.Equal("Петрова Ольга", staffRow.CounterpartyName);
-        Assert.Equal("Бухгалтерия", staffRow.ExpenseTypeName);
+        Assert.Equal(salaryExpenseType.Id, staffRow.ExpenseTypeId);
+        Assert.Equal("Зарплата", staffRow.ExpenseTypeName);
         Assert.Equal(40000m, staffRow.AccrualAmount);
         Assert.Equal(15000m, staffRow.ExpenseAmount);
         Assert.Equal(25000m, staffRow.Balance);
         Assert.Null(staffRow.CollectedAmount);
         Assert.Null(staffRow.Difference);
     }
+
+    [Fact]
+    public async Task GetExpenseWorksheetAsync_CalculatesOpeningBalancesForEachSupplierAndStaffExpenseTypePair()
+    {
+        var commandCounter = new SelectCommandCounter();
+        await using var database = await TestDatabase.CreateAsync(commandCounter);
+        var service = FinanceServiceTestFactory.Create(database.Context);
+        var supplierGroup = new SupplierGroup { Name = "Коммунальные услуги" };
+        var firstSupplier = new Supplier { Name = "Первый поставщик", Group = supplierGroup };
+        var secondSupplier = new Supplier { Name = "Второй поставщик", Group = supplierGroup };
+        var waterType = new ExpenseType { Name = "Водоснабжение", Code = "water" };
+        var repairType = new ExpenseType { Name = "Ремонт", Code = "repair" };
+        var salaryType = new ExpenseType { Name = "Зарплата", Code = "salary", IsSystem = true };
+        var department = new StaffDepartment { Name = "Бухгалтерия" };
+        var staffMember = new StaffMember
+        {
+            FullName = "Петрова Ольга",
+            Department = department,
+            Rate = 100m,
+            CreatedAtUtc = new DateTimeOffset(2026, 1, 15, 0, 0, 0, TimeSpan.Zero)
+        };
+        database.Context.AddRange(
+            firstSupplier,
+            secondSupplier,
+            supplierGroup,
+            waterType,
+            repairType,
+            salaryType,
+            department,
+            staffMember,
+            new SupplierAccrual
+            {
+                Supplier = firstSupplier,
+                ExpenseType = waterType,
+                AccountingMonth = new DateOnly(2026, 1, 1),
+                Amount = 100m,
+                Source = AccrualSources.Manual
+            },
+            new SupplierAccrual
+            {
+                Supplier = firstSupplier,
+                ExpenseType = waterType,
+                AccountingMonth = new DateOnly(2026, 2, 1),
+                Amount = 100m,
+                Source = AccrualSources.Manual
+            },
+            new SupplierAccrual
+            {
+                Supplier = firstSupplier,
+                ExpenseType = repairType,
+                AccountingMonth = new DateOnly(2026, 1, 1),
+                Amount = 50m,
+                Source = AccrualSources.Manual
+            },
+            new SupplierAccrual
+            {
+                Supplier = secondSupplier,
+                ExpenseType = waterType,
+                AccountingMonth = new DateOnly(2026, 1, 1),
+                Amount = 300m,
+                Source = AccrualSources.Manual
+            },
+            new SupplierAccrual
+            {
+                Supplier = firstSupplier,
+                ExpenseType = waterType,
+                AccountingMonth = new DateOnly(2026, 3, 1),
+                Amount = 30m,
+                Source = AccrualSources.Manual
+            },
+            new SupplierAccrual
+            {
+                Supplier = firstSupplier,
+                ExpenseType = waterType,
+                AccountingMonth = new DateOnly(2026, 4, 1),
+                Amount = 999m,
+                Source = AccrualSources.Manual
+            },
+            CreateHistoricalExpense(firstSupplier, null, waterType, new DateOnly(2026, 1, 1), 70m),
+            CreateHistoricalExpense(firstSupplier, null, repairType, new DateOnly(2026, 2, 1), 60m),
+            CreateHistoricalExpense(secondSupplier, null, waterType, new DateOnly(2026, 2, 1), 100m),
+            CreateHistoricalExpense(firstSupplier, null, waterType, new DateOnly(2026, 3, 1), 10m),
+            CreateHistoricalExpense(firstSupplier, null, waterType, new DateOnly(2026, 4, 1), 555m),
+            CreateHistoricalExpense(null, staffMember, salaryType, new DateOnly(2026, 1, 1), 60m),
+            CreateHistoricalExpense(null, staffMember, salaryType, new DateOnly(2026, 2, 1), 100m),
+            new FinancialOperation
+            {
+                OperationKind = FinancialOperationKinds.Expense,
+                OperationDate = new DateOnly(2026, 3, 10),
+                AccountingMonth = new DateOnly(2026, 3, 1),
+                Amount = 777m,
+                StaffMember = staffMember
+            },
+            CreateHistoricalExpense(firstSupplier, null, waterType, new DateOnly(2026, 2, 1), 999m, isCanceled: true),
+            CreateHistoricalExpense(null, staffMember, salaryType, new DateOnly(2026, 2, 1), 999m, isCanceled: true));
+        await database.Context.SaveChangesAsync();
+        commandCounter.Reset();
+
+        var result = await service.GetExpenseWorksheetAsync(
+            new ExpenseWorksheetRequest(new DateOnly(2026, 3, 1)),
+            CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+        Assert.Equal(1, commandCounter.Count);
+        Assert.Equal(360m, result.Value!.OpeningBalanceTotal);
+        var firstSupplierWaterRow = Assert.Single(result.Value.Rows, row =>
+            row.SupplierId == firstSupplier.Id && row.ExpenseTypeId == waterType.Id);
+        Assert.Equal(130m, firstSupplierWaterRow.OpeningBalance);
+        Assert.Equal(30m, firstSupplierWaterRow.AccrualAmount);
+        Assert.Equal(10m, firstSupplierWaterRow.ExpenseAmount);
+        Assert.Equal(-10m, Assert.Single(result.Value.Rows, row =>
+            row.SupplierId == firstSupplier.Id && row.ExpenseTypeId == repairType.Id).OpeningBalance);
+        Assert.Equal(200m, Assert.Single(result.Value.Rows, row =>
+            row.SupplierId == secondSupplier.Id && row.ExpenseTypeId == waterType.Id).OpeningBalance);
+        var staffRow = Assert.Single(result.Value.Rows, row => row.StaffMemberId == staffMember.Id);
+        Assert.Equal(salaryType.Id, staffRow.ExpenseTypeId);
+        Assert.Equal(40m, staffRow.OpeningBalance);
+    }
+
+    private static FinancialOperation CreateHistoricalExpense(
+        Supplier? supplier,
+        StaffMember? staffMember,
+        ExpenseType expenseType,
+        DateOnly accountingMonth,
+        decimal amount,
+        bool isCanceled = false) =>
+        new()
+        {
+            OperationKind = FinancialOperationKinds.Expense,
+            OperationDate = accountingMonth.AddDays(15),
+            AccountingMonth = accountingMonth,
+            Amount = amount,
+            Supplier = supplier,
+            StaffMember = staffMember,
+            ExpenseType = expenseType,
+            IsCanceled = isCanceled
+        };
 
     [Fact]
     public async Task GetExpenseWorksheetAsync_KeepsCashAndBankEqualCollectedFundsAfterMixedExpenses()
@@ -4201,6 +4339,9 @@ public sealed class FinanceServiceTests
         Assert.Empty(result.SupplierExpenses);
         Assert.Empty(result.StaffMembers);
         Assert.Empty(result.StaffExpenses);
+        Assert.Empty(result.SupplierOpeningAccruals);
+        Assert.Empty(result.SupplierOpeningExpenses);
+        Assert.Empty(result.StaffOpeningExpenses);
         Assert.Empty(result.Incomes);
         Assert.Equal(0m, result.AvailableBalance.IncomeTotal);
         Assert.Equal(0m, result.AvailableBalance.BankDepositTotal);
