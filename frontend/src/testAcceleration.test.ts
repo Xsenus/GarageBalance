@@ -53,7 +53,7 @@ describe('frontend test acceleration', () => {
     expect(runner).toContain("['it', 'test', 'describe']")
     expect(runner).toContain('Full App workflows are skipped.')
     expect(runner).toContain('Math.min(8, availableParallelism())')
-    expect(runner).toContain("quickMode ? ['--pool=threads'] : []")
+    expect(runner).toContain("'--pool=threads',")
     expect(runner).toContain('finally {\n  cleanupGeneratedShards()')
     expect(runner).toContain('--slowTestThreshold=1000')
   })

@@ -35,7 +35,7 @@ try {
     vitestCli,
     relatedMode ? 'related' : 'run',
     ...(relatedMode ? ['--run'] : []),
-    ...(quickMode ? ['--pool=threads'] : []),
+    '--pool=threads',
     '--exclude',
     'src/App.test.tsx',
     `--maxWorkers=${workerCount}`,
