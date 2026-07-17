@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using GarageBalance.Api.Application.Finance;
 using GarageBalance.Api.Controllers;
+using GarageBalance.Api.Domain.Finance;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 
@@ -1221,6 +1222,32 @@ public sealed class FinanceControllerTests
         var conflict = Assert.IsType<ConflictObjectResult>(result.Result);
         var problem = Assert.IsType<ProblemDetails>(conflict.Value);
         Assert.Equal("meter_reading_conflict", problem.Title);
+    }
+
+    [Fact]
+    public async Task SavePaymentFormMeterReading_ReturnsBadRequestWhenManualValueIsMissing()
+    {
+        var service = new FakeFinanceService
+        {
+            SavePaymentFormMeterReadingResult = FinanceResult<MeterReadingDto>.Failure(
+                "meter_reading_value_required",
+                "Введите показание счетчика вручную.")
+        };
+        var controller = CreateController(service);
+        var request = new SavePaymentFormMeterReadingRequest(
+            Guid.NewGuid(),
+            MeterKinds.Water,
+            new DateOnly(2026, 7, 1),
+            new DateOnly(2026, 7, 17),
+            null,
+            null);
+
+        var result = await controller.SavePaymentFormMeterReading(request, CancellationToken.None);
+
+        var badRequest = Assert.IsType<BadRequestObjectResult>(result.Result);
+        var problem = Assert.IsType<ProblemDetails>(badRequest.Value);
+        Assert.Equal("meter_reading_value_required", problem.Title);
+        Assert.Same(request, service.LastSavePaymentFormMeterReadingRequest);
     }
 
     [Fact]

@@ -284,7 +284,7 @@ public sealed record CreateMeterReadingRequest(
     [Required, MaxLength(40)] string MeterKind,
     DateOnly AccountingMonth,
     DateOnly ReadingDate,
-    [Range(0, 999999999)] decimal CurrentValue,
+    [Required, Range(0, 999999999)] decimal? CurrentValue,
     [MaxLength(1000)] string? Comment,
     Guid? ExpectedVersion = null);
 
@@ -293,14 +293,14 @@ public sealed record SavePaymentFormMeterReadingRequest(
     [Required, MaxLength(40)] string MeterKind,
     DateOnly AccountingMonth,
     DateOnly ReadingDate,
-    [Range(0, 999999999)] decimal CurrentValue,
+    [Required, Range(0, 999999999)] decimal? CurrentValue,
     [MaxLength(1000)] string? Comment,
     Guid? MeterReadingId = null,
     Guid? ExpectedVersion = null);
 
 public sealed record CorrectHistoricalMeterReadingRequest(
     DateOnly ReadingDate,
-    [Range(0, 999999999)] decimal CurrentValue,
+    [Required, Range(0, 999999999)] decimal? CurrentValue,
     [MaxLength(1000)] string? Comment,
     [Required, MaxLength(500)] string Reason,
     Guid ExpectedVersion);

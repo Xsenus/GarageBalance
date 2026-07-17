@@ -1,5 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using System.Globalization;
+using System.Text.Json;
 using GarageBalance.Api.Application.Finance;
 
 namespace GarageBalance.Api.Tests.Controllers;
@@ -47,6 +48,46 @@ public sealed class RequestContractValidationAttributeTests
             CultureInfo.CurrentCulture = originalCulture;
             CultureInfo.CurrentUICulture = originalUiCulture;
         }
+    }
+
+    [Fact]
+    public void MeterReadingContractsRequireAnExplicitManualValue()
+    {
+        var requestTypes = new[]
+        {
+            typeof(CreateMeterReadingRequest),
+            typeof(SavePaymentFormMeterReadingRequest),
+            typeof(CorrectHistoricalMeterReadingRequest)
+        };
+
+        foreach (var requestType in requestTypes)
+        {
+            var constructor = Assert.Single(requestType.GetConstructors());
+            var currentValue = Assert.Single(
+                constructor.GetParameters(),
+                parameter => string.Equals(parameter.Name, "CurrentValue", StringComparison.OrdinalIgnoreCase));
+
+            Assert.Equal(typeof(decimal?), currentValue.ParameterType);
+            Assert.Contains(currentValue.GetCustomAttributes(inherit: true), attribute => attribute is RequiredAttribute);
+        }
+    }
+
+    [Fact]
+    public void MissingMeterReadingValueDeserializesAsNullInsteadOfZero()
+    {
+        var request = JsonSerializer.Deserialize<CreateMeterReadingRequest>(
+            """
+            {
+              "garageId": "3ec3e358-00a8-40a2-a29b-9cceea22951f",
+              "meterKind": "water",
+              "accountingMonth": "2026-07-01",
+              "readingDate": "2026-07-17"
+            }
+            """,
+            new JsonSerializerOptions(JsonSerializerDefaults.Web));
+
+        Assert.NotNull(request);
+        Assert.Null(request.CurrentValue);
     }
 
     private static string FindApiProjectRoot()

@@ -3676,6 +3676,90 @@ public sealed class FinanceServiceTests
     }
 
     [Fact]
+    public async Task MeterReadingCommands_RequireAnExplicitManualWaterValue()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        var service = FinanceServiceTestFactory.Create(
+            database.Context,
+            new FixedTimeProvider(new DateTimeOffset(2026, 7, 17, 12, 0, 0, TimeSpan.Zero)));
+        var created = await service.CreateMeterReadingAsync(
+            new CreateMeterReadingRequest(fixtures.Garage.Id, MeterKinds.Water, new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 20), 15m, null),
+            null,
+            CancellationToken.None);
+
+        var createWithoutValue = await service.CreateMeterReadingAsync(
+            new CreateMeterReadingRequest(fixtures.Garage.Id, MeterKinds.Water, new DateOnly(2026, 7, 1), new DateOnly(2026, 7, 17), null, null),
+            null,
+            CancellationToken.None);
+        var paymentFormWithoutValue = await service.SavePaymentFormMeterReadingAsync(
+            new SavePaymentFormMeterReadingRequest(fixtures.Garage.Id, MeterKinds.Water, new DateOnly(2026, 7, 1), new DateOnly(2026, 7, 17), null, null),
+            null,
+            CancellationToken.None);
+        var updateWithoutValue = await service.UpdateMeterReadingAsync(
+            created.Value!.Id,
+            new CreateMeterReadingRequest(fixtures.Garage.Id, MeterKinds.Water, new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 21), null, null, created.Value.Version),
+            null,
+            CancellationToken.None);
+        var correctionWithoutValue = await service.CorrectHistoricalMeterReadingAsync(
+            created.Value.Id,
+            new CorrectHistoricalMeterReadingRequest(new DateOnly(2026, 6, 21), null, null, "Сверка с журналом", created.Value.Version),
+            null,
+            CancellationToken.None);
+
+        Assert.True(created.Succeeded, created.ErrorMessage);
+        Assert.All(
+            new[] { createWithoutValue, paymentFormWithoutValue, updateWithoutValue, correctionWithoutValue },
+            result =>
+            {
+                Assert.False(result.Succeeded);
+                Assert.Equal("meter_reading_value_required", result.ErrorCode);
+            });
+        var stored = Assert.Single(database.Context.MeterReadings);
+        Assert.Equal(15m, stored.CurrentValue);
+        Assert.Single(database.Context.AuditEvents, item => item.Action == "finance.meter_reading_created");
+    }
+
+    [Fact]
+    public async Task CreateMeterReadingAsync_DoesNotSubstituteZeroForMissingWaterBaseline()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        fixtures.Garage.InitialWaterMeterValue = null;
+        await database.Context.SaveChangesAsync();
+        var service = FinanceServiceTestFactory.Create(database.Context);
+
+        var missingBaseline = await service.CreateMeterReadingAsync(
+            new CreateMeterReadingRequest(fixtures.Garage.Id, MeterKinds.Water, new DateOnly(2026, 5, 1), new DateOnly(2026, 5, 20), 15m, null),
+            null,
+            CancellationToken.None);
+
+        Assert.False(missingBaseline.Succeeded);
+        Assert.Equal("water_meter_reading_baseline_required", missingBaseline.ErrorCode);
+        Assert.Empty(database.Context.MeterReadings);
+        Assert.DoesNotContain(database.Context.AuditEvents, item => item.Action == "finance.meter_reading_created");
+
+        fixtures.Garage.InitialWaterMeterValue = 10m;
+        await database.Context.SaveChangesAsync();
+        var first = await service.CreateMeterReadingAsync(
+            new CreateMeterReadingRequest(fixtures.Garage.Id, MeterKinds.Water, new DateOnly(2026, 5, 1), new DateOnly(2026, 5, 20), 15m, null),
+            null,
+            CancellationToken.None);
+        fixtures.Garage.InitialWaterMeterValue = null;
+        await database.Context.SaveChangesAsync();
+
+        var next = await service.CreateMeterReadingAsync(
+            new CreateMeterReadingRequest(fixtures.Garage.Id, MeterKinds.Water, new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 20), 18m, null),
+            null,
+            CancellationToken.None);
+
+        Assert.True(first.Succeeded, first.ErrorMessage);
+        Assert.True(next.Succeeded, next.ErrorMessage);
+        Assert.Equal(15m, next.Value!.PreviousValue);
+        Assert.Equal(3m, next.Value.Consumption);
+    }
+
+    [Fact]
     public async Task SavePaymentFormMeterReadingAsync_CreatesAndUpdatesWithRotatedVersion()
     {
         await using var database = await TestDatabase.CreateAsync();

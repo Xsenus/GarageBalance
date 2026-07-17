@@ -9,6 +9,7 @@
 - [x] Регулярные начисления считают воду по расходу счетчика, электроэнергию по порогам, мусор по количеству людей в гараже, фиксированные услуги по ставке тарифа.
 - [x] Показания воды и электроэнергии хранятся помесячно, имеют предыдущие/текущие значения, расход, audit и предупреждение по разрыву истории электроэнергии.
 - [x] Форма поступлений подсвечивает пустую ячейку счетчика для строк, где backend worksheet требует показание.
+- [x] Backend требует явное текущее показание счетчика и для первой воды без предыдущего месяца не подставляет ноль: нужна реальная стартовая база из карточки гаража.
 - [x] Справочник услуг хранит периодичность, месяц старта начисления, дату оплаты, grace period, признак счетчика, признак порогов и единицу измерения.
 - [x] Годовые сборы поддерживаются через `FeeCampaigns`, участников, дату начала/окончания, целевую сумму, сумму взноса, начисление и audit.
 
@@ -25,7 +26,7 @@
 - [x] Backend validation/tests for the chosen current-month electricity meter edit rule.
 - [x] Frontend state and tests for blocking or confirming electricity meter edits outside the allowed month.
 - [~] Backend and frontend confirmation flow for early electricity payments: серверный preview и границы 29/30/31 готовы, неблокирующий frontend dialog остается следующим пунктом.
-- [ ] Water empty-field highlighting exactly in the decided screens.
+- [~] Water empty-field highlighting: backend-правило ручного значения и запрет фиктивного нуля готовы; точный набор экранов для мягкой красной подсветки остается бизнес-решением frontend.
 - [ ] Annual dues and outdoor lighting accrual-stop logic with tests for paid, partially paid, overpaid, canceled payment and restored payment cases.
 - [ ] Release note for cooperative staff/admins describing the final business rules.
 

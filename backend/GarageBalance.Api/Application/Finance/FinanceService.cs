@@ -2348,6 +2348,11 @@ public sealed class FinanceService(
             return FinanceResult<MeterReadingDto>.Failure("meter_kind_invalid", "Тип счетчика должен быть water или electricity.");
         }
 
+        if (!request.CurrentValue.HasValue)
+        {
+            return ManualMeterReadingValueRequired();
+        }
+
         var garage = await garageRepository.FindActiveWithOwnerAsync(request.GarageId, cancellationToken);
         if (garage is null)
         {
@@ -2361,8 +2366,14 @@ public sealed class FinanceService(
         }
 
         var previousReading = await meterReadingRepository.GetPreviousActiveAsync(null, garage.Id, meterKind, month, cancellationToken);
-        var currentValue = MoneyMath.RoundMeterValue(request.CurrentValue);
-        var previousValue = MoneyMath.RoundMeterValue(previousReading?.CurrentValue ?? GetInitialMeterValue(garage, meterKind) ?? 0m);
+        var currentValue = MoneyMath.RoundMeterValue(request.CurrentValue.Value);
+        var previousMeterValue = previousReading?.CurrentValue ?? GetInitialMeterValue(garage, meterKind);
+        if (!previousMeterValue.HasValue && meterKind == MeterKinds.Water)
+        {
+            return WaterMeterReadingBaselineRequired();
+        }
+
+        var previousValue = MoneyMath.RoundMeterValue(previousMeterValue ?? 0m);
         var consumption = MoneyMath.RoundMeterValue(currentValue - previousValue);
         if (consumption < 0)
         {
@@ -2399,6 +2410,11 @@ public sealed class FinanceService(
         if (meterKind is not MeterKinds.Water and not MeterKinds.Electricity)
         {
             return FinanceResult<MeterReadingDto>.Failure("meter_kind_invalid", "Тип счетчика должен быть water или electricity.");
+        }
+
+        if (!request.CurrentValue.HasValue)
+        {
+            return ManualMeterReadingValueRequired();
         }
 
         var month = MonthPeriod.Normalize(request.AccountingMonth);
@@ -2501,6 +2517,11 @@ public sealed class FinanceService(
             return FinanceResult<MeterReadingDto>.Failure("meter_kind_invalid", "Тип счетчика должен быть water или electricity.");
         }
 
+        if (!request.CurrentValue.HasValue)
+        {
+            return ManualMeterReadingValueRequired();
+        }
+
         var reading = await meterReadingRepository.FindForUpdateAsync(meterReadingId, cancellationToken);
         if (reading is null)
         {
@@ -2545,8 +2566,18 @@ public sealed class FinanceService(
         }
 
         var previousReading = await meterReadingRepository.GetPreviousActiveAsync(reading.Id, garage.Id, meterKind, month, cancellationToken);
-        var currentValue = MoneyMath.RoundMeterValue(request.CurrentValue);
-        var previousValue = MoneyMath.RoundMeterValue(previousReading?.CurrentValue ?? GetInitialMeterValue(garage, meterKind) ?? 0m);
+        var currentValue = MoneyMath.RoundMeterValue(request.CurrentValue.Value);
+        var storedPreviousValue = reading.GarageId == garage.Id &&
+            string.Equals(reading.MeterKind, meterKind, StringComparison.Ordinal)
+                ? reading.PreviousValue
+                : (decimal?)null;
+        var previousMeterValue = previousReading?.CurrentValue ?? GetInitialMeterValue(garage, meterKind) ?? storedPreviousValue;
+        if (!previousMeterValue.HasValue && meterKind == MeterKinds.Water)
+        {
+            return WaterMeterReadingBaselineRequired();
+        }
+
+        var previousValue = MoneyMath.RoundMeterValue(previousMeterValue ?? 0m);
         var consumption = MoneyMath.RoundMeterValue(currentValue - previousValue);
         if (consumption < 0)
         {
@@ -2700,6 +2731,16 @@ public sealed class FinanceService(
         FinanceResult<MeterReadingDto>.Failure(
             "meter_reading_conflict",
             "Показание уже изменено другим пользователем. Обновите данные и повторите действие.");
+
+    private static FinanceResult<MeterReadingDto> ManualMeterReadingValueRequired() =>
+        FinanceResult<MeterReadingDto>.Failure(
+            "meter_reading_value_required",
+            "Введите показание счетчика вручную.");
+
+    private static FinanceResult<MeterReadingDto> WaterMeterReadingBaselineRequired() =>
+        FinanceResult<MeterReadingDto>.Failure(
+            "water_meter_reading_baseline_required",
+            "Для первого показания воды укажите стартовое значение счетчика в карточке гаража.");
 
     public async Task<FinanceResult<MeterReadingDto>> CancelMeterReadingAsync(Guid meterReadingId, CancelFinanceEntryRequest request, Guid? actorUserId, CancellationToken cancellationToken)
     {
