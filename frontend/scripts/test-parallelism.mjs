@@ -3,5 +3,5 @@ export function chooseTestParallelism(availableWorkers) {
     ? availableWorkers
     : 1
 
-  return Math.min(4, normalizedWorkers, Math.floor(normalizedWorkers / 2) + 1)
+  return Math.min(6, normalizedWorkers)
 }

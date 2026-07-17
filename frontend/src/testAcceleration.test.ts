@@ -61,11 +61,11 @@ describe('frontend test acceleration', () => {
   it.each([
     [1, 1],
     [2, 2],
-    [3, 2],
-    [4, 3],
-    [5, 3],
-    [6, 4],
-    [8, 4],
+    [3, 3],
+    [4, 4],
+    [5, 5],
+    [6, 6],
+    [8, 6],
   ])('uses %i workers as a safe parallelism budget of %i', (availableWorkers, expectedWorkers) => {
     expect(chooseTestParallelism(availableWorkers)).toBe(expectedWorkers)
   })
