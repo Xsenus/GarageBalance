@@ -4738,6 +4738,10 @@ describe('App', () => {
           expenseTypeId: 'expense-water',
           expenseTypeName: 'Водоснабжение',
           openingBalance: 7500,
+          openingDebt: 7500,
+          openingAdvance: 0,
+          closingDebt: 29500,
+          closingAdvance: 0,
           accrualAmount: 32000,
           expenseAmount: 10000,
           balance: 22000,
@@ -4752,6 +4756,10 @@ describe('App', () => {
           expenseTypeId: null,
           expenseTypeName: 'Бухгалтерия',
           openingBalance: -2500,
+          openingDebt: 0,
+          openingAdvance: 2500,
+          closingDebt: 22500,
+          closingAdvance: 0,
           accrualAmount: 40000,
           expenseAmount: 15000,
           balance: 25000,
@@ -4776,11 +4784,23 @@ describe('App', () => {
     const expenseTable = within(prototype).getByRole('table', { name: 'Форма выплат за июнь 2026' })
     expect(await within(expenseTable).findByText('Серверный водоканал')).toBeInTheDocument()
     expect(within(expenseTable).getByText('Петрова Ольга')).toBeInTheDocument()
-    expect(within(expenseTable).getByRole('columnheader', { name: 'Входящий долг/аванс' })).toBeInTheDocument()
-    expect(within(expenseTable).getByText('7 500.00')).toHaveClass('money-expense')
-    expect(within(expenseTable).getByText('-2 500.00')).toHaveClass('money-income')
+    expect(within(expenseTable).getByRole('columnheader', { name: 'Входящий долг' })).toBeInTheDocument()
+    expect(within(expenseTable).getByRole('columnheader', { name: 'Входящий аванс' })).toBeInTheDocument()
+    expect(within(expenseTable).getByRole('columnheader', { name: 'Исходящий долг' })).toBeInTheDocument()
+    expect(within(expenseTable).getByRole('columnheader', { name: 'Исходящий аванс' })).toBeInTheDocument()
+    const supplierExpenseRow = within(expenseTable).getByText('Серверный водоканал').closest('tr')
+    const staffExpenseRow = within(expenseTable).getByText('Петрова Ольга').closest('tr')
+    expect(supplierExpenseRow).not.toBeNull()
+    expect(staffExpenseRow).not.toBeNull()
+    expect(within(supplierExpenseRow!).getByText('7 500.00')).toHaveClass('money-expense')
+    expect(within(supplierExpenseRow!).getByText('29 500.00')).toHaveClass('money-expense')
+    expect(within(staffExpenseRow!).getByText('2 500.00')).toHaveClass('money-income')
+    expect(within(staffExpenseRow!).getByText('22 500.00')).toHaveClass('money-expense')
     expect(within(expenseTable).getAllByText('32 000.00').length).toBeGreaterThan(0)
-    expect(within(expenseTable).getAllByText('47 000.00').length).toBeGreaterThan(0)
+    expect(within(expenseTable).getAllByText('52 000.00').length).toBeGreaterThan(0)
+    await user.click(within(supplierExpenseRow!).getByRole('button', { name: 'Оплатить Водоснабжение' }))
+    const expenseDialog = await screen.findByRole('dialog', { name: 'Новая выплата' })
+    expect(within(expenseDialog).getByLabelText('Сумма выплаты')).toHaveValue('29 500.00')
     expect(within(prototype).getByText('12 000.00')).toBeInTheDocument()
     expect(within(prototype).getByText('4 000.00')).toBeInTheDocument()
   })
@@ -15242,6 +15262,10 @@ function createExpenseWorksheet(overrides: Partial<ExpenseWorksheetDto>): Expens
   return {
     accountingMonth: '2026-06-01',
     openingBalanceTotal: 0,
+    openingDebtTotal: 0,
+    openingAdvanceTotal: 0,
+    closingDebtTotal: 47000,
+    closingAdvanceTotal: 0,
     accrualTotal: 72000,
     expenseTotal: 25000,
     balanceTotal: 47000,
@@ -15258,6 +15282,10 @@ function createExpenseWorksheet(overrides: Partial<ExpenseWorksheetDto>): Expens
         expenseTypeId: 'expense-water',
         expenseTypeName: 'Водоснабжение',
         openingBalance: 0,
+        openingDebt: 0,
+        openingAdvance: 0,
+        closingDebt: 22000,
+        closingAdvance: 0,
         accrualAmount: 32000,
         expenseAmount: 10000,
         balance: 22000,
@@ -15272,6 +15300,10 @@ function createExpenseWorksheet(overrides: Partial<ExpenseWorksheetDto>): Expens
         expenseTypeId: null,
         expenseTypeName: 'Бухгалтерия',
         openingBalance: 0,
+        openingDebt: 0,
+        openingAdvance: 0,
+        closingDebt: 25000,
+        closingAdvance: 0,
         accrualAmount: 40000,
         expenseAmount: 15000,
         balance: 25000,

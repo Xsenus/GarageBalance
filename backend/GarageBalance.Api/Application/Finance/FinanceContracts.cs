@@ -382,6 +382,14 @@ public sealed record ExpenseWorksheetRowDto(
     decimal? Difference)
 {
     public decimal OpeningBalance { get; init; }
+
+    public decimal OpeningDebt { get; init; }
+
+    public decimal OpeningAdvance { get; init; }
+
+    public decimal ClosingDebt { get; init; }
+
+    public decimal ClosingAdvance { get; init; }
 }
 
 public sealed record ExpenseWorksheetDto(
@@ -396,6 +404,14 @@ public sealed record ExpenseWorksheetDto(
     IReadOnlyList<ExpenseWorksheetRowDto> Rows)
 {
     public decimal OpeningBalanceTotal { get; init; }
+
+    public decimal OpeningDebtTotal { get; init; }
+
+    public decimal OpeningAdvanceTotal { get; init; }
+
+    public decimal ClosingDebtTotal { get; init; }
+
+    public decimal ClosingAdvanceTotal { get; init; }
 }
 
 public sealed record FinanceSummaryDto(

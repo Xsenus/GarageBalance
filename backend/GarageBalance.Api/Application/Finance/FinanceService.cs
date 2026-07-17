@@ -504,6 +504,7 @@ public sealed class FinanceService(
             var expenseAmount = MoneyMath.RoundMoney(expense?.Amount ?? 0m);
             var balance = MoneyMath.RoundMoney(Math.Max(accrualAmount - expenseAmount, 0m));
             var openingBalance = MoneyMath.RoundMoney((openingAccrual?.Amount ?? 0m) - (openingExpense?.Amount ?? 0m));
+            var closingBalance = MoneyMath.RoundMoney(openingBalance + accrualAmount - expenseAmount);
             var collected = TryGetCollectedAmount(collectedByIncomeKey, sample.ExpenseTypeName, sample.ExpenseTypeCode);
             decimal? difference = collected.HasValue ? MoneyMath.RoundMoney(collected.Value - accrualAmount) : null;
             rows.Add(new ExpenseWorksheetRowDto(
@@ -519,7 +520,11 @@ public sealed class FinanceService(
                 collected,
                 difference)
             {
-                OpeningBalance = openingBalance
+                OpeningBalance = openingBalance,
+                OpeningDebt = MoneyMath.RoundMoney(Math.Max(openingBalance, 0m)),
+                OpeningAdvance = MoneyMath.RoundMoney(Math.Max(-openingBalance, 0m)),
+                ClosingDebt = MoneyMath.RoundMoney(Math.Max(closingBalance, 0m)),
+                ClosingAdvance = MoneyMath.RoundMoney(Math.Max(-closingBalance, 0m))
             });
         }
 
@@ -546,6 +551,7 @@ public sealed class FinanceService(
                 ((accountingMonth.Year - historyStartMonth.Year) * 12) + accountingMonth.Month - historyStartMonth.Month);
             var openingBalance = MoneyMath.RoundMoney(
                 (staffMember.Rate * historyMonthCount) - (staffOpeningExpense?.Amount ?? 0m));
+            var closingBalance = MoneyMath.RoundMoney(openingBalance + accrualAmount - expenseAmount);
             rows.Add(new ExpenseWorksheetRowDto(
                 "staff",
                 null,
@@ -559,7 +565,11 @@ public sealed class FinanceService(
                 null,
                 null)
             {
-                OpeningBalance = openingBalance
+                OpeningBalance = openingBalance,
+                OpeningDebt = MoneyMath.RoundMoney(Math.Max(openingBalance, 0m)),
+                OpeningAdvance = MoneyMath.RoundMoney(Math.Max(-openingBalance, 0m)),
+                ClosingDebt = MoneyMath.RoundMoney(Math.Max(closingBalance, 0m)),
+                ClosingAdvance = MoneyMath.RoundMoney(Math.Max(-closingBalance, 0m))
             });
         }
 
@@ -573,6 +583,10 @@ public sealed class FinanceService(
         var expenseTotal = MoneyMath.RoundMoney(rows.Sum(row => row.ExpenseAmount));
         var balanceTotal = MoneyMath.RoundMoney(rows.Sum(row => row.Balance));
         var openingBalanceTotal = MoneyMath.RoundMoney(rows.Sum(row => row.OpeningBalance));
+        var openingDebtTotal = MoneyMath.RoundMoney(rows.Sum(row => row.OpeningDebt));
+        var openingAdvanceTotal = MoneyMath.RoundMoney(rows.Sum(row => row.OpeningAdvance));
+        var closingDebtTotal = MoneyMath.RoundMoney(rows.Sum(row => row.ClosingDebt));
+        var closingAdvanceTotal = MoneyMath.RoundMoney(rows.Sum(row => row.ClosingAdvance));
         var collectedTotal = MoneyMath.RoundMoney(rows.Sum(row => row.CollectedAmount ?? 0m));
         var differenceTotal = MoneyMath.RoundMoney(collectedTotal - accrualTotal);
         var availableAmounts = CalculateAvailableAmounts(worksheetData.AvailableBalance);
@@ -588,7 +602,11 @@ public sealed class FinanceService(
             availableAmounts.CashAmount,
             rows)
         {
-            OpeningBalanceTotal = openingBalanceTotal
+            OpeningBalanceTotal = openingBalanceTotal,
+            OpeningDebtTotal = openingDebtTotal,
+            OpeningAdvanceTotal = openingAdvanceTotal,
+            ClosingDebtTotal = closingDebtTotal,
+            ClosingAdvanceTotal = closingAdvanceTotal
         });
     }
 

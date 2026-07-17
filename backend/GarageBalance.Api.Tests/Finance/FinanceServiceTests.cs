@@ -4094,6 +4094,10 @@ public sealed class FinanceServiceTests
         Assert.Equal(72075m, result.Value.AccrualTotal);
         Assert.Equal(25100m, result.Value.ExpenseTotal);
         Assert.Equal(47075m, result.Value.BalanceTotal);
+        Assert.Equal(0m, result.Value.OpeningDebtTotal);
+        Assert.Equal(0m, result.Value.OpeningAdvanceTotal);
+        Assert.Equal(47075m, result.Value.ClosingDebtTotal);
+        Assert.Equal(100m, result.Value.ClosingAdvanceTotal);
         Assert.Equal(29000m, result.Value.CollectedTotal);
         Assert.Equal(-43075m, result.Value.DifferenceTotal);
         Assert.Equal(0m, result.Value.CashAmount);
@@ -4106,6 +4110,10 @@ public sealed class FinanceServiceTests
         Assert.Equal(32000m, supplierRow.AccrualAmount);
         Assert.Equal(10000m, supplierRow.ExpenseAmount);
         Assert.Equal(22000m, supplierRow.Balance);
+        Assert.Equal(0m, supplierRow.OpeningDebt);
+        Assert.Equal(0m, supplierRow.OpeningAdvance);
+        Assert.Equal(22000m, supplierRow.ClosingDebt);
+        Assert.Equal(0m, supplierRow.ClosingAdvance);
         Assert.Equal(29000m, supplierRow.CollectedAmount);
         Assert.Equal(-3000m, supplierRow.Difference);
 
@@ -4113,6 +4121,8 @@ public sealed class FinanceServiceTests
         Assert.Equal(0m, expenseOnlyRow.AccrualAmount);
         Assert.Equal(100m, expenseOnlyRow.ExpenseAmount);
         Assert.Equal(0m, expenseOnlyRow.Balance);
+        Assert.Equal(0m, expenseOnlyRow.ClosingDebt);
+        Assert.Equal(100m, expenseOnlyRow.ClosingAdvance);
         Assert.Null(expenseOnlyRow.CollectedAmount);
 
         var accrualOnlyRow = Assert.Single(result.Value.Rows, row => row.ExpenseTypeId == accrualOnlyType.Id);
@@ -4236,18 +4246,35 @@ public sealed class FinanceServiceTests
         Assert.True(result.Succeeded);
         Assert.Equal(1, commandCounter.Count);
         Assert.Equal(360m, result.Value!.OpeningBalanceTotal);
+        Assert.Equal(370m, result.Value.OpeningDebtTotal);
+        Assert.Equal(10m, result.Value.OpeningAdvanceTotal);
+        Assert.Equal(490m, result.Value.ClosingDebtTotal);
+        Assert.Equal(10m, result.Value.ClosingAdvanceTotal);
         var firstSupplierWaterRow = Assert.Single(result.Value.Rows, row =>
             row.SupplierId == firstSupplier.Id && row.ExpenseTypeId == waterType.Id);
         Assert.Equal(130m, firstSupplierWaterRow.OpeningBalance);
+        Assert.Equal(130m, firstSupplierWaterRow.OpeningDebt);
+        Assert.Equal(0m, firstSupplierWaterRow.OpeningAdvance);
+        Assert.Equal(150m, firstSupplierWaterRow.ClosingDebt);
+        Assert.Equal(0m, firstSupplierWaterRow.ClosingAdvance);
         Assert.Equal(30m, firstSupplierWaterRow.AccrualAmount);
         Assert.Equal(10m, firstSupplierWaterRow.ExpenseAmount);
-        Assert.Equal(-10m, Assert.Single(result.Value.Rows, row =>
-            row.SupplierId == firstSupplier.Id && row.ExpenseTypeId == repairType.Id).OpeningBalance);
+        var firstSupplierRepairRow = Assert.Single(result.Value.Rows, row =>
+            row.SupplierId == firstSupplier.Id && row.ExpenseTypeId == repairType.Id);
+        Assert.Equal(-10m, firstSupplierRepairRow.OpeningBalance);
+        Assert.Equal(0m, firstSupplierRepairRow.OpeningDebt);
+        Assert.Equal(10m, firstSupplierRepairRow.OpeningAdvance);
+        Assert.Equal(0m, firstSupplierRepairRow.ClosingDebt);
+        Assert.Equal(10m, firstSupplierRepairRow.ClosingAdvance);
         Assert.Equal(200m, Assert.Single(result.Value.Rows, row =>
             row.SupplierId == secondSupplier.Id && row.ExpenseTypeId == waterType.Id).OpeningBalance);
         var staffRow = Assert.Single(result.Value.Rows, row => row.StaffMemberId == staffMember.Id);
         Assert.Equal(salaryType.Id, staffRow.ExpenseTypeId);
         Assert.Equal(40m, staffRow.OpeningBalance);
+        Assert.Equal(40m, staffRow.OpeningDebt);
+        Assert.Equal(0m, staffRow.OpeningAdvance);
+        Assert.Equal(140m, staffRow.ClosingDebt);
+        Assert.Equal(0m, staffRow.ClosingAdvance);
     }
 
     private static FinancialOperation CreateHistoricalExpense(

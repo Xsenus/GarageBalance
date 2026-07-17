@@ -230,6 +230,10 @@ export type ExpenseWorksheetRowDto = {
   expenseTypeId: string | null
   expenseTypeName: string
   openingBalance: number
+  openingDebt?: number
+  openingAdvance?: number
+  closingDebt?: number
+  closingAdvance?: number
   accrualAmount: number
   expenseAmount: number
   balance: number
@@ -240,6 +244,10 @@ export type ExpenseWorksheetRowDto = {
 export type ExpenseWorksheetDto = {
   accountingMonth: string
   openingBalanceTotal: number
+  openingDebtTotal?: number
+  openingAdvanceTotal?: number
+  closingDebtTotal?: number
+  closingAdvanceTotal?: number
   accrualTotal: number
   expenseTotal: number
   balanceTotal: number
