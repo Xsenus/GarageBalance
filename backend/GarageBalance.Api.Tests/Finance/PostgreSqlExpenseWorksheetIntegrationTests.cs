@@ -9,6 +9,100 @@ namespace GarageBalance.Api.Tests.Finance;
 public sealed class PostgreSqlExpenseWorksheetIntegrationTests
 {
     [PostgreSqlFact]
+    public async Task BankExpense_AllowsNegativeServiceDifferenceButRejectsInsufficientBankBalance()
+    {
+        await using var database = await PostgreSqlTestDatabase.CreateAsync();
+        Guid supplierId;
+        Guid expenseTypeId;
+        await using (var seedContext = database.CreateContext())
+        {
+            seedContext.FinancialOperations.RemoveRange(seedContext.FinancialOperations);
+            seedContext.FundOperations.RemoveRange(seedContext.FundOperations);
+            seedContext.Funds.RemoveRange(seedContext.Funds);
+            var owner = new Owner { LastName = "Проверка", FirstName = "Банка" };
+            var garage = new Garage { Number = "PG-BANK-RULE", PeopleCount = 1, FloorCount = 1, Owner = owner };
+            var incomeType = new IncomeType { Name = "Банковское правило PG", Code = "pg_bank_rule" };
+            var supplierGroup = new SupplierGroup { Name = "Банковское правило PG" };
+            var supplier = new Supplier { Name = "Поставщик банковского правила PG", Group = supplierGroup };
+            var expenseType = new ExpenseType { Name = incomeType.Name, Code = incomeType.Code };
+            var bankFund = new Fund { Name = "Банк правила PG", NormalizedName = "БАНК ПРАВИЛА PG", Balance = 300m };
+            supplierId = supplier.Id;
+            expenseTypeId = expenseType.Id;
+            seedContext.AddRange(
+                owner,
+                garage,
+                incomeType,
+                supplierGroup,
+                supplier,
+                expenseType,
+                bankFund,
+                new FundOperation
+                {
+                    Fund = bankFund,
+                    OperationKind = FundOperationKinds.Deposit,
+                    Amount = 300m,
+                    BalanceBefore = 0m,
+                    BalanceAfter = 300m,
+                    Reason = "Остаток банка для проверки",
+                    CreatedAtUtc = new DateTimeOffset(2026, 6, 1, 0, 0, 0, TimeSpan.Zero)
+                },
+                new FinancialOperation
+                {
+                    OperationKind = FinancialOperationKinds.Income,
+                    OperationDate = new DateOnly(2026, 6, 10),
+                    AccountingMonth = new DateOnly(2026, 6, 1),
+                    Amount = 100m,
+                    Garage = garage,
+                    IncomeType = incomeType
+                },
+                CreateAccrual(supplier, expenseType, new DateOnly(2026, 6, 1), 500m));
+            await seedContext.SaveChangesAsync();
+        }
+
+        await using var context = database.CreateContext();
+        var service = FinanceServiceTestFactory.Create(context);
+        var allowed = await service.CreateExpenseAsync(
+            new CreateExpenseOperationRequest(
+                supplierId,
+                expenseTypeId,
+                new DateOnly(2026, 6, 20),
+                new DateOnly(2026, 6, 1),
+                250m,
+                "PG-BANK-ALLOWED",
+                null),
+            Guid.NewGuid(),
+            CancellationToken.None);
+        var rejected = await service.CreateExpenseAsync(
+            new CreateExpenseOperationRequest(
+                supplierId,
+                expenseTypeId,
+                new DateOnly(2026, 6, 21),
+                new DateOnly(2026, 6, 1),
+                50.01m,
+                "PG-BANK-REJECTED",
+                null),
+            Guid.NewGuid(),
+            CancellationToken.None);
+        var worksheet = await service.GetExpenseWorksheetAsync(
+            new ExpenseWorksheetRequest(new DateOnly(2026, 6, 1)),
+            CancellationToken.None);
+
+        Assert.True(allowed.Succeeded);
+        Assert.False(rejected.Succeeded);
+        Assert.Equal("bank_amount_insufficient", rejected.ErrorCode);
+        var row = Assert.Single(worksheet.Value!.Rows, item => item.SupplierId == supplierId && item.ExpenseTypeId == expenseTypeId);
+        Assert.Equal(100m, row.CollectedAmount);
+        Assert.Equal(-400m, row.Difference);
+        Assert.Equal(250m, row.ExpenseAmount);
+        Assert.Equal(50m, worksheet.Value.BankAmount);
+        Assert.Equal(1, await context.FinancialOperations.CountAsync(operation =>
+            operation.OperationKind == FinancialOperationKinds.Expense &&
+            operation.SupplierId == supplierId &&
+            operation.ExpenseTypeId == expenseTypeId));
+        Assert.Equal(1, await context.AuditEvents.CountAsync(audit => audit.Action == "finance.expense_created"));
+    }
+
+    [PostgreSqlFact]
     public async Task AtomicCashExpense_SerializesConcurrentPayoutsAndKeepsCostEqualToPayment()
     {
         await using var database = await PostgreSqlTestDatabase.CreateAsync();

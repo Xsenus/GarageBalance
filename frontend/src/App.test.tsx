@@ -4760,7 +4760,7 @@ describe('App', () => {
     await waitFor(() => expect(cancelOperation).toHaveBeenCalledWith('token', 'operation-garage-77', { reason: 'Ошибочный платеж' }))
   })
 
-  it('loads expense worksheet from finance backend', async () => {
+  it('loads expense worksheet from finance backend and allows payment when the service difference is negative', async () => {
     const user = userEvent.setup()
     const getExpenseWorksheet = vi.fn(async (_token: string, params?: { accountingMonth?: string }) => createExpenseWorksheet({
       accountingMonth: params?.accountingMonth ?? '2026-06-01',
@@ -4830,6 +4830,7 @@ describe('App', () => {
     expect(staffExpenseRow).not.toBeNull()
     expect(within(supplierExpenseRow!).getByText('7 500.00')).toHaveClass('money-expense')
     expect(within(supplierExpenseRow!).getByText('29 500.00')).toHaveClass('money-expense')
+    expect(within(supplierExpenseRow!).getByText('-3 000.00')).toHaveClass('money-expense')
     expect(within(staffExpenseRow!).getByText('2 500.00')).toHaveClass('money-income')
     expect(within(staffExpenseRow!).getByText('22 500.00')).toHaveClass('money-expense')
     expect(within(expenseTable).getAllByText('32 000.00').length).toBeGreaterThan(0)

@@ -1605,6 +1605,64 @@ public sealed class FinanceServiceTests
     }
 
     [Fact]
+    public async Task CreateExpenseAsync_AllowsBankPaymentWhenServiceCollectionsAreInsufficient()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        var waterIncomeType = new IncomeType { Name = "Вода", Code = "water" };
+        database.Context.Add(waterIncomeType);
+        await database.Context.SaveChangesAsync();
+        var service = FinanceServiceTestFactory.Create(database.Context);
+
+        Assert.True((await service.CreateSupplierAccrualAsync(
+            new CreateSupplierAccrualRequest(
+                fixtures.Supplier.Id,
+                fixtures.ExpenseType.Id,
+                new DateOnly(2026, 6, 1),
+                500m,
+                AccrualSources.Manual,
+                "WATER-INVOICE",
+                "Счет больше собранной суммы"),
+            null,
+            CancellationToken.None)).Succeeded);
+        Assert.True((await service.CreateIncomeAsync(
+            new CreateIncomeOperationRequest(
+                fixtures.Garage.Id,
+                waterIncomeType.Id,
+                new DateOnly(2026, 6, 15),
+                new DateOnly(2026, 6, 1),
+                100m,
+                "WATER-INCOME",
+                null),
+            null,
+            CancellationToken.None)).Succeeded);
+        database.Context.AuditEvents.RemoveRange(database.Context.AuditEvents);
+        await database.Context.SaveChangesAsync();
+
+        var result = await service.CreateExpenseAsync(
+            new CreateExpenseOperationRequest(
+                fixtures.Supplier.Id,
+                fixtures.ExpenseType.Id,
+                new DateOnly(2026, 6, 20),
+                new DateOnly(2026, 6, 1),
+                300m,
+                "WATER-BANK-PAYMENT",
+                "Оплата при отрицательной разнице"),
+            Guid.NewGuid(),
+            CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+        var worksheet = await service.GetExpenseWorksheetAsync(
+            new ExpenseWorksheetRequest(new DateOnly(2026, 6, 1)),
+            CancellationToken.None);
+        var row = Assert.Single(worksheet.Value!.Rows, item => item.ExpenseTypeId == fixtures.ExpenseType.Id);
+        Assert.Equal(100m, row.CollectedAmount);
+        Assert.Equal(-400m, row.Difference);
+        Assert.Equal(300m, row.ExpenseAmount);
+        Assert.Single(database.Context.AuditEvents, item => item.Action == "finance.expense_created");
+    }
+
+    [Fact]
     public async Task CreateExpenseAsync_AllowsCashExpenseWithoutBankWhenCashIsAvailable()
     {
         await using var database = await TestDatabase.CreateAsync();
