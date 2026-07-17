@@ -4,6 +4,7 @@ public sealed class DemoDatasetMigrationTests
 {
     private const string MigrationFileName = "20260716171911_SeedStagingDemoDataset.cs";
     private const string BalanceMigrationFileName = "20260717021022_BalanceStagingDemoGarages.cs";
+    private const string PaymentTimesMigrationFileName = "20260717024639_DiversifyStagingDemoPaymentTimes.cs";
 
     [Fact]
     public void DemoDatasetMigration_IsRestrictedToStagingAndIdempotent()
@@ -106,6 +107,36 @@ public sealed class DemoDatasetMigrationTests
         Assert.Contains("'advanceGarageNumbers', '114-120'", migration, StringComparison.Ordinal);
         Assert.Contains("Демонстрационная полная оплата задолженности", migration, StringComparison.Ordinal);
         Assert.Contains("Демонстрационная оплата с авансом", migration, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void PaymentTimesMigration_OnlyChangesGeneratedStagingPayments()
+    {
+        var migration = ReadMigration(PaymentTimesMigrationFileName);
+        var upSection = migration[..migration.IndexOf("protected override void Down", StringComparison.Ordinal)];
+
+        Assert.Contains("current_database() <> 'garagebalance_staging'", upSection, StringComparison.Ordinal);
+        Assert.Contains("garagebalance-staging-demo-dataset-v1", upSection, StringComparison.Ordinal);
+        Assert.Contains("garagebalance-staging-demo-payment-times-v3", upSection, StringComparison.Ordinal);
+        Assert.Contains("garagebalance-demo-income-", upSection, StringComparison.Ordinal);
+        Assert.Contains("garagebalance-demo-balance-adjustment-", upSection, StringComparison.Ordinal);
+        Assert.DoesNotContain("DocumentNumber", upSection, StringComparison.Ordinal);
+        Assert.DoesNotContain("SET \"Amount\"", upSection, StringComparison.Ordinal);
+        Assert.DoesNotContain("SET \"OperationDate\"", upSection, StringComparison.Ordinal);
+        Assert.DoesNotContain("SET \"AccountingMonth\"", upSection, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void PaymentTimesMigration_UsesDeterministicBusinessHours()
+    {
+        var migration = ReadMigration(PaymentTimesMigrationFileName);
+
+        Assert.Contains("make_timestamptz", migration, StringComparison.Ordinal);
+        Assert.Contains("8 + mod", migration, StringComparison.Ordinal);
+        Assert.Contains("12) * 5", migration, StringComparison.Ordinal);
+        Assert.Contains("'Asia/Novosibirsk'", migration, StringComparison.Ordinal);
+        Assert.Contains("'localTimeFrom', '08:00'", migration, StringComparison.Ordinal);
+        Assert.Contains("'localTimeTo', '19:55'", migration, StringComparison.Ordinal);
     }
 
     private static string ReadMigration(string migrationFileName = MigrationFileName)
