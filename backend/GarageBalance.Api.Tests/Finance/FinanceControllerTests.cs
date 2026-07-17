@@ -1076,6 +1076,60 @@ public sealed class FinanceControllerTests
     }
 
     [Fact]
+    public async Task SavePaymentFormMeterReading_ReturnsOkAndPassesVersionAndActorToService()
+    {
+        var actorUserId = Guid.NewGuid();
+        var meterReadingId = Guid.NewGuid();
+        var version = Guid.NewGuid();
+        var request = new SavePaymentFormMeterReadingRequest(
+            Guid.NewGuid(),
+            "water",
+            new DateOnly(2026, 6, 1),
+            new DateOnly(2026, 6, 20),
+            18m,
+            null,
+            meterReadingId,
+            version);
+        var service = new FakeFinanceService
+        {
+            SavePaymentFormMeterReadingResult = FinanceResult<MeterReadingDto>.Success(
+                CreateMeterReading(id: meterReadingId, currentValue: 18m, consumption: 8m))
+        };
+        var controller = CreateController(service, actorUserId);
+
+        var result = await controller.SavePaymentFormMeterReading(request, CancellationToken.None);
+
+        Assert.IsType<OkObjectResult>(result.Result);
+        Assert.Equal(actorUserId, service.LastActorUserId);
+        Assert.Equal(request, service.LastSavePaymentFormMeterReadingRequest);
+    }
+
+    [Fact]
+    public async Task SavePaymentFormMeterReading_ReturnsConflictForStaleVersion()
+    {
+        var controller = CreateController(new FakeFinanceService
+        {
+            SavePaymentFormMeterReadingResult = FinanceResult<MeterReadingDto>.Failure(
+                "meter_reading_conflict",
+                "Показание уже изменено другим пользователем.")
+        });
+
+        var result = await controller.SavePaymentFormMeterReading(
+            new SavePaymentFormMeterReadingRequest(
+                Guid.NewGuid(),
+                "water",
+                new DateOnly(2026, 6, 1),
+                new DateOnly(2026, 6, 20),
+                18m,
+                null),
+            CancellationToken.None);
+
+        var conflict = Assert.IsType<ConflictObjectResult>(result.Result);
+        var problem = Assert.IsType<ProblemDetails>(conflict.Value);
+        Assert.Equal("meter_reading_conflict", problem.Title);
+    }
+
+    [Fact]
     public async Task CancelMeterReading_ReturnsNotFoundForMissingReading()
     {
         var controller = CreateController(new FakeFinanceService
@@ -1256,7 +1310,8 @@ public sealed class FinanceControllerTests
             consumption,
             false,
             null,
-            isCanceled);
+            isCanceled,
+            Guid.NewGuid());
     }
 
     private static SupplierAccrualDto CreateSupplierAccrual(Guid? id = null, decimal amount = 100m, bool isCanceled = false)
@@ -1371,6 +1426,7 @@ public sealed class FinanceControllerTests
         public Guid? LastUpdatedMeterReadingId { get; private set; }
         public Guid? LastCanceledMeterReadingId { get; private set; }
         public Guid? LastRestoredMeterReadingId { get; private set; }
+        public SavePaymentFormMeterReadingRequest? LastSavePaymentFormMeterReadingRequest { get; private set; }
         public Guid? LastGarageBalanceHistoryGarageId { get; private set; }
         public Guid? LastGarageOverdueDebtGarageId { get; private set; }
         public Guid? LastGarageIncomeWorksheetGarageId { get; private set; }
@@ -1419,6 +1475,7 @@ public sealed class FinanceControllerTests
         public FinanceResult<FeeCampaignAccrualGenerationResultDto> GenerateFeeCampaignAccrualsResult { get; init; } = FinanceResult<FeeCampaignAccrualGenerationResultDto>.Failure("not_configured", "Not configured.");
         public FinanceResult<SupplierGroupSalaryAccrualGenerationResultDto> GenerateSupplierGroupSalaryAccrualsResult { get; init; } = FinanceResult<SupplierGroupSalaryAccrualGenerationResultDto>.Failure("not_configured", "Not configured.");
         public FinanceResult<MeterReadingDto> CreateMeterReadingResult { get; init; } = FinanceResult<MeterReadingDto>.Failure("not_configured", "Not configured.");
+        public FinanceResult<MeterReadingDto> SavePaymentFormMeterReadingResult { get; init; } = FinanceResult<MeterReadingDto>.Failure("not_configured", "Not configured.");
         public FinanceResult<MeterReadingDto> UpdateMeterReadingResult { get; init; } = FinanceResult<MeterReadingDto>.Failure("not_configured", "Not configured.");
         public FinanceResult<MeterReadingDto> CancelMeterReadingResult { get; init; } = FinanceResult<MeterReadingDto>.Failure("not_configured", "Not configured.");
         public FinanceResult<MeterReadingDto> RestoreMeterReadingResult { get; init; } = FinanceResult<MeterReadingDto>.Failure("not_configured", "Not configured.");
@@ -1673,6 +1730,13 @@ public sealed class FinanceControllerTests
         {
             LastActorUserId = actorUserId;
             return Task.FromResult(CreateMeterReadingResult);
+        }
+
+        public Task<FinanceResult<MeterReadingDto>> SavePaymentFormMeterReadingAsync(SavePaymentFormMeterReadingRequest request, Guid? actorUserId, CancellationToken cancellationToken)
+        {
+            LastActorUserId = actorUserId;
+            LastSavePaymentFormMeterReadingRequest = request;
+            return Task.FromResult(SavePaymentFormMeterReadingResult);
         }
 
         public Task<FinanceResult<MeterReadingDto>> UpdateMeterReadingAsync(Guid meterReadingId, CreateMeterReadingRequest request, Guid? actorUserId, CancellationToken cancellationToken)

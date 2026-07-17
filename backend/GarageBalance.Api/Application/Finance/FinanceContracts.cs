@@ -240,7 +240,8 @@ public sealed record MeterReadingDto(
     decimal Consumption,
     bool HasGapWarning,
     string? Comment,
-    bool IsCanceled);
+    bool IsCanceled,
+    Guid Version);
 
 public sealed record MeterReadingYearGarageDto(Guid Id, string Number);
 
@@ -272,7 +273,18 @@ public sealed record CreateMeterReadingRequest(
     DateOnly AccountingMonth,
     DateOnly ReadingDate,
     [Range(0, 999999999)] decimal CurrentValue,
-    [MaxLength(1000)] string? Comment);
+    [MaxLength(1000)] string? Comment,
+    Guid? ExpectedVersion = null);
+
+public sealed record SavePaymentFormMeterReadingRequest(
+    Guid GarageId,
+    [Required, MaxLength(40)] string MeterKind,
+    DateOnly AccountingMonth,
+    DateOnly ReadingDate,
+    [Range(0, 999999999)] decimal CurrentValue,
+    [MaxLength(1000)] string? Comment,
+    Guid? MeterReadingId = null,
+    Guid? ExpectedVersion = null);
 
 public sealed record MeterReadingListRequest(
     DateOnly? MonthFrom,

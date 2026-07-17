@@ -3528,6 +3528,109 @@ public sealed class FinanceServiceTests
     }
 
     [Fact]
+    public async Task SavePaymentFormMeterReadingAsync_CreatesAndUpdatesWithRotatedVersion()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        var service = FinanceServiceTestFactory.Create(database.Context);
+        var actorUserId = Guid.NewGuid();
+        var createRequest = new SavePaymentFormMeterReadingRequest(
+            fixtures.Garage.Id,
+            "water",
+            new DateOnly(2026, 6, 15),
+            new DateOnly(2026, 6, 20),
+            15.5m,
+            "Из формы оплаты");
+
+        var created = await service.SavePaymentFormMeterReadingAsync(createRequest, actorUserId, CancellationToken.None);
+
+        Assert.True(created.Succeeded, created.ErrorMessage);
+        Assert.NotEqual(Guid.Empty, created.Value!.Version);
+        Assert.Equal(new DateOnly(2026, 6, 1), created.Value.AccountingMonth);
+
+        var updated = await service.SavePaymentFormMeterReadingAsync(
+            createRequest with
+            {
+                MeterReadingId = created.Value.Id,
+                ExpectedVersion = created.Value.Version,
+                CurrentValue = 18m,
+                Comment = "Исправлено из формы оплаты"
+            },
+            actorUserId,
+            CancellationToken.None);
+
+        Assert.True(updated.Succeeded, updated.ErrorMessage);
+        Assert.Equal(18m, updated.Value!.CurrentValue);
+        Assert.Equal(8m, updated.Value.Consumption);
+        Assert.NotEqual(created.Value.Version, updated.Value.Version);
+        Assert.Single(database.Context.MeterReadings);
+        Assert.Equal(2, database.Context.AuditEvents.Count(item =>
+            item.Action == "finance.meter_reading_created" || item.Action == "finance.meter_reading_updated"));
+    }
+
+    [Fact]
+    public async Task SavePaymentFormMeterReadingAsync_RejectsStaleOrMissingVersion()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        var service = FinanceServiceTestFactory.Create(database.Context);
+        var created = await service.SavePaymentFormMeterReadingAsync(
+            new SavePaymentFormMeterReadingRequest(
+                fixtures.Garage.Id,
+                "water",
+                new DateOnly(2026, 6, 1),
+                new DateOnly(2026, 6, 20),
+                15.5m,
+                null),
+            null,
+            CancellationToken.None);
+        var originalVersion = created.Value!.Version;
+        var firstUpdate = await service.SavePaymentFormMeterReadingAsync(
+            new SavePaymentFormMeterReadingRequest(
+                fixtures.Garage.Id,
+                "water",
+                new DateOnly(2026, 6, 1),
+                new DateOnly(2026, 6, 21),
+                17m,
+                null,
+                created.Value.Id,
+                originalVersion),
+            null,
+            CancellationToken.None);
+
+        var staleUpdate = await service.SavePaymentFormMeterReadingAsync(
+            new SavePaymentFormMeterReadingRequest(
+                fixtures.Garage.Id,
+                "water",
+                new DateOnly(2026, 6, 1),
+                new DateOnly(2026, 6, 22),
+                19m,
+                null,
+                created.Value.Id,
+                originalVersion),
+            null,
+            CancellationToken.None);
+        var missingToken = await service.SavePaymentFormMeterReadingAsync(
+            new SavePaymentFormMeterReadingRequest(
+                fixtures.Garage.Id,
+                "water",
+                new DateOnly(2026, 6, 1),
+                new DateOnly(2026, 6, 22),
+                19m,
+                null,
+                created.Value.Id),
+            null,
+            CancellationToken.None);
+
+        Assert.True(firstUpdate.Succeeded, firstUpdate.ErrorMessage);
+        Assert.False(staleUpdate.Succeeded);
+        Assert.Equal("meter_reading_conflict", staleUpdate.ErrorCode);
+        Assert.False(missingToken.Succeeded);
+        Assert.Equal("meter_reading_conflict", missingToken.ErrorCode);
+        Assert.Equal(17m, database.Context.MeterReadings.Single().CurrentValue);
+    }
+
+    [Fact]
     public async Task CreateMeterReadingAsync_RoundsMeterValuesAndConsumptionAwayFromZero()
     {
         await using var database = await TestDatabase.CreateAsync();

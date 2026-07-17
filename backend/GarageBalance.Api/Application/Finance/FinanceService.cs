@@ -2349,6 +2349,60 @@ public sealed class FinanceService(
         return FinanceResult<MeterReadingDto>.Success(ToDto(reading));
     }
 
+    public async Task<FinanceResult<MeterReadingDto>> SavePaymentFormMeterReadingAsync(
+        SavePaymentFormMeterReadingRequest request,
+        Guid? actorUserId,
+        CancellationToken cancellationToken)
+    {
+        var meterKind = request.MeterKind.Trim();
+        if (meterKind is not MeterKinds.Water and not MeterKinds.Electricity)
+        {
+            return FinanceResult<MeterReadingDto>.Failure("meter_kind_invalid", "Тип счетчика должен быть water или electricity.");
+        }
+
+        var month = MonthPeriod.Normalize(request.AccountingMonth);
+        var activeReading = await meterReadingRepository.GetActiveAsync(
+            request.GarageId,
+            meterKind,
+            month,
+            cancellationToken);
+        var saveRequest = new CreateMeterReadingRequest(
+            request.GarageId,
+            meterKind,
+            month,
+            request.ReadingDate,
+            request.CurrentValue,
+            request.Comment,
+            request.ExpectedVersion);
+
+        if (!request.MeterReadingId.HasValue)
+        {
+            if (activeReading is not null)
+            {
+                return MeterReadingConflict();
+            }
+
+            try
+            {
+                return await CreateMeterReadingAsync(saveRequest, actorUserId, cancellationToken);
+            }
+            catch (ApplicationPersistenceConflictException)
+            {
+                return MeterReadingConflict();
+            }
+        }
+
+        if (!request.ExpectedVersion.HasValue ||
+            activeReading is null ||
+            activeReading.Id != request.MeterReadingId.Value ||
+            activeReading.Version != request.ExpectedVersion.Value)
+        {
+            return MeterReadingConflict();
+        }
+
+        return await UpdateMeterReadingAsync(request.MeterReadingId.Value, saveRequest, actorUserId, cancellationToken);
+    }
+
     public async Task<FinanceResult<MeterReadingDto>> UpdateMeterReadingAsync(Guid meterReadingId, CreateMeterReadingRequest request, Guid? actorUserId, CancellationToken cancellationToken)
     {
         var meterKind = request.MeterKind.Trim();
@@ -2366,6 +2420,11 @@ public sealed class FinanceService(
         if (reading.IsCanceled)
         {
             return FinanceResult<MeterReadingDto>.Failure("meter_reading_already_canceled", "Отмененное показание нельзя изменить.");
+        }
+
+        if (request.ExpectedVersion.HasValue && reading.Version != request.ExpectedVersion.Value)
+        {
+            return MeterReadingConflict();
         }
 
         var garage = await garageRepository.FindActiveWithOwnerAsync(request.GarageId, cancellationToken);
@@ -2437,11 +2496,24 @@ public sealed class FinanceService(
         reading.Consumption = consumption;
         reading.HasGapWarning = hasGapWarning;
         reading.Comment = comment;
-        reading.UpdatedAtUtc = DateTimeOffset.UtcNow;
+        reading.Version = Guid.NewGuid();
+        reading.UpdatedAtUtc = timeProvider.GetUtcNow();
         AddAudit(actorUserId, "finance.meter_reading_updated", reading, FormatMeterReadingUpdatedAuditSummary(reading), oldValues, newValues);
-        await unitOfWork.SaveChangesAsync(cancellationToken);
+        try
+        {
+            await unitOfWork.SaveChangesAsync(cancellationToken);
+        }
+        catch (ApplicationConcurrencyException)
+        {
+            return MeterReadingConflict();
+        }
         return FinanceResult<MeterReadingDto>.Success(ToDto(reading));
     }
+
+    private static FinanceResult<MeterReadingDto> MeterReadingConflict() =>
+        FinanceResult<MeterReadingDto>.Failure(
+            "meter_reading_conflict",
+            "Показание уже изменено другим пользователем. Обновите данные и повторите действие.");
 
     public async Task<FinanceResult<MeterReadingDto>> CancelMeterReadingAsync(Guid meterReadingId, CancelFinanceEntryRequest request, Guid? actorUserId, CancellationToken cancellationToken)
     {
@@ -2464,8 +2536,17 @@ public sealed class FinanceService(
 
         reading.IsCanceled = true;
         reading.Comment = AppendCancelReason(reading.Comment, reason);
+        reading.Version = Guid.NewGuid();
+        reading.UpdatedAtUtc = timeProvider.GetUtcNow();
         AddAudit(actorUserId, "finance.meter_reading_canceled", reading, FormatMeterReadingCanceledAuditSummary(reading, reason));
-        await unitOfWork.SaveChangesAsync(cancellationToken);
+        try
+        {
+            await unitOfWork.SaveChangesAsync(cancellationToken);
+        }
+        catch (ApplicationConcurrencyException)
+        {
+            return MeterReadingConflict();
+        }
         return FinanceResult<MeterReadingDto>.Success(ToDto(reading));
     }
 
@@ -2493,9 +2574,17 @@ public sealed class FinanceService(
         }
 
         reading.IsCanceled = false;
-        reading.UpdatedAtUtc = DateTimeOffset.UtcNow;
+        reading.Version = Guid.NewGuid();
+        reading.UpdatedAtUtc = timeProvider.GetUtcNow();
         AddAudit(actorUserId, "finance.meter_reading_restored", reading, FormatMeterReadingRestoredAuditSummary(reading));
-        await unitOfWork.SaveChangesAsync(cancellationToken);
+        try
+        {
+            await unitOfWork.SaveChangesAsync(cancellationToken);
+        }
+        catch (ApplicationConcurrencyException)
+        {
+            return MeterReadingConflict();
+        }
         return FinanceResult<MeterReadingDto>.Success(ToDto(reading));
     }
 
@@ -3589,7 +3678,8 @@ public sealed class FinanceService(
             reading.Consumption,
             reading.HasGapWarning,
             reading.Comment,
-            reading.IsCanceled);
+            reading.IsCanceled,
+            reading.Version);
     }
 
     private readonly record struct AmountCalculationResult(bool Succeeded, decimal Value, string? ErrorMessage)

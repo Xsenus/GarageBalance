@@ -529,6 +529,20 @@ public sealed class FinanceController(IFinanceService financeService) : Controll
     }
 
     [Authorize(Policy = SystemPermissions.PaymentsWrite)]
+    [HttpPut("payment-form/meter-reading")]
+    [ProducesResponseType<MeterReadingDto>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
+    public async Task<ActionResult<MeterReadingDto>> SavePaymentFormMeterReading(
+        SavePaymentFormMeterReadingRequest request,
+        CancellationToken cancellationToken)
+    {
+        var result = await financeService.SavePaymentFormMeterReadingAsync(request, GetActorUserId(), cancellationToken);
+        return result.Succeeded ? Ok(result.Value) : ToError(result);
+    }
+
+    [Authorize(Policy = SystemPermissions.PaymentsWrite)]
     [HttpPut("meter-readings/{meterReadingId:guid}")]
     [ProducesResponseType<MeterReadingDto>(StatusCodes.Status200OK)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
@@ -589,7 +603,7 @@ public sealed class FinanceController(IFinanceService financeService) : Controll
         return result.ErrorCode switch
         {
             "garage_not_found" or "income_type_not_found" or "supplier_not_found" or "expense_type_not_found" or "tariff_not_found" or "operation_not_found" or "accrual_not_found" or "supplier_accrual_not_found" or "meter_reading_not_found" => NotFound(ApiProblemDetails.Create(result.ErrorCode, result.ErrorMessage, StatusCodes.Status404NotFound)),
-            "operation_duplicate" or "operation_already_canceled" or "operation_not_canceled" or "operation_kind_mismatch" or "accrual_duplicate" or "accrual_already_canceled" or "accrual_not_canceled" or "supplier_accrual_duplicate" or "supplier_accrual_already_canceled" or "supplier_accrual_not_canceled" or "meter_reading_duplicate" or "meter_reading_already_canceled" or "meter_reading_not_canceled" or "meter_reading_sequence_invalid" or "regular_accruals_empty" or "salary_accruals_empty" or "staff_payment_amount_exceeds_available" or "bank_amount_insufficient" or "cash_amount_insufficient" => Conflict(ApiProblemDetails.Create(result.ErrorCode, result.ErrorMessage, StatusCodes.Status409Conflict)),
+            "operation_duplicate" or "operation_already_canceled" or "operation_not_canceled" or "operation_kind_mismatch" or "accrual_duplicate" or "accrual_already_canceled" or "accrual_not_canceled" or "supplier_accrual_duplicate" or "supplier_accrual_already_canceled" or "supplier_accrual_not_canceled" or "meter_reading_duplicate" or "meter_reading_conflict" or "meter_reading_already_canceled" or "meter_reading_not_canceled" or "meter_reading_sequence_invalid" or "regular_accruals_empty" or "salary_accruals_empty" or "staff_payment_amount_exceeds_available" or "bank_amount_insufficient" or "cash_amount_insufficient" => Conflict(ApiProblemDetails.Create(result.ErrorCode, result.ErrorMessage, StatusCodes.Status409Conflict)),
             _ => BadRequest(ApiProblemDetails.Create(result.ErrorCode, result.ErrorMessage, StatusCodes.Status400BadRequest))
         };
     }

@@ -124,6 +124,7 @@ export type MeterReadingDto = {
   hasGapWarning: boolean
   comment: string | null
   isCanceled: boolean
+  version: string
 }
 
 export type MeterReadingYearGarageDto = {
@@ -410,6 +411,11 @@ export type CreateMeterReadingRequest = {
   readingDate: string
   currentValue: number
   comment?: string
+  expectedVersion?: string
+}
+
+export type SavePaymentFormMeterReadingRequest = CreateMeterReadingRequest & {
+  meterReadingId?: string
 }
 
 export type FinanceClient = {
@@ -451,6 +457,7 @@ export type FinanceClient = {
   generateSupplierGroupSalaryAccruals(accessToken: string, request: GenerateSupplierGroupSalaryAccrualsRequest): Promise<SupplierGroupSalaryAccrualGenerationResultDto>
   generateFeeCampaignAccruals(accessToken: string, request: GenerateFeeCampaignAccrualsRequest): Promise<FeeCampaignAccrualGenerationResultDto>
   createMeterReading(accessToken: string, request: CreateMeterReadingRequest): Promise<MeterReadingDto>
+  savePaymentFormMeterReading?(accessToken: string, request: SavePaymentFormMeterReadingRequest): Promise<MeterReadingDto>
   updateMeterReading(accessToken: string, meterReadingId: string, request: CreateMeterReadingRequest): Promise<MeterReadingDto>
   cancelMeterReading(accessToken: string, meterReadingId: string, request: CancelFinanceEntryRequest): Promise<MeterReadingDto>
   restoreMeterReading(accessToken: string, meterReadingId: string): Promise<MeterReadingDto>
@@ -674,6 +681,9 @@ export const financeApi: FinanceClient = {
   },
   createMeterReading(accessToken, request) {
     return requestJson(accessToken, '/api/finance/meter-readings', { method: 'POST', body: JSON.stringify(request) })
+  },
+  savePaymentFormMeterReading(accessToken, request) {
+    return requestJson(accessToken, '/api/finance/payment-form/meter-reading', { method: 'PUT', body: JSON.stringify(request) })
   },
   updateMeterReading(accessToken, meterReadingId, request) {
     return requestJson(accessToken, `/api/finance/meter-readings/${meterReadingId}`, { method: 'PUT', body: JSON.stringify(request) })

@@ -512,6 +512,7 @@ public sealed class GarageBalanceDbContext(DbContextOptions<GarageBalanceDbConte
             entity.Property(reading => reading.Consumption).HasPrecision(18, 3);
             entity.Property(reading => reading.HasGapWarning).HasDefaultValue(false);
             entity.Property(reading => reading.Comment).HasMaxLength(1000);
+            entity.Property(reading => reading.Version).IsConcurrencyToken();
             entity.HasIndex(reading => reading.AccountingMonth);
             entity.HasIndex(reading => reading.ReadingDate);
             entity.HasIndex(reading => reading.GarageId);

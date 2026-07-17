@@ -109,6 +109,35 @@ describe('financeApi', () => {
     })
   })
 
+  it('saves a versioned meter reading through the payment form endpoint', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      id: 'meter-reading-1',
+      version: 'version-2',
+    }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
+    vi.stubGlobal('fetch', fetchMock)
+    const request = {
+      garageId: 'garage-12',
+      meterKind: 'water' as const,
+      accountingMonth: '2026-06-01',
+      readingDate: '2026-06-20',
+      currentValue: 18,
+      comment: 'Из формы оплаты',
+      meterReadingId: 'meter-reading-1',
+      expectedVersion: 'version-1',
+    }
+
+    await financeApi.savePaymentFormMeterReading('token', request)
+
+    expect(fetchMock).toHaveBeenCalledWith('/api/finance/payment-form/meter-reading', {
+      method: 'PUT',
+      body: JSON.stringify(request),
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: 'Bearer token',
+      },
+    })
+  })
+
   it('loads the overdue debt breakdown for the selected garage', async () => {
     const fetchMock = vi.fn().mockImplementation(() => Promise.resolve(new Response(JSON.stringify({
       garageId: 'garage-88',

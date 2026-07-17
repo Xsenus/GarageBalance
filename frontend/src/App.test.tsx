@@ -15978,6 +15978,7 @@ function createMeterReading(overrides: Partial<MeterReadingDto>): MeterReadingDt
     hasGapWarning: false,
     comment: null,
     isCanceled: false,
+    version: 'meter-reading-version-1',
     ...overrides,
   }
 }

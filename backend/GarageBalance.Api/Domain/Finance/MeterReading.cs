@@ -16,6 +16,7 @@ public sealed class MeterReading
     public bool HasGapWarning { get; set; }
     public string? Comment { get; set; }
     public bool IsCanceled { get; set; }
+    public Guid Version { get; set; } = Guid.NewGuid();
     public DateTimeOffset CreatedAtUtc { get; set; } = DateTimeOffset.UtcNow;
     public DateTimeOffset UpdatedAtUtc { get; set; } = DateTimeOffset.UtcNow;
 }
