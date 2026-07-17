@@ -13,7 +13,7 @@ namespace GarageBalance.Api.Tests.Releases;
 public sealed class AppReleaseCatalogSynchronizerTests
 {
     [Fact]
-    public async Task StartAsync_ImportsReleaseSourceIntoDatabase()
+    public async Task SynchronizeOnceAsync_ImportsReleaseSourceIntoDatabase()
     {
         var rootPath = Path.Combine(Path.GetTempPath(), $"garagebalance-release-sync-{Guid.NewGuid():N}");
         Directory.CreateDirectory(Path.Combine(rootPath, "AppReleases"));
@@ -49,16 +49,7 @@ public sealed class AppReleaseCatalogSynchronizerTests
                 provider.GetRequiredService<IServiceScopeFactory>(),
                 new FakeWebHostEnvironment(rootPath),
                 NullLogger<AppReleaseCatalogSynchronizer>.Instance);
-            await synchronizer.StartAsync(CancellationToken.None);
-
-            await WaitUntilAsync(async () =>
-            {
-                using var scope = provider.CreateScope();
-                var repository = scope.ServiceProvider.GetRequiredService<IAppReleaseRepository>();
-                return (await repository.GetPageAsync(false, 0, 9, CancellationToken.None)).TotalCount == 1;
-            });
-
-            await synchronizer.StopAsync(CancellationToken.None);
+            await synchronizer.SynchronizeOnceAsync(CancellationToken.None);
 
             using var verificationScope = provider.CreateScope();
             var repository = verificationScope.ServiceProvider.GetRequiredService<IAppReleaseRepository>();
@@ -81,14 +72,13 @@ public sealed class AppReleaseCatalogSynchronizerTests
             Path.Combine(rootPath, "AppReleases", "releases.json"),
             "[]");
 
-        var synchronizationStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var allowSynchronizationToFinish = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
 
         try
         {
             var services = new ServiceCollection();
             services.AddSingleton<IAppReleaseRepository>(
-                new BlockingAppReleaseRepository(synchronizationStarted, allowSynchronizationToFinish));
+                new BlockingAppReleaseRepository(allowSynchronizationToFinish));
             await using var provider = services.BuildServiceProvider();
             var synchronizer = new AppReleaseCatalogSynchronizer(
                 provider.GetRequiredService<IServiceScopeFactory>(),
@@ -97,8 +87,6 @@ public sealed class AppReleaseCatalogSynchronizerTests
 
             var startTask = synchronizer.StartAsync(CancellationToken.None);
 
-            await startTask.WaitAsync(TimeSpan.FromSeconds(1));
-            await synchronizationStarted.Task.WaitAsync(TimeSpan.FromSeconds(1));
             Assert.True(startTask.IsCompletedSuccessfully);
 
             allowSynchronizationToFinish.SetResult();
@@ -112,7 +100,7 @@ public sealed class AppReleaseCatalogSynchronizerTests
     }
 
     [Fact]
-    public async Task SynchronizationFailure_DoesNotStopApplicationStartup()
+    public async Task SynchronizeOnceAsync_LogsFailureWithoutPropagatingIt()
     {
         var rootPath = Path.Combine(Path.GetTempPath(), $"garagebalance-release-sync-{Guid.NewGuid():N}");
         Directory.CreateDirectory(Path.Combine(rootPath, "AppReleases"));
@@ -131,10 +119,9 @@ public sealed class AppReleaseCatalogSynchronizerTests
                 new FakeWebHostEnvironment(rootPath),
                 logger);
 
-            await synchronizer.StartAsync(CancellationToken.None).WaitAsync(TimeSpan.FromSeconds(1));
-            await logger.ErrorLogged.Task.WaitAsync(TimeSpan.FromSeconds(1));
-            await synchronizer.StopAsync(CancellationToken.None);
+            await synchronizer.SynchronizeOnceAsync(CancellationToken.None);
 
+            Assert.True(logger.ErrorLogged.Task.IsCompletedSuccessfully);
             Assert.NotNull(logger.Exception);
         }
         finally
@@ -143,17 +130,7 @@ public sealed class AppReleaseCatalogSynchronizerTests
         }
     }
 
-    private static async Task WaitUntilAsync(Func<Task<bool>> predicate)
-    {
-        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-        while (!await predicate())
-        {
-            await Task.Delay(20, timeout.Token);
-        }
-    }
-
     private sealed class BlockingAppReleaseRepository(
-        TaskCompletionSource synchronizationStarted,
         TaskCompletionSource allowSynchronizationToFinish) : IAppReleaseRepository
     {
         public Task<AppReleasePageDto> GetPageAsync(bool includeDrafts, int offset, int limit, CancellationToken cancellationToken) =>
@@ -161,7 +138,6 @@ public sealed class AppReleaseCatalogSynchronizerTests
 
         public async Task SynchronizeAsync(IReadOnlyList<AppReleaseDto> releases, CancellationToken cancellationToken)
         {
-            synchronizationStarted.SetResult();
             await allowSynchronizationToFinish.Task.WaitAsync(cancellationToken);
         }
     }

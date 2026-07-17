@@ -19,6 +19,11 @@ public sealed class AppReleaseCatalogSynchronizer(
         // release catalog is being deserialized and synchronized with PostgreSQL.
         await Task.Yield();
 
+        await SynchronizeOnceAsync(stoppingToken);
+    }
+
+    internal async Task SynchronizeOnceAsync(CancellationToken stoppingToken)
+    {
         try
         {
             var path = Path.Combine(environment.ContentRootPath, "AppReleases", "releases.json");
@@ -45,6 +50,5 @@ public sealed class AppReleaseCatalogSynchronizer(
             // accounting application unavailable when their synchronization fails.
             logger.LogError(exception, "App release catalog synchronization failed.");
         }
-
     }
 }
