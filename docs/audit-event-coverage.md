@@ -38,7 +38,7 @@
 | Auth | 7 | actor для известных пользователей, metadata без паролей, rate-limit audit | у неизвестного email actor отсутствует по природе сценария; нет `было/стало` |
 | Users | 3 | create/update/restore, diff и причина отключения | отдельной матрицы прав пока нет |
 | Dictionaries | 36 | create/update/archive/restore для текущих справочников, diff на update, причина archive | начисление участников сборов и полная UI-связка сборов остаются следующим срезом |
-| Finance | 23 | create/update/cancel/restore/generate, diff на update, связанные месяц/гараж/контрагент/документ, перенос задолженности | следующие объектные строки начислений и выплат синхронизируются отдельными срезами |
+| Finance | 24 | create/update/cancel/restore/generate, diff на update, связанные месяц/гараж/контрагент/документ, перенос задолженности | следующие объектные строки начислений и выплат синхронизируются отдельными срезами |
 | Funds | 5 | пополнение, изъятие, изменение, отмена и восстановление операций фонда | фактические финансовые модели фондов расширяются следующими срезами |
 | Import | 8 | dry-run, отчет, заявки на импорт/rollback, карантин, fingerprints, безопасная metadata | фактический импорт/rollback еще не завершены |
 | Integrations | 6 | secret upsert без plaintext-секретов, diff состояния секрета, запрос и retry синхронизации 1C Fresh без раскрытия токена, действия печати квитанций | реальный обмен, фискальное устройство и конфликты будущих интеграций впереди |
@@ -130,6 +130,7 @@
 | `finance.supplier_group_salary_accruals_generated` | `supplier_accrual_batch` | Нет | Нет | Да | `FinanceServiceTests` | массовая генерация зарплаты/поставщиков |
 | `finance.meter_reading_created` | `meter_reading` | Нет | Нет | Да | `FinanceServiceTests` | гараж, месяц, тип счетчика, расход |
 | `finance.meter_reading_updated` | `meter_reading` | Да | Нет | Да | `FinanceServiceTests` | diff показаний и расхода |
+| `finance.meter_reading_historical_updated` | `meter_reading` | Да | Да | Да | `FinanceServiceTests`, `PostgreSqlMeterReadingConcurrencyIntegrationTests` | отдельная корректировка прошлого месяца с обязательной причиной и optimistic concurrency |
 | `finance.meter_reading_canceled` | `meter_reading` | Нет | Да | Да | `FinanceServiceTests`, `FinanceControllerTests` | request требует reason |
 | `finance.meter_reading_restored` | `meter_reading` | Нет | Нет | Да | `FinanceServiceTests`, `FinanceControllerTests` | восстановление отмененного показания с проверкой активного дубля |
 

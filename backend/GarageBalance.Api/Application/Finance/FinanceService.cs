@@ -241,7 +241,7 @@ public sealed class FinanceService(
             cancellationToken);
         var result = new MeterReadingYearPageDto(
             page.Garages.Select(garage => new MeterReadingYearGarageDto(garage.Id, garage.Number)).ToList(),
-            page.Readings.Select(reading => new MeterReadingYearValueDto(reading.Id, reading.GarageId, reading.AccountingMonth, reading.CurrentValue)).ToList(),
+            page.Readings.Select(reading => new MeterReadingYearValueDto(reading.Id, reading.GarageId, reading.AccountingMonth, reading.CurrentValue, reading.Version)).ToList(),
             page.TotalCount,
             normalizedOffset,
             normalizedLimit);
@@ -2403,7 +2403,56 @@ public sealed class FinanceService(
         return await UpdateMeterReadingAsync(request.MeterReadingId.Value, saveRequest, actorUserId, cancellationToken);
     }
 
-    public async Task<FinanceResult<MeterReadingDto>> UpdateMeterReadingAsync(Guid meterReadingId, CreateMeterReadingRequest request, Guid? actorUserId, CancellationToken cancellationToken)
+    public Task<FinanceResult<MeterReadingDto>> UpdateMeterReadingAsync(
+        Guid meterReadingId,
+        CreateMeterReadingRequest request,
+        Guid? actorUserId,
+        CancellationToken cancellationToken) =>
+        UpdateMeterReadingCoreAsync(meterReadingId, request, actorUserId, historicalCorrectionReason: null, cancellationToken);
+
+    public async Task<FinanceResult<MeterReadingDto>> CorrectHistoricalMeterReadingAsync(
+        Guid meterReadingId,
+        CorrectHistoricalMeterReadingRequest request,
+        Guid? actorUserId,
+        CancellationToken cancellationToken)
+    {
+        var reason = NormalizeOptional(request.Reason);
+        if (reason is null)
+        {
+            return FinanceResult<MeterReadingDto>.Failure(
+                "meter_reading_correction_reason_required",
+                "Для исторической корректировки показания нужна причина.");
+        }
+
+        var reading = await meterReadingRepository.FindForUpdateAsync(meterReadingId, cancellationToken);
+        if (reading is null)
+        {
+            return FinanceResult<MeterReadingDto>.Failure("meter_reading_not_found", "Показание счетчика не найдено.");
+        }
+
+        var currentMonth = GetCurrentAccountingMonth();
+        if (reading.AccountingMonth >= currentMonth)
+        {
+            return HistoricalMeterReadingMonthRequired();
+        }
+
+        var correction = new CreateMeterReadingRequest(
+            reading.GarageId,
+            reading.MeterKind,
+            reading.AccountingMonth,
+            request.ReadingDate,
+            request.CurrentValue,
+            request.Comment,
+            request.ExpectedVersion);
+        return await UpdateMeterReadingCoreAsync(meterReadingId, correction, actorUserId, reason, cancellationToken);
+    }
+
+    private async Task<FinanceResult<MeterReadingDto>> UpdateMeterReadingCoreAsync(
+        Guid meterReadingId,
+        CreateMeterReadingRequest request,
+        Guid? actorUserId,
+        string? historicalCorrectionReason,
+        CancellationToken cancellationToken)
     {
         var meterKind = request.MeterKind.Trim();
         if (meterKind is not MeterKinds.Water and not MeterKinds.Electricity)
@@ -2427,13 +2476,28 @@ public sealed class FinanceService(
             return MeterReadingConflict();
         }
 
+        var month = MonthPeriod.Normalize(request.AccountingMonth);
+        var currentMonth = GetCurrentAccountingMonth();
+        if (historicalCorrectionReason is null)
+        {
+            if (reading.AccountingMonth != currentMonth || month != currentMonth)
+            {
+                return FinanceResult<MeterReadingDto>.Failure(
+                    "meter_reading_current_month_required",
+                    "Обычное изменение показания разрешено только за текущий учетный месяц. Для прошлого месяца используйте историческую корректировку.");
+            }
+        }
+        else if (reading.AccountingMonth >= currentMonth || month != reading.AccountingMonth)
+        {
+            return HistoricalMeterReadingMonthRequired();
+        }
+
         var garage = await garageRepository.FindActiveWithOwnerAsync(request.GarageId, cancellationToken);
         if (garage is null)
         {
             return FinanceResult<MeterReadingDto>.Failure("garage_not_found", "Гараж для показания счетчика не найден.");
         }
 
-        var month = MonthPeriod.Normalize(request.AccountingMonth);
         if (await meterReadingRepository.ActiveDuplicateExistsAsync(reading.Id, garage.Id, meterKind, month, cancellationToken))
         {
             return FinanceResult<MeterReadingDto>.Failure("meter_reading_duplicate", "Показание этого счетчика за месяц уже внесено.");
@@ -2498,7 +2562,16 @@ public sealed class FinanceService(
         reading.Comment = comment;
         reading.Version = Guid.NewGuid();
         reading.UpdatedAtUtc = timeProvider.GetUtcNow();
-        AddAudit(actorUserId, "finance.meter_reading_updated", reading, FormatMeterReadingUpdatedAuditSummary(reading), oldValues, newValues);
+        AddAudit(
+            actorUserId,
+            historicalCorrectionReason is null ? "finance.meter_reading_updated" : "finance.meter_reading_historical_updated",
+            reading,
+            historicalCorrectionReason is null
+                ? FormatMeterReadingUpdatedAuditSummary(reading)
+                : FormatHistoricalMeterReadingCorrectedAuditSummary(reading),
+            oldValues,
+            newValues,
+            historicalCorrectionReason);
         try
         {
             await unitOfWork.SaveChangesAsync(cancellationToken);
@@ -2509,6 +2582,16 @@ public sealed class FinanceService(
         }
         return FinanceResult<MeterReadingDto>.Success(ToDto(reading));
     }
+
+    private DateOnly GetCurrentAccountingMonth()
+    {
+        return MonthPeriod.Normalize(DateOnly.FromDateTime(timeProvider.GetLocalNow().DateTime));
+    }
+
+    private static FinanceResult<MeterReadingDto> HistoricalMeterReadingMonthRequired() =>
+        FinanceResult<MeterReadingDto>.Failure(
+            "meter_reading_historical_month_required",
+            "Историческая корректировка разрешена только для учетного месяца раньше текущего.");
 
     private static FinanceResult<MeterReadingDto> MeterReadingConflict() =>
         FinanceResult<MeterReadingDto>.Failure(
@@ -3017,6 +3100,11 @@ public sealed class FinanceService(
         return comment is null ? summary : $"{summary} Комментарий: {comment}";
     }
 
+    private static string FormatHistoricalMeterReadingCorrectedAuditSummary(MeterReading reading)
+    {
+        return $"Исторически скорректировано показание {reading.MeterKind} по гаражу {reading.Garage.Number} за {reading.AccountingMonth:MM.yyyy}; дата {reading.ReadingDate:dd.MM.yyyy}; предыдущее {reading.PreviousValue.ToString("0.###", RussianCulture)}, текущее {reading.CurrentValue.ToString("0.###", RussianCulture)}, расход {reading.Consumption.ToString("0.###", RussianCulture)}.";
+    }
+
     private void AddAudit(
         Guid? actorUserId,
         string action,
@@ -3133,7 +3221,8 @@ public sealed class FinanceService(
         MeterReading reading,
         string summary,
         IReadOnlyDictionary<string, object?>? oldValues = null,
-        IReadOnlyDictionary<string, object?>? newValues = null)
+        IReadOnlyDictionary<string, object?>? newValues = null,
+        string? reason = null)
     {
         AddAudit(
             actorUserId,
@@ -3158,7 +3247,8 @@ public sealed class FinanceService(
                 ["consumption"] = reading.Consumption
             },
             oldValues,
-            newValues);
+            newValues,
+            reason);
     }
 
     private void AddAudit(
@@ -3176,7 +3266,8 @@ public sealed class FinanceService(
         string? relatedCounterpartyName = null,
         IReadOnlyDictionary<string, object?>? metadata = null,
         IReadOnlyDictionary<string, object?>? oldValues = null,
-        IReadOnlyDictionary<string, object?>? newValues = null)
+        IReadOnlyDictionary<string, object?>? newValues = null,
+        string? reason = null)
     {
         var mergedMetadata = new Dictionary<string, object?>(StringComparer.Ordinal)
         {
@@ -3197,7 +3288,7 @@ public sealed class FinanceService(
             entityId.ToString(),
             Summary: summary,
             EntityDisplayName: NormalizeAuditDisplayName(summary),
-            Reason: action.Contains("_canceled", StringComparison.Ordinal) ? "Отмена финансовой записи." : null,
+            Reason: reason ?? (action.Contains("_canceled", StringComparison.Ordinal) ? "Отмена финансовой записи." : null),
             OldValues: oldValues,
             NewValues: newValues,
             FieldLabels: oldValues is null || newValues is null ? null : FinanceFieldLabels,

@@ -1211,7 +1211,7 @@ public sealed class ProjectWideRoadmapStatusTests
         };
         Assert.All(requiredSections, section => Assert.Contains(section, verification, StringComparison.Ordinal));
         Assert.Contains("Новая запись \"Что нового\" не нужна", verification, StringComparison.Ordinal);
-        Assert.Contains("| Finance | 23 |", auditCoverage, StringComparison.Ordinal);
+        Assert.Contains("| Finance | 24 |", auditCoverage, StringComparison.Ordinal);
         Assert.Contains("| Integrations | 6 |", auditCoverage, StringComparison.Ordinal);
         Assert.Contains("| Reports | 10 |", auditCoverage, StringComparison.Ordinal);
         Assert.Contains("ProductionBackendCode_CreatesAuditEventsOnlyThroughAuditEventWriter", migrationPolicyTests, StringComparison.Ordinal);

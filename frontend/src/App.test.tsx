@@ -30,7 +30,7 @@ import type { AuditClient, AuditEventDto } from './services/auditApi'
 import type { AuthClient, AuthResponse } from './services/authApi'
 import { DictionaryApiError } from './services/dictionariesApi'
 import type { AccountingTypeDto, ChargeServiceSettingDto, DictionaryClient, FeeCampaignDto, GarageDto, IrregularPaymentDto, OwnerDto, PagedResult, StaffDepartmentDto, StaffMemberDto, SupplierContactDto, SupplierDto, SupplierGroupDto, TariffDto, UpsertGarageRequest, UpsertStaffMemberRequest, UpsertSupplierRequest, UpsertTariffRequest } from './services/dictionariesApi'
-import type { AccrualDto, CreateAccrualRequest, CreateDebtTransferRequest, CreateExpenseOperationRequest, CreateIncomeOperationRequest, CreateMeterReadingRequest, CreateStaffPaymentRequest, CreateSupplierAccrualRequest, ExpenseWorksheetDto, FeeCampaignAccrualGenerationResultDto, FinanceClient, FinancePagedResult, FinancePageParams, FinanceSummaryDto, FinancialOperationDto, GarageBalanceHistoryDto, GarageIncomeWorksheetDto, GenerateFeeCampaignAccrualsRequest, GenerateRegularCatalogAccrualsRequest, GenerateSupplierGroupSalaryAccrualsRequest, MeterReadingDto, MeterReadingYearPageDto, MissingMeterReadingDto, RegularAccrualGenerationResultDto, RegularCatalogAccrualGenerationResultDto, SupplierAccrualDto, SupplierGroupSalaryAccrualGenerationResultDto } from './services/financeApi'
+import type { AccrualDto, CorrectHistoricalMeterReadingRequest, CreateAccrualRequest, CreateDebtTransferRequest, CreateExpenseOperationRequest, CreateIncomeOperationRequest, CreateMeterReadingRequest, CreateStaffPaymentRequest, CreateSupplierAccrualRequest, ExpenseWorksheetDto, FeeCampaignAccrualGenerationResultDto, FinanceClient, FinancePagedResult, FinancePageParams, FinanceSummaryDto, FinancialOperationDto, GarageBalanceHistoryDto, GarageIncomeWorksheetDto, GenerateFeeCampaignAccrualsRequest, GenerateRegularCatalogAccrualsRequest, GenerateSupplierGroupSalaryAccrualsRequest, MeterReadingDto, MeterReadingYearPageDto, MissingMeterReadingDto, RegularAccrualGenerationResultDto, RegularCatalogAccrualGenerationResultDto, SupplierAccrualDto, SupplierGroupSalaryAccrualGenerationResultDto } from './services/financeApi'
 import type { CreateFundOperationRequest, FundDto, FundOperationDto, FundOperationPageDto, FundsClient } from './services/fundsApi'
 import type { AccessImportCreatedRecordDto, AccessImportQuarantineItemDto, AccessImportReaderStatusDto, AccessImportRunDto, AccessImportRunLogEntryDto, ImportClient } from './services/importApi'
 import type { IntegrationClient, IntegrationSecretSettingDto, OneCFreshIntegrationStatusDto, OneCFreshSyncDto, OneCFreshSyncPreviewDto, OneCFreshSyncRequest, ReceiptPrintingActionDto, ReceiptPrintingActionRequest, ReceiptPrintingIntegrationStatusDto } from './services/integrationsApi'
@@ -3115,8 +3115,8 @@ describe('App', () => {
   it('shows meter readings prototype as a yearly garage table', async () => {
     const user = userEvent.setup()
     let createdMeterReadingRequest: CreateMeterReadingRequest | null = null
-    let updatedMeterReadingRequest: CreateMeterReadingRequest | null = null
-    let updatedMeterReadingId: string | null = null
+    let correctedMeterReadingRequest: CorrectHistoricalMeterReadingRequest | null = null
+    let correctedMeterReadingId: string | null = null
     let resolveMeterReadingYearPage!: (page: MeterReadingYearPageDto) => void
     const meterReadingYearPageRequests: Array<Parameters<FinanceClient['getMeterReadingYearPage']>[1]> = []
     const getGarages = vi.fn(async () => [createGarage({ id: 'unused-garage', number: '99' })])
@@ -3143,20 +3143,21 @@ describe('App', () => {
           comment: request.comment ?? null,
         })
       },
-      updateMeterReading: async (_token, meterReadingId, request) => {
-        updatedMeterReadingId = meterReadingId
-        updatedMeterReadingRequest = request
+      correctHistoricalMeterReading: async (_token, meterReadingId, request) => {
+        correctedMeterReadingId = meterReadingId
+        correctedMeterReadingRequest = request
         return createMeterReading({
           id: meterReadingId,
-          garageId: request.garageId,
+          garageId: 'garage-12',
           garageNumber: '12',
-          meterKind: request.meterKind,
-          accountingMonth: request.accountingMonth,
+          meterKind: 'electricity',
+          accountingMonth: '2026-01-01',
           readingDate: request.readingDate,
           currentValue: request.currentValue,
           previousValue: 4654,
           consumption: request.currentValue - 4654,
           comment: request.comment ?? null,
+          version: 'meter-reading-version-corrected',
         })
       },
     })
@@ -3215,7 +3216,7 @@ describe('App', () => {
 
     await user.clear(januaryInput)
     await user.type(januaryInput, '4660{Enter}')
-    const readingConfirmDialog = await screen.findByRole('dialog', { name: 'Подтвердить показание?' })
+    const readingConfirmDialog = await screen.findByRole('dialog', { name: 'Скорректировать историческое показание?' })
     expect(within(readingConfirmDialog).getByText('Гараж 12, Январь')).toBeInTheDocument()
     const readingChangeList = within(readingConfirmDialog).getByRole('list', { name: 'Изменяемые поля показания' })
     expect(within(readingChangeList).getByText('Показание')).toBeInTheDocument()
@@ -3224,8 +3225,11 @@ describe('App', () => {
     const readingCancelButton = within(readingConfirmDialog).getByRole('button', { name: 'Отмена' })
     const readingSaveButton = within(readingConfirmDialog).getByRole('button', { name: 'Сохранить' })
     const readingCloseButton = within(readingConfirmDialog).getByRole('button', { name: 'Закрыть подтверждение показания' })
+    const readingReasonInput = within(readingConfirmDialog).getByLabelText('Причина исторической корректировки')
     expect(Boolean(readingCancelButton.compareDocumentPosition(readingSaveButton) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true)
     await waitFor(() => expect(readingCancelButton).toHaveFocus())
+    await user.keyboard('{Shift>}{Tab}{/Shift}')
+    expect(readingReasonInput).toHaveFocus()
     await user.keyboard('{Shift>}{Tab}{/Shift}')
     expect(readingCloseButton).toHaveFocus()
     await user.keyboard('{Shift>}{Tab}{/Shift}')
@@ -3233,23 +3237,86 @@ describe('App', () => {
     await user.keyboard('{Tab}')
     expect(readingCloseButton).toHaveFocus()
     await user.keyboard('{Tab}')
+    expect(readingReasonInput).toHaveFocus()
+    await user.keyboard('{Tab}')
     expect(readingCancelButton).toHaveFocus()
     await user.keyboard('{Escape}')
-    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Подтвердить показание?' })).not.toBeInTheDocument())
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Скорректировать историческое показание?' })).not.toBeInTheDocument())
     expect(januaryInput).toHaveFocus()
     expect(januaryInput).toHaveValue('4654')
 
     await user.clear(januaryInput)
     await user.type(januaryInput, '4660{Enter}')
-    const reopenedReadingConfirmDialog = await screen.findByRole('dialog', { name: 'Подтвердить показание?' })
+    const reopenedReadingConfirmDialog = await screen.findByRole('dialog', { name: 'Скорректировать историческое показание?' })
     await user.click(within(reopenedReadingConfirmDialog).getByRole('button', { name: 'Сохранить' }))
-    await waitFor(() => expect(updatedMeterReadingRequest?.currentValue).toBe(4660))
-    expect(updatedMeterReadingId).toBe('meter-reading-jan')
-    expect(updatedMeterReadingRequest).toMatchObject({ garageId: 'garage-12', meterKind: 'electricity', accountingMonth: '2026-01-01' })
+    expect(within(reopenedReadingConfirmDialog).getByRole('alert')).toHaveTextContent('Укажите причину исторической корректировки.')
+    await user.type(within(reopenedReadingConfirmDialog).getByLabelText('Причина исторической корректировки'), 'Сверка с бумажным журналом')
+    await user.click(within(reopenedReadingConfirmDialog).getByRole('button', { name: 'Сохранить' }))
+    await waitFor(() => expect(correctedMeterReadingRequest?.currentValue).toBe(4660))
+    expect(correctedMeterReadingId).toBe('meter-reading-jan')
+    expect(correctedMeterReadingRequest).toMatchObject({ reason: 'Сверка с бумажным журналом', expectedVersion: expect.any(String) })
     await waitFor(() => expect(januaryInput).toHaveValue('4660'))
+
+    const decemberInput = within(readingsPanel).getByLabelText('Гараж 12, Декабрь, показание')
+    await user.type(decemberInput, '5000{Enter}')
+    await waitFor(() => expect(decemberInput).toHaveValue('5000'))
+    await user.clear(decemberInput)
+    await user.type(decemberInput, '5001{Enter}')
+    expect(await within(readingsPanel).findByRole('alert')).toHaveTextContent('Изменять показание будущего учетного месяца нельзя.')
+    expect(decemberInput).toHaveValue('5000')
 
     expect(within(readingsPanel).queryByRole('tab', { name: 'История изменений' })).not.toBeInTheDocument()
     expect(within(readingsPanel).queryByRole('table', { name: 'История изменений показаний', hidden: true })).not.toBeInTheDocument()
+  })
+
+  it('blocks historical meter reading edits without the dedicated permission', async () => {
+    const user = userEvent.setup()
+    const historicalReading = createMeterReading({
+      id: 'historical-reading',
+      garageId: 'garage-12',
+      garageNumber: '12',
+      accountingMonth: '2026-01-01',
+      currentValue: 4654,
+      version: 'historical-reading-version',
+    })
+    const correctHistoricalMeterReading = vi.fn(async () => historicalReading)
+    const auth = createAuthResponse({
+      user: {
+        permissions: createAuthResponse().user.permissions.filter((permission) => permission !== 'payments.meter_readings.historical_correct'),
+      },
+    })
+    const financeClient = createFinanceClient({
+      getMeterReadingYearPage: async () => ({
+        garages: [{ id: 'garage-12', number: '12' }],
+        readings: [{
+          id: historicalReading.id,
+          garageId: historicalReading.garageId,
+          accountingMonth: historicalReading.accountingMonth,
+          currentValue: historicalReading.currentValue,
+          version: historicalReading.version,
+        }],
+        totalCount: 1,
+        offset: 0,
+        limit: 25,
+      }),
+      correctHistoricalMeterReading,
+    })
+    render(<App authClient={createAuthClient({ login: async () => auth })} dictionaryClient={createDictionaryClient()} financeClient={financeClient} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Показания')
+    const readingsPanel = await screen.findByRole('region', { name: 'Показания' })
+    const januaryInput = await within(readingsPanel).findByLabelText('Гараж 12, Январь, показание')
+    expect(januaryInput).toHaveValue('4654')
+
+    await user.clear(januaryInput)
+    await user.type(januaryInput, '4660{Enter}')
+
+    expect(await within(readingsPanel).findByRole('alert')).toHaveTextContent('Для изменения показания прошлого месяца нужно право на историческую корректировку.')
+    expect(januaryInput).toHaveValue('4654')
+    expect(screen.queryByRole('dialog', { name: 'Скорректировать историческое показание?' })).not.toBeInTheDocument()
+    expect(correctHistoricalMeterReading).not.toHaveBeenCalled()
   })
 
   it('shows payments prototype and opens payment form modals', async () => {
@@ -13962,7 +14029,7 @@ function createFinanceClient(overrides: Partial<FinanceClient> = {}): FinanceCli
     getMeterReadingsPage: async () => ({ items: [meterReading], totalCount: 1, offset: 0, limit: 25 }),
     getMeterReadingYearPage: async () => ({
       garages: [{ id: meterReading.garageId, number: meterReading.garageNumber }],
-      readings: [{ id: meterReading.id, garageId: meterReading.garageId, accountingMonth: meterReading.accountingMonth, currentValue: meterReading.currentValue }],
+      readings: [{ id: meterReading.id, garageId: meterReading.garageId, accountingMonth: meterReading.accountingMonth, currentValue: meterReading.currentValue, version: meterReading.version }],
       totalCount: 1,
       offset: 0,
       limit: 25,
@@ -14029,6 +14096,7 @@ function createFinanceClient(overrides: Partial<FinanceClient> = {}): FinanceCli
     generateSupplierGroupSalaryAccruals: async () => createSupplierGroupSalaryAccrualGenerationResult({ createdAccruals: [supplierAccrual], totalAmount: supplierAccrual.amount }),
     createMeterReading: async () => meterReading,
     updateMeterReading: async (_token, meterReadingId) => ({ ...meterReading, id: meterReadingId }),
+    correctHistoricalMeterReading: async (_token, meterReadingId) => ({ ...meterReading, id: meterReadingId }),
     cancelMeterReading: async (_token, meterReadingId, request) => {
       const target = meterReading.id === meterReadingId ? meterReading : createMeterReading({ id: meterReadingId })
       return { ...target, isCanceled: true, comment: `Отменено: ${request.reason}` }
@@ -14977,7 +15045,7 @@ function createAuthResponse(overrides: Partial<AuthResponse> & { user?: Partial<
       email: 'admin@example.com',
       displayName: 'Администратор',
       roles: ['administrator'],
-      permissions: ['users.manage', 'dictionaries.read', 'dictionaries.write', 'tariffs.manage', 'payments.read', 'payments.write', 'reports.read', 'import.run', 'app_releases.manage', 'audit.read'],
+      permissions: ['users.manage', 'dictionaries.read', 'dictionaries.write', 'tariffs.manage', 'payments.read', 'payments.write', 'payments.meter_readings.historical_correct', 'reports.read', 'import.run', 'app_releases.manage', 'audit.read'],
     },
   }
 
@@ -15025,7 +15093,7 @@ function createAuditEvent(overrides: Partial<AuditEventDto>): AuditEventDto {
 
 function createRoles(): ManagedRoleDto[] {
   return [
-    { code: 'administrator', name: 'Администратор', permissions: ['users.manage', 'dictionaries.read', 'dictionaries.write', 'tariffs.manage', 'payments.read', 'payments.write', 'reports.read', 'import.run', 'app_releases.manage', 'audit.read'] },
+    { code: 'administrator', name: 'Администратор', permissions: ['users.manage', 'dictionaries.read', 'dictionaries.write', 'tariffs.manage', 'payments.read', 'payments.write', 'payments.meter_readings.historical_correct', 'reports.read', 'import.run', 'app_releases.manage', 'audit.read'] },
     { code: 'operator', name: 'Оператор', permissions: ['dictionaries.read', 'payments.read', 'payments.write'] },
     { code: 'accountant', name: 'Бухгалтер', permissions: ['dictionaries.read', 'dictionaries.write', 'tariffs.manage', 'payments.read', 'payments.write', 'reports.read', 'import.run'] },
     { code: 'reports_viewer', name: 'Просмотр отчетов', permissions: ['dictionaries.read', 'reports.read'] },

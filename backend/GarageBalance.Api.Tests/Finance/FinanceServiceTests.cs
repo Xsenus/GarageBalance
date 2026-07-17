@@ -259,7 +259,9 @@ public sealed class FinanceServiceTests
     {
         await using var database = await TestDatabase.CreateAsync();
         var fixtures = await database.SeedAsync();
-        var service = FinanceServiceTestFactory.Create(database.Context);
+        var service = FinanceServiceTestFactory.Create(
+            database.Context,
+            new FixedTimeProvider(new DateTimeOffset(2026, 6, 20, 12, 0, 0, TimeSpan.Zero)));
         var actorUserId = Guid.NewGuid();
 
         var income = await service.CreateIncomeAsync(
@@ -477,6 +479,7 @@ public sealed class FinanceServiceTests
         Assert.Equal(secondGarage.Id, reading.GarageId);
         Assert.Equal(new DateOnly(2026, 2, 1), reading.AccountingMonth);
         Assert.Equal(125m, reading.CurrentValue);
+        Assert.NotEqual(Guid.Empty, reading.Version);
         Assert.DoesNotContain(result.Value.Garages, item => item.Id == fixtures.Garage.Id);
     }
 
@@ -3532,7 +3535,9 @@ public sealed class FinanceServiceTests
     {
         await using var database = await TestDatabase.CreateAsync();
         var fixtures = await database.SeedAsync();
-        var service = FinanceServiceTestFactory.Create(database.Context);
+        var service = FinanceServiceTestFactory.Create(
+            database.Context,
+            new FixedTimeProvider(new DateTimeOffset(2026, 6, 20, 12, 0, 0, TimeSpan.Zero)));
         var actorUserId = Guid.NewGuid();
         var createRequest = new SavePaymentFormMeterReadingRequest(
             fixtures.Garage.Id,
@@ -3573,7 +3578,9 @@ public sealed class FinanceServiceTests
     {
         await using var database = await TestDatabase.CreateAsync();
         var fixtures = await database.SeedAsync();
-        var service = FinanceServiceTestFactory.Create(database.Context);
+        var service = FinanceServiceTestFactory.Create(
+            database.Context,
+            new FixedTimeProvider(new DateTimeOffset(2026, 6, 20, 12, 0, 0, TimeSpan.Zero)));
         var created = await service.SavePaymentFormMeterReadingAsync(
             new SavePaymentFormMeterReadingRequest(
                 fixtures.Garage.Id,
@@ -3631,6 +3638,127 @@ public sealed class FinanceServiceTests
     }
 
     [Fact]
+    public async Task UpdateMeterReadingAsync_AllowsOnlyCurrentAccountingMonth()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        var service = FinanceServiceTestFactory.Create(
+            database.Context,
+            new FixedTimeProvider(new DateTimeOffset(2026, 7, 17, 12, 0, 0, TimeSpan.Zero)));
+        var past = await service.CreateMeterReadingAsync(
+            new CreateMeterReadingRequest(fixtures.Garage.Id, "water", new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 20), 15m, null),
+            null,
+            CancellationToken.None);
+        var current = await service.CreateMeterReadingAsync(
+            new CreateMeterReadingRequest(fixtures.Garage.Id, "water", new DateOnly(2026, 7, 1), new DateOnly(2026, 7, 17), 20m, null),
+            null,
+            CancellationToken.None);
+        var future = await service.CreateMeterReadingAsync(
+            new CreateMeterReadingRequest(fixtures.Garage.Id, "water", new DateOnly(2026, 8, 1), new DateOnly(2026, 8, 20), 25m, null),
+            null,
+            CancellationToken.None);
+
+        var pastUpdate = await service.UpdateMeterReadingAsync(
+            past.Value!.Id,
+            new CreateMeterReadingRequest(fixtures.Garage.Id, "water", new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 21), 16m, null, past.Value.Version),
+            null,
+            CancellationToken.None);
+        var currentUpdate = await service.UpdateMeterReadingAsync(
+            current.Value!.Id,
+            new CreateMeterReadingRequest(fixtures.Garage.Id, "water", new DateOnly(2026, 7, 1), new DateOnly(2026, 7, 18), 21m, null, current.Value.Version),
+            null,
+            CancellationToken.None);
+        var futureUpdate = await service.UpdateMeterReadingAsync(
+            future.Value!.Id,
+            new CreateMeterReadingRequest(fixtures.Garage.Id, "water", new DateOnly(2026, 8, 1), new DateOnly(2026, 8, 21), 26m, null, future.Value.Version),
+            null,
+            CancellationToken.None);
+
+        Assert.False(pastUpdate.Succeeded);
+        Assert.Equal("meter_reading_current_month_required", pastUpdate.ErrorCode);
+        Assert.True(currentUpdate.Succeeded, currentUpdate.ErrorMessage);
+        Assert.Equal(21m, currentUpdate.Value!.CurrentValue);
+        Assert.False(futureUpdate.Succeeded);
+        Assert.Equal("meter_reading_current_month_required", futureUpdate.ErrorCode);
+    }
+
+    [Fact]
+    public async Task CorrectHistoricalMeterReadingAsync_RequiresReasonAndWritesAuditedCorrection()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        var service = FinanceServiceTestFactory.Create(
+            database.Context,
+            new FixedTimeProvider(new DateTimeOffset(2026, 7, 17, 12, 0, 0, TimeSpan.Zero)));
+        var actorUserId = Guid.NewGuid();
+        var created = await service.CreateMeterReadingAsync(
+            new CreateMeterReadingRequest(fixtures.Garage.Id, "water", new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 20), 15m, "До сверки"),
+            null,
+            CancellationToken.None);
+        database.Context.AuditEvents.RemoveRange(database.Context.AuditEvents);
+        await database.Context.SaveChangesAsync();
+
+        var blankReason = await service.CorrectHistoricalMeterReadingAsync(
+            created.Value!.Id,
+            new CorrectHistoricalMeterReadingRequest(new DateOnly(2026, 6, 21), 18m, "После сверки", "   ", created.Value.Version),
+            actorUserId,
+            CancellationToken.None);
+        var corrected = await service.CorrectHistoricalMeterReadingAsync(
+            created.Value.Id,
+            new CorrectHistoricalMeterReadingRequest(new DateOnly(2026, 6, 21), 18m, "После сверки", "Сверка с бумажным журналом", created.Value.Version),
+            actorUserId,
+            CancellationToken.None);
+
+        Assert.False(blankReason.Succeeded);
+        Assert.Equal("meter_reading_correction_reason_required", blankReason.ErrorCode);
+        Assert.True(corrected.Succeeded, corrected.ErrorMessage);
+        Assert.Equal(18m, corrected.Value!.CurrentValue);
+        Assert.NotEqual(created.Value.Version, corrected.Value.Version);
+        var audit = Assert.Single(database.Context.AuditEvents, item => item.Action == "finance.meter_reading_historical_updated");
+        Assert.Equal(actorUserId, audit.ActorUserId);
+        Assert.Equal("update", audit.ActionKind);
+        Assert.Contains("Исторически скорректировано", audit.Summary, StringComparison.Ordinal);
+        Assert.Contains("Сверка с бумажным журналом", audit.Summary, StringComparison.Ordinal);
+        using var metadata = JsonDocument.Parse(audit.MetadataJson!);
+        Assert.Equal("Сверка с бумажным журналом", metadata.RootElement.GetProperty("reason").GetString());
+        Assert.Contains("Текущее показание", metadata.RootElement.GetProperty("changedFields").GetString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task CorrectHistoricalMeterReadingAsync_RejectsCurrentAndFutureMonths()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        var service = FinanceServiceTestFactory.Create(
+            database.Context,
+            new FixedTimeProvider(new DateTimeOffset(2026, 7, 17, 12, 0, 0, TimeSpan.Zero)));
+        var current = await service.CreateMeterReadingAsync(
+            new CreateMeterReadingRequest(fixtures.Garage.Id, "electricity", new DateOnly(2026, 7, 1), new DateOnly(2026, 7, 17), 110m, null),
+            null,
+            CancellationToken.None);
+        var future = await service.CreateMeterReadingAsync(
+            new CreateMeterReadingRequest(fixtures.Garage.Id, "electricity", new DateOnly(2026, 8, 1), new DateOnly(2026, 8, 17), 120m, null),
+            null,
+            CancellationToken.None);
+
+        var currentResult = await service.CorrectHistoricalMeterReadingAsync(
+            current.Value!.Id,
+            new CorrectHistoricalMeterReadingRequest(new DateOnly(2026, 7, 18), 111m, null, "Причина", current.Value.Version),
+            null,
+            CancellationToken.None);
+        var futureResult = await service.CorrectHistoricalMeterReadingAsync(
+            future.Value!.Id,
+            new CorrectHistoricalMeterReadingRequest(new DateOnly(2026, 8, 18), 121m, null, "Причина", future.Value.Version),
+            null,
+            CancellationToken.None);
+
+        Assert.False(currentResult.Succeeded);
+        Assert.Equal("meter_reading_historical_month_required", currentResult.ErrorCode);
+        Assert.False(futureResult.Succeeded);
+        Assert.Equal("meter_reading_historical_month_required", futureResult.ErrorCode);
+    }
+
+    [Fact]
     public async Task CreateMeterReadingAsync_RoundsMeterValuesAndConsumptionAwayFromZero()
     {
         await using var database = await TestDatabase.CreateAsync();
@@ -3655,7 +3783,9 @@ public sealed class FinanceServiceTests
     {
         await using var database = await TestDatabase.CreateAsync();
         var fixtures = await database.SeedAsync();
-        var service = FinanceServiceTestFactory.Create(database.Context);
+        var service = FinanceServiceTestFactory.Create(
+            database.Context,
+            new FixedTimeProvider(new DateTimeOffset(2026, 6, 20, 12, 0, 0, TimeSpan.Zero)));
         var actorUserId = Guid.NewGuid();
         var created = await service.CreateMeterReadingAsync(
             new CreateMeterReadingRequest(fixtures.Garage.Id, "water", new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 20), 15.5m, "Первичное показание"),

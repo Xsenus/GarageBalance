@@ -95,7 +95,8 @@ public sealed class EfMeterReadingRepository(GarageBalanceDbContext dbContext) :
                 reading.Id,
                 reading.GarageId,
                 reading.AccountingMonth,
-                reading.CurrentValue))
+                reading.CurrentValue,
+                reading.Version))
             .ToListAsync(cancellationToken);
 
         return new MeterReadingYearPageData(garages, readings, totalCount);

@@ -137,6 +137,7 @@ export type MeterReadingYearValueDto = {
   garageId: string
   accountingMonth: string
   currentValue: number
+  version: string
 }
 
 export type MeterReadingYearPageDto = {
@@ -418,6 +419,14 @@ export type SavePaymentFormMeterReadingRequest = CreateMeterReadingRequest & {
   meterReadingId?: string
 }
 
+export type CorrectHistoricalMeterReadingRequest = {
+  readingDate: string
+  currentValue: number
+  comment?: string
+  reason: string
+  expectedVersion: string
+}
+
 export type FinanceClient = {
   getOperations(accessToken: string, limit?: number): Promise<FinancialOperationDto[]>
   getOperationsPage(accessToken: string, params?: FinancePageParams & { operationKind?: 'income' | 'expense' }): Promise<FinancePagedResult<FinancialOperationDto>>
@@ -459,6 +468,7 @@ export type FinanceClient = {
   createMeterReading(accessToken: string, request: CreateMeterReadingRequest): Promise<MeterReadingDto>
   savePaymentFormMeterReading?(accessToken: string, request: SavePaymentFormMeterReadingRequest): Promise<MeterReadingDto>
   updateMeterReading(accessToken: string, meterReadingId: string, request: CreateMeterReadingRequest): Promise<MeterReadingDto>
+  correctHistoricalMeterReading?(accessToken: string, meterReadingId: string, request: CorrectHistoricalMeterReadingRequest): Promise<MeterReadingDto>
   cancelMeterReading(accessToken: string, meterReadingId: string, request: CancelFinanceEntryRequest): Promise<MeterReadingDto>
   restoreMeterReading(accessToken: string, meterReadingId: string): Promise<MeterReadingDto>
 }
@@ -687,6 +697,9 @@ export const financeApi: FinanceClient = {
   },
   updateMeterReading(accessToken, meterReadingId, request) {
     return requestJson(accessToken, `/api/finance/meter-readings/${meterReadingId}`, { method: 'PUT', body: JSON.stringify(request) })
+  },
+  correctHistoricalMeterReading(accessToken, meterReadingId, request) {
+    return requestJson(accessToken, `/api/finance/meter-readings/${meterReadingId}/historical-correction`, { method: 'PUT', body: JSON.stringify(request) })
   },
   cancelMeterReading(accessToken, meterReadingId, request) {
     return requestJson(accessToken, `/api/finance/meter-readings/${meterReadingId}/cancel`, { method: 'POST', body: JSON.stringify(request) })

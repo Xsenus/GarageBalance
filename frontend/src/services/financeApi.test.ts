@@ -138,6 +138,32 @@ describe('financeApi', () => {
     })
   })
 
+  it('sends an audited historical meter reading correction to the dedicated endpoint', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      id: 'meter-reading-1',
+      version: 'version-2',
+    }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
+    vi.stubGlobal('fetch', fetchMock)
+    const request = {
+      readingDate: '2026-06-21',
+      currentValue: 18,
+      comment: 'После сверки',
+      reason: 'Сверка с бумажным журналом',
+      expectedVersion: 'version-1',
+    }
+
+    await financeApi.correctHistoricalMeterReading!('token', 'meter-reading-1', request)
+
+    expect(fetchMock).toHaveBeenCalledWith('/api/finance/meter-readings/meter-reading-1/historical-correction', {
+      method: 'PUT',
+      body: JSON.stringify(request),
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: 'Bearer token',
+      },
+    })
+  })
+
   it('loads the overdue debt breakdown for the selected garage', async () => {
     const fetchMock = vi.fn().mockImplementation(() => Promise.resolve(new Response(JSON.stringify({
       garageId: 'garage-88',

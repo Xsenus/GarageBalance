@@ -48,6 +48,7 @@ describe('accessControl', () => {
       { label: 'Справочники', permission: permissions.dictionariesWrite },
       { label: 'Тарифы', permission: permissions.tariffsManage },
       { label: 'Платежи', permission: permissions.paymentsWrite },
+      { label: 'Исторические показания', permission: permissions.historicalMeterReadingsCorrect },
       { label: 'Отчеты', permission: permissions.reportsRead },
       { label: 'Импорт', permission: permissions.importRun },
       { label: 'История изменений', permission: permissions.auditRead },

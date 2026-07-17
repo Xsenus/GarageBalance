@@ -9,6 +9,7 @@ import { TablePagination } from '../../shared/TablePagination'
 import { getLocalDateInputValue } from '../../shared/formatters'
 import { useEscapeKey, useFocusOnOpen, useFocusTrap, useRestoreFocusOnClose } from '../../shared/focusHooks'
 import { formatPrototypeChangeValue, handleEditableInputKeyDown } from '../../shared/prototypeEditing'
+import { hasPermission, permissions } from '../../shared/accessControl'
 const meterReadingMonths = [
   { key: '01', label: 'Январь' },
   { key: '02', label: 'Февраль' },
@@ -63,12 +64,14 @@ function parseMeterReadingInputValue(value: string) {
 type MeterReadingPrototypePendingChange = {
   cellKey: string
   readingId?: string
+  readingVersion?: string
   garageNumber: string
   monthLabel: string
   meterTypeLabel: string
   unit: string
   previousValue: string
   nextValue: string
+  isHistorical: boolean
 }
 
 type MeterReadingMonth = typeof meterReadingMonths[number]
@@ -164,8 +167,11 @@ export function MeterReadingsPrototypePanel({ auth, financeClient }: { auth: Aut
   const [savedReadings, setSavedReadings] = useState<Record<string, string>>({})
   const [draftReadings, setDraftReadings] = useState<Record<string, string>>({})
   const [savedReadingIds, setSavedReadingIds] = useState<Record<string, string>>({})
+  const [savedReadingVersions, setSavedReadingVersions] = useState<Record<string, string>>({})
   const [savingReadingKey, setSavingReadingKey] = useState<string | null>(null)
   const [pendingReadingChange, setPendingReadingChange] = useState<MeterReadingPrototypePendingChange | null>(null)
+  const [historicalCorrectionReason, setHistoricalCorrectionReason] = useState('')
+  const [historicalCorrectionReasonError, setHistoricalCorrectionReasonError] = useState<string | null>(null)
 
   const meterType: MeterReadingTypeId = 'electricity'
   const selectedMeterType = meterReadingTypes[0]
@@ -180,6 +186,8 @@ export function MeterReadingsPrototypePanel({ auth, financeClient }: { auth: Aut
     }
 
     setPendingReadingChange(null)
+    setHistoricalCorrectionReason('')
+    setHistoricalCorrectionReasonError(null)
   }
 
   function confirmPendingReadingChange() {
@@ -187,7 +195,19 @@ export function MeterReadingsPrototypePanel({ auth, financeClient }: { auth: Aut
       return
     }
 
-    void saveReadingValue(pendingReadingChange.cellKey, pendingReadingChange.readingId, pendingReadingChange.nextValue)
+    const reason = historicalCorrectionReason.trim()
+    if (pendingReadingChange.isHistorical && !reason) {
+      setHistoricalCorrectionReasonError('Укажите причину исторической корректировки.')
+      return
+    }
+
+    void saveReadingValue(
+      pendingReadingChange.cellKey,
+      pendingReadingChange.readingId,
+      pendingReadingChange.readingVersion,
+      pendingReadingChange.nextValue,
+      pendingReadingChange.isHistorical ? reason : undefined,
+    )
   }
 
   function updateYearDraft(value: string) {
@@ -230,11 +250,13 @@ export function MeterReadingsPrototypePanel({ auth, financeClient }: { auth: Aut
 
         const nextSavedReadings: Record<string, string> = {}
         const nextSavedReadingIds: Record<string, string> = {}
+        const nextSavedReadingVersions: Record<string, string> = {}
         yearPage.readings.forEach((reading) => {
           const monthKey = reading.accountingMonth.slice(5, 7)
           const cellKey = createMeterReadingCellKey(appliedYear, meterType, reading.garageId, monthKey)
           nextSavedReadings[cellKey] = formatMeterReadingInputValue(reading.currentValue)
           nextSavedReadingIds[cellKey] = reading.id
+          nextSavedReadingVersions[cellKey] = reading.version
         })
 
         setGarages(yearPage.garages)
@@ -242,6 +264,7 @@ export function MeterReadingsPrototypePanel({ auth, financeClient }: { auth: Aut
         setSavedReadings(nextSavedReadings)
         setDraftReadings(nextSavedReadings)
         setSavedReadingIds(nextSavedReadingIds)
+        setSavedReadingVersions(nextSavedReadingVersions)
         setLoading(false)
       } catch (loadError) {
         if (!isMounted) {
@@ -262,7 +285,13 @@ export function MeterReadingsPrototypePanel({ auth, financeClient }: { auth: Aut
     }
   }, [appliedYear, auth.accessToken, financeClient, meterType, pageOffset, pageSize])
 
-  const saveReadingValue = useCallback(async (cellKey: string, readingId: string | undefined, nextValue: string) => {
+  const saveReadingValue = useCallback(async (
+    cellKey: string,
+    readingId: string | undefined,
+    readingVersion: string | undefined,
+    nextValue: string,
+    historicalCorrectionReason?: string,
+  ) => {
     const [, , garageId, monthKey] = cellKey.split(':')
     const parsedValue = parseMeterReadingInputValue(nextValue)
     if (parsedValue === null) {
@@ -277,19 +306,31 @@ export function MeterReadingsPrototypePanel({ auth, financeClient }: { auth: Aut
       readingDate: getLocalDateInputValue(),
       currentValue: parsedValue,
       comment: 'Ввод из годовой таблицы показаний',
+      expectedVersion: readingVersion,
     }
 
     setSavingReadingKey(cellKey)
     setError(null)
     try {
-      const savedReading = readingId
-        ? await financeClient.updateMeterReading(auth.accessToken, readingId, request)
-        : await financeClient.createMeterReading(auth.accessToken, request)
+      const savedReading = readingId && historicalCorrectionReason
+        ? await financeClient.correctHistoricalMeterReading!(auth.accessToken, readingId, {
+            readingDate: request.readingDate,
+            currentValue: request.currentValue,
+            comment: request.comment,
+            reason: historicalCorrectionReason,
+            expectedVersion: readingVersion!,
+          })
+        : readingId
+          ? await financeClient.updateMeterReading(auth.accessToken, readingId, request)
+          : await financeClient.createMeterReading(auth.accessToken, request)
       const savedValue = formatMeterReadingInputValue(savedReading.currentValue)
       setSavedReadings((currentReadings) => ({ ...currentReadings, [cellKey]: savedValue }))
       setDraftReadings((currentDrafts) => ({ ...currentDrafts, [cellKey]: savedValue }))
       setSavedReadingIds((currentIds) => ({ ...currentIds, [cellKey]: savedReading.id }))
+      setSavedReadingVersions((currentVersions) => ({ ...currentVersions, [cellKey]: savedReading.version }))
       setPendingReadingChange(null)
+      setHistoricalCorrectionReason('')
+      setHistoricalCorrectionReasonError(null)
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Не удалось сохранить показание.')
     } finally {
@@ -319,21 +360,46 @@ export function MeterReadingsPrototypePanel({ auth, financeClient }: { auth: Aut
     }
 
     if (previousValue.trim() === '') {
-      void saveReadingValue(cellKey, undefined, nextValue)
+      void saveReadingValue(cellKey, undefined, undefined, nextValue)
+      return
+    }
+
+    const accountingMonth = `${appliedYear}-${month.key}`
+    const currentMonth = getLocalDateInputValue().slice(0, 7)
+    if (accountingMonth > currentMonth) {
+      setDraftReadings((currentDrafts) => ({ ...currentDrafts, [cellKey]: previousValue }))
+      setError('Изменять показание будущего учетного месяца нельзя.')
+      return
+    }
+
+    const isHistorical = accountingMonth < currentMonth
+    if (isHistorical && !hasPermission(auth, permissions.historicalMeterReadingsCorrect)) {
+      setDraftReadings((currentDrafts) => ({ ...currentDrafts, [cellKey]: previousValue }))
+      setError('Для изменения показания прошлого месяца нужно право на историческую корректировку.')
+      return
+    }
+
+    if (isHistorical && (!financeClient.correctHistoricalMeterReading || !savedReadingVersions[cellKey])) {
+      setDraftReadings((currentDrafts) => ({ ...currentDrafts, [cellKey]: previousValue }))
+      setError('Не удалось подготовить безопасную историческую корректировку. Обновите страницу и повторите действие.')
       return
     }
 
     setPendingReadingChange({
       cellKey,
       readingId: savedReadingIds[cellKey],
+      readingVersion: savedReadingVersions[cellKey],
       garageNumber: garage.number,
       monthLabel: month.label,
       meterTypeLabel: selectedMeterType.label,
       unit: selectedMeterType.unit,
       previousValue,
       nextValue,
+      isHistorical,
     })
-  }, [appliedYear, draftReadings, meterType, savedReadingIds, savedReadings, saveReadingValue, savingReadingKey, selectedMeterType.label, selectedMeterType.unit, yearIsValid])
+    setHistoricalCorrectionReason('')
+    setHistoricalCorrectionReasonError(null)
+  }, [appliedYear, auth, draftReadings, financeClient.correctHistoricalMeterReading, meterType, savedReadingIds, savedReadingVersions, savedReadings, saveReadingValue, savingReadingKey, selectedMeterType.label, selectedMeterType.unit, yearIsValid])
 
   return (
     <section className="meter-readings-page" aria-label="Показания">
@@ -399,8 +465,8 @@ export function MeterReadingsPrototypePanel({ auth, financeClient }: { auth: Aut
           <section ref={readingChangeDialogRef} className="detail-dialog contractors-dialog dictionary-confirmation-dialog" role="dialog" aria-modal="true" aria-labelledby="meter-reading-change-title" aria-describedby="meter-reading-change-description" onMouseDown={(event) => event.stopPropagation()}>
             <div className="detail-dialog-header">
               <div>
-                <p className="eyebrow">Изменение</p>
-                <h3 id="meter-reading-change-title">Подтвердить показание?</h3>
+                <p className="eyebrow">{pendingReadingChange.isHistorical ? 'Историческая корректировка' : 'Изменение'}</p>
+                <h3 id="meter-reading-change-title">{pendingReadingChange.isHistorical ? 'Скорректировать историческое показание?' : 'Подтвердить показание?'}</h3>
                 <p>{`Гараж ${pendingReadingChange.garageNumber}, ${pendingReadingChange.monthLabel}`}</p>
               </div>
               <button className="icon-button" type="button" aria-label="Закрыть подтверждение показания" onClick={cancelPendingReadingChange}>
@@ -418,6 +484,23 @@ export function MeterReadingsPrototypePanel({ auth, financeClient }: { auth: Aut
                 </span>
               </li>
             </ul>
+            {pendingReadingChange.isHistorical ? (
+              <>
+                <FormField label="Причина исторической корректировки">
+                  <textarea
+                    aria-label="Причина исторической корректировки"
+                    aria-invalid={Boolean(historicalCorrectionReasonError)}
+                    maxLength={500}
+                    value={historicalCorrectionReason}
+                    onChange={(event) => {
+                      setHistoricalCorrectionReason(event.target.value)
+                      setHistoricalCorrectionReasonError(null)
+                    }}
+                  />
+                </FormField>
+                {historicalCorrectionReasonError ? <div className="form-error" role="alert">{historicalCorrectionReasonError}</div> : null}
+              </>
+            ) : null}
             <div className="detail-dialog-actions contractors-dialog-actions">
               <button ref={readingChangeCancelRef} className="ghost-button" type="button" onClick={cancelPendingReadingChange}>Отмена</button>
               <button className="secondary-button" type="button" onClick={confirmPendingReadingChange}>

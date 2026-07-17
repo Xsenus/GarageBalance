@@ -19,7 +19,8 @@ public sealed class UserManagementServiceTests
 
         var roles = await service.GetRolesAsync(CancellationToken.None);
 
-        Assert.Contains(roles, role => role.Code == SystemRoles.Administrator && role.Permissions.Contains(SystemPermissions.UsersManage));
+        Assert.Contains(roles, role => role.Code == SystemRoles.Administrator && role.Permissions.Contains(SystemPermissions.UsersManage) && role.Permissions.Contains(SystemPermissions.HistoricalMeterReadingsCorrect));
+        Assert.Contains(roles, role => role.Code == SystemRoles.Accountant && !role.Permissions.Contains(SystemPermissions.HistoricalMeterReadingsCorrect));
         Assert.Contains(roles, role => role.Code == SystemRoles.Operator && role.Permissions.Contains(SystemPermissions.DictionariesRead));
         Assert.Contains(roles, role => role.Code == SystemRoles.Accountant && role.Permissions.Contains(SystemPermissions.TariffsManage) && role.Permissions.Contains(SystemPermissions.ImportRun));
         Assert.Contains(roles, role => role.Code == SystemRoles.ReportsViewer && role.Permissions.Contains(SystemPermissions.ReportsRead) && !role.Permissions.Contains(SystemPermissions.PaymentsWrite));

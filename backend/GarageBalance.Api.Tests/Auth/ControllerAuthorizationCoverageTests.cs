@@ -152,6 +152,19 @@ public sealed class ControllerAuthorizationCoverageTests
     }
 
     [Fact]
+    public void HistoricalMeterReadingCorrectionRequiresWriteAndDedicatedPermissions()
+    {
+        var action = typeof(FinanceController).GetMethod(nameof(FinanceController.CorrectHistoricalMeterReading));
+        Assert.NotNull(action);
+        var policies = action.GetCustomAttributes<AuthorizeAttribute>(inherit: true)
+            .Select(attribute => attribute.Policy)
+            .ToArray();
+
+        Assert.Contains(SystemPermissions.PaymentsWrite, policies);
+        Assert.Contains(SystemPermissions.HistoricalMeterReadingsCorrect, policies);
+    }
+
+    [Fact]
     public void FundsActionsRequireReportsReadAndPaymentsWritePermissions()
     {
         var controllerPolicy = typeof(FundsController)

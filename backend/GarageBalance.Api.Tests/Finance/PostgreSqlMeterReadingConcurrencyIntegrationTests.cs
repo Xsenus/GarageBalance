@@ -5,11 +5,75 @@ using GarageBalance.Api.Domain.Finance;
 using GarageBalance.Api.Infrastructure.Data;
 using GarageBalance.Api.Tests.Common;
 using Microsoft.EntityFrameworkCore;
+using System.Text.Json;
 
 namespace GarageBalance.Api.Tests.Finance;
 
 public sealed class PostgreSqlMeterReadingConcurrencyIntegrationTests
 {
+    [PostgreSqlFact]
+    public async Task HistoricalCorrection_EnforcesMonthBoundaryAndPersistsReasonedAudit()
+    {
+        await using var database = await PostgreSqlTestDatabase.CreateAsync();
+        Guid garageId;
+        await using (var seedContext = database.CreateContext())
+        {
+            var garage = new Garage
+            {
+                Number = "PG-METER-HISTORY",
+                PeopleCount = 1,
+                FloorCount = 1,
+                InitialWaterMeterValue = 10m
+            };
+            seedContext.Add(garage);
+            await seedContext.SaveChangesAsync();
+            garageId = garage.Id;
+        }
+
+        var now = new FixedTimeProvider(new DateTimeOffset(2026, 7, 17, 12, 0, 0, TimeSpan.Zero));
+        await using var context = database.CreateContext();
+        var service = FinanceServiceTestFactory.Create(context, now);
+        var actorUserId = Guid.NewGuid();
+        var past = await service.CreateMeterReadingAsync(
+            new CreateMeterReadingRequest(garageId, MeterKinds.Water, new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 20), 15m, null),
+            null,
+            CancellationToken.None);
+        var future = await service.CreateMeterReadingAsync(
+            new CreateMeterReadingRequest(garageId, MeterKinds.Water, new DateOnly(2026, 8, 1), new DateOnly(2026, 8, 20), 25m, null),
+            null,
+            CancellationToken.None);
+
+        var ordinaryPastUpdate = await service.UpdateMeterReadingAsync(
+            past.Value!.Id,
+            new CreateMeterReadingRequest(garageId, MeterKinds.Water, new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 21), 18m, null, past.Value.Version),
+            actorUserId,
+            CancellationToken.None);
+        var ordinaryFutureUpdate = await service.UpdateMeterReadingAsync(
+            future.Value!.Id,
+            new CreateMeterReadingRequest(garageId, MeterKinds.Water, new DateOnly(2026, 8, 1), new DateOnly(2026, 8, 21), 26m, null, future.Value.Version),
+            actorUserId,
+            CancellationToken.None);
+        var corrected = await service.CorrectHistoricalMeterReadingAsync(
+            past.Value.Id,
+            new CorrectHistoricalMeterReadingRequest(
+                new DateOnly(2026, 6, 21),
+                18m,
+                null,
+                "Сверка PostgreSQL",
+                past.Value.Version),
+            actorUserId,
+            CancellationToken.None);
+
+        Assert.Equal("meter_reading_current_month_required", ordinaryPastUpdate.ErrorCode);
+        Assert.Equal("meter_reading_current_month_required", ordinaryFutureUpdate.ErrorCode);
+        Assert.True(corrected.Succeeded, corrected.ErrorMessage);
+        Assert.Equal(18m, corrected.Value!.CurrentValue);
+        var audit = await context.AuditEvents.SingleAsync(item => item.Action == "finance.meter_reading_historical_updated");
+        Assert.Equal(actorUserId, audit.ActorUserId);
+        using var metadata = JsonDocument.Parse(audit.MetadataJson!);
+        Assert.Equal("Сверка PostgreSQL", metadata.RootElement.GetProperty("reason").GetString());
+    }
+
     [PostgreSqlFact]
     public async Task PaymentFormCommand_CreatesSingleReadingWhenRequestsRace()
     {
@@ -108,5 +172,10 @@ public sealed class PostgreSqlMeterReadingConcurrencyIntegrationTests
         var persisted = await assertionContext.MeterReadings.SingleAsync(item => item.Id == meterReadingId);
         Assert.Equal(17m, persisted.CurrentValue);
         Assert.Equal(7m, persisted.Consumption);
+    }
+
+    private sealed class FixedTimeProvider(DateTimeOffset utcNow) : TimeProvider
+    {
+        public override DateTimeOffset GetUtcNow() => utcNow;
     }
 }

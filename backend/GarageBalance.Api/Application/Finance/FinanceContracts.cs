@@ -245,7 +245,7 @@ public sealed record MeterReadingDto(
 
 public sealed record MeterReadingYearGarageDto(Guid Id, string Number);
 
-public sealed record MeterReadingYearValueDto(Guid Id, Guid GarageId, DateOnly AccountingMonth, decimal CurrentValue);
+public sealed record MeterReadingYearValueDto(Guid Id, Guid GarageId, DateOnly AccountingMonth, decimal CurrentValue, Guid Version);
 
 public sealed record MeterReadingYearPageDto(
     IReadOnlyList<MeterReadingYearGarageDto> Garages,
@@ -285,6 +285,13 @@ public sealed record SavePaymentFormMeterReadingRequest(
     [MaxLength(1000)] string? Comment,
     Guid? MeterReadingId = null,
     Guid? ExpectedVersion = null);
+
+public sealed record CorrectHistoricalMeterReadingRequest(
+    DateOnly ReadingDate,
+    [Range(0, 999999999)] decimal CurrentValue,
+    [MaxLength(1000)] string? Comment,
+    [Required, MaxLength(500)] string Reason,
+    Guid ExpectedVersion);
 
 public sealed record MeterReadingListRequest(
     DateOnly? MonthFrom,
