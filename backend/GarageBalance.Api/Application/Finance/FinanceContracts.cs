@@ -91,7 +91,9 @@ public sealed record AccrualDto(
     decimal Amount,
     string Source,
     string? Comment,
-    bool IsCanceled);
+    bool IsCanceled,
+    DateOnly DueDate,
+    DateOnly OverdueFromDate);
 
 public sealed record SupplierAccrualDto(
     Guid Id,

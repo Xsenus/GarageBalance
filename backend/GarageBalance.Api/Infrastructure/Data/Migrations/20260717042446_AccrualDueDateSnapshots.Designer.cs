@@ -3,6 +3,7 @@ using System;
 using GarageBalance.Api.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace GarageBalance.Api.Infrastructure.Data.Migrations
 {
     [DbContext(typeof(GarageBalanceDbContext))]
-    partial class GarageBalanceDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260717042446_AccrualDueDateSnapshots")]
+    partial class AccrualDueDateSnapshots
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -874,42 +877,6 @@ namespace GarageBalance.Api.Infrastructure.Data.Migrations
                         .HasFilter("\"IsCanceled\" = false");
 
                     b.ToTable("accruals", (string)null);
-                });
-
-            modelBuilder.Entity("GarageBalance.Api.Domain.Finance.AccrualPaymentAllocation", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("AccrualId")
-                        .HasColumnType("uuid");
-
-                    b.Property<decimal>("Amount")
-                        .HasPrecision(18, 2)
-                        .HasColumnType("numeric(18,2)");
-
-                    b.Property<DateTimeOffset>("CreatedAtUtc")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid>("FinancialOperationId")
-                        .HasColumnType("uuid");
-
-                    b.Property<bool>("IsActive")
-                        .HasColumnType("boolean");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("AccrualId");
-
-                    b.HasIndex("FinancialOperationId", "AccrualId")
-                        .IsUnique()
-                        .HasFilter("\"IsActive\" = true");
-
-                    b.ToTable("accrual_payment_allocations", null, t =>
-                        {
-                            t.HasCheckConstraint("CK_accrual_payment_allocations_Amount_Positive", "\"Amount\" > 0");
-                        });
                 });
 
             modelBuilder.Entity("GarageBalance.Api.Domain.Finance.FinancialOperation", b =>
@@ -1926,25 +1893,6 @@ namespace GarageBalance.Api.Infrastructure.Data.Migrations
                     b.Navigation("IncomeType");
 
                     b.Navigation("Tariff");
-                });
-
-            modelBuilder.Entity("GarageBalance.Api.Domain.Finance.AccrualPaymentAllocation", b =>
-                {
-                    b.HasOne("GarageBalance.Api.Domain.Finance.Accrual", "Accrual")
-                        .WithMany()
-                        .HasForeignKey("AccrualId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("GarageBalance.Api.Domain.Finance.FinancialOperation", "FinancialOperation")
-                        .WithMany()
-                        .HasForeignKey("FinancialOperationId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Accrual");
-
-                    b.Navigation("FinancialOperation");
                 });
 
             modelBuilder.Entity("GarageBalance.Api.Domain.Finance.FinancialOperation", b =>

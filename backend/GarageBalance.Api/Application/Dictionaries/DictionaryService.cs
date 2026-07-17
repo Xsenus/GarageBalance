@@ -246,7 +246,13 @@ public sealed class DictionaryService(
                     totals.AccrualTotals.GetValueOrDefault(garage.Id) -
                     totals.IncomeTotals.GetValueOrDefault(garage.Id);
                 balance = Math.Round(balance, 2, MidpointRounding.AwayFromZero);
-                return ToGarageDto(garage, balance, Math.Max(balance, 0m));
+                var unallocatedIncome = totals.IncomeTotals.GetValueOrDefault(garage.Id) -
+                    totals.AllocatedIncomeTotals.GetValueOrDefault(garage.Id);
+                var overdueDebt = garage.StartingBalance +
+                    totals.OverdueAccrualTotals.GetValueOrDefault(garage.Id) -
+                    unallocatedIncome;
+                overdueDebt = Math.Round(Math.Max(overdueDebt, 0m), 2, MidpointRounding.AwayFromZero);
+                return ToGarageDto(garage, balance, overdueDebt);
             })
             .ToList();
     }

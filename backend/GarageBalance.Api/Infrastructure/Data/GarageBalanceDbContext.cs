@@ -36,6 +36,7 @@ public sealed class GarageBalanceDbContext(DbContextOptions<GarageBalanceDbConte
     public DbSet<FeeCampaignGarage> FeeCampaignGarages => Set<FeeCampaignGarage>();
     public DbSet<FinancialOperation> FinancialOperations => Set<FinancialOperation>();
     public DbSet<Accrual> Accruals => Set<Accrual>();
+    public DbSet<AccrualPaymentAllocation> AccrualPaymentAllocations => Set<AccrualPaymentAllocation>();
     public DbSet<SupplierAccrual> SupplierAccruals => Set<SupplierAccrual>();
     public DbSet<MeterReading> MeterReadings => Set<MeterReading>();
     public DbSet<Fund> Funds => Set<Fund>();
@@ -431,6 +432,9 @@ public sealed class GarageBalanceDbContext(DbContextOptions<GarageBalanceDbConte
             entity.Property(accrual => accrual.Source).HasMaxLength(40).IsRequired();
             entity.Property(accrual => accrual.Comment).HasMaxLength(1000);
             entity.HasIndex(accrual => accrual.AccountingMonth);
+            entity.HasIndex(accrual => accrual.DueDate);
+            entity.HasIndex(accrual => accrual.OverdueFromDate);
+            entity.HasIndex(accrual => new { accrual.GarageId, accrual.OverdueFromDate, accrual.IsCanceled });
             entity.HasIndex(accrual => accrual.GarageId);
             entity.HasIndex(accrual => accrual.IncomeTypeId);
             entity.HasIndex(accrual => accrual.TariffId);
@@ -449,6 +453,27 @@ public sealed class GarageBalanceDbContext(DbContextOptions<GarageBalanceDbConte
                 .WithMany()
                 .HasForeignKey(accrual => accrual.TariffId)
                 .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<AccrualPaymentAllocation>(entity =>
+        {
+            entity.ToTable(
+                "accrual_payment_allocations",
+                table => table.HasCheckConstraint("CK_accrual_payment_allocations_Amount_Positive", "\"Amount\" > 0"));
+            entity.HasKey(item => item.Id);
+            entity.Property(item => item.Amount).HasPrecision(18, 2);
+            entity.HasIndex(item => new { item.FinancialOperationId, item.AccrualId })
+                .IsUnique()
+                .HasFilter("\"IsActive\" = true");
+            entity.HasIndex(item => item.AccrualId);
+            entity.HasOne(item => item.FinancialOperation)
+                .WithMany()
+                .HasForeignKey(item => item.FinancialOperationId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(item => item.Accrual)
+                .WithMany()
+                .HasForeignKey(item => item.AccrualId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<SupplierAccrual>(entity =>

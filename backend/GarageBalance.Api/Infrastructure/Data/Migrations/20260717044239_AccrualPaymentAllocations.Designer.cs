@@ -3,6 +3,7 @@ using System;
 using GarageBalance.Api.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace GarageBalance.Api.Infrastructure.Data.Migrations
 {
     [DbContext(typeof(GarageBalanceDbContext))]
-    partial class GarageBalanceDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260717044239_AccrualPaymentAllocations")]
+    partial class AccrualPaymentAllocations
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -906,10 +909,7 @@ namespace GarageBalance.Api.Infrastructure.Data.Migrations
                         .IsUnique()
                         .HasFilter("\"IsActive\" = true");
 
-                    b.ToTable("accrual_payment_allocations", null, t =>
-                        {
-                            t.HasCheckConstraint("CK_accrual_payment_allocations_Amount_Positive", "\"Amount\" > 0");
-                        });
+                    b.ToTable("accrual_payment_allocations", (string)null);
                 });
 
             modelBuilder.Entity("GarageBalance.Api.Domain.Finance.FinancialOperation", b =>

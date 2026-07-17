@@ -15109,6 +15109,8 @@ function createAccrual(overrides: Partial<AccrualDto>): AccrualDto {
     source: 'manual',
     comment: null,
     isCanceled: false,
+    dueDate: '2026-07-31',
+    overdueFromDate: '2026-08-31',
     ...overrides,
   }
 }

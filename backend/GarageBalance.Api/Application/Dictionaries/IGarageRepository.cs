@@ -21,4 +21,6 @@ public sealed record GaragePageData(IReadOnlyList<Garage> Items, int TotalCount)
 
 public sealed record GarageBalanceTotalsData(
     IReadOnlyDictionary<Guid, decimal> AccrualTotals,
-    IReadOnlyDictionary<Guid, decimal> IncomeTotals);
+    IReadOnlyDictionary<Guid, decimal> IncomeTotals,
+    IReadOnlyDictionary<Guid, decimal> OverdueAccrualTotals,
+    IReadOnlyDictionary<Guid, decimal> AllocatedIncomeTotals);

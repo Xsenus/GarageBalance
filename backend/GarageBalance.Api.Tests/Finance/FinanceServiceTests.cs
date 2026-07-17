@@ -842,6 +842,20 @@ public sealed class FinanceServiceTests
                 Assert.Equal(300m, second.PaidAmount);
                 Assert.Equal(400m, second.DebtAfter);
             });
+
+        var persistedAllocations = await database.Context.AccrualPaymentAllocations
+            .OrderBy(item => item.Accrual.DueDate)
+            .ToListAsync();
+        Assert.Equal([500m, 300m], persistedAllocations.Select(item => item.Amount));
+
+        var canceled = await service.CancelOperationAsync(
+            payment.Value.Id,
+            new CancelFinanceEntryRequest("Ошибочный платёж"),
+            null,
+            CancellationToken.None);
+        Assert.True(canceled.Succeeded);
+        Assert.Empty(await database.Context.AccrualPaymentAllocations.Where(item => item.IsActive).ToListAsync());
+        Assert.Equal(2, await database.Context.AccrualPaymentAllocations.CountAsync(item => !item.IsActive));
     }
 
     [Fact]
@@ -1690,6 +1704,8 @@ public sealed class FinanceServiceTests
         Assert.Equal(new DateOnly(2026, 6, 1), result.Value!.AccountingMonth);
         Assert.Equal("manual", result.Value.Source);
         Assert.Equal("12", result.Value.GarageNumber);
+        Assert.Equal(new DateOnly(2026, 7, 31), result.Value.DueDate);
+        Assert.Equal(new DateOnly(2026, 8, 31), result.Value.OverdueFromDate);
         var audit = Assert.Single(database.Context.AuditEvents, item => item.Action == "finance.accrual_created");
         Assert.Equal(actorUserId, audit.ActorUserId);
         Assert.Contains("Создано начисление 700.00", audit.Summary, StringComparison.Ordinal);
@@ -2365,6 +2381,8 @@ public sealed class FinanceServiceTests
         var accrual = Assert.Single(database.Context.Accruals);
         Assert.Equal(fixtures.IncomeType.Id, accrual.IncomeTypeId);
         Assert.Equal(tariff.Id, accrual.TariffId);
+        Assert.Equal(new DateOnly(2026, 6, 30), accrual.DueDate);
+        Assert.Equal(new DateOnly(2026, 7, 31), accrual.OverdueFromDate);
         Assert.Equal("Каталог услуг: Членский взнос; Июнь; тариф Членский тариф: ставка 300.00, действует с 01.01.2026.", accrual.Comment);
         Assert.Contains(database.Context.AuditEvents, item => item.Action == "finance.regular_accruals_generated" && item.ActorUserId == actorUserId);
         Assert.Contains(database.Context.AuditEvents, item => item.Action == "finance.regular_catalog_accruals_generated" && item.ActorUserId == actorUserId);
@@ -2471,6 +2489,8 @@ public sealed class FinanceServiceTests
             Assert.Equal(500m, accrual.Amount);
             Assert.Equal("fee_campaign", accrual.Source);
             Assert.Equal(fixtures.IncomeType.Id, accrual.IncomeTypeId);
+            Assert.Equal(new DateOnly(2026, 7, 31), accrual.DueDate);
+            Assert.Equal(new DateOnly(2026, 8, 31), accrual.OverdueFromDate);
             Assert.Contains("Сбор на ворота", accrual.Comment, StringComparison.Ordinal);
             Assert.Contains("Июньский сбор", accrual.Comment, StringComparison.Ordinal);
         });
@@ -2526,7 +2546,7 @@ public sealed class FinanceServiceTests
         Assert.True(firstRun.Succeeded, firstRun.ErrorMessage);
         Assert.Equal(200, firstRun.Value!.CreatedCount);
         Assert.Equal(100000m, firstRun.Value.TotalAmount);
-        Assert.InRange(firstRunSelectCount, 1, 3);
+        Assert.InRange(firstRunSelectCount, 1, 4);
         Assert.False(secondRun.Succeeded);
         Assert.Equal("fee_campaign_accruals_empty", secondRun.ErrorCode);
         Assert.InRange(secondRunSelectCount, 1, 3);
@@ -2784,10 +2804,10 @@ public sealed class FinanceServiceTests
         Assert.True(firstRun.Succeeded, firstRun.ErrorMessage);
         Assert.Equal(200, firstRun.Value!.CreatedCount);
         Assert.Equal(20000m, firstRun.Value.TotalAmount);
-        Assert.InRange(firstRunSelectCount, 1, 5);
+        Assert.InRange(firstRunSelectCount, 1, 7);
         Assert.False(secondRun.Succeeded);
         Assert.Equal("regular_accruals_empty", secondRun.ErrorCode);
-        Assert.InRange(secondRunSelectCount, 1, 4);
+        Assert.InRange(secondRunSelectCount, 1, 5);
         Assert.DoesNotContain(commandCounter.Commands, command => command.Contains("JOIN \"owners\"", StringComparison.OrdinalIgnoreCase));
         Assert.Equal(200, database.Context.Accruals.Count());
     }

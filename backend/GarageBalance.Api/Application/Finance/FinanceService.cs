@@ -20,6 +20,7 @@ public sealed class FinanceService(
     IMeterReadingRepository meterReadingRepository,
     IFinancialOperationRepository financialOperationRepository,
     IAccrualRepository accrualRepository,
+    IAccrualPaymentAllocationRepository accrualPaymentAllocationRepository,
     ISupplierAccrualRepository supplierAccrualRepository,
     ISupplierGroupRepository supplierGroupRepository,
     ISupplierRepository supplierRepository,
@@ -547,6 +548,9 @@ public sealed class FinanceService(
         };
 
         financialOperationRepository.Add(operation);
+        await accrualPaymentAllocationRepository.RebuildAsync(
+            [new AccrualPaymentAllocationKey(operation.GarageId!.Value, operation.IncomeTypeId!.Value)],
+            cancellationToken);
         AddAudit(actorUserId, "finance.income_created", operation, FormatIncomeCreatedAuditSummary(operation));
         await unitOfWork.SaveChangesAsync(cancellationToken);
         return FinanceResult<FinancialOperationDto>.Success(await ToDtoAsync(operation, cancellationToken));
@@ -796,6 +800,7 @@ public sealed class FinanceService(
             return FinanceResult<FinancialOperationDto>.Success(await ToDtoAsync(operation, cancellationToken));
         }
 
+        var oldAllocationKey = new AccrualPaymentAllocationKey(operation.GarageId!.Value, operation.IncomeTypeId!.Value);
         var previousSnapshot = FormatIncomeOperationSnapshot(operation);
         var oldValues = new Dictionary<string, object?>
         {
@@ -827,6 +832,9 @@ public sealed class FinanceService(
         operation.IncomeTypeId = incomeType.Id;
         operation.IncomeType = incomeType;
         operation.UpdatedAtUtc = DateTimeOffset.UtcNow;
+        await accrualPaymentAllocationRepository.RebuildAsync(
+            [oldAllocationKey, new AccrualPaymentAllocationKey(garage.Id, incomeType.Id)],
+            cancellationToken);
         AddAudit(actorUserId, "finance.income_updated", operation, FormatIncomeUpdatedAuditSummary(previousSnapshot, operation), oldValues, newValues);
         await unitOfWork.SaveChangesAsync(cancellationToken);
         return FinanceResult<FinancialOperationDto>.Success(await ToDtoAsync(operation, cancellationToken));
@@ -962,6 +970,12 @@ public sealed class FinanceService(
         operation.IsCanceled = true;
         operation.UpdatedAtUtc = DateTimeOffset.UtcNow;
         operation.Comment = AppendCancelReason(operation.Comment, reason);
+        if (operation.OperationKind == FinancialOperationKinds.Income)
+        {
+            await accrualPaymentAllocationRepository.RebuildAsync(
+                [new AccrualPaymentAllocationKey(operation.GarageId!.Value, operation.IncomeTypeId!.Value)],
+                cancellationToken);
+        }
         AddAudit(actorUserId, "finance.operation_canceled", operation, FormatOperationCanceledAuditSummary(operation, reason));
         await unitOfWork.SaveChangesAsync(cancellationToken);
         return FinanceResult<FinancialOperationDto>.Success(await ToDtoAsync(operation, cancellationToken));
@@ -1024,6 +1038,12 @@ public sealed class FinanceService(
 
         operation.IsCanceled = false;
         operation.UpdatedAtUtc = DateTimeOffset.UtcNow;
+        if (operation.OperationKind == FinancialOperationKinds.Income)
+        {
+            await accrualPaymentAllocationRepository.RebuildAsync(
+                [new AccrualPaymentAllocationKey(operation.GarageId!.Value, operation.IncomeTypeId!.Value)],
+                cancellationToken);
+        }
         AddAudit(actorUserId, "finance.operation_restored", operation, FormatOperationRestoredAuditSummary(operation));
         await unitOfWork.SaveChangesAsync(cancellationToken);
         return FinanceResult<FinancialOperationDto>.Success(await ToDtoAsync(operation, cancellationToken));
@@ -1050,6 +1070,9 @@ public sealed class FinanceService(
 
         accrual.IsCanceled = true;
         accrual.Comment = AppendCancelReason(accrual.Comment, reason);
+        await accrualPaymentAllocationRepository.RebuildAsync(
+            [new AccrualPaymentAllocationKey(accrual.GarageId, accrual.IncomeTypeId)],
+            cancellationToken);
         AddAudit(actorUserId, "finance.accrual_canceled", accrual, FormatAccrualCanceledAuditSummary(accrual, reason));
         await unitOfWork.SaveChangesAsync(cancellationToken);
         return FinanceResult<AccrualDto>.Success(ToDto(accrual));
@@ -1081,6 +1104,9 @@ public sealed class FinanceService(
 
         accrual.IsCanceled = false;
         accrual.UpdatedAtUtc = DateTimeOffset.UtcNow;
+        await accrualPaymentAllocationRepository.RebuildAsync(
+            [new AccrualPaymentAllocationKey(accrual.GarageId, accrual.IncomeTypeId)],
+            cancellationToken);
         AddAudit(actorUserId, "finance.accrual_restored", accrual, FormatAccrualRestoredAuditSummary(accrual));
         await unitOfWork.SaveChangesAsync(cancellationToken);
         return FinanceResult<AccrualDto>.Success(ToDto(accrual));
@@ -1117,6 +1143,7 @@ public sealed class FinanceService(
             return FinanceResult<AccrualDto>.Failure("accrual_duplicate", "Такое начисление за месяц уже внесено.");
         }
 
+        var dueDates = AccrualDueDates.ForChargeService(month, null);
         var accrual = new Accrual
         {
             GarageId = garage.Id,
@@ -1124,12 +1151,17 @@ public sealed class FinanceService(
             IncomeTypeId = incomeType.Id,
             IncomeType = incomeType,
             AccountingMonth = month,
+            DueDate = dueDates.DueDate,
+            OverdueFromDate = dueDates.OverdueFromDate,
             Amount = MoneyMath.RoundMoney(request.Amount),
             Source = source,
             Comment = NormalizeOptional(request.Comment)
         };
 
         accrualRepository.Add(accrual);
+        await accrualPaymentAllocationRepository.RebuildAsync(
+            [new AccrualPaymentAllocationKey(accrual.GarageId, accrual.IncomeTypeId)],
+            cancellationToken);
         AddAudit(actorUserId, "finance.accrual_created", accrual, FormatAccrualCreatedAuditSummary(accrual));
         await unitOfWork.SaveChangesAsync(cancellationToken);
         return FinanceResult<AccrualDto>.Success(ToDto(accrual));
@@ -1167,6 +1199,7 @@ public sealed class FinanceService(
 
         if (accrual is null)
         {
+            var dueDates = AccrualDueDates.ForChargeService(targetMonth, null);
             accrual = new Accrual
             {
                 GarageId = garage.Id,
@@ -1174,11 +1207,16 @@ public sealed class FinanceService(
                 IncomeTypeId = incomeType.Id,
                 IncomeType = incomeType,
                 AccountingMonth = targetMonth,
+                DueDate = dueDates.DueDate,
+                OverdueFromDate = dueDates.OverdueFromDate,
                 Amount = amount,
                 Source = AccrualSources.DebtTransfer,
                 Comment = comment
             };
             accrualRepository.Add(accrual);
+            await accrualPaymentAllocationRepository.RebuildAsync(
+                [new AccrualPaymentAllocationKey(accrual.GarageId, accrual.IncomeTypeId)],
+                cancellationToken);
             AddAudit(actorUserId, "finance.debt_transfer_created", accrual, FormatDebtTransferCreatedAuditSummary(accrual, sourceMonth, targetMonth));
             await unitOfWork.SaveChangesAsync(cancellationToken);
             return FinanceResult<AccrualDto>.Success(ToDto(accrual));
@@ -1198,6 +1236,9 @@ public sealed class FinanceService(
         accrual.Amount = MoneyMath.RoundMoney(accrual.Amount + amount);
         accrual.Comment = AppendDebtTransferComment(accrual.Comment, comment);
         accrual.UpdatedAtUtc = DateTimeOffset.UtcNow;
+        await accrualPaymentAllocationRepository.RebuildAsync(
+            [new AccrualPaymentAllocationKey(accrual.GarageId, accrual.IncomeTypeId)],
+            cancellationToken);
 
         var newValues = new Dictionary<string, object?>
         {
@@ -1273,6 +1314,7 @@ public sealed class FinanceService(
             return FinanceResult<AccrualDto>.Success(ToDto(accrual));
         }
 
+        var oldAllocationKey = new AccrualPaymentAllocationKey(accrual.GarageId, accrual.IncomeTypeId);
         var before = AccrualAuditSnapshot.From(accrual);
         var oldValues = new Dictionary<string, object?>
         {
@@ -1298,10 +1340,16 @@ public sealed class FinanceService(
         accrual.IncomeTypeId = incomeType.Id;
         accrual.IncomeType = incomeType;
         accrual.AccountingMonth = month;
+        var updatedDueDates = AccrualDueDates.ForChargeService(month, null);
+        accrual.DueDate = updatedDueDates.DueDate;
+        accrual.OverdueFromDate = updatedDueDates.OverdueFromDate;
         accrual.Amount = amount;
         accrual.Source = source;
         accrual.Comment = comment;
         accrual.UpdatedAtUtc = DateTimeOffset.UtcNow;
+        await accrualPaymentAllocationRepository.RebuildAsync(
+            [oldAllocationKey, new AccrualPaymentAllocationKey(accrual.GarageId, accrual.IncomeTypeId)],
+            cancellationToken);
         AddAudit(actorUserId, "finance.accrual_updated", accrual, FormatAccrualUpdatedAuditSummary(before, accrual), oldValues, newValues);
         await unitOfWork.SaveChangesAsync(cancellationToken);
         return FinanceResult<AccrualDto>.Success(ToDto(accrual));
@@ -1535,6 +1583,13 @@ public sealed class FinanceService(
                 "Выбранный тариф не подходит для этого вида регулярного начисления.");
         }
 
+        var matchingSetting = (await chargeServiceSettingRepository.GetActiveRegularAsync(cancellationToken))
+            .FirstOrDefault(setting =>
+                setting.IncomeTypeId == incomeType.Id &&
+                setting.TariffId == tariff.Id &&
+                IsChargeServiceDueForMonth(setting, month));
+        var dueDates = AccrualDueDates.ForChargeService(month, matchingSetting);
+
         var existingAccrualCount = await accrualRepository.CountActiveForGenerationAsync(
             incomeType.Id,
             month,
@@ -1607,6 +1662,8 @@ public sealed class FinanceService(
                 TariffId = tariff.Id,
                 Tariff = tariff,
                 AccountingMonth = month,
+                DueDate = dueDates.DueDate,
+                OverdueFromDate = dueDates.OverdueFromDate,
                 Amount = amount,
                 Source = AccrualSources.Regular,
                 Comment = BuildRegularAccrualComment(tariff, request.Comment)
@@ -1646,6 +1703,9 @@ public sealed class FinanceService(
                 ["skippedCount"] = skipped.Count,
                 ["totalAmount"] = created.Sum(item => item.Amount)
             });
+        await accrualPaymentAllocationRepository.RebuildAsync(
+            created.Select(item => new AccrualPaymentAllocationKey(item.GarageId, item.IncomeTypeId)).ToArray(),
+            cancellationToken);
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
         var result = new RegularAccrualGenerationResultDto(
@@ -1776,6 +1836,8 @@ public sealed class FinanceService(
             return FinanceResult<FeeCampaignAccrualGenerationResultDto>.Failure("fee_campaign_contribution_amount_invalid", "Сумма взноса по сбору должна быть больше нуля для начисления.");
         }
 
+        var dueDates = AccrualDueDates.ForFeeCampaign(month, campaign.EndsOn, campaign.OverdueGraceDays);
+
         IReadOnlyList<Garage> garages = campaign.AppliesToAllGarages
             ? await garageRepository.GetAllActiveWithOwnerAsync(cancellationToken)
             : campaign.ParticipantGarages
@@ -1810,6 +1872,8 @@ public sealed class FinanceService(
                 IncomeTypeId = campaign.IncomeTypeId,
                 IncomeType = campaign.IncomeType,
                 AccountingMonth = month,
+                DueDate = dueDates.DueDate,
+                OverdueFromDate = dueDates.OverdueFromDate,
                 Amount = amount,
                 Source = AccrualSources.FeeCampaign,
                 Comment = BuildFeeCampaignAccrualComment(campaign, request.Comment)
@@ -1842,6 +1906,9 @@ public sealed class FinanceService(
                 ["skippedCount"] = skipped.Count,
                 ["totalAmount"] = created.Sum(item => item.Amount)
             });
+        await accrualPaymentAllocationRepository.RebuildAsync(
+            created.Select(item => new AccrualPaymentAllocationKey(item.GarageId, item.IncomeTypeId)).ToArray(),
+            cancellationToken);
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
         var result = new FeeCampaignAccrualGenerationResultDto(
@@ -3213,7 +3280,9 @@ public sealed class FinanceService(
             accrual.Amount,
             accrual.Source,
             accrual.Comment,
-            accrual.IsCanceled);
+            accrual.IsCanceled,
+            accrual.DueDate,
+            accrual.OverdueFromDate);
     }
 
     private static SupplierAccrualDto ToDto(SupplierAccrual accrual)

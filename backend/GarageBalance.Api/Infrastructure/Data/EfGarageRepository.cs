@@ -5,10 +5,13 @@ using Microsoft.EntityFrameworkCore;
 
 namespace GarageBalance.Api.Infrastructure.Data;
 
-public sealed class EfGarageRepository(GarageBalanceDbContext dbContext) : IGarageRepository
+public sealed class EfGarageRepository(GarageBalanceDbContext dbContext, TimeProvider? timeProvider = null) : IGarageRepository
 {
     private const int AccrualBalanceCategory = 1;
     private const int IncomeBalanceCategory = 2;
+    private const int OverdueAccrualBalanceCategory = 3;
+    private const int AllocatedIncomeBalanceCategory = 4;
+    private DateOnly Today => DateOnly.FromDateTime((timeProvider ?? TimeProvider.System).GetUtcNow().UtcDateTime);
 
     public async Task<IReadOnlyList<Garage>> GetListAsync(
         string? normalizedSearch,
@@ -47,7 +50,7 @@ public sealed class EfGarageRepository(GarageBalanceDbContext dbContext) : IGara
                 : garages;
             var totals = sortBy == "overdueDebt"
                 ? await GetBalanceTotalsAsync(filtered.Select(garage => garage.Id).ToArray(), cancellationToken)
-                : new GarageBalanceTotalsData(new Dictionary<Guid, decimal>(), new Dictionary<Guid, decimal>());
+                : EmptyBalanceTotals();
             var pageItems = ApplySqlitePageSorting(filtered, totals, sortBy, sortDescending)
                 .Skip(offset)
                 .Take(limit)
@@ -71,7 +74,7 @@ public sealed class EfGarageRepository(GarageBalanceDbContext dbContext) : IGara
     {
         if (garageIds.Count == 0)
         {
-            return new GarageBalanceTotalsData(new Dictionary<Guid, decimal>(), new Dictionary<Guid, decimal>());
+            return EmptyBalanceTotals();
         }
 
         var accrualQuery = dbContext.Accruals.AsNoTracking()
@@ -96,8 +99,44 @@ public sealed class EfGarageRepository(GarageBalanceDbContext dbContext) : IGara
                 GarageId = group.Key,
                 Amount = group.Sum(operation => operation.Amount)
             });
+        var today = Today;
+        var overdueAccrualQuery = dbContext.Accruals.AsNoTracking()
+            .Where(accrual =>
+                !accrual.IsCanceled &&
+                accrual.OverdueFromDate <= today &&
+                garageIds.Contains(accrual.GarageId))
+            .GroupBy(accrual => accrual.GarageId)
+            .Select(group => new
+            {
+                Category = OverdueAccrualBalanceCategory,
+                GarageId = group.Key,
+                Amount = group.Sum(accrual => accrual.Amount) -
+                    dbContext.AccrualPaymentAllocations
+                        .Where(allocation =>
+                            allocation.IsActive &&
+                            !allocation.Accrual.IsCanceled &&
+                            allocation.Accrual.OverdueFromDate <= today &&
+                            allocation.Accrual.GarageId == group.Key &&
+                            !allocation.FinancialOperation.IsCanceled)
+                        .Sum(allocation => (decimal?)allocation.Amount) ?? 0m
+            });
+        var allocatedIncomeQuery = dbContext.AccrualPaymentAllocations.AsNoTracking()
+            .Where(allocation =>
+                allocation.IsActive &&
+                !allocation.Accrual.IsCanceled &&
+                !allocation.FinancialOperation.IsCanceled &&
+                garageIds.Contains(allocation.Accrual.GarageId))
+            .GroupBy(allocation => allocation.Accrual.GarageId)
+            .Select(group => new
+            {
+                Category = AllocatedIncomeBalanceCategory,
+                GarageId = group.Key,
+                Amount = group.Sum(allocation => allocation.Amount)
+            });
         var rows = await accrualQuery
             .Concat(incomeQuery)
+            .Concat(overdueAccrualQuery)
+            .Concat(allocatedIncomeQuery)
             .ToListAsync(cancellationToken);
         var accrualTotals = rows
             .Where(row => row.Category == AccrualBalanceCategory)
@@ -105,7 +144,13 @@ public sealed class EfGarageRepository(GarageBalanceDbContext dbContext) : IGara
         var incomeTotals = rows
             .Where(row => row.Category == IncomeBalanceCategory)
             .ToDictionary(row => row.GarageId, row => row.Amount);
-        return new GarageBalanceTotalsData(accrualTotals, incomeTotals);
+        var overdueAccrualTotals = rows
+            .Where(row => row.Category == OverdueAccrualBalanceCategory)
+            .ToDictionary(row => row.GarageId, row => row.Amount);
+        var allocatedIncomeTotals = rows
+            .Where(row => row.Category == AllocatedIncomeBalanceCategory)
+            .ToDictionary(row => row.GarageId, row => row.Amount);
+        return new GarageBalanceTotalsData(accrualTotals, incomeTotals, overdueAccrualTotals, allocatedIncomeTotals);
     }
 
     public Task<Garage?> FindActiveWithOwnerAsync(Guid id, CancellationToken cancellationToken) =>
@@ -173,6 +218,7 @@ public sealed class EfGarageRepository(GarageBalanceDbContext dbContext) : IGara
 
     private IOrderedQueryable<Garage> ApplyPageSorting(IQueryable<Garage> query, string sortBy, bool descending)
     {
+        var today = Today;
         return (sortBy, descending) switch
         {
             ("peopleCount", true) => query.OrderByDescending(garage => garage.PeopleCount),
@@ -185,21 +231,17 @@ public sealed class EfGarageRepository(GarageBalanceDbContext dbContext) : IGara
             ("phone", false) => query.OrderBy(garage => garage.Owner == null ? null : garage.Owner.Phone),
             ("overdueDebt", true) => query.OrderByDescending(garage => Math.Max(
                 garage.StartingBalance +
-                (dbContext.Accruals
-                    .Where(accrual => accrual.GarageId == garage.Id && !accrual.IsCanceled)
-                    .Sum(accrual => (decimal?)accrual.Amount) ?? 0m) -
-                (dbContext.FinancialOperations
-                    .Where(operation => operation.GarageId == garage.Id && !operation.IsCanceled && operation.OperationKind == FinancialOperationKinds.Income)
-                    .Sum(operation => (decimal?)operation.Amount) ?? 0m),
+                (dbContext.Accruals.Where(accrual => accrual.GarageId == garage.Id && !accrual.IsCanceled && accrual.OverdueFromDate <= today).Sum(accrual => (decimal?)accrual.Amount) ?? 0m) -
+                (dbContext.FinancialOperations.Where(operation => operation.GarageId == garage.Id && !operation.IsCanceled && operation.OperationKind == FinancialOperationKinds.Income).Sum(operation => (decimal?)operation.Amount) ?? 0m) +
+                (dbContext.AccrualPaymentAllocations.Where(allocation => allocation.IsActive && allocation.Accrual.GarageId == garage.Id && !allocation.Accrual.IsCanceled && !allocation.FinancialOperation.IsCanceled).Sum(allocation => (decimal?)allocation.Amount) ?? 0m) -
+                (dbContext.AccrualPaymentAllocations.Where(allocation => allocation.IsActive && allocation.Accrual.GarageId == garage.Id && !allocation.Accrual.IsCanceled && allocation.Accrual.OverdueFromDate <= today && !allocation.FinancialOperation.IsCanceled).Sum(allocation => (decimal?)allocation.Amount) ?? 0m),
                 0m)),
             ("overdueDebt", false) => query.OrderBy(garage => Math.Max(
                 garage.StartingBalance +
-                (dbContext.Accruals
-                    .Where(accrual => accrual.GarageId == garage.Id && !accrual.IsCanceled)
-                    .Sum(accrual => (decimal?)accrual.Amount) ?? 0m) -
-                (dbContext.FinancialOperations
-                    .Where(operation => operation.GarageId == garage.Id && !operation.IsCanceled && operation.OperationKind == FinancialOperationKinds.Income)
-                    .Sum(operation => (decimal?)operation.Amount) ?? 0m),
+                (dbContext.Accruals.Where(accrual => accrual.GarageId == garage.Id && !accrual.IsCanceled && accrual.OverdueFromDate <= today).Sum(accrual => (decimal?)accrual.Amount) ?? 0m) -
+                (dbContext.FinancialOperations.Where(operation => operation.GarageId == garage.Id && !operation.IsCanceled && operation.OperationKind == FinancialOperationKinds.Income).Sum(operation => (decimal?)operation.Amount) ?? 0m) +
+                (dbContext.AccrualPaymentAllocations.Where(allocation => allocation.IsActive && allocation.Accrual.GarageId == garage.Id && !allocation.Accrual.IsCanceled && !allocation.FinancialOperation.IsCanceled).Sum(allocation => (decimal?)allocation.Amount) ?? 0m) -
+                (dbContext.AccrualPaymentAllocations.Where(allocation => allocation.IsActive && allocation.Accrual.GarageId == garage.Id && !allocation.Accrual.IsCanceled && allocation.Accrual.OverdueFromDate <= today && !allocation.FinancialOperation.IsCanceled).Sum(allocation => (decimal?)allocation.Amount) ?? 0m),
                 0m)),
             (_, true) => query.OrderByDescending(garage => garage.Number),
             _ => query.OrderBy(garage => garage.Number)
@@ -213,9 +255,8 @@ public sealed class EfGarageRepository(GarageBalanceDbContext dbContext) : IGara
         bool descending)
     {
         Func<Garage, decimal> overdueDebt = garage => Math.Max(
-            garage.StartingBalance +
-            totals.AccrualTotals.GetValueOrDefault(garage.Id) -
-            totals.IncomeTotals.GetValueOrDefault(garage.Id),
+            garage.StartingBalance + totals.OverdueAccrualTotals.GetValueOrDefault(garage.Id) -
+            (totals.IncomeTotals.GetValueOrDefault(garage.Id) - totals.AllocatedIncomeTotals.GetValueOrDefault(garage.Id)),
             0m);
 
         var ordered = (sortBy, descending) switch
@@ -235,6 +276,13 @@ public sealed class EfGarageRepository(GarageBalanceDbContext dbContext) : IGara
         };
         return ordered.ThenBy(garage => garage.Id);
     }
+
+    private static GarageBalanceTotalsData EmptyBalanceTotals() =>
+        new(
+            new Dictionary<Guid, decimal>(),
+            new Dictionary<Guid, decimal>(),
+            new Dictionary<Guid, decimal>(),
+            new Dictionary<Guid, decimal>());
 
     private static bool GarageMatchesSearch(Garage garage, string normalizedSearch) =>
         garage.Number.Contains(normalizedSearch, StringComparison.OrdinalIgnoreCase) ||

@@ -78,6 +78,7 @@ builder.Services.AddScoped<IFinanceTotalsQuery, EfFinanceTotalsQuery>();
 builder.Services.AddScoped<IMeterReadingRepository, EfMeterReadingRepository>();
 builder.Services.AddScoped<IFinancialOperationRepository, EfFinancialOperationRepository>();
 builder.Services.AddScoped<IAccrualRepository, EfAccrualRepository>();
+builder.Services.AddScoped<IAccrualPaymentAllocationRepository, EfAccrualPaymentAllocationRepository>();
 builder.Services.AddScoped<ISupplierAccrualRepository, EfSupplierAccrualRepository>();
 builder.Services.AddScoped<IFinanceService>(services => new FinanceService(
     services.GetRequiredService<IStaffMemberRepository>(),
@@ -92,6 +93,7 @@ builder.Services.AddScoped<IFinanceService>(services => new FinanceService(
     services.GetRequiredService<IMeterReadingRepository>(),
     services.GetRequiredService<IFinancialOperationRepository>(),
     services.GetRequiredService<IAccrualRepository>(),
+    services.GetRequiredService<IAccrualPaymentAllocationRepository>(),
     services.GetRequiredService<ISupplierAccrualRepository>(),
     services.GetRequiredService<ISupplierGroupRepository>(),
     services.GetRequiredService<ISupplierRepository>(),

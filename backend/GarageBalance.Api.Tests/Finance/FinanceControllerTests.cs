@@ -1194,7 +1194,9 @@ public sealed class FinanceControllerTests
             amount,
             "regular",
             null,
-            isCanceled);
+            isCanceled,
+            new DateOnly(2026, 7, 31),
+            new DateOnly(2026, 8, 31));
     }
 
     private static MeterReadingDto CreateMeterReading(Guid? id = null, decimal currentValue = 15m, decimal previousValue = 10m, decimal consumption = 5m, bool isCanceled = false)

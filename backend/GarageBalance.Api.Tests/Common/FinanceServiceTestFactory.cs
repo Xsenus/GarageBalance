@@ -23,6 +23,7 @@ internal static class FinanceServiceTestFactory
             new EfMeterReadingRepository(dbContext),
             new EfFinancialOperationRepository(dbContext),
             new EfAccrualRepository(dbContext),
+            new EfAccrualPaymentAllocationRepository(dbContext),
             new EfSupplierAccrualRepository(dbContext),
             new EfSupplierGroupRepository(dbContext),
             new EfSupplierRepository(dbContext),

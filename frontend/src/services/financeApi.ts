@@ -80,6 +80,8 @@ export type AccrualDto = {
   source: 'manual' | 'regular' | 'debt_transfer' | 'fee_campaign'
   comment: string | null
   isCanceled: boolean
+  dueDate: string
+  overdueFromDate: string
 }
 
 export type SupplierAccrualDto = {

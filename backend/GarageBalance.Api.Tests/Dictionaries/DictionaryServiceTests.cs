@@ -659,6 +659,54 @@ public sealed class DictionaryServiceTests
     }
 
     [Fact]
+    public async Task GarageRepository_OverdueDebtStartsAfterGraceAndRequiresFullPayment()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var garage = new Garage { Number = "DUE-1" };
+        var incomeType = new IncomeType { Name = "Annual", Code = "annual" };
+        var annualAccrual = new Accrual
+        {
+            Garage = garage,
+            IncomeType = incomeType,
+            AccountingMonth = new DateOnly(2026, 1, 1),
+            DueDate = new DateOnly(2026, 6, 30),
+            OverdueFromDate = new DateOnly(2026, 7, 31),
+            Amount = 1200m,
+            Source = AccrualSources.Regular
+        };
+        var payment = new FinancialOperation
+        {
+            OperationKind = FinancialOperationKinds.Income,
+            OperationDate = new DateOnly(2026, 6, 20),
+            AccountingMonth = new DateOnly(2026, 6, 1),
+            Amount = 1199m,
+            Garage = garage,
+            IncomeType = incomeType
+        };
+        database.Context.AddRange(annualAccrual, payment);
+        database.Context.AccrualPaymentAllocations.Add(new AccrualPaymentAllocation
+        {
+            Accrual = annualAccrual,
+            FinancialOperation = payment,
+            Amount = 1199m
+        });
+        await database.Context.SaveChangesAsync();
+
+        var beforeGrace = await new EfGarageRepository(
+                database.Context,
+                new FixedTimeProvider(new DateTimeOffset(2026, 7, 30, 12, 0, 0, TimeSpan.Zero)))
+            .GetBalanceTotalsAsync([garage.Id], CancellationToken.None);
+        var afterGrace = await new EfGarageRepository(
+                database.Context,
+                new FixedTimeProvider(new DateTimeOffset(2026, 7, 31, 12, 0, 0, TimeSpan.Zero)))
+            .GetBalanceTotalsAsync([garage.Id], CancellationToken.None);
+
+        Assert.Equal(0m, beforeGrace.OverdueAccrualTotals.GetValueOrDefault(garage.Id));
+        Assert.Equal(1m, afterGrace.OverdueAccrualTotals.GetValueOrDefault(garage.Id));
+        Assert.Equal(1199m, afterGrace.AllocatedIncomeTotals.GetValueOrDefault(garage.Id));
+    }
+
+    [Fact]
     public async Task GetGaragesPageAsync_SortsFieldsBeforePagination()
     {
         await using var database = await TestDatabase.CreateAsync();
@@ -2647,5 +2695,10 @@ public sealed class DictionaryServiceTests
         }
 
         return count;
+    }
+
+    private sealed class FixedTimeProvider(DateTimeOffset utcNow) : TimeProvider
+    {
+        public override DateTimeOffset GetUtcNow() => utcNow;
     }
 }
