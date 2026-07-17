@@ -4505,6 +4505,61 @@ public sealed class FinanceServiceTests
         Assert.Equal(3, await database.Context.FinancialOperations.CountAsync());
     }
 
+    [Fact]
+    public async Task GetExpenseWorksheetAsync_RecalculatesEmptyMonthsAcrossYearAfterPreviousPaymentCancellation()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = FinanceServiceTestFactory.Create(database.Context);
+        var supplierGroup = new SupplierGroup { Name = "Перерасчет на границе года" };
+        var supplier = new Supplier { Name = "Поставщик перерасчета", Group = supplierGroup };
+        var expenseType = new ExpenseType { Name = "Услуга перерасчета", Code = "year_boundary_recalculation" };
+        var decemberPayment = CreateHistoricalExpense(supplier, null, expenseType, new DateOnly(2026, 12, 1), 40m);
+        database.Context.AddRange(
+            supplierGroup,
+            supplier,
+            expenseType,
+            CreateSupplierAccrual(supplier, expenseType, new DateOnly(2026, 12, 1), 100m),
+            CreateSupplierAccrual(supplier, expenseType, new DateOnly(2027, 2, 1), 50m),
+            decemberPayment,
+            CreateHistoricalExpense(supplier, null, expenseType, new DateOnly(2027, 2, 1), 30m));
+        await database.Context.SaveChangesAsync();
+
+        var december = await service.GetExpenseWorksheetAsync(
+            new ExpenseWorksheetRequest(new DateOnly(2026, 12, 1)), CancellationToken.None);
+        var emptyJanuary = await service.GetExpenseWorksheetAsync(
+            new ExpenseWorksheetRequest(new DateOnly(2027, 1, 1)), CancellationToken.None);
+        var february = await service.GetExpenseWorksheetAsync(
+            new ExpenseWorksheetRequest(new DateOnly(2027, 2, 1)), CancellationToken.None);
+        var emptyMarch = await service.GetExpenseWorksheetAsync(
+            new ExpenseWorksheetRequest(new DateOnly(2027, 3, 1)), CancellationToken.None);
+
+        AssertExpenseCarry(Assert.Single(december.Value!.Rows), 0m, 0m, 60m, 0m);
+        AssertEmptyExpenseMonth(Assert.Single(emptyJanuary.Value!.Rows), 60m);
+        AssertExpenseCarry(Assert.Single(february.Value!.Rows), 60m, 0m, 80m, 0m);
+        AssertEmptyExpenseMonth(Assert.Single(emptyMarch.Value!.Rows), 80m);
+
+        var canceled = await service.CancelOperationAsync(
+            decemberPayment.Id,
+            new CancelFinanceEntryRequest("Отмена прошлогодней выплаты"),
+            Guid.NewGuid(),
+            CancellationToken.None);
+
+        Assert.True(canceled.Succeeded);
+        var recalculatedJanuary = await service.GetExpenseWorksheetAsync(
+            new ExpenseWorksheetRequest(new DateOnly(2027, 1, 1)), CancellationToken.None);
+        var recalculatedFebruary = await service.GetExpenseWorksheetAsync(
+            new ExpenseWorksheetRequest(new DateOnly(2027, 2, 1)), CancellationToken.None);
+        var recalculatedMarch = await service.GetExpenseWorksheetAsync(
+            new ExpenseWorksheetRequest(new DateOnly(2027, 3, 1)), CancellationToken.None);
+
+        AssertEmptyExpenseMonth(Assert.Single(recalculatedJanuary.Value!.Rows), 100m);
+        AssertExpenseCarry(Assert.Single(recalculatedFebruary.Value!.Rows), 100m, 0m, 120m, 0m);
+        AssertEmptyExpenseMonth(Assert.Single(recalculatedMarch.Value!.Rows), 120m);
+        Assert.Single(database.Context.AuditEvents, audit => audit.Action == "finance.operation_canceled");
+        Assert.Equal(2, await database.Context.SupplierAccruals.CountAsync());
+        Assert.Equal(2, await database.Context.FinancialOperations.CountAsync());
+    }
+
     private static SupplierAccrual CreateSupplierAccrual(
         Supplier supplier,
         ExpenseType expenseType,
@@ -4530,6 +4585,13 @@ public sealed class FinanceServiceTests
         Assert.Equal(openingAdvance, row.OpeningAdvance);
         Assert.Equal(closingDebt, row.ClosingDebt);
         Assert.Equal(closingAdvance, row.ClosingAdvance);
+    }
+
+    private static void AssertEmptyExpenseMonth(ExpenseWorksheetRowDto row, decimal carriedDebt)
+    {
+        Assert.Equal(0m, row.AccrualAmount);
+        Assert.Equal(0m, row.ExpenseAmount);
+        AssertExpenseCarry(row, carriedDebt, 0m, carriedDebt, 0m);
     }
 
     [Fact]
