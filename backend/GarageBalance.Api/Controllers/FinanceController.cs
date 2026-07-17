@@ -167,6 +167,17 @@ public sealed class FinanceController(IFinanceService financeService) : Controll
         return result.Succeeded ? Ok(result.Value) : ToError(result);
     }
 
+    [HttpGet("garages/{garageId:guid}/overdue-debt")]
+    [ProducesResponseType<GarageOverdueDebtDto>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<GarageOverdueDebtDto>> GetGarageOverdueDebt(
+        Guid garageId,
+        CancellationToken cancellationToken)
+    {
+        var result = await financeService.GetGarageOverdueDebtAsync(garageId, cancellationToken);
+        return result.Succeeded ? Ok(result.Value) : ToError(result);
+    }
+
     [HttpGet("garages/{garageId:guid}/income-worksheet")]
     [ProducesResponseType<GarageIncomeWorksheetDto>(StatusCodes.Status200OK)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]

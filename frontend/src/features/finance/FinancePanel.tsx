@@ -3,7 +3,7 @@ import type { FormEvent, KeyboardEvent, MouseEvent, ReactNode } from 'react'
 import { ArrowRight, CalendarDays, FileText, Pencil, RotateCcw, Save, Search, Trash2, WalletCards, X } from 'lucide-react'
 import type { AuthResponse } from '../../services/authApi'
 import type { AccountingTypeDto, DictionaryClient, GarageDto, StaffMemberDto, SupplierDto, SupplierGroupDto, TariffDto } from '../../services/dictionariesApi'
-import type { AccrualDto, CreateAccrualRequest, CreateExpenseOperationRequest, CreateIncomeOperationRequest, CreateMeterReadingRequest, CreateSupplierAccrualRequest, ExpenseWorksheetDto, FinanceClient, FinancePagedResult, FinanceSummaryDto, FinancialOperationDto, GarageIncomeWorksheetDto, GenerateRegularAccrualsRequest, GenerateSupplierGroupSalaryAccrualsRequest, MeterReadingDto, MissingMeterReadingDto, SupplierAccrualDto } from '../../services/financeApi'
+import type { AccrualDto, CreateAccrualRequest, CreateExpenseOperationRequest, CreateIncomeOperationRequest, CreateMeterReadingRequest, CreateSupplierAccrualRequest, ExpenseWorksheetDto, FinanceClient, FinancePagedResult, FinanceSummaryDto, FinancialOperationDto, GarageIncomeWorksheetDto, GarageOverdueDebtDto, GenerateRegularAccrualsRequest, GenerateSupplierGroupSalaryAccrualsRequest, MeterReadingDto, MissingMeterReadingDto, SupplierAccrualDto } from '../../services/financeApi'
 import type { FundDto, FundsClient } from '../../services/fundsApi'
 import type { FormStateClient } from '../../services/formStatesApi'
 import type { IntegrationClient, ReceiptPrintingActionKind } from '../../services/integrationsApi'
@@ -3039,6 +3039,10 @@ function PaymentsPrototypePanel({
   const garageSearchWrapRef = useRef<HTMLDivElement | null>(null)
   const [selectedGarageId, setSelectedGarageId] = useState<string | null>(null)
   const [selectedGarageIds, setSelectedGarageIds] = useState<string[]>([])
+  const [overdueDebtDetails, setOverdueDebtDetails] = useState<GarageOverdueDebtDto | null>(null)
+  const [overdueDebtLoading, setOverdueDebtLoading] = useState(false)
+  const [overdueDebtError, setOverdueDebtError] = useState<string | null>(null)
+  const [overdueDebtRefresh, setOverdueDebtRefresh] = useState(0)
   const [incomeWorksheetMonthFrom, setIncomeWorksheetMonthFrom] = useState(() => getPreviousMonthInputValue(getCurrentMonthInputValue()))
   const [incomeWorksheetMonthTo, setIncomeWorksheetMonthTo] = useState(() => getCurrentMonthInputValue())
   const [garageRows, setGarageRows] = useState<GarageIncomePrototypeRow[]>([])
@@ -3104,6 +3108,7 @@ function PaymentsPrototypePanel({
     [availableGarages],
   )
   const selectedGarage = garageOptions.find((garage) => garage.id === selectedGarageId) ?? null
+  const selectedGarageOverdueDebt = selectedGarage?.overdueDebt ?? 0
   const selectedGarages = selectedGarageIds
     .map((garageId) => garageOptions.find((garage) => garage.id === garageId))
     .filter((garage): garage is PaymentsPrototypeGarage => garage !== undefined)
@@ -3158,6 +3163,40 @@ function PaymentsPrototypePanel({
       window.clearTimeout(handle)
     }
   }, [auth.accessToken, dictionaryClient, garageSearch])
+
+  useEffect(() => {
+    if (!selectedGarageId || selectedGarageOverdueDebt <= 0) {
+      setOverdueDebtDetails(null)
+      setOverdueDebtLoading(false)
+      setOverdueDebtError(null)
+      return
+    }
+
+    let cancelled = false
+    setOverdueDebtDetails(null)
+    setOverdueDebtLoading(true)
+    setOverdueDebtError(null)
+    void financeClient.getGarageOverdueDebt(auth.accessToken, selectedGarageId)
+      .then((details) => {
+        if (!cancelled) {
+          setOverdueDebtDetails(details)
+        }
+      })
+      .catch((error: unknown) => {
+        if (!cancelled) {
+          setOverdueDebtError(error instanceof Error ? error.message : 'Не удалось загрузить расшифровку просрочки.')
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setOverdueDebtLoading(false)
+        }
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [auth.accessToken, financeClient, overdueDebtRefresh, selectedGarageId, selectedGarageOverdueDebt])
 
   useEffect(() => {
     if (!garageSearchOpen) {
@@ -4425,6 +4464,59 @@ function PaymentsPrototypePanel({
           </section>
         ) : null}
       </div>
+      {selectedGarage && selectedGarage.overdueDebt > 0 ? (
+        <details className="payments-prototype-overdue-details">
+          <summary>
+            <span>Расшифровка просроченной задолженности</span>
+            <strong>{formatPaymentPrototypeValue(overdueDebtDetails?.total ?? selectedGarage.overdueDebt)}</strong>
+          </summary>
+          {overdueDebtLoading ? (
+            <LoadingSkeleton label="Загрузка расшифровки просроченной задолженности" rows={3} columns={4} />
+          ) : overdueDebtError ? (
+            <div className="form-error payments-prototype-overdue-error" role="alert">
+              <span>{overdueDebtError}</span>
+              <button className="secondary-button" type="button" onClick={() => setOverdueDebtRefresh((value) => value + 1)}>Повторить</button>
+            </div>
+          ) : overdueDebtDetails && overdueDebtDetails.rows.length > 0 ? (
+            <div className="table-scroll">
+              <table aria-label="Расшифровка просроченной задолженности">
+                <thead>
+                  <tr>
+                    <th>Услуга</th>
+                    <th>Месяц начисления</th>
+                    <th>Срок оплаты</th>
+                    <th>Просрочено с</th>
+                    <th>Начислено</th>
+                    <th>Оплачено</th>
+                    <th>Остаток</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {overdueDebtDetails.rows.map((row, index) => (
+                    <tr key={`${row.rowKind}-${row.incomeTypeId ?? 'opening'}-${row.accountingMonth ?? index}`}>
+                      <td>{row.incomeTypeName}</td>
+                      <td>{row.accountingMonth ? formatMonth(row.accountingMonth) : '—'}</td>
+                      <td>{row.dueDate ? formatDateOnly(row.dueDate) : '—'}</td>
+                      <td>{row.overdueFromDate ? formatDateOnly(row.overdueFromDate) : '—'}</td>
+                      <td>{formatPaymentPrototypeValue(row.originalAmount)}</td>
+                      <td>{formatPaymentPrototypeValue(row.paidAmount)}</td>
+                      <td className="money-expense">{formatPaymentPrototypeValue(row.outstandingAmount)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot>
+                  <tr>
+                    <th colSpan={6}>Итого на {formatDateOnly(overdueDebtDetails.asOfDate)}</th>
+                    <th>{formatPaymentPrototypeValue(overdueDebtDetails.total)}</th>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          ) : (
+            <p className="empty-state empty-state--spacious" role="status" aria-live="polite">Просроченных начислений не найдено.</p>
+          )}
+        </details>
+      ) : null}
       {headingNotices}
       <div className="payments-prototype-topline">
         <div ref={garageSearchWrapRef} className="payments-prototype-search-wrap">

@@ -58,6 +58,54 @@ public sealed class EfAccrualRepository(GarageBalanceDbContext dbContext) : IAcc
             .Where(accrual => !accrual.IsCanceled && accrual.GarageId == garageId && accrual.AccountingMonth < accountingMonth)
             .SumAsync(accrual => accrual.Amount, cancellationToken);
 
+    public async Task<IReadOnlyList<OverdueAccrualDebtData>> GetOverdueDebtDetailsAsync(
+        Guid garageId,
+        DateOnly asOfDate,
+        CancellationToken cancellationToken)
+    {
+        var query = dbContext.Accruals.AsNoTracking()
+            .Where(accrual =>
+                !accrual.IsCanceled &&
+                accrual.GarageId == garageId &&
+                accrual.OverdueFromDate <= asOfDate)
+            .Select(accrual => new
+            {
+                AccrualId = accrual.Id,
+                accrual.IncomeTypeId,
+                IncomeTypeName = accrual.IncomeType.Name,
+                accrual.AccountingMonth,
+                accrual.DueDate,
+                accrual.OverdueFromDate,
+                accrual.Amount,
+                PaidAmount = dbContext.AccrualPaymentAllocations
+                    .Where(allocation =>
+                        allocation.IsActive &&
+                        allocation.AccrualId == accrual.Id &&
+                        !allocation.FinancialOperation.IsCanceled)
+                    .Sum(allocation => (decimal?)allocation.Amount) ?? 0m
+            });
+
+        var rows = await query.ToListAsync(cancellationToken);
+        return rows
+            .Select(row => new OverdueAccrualDebtData(
+                row.AccrualId,
+                row.IncomeTypeId,
+                row.IncomeTypeName,
+                row.AccountingMonth,
+                row.DueDate,
+                row.OverdueFromDate,
+                row.Amount,
+                row.PaidAmount,
+                Math.Max(row.Amount - row.PaidAmount, 0m)))
+            .Where(row => row.OutstandingAmount > 0m)
+            .OrderBy(row => row.OverdueFromDate)
+            .ThenBy(row => row.DueDate)
+            .ThenBy(row => row.AccountingMonth)
+            .ThenBy(row => row.IncomeTypeName, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(row => row.AccrualId)
+            .ToList();
+    }
+
     public async Task<IReadOnlyList<AccrualBucketData>> GetMonthlyBucketsAsync(
         Guid garageId,
         DateOnly? monthFrom,

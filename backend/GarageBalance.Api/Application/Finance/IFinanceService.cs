@@ -24,6 +24,8 @@ public interface IFinanceService
 
     Task<FinanceResult<GarageBalanceHistoryDto>> GetGarageBalanceHistoryAsync(Guid garageId, GarageBalanceHistoryRequest request, CancellationToken cancellationToken);
 
+    Task<FinanceResult<GarageOverdueDebtDto>> GetGarageOverdueDebtAsync(Guid garageId, CancellationToken cancellationToken);
+
     Task<FinanceResult<GarageIncomeWorksheetDto>> GetGarageIncomeWorksheetAsync(Guid garageId, GarageIncomeWorksheetRequest request, CancellationToken cancellationToken);
 
     Task<FinanceResult<ExpenseWorksheetDto>> GetExpenseWorksheetAsync(ExpenseWorksheetRequest request, CancellationToken cancellationToken);

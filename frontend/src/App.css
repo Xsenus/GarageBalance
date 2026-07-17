@@ -3291,6 +3291,46 @@ h1 {
   text-align: right;
 }
 
+.payments-prototype-overdue-details {
+  border: 1px solid #fecdca;
+  border-radius: 10px;
+  background: #fffafa;
+  padding: 0 14px 14px;
+}
+
+.payments-prototype-overdue-details > summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  cursor: pointer;
+  padding: 12px 0;
+  color: #912018;
+  font-weight: 750;
+}
+
+.payments-prototype-overdue-details > summary:focus-visible {
+  outline: 3px solid rgba(217, 45, 32, 0.22);
+  outline-offset: 4px;
+  border-radius: 4px;
+}
+
+.payments-prototype-overdue-details table {
+  min-width: 860px;
+}
+
+.payments-prototype-overdue-details tfoot th {
+  background: #fff1f0;
+  text-align: right;
+}
+
+.payments-prototype-overdue-error {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
 @media (max-width: 1180px) {
   .payments-prototype-heading {
     grid-template-columns: minmax(0, 1fr);

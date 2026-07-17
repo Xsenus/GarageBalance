@@ -180,6 +180,45 @@ public sealed class FinanceControllerTests
     }
 
     [Fact]
+    public async Task GetGarageOverdueDebt_ReturnsBreakdownAndPassesGarageToService()
+    {
+        var garageId = Guid.NewGuid();
+        var breakdown = new GarageOverdueDebtDto(
+            garageId,
+            "12",
+            "Иванов Иван",
+            new DateOnly(2026, 7, 17),
+            300m,
+            [new GarageOverdueDebtRowDto("accrual", Guid.NewGuid(), "Вода", new DateOnly(2026, 5, 1), new DateOnly(2026, 6, 10), new DateOnly(2026, 6, 11), 500m, 200m, 300m)]);
+        var service = new FakeFinanceService
+        {
+            GarageOverdueDebtResult = FinanceResult<GarageOverdueDebtDto>.Success(breakdown)
+        };
+        var controller = CreateController(service);
+
+        var result = await controller.GetGarageOverdueDebt(garageId, CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        Assert.Same(breakdown, ok.Value);
+        Assert.Equal(garageId, service.LastGarageOverdueDebtGarageId);
+    }
+
+    [Fact]
+    public async Task GetGarageOverdueDebt_ReturnsNotFoundForMissingGarage()
+    {
+        var service = new FakeFinanceService
+        {
+            GarageOverdueDebtResult = FinanceResult<GarageOverdueDebtDto>.Failure("garage_not_found", "Гараж не найден.")
+        };
+        var controller = CreateController(service);
+
+        var result = await controller.GetGarageOverdueDebt(Guid.NewGuid(), CancellationToken.None);
+
+        var problem = Assert.IsType<NotFoundObjectResult>(result.Result);
+        Assert.Equal(StatusCodes.Status404NotFound, problem.StatusCode);
+    }
+
+    [Fact]
     public async Task GetGarageIncomeWorksheet_PassesGarageAndPeriodToService()
     {
         var garageId = Guid.NewGuid();
@@ -1330,6 +1369,7 @@ public sealed class FinanceControllerTests
         public Guid? LastCanceledMeterReadingId { get; private set; }
         public Guid? LastRestoredMeterReadingId { get; private set; }
         public Guid? LastGarageBalanceHistoryGarageId { get; private set; }
+        public Guid? LastGarageOverdueDebtGarageId { get; private set; }
         public Guid? LastGarageIncomeWorksheetGarageId { get; private set; }
         public CancelFinanceEntryRequest? LastCancelRequest { get; private set; }
         public FinancialOperationListRequest? LastFinancialOperationListRequest { get; private set; }
@@ -1350,6 +1390,7 @@ public sealed class FinanceControllerTests
         public GenerateFeeCampaignAccrualsRequest? LastFeeCampaignAccrualGenerationRequest { get; private set; }
         public GenerateSupplierGroupSalaryAccrualsRequest? LastSupplierGroupSalaryAccrualGenerationRequest { get; private set; }
         public FinanceResult<GarageBalanceHistoryDto> GarageBalanceHistoryResult { get; init; } = FinanceResult<GarageBalanceHistoryDto>.Failure("not_configured", "Not configured.");
+        public FinanceResult<GarageOverdueDebtDto> GarageOverdueDebtResult { get; init; } = FinanceResult<GarageOverdueDebtDto>.Failure("not_configured", "Not configured.");
         public FinanceResult<GarageIncomeWorksheetDto> GarageIncomeWorksheetResult { get; init; } = FinanceResult<GarageIncomeWorksheetDto>.Failure("not_configured", "Not configured.");
         public FinanceResult<ExpenseWorksheetDto> ExpenseWorksheetResult { get; init; } = FinanceResult<ExpenseWorksheetDto>.Failure("not_configured", "Not configured.");
         public FinanceResult<FinancialOperationDto> CreateIncomeResult { get; init; } = FinanceResult<FinancialOperationDto>.Failure("not_configured", "Not configured.");
@@ -1445,6 +1486,12 @@ public sealed class FinanceControllerTests
             LastGarageBalanceHistoryGarageId = garageId;
             LastGarageBalanceHistoryRequest = request;
             return Task.FromResult(GarageBalanceHistoryResult);
+        }
+
+        public Task<FinanceResult<GarageOverdueDebtDto>> GetGarageOverdueDebtAsync(Guid garageId, CancellationToken cancellationToken)
+        {
+            LastGarageOverdueDebtGarageId = garageId;
+            return Task.FromResult(GarageOverdueDebtResult);
         }
 
         public Task<FinanceResult<GarageIncomeWorksheetDto>> GetGarageIncomeWorksheetAsync(Guid garageId, GarageIncomeWorksheetRequest request, CancellationToken cancellationToken)

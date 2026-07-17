@@ -3597,6 +3597,12 @@ describe('App', () => {
     expect(selectedGarageSummary).toHaveTextContent('Просроченная задолженность')
     const overdueDebtSummaryValue = within(selectedGarageSummary).getByText('Просроченная задолженность').parentElement?.querySelector('strong')
     expect(overdueDebtSummaryValue).toHaveClass('payments-prototype-garage-summary-value')
+    const overdueDebtTable = await within(prototype).findByRole('table', { name: 'Расшифровка просроченной задолженности' })
+    expect(within(overdueDebtTable).getByRole('columnheader', { name: 'Услуга' })).toBeInTheDocument()
+    expect(within(overdueDebtTable).getByText('Членский взнос')).toBeInTheDocument()
+    expect(within(overdueDebtTable).getByText('05.2026')).toBeInTheDocument()
+    expect(within(overdueDebtTable).getByText('10.06.2026')).toBeInTheDocument()
+    expect(within(overdueDebtTable).getAllByText('500.00')).toHaveLength(2)
     expect(within(prototype).getByLabelText('Выбранный гараж')).toHaveTextContent('Иванов Иван')
     expect(within(prototype).getByRole('table', { name: 'История платежей гаража' })).toBeInTheDocument()
     const incomeTable = within(prototype).getByRole('table', { name: 'Поступления гаража 1' })
@@ -3964,6 +3970,73 @@ describe('App', () => {
     expect(within(prototype).getByLabelText('Выбранный гараж')).toHaveTextContent('Кузнецова Мария')
     expect(within(prototype).getByRole('region', { name: 'Параметры выбранного гаража' })).toHaveTextContent('4')
     expect(within(prototype).getByRole('table', { name: 'Поступления гаража 77' })).toBeInTheDocument()
+  })
+
+  it('shows an overdue breakdown error and retries the request', async () => {
+    const user = userEvent.setup()
+    const garage = createGarage({ id: 'garage-overdue', number: '18', ownerName: 'Иванов Иван', overdueDebt: 500 })
+    const getGarageOverdueDebt = vi.fn()
+      .mockRejectedValueOnce(new Error('Расшифровка временно недоступна'))
+      .mockResolvedValueOnce({
+        garageId: garage.id,
+        garageNumber: garage.number,
+        ownerName: garage.ownerName,
+        asOfDate: '2026-07-17',
+        total: 500,
+        rows: [{ rowKind: 'accrual', incomeTypeId: 'water', incomeTypeName: 'Вода', accountingMonth: '2026-05-01', dueDate: '2026-06-10', overdueFromDate: '2026-06-11', originalAmount: 700, paidAmount: 200, outstandingAmount: 500 }],
+      })
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient({ getGarages: async () => [garage] })} financeClient={createFinanceClient({ getGarageOverdueDebt })} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Платежи')
+    const prototype = within(await screen.findByRole('region', { name: 'Платежи' })).getByRole('region', { name: 'Форма платежей' })
+    await user.type(within(prototype).getByLabelText('Поиск номера гаража или ФИО владельца'), '18')
+    await user.click(await within(prototype).findByRole('option', { name: /Гараж\s*18\s*Иванов Иван/ }))
+
+    expect(await within(prototype).findByRole('alert')).toHaveTextContent('Расшифровка временно недоступна')
+    await user.click(within(prototype).getByRole('button', { name: 'Повторить' }))
+    const table = await within(prototype).findByRole('table', { name: 'Расшифровка просроченной задолженности' })
+    expect(within(table).getByText('Вода')).toBeInTheDocument()
+    expect(getGarageOverdueDebt).toHaveBeenCalledTimes(2)
+  })
+
+  it('ignores a stale overdue breakdown after another garage is selected', async () => {
+    const user = userEvent.setup()
+    const firstGarage = createGarage({ id: 'garage-first', number: '18', ownerName: 'Иванов Иван', overdueDebt: 500 })
+    const secondGarage = createGarage({ id: 'garage-second', number: '19', ownerName: 'Петров Петр', overdueDebt: 300 })
+    let resolveFirst!: (value: Awaited<ReturnType<FinanceClient['getGarageOverdueDebt']>>) => void
+    const firstRequest = new Promise<Awaited<ReturnType<FinanceClient['getGarageOverdueDebt']>>>((resolve) => { resolveFirst = resolve })
+    const getGarageOverdueDebt = vi.fn(async (_token: string, garageId: string) => {
+      if (garageId === firstGarage.id) return firstRequest
+      return {
+        garageId: secondGarage.id,
+        garageNumber: secondGarage.number,
+        ownerName: secondGarage.ownerName,
+        asOfDate: '2026-07-17',
+        total: 300,
+        rows: [{ rowKind: 'accrual' as const, incomeTypeId: 'electricity', incomeTypeName: 'Электроэнергия', accountingMonth: '2026-06-01', dueDate: '2026-07-10', overdueFromDate: '2026-07-11', originalAmount: 300, paidAmount: 0, outstandingAmount: 300 }],
+      }
+    })
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient({ getGarages: async () => [firstGarage, secondGarage] })} financeClient={createFinanceClient({ getGarageOverdueDebt })} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Платежи')
+    const prototype = within(await screen.findByRole('region', { name: 'Платежи' })).getByRole('region', { name: 'Форма платежей' })
+    const search = within(prototype).getByLabelText('Поиск номера гаража или ФИО владельца')
+    await user.type(search, '18')
+    await user.click(await within(prototype).findByRole('option', { name: /Гараж\s*18\s*Иванов Иван/ }))
+    await user.clear(search)
+    await user.type(search, '19')
+    await user.click(await within(prototype).findByRole('option', { name: /Гараж\s*19\s*Петров Петр/ }))
+    expect(await within(prototype).findByText('Электроэнергия')).toBeInTheDocument()
+
+    resolveFirst({ garageId: firstGarage.id, garageNumber: firstGarage.number, ownerName: firstGarage.ownerName, asOfDate: '2026-07-17', total: 500, rows: [{ rowKind: 'accrual', incomeTypeId: 'water', incomeTypeName: 'Устаревшая вода', accountingMonth: '2026-05-01', dueDate: '2026-06-10', overdueFromDate: '2026-06-11', originalAmount: 500, paidAmount: 0, outstandingAmount: 500 }] })
+    await act(async () => { await firstRequest })
+
+    expect(within(prototype).queryByText('Устаревшая вода')).not.toBeInTheDocument()
+    expect(within(prototype).getByText('Электроэнергия')).toBeInTheDocument()
   })
 
   it('does not show fallback garages or prototype payment history when backend garages are empty', async () => {
@@ -13678,6 +13751,24 @@ function createFinanceClient(overrides: Partial<FinanceClient> = {}): FinanceCli
     debtTotal: 0,
     rows: [],
   })
+  const garageOverdueDebt = {
+    garageId: 'garage-1',
+    garageNumber: '12',
+    ownerName: 'Иванов Иван',
+    asOfDate: '2026-07-17',
+    total: 500,
+    rows: [{
+      rowKind: 'accrual' as const,
+      incomeTypeId: 'income-type-membership',
+      incomeTypeName: 'Членский взнос',
+      accountingMonth: '2026-05-01',
+      dueDate: '2026-06-10',
+      overdueFromDate: '2026-06-11',
+      originalAmount: 700,
+      paidAmount: 200,
+      outstandingAmount: 500,
+    }],
+  }
 
   const client: FinanceClient = {
     getOperations: async () => [operation],
@@ -13697,6 +13788,7 @@ function createFinanceClient(overrides: Partial<FinanceClient> = {}): FinanceCli
     }),
     getMissingMeterReadings: async () => [missingMeterReading],
     getGarageBalanceHistory: async () => garageBalanceHistory,
+    getGarageOverdueDebt: async () => garageOverdueDebt,
     getGarageIncomeWorksheet: async () => garageIncomeWorksheet,
     getExpenseWorksheet: async () => {
       throw new Error('Серверная форма выплат недоступна')

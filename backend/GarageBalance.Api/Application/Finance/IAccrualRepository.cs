@@ -20,6 +20,7 @@ public interface IAccrualRepository
         CancellationToken cancellationToken);
 
     Task<decimal> GetTotalBeforeMonthAsync(Guid garageId, DateOnly accountingMonth, CancellationToken cancellationToken);
+    Task<IReadOnlyList<OverdueAccrualDebtData>> GetOverdueDebtDetailsAsync(Guid garageId, DateOnly asOfDate, CancellationToken cancellationToken);
     Task<IReadOnlyList<AccrualBucketData>> GetMonthlyBucketsAsync(Guid garageId, DateOnly? monthFrom, DateOnly monthTo, CancellationToken cancellationToken);
     Task<Accrual?> FindForUpdateAsync(Guid id, CancellationToken cancellationToken);
     Task<Accrual?> FindActiveForUpdateAsync(Guid garageId, Guid incomeTypeId, DateOnly accountingMonth, string source, CancellationToken cancellationToken);
@@ -32,3 +33,13 @@ public interface IAccrualRepository
 
 public sealed record AccrualPageData(IReadOnlyList<Accrual> Items, int TotalCount);
 public sealed record AccrualBucketData(DateOnly AccountingMonth, decimal Amount);
+public sealed record OverdueAccrualDebtData(
+    Guid AccrualId,
+    Guid IncomeTypeId,
+    string IncomeTypeName,
+    DateOnly AccountingMonth,
+    DateOnly DueDate,
+    DateOnly OverdueFromDate,
+    decimal Amount,
+    decimal PaidAmount,
+    decimal OutstandingAmount);

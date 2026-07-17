@@ -163,6 +163,27 @@ export type GarageBalanceHistoryDto = {
   rows: GarageBalanceHistoryRowDto[]
 }
 
+export type GarageOverdueDebtRowDto = {
+  rowKind: 'opening_balance' | 'accrual'
+  incomeTypeId: string | null
+  incomeTypeName: string
+  accountingMonth: string | null
+  dueDate: string | null
+  overdueFromDate: string | null
+  originalAmount: number
+  paidAmount: number
+  outstandingAmount: number
+}
+
+export type GarageOverdueDebtDto = {
+  garageId: string
+  garageNumber: string
+  ownerName: string | null
+  asOfDate: string
+  total: number
+  rows: GarageOverdueDebtRowDto[]
+}
+
 export type GarageIncomeWorksheetRowDto = {
   accountingMonth: string
   incomeTypeId: string | null
@@ -381,6 +402,7 @@ export type FinanceClient = {
   getMeterReadingYearPage(accessToken: string, params: { year: number; meterKind: 'water' | 'electricity'; offset?: number; limit?: number }): Promise<MeterReadingYearPageDto>
   getMissingMeterReadings(accessToken: string, params?: { accountingMonth?: string; meterKind?: 'water' | 'electricity'; search?: string; limit?: number }): Promise<MissingMeterReadingDto[]>
   getGarageBalanceHistory(accessToken: string, garageId: string, params?: { monthFrom?: string; monthTo?: string }): Promise<GarageBalanceHistoryDto>
+  getGarageOverdueDebt(accessToken: string, garageId: string): Promise<GarageOverdueDebtDto>
   getGarageIncomeWorksheet(accessToken: string, garageId: string, params?: { monthFrom?: string; monthTo?: string }): Promise<GarageIncomeWorksheetDto>
   getExpenseWorksheet(accessToken: string, params?: { accountingMonth?: string }): Promise<ExpenseWorksheetDto>
   getSummary(accessToken: string, params?: FinancePageParams): Promise<FinanceSummaryDto>
@@ -536,6 +558,9 @@ export const financeApi: FinanceClient = {
       monthFrom: toMonthStart(params.monthFrom),
       monthTo: toMonthStart(params.monthTo),
     }))
+  },
+  getGarageOverdueDebt(accessToken, garageId) {
+    return requestJson(accessToken, `/api/finance/garages/${garageId}/overdue-debt`)
   },
   getGarageIncomeWorksheet(accessToken, garageId, params = {}) {
     return requestJson(accessToken, withQuery(`/api/finance/garages/${garageId}/income-worksheet`, {

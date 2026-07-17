@@ -103,7 +103,8 @@ builder.Services.AddScoped<IFinanceService>(services => new FinanceService(
     services.GetRequiredService<IFeeCampaignRepository>(),
     services.GetRequiredService<IChargeServiceSettingRepository>(),
     services.GetRequiredService<IApplicationUnitOfWork>(),
-    services.GetRequiredService<IAuditEventWriter>()));
+    services.GetRequiredService<IAuditEventWriter>(),
+    services.GetRequiredService<TimeProvider>()));
 builder.Services.AddScoped<IFundRepository, EfFundRepository>();
 builder.Services.AddScoped<IFundService, FundService>();
 builder.Services.AddScoped<IImportRepository, EfImportRepository>();

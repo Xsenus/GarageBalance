@@ -300,6 +300,25 @@ public sealed record GarageBalanceHistoryDto(
     decimal Debt,
     IReadOnlyList<GarageBalanceHistoryRowDto> Rows);
 
+public sealed record GarageOverdueDebtRowDto(
+    string RowKind,
+    Guid? IncomeTypeId,
+    string IncomeTypeName,
+    DateOnly? AccountingMonth,
+    DateOnly? DueDate,
+    DateOnly? OverdueFromDate,
+    decimal OriginalAmount,
+    decimal PaidAmount,
+    decimal OutstandingAmount);
+
+public sealed record GarageOverdueDebtDto(
+    Guid GarageId,
+    string GarageNumber,
+    string? OwnerName,
+    DateOnly AsOfDate,
+    decimal Total,
+    IReadOnlyList<GarageOverdueDebtRowDto> Rows);
+
 public sealed record GarageIncomeWorksheetRequest(
     DateOnly? MonthFrom,
     DateOnly? MonthTo);

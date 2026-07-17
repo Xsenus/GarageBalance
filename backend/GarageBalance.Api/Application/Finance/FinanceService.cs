@@ -30,7 +30,8 @@ public sealed class FinanceService(
     IFeeCampaignRepository feeCampaignRepository,
     IChargeServiceSettingRepository chargeServiceSettingRepository,
     IApplicationUnitOfWork unitOfWork,
-    IAuditEventWriter auditEventWriter) : IFinanceService
+    IAuditEventWriter auditEventWriter,
+    TimeProvider timeProvider) : IFinanceService
 {
     private const int DefaultListLimit = 100;
     private const int MaxListLimit = 500;
@@ -295,6 +296,71 @@ public sealed class FinanceService(
             rows.Count == 0 ? openingDebt : rows[^1].ClosingDebt,
             rows);
         return FinanceResult<GarageBalanceHistoryDto>.Success(dto);
+    }
+
+    public async Task<FinanceResult<GarageOverdueDebtDto>> GetGarageOverdueDebtAsync(Guid garageId, CancellationToken cancellationToken)
+    {
+        var garage = await garageRepository.FindActiveWithOwnerAsync(garageId, cancellationToken);
+        if (garage is null)
+        {
+            return FinanceResult<GarageOverdueDebtDto>.Failure("garage_not_found", "Гараж для расшифровки просрочки не найден.");
+        }
+
+        var asOfDate = DateOnly.FromDateTime(timeProvider.GetUtcNow().UtcDateTime);
+        var accruals = await accrualRepository.GetOverdueDebtDetailsAsync(garageId, asOfDate, cancellationToken);
+        var totals = await garageRepository.GetBalanceTotalsAsync([garageId], cancellationToken);
+        var unallocatedIncome = Math.Max(
+            totals.IncomeTotals.GetValueOrDefault(garageId) - totals.AllocatedIncomeTotals.GetValueOrDefault(garageId),
+            0m);
+        var openingOriginal = Math.Max(garage.StartingBalance, 0m);
+        var openingOutstanding = Math.Max(openingOriginal - unallocatedIncome, 0m);
+        var remainingCredit = Math.Max(unallocatedIncome - openingOriginal, 0m) + Math.Max(-garage.StartingBalance, 0m);
+        var rows = new List<GarageOverdueDebtRowDto>(accruals.Count + 1);
+
+        if (openingOutstanding > 0m)
+        {
+            rows.Add(new GarageOverdueDebtRowDto(
+                "opening_balance",
+                null,
+                "Входящий долг",
+                null,
+                null,
+                null,
+                MoneyMath.RoundMoney(openingOriginal),
+                MoneyMath.RoundMoney(openingOriginal - openingOutstanding),
+                MoneyMath.RoundMoney(openingOutstanding)));
+        }
+
+        foreach (var accrual in accruals)
+        {
+            var creditApplied = Math.Min(remainingCredit, accrual.OutstandingAmount);
+            remainingCredit = MoneyMath.RoundMoney(remainingCredit - creditApplied);
+            var outstanding = MoneyMath.RoundMoney(accrual.OutstandingAmount - creditApplied);
+            if (outstanding <= 0m)
+            {
+                continue;
+            }
+
+            rows.Add(new GarageOverdueDebtRowDto(
+                "accrual",
+                accrual.IncomeTypeId,
+                accrual.IncomeTypeName,
+                accrual.AccountingMonth,
+                accrual.DueDate,
+                accrual.OverdueFromDate,
+                MoneyMath.RoundMoney(accrual.Amount),
+                MoneyMath.RoundMoney(accrual.PaidAmount + creditApplied),
+                outstanding));
+        }
+
+        var total = MoneyMath.RoundMoney(rows.Sum(row => row.OutstandingAmount));
+        return FinanceResult<GarageOverdueDebtDto>.Success(new GarageOverdueDebtDto(
+            garage.Id,
+            garage.Number,
+            garage.Owner?.FullName,
+            asOfDate,
+            total,
+            rows));
     }
 
     public async Task<FinanceResult<GarageIncomeWorksheetDto>> GetGarageIncomeWorksheetAsync(Guid garageId, GarageIncomeWorksheetRequest request, CancellationToken cancellationToken)

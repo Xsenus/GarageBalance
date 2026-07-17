@@ -9,10 +9,10 @@ namespace GarageBalance.Api.Tests.Common;
 
 internal static class FinanceServiceTestFactory
 {
-    public static FinanceService Create(GarageBalanceDbContext dbContext) =>
+    public static FinanceService Create(GarageBalanceDbContext dbContext, TimeProvider? timeProvider = null) =>
         new(
             new EfStaffMemberRepository(dbContext),
-            new EfGarageRepository(dbContext),
+            new EfGarageRepository(dbContext, timeProvider),
             new EfMissingMeterReadingQuery(dbContext),
             new EfGarageIncomeWorksheetQuery(dbContext),
             new EfGarageBalanceHistoryQuery(dbContext),
@@ -33,5 +33,6 @@ internal static class FinanceServiceTestFactory
             new EfFeeCampaignRepository(dbContext),
             new EfChargeServiceSettingRepository(dbContext),
             new EfApplicationUnitOfWork(dbContext),
-            new AuditEventWriter(dbContext));
+            new AuditEventWriter(dbContext),
+            timeProvider ?? TimeProvider.System);
 }

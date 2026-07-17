@@ -877,6 +877,102 @@ public sealed class FinanceServiceTests
     }
 
     [Fact]
+    public async Task GetGarageOverdueDebtAsync_ReturnsOnlyOutstandingMaturedDebtInOldestFirstOrder()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        fixtures.Garage.StartingBalance = 100m;
+        var overdue = new Accrual
+        {
+            GarageId = fixtures.Garage.Id,
+            IncomeTypeId = fixtures.IncomeType.Id,
+            AccountingMonth = new DateOnly(2026, 5, 1),
+            DueDate = new DateOnly(2026, 6, 10),
+            OverdueFromDate = new DateOnly(2026, 6, 11),
+            Amount = 500m,
+            Source = "overdue-breakdown-test"
+        };
+        var future = new Accrual
+        {
+            GarageId = fixtures.Garage.Id,
+            IncomeTypeId = fixtures.IncomeType.Id,
+            AccountingMonth = new DateOnly(2026, 7, 1),
+            DueDate = new DateOnly(2026, 8, 10),
+            OverdueFromDate = new DateOnly(2026, 8, 11),
+            Amount = 700m,
+            Source = "overdue-breakdown-test"
+        };
+        var canceled = new Accrual
+        {
+            GarageId = fixtures.Garage.Id,
+            IncomeTypeId = fixtures.IncomeType.Id,
+            AccountingMonth = new DateOnly(2026, 4, 1),
+            DueDate = new DateOnly(2026, 5, 10),
+            OverdueFromDate = new DateOnly(2026, 5, 11),
+            Amount = 900m,
+            Source = "overdue-breakdown-test",
+            IsCanceled = true
+        };
+        database.Context.AddRange(overdue, future, canceled);
+        await database.Context.SaveChangesAsync();
+        var service = FinanceServiceTestFactory.Create(
+            database.Context,
+            new FixedTimeProvider(new DateTimeOffset(2026, 7, 17, 12, 0, 0, TimeSpan.Zero)));
+
+        var payment = await service.CreateIncomeAsync(
+            new CreateIncomeOperationRequest(
+                fixtures.Garage.Id,
+                fixtures.IncomeType.Id,
+                new DateOnly(2026, 7, 1),
+                new DateOnly(2026, 7, 1),
+                200m,
+                "PKO-overdue-breakdown",
+                null),
+            null,
+            CancellationToken.None);
+        var result = await service.GetGarageOverdueDebtAsync(fixtures.Garage.Id, CancellationToken.None);
+
+        Assert.True(payment.Succeeded);
+        Assert.True(result.Succeeded, result.ErrorMessage);
+        Assert.Equal(new DateOnly(2026, 7, 17), result.Value!.AsOfDate);
+        Assert.Equal(400m, result.Value.Total);
+        Assert.Collection(
+            result.Value.Rows,
+            opening =>
+            {
+                Assert.Equal("opening_balance", opening.RowKind);
+                Assert.Equal("Входящий долг", opening.IncomeTypeName);
+                Assert.Null(opening.AccountingMonth);
+                Assert.Equal(100m, opening.OutstandingAmount);
+            },
+            accrual =>
+            {
+                Assert.Equal("accrual", accrual.RowKind);
+                Assert.Equal(fixtures.IncomeType.Id, accrual.IncomeTypeId);
+                Assert.Equal(new DateOnly(2026, 5, 1), accrual.AccountingMonth);
+                Assert.Equal(new DateOnly(2026, 6, 10), accrual.DueDate);
+                Assert.Equal(new DateOnly(2026, 6, 11), accrual.OverdueFromDate);
+                Assert.Equal(500m, accrual.OriginalAmount);
+                Assert.Equal(200m, accrual.PaidAmount);
+                Assert.Equal(300m, accrual.OutstandingAmount);
+            });
+    }
+
+    [Fact]
+    public async Task GetGarageOverdueDebtAsync_ReturnsFailureForMissingGarage()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = FinanceServiceTestFactory.Create(
+            database.Context,
+            new FixedTimeProvider(new DateTimeOffset(2026, 7, 17, 12, 0, 0, TimeSpan.Zero)));
+
+        var result = await service.GetGarageOverdueDebtAsync(Guid.NewGuid(), CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Equal("garage_not_found", result.ErrorCode);
+    }
+
+    [Fact]
     public async Task GetGarageBalanceHistoryAsync_ReturnsMonthlyRunningDebt()
     {
         var commandCounter = new SelectCommandCounter();

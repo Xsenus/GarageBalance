@@ -107,4 +107,25 @@ describe('financeApi', () => {
       },
     })
   })
+
+  it('loads the overdue debt breakdown for the selected garage', async () => {
+    const fetchMock = vi.fn().mockImplementation(() => Promise.resolve(new Response(JSON.stringify({
+      garageId: 'garage-88',
+      garageNumber: '88',
+      asOfDate: '2026-07-17',
+      total: 500,
+      rows: [],
+    }), { status: 200, headers: { 'Content-Type': 'application/json' } })))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const result = await financeApi.getGarageOverdueDebt('token', 'garage-88')
+
+    expect(result.total).toBe(500)
+    expect(fetchMock).toHaveBeenCalledWith('/api/finance/garages/garage-88/overdue-debt', {
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: 'Bearer token',
+      },
+    })
+  })
 })
