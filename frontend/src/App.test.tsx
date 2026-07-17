@@ -4589,6 +4589,8 @@ describe('App', () => {
     let waterConsumption: number | null = null
     let waterVersion: string | null = null
     let failNextSave = false
+    let delayFirstElectricitySave = true
+    let releaseFirstElectricitySave: (() => void) | null = null
     const getGarageIncomeWorksheet = vi.fn(async () => createGarageIncomeWorksheet({
       garageId: garage.id,
       garageNumber: garage.number,
@@ -4650,6 +4652,13 @@ describe('App', () => {
         })
       }
 
+      if (delayFirstElectricitySave) {
+        await new Promise<void>((resolve) => {
+          releaseFirstElectricitySave = resolve
+        })
+        delayFirstElectricitySave = false
+      }
+
       currentValue = request.currentValue
       consumption = currentValue - 68
       version = 'reading-version-2'
@@ -4692,9 +4701,19 @@ describe('App', () => {
       meterReadingId: 'reading-current',
       expectedVersion: 'reading-version-1',
     }))
+    const pendingElectricityRow = within(prototype).getByRole('textbox', { name: /^Показание Электроэнергия/ }).closest('tr')
+    expect(pendingElectricityRow).not.toBeNull()
+    expect(within(pendingElectricityRow!).getByText('18.00')).toBeInTheDocument()
+    expect(within(pendingElectricityRow!).getAllByText('180.00').length).toBeGreaterThan(0)
+    expect(within(pendingElectricityRow!).queryByText('240.00')).not.toBeInTheDocument()
+    await act(async () => releaseFirstElectricitySave?.())
     await waitFor(() => expect(getGarageIncomeWorksheet).toHaveBeenCalledTimes(2))
-    expect(within(prototype).getByRole('textbox', { name: /^Показание Электроэнергия/ })).toHaveValue('92')
-    expect(within(prototype).getByText('24.00')).toBeInTheDocument()
+    const confirmedElectricityInput = within(prototype).getByRole('textbox', { name: /^Показание Электроэнергия/ })
+    const confirmedElectricityRow = confirmedElectricityInput.closest('tr')
+    expect(confirmedElectricityInput).toHaveValue('92')
+    expect(confirmedElectricityRow).not.toBeNull()
+    expect(within(confirmedElectricityRow!).getByText('24.00')).toBeInTheDocument()
+    expect(within(confirmedElectricityRow!).getAllByText('240.00').length).toBeGreaterThan(0)
 
     const waterInput = within(prototype).getByRole('textbox', { name: /^Показание Водоснабжение/ })
     expect(waterInput).toHaveValue('')
@@ -4722,10 +4741,13 @@ describe('App', () => {
     expect(await within(prototype).findByRole('alert')).toHaveTextContent('Показание уже изменено другим пользователем.')
     expect(electricityInput).toHaveValue('93')
     expect(currentValue).toBe(92)
+    expect(within(electricityInput.closest('tr')!).getAllByText('240.00').length).toBeGreaterThan(0)
+    expect(within(electricityInput.closest('tr')!).queryByText('250.00')).not.toBeInTheDocument()
 
     await user.click(within(prototype).getByRole('button', { name: /^Сохранить показание Электроэнергия/ }))
     await waitFor(() => expect(currentValue).toBe(93))
     await waitFor(() => expect(within(prototype).queryByRole('alert')).not.toBeInTheDocument())
+    await waitFor(() => expect(within(within(prototype).getByRole('textbox', { name: /^Показание Электроэнергия/ }).closest('tr')!).getAllByText('250.00').length).toBeGreaterThan(0))
     expect(savePaymentFormMeterReading).toHaveBeenCalledTimes(4)
   })
 
