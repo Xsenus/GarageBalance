@@ -3815,6 +3815,183 @@ public sealed class FinanceServiceTests
     }
 
     [Fact]
+    public async Task UpdateMeterReadingAsync_RecalculatesLinkedUnpaidAccrualAndWritesAudit()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        fixtures.IncomeType.Code = "water";
+        var tariff = new Tariff
+        {
+            Name = "Вода по счетчику",
+            CalculationBase = TariffCalculationBases.MeterWater,
+            Rate = 50m,
+            EffectiveFrom = new DateOnly(2026, 1, 1)
+        };
+        database.Context.Tariffs.Add(tariff);
+        await database.Context.SaveChangesAsync();
+        var service = FinanceServiceTestFactory.Create(
+            database.Context,
+            new FixedTimeProvider(new DateTimeOffset(2026, 6, 20, 12, 0, 0, TimeSpan.Zero)));
+        var reading = await service.CreateMeterReadingAsync(
+            new CreateMeterReadingRequest(fixtures.Garage.Id, MeterKinds.Water, new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 20), 15m, null),
+            null,
+            CancellationToken.None);
+        var generation = await service.GenerateRegularAccrualsAsync(
+            new GenerateRegularAccrualsRequest(fixtures.IncomeType.Id, tariff.Id, new DateOnly(2026, 6, 1), null),
+            null,
+            CancellationToken.None);
+
+        var result = await service.UpdateMeterReadingAsync(
+            reading.Value!.Id,
+            new CreateMeterReadingRequest(fixtures.Garage.Id, MeterKinds.Water, new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 21), 18m, null, reading.Value.Version),
+            Guid.NewGuid(),
+            CancellationToken.None);
+
+        Assert.True(generation.Succeeded, generation.ErrorMessage);
+        Assert.True(result.Succeeded, result.ErrorMessage);
+        Assert.Equal(8m, result.Value!.Consumption);
+        Assert.Equal(400m, Assert.Single(database.Context.Accruals).Amount);
+        var audit = Assert.Single(database.Context.AuditEvents, item => item.Action == "finance.accrual_updated_from_meter_reading");
+        Assert.Equal("update", audit.ActionKind);
+        Assert.Contains("было", audit.Summary, StringComparison.Ordinal);
+        Assert.Contains("250.00", audit.Summary, StringComparison.Ordinal);
+        Assert.Contains("400.00", audit.Summary, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task UpdateMeterReadingAsync_RecalculatesLinkedTieredElectricityAccrual()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        fixtures.IncomeType.Code = "electricity";
+        var tariff = new Tariff
+        {
+            Name = "Электроэнергия по диапазонам",
+            CalculationBase = TariffCalculationBases.MeterElectricity,
+            Rate = 4m,
+            ElectricityFirstThreshold = 50m,
+            ElectricitySecondThreshold = 100m,
+            ElectricityFirstRate = 2m,
+            ElectricitySecondRate = 3m,
+            ElectricityThirdRate = 5m,
+            EffectiveFrom = new DateOnly(2026, 1, 1)
+        };
+        database.Context.Tariffs.Add(tariff);
+        await database.Context.SaveChangesAsync();
+        var service = FinanceServiceTestFactory.Create(
+            database.Context,
+            new FixedTimeProvider(new DateTimeOffset(2026, 6, 20, 12, 0, 0, TimeSpan.Zero)));
+        var reading = await service.CreateMeterReadingAsync(
+            new CreateMeterReadingRequest(fixtures.Garage.Id, MeterKinds.Electricity, new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 20), 230m, null),
+            null,
+            CancellationToken.None);
+        Assert.True((await service.GenerateRegularAccrualsAsync(
+            new GenerateRegularAccrualsRequest(fixtures.IncomeType.Id, tariff.Id, new DateOnly(2026, 6, 1), null),
+            null,
+            CancellationToken.None)).Succeeded);
+
+        var result = await service.UpdateMeterReadingAsync(
+            reading.Value!.Id,
+            new CreateMeterReadingRequest(fixtures.Garage.Id, MeterKinds.Electricity, new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 21), 250m, null, reading.Value.Version),
+            null,
+            CancellationToken.None);
+
+        Assert.True(result.Succeeded, result.ErrorMessage);
+        Assert.Equal(150m, result.Value!.Consumption);
+        Assert.Equal(500m, Assert.Single(database.Context.Accruals).Amount);
+    }
+
+    [Fact]
+    public async Task UpdateMeterReadingAsync_RejectsRecalculationWhenLinkedAccrualIsPartiallyPaid()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        fixtures.IncomeType.Code = "water";
+        var tariff = new Tariff
+        {
+            Name = "Вода по счетчику",
+            CalculationBase = TariffCalculationBases.MeterWater,
+            Rate = 50m,
+            EffectiveFrom = new DateOnly(2026, 1, 1)
+        };
+        database.Context.Tariffs.Add(tariff);
+        await database.Context.SaveChangesAsync();
+        var service = FinanceServiceTestFactory.Create(
+            database.Context,
+            new FixedTimeProvider(new DateTimeOffset(2026, 6, 20, 12, 0, 0, TimeSpan.Zero)));
+        var reading = await service.CreateMeterReadingAsync(
+            new CreateMeterReadingRequest(fixtures.Garage.Id, MeterKinds.Water, new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 20), 15m, null),
+            null,
+            CancellationToken.None);
+        var generation = await service.GenerateRegularAccrualsAsync(
+            new GenerateRegularAccrualsRequest(fixtures.IncomeType.Id, tariff.Id, new DateOnly(2026, 6, 1), null),
+            null,
+            CancellationToken.None);
+        var payment = await service.CreateIncomeAsync(
+            new CreateIncomeOperationRequest(fixtures.Garage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 6, 20), new DateOnly(2026, 6, 1), 100m, "PKO-partial-meter", null),
+            null,
+            CancellationToken.None);
+
+        var result = await service.UpdateMeterReadingAsync(
+            reading.Value!.Id,
+            new CreateMeterReadingRequest(fixtures.Garage.Id, MeterKinds.Water, new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 21), 18m, null, reading.Value.Version),
+            null,
+            CancellationToken.None);
+
+        Assert.True(generation.Succeeded, generation.ErrorMessage);
+        Assert.True(payment.Succeeded, payment.ErrorMessage);
+        Assert.False(result.Succeeded);
+        Assert.Equal("meter_reading_accrual_paid", result.ErrorCode);
+        Assert.Contains("частично оплачено", result.ErrorMessage, StringComparison.Ordinal);
+        Assert.Equal(15m, database.Context.MeterReadings.Single().CurrentValue);
+        Assert.Equal(reading.Value.Version, database.Context.MeterReadings.Single().Version);
+        Assert.Equal(250m, database.Context.Accruals.Single().Amount);
+        Assert.DoesNotContain(database.Context.AuditEvents, item => item.Action == "finance.accrual_updated_from_meter_reading");
+    }
+
+    [Fact]
+    public async Task UpdateMeterReadingAsync_RollsBackReadingWhenLinkedAccrualUpdateFails()
+    {
+        var failure = new MeteredAccrualUpdateFailureInterceptor();
+        await using var database = await TestDatabase.CreateAsync(failure);
+        var fixtures = await database.SeedAsync();
+        fixtures.IncomeType.Code = "water";
+        var tariff = new Tariff
+        {
+            Name = "Вода по счетчику",
+            CalculationBase = TariffCalculationBases.MeterWater,
+            Rate = 50m,
+            EffectiveFrom = new DateOnly(2026, 1, 1)
+        };
+        database.Context.Tariffs.Add(tariff);
+        await database.Context.SaveChangesAsync();
+        var service = FinanceServiceTestFactory.Create(
+            database.Context,
+            new FixedTimeProvider(new DateTimeOffset(2026, 6, 20, 12, 0, 0, TimeSpan.Zero)));
+        var reading = await service.CreateMeterReadingAsync(
+            new CreateMeterReadingRequest(fixtures.Garage.Id, MeterKinds.Water, new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 20), 15m, null),
+            null,
+            CancellationToken.None);
+        Assert.True((await service.GenerateRegularAccrualsAsync(
+            new GenerateRegularAccrualsRequest(fixtures.IncomeType.Id, tariff.Id, new DateOnly(2026, 6, 1), null),
+            null,
+            CancellationToken.None)).Succeeded);
+        failure.Enabled = true;
+
+        await Assert.ThrowsAsync<DbUpdateException>(() => service.UpdateMeterReadingAsync(
+            reading.Value!.Id,
+            new CreateMeterReadingRequest(fixtures.Garage.Id, MeterKinds.Water, new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 21), 18m, null, reading.Value.Version),
+            null,
+            CancellationToken.None));
+
+        failure.Enabled = false;
+        database.Context.ChangeTracker.Clear();
+        Assert.Equal(15m, (await database.Context.MeterReadings.SingleAsync()).CurrentValue);
+        Assert.Equal(250m, (await database.Context.Accruals.SingleAsync()).Amount);
+        Assert.DoesNotContain(database.Context.AuditEvents, item => item.Action == "finance.accrual_updated_from_meter_reading");
+    }
+
+    [Fact]
     public async Task CancelMeterReadingAsync_CancelsReadingAndRemovesItFromSummary()
     {
         await using var database = await TestDatabase.CreateAsync();
@@ -5220,6 +5397,39 @@ public sealed class FinanceServiceTests
             if (Enabled && command.CommandText.Contains("INSERT INTO \"supplier_accruals\"", StringComparison.OrdinalIgnoreCase))
             {
                 throw new InvalidOperationException("Имитирована ошибка второй записи атомарной выплаты.");
+            }
+        }
+    }
+
+    private sealed class MeteredAccrualUpdateFailureInterceptor : DbCommandInterceptor
+    {
+        public bool Enabled { get; set; }
+
+        public override ValueTask<InterceptionResult<int>> NonQueryExecutingAsync(
+            DbCommand command,
+            CommandEventData eventData,
+            InterceptionResult<int> result,
+            CancellationToken cancellationToken = default)
+        {
+            ThrowIfAccrualUpdate(command);
+            return base.NonQueryExecutingAsync(command, eventData, result, cancellationToken);
+        }
+
+        public override ValueTask<InterceptionResult<DbDataReader>> ReaderExecutingAsync(
+            DbCommand command,
+            CommandEventData eventData,
+            InterceptionResult<DbDataReader> result,
+            CancellationToken cancellationToken = default)
+        {
+            ThrowIfAccrualUpdate(command);
+            return base.ReaderExecutingAsync(command, eventData, result, cancellationToken);
+        }
+
+        private void ThrowIfAccrualUpdate(DbCommand command)
+        {
+            if (Enabled && command.CommandText.Contains("UPDATE \"accruals\"", StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException("Имитирована ошибка пересчета связанного начисления.");
             }
         }
     }

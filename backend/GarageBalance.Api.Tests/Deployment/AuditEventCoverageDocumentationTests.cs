@@ -69,6 +69,7 @@ public sealed class AuditEventCoverageDocumentationTests
             "finance.supplier_group_salary_accruals_generated",
             "finance.meter_reading_created",
             "finance.meter_reading_updated",
+            "finance.accrual_updated_from_meter_reading",
             "finance.meter_reading_canceled",
             "finance.meter_reading_restored",
             "fund.operation_deposited",

@@ -127,6 +127,23 @@ public sealed class EfAccrualPaymentAllocationRepository(GarageBalanceDbContext 
             activeAllocationCount);
     }
 
+    public Task<bool> HasActiveAllocationAsync(
+        IReadOnlyCollection<Guid> accrualIds,
+        CancellationToken cancellationToken)
+    {
+        if (accrualIds.Count == 0)
+        {
+            return Task.FromResult(false);
+        }
+
+        return dbContext.AccrualPaymentAllocations.AsNoTracking().AnyAsync(
+            allocation =>
+                allocation.IsActive &&
+                accrualIds.Contains(allocation.AccrualId) &&
+                !allocation.FinancialOperation.IsCanceled,
+            cancellationToken);
+    }
+
     private IQueryable<AllocationLedgerRow> BuildLedgerQuery(Guid[] garageIds, Guid[] incomeTypeIds)
     {
         var accrualRows = dbContext.Accruals.AsNoTracking()

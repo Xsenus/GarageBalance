@@ -2525,6 +2525,47 @@ public sealed class FinanceService(
             return FinanceResult<MeterReadingDto>.Success(ToDto(reading));
         }
 
+        var linkedAccruals = await accrualRepository.GetActiveMeteredForUpdateAsync(
+            garage.Id,
+            month,
+            meterKind,
+            cancellationToken);
+        var prospectiveReading = new MeterReading
+        {
+            GarageId = garage.Id,
+            Garage = garage,
+            MeterKind = meterKind,
+            AccountingMonth = month,
+            ReadingDate = request.ReadingDate,
+            CurrentValue = currentValue,
+            PreviousValue = previousValue,
+            Consumption = consumption
+        };
+        var accrualRecalculations = linkedAccruals
+            .Select(accrual => new
+            {
+                Accrual = accrual,
+                Calculation = CalculateRegularAccrualAmount(garage, accrual.Tariff!, prospectiveReading)
+            })
+            .Where(item => item.Calculation.Succeeded && item.Calculation.Value != item.Accrual.Amount)
+            .Select(item => (item.Accrual, NewAmount: item.Calculation.Value))
+            .ToArray();
+        var allocationKeys = accrualRecalculations
+            .Select(item => new AccrualPaymentAllocationKey(item.Accrual.GarageId, item.Accrual.IncomeTypeId))
+            .Distinct()
+            .ToArray();
+        await using var allocationLock = await accrualPaymentAllocationRepository.AcquireRebuildLockAsync(
+            allocationKeys,
+            cancellationToken);
+        if (await accrualPaymentAllocationRepository.HasActiveAllocationAsync(
+            accrualRecalculations.Select(item => item.Accrual.Id).ToArray(),
+            cancellationToken))
+        {
+            return FinanceResult<MeterReadingDto>.Failure(
+                "meter_reading_accrual_paid",
+                "Связанное начисление уже полностью или частично оплачено. Изменение показания отменено; сначала исправьте оплату или согласуйте отдельную корректировку начисления.");
+        }
+
         var oldValues = new Dictionary<string, object?>
         {
             ["garage"] = reading.Garage.Number,
@@ -2562,6 +2603,27 @@ public sealed class FinanceService(
         reading.Comment = comment;
         reading.Version = Guid.NewGuid();
         reading.UpdatedAtUtc = timeProvider.GetUtcNow();
+        foreach (var (accrual, newAmount) in accrualRecalculations)
+        {
+            var before = AccrualAuditSnapshot.From(accrual);
+            var oldAccrualValues = new Dictionary<string, object?> { ["amount"] = accrual.Amount };
+            var newAccrualValues = new Dictionary<string, object?> { ["amount"] = newAmount };
+            accrual.Amount = newAmount;
+            accrual.UpdatedAtUtc = timeProvider.GetUtcNow();
+            AddAudit(
+                actorUserId,
+                "finance.accrual_updated_from_meter_reading",
+                accrual,
+                $"Начисление пересчитано после изменения показания: было {FormatAccrualSnapshot(before)}; стало {FormatAccrualSnapshot(AccrualAuditSnapshot.From(accrual))}.",
+                oldAccrualValues,
+                newAccrualValues);
+        }
+        await RebuildPaymentAllocationsAsync(
+            allocationKeys,
+            actorUserId,
+            "Пересчет начисления после изменения показания",
+            reading.Id,
+            cancellationToken);
         AddAudit(
             actorUserId,
             historicalCorrectionReason is null ? "finance.meter_reading_updated" : "finance.meter_reading_historical_updated",

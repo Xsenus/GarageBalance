@@ -26,6 +26,11 @@ public interface IAccrualRepository
     Task<IReadOnlyList<AccrualBucketData>> GetMonthlyBucketsAsync(Guid garageId, DateOnly? monthFrom, DateOnly monthTo, CancellationToken cancellationToken);
     Task<Accrual?> FindForUpdateAsync(Guid id, CancellationToken cancellationToken);
     Task<Accrual?> FindActiveForUpdateAsync(Guid garageId, Guid incomeTypeId, DateOnly accountingMonth, string source, CancellationToken cancellationToken);
+    Task<IReadOnlyList<Accrual>> GetActiveMeteredForUpdateAsync(
+        Guid garageId,
+        DateOnly accountingMonth,
+        string meterKind,
+        CancellationToken cancellationToken);
     Task<int> CountActiveForGenerationAsync(Guid incomeTypeId, DateOnly accountingMonth, string source, CancellationToken cancellationToken);
     Task<IReadOnlySet<Guid>> GetActiveGarageIdsAsync(Guid incomeTypeId, DateOnly accountingMonth, string source, CancellationToken cancellationToken);
     Task<bool> ActiveDuplicateExistsAsync(Guid? ignoredId, Guid garageId, Guid incomeTypeId, DateOnly accountingMonth, string source, CancellationToken cancellationToken);

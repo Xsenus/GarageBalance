@@ -1181,6 +1181,31 @@ public sealed class FinanceControllerTests
     }
 
     [Fact]
+    public async Task SavePaymentFormMeterReading_ReturnsConflictForPaidLinkedAccrual()
+    {
+        var controller = CreateController(new FakeFinanceService
+        {
+            SavePaymentFormMeterReadingResult = FinanceResult<MeterReadingDto>.Failure(
+                "meter_reading_accrual_paid",
+                "Связанное начисление уже полностью или частично оплачено.")
+        });
+
+        var result = await controller.SavePaymentFormMeterReading(
+            new SavePaymentFormMeterReadingRequest(
+                Guid.NewGuid(),
+                "water",
+                new DateOnly(2026, 6, 1),
+                new DateOnly(2026, 6, 20),
+                18m,
+                null),
+            CancellationToken.None);
+
+        var conflict = Assert.IsType<ConflictObjectResult>(result.Result);
+        var problem = Assert.IsType<ProblemDetails>(conflict.Value);
+        Assert.Equal("meter_reading_accrual_paid", problem.Title);
+    }
+
+    [Fact]
     public async Task CancelMeterReading_ReturnsNotFoundForMissingReading()
     {
         var controller = CreateController(new FakeFinanceService
