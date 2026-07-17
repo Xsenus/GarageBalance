@@ -20,6 +20,151 @@ public sealed class FinanceServiceTests
 {
     private const decimal SeededBankAmount = 1000000m;
 
+    [Theory]
+    [InlineData(29, true)]
+    [InlineData(30, false)]
+    [InlineData(31, false)]
+    public async Task GetIncomePaymentWarningAsync_UsesCalendarDayBoundary(int daysSincePreviousPayment, bool requiresConfirmation)
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        fixtures.IncomeType.Code = MeterKinds.Electricity;
+        await database.Context.SaveChangesAsync();
+        var service = FinanceServiceTestFactory.Create(database.Context);
+        var previousPaymentDate = new DateOnly(2026, 6, 1);
+        Assert.True((await service.CreateIncomeAsync(
+            new CreateIncomeOperationRequest(
+                fixtures.Garage.Id,
+                fixtures.IncomeType.Id,
+                previousPaymentDate,
+                new DateOnly(2026, 6, 1),
+                500m,
+                "PKO-electricity-previous",
+                null),
+            null,
+            CancellationToken.None)).Succeeded);
+
+        var result = await service.GetIncomePaymentWarningAsync(
+            new IncomePaymentWarningRequest(
+                fixtures.Garage.Id,
+                fixtures.IncomeType.Id,
+                previousPaymentDate.AddDays(daysSincePreviousPayment)),
+            CancellationToken.None);
+
+        Assert.True(result.Succeeded, result.ErrorMessage);
+        Assert.True(result.Value!.IsElectricityPayment);
+        Assert.Equal(previousPaymentDate, result.Value.PreviousPaymentDate);
+        Assert.Equal(daysSincePreviousPayment, result.Value.DaysSincePreviousPayment);
+        Assert.Equal(requiresConfirmation, result.Value.RequiresConfirmation);
+    }
+
+    [Fact]
+    public async Task GetIncomePaymentWarningAsync_ReturnsNoWarningWithoutPreviousElectricityPayment()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        fixtures.IncomeType.Code = MeterKinds.Electricity;
+        await database.Context.SaveChangesAsync();
+        var service = FinanceServiceTestFactory.Create(database.Context);
+
+        var result = await service.GetIncomePaymentWarningAsync(
+            new IncomePaymentWarningRequest(fixtures.Garage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 6, 30)),
+            CancellationToken.None);
+
+        Assert.True(result.Succeeded, result.ErrorMessage);
+        Assert.True(result.Value!.IsElectricityPayment);
+        Assert.Null(result.Value.PreviousPaymentDate);
+        Assert.Null(result.Value.DaysSincePreviousPayment);
+        Assert.False(result.Value.RequiresConfirmation);
+    }
+
+    [Fact]
+    public async Task GetIncomePaymentWarningAsync_DoesNotApplyToOtherIncomeTypes()
+    {
+        var commandCounter = new SelectCommandCounter();
+        await using var database = await TestDatabase.CreateAsync(commandCounter);
+        var fixtures = await database.SeedAsync();
+        var service = FinanceServiceTestFactory.Create(database.Context);
+        commandCounter.Reset();
+
+        var result = await service.GetIncomePaymentWarningAsync(
+            new IncomePaymentWarningRequest(fixtures.Garage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 6, 30)),
+            CancellationToken.None);
+
+        Assert.True(result.Succeeded, result.ErrorMessage);
+        Assert.False(result.Value!.IsElectricityPayment);
+        Assert.Null(result.Value.PreviousPaymentDate);
+        Assert.False(result.Value.RequiresConfirmation);
+        Assert.Equal(2, commandCounter.Count);
+    }
+
+    [Fact]
+    public async Task GetIncomePaymentWarningAsync_ExcludesEditedCanceledAndFuturePayments()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        fixtures.IncomeType.Code = MeterKinds.Electricity;
+        await database.Context.SaveChangesAsync();
+        var service = FinanceServiceTestFactory.Create(database.Context);
+        var first = await service.CreateIncomeAsync(
+            new CreateIncomeOperationRequest(fixtures.Garage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 1), 500m, "PKO-electricity-first", null),
+            null,
+            CancellationToken.None);
+        var edited = await service.CreateIncomeAsync(
+            new CreateIncomeOperationRequest(fixtures.Garage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 6, 20), new DateOnly(2026, 6, 1), 500m, "PKO-electricity-edited", null),
+            null,
+            CancellationToken.None);
+        var canceled = await service.CreateIncomeAsync(
+            new CreateIncomeOperationRequest(fixtures.Garage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 6, 25), new DateOnly(2026, 6, 1), 500m, "PKO-electricity-canceled", null),
+            null,
+            CancellationToken.None);
+        Assert.True(canceled.Succeeded, canceled.ErrorMessage);
+        database.Context.FinancialOperations.Single(operation => operation.Id == canceled.Value!.Id).IsCanceled = true;
+        await database.Context.SaveChangesAsync();
+        Assert.True((await service.CreateIncomeAsync(
+            new CreateIncomeOperationRequest(fixtures.Garage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 7, 20), new DateOnly(2026, 7, 1), 500m, "PKO-electricity-future", null),
+            null,
+            CancellationToken.None)).Succeeded);
+
+        var result = await service.GetIncomePaymentWarningAsync(
+            new IncomePaymentWarningRequest(
+                fixtures.Garage.Id,
+                fixtures.IncomeType.Id,
+                new DateOnly(2026, 6, 20),
+                edited.Value!.Id),
+            CancellationToken.None);
+
+        Assert.True(first.Succeeded, first.ErrorMessage);
+        Assert.True(edited.Succeeded, edited.ErrorMessage);
+        Assert.True(result.Succeeded, result.ErrorMessage);
+        Assert.Equal(new DateOnly(2026, 6, 1), result.Value!.PreviousPaymentDate);
+        Assert.Equal(19, result.Value.DaysSincePreviousPayment);
+        Assert.True(result.Value.RequiresConfirmation);
+    }
+
+    [Fact]
+    public async Task GetIncomePaymentWarningAsync_ReturnsMissingDictionaryErrorsAndPropagatesCancellation()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        var service = FinanceServiceTestFactory.Create(database.Context);
+
+        var missingGarage = await service.GetIncomePaymentWarningAsync(
+            new IncomePaymentWarningRequest(Guid.NewGuid(), fixtures.IncomeType.Id, new DateOnly(2026, 6, 30)),
+            CancellationToken.None);
+        var missingIncomeType = await service.GetIncomePaymentWarningAsync(
+            new IncomePaymentWarningRequest(fixtures.Garage.Id, Guid.NewGuid(), new DateOnly(2026, 6, 30)),
+            CancellationToken.None);
+        using var cancellation = new CancellationTokenSource();
+        await cancellation.CancelAsync();
+
+        Assert.Equal("garage_not_found", missingGarage.ErrorCode);
+        Assert.Equal("income_type_not_found", missingIncomeType.ErrorCode);
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => service.GetIncomePaymentWarningAsync(
+            new IncomePaymentWarningRequest(fixtures.Garage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 6, 30)),
+            cancellation.Token));
+    }
+
     [Fact]
     public async Task CreateIncomeAsync_CreatesOperationAndWritesAudit()
     {

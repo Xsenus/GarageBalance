@@ -133,6 +133,25 @@ public sealed class EfFinancialOperationRepository(GarageBalanceDbContext dbCont
                 operation.OperationDate < operationDate)
             .SumAsync(operation => operation.Amount, cancellationToken);
 
+    public Task<DateOnly?> GetPreviousActiveIncomeDateAsync(
+        Guid garageId,
+        Guid incomeTypeId,
+        DateOnly operationDate,
+        Guid? ignoredOperationId,
+        CancellationToken cancellationToken) =>
+        dbContext.FinancialOperations.AsNoTracking()
+            .Where(operation =>
+                !operation.IsCanceled &&
+                operation.OperationKind == FinancialOperationKinds.Income &&
+                operation.GarageId == garageId &&
+                operation.IncomeTypeId == incomeTypeId &&
+                operation.OperationDate <= operationDate &&
+                (!ignoredOperationId.HasValue || operation.Id != ignoredOperationId.Value))
+            .OrderByDescending(operation => operation.OperationDate)
+            .ThenByDescending(operation => operation.Id)
+            .Select(operation => (DateOnly?)operation.OperationDate)
+            .FirstOrDefaultAsync(cancellationToken);
+
     public void Add(FinancialOperation operation) => dbContext.FinancialOperations.Add(operation);
 
     private IQueryable<FinancialOperation> QueryActive() =>

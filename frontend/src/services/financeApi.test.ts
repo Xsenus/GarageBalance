@@ -109,6 +109,34 @@ describe('financeApi', () => {
     })
   })
 
+  it('previews the early electricity payment warning with an optional edited operation', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      isElectricityPayment: true,
+      previousPaymentDate: '2026-06-01',
+      daysSincePreviousPayment: 29,
+      requiresConfirmation: true,
+    }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
+    vi.stubGlobal('fetch', fetchMock)
+    const request = {
+      garageId: 'garage-88',
+      incomeTypeId: 'income-electricity',
+      operationDate: '2026-06-30',
+      excludedOperationId: 'operation-edited',
+    }
+
+    const warning = await financeApi.getIncomePaymentWarning('token', request)
+
+    expect(warning).toMatchObject({ daysSincePreviousPayment: 29, requiresConfirmation: true })
+    expect(fetchMock).toHaveBeenCalledWith('/api/finance/income/payment-warning', {
+      method: 'POST',
+      body: JSON.stringify(request),
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: 'Bearer token',
+      },
+    })
+  })
+
   it('saves a versioned meter reading through the payment form endpoint', async () => {
     const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({
       id: 'meter-reading-1',

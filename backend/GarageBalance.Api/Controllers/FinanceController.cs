@@ -226,6 +226,18 @@ public sealed class FinanceController(IFinanceService financeService) : Controll
     }
 
     [Authorize(Policy = SystemPermissions.PaymentsWrite)]
+    [HttpPost("income/payment-warning")]
+    [ProducesResponseType<IncomePaymentWarningDto>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<IncomePaymentWarningDto>> GetIncomePaymentWarning(
+        IncomePaymentWarningRequest request,
+        CancellationToken cancellationToken)
+    {
+        var result = await financeService.GetIncomePaymentWarningAsync(request, cancellationToken);
+        return result.Succeeded ? Ok(result.Value) : ToError(result);
+    }
+
+    [Authorize(Policy = SystemPermissions.PaymentsWrite)]
     [HttpPost("income")]
     [ProducesResponseType<FinancialOperationDto>(StatusCodes.Status201Created)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]

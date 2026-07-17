@@ -270,6 +270,20 @@ export type CreateIncomeOperationRequest = {
   comment?: string
 }
 
+export type IncomePaymentWarningRequest = {
+  garageId: string
+  incomeTypeId: string
+  operationDate: string
+  excludedOperationId?: string
+}
+
+export type IncomePaymentWarningDto = {
+  isElectricityPayment: boolean
+  previousPaymentDate: string | null
+  daysSincePreviousPayment: number | null
+  requiresConfirmation: boolean
+}
+
 export type CreateGarageDebtPaymentRequest = {
   garageId: string
   operationDate: string
@@ -444,6 +458,7 @@ export type FinanceClient = {
   getGarageIncomeWorksheet(accessToken: string, garageId: string, params?: { monthFrom?: string; monthTo?: string }): Promise<GarageIncomeWorksheetDto>
   getExpenseWorksheet(accessToken: string, params?: { accountingMonth?: string }): Promise<ExpenseWorksheetDto>
   getSummary(accessToken: string, params?: FinancePageParams): Promise<FinanceSummaryDto>
+  getIncomePaymentWarning(accessToken: string, request: IncomePaymentWarningRequest): Promise<IncomePaymentWarningDto>
   createIncome(accessToken: string, request: CreateIncomeOperationRequest): Promise<FinancialOperationDto>
   createGarageDebtPayment(accessToken: string, request: CreateGarageDebtPaymentRequest): Promise<FinancialOperationDto>
   updateIncome(accessToken: string, operationId: string, request: CreateIncomeOperationRequest): Promise<FinancialOperationDto>
@@ -625,6 +640,9 @@ export const financeApi: FinanceClient = {
       dateTo: toMonthEnd(params.monthTo),
       search: params.search,
     }))
+  },
+  getIncomePaymentWarning(accessToken, request) {
+    return requestJson(accessToken, '/api/finance/income/payment-warning', { method: 'POST', body: JSON.stringify(request) })
   },
   createIncome(accessToken, request) {
     return requestJson(accessToken, '/api/finance/income', { method: 'POST', body: JSON.stringify(request) })

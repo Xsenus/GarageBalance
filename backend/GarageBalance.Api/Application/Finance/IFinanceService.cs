@@ -34,6 +34,8 @@ public interface IFinanceService
 
     Task<FinanceSummaryDto> GetSummaryAsync(FinancialOperationListRequest request, CancellationToken cancellationToken);
 
+    Task<FinanceResult<IncomePaymentWarningDto>> GetIncomePaymentWarningAsync(IncomePaymentWarningRequest request, CancellationToken cancellationToken);
+
     Task<FinanceResult<FinancialOperationDto>> CreateIncomeAsync(CreateIncomeOperationRequest request, Guid? actorUserId, CancellationToken cancellationToken);
 
     Task<FinanceResult<FinancialOperationDto>> CreateGarageDebtPaymentAsync(CreateGarageDebtPaymentRequest request, Guid? actorUserId, CancellationToken cancellationToken);

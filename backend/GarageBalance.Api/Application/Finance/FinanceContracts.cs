@@ -49,6 +49,18 @@ public sealed record CreateIncomeOperationRequest(
     [MaxLength(120)] string? DocumentNumber,
     [MaxLength(1000)] string? Comment);
 
+public sealed record IncomePaymentWarningRequest(
+    Guid GarageId,
+    Guid IncomeTypeId,
+    DateOnly OperationDate,
+    Guid? ExcludedOperationId = null);
+
+public sealed record IncomePaymentWarningDto(
+    bool IsElectricityPayment,
+    DateOnly? PreviousPaymentDate,
+    int? DaysSincePreviousPayment,
+    bool RequiresConfirmation);
+
 public sealed record CreateExpenseOperationRequest(
     Guid SupplierId,
     Guid ExpenseTypeId,

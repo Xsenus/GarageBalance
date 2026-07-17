@@ -36,6 +36,7 @@ public sealed class FinanceService(
     private const int DefaultListLimit = 100;
     private const int MaxListLimit = 500;
     private const int MaxBalanceHistoryMonths = 60;
+    private const int EarlyElectricityPaymentWarningDays = 30;
     private const string DebtTransferIncomeTypeCode = "debt_transfer";
     private const string DebtTransferIncomeTypeName = "Перенос задолженности";
     private const string AdvancePaymentExpenseTypeName = "Авансовые выплаты";
@@ -650,6 +651,46 @@ public sealed class FinanceService(
             ExpenseCount = totals.ExpenseCount,
             SupplierAccrualCount = totals.SupplierAccrualCount
         };
+    }
+
+    public async Task<FinanceResult<IncomePaymentWarningDto>> GetIncomePaymentWarningAsync(
+        IncomePaymentWarningRequest request,
+        CancellationToken cancellationToken)
+    {
+        var garage = await garageRepository.FindActiveWithOwnerAsync(request.GarageId, cancellationToken);
+        if (garage is null)
+        {
+            return FinanceResult<IncomePaymentWarningDto>.Failure("garage_not_found", "Гараж для поступления не найден.");
+        }
+
+        var incomeType = await incomeTypeRepository.FindActiveAsync(request.IncomeTypeId, cancellationToken);
+        if (incomeType is null)
+        {
+            return FinanceResult<IncomePaymentWarningDto>.Failure("income_type_not_found", "Вид поступления не найден.");
+        }
+
+        if (!string.Equals(incomeType.Code, MeterKinds.Electricity, StringComparison.OrdinalIgnoreCase))
+        {
+            return FinanceResult<IncomePaymentWarningDto>.Success(new IncomePaymentWarningDto(false, null, null, false));
+        }
+
+        var previousPaymentDate = await financialOperationRepository.GetPreviousActiveIncomeDateAsync(
+            garage.Id,
+            incomeType.Id,
+            request.OperationDate,
+            request.ExcludedOperationId,
+            cancellationToken);
+        if (!previousPaymentDate.HasValue)
+        {
+            return FinanceResult<IncomePaymentWarningDto>.Success(new IncomePaymentWarningDto(true, null, null, false));
+        }
+
+        var daysSincePreviousPayment = request.OperationDate.DayNumber - previousPaymentDate.Value.DayNumber;
+        return FinanceResult<IncomePaymentWarningDto>.Success(new IncomePaymentWarningDto(
+            true,
+            previousPaymentDate,
+            daysSincePreviousPayment,
+            daysSincePreviousPayment < EarlyElectricityPaymentWarningDays));
     }
 
     public async Task<FinanceResult<FinancialOperationDto>> CreateIncomeAsync(CreateIncomeOperationRequest request, Guid? actorUserId, CancellationToken cancellationToken)

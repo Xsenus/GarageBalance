@@ -14042,6 +14042,12 @@ function createFinanceClient(overrides: Partial<FinanceClient> = {}): FinanceCli
       throw new Error('Серверная форма выплат недоступна')
     },
     getSummary: async () => ({ incomeTotal: 1500, expenseTotal: 0, accrualTotal: 2000, balance: 1500, debt: 500, operationCount: 1, accrualCount: 1, meterReadingCount: 1 }),
+    getIncomePaymentWarning: async () => ({
+      isElectricityPayment: false,
+      previousPaymentDate: null,
+      daysSincePreviousPayment: null,
+      requiresConfirmation: false,
+    }),
     createIncome: async () => operation,
     createGarageDebtPayment: async () => createFinancialOperation({ id: 'operation-debt-payment', amount: 500, incomeTypeName: 'Перенос задолженности' }),
     updateIncome: async (_token, operationId) => ({ ...operation, id: operationId }),

@@ -34,6 +34,12 @@ public interface IFinancialOperationRepository
     Task<decimal> GetStaffExpenseTotalAsync(Guid staffMemberId, DateOnly accountingMonth, CancellationToken cancellationToken);
     Task<decimal> GetPreviousGarageIncomeTotalAsync(Guid ignoredId, Guid garageId, DateOnly operationDate, CancellationToken cancellationToken);
     Task<decimal> GetPreviousSupplierExpenseTotalAsync(Guid ignoredId, Guid supplierId, DateOnly operationDate, CancellationToken cancellationToken);
+    Task<DateOnly?> GetPreviousActiveIncomeDateAsync(
+        Guid garageId,
+        Guid incomeTypeId,
+        DateOnly operationDate,
+        Guid? ignoredOperationId,
+        CancellationToken cancellationToken);
     void Add(FinancialOperation operation);
 }
 

@@ -14,17 +14,17 @@
 
 ## Нужны Бизнес-Решения
 
-- [decision] "Правка электросчетчика только за текущий месяц": нужно уточнить, блокируется только годовая таблица `Показания` или все backend-изменения `meter_electricity`, разрешены ли администраторские исправления прошлых месяцев через отмену/новую запись, какой timezone/current month считается рабочим.
-- [decision] "Подтверждение платежа по электроэнергии раньше 30 дней": нужно уточнить, правило привязано к дню фактической операции, расчетному месяцу, дате показания или сроку оплаты услуги; нужен ли обязательный комментарий/причина и должен ли backend отклонять платеж без признака подтверждения.
+- [x] "Правка электросчетчика только за текущий месяц": обычное изменение всех backend-показаний разрешено только за текущий локальный учетный месяц; прошлый месяц исправляется отдельной исторической корректировкой с правом и причиной, будущий запрещен.
+- [x] "Подтверждение платежа по электроэнергии раньше 30 дней": интервал считается по фактической дате активной операции того же гаража и вида поступления; сервер возвращает preview без обязательного комментария и не отклоняет платеж, а frontend должен показать неблокирующее подтверждение при интервале 0–29 дней.
 - [decision] "Ручное водоснабжение с мягкой красной подсветкой пустого поля": нужно уточнить, подсветка нужна только в форме поступлений для пустого meter value, или также в годовой таблице показаний и при ручном начислении воды.
 - [decision] "Годовые взносы и наружное освещение с прекращением начисления после оплаты в текущем году": нужно выбрать модель. Варианты: регулярная годовая услуга, `FeeCampaign`, отдельный фонд/сбор или специальное правило по income type. Нужно определить, что считается оплатой года: полная оплата начисления, любая частичная оплата, переплата, платеж без начисления или закрытый годовой campaign.
 - [decision] Для наружного освещения нужно определить income type/tariff/fund mapping: это фиксированная услуга, целевой сбор, отдельный фонд или расходно-приходная связка.
 
 ## Required Implementation After Decisions
 
-- [ ] Backend validation/tests for the chosen current-month electricity meter edit rule.
-- [ ] Frontend state and tests for blocking or confirming electricity meter edits outside the allowed month.
-- [ ] Backend and frontend confirmation flow for early electricity payments, including audit-safe confirmation metadata if required.
+- [x] Backend validation/tests for the chosen current-month electricity meter edit rule.
+- [x] Frontend state and tests for blocking or confirming electricity meter edits outside the allowed month.
+- [~] Backend and frontend confirmation flow for early electricity payments: серверный preview и границы 29/30/31 готовы, неблокирующий frontend dialog остается следующим пунктом.
 - [ ] Water empty-field highlighting exactly in the decided screens.
 - [ ] Annual dues and outdoor lighting accrual-stop logic with tests for paid, partially paid, overpaid, canceled payment and restored payment cases.
 - [ ] Release note for cooperative staff/admins describing the final business rules.

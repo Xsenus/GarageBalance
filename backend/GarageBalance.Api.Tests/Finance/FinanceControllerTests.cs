@@ -101,6 +101,49 @@ public sealed class FinanceControllerTests
     }
 
     [Fact]
+    public async Task GetIncomePaymentWarning_ReturnsPreviewAndPassesRequestToService()
+    {
+        var request = new IncomePaymentWarningRequest(
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            new DateOnly(2026, 6, 30),
+            Guid.NewGuid());
+        var service = new FakeFinanceService
+        {
+            IncomePaymentWarningResult = FinanceResult<IncomePaymentWarningDto>.Success(
+                new IncomePaymentWarningDto(true, new DateOnly(2026, 6, 1), 29, true))
+        };
+        var controller = CreateController(service);
+
+        var result = await controller.GetIncomePaymentWarning(request, CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var warning = Assert.IsType<IncomePaymentWarningDto>(ok.Value);
+        Assert.True(warning.RequiresConfirmation);
+        Assert.Equal(29, warning.DaysSincePreviousPayment);
+        Assert.Same(request, service.LastIncomePaymentWarningRequest);
+    }
+
+    [Fact]
+    public async Task GetIncomePaymentWarning_ReturnsNotFoundForMissingGarage()
+    {
+        var controller = CreateController(new FakeFinanceService
+        {
+            IncomePaymentWarningResult = FinanceResult<IncomePaymentWarningDto>.Failure(
+                "garage_not_found",
+                "Гараж для поступления не найден.")
+        });
+
+        var result = await controller.GetIncomePaymentWarning(
+            new IncomePaymentWarningRequest(Guid.NewGuid(), Guid.NewGuid(), new DateOnly(2026, 6, 30)),
+            CancellationToken.None);
+
+        var notFound = Assert.IsType<NotFoundObjectResult>(result.Result);
+        var problem = Assert.IsType<ProblemDetails>(notFound.Value);
+        Assert.Equal("garage_not_found", problem.Title);
+    }
+
+    [Fact]
     public async Task GetMeterReadingYearPage_PassesCompactYearRequestToService()
     {
         var page = new MeterReadingYearPageDto([], [], 0, 25, 50);
@@ -1523,6 +1566,7 @@ public sealed class FinanceControllerTests
         public ExpenseWorksheetRequest? LastExpenseWorksheetRequest { get; private set; }
         public FinancialOperationListRequest? LastSummaryRequest { get; private set; }
         public CreateGarageDebtPaymentRequest? LastGarageDebtPaymentRequest { get; private set; }
+        public IncomePaymentWarningRequest? LastIncomePaymentWarningRequest { get; private set; }
         public GenerateRegularAccrualsRequest? LastRegularAccrualGenerationRequest { get; private set; }
         public GenerateRegularCatalogAccrualsRequest? LastRegularCatalogAccrualGenerationRequest { get; private set; }
         public GenerateFeeCampaignAccrualsRequest? LastFeeCampaignAccrualGenerationRequest { get; private set; }
@@ -1532,6 +1576,7 @@ public sealed class FinanceControllerTests
         public FinanceResult<GarageIncomeWorksheetDto> GarageIncomeWorksheetResult { get; init; } = FinanceResult<GarageIncomeWorksheetDto>.Failure("not_configured", "Not configured.");
         public FinanceResult<ExpenseWorksheetDto> ExpenseWorksheetResult { get; init; } = FinanceResult<ExpenseWorksheetDto>.Failure("not_configured", "Not configured.");
         public FinanceResult<FinancialOperationDto> CreateIncomeResult { get; init; } = FinanceResult<FinancialOperationDto>.Failure("not_configured", "Not configured.");
+        public FinanceResult<IncomePaymentWarningDto> IncomePaymentWarningResult { get; init; } = FinanceResult<IncomePaymentWarningDto>.Failure("not_configured", "Not configured.");
         public FinanceResult<FinancialOperationDto> CreateGarageDebtPaymentResult { get; init; } = FinanceResult<FinancialOperationDto>.Failure("not_configured", "Not configured.");
         public FinanceResult<FinancialOperationDto> UpdateIncomeResult { get; init; } = FinanceResult<FinancialOperationDto>.Failure("not_configured", "Not configured.");
         public FinanceResult<FinancialOperationDto> CreateExpenseResult { get; init; } = FinanceResult<FinancialOperationDto>.Failure("not_configured", "Not configured.");
@@ -1657,6 +1702,14 @@ public sealed class FinanceControllerTests
         {
             LastSummaryRequest = request;
             return Task.FromResult(SummaryResult);
+        }
+
+        public Task<FinanceResult<IncomePaymentWarningDto>> GetIncomePaymentWarningAsync(
+            IncomePaymentWarningRequest request,
+            CancellationToken cancellationToken)
+        {
+            LastIncomePaymentWarningRequest = request;
+            return Task.FromResult(IncomePaymentWarningResult);
         }
 
         public Task<FinanceResult<FinancialOperationDto>> CreateIncomeAsync(CreateIncomeOperationRequest request, Guid? actorUserId, CancellationToken cancellationToken)
