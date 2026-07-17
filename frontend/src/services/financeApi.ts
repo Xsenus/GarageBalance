@@ -203,6 +203,9 @@ export type GarageIncomeWorksheetRowDto = {
   incomeTypeId: string | null
   incomeTypeName: string
   meterKind: 'water' | 'electricity' | null
+  meterReadingId?: string | null
+  meterReadingVersion?: string | null
+  meterReadingDate?: string | null
   meterValue: number | null
   meterConsumption: number | null
   accrualAmount: number

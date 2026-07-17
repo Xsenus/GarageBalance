@@ -20,6 +20,7 @@ import { formatAccrualSource, formatDateOnly, formatDebtAmount, formatDebtLabel,
 import { useEscapeKey, useFocusOnOpen, useFocusTrap, useRestoreFocusOnClose } from '../../shared/focusHooks'
 import { LocalizedDatePicker } from '../../shared/LocalizedDatePicker'
 import { MoneyInput, MoneyTextInput } from '../../shared/MoneyInput'
+import { MeterReadingInput } from '../../shared/MeterReadingInput'
 import { SelectControl } from '../../shared/SelectControl'
 import { TablePagination } from '../../shared/TablePagination'
 import { chooseRegularTariffId, getAccrualValidationErrors, getCompatibleRegularTariffs, getExpenseValidationErrors, getIncomeValidationErrors, getMeterReadingValidationErrors, getRegularAccrualValidationErrorsForCatalog, getSupplierAccrualValidationErrors, getSupplierGroupSalaryValidationErrors } from '../../shared/validation'
@@ -105,7 +106,13 @@ type GarageIncomePrototypeRow = {
   month: string
   monthLabel: string
   service: string
+  meterKind: 'water' | 'electricity' | null
+  meterReadingId: string | null
+  meterReadingVersion: string | null
+  meterReadingDate: string | null
   meter: number | null
+  meterDraft: string
+  meterError: string | null
   difference: number | null
   payable: number
   paymentDraft: string
@@ -282,7 +289,13 @@ function createGarageIncomeRowsFromWorksheet(worksheet: GarageIncomeWorksheetDto
       month,
       monthLabel: formatPaymentPrototypeMonthLabel(row.accountingMonth),
       service: row.incomeTypeName,
+      meterKind: row.meterKind,
+      meterReadingId: row.meterReadingId ?? null,
+      meterReadingVersion: row.meterReadingVersion ?? null,
+      meterReadingDate: row.meterReadingDate ?? null,
       meter: row.meterValue,
+      meterDraft: row.meterValue === null ? '' : String(row.meterValue),
+      meterError: null,
       difference: row.meterConsumption,
       payable: row.accrualAmount,
       paymentDraft: '',
@@ -3070,6 +3083,7 @@ function PaymentsPrototypePanel({
   const [garagePaymentHistoryLoadingId, setGaragePaymentHistoryLoadingId] = useState<string | null>(null)
   const [expenseWorksheetLoading, setExpenseWorksheetLoading] = useState(false)
   const [savingPaymentRowId, setSavingPaymentRowId] = useState<string | null>(null)
+  const [savingMeterRowId, setSavingMeterRowId] = useState<string | null>(null)
   const [fullPaymentDialogOpen, setFullPaymentDialogOpen] = useState(false)
   const fullPaymentTriggerRef = useRef<HTMLButtonElement | null>(null)
   const [debtTransferDialogOpen, setDebtTransferDialogOpen] = useState(false)
@@ -3834,6 +3848,84 @@ function PaymentsPrototypePanel({
     }
   }
 
+  function handleMeterDraftChange(rowId: string, meterDraft: string) {
+    setGarageRows((currentRows) => currentRows.map((row) => row.id === rowId
+      ? { ...row, meterDraft, meterError: null }
+      : row))
+  }
+
+  async function commitGarageMeterReading(row: GarageIncomePrototypeRow) {
+    if (
+      !selectedGarage
+      || !realGarageIds.has(selectedGarage.id)
+      || !row.meterKind
+      || row.month !== getCurrentMonthInputValue()
+      || !financeClient.savePaymentFormMeterReading
+    ) {
+      return
+    }
+
+    const normalizedMeterDraft = row.meterDraft.trim().replace(',', '.')
+    if (!normalizedMeterDraft) {
+      setGarageRows((currentRows) => currentRows.map((currentRow) => currentRow.id === row.id
+        ? { ...currentRow, meterError: 'Введите показание счетчика вручную.' }
+        : currentRow))
+      return
+    }
+
+    const currentValue = Number(normalizedMeterDraft)
+    const validationErrors = getMeterReadingValidationErrors({
+      garageId: selectedGarage.id,
+      meterKind: row.meterKind,
+      accountingMonth: `${row.month}-01`,
+      readingDate: row.meterReadingDate ?? getLocalDateInputValue(),
+      currentValue,
+    })
+    if (validationErrors.length > 0) {
+      setGarageRows((currentRows) => currentRows.map((currentRow) => currentRow.id === row.id
+        ? { ...currentRow, meterError: validationErrors[0] }
+        : currentRow))
+      return
+    }
+
+    setSavingMeterRowId(row.id)
+    setGarageRows((currentRows) => currentRows.map((currentRow) => currentRow.id === row.id
+      ? { ...currentRow, meterError: null }
+      : currentRow))
+    try {
+      const savedReading = await financeClient.savePaymentFormMeterReading(auth.accessToken, {
+        garageId: selectedGarage.id,
+        meterKind: row.meterKind,
+        accountingMonth: `${row.month}-01`,
+        readingDate: row.meterReadingDate ?? getLocalDateInputValue(),
+        currentValue,
+        comment: `Показание из формы поступлений: ${row.service} ${row.monthLabel}`,
+        meterReadingId: row.meterReadingId ?? undefined,
+        expectedVersion: row.meterReadingVersion ?? undefined,
+      })
+      setGarageRows((currentRows) => currentRows.map((currentRow) => currentRow.id === row.id
+        ? {
+            ...currentRow,
+            meter: savedReading.currentValue,
+            meterDraft: String(savedReading.currentValue),
+            difference: savedReading.consumption,
+            meterReadingId: savedReading.id,
+            meterReadingVersion: savedReading.version,
+            meterReadingDate: savedReading.readingDate,
+            meterRequired: false,
+            meterError: null,
+          }
+        : currentRow))
+      await loadGarageIncomeWorksheet(selectedGarage)
+    } catch (error) {
+      setGarageRows((currentRows) => currentRows.map((currentRow) => currentRow.id === row.id
+        ? { ...currentRow, meterError: error instanceof Error ? error.message : 'Не удалось сохранить показание. Повторите попытку.' }
+        : currentRow))
+    } finally {
+      setSavingMeterRowId(null)
+    }
+  }
+
   function selectFirstGarageResult() {
     if (garageSearchResults.length > 0) {
       toggleGarageSelection(garageSearchResults[0])
@@ -4088,7 +4180,13 @@ function PaymentsPrototypePanel({
             month: request.targetMonth,
             monthLabel: targetLabel,
             service: transferService,
+            meterKind: null,
+            meterReadingId: null,
+            meterReadingVersion: null,
+            meterReadingDate: null,
             meter: null,
+            meterDraft: '',
+            meterError: null,
             difference: null,
             payable: allocation.amount,
             paymentDraft: '',
@@ -4154,7 +4252,13 @@ function PaymentsPrototypePanel({
           month,
           monthLabel,
           service: savedAccrual.incomeTypeName,
+          meterKind: null,
+          meterReadingId: null,
+          meterReadingVersion: null,
+          meterReadingDate: null,
           meter: null,
+          meterDraft: '',
+          meterError: null,
           difference: null,
           payable: savedAccrual.amount,
           paymentDraft: '',
@@ -4217,7 +4321,13 @@ function PaymentsPrototypePanel({
               month,
               monthLabel: formatPaymentPrototypeMonthLabel(accrual.accountingMonth),
               service: accrual.incomeTypeName,
+              meterKind: null,
+              meterReadingId: null,
+              meterReadingVersion: null,
+              meterReadingDate: null,
               meter: null,
+              meterDraft: '',
+              meterError: null,
               difference: null,
               payable: accrual.amount,
               paymentDraft: '',
@@ -4801,7 +4911,37 @@ function PaymentsPrototypePanel({
                           <tr key={row.id}>
                             <td />
                             <td>{row.service}</td>
-                            <td className={row.meterRequired && row.meter === null ? 'payments-prototype-required-cell' : undefined}>{row.meter === null ? '' : row.meter.toLocaleString('ru-RU', { maximumFractionDigits: 3 })}</td>
+                            <td className={row.meterRequired && row.meter === null ? 'payments-prototype-required-cell' : undefined}>
+                              {row.meterKind && row.month === getCurrentMonthInputValue() && canWritePayments && financeClient.savePaymentFormMeterReading ? (
+                                <div className="payments-prototype-meter-editor">
+                                  <MeterReadingInput
+                                    className="payments-prototype-meter-input"
+                                    aria-label={`Показание ${row.service} ${row.monthLabel}`}
+                                    aria-invalid={row.meterError ? 'true' : undefined}
+                                    disabled={savingMeterRowId === row.id}
+                                    value={row.meterDraft}
+                                    onChange={(event) => handleMeterDraftChange(row.id, event.target.value)}
+                                    onKeyDown={(event) => {
+                                      if (event.key === 'Enter') {
+                                        event.preventDefault()
+                                        void commitGarageMeterReading(row)
+                                      }
+                                    }}
+                                  />
+                                  <button
+                                    type="button"
+                                    className="icon-button payments-prototype-meter-save"
+                                    aria-label={`Сохранить показание ${row.service} ${row.monthLabel}`}
+                                    title="Сохранить показание"
+                                    disabled={savingMeterRowId === row.id}
+                                    onClick={() => void commitGarageMeterReading(row)}
+                                  >
+                                    <Save size={14} aria-hidden="true" />
+                                  </button>
+                                  {row.meterError ? <span className="payments-prototype-meter-error" role="alert">{row.meterError}</span> : null}
+                                </div>
+                              ) : row.meter === null ? '' : row.meter.toLocaleString('ru-RU', { maximumFractionDigits: 3 })}
+                            </td>
                             <td>{formatPaymentMoney(row.difference ?? '')}</td>
                             <td>{formatPaymentMoney(row.payable)}</td>
                             <td>

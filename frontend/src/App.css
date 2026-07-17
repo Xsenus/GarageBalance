@@ -3701,6 +3701,66 @@ h1 {
   outline: 3px solid rgba(46, 144, 250, 0.16);
 }
 
+.payments-prototype-meter-editor {
+  display: grid;
+  grid-template-columns: minmax(72px, 110px) 30px;
+  gap: 5px;
+  align-items: center;
+}
+
+.payments-prototype-meter-input {
+  width: 100%;
+  min-height: 32px;
+  border: 1px solid #d0d5dd;
+  border-radius: 7px;
+  background: #ffffff;
+  color: #101828;
+  font: inherit;
+  padding: 5px 8px;
+  text-align: right;
+}
+
+.payments-prototype-meter-input:focus {
+  border-color: #2e90fa;
+  outline: 3px solid rgba(46, 144, 250, 0.16);
+}
+
+.payments-prototype-meter-input[aria-invalid='true'] {
+  border-color: #d92d20;
+}
+
+.payments-prototype-meter-save {
+  display: inline-grid;
+  width: 30px;
+  min-height: 30px;
+  place-items: center;
+  border: 1px solid #b2ccff;
+  border-radius: 7px;
+  background: #eff4ff;
+  color: #175cd3;
+  cursor: pointer;
+}
+
+.payments-prototype-meter-save:hover:not(:disabled),
+.payments-prototype-meter-save:focus-visible {
+  border-color: #84adff;
+  background: #dbe8ff;
+}
+
+.payments-prototype-meter-save:disabled,
+.payments-prototype-meter-input:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}
+
+.payments-prototype-meter-error {
+  grid-column: 1 / -1;
+  max-width: 180px;
+  color: #b42318;
+  font-size: 11px;
+  line-height: 1.3;
+}
+
 .payments-prototype-month-total td {
   background: #f2f4f7 !important;
   color: #101828;

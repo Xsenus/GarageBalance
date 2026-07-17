@@ -5,6 +5,7 @@ import type { DictionaryClient } from '../../services/dictionariesApi'
 import type { CreateMeterReadingRequest, FinanceClient, MeterReadingYearGarageDto } from '../../services/financeApi'
 import { TableLoadingState } from '../../shared/AsyncState'
 import { FormField } from '../../shared/FormField'
+import { MeterReadingInput } from '../../shared/MeterReadingInput'
 import { TablePagination } from '../../shared/TablePagination'
 import { getLocalDateInputValue } from '../../shared/formatters'
 import { useEscapeKey, useFocusOnOpen, useFocusTrap, useRestoreFocusOnClose } from '../../shared/focusHooks'
@@ -132,10 +133,9 @@ const MeterReadingsTable = memo(function MeterReadingsTable({
               const cellKey = createMeterReadingCellKey(appliedYear, meterType, garage.id, month.key)
               return (
                 <span role="cell" key={cellKey}>
-                  <input
+                  <MeterReadingInput
                     aria-label={`Гараж ${garage.number}, ${month.label}, показание`}
                     disabled={!yearIsValid || savingReadingKey === cellKey}
-                    inputMode="decimal"
                     value={draftReadings[cellKey] ?? savedReadings[cellKey] ?? ''}
                     onBlur={() => onCommitReading(garage, month)}
                     onChange={(event) => onDraftReadingChange(cellKey, event.target.value)}

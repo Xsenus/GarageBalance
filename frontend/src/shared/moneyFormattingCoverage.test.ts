@@ -24,7 +24,7 @@ const sources = collectSourceFiles(sourceRoot).map((path) => ({
 describe('unified money formatting coverage', () => {
   it('keeps decimal money inputs inside the shared control', () => {
     const offenders = sources
-      .filter(({ path }) => !['shared/MoneyInput.tsx', 'features/meterReadings/MeterReadingsPanel.tsx'].includes(path))
+      .filter(({ path }) => !['shared/MoneyInput.tsx', 'shared/MeterReadingInput.tsx'].includes(path))
       .filter(({ source }) => /inputMode="decimal"|step="0\.01"/.test(source))
       .map(({ path }) => path)
 

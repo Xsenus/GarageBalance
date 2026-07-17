@@ -4561,6 +4561,7 @@ describe('App', () => {
     }))
     const incomeTable = within(prototype).getByRole('table', { name: 'Поступления гаража 77' })
     expect(await within(incomeTable).findByText('Серверная электроэнергия')).toBeInTheDocument()
+    expect(within(incomeTable).queryByRole('textbox', { name: /^Показание Серверная электроэнергия/ })).not.toBeInTheDocument()
     expect(within(incomeTable).getByLabelText('Платеж Серверная электроэнергия июн.26')).toHaveValue('')
     expect(within(incomeTable).getByText('86')).toBeInTheDocument()
     expect(within(incomeTable).getByText('18.00')).toBeInTheDocument()
@@ -4574,6 +4575,158 @@ describe('App', () => {
     expect(periodSummary).toHaveTextContent('1 000')
     expect(periodSummary).toHaveTextContent('Долг на конец')
     expect(periodSummary).toHaveTextContent('5 574')
+  })
+
+  it('edits a current-month meter reading in the selected garage worksheet', async () => {
+    const user = userEvent.setup()
+    const currentMonth = getTestCurrentMonthInputValue()
+    const accountingMonth = `${currentMonth}-01`
+    const garage = createGarage({ id: 'garage-meter-inline', number: '81', ownerName: 'Петров Петр' })
+    let currentValue = 86
+    let consumption = 18
+    let version = 'reading-version-1'
+    let waterValue: number | null = null
+    let waterConsumption: number | null = null
+    let waterVersion: string | null = null
+    let failNextSave = false
+    const getGarageIncomeWorksheet = vi.fn(async () => createGarageIncomeWorksheet({
+      garageId: garage.id,
+      garageNumber: garage.number,
+      ownerName: garage.ownerName,
+      monthFrom: accountingMonth,
+      monthTo: accountingMonth,
+      rows: [
+        {
+          accountingMonth,
+          incomeTypeId: 'income-type-electricity',
+          incomeTypeName: 'Электроэнергия',
+          meterKind: 'electricity',
+          meterReadingId: 'reading-current',
+          meterReadingVersion: version,
+          meterReadingDate: `${currentMonth}-15`,
+          meterValue: currentValue,
+          meterConsumption: consumption,
+          accrualAmount: consumption * 10,
+          incomeAmount: 0,
+          debt: consumption * 10,
+        },
+        {
+          accountingMonth,
+          incomeTypeId: 'income-type-water',
+          incomeTypeName: 'Водоснабжение',
+          meterKind: 'water',
+          meterReadingId: waterVersion ? 'reading-water' : null,
+          meterReadingVersion: waterVersion,
+          meterReadingDate: waterVersion ? `${currentMonth}-17` : null,
+          meterValue: waterValue,
+          meterConsumption: waterConsumption,
+          accrualAmount: waterConsumption === null ? 0 : waterConsumption * 50,
+          incomeAmount: 0,
+          debt: waterConsumption === null ? 0 : waterConsumption * 50,
+        },
+      ],
+    }))
+    const savePaymentFormMeterReading = vi.fn(async (_token: string, request) => {
+      if (failNextSave) {
+        failNextSave = false
+        throw new Error('Показание уже изменено другим пользователем.')
+      }
+
+      if (request.meterKind === 'water') {
+        waterValue = request.currentValue
+        waterConsumption = 5
+        waterVersion = 'reading-water-version-1'
+        return createMeterReading({
+          id: 'reading-water',
+          garageId: garage.id,
+          garageNumber: garage.number,
+          meterKind: 'water',
+          accountingMonth,
+          readingDate: request.readingDate,
+          currentValue: waterValue,
+          previousValue: waterValue - waterConsumption,
+          consumption: waterConsumption,
+          version: waterVersion,
+        })
+      }
+
+      currentValue = request.currentValue
+      consumption = currentValue - 68
+      version = 'reading-version-2'
+      return createMeterReading({
+        id: 'reading-current',
+        garageId: garage.id,
+        garageNumber: garage.number,
+        meterKind: 'electricity',
+        accountingMonth,
+        readingDate: request.readingDate,
+        currentValue,
+        previousValue: 68,
+        consumption,
+        version,
+      })
+    })
+
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient({ getGarages: async () => [garage] })} financeClient={createFinanceClient({ getGarageIncomeWorksheet, savePaymentFormMeterReading })} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Платежи')
+    const prototype = within(await screen.findByRole('region', { name: 'Платежи' })).getByRole('region', { name: 'Форма платежей' })
+    await user.type(within(prototype).getByLabelText('Поиск номера гаража или ФИО владельца'), '81')
+    await user.click(await within(prototype).findByRole('option', { name: /Гараж\s*81\s*Петров Петр/ }))
+
+    const meterInput = await within(prototype).findByRole('textbox', { name: /^Показание Электроэнергия/ })
+    expect(meterInput).toHaveValue('86')
+    await user.clear(meterInput)
+    await user.type(meterInput, '92')
+    await user.click(within(prototype).getByRole('button', { name: /^Сохранить показание Электроэнергия/ }))
+
+    await waitFor(() => expect(savePaymentFormMeterReading).toHaveBeenCalledWith('token', {
+      garageId: garage.id,
+      meterKind: 'electricity',
+      accountingMonth,
+      readingDate: `${currentMonth}-15`,
+      currentValue: 92,
+      comment: expect.stringContaining('Электроэнергия'),
+      meterReadingId: 'reading-current',
+      expectedVersion: 'reading-version-1',
+    }))
+    await waitFor(() => expect(getGarageIncomeWorksheet).toHaveBeenCalledTimes(2))
+    expect(within(prototype).getByRole('textbox', { name: /^Показание Электроэнергия/ })).toHaveValue('92')
+    expect(within(prototype).getByText('24.00')).toBeInTheDocument()
+
+    const waterInput = within(prototype).getByRole('textbox', { name: /^Показание Водоснабжение/ })
+    expect(waterInput).toHaveValue('')
+    await user.type(waterInput, '120')
+    await user.keyboard('{Enter}')
+    await waitFor(() => expect(savePaymentFormMeterReading).toHaveBeenLastCalledWith('token', expect.objectContaining({
+      garageId: garage.id,
+      meterKind: 'water',
+      accountingMonth,
+      currentValue: 120,
+      meterReadingId: undefined,
+      expectedVersion: undefined,
+    })))
+    await waitFor(() => expect(within(prototype).getByRole('textbox', { name: /^Показание Водоснабжение/ })).toHaveValue('120'))
+
+    await user.clear(within(prototype).getByRole('textbox', { name: /^Показание Электроэнергия/ }))
+    await user.click(within(prototype).getByRole('button', { name: /^Сохранить показание Электроэнергия/ }))
+    expect(await within(prototype).findByRole('alert')).toHaveTextContent('Введите показание счетчика вручную.')
+    expect(savePaymentFormMeterReading).toHaveBeenCalledTimes(2)
+
+    const electricityInput = within(prototype).getByRole('textbox', { name: /^Показание Электроэнергия/ })
+    await user.type(electricityInput, '93')
+    failNextSave = true
+    await user.click(within(prototype).getByRole('button', { name: /^Сохранить показание Электроэнергия/ }))
+    expect(await within(prototype).findByRole('alert')).toHaveTextContent('Показание уже изменено другим пользователем.')
+    expect(electricityInput).toHaveValue('93')
+    expect(currentValue).toBe(92)
+
+    await user.click(within(prototype).getByRole('button', { name: /^Сохранить показание Электроэнергия/ }))
+    await waitFor(() => expect(currentValue).toBe(93))
+    await waitFor(() => expect(within(prototype).queryByRole('alert')).not.toBeInTheDocument())
+    expect(savePaymentFormMeterReading).toHaveBeenCalledTimes(4)
   })
 
   it('pays opening debt through full payment when worksheet has no service rows', async () => {

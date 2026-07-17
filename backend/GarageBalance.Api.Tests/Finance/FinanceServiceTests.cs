@@ -4533,10 +4533,11 @@ public sealed class FinanceServiceTests
             new CreateIncomeOperationRequest(fixtures.Garage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 6, 20), new DateOnly(2026, 6, 1), 500m, "PKO-membership-only", null),
             null,
             CancellationToken.None)).Succeeded);
-        Assert.True((await service.CreateMeterReadingAsync(
+        var createdReading = await service.CreateMeterReadingAsync(
             new CreateMeterReadingRequest(fixtures.Garage.Id, "electricity", new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 21), 118m, null),
             null,
-            CancellationToken.None)).Succeeded);
+            CancellationToken.None);
+        Assert.True(createdReading.Succeeded);
 
         var result = await service.GetGarageIncomeWorksheetAsync(
             fixtures.Garage.Id,
@@ -4554,6 +4555,9 @@ public sealed class FinanceServiceTests
 
         var electricity = Assert.Single(result.Value.Rows, row => row.IncomeTypeId == electricityType.Id);
         Assert.Equal("electricity", electricity.MeterKind);
+        Assert.Equal(createdReading.Value!.Id, electricity.MeterReadingId);
+        Assert.Equal(createdReading.Value.Version, electricity.MeterReadingVersion);
+        Assert.Equal(new DateOnly(2026, 6, 21), electricity.MeterReadingDate);
         Assert.Equal(118m, electricity.MeterValue);
         Assert.Equal(18m, electricity.MeterConsumption);
         Assert.Equal(5674m, electricity.AccrualAmount);
@@ -4612,7 +4616,7 @@ public sealed class FinanceServiceTests
                 GarageId = fixtures.Garage.Id,
                 IncomeTypeId = electricityType.Id
             });
-        database.Context.MeterReadings.Add(new MeterReading
+        var meterReading = new MeterReading
         {
             GarageId = fixtures.Garage.Id,
             MeterKind = "electricity",
@@ -4621,7 +4625,8 @@ public sealed class FinanceServiceTests
             PreviousValue = 100m,
             CurrentValue = 118m,
             Consumption = 18m
-        });
+        };
+        database.Context.MeterReadings.Add(meterReading);
         await database.Context.SaveChangesAsync();
         var service = FinanceServiceTestFactory.Create(database.Context);
         commandCounter.Reset();
@@ -4640,6 +4645,9 @@ public sealed class FinanceServiceTests
         Assert.Equal(electricityType.Id, row.IncomeTypeId);
         Assert.Equal(500m, row.AccrualAmount);
         Assert.Equal(125m, row.IncomeAmount);
+        Assert.Equal(meterReading.Id, row.MeterReadingId);
+        Assert.Equal(meterReading.Version, row.MeterReadingVersion);
+        Assert.Equal(meterReading.ReadingDate, row.MeterReadingDate);
         Assert.Equal(118m, row.MeterValue);
         Assert.Equal(18m, row.MeterConsumption);
     }

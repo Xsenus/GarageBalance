@@ -28,6 +28,8 @@ public sealed record GarageIncomeWorksheetBucketData(
     decimal Amount);
 
 public sealed record GarageIncomeWorksheetMeterData(
+    Guid Id,
+    Guid Version,
     DateOnly AccountingMonth,
     string MeterKind,
     DateOnly ReadingDate,
