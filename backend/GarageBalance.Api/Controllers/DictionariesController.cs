@@ -85,9 +85,9 @@ public sealed class DictionariesController(IDictionaryService dictionaryService)
 
     [HttpGet("garages/page")]
     [ProducesResponseType<PagedResult<GarageDto>>(StatusCodes.Status200OK)]
-    public async Task<ActionResult<PagedResult<GarageDto>>> GetGaragesPage([FromQuery] string? search, [FromQuery] int? offset, [FromQuery] int? limit, [FromQuery] string? sortBy, [FromQuery] string? sortDirection, [FromQuery] bool includeArchived, CancellationToken cancellationToken)
+    public async Task<ActionResult<PagedResult<GarageDto>>> GetGaragesPage([FromQuery] string? search, [FromQuery] int? offset, [FromQuery] int? limit, [FromQuery] string? sortBy, [FromQuery] string? sortDirection, [FromQuery] bool includeArchived, [FromQuery] bool debtorsOnly, CancellationToken cancellationToken)
     {
-        return Ok(await dictionaryService.GetGaragesPageAsync(search, offset, limit, sortBy, sortDirection, cancellationToken, includeArchived));
+        return Ok(await dictionaryService.GetGaragesPageAsync(search, offset, limit, sortBy, sortDirection, cancellationToken, includeArchived, debtorsOnly));
     }
 
     [Authorize(Policy = SystemPermissions.DictionariesWrite)]

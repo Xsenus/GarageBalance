@@ -17,7 +17,7 @@ public sealed class DictionariesControllerTests
 
         await controller.GetOwners("ivan", 40, true, CancellationToken.None);
         await controller.GetGarages("12", 41, true, CancellationToken.None);
-        await controller.GetGaragesPage("12", 25, 10, "owner", "desc", true, CancellationToken.None);
+        await controller.GetGaragesPage("12", 25, 10, "owner", "desc", true, true, CancellationToken.None);
         await controller.GetSupplierGroups("group", 42, true, CancellationToken.None);
         await controller.GetSuppliers(groupId, "water", 43, true, CancellationToken.None);
         await controller.GetSuppliersPage(groupId, "water", 25, 10, "debt", "desc", true, CancellationToken.None);
@@ -29,7 +29,7 @@ public sealed class DictionariesControllerTests
 
         Assert.Equal(("ivan", 40, true), service.LastOwnerListRequest);
         Assert.Equal(("12", 41, true), service.LastGarageListRequest);
-        Assert.Equal(("12", 25, 10, "owner", "desc", true), service.LastGaragePageRequest);
+        Assert.Equal(("12", 25, 10, "owner", "desc", true, true), service.LastGaragePageRequest);
         Assert.Equal(("group", 42, true), service.LastSupplierGroupListRequest);
         Assert.Equal((groupId, "water", 43, true), service.LastSupplierListRequest);
         Assert.Equal((groupId, "water", 25, 10, "debt", "desc", true), service.LastSupplierPageRequest);
@@ -1530,7 +1530,7 @@ public sealed class DictionariesControllerTests
         public Guid? LastRestoreId { get; private set; }
         public (string? Search, int? Limit, bool IncludeArchived) LastOwnerListRequest { get; private set; }
         public (string? Search, int? Limit, bool IncludeArchived) LastGarageListRequest { get; private set; }
-        public (string? Search, int? Offset, int? Limit, string? SortBy, string? SortDirection, bool IncludeArchived) LastGaragePageRequest { get; private set; }
+        public (string? Search, int? Offset, int? Limit, string? SortBy, string? SortDirection, bool IncludeArchived, bool DebtorsOnly) LastGaragePageRequest { get; private set; }
         public (string? Search, int? Limit, bool IncludeArchived) LastSupplierGroupListRequest { get; private set; }
         public (Guid? GroupId, string? Search, int? Limit, bool IncludeArchived) LastSupplierListRequest { get; private set; }
         public (Guid? GroupId, string? Search, int? Offset, int? Limit, string? SortBy, string? SortDirection, bool IncludeArchived) LastSupplierPageRequest { get; private set; }
@@ -1645,9 +1645,9 @@ public sealed class DictionariesControllerTests
             return Task.FromResult<IReadOnlyList<GarageDto>>([]);
         }
 
-        public Task<PagedResult<GarageDto>> GetGaragesPageAsync(string? search, int? offset, int? limit, string? sortBy, string? sortDirection, CancellationToken cancellationToken, bool includeArchived = false)
+        public Task<PagedResult<GarageDto>> GetGaragesPageAsync(string? search, int? offset, int? limit, string? sortBy, string? sortDirection, CancellationToken cancellationToken, bool includeArchived = false, bool debtorsOnly = false)
         {
-            LastGaragePageRequest = (search, offset, limit, sortBy, sortDirection, includeArchived);
+            LastGaragePageRequest = (search, offset, limit, sortBy, sortDirection, includeArchived, debtorsOnly);
             return Task.FromResult(new PagedResult<GarageDto>([], 0, offset ?? 0, limit ?? 100));
         }
 

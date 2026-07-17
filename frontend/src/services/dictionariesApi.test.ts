@@ -64,4 +64,21 @@ describe('dictionariesApi response cache', () => {
 
     expect(fetchMock).toHaveBeenCalledTimes(2)
   })
+
+  it('passes the overdue debtor mode to the garage page endpoint', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      items: [],
+      totalCount: 0,
+      offset: 25,
+      limit: 25,
+    }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await dictionariesApi.getGaragesPage('token', undefined, 25, 25, true, 'overdueDebt', 'desc', true)
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/dictionaries/garages/page?offset=25&limit=25&includeArchived=true&sortBy=overdueDebt&sortDirection=desc&debtorsOnly=true',
+      expect.objectContaining({ headers: expect.objectContaining({ Authorization: 'Bearer token' }) }),
+    )
+  })
 })

@@ -785,7 +785,7 @@ public sealed class BackendPerformanceGuardTests
             source,
             StringComparison.Ordinal);
         Assert.Contains(
-            "garageRepository.GetPageAsync(normalizedSearch, includeArchived, normalizedOffset, normalizedLimit",
+            "garageRepository.GetPageAsync(normalizedSearch, includeArchived, debtorsOnly, normalizedOffset, normalizedLimit",
             source,
             StringComparison.Ordinal);
         Assert.Contains(".Take(limit)", garageRepositorySource, StringComparison.Ordinal);

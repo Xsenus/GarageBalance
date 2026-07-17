@@ -762,6 +762,67 @@ public sealed class DictionaryServiceTests
     }
 
     [Fact]
+    public async Task GetGaragesPageAsync_FiltersOverdueDebtorsBeforePagination()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = DictionaryServiceTestFactory.Create(database.Context);
+        var incomeType = new IncomeType
+        {
+            Name = "Debt filter income",
+            Code = "debt_filter_income"
+        };
+        var lowerDebt = new Garage { Number = "10", StartingBalance = 100m };
+        var higherDebt = new Garage { Number = "20", StartingBalance = 300m };
+        var freshDebt = new Garage { Number = "30" };
+        var paidDebt = new Garage { Number = "40", StartingBalance = 200m };
+        var archivedDebt = new Garage { Number = "50", StartingBalance = 500m, IsArchived = true };
+
+        database.Context.AddRange(incomeType, lowerDebt, higherDebt, freshDebt, paidDebt, archivedDebt);
+        database.Context.Accruals.Add(new Accrual
+        {
+            GarageId = freshDebt.Id,
+            IncomeTypeId = incomeType.Id,
+            AccountingMonth = new DateOnly(2026, 7, 1),
+            DueDate = DateOnly.MaxValue,
+            OverdueFromDate = DateOnly.MaxValue,
+            Amount = 700m,
+            Source = AccrualSources.Manual
+        });
+        database.Context.FinancialOperations.Add(new FinancialOperation
+        {
+            OperationKind = FinancialOperationKinds.Income,
+            GarageId = paidDebt.Id,
+            IncomeTypeId = incomeType.Id,
+            OperationDate = new DateOnly(2026, 7, 1),
+            AccountingMonth = new DateOnly(2026, 7, 1),
+            Amount = 200m
+        });
+        await database.Context.SaveChangesAsync();
+
+        var firstPage = await service.GetGaragesPageAsync(
+            null, 0, 1, "overdueDebt", "desc", CancellationToken.None,
+            includeArchived: true,
+            debtorsOnly: true);
+        var secondPage = await service.GetGaragesPageAsync(
+            null, 1, 1, "overdueDebt", "desc", CancellationToken.None,
+            includeArchived: true,
+            debtorsOnly: true);
+        var emptyFreshDebtPage = await service.GetGaragesPageAsync(
+            "30", 0, 25, "overdueDebt", "desc", CancellationToken.None,
+            includeArchived: true,
+            debtorsOnly: true);
+
+        Assert.Equal(2, firstPage.TotalCount);
+        Assert.Equal("20", Assert.Single(firstPage.Items).Number);
+        Assert.Equal(300m, firstPage.Items[0].OverdueDebt);
+        Assert.Equal(2, secondPage.TotalCount);
+        Assert.Equal("10", Assert.Single(secondPage.Items).Number);
+        Assert.Equal(100m, secondPage.Items[0].OverdueDebt);
+        Assert.Empty(emptyFreshDebtPage.Items);
+        Assert.Equal(0, emptyFreshDebtPage.TotalCount);
+    }
+
+    [Fact]
     public async Task CreateGarageAsync_AllowsSeveralActiveGaragesForOneOwner()
     {
         await using var database = await TestDatabase.CreateAsync();

@@ -275,7 +275,7 @@ export type DictionaryClient = {
   archiveOwner(accessToken: string, id: string, reason: string): Promise<void>
   restoreOwner(accessToken: string, id: string): Promise<OwnerDto>
   getGarages(accessToken: string, search?: string, limit?: number, includeArchived?: boolean): Promise<GarageDto[]>
-  getGaragesPage?(accessToken: string, search?: string, offset?: number, limit?: number, includeArchived?: boolean, sortBy?: string, sortDirection?: string): Promise<PagedResult<GarageDto>>
+  getGaragesPage?(accessToken: string, search?: string, offset?: number, limit?: number, includeArchived?: boolean, sortBy?: string, sortDirection?: string, debtorsOnly?: boolean): Promise<PagedResult<GarageDto>>
   createGarage(accessToken: string, request: UpsertGarageRequest): Promise<GarageDto>
   updateGarage(accessToken: string, id: string, request: UpsertGarageRequest): Promise<GarageDto>
   archiveGarage(accessToken: string, id: string, reason: string): Promise<void>
@@ -456,8 +456,8 @@ export const dictionariesApi: DictionaryClient = {
   getGarages(accessToken, search, limit = defaultDictionaryListLimit, includeArchived = false) {
     return requestJson(accessToken, withQuery('/api/dictionaries/garages', { search, limit, includeArchived: includeArchived || undefined }))
   },
-  getGaragesPage(accessToken, search, offset = 0, limit = defaultDictionaryListLimit, includeArchived = false, sortBy, sortDirection) {
-    return requestJson(accessToken, withQuery('/api/dictionaries/garages/page', { search, offset, limit, includeArchived: includeArchived || undefined, sortBy, sortDirection }))
+  getGaragesPage(accessToken, search, offset = 0, limit = defaultDictionaryListLimit, includeArchived = false, sortBy, sortDirection, debtorsOnly = false) {
+    return requestJson(accessToken, withQuery('/api/dictionaries/garages/page', { search, offset, limit, includeArchived: includeArchived || undefined, sortBy, sortDirection, debtorsOnly: debtorsOnly || undefined }))
   },
   createGarage(accessToken, request) {
     return requestJson(accessToken, '/api/dictionaries/garages', { method: 'POST', body: JSON.stringify(request) })

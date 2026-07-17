@@ -779,6 +779,7 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
   const loadedContractorReferencesRef = useRef<Record<'garages' | 'suppliers', boolean>>({ garages: false, suppliers: false })
   const ownersRef = useRef<OwnerDto[]>([])
   const supplierContactsRef = useRef<SupplierContactDto[]>([])
+  const garagePageRequestSequenceRef = useRef(0)
   useRestoreFocusOnClose(Boolean(restoreTarget))
   useRestoreFocusOnClose(Boolean(garageDeleteTarget))
   useRestoreFocusOnClose(Boolean(garageFinancialReportTarget))
@@ -840,13 +841,16 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
 
     let cancelled = false
     async function loadActiveContractorSection() {
+      let garageRequestSequence: number | null = null
+      const isCurrentRequest = () => !cancelled && (garageRequestSequence === null || garageRequestSequence === garagePageRequestSequenceRef.current)
       setContractorPageLoading((current) => ({ ...current, [activeSection]: true }))
       try {
         if (activeSection === 'garages') {
+          garageRequestSequence = ++garagePageRequestSequenceRef.current
           const garageRows = await (dictionaryClient.getGaragesPage
             ? dictionaryClient.getGaragesPage(auth.accessToken, undefined, 0, contractorsDefaultPageSize, true)
             : dictionaryClient.getGarages(auth.accessToken, undefined, contractorsDictionaryListLimit, true).then((items) => createFallbackPage(items, 0, contractorsDefaultPageSize)))
-          if (!cancelled) {
+          if (isCurrentRequest()) {
             setGarages(garageRows.items.map((garage) => createGarageRowFromDto(garage, ownersRef.current)))
             setGaragePage({ totalCount: garageRows.totalCount, offset: garageRows.offset, limit: garageRows.limit })
           }
@@ -872,15 +876,15 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
           }
         }
 
-        if (!cancelled) {
+        if (isCurrentRequest()) {
           loadedContractorSectionsRef.current[activeSection] = true
         }
       } catch (error) {
-        if (!cancelled) {
+        if (isCurrentRequest()) {
           setFormStateError(error instanceof Error ? error.message : 'Не удалось загрузить контрагентов из справочников.')
         }
       } finally {
-        if (!cancelled) {
+        if (isCurrentRequest()) {
           setContractorPageLoading((current) => ({ ...current, [activeSection]: false }))
         }
       }
@@ -1062,19 +1066,38 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
     sort: ContractorSortState = contractorSort.section === 'garages' && isGarageServerSortKey(contractorSort.key)
       ? contractorSort
       : { section: 'garages', key: 'number', direction: 'asc' },
+    debtorsOnly = debtorFilters.garages,
   ) {
+    const requestSequence = ++garagePageRequestSequenceRef.current
     setContractorPageLoading((current) => ({ ...current, garages: true }))
     setGarageContextMenu(null)
     try {
       const page = dictionaryClient.getGaragesPage
-        ? await dictionaryClient.getGaragesPage(auth.accessToken, undefined, offset, limit, true, sort.key, sort.direction)
-        : createFallbackPage(await dictionaryClient.getGarages(auth.accessToken, undefined, contractorsDictionaryListLimit, true), offset, limit)
+        ? await dictionaryClient.getGaragesPage(auth.accessToken, undefined, offset, limit, true, sort.key, sort.direction, debtorsOnly)
+        : createFallbackPage(
+            (await dictionaryClient.getGarages(auth.accessToken, undefined, contractorsDictionaryListLimit, true))
+              .filter((garage) => !debtorsOnly || (!garage.isArchived && garage.overdueDebt > 0)),
+            offset,
+            limit,
+          )
+      if (requestSequence !== garagePageRequestSequenceRef.current) {
+        return null
+      }
       setGarages(page.items.map((garage) => createGarageRowFromDto(garage, owners)))
       setGaragePage({ totalCount: page.totalCount, offset: page.offset, limit: page.limit })
+      loadedContractorSectionsRef.current.garages = true
+      setFormStateError(null)
+      return true
     } catch (error) {
+      if (requestSequence !== garagePageRequestSequenceRef.current) {
+        return null
+      }
       setFormStateError(error instanceof Error ? error.message : 'Не удалось загрузить страницу гаражей.')
+      return false
     } finally {
-      setContractorPageLoading((current) => ({ ...current, garages: false }))
+      if (requestSequence === garagePageRequestSequenceRef.current) {
+        setContractorPageLoading((current) => ({ ...current, garages: false }))
+      }
     }
   }
 
@@ -1752,12 +1775,18 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
   const showSupplierDebtorsOnly = debtorFilters.suppliers
   const showDebtorsOnly = activeSection === 'suppliers' ? showSupplierDebtorsOnly : activeSection === 'garages' ? showGarageDebtorsOnly : false
   const toggleDebtorsFilter = (section: ContractorDebtorFilterSection) => {
-    setDebtorFilters((currentFilters) => ({ ...currentFilters, [section]: !currentFilters[section] }))
+    const nextValue = !debtorFilters[section]
+    setDebtorFilters((currentFilters) => ({ ...currentFilters, [section]: nextValue }))
+    if (section === 'garages') {
+      void loadGaragePage(0, garagePage.limit, undefined, nextValue).then((loaded) => {
+        if (loaded === false) {
+          setDebtorFilters((currentFilters) => ({ ...currentFilters, garages: !nextValue }))
+        }
+      })
+    }
   }
 
-  const filteredGarages = showGarageDebtorsOnly
-    ? garages.filter((garage) => !garage.isDeleted && isContractorMoneyDebt(garage.overdueDebt))
-    : garages
+  const filteredGarages = garages
   const filteredSuppliers = showSupplierDebtorsOnly
     ? suppliers.filter((supplier) => !supplier.isDeleted && isContractorMoneyDebt(supplier.debt))
     : suppliers
@@ -1921,7 +1950,7 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
             visibleCount={visibleGarages.length}
             disabled={contractorPageLoading.garages}
             pageSizeLabel="Количество строк гаражей"
-            statusText={showGarageDebtorsOnly ? `Должников на странице: ${visibleGarages.length}` : undefined}
+            statusText={showGarageDebtorsOnly ? `Всего должников: ${garagePage.totalCount}` : undefined}
             onPageChange={(page) => void loadGaragePage((page - 1) * garagePage.limit)}
             onPageSizeChange={(limit) => void loadGaragePage(0, limit)}
           />
