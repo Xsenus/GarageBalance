@@ -970,6 +970,57 @@ public sealed class FinanceServiceTests
             });
     }
 
+    [Theory]
+    [InlineData(2026, 6, 29, false)]
+    [InlineData(2026, 6, 30, false)]
+    [InlineData(2026, 7, 30, false)]
+    [InlineData(2026, 7, 31, true)]
+    [InlineData(2026, 8, 1, true)]
+    public async Task GetGarageOverdueDebtAsync_IncludesAccrualOnlyFromOverdueDate(
+        int year,
+        int month,
+        int day,
+        bool expectedOverdue)
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        var accrual = new Accrual
+        {
+            GarageId = fixtures.Garage.Id,
+            IncomeTypeId = fixtures.IncomeType.Id,
+            AccountingMonth = new DateOnly(2026, 5, 1),
+            DueDate = new DateOnly(2026, 6, 30),
+            OverdueFromDate = new DateOnly(2026, 7, 31),
+            Amount = 500m,
+            Source = "overdue-boundary-test"
+        };
+        database.Context.Accruals.Add(accrual);
+        await database.Context.SaveChangesAsync();
+        var asOfDate = new DateOnly(year, month, day);
+        var service = FinanceServiceTestFactory.Create(
+            database.Context,
+            new FixedTimeProvider(new DateTimeOffset(year, month, day, 12, 0, 0, TimeSpan.Zero)));
+
+        var result = await service.GetGarageOverdueDebtAsync(fixtures.Garage.Id, CancellationToken.None);
+
+        Assert.True(result.Succeeded, result.ErrorMessage);
+        Assert.Equal(asOfDate, result.Value!.AsOfDate);
+        if (expectedOverdue)
+        {
+            var row = Assert.Single(result.Value.Rows);
+            Assert.Equal(fixtures.IncomeType.Id, row.IncomeTypeId);
+            Assert.Equal(accrual.DueDate, row.DueDate);
+            Assert.Equal(accrual.OverdueFromDate, row.OverdueFromDate);
+            Assert.Equal(500m, row.OutstandingAmount);
+            Assert.Equal(500m, result.Value.Total);
+        }
+        else
+        {
+            Assert.Empty(result.Value.Rows);
+            Assert.Equal(0m, result.Value.Total);
+        }
+    }
+
     [Fact]
     public async Task GetAccrualDueDateReviewPageAsync_ReturnsOnlyActiveFlaggedRowsWithStablePagination()
     {
