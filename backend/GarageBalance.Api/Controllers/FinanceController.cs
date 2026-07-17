@@ -69,6 +69,16 @@ public sealed class FinanceController(IFinanceService financeService) : Controll
         return Ok(await financeService.GetAccrualsPageAsync(new AccrualListRequest(monthFrom, monthTo, search, limit, offset), cancellationToken));
     }
 
+    [HttpGet("accruals/due-date-review")]
+    [ProducesResponseType<FinancePagedResult<AccrualDueDateReviewDto>>(StatusCodes.Status200OK)]
+    public async Task<ActionResult<FinancePagedResult<AccrualDueDateReviewDto>>> GetAccrualDueDateReviewPage(
+        [FromQuery] int? offset,
+        [FromQuery] int? limit,
+        CancellationToken cancellationToken)
+    {
+        return Ok(await financeService.GetAccrualDueDateReviewPageAsync(offset, limit, cancellationToken));
+    }
+
     [HttpGet("supplier-accruals")]
     [ProducesResponseType<IReadOnlyList<SupplierAccrualDto>>(StatusCodes.Status200OK)]
     public async Task<ActionResult<IReadOnlyList<SupplierAccrualDto>>> GetSupplierAccruals(

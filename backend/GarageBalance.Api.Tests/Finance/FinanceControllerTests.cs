@@ -59,6 +59,9 @@ public sealed class FinanceControllerTests
         Assert.Equal(20, service.LastAccrualListRequest?.Offset);
         Assert.Equal(30, service.LastAccrualListRequest?.Limit);
 
+        await controller.GetAccrualDueDateReviewPage(21, 31, CancellationToken.None);
+        Assert.Equal((21, 31), service.LastAccrualDueDateReviewRequest);
+
         await controller.GetSupplierAccrualsPage(null, null, "water", 40, 50, null, CancellationToken.None);
         Assert.Equal(40, service.LastSupplierAccrualListRequest?.Offset);
         Assert.Equal(50, service.LastSupplierAccrualListRequest?.Limit);
@@ -1376,6 +1379,7 @@ public sealed class FinanceControllerTests
         public CreateStaffPaymentRequest? LastStaffPaymentRequest { get; private set; }
         public CreateDebtTransferRequest? LastDebtTransferRequest { get; private set; }
         public AccrualListRequest? LastAccrualListRequest { get; private set; }
+        public (int? Offset, int? Limit)? LastAccrualDueDateReviewRequest { get; private set; }
         public SupplierAccrualListRequest? LastSupplierAccrualListRequest { get; private set; }
         public MeterReadingListRequest? LastMeterReadingListRequest { get; private set; }
         public MeterReadingYearRequest? LastMeterReadingYearRequest { get; private set; }
@@ -1443,6 +1447,12 @@ public sealed class FinanceControllerTests
         {
             LastAccrualListRequest = request;
             return Task.FromResult(new FinancePagedResult<AccrualDto>([], 0, request.Offset ?? 0, request.Limit ?? 50));
+        }
+
+        public Task<FinancePagedResult<AccrualDueDateReviewDto>> GetAccrualDueDateReviewPageAsync(int? offset, int? limit, CancellationToken cancellationToken)
+        {
+            LastAccrualDueDateReviewRequest = (offset, limit);
+            return Task.FromResult(new FinancePagedResult<AccrualDueDateReviewDto>([], 0, offset ?? 0, limit ?? 50));
         }
 
         public Task<IReadOnlyList<SupplierAccrualDto>> GetSupplierAccrualsAsync(SupplierAccrualListRequest request, CancellationToken cancellationToken)

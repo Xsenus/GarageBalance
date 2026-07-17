@@ -78,7 +78,7 @@ public sealed class EfAccrualPaymentAllocationRepository(GarageBalanceDbContext 
     private IQueryable<AllocationLedgerRow> BuildLedgerQuery(Guid[] garageIds, Guid[] incomeTypeIds)
     {
         var accrualRows = dbContext.Accruals.AsNoTracking()
-            .Where(item => garageIds.Contains(item.GarageId) && incomeTypeIds.Contains(item.IncomeTypeId))
+            .Where(item => !item.DueDateNeedsReview && garageIds.Contains(item.GarageId) && incomeTypeIds.Contains(item.IncomeTypeId))
             .Select(item => new
             {
                 Kind = AccrualRowKind,
@@ -149,7 +149,7 @@ public sealed class EfAccrualPaymentAllocationRepository(GarageBalanceDbContext 
         foreach (var accrual in dbContext.ChangeTracker.Entries<Accrual>().Select(entry => entry.Entity))
         {
             rows.RemoveAll(row => row.Kind == AccrualRowKind && row.Id == accrual.Id);
-            if (garageIds.Contains(accrual.GarageId) && incomeTypeIds.Contains(accrual.IncomeTypeId))
+            if (!accrual.DueDateNeedsReview && garageIds.Contains(accrual.GarageId) && incomeTypeIds.Contains(accrual.IncomeTypeId))
             {
                 rows.Add(new AllocationLedgerRow(
                     AccrualRowKind,

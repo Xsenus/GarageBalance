@@ -19,6 +19,8 @@ public interface IAccrualRepository
         int limit,
         CancellationToken cancellationToken);
 
+    Task<AccrualPageData> GetDueDateReviewPageAsync(int offset, int limit, CancellationToken cancellationToken);
+
     Task<decimal> GetTotalBeforeMonthAsync(Guid garageId, DateOnly accountingMonth, CancellationToken cancellationToken);
     Task<IReadOnlyList<OverdueAccrualDebtData>> GetOverdueDebtDetailsAsync(Guid garageId, DateOnly asOfDate, CancellationToken cancellationToken);
     Task<IReadOnlyList<AccrualBucketData>> GetMonthlyBucketsAsync(Guid garageId, DateOnly? monthFrom, DateOnly monthTo, CancellationToken cancellationToken);

@@ -84,6 +84,18 @@ export type AccrualDto = {
   overdueFromDate: string
 }
 
+export type AccrualDueDateReviewDto = {
+  accrualId: string
+  garageNumber: string
+  incomeTypeName: string
+  accountingMonth: string
+  amount: number
+  source: string
+  temporaryDueDate: string
+  temporaryOverdueFromDate: string
+  reasonCode: string
+}
+
 export type SupplierAccrualDto = {
   id: string
   supplierId: string
@@ -395,6 +407,7 @@ export type FinanceClient = {
   getOperationsPage(accessToken: string, params?: FinancePageParams & { operationKind?: 'income' | 'expense' }): Promise<FinancePagedResult<FinancialOperationDto>>
   getAccruals(accessToken: string, limit?: number): Promise<AccrualDto[]>
   getAccrualsPage(accessToken: string, params?: FinancePageParams): Promise<FinancePagedResult<AccrualDto>>
+  getAccrualDueDateReviewPage?(accessToken: string, params?: Pick<FinancePageParams, 'offset' | 'limit'>): Promise<FinancePagedResult<AccrualDueDateReviewDto>>
   getSupplierAccruals(accessToken: string, limit?: number): Promise<SupplierAccrualDto[]>
   getSupplierAccrualsPage(accessToken: string, params?: FinancePageParams): Promise<FinancePagedResult<SupplierAccrualDto>>
   getMeterReadings(accessToken: string, limit?: number): Promise<MeterReadingDto[]>
@@ -507,6 +520,12 @@ export const financeApi: FinanceClient = {
       monthFrom: toMonthStart(params.monthFrom),
       monthTo: toMonthStart(params.monthTo),
       search: params.search,
+      offset: params.offset,
+      limit: params.limit,
+    }))
+  },
+  getAccrualDueDateReviewPage(accessToken, params = {}) {
+    return requestJson(accessToken, withQuery('/api/finance/accruals/due-date-review', {
       offset: params.offset,
       limit: params.limit,
     }))

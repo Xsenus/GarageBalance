@@ -82,7 +82,8 @@ public sealed class FinanceService(
         ["currentValue"] = "Текущее показание",
         ["previousValue"] = "Предыдущее показание",
         ["consumption"] = "Расход",
-        ["hasGapWarning"] = "Разрыв истории"
+        ["hasGapWarning"] = "Разрыв истории",
+        ["dueDateNeedsReview"] = "Срок требует сверки"
     };
 
     public async Task<IReadOnlyList<FinancialOperationDto>> GetOperationsAsync(FinancialOperationListRequest request, CancellationToken cancellationToken)
@@ -141,6 +142,24 @@ public sealed class FinanceService(
             normalizedLimit,
             cancellationToken);
         return new FinancePagedResult<AccrualDto>(page.Items.Select(ToDto).ToList(), page.TotalCount, normalizedOffset, normalizedLimit);
+    }
+
+    public async Task<FinancePagedResult<AccrualDueDateReviewDto>> GetAccrualDueDateReviewPageAsync(int? offset, int? limit, CancellationToken cancellationToken)
+    {
+        var normalizedOffset = NormalizeListOffset(offset);
+        var normalizedLimit = NormalizeListLimit(limit);
+        var page = await accrualRepository.GetDueDateReviewPageAsync(normalizedOffset, normalizedLimit, cancellationToken);
+        var items = page.Items.Select(accrual => new AccrualDueDateReviewDto(
+            accrual.Id,
+            accrual.Garage.Number,
+            accrual.IncomeType.Name,
+            accrual.AccountingMonth,
+            accrual.Amount,
+            accrual.Source,
+            accrual.DueDate,
+            accrual.OverdueFromDate,
+            accrual.DueDateReviewReason ?? "historical_due_date_ambiguous")).ToList();
+        return new FinancePagedResult<AccrualDueDateReviewDto>(items, page.TotalCount, normalizedOffset, normalizedLimit);
     }
 
     public async Task<IReadOnlyList<SupplierAccrualDto>> GetSupplierAccrualsAsync(SupplierAccrualListRequest request, CancellationToken cancellationToken)
@@ -1402,7 +1421,7 @@ public sealed class FinanceService(
 
         var amount = MoneyMath.RoundMoney(request.Amount);
         var comment = NormalizeOptional(request.Comment);
-        if (AccrualMatches(accrual, garage.Id, incomeType.Id, month, amount, source, comment))
+        if (!accrual.DueDateNeedsReview && AccrualMatches(accrual, garage.Id, incomeType.Id, month, amount, source, comment))
         {
             return FinanceResult<AccrualDto>.Success(ToDto(accrual));
         }
@@ -1416,7 +1435,8 @@ public sealed class FinanceService(
             ["accountingMonth"] = accrual.AccountingMonth,
             ["amount"] = accrual.Amount,
             ["source"] = accrual.Source,
-            ["comment"] = accrual.Comment
+            ["comment"] = accrual.Comment,
+            ["dueDateNeedsReview"] = accrual.DueDateNeedsReview
         };
         var newValues = new Dictionary<string, object?>
         {
@@ -1425,7 +1445,8 @@ public sealed class FinanceService(
             ["accountingMonth"] = month,
             ["amount"] = amount,
             ["source"] = source,
-            ["comment"] = comment
+            ["comment"] = comment,
+            ["dueDateNeedsReview"] = false
         };
 
         accrual.GarageId = garage.Id;
@@ -1436,6 +1457,8 @@ public sealed class FinanceService(
         var updatedDueDates = AccrualDueDates.ForChargeService(month, null);
         accrual.DueDate = updatedDueDates.DueDate;
         accrual.OverdueFromDate = updatedDueDates.OverdueFromDate;
+        accrual.DueDateNeedsReview = false;
+        accrual.DueDateReviewReason = null;
         accrual.Amount = amount;
         accrual.Source = source;
         accrual.Comment = comment;

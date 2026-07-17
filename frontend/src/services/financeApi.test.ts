@@ -128,4 +128,23 @@ describe('financeApi', () => {
       },
     })
   })
+
+  it('loads the paged historical accrual due-date reconciliation report', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      items: [],
+      totalCount: 0,
+      offset: 25,
+      limit: 25,
+    }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await financeApi.getAccrualDueDateReviewPage!('token', { offset: 25, limit: 25 })
+
+    expect(fetchMock).toHaveBeenCalledWith('/api/finance/accruals/due-date-review?offset=25&limit=25', {
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: 'Bearer token',
+      },
+    })
+  })
 })

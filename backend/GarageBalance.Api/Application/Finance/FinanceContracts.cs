@@ -95,6 +95,17 @@ public sealed record AccrualDto(
     DateOnly DueDate,
     DateOnly OverdueFromDate);
 
+public sealed record AccrualDueDateReviewDto(
+    Guid AccrualId,
+    string GarageNumber,
+    string IncomeTypeName,
+    DateOnly AccountingMonth,
+    decimal Amount,
+    string Source,
+    DateOnly TemporaryDueDate,
+    DateOnly TemporaryOverdueFromDate,
+    string ReasonCode);
+
 public sealed record SupplierAccrualDto(
     Guid Id,
     Guid SupplierId,

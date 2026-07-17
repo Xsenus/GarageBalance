@@ -14,6 +14,8 @@ public sealed class Accrual
     public DateOnly AccountingMonth { get; set; }
     public DateOnly DueDate { get; set; }
     public DateOnly OverdueFromDate { get; set; }
+    public bool DueDateNeedsReview { get; set; }
+    public string? DueDateReviewReason { get; set; }
     public decimal Amount { get; set; }
     public required string Source { get; set; }
     public string? Comment { get; set; }

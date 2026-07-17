@@ -913,7 +913,19 @@ public sealed class FinanceServiceTests
             Source = "overdue-breakdown-test",
             IsCanceled = true
         };
-        database.Context.AddRange(overdue, future, canceled);
+        var needsReview = new Accrual
+        {
+            GarageId = fixtures.Garage.Id,
+            IncomeTypeId = fixtures.IncomeType.Id,
+            AccountingMonth = new DateOnly(2026, 3, 1),
+            DueDate = new DateOnly(2026, 4, 30),
+            OverdueFromDate = new DateOnly(2026, 6, 1),
+            DueDateNeedsReview = true,
+            DueDateReviewReason = "historical_source_unknown",
+            Amount = 800m,
+            Source = "legacy"
+        };
+        database.Context.AddRange(overdue, future, canceled, needsReview);
         await database.Context.SaveChangesAsync();
         var service = FinanceServiceTestFactory.Create(
             database.Context,
@@ -956,6 +968,64 @@ public sealed class FinanceServiceTests
                 Assert.Equal(200m, accrual.PaidAmount);
                 Assert.Equal(300m, accrual.OutstandingAmount);
             });
+    }
+
+    [Fact]
+    public async Task GetAccrualDueDateReviewPageAsync_ReturnsOnlyActiveFlaggedRowsWithStablePagination()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        var first = new Accrual
+        {
+            GarageId = fixtures.Garage.Id,
+            IncomeTypeId = fixtures.IncomeType.Id,
+            AccountingMonth = new DateOnly(2025, 1, 1),
+            DueDate = new DateOnly(2025, 2, 28),
+            OverdueFromDate = new DateOnly(2025, 3, 31),
+            DueDateNeedsReview = true,
+            DueDateReviewReason = "regular_service_not_unique",
+            Amount = 500m,
+            Source = AccrualSources.Regular
+        };
+        var second = new Accrual
+        {
+            GarageId = fixtures.Garage.Id,
+            IncomeTypeId = fixtures.IncomeType.Id,
+            AccountingMonth = new DateOnly(2025, 2, 1),
+            DueDate = new DateOnly(2025, 3, 31),
+            OverdueFromDate = new DateOnly(2025, 5, 1),
+            DueDateNeedsReview = true,
+            DueDateReviewReason = "fee_campaign_not_unique",
+            Amount = 700m,
+            Source = AccrualSources.FeeCampaign
+        };
+        var canceled = new Accrual
+        {
+            GarageId = fixtures.Garage.Id,
+            IncomeTypeId = fixtures.IncomeType.Id,
+            AccountingMonth = new DateOnly(2024, 12, 1),
+            DueDate = new DateOnly(2025, 1, 31),
+            OverdueFromDate = new DateOnly(2025, 3, 3),
+            DueDateNeedsReview = true,
+            DueDateReviewReason = "historical_source_unknown",
+            Amount = 900m,
+            Source = "legacy",
+            IsCanceled = true
+        };
+        database.Context.AddRange(first, second, canceled);
+        await database.Context.SaveChangesAsync();
+        var service = FinanceServiceTestFactory.Create(database.Context);
+
+        var firstPage = await service.GetAccrualDueDateReviewPageAsync(0, 1, CancellationToken.None);
+        var secondPage = await service.GetAccrualDueDateReviewPageAsync(1, 1, CancellationToken.None);
+
+        Assert.Equal(2, firstPage.TotalCount);
+        Assert.Equal(first.Id, Assert.Single(firstPage.Items).AccrualId);
+        Assert.Equal("regular_service_not_unique", firstPage.Items[0].ReasonCode);
+        Assert.Equal(fixtures.Garage.Number, firstPage.Items[0].GarageNumber);
+        Assert.Equal(2, secondPage.TotalCount);
+        Assert.Equal(second.Id, Assert.Single(secondPage.Items).AccrualId);
+        Assert.Equal("fee_campaign_not_unique", secondPage.Items[0].ReasonCode);
     }
 
     [Fact]
@@ -1916,6 +1986,10 @@ public sealed class FinanceServiceTests
             new CreateAccrualRequest(fixtures.Garage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 6, 1), 700m, "manual", "Исходная ручная сумма"),
             null,
             CancellationToken.None);
+        var persisted = await database.Context.Accruals.SingleAsync(item => item.Id == created.Value!.Id);
+        persisted.DueDateNeedsReview = true;
+        persisted.DueDateReviewReason = "historical_source_unknown";
+        await database.Context.SaveChangesAsync();
 
         var result = await service.UpdateAccrualAsync(
             created.Value!.Id,
@@ -1924,6 +1998,8 @@ public sealed class FinanceServiceTests
             CancellationToken.None);
 
         Assert.True(result.Succeeded);
+        Assert.False(persisted.DueDateNeedsReview);
+        Assert.Null(persisted.DueDateReviewReason);
         var audit = Assert.Single(database.Context.AuditEvents, item => item.Action == "finance.accrual_updated");
         Assert.Equal(actorUserId, audit.ActorUserId);
         Assert.Contains("было 700.00 по гаражу 12 за 06.2026", audit.Summary, StringComparison.Ordinal);
@@ -1937,7 +2013,8 @@ public sealed class FinanceServiceTests
         Assert.Contains("Расчетный месяц", changedFields, StringComparison.Ordinal);
         Assert.Contains("Сумма", changedFields, StringComparison.Ordinal);
         Assert.Contains("Комментарий", changedFields, StringComparison.Ordinal);
-        Assert.Equal("3", metadata.RootElement.GetProperty("changesCount").GetString());
+        Assert.Contains("Срок требует сверки", changedFields, StringComparison.Ordinal);
+        Assert.Equal("4", metadata.RootElement.GetProperty("changesCount").GetString());
     }
 
     [Fact]
@@ -3481,7 +3558,6 @@ public sealed class FinanceServiceTests
         var result = await service.GetMissingMeterReadingsAsync(
             new MissingMeterReadingListRequest(new DateOnly(2026, 6, 1), null, null, 100),
             CancellationToken.None);
-
         Assert.Equal(100, result.Count);
         Assert.Equal(1, commandCounter.Count);
         Assert.All(result, item => Assert.Contains(item.MeterKind, new[] { MeterKinds.Water, MeterKinds.Electricity }));

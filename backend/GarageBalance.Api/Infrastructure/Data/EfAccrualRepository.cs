@@ -53,6 +53,23 @@ public sealed class EfAccrualRepository(GarageBalanceDbContext dbContext) : IAcc
         return new AccrualPageData(items, totalCount);
     }
 
+    public async Task<AccrualPageData> GetDueDateReviewPageAsync(int offset, int limit, CancellationToken cancellationToken)
+    {
+        var query = dbContext.Accruals.AsNoTracking()
+            .Include(accrual => accrual.Garage)
+            .Include(accrual => accrual.IncomeType)
+            .Where(accrual => !accrual.IsCanceled && accrual.DueDateNeedsReview);
+        var totalCount = await query.CountAsync(cancellationToken);
+        var items = await query
+            .OrderBy(accrual => accrual.AccountingMonth)
+            .ThenBy(accrual => accrual.Garage.Number)
+            .ThenBy(accrual => accrual.Id)
+            .Skip(offset)
+            .Take(limit)
+            .ToListAsync(cancellationToken);
+        return new AccrualPageData(items, totalCount);
+    }
+
     public async Task<decimal> GetTotalBeforeMonthAsync(Guid garageId, DateOnly accountingMonth, CancellationToken cancellationToken) =>
         await dbContext.Accruals.AsNoTracking()
             .Where(accrual => !accrual.IsCanceled && accrual.GarageId == garageId && accrual.AccountingMonth < accountingMonth)
@@ -66,6 +83,7 @@ public sealed class EfAccrualRepository(GarageBalanceDbContext dbContext) : IAcc
         var query = dbContext.Accruals.AsNoTracking()
             .Where(accrual =>
                 !accrual.IsCanceled &&
+                !accrual.DueDateNeedsReview &&
                 accrual.GarageId == garageId &&
                 accrual.OverdueFromDate <= asOfDate)
             .Select(accrual => new

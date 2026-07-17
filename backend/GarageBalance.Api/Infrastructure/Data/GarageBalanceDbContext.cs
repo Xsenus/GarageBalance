@@ -429,12 +429,14 @@ public sealed class GarageBalanceDbContext(DbContextOptions<GarageBalanceDbConte
             entity.ToTable("accruals");
             entity.HasKey(accrual => accrual.Id);
             entity.Property(accrual => accrual.Amount).HasPrecision(18, 2);
+            entity.Property(accrual => accrual.DueDateReviewReason).HasMaxLength(80);
             entity.Property(accrual => accrual.Source).HasMaxLength(40).IsRequired();
             entity.Property(accrual => accrual.Comment).HasMaxLength(1000);
             entity.HasIndex(accrual => accrual.AccountingMonth);
             entity.HasIndex(accrual => accrual.DueDate);
             entity.HasIndex(accrual => accrual.OverdueFromDate);
             entity.HasIndex(accrual => new { accrual.GarageId, accrual.OverdueFromDate, accrual.IsCanceled });
+            entity.HasIndex(accrual => new { accrual.DueDateNeedsReview, accrual.AccountingMonth });
             entity.HasIndex(accrual => accrual.GarageId);
             entity.HasIndex(accrual => accrual.IncomeTypeId);
             entity.HasIndex(accrual => accrual.TariffId);
