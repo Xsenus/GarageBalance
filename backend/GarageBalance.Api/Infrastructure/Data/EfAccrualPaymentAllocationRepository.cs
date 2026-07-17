@@ -11,14 +11,14 @@ public sealed class EfAccrualPaymentAllocationRepository(GarageBalanceDbContext 
     private const int PaymentRowKind = 2;
     private const int AllocationRowKind = 3;
 
-    public async Task RebuildAsync(
+    public async Task<AccrualPaymentAllocationRebuildResult> RebuildAsync(
         IReadOnlyCollection<AccrualPaymentAllocationKey> keys,
         CancellationToken cancellationToken)
     {
         var distinctKeys = keys.Distinct().ToArray();
         if (distinctKeys.Length == 0)
         {
-            return;
+            return new AccrualPaymentAllocationRebuildResult(0, 0, 0);
         }
 
         var garageIds = distinctKeys.Select(key => key.GarageId).Distinct().ToArray();
@@ -28,6 +28,9 @@ public sealed class EfAccrualPaymentAllocationRepository(GarageBalanceDbContext 
 
         OverlayTrackedAccruals(rows, garageIds, incomeTypeIds);
         OverlayTrackedPayments(rows, garageIds, incomeTypeIds);
+        var previousActiveAllocationCount = rows.Count(row =>
+            row.Kind == AllocationRowKind && keySet.Contains(row.Key));
+        var activeAllocationCount = 0;
 
         foreach (var row in rows.Where(row => row.Kind == AllocationRowKind && keySet.Contains(row.Key)))
         {
@@ -63,7 +66,13 @@ public sealed class EfAccrualPaymentAllocationRepository(GarageBalanceDbContext 
                 AccrualId = item.AccrualId,
                 Amount = item.Amount
             }));
+            activeAllocationCount += plan.Count;
         }
+
+        return new AccrualPaymentAllocationRebuildResult(
+            distinctKeys.Length,
+            previousActiveAllocationCount,
+            activeAllocationCount);
     }
 
     private IQueryable<AllocationLedgerRow> BuildLedgerQuery(Guid[] garageIds, Guid[] incomeTypeIds)

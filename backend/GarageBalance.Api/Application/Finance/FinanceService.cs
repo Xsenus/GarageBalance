@@ -548,8 +548,11 @@ public sealed class FinanceService(
         };
 
         financialOperationRepository.Add(operation);
-        await accrualPaymentAllocationRepository.RebuildAsync(
+        await RebuildPaymentAllocationsAsync(
             [new AccrualPaymentAllocationKey(operation.GarageId!.Value, operation.IncomeTypeId!.Value)],
+            actorUserId,
+            "Создание поступления",
+            operation.Id,
             cancellationToken);
         AddAudit(actorUserId, "finance.income_created", operation, FormatIncomeCreatedAuditSummary(operation));
         await unitOfWork.SaveChangesAsync(cancellationToken);
@@ -832,8 +835,11 @@ public sealed class FinanceService(
         operation.IncomeTypeId = incomeType.Id;
         operation.IncomeType = incomeType;
         operation.UpdatedAtUtc = DateTimeOffset.UtcNow;
-        await accrualPaymentAllocationRepository.RebuildAsync(
+        await RebuildPaymentAllocationsAsync(
             [oldAllocationKey, new AccrualPaymentAllocationKey(garage.Id, incomeType.Id)],
+            actorUserId,
+            "Изменение поступления",
+            operation.Id,
             cancellationToken);
         AddAudit(actorUserId, "finance.income_updated", operation, FormatIncomeUpdatedAuditSummary(previousSnapshot, operation), oldValues, newValues);
         await unitOfWork.SaveChangesAsync(cancellationToken);
@@ -972,8 +978,11 @@ public sealed class FinanceService(
         operation.Comment = AppendCancelReason(operation.Comment, reason);
         if (operation.OperationKind == FinancialOperationKinds.Income)
         {
-            await accrualPaymentAllocationRepository.RebuildAsync(
+            await RebuildPaymentAllocationsAsync(
                 [new AccrualPaymentAllocationKey(operation.GarageId!.Value, operation.IncomeTypeId!.Value)],
+                actorUserId,
+                "Отмена поступления",
+                operation.Id,
                 cancellationToken);
         }
         AddAudit(actorUserId, "finance.operation_canceled", operation, FormatOperationCanceledAuditSummary(operation, reason));
@@ -1040,8 +1049,11 @@ public sealed class FinanceService(
         operation.UpdatedAtUtc = DateTimeOffset.UtcNow;
         if (operation.OperationKind == FinancialOperationKinds.Income)
         {
-            await accrualPaymentAllocationRepository.RebuildAsync(
+            await RebuildPaymentAllocationsAsync(
                 [new AccrualPaymentAllocationKey(operation.GarageId!.Value, operation.IncomeTypeId!.Value)],
+                actorUserId,
+                "Восстановление поступления",
+                operation.Id,
                 cancellationToken);
         }
         AddAudit(actorUserId, "finance.operation_restored", operation, FormatOperationRestoredAuditSummary(operation));
@@ -1070,8 +1082,11 @@ public sealed class FinanceService(
 
         accrual.IsCanceled = true;
         accrual.Comment = AppendCancelReason(accrual.Comment, reason);
-        await accrualPaymentAllocationRepository.RebuildAsync(
+        await RebuildPaymentAllocationsAsync(
             [new AccrualPaymentAllocationKey(accrual.GarageId, accrual.IncomeTypeId)],
+            actorUserId,
+            "Отмена начисления",
+            accrual.Id,
             cancellationToken);
         AddAudit(actorUserId, "finance.accrual_canceled", accrual, FormatAccrualCanceledAuditSummary(accrual, reason));
         await unitOfWork.SaveChangesAsync(cancellationToken);
@@ -1104,8 +1119,11 @@ public sealed class FinanceService(
 
         accrual.IsCanceled = false;
         accrual.UpdatedAtUtc = DateTimeOffset.UtcNow;
-        await accrualPaymentAllocationRepository.RebuildAsync(
+        await RebuildPaymentAllocationsAsync(
             [new AccrualPaymentAllocationKey(accrual.GarageId, accrual.IncomeTypeId)],
+            actorUserId,
+            "Восстановление начисления",
+            accrual.Id,
             cancellationToken);
         AddAudit(actorUserId, "finance.accrual_restored", accrual, FormatAccrualRestoredAuditSummary(accrual));
         await unitOfWork.SaveChangesAsync(cancellationToken);
@@ -1159,8 +1177,11 @@ public sealed class FinanceService(
         };
 
         accrualRepository.Add(accrual);
-        await accrualPaymentAllocationRepository.RebuildAsync(
+        await RebuildPaymentAllocationsAsync(
             [new AccrualPaymentAllocationKey(accrual.GarageId, accrual.IncomeTypeId)],
+            actorUserId,
+            "Создание начисления",
+            accrual.Id,
             cancellationToken);
         AddAudit(actorUserId, "finance.accrual_created", accrual, FormatAccrualCreatedAuditSummary(accrual));
         await unitOfWork.SaveChangesAsync(cancellationToken);
@@ -1214,8 +1235,11 @@ public sealed class FinanceService(
                 Comment = comment
             };
             accrualRepository.Add(accrual);
-            await accrualPaymentAllocationRepository.RebuildAsync(
+            await RebuildPaymentAllocationsAsync(
                 [new AccrualPaymentAllocationKey(accrual.GarageId, accrual.IncomeTypeId)],
+                actorUserId,
+                "Перенос задолженности",
+                accrual.Id,
                 cancellationToken);
             AddAudit(actorUserId, "finance.debt_transfer_created", accrual, FormatDebtTransferCreatedAuditSummary(accrual, sourceMonth, targetMonth));
             await unitOfWork.SaveChangesAsync(cancellationToken);
@@ -1236,8 +1260,11 @@ public sealed class FinanceService(
         accrual.Amount = MoneyMath.RoundMoney(accrual.Amount + amount);
         accrual.Comment = AppendDebtTransferComment(accrual.Comment, comment);
         accrual.UpdatedAtUtc = DateTimeOffset.UtcNow;
-        await accrualPaymentAllocationRepository.RebuildAsync(
+        await RebuildPaymentAllocationsAsync(
             [new AccrualPaymentAllocationKey(accrual.GarageId, accrual.IncomeTypeId)],
+            actorUserId,
+            "Изменение переноса задолженности",
+            accrual.Id,
             cancellationToken);
 
         var newValues = new Dictionary<string, object?>
@@ -1347,8 +1374,11 @@ public sealed class FinanceService(
         accrual.Source = source;
         accrual.Comment = comment;
         accrual.UpdatedAtUtc = DateTimeOffset.UtcNow;
-        await accrualPaymentAllocationRepository.RebuildAsync(
+        await RebuildPaymentAllocationsAsync(
             [oldAllocationKey, new AccrualPaymentAllocationKey(accrual.GarageId, accrual.IncomeTypeId)],
+            actorUserId,
+            "Изменение начисления",
+            accrual.Id,
             cancellationToken);
         AddAudit(actorUserId, "finance.accrual_updated", accrual, FormatAccrualUpdatedAuditSummary(before, accrual), oldValues, newValues);
         await unitOfWork.SaveChangesAsync(cancellationToken);
@@ -1703,8 +1733,11 @@ public sealed class FinanceService(
                 ["skippedCount"] = skipped.Count,
                 ["totalAmount"] = created.Sum(item => item.Amount)
             });
-        await accrualPaymentAllocationRepository.RebuildAsync(
+        await RebuildPaymentAllocationsAsync(
             created.Select(item => new AccrualPaymentAllocationKey(item.GarageId, item.IncomeTypeId)).ToArray(),
+            actorUserId,
+            "Формирование регулярных начислений",
+            incomeType.Id,
             cancellationToken);
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
@@ -1906,8 +1939,11 @@ public sealed class FinanceService(
                 ["skippedCount"] = skipped.Count,
                 ["totalAmount"] = created.Sum(item => item.Amount)
             });
-        await accrualPaymentAllocationRepository.RebuildAsync(
+        await RebuildPaymentAllocationsAsync(
             created.Select(item => new AccrualPaymentAllocationKey(item.GarageId, item.IncomeTypeId)).ToArray(),
+            actorUserId,
+            "Формирование начислений по сбору",
+            campaign.Id,
             cancellationToken);
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
@@ -2653,6 +2689,34 @@ public sealed class FinanceService(
             operationDate,
             normalized,
             cancellationToken);
+    }
+
+    private async Task RebuildPaymentAllocationsAsync(
+        IReadOnlyCollection<AccrualPaymentAllocationKey> keys,
+        Guid? actorUserId,
+        string trigger,
+        Guid sourceEntityId,
+        CancellationToken cancellationToken)
+    {
+        var result = await accrualPaymentAllocationRepository.RebuildAsync(keys, cancellationToken);
+        if (result.PreviousActiveAllocationCount == 0 && result.ActiveAllocationCount == 0)
+        {
+            return;
+        }
+
+        AddAudit(
+            actorUserId,
+            "finance.payment_allocations_rebuilt",
+            "payment_allocation",
+            sourceEntityId,
+            $"{trigger}: перераспределены платежи по начислениям; пар учета {result.KeyCount}, активных распределений {result.ActiveAllocationCount}.",
+            metadata: new Dictionary<string, object?>
+            {
+                ["trigger"] = trigger,
+                ["keyCount"] = result.KeyCount,
+                ["previousActiveAllocationCount"] = result.PreviousActiveAllocationCount,
+                ["activeAllocationCount"] = result.ActiveAllocationCount
+            });
     }
 
     private void AddAudit(

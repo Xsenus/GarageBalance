@@ -856,6 +856,24 @@ public sealed class FinanceServiceTests
         Assert.True(canceled.Succeeded);
         Assert.Empty(await database.Context.AccrualPaymentAllocations.Where(item => item.IsActive).ToListAsync());
         Assert.Equal(2, await database.Context.AccrualPaymentAllocations.CountAsync(item => !item.IsActive));
+
+        var allocationAudits = await database.Context.AuditEvents
+            .Where(item =>
+                item.Action == "finance.payment_allocations_rebuilt" &&
+                item.EntityId == payment.Value.Id.ToString())
+            .ToListAsync();
+        Assert.Equal(2, allocationAudits.Count);
+        Assert.Single(allocationAudits, audit => audit.Summary.Contains("Создание поступления", StringComparison.Ordinal));
+        Assert.Single(allocationAudits, audit => audit.Summary.Contains("Отмена поступления", StringComparison.Ordinal));
+        Assert.All(allocationAudits, audit =>
+        {
+            Assert.Equal("payment_allocation", audit.EntityType);
+            Assert.DoesNotContain("PKO-alloc", audit.MetadataJson, StringComparison.Ordinal);
+            Assert.DoesNotContain(fixtures.Garage.Number, audit.MetadataJson, StringComparison.Ordinal);
+            using var metadata = JsonDocument.Parse(audit.MetadataJson!);
+            Assert.True(metadata.RootElement.TryGetProperty("activeAllocationCount", out _));
+            Assert.True(metadata.RootElement.TryGetProperty("previousActiveAllocationCount", out _));
+        });
     }
 
     [Fact]
