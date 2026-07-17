@@ -3059,7 +3059,7 @@ function PaymentsPrototypePanel({
   const [garageRows, setGarageRows] = useState<GarageIncomePrototypeRow[]>([])
   const [garageWorksheetSummary, setGarageWorksheetSummary] = useState<GarageIncomeWorksheetPeriodSummary | null>(null)
   const [expenseRows, setExpenseRows] = useState<PaymentPrototypeRow[]>([])
-  const [expenseWorksheetMonth, setExpenseWorksheetMonth] = useState('2026-06')
+  const [expenseWorksheetMonth, setExpenseWorksheetMonth] = useState(() => getCurrentMonthInputValue())
   const [expenseBankAmount, setExpenseBankAmount] = useState(0)
   const [historyRows, setHistoryRows] = useState<GaragePaymentHistoryPrototypeRow[]>([])
   const [formStateLoaded, setFormStateLoaded] = useState(false)
@@ -3394,6 +3394,10 @@ function PaymentsPrototypePanel({
   }
 
   function handleExpenseWorksheetMonthChange(value: string) {
+    if (!/^\d{4}-\d{2}$/.test(value)) {
+      return
+    }
+
     setExpenseWorksheetLoading(true)
     setExpenseWorksheetMonth(value)
   }
@@ -4454,13 +4458,9 @@ function PaymentsPrototypePanel({
   const expenseCollectedTotal = expenseRows.reduce((sum, row) => sum + (typeof row.collected === 'number' ? row.collected : 0), 0)
   const expenseDifferenceTotal = expenseCollectedTotal - expenseAccrualTotal
   const expenseCashTotal = expenseCollectedTotal - expensePaidTotal
-  const expenseMonthLabel = expenseWorksheetMonth === '2026-06'
-    ? 'июнь 2026'
-    : expenseWorksheetMonth === '2026-05'
-      ? 'май 2026'
-      : expenseWorksheetMonth === '2026-04'
-        ? 'апрель 2026'
-        : formatMonth(`${expenseWorksheetMonth}-01`)
+  const expenseMonthLabel = new Intl.DateTimeFormat('ru-RU', { month: 'long', year: 'numeric', timeZone: 'UTC' })
+    .format(new Date(`${expenseWorksheetMonth}-01T00:00:00Z`))
+    .replace(/\s+г\.$/u, '')
 
   return (
     <section className="payments-prototype" aria-label="Форма платежей">
@@ -4868,14 +4868,10 @@ function PaymentsPrototypePanel({
             <div className="payments-prototype-period-row">
               <label>
                 <span>Месяц</span>
-                <SelectControl
-                  aria-label="Месяц выплат"
+                <LocalizedDatePicker
+                  ariaLabel="Месяц выплат"
+                  mode="month"
                   value={expenseWorksheetMonth}
-                  options={[
-                    { value: '2026-06', label: 'июнь 2026' },
-                    { value: '2026-05', label: 'май 2026' },
-                    { value: '2026-04', label: 'апрель 2026' },
-                  ]}
                   onChange={handleExpenseWorksheetMonthChange}
                 />
               </label>

@@ -7,6 +7,7 @@ export const nodeTestFiles = [
   'src/createActionCoverage.test.ts',
   'src/features/contractors/staffRateFormatting.test.ts',
   'src/features/finance/paymentMoneyFormatting.test.ts',
+  'src/features/finance/paymentMonthCoverage.test.ts',
   'src/features/tariffs/TariffsAndFeesPanel.test.ts',
   'src/loadingPatternCoverage.test.ts',
   'src/nginxConfig.test.ts',

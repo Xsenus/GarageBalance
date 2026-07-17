@@ -4761,6 +4761,37 @@ describe('App', () => {
     await waitFor(() => expect(cancelOperation).toHaveBeenCalledWith('token', 'operation-garage-77', { reason: 'Ошибочный платеж' }))
   })
 
+  it('opens the expense worksheet on the current month and accepts any localized month across years', async () => {
+    vi.setSystemTime(new Date('2027-10-15T10:00:00+07:00'))
+    const user = userEvent.setup()
+    const getExpenseWorksheet = vi.fn(async (_token: string, params?: { accountingMonth?: string }) => createExpenseWorksheet({
+      accountingMonth: params?.accountingMonth ?? '2027-10-01',
+      rows: [],
+    }))
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient({ getExpenseWorksheet })} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Платежи')
+
+    const prototype = within(await screen.findByRole('region', { name: 'Платежи' })).getByRole('region', { name: 'Форма платежей' })
+    await user.type(within(prototype).getByLabelText('Поиск номера гаража или ФИО владельца'), '12')
+    await user.click(await within(prototype).findByRole('option', { name: /Гараж\s*12\s*Иванов Иван/ }))
+    await user.click(within(prototype).getByRole('tab', { name: 'Выплаты' }))
+
+    await waitFor(() => expect(getExpenseWorksheet).toHaveBeenCalledWith('token', { accountingMonth: '2027-10-01' }))
+    expect(within(prototype).getByRole('table', { name: 'Форма выплат за октябрь 2027' })).toBeInTheDocument()
+    const monthInput = within(prototype).getByLabelText('Месяц выплат')
+    expect(monthInput).toHaveValue('10.2027')
+    expect(monthInput.closest('.localized-date-picker')).not.toBeNull()
+
+    await user.clear(monthInput)
+    await user.type(monthInput, '02.2029')
+
+    await waitFor(() => expect(getExpenseWorksheet).toHaveBeenCalledWith('token', { accountingMonth: '2029-02-01' }))
+    expect(within(prototype).getByRole('table', { name: 'Форма выплат за февраль 2029' })).toBeInTheDocument()
+  })
+
   it('loads expense worksheet from finance backend and allows payment when the service difference is negative', async () => {
     const user = userEvent.setup()
     const getExpenseWorksheet = vi.fn(async (_token: string, params?: { accountingMonth?: string }) => createExpenseWorksheet({
