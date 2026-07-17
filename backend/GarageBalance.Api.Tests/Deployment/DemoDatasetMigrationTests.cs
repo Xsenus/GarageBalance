@@ -3,6 +3,7 @@ namespace GarageBalance.Api.Tests.Deployment;
 public sealed class DemoDatasetMigrationTests
 {
     private const string MigrationFileName = "20260716171911_SeedStagingDemoDataset.cs";
+    private const string BalanceMigrationFileName = "20260717021022_BalanceStagingDemoGarages.cs";
 
     [Fact]
     public void DemoDatasetMigration_IsRestrictedToStagingAndIdempotent()
@@ -80,7 +81,34 @@ public sealed class DemoDatasetMigrationTests
         Assert.Contains("Демонстрационное", upSection, StringComparison.Ordinal);
     }
 
-    private static string ReadMigration()
+    [Fact]
+    public void BalanceMigration_IsRestrictedToSeededStagingDataset()
+    {
+        var migration = ReadMigration(BalanceMigrationFileName);
+
+        Assert.Contains("current_database() <> 'garagebalance_staging'", migration, StringComparison.Ordinal);
+        Assert.Contains("garagebalance-staging-demo-dataset-v1", migration, StringComparison.Ordinal);
+        Assert.Contains("garagebalance-staging-demo-balances-v2", migration, StringComparison.Ordinal);
+        Assert.Contains("ON CONFLICT DO NOTHING", migration, StringComparison.Ordinal);
+        Assert.DoesNotContain("UPDATE ", migration[..migration.IndexOf("protected override void Down", StringComparison.Ordinal)], StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void BalanceMigration_ProvidesDebtPaidAndAdvanceGarageExamples()
+    {
+        var migration = ReadMigration(BalanceMigrationFileName);
+
+        Assert.Contains("generate_series(107, 120)", migration, StringComparison.Ordinal);
+        Assert.Contains("garage_no BETWEEN 107 AND 113 THEN 0.00", migration, StringComparison.Ordinal);
+        Assert.Contains("garage_no - 114", migration, StringComparison.Ordinal);
+        Assert.Contains("'debtGarageNumbers', '101-106'", migration, StringComparison.Ordinal);
+        Assert.Contains("'paidGarageNumbers', '107-113'", migration, StringComparison.Ordinal);
+        Assert.Contains("'advanceGarageNumbers', '114-120'", migration, StringComparison.Ordinal);
+        Assert.Contains("Демонстрационная полная оплата задолженности", migration, StringComparison.Ordinal);
+        Assert.Contains("Демонстрационная оплата с авансом", migration, StringComparison.Ordinal);
+    }
+
+    private static string ReadMigration(string migrationFileName = MigrationFileName)
     {
         var directory = new DirectoryInfo(AppContext.BaseDirectory);
         while (directory is not null && !File.Exists(Path.Combine(directory.FullName, "GarageBalance.slnx")))
@@ -96,6 +124,6 @@ public sealed class DemoDatasetMigrationTests
             "Infrastructure",
             "Data",
             "Migrations",
-            MigrationFileName));
+            migrationFileName));
     }
 }
