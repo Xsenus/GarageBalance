@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, expect, it } from 'vitest'
 import type { TariffDto, UpsertTariffRequest } from '../services/dictionariesApi'
 import type { AccountingTypeDto } from '../services/dictionariesApi'

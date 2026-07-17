@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, expect, it } from 'vitest'
 import type { TariffDto } from '../services/dictionariesApi'
 import type { AccessImportRunDto } from '../services/importApi'

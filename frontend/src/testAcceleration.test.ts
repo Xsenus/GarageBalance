@@ -1,7 +1,9 @@
+// @vitest-environment node
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 
 import { describe, expect, it } from 'vitest'
+import { nodeTestFiles } from '../scripts/test-environments.mjs'
 import { chooseTestParallelism } from '../scripts/test-parallelism.mjs'
 
 describe('frontend test acceleration', () => {
@@ -10,6 +12,23 @@ describe('frontend test acceleration', () => {
   }
   const runner = readFileSync(resolve(process.cwd(), 'scripts', 'run-vitest.mjs'), 'utf8').replace(/\r\n/g, '\n')
   const workflow = readFileSync(resolve(process.cwd(), '..', '.github', 'workflows', 'deploy-staging.yml'), 'utf8')
+
+  it('runs pure tests in Node without the heavier jsdom environment', () => {
+    expect(nodeTestFiles).toContain('src/services/financeApi.test.ts')
+    expect(nodeTestFiles).toContain('src/shared/validation.test.ts')
+    expect(new Set(nodeTestFiles).size).toBe(nodeTestFiles.length)
+
+    for (const testFile of nodeTestFiles) {
+      expect(testFile).toMatch(/^src\/.+\.test\.ts$/)
+      const source = readFileSync(resolve(process.cwd(), testFile), 'utf8')
+      expect(source.startsWith('// @vitest-environment node')).toBe(true)
+      if (testFile === 'src/testAcceleration.test.ts') continue
+
+      expect(source).not.toMatch(
+        /@testing-library\/react|\bdocument\b|\bwindow\b|localStorage|sessionStorage/,
+      )
+    }
+  })
 
   it('uses the sharded runner locally and enforces coverage in CI', () => {
     expect(packageJson.scripts.test).toBe('node scripts/run-vitest.mjs')
