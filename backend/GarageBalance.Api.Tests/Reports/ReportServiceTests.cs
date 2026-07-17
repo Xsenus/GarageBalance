@@ -1445,6 +1445,7 @@ public sealed class ReportServiceTests
                 BalanceBefore = 0m,
                 BalanceAfter = 3000m,
                 Reason = "Сдача наличных в банк",
+                IsCashToBankTransfer = true,
                 ActorUserId = actorUserId,
                 CreatedAtUtc = new DateTimeOffset(2026, 6, 15, 9, 0, 0, TimeSpan.Zero)
             },
@@ -1456,6 +1457,7 @@ public sealed class ReportServiceTests
                 BalanceBefore = 3000m,
                 BalanceAfter = 3900m,
                 Reason = "Canceled bank deposit",
+                IsCashToBankTransfer = true,
                 ActorUserId = actorUserId,
                 IsCanceled = true,
                 CreatedAtUtc = new DateTimeOffset(2026, 6, 15, 10, 0, 0, TimeSpan.Zero)
@@ -1470,6 +1472,17 @@ public sealed class ReportServiceTests
                 Reason = "Не сдача",
                 ActorUserId = actorUserId,
                 CreatedAtUtc = new DateTimeOffset(2026, 6, 16, 9, 0, 0, TimeSpan.Zero)
+            },
+            new FundOperation
+            {
+                Fund = fund,
+                OperationKind = FundOperationKinds.Deposit,
+                Amount = 500m,
+                BalanceBefore = 2000m,
+                BalanceAfter = 2500m,
+                Reason = "Обычное распределение фонда",
+                ActorUserId = actorUserId,
+                CreatedAtUtc = new DateTimeOffset(2026, 6, 17, 9, 0, 0, TimeSpan.Zero)
             });
         await database.Context.SaveChangesAsync();
 
@@ -1484,6 +1497,7 @@ public sealed class ReportServiceTests
         Assert.Equal(new DateOnly(2026, 6, 15), row.Date);
         Assert.Equal("Сдача наличных в банк", row.Comment);
         Assert.DoesNotContain(result.Value.Rows, item => item.Comment == "Canceled bank deposit");
+        Assert.DoesNotContain(result.Value.Rows, item => item.Comment == "Обычное распределение фонда");
         Assert.Contains(database.Context.AuditEvents, auditEvent =>
             auditEvent.Action == "reports.bank_deposits_generated" &&
             auditEvent.EntityId == "bank_deposits" &&
@@ -1506,6 +1520,7 @@ public sealed class ReportServiceTests
                 BalanceBefore = 0m,
                 BalanceAfter = 100m,
                 Reason = "Сдача 1",
+                IsCashToBankTransfer = true,
                 CreatedAtUtc = new DateTimeOffset(2026, 6, 10, 9, 0, 0, TimeSpan.Zero)
             },
             new FundOperation
@@ -1516,6 +1531,7 @@ public sealed class ReportServiceTests
                 BalanceBefore = 100m,
                 BalanceAfter = 300m,
                 Reason = "Сдача 2",
+                IsCashToBankTransfer = true,
                 CreatedAtUtc = new DateTimeOffset(2026, 6, 11, 9, 0, 0, TimeSpan.Zero)
             },
             new FundOperation
@@ -1526,6 +1542,7 @@ public sealed class ReportServiceTests
                 BalanceBefore = 300m,
                 BalanceAfter = 600m,
                 Reason = "Сдача 3",
+                IsCashToBankTransfer = true,
                 CreatedAtUtc = new DateTimeOffset(2026, 6, 12, 9, 0, 0, TimeSpan.Zero)
             });
         await database.Context.SaveChangesAsync();
@@ -1849,6 +1866,7 @@ public sealed class ReportServiceTests
                 BalanceBefore = 0m,
                 BalanceAfter = 3000m,
                 Reason = "Сдача наличных в банк",
+                IsCashToBankTransfer = true,
                 ActorUserId = actorUserId,
                 CreatedAtUtc = new DateTimeOffset(2026, 6, 15, 9, 0, 0, TimeSpan.Zero)
             },
@@ -1860,6 +1878,7 @@ public sealed class ReportServiceTests
                 BalanceBefore = 3000m,
                 BalanceAfter = 3500m,
                 Reason = "Вне периода",
+                IsCashToBankTransfer = true,
                 ActorUserId = actorUserId,
                 CreatedAtUtc = new DateTimeOffset(2026, 7, 1, 9, 0, 0, TimeSpan.Zero)
             });
@@ -1898,6 +1917,7 @@ public sealed class ReportServiceTests
             BalanceBefore = 0m,
             BalanceAfter = 3000m,
             Reason = "Сдача наличных в банк",
+            IsCashToBankTransfer = true,
             ActorUserId = actorUserId,
             CreatedAtUtc = new DateTimeOffset(2026, 6, 15, 9, 0, 0, TimeSpan.Zero)
         });
@@ -2082,6 +2102,7 @@ public sealed class ReportServiceTests
                 BalanceBefore = 0m,
                 BalanceAfter = SeededBankAmount,
                 Reason = "Тестовая сумма на банковском счете",
+                IsCashToBankTransfer = true,
                 CreatedAtUtc = new DateTimeOffset(2000, 1, 1, 0, 0, 0, TimeSpan.Zero)
             };
 

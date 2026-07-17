@@ -972,6 +972,21 @@ public sealed class FinanceService(
             return FinanceResult<FinancialOperationDto>.Success(await ToDtoAsync(operation, cancellationToken));
         }
 
+        await using var cashBalanceLock = amount < operation.Amount
+            ? await financeAvailableBalanceQuery.AcquireUpdateLockAsync(cashExpense: true, cancellationToken)
+            : null;
+        var reductionAmount = MoneyMath.RoundMoney(operation.Amount - amount);
+        if (reductionAmount > 0m)
+        {
+            var availableCashAmount = await CalculateAvailableCashAmountAsync(cancellationToken);
+            if (reductionAmount > availableCashAmount)
+            {
+                return FinanceResult<FinancialOperationDto>.Failure(
+                    "cash_amount_insufficient",
+                    $"Уменьшение поступления превышает доступный остаток в кассе {MoneyFormatting.Format(availableCashAmount)}.");
+            }
+        }
+
         var oldAllocationKey = new AccrualPaymentAllocationKey(operation.GarageId!.Value, operation.IncomeTypeId!.Value);
         var previousSnapshot = FormatIncomeOperationSnapshot(operation);
         var oldValues = new Dictionary<string, object?>
@@ -1140,6 +1155,20 @@ public sealed class FinanceService(
         if (operation.IsCanceled)
         {
             return FinanceResult<FinancialOperationDto>.Failure("operation_already_canceled", "Финансовая операция уже отменена.");
+        }
+
+        await using var cashBalanceLock = operation.OperationKind == FinancialOperationKinds.Income
+            ? await financeAvailableBalanceQuery.AcquireUpdateLockAsync(cashExpense: true, cancellationToken)
+            : null;
+        if (operation.OperationKind == FinancialOperationKinds.Income)
+        {
+            var availableCashAmount = await CalculateAvailableCashAmountAsync(cancellationToken);
+            if (operation.Amount > availableCashAmount)
+            {
+                return FinanceResult<FinancialOperationDto>.Failure(
+                    "cash_amount_insufficient",
+                    $"Поступление нельзя отменить: доступный остаток в кассе составляет {MoneyFormatting.Format(availableCashAmount)}.");
+            }
         }
 
         operation.IsCanceled = true;

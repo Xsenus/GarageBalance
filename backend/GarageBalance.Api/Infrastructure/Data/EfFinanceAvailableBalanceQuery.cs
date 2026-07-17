@@ -75,7 +75,10 @@ public sealed class EfFinanceAvailableBalanceQuery(GarageBalanceDbContext dbCont
                         : 0m)
             });
         var bankDepositQuery = dbContext.FundOperations.AsNoTracking()
-            .Where(operation => !operation.IsCanceled && operation.OperationKind == FundOperationKinds.Deposit)
+            .Where(operation =>
+                !operation.IsCanceled &&
+                operation.OperationKind == FundOperationKinds.Deposit &&
+                operation.IsCashToBankTransfer)
             .GroupBy(_ => 1)
             .Select(group => new
             {

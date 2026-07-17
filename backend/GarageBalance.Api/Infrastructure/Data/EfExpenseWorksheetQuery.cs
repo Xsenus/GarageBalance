@@ -295,7 +295,10 @@ public sealed class EfExpenseWorksheetQuery(GarageBalanceDbContext dbContext) : 
             });
 
         var bankDeposits = dbContext.FundOperations.AsNoTracking()
-            .Where(operation => !operation.IsCanceled && operation.OperationKind == FundOperationKinds.Deposit)
+            .Where(operation =>
+                !operation.IsCanceled &&
+                operation.OperationKind == FundOperationKinds.Deposit &&
+                operation.IsCashToBankTransfer)
             .GroupBy(_ => 1)
             .Select(group => new
             {

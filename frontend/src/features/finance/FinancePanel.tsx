@@ -5401,6 +5401,7 @@ function BankDepositPrototypeDialog({
         operationKind: 'deposit',
         amount: parsedAmount,
         reason,
+        isCashToBankTransfer: true,
       })
       onClose()
     } catch (submitError) {

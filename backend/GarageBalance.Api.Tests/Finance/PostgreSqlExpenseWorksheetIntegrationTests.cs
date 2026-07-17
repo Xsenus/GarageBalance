@@ -1,7 +1,10 @@
+using GarageBalance.Api.Application.Audit;
 using GarageBalance.Api.Application.Finance;
+using GarageBalance.Api.Application.Funds;
 using GarageBalance.Api.Domain.Dictionaries;
 using GarageBalance.Api.Domain.Finance;
 using GarageBalance.Api.Tests.Common;
+using GarageBalance.Api.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 
 namespace GarageBalance.Api.Tests.Finance;
@@ -44,6 +47,7 @@ public sealed class PostgreSqlExpenseWorksheetIntegrationTests
                     BalanceBefore = 0m,
                     BalanceAfter = 300m,
                     Reason = "Остаток банка для проверки",
+                    IsCashToBankTransfer = true,
                     CreatedAtUtc = new DateTimeOffset(2026, 6, 1, 0, 0, 0, TimeSpan.Zero)
                 },
                 new FinancialOperation
@@ -100,6 +104,78 @@ public sealed class PostgreSqlExpenseWorksheetIntegrationTests
             operation.SupplierId == supplierId &&
             operation.ExpenseTypeId == expenseTypeId));
         Assert.Equal(1, await context.AuditEvents.CountAsync(audit => audit.Action == "finance.expense_created"));
+    }
+
+    [PostgreSqlFact]
+    public async Task CashAndBankInvariant_DistinguishesBankTransferFromFundRedistributionOnPostgreSql()
+    {
+        await using var database = await PostgreSqlTestDatabase.CreateAsync();
+        await using var context = database.CreateContext();
+        context.FinancialOperations.RemoveRange(context.FinancialOperations);
+        context.FundOperations.RemoveRange(context.FundOperations);
+        context.Funds.RemoveRange(context.Funds);
+        var month = new DateOnly(2026, 6, 1);
+        var garage = new Garage { Number = "PG-INVARIANT", PeopleCount = 1, FloorCount = 1 };
+        var incomeType = new IncomeType { Name = "Инвариант PG", Code = "pg_balance_invariant" };
+        var bankFund = new Fund { Name = "Банк инварианта PG", NormalizedName = "БАНК ИНВАРИАНТА PG", AllowOperations = true };
+        var reserveFund = new Fund { Name = "Резерв инварианта PG", NormalizedName = "РЕЗЕРВ ИНВАРИАНТА PG", AllowOperations = true };
+        context.AddRange(garage, incomeType, bankFund, reserveFund);
+        await context.SaveChangesAsync();
+        var financeService = FinanceServiceTestFactory.Create(context);
+        var fundService = new FundService(
+            new EfFundRepository(context),
+            new EfFinanceAvailableBalanceQuery(context),
+            new AuditEventWriter(context));
+
+        async Task AssertInvariantAsync(decimal expectedCash, decimal expectedBank)
+        {
+            var worksheet = await financeService.GetExpenseWorksheetAsync(new ExpenseWorksheetRequest(month), CancellationToken.None);
+            var activeIncome = await context.FinancialOperations
+                .Where(operation => !operation.IsCanceled && operation.OperationKind == FinancialOperationKinds.Income)
+                .SumAsync(operation => operation.Amount);
+            var activeExpense = await context.FinancialOperations
+                .Where(operation => !operation.IsCanceled && operation.OperationKind == FinancialOperationKinds.Expense)
+                .SumAsync(operation => operation.Amount);
+
+            Assert.True(worksheet.Succeeded);
+            Assert.Equal(expectedCash, worksheet.Value!.CashAmount);
+            Assert.Equal(expectedBank, worksheet.Value.BankAmount);
+            Assert.Equal(activeIncome - activeExpense, worksheet.Value.CashAmount + worksheet.Value.BankAmount);
+        }
+
+        var income = await financeService.CreateIncomeAsync(
+            new CreateIncomeOperationRequest(garage.Id, incomeType.Id, new DateOnly(2026, 6, 10), month, 1000m, "PG-INV-INCOME", null),
+            null,
+            CancellationToken.None);
+        var transfer = await fundService.CreateOperationAsync(
+            bankFund.Id,
+            new CreateFundOperationRequest("deposit", 400m, "Сдача кассы в банк PG", IsCashToBankTransfer: true),
+            null,
+            CancellationToken.None);
+        Assert.True(income.Succeeded);
+        Assert.True(transfer.Succeeded);
+        await AssertInvariantAsync(600m, 400m);
+
+        var withdrawal = await fundService.CreateOperationAsync(
+            bankFund.Id,
+            new CreateFundOperationRequest("withdraw", 200m, "Возврат для перераспределения PG"),
+            null,
+            CancellationToken.None);
+        var redistribution = await fundService.CreateOperationAsync(
+            reserveFund.Id,
+            new CreateFundOperationRequest("deposit", 200m, "Перераспределение PG"),
+            null,
+            CancellationToken.None);
+        Assert.True(withdrawal.Succeeded);
+        Assert.True(redistribution.Succeeded);
+        await AssertInvariantAsync(600m, 400m);
+
+        Assert.True((await fundService.CancelOperationAsync(redistribution.Value!.Id, new CancelFundOperationRequest("Отмена перераспределения PG"), null, CancellationToken.None)).Succeeded);
+        Assert.True((await fundService.CancelOperationAsync(withdrawal.Value!.Id, new CancelFundOperationRequest("Отмена изъятия PG"), null, CancellationToken.None)).Succeeded);
+        Assert.True((await fundService.CancelOperationAsync(transfer.Value!.Id, new CancelFundOperationRequest("Отмена сдачи PG"), null, CancellationToken.None)).Succeeded);
+        await AssertInvariantAsync(1000m, 0m);
+        Assert.True((await fundService.RestoreOperationAsync(transfer.Value.Id, null, CancellationToken.None)).Succeeded);
+        await AssertInvariantAsync(600m, 400m);
     }
 
     [PostgreSqlFact]

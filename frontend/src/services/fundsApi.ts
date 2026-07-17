@@ -19,6 +19,7 @@ export type FundOperationDto = {
   reason: string
   createdAtUtc: string
   isCanceled: boolean
+  isCashToBankTransfer?: boolean
 }
 
 export type FundOperationPageDto = {
@@ -32,6 +33,7 @@ export type CreateFundOperationRequest = {
   operationKind: 'deposit' | 'withdraw'
   amount: number
   reason: string
+  isCashToBankTransfer?: boolean
 }
 
 export type UpdateFundOperationRequest = {

@@ -21,7 +21,8 @@ public sealed record FundOperationDto(
     decimal BalanceAfter,
     string Reason,
     DateTimeOffset CreatedAtUtc,
-    bool IsCanceled);
+    bool IsCanceled,
+    bool IsCashToBankTransfer);
 
 public sealed record FundOperationPageDto(
     IReadOnlyList<FundOperationDto> Items,
@@ -32,7 +33,8 @@ public sealed record FundOperationPageDto(
 public sealed record CreateFundOperationRequest(
     [Required, MaxLength(20)] string OperationKind,
     [Range(0.01, 999999999)] decimal Amount,
-    [Required, MaxLength(1000)] string Reason);
+    [Required, MaxLength(1000)] string Reason,
+    bool IsCashToBankTransfer = false);
 
 public sealed record UpdateFundOperationRequest(
     [Range(0.01, 999999999)] decimal Amount,

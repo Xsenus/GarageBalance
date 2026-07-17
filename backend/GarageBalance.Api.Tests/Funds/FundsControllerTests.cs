@@ -209,7 +209,8 @@ public sealed class FundsControllerTests
             500m,
             "Решение правления",
             DateTimeOffset.UtcNow,
-            isCanceled);
+            isCanceled,
+            false);
     }
 
     private sealed class FakeFundService : IFundService

@@ -816,7 +816,9 @@ public sealed class BackendPerformanceGuardTests
     {
         var source = ReadApiSource("Infrastructure/Data/EfFinanceAvailableBalanceQuery.cs");
 
-        Assert.Contains("!operation.IsCanceled && operation.OperationKind == FundOperationKinds.Deposit", source, StringComparison.Ordinal);
+        Assert.Contains("!operation.IsCanceled", source, StringComparison.Ordinal);
+        Assert.Contains("operation.OperationKind == FundOperationKinds.Deposit", source, StringComparison.Ordinal);
+        Assert.Contains("operation.IsCashToBankTransfer", source, StringComparison.Ordinal);
         Assert.Contains("BankDepositTotal = group.Sum(operation => operation.Amount)", source, StringComparison.Ordinal);
         Assert.Equal(1, CountOccurrences(source, ".ToListAsync(cancellationToken)"));
     }

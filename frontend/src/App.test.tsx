@@ -4067,6 +4067,7 @@ describe('App', () => {
         operationKind: 'deposit',
         amount: 12300,
         reason: 'Сдача кассы в банк 2026-06-30: Инкассация из формы',
+        isCashToBankTransfer: true,
       },
     })
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Учет суммы на счете в банке' })).not.toBeInTheDocument())

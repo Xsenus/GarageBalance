@@ -87,6 +87,7 @@ public sealed class EfCashMovementReportQuery(GarageBalanceDbContext dbContext) 
             .Where(operation =>
                 !operation.IsCanceled &&
                 operation.OperationKind == FundOperationKinds.Deposit &&
+                operation.IsCashToBankTransfer &&
                 operation.CreatedAtUtc >= fromUtc &&
                 operation.CreatedAtUtc < toExclusiveUtc);
 
@@ -98,6 +99,7 @@ public sealed class EfCashMovementReportQuery(GarageBalanceDbContext dbContext) 
                 .Where(operation =>
                     !operation.IsCanceled &&
                     operation.OperationKind == FundOperationKinds.Deposit &&
+                    operation.IsCashToBankTransfer &&
                     operation.CreatedAtUtc >= fromUtc &&
                     operation.CreatedAtUtc < toExclusiveUtc)
                 .ToList();
