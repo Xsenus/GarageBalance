@@ -74,19 +74,107 @@ public sealed class PostgreSqlExpenseWorksheetIntegrationTests
         Assert.Equal(0m, result.Value.ClosingAdvanceTotal);
     }
 
+    [PostgreSqlFact]
+    public async Task ExpenseWorksheet_CarriesDebtAndAdvanceAcrossMonthsWithoutPersistingTransfers()
+    {
+        await using var database = await PostgreSqlTestDatabase.CreateAsync();
+        Guid supplierId;
+        Guid expenseTypeId;
+        await using (var seedContext = database.CreateContext())
+        {
+            var supplierGroup = new SupplierGroup { Name = "Перенос выплат PG" };
+            var supplier = new Supplier { Name = "Поставщик переноса PG", Group = supplierGroup };
+            var expenseType = new ExpenseType { Name = "Услуга переноса PG", Code = "pg_carry_service" };
+            supplierId = supplier.Id;
+            expenseTypeId = expenseType.Id;
+            seedContext.AddRange(
+                supplierGroup,
+                supplier,
+                expenseType,
+                CreateAccrual(supplier, expenseType, new DateOnly(2026, 1, 1), 100m),
+                CreateAccrual(supplier, expenseType, new DateOnly(2026, 2, 1), 200m),
+                CreateAccrual(supplier, expenseType, new DateOnly(2026, 3, 1), 100m),
+                CreateAccrual(supplier, expenseType, new DateOnly(2026, 4, 1), 80m),
+                CreateExpense(supplier, null, expenseType, new DateOnly(2026, 1, 1), 100m),
+                CreateExpense(supplier, null, expenseType, new DateOnly(2026, 2, 1), 50m),
+                CreateExpense(supplier, null, expenseType, new DateOnly(2026, 3, 1), 300m));
+            await seedContext.SaveChangesAsync();
+        }
+
+        await using var assertionContext = database.CreateContext();
+        var service = FinanceServiceTestFactory.Create(assertionContext);
+        var february = await service.GetExpenseWorksheetAsync(
+            new ExpenseWorksheetRequest(new DateOnly(2026, 2, 1)), CancellationToken.None);
+        var march = await service.GetExpenseWorksheetAsync(
+            new ExpenseWorksheetRequest(new DateOnly(2026, 3, 1)), CancellationToken.None);
+        var april = await service.GetExpenseWorksheetAsync(
+            new ExpenseWorksheetRequest(new DateOnly(2026, 4, 1)), CancellationToken.None);
+        var repeatedApril = await service.GetExpenseWorksheetAsync(
+            new ExpenseWorksheetRequest(new DateOnly(2026, 4, 1)), CancellationToken.None);
+
+        AssertExpenseCarry(FindRow(february.Value!, supplierId, expenseTypeId), 0m, 0m, 150m, 0m);
+        AssertExpenseCarry(FindRow(march.Value!, supplierId, expenseTypeId), 150m, 0m, 0m, 50m);
+        AssertExpenseCarry(FindRow(april.Value!, supplierId, expenseTypeId), 0m, 50m, 30m, 0m);
+        AssertExpenseCarry(FindRow(repeatedApril.Value!, supplierId, expenseTypeId), 0m, 50m, 30m, 0m);
+        Assert.Equal(4, await assertionContext.SupplierAccruals.CountAsync());
+        Assert.Equal(3, await assertionContext.FinancialOperations.CountAsync());
+    }
+
+    private static SupplierAccrual CreateAccrual(
+        Supplier supplier,
+        ExpenseType expenseType,
+        DateOnly accountingMonth,
+        decimal amount) =>
+        new()
+        {
+            Supplier = supplier,
+            ExpenseType = expenseType,
+            AccountingMonth = accountingMonth,
+            Amount = amount,
+            Source = AccrualSources.Manual
+        };
+
     private static FinancialOperation CreateExpense(
         Supplier? supplier,
         StaffMember? staffMember,
         ExpenseType expenseType,
+        decimal amount) => CreateExpense(
+            supplier,
+            staffMember,
+            expenseType,
+            new DateOnly(2026, 1, 1),
+            amount);
+
+    private static FinancialOperation CreateExpense(
+        Supplier? supplier,
+        StaffMember? staffMember,
+        ExpenseType expenseType,
+        DateOnly accountingMonth,
         decimal amount) =>
         new()
         {
             OperationKind = FinancialOperationKinds.Expense,
-            OperationDate = new DateOnly(2026, 1, 20),
-            AccountingMonth = new DateOnly(2026, 1, 1),
+            OperationDate = accountingMonth.AddDays(19),
+            AccountingMonth = accountingMonth,
             Amount = amount,
             Supplier = supplier,
             StaffMember = staffMember,
             ExpenseType = expenseType
         };
+
+    private static ExpenseWorksheetRowDto FindRow(ExpenseWorksheetDto worksheet, Guid supplierId, Guid expenseTypeId) =>
+        Assert.Single(worksheet.Rows, row => row.SupplierId == supplierId && row.ExpenseTypeId == expenseTypeId);
+
+    private static void AssertExpenseCarry(
+        ExpenseWorksheetRowDto row,
+        decimal openingDebt,
+        decimal openingAdvance,
+        decimal closingDebt,
+        decimal closingAdvance)
+    {
+        Assert.Equal(openingDebt, row.OpeningDebt);
+        Assert.Equal(openingAdvance, row.OpeningAdvance);
+        Assert.Equal(closingDebt, row.ClosingDebt);
+        Assert.Equal(closingAdvance, row.ClosingAdvance);
+    }
 }

@@ -4297,6 +4297,77 @@ public sealed class FinanceServiceTests
         };
 
     [Fact]
+    public async Task GetExpenseWorksheetAsync_CarriesDebtAndAdvanceAcrossMonthsWithoutCreatingTransferRows()
+    {
+        var commandCounter = new SelectCommandCounter();
+        await using var database = await TestDatabase.CreateAsync(commandCounter);
+        var service = FinanceServiceTestFactory.Create(database.Context);
+        var supplierGroup = new SupplierGroup { Name = "Последовательность выплат" };
+        var supplier = new Supplier { Name = "Поставщик последовательности", Group = supplierGroup };
+        var expenseType = new ExpenseType { Name = "Последовательная услуга", Code = "sequence_service" };
+        database.Context.AddRange(
+            supplierGroup,
+            supplier,
+            expenseType,
+            CreateSupplierAccrual(supplier, expenseType, new DateOnly(2026, 1, 1), 100m),
+            CreateSupplierAccrual(supplier, expenseType, new DateOnly(2026, 2, 1), 200m),
+            CreateSupplierAccrual(supplier, expenseType, new DateOnly(2026, 3, 1), 100m),
+            CreateSupplierAccrual(supplier, expenseType, new DateOnly(2026, 4, 1), 80m),
+            CreateHistoricalExpense(supplier, null, expenseType, new DateOnly(2026, 1, 1), 100m),
+            CreateHistoricalExpense(supplier, null, expenseType, new DateOnly(2026, 2, 1), 50m),
+            CreateHistoricalExpense(supplier, null, expenseType, new DateOnly(2026, 3, 1), 300m));
+        await database.Context.SaveChangesAsync();
+        commandCounter.Reset();
+
+        var january = await service.GetExpenseWorksheetAsync(
+            new ExpenseWorksheetRequest(new DateOnly(2026, 1, 1)), CancellationToken.None);
+        var february = await service.GetExpenseWorksheetAsync(
+            new ExpenseWorksheetRequest(new DateOnly(2026, 2, 1)), CancellationToken.None);
+        var march = await service.GetExpenseWorksheetAsync(
+            new ExpenseWorksheetRequest(new DateOnly(2026, 3, 1)), CancellationToken.None);
+        var april = await service.GetExpenseWorksheetAsync(
+            new ExpenseWorksheetRequest(new DateOnly(2026, 4, 1)), CancellationToken.None);
+        var repeatedApril = await service.GetExpenseWorksheetAsync(
+            new ExpenseWorksheetRequest(new DateOnly(2026, 4, 1)), CancellationToken.None);
+
+        Assert.Equal(5, commandCounter.Count);
+        AssertExpenseCarry(Assert.Single(january.Value!.Rows), 0m, 0m, 0m, 0m);
+        AssertExpenseCarry(Assert.Single(february.Value!.Rows), 0m, 0m, 150m, 0m);
+        AssertExpenseCarry(Assert.Single(march.Value!.Rows), 150m, 0m, 0m, 50m);
+        AssertExpenseCarry(Assert.Single(april.Value!.Rows), 0m, 50m, 30m, 0m);
+        AssertExpenseCarry(Assert.Single(repeatedApril.Value!.Rows), 0m, 50m, 30m, 0m);
+        Assert.Equal(4, await database.Context.SupplierAccruals.CountAsync());
+        Assert.Equal(3, await database.Context.FinancialOperations.CountAsync());
+    }
+
+    private static SupplierAccrual CreateSupplierAccrual(
+        Supplier supplier,
+        ExpenseType expenseType,
+        DateOnly accountingMonth,
+        decimal amount) =>
+        new()
+        {
+            Supplier = supplier,
+            ExpenseType = expenseType,
+            AccountingMonth = accountingMonth,
+            Amount = amount,
+            Source = AccrualSources.Manual
+        };
+
+    private static void AssertExpenseCarry(
+        ExpenseWorksheetRowDto row,
+        decimal openingDebt,
+        decimal openingAdvance,
+        decimal closingDebt,
+        decimal closingAdvance)
+    {
+        Assert.Equal(openingDebt, row.OpeningDebt);
+        Assert.Equal(openingAdvance, row.OpeningAdvance);
+        Assert.Equal(closingDebt, row.ClosingDebt);
+        Assert.Equal(closingAdvance, row.ClosingAdvance);
+    }
+
+    [Fact]
     public async Task GetExpenseWorksheetAsync_KeepsCashAndBankEqualCollectedFundsAfterMixedExpenses()
     {
         await using var database = await TestDatabase.CreateAsync();
