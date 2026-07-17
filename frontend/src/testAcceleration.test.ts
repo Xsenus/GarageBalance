@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 
 import { describe, expect, it } from 'vitest'
+import { chooseTestParallelism } from '../scripts/test-parallelism.mjs'
 
 describe('frontend test acceleration', () => {
   const packageJson = JSON.parse(readFileSync(resolve(process.cwd(), 'package.json'), 'utf8')) as {
@@ -28,10 +29,30 @@ describe('frontend test acceleration', () => {
 
   it('balances the monolithic App scenarios and always removes generated shards', () => {
     expect(runner).toContain('balanceTests(testStatements, shardCount)')
+    expect(runner).toContain('chooseTestParallelism(availableParallelism())')
+    expect(runner).toContain('VITEST_APP_SHARDS, workerCount')
     expect(runner).toContain("['it', 'test', 'describe']")
     expect(runner).toContain('Full App workflows are skipped.')
     expect(runner).toContain('Math.min(8, availableParallelism())')
+    expect(runner).toContain("quickMode ? ['--pool=threads'] : []")
     expect(runner).toContain('finally {\n  cleanupGeneratedShards()')
     expect(runner).toContain('--slowTestThreshold=1000')
+  })
+
+  it.each([
+    [1, 1],
+    [2, 2],
+    [3, 2],
+    [4, 3],
+    [5, 3],
+    [6, 4],
+    [8, 4],
+  ])('uses %i workers as a safe parallelism budget of %i', (availableWorkers, expectedWorkers) => {
+    expect(chooseTestParallelism(availableWorkers)).toBe(expectedWorkers)
+  })
+
+  it('falls back to one worker for an invalid CPU budget', () => {
+    expect(chooseTestParallelism(0)).toBe(1)
+    expect(chooseTestParallelism(Number.NaN)).toBe(1)
   })
 })

@@ -4,6 +4,7 @@ import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import ts from 'typescript'
+import { chooseTestParallelism } from './test-parallelism.mjs'
 
 const frontendRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const sourcePath = join(frontendRoot, 'src', 'App.test.tsx')
@@ -11,15 +12,13 @@ const shardPattern = /^App\.shard-\d+\.test\.tsx$/
 const relatedMode = process.argv.includes('--related')
 const quickMode = process.argv.includes('--quick')
 const forwardedArgs = process.argv.slice(2).filter((argument) => !['--ci', '--quick', '--related'].includes(argument))
-const isCi = process.argv.includes('--ci') || process.env.CI === 'true'
-const defaultParallelism = Math.max(1, Math.min(2, Math.floor(availableParallelism() / 2)))
-const ciParallelism = Math.max(1, Math.min(2, availableParallelism()))
+const defaultParallelism = chooseTestParallelism(availableParallelism())
 const quickParallelism = Math.max(2, Math.min(8, availableParallelism()))
-const shardCount = readPositiveInteger(process.env.VITEST_APP_SHARDS, defaultParallelism)
 const workerCount = readPositiveInteger(
   process.env.VITEST_MAX_WORKERS,
-  quickMode ? quickParallelism : isCi ? ciParallelism : defaultParallelism,
+  quickMode ? quickParallelism : defaultParallelism,
 )
+const shardCount = readPositiveInteger(process.env.VITEST_APP_SHARDS, workerCount)
 let child
 
 cleanupGeneratedShards()
@@ -36,6 +35,7 @@ try {
     vitestCli,
     relatedMode ? 'related' : 'run',
     ...(relatedMode ? ['--run'] : []),
+    ...(quickMode ? ['--pool=threads'] : []),
     '--exclude',
     'src/App.test.tsx',
     `--maxWorkers=${workerCount}`,
