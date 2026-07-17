@@ -796,6 +796,9 @@ public sealed class FinanceService(
             return FinanceResult<FinancialOperationDto>.Failure("expense_type_not_found", "Вид выплаты не найден.");
         }
 
+        var isCashExpense = IsCashExpenseType(expenseType);
+        await using var balanceLock = await financeAvailableBalanceQuery.AcquireUpdateLockAsync(isCashExpense, cancellationToken);
+
         var duplicate = await HasDocumentDuplicateAsync(FinancialOperationKinds.Expense, request.DocumentNumber, request.OperationDate, cancellationToken);
         if (duplicate)
         {
@@ -803,7 +806,7 @@ public sealed class FinanceService(
         }
 
         var amount = MoneyMath.RoundMoney(request.Amount);
-        if (IsCashExpenseType(expenseType))
+        if (isCashExpense)
         {
             var availableCashAmount = await CalculateAvailableCashAmountAsync(cancellationToken);
             if (amount > availableCashAmount)
@@ -839,7 +842,31 @@ public sealed class FinanceService(
         };
 
         financialOperationRepository.Add(operation);
-        AddAudit(actorUserId, "finance.expense_created", operation, FormatExpenseCreatedAuditSummary(operation));
+        if (isCashExpense)
+        {
+            supplierAccrualRepository.Add(new SupplierAccrual
+            {
+                SupplierId = supplier.Id,
+                Supplier = supplier,
+                ExpenseTypeId = expenseType.Id,
+                ExpenseType = expenseType,
+                AccountingMonth = operation.AccountingMonth,
+                Amount = amount,
+                Source = AccrualSources.Manual,
+                DocumentNumber = operation.DocumentNumber,
+                Comment = operation.Comment
+            });
+            AddAudit(
+                actorUserId,
+                "finance.atomic_cash_expense_created",
+                operation,
+                FormatAtomicCashExpenseCreatedAuditSummary(operation));
+        }
+        else
+        {
+            AddAudit(actorUserId, "finance.expense_created", operation, FormatExpenseCreatedAuditSummary(operation));
+        }
+
         await unitOfWork.SaveChangesAsync(cancellationToken);
         return FinanceResult<FinancialOperationDto>.Success(await ToDtoAsync(operation, cancellationToken));
     }
@@ -2863,6 +2890,13 @@ public sealed class FinanceService(
                 ["previousActiveAllocationCount"] = result.PreviousActiveAllocationCount,
                 ["activeAllocationCount"] = result.ActiveAllocationCount
             });
+    }
+
+    private static string FormatAtomicCashExpenseCreatedAuditSummary(FinancialOperation operation)
+    {
+        var comment = NormalizeOptional(operation.Comment);
+        var summary = $"Атомарно созданы стоимость и оплата выплаты {FormatExpenseOperationSnapshot(operation)}.";
+        return comment is null ? summary : $"{summary} Комментарий: {comment}";
     }
 
     private void AddAudit(

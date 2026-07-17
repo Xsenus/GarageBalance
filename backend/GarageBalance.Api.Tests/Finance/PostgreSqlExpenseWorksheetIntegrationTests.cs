@@ -9,6 +9,74 @@ namespace GarageBalance.Api.Tests.Finance;
 public sealed class PostgreSqlExpenseWorksheetIntegrationTests
 {
     [PostgreSqlFact]
+    public async Task AtomicCashExpense_SerializesConcurrentPayoutsAndKeepsCostEqualToPayment()
+    {
+        await using var database = await PostgreSqlTestDatabase.CreateAsync();
+        Guid supplierId;
+        Guid expenseTypeId;
+        await using (var seedContext = database.CreateContext())
+        {
+            seedContext.FinancialOperations.RemoveRange(seedContext.FinancialOperations);
+            seedContext.FundOperations.RemoveRange(seedContext.FundOperations);
+            seedContext.Funds.RemoveRange(seedContext.Funds);
+            var owner = new Owner { LastName = "Проверка", FirstName = "Атомарности" };
+            var garage = new Garage { Number = "PG-ATOMIC", PeopleCount = 1, FloorCount = 1, Owner = owner };
+            var incomeType = new IncomeType { Name = "Поступление для атомарной проверки PG", Code = "pg_atomic_income" };
+            var supplierGroup = new SupplierGroup { Name = "Атомарные выплаты PG" };
+            var supplier = new Supplier { Name = "Получатель атомарной выплаты PG", Group = supplierGroup };
+            var expenseType = new ExpenseType { Name = "Авансовые выплаты PG", Code = "advance_payment" };
+            supplierId = supplier.Id;
+            expenseTypeId = expenseType.Id;
+            seedContext.AddRange(
+                owner,
+                garage,
+                incomeType,
+                supplierGroup,
+                supplier,
+                expenseType,
+                new FinancialOperation
+                {
+                    OperationKind = FinancialOperationKinds.Income,
+                    OperationDate = new DateOnly(2026, 6, 10),
+                    AccountingMonth = new DateOnly(2026, 6, 1),
+                    Amount = 100m,
+                    Garage = garage,
+                    IncomeType = incomeType
+                });
+            await seedContext.SaveChangesAsync();
+        }
+
+        await using var firstContext = database.CreateContext();
+        await using var secondContext = database.CreateContext();
+        var firstService = FinanceServiceTestFactory.Create(firstContext);
+        var secondService = FinanceServiceTestFactory.Create(secondContext);
+        var firstRequest = new CreateExpenseOperationRequest(
+            supplierId, expenseTypeId, new DateOnly(2026, 6, 20), new DateOnly(2026, 6, 1), 70m, "PG-ATOMIC-1", null);
+        var secondRequest = firstRequest with { DocumentNumber = "PG-ATOMIC-2" };
+
+        var results = await Task.WhenAll(
+            firstService.CreateExpenseAsync(firstRequest, Guid.NewGuid(), CancellationToken.None),
+            secondService.CreateExpenseAsync(secondRequest, Guid.NewGuid(), CancellationToken.None));
+
+        Assert.Single(results, result => result.Succeeded);
+        var rejected = Assert.Single(results, result => !result.Succeeded);
+        Assert.Equal("cash_amount_insufficient", rejected.ErrorCode);
+
+        await using var assertionContext = database.CreateContext();
+        Assert.Equal(1, await assertionContext.FinancialOperations.CountAsync(operation =>
+            operation.OperationKind == FinancialOperationKinds.Expense &&
+            operation.SupplierId == supplierId &&
+            operation.ExpenseTypeId == expenseTypeId));
+        Assert.Equal(70m, await assertionContext.SupplierAccruals
+            .Where(accrual => accrual.SupplierId == supplierId && accrual.ExpenseTypeId == expenseTypeId)
+            .SumAsync(accrual => accrual.Amount));
+        Assert.Equal(70m, await assertionContext.FinancialOperations
+            .Where(operation => operation.OperationKind == FinancialOperationKinds.Expense && operation.SupplierId == supplierId && operation.ExpenseTypeId == expenseTypeId)
+            .SumAsync(operation => operation.Amount));
+        Assert.Equal(1, await assertionContext.AuditEvents.CountAsync(audit => audit.Action == "finance.atomic_cash_expense_created"));
+    }
+
+    [PostgreSqlFact]
     public async Task ExpenseWorksheet_AggregatesOpeningBalancesOnPostgreSql()
     {
         await using var database = await PostgreSqlTestDatabase.CreateAsync();

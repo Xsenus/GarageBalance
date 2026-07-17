@@ -1640,10 +1640,66 @@ public sealed class FinanceServiceTests
         Assert.True(result.Succeeded);
         Assert.Equal(300m, result.Value!.Amount);
         Assert.Equal("Авансовые выплаты", result.Value.ExpenseTypeName);
+        var accrual = Assert.Single(database.Context.SupplierAccruals);
+        Assert.Equal(300m, accrual.Amount);
+        Assert.Equal(result.Value.AccountingMonth, accrual.AccountingMonth);
+        Assert.Equal("CASH-ADVANCE", accrual.DocumentNumber);
+        var audit = Assert.Single(database.Context.AuditEvents);
+        Assert.Equal("finance.atomic_cash_expense_created", audit.Action);
+        Assert.Contains("Атомарно созданы стоимость и оплата выплаты", audit.Summary, StringComparison.Ordinal);
         var worksheet = await service.GetExpenseWorksheetAsync(new ExpenseWorksheetRequest(new DateOnly(2026, 6, 1)), CancellationToken.None);
         Assert.True(worksheet.Succeeded);
         Assert.Equal(0m, worksheet.Value!.BankAmount);
         Assert.Equal(200m, worksheet.Value.CashAmount);
+        var row = Assert.Single(worksheet.Value.Rows, item => item.ExpenseTypeId == cashExpenseType.Id);
+        Assert.Equal(300m, row.AccrualAmount);
+        Assert.Equal(300m, row.ExpenseAmount);
+        Assert.Equal(0m, row.ClosingDebt);
+        Assert.Equal(0m, row.ClosingAdvance);
+    }
+
+    [Fact]
+    public async Task CreateExpenseAsync_RollsBackOperationAccrualAndAuditWhenAccrualInsertFails()
+    {
+        var interceptor = new SupplierAccrualInsertFailureInterceptor();
+        await using var database = await TestDatabase.CreateAsync(interceptor);
+        var fixtures = await database.SeedAsync();
+        database.Context.FundOperations.RemoveRange(database.Context.FundOperations);
+        var cashExpenseType = new ExpenseType { Name = "Выплата без чека", Code = "no_receipt" };
+        database.Context.AddRange(
+            cashExpenseType,
+            new FinancialOperation
+            {
+                OperationKind = FinancialOperationKinds.Income,
+                OperationDate = new DateOnly(2026, 6, 10),
+                AccountingMonth = new DateOnly(2026, 6, 1),
+                Amount = 500m,
+                GarageId = fixtures.Garage.Id,
+                IncomeTypeId = fixtures.IncomeType.Id
+            });
+        await database.Context.SaveChangesAsync();
+        var operationCountBefore = await database.Context.FinancialOperations.CountAsync();
+        var accrualCountBefore = await database.Context.SupplierAccruals.CountAsync();
+        var auditCountBefore = await database.Context.AuditEvents.CountAsync();
+        interceptor.Enabled = true;
+
+        var exception = await Assert.ThrowsAsync<DbUpdateException>(() => FinanceServiceTestFactory.Create(database.Context).CreateExpenseAsync(
+            new CreateExpenseOperationRequest(
+                fixtures.Supplier.Id,
+                cashExpenseType.Id,
+                new DateOnly(2026, 6, 20),
+                new DateOnly(2026, 6, 1),
+                300m,
+                "CASH-ROLLBACK",
+                "Проверка отката"),
+            Guid.NewGuid(),
+            CancellationToken.None));
+        Assert.IsType<InvalidOperationException>(exception.InnerException);
+
+        database.Context.ChangeTracker.Clear();
+        Assert.Equal(operationCountBefore, await database.Context.FinancialOperations.CountAsync());
+        Assert.Equal(accrualCountBefore, await database.Context.SupplierAccruals.CountAsync());
+        Assert.Equal(auditCountBefore, await database.Context.AuditEvents.CountAsync());
     }
 
     [Fact]
@@ -4607,6 +4663,39 @@ public sealed class FinanceServiceTests
             }
 
             return base.ReaderExecutingAsync(command, eventData, result, cancellationToken);
+        }
+    }
+
+    private sealed class SupplierAccrualInsertFailureInterceptor : DbCommandInterceptor
+    {
+        public bool Enabled { get; set; }
+
+        public override ValueTask<InterceptionResult<int>> NonQueryExecutingAsync(
+            DbCommand command,
+            CommandEventData eventData,
+            InterceptionResult<int> result,
+            CancellationToken cancellationToken = default)
+        {
+            ThrowIfSupplierAccrualInsert(command);
+            return base.NonQueryExecutingAsync(command, eventData, result, cancellationToken);
+        }
+
+        public override ValueTask<InterceptionResult<DbDataReader>> ReaderExecutingAsync(
+            DbCommand command,
+            CommandEventData eventData,
+            InterceptionResult<DbDataReader> result,
+            CancellationToken cancellationToken = default)
+        {
+            ThrowIfSupplierAccrualInsert(command);
+            return base.ReaderExecutingAsync(command, eventData, result, cancellationToken);
+        }
+
+        private void ThrowIfSupplierAccrualInsert(DbCommand command)
+        {
+            if (Enabled && command.CommandText.Contains("INSERT INTO \"supplier_accruals\"", StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException("Имитирована ошибка второй записи атомарной выплаты.");
+            }
         }
     }
 }

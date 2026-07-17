@@ -3259,6 +3259,12 @@ describe('App', () => {
     const incomeType = createAccountingType({ id: 'income-electricity', name: 'Электроэнергия', code: 'electricity' })
     const waterIncomeType = createAccountingType({ id: 'income-water', name: 'Водоснабжение', code: 'water' })
     const incomeTypes = [incomeType, waterIncomeType]
+    const electricityExpenseType = createAccountingType({ id: 'expense-type-1', name: 'Электроэнергия', code: 'electricity' })
+    const advanceExpenseType = createAccountingType({ id: 'expense-advance', name: 'Авансовые выплаты', code: 'advance_payment' })
+    const noReceiptExpenseType = createAccountingType({ id: 'expense-no-receipt', name: 'Выплата без чека', code: 'no_receipt' })
+    const expenseTypes = [electricityExpenseType, advanceExpenseType, noReceiptExpenseType]
+    let atomicAdvanceAmount = 16500
+    let expenseWorksheetRequestCount = 0
     const savedIncomeRequests: CreateIncomeOperationRequest[] = []
     const savedAccrualRequests: CreateAccrualRequest[] = []
     const savedRegularAccrualRequests: GenerateRegularCatalogAccrualsRequest[] = []
@@ -3272,6 +3278,7 @@ describe('App', () => {
       getGarages: async () => [garage, secondGarage],
       getGaragesPage: searchGaragesPage,
       getIncomeTypes: async () => incomeTypes,
+      getExpenseTypes: async () => expenseTypes,
     })
     const financeClient = createFinanceClient({
       createIncome: async (_token, request) => {
@@ -3343,13 +3350,17 @@ describe('App', () => {
       },
       createExpense: async (_token, request) => {
         savedExpenseRequests.push(request)
+        const requestExpenseType = expenseTypes.find((item) => item.id === request.expenseTypeId) ?? electricityExpenseType
+        if (requestExpenseType.id === advanceExpenseType.id) {
+          atomicAdvanceAmount += request.amount
+        }
         return createFinancialOperation({
           id: `expense-payment-${savedExpenseRequests.length}`,
           operationKind: 'expense',
           supplierId: request.supplierId,
           supplierName: 'Водоканал',
           expenseTypeId: request.expenseTypeId,
-          expenseTypeName: 'Электроэнергия',
+          expenseTypeName: requestExpenseType.name,
           operationDate: request.operationDate,
           accountingMonth: request.accountingMonth,
           amount: request.amount,
@@ -3459,7 +3470,9 @@ describe('App', () => {
           },
         ],
       }),
-      getExpenseWorksheet: async (_token, params) => createExpenseWorksheet({
+      getExpenseWorksheet: async (_token, params) => {
+        expenseWorksheetRequestCount += 1
+        return createExpenseWorksheet({
         accountingMonth: params?.accountingMonth ?? '2026-06-01',
         accrualTotal: 235000,
         expenseTotal: 55500,
@@ -3591,10 +3604,10 @@ describe('App', () => {
             supplierId: 'supplier-1',
             staffMemberId: null,
             counterpartyName: '',
-            expenseTypeId: 'expense-type-1',
+            expenseTypeId: advanceExpenseType.id,
             expenseTypeName: 'Авансовые выплаты',
-            accrualAmount: 0,
-            expenseAmount: 16500,
+            accrualAmount: atomicAdvanceAmount,
+            expenseAmount: atomicAdvanceAmount,
             balance: 0,
             collectedAmount: null,
             difference: null,
@@ -3604,16 +3617,17 @@ describe('App', () => {
             supplierId: 'supplier-1',
             staffMemberId: null,
             counterpartyName: '',
-            expenseTypeId: 'expense-type-1',
+            expenseTypeId: noReceiptExpenseType.id,
             expenseTypeName: 'Выплата без чека',
             accrualAmount: 16500,
-            expenseAmount: 0,
+            expenseAmount: 16500,
             balance: 0,
             collectedAmount: null,
             difference: null,
           },
         ],
-      }),
+        })
+      },
     })
     const fundsClient = createFundsClient({
       createOperation: async (_token, fundId, request) => {
@@ -3890,6 +3904,28 @@ describe('App', () => {
     })
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Новая выплата' })).not.toBeInTheDocument())
     await waitFor(() => expect(addExpenseButton).toHaveFocus())
+
+    const worksheetRequestsBeforeAtomicPayout = expenseWorksheetRequestCount
+    await user.click(addExpenseButton)
+    const atomicExpenseDialog = await screen.findByRole('dialog', { name: 'Новая выплата' })
+    const atomicExpenseType = within(atomicExpenseDialog).getByRole('combobox', { name: 'Вид выплаты' })
+    await user.click(atomicExpenseType)
+    await user.click(within(atomicExpenseDialog).getByRole('option', { name: 'Авансовые выплаты' }))
+    await user.type(within(atomicExpenseDialog).getByLabelText('Сумма выплаты'), '500')
+    await user.type(within(atomicExpenseDialog).getByLabelText('Документ выплаты'), 'ADVANCE-ATOMIC')
+    await user.click(within(atomicExpenseDialog).getByRole('button', { name: 'Провести' }))
+    await waitFor(() => expect(savedExpenseRequests).toHaveLength(2))
+    await waitFor(() => expect(expenseWorksheetRequestCount).toBe(worksheetRequestsBeforeAtomicPayout + 1))
+    const reloadedAdvanceRow = within(expenseTable).getByText('Авансовые выплаты').closest('tr')
+    expect(reloadedAdvanceRow).not.toBeNull()
+    expect(within(reloadedAdvanceRow as HTMLTableRowElement).getAllByRole('cell')[4]).toHaveTextContent('17 000.00')
+    expect(within(reloadedAdvanceRow as HTMLTableRowElement).getAllByRole('cell')[5]).toHaveTextContent('17 000.00')
+    expect(within(reloadedAdvanceRow as HTMLTableRowElement).queryByRole('button', { name: /Оплатить/ })).not.toBeInTheDocument()
+    expect(savedExpenseRequests[1]).toMatchObject({
+      expenseTypeId: advanceExpenseType.id,
+      amount: 500,
+      documentNumber: 'ADVANCE-ATOMIC',
+    })
 
     const staffPaymentButton = within(prototype).getByRole('button', { name: 'Оплатить сотрудника Петрова' })
     await user.click(staffPaymentButton)

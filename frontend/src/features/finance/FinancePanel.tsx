@@ -24,7 +24,7 @@ import { SelectControl } from '../../shared/SelectControl'
 import { TablePagination } from '../../shared/TablePagination'
 import { chooseRegularTariffId, getAccrualValidationErrors, getCompatibleRegularTariffs, getExpenseValidationErrors, getIncomeValidationErrors, getMeterReadingValidationErrors, getRegularAccrualValidationErrorsForCatalog, getSupplierAccrualValidationErrors, getSupplierGroupSalaryValidationErrors } from '../../shared/validation'
 import { formatPaymentMoney, parsePaymentMoney } from './paymentMoneyFormatting'
-import { calculateExpenseWorksheetClosingBalance } from './expenseWorksheetBalances'
+import { calculateExpenseWorksheetClosingBalance, isAtomicCashExpenseType } from './expenseWorksheetBalances'
 
 type AccrualBreakdown =
   | { kind: 'garage'; accrual: AccrualDto }
@@ -74,6 +74,7 @@ type PaymentPrototypeRow = {
   rowKind?: 'supplier' | 'staff' | string
   supplierId?: string | null
   staffMemberId?: string | null
+  expenseTypeId?: string | null
   item: string
   counterparty?: string
   openingDebt: number
@@ -297,6 +298,7 @@ function createExpenseRowsFromWorksheet(worksheet: ExpenseWorksheetDto): Payment
     rowKind: row.rowKind,
     supplierId: row.supplierId,
     staffMemberId: row.staffMemberId,
+    expenseTypeId: row.expenseTypeId,
     counterparty: row.counterpartyName ?? '',
     item: row.expenseTypeName,
     openingDebt: row.openingDebt ?? Math.max(row.openingBalance ?? 0, 0),
@@ -4239,7 +4241,7 @@ function PaymentsPrototypePanel({
       return 'Выберите вид выплаты из справочника.'
     }
 
-    const operation = await financeClient.createExpense(auth.accessToken, {
+    await financeClient.createExpense(auth.accessToken, {
       supplierId: supplier.id,
       expenseTypeId: expenseType.id,
       operationDate: request.operationDate,
@@ -4249,18 +4251,11 @@ function PaymentsPrototypePanel({
       comment: request.comment.trim() || undefined,
     })
 
-    setExpenseRows((currentRows) => currentRows.map((row, index) => {
-      const shouldUpdate = request.rowIndex === index
-        || (request.rowIndex === undefined && row.item.trim().toLocaleLowerCase('ru-RU') === (operation.expenseTypeName ?? expenseType.name).trim().toLocaleLowerCase('ru-RU'))
-      if (!shouldUpdate) {
-        return row
-      }
-
-      const paid = typeof row.paid === 'number' ? row.paid + operation.amount : operation.amount
-      const cost = typeof row.cost === 'number' ? row.cost : operation.amount
-      const balance = Math.max(cost - paid, 0)
-      return { ...row, paid, balance }
-    }))
+    const worksheet = await financeClient.getExpenseWorksheet(auth.accessToken, {
+      accountingMonth: request.accountingMonth,
+    })
+    setExpenseRows(createExpenseRowsFromWorksheet(worksheet))
+    setExpenseBankAmount(worksheet.bankAmount)
 
     return null
   }
@@ -4907,6 +4902,8 @@ function PaymentsPrototypePanel({
                     const supplier = row.counterparty ?? ''
                     const isStaffPaymentRow = row.rowKind === 'staff'
                     const suggestedAmount = row.closingDebt > 0 ? row.closingDebt : typeof row.cost === 'number' ? row.cost : undefined
+                    const rowExpenseType = expenseTypes.find((expenseType) => expenseType.id === row.expenseTypeId)
+                    const isAtomicCashPayout = isAtomicCashExpenseType(rowExpenseType?.code, row.item)
                     return (
                       <tr key={`${row.item}-${index}`}>
                         <td>{supplier}</td>
@@ -4922,7 +4919,7 @@ function PaymentsPrototypePanel({
                           {formatPaymentMoney(row.difference)}
                         </td>
                         <td>
-                          {row.action && row.item !== 'Авансовые выплаты' && row.item !== 'Выплата без чека' ? (
+                          {row.action && !isAtomicCashPayout ? (
                             <button className="link-button" type="button" onClick={(event) => {
                               if (isStaffPaymentRow) {
                                 openStaffPaymentDialog(event, { staffMemberName: supplier, amount: suggestedAmount, rowIndex: index })
