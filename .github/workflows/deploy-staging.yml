@@ -20,12 +20,28 @@ jobs:
     timeout-minutes: 45
     environment: staging
 
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: garagebalance_test
+          POSTGRES_PASSWORD: garagebalance_test_password
+          POSTGRES_DB: garagebalance_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U garagebalance_test -d garagebalance_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
     env:
       DOTNET_NOLOGO: true
       DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true
       FRONTEND_DIR: frontend
       API_PROJECT: backend/GarageBalance.Api/GarageBalance.Api.csproj
       RELEASE_ID: ${{ github.sha }}-${{ github.run_number }}
+      GARAGEBALANCE_POSTGRES_TEST_CONNECTION: Host=127.0.0.1;Port=5432;Database=garagebalance_test;Username=garagebalance_test;Password=garagebalance_test_password
 
     steps:
       - name: Checkout

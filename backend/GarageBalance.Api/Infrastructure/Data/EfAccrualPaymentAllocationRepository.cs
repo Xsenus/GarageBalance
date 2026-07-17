@@ -1,6 +1,10 @@
 using GarageBalance.Api.Application.Finance;
 using GarageBalance.Api.Domain.Finance;
 using Microsoft.EntityFrameworkCore;
+using System.Buffers.Binary;
+using System.Data;
+using System.Data.Common;
+using System.Security.Cryptography;
 
 namespace GarageBalance.Api.Infrastructure.Data;
 
@@ -10,6 +14,54 @@ public sealed class EfAccrualPaymentAllocationRepository(GarageBalanceDbContext 
     private const int AccrualRowKind = 1;
     private const int PaymentRowKind = 2;
     private const int AllocationRowKind = 3;
+
+    public async Task<IAsyncDisposable> AcquireRebuildLockAsync(
+        IReadOnlyCollection<AccrualPaymentAllocationKey> keys,
+        CancellationToken cancellationToken)
+    {
+        if (!dbContext.Database.IsNpgsql())
+        {
+            return NoOpAsyncDisposable.Instance;
+        }
+
+        var lockKeys = keys
+            .Distinct()
+            .Select(CreateAdvisoryLockKey)
+            .Order()
+            .ToArray();
+        if (lockKeys.Length == 0)
+        {
+            return NoOpAsyncDisposable.Instance;
+        }
+
+        var connection = dbContext.Database.GetDbConnection();
+        var closeConnection = connection.State == ConnectionState.Closed;
+        if (closeConnection)
+        {
+            await connection.OpenAsync(cancellationToken);
+        }
+
+        var acquiredKeys = new List<long>(lockKeys.Length);
+        try
+        {
+            foreach (var lockKey in lockKeys)
+            {
+                await ExecuteAdvisoryLockCommandAsync(
+                    connection,
+                    "SELECT pg_advisory_lock(@lock_key)",
+                    lockKey,
+                    cancellationToken);
+                acquiredKeys.Add(lockKey);
+            }
+
+            return new PostgreSqlAdvisoryLockLease(connection, acquiredKeys, closeConnection);
+        }
+        catch
+        {
+            await ReleaseLocksAsync(connection, acquiredKeys, closeConnection);
+            throw;
+        }
+    }
 
     public async Task<AccrualPaymentAllocationRebuildResult> RebuildAsync(
         IReadOnlyCollection<AccrualPaymentAllocationKey> keys,
@@ -142,6 +194,82 @@ public sealed class EfAccrualPaymentAllocationRepository(GarageBalanceDbContext 
                 row.CreatedAtUtc,
                 row.IsCanceled,
                 row.OperationKind));
+    }
+
+    private static long CreateAdvisoryLockKey(AccrualPaymentAllocationKey key)
+    {
+        Span<byte> source = stackalloc byte[32];
+        key.GarageId.TryWriteBytes(source[..16]);
+        key.IncomeTypeId.TryWriteBytes(source[16..]);
+        Span<byte> hash = stackalloc byte[32];
+        SHA256.HashData(source, hash);
+        return BinaryPrimitives.ReadInt64BigEndian(hash);
+    }
+
+    private static async Task ExecuteAdvisoryLockCommandAsync(
+        DbConnection connection,
+        string commandText,
+        long lockKey,
+        CancellationToken cancellationToken)
+    {
+        await using var command = connection.CreateCommand();
+        command.CommandText = commandText;
+        var parameter = command.CreateParameter();
+        parameter.ParameterName = "lock_key";
+        parameter.Value = lockKey;
+        command.Parameters.Add(parameter);
+        await command.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    private static async Task ReleaseLocksAsync(
+        DbConnection connection,
+        IReadOnlyList<long> lockKeys,
+        bool closeConnection)
+    {
+        try
+        {
+            for (var index = lockKeys.Count - 1; index >= 0; index--)
+            {
+                await ExecuteAdvisoryLockCommandAsync(
+                    connection,
+                    "SELECT pg_advisory_unlock(@lock_key)",
+                    lockKeys[index],
+                    CancellationToken.None);
+            }
+        }
+        finally
+        {
+            if (closeConnection)
+            {
+                await connection.CloseAsync();
+            }
+        }
+    }
+
+    private sealed class PostgreSqlAdvisoryLockLease(
+        DbConnection connection,
+        IReadOnlyList<long> lockKeys,
+        bool closeConnection) : IAsyncDisposable
+    {
+        private bool disposed;
+
+        public async ValueTask DisposeAsync()
+        {
+            if (disposed)
+            {
+                return;
+            }
+
+            disposed = true;
+            await ReleaseLocksAsync(connection, lockKeys, closeConnection);
+        }
+    }
+
+    private sealed class NoOpAsyncDisposable : IAsyncDisposable
+    {
+        public static NoOpAsyncDisposable Instance { get; } = new();
+
+        public ValueTask DisposeAsync() => ValueTask.CompletedTask;
     }
 
     private void OverlayTrackedAccruals(List<AllocationLedgerRow> rows, Guid[] garageIds, Guid[] incomeTypeIds)

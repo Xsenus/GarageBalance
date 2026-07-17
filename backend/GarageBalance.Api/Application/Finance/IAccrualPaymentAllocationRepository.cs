@@ -4,6 +4,10 @@ namespace GarageBalance.Api.Application.Finance;
 
 public interface IAccrualPaymentAllocationRepository
 {
+    Task<IAsyncDisposable> AcquireRebuildLockAsync(
+        IReadOnlyCollection<AccrualPaymentAllocationKey> keys,
+        CancellationToken cancellationToken);
+
     Task<AccrualPaymentAllocationRebuildResult> RebuildAsync(
         IReadOnlyCollection<AccrualPaymentAllocationKey> keys,
         CancellationToken cancellationToken);

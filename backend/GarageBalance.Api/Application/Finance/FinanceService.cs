@@ -633,6 +633,9 @@ public sealed class FinanceService(
         };
 
         financialOperationRepository.Add(operation);
+        await using var allocationLock = await accrualPaymentAllocationRepository.AcquireRebuildLockAsync(
+            [new AccrualPaymentAllocationKey(operation.GarageId!.Value, operation.IncomeTypeId!.Value)],
+            cancellationToken);
         await RebuildPaymentAllocationsAsync(
             [new AccrualPaymentAllocationKey(operation.GarageId!.Value, operation.IncomeTypeId!.Value)],
             actorUserId,
