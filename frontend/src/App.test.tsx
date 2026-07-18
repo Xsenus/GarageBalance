@@ -15690,6 +15690,7 @@ function createGarage(overrides: Partial<GarageDto>): GarageDto {
     floorCount: 1,
     ownerId: null,
     ownerName: null,
+    ownerPhone: null,
     startingBalance: 0,
     balance: 0,
     overdueDebt: 0,

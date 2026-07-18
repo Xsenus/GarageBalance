@@ -25,6 +25,7 @@ export type GarageDto = {
   isArchived: boolean
   balance: number
   overdueDebt: number
+  ownerPhone: string | null
 }
 
 export type SupplierGroupDto = {

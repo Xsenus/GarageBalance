@@ -549,7 +549,7 @@ public sealed class DictionaryServiceTests
     {
         await using var database = await TestDatabase.CreateAsync();
         var service = DictionaryServiceTestFactory.Create(database.Context);
-        var firstOwner = await service.CreateOwnerAsync(new UpsertOwnerRequest("Иванов", "Иван", null, null, null, null), null, CancellationToken.None);
+        var firstOwner = await service.CreateOwnerAsync(new UpsertOwnerRequest("Иванов", "Иван", null, "+7 900 111-22-33", "Лишний адрес", "Лишние заметки"), null, CancellationToken.None);
         var secondOwner = await service.CreateOwnerAsync(new UpsertOwnerRequest("Петров", "Петр", null, null, null, null), null, CancellationToken.None);
         await service.CreateGarageAsync(new UpsertGarageRequest("12", 1, 1, firstOwner.Value!.Id, 0, null, null, null), null, CancellationToken.None);
         await service.CreateGarageAsync(new UpsertGarageRequest("21", 1, 1, secondOwner.Value!.Id, 0, null, null, null), null, CancellationToken.None);
@@ -559,8 +559,10 @@ public sealed class DictionaryServiceTests
 
         var garageByNumber = Assert.Single(byNumber);
         Assert.Equal("Иванов Иван", garageByNumber.OwnerName);
+        Assert.Equal("+7 900 111-22-33", garageByNumber.OwnerPhone);
         var garageByOwner = Assert.Single(byOwner);
         Assert.Equal("21", garageByOwner.Number);
+        Assert.Null(garageByOwner.OwnerPhone);
     }
 
     [Fact]

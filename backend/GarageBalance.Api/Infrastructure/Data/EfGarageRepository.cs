@@ -13,7 +13,7 @@ public sealed class EfGarageRepository(GarageBalanceDbContext dbContext, TimePro
     private const int AllocatedIncomeBalanceCategory = 4;
     private DateOnly Today => DateOnly.FromDateTime((timeProvider ?? TimeProvider.System).GetUtcNow().UtcDateTime);
 
-    public async Task<IReadOnlyList<Garage>> GetListAsync(
+    public async Task<IReadOnlyList<GarageListItemData>> GetListAsync(
         string? normalizedSearch,
         bool includeArchived,
         int limit,
@@ -22,12 +22,12 @@ public sealed class EfGarageRepository(GarageBalanceDbContext dbContext, TimePro
         var query = ApplyArchiveFilter(includeArchived);
         if (normalizedSearch is { } searchValue && IsSqliteProvider())
         {
-            var garages = await query.OrderBy(garage => garage.Number).ToListAsync(cancellationToken);
+            var garages = await ProjectListItems(query.OrderBy(garage => garage.Number)).ToListAsync(cancellationToken);
             return garages.Where(garage => GarageMatchesSearch(garage, searchValue)).Take(limit).ToList();
         }
 
-        return await ApplySearch(query, normalizedSearch)
-            .OrderBy(garage => garage.Number)
+        return await ProjectListItems(ApplySearch(query, normalizedSearch)
+                .OrderBy(garage => garage.Number))
             .Take(limit)
             .ToListAsync(cancellationToken);
     }
@@ -45,7 +45,7 @@ public sealed class EfGarageRepository(GarageBalanceDbContext dbContext, TimePro
         var query = ApplyArchiveFilter(includeArchived);
         if (IsSqliteProvider() && (normalizedSearch is not null || sortBy == "overdueDebt" || debtorsOnly))
         {
-            var garages = await query.ToListAsync(cancellationToken);
+            var garages = await ProjectListItems(query).ToListAsync(cancellationToken);
             var filtered = normalizedSearch is { } searchValue
                 ? garages.Where(garage => GarageMatchesSearch(garage, searchValue)).ToList()
                 : garages;
@@ -71,10 +71,10 @@ public sealed class EfGarageRepository(GarageBalanceDbContext dbContext, TimePro
             query = ApplyDebtorsFilter(query);
         }
         var totalCount = await query.CountAsync(cancellationToken);
-        var items = await ApplyPageSorting(query, sortBy, sortDescending)
-            .ThenBy(garage => garage.Id)
-            .Skip(offset)
-            .Take(limit)
+        var items = await ProjectListItems(ApplyPageSorting(query, sortBy, sortDescending)
+                .ThenBy(garage => garage.Id)
+                .Skip(offset)
+                .Take(limit))
             .ToListAsync(cancellationToken);
         return new GaragePageData(items, totalCount);
     }
@@ -214,8 +214,24 @@ public sealed class EfGarageRepository(GarageBalanceDbContext dbContext, TimePro
 
     private IQueryable<Garage> ApplyArchiveFilter(bool includeArchived) =>
         dbContext.Garages.AsNoTracking()
-            .Include(garage => garage.Owner)
             .Where(garage => includeArchived || !garage.IsArchived);
+
+    private static IQueryable<GarageListItemData> ProjectListItems(IQueryable<Garage> query) =>
+        query.Select(garage => new GarageListItemData(
+            garage.Id,
+            garage.Number,
+            garage.PeopleCount,
+            garage.FloorCount,
+            garage.OwnerId,
+            garage.Owner == null
+                ? null
+                : (garage.Owner.LastName + " " + garage.Owner.FirstName + " " + (garage.Owner.MiddleName ?? string.Empty)).Trim(),
+            garage.Owner == null ? null : garage.Owner.Phone,
+            garage.StartingBalance,
+            garage.InitialWaterMeterValue,
+            garage.InitialElectricityMeterValue,
+            garage.Comment,
+            garage.IsArchived));
 
     private static IQueryable<Garage> ApplySearch(IQueryable<Garage> query, string? normalizedSearch)
     {
@@ -280,13 +296,13 @@ public sealed class EfGarageRepository(GarageBalanceDbContext dbContext, TimePro
             (dbContext.AccrualPaymentAllocations.Where(allocation => allocation.IsActive && allocation.Accrual.GarageId == garage.Id && !allocation.Accrual.IsCanceled && !allocation.Accrual.DueDateNeedsReview && allocation.Accrual.OverdueFromDate <= today && !allocation.FinancialOperation.IsCanceled).Sum(allocation => (decimal?)allocation.Amount) ?? 0m) > 0m);
     }
 
-    private static IOrderedEnumerable<Garage> ApplySqlitePageSorting(
-        IEnumerable<Garage> garages,
+    private static IOrderedEnumerable<GarageListItemData> ApplySqlitePageSorting(
+        IEnumerable<GarageListItemData> garages,
         GarageBalanceTotalsData totals,
         string sortBy,
         bool descending)
     {
-        Func<Garage, decimal> overdueDebt = garage => CalculateOverdueDebt(garage, totals);
+        Func<GarageListItemData, decimal> overdueDebt = garage => CalculateOverdueDebt(garage, totals);
 
         var ordered = (sortBy, descending) switch
         {
@@ -294,10 +310,10 @@ public sealed class EfGarageRepository(GarageBalanceDbContext dbContext, TimePro
             ("peopleCount", false) => garages.OrderBy(garage => garage.PeopleCount),
             ("floorCount", true) => garages.OrderByDescending(garage => garage.FloorCount),
             ("floorCount", false) => garages.OrderBy(garage => garage.FloorCount),
-            ("owner", true) => garages.OrderByDescending(garage => garage.Owner?.FullName),
-            ("owner", false) => garages.OrderBy(garage => garage.Owner?.FullName),
-            ("phone", true) => garages.OrderByDescending(garage => garage.Owner?.Phone),
-            ("phone", false) => garages.OrderBy(garage => garage.Owner?.Phone),
+            ("owner", true) => garages.OrderByDescending(garage => garage.OwnerName),
+            ("owner", false) => garages.OrderBy(garage => garage.OwnerName),
+            ("phone", true) => garages.OrderByDescending(garage => garage.OwnerPhone),
+            ("phone", false) => garages.OrderBy(garage => garage.OwnerPhone),
             ("overdueDebt", true) => garages.OrderByDescending(overdueDebt),
             ("overdueDebt", false) => garages.OrderBy(overdueDebt),
             (_, true) => garages.OrderByDescending(garage => garage.Number),
@@ -306,7 +322,7 @@ public sealed class EfGarageRepository(GarageBalanceDbContext dbContext, TimePro
         return ordered.ThenBy(garage => garage.Id);
     }
 
-    private static decimal CalculateOverdueDebt(Garage garage, GarageBalanceTotalsData totals) =>
+    private static decimal CalculateOverdueDebt(GarageListItemData garage, GarageBalanceTotalsData totals) =>
         Math.Max(
             garage.StartingBalance + totals.OverdueAccrualTotals.GetValueOrDefault(garage.Id) -
             (totals.IncomeTotals.GetValueOrDefault(garage.Id) - totals.AllocatedIncomeTotals.GetValueOrDefault(garage.Id)),
@@ -319,7 +335,7 @@ public sealed class EfGarageRepository(GarageBalanceDbContext dbContext, TimePro
             new Dictionary<Guid, decimal>(),
             new Dictionary<Guid, decimal>());
 
-    private static bool GarageMatchesSearch(Garage garage, string normalizedSearch) =>
+    private static bool GarageMatchesSearch(GarageListItemData garage, string normalizedSearch) =>
         garage.Number.Contains(normalizedSearch, StringComparison.OrdinalIgnoreCase) ||
-        (garage.Owner?.FullName.Contains(normalizedSearch, StringComparison.OrdinalIgnoreCase) ?? false);
+        (garage.OwnerName?.Contains(normalizedSearch, StringComparison.OrdinalIgnoreCase) ?? false);
 }

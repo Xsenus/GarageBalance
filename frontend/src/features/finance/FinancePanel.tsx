@@ -1575,6 +1575,7 @@ export function FinancePanel({
               number: record.garageNumber ?? 'без номера',
               ownerId: null,
               ownerName: record.ownerName,
+              ownerPhone: null,
               peopleCount: 0,
               floorCount: 0,
               startingBalance: 0,

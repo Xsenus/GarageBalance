@@ -42,7 +42,8 @@ public sealed record GarageDto(
     string? Comment,
     bool IsArchived,
     decimal Balance = 0,
-    decimal OverdueDebt = 0);
+    decimal OverdueDebt = 0,
+    string? OwnerPhone = null);
 
 public sealed record UpsertGarageRequest(
     [Required, MaxLength(80)] string Number,

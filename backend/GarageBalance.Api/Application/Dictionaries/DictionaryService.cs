@@ -227,10 +227,21 @@ public sealed class DictionaryService(
 
     private async Task<GarageDto> ToGarageDtoWithBalanceAsync(Garage garage, CancellationToken cancellationToken)
     {
-        return (await ToGarageDtosWithBalancesAsync([garage], cancellationToken))[0];
+        var totals = await garageRepository.GetBalanceTotalsAsync([garage.Id], cancellationToken);
+        var balance = garage.StartingBalance +
+            totals.AccrualTotals.GetValueOrDefault(garage.Id) -
+            totals.IncomeTotals.GetValueOrDefault(garage.Id);
+        balance = Math.Round(balance, 2, MidpointRounding.AwayFromZero);
+        var unallocatedIncome = totals.IncomeTotals.GetValueOrDefault(garage.Id) -
+            totals.AllocatedIncomeTotals.GetValueOrDefault(garage.Id);
+        var overdueDebt = garage.StartingBalance +
+            totals.OverdueAccrualTotals.GetValueOrDefault(garage.Id) -
+            unallocatedIncome;
+        overdueDebt = Math.Round(Math.Max(overdueDebt, 0m), 2, MidpointRounding.AwayFromZero);
+        return ToGarageDto(garage, balance, overdueDebt);
     }
 
-    private async Task<IReadOnlyList<GarageDto>> ToGarageDtosWithBalancesAsync(IReadOnlyList<Garage> garages, CancellationToken cancellationToken)
+    private async Task<IReadOnlyList<GarageDto>> ToGarageDtosWithBalancesAsync(IReadOnlyList<GarageListItemData> garages, CancellationToken cancellationToken)
     {
         if (garages.Count == 0)
         {
@@ -2521,8 +2532,26 @@ public sealed class DictionaryService(
             garage.Comment,
             garage.IsArchived,
             calculatedBalance,
-            overdueDebt ?? Math.Max(calculatedBalance, 0m));
+            overdueDebt ?? Math.Max(calculatedBalance, 0m),
+            garage.Owner?.Phone);
     }
+
+    private static GarageDto ToGarageDto(GarageListItemData garage, decimal balance, decimal overdueDebt) =>
+        new(
+            garage.Id,
+            garage.Number,
+            garage.PeopleCount,
+            garage.FloorCount,
+            garage.OwnerId,
+            garage.OwnerName,
+            garage.StartingBalance,
+            garage.InitialWaterMeterValue,
+            garage.InitialElectricityMeterValue,
+            garage.Comment,
+            garage.IsArchived,
+            balance,
+            overdueDebt,
+            garage.OwnerPhone);
 
     private static SupplierDto ToSupplierDto(Supplier supplier, decimal? debt = null)
     {
