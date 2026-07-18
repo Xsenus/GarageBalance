@@ -221,11 +221,11 @@ export function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; 
         }
         await userClient.createUser(auth.accessToken, request)
         setOffset(0)
-        showToast('Пользователь добавлен.')
       }
 
       closeEditor()
       await refreshUsers()
+      showToast('Пользователь добавлен.')
     } catch (caught) {
       const message = caught instanceof Error ? caught.message : 'Не удалось сохранить пользователя.'
       setError(message)
@@ -246,8 +246,8 @@ export function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; 
       await userClient.updateUser(auth.accessToken, saveConfirmation.user.id, saveConfirmation.request)
       setSaveConfirmation(null)
       closeEditor()
-      showToast('Пользователь изменен.')
       await refreshUsers()
+      showToast('Пользователь изменен.')
     } catch (caught) {
       const message = caught instanceof Error ? caught.message : 'Не удалось сохранить пользователя.'
       setError(message)
@@ -280,8 +280,8 @@ export function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; 
         deactivationReason: reason,
       })
       closeDeleteDialog()
-      showToast('Пользователь отключен.')
       await refreshUsers()
+      showToast('Пользователь отключен.')
     } catch (caught) {
       const message = caught instanceof Error ? caught.message : 'Не удалось отключить пользователя.'
       setError(message)
@@ -376,8 +376,8 @@ export function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; 
       setRoles((current) => current.map((role) => (role.code === updatedRole.code ? updatedRole : role)))
       setRoleConfirmation(null)
       setRoleEditor(null)
-      showToast('Права роли изменены.')
       await refreshUsers()
+      showToast('Права роли изменены.')
     } catch (caught) {
       const message = caught instanceof Error ? caught.message : 'Не удалось сохранить права роли.'
       setError(message)

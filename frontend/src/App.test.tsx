@@ -6806,16 +6806,30 @@ describe('App', () => {
     const user = userEvent.setup()
     const statefulUserClient = createStatefulUserClient()
     let deactivationReason: string | null = null
+    let releaseDeactivationRefresh: (() => void) | undefined
+    let deactivationRefresh: Promise<void> | null = null
     let updateCalls = 0
     let lastUpdateRequest: UpdateManagedUserRequest | null = null
     const userClient: UserManagementClient = {
       ...statefulUserClient,
+      getUsersPage: async (...args) => {
+        if (deactivationRefresh) {
+          const pendingRefresh = deactivationRefresh
+          deactivationRefresh = null
+          await pendingRefresh
+        }
+
+        return statefulUserClient.getUsersPage(...args)
+      },
       updateUser: async (...args) => {
         updateCalls += 1
         const request = args[2]
         lastUpdateRequest = request
         if (!request.isActive) {
           deactivationReason = request.deactivationReason ?? null
+          deactivationRefresh = new Promise((resolve) => {
+            releaseDeactivationRefresh = resolve
+          })
         }
 
         return statefulUserClient.updateUser(...args)
@@ -6915,6 +6929,13 @@ describe('App', () => {
     const reopenedDeleteReasonInput = within(reopenedDeleteDialog).getByLabelText('Причина отключения пользователя')
     await user.type(reopenedDeleteReasonInput, 'Access no longer needed')
     await user.click(reopenedDeleteButton)
+
+    await waitFor(() => expect(releaseDeactivationRefresh).toBeDefined())
+    expect(screen.queryByText('Пользователь отключен.')).not.toBeInTheDocument()
+    await act(async () => {
+      releaseDeactivationRefresh?.()
+      await Promise.resolve()
+    })
 
     expect(await within(usersPanel).findByText('Отключен')).toBeInTheDocument()
     expect(deactivationReason).toBe('Access no longer needed')
