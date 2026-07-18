@@ -1433,6 +1433,7 @@ public sealed class FinanceControllerTests
             Guid.NewGuid(),
             "Членский взнос",
             new DateOnly(2026, 6, 1),
+            2026,
             amount,
             "regular",
             null,

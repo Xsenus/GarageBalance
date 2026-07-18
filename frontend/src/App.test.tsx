@@ -9519,6 +9519,7 @@ describe('App', () => {
     await openSection(user, 'Платежи')
     const financePanel = await screen.findByRole('region', { name: 'Платежи' })
     await user.click(within(financePanel).getByRole('tab', { name: /Начисления владельцам/ }))
+    expect(within(financePanel).getByRole('columnheader', { name: 'Учетный год' })).toBeInTheDocument()
 
     await user.clear(within(financePanel).getByLabelText('Сумма начисления'))
     await user.type(within(financePanel).getByLabelText('Сумма начисления'), '1100')
@@ -9527,6 +9528,7 @@ describe('App', () => {
 
     const accrualCell = await within(financePanel).findByText('Начисление edit')
     const accrualRow = accrualCell.closest('tr')!
+    expect(within(accrualRow).getByText('2026')).toBeInTheDocument()
     accrualRow.focus()
     await user.keyboard(' ')
     const dialog = await screen.findByRole('dialog', { name: 'Ручное начисление' })
@@ -15836,6 +15838,7 @@ function createAccrual(overrides: Partial<AccrualDto>): AccrualDto {
     incomeTypeId: 'income-type-1',
     incomeTypeName: 'Членский взнос',
     accountingMonth: '2026-06-01',
+    accountingYear: 2026,
     amount: 100,
     source: 'manual',
     comment: null,

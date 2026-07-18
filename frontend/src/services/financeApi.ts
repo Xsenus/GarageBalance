@@ -92,6 +92,7 @@ export type AccrualDto = {
   incomeTypeId: string
   incomeTypeName: string
   accountingMonth: string
+  accountingYear: number | null
   amount: number
   source: 'manual' | 'regular' | 'debt_transfer' | 'fee_campaign'
   comment: string | null

@@ -100,6 +100,7 @@ public sealed record AccrualDto(
     Guid IncomeTypeId,
     string IncomeTypeName,
     DateOnly AccountingMonth,
+    int? AccountingYear,
     decimal Amount,
     string Source,
     string? Comment,

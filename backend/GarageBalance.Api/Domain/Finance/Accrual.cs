@@ -12,6 +12,7 @@ public sealed class Accrual
     public Guid? TariffId { get; set; }
     public Tariff? Tariff { get; set; }
     public DateOnly AccountingMonth { get; set; }
+    public int? AccountingYear { get; set; }
     public DateOnly DueDate { get; set; }
     public DateOnly OverdueFromDate { get; set; }
     public bool DueDateNeedsReview { get; set; }

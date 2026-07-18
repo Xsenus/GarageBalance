@@ -1420,6 +1420,7 @@ public sealed class FinanceService(
             IncomeTypeId = incomeType.Id,
             IncomeType = incomeType,
             AccountingMonth = month,
+            AccountingYear = AnnualAccrualPolicy.ResolveAccountingYear(incomeType.Code, month),
             DueDate = dueDates.DueDate,
             OverdueFromDate = dueDates.OverdueFromDate,
             Amount = MoneyMath.RoundMoney(request.Amount),
@@ -1479,6 +1480,7 @@ public sealed class FinanceService(
                 IncomeTypeId = incomeType.Id,
                 IncomeType = incomeType,
                 AccountingMonth = targetMonth,
+                AccountingYear = AnnualAccrualPolicy.ResolveAccountingYear(incomeType.Code, targetMonth),
                 DueDate = dueDates.DueDate,
                 OverdueFromDate = dueDates.OverdueFromDate,
                 Amount = amount,
@@ -1587,7 +1589,8 @@ public sealed class FinanceService(
 
         var amount = MoneyMath.RoundMoney(request.Amount);
         var comment = NormalizeOptional(request.Comment);
-        if (!accrual.DueDateNeedsReview && AccrualMatches(accrual, garage.Id, incomeType.Id, month, amount, source, comment))
+        var accountingYear = AnnualAccrualPolicy.ResolveAccountingYear(incomeType.Code, month);
+        if (!accrual.DueDateNeedsReview && AccrualMatches(accrual, garage.Id, incomeType.Id, month, accountingYear, amount, source, comment))
         {
             return FinanceResult<AccrualDto>.Success(ToDto(accrual));
         }
@@ -1599,6 +1602,7 @@ public sealed class FinanceService(
             ["garage"] = accrual.Garage.Number,
             ["incomeType"] = accrual.IncomeType.Name,
             ["accountingMonth"] = accrual.AccountingMonth,
+            ["accountingYear"] = accrual.AccountingYear,
             ["amount"] = accrual.Amount,
             ["source"] = accrual.Source,
             ["comment"] = accrual.Comment,
@@ -1609,6 +1613,7 @@ public sealed class FinanceService(
             ["garage"] = garage.Number,
             ["incomeType"] = incomeType.Name,
             ["accountingMonth"] = month,
+            ["accountingYear"] = accountingYear,
             ["amount"] = amount,
             ["source"] = source,
             ["comment"] = comment,
@@ -1620,6 +1625,7 @@ public sealed class FinanceService(
         accrual.IncomeTypeId = incomeType.Id;
         accrual.IncomeType = incomeType;
         accrual.AccountingMonth = month;
+        accrual.AccountingYear = accountingYear;
         var updatedDueDates = AccrualDueDates.ForChargeService(month, null);
         accrual.DueDate = updatedDueDates.DueDate;
         accrual.OverdueFromDate = updatedDueDates.OverdueFromDate;
@@ -1947,6 +1953,7 @@ public sealed class FinanceService(
                 TariffId = tariff.Id,
                 Tariff = tariff,
                 AccountingMonth = month,
+                AccountingYear = AnnualAccrualPolicy.ResolveAccountingYear(incomeType.Code, month),
                 DueDate = dueDates.DueDate,
                 OverdueFromDate = dueDates.OverdueFromDate,
                 Amount = amount,
@@ -2160,6 +2167,7 @@ public sealed class FinanceService(
                 IncomeTypeId = campaign.IncomeTypeId,
                 IncomeType = campaign.IncomeType,
                 AccountingMonth = month,
+                AccountingYear = AnnualAccrualPolicy.ResolveAccountingYear(campaign.IncomeType.Code, month),
                 DueDate = dueDates.DueDate,
                 OverdueFromDate = dueDates.OverdueFromDate,
                 Amount = amount,
@@ -3022,7 +3030,8 @@ public sealed class FinanceService(
     {
         var amount = MoneyFormatting.Format(accrual.Amount);
         var comment = NormalizeOptional(accrual.Comment);
-        var summary = $"Создано начисление {amount} по гаражу {accrual.Garage.Number} за {accrual.AccountingMonth:MM.yyyy}; вид {accrual.IncomeType.Name}; источник {accrual.Source}.";
+        var accountingYear = accrual.AccountingYear.HasValue ? $"; учетный год {accrual.AccountingYear.Value}" : null;
+        var summary = $"Создано начисление {amount} по гаражу {accrual.Garage.Number} за {accrual.AccountingMonth:MM.yyyy}{accountingYear}; вид {accrual.IncomeType.Name}; источник {accrual.Source}.";
         return comment is null ? summary : $"{summary} Комментарий: {comment}";
     }
 
@@ -3034,13 +3043,15 @@ public sealed class FinanceService(
     private static string FormatAccrualCanceledAuditSummary(Accrual accrual, string reason)
     {
         var amount = MoneyFormatting.Format(accrual.Amount);
-        return $"Отменено начисление {amount} по гаражу {accrual.Garage.Number} за {accrual.AccountingMonth:MM.yyyy}; вид {accrual.IncomeType.Name}; источник {accrual.Source}. Причина: {reason}";
+        var accountingYear = accrual.AccountingYear.HasValue ? $"; учетный год {accrual.AccountingYear.Value}" : null;
+        return $"Отменено начисление {amount} по гаражу {accrual.Garage.Number} за {accrual.AccountingMonth:MM.yyyy}{accountingYear}; вид {accrual.IncomeType.Name}; источник {accrual.Source}. Причина: {reason}";
     }
 
     private static string FormatAccrualRestoredAuditSummary(Accrual accrual)
     {
         var amount = MoneyFormatting.Format(accrual.Amount);
-        return $"Восстановлено начисление {amount} по гаражу {accrual.Garage.Number} за {accrual.AccountingMonth:MM.yyyy}; вид {accrual.IncomeType.Name}; источник {accrual.Source}.";
+        var accountingYear = accrual.AccountingYear.HasValue ? $"; учетный год {accrual.AccountingYear.Value}" : null;
+        return $"Восстановлено начисление {amount} по гаражу {accrual.Garage.Number} за {accrual.AccountingMonth:MM.yyyy}{accountingYear}; вид {accrual.IncomeType.Name}; источник {accrual.Source}.";
     }
 
     private static string FormatSupplierAccrualCreatedAuditSummary(SupplierAccrual accrual)
@@ -3061,7 +3072,8 @@ public sealed class FinanceService(
     {
         var amount = MoneyFormatting.Format(snapshot.Amount);
         var comment = NormalizeOptional(snapshot.Comment);
-        var summary = $"{amount} по гаражу {snapshot.GarageNumber} за {snapshot.AccountingMonth:MM.yyyy}; вид {snapshot.IncomeTypeName}; источник {snapshot.Source}";
+        var accountingYear = snapshot.AccountingYear.HasValue ? $"; учетный год {snapshot.AccountingYear.Value}" : null;
+        var summary = $"{amount} по гаражу {snapshot.GarageNumber} за {snapshot.AccountingMonth:MM.yyyy}{accountingYear}; вид {snapshot.IncomeTypeName}; источник {snapshot.Source}";
         return comment is null ? summary : $"{summary}; комментарий {comment}";
     }
 
@@ -3485,11 +3497,12 @@ public sealed class FinanceService(
             operation.ExpenseTypeId == expenseTypeId;
     }
 
-    private static bool AccrualMatches(Accrual accrual, Guid garageId, Guid incomeTypeId, DateOnly accountingMonth, decimal amount, string source, string? comment)
+    private static bool AccrualMatches(Accrual accrual, Guid garageId, Guid incomeTypeId, DateOnly accountingMonth, int? accountingYear, decimal amount, string source, string? comment)
     {
         return accrual.GarageId == garageId &&
             accrual.IncomeTypeId == incomeTypeId &&
             accrual.AccountingMonth == accountingMonth &&
+            accrual.AccountingYear == accountingYear &&
             accrual.Amount == amount &&
             StringEquals(accrual.Source, source) &&
             StringEquals(accrual.Comment, comment);
@@ -3838,6 +3851,7 @@ public sealed class FinanceService(
         string GarageNumber,
         string IncomeTypeName,
         DateOnly AccountingMonth,
+        int? AccountingYear,
         decimal Amount,
         string Source,
         string? Comment)
@@ -3848,6 +3862,7 @@ public sealed class FinanceService(
                 accrual.Garage.Number,
                 accrual.IncomeType.Name,
                 accrual.AccountingMonth,
+                accrual.AccountingYear,
                 accrual.Amount,
                 accrual.Source,
                 accrual.Comment);
@@ -3886,6 +3901,7 @@ public sealed class FinanceService(
             accrual.IncomeTypeId,
             accrual.IncomeType.Name,
             accrual.AccountingMonth,
+            accrual.AccountingYear,
             accrual.Amount,
             accrual.Source,
             accrual.Comment,

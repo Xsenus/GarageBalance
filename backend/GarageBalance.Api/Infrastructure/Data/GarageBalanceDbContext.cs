@@ -429,6 +429,9 @@ public sealed class GarageBalanceDbContext(DbContextOptions<GarageBalanceDbConte
             entity.ToTable("accruals");
             entity.HasKey(accrual => accrual.Id);
             entity.Property(accrual => accrual.Amount).HasPrecision(18, 2);
+            entity.ToTable(table => table.HasCheckConstraint(
+                "CK_accruals_AccountingYear_Range",
+                "\"AccountingYear\" IS NULL OR (\"AccountingYear\" >= 1900 AND \"AccountingYear\" <= 9999)"));
             entity.Property(accrual => accrual.DueDateReviewReason).HasMaxLength(80);
             entity.Property(accrual => accrual.Source).HasMaxLength(40).IsRequired();
             entity.Property(accrual => accrual.Comment).HasMaxLength(1000);
@@ -440,6 +443,7 @@ public sealed class GarageBalanceDbContext(DbContextOptions<GarageBalanceDbConte
             entity.HasIndex(accrual => accrual.GarageId);
             entity.HasIndex(accrual => accrual.IncomeTypeId);
             entity.HasIndex(accrual => accrual.TariffId);
+            entity.HasIndex(accrual => new { accrual.GarageId, accrual.IncomeTypeId, accrual.AccountingYear, accrual.IsCanceled });
             entity.HasIndex(accrual => new { accrual.GarageId, accrual.IncomeTypeId, accrual.AccountingMonth, accrual.Source })
                 .IsUnique()
                 .HasFilter("\"IsCanceled\" = false");

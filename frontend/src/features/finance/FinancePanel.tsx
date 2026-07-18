@@ -1852,6 +1852,7 @@ export function FinancePanel({
             {filteredAccruals.map((accrual) => (
               <tr className="finance-table-row--interactive" key={accrual.id} tabIndex={0} onContextMenu={(event) => openFinanceContextMenu(event, 'accruals', accrual)} onClick={(event) => editFinanceRecord('accruals', accrual, event.currentTarget)} onKeyDown={(event) => handleFinanceRowKeyDown(event, 'accruals', accrual)}>
                 <td>{formatMonth(accrual.accountingMonth)}</td>
+                <td>{accrual.accountingYear ?? '—'}</td>
                 <td>{formatFinanceGarageLabel(accrual.garageNumber)}</td>
                 <td>{getFinanceOptionalText(accrual.ownerName)}</td>
                 <td>{accrual.incomeTypeName}</td>
@@ -2638,6 +2639,7 @@ export function FinancePanel({
               <span role="cell">
                 <strong>{accrual.incomeTypeName}</strong>
                 <small>Гараж {accrual.garageNumber}</small>
+                {accrual.accountingYear ? <small>Учетный год: {accrual.accountingYear}</small> : null}
                 <small>{formatAccrualSource(accrual.source)}</small>
               </span>
               <span role="cell" className="operation-amount money-accrual">

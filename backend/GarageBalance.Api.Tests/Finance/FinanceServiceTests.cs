@@ -2316,6 +2316,7 @@ public sealed class FinanceServiceTests
 
         Assert.True(result.Succeeded);
         Assert.Equal(new DateOnly(2026, 6, 1), result.Value!.AccountingMonth);
+        Assert.Equal(2026, result.Value.AccountingYear);
         Assert.Equal("manual", result.Value.Source);
         Assert.Equal("12", result.Value.GarageNumber);
         Assert.Equal(new DateOnly(2026, 7, 31), result.Value.DueDate);
@@ -2328,6 +2329,7 @@ public sealed class FinanceServiceTests
         Assert.Contains($"вид {fixtures.IncomeType.Name}", audit.Summary, StringComparison.Ordinal);
         Assert.Contains("источник manual", audit.Summary, StringComparison.Ordinal);
         Assert.Contains("Комментарий: Целевой сбор", audit.Summary, StringComparison.Ordinal);
+        Assert.Contains("учетный год 2026", audit.Summary, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -3001,6 +3003,7 @@ public sealed class FinanceServiceTests
         Assert.Contains(result.Value.SkippedServices, item => item.Contains("Годовой сбор", StringComparison.Ordinal));
         var accrual = Assert.Single(database.Context.Accruals);
         Assert.Equal(fixtures.IncomeType.Id, accrual.IncomeTypeId);
+        Assert.Equal(2026, accrual.AccountingYear);
         Assert.Equal(tariff.Id, accrual.TariffId);
         Assert.Equal(new DateOnly(2026, 6, 30), accrual.DueDate);
         Assert.Equal(new DateOnly(2026, 7, 31), accrual.OverdueFromDate);
@@ -3108,6 +3111,7 @@ public sealed class FinanceServiceTests
         Assert.All(result.Value.CreatedAccruals, accrual =>
         {
             Assert.Equal(500m, accrual.Amount);
+            Assert.Equal(2026, accrual.AccountingYear);
             Assert.Equal("fee_campaign", accrual.Source);
             Assert.Equal(fixtures.IncomeType.Id, accrual.IncomeTypeId);
             Assert.Equal(new DateOnly(2026, 7, 31), accrual.DueDate);
