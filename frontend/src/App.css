@@ -6839,6 +6839,23 @@ button.operation-row:focus-visible {
   padding: 8px 12px;
 }
 
+.report-sort-status {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  min-height: 28px;
+  margin: 0 16px;
+  color: #667085;
+  font-size: 12px;
+}
+
+.report-sort-status .link-button {
+  min-height: 26px;
+  padding: 2px 4px;
+  font-size: 12px;
+}
+
 .report-workbook-table {
   overflow-x: auto;
   margin: 0 16px 16px;
@@ -6886,6 +6903,44 @@ button.operation-row:focus-visible {
   background: #f8fafc;
   font-weight: 800;
   text-align: center;
+}
+
+.report-sort-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  width: 100%;
+  min-height: 24px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: inherit;
+  padding: 1px 3px;
+  font: inherit;
+  font-weight: inherit;
+  cursor: pointer;
+}
+
+.report-sort-button:hover:not(:disabled) {
+  background: #eaecf0;
+}
+
+.report-sort-button:focus-visible {
+  outline: 2px solid #2e90fa;
+  outline-offset: 1px;
+}
+
+.report-sort-button:disabled {
+  cursor: wait;
+  opacity: 0.62;
+}
+
+.report-sort-direction {
+  min-width: 12px;
+  color: #475467;
+  font-size: 14px;
+  line-height: 1;
 }
 
 .report-workbook-row--header {

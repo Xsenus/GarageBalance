@@ -12839,10 +12839,12 @@ describe('App', () => {
     expect(within(reportsPanel).getByText('Консолидированный отчёт')).toBeInTheDocument()
     const consolidatedTable = within(reportsPanel).getByRole('table', { name: 'Консолидированный отчет' })
     expect(consolidatedTable).toBeInTheDocument()
-    await waitFor(() => expect(consolidatedTable).toHaveTextContent('Членский взнос'))
-    expect(consolidatedTable).toHaveTextContent('Вода')
+    await waitFor(() => expect(consolidatedTable).toHaveTextContent('06.2026'))
     expect(consolidatedTable).toHaveTextContent('На начало месяца')
     expect(consolidatedTable).toHaveTextContent('На конец месяца')
+    const consolidatedBreakdown = within(reportsPanel).getByRole('table', { name: 'Расшифровка консолидированного отчета' })
+    expect(consolidatedBreakdown).toHaveTextContent('Членский взнос')
+    expect(consolidatedBreakdown).toHaveTextContent('Вода')
     expect(within(reportsPanel).getByRole('navigation', { name: 'Пагинация консолидированного отчета' })).toBeInTheDocument()
     expect(within(reportsPanel).queryByRole('button', { name: /Скачать сводный/ })).not.toBeInTheDocument()
 
@@ -12911,7 +12913,7 @@ describe('App', () => {
     await openSection(user, 'Отчеты')
     const reportsPanel = await screen.findByRole('region', { name: 'Отчеты' })
     const consolidatedTable = within(reportsPanel).getByRole('table', { name: 'Консолидированный отчет' })
-    await waitFor(() => expect(consolidatedTable).toHaveTextContent('Членский взнос'))
+    await waitFor(() => expect(consolidatedTable).toHaveTextContent('06.2026'))
 
     expect(getConsolidatedReport).toHaveBeenCalledTimes(1)
     expect(getIncomeReport).not.toHaveBeenCalled()
@@ -13384,6 +13386,102 @@ describe('App', () => {
     await waitFor(() => expect(within(incomeGarageFilter).getAllByRole('option')).toHaveLength(2))
     await user.selectOptions(incomeGarageFilter, 'garage-2')
     await waitFor(() => expect(incomeRequests).toContainEqual({ garageIds: ['garage-2'] }))
+  })
+
+  it('sorts every server report from accessible headers, shows direction and resets to default order', async () => {
+    const user = userEvent.setup()
+    const baseReportClient = createReportClient()
+    type SortRequest = { sortBy?: string; sortDirection?: string; offset?: number }
+    const requests: Record<string, SortRequest[]> = {
+      consolidated: [], garages: [], payouts: [], income: [], cashPayments: [], bankDeposits: [], fees: [], funds: [],
+    }
+    const reportClient = createReportClient({
+      getConsolidatedReport: async (token, params) => {
+        requests.consolidated.push(params ?? {})
+        return baseReportClient.getConsolidatedReport(token, params)
+      },
+      getGarageReport: async (token, params) => {
+        requests.garages.push(params ?? {})
+        const report = await baseReportClient.getGarageReport(token, params)
+        return { ...report, rowCount: 30, offset: params?.offset ?? 0, limit: params?.limit ?? 25 }
+      },
+      getExpenseReport: async (token, params) => {
+        requests.payouts.push(params ?? {})
+        return baseReportClient.getExpenseReport(token, params)
+      },
+      getIncomeReport: async (token, params) => {
+        requests.income.push(params ?? {})
+        return baseReportClient.getIncomeReport(token, params)
+      },
+      getCashPaymentReport: async (token, params) => {
+        requests.cashPayments.push(params ?? {})
+        return baseReportClient.getCashPaymentReport(token, params)
+      },
+      getBankDepositReport: async (token, params) => {
+        requests.bankDeposits.push(params ?? {})
+        return baseReportClient.getBankDepositReport(token, params)
+      },
+      getFeeReport: async (token, params) => {
+        requests.fees.push(params ?? {})
+        return baseReportClient.getFeeReport(token, params)
+      },
+      getFundChangeReport: async (token, params) => {
+        requests.funds.push(params ?? {})
+        return baseReportClient.getFundChangeReport(token, params)
+      },
+    })
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={reportClient} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Отчеты')
+    const reportsPanel = await screen.findByRole('region', { name: 'Отчеты' })
+
+    const consolidatedSort = await within(reportsPanel).findByRole('button', { name: /Сортировать Месяц/ })
+    await user.click(consolidatedSort)
+    await waitFor(() => expect(requests.consolidated).toContainEqual(expect.objectContaining({ sortBy: 'accountingMonth', sortDirection: 'asc' })))
+    expect(within(reportsPanel).getByRole('columnheader', { name: /Месяц/ })).toHaveAttribute('aria-sort', 'ascending')
+    expect(within(reportsPanel).getByText('Сортировка: Месяц, по возрастанию').closest('[role="status"]')).not.toBeNull()
+    await waitFor(() => expect(consolidatedSort).toBeEnabled())
+    await user.click(consolidatedSort)
+    await waitFor(() => expect(requests.consolidated).toContainEqual(expect.objectContaining({ sortBy: 'accountingMonth', sortDirection: 'desc' })))
+    expect(within(reportsPanel).getByRole('columnheader', { name: /Месяц/ })).toHaveAttribute('aria-sort', 'descending')
+    await waitFor(() => expect(within(reportsPanel).getByRole('button', { name: 'Сбросить сортировку' })).toBeEnabled())
+    await user.click(within(reportsPanel).getByRole('button', { name: 'Сбросить сортировку' }))
+    await waitFor(() => expect(requests.consolidated.at(-1)).toEqual(expect.objectContaining({ sortBy: undefined, sortDirection: undefined })))
+    expect(within(reportsPanel).getByText('Сортировка: по умолчанию').closest('[role="status"]')).not.toBeNull()
+
+    await openReportTab(user, reportsPanel, 'По гаражам')
+    await waitFor(() => expect(within(reportsPanel).getByRole('button', { name: 'Страница 2' })).toBeEnabled())
+    await user.click(within(reportsPanel).getByRole('button', { name: 'Страница 2' }))
+    await waitFor(() => expect(requests.garages).toContainEqual(expect.objectContaining({ offset: 25 })))
+    await user.click(within(reportsPanel).getByRole('button', { name: /Сортировать Гараж/ }))
+    await waitFor(() => expect(requests.garages).toContainEqual(expect.objectContaining({ sortBy: 'garageNumber', sortDirection: 'asc', offset: 0 })))
+
+    await openReportTab(user, reportsPanel, 'По выплатам')
+    await user.click(await within(reportsPanel).findByRole('button', { name: /Сортировать Поставщик\/сотрудник/ }))
+    await waitFor(() => expect(requests.payouts).toContainEqual(expect.objectContaining({ sortBy: 'supplierName', sortDirection: 'asc' })))
+
+    await openReportTab(user, reportsPanel, 'Поступления')
+    await user.click(await within(reportsPanel).findByRole('button', { name: /Сортировать Сумма платежа/ }))
+    await waitFor(() => expect(requests.income).toContainEqual(expect.objectContaining({ sortBy: 'incomeAmount', sortDirection: 'asc' })))
+
+    await openReportTab(user, reportsPanel, 'Оплаты из кассы')
+    await user.click(await within(reportsPanel).findByRole('button', { name: /Сортировать Наличие чека/ }))
+    await waitFor(() => expect(requests.cashPayments).toContainEqual(expect.objectContaining({ sortBy: 'hasReceipt', sortDirection: 'asc' })))
+
+    await openReportTab(user, reportsPanel, 'Сдача кассы в банк')
+    await user.click(await within(reportsPanel).findByRole('button', { name: /Сортировать Комментарий/ }))
+    await waitFor(() => expect(requests.bankDeposits).toContainEqual(expect.objectContaining({ sortBy: 'comment', sortDirection: 'asc' })))
+
+    await openReportTab(user, reportsPanel, 'Сборы')
+    await user.click(await within(reportsPanel).findByRole('button', { name: 'Показать должников' }))
+    await user.click(within(reportsPanel).getByRole('button', { name: /Сортировать Задолженность/ }))
+    await waitFor(() => expect(requests.fees).toContainEqual(expect.objectContaining({ sortBy: 'debt', sortDirection: 'asc' })))
+
+    await openReportTab(user, reportsPanel, 'Изменение фондов')
+    await user.click(await within(reportsPanel).findByRole('button', { name: /Сортировать Пользователь/ }))
+    await waitFor(() => expect(requests.funds).toContainEqual(expect.objectContaining({ sortBy: 'actorDisplayName', sortDirection: 'asc' })))
   })
 
   it('shows loading and error states for the paged garage report', async () => {
