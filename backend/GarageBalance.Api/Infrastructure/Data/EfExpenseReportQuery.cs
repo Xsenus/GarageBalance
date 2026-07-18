@@ -1,6 +1,7 @@
 using GarageBalance.Api.Application.Reports;
 using GarageBalance.Api.Domain.Finance;
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
 
 namespace GarageBalance.Api.Infrastructure.Data;
 
@@ -24,13 +25,27 @@ public sealed class EfExpenseReportQuery(GarageBalanceDbContext dbContext) : IEx
         int? limit,
         int offset,
         CancellationToken cancellationToken) =>
-        GetRowsAsync(dateFrom, dateTo, rowMode, supplierIds, expenseTypeIds, search, limit, offset, new ReportSort("date", false), cancellationToken);
+        GetRowsAsync(dateFrom, dateTo, rowMode, supplierIds, new HashSet<Guid>(), expenseTypeIds, search, limit, offset, new ReportSort("date", false), cancellationToken);
+
+    public Task<ExpenseReportQueryData> GetRowsAsync(
+        DateOnly dateFrom,
+        DateOnly dateTo,
+        string rowMode,
+        IReadOnlySet<Guid> supplierIds,
+        IReadOnlySet<Guid> expenseTypeIds,
+        string? search,
+        int? limit,
+        int offset,
+        ReportSort sort,
+        CancellationToken cancellationToken) =>
+        GetRowsAsync(dateFrom, dateTo, rowMode, supplierIds, new HashSet<Guid>(), expenseTypeIds, search, limit, offset, sort, cancellationToken);
 
     public async Task<ExpenseReportQueryData> GetRowsAsync(
         DateOnly dateFrom,
         DateOnly dateTo,
         string rowMode,
         IReadOnlySet<Guid> supplierIds,
+        IReadOnlySet<Guid> staffMemberIds,
         IReadOnlySet<Guid> expenseTypeIds,
         string? search,
         int? limit,
@@ -45,6 +60,7 @@ public sealed class EfExpenseReportQuery(GarageBalanceDbContext dbContext) : IEx
                 dateTo,
                 rowMode,
                 supplierIds,
+                staffMemberIds,
                 expenseTypeIds,
                 search,
                 limit,
@@ -61,6 +77,9 @@ public sealed class EfExpenseReportQuery(GarageBalanceDbContext dbContext) : IEx
         var normalizedSearch = search?.Trim().ToLowerInvariant();
         var useClientSearch = hasSearch && !(dbContext.Database.ProviderName?.Contains("Npgsql", StringComparison.OrdinalIgnoreCase) ?? false);
         var fetchLimit = useClientSearch ? null : GetFetchLimit(offset, limit);
+        var includeSuppliers = supplierIds.Count > 0 || staffMemberIds.Count == 0;
+        var includeStaff = staffMemberIds.Count > 0 || supplierIds.Count == 0;
+        var staffRows = new List<ExpenseReportRowDto>();
         var aggregateQuery = dbContext.SupplierAccruals.AsNoTracking()
             .Where(_ => false)
             .Select(_ => new { Category = 0, Total = 0m, Count = 0 });
@@ -71,7 +90,7 @@ public sealed class EfExpenseReportQuery(GarageBalanceDbContext dbContext) : IEx
             if (expenseTypeIds.Count == 0)
             {
                 var startingBalanceQuery = dbContext.Suppliers.AsNoTracking()
-                    .Where(supplier => !supplier.IsArchived && supplier.StartingBalance != 0);
+                    .Where(supplier => includeSuppliers && !supplier.IsArchived && supplier.StartingBalance != 0);
                 if (supplierIds.Count > 0)
                 {
                     startingBalanceQuery = startingBalanceQuery.Where(supplier => supplierIds.Contains(supplier.Id));
@@ -117,6 +136,7 @@ public sealed class EfExpenseReportQuery(GarageBalanceDbContext dbContext) : IEx
                 .Include(accrual => accrual.Supplier)
                 .Include(accrual => accrual.ExpenseType)
                 .Where(accrual =>
+                    includeSuppliers &&
                     !accrual.IsCanceled &&
                     accrual.AccountingMonth >= dateFrom &&
                     accrual.AccountingMonth <= dateTo);
@@ -177,6 +197,7 @@ public sealed class EfExpenseReportQuery(GarageBalanceDbContext dbContext) : IEx
                 .Include(operation => operation.Supplier)
                 .Include(operation => operation.ExpenseType)
                 .Where(operation =>
+                    includeSuppliers &&
                     !operation.IsCanceled &&
                     operation.OperationKind == FinancialOperationKinds.Expense &&
                     operation.SupplierId != null &&
@@ -234,6 +255,90 @@ public sealed class EfExpenseReportQuery(GarageBalanceDbContext dbContext) : IEx
                 operation.Comment)));
         }
 
+        if (includeStaff && rowMode is AllRows or AccrualRows)
+        {
+            var staffAccrualSources = await (
+                    from member in dbContext.StaffMembers.AsNoTracking()
+                    where !member.IsArchived && (staffMemberIds.Count == 0 || staffMemberIds.Contains(member.Id))
+                    from expenseType in dbContext.ExpenseTypes.AsNoTracking()
+                    where !expenseType.IsArchived && expenseType.Code == "salary" && (expenseTypeIds.Count == 0 || expenseTypeIds.Contains(expenseType.Id))
+                    select new
+                    {
+                        member.Id,
+                        member.FullName,
+                        member.Rate,
+                        member.CreatedAtUtc,
+                        ExpenseTypeId = expenseType.Id,
+                        ExpenseTypeName = expenseType.Name
+                    })
+                .ToListAsync(cancellationToken);
+            var months = EnumerateMonths(dateFrom, dateTo).ToArray();
+            staffRows.AddRange(
+                from source in staffAccrualSources
+                from month in months
+                where month >= NormalizeMonth(DateOnly.FromDateTime(source.CreatedAtUtc.UtcDateTime))
+                select new ExpenseReportRowDto(
+                    AccrualRows,
+                    month,
+                    month,
+                    source.Id,
+                    source.FullName,
+                    source.ExpenseTypeId,
+                    source.ExpenseTypeName,
+                    source.Rate,
+                    0m,
+                    source.Rate,
+                    null,
+                    "Расчетная ставка сотрудника",
+                    source.Id,
+                    "staff"));
+        }
+
+        if (includeStaff && rowMode is AllRows or PaymentRows)
+        {
+            var staffPayments = await dbContext.FinancialOperations.AsNoTracking()
+                .Include(operation => operation.StaffMember)
+                .Include(operation => operation.ExpenseType)
+                .Where(operation =>
+                    includeStaff &&
+                    !operation.IsCanceled &&
+                    operation.OperationKind == FinancialOperationKinds.Expense &&
+                    operation.StaffMemberId != null &&
+                    operation.ExpenseTypeId != null &&
+                    operation.OperationDate >= dateFrom &&
+                    operation.OperationDate <= dateTo &&
+                    (staffMemberIds.Count == 0 || staffMemberIds.Contains(operation.StaffMemberId.Value)) &&
+                    (expenseTypeIds.Count == 0 || expenseTypeIds.Contains(operation.ExpenseTypeId.Value)))
+                .ToListAsync(cancellationToken);
+            staffRows.AddRange(staffPayments.Select(operation => new ExpenseReportRowDto(
+                PaymentRows,
+                operation.OperationDate,
+                operation.AccountingMonth,
+                operation.StaffMemberId!.Value,
+                operation.StaffMember!.FullName,
+                operation.ExpenseTypeId!.Value,
+                operation.ExpenseType!.Name,
+                0m,
+                operation.Amount,
+                -operation.Amount,
+                operation.DocumentNumber,
+                operation.Comment,
+                operation.StaffMemberId,
+                "staff")));
+        }
+
+        if (hasSearch)
+        {
+            var clientSearch = search!.Trim();
+            staffRows = staffRows.Where(row =>
+                    row.SupplierName.Contains(clientSearch, StringComparison.OrdinalIgnoreCase) ||
+                    row.ExpenseTypeName.Contains(clientSearch, StringComparison.OrdinalIgnoreCase) ||
+                    (row.DocumentNumber?.Contains(clientSearch, StringComparison.OrdinalIgnoreCase) ?? false))
+                .ToList();
+        }
+
+        rows.AddRange(staffRows);
+
         if (!useClientSearch && hasAggregateQueries)
         {
             var aggregates = await aggregateQuery.ToListAsync(cancellationToken);
@@ -258,6 +363,13 @@ public sealed class EfExpenseReportQuery(GarageBalanceDbContext dbContext) : IEx
             rowCount = rows.Count;
         }
 
+        if (!useClientSearch)
+        {
+            accrualTotal += staffRows.Sum(row => row.AccrualAmount);
+            expenseTotal += staffRows.Sum(row => row.ExpenseAmount);
+            rowCount += staffRows.Count;
+        }
+
         var visibleRows = ApplyPage(
                 ApplySort(rows, sort)
                     .ThenBy(row => row.SupplierName, StringComparer.Ordinal)
@@ -274,6 +386,7 @@ public sealed class EfExpenseReportQuery(GarageBalanceDbContext dbContext) : IEx
         DateOnly dateTo,
         string rowMode,
         IReadOnlySet<Guid> supplierIds,
+        IReadOnlySet<Guid> staffMemberIds,
         IReadOnlySet<Guid> expenseTypeIds,
         string? search,
         int? limit,
@@ -283,6 +396,8 @@ public sealed class EfExpenseReportQuery(GarageBalanceDbContext dbContext) : IEx
     {
         var normalizedSearch = search?.Trim().ToLowerInvariant();
         var hasSearch = !string.IsNullOrWhiteSpace(normalizedSearch);
+        var includeSuppliers = supplierIds.Count > 0 || staffMemberIds.Count == 0;
+        var includeStaff = staffMemberIds.Count > 0 || supplierIds.Count == 0;
         IQueryable<ExpenseReportProjection>? reportRows = null;
         var aggregateQuery = dbContext.SupplierAccruals.AsNoTracking()
             .Where(_ => false)
@@ -293,7 +408,7 @@ public sealed class EfExpenseReportQuery(GarageBalanceDbContext dbContext) : IEx
             if (expenseTypeIds.Count == 0)
             {
                 var startingBalances = dbContext.Suppliers.AsNoTracking()
-                    .Where(supplier => !supplier.IsArchived && supplier.StartingBalance != 0);
+                    .Where(supplier => includeSuppliers && !supplier.IsArchived && supplier.StartingBalance != 0);
                 if (supplierIds.Count > 0)
                 {
                     startingBalances = startingBalances.Where(supplier => supplierIds.Contains(supplier.Id));
@@ -328,12 +443,14 @@ public sealed class EfExpenseReportQuery(GarageBalanceDbContext dbContext) : IEx
                     DocumentNumber = null,
                     Comment = "Начальное обязательство перед поставщиком",
                     CreatedAtUtc = supplier.CreatedAtUtc,
-                    RowId = supplier.Id
+                    RowId = supplier.Id,
+                    StaffMemberId = null,
+                    CounterpartyKind = "supplier"
                 });
             }
 
             var accruals = dbContext.SupplierAccruals.AsNoTracking()
-                .Where(accrual => !accrual.IsCanceled && accrual.AccountingMonth >= dateFrom && accrual.AccountingMonth <= dateTo);
+                .Where(accrual => includeSuppliers && !accrual.IsCanceled && accrual.AccountingMonth >= dateFrom && accrual.AccountingMonth <= dateTo);
             if (supplierIds.Count > 0)
             {
                 accruals = accruals.Where(accrual => supplierIds.Contains(accrual.SupplierId));
@@ -376,7 +493,9 @@ public sealed class EfExpenseReportQuery(GarageBalanceDbContext dbContext) : IEx
                 DocumentNumber = accrual.DocumentNumber,
                 Comment = accrual.Comment,
                 CreatedAtUtc = accrual.CreatedAtUtc,
-                RowId = accrual.Id
+                RowId = accrual.Id,
+                StaffMemberId = null,
+                CounterpartyKind = "supplier"
             });
             reportRows = reportRows == null ? projectedAccruals : reportRows.Concat(projectedAccruals);
         }
@@ -385,6 +504,7 @@ public sealed class EfExpenseReportQuery(GarageBalanceDbContext dbContext) : IEx
         {
             var payments = dbContext.FinancialOperations.AsNoTracking()
                 .Where(operation =>
+                    includeSuppliers &&
                     !operation.IsCanceled &&
                     operation.OperationKind == FinancialOperationKinds.Expense &&
                     operation.SupplierId != null &&
@@ -433,9 +553,128 @@ public sealed class EfExpenseReportQuery(GarageBalanceDbContext dbContext) : IEx
                 DocumentNumber = operation.DocumentNumber,
                 Comment = operation.Comment,
                 CreatedAtUtc = operation.CreatedAtUtc,
-                RowId = operation.Id
+                RowId = operation.Id,
+                StaffMemberId = null,
+                CounterpartyKind = "supplier"
             });
             reportRows = reportRows == null ? projectedPayments : reportRows.Concat(projectedPayments);
+        }
+
+        if (includeStaff && rowMode is AllRows or AccrualRows)
+        {
+            const string staffAccrualSql = """
+                SELECT
+                    'accruals'::text AS "RowType",
+                    month_value::date AS "Date",
+                    month_value::date AS "AccountingMonth",
+                    member."Id" AS "SupplierId",
+                    member."FullName" AS "SupplierName",
+                    expense_type."Id" AS "ExpenseTypeId",
+                    expense_type."Name" AS "ExpenseTypeName",
+                    member."Rate" AS "AccrualAmount",
+                    0::numeric AS "ExpenseAmount",
+                    member."Rate" AS "Difference",
+                    NULL::text AS "DocumentNumber",
+                    'Расчетная ставка сотрудника'::text AS "Comment",
+                    member."CreatedAtUtc" AS "CreatedAtUtc",
+                    md5(member."Id"::text || ':' || expense_type."Id"::text || ':' || month_value::date::text)::uuid AS "RowId",
+                    member."Id" AS "StaffMemberId",
+                    'staff'::text AS "CounterpartyKind"
+                FROM staff_members member
+                CROSS JOIN expense_types expense_type
+                CROSS JOIN generate_series(@month_from::date, @month_to::date, interval '1 month') month_value
+                WHERE member."IsArchived" = FALSE
+                  AND expense_type."IsArchived" = FALSE
+                  AND expense_type."Code" = 'salary'
+                  AND month_value::date >= date_trunc('month', member."CreatedAtUtc" AT TIME ZONE 'UTC')::date
+                  AND (@has_staff_filter = FALSE OR member."Id" = ANY(@staff_ids))
+                  AND (@has_type_filter = FALSE OR expense_type."Id" = ANY(@expense_type_ids))
+                  AND (@has_search = FALSE OR lower(member."FullName") LIKE '%' || @search || '%' OR lower(expense_type."Name") LIKE '%' || @search || '%')
+                """;
+            var staffAccrualSource = dbContext.Database.SqlQueryRaw<ExpenseReportProjection>(
+                staffAccrualSql,
+                new NpgsqlParameter<DateOnly>("month_from", NormalizeMonth(dateFrom)),
+                new NpgsqlParameter<DateOnly>("month_to", NormalizeMonth(dateTo)),
+                new NpgsqlParameter<bool>("has_staff_filter", staffMemberIds.Count > 0),
+                new NpgsqlParameter<Guid[]>("staff_ids", staffMemberIds.ToArray()),
+                new NpgsqlParameter<bool>("has_type_filter", expenseTypeIds.Count > 0),
+                new NpgsqlParameter<Guid[]>("expense_type_ids", expenseTypeIds.ToArray()),
+                new NpgsqlParameter<bool>("has_search", hasSearch),
+                new NpgsqlParameter<string>("search", normalizedSearch ?? string.Empty));
+            var staffAccruals = staffAccrualSource.Select(row => new ExpenseReportProjection
+            {
+                RowType = row.RowType,
+                Date = row.Date,
+                AccountingMonth = row.AccountingMonth,
+                SupplierId = row.SupplierId,
+                SupplierName = row.SupplierName,
+                ExpenseTypeId = row.ExpenseTypeId,
+                ExpenseTypeName = row.ExpenseTypeName,
+                AccrualAmount = row.AccrualAmount,
+                ExpenseAmount = row.ExpenseAmount,
+                Difference = row.Difference,
+                DocumentNumber = row.DocumentNumber,
+                Comment = row.Comment,
+                CreatedAtUtc = row.CreatedAtUtc,
+                RowId = row.RowId,
+                StaffMemberId = row.StaffMemberId,
+                CounterpartyKind = row.CounterpartyKind
+            });
+            aggregateQuery = aggregateQuery.Concat(staffAccruals
+                .GroupBy(_ => 1)
+                .Select(group => new
+                {
+                    Category = AccrualTotalCategory,
+                    Total = group.Sum(row => row.AccrualAmount),
+                    Count = group.Count()
+                }));
+            reportRows = reportRows == null ? staffAccruals : reportRows.Concat(staffAccruals);
+        }
+
+        if (includeStaff && rowMode is AllRows or PaymentRows)
+        {
+            var staffPayments = dbContext.FinancialOperations.AsNoTracking()
+                .Where(operation =>
+                    !operation.IsCanceled &&
+                    operation.OperationKind == FinancialOperationKinds.Expense &&
+                    operation.StaffMemberId != null &&
+                    operation.ExpenseTypeId != null &&
+                    operation.OperationDate >= dateFrom &&
+                    operation.OperationDate <= dateTo &&
+                    (staffMemberIds.Count == 0 || staffMemberIds.Contains(operation.StaffMemberId.Value)) &&
+                    (expenseTypeIds.Count == 0 || expenseTypeIds.Contains(operation.ExpenseTypeId.Value)) &&
+                    (!hasSearch ||
+                        operation.StaffMember!.FullName.ToLower().Contains(normalizedSearch!) ||
+                        operation.ExpenseType!.Name.ToLower().Contains(normalizedSearch!) ||
+                        (operation.DocumentNumber != null && operation.DocumentNumber.ToLower().Contains(normalizedSearch!))));
+            aggregateQuery = aggregateQuery.Concat(staffPayments
+                .GroupBy(_ => 1)
+                .Select(group => new
+                {
+                    Category = ExpenseTotalCategory,
+                    Total = group.Sum(operation => operation.Amount),
+                    Count = group.Count()
+                }));
+            var projectedStaffPayments = staffPayments.Select(operation => new ExpenseReportProjection
+            {
+                RowType = PaymentRows,
+                Date = operation.OperationDate,
+                AccountingMonth = operation.AccountingMonth,
+                SupplierId = operation.StaffMemberId!.Value,
+                SupplierName = operation.StaffMember!.FullName,
+                ExpenseTypeId = operation.ExpenseTypeId!.Value,
+                ExpenseTypeName = operation.ExpenseType!.Name,
+                AccrualAmount = 0m,
+                ExpenseAmount = operation.Amount,
+                Difference = -operation.Amount,
+                DocumentNumber = operation.DocumentNumber,
+                Comment = operation.Comment,
+                CreatedAtUtc = operation.CreatedAtUtc,
+                RowId = operation.Id,
+                StaffMemberId = operation.StaffMemberId,
+                CounterpartyKind = "staff"
+            });
+            reportRows = reportRows == null ? projectedStaffPayments : reportRows.Concat(projectedStaffPayments);
         }
 
         if (reportRows == null)
@@ -467,7 +706,9 @@ public sealed class EfExpenseReportQuery(GarageBalanceDbContext dbContext) : IEx
             DocumentNumber = row.DocumentNumber,
             Comment = row.Comment,
             CreatedAtUtc = row.CreatedAtUtc,
-            RowId = row.RowId
+            RowId = row.RowId,
+            StaffMemberId = row.StaffMemberId,
+            CounterpartyKind = row.CounterpartyKind
         });
         var ordered = ApplyPostgresSort(sortableRows, sort)
             .ThenBy(row => row.SupplierName)
@@ -492,7 +733,9 @@ public sealed class EfExpenseReportQuery(GarageBalanceDbContext dbContext) : IEx
                 row.ExpenseAmount,
                 row.Difference,
                 row.DocumentNumber,
-                row.Comment))
+                row.Comment,
+                row.StaffMemberId,
+                row.CounterpartyKind))
             .ToListAsync(cancellationToken);
         return new ExpenseReportQueryData(accrualTotal, expenseTotal, rowCount, rows);
     }
@@ -521,6 +764,16 @@ public sealed class EfExpenseReportQuery(GarageBalanceDbContext dbContext) : IEx
 
     private static int? GetFetchLimit(int offset, int? limit) =>
         limit is > 0 ? (int)Math.Min((long)offset + limit.Value, int.MaxValue) : null;
+
+    private static IEnumerable<DateOnly> EnumerateMonths(DateOnly dateFrom, DateOnly dateTo)
+    {
+        for (var month = NormalizeMonth(dateFrom); month <= NormalizeMonth(dateTo); month = month.AddMonths(1))
+        {
+            yield return month;
+        }
+    }
+
+    private static DateOnly NormalizeMonth(DateOnly date) => new(date.Year, date.Month, 1);
 
     private bool IsNpgsql() =>
         dbContext.Database.ProviderName?.Contains("Npgsql", StringComparison.OrdinalIgnoreCase) == true;
@@ -558,5 +811,7 @@ public sealed class EfExpenseReportQuery(GarageBalanceDbContext dbContext) : IEx
         public string? Comment { get; init; }
         public DateTimeOffset CreatedAtUtc { get; init; }
         public Guid RowId { get; init; }
+        public Guid? StaffMemberId { get; init; }
+        public string CounterpartyKind { get; init; } = "supplier";
     }
 }

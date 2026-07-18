@@ -17,12 +17,26 @@ public sealed class EfGarageReportQuery(GarageBalanceDbContext dbContext) : IGar
         int offset,
         int limit,
         CancellationToken cancellationToken) =>
-        GetRowsAsync(periodFrom, periodTo, search, groupAccruals, offset, limit, new ReportSort("accountingMonth", true), cancellationToken);
+        GetRowsAsync(periodFrom, periodTo, search, new HashSet<Guid>(), new HashSet<Guid>(), new HashSet<Guid>(), groupAccruals, offset, limit, new ReportSort("accountingMonth", true), cancellationToken);
+
+    public Task<GarageReportQueryData> GetRowsAsync(
+        DateOnly periodFrom,
+        DateOnly periodTo,
+        string? search,
+        bool groupAccruals,
+        int offset,
+        int limit,
+        ReportSort sort,
+        CancellationToken cancellationToken) =>
+        GetRowsAsync(periodFrom, periodTo, search, new HashSet<Guid>(), new HashSet<Guid>(), new HashSet<Guid>(), groupAccruals, offset, limit, sort, cancellationToken);
 
     public async Task<GarageReportQueryData> GetRowsAsync(
         DateOnly periodFrom,
         DateOnly periodTo,
         string? search,
+        IReadOnlySet<Guid> selectedGarageIds,
+        IReadOnlySet<Guid> ownerIds,
+        IReadOnlySet<Guid> incomeTypeIds,
         bool groupAccruals,
         int offset,
         int limit,
@@ -31,6 +45,15 @@ public sealed class EfGarageReportQuery(GarageBalanceDbContext dbContext) : IGar
     {
         var dateTo = periodTo.AddMonths(1).AddDays(-1);
         var garages = dbContext.Garages.AsNoTracking().Where(garage => !garage.IsArchived);
+        if (selectedGarageIds.Count > 0)
+        {
+            garages = garages.Where(garage => selectedGarageIds.Contains(garage.Id));
+        }
+
+        if (ownerIds.Count > 0)
+        {
+            garages = garages.Where(garage => garage.OwnerId != null && ownerIds.Contains(garage.OwnerId.Value));
+        }
         if (!string.IsNullOrWhiteSpace(search))
         {
             var normalizedSearch = search.Trim();
@@ -60,7 +83,7 @@ public sealed class EfGarageReportQuery(GarageBalanceDbContext dbContext) : IGar
 
         var garageIds = garages.Select(garage => garage.Id);
         var startingBalances = garages
-            .Where(garage => garage.StartingBalance != 0)
+            .Where(garage => incomeTypeIds.Count == 0 && garage.StartingBalance != 0)
             .Select(garage => new
             {
                 AccountingMonth = periodFrom,
@@ -78,6 +101,7 @@ public sealed class EfGarageReportQuery(GarageBalanceDbContext dbContext) : IGar
             .Where(accrual =>
                 !accrual.IsCanceled &&
                 garageIds.Contains(accrual.GarageId) &&
+                (incomeTypeIds.Count == 0 || incomeTypeIds.Contains(accrual.IncomeTypeId)) &&
                 accrual.AccountingMonth >= periodFrom &&
                 accrual.AccountingMonth <= periodTo)
             .Select(accrual => new
@@ -100,6 +124,7 @@ public sealed class EfGarageReportQuery(GarageBalanceDbContext dbContext) : IGar
                 operation.GarageId != null &&
                 operation.IncomeTypeId != null &&
                 garageIds.Contains(operation.GarageId.Value) &&
+                (incomeTypeIds.Count == 0 || incomeTypeIds.Contains(operation.IncomeTypeId.Value)) &&
                 operation.OperationDate >= periodFrom &&
                 operation.OperationDate <= dateTo)
             .Select(operation => new

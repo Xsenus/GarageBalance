@@ -168,6 +168,9 @@ public sealed class ReportService(
             periodFrom,
             periodTo,
             request.Search,
+            (request.GarageIds ?? []).ToHashSet(),
+            (request.OwnerIds ?? []).ToHashSet(),
+            (request.IncomeTypeIds ?? []).ToHashSet(),
             request.GroupAccruals,
             offset,
             limit,
@@ -207,6 +210,9 @@ public sealed class ReportService(
             new Dictionary<string, object?>
             {
                 ["groupAccruals"] = request.GroupAccruals,
+                ["garageFilterCount"] = request.GarageIds?.Count ?? 0,
+                ["ownerFilterCount"] = request.OwnerIds?.Count ?? 0,
+                ["incomeTypeFilterCount"] = request.IncomeTypeIds?.Count ?? 0,
                 ["limit"] = request.Limit,
                 ["offset"] = request.Offset,
                 ["sortBy"] = sort.Field,
@@ -424,6 +430,7 @@ public sealed class ReportService(
             dateTo,
             rowMode,
             request.SupplierIds.ToHashSet(),
+            (request.StaffMemberIds ?? []).ToHashSet(),
             request.ExpenseTypeIds.ToHashSet(),
             request.Search,
             limit,
@@ -1218,7 +1225,7 @@ public sealed class ReportService(
             [
                 new XlsxSheet(
                     "Выплаты",
-                    ["Тип", "Дата", "Месяц учета", "Поставщик", "Вид выплаты", "Начислено", "Выплачено", "Разница", "Документ", "Комментарий"],
+                    ["Тип", "Дата", "Месяц учета", "Поставщик или сотрудник", "Вид выплаты", "Начислено", "Выплачено", "Разница", "Документ", "Комментарий"],
                     report.Rows.Select(row => (IReadOnlyList<XlsxCell>)
                     [
                         XlsxCell.Text(FormatExpenseRowType(row.RowType)),
@@ -1270,7 +1277,7 @@ public sealed class ReportService(
             $"Period: {report.DateFrom:yyyy-MM-dd} - {report.DateTo:yyyy-MM-dd}",
             $"Accrued: {FormatAmount(report.AccrualTotal)} | Paid: {FormatAmount(report.ExpenseTotal)} | Difference: {FormatAmount(report.Difference)} | Rows: {report.RowCount}",
             string.Empty,
-            "Type | Date | Month | Supplier | Expense type | Accrued | Paid | Difference | Document"
+            "Type | Date | Month | Supplier or employee | Expense type | Accrued | Paid | Difference | Document"
         };
         lines.AddRange(report.Rows.Select(row =>
             string.Join(" | ",
@@ -1389,6 +1396,7 @@ public sealed class ReportService(
             ["rowMode"] = rowMode,
             ["visibleRowCount"] = visibleRowCount,
             ["supplierFilterCount"] = request.SupplierIds.Count,
+            ["staffMemberFilterCount"] = request.StaffMemberIds?.Count ?? 0,
             ["expenseTypeFilterCount"] = request.ExpenseTypeIds.Count,
             ["limit"] = request.Limit,
             ["offset"] = request.Offset,

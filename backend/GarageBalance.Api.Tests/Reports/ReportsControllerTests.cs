@@ -85,8 +85,11 @@ public sealed class ReportsControllerTests
         {
             User = new ClaimsPrincipal(new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, actorUserId.ToString())]))
         };
+        var garageIds = new[] { Guid.NewGuid(), Guid.NewGuid() };
+        var ownerIds = new[] { Guid.NewGuid() };
+        var incomeTypeIds = new[] { Guid.NewGuid() };
 
-        var result = await controller.GetGarageReport(new DateOnly(2026, 6, 1), new DateOnly(2026, 7, 1), "12", true, 25, 50, CancellationToken.None);
+        var result = await controller.GetGarageReport(new DateOnly(2026, 6, 1), new DateOnly(2026, 7, 1), "12", true, 25, 50, CancellationToken.None, garageIds: garageIds, ownerIds: ownerIds, incomeTypeIds: incomeTypeIds);
 
         var ok = Assert.IsType<OkObjectResult>(result.Result);
         Assert.Same(report, ok.Value);
@@ -95,6 +98,9 @@ public sealed class ReportsControllerTests
         Assert.Equal(25, reportService.GarageRequest?.Limit);
         Assert.Equal(50, reportService.GarageRequest?.Offset);
         Assert.Equal(actorUserId, reportService.GarageRequest?.ActorUserId);
+        Assert.Equal(garageIds, reportService.GarageRequest?.GarageIds);
+        Assert.Equal(ownerIds, reportService.GarageRequest?.OwnerIds);
+        Assert.Equal(incomeTypeIds, reportService.GarageRequest?.IncomeTypeIds);
     }
 
     [Fact]
@@ -243,22 +249,29 @@ public sealed class ReportsControllerTests
             ExpenseResult = ReportResult<ExpenseReportDto>.Success(report)
         };
         var controller = new ReportsController(service);
+        var supplierIds = new[] { Guid.NewGuid(), Guid.NewGuid() };
+        var staffMemberIds = new[] { Guid.NewGuid(), Guid.NewGuid() };
+        var expenseTypeIds = new[] { Guid.NewGuid() };
 
         var result = await controller.GetExpenseReport(
             new DateOnly(2026, 6, 1),
             new DateOnly(2026, 6, 30),
             "Vodokanal",
-            [Guid.NewGuid()],
-            [],
+            supplierIds,
+            expenseTypeIds,
             "payments",
             16,
             8,
-            CancellationToken.None);
+            CancellationToken.None,
+            staffMemberIds: staffMemberIds);
 
         var ok = Assert.IsType<OkObjectResult>(result.Result);
         Assert.Same(report, ok.Value);
         Assert.Equal(16, service.ExpenseRequest?.Limit);
         Assert.Equal(8, service.ExpenseRequest?.Offset);
+        Assert.Equal(supplierIds, service.ExpenseRequest?.SupplierIds);
+        Assert.Equal(staffMemberIds, service.ExpenseRequest?.StaffMemberIds);
+        Assert.Equal(expenseTypeIds, service.ExpenseRequest?.ExpenseTypeIds);
     }
 
     [Fact]

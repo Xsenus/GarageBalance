@@ -7,6 +7,7 @@ public interface IExpenseReportQuery
         DateOnly dateTo,
         string rowMode,
         IReadOnlySet<Guid> supplierIds,
+        IReadOnlySet<Guid> staffMemberIds,
         IReadOnlySet<Guid> expenseTypeIds,
         string? search,
         int? limit,

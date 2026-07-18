@@ -19,7 +19,10 @@ public sealed record GarageReportRequest(
     int? Offset = null,
     Guid? ActorUserId = null,
     string? SortBy = null,
-    string? SortDirection = null);
+    string? SortDirection = null,
+    IReadOnlyCollection<Guid>? GarageIds = null,
+    IReadOnlyCollection<Guid>? OwnerIds = null,
+    IReadOnlyCollection<Guid>? IncomeTypeIds = null);
 
 public sealed record IncomeReportRequest(
     DateOnly? DateFrom,
@@ -46,7 +49,8 @@ public sealed record ExpenseReportRequest(
     int? Offset = null,
     Guid? ActorUserId = null,
     string? SortBy = null,
-    string? SortDirection = null);
+    string? SortDirection = null,
+    IReadOnlyCollection<Guid>? StaffMemberIds = null);
 
 public sealed record FundChangeReportRequest(
     DateOnly? DateFrom,
@@ -202,7 +206,9 @@ public sealed record ExpenseReportRowDto(
     decimal ExpenseAmount,
     decimal Difference,
     string? DocumentNumber,
-    string? Comment);
+    string? Comment,
+    Guid? StaffMemberId = null,
+    string CounterpartyKind = "supplier");
 
 public sealed record FundChangeReportDto(
     DateOnly DateFrom,

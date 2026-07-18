@@ -42,10 +42,13 @@ public sealed class ReportsController(IReportService reportService) : Controller
         [FromQuery] int? offset,
         CancellationToken cancellationToken,
         [FromQuery] string? sortBy = null,
-        [FromQuery] string? sortDirection = null)
+        [FromQuery] string? sortDirection = null,
+        [FromQuery] Guid[]? garageIds = null,
+        [FromQuery] Guid[]? ownerIds = null,
+        [FromQuery] Guid[]? incomeTypeIds = null)
     {
         var result = await reportService.GetGarageReportAsync(
-            new GarageReportRequest(monthFrom, monthTo, search, groupAccruals, limit, offset, GetActorUserId(), sortBy, sortDirection),
+            new GarageReportRequest(monthFrom, monthTo, search, groupAccruals, limit, offset, GetActorUserId(), sortBy, sortDirection, garageIds ?? [], ownerIds ?? [], incomeTypeIds ?? []),
             cancellationToken);
         return result.Succeeded
             ? Ok(result.Value)
@@ -206,7 +209,8 @@ public sealed class ReportsController(IReportService reportService) : Controller
         [FromQuery] int? offset,
         CancellationToken cancellationToken,
         [FromQuery] string? sortBy = null,
-        [FromQuery] string? sortDirection = null)
+        [FromQuery] string? sortDirection = null,
+        [FromQuery] Guid[]? staffMemberIds = null)
     {
         var result = await reportService.GetExpenseReportAsync(
             new ExpenseReportRequest(
@@ -220,7 +224,8 @@ public sealed class ReportsController(IReportService reportService) : Controller
                 offset,
                 GetActorUserId(),
                 sortBy,
-                sortDirection),
+                sortDirection,
+                staffMemberIds ?? []),
             cancellationToken);
 
         return result.Succeeded
@@ -482,7 +487,8 @@ public sealed class ReportsController(IReportService reportService) : Controller
         [FromQuery] string? rowMode,
         CancellationToken cancellationToken,
         [FromQuery] string? sortBy = null,
-        [FromQuery] string? sortDirection = null)
+        [FromQuery] string? sortDirection = null,
+        [FromQuery] Guid[]? staffMemberIds = null)
     {
         var result = await reportService.ExportExpenseReportXlsxAsync(
             new ExpenseReportRequest(
@@ -494,7 +500,8 @@ public sealed class ReportsController(IReportService reportService) : Controller
                 rowMode,
                 ActorUserId: GetActorUserId(),
                 SortBy: sortBy,
-                SortDirection: sortDirection),
+                SortDirection: sortDirection,
+                StaffMemberIds: staffMemberIds ?? []),
             cancellationToken);
 
         return result.Succeeded
@@ -514,7 +521,8 @@ public sealed class ReportsController(IReportService reportService) : Controller
         [FromQuery] string? rowMode,
         CancellationToken cancellationToken,
         [FromQuery] string? sortBy = null,
-        [FromQuery] string? sortDirection = null)
+        [FromQuery] string? sortDirection = null,
+        [FromQuery] Guid[]? staffMemberIds = null)
     {
         var result = await reportService.ExportExpenseReportPdfAsync(
             new ExpenseReportRequest(
@@ -526,7 +534,8 @@ public sealed class ReportsController(IReportService reportService) : Controller
                 rowMode,
                 ActorUserId: GetActorUserId(),
                 SortBy: sortBy,
-                SortDirection: sortDirection),
+                SortDirection: sortDirection,
+                StaffMemberIds: staffMemberIds ?? []),
             cancellationToken);
 
         return result.Succeeded

@@ -112,6 +112,8 @@ export type ExpenseReportRowDto = {
   difference: number
   documentNumber: string | null
   comment: string | null
+  staffMemberId?: string | null
+  counterpartyKind?: 'supplier' | 'staff'
 }
 
 export type ExpenseReportDto = {
@@ -238,7 +240,7 @@ export type ReportClient = {
   getConsolidatedReport(accessToken: string, params?: { monthFrom?: string; monthTo?: string; search?: string; limit?: number; offset?: number; sortBy?: string; sortDirection?: string }): Promise<ConsolidatedReportDto>
   getGarageReport(
     accessToken: string,
-    params?: { monthFrom?: string; monthTo?: string; search?: string; groupAccruals?: boolean; offset?: number; limit?: number; sortBy?: string; sortDirection?: string },
+    params?: { monthFrom?: string; monthTo?: string; search?: string; garageIds?: string[]; ownerIds?: string[]; incomeTypeIds?: string[]; groupAccruals?: boolean; offset?: number; limit?: number; sortBy?: string; sortDirection?: string },
   ): Promise<GarageDetailReportDto>
   exportConsolidatedReportXlsx(accessToken: string, params?: { monthFrom?: string; monthTo?: string; search?: string; sortBy?: string; sortDirection?: string }): Promise<Blob>
   exportConsolidatedReportPdf(accessToken: string, params?: { monthFrom?: string; monthTo?: string; search?: string; sortBy?: string; sortDirection?: string }): Promise<Blob>
@@ -293,6 +295,7 @@ export type ReportClient = {
       dateTo?: string
       search?: string
       supplierIds?: string[]
+      staffMemberIds?: string[]
       expenseTypeIds?: string[]
       rowMode?: string
       limit?: number
@@ -430,6 +433,7 @@ export type ReportClient = {
       dateTo?: string
       search?: string
       supplierIds?: string[]
+      staffMemberIds?: string[]
       expenseTypeIds?: string[]
       rowMode?: string
       sortBy?: string
@@ -443,6 +447,7 @@ export type ReportClient = {
       dateTo?: string
       search?: string
       supplierIds?: string[]
+      staffMemberIds?: string[]
       expenseTypeIds?: string[]
       rowMode?: string
       sortBy?: string
@@ -568,6 +573,15 @@ function buildGarageReportQuery(params: Parameters<ReportClient['getGarageReport
   if (params.limit) {
     searchParams.set('limit', String(params.limit))
   }
+  for (const garageId of params.garageIds ?? []) {
+    searchParams.append('garageIds', garageId)
+  }
+  for (const ownerId of params.ownerIds ?? []) {
+    searchParams.append('ownerIds', ownerId)
+  }
+  for (const incomeTypeId of params.incomeTypeIds ?? []) {
+    searchParams.append('incomeTypeIds', incomeTypeId)
+  }
   appendReportSort(searchParams, params)
   return searchParams.toString()
 }
@@ -594,6 +608,9 @@ function buildExpenseReportQuery(params: Parameters<ReportClient['getExpenseRepo
   }
   for (const supplierId of params.supplierIds ?? []) {
     searchParams.append('supplierIds', supplierId)
+  }
+  for (const staffMemberId of params.staffMemberIds ?? []) {
+    searchParams.append('staffMemberIds', staffMemberId)
   }
   for (const expenseTypeId of params.expenseTypeIds ?? []) {
     searchParams.append('expenseTypeIds', expenseTypeId)

@@ -3,11 +3,97 @@ using GarageBalance.Api.Domain.Dictionaries;
 using GarageBalance.Api.Domain.Finance;
 using GarageBalance.Api.Infrastructure.Data;
 using GarageBalance.Api.Tests.Common;
+using Microsoft.EntityFrameworkCore;
 
 namespace GarageBalance.Api.Tests.Reports;
 
 public sealed class PostgreSqlReportSortingIntegrationTests
 {
+    [PostgreSqlFact]
+    public async Task GarageAndExpenseReportsSupportSingleMultipleAndAllSelections()
+    {
+        await using var database = await PostgreSqlTestDatabase.CreateAsync();
+        await using var context = database.CreateContext();
+        var january = new DateOnly(2026, 1, 1);
+        var february = new DateOnly(2026, 2, 1);
+        var periodEnd = february.AddMonths(1).AddDays(-1);
+        var createdBeforePeriod = new DateTimeOffset(2025, 12, 15, 0, 0, 0, TimeSpan.Zero);
+        var firstOwner = new Owner { LastName = "Фильтр", FirstName = "Первый" };
+        var secondOwner = new Owner { LastName = "Фильтр", FirstName = "Второй" };
+        var firstGarage = new Garage { Number = "F-1", PeopleCount = 1, FloorCount = 1, Owner = firstOwner };
+        var secondGarage = new Garage { Number = "F-2", PeopleCount = 1, FloorCount = 1, Owner = secondOwner };
+        var incomeType = new IncomeType { Name = $"Фильтр дохода {Guid.NewGuid():N}" };
+        var group = new SupplierGroup { Name = $"Фильтр группы {Guid.NewGuid():N}" };
+        var supplier = new Supplier { Name = "Фильтр поставщика", Group = group };
+        var supplierExpenseType = new ExpenseType { Name = $"Фильтр выплаты {Guid.NewGuid():N}" };
+        var department = new StaffDepartment { Name = $"Фильтр отдела {Guid.NewGuid():N}" };
+        var staff = new StaffMember
+        {
+            FullName = "Фильтр Сотрудник",
+            Rate = 200m,
+            Department = department,
+            CreatedAtUtc = createdBeforePeriod,
+            UpdatedAtUtc = createdBeforePeriod
+        };
+        var salaryType = await context.ExpenseTypes.SingleAsync(type => type.Code == "salary");
+
+        context.AddRange(firstOwner, secondOwner, firstGarage, secondGarage, incomeType, group, supplier, supplierExpenseType, department, staff);
+        context.Accruals.AddRange(
+            CreateAccrual(firstGarage, incomeType, january, 100m),
+            CreateAccrual(secondGarage, incomeType, february, 300m));
+        context.SupplierAccruals.Add(CreateSupplierAccrual(supplier, supplierExpenseType, january, 400m));
+        context.FinancialOperations.AddRange(
+            CreateExpense(supplier, supplierExpenseType, january, 50m, "SUPPLIER-PAY"),
+            new FinancialOperation
+            {
+                OperationKind = FinancialOperationKinds.Expense,
+                OperationDate = february.AddDays(10),
+                AccountingMonth = february,
+                Amount = 75m,
+                StaffMember = staff,
+                ExpenseType = salaryType,
+                DocumentNumber = "STAFF-PAY",
+                CreatedAtUtc = new DateTimeOffset(2026, 2, 11, 0, 0, 0, TimeSpan.Zero)
+            });
+        await context.SaveChangesAsync();
+
+        var garageQuery = new EfGarageReportQuery(context);
+        var allGarages = await garageQuery.GetRowsAsync(january, february, null, new HashSet<Guid>(), new HashSet<Guid>(), new HashSet<Guid>(), false, 0, 20, new ReportSort("garageNumber", false), CancellationToken.None);
+        Assert.Equal(2, allGarages.RowCount);
+        Assert.Equal([firstGarage.Id, secondGarage.Id], allGarages.Rows.Select(row => row.GarageId).ToArray());
+
+        var oneGarage = await garageQuery.GetRowsAsync(january, february, null, new HashSet<Guid> { secondGarage.Id }, new HashSet<Guid>(), new HashSet<Guid> { incomeType.Id }, false, 0, 20, new ReportSort("garageNumber", false), CancellationToken.None);
+        Assert.Equal(1, oneGarage.RowCount);
+        Assert.Equal(secondGarage.Id, Assert.Single(oneGarage.Rows).GarageId);
+
+        var ownerSelection = await garageQuery.GetRowsAsync(january, february, null, new HashSet<Guid> { firstGarage.Id, secondGarage.Id }, new HashSet<Guid> { firstOwner.Id }, new HashSet<Guid> { incomeType.Id }, false, 0, 20, new ReportSort("garageNumber", false), CancellationToken.None);
+        Assert.Equal(firstGarage.Id, Assert.Single(ownerSelection.Rows).GarageId);
+
+        var expenseQuery = new EfExpenseReportQuery(context);
+        var allCounterparties = await expenseQuery.GetRowsAsync(january, periodEnd, "all", new HashSet<Guid>(), new HashSet<Guid>(), new HashSet<Guid>(), null, 20, 0, new ReportSort("date", false), CancellationToken.None);
+        Assert.Equal(5, allCounterparties.RowCount);
+        Assert.Equal(800m, allCounterparties.AccrualTotal);
+        Assert.Equal(125m, allCounterparties.ExpenseTotal);
+        Assert.Contains(allCounterparties.Rows, row => row.CounterpartyKind == "supplier");
+        Assert.Contains(allCounterparties.Rows, row => row.CounterpartyKind == "staff" && row.StaffMemberId == staff.Id);
+
+        var supplierOnly = await expenseQuery.GetRowsAsync(january, periodEnd, "all", new HashSet<Guid> { supplier.Id }, new HashSet<Guid>(), new HashSet<Guid> { supplierExpenseType.Id }, null, 20, 0, new ReportSort("date", false), CancellationToken.None);
+        Assert.Equal(2, supplierOnly.RowCount);
+        Assert.All(supplierOnly.Rows, row => Assert.Equal("supplier", row.CounterpartyKind));
+
+        var staffOnly = await expenseQuery.GetRowsAsync(january, periodEnd, "all", new HashSet<Guid>(), new HashSet<Guid> { staff.Id }, new HashSet<Guid> { salaryType.Id }, null, 20, 0, new ReportSort("date", false), CancellationToken.None);
+        Assert.Equal(3, staffOnly.RowCount);
+        Assert.Equal(400m, staffOnly.AccrualTotal);
+        Assert.Equal(75m, staffOnly.ExpenseTotal);
+        Assert.All(staffOnly.Rows, row => Assert.Equal(staff.Id, row.StaffMemberId));
+
+        var mixed = await expenseQuery.GetRowsAsync(january, periodEnd, "all", new HashSet<Guid> { supplier.Id }, new HashSet<Guid> { staff.Id }, new HashSet<Guid> { supplierExpenseType.Id, salaryType.Id }, null, 3, 0, new ReportSort("date", false), CancellationToken.None);
+        Assert.Equal(5, mixed.RowCount);
+        Assert.Equal(3, mixed.Rows.Count);
+        Assert.Equal(800m, mixed.AccrualTotal);
+        Assert.Equal(125m, mixed.ExpenseTotal);
+    }
+
     [PostgreSqlFact]
     public async Task AllReportQueriesSortBeforePagingOnPostgreSql()
     {

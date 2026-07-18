@@ -1044,7 +1044,7 @@ public sealed class ReportServiceTests
     }
 
     [Fact]
-    public async Task ExpenseAllRowsQuery_LoadsThreeSectionsAndCombinedTotalsInFourSelects()
+    public async Task ExpenseAllRowsQuery_LoadsSupplierAndStaffSectionsInSixSelects()
     {
         var commandCounter = new SelectCommandCounter();
         await using var database = await TestDatabase.CreateAsync(commandCounter);
@@ -1087,12 +1087,70 @@ public sealed class ReportServiceTests
             0,
             CancellationToken.None);
 
-        Assert.Equal(4, commandCounter.Count);
+        Assert.Equal(6, commandCounter.Count);
         Assert.Equal(10100m, result.AccrualTotal);
         Assert.Equal(4000m, result.ExpenseTotal);
         Assert.Equal(401, result.RowCount);
         Assert.Equal(25, result.Rows.Count);
         Assert.All(result.Rows, row => Assert.Equal(fixtures.Supplier.Id, row.SupplierId));
+    }
+
+    [Fact]
+    public async Task ExpenseQuery_WithStaffSelection_ReturnsOnlyStaffAccrualAndPaymentOnSqlite()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        var department = new StaffDepartment { Name = "Отдел отчета" };
+        var staff = new StaffMember
+        {
+            FullName = "Сотрудник отчета",
+            Rate = 300m,
+            Department = department,
+            CreatedAtUtc = new DateTimeOffset(2026, 5, 1, 0, 0, 0, TimeSpan.Zero)
+        };
+        var salaryType = new ExpenseType { Name = "Зарплата", Code = "salary", IsSystem = true };
+        database.Context.AddRange(department, staff, salaryType);
+        database.Context.FinancialOperations.Add(new FinancialOperation
+        {
+            OperationKind = FinancialOperationKinds.Expense,
+            OperationDate = new DateOnly(2026, 6, 15),
+            AccountingMonth = new DateOnly(2026, 6, 1),
+            Amount = 125m,
+            StaffMember = staff,
+            ExpenseType = salaryType
+        });
+        database.Context.FinancialOperations.Add(new FinancialOperation
+        {
+            OperationKind = FinancialOperationKinds.Expense,
+            OperationDate = new DateOnly(2026, 6, 16),
+            AccountingMonth = new DateOnly(2026, 6, 1),
+            Amount = 999m,
+            Supplier = fixtures.Supplier,
+            ExpenseType = fixtures.ExpenseType
+        });
+        await database.Context.SaveChangesAsync();
+
+        var result = await new EfExpenseReportQuery(database.Context).GetRowsAsync(
+            new DateOnly(2026, 6, 1),
+            new DateOnly(2026, 6, 30),
+            "all",
+            new HashSet<Guid>(),
+            new HashSet<Guid> { staff.Id },
+            new HashSet<Guid> { salaryType.Id },
+            null,
+            25,
+            0,
+            new ReportSort("date", false),
+            CancellationToken.None);
+
+        Assert.Equal(2, result.RowCount);
+        Assert.Equal(300m, result.AccrualTotal);
+        Assert.Equal(125m, result.ExpenseTotal);
+        Assert.All(result.Rows, row =>
+        {
+            Assert.Equal("staff", row.CounterpartyKind);
+            Assert.Equal(staff.Id, row.StaffMemberId);
+        });
     }
 
     [Fact]
