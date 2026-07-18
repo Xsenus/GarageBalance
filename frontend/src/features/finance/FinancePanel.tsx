@@ -107,6 +107,7 @@ type GarageIncomePrototypeRow = {
   month: string
   monthLabel: string
   service: string
+  annualAccrualId: string | null
   meterKind: 'water' | 'electricity' | null
   meterReadingId: string | null
   meterReadingVersion: string | null
@@ -124,6 +125,7 @@ type GarageIncomePrototypeRow = {
 
 type GarageIncomeWorksheetPeriodSummary = {
   openingDebt: number
+  unrepresentedOpeningDebt: number
   accrualTotal: number
   incomeTotal: number
   closingDebt: number
@@ -296,6 +298,7 @@ function createGarageIncomeRowsFromWorksheet(worksheet: GarageIncomeWorksheetDto
       month,
       monthLabel: formatPaymentPrototypeMonthLabel(row.accountingMonth),
       service: row.incomeTypeName,
+      annualAccrualId: row.annualAccrualId ?? null,
       meterKind: row.meterKind,
       meterReadingId: row.meterReadingId ?? null,
       meterReadingVersion: row.meterReadingVersion ?? null,
@@ -304,7 +307,7 @@ function createGarageIncomeRowsFromWorksheet(worksheet: GarageIncomeWorksheetDto
       meterDraft: row.meterValue === null ? '' : String(row.meterValue),
       meterError: null,
       difference: row.meterConsumption,
-      payable: row.accrualAmount,
+      payable: row.payableAmount ?? row.accrualAmount,
       paymentDraft: '',
       paid: row.incomeAmount,
       debt: row.debt,
@@ -3300,6 +3303,7 @@ function PaymentsPrototypePanel({
                 setGarageRows(createGarageIncomeRowsFromWorksheet(worksheet))
                 setGarageWorksheetSummary({
                   openingDebt: worksheet.openingDebt,
+                  unrepresentedOpeningDebt: worksheet.unrepresentedOpeningDebt ?? 0,
                   accrualTotal: worksheet.accrualTotal,
                   incomeTotal: worksheet.incomeTotal,
                   closingDebt: worksheet.closingDebt,
@@ -3611,6 +3615,7 @@ function PaymentsPrototypePanel({
       setGarageRows(rows)
       setGarageWorksheetSummary({
         openingDebt: worksheet.openingDebt,
+        unrepresentedOpeningDebt: worksheet.unrepresentedOpeningDebt ?? 0,
         accrualTotal: worksheet.accrualTotal,
         incomeTotal: worksheet.incomeTotal,
         closingDebt: worksheet.closingDebt,
@@ -4066,7 +4071,10 @@ function PaymentsPrototypePanel({
         { id: operation.id, date: formatDateOnly(operation.operationDate), time: formatOperationTime(operation.createdAtUtc) || paymentTime, amount: operation.amount, purpose: operation.incomeTypeName ?? row.service, debtAfter: historyDebtAfter },
         ...currentRows,
       ])
-      void loadGaragePaymentHistory(selectedGarage)
+      await Promise.all([
+        row.annualAccrualId ? loadGarageIncomeWorksheet(selectedGarage) : Promise.resolve(),
+        loadGaragePaymentHistory(selectedGarage),
+      ])
     } catch (error) {
       setPaymentError(error instanceof Error ? error.message : 'Не удалось сохранить платеж. Повторите попытку позже.')
     } finally {
@@ -4099,11 +4107,26 @@ function PaymentsPrototypePanel({
   }
 
   function getRowsForFullPayment(period: string) {
-    return garageRows.filter((row) => row.debt > 0 && (period === 'full' || row.month === period))
+    const rows = garageRows.filter((row) => row.debt > 0 && (period === 'full' || row.month === period))
+    if (period !== 'full') {
+      return rows
+    }
+
+    const seenAnnualAccruals = new Set<string>()
+    return rows.filter((row) => {
+      if (!row.annualAccrualId) {
+        return true
+      }
+      if (seenAnnualAccruals.has(row.annualAccrualId)) {
+        return false
+      }
+      seenAnnualAccruals.add(row.annualAccrualId)
+      return true
+    })
   }
 
   function getOpeningDebtForFullPayment(period: string) {
-    return period === 'full' ? Math.max(garageWorksheetSummary?.openingDebt ?? 0, 0) : 0
+    return period === 'full' ? Math.max(garageWorksheetSummary?.unrepresentedOpeningDebt ?? 0, 0) : 0
   }
 
   async function commitFullGaragePayment(request: FullPaymentPrototypeSubmitRequest) {
@@ -4202,8 +4225,10 @@ function PaymentsPrototypePanel({
       ...currentRows,
     ])
 
-    void loadGarageIncomeWorksheet(selectedGarage)
-    void loadGaragePaymentHistory(selectedGarage)
+    await Promise.all([
+      loadGarageIncomeWorksheet(selectedGarage),
+      loadGaragePaymentHistory(selectedGarage),
+    ])
 
     return null
   }
@@ -4274,6 +4299,7 @@ function PaymentsPrototypePanel({
             month: request.targetMonth,
             monthLabel: targetLabel,
             service: transferService,
+            annualAccrualId: null,
             meterKind: null,
             meterReadingId: null,
             meterReadingVersion: null,
@@ -4346,6 +4372,7 @@ function PaymentsPrototypePanel({
           month,
           monthLabel,
           service: savedAccrual.incomeTypeName,
+          annualAccrualId: savedAccrual.accountingYear ? savedAccrual.id : null,
           meterKind: null,
           meterReadingId: null,
           meterReadingVersion: null,
@@ -4415,6 +4442,7 @@ function PaymentsPrototypePanel({
               month,
               monthLabel: formatPaymentPrototypeMonthLabel(accrual.accountingMonth),
               service: accrual.incomeTypeName,
+              annualAccrualId: accrual.accountingYear ? accrual.id : null,
               meterKind: null,
               meterReadingId: null,
               meterReadingVersion: null,
@@ -4632,11 +4660,12 @@ function PaymentsPrototypePanel({
     return groups
   }, [])
 
-  const paymentTotal = garageRows.reduce((sum, row) => sum + row.payable, 0)
-  const paidTotal = garageRows.reduce((sum, row) => sum + row.paid, 0)
-  const debtTotal = garageRows.reduce((sum, row) => sum + row.debt, 0)
+  const paymentTotal = garageWorksheetSummary?.accrualTotal ?? garageRows.reduce((sum, row) => sum + row.payable, 0)
+  const paidTotal = garageWorksheetSummary?.incomeTotal ?? garageRows.reduce((sum, row) => sum + row.paid, 0)
+  const debtTotal = garageWorksheetSummary?.closingDebt ?? garageRows.reduce((sum, row) => sum + row.debt, 0)
+  const fullPaymentRowsDebt = getRowsForFullPayment('full').reduce((sum, row) => sum + row.debt, 0)
   const fullPaymentPeriodOptions = [
-    { value: 'full', label: 'Полный расчет', debt: debtTotal + getOpeningDebtForFullPayment('full') },
+    { value: 'full', label: 'Полный расчет', debt: fullPaymentRowsDebt + getOpeningDebtForFullPayment('full') },
     ...groupedGarageRows.map((group) => ({ value: group.month, label: group.monthLabel, debt: group.rows.reduce((sum, row) => sum + row.debt, 0) })),
   ].filter((option, index, options) => index === 0 || option.debt > 0 || !options.some((existingOption, existingIndex) => existingIndex < index && existingOption.value === option.value))
   const debtTransferSourceOptions: DebtTransferPrototypePeriodOption[] = groupedGarageRows

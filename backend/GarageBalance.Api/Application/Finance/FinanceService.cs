@@ -408,6 +408,20 @@ public sealed class FinanceService(
         var openingDebt = MoneyMath.RoundMoney(Math.Max(
             worksheetData.StartingBalance + worksheetData.PreviousAccrualTotal - worksheetData.PreviousIncomeTotal,
             0m));
+        var annualAllocations = worksheetData.AnnualAllocations
+            .GroupBy(allocation => allocation.AccrualId)
+            .ToDictionary(group => group.Key, group => group.ToList());
+        var representedOpeningDebt = MoneyMath.RoundMoney(worksheetData.AnnualAccruals
+            .Where(accrual => accrual.AccountingMonth < monthFrom)
+            .Sum(accrual =>
+            {
+                var allocatedBeforePeriod = annualAllocations
+                    .GetValueOrDefault(accrual.AccrualId)?
+                    .Where(allocation => allocation.AccountingMonth < monthFrom)
+                    .Sum(allocation => allocation.Amount) ?? 0m;
+                return Math.Max(accrual.Amount - allocatedBeforePeriod, 0m);
+            }));
+        var unrepresentedOpeningDebt = MoneyMath.RoundMoney(Math.Max(openingDebt - representedOpeningDebt, 0m));
         var meterReadingByMonthKind = worksheetData.MeterReadings
             .GroupBy(reading => (reading.AccountingMonth, reading.MeterKind))
             .ToDictionary(
@@ -419,6 +433,9 @@ public sealed class FinanceService(
 
         var accrualLookup = worksheetData.AccrualBuckets.ToDictionary(bucket => (bucket.AccountingMonth, bucket.IncomeTypeId));
         var incomeLookup = worksheetData.IncomeBuckets.ToDictionary(bucket => (bucket.AccountingMonth, bucket.IncomeTypeId));
+        var annualObligationKeys = worksheetData.AnnualAccruals
+            .Select(accrual => (accrual.AccountingYear, accrual.IncomeTypeId))
+            .ToHashSet();
         var requiredMeterBuckets = defaultMonthTo >= monthFrom && defaultMonthTo <= monthTo
             ? worksheetData.MeterIncomeTypes.Select(incomeType => new GarageIncomeWorksheetBucketData(
                 defaultMonthTo,
@@ -430,6 +447,7 @@ public sealed class FinanceService(
         var keys = worksheetData.AccrualBuckets
             .Concat(worksheetData.IncomeBuckets)
             .Concat(requiredMeterBuckets)
+            .Where(bucket => !annualObligationKeys.Contains((bucket.AccountingMonth.Year, bucket.IncomeTypeId)))
             .GroupBy(bucket => (bucket.AccountingMonth, bucket.IncomeTypeId))
             .Select(group => group.First())
             .OrderByDescending(bucket => bucket.AccountingMonth)
@@ -447,6 +465,7 @@ public sealed class FinanceService(
                 key.AccountingMonth,
                 key.IncomeTypeId,
                 key.IncomeTypeName,
+                null,
                 meterKind,
                 reading?.Id,
                 reading?.Version,
@@ -454,12 +473,62 @@ public sealed class FinanceService(
                 reading?.CurrentValue,
                 reading?.Consumption,
                 accrualAmount,
+                accrualAmount,
                 incomeAmount,
                 debt);
         }).ToList();
 
-        var accrualTotal = MoneyMath.RoundMoney(rows.Sum(row => row.AccrualAmount));
-        var incomeTotal = MoneyMath.RoundMoney(rows.Sum(row => row.IncomeAmount));
+        foreach (var annualAccrual in worksheetData.AnnualAccruals)
+        {
+            var yearStart = new DateOnly(annualAccrual.AccountingYear, 1, 1);
+            var yearEnd = new DateOnly(annualAccrual.AccountingYear, 12, 1);
+            var displayFrom = monthFrom > yearStart ? monthFrom : yearStart;
+            var displayTo = monthTo < yearEnd ? monthTo : yearEnd;
+            if (displayFrom > displayTo)
+            {
+                continue;
+            }
+
+            var allocations = annualAllocations.GetValueOrDefault(annualAccrual.AccrualId) ?? [];
+            for (var month = displayFrom; month <= displayTo; month = month.AddMonths(1))
+            {
+                var allocatedBeforeMonth = MoneyMath.RoundMoney(allocations
+                    .Where(allocation => allocation.AccountingMonth < month)
+                    .Sum(allocation => allocation.Amount));
+                if (AnnualAccrualPolicy.IsFullyPaid(annualAccrual.Amount, allocatedBeforeMonth))
+                {
+                    break;
+                }
+
+                var allocatedInMonth = MoneyMath.RoundMoney(allocations
+                    .Where(allocation => allocation.AccountingMonth == month)
+                    .Sum(allocation => allocation.Amount));
+                var allocatedThroughMonth = MoneyMath.RoundMoney(allocatedBeforeMonth + allocatedInMonth);
+                rows.Add(new GarageIncomeWorksheetRowDto(
+                    month,
+                    annualAccrual.IncomeTypeId,
+                    annualAccrual.IncomeTypeName,
+                    annualAccrual.AccrualId,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    annualAccrual.AccountingMonth == month ? MoneyMath.RoundMoney(annualAccrual.Amount) : 0m,
+                    MoneyMath.RoundMoney(Math.Max(annualAccrual.Amount - allocatedBeforeMonth, 0m)),
+                    allocatedInMonth,
+                    MoneyMath.RoundMoney(Math.Max(annualAccrual.Amount - allocatedThroughMonth, 0m))));
+            }
+        }
+
+        rows = rows
+            .OrderByDescending(row => row.AccountingMonth)
+            .ThenBy(row => row.IncomeTypeName, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        var accrualTotal = MoneyMath.RoundMoney(worksheetData.AccrualBuckets.Sum(bucket => bucket.Amount));
+        var incomeTotal = MoneyMath.RoundMoney(worksheetData.IncomeBuckets.Sum(bucket => bucket.Amount));
         var closingDebt = MoneyMath.RoundMoney(Math.Max(openingDebt + accrualTotal - incomeTotal, 0m));
         var debtTotal = closingDebt;
         return FinanceResult<GarageIncomeWorksheetDto>.Success(new GarageIncomeWorksheetDto(
@@ -469,6 +538,7 @@ public sealed class FinanceService(
             monthFrom,
             monthTo,
             openingDebt,
+            unrepresentedOpeningDebt,
             accrualTotal,
             incomeTotal,
             debtTotal,

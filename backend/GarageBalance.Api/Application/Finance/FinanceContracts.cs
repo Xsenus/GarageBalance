@@ -370,6 +370,7 @@ public sealed record GarageIncomeWorksheetRowDto(
     DateOnly AccountingMonth,
     Guid? IncomeTypeId,
     string IncomeTypeName,
+    Guid? AnnualAccrualId,
     string? MeterKind,
     Guid? MeterReadingId,
     Guid? MeterReadingVersion,
@@ -377,6 +378,7 @@ public sealed record GarageIncomeWorksheetRowDto(
     decimal? MeterValue,
     decimal? MeterConsumption,
     decimal AccrualAmount,
+    decimal PayableAmount,
     decimal IncomeAmount,
     decimal Debt);
 
@@ -387,6 +389,7 @@ public sealed record GarageIncomeWorksheetDto(
     DateOnly MonthFrom,
     DateOnly MonthTo,
     decimal OpeningDebt,
+    decimal UnrepresentedOpeningDebt,
     decimal AccrualTotal,
     decimal IncomeTotal,
     decimal DebtTotal,

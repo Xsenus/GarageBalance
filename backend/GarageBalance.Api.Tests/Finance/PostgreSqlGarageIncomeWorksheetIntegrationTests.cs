@@ -9,6 +9,70 @@ namespace GarageBalance.Api.Tests.Finance;
 public sealed class PostgreSqlGarageIncomeWorksheetIntegrationTests
 {
     [PostgreSqlFact]
+    public async Task Worksheet_ProjectsAnnualObligationUntilFullPaymentAndReopensItAfterCancellation()
+    {
+        await using var database = await PostgreSqlTestDatabase.CreateAsync();
+        await using var context = database.CreateContext();
+        var membershipType = await context.IncomeTypes.SingleAsync(type => type.Code == "membership");
+        var garage = new Garage
+        {
+            Number = "PG-ANNUAL-OBLIGATION",
+            PeopleCount = 1,
+            FloorCount = 1
+        };
+        context.Garages.Add(garage);
+        await context.SaveChangesAsync();
+        var service = FinanceServiceTestFactory.Create(context);
+
+        var accrual = await service.CreateAccrualAsync(
+            new CreateAccrualRequest(garage.Id, membershipType.Id, new DateOnly(2026, 1, 1), 700m, "regular", null),
+            null,
+            CancellationToken.None);
+        Assert.True(accrual.Succeeded, accrual.ErrorMessage);
+        var annualAccrualId = accrual.Value!.Id;
+        Assert.True((await service.CreateIncomeAsync(
+            new CreateIncomeOperationRequest(garage.Id, membershipType.Id, new DateOnly(2026, 3, 10), new DateOnly(2026, 3, 1), 300m, null, null),
+            null,
+            CancellationToken.None)).Succeeded);
+
+        var partial = await service.GetGarageIncomeWorksheetAsync(
+            garage.Id,
+            new GarageIncomeWorksheetRequest(new DateOnly(2026, 1, 1), new DateOnly(2026, 6, 1)),
+            CancellationToken.None);
+        Assert.True(partial.Succeeded, partial.ErrorMessage);
+        Assert.Equal(6, partial.Value!.Rows.Count(row => row.AnnualAccrualId == annualAccrualId));
+        Assert.Equal(400m, Assert.Single(partial.Value.Rows, row =>
+            row.AnnualAccrualId == annualAccrualId && row.AccountingMonth == new DateOnly(2026, 6, 1)).Debt);
+
+        var fullPayment = await service.CreateIncomeAsync(
+            new CreateIncomeOperationRequest(garage.Id, membershipType.Id, new DateOnly(2026, 4, 10), new DateOnly(2026, 4, 1), 400m, null, null),
+            null,
+            CancellationToken.None);
+        Assert.True(fullPayment.Succeeded, fullPayment.ErrorMessage);
+        var paid = await service.GetGarageIncomeWorksheetAsync(
+            garage.Id,
+            new GarageIncomeWorksheetRequest(new DateOnly(2026, 1, 1), new DateOnly(2026, 6, 1)),
+            CancellationToken.None);
+        Assert.True(paid.Succeeded, paid.ErrorMessage);
+        Assert.DoesNotContain(paid.Value!.Rows, row =>
+            row.AnnualAccrualId == annualAccrualId && row.AccountingMonth > new DateOnly(2026, 4, 1));
+
+        var canceled = await service.CancelOperationAsync(
+            fullPayment.Value!.Id,
+            new CancelFinanceEntryRequest("Проверка возврата годового остатка"),
+            null,
+            CancellationToken.None);
+        Assert.True(canceled.Succeeded, canceled.ErrorMessage);
+        var reopened = await service.GetGarageIncomeWorksheetAsync(
+            garage.Id,
+            new GarageIncomeWorksheetRequest(new DateOnly(2026, 5, 1), new DateOnly(2026, 6, 1)),
+            CancellationToken.None);
+        Assert.True(reopened.Succeeded, reopened.ErrorMessage);
+        Assert.Equal(400m, Assert.Single(reopened.Value!.Rows, row =>
+            row.AnnualAccrualId == annualAccrualId && row.AccountingMonth == new DateOnly(2026, 6, 1)).Debt);
+    }
+
+    [PostgreSqlFact]
     public async Task Worksheet_ReturnsMeterIdentityAndVersionForInlineEditing()
     {
         await using var database = await PostgreSqlTestDatabase.CreateAsync();

@@ -622,8 +622,12 @@ public sealed class BackendPerformanceGuardTests
         Assert.Contains("incomeBucketQuery", source, StringComparison.Ordinal);
         Assert.Contains("meterReadingQuery", source, StringComparison.Ordinal);
         Assert.Contains("meterIncomeTypeQuery", source, StringComparison.Ordinal);
+        Assert.Contains("annualAccrualQuery", source, StringComparison.Ordinal);
+        Assert.Contains("annualAllocationQuery", source, StringComparison.Ordinal);
         Assert.Contains(".Concat(meterIncomeTypeQuery)", source, StringComparison.Ordinal);
-        Assert.Equal(6, CountOccurrences(source, ".Concat("));
+        Assert.Contains(".Concat(annualAccrualQuery)", source, StringComparison.Ordinal);
+        Assert.Contains(".Concat(annualAllocationQuery)", source, StringComparison.Ordinal);
+        Assert.Equal(8, CountOccurrences(source, ".Concat("));
         Assert.Equal(1, CountOccurrences(source, ".ToListAsync(cancellationToken)"));
         Assert.Contains("garageIncomeWorksheetQuery.GetAsync", serviceSource, StringComparison.Ordinal);
     }

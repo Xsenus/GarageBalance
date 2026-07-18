@@ -276,6 +276,7 @@ public sealed class FinanceControllerTests
             new DateOnly(2026, 6, 1),
             new DateOnly(2026, 7, 1),
             250m,
+            250m,
             1000m,
             400m,
             600m,

@@ -219,6 +219,7 @@ export type GarageIncomeWorksheetRowDto = {
   accountingMonth: string
   incomeTypeId: string | null
   incomeTypeName: string
+  annualAccrualId?: string | null
   meterKind: 'water' | 'electricity' | null
   meterReadingId?: string | null
   meterReadingVersion?: string | null
@@ -226,6 +227,7 @@ export type GarageIncomeWorksheetRowDto = {
   meterValue: number | null
   meterConsumption: number | null
   accrualAmount: number
+  payableAmount?: number
   incomeAmount: number
   debt: number
 }
@@ -237,6 +239,7 @@ export type GarageIncomeWorksheetDto = {
   monthFrom: string
   monthTo: string
   openingDebt: number
+  unrepresentedOpeningDebt?: number
   accrualTotal: number
   incomeTotal: number
   debtTotal: number

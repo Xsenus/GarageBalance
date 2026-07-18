@@ -28,9 +28,9 @@
 - [x] Frontend state and tests for blocking or confirming electricity meter edits outside the allowed month.
 - [~] Backend and frontend confirmation flow for early electricity payments: серверный preview и границы 29/30/31 готовы, неблокирующий frontend dialog остается следующим пунктом.
 - [~] Water empty-field highlighting: backend-правило ручного значения и запрет фиктивного нуля готовы; точный набор экранов для мягкой красной подсветки остается бизнес-решением frontend.
-- [~] Annual dues and outdoor lighting accrual-stop logic: явный учетный год и правило полного погашения готовы; прекращение показа после оплаты и сценарии отмены/восстановления остаются следующим roadmap-пунктом.
-- [ ] Release note for cooperative staff/admins describing the final business rules.
+- [x] Annual dues and outdoor lighting accrual-stop logic: явный учетный год и правило полного погашения реализованы; частичный остаток показывается до конца года, полная оплата скрывает будущие строки, отмена и восстановление платежа пересчитывают показ.
+- [x] Release note for cooperative staff/admins describing the final business rules.
 
 ## Current Status
 
-- [~] Roadmap-пункт нельзя закрывать как `[x]`, пока не завершены frontend-подтверждение ранней оплаты, точный набор экранов водяной подсветки и прекращение показа полностью погашенного годового обязательства; решения по годовым начислениям уже утверждены и внедряются.
+- [~] Roadmap-пункт нельзя закрывать как `[x]`, пока не завершены frontend-подтверждение ранней оплаты и точный набор экранов водяной подсветки; решения и реализация по годовым начислениям завершены.

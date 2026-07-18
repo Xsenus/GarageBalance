@@ -4652,6 +4652,95 @@ public sealed class FinanceServiceTests
     }
 
     [Fact]
+    public async Task GetGarageIncomeWorksheetAsync_ShowsAnnualObligationUntilFullPaymentAndRestoresItAfterCancellation()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        await RemoveSeededBankTransferAsync(database.Context);
+        var service = FinanceServiceTestFactory.Create(database.Context);
+        var annualAccrual = await service.CreateAccrualAsync(
+            new CreateAccrualRequest(fixtures.Garage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 1, 1), 700m, "regular", null),
+            null,
+            CancellationToken.None);
+        Assert.True(annualAccrual.Succeeded, annualAccrual.ErrorMessage);
+        var annualAccrualId = annualAccrual.Value!.Id;
+        var partialPayment = await service.CreateIncomeAsync(
+            new CreateIncomeOperationRequest(fixtures.Garage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 3, 10), new DateOnly(2026, 3, 1), 300m, null, null),
+            null,
+            CancellationToken.None);
+        Assert.True(partialPayment.Succeeded, partialPayment.ErrorMessage);
+
+        var partialWorksheet = await service.GetGarageIncomeWorksheetAsync(
+            fixtures.Garage.Id,
+            new GarageIncomeWorksheetRequest(new DateOnly(2026, 1, 1), new DateOnly(2026, 5, 1)),
+            CancellationToken.None);
+
+        Assert.True(partialWorksheet.Succeeded, partialWorksheet.ErrorMessage);
+        var partialRows = partialWorksheet.Value!.Rows
+            .Where(row => row.AnnualAccrualId == annualAccrualId)
+            .OrderBy(row => row.AccountingMonth)
+            .ToList();
+        Assert.Equal(5, partialRows.Count);
+        Assert.Equal(700m, partialRows[0].AccrualAmount);
+        Assert.Equal(700m, partialRows[0].PayableAmount);
+        Assert.Equal(700m, partialRows[1].Debt);
+        Assert.Equal(700m, partialRows[2].PayableAmount);
+        Assert.Equal(300m, partialRows[2].IncomeAmount);
+        Assert.Equal(400m, partialRows[2].Debt);
+        Assert.Equal(400m, partialRows[4].PayableAmount);
+        Assert.Equal(400m, partialRows[4].Debt);
+
+        var fullPayment = await service.CreateIncomeAsync(
+            new CreateIncomeOperationRequest(fixtures.Garage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 4, 10), new DateOnly(2026, 4, 1), 500m, null, null),
+            null,
+            CancellationToken.None);
+        Assert.True(fullPayment.Succeeded, fullPayment.ErrorMessage);
+        var paidWorksheet = await service.GetGarageIncomeWorksheetAsync(
+            fixtures.Garage.Id,
+            new GarageIncomeWorksheetRequest(new DateOnly(2026, 1, 1), new DateOnly(2026, 6, 1)),
+            CancellationToken.None);
+
+        Assert.True(paidWorksheet.Succeeded, paidWorksheet.ErrorMessage);
+        var paidRows = paidWorksheet.Value!.Rows
+            .Where(row => row.AnnualAccrualId == annualAccrualId)
+            .OrderBy(row => row.AccountingMonth)
+            .ToList();
+        Assert.Equal(4, paidRows.Count);
+        Assert.Equal(new DateOnly(2026, 4, 1), paidRows[^1].AccountingMonth);
+        Assert.Equal(400m, paidRows[^1].PayableAmount);
+        Assert.Equal(400m, paidRows[^1].IncomeAmount);
+        Assert.Equal(0m, paidRows[^1].Debt);
+        Assert.Equal(700m, paidWorksheet.Value.AccrualTotal);
+        Assert.Equal(800m, paidWorksheet.Value.IncomeTotal);
+        Assert.Equal(0m, paidWorksheet.Value.ClosingDebt);
+
+        var canceledPayment = await service.CancelOperationAsync(
+            fullPayment.Value!.Id,
+            new CancelFinanceEntryRequest("Проверяем возврат годового остатка"),
+            null,
+            CancellationToken.None);
+        Assert.True(canceledPayment.Succeeded, canceledPayment.ErrorMessage);
+        var canceledWorksheet = await service.GetGarageIncomeWorksheetAsync(
+            fixtures.Garage.Id,
+            new GarageIncomeWorksheetRequest(new DateOnly(2026, 3, 1), new DateOnly(2026, 6, 1)),
+            CancellationToken.None);
+        Assert.True(canceledWorksheet.Succeeded, canceledWorksheet.ErrorMessage);
+        Assert.Equal(0m, canceledWorksheet.Value!.UnrepresentedOpeningDebt);
+        var juneAfterCancellation = Assert.Single(canceledWorksheet.Value.Rows, row =>
+            row.AnnualAccrualId == annualAccrualId && row.AccountingMonth == new DateOnly(2026, 6, 1));
+        Assert.Equal(400m, juneAfterCancellation.Debt);
+
+        Assert.True((await service.RestoreOperationAsync(fullPayment.Value.Id, null, CancellationToken.None)).Succeeded);
+        var restoredWorksheet = await service.GetGarageIncomeWorksheetAsync(
+            fixtures.Garage.Id,
+            new GarageIncomeWorksheetRequest(new DateOnly(2026, 1, 1), new DateOnly(2026, 6, 1)),
+            CancellationToken.None);
+        Assert.True(restoredWorksheet.Succeeded, restoredWorksheet.ErrorMessage);
+        Assert.DoesNotContain(restoredWorksheet.Value!.Rows, row =>
+            row.AnnualAccrualId == annualAccrualId && row.AccountingMonth > new DateOnly(2026, 4, 1));
+    }
+
+    [Fact]
     public async Task GetGarageIncomeWorksheetAsync_UsesOneSelectForGarageAndCombinedWorksheetData()
     {
         var commandCounter = new SelectCommandCounter();
