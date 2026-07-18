@@ -208,6 +208,18 @@ public sealed class EfAccrualRepository(GarageBalanceDbContext dbContext) : IAcc
             .Select(accrual => accrual.GarageId)
             .ToHashSetAsync(cancellationToken);
 
+    public async Task<IReadOnlySet<Guid>> GetActiveFeeCampaignGarageIdsAsync(
+        Guid feeCampaignId,
+        DateOnly accountingMonth,
+        CancellationToken cancellationToken) =>
+        await dbContext.Accruals.AsNoTracking()
+            .Where(accrual =>
+                !accrual.IsCanceled &&
+                accrual.FeeCampaignId == feeCampaignId &&
+                accrual.AccountingMonth == accountingMonth)
+            .Select(accrual => accrual.GarageId)
+            .ToHashSetAsync(cancellationToken);
+
     public Task<int> CountActiveForGenerationAsync(
         Guid incomeTypeId,
         DateOnly accountingMonth,
@@ -283,6 +295,20 @@ public sealed class EfAccrualRepository(GarageBalanceDbContext dbContext) : IAcc
             accrual.AccountingMonth == accountingMonth,
             cancellationToken);
 
+    public Task<bool> ActiveFeeCampaignDuplicateExistsAsync(
+        Guid? ignoredId,
+        Guid garageId,
+        Guid feeCampaignId,
+        DateOnly accountingMonth,
+        CancellationToken cancellationToken) =>
+        dbContext.Accruals.AsNoTracking().AnyAsync(accrual =>
+            !accrual.IsCanceled &&
+            (!ignoredId.HasValue || accrual.Id != ignoredId.Value) &&
+            accrual.GarageId == garageId &&
+            accrual.FeeCampaignId == feeCampaignId &&
+            accrual.AccountingMonth == accountingMonth,
+            cancellationToken);
+
     public async Task<decimal> GetTotalThroughMonthAsync(Guid garageId, DateOnly accountingMonth, CancellationToken cancellationToken) =>
         await dbContext.Accruals.AsNoTracking()
             .Where(accrual => !accrual.IsCanceled && accrual.GarageId == garageId && accrual.AccountingMonth <= accountingMonth)
@@ -296,6 +322,7 @@ public sealed class EfAccrualRepository(GarageBalanceDbContext dbContext) : IAcc
             .ThenInclude(garage => garage.Owner)
             .Include(accrual => accrual.IncomeType)
             .Include(accrual => accrual.IrregularPayment)
+            .Include(accrual => accrual.FeeCampaign)
             .Where(accrual => !accrual.IsCanceled);
 
     private IQueryable<Accrual> TrackedAggregate() =>
@@ -303,7 +330,8 @@ public sealed class EfAccrualRepository(GarageBalanceDbContext dbContext) : IAcc
             .Include(accrual => accrual.Garage)
             .ThenInclude(garage => garage.Owner)
             .Include(accrual => accrual.IncomeType)
-            .Include(accrual => accrual.IrregularPayment);
+            .Include(accrual => accrual.IrregularPayment)
+            .Include(accrual => accrual.FeeCampaign);
 
     private static IQueryable<Accrual> ApplyPeriod(IQueryable<Accrual> query, DateOnly? monthFrom, DateOnly? monthTo)
     {
@@ -331,6 +359,7 @@ public sealed class EfAccrualRepository(GarageBalanceDbContext dbContext) : IAcc
             accrual.Garage.Number.ToLower().Contains(normalizedSearch) ||
             accrual.IncomeType.Name.ToLower().Contains(normalizedSearch) ||
             (accrual.IrregularPayment != null && accrual.IrregularPayment.Name.ToLower().Contains(normalizedSearch)) ||
+            (accrual.FeeCampaign != null && accrual.FeeCampaign.Name.ToLower().Contains(normalizedSearch)) ||
             (accrual.Comment != null && accrual.Comment.ToLower().Contains(normalizedSearch)));
     }
 
@@ -342,6 +371,7 @@ public sealed class EfAccrualRepository(GarageBalanceDbContext dbContext) : IAcc
         accrual.Garage.Number.Contains(normalizedSearch, StringComparison.OrdinalIgnoreCase) ||
         accrual.IncomeType.Name.Contains(normalizedSearch, StringComparison.OrdinalIgnoreCase) ||
         (accrual.IrregularPayment?.Name.Contains(normalizedSearch, StringComparison.OrdinalIgnoreCase) ?? false) ||
+        (accrual.FeeCampaign?.Name.Contains(normalizedSearch, StringComparison.OrdinalIgnoreCase) ?? false) ||
         (accrual.Comment?.Contains(normalizedSearch, StringComparison.OrdinalIgnoreCase) ?? false);
 
     private bool IsSqliteProvider() =>

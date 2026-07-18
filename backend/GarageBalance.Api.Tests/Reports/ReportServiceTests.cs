@@ -1698,9 +1698,22 @@ public sealed class ReportServiceTests
             AppliesToAllGarages = true,
             OverdueGraceDays = 30
         };
-        database.Context.FeeCampaigns.Add(campaign);
+        var accrual = new Accrual
+        {
+            GarageId = fixtures.FirstGarage.Id,
+            Garage = fixtures.FirstGarage,
+            IncomeTypeId = fixtures.IncomeType.Id,
+            IncomeType = fixtures.IncomeType,
+            FeeCampaignId = campaign.Id,
+            FeeCampaign = campaign,
+            AccountingMonth = new DateOnly(2026, 6, 1),
+            DueDate = new DateOnly(2026, 6, 30),
+            OverdueFromDate = new DateOnly(2026, 7, 31),
+            Amount = 500m,
+            Source = AccrualSources.FeeCampaign
+        };
+        database.Context.AddRange(campaign, accrual);
         await database.Context.SaveChangesAsync();
-        Assert.True((await finance.CreateAccrualAsync(new CreateAccrualRequest(fixtures.FirstGarage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 6, 1), 500m, "manual", "Сбор"), null, CancellationToken.None)).Succeeded);
         Assert.True((await finance.CreateIncomeAsync(new CreateIncomeOperationRequest(fixtures.FirstGarage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 6, 10), new DateOnly(2026, 6, 1), 200m, "PKO-1", "Частичная оплата"), null, CancellationToken.None)).Succeeded);
 
         var result = await service.GetFeeReportAsync(
@@ -1720,6 +1733,91 @@ public sealed class ReportServiceTests
         Assert.Equal(200m, garageRow.Paid);
         Assert.Equal(300m, garageRow.Debt);
     }
+
+    [Fact]
+    public async Task GetFeeReportAsync_SeparatesCampaignsSharingOtherIncomeDestination()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        var firstCampaign = new FeeCampaign
+        {
+            Name = "Сбор на ворота",
+            IncomeTypeId = fixtures.IncomeType.Id,
+            IncomeType = fixtures.IncomeType,
+            ContributionAmount = 500m,
+            TargetAmount = 5000m,
+            StartsOn = new DateOnly(2026, 1, 1),
+            AppliesToAllGarages = true,
+            OverdueGraceDays = 30
+        };
+        var secondCampaign = new FeeCampaign
+        {
+            Name = "Сбор на камеры",
+            IncomeTypeId = fixtures.IncomeType.Id,
+            IncomeType = fixtures.IncomeType,
+            ContributionAmount = 700m,
+            TargetAmount = 7000m,
+            StartsOn = new DateOnly(2026, 1, 1),
+            AppliesToAllGarages = true,
+            OverdueGraceDays = 30
+        };
+        var firstAccrual = CreateFeeAccrual(firstCampaign, fixtures.FirstGarage, fixtures.IncomeType, 500m);
+        var secondAccrual = CreateFeeAccrual(secondCampaign, fixtures.FirstGarage, fixtures.IncomeType, 700m);
+        var firstPayment = CreateFeePayment(fixtures.FirstGarage, fixtures.IncomeType, 200m, "FEE-1");
+        var secondPayment = CreateFeePayment(fixtures.FirstGarage, fixtures.IncomeType, 300m, "FEE-2");
+        database.Context.AddRange(
+            firstCampaign,
+            secondCampaign,
+            firstAccrual,
+            secondAccrual,
+            firstPayment,
+            secondPayment,
+            new AccrualPaymentAllocation { Accrual = firstAccrual, FinancialOperation = firstPayment, Amount = 200m },
+            new AccrualPaymentAllocation { Accrual = secondAccrual, FinancialOperation = secondPayment, Amount = 300m });
+        await database.Context.SaveChangesAsync();
+
+        var result = await CreateService(database.Context).GetFeeReportAsync(
+            new FeeReportRequest(null, 10),
+            CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+        Assert.Equal(2, result.Value!.SummaryRows.Count);
+        Assert.Equal(2, result.Value.GarageRows.Count);
+        Assert.Contains(result.Value.SummaryRows, row => row.IncomeTypeId == firstCampaign.Id && row.Name == firstCampaign.Name && row.Collected == 200m);
+        Assert.Contains(result.Value.SummaryRows, row => row.IncomeTypeId == secondCampaign.Id && row.Name == secondCampaign.Name && row.Collected == 300m);
+        Assert.Contains(result.Value.GarageRows, row => row.IncomeTypeId == firstCampaign.Id && row.Paid == 200m && row.Debt == 300m);
+        Assert.Contains(result.Value.GarageRows, row => row.IncomeTypeId == secondCampaign.Id && row.Paid == 300m && row.Debt == 400m);
+    }
+
+    private static Accrual CreateFeeAccrual(FeeCampaign campaign, Garage garage, IncomeType incomeType, decimal amount) =>
+        new()
+        {
+            GarageId = garage.Id,
+            Garage = garage,
+            IncomeTypeId = incomeType.Id,
+            IncomeType = incomeType,
+            FeeCampaignId = campaign.Id,
+            FeeCampaign = campaign,
+            AccountingMonth = new DateOnly(2026, 6, 1),
+            DueDate = new DateOnly(2026, 6, 30),
+            OverdueFromDate = new DateOnly(2026, 7, 31),
+            Amount = amount,
+            Source = AccrualSources.FeeCampaign
+        };
+
+    private static FinancialOperation CreateFeePayment(Garage garage, IncomeType incomeType, decimal amount, string documentNumber) =>
+        new()
+        {
+            OperationKind = FinancialOperationKinds.Income,
+            GarageId = garage.Id,
+            Garage = garage,
+            IncomeTypeId = incomeType.Id,
+            IncomeType = incomeType,
+            OperationDate = new DateOnly(2026, 6, 10),
+            AccountingMonth = new DateOnly(2026, 6, 1),
+            Amount = amount,
+            DocumentNumber = documentNumber
+        };
 
     [Fact]
     public async Task ExportIncomeReportXlsxAsync_ReturnsWorkbookWithFilteredRows()

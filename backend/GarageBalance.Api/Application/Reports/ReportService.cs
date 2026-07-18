@@ -1,6 +1,7 @@
 using System.Globalization;
 using GarageBalance.Api.Application.Audit;
 using GarageBalance.Api.Application.Common;
+using GarageBalance.Api.Domain.Dictionaries;
 using GarageBalance.Api.Domain.Finance;
 
 namespace GarageBalance.Api.Application.Reports;
@@ -810,15 +811,8 @@ public sealed class ReportService(
                 .ToList();
         }
 
-        var campaignByIncomeType = campaigns
-            .GroupBy(campaign => campaign.IncomeTypeId)
-            .ToDictionary(group => group.Key, group => group.First());
         var incomeTypes = hasFeeCampaigns
-            ? campaigns
-                .Select(campaign => campaign.IncomeType)
-                .DistinctBy(incomeType => incomeType.Id)
-                .OrderBy(incomeType => incomeType.Name)
-                .ToList()
+            ? new List<IncomeType>()
             : (await feeReportQuery.GetActiveIncomeTypesAsync(cancellationToken)).ToList();
 
         if (!hasFeeCampaigns && !string.IsNullOrWhiteSpace(variation))
@@ -829,42 +823,49 @@ public sealed class ReportService(
                 .ToList();
         }
 
-        var incomeTypeIds = incomeTypes.Select(incomeType => incomeType.Id).ToList();
+        var feeEntries = hasFeeCampaigns
+            ? campaigns
+                .Select(campaign => (
+                    Id: campaign.Id,
+                    campaign.Name,
+                    Goal: string.IsNullOrWhiteSpace(campaign.Goal) ? BuildFeeGoal(campaign.Name) : campaign.Goal.Trim(),
+                    TargetAmount: (decimal?)campaign.TargetAmount))
+                .OrderBy(entry => entry.Name)
+                .ToList()
+            : incomeTypes
+                .Select(incomeType => (
+                    Id: incomeType.Id,
+                    incomeType.Name,
+                    Goal: BuildFeeGoal(incomeType.Name),
+                    TargetAmount: (decimal?)null))
+                .OrderBy(entry => entry.Name)
+                .ToList();
 
-        if (incomeTypeIds.Count == 0)
+        if (feeEntries.Count == 0)
         {
             var emptyReport = new FeeReportDto(variation ?? "Все сборы", 0m, 0m, 0m, 0, [], [], []);
             await AddFeeReportAuditAsync(request, emptyReport, cancellationToken);
             return ReportResult<FeeReportDto>.Success(emptyReport);
         }
 
-        var feeData = await feeReportQuery.GetFeeDataAsync(incomeTypeIds, cancellationToken);
+        var feeEntryIds = feeEntries.Select(entry => entry.Id).ToList();
+        var feeData = hasFeeCampaigns
+            ? await feeReportQuery.GetFeeCampaignDataAsync(feeEntryIds, cancellationToken)
+            : await feeReportQuery.GetFeeDataAsync(feeEntryIds, cancellationToken);
 
-        var summaryRows = incomeTypes
-            .Select(incomeType =>
+        var summaryRows = feeEntries
+            .Select(entry =>
             {
-                feeData.AccrualTotals.TryGetValue(incomeType.Id, out var accrued);
-                feeData.CollectedTotals.TryGetValue(incomeType.Id, out var collected);
-                if (campaignByIncomeType.TryGetValue(incomeType.Id, out var campaign))
-                {
-                    return new FeeReportSummaryRowDto(
-                        incomeType.Id,
-                        campaign.Name,
-                        string.IsNullOrWhiteSpace(campaign.Goal) ? BuildFeeGoal(campaign.Name) : campaign.Goal.Trim(),
-                        campaign.TargetAmount,
-                        collected);
-                }
-
-                return new FeeReportSummaryRowDto(incomeType.Id, incomeType.Name, BuildFeeGoal(incomeType.Name), accrued, collected);
+                feeData.AccrualTotals.TryGetValue(entry.Id, out var accrued);
+                feeData.CollectedTotals.TryGetValue(entry.Id, out var collected);
+                return new FeeReportSummaryRowDto(entry.Id, entry.Name, entry.Goal, entry.TargetAmount ?? accrued, collected);
             })
             .Where(row => row.FeeAmount != 0 || row.Collected != 0 || !string.IsNullOrWhiteSpace(variation))
             .ToList();
 
         var accrualLookup = feeData.AccrualsByGarage.ToDictionary(row => (row.GarageId, row.IncomeTypeId));
         var paymentLookup = feeData.PaymentsByGarage.ToDictionary(row => (row.GarageId, row.IncomeTypeId));
-        var incomeTypeNames = incomeTypes.ToDictionary(
-            incomeType => incomeType.Id,
-            incomeType => campaignByIncomeType.TryGetValue(incomeType.Id, out var campaign) ? campaign.Name : incomeType.Name);
+        var incomeTypeNames = feeEntries.ToDictionary(entry => entry.Id, entry => entry.Name);
         var feeGarageRows = accrualLookup.Keys
             .Concat(paymentLookup.Keys)
             .Distinct()

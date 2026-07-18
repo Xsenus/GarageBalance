@@ -101,6 +101,8 @@ export type AccrualDto = {
   overdueFromDate: string
   irregularPaymentId: string | null
   irregularPaymentName: string | null
+  feeCampaignId: string | null
+  feeCampaignName: string | null
 }
 
 export type AccrualDueDateReviewDto = {

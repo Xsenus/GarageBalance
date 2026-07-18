@@ -25,6 +25,7 @@ public sealed class DictionaryService(
 {
     private const int DefaultListLimit = 100;
     private const int MaxListLimit = 500;
+    private const string OtherIncomeIncomeTypeCode = "other_income";
     private static readonly IReadOnlyDictionary<string, string> DictionaryFieldLabels = new Dictionary<string, string>(StringComparer.Ordinal)
     {
         ["lastName"] = "Фамилия",
@@ -1807,10 +1808,12 @@ public sealed class DictionaryService(
             return DictionaryResult<FeeCampaignDto>.Failure("fee_campaign_duplicate", "Активный сбор с таким наименованием уже существует.");
         }
 
-        var incomeType = await incomeTypeRepository.FindActiveAsync(request.IncomeTypeId, cancellationToken);
-        if (incomeType is null)
+        var incomeType = await incomeTypeRepository.FindFirstActiveByCodeAsync(OtherIncomeIncomeTypeCode, cancellationToken);
+        if (incomeType is null || !incomeType.IsSystem || !incomeType.DestinationFundId.HasValue)
         {
-            return DictionaryResult<FeeCampaignDto>.Failure("income_type_not_found", "Вид поступления для сбора не найден.");
+            return DictionaryResult<FeeCampaignDto>.Failure(
+                "other_income_destination_not_configured",
+                "Системное назначение «Прочие доходы» не настроено или не связано с фондом.");
         }
 
         var participants = await ResolveFeeCampaignParticipantsAsync(request, cancellationToken);
@@ -1820,7 +1823,7 @@ public sealed class DictionaryService(
         }
 
         var campaign = new FeeCampaign { Name = name };
-        ApplyFeeCampaign(campaign, request);
+        ApplyFeeCampaign(campaign, request, incomeType.Id);
         campaign.IncomeType = incomeType;
         SyncFeeCampaignParticipants(campaign, participants.Value!);
 
@@ -1849,10 +1852,12 @@ public sealed class DictionaryService(
             return DictionaryResult<FeeCampaignDto>.Failure("fee_campaign_duplicate", "Активный сбор с таким наименованием уже существует.");
         }
 
-        var incomeType = await incomeTypeRepository.FindActiveAsync(request.IncomeTypeId, cancellationToken);
-        if (incomeType is null)
+        var incomeType = await incomeTypeRepository.FindFirstActiveByCodeAsync(OtherIncomeIncomeTypeCode, cancellationToken);
+        if (incomeType is null || !incomeType.IsSystem || !incomeType.DestinationFundId.HasValue)
         {
-            return DictionaryResult<FeeCampaignDto>.Failure("income_type_not_found", "Вид поступления для сбора не найден.");
+            return DictionaryResult<FeeCampaignDto>.Failure(
+                "other_income_destination_not_configured",
+                "Системное назначение «Прочие доходы» не настроено или не связано с фондом.");
         }
 
         var participants = await ResolveFeeCampaignParticipantsAsync(request, cancellationToken);
@@ -1861,13 +1866,13 @@ public sealed class DictionaryService(
             return DictionaryResult<FeeCampaignDto>.Failure(participants.ErrorCode!, participants.ErrorMessage!);
         }
 
-        if (FeeCampaignMatches(campaign, request, participants.Value!))
+        if (FeeCampaignMatches(campaign, request, participants.Value!, incomeType.Id))
         {
             return DictionaryResult<FeeCampaignDto>.Success(ToFeeCampaignDto(campaign));
         }
 
         var oldValues = ToFeeCampaignAuditValues(campaign);
-        ApplyFeeCampaign(campaign, request);
+        ApplyFeeCampaign(campaign, request, incomeType.Id);
         campaign.IncomeType = incomeType;
         SyncFeeCampaignParticipants(campaign, participants.Value!);
         campaign.UpdatedAtUtc = DateTimeOffset.UtcNow;
@@ -2207,11 +2212,6 @@ public sealed class DictionaryService(
             return DictionaryResult<FeeCampaignDto>.Failure("fee_campaign_name_required", "Наименование сбора обязательно.");
         }
 
-        if (request.IncomeTypeId == Guid.Empty)
-        {
-            return DictionaryResult<FeeCampaignDto>.Failure("fee_campaign_income_type_required", "Для сбора нужно выбрать вид поступления.");
-        }
-
         if (MoneyMath.RoundMoney(request.ContributionAmount) < 0m)
         {
             return DictionaryResult<FeeCampaignDto>.Failure("fee_campaign_contribution_amount_invalid", "Сумма взноса не может быть отрицательной.");
@@ -2267,10 +2267,10 @@ public sealed class DictionaryService(
         return DictionaryResult<IReadOnlyList<Garage>>.Success(garages);
     }
 
-    private static void ApplyFeeCampaign(FeeCampaign campaign, UpsertFeeCampaignRequest request)
+    private static void ApplyFeeCampaign(FeeCampaign campaign, UpsertFeeCampaignRequest request, Guid incomeTypeId)
     {
         campaign.Name = request.Name.Trim();
-        campaign.IncomeTypeId = request.IncomeTypeId;
+        campaign.IncomeTypeId = incomeTypeId;
         campaign.Goal = NormalizeOptional(request.Goal);
         campaign.ContributionAmount = MoneyMath.RoundMoney(request.ContributionAmount);
         campaign.TargetAmount = MoneyMath.RoundMoney(request.TargetAmount);
@@ -2295,7 +2295,11 @@ public sealed class DictionaryService(
         }
     }
 
-    private static bool FeeCampaignMatches(FeeCampaign campaign, UpsertFeeCampaignRequest request, IReadOnlyList<Garage> participants)
+    private static bool FeeCampaignMatches(
+        FeeCampaign campaign,
+        UpsertFeeCampaignRequest request,
+        IReadOnlyList<Garage> participants,
+        Guid incomeTypeId)
     {
         var currentParticipantIds = campaign.ParticipantGarages
             .Select(participant => participant.GarageId)
@@ -2307,7 +2311,7 @@ public sealed class DictionaryService(
             .ToArray();
 
         return StringEquals(campaign.Name, request.Name.Trim()) &&
-            campaign.IncomeTypeId == request.IncomeTypeId &&
+            campaign.IncomeTypeId == incomeTypeId &&
             StringEquals(campaign.Goal, NormalizeOptional(request.Goal)) &&
             campaign.ContributionAmount == MoneyMath.RoundMoney(request.ContributionAmount) &&
             campaign.TargetAmount == MoneyMath.RoundMoney(request.TargetAmount) &&

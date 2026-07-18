@@ -11,6 +11,8 @@ public sealed class Accrual
     public IncomeType IncomeType { get; set; } = null!;
     public Guid? IrregularPaymentId { get; set; }
     public IrregularPayment? IrregularPayment { get; set; }
+    public Guid? FeeCampaignId { get; set; }
+    public FeeCampaign? FeeCampaign { get; set; }
     public Guid? TariffId { get; set; }
     public Tariff? Tariff { get; set; }
     public DateOnly AccountingMonth { get; set; }

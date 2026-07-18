@@ -33,10 +33,12 @@ public interface IAccrualRepository
         CancellationToken cancellationToken);
     Task<int> CountActiveForGenerationAsync(Guid incomeTypeId, DateOnly accountingMonth, string source, CancellationToken cancellationToken);
     Task<IReadOnlySet<Guid>> GetActiveGarageIdsAsync(Guid incomeTypeId, DateOnly accountingMonth, string source, CancellationToken cancellationToken);
+    Task<IReadOnlySet<Guid>> GetActiveFeeCampaignGarageIdsAsync(Guid feeCampaignId, DateOnly accountingMonth, CancellationToken cancellationToken);
     Task<int> CountActiveAnnualRegularForGenerationAsync(Guid incomeTypeId, int accountingYear, CancellationToken cancellationToken);
     Task<IReadOnlySet<Guid>> GetActiveAnnualRegularGarageIdsAsync(Guid incomeTypeId, int accountingYear, CancellationToken cancellationToken);
     Task<bool> ActiveDuplicateExistsAsync(Guid? ignoredId, Guid garageId, Guid incomeTypeId, DateOnly accountingMonth, int? accountingYear, string source, CancellationToken cancellationToken);
     Task<bool> ActiveIrregularDuplicateExistsAsync(Guid? ignoredId, Guid garageId, Guid irregularPaymentId, DateOnly accountingMonth, CancellationToken cancellationToken);
+    Task<bool> ActiveFeeCampaignDuplicateExistsAsync(Guid? ignoredId, Guid garageId, Guid feeCampaignId, DateOnly accountingMonth, CancellationToken cancellationToken);
     Task<decimal> GetTotalThroughMonthAsync(Guid garageId, DateOnly accountingMonth, CancellationToken cancellationToken);
     void Add(Accrual accrual);
 }

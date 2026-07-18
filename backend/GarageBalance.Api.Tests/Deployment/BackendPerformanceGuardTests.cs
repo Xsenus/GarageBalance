@@ -689,8 +689,13 @@ public sealed class BackendPerformanceGuardTests
         Assert.Contains("var collectedTotals = rows", source, StringComparison.Ordinal);
         Assert.Contains("accrualQuery", source, StringComparison.Ordinal);
         Assert.Contains(".Concat(paymentQuery)", source, StringComparison.Ordinal);
-        var feeDataSource = source[source.IndexOf("GetFeeDataAsync", StringComparison.Ordinal)..];
+        var feeDataStart = source.IndexOf("GetFeeDataAsync", StringComparison.Ordinal);
+        var campaignDataStart = source.IndexOf("GetFeeCampaignDataAsync", StringComparison.Ordinal);
+        var feeDataSource = source[feeDataStart..campaignDataStart];
+        var campaignDataSource = source[campaignDataStart..];
         Assert.Equal(1, CountOccurrences(feeDataSource, ".ToListAsync(cancellationToken)"));
+        Assert.Equal(2, CountOccurrences(campaignDataSource, ".ToListAsync(cancellationToken)"));
+        Assert.Contains("AccrualPaymentAllocations", campaignDataSource, StringComparison.Ordinal);
         Assert.DoesNotContain("missingGarageIds", source, StringComparison.Ordinal);
         Assert.Contains("group.Max(operation => (DateOnly?)operation.OperationDate)", source, StringComparison.Ordinal);
     }

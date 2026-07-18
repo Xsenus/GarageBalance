@@ -7,6 +7,7 @@ public interface IFeeReportQuery
     Task<IReadOnlyList<FeeCampaign>> GetActiveCampaignsAsync(CancellationToken cancellationToken);
     Task<IReadOnlyList<IncomeType>> GetActiveIncomeTypesAsync(CancellationToken cancellationToken);
     Task<FeeReportQueryData> GetFeeDataAsync(IReadOnlyList<Guid> incomeTypeIds, CancellationToken cancellationToken);
+    Task<FeeReportQueryData> GetFeeCampaignDataAsync(IReadOnlyList<Guid> feeCampaignIds, CancellationToken cancellationToken);
 }
 
 public sealed record FeeReportQueryData(

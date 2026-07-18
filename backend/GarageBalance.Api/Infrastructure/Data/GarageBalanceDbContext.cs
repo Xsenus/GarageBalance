@@ -448,14 +448,18 @@ public sealed class GarageBalanceDbContext(DbContextOptions<GarageBalanceDbConte
             entity.HasIndex(accrual => accrual.GarageId);
             entity.HasIndex(accrual => accrual.IncomeTypeId);
             entity.HasIndex(accrual => accrual.IrregularPaymentId);
+            entity.HasIndex(accrual => accrual.FeeCampaignId);
             entity.HasIndex(accrual => accrual.TariffId);
             entity.HasIndex(accrual => new { accrual.GarageId, accrual.IncomeTypeId, accrual.AccountingYear, accrual.IsCanceled });
             entity.HasIndex(accrual => new { accrual.GarageId, accrual.IncomeTypeId, accrual.AccountingMonth, accrual.Source })
                 .IsUnique()
-                .HasFilter("\"IsCanceled\" = false AND \"IrregularPaymentId\" IS NULL");
+                .HasFilter("\"IsCanceled\" = false AND \"IrregularPaymentId\" IS NULL AND \"FeeCampaignId\" IS NULL");
             entity.HasIndex(accrual => new { accrual.GarageId, accrual.IrregularPaymentId, accrual.AccountingMonth })
                 .IsUnique()
                 .HasFilter("\"IsCanceled\" = false AND \"IrregularPaymentId\" IS NOT NULL");
+            entity.HasIndex(accrual => new { accrual.GarageId, accrual.FeeCampaignId, accrual.AccountingMonth })
+                .IsUnique()
+                .HasFilter("\"IsCanceled\" = false AND \"FeeCampaignId\" IS NOT NULL");
             entity.HasOne(accrual => accrual.Garage)
                 .WithMany()
                 .HasForeignKey(accrual => accrual.GarageId)
@@ -467,6 +471,10 @@ public sealed class GarageBalanceDbContext(DbContextOptions<GarageBalanceDbConte
             entity.HasOne(accrual => accrual.IrregularPayment)
                 .WithMany()
                 .HasForeignKey(accrual => accrual.IrregularPaymentId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(accrual => accrual.FeeCampaign)
+                .WithMany()
+                .HasForeignKey(accrual => accrual.FeeCampaignId)
                 .OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(accrual => accrual.Tariff)
                 .WithMany()

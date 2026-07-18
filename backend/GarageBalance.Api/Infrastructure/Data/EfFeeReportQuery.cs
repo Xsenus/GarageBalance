@@ -137,4 +137,74 @@ public sealed class EfFeeReportQuery(GarageBalanceDbContext dbContext) : IFeeRep
             paymentsByGarage,
             garagesById);
     }
+
+    public async Task<FeeReportQueryData> GetFeeCampaignDataAsync(
+        IReadOnlyList<Guid> feeCampaignIds,
+        CancellationToken cancellationToken)
+    {
+        var accrualsByGarage = await dbContext.Accruals.AsNoTracking()
+            .Where(accrual =>
+                !accrual.IsCanceled &&
+                accrual.FeeCampaignId.HasValue &&
+                feeCampaignIds.Contains(accrual.FeeCampaignId.Value))
+            .GroupBy(accrual => new
+            {
+                accrual.GarageId,
+                accrual.Garage.Number,
+                OwnerLastName = accrual.Garage.Owner != null ? accrual.Garage.Owner.LastName : null,
+                OwnerFirstName = accrual.Garage.Owner != null ? accrual.Garage.Owner.FirstName : null,
+                OwnerMiddleName = accrual.Garage.Owner != null ? accrual.Garage.Owner.MiddleName : null,
+                FeeCampaignId = accrual.FeeCampaignId!.Value
+            })
+            .Select(group => new FeeAccrualByGarageData(
+                group.Key.GarageId,
+                group.Key.Number,
+                group.Key.OwnerLastName,
+                group.Key.OwnerFirstName,
+                group.Key.OwnerMiddleName,
+                group.Key.FeeCampaignId,
+                group.Sum(accrual => accrual.Amount)))
+            .ToListAsync(cancellationToken);
+
+        var paymentsByGarage = await dbContext.AccrualPaymentAllocations.AsNoTracking()
+            .Where(allocation =>
+                allocation.IsActive &&
+                !allocation.Accrual.IsCanceled &&
+                allocation.Accrual.FeeCampaignId.HasValue &&
+                feeCampaignIds.Contains(allocation.Accrual.FeeCampaignId.Value) &&
+                !allocation.FinancialOperation.IsCanceled)
+            .GroupBy(allocation => new
+            {
+                allocation.Accrual.GarageId,
+                FeeCampaignId = allocation.Accrual.FeeCampaignId!.Value
+            })
+            .Select(group => new FeePaymentByGarageData(
+                group.Key.GarageId,
+                group.Key.FeeCampaignId,
+                group.Sum(allocation => allocation.Amount),
+                group.Max(allocation => (DateOnly?)allocation.FinancialOperation.OperationDate)))
+            .ToListAsync(cancellationToken);
+
+        var garagesById = accrualsByGarage
+            .GroupBy(row => row.GarageId)
+            .ToDictionary(
+                group => group.Key,
+                group =>
+                {
+                    var row = group.First();
+                    return new FeeGarageIdentityData(
+                        row.GarageId,
+                        row.GarageNumber,
+                        row.OwnerLastName,
+                        row.OwnerFirstName,
+                        row.OwnerMiddleName);
+                });
+
+        return new FeeReportQueryData(
+            accrualsByGarage.GroupBy(row => row.IncomeTypeId).ToDictionary(group => group.Key, group => group.Sum(row => row.Accrued)),
+            paymentsByGarage.GroupBy(row => row.IncomeTypeId).ToDictionary(group => group.Key, group => group.Sum(row => row.Paid)),
+            accrualsByGarage,
+            paymentsByGarage,
+            garagesById);
+    }
 }

@@ -3433,6 +3433,8 @@ public sealed class FinanceServiceTests
     {
         await using var database = await TestDatabase.CreateAsync();
         var fixtures = await database.SeedAsync();
+        var otherIncome = AddOtherIncomeDestination(database.Context);
+        otherIncome.Name = "Переименованные прочие доходы";
         var secondOwner = new Owner { LastName = "Петров", FirstName = "Петр" };
         var secondGarage = new Garage { Number = "22", PeopleCount = 1, FloorCount = 1, Owner = secondOwner };
         var archivedGarage = new Garage { Number = "99", PeopleCount = 1, FloorCount = 1, Owner = secondOwner, IsArchived = true };
@@ -3462,16 +3464,19 @@ public sealed class FinanceServiceTests
         Assert.True(result.Succeeded, result.ErrorMessage);
         Assert.Equal(new DateOnly(2026, 6, 1), result.Value!.AccountingMonth);
         Assert.Equal(campaign.Id, result.Value.FeeCampaignId);
-        Assert.Equal(fixtures.IncomeType.Id, result.Value.IncomeTypeId);
+        Assert.Equal(otherIncome.Id, result.Value.IncomeTypeId);
+        Assert.Equal("Переименованные прочие доходы", result.Value.IncomeTypeName);
         Assert.Equal(2, result.Value.CreatedCount);
         Assert.Equal(0, result.Value.SkippedCount);
         Assert.Equal(1000m, result.Value.TotalAmount);
         Assert.All(result.Value.CreatedAccruals, accrual =>
         {
             Assert.Equal(500m, accrual.Amount);
-            Assert.Equal(2026, accrual.AccountingYear);
+            Assert.Null(accrual.AccountingYear);
             Assert.Equal("fee_campaign", accrual.Source);
-            Assert.Equal(fixtures.IncomeType.Id, accrual.IncomeTypeId);
+            Assert.Equal(otherIncome.Id, accrual.IncomeTypeId);
+            Assert.Equal(campaign.Id, accrual.FeeCampaignId);
+            Assert.Equal(campaign.Name, accrual.FeeCampaignName);
             Assert.Equal(new DateOnly(2026, 7, 31), accrual.DueDate);
             Assert.Equal(new DateOnly(2026, 8, 31), accrual.OverdueFromDate);
             Assert.Contains("Сбор на ворота", accrual.Comment, StringComparison.Ordinal);
@@ -3483,6 +3488,84 @@ public sealed class FinanceServiceTests
         Assert.Equal(campaign.Id.ToString(), audit.EntityId);
         Assert.Contains("Сбор на ворота", audit.Summary, StringComparison.Ordinal);
         Assert.Contains("createdCount", audit.MetadataJson, StringComparison.Ordinal);
+        Assert.Contains("destinationFundId", audit.MetadataJson, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task GenerateFeeCampaignAccrualsAsync_AllowsDifferentCampaignsInSameMonth()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        var otherIncome = AddOtherIncomeDestination(database.Context);
+        var firstCampaign = new FeeCampaign
+        {
+            Name = "Сбор на ворота",
+            IncomeTypeId = fixtures.IncomeType.Id,
+            IncomeType = fixtures.IncomeType,
+            ContributionAmount = 500m,
+            TargetAmount = 5000m,
+            StartsOn = new DateOnly(2026, 1, 1),
+            AppliesToAllGarages = true,
+            OverdueGraceDays = 30
+        };
+        var secondCampaign = new FeeCampaign
+        {
+            Name = "Сбор на камеры",
+            IncomeTypeId = fixtures.IncomeType.Id,
+            IncomeType = fixtures.IncomeType,
+            ContributionAmount = 700m,
+            TargetAmount = 7000m,
+            StartsOn = new DateOnly(2026, 1, 1),
+            AppliesToAllGarages = true,
+            OverdueGraceDays = 30
+        };
+        database.Context.AddRange(firstCampaign, secondCampaign);
+        await database.Context.SaveChangesAsync();
+        var service = FinanceServiceTestFactory.Create(database.Context);
+
+        var first = await service.GenerateFeeCampaignAccrualsAsync(
+            new GenerateFeeCampaignAccrualsRequest(firstCampaign.Id, new DateOnly(2026, 6, 1), null),
+            null,
+            CancellationToken.None);
+        var second = await service.GenerateFeeCampaignAccrualsAsync(
+            new GenerateFeeCampaignAccrualsRequest(secondCampaign.Id, new DateOnly(2026, 6, 1), null),
+            null,
+            CancellationToken.None);
+
+        Assert.True(first.Succeeded, first.ErrorMessage);
+        Assert.True(second.Succeeded, second.ErrorMessage);
+        Assert.Equal(2, database.Context.Accruals.Count());
+        Assert.All(database.Context.Accruals, accrual => Assert.Equal(otherIncome.Id, accrual.IncomeTypeId));
+        Assert.Equal(2, database.Context.Accruals.Select(accrual => accrual.FeeCampaignId).Distinct().Count());
+    }
+
+    [Fact]
+    public async Task GenerateFeeCampaignAccrualsAsync_RejectsMissingOtherIncomeDestination()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        var campaign = new FeeCampaign
+        {
+            Name = "Сбор без назначения",
+            IncomeTypeId = fixtures.IncomeType.Id,
+            IncomeType = fixtures.IncomeType,
+            ContributionAmount = 500m,
+            TargetAmount = 5000m,
+            StartsOn = new DateOnly(2026, 1, 1),
+            AppliesToAllGarages = true,
+            OverdueGraceDays = 30
+        };
+        database.Context.Add(campaign);
+        await database.Context.SaveChangesAsync();
+
+        var result = await FinanceServiceTestFactory.Create(database.Context).GenerateFeeCampaignAccrualsAsync(
+            new GenerateFeeCampaignAccrualsRequest(campaign.Id, new DateOnly(2026, 6, 1), null),
+            null,
+            CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Equal("other_income_destination_not_configured", result.ErrorCode);
+        Assert.Empty(database.Context.Accruals);
     }
 
     [Fact]
@@ -3491,6 +3574,7 @@ public sealed class FinanceServiceTests
         var commandCounter = new SelectCommandCounter();
         await using var database = await TestDatabase.CreateAsync(commandCounter);
         var fixtures = await database.SeedAsync();
+        AddOtherIncomeDestination(database.Context);
         var campaign = new FeeCampaign
         {
             Name = "Mass fee",
@@ -3529,10 +3613,10 @@ public sealed class FinanceServiceTests
         Assert.True(firstRun.Succeeded, firstRun.ErrorMessage);
         Assert.Equal(200, firstRun.Value!.CreatedCount);
         Assert.Equal(100000m, firstRun.Value.TotalAmount);
-        Assert.InRange(firstRunSelectCount, 1, 4);
+        Assert.InRange(firstRunSelectCount, 1, 5);
         Assert.False(secondRun.Succeeded);
         Assert.Equal("fee_campaign_accruals_empty", secondRun.ErrorCode);
-        Assert.InRange(secondRunSelectCount, 1, 3);
+        Assert.InRange(secondRunSelectCount, 1, 4);
         Assert.Equal(200, database.Context.Accruals.Count());
     }
 
@@ -3541,6 +3625,7 @@ public sealed class FinanceServiceTests
     {
         await using var database = await TestDatabase.CreateAsync();
         var fixtures = await database.SeedAsync();
+        AddOtherIncomeDestination(database.Context);
         var campaign = new FeeCampaign
         {
             Name = "Сбор на ворота",
@@ -3571,6 +3656,7 @@ public sealed class FinanceServiceTests
     {
         await using var database = await TestDatabase.CreateAsync();
         var fixtures = await database.SeedAsync();
+        AddOtherIncomeDestination(database.Context);
         var secondOwner = new Owner { LastName = "Петров", FirstName = "Петр" };
         var selectedGarage = new Garage { Number = "22", PeopleCount = 1, FloorCount = 1, Owner = secondOwner };
         var notSelectedGarage = new Garage { Number = "33", PeopleCount = 1, FloorCount = 1, Owner = secondOwner };
@@ -6036,6 +6122,25 @@ public sealed class FinanceServiceTests
     {
         context.FundOperations.RemoveRange(context.FundOperations);
         await context.SaveChangesAsync();
+    }
+
+    private static IncomeType AddOtherIncomeDestination(GarageBalanceDbContext context)
+    {
+        var fund = new Fund
+        {
+            Name = "Прочее",
+            NormalizedName = "ПРОЧЕЕ"
+        };
+        var incomeType = new IncomeType
+        {
+            Name = "Прочие доходы",
+            Code = "other_income",
+            IsSystem = true,
+            DestinationFund = fund,
+            DestinationFundId = fund.Id
+        };
+        context.AddRange(fund, incomeType);
+        return incomeType;
     }
 
     private sealed class TestDatabase : IAsyncDisposable

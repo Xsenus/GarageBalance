@@ -499,8 +499,8 @@ describe('App', () => {
     const feeDialog = await screen.findByRole('dialog', { name: 'Добавить сбор' })
     expect(within(feeDialog).getByLabelText('Наименование сбора')).toBeInTheDocument()
     expect(feeDialog).toHaveClass('contractors-fee-dialog')
-    expect(within(feeDialog).getByRole('combobox', { name: 'Вид поступления для сбора' })).toHaveClass('select-control__trigger')
-    expect(within(feeDialog).getByRole('combobox', { name: 'Вид поступления для сбора' })).toHaveTextContent('Членский взнос')
+    expect(within(feeDialog).getByLabelText('Назначение поступления для сбора')).toHaveValue('Прочие доходы')
+    expect(within(feeDialog).getByLabelText('Назначение поступления для сбора')).toHaveAttribute('readonly')
     expect(within(feeDialog).getByLabelText('Цель сбора')).toBeInTheDocument()
     const feeContributionInput = within(feeDialog).getByLabelText('Сумма взноса')
     const feeTargetInput = within(feeDialog).getByLabelText('Сумма сбора')
@@ -535,7 +535,7 @@ describe('App', () => {
 
   it('creates and edits announced fee campaigns from tariffs page', async () => {
     const user = userEvent.setup()
-    const targetIncomeType = createAccountingType({ id: 'income-type-target', name: 'Целевой взнос', code: 'target' })
+    const targetIncomeType = createAccountingType({ id: 'income-type-other-income', name: 'Прочие доходы', code: 'other_income', isSystem: true })
     const participantGarage = createGarage({ id: 'garage-target', number: '27', ownerName: 'Сидорова Анна' })
     const otherGarage = createGarage({ id: 'garage-other', number: '12', ownerName: 'Петров Петр' })
     let campaigns = [
@@ -637,8 +637,8 @@ describe('App', () => {
     await user.click(within(tariffsPanel).getAllByRole('button', { name: 'Объявить сбор' })[0])
     const createDialog = await screen.findByRole('dialog', { name: 'Добавить сбор' })
     await user.type(within(createDialog).getByLabelText('Наименование сбора'), 'Сбор на камеры')
-    await user.click(within(createDialog).getByRole('combobox', { name: 'Вид поступления для сбора' }))
-    await user.click(within(createDialog).getByRole('option', { name: targetIncomeType.name }))
+    expect(within(createDialog).getByLabelText('Назначение поступления для сбора')).toHaveValue(targetIncomeType.name)
+    expect(within(createDialog).getByLabelText('Назначение поступления для сбора')).toHaveAttribute('readonly')
     await user.type(within(createDialog).getByLabelText('Цель сбора'), 'Видеонаблюдение')
     await user.type(within(createDialog).getByLabelText('Сумма взноса'), '700')
     await user.type(within(createDialog).getByLabelText('Сумма сбора'), '35000')
@@ -711,7 +711,7 @@ describe('App', () => {
 
   it('generates announced fee campaign accruals from tariffs page', async () => {
     const user = userEvent.setup()
-    const targetIncomeType = createAccountingType({ id: 'income-type-target', name: 'Целевой взнос', code: 'target' })
+    const targetIncomeType = createAccountingType({ id: 'income-type-other-income', name: 'Прочие доходы', code: 'other_income', isSystem: true })
     const campaign = createFeeCampaign({ id: 'fee-campaign-active', name: 'Сбор на ворота', incomeTypeId: targetIncomeType.id, incomeTypeName: targetIncomeType.name })
     const generateRequests: GenerateFeeCampaignAccrualsRequest[] = []
     const dictionaryClient = createDictionaryClient({
@@ -774,7 +774,7 @@ describe('App', () => {
 
   it('archives and restores announced fee campaigns from tariffs page', async () => {
     const user = userEvent.setup()
-    const targetIncomeType = createAccountingType({ id: 'income-type-target', name: 'Целевой взнос', code: 'target' })
+    const targetIncomeType = createAccountingType({ id: 'income-type-other-income', name: 'Прочие доходы', code: 'other_income', isSystem: true })
     let campaigns = [
       createFeeCampaign({ id: 'fee-campaign-active', name: 'Сбор на ворота', incomeTypeId: targetIncomeType.id, incomeTypeName: targetIncomeType.name }),
       createFeeCampaign({ id: 'fee-campaign-archived', name: 'Старый сбор', incomeTypeId: targetIncomeType.id, incomeTypeName: targetIncomeType.name, isArchived: true }),
@@ -7907,7 +7907,7 @@ describe('App', () => {
       throw new Error('Строка гаража 12 не найдена.')
     }
 
-    fireEvent.doubleClick(garageRow)
+    await user.dblClick(garageRow)
     let garageDialog = await screen.findByRole('dialog', { name: 'Гаражи' })
     await user.click(within(garageDialog).getByRole('button', { name: 'Сохранить' }))
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Подтвердите изменения' })).not.toBeInTheDocument())
@@ -7919,7 +7919,7 @@ describe('App', () => {
       throw new Error('Строка гаража 12 не найдена после no-op сохранения.')
     }
 
-    fireEvent.doubleClick(garageRow)
+    await user.dblClick(garageRow)
     garageDialog = await screen.findByRole('dialog', { name: 'Гаражи' })
     await selectStyledOption(user, garageDialog, 'Владелец гаража', 'Петров Петр')
     await user.clear(within(garageDialog).getByLabelText('Стартовый баланс гаража'))
@@ -13977,6 +13977,7 @@ function createDictionaryClient(overrides: Partial<DictionaryClient> = {}): Dict
   const staffDepartment = createStaffDepartment({ id: 'staff-department-1', name: 'Бухгалтерия' })
   const staffMember = createStaffMember({ id: 'staff-member-1', fullName: 'Петрова Ольга', departmentId: staffDepartment.id, departmentName: staffDepartment.name, rate: 40000 })
   const incomeType = createAccountingType({ id: 'income-type-1', name: 'Членский взнос', code: 'membership' })
+  const otherIncomeType = createAccountingType({ id: 'income-type-other-income', name: 'Прочие доходы', code: 'other_income', isSystem: true })
   const expenseType = createAccountingType({ id: 'expense-type-1', name: 'Электроэнергия', code: 'electricity' })
   const tariff = createTariff({ id: 'tariff-1', name: 'Тариф воды', calculationBase: 'meter_water', rate: 50, effectiveFrom: '2026-07-01' })
   let owners = [owner]
@@ -14202,7 +14203,7 @@ function createDictionaryClient(overrides: Partial<DictionaryClient> = {}): Dict
         : [{ ...member, isArchived: false }, ...staffMembers]
       return { ...member, isArchived: false }
     },
-    getIncomeTypes: async () => [incomeType],
+    getIncomeTypes: async () => [incomeType, otherIncomeType],
     createIncomeType: async () => incomeType,
     updateIncomeType: async (_token, id, request) => createAccountingType({ id, name: request.name, code: request.code ?? null }),
     archiveIncomeType: async () => undefined,

@@ -108,7 +108,9 @@ public sealed record AccrualDto(
     DateOnly DueDate,
     DateOnly OverdueFromDate,
     Guid? IrregularPaymentId = null,
-    string? IrregularPaymentName = null);
+    string? IrregularPaymentName = null,
+    Guid? FeeCampaignId = null,
+    string? FeeCampaignName = null);
 
 public sealed record AccrualDueDateReviewDto(
     Guid AccrualId,

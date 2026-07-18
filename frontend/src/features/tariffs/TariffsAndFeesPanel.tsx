@@ -2345,7 +2345,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
       {modal === 'fee' ? (
         <AddFeePrototypeDialog
           garageOptions={feeCampaignGarageOptions}
-          incomeTypes={backendIncomeTypes.filter((incomeType) => !incomeType.isArchived)}
+          incomeTypes={backendIncomeTypes.filter((incomeType) => !incomeType.isArchived && incomeType.code === 'other_income')}
           isSaving={feeCampaignSavingId === 'new-fee-campaign'}
           onClose={() => setModal(null)}
           onSave={createFeeCampaign}
@@ -2354,7 +2354,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
       {feeCampaignEditTarget ? (
         <AddFeePrototypeDialog
           garageOptions={feeCampaignGarageOptions}
-          incomeTypes={backendIncomeTypes.filter((incomeType) => !incomeType.isArchived || incomeType.id === feeCampaignEditTarget.incomeTypeId)}
+          incomeTypes={backendIncomeTypes.filter((incomeType) => !incomeType.isArchived && incomeType.code === 'other_income')}
           initialCampaign={feeCampaignEditTarget}
           isSaving={feeCampaignSavingId === feeCampaignEditTarget.id}
           onClose={closeFeeCampaignEditDialog}
@@ -2630,7 +2630,7 @@ function AddFeePrototypeDialog({
   title?: string
 }) {
   const [name, setName] = useState(initialCampaign?.name ?? '')
-  const [incomeTypeId, setIncomeTypeId] = useState(initialCampaign?.incomeTypeId ?? incomeTypes[0]?.id ?? '')
+  const [incomeTypeId] = useState(incomeTypes[0]?.id ?? '')
   const [goal, setGoal] = useState(initialCampaign?.goal ?? '')
   const [contributionAmount, setContributionAmount] = useState(initialCampaign ? formatTariffDecimal(initialCampaign.contributionAmount) : '')
   const [targetAmount, setTargetAmount] = useState(initialCampaign ? formatTariffDecimal(initialCampaign.targetAmount) : '')
@@ -2673,7 +2673,7 @@ function AddFeePrototypeDialog({
     }
 
     if (!incomeTypeId) {
-      setError('Выберите вид поступления для сбора.')
+      setError('Системное назначение «Прочие доходы» не настроено.')
       return
     }
 
@@ -2761,14 +2761,11 @@ function AddFeePrototypeDialog({
             <FormField label="Наименование сбора">
               <input aria-label="Наименование сбора" value={name} onChange={(event) => setName(event.target.value)} />
             </FormField>
-          <FormField label="Вид поступления">
-            <SelectControl
-              aria-label="Вид поступления для сбора"
-              value={incomeTypeId}
-              options={incomeTypes.length > 0
-                ? incomeTypes.map((incomeType) => ({ value: incomeType.id, label: incomeType.name }))
-                : [{ value: '', label: 'Нет видов поступлений' }]}
-              onChange={setIncomeTypeId}
+          <FormField label="Назначение поступления">
+            <input
+              aria-label="Назначение поступления для сбора"
+              value={incomeTypes[0]?.name ?? 'Прочие доходы не настроены'}
+              readOnly
             />
           </FormField>
           <FormField label="Цель">

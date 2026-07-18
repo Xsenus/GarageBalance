@@ -40,6 +40,7 @@ public sealed class FinanceService(
     private const int EarlyElectricityPaymentWarningDays = 30;
     private const string DebtTransferIncomeTypeCode = "debt_transfer";
     private const string OtherPaymentsIncomeTypeCode = "other_payments";
+    private const string OtherIncomeIncomeTypeCode = "other_income";
     private const string DebtTransferIncomeTypeName = "Перенос задолженности";
     private const string AdvancePaymentExpenseTypeName = "Авансовые выплаты";
     private const string NoReceiptPaymentExpenseTypeName = "Выплата без чека";
@@ -1436,6 +1437,13 @@ public sealed class FinanceService(
                 accrual.IrregularPaymentId.Value,
                 accrual.AccountingMonth,
                 cancellationToken)
+            : accrual.FeeCampaignId.HasValue
+                ? await accrualRepository.ActiveFeeCampaignDuplicateExistsAsync(
+                    accrual.Id,
+                    accrual.GarageId,
+                    accrual.FeeCampaignId.Value,
+                    accrual.AccountingMonth,
+                    cancellationToken)
             : await accrualRepository.ActiveDuplicateExistsAsync(
                 accrual.Id,
                 accrual.GarageId,
@@ -1738,6 +1746,13 @@ public sealed class FinanceService(
             return FinanceResult<AccrualDto>.Failure(
                 "irregular_accrual_edit_not_supported",
                 "Нерегулярное начисление нельзя переназначить как обычное. Отмените его и создайте заново из справочника.");
+        }
+
+        if (accrual.FeeCampaignId.HasValue)
+        {
+            return FinanceResult<AccrualDto>.Failure(
+                "fee_campaign_accrual_edit_not_supported",
+                "Начисление объявленного сбора нельзя переназначить как обычное. Отмените его и сформируйте сбор заново.");
         }
 
         if (accrual.IsCanceled)
@@ -2329,9 +2344,12 @@ public sealed class FinanceService(
             return FinanceResult<FeeCampaignAccrualGenerationResultDto>.Failure("fee_campaign_not_found", "Сбор не найден.");
         }
 
-        if (campaign.IncomeType.IsArchived)
+        var incomeType = await incomeTypeRepository.FindFirstActiveByCodeAsync(OtherIncomeIncomeTypeCode, cancellationToken);
+        if (incomeType is null || !incomeType.IsSystem || !incomeType.DestinationFundId.HasValue)
         {
-            return FinanceResult<FeeCampaignAccrualGenerationResultDto>.Failure("income_type_not_found", "Вид поступления для сбора не найден.");
+            return FinanceResult<FeeCampaignAccrualGenerationResultDto>.Failure(
+                "other_income_destination_not_configured",
+                "Системное назначение «Прочие доходы» не настроено или не связано с фондом.");
         }
 
         if (campaign.StartsOn > month)
@@ -2364,11 +2382,7 @@ public sealed class FinanceService(
             return FinanceResult<FeeCampaignAccrualGenerationResultDto>.Failure("fee_campaign_no_garages", "Нет активных гаражей для начисления сбора.");
         }
 
-        var existingGarageIds = await accrualRepository.GetActiveGarageIdsAsync(
-            campaign.IncomeTypeId,
-            month,
-            AccrualSources.FeeCampaign,
-            cancellationToken);
+        var existingGarageIds = await accrualRepository.GetActiveFeeCampaignGarageIdsAsync(campaign.Id, month, cancellationToken);
         var created = new List<AccrualDto>();
         var skipped = new List<string>();
         foreach (var garage in garages)
@@ -2383,10 +2397,12 @@ public sealed class FinanceService(
             {
                 GarageId = garage.Id,
                 Garage = garage,
-                IncomeTypeId = campaign.IncomeTypeId,
-                IncomeType = campaign.IncomeType,
+                IncomeTypeId = incomeType.Id,
+                IncomeType = incomeType,
+                FeeCampaignId = campaign.Id,
+                FeeCampaign = campaign,
                 AccountingMonth = month,
-                AccountingYear = AnnualAccrualPolicy.ResolveAccountingYear(campaign.IncomeType.Code, month),
+                AccountingYear = AnnualAccrualPolicy.ResolveAccountingYear(incomeType.Code, month),
                 DueDate = dueDates.DueDate,
                 OverdueFromDate = dueDates.OverdueFromDate,
                 Amount = amount,
@@ -2407,7 +2423,7 @@ public sealed class FinanceService(
             "finance.fee_campaign_accruals_generated",
             "accrual",
             campaign.Id,
-            FormatFeeCampaignAccrualGenerationAuditSummary(month, campaign, created, skipped),
+            FormatFeeCampaignAccrualGenerationAuditSummary(month, campaign, incomeType, created, skipped),
             relatedAccountingMonth: month,
             relatedDocumentNumber: $"{campaign.Name} {month:MM.yyyy}",
             metadata: new Dictionary<string, object?>
@@ -2415,8 +2431,9 @@ public sealed class FinanceService(
                 ["financeEntityType"] = "accrual",
                 ["feeCampaignId"] = campaign.Id,
                 ["feeCampaignName"] = campaign.Name,
-                ["incomeTypeId"] = campaign.IncomeTypeId,
-                ["incomeTypeName"] = campaign.IncomeType.Name,
+                ["incomeTypeId"] = incomeType.Id,
+                ["incomeTypeName"] = incomeType.Name,
+                ["destinationFundId"] = incomeType.DestinationFundId,
                 ["createdCount"] = created.Count,
                 ["skippedCount"] = skipped.Count,
                 ["totalAmount"] = created.Sum(item => item.Amount)
@@ -2433,8 +2450,8 @@ public sealed class FinanceService(
             month,
             campaign.Id,
             campaign.Name,
-            campaign.IncomeTypeId,
-            campaign.IncomeType.Name,
+            incomeType.Id,
+            incomeType.Name,
             amount,
             created.Count,
             skipped.Count,
@@ -3359,10 +3376,15 @@ public sealed class FinanceService(
         return $"Создано регулярных начислений: {created.Count} на сумму {totalAmount} за {month:MM.yyyy}; вид {incomeType.Name}; тариф {tariff.Name}, база {tariff.CalculationBase}, {FormatTariffRateSnapshot(tariff)}; пропущено {skipped.Count}.";
     }
 
-    private static string FormatFeeCampaignAccrualGenerationAuditSummary(DateOnly month, FeeCampaign campaign, IReadOnlyCollection<AccrualDto> created, IReadOnlyCollection<string> skipped)
+    private static string FormatFeeCampaignAccrualGenerationAuditSummary(
+        DateOnly month,
+        FeeCampaign campaign,
+        IncomeType incomeType,
+        IReadOnlyCollection<AccrualDto> created,
+        IReadOnlyCollection<string> skipped)
     {
         var totalAmount = MoneyFormatting.Format(created.Sum(item => item.Amount));
-        return $"Создано начислений по сбору: {created.Count} на сумму {totalAmount} за {month:MM.yyyy}; сбор {campaign.Name}; вид {campaign.IncomeType.Name}; взнос {MoneyFormatting.Format(campaign.ContributionAmount)}; пропущено {skipped.Count}.";
+        return $"Создано начислений по сбору: {created.Count} на сумму {totalAmount} за {month:MM.yyyy}; сбор {campaign.Name}; назначение {incomeType.Name}; взнос {MoneyFormatting.Format(campaign.ContributionAmount)}; пропущено {skipped.Count}.";
     }
 
     private static string FormatSupplierGroupSalaryAccrualGenerationAuditSummary(DateOnly month, string groupName, string expenseTypeName, IReadOnlyCollection<SupplierAccrualDto> created, IReadOnlyCollection<string> skipped)
@@ -4136,7 +4158,9 @@ public sealed class FinanceService(
             accrual.DueDate,
             accrual.OverdueFromDate,
             accrual.IrregularPaymentId,
-            accrual.IrregularPayment?.Name);
+            accrual.IrregularPayment?.Name,
+            accrual.FeeCampaignId,
+            accrual.FeeCampaign?.Name);
     }
 
     private static SupplierAccrualDto ToDto(SupplierAccrual accrual)

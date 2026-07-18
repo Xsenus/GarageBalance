@@ -81,6 +81,7 @@ public sealed class DictionaryServiceTests
     public async Task ListMethods_ApplyExplicitLimit()
     {
         await using var database = await TestDatabase.CreateAsync();
+        await AddOtherIncomeDestinationAsync(database.Context);
         var service = DictionaryServiceTestFactory.Create(database.Context);
 
         var groupResults = new List<DictionaryResult<SupplierGroupDto>>();
@@ -320,6 +321,7 @@ public sealed class DictionaryServiceTests
     public async Task CurrentExtendedUpdateMethods_DoNotWriteAuditWhenNormalizedValuesAreUnchanged()
     {
         await using var database = await TestDatabase.CreateAsync();
+        await AddOtherIncomeDestinationAsync(database.Context);
         var service = DictionaryServiceTestFactory.Create(database.Context);
         var actorUserId = Guid.NewGuid();
 
@@ -2399,6 +2401,7 @@ public sealed class DictionaryServiceTests
     public async Task FeeCampaignAsync_CreatesUpdatesArchivesAndRestoresWithAudit()
     {
         await using var database = await TestDatabase.CreateAsync();
+        var otherIncome = await AddOtherIncomeDestinationAsync(database.Context);
         var service = DictionaryServiceTestFactory.Create(database.Context);
         var actorUserId = Guid.NewGuid();
         var incomeType = await service.CreateIncomeTypeAsync(new UpsertAccountingTypeRequest("Gate fee", "gate_fee"), actorUserId, CancellationToken.None);
@@ -2408,6 +2411,7 @@ public sealed class DictionaryServiceTests
             new UpsertFeeCampaignRequest(" Gate campaign ", incomeType.Value!.Id, "Gate replacement", 500m, 33500m, new DateOnly(2026, 5, 4), new DateOnly(2026, 6, 30), true, 30),
             actorUserId,
             CancellationToken.None);
+        Assert.Equal(otherIncome.Id, created.Value!.IncomeTypeId);
         var activeCampaigns = await service.GetFeeCampaignsAsync("gate", CancellationToken.None);
         database.Context.AuditEvents.RemoveRange(database.Context.AuditEvents);
         await database.Context.SaveChangesAsync();
@@ -2430,8 +2434,8 @@ public sealed class DictionaryServiceTests
 
         Assert.True(created.Succeeded);
         Assert.Equal("Gate campaign", created.Value.Name);
-        Assert.Equal(incomeType.Value.Id, created.Value.IncomeTypeId);
-        Assert.Equal("Gate fee", created.Value.IncomeTypeName);
+        Assert.Equal(otherIncome.Id, created.Value.IncomeTypeId);
+        Assert.Equal("Прочие доходы", created.Value.IncomeTypeName);
         Assert.Single(activeCampaigns);
         Assert.True(updated.Succeeded);
         Assert.Equal(600m, updated.Value!.ContributionAmount);
@@ -2454,6 +2458,7 @@ public sealed class DictionaryServiceTests
     public async Task FeeCampaignAsync_RejectsInvalidInputAndDuplicateRestore()
     {
         await using var database = await TestDatabase.CreateAsync();
+        var otherIncome = await AddOtherIncomeDestinationAsync(database.Context);
         var service = DictionaryServiceTestFactory.Create(database.Context);
         var actorUserId = Guid.NewGuid();
         var incomeType = await service.CreateIncomeTypeAsync(new UpsertAccountingTypeRequest("Gate fee", "gate_fee"), actorUserId, CancellationToken.None);
@@ -2463,7 +2468,7 @@ public sealed class DictionaryServiceTests
             new UpsertFeeCampaignRequest(" ", incomeType.Value!.Id, null, 500m, 33500m, new DateOnly(2026, 5, 4), null, true, 30),
             actorUserId,
             CancellationToken.None);
-        var emptyIncomeType = await service.CreateFeeCampaignAsync(
+        var automaticIncomeType = await service.CreateFeeCampaignAsync(
             new UpsertFeeCampaignRequest("No income type", Guid.Empty, null, 500m, 33500m, new DateOnly(2026, 5, 4), null, true, 30),
             actorUserId,
             CancellationToken.None);
@@ -2488,8 +2493,8 @@ public sealed class DictionaryServiceTests
 
         Assert.False(emptyName.Succeeded);
         Assert.Equal("fee_campaign_name_required", emptyName.ErrorCode);
-        Assert.False(emptyIncomeType.Succeeded);
-        Assert.Equal("fee_campaign_income_type_required", emptyIncomeType.ErrorCode);
+        Assert.True(automaticIncomeType.Succeeded);
+        Assert.Equal(otherIncome.Id, automaticIncomeType.Value!.IncomeTypeId);
         Assert.False(invalidTarget.Succeeded);
         Assert.Equal("fee_campaign_target_amount_invalid", invalidTarget.ErrorCode);
         Assert.False(invalidPeriod.Succeeded);
@@ -2503,6 +2508,7 @@ public sealed class DictionaryServiceTests
     public async Task FeeCampaignAsync_SavesSelectedParticipantGaragesAndWritesDiff()
     {
         await using var database = await TestDatabase.CreateAsync();
+        await AddOtherIncomeDestinationAsync(database.Context);
         var service = DictionaryServiceTestFactory.Create(database.Context);
         var actorUserId = Guid.NewGuid();
         var incomeType = await service.CreateIncomeTypeAsync(new UpsertAccountingTypeRequest("Gate fee", "gate_fee"), actorUserId, CancellationToken.None);
@@ -2541,6 +2547,31 @@ public sealed class DictionaryServiceTests
         Assert.Equal([garage2.Id], Assert.Single(loaded).ParticipantGarageIds);
         var audit = Assert.Single(database.Context.AuditEvents, item => item.Action == "dictionary.fee_campaign_updated" && item.ActorUserId == actorUserId);
         Assert.Contains("participantGarageIds", audit.MetadataJson, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task CreateFeeCampaignAsync_RejectsMissingOtherIncomeDestination()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = DictionaryServiceTestFactory.Create(database.Context);
+
+        var result = await service.CreateFeeCampaignAsync(
+            new UpsertFeeCampaignRequest(
+                "Сбор без назначения",
+                Guid.NewGuid(),
+                null,
+                500m,
+                5000m,
+                new DateOnly(2026, 1, 1),
+                null,
+                true,
+                30),
+            null,
+            CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Equal("other_income_destination_not_configured", result.ErrorCode);
+        Assert.Empty(database.Context.FeeCampaigns);
     }
 
     [Fact]
@@ -2667,6 +2698,26 @@ public sealed class DictionaryServiceTests
         Assert.Empty(garageTotals.AccrualTotals);
         Assert.Empty(garageTotals.IncomeTotals);
         Assert.Empty(supplierTotals);
+    }
+
+    private static async Task<IncomeType> AddOtherIncomeDestinationAsync(GarageBalanceDbContext context)
+    {
+        var fund = new Fund
+        {
+            Name = "Прочее",
+            NormalizedName = "ПРОЧЕЕ"
+        };
+        var incomeType = new IncomeType
+        {
+            Name = "Прочие доходы",
+            Code = "other_income",
+            IsSystem = true,
+            DestinationFund = fund,
+            DestinationFundId = fund.Id
+        };
+        context.AddRange(fund, incomeType);
+        await context.SaveChangesAsync();
+        return incomeType;
     }
 
     private sealed class TestDatabase : IAsyncDisposable
