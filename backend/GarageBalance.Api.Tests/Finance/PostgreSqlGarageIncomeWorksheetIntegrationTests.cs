@@ -51,12 +51,15 @@ public sealed class PostgreSqlGarageIncomeWorksheetIntegrationTests
             CancellationToken.None);
 
         Assert.True(result.Succeeded, result.ErrorMessage);
-        var row = Assert.Single(result.Value!.Rows);
+        var row = Assert.Single(result.Value!.Rows, item => item.IncomeTypeId == electricityType.Id);
         Assert.Equal(MeterKinds.Electricity, row.MeterKind);
         Assert.Equal(reading.Id, row.MeterReadingId);
         Assert.Equal(reading.Version, row.MeterReadingVersion);
         Assert.Equal(reading.ReadingDate, row.MeterReadingDate);
         Assert.Equal(118m, row.MeterValue);
         Assert.Equal(18m, row.MeterConsumption);
+        var missingWater = Assert.Single(result.Value.Rows, item => item.MeterKind == MeterKinds.Water);
+        Assert.Null(missingWater.MeterValue);
+        Assert.Equal(0m, missingWater.AccrualAmount);
     }
 }

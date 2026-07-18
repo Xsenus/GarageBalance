@@ -4626,6 +4626,17 @@ describe('App', () => {
           incomeAmount: 0,
           debt: waterConsumption === null ? 0 : waterConsumption * 50,
         },
+        {
+          accountingMonth,
+          incomeTypeId: 'income-type-membership',
+          incomeTypeName: 'Членский взнос',
+          meterKind: null,
+          meterValue: null,
+          meterConsumption: null,
+          accrualAmount: 700,
+          incomeAmount: 0,
+          debt: 700,
+        },
       ],
     }))
     const savePaymentFormMeterReading = vi.fn(async (_token: string, request) => {
@@ -4717,6 +4728,12 @@ describe('App', () => {
 
     const waterInput = within(prototype).getByRole('textbox', { name: /^Показание Водоснабжение/ })
     expect(waterInput).toHaveValue('')
+    expect(waterInput).toHaveAttribute('aria-invalid', 'true')
+    expect(waterInput.closest('td')).toHaveClass('payments-prototype-required-cell')
+    expect(within(waterInput.closest('td')!).getByText('Введите обязательное показание')).toBeInTheDocument()
+    const membershipPayment = within(prototype).getByRole('textbox', { name: /^Платеж Членский взнос/ })
+    expect(membershipPayment).toBeEnabled()
+    expect(within(membershipPayment.closest('tr')!).getAllByText('700.00').length).toBeGreaterThan(0)
     await user.type(waterInput, '120')
     await user.keyboard('{Enter}')
     await waitFor(() => expect(savePaymentFormMeterReading).toHaveBeenLastCalledWith('token', expect.objectContaining({
@@ -4728,6 +4745,7 @@ describe('App', () => {
       expectedVersion: undefined,
     })))
     await waitFor(() => expect(within(prototype).getByRole('textbox', { name: /^Показание Водоснабжение/ })).toHaveValue('120'))
+    expect(within(within(prototype).getByRole('textbox', { name: /^Показание Водоснабжение/ }).closest('td')!).queryByText('Введите обязательное показание')).not.toBeInTheDocument()
 
     await user.clear(within(prototype).getByRole('textbox', { name: /^Показание Электроэнергия/ }))
     await user.click(within(prototype).getByRole('button', { name: /^Сохранить показание Электроэнергия/ }))

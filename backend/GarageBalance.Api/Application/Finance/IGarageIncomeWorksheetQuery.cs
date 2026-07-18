@@ -18,6 +18,7 @@ public sealed record GarageIncomeWorksheetData(
     decimal PreviousIncomeTotal,
     IReadOnlyList<GarageIncomeWorksheetBucketData> AccrualBuckets,
     IReadOnlyList<GarageIncomeWorksheetBucketData> IncomeBuckets,
+    IReadOnlyList<GarageIncomeWorksheetMeterTypeData> MeterIncomeTypes,
     IReadOnlyList<GarageIncomeWorksheetMeterData> MeterReadings);
 
 public sealed record GarageIncomeWorksheetBucketData(
@@ -26,6 +27,11 @@ public sealed record GarageIncomeWorksheetBucketData(
     string IncomeTypeName,
     string? IncomeTypeCode,
     decimal Amount);
+
+public sealed record GarageIncomeWorksheetMeterTypeData(
+    Guid IncomeTypeId,
+    string IncomeTypeName,
+    string IncomeTypeCode);
 
 public sealed record GarageIncomeWorksheetMeterData(
     Guid Id,

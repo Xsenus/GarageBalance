@@ -419,8 +419,17 @@ public sealed class FinanceService(
 
         var accrualLookup = worksheetData.AccrualBuckets.ToDictionary(bucket => (bucket.AccountingMonth, bucket.IncomeTypeId));
         var incomeLookup = worksheetData.IncomeBuckets.ToDictionary(bucket => (bucket.AccountingMonth, bucket.IncomeTypeId));
+        var requiredMeterBuckets = defaultMonthTo >= monthFrom && defaultMonthTo <= monthTo
+            ? worksheetData.MeterIncomeTypes.Select(incomeType => new GarageIncomeWorksheetBucketData(
+                defaultMonthTo,
+                incomeType.IncomeTypeId,
+                incomeType.IncomeTypeName,
+                incomeType.IncomeTypeCode,
+                0m))
+            : [];
         var keys = worksheetData.AccrualBuckets
             .Concat(worksheetData.IncomeBuckets)
+            .Concat(requiredMeterBuckets)
             .GroupBy(bucket => (bucket.AccountingMonth, bucket.IncomeTypeId))
             .Select(group => group.First())
             .OrderByDescending(bucket => bucket.AccountingMonth)

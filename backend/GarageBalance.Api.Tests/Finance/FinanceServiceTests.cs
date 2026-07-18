@@ -1,6 +1,7 @@
 using System.Data.Common;
 using System.Text.Json;
 using GarageBalance.Api.Application.Audit;
+using GarageBalance.Api.Application.Common;
 using GarageBalance.Api.Application.Dictionaries;
 using GarageBalance.Api.Application.Finance;
 using GarageBalance.Api.Application.Funds;
@@ -4568,6 +4569,52 @@ public sealed class FinanceServiceTests
         Assert.Equal(0m, membership.AccrualAmount);
         Assert.Equal(500m, membership.IncomeAmount);
         Assert.Equal(0m, membership.Debt);
+    }
+
+    [Fact]
+    public async Task GetGarageIncomeWorksheetAsync_IncludesMissingCurrentMeterRowsAndKeepsOtherAccruals()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        var currentMonth = MonthPeriod.CurrentLocalMonth();
+        var waterType = new IncomeType { Name = "Водоснабжение", Code = MeterKinds.Water };
+        var electricityType = new IncomeType { Name = "Электроэнергия", Code = MeterKinds.Electricity };
+        var archivedMeterType = new IncomeType { Name = "Архивная вода", Code = MeterKinds.Water, IsArchived = true };
+        database.Context.AddRange(
+            waterType,
+            electricityType,
+            archivedMeterType,
+            new Accrual
+            {
+                GarageId = fixtures.Garage.Id,
+                IncomeTypeId = fixtures.IncomeType.Id,
+                AccountingMonth = currentMonth,
+                Amount = 700m,
+                Source = "regular"
+            });
+        await database.Context.SaveChangesAsync();
+        var service = FinanceServiceTestFactory.Create(database.Context);
+
+        var result = await service.GetGarageIncomeWorksheetAsync(
+            fixtures.Garage.Id,
+            new GarageIncomeWorksheetRequest(currentMonth, currentMonth),
+            CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+        Assert.Equal(3, result.Value!.Rows.Count);
+        var membership = Assert.Single(result.Value.Rows, row => row.IncomeTypeId == fixtures.IncomeType.Id);
+        Assert.Equal(700m, membership.AccrualAmount);
+        Assert.Null(membership.MeterKind);
+        foreach (var meterType in new[] { waterType, electricityType })
+        {
+            var missingMeter = Assert.Single(result.Value.Rows, row => row.IncomeTypeId == meterType.Id);
+            Assert.Equal(meterType.Code, missingMeter.MeterKind);
+            Assert.Null(missingMeter.MeterValue);
+            Assert.Equal(0m, missingMeter.AccrualAmount);
+            Assert.Equal(0m, missingMeter.IncomeAmount);
+            Assert.Equal(0m, missingMeter.Debt);
+        }
+        Assert.DoesNotContain(result.Value.Rows, row => row.IncomeTypeId == archivedMeterType.Id);
     }
 
     [Fact]

@@ -4917,7 +4917,8 @@ function PaymentsPrototypePanel({
                                   <MeterReadingInput
                                     className="payments-prototype-meter-input"
                                     aria-label={`Показание ${row.service} ${row.monthLabel}`}
-                                    aria-invalid={row.meterError ? 'true' : undefined}
+                                    aria-describedby={row.meterRequired && row.meter === null ? `required-meter-${row.id}` : undefined}
+                                    aria-invalid={row.meterError || (row.meterRequired && row.meter === null) ? 'true' : undefined}
                                     disabled={savingMeterRowId === row.id}
                                     value={row.meterDraft}
                                     onChange={(event) => handleMeterDraftChange(row.id, event.target.value)}
@@ -4941,6 +4942,11 @@ function PaymentsPrototypePanel({
                                   {row.meterError ? <span className="payments-prototype-meter-error" role="alert">{row.meterError}</span> : null}
                                 </div>
                               ) : row.meter === null ? '' : row.meter.toLocaleString('ru-RU', { maximumFractionDigits: 3 })}
+                              {row.meterRequired && row.meter === null ? (
+                                <span className="payments-prototype-meter-required-hint" id={`required-meter-${row.id}`}>
+                                  Введите обязательное показание
+                                </span>
+                              ) : null}
                             </td>
                             <td>{formatPaymentMoney(row.difference ?? '')}</td>
                             <td>{formatPaymentMoney(row.payable)}</td>

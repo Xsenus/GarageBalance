@@ -12,6 +12,7 @@ public sealed class EfGarageIncomeWorksheetQuery(GarageBalanceDbContext dbContex
     private const int AccrualBucketCategory = 3;
     private const int IncomeBucketCategory = 4;
     private const int MeterReadingCategory = 5;
+    private const int MeterIncomeTypeCategory = 6;
 
     public async Task<GarageIncomeWorksheetData?> GetAsync(
         Guid garageId,
@@ -192,6 +193,31 @@ public sealed class EfGarageIncomeWorksheetQuery(GarageBalanceDbContext dbContex
                 Consumption = (decimal?)reading.Consumption,
                 UpdatedAtUtc = (DateTimeOffset?)reading.UpdatedAtUtc
             });
+        var meterIncomeTypeQuery = dbContext.IncomeTypes.AsNoTracking()
+            .Where(incomeType =>
+                !incomeType.IsArchived &&
+                (incomeType.Code == MeterKinds.Water || incomeType.Code == MeterKinds.Electricity))
+            .Select(incomeType => new
+            {
+                Category = MeterIncomeTypeCategory,
+                GarageId = (Guid?)null,
+                GarageNumber = (string?)null,
+                OwnerLastName = (string?)null,
+                OwnerFirstName = (string?)null,
+                OwnerMiddleName = (string?)null,
+                AccountingMonth = (DateOnly?)null,
+                IncomeTypeId = (Guid?)incomeType.Id,
+                IncomeTypeName = (string?)incomeType.Name,
+                IncomeTypeCode = incomeType.Code,
+                Amount = 0m,
+                MeterReadingId = (Guid?)null,
+                MeterReadingVersion = (Guid?)null,
+                MeterKind = (string?)null,
+                ReadingDate = (DateOnly?)null,
+                CurrentValue = (decimal?)null,
+                Consumption = (decimal?)null,
+                UpdatedAtUtc = (DateTimeOffset?)null
+            });
 
         var rows = await garageQuery
             .Concat(previousAccrualQuery)
@@ -199,6 +225,7 @@ public sealed class EfGarageIncomeWorksheetQuery(GarageBalanceDbContext dbContex
             .Concat(accrualBucketQuery)
             .Concat(incomeBucketQuery)
             .Concat(meterReadingQuery)
+            .Concat(meterIncomeTypeQuery)
             .ToListAsync(cancellationToken);
         var garage = rows.SingleOrDefault(row => row.Category == GarageCategory);
         if (garage is null)
@@ -231,6 +258,12 @@ public sealed class EfGarageIncomeWorksheetQuery(GarageBalanceDbContext dbContex
                     row.IncomeTypeName!,
                     row.IncomeTypeCode,
                     row.Amount))
+                .ToList(),
+            rows.Where(row => row.Category == MeterIncomeTypeCategory)
+                .Select(row => new GarageIncomeWorksheetMeterTypeData(
+                    row.IncomeTypeId!.Value,
+                    row.IncomeTypeName!,
+                    row.IncomeTypeCode!))
                 .ToList(),
             rows.Where(row => row.Category == MeterReadingCategory)
                 .Select(row => new GarageIncomeWorksheetMeterData(
