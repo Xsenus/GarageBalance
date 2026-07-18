@@ -50,6 +50,22 @@ export type FinanceSummaryDto = {
   supplierAccrualCount?: number
 }
 
+export class FinanceApiError extends Error {
+  readonly code: string
+  readonly status: number
+
+  constructor(
+    code: string,
+    message: string,
+    status: number,
+  ) {
+    super(message)
+    this.name = 'FinanceApiError'
+    this.code = code
+    this.status = status
+  }
+}
+
 export type FinancePagedResult<TItem> = {
   items: TItem[]
   totalCount: number
@@ -534,7 +550,11 @@ async function requestJson<TResponse>(accessToken: string, path: string, init?: 
 
   if (!response.ok) {
     const problem = await response.json().catch(() => null)
-    throw new Error(problem?.detail ?? 'Не удалось выполнить финансовую операцию.')
+    throw new FinanceApiError(
+      problem?.code ?? 'finance_request_failed',
+      problem?.detail ?? 'Не удалось выполнить финансовую операцию.',
+      response.status,
+    )
   }
 
   return response.json()

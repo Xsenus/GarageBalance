@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { financeApi } from './financeApi'
+import { FinanceApiError, financeApi } from './financeApi'
 
 describe('financeApi', () => {
   afterEach(() => {
@@ -164,6 +164,29 @@ describe('financeApi', () => {
         Authorization: 'Bearer token',
       },
     })
+  })
+
+  it('preserves the server error code and status for recoverable finance conflicts', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      code: 'meter_reading_conflict',
+      detail: 'Показание уже изменено другим пользователем.',
+    }), { status: 409, headers: { 'Content-Type': 'application/problem+json' } }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await expect(financeApi.savePaymentFormMeterReading('token', {
+      garageId: 'garage-12',
+      meterKind: 'electricity',
+      accountingMonth: '2026-06-01',
+      readingDate: '2026-06-20',
+      currentValue: 18,
+      meterReadingId: 'meter-reading-1',
+      expectedVersion: 'version-stale',
+    })).rejects.toEqual(expect.objectContaining<Partial<FinanceApiError>>({
+      name: 'FinanceApiError',
+      code: 'meter_reading_conflict',
+      status: 409,
+      message: 'Показание уже изменено другим пользователем.',
+    }))
   })
 
   it('sends an audited historical meter reading correction to the dedicated endpoint', async () => {

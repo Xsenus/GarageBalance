@@ -30,6 +30,7 @@ import type { AuditClient, AuditEventDto } from './services/auditApi'
 import type { AuthClient, AuthResponse } from './services/authApi'
 import { DictionaryApiError } from './services/dictionariesApi'
 import type { AccountingTypeDto, ChargeServiceSettingDto, DictionaryClient, FeeCampaignDto, GarageDto, IrregularPaymentDto, OwnerDto, PagedResult, StaffDepartmentDto, StaffMemberDto, SupplierContactDto, SupplierDto, SupplierGroupDto, TariffDto, UpsertGarageRequest, UpsertStaffMemberRequest, UpsertSupplierRequest, UpsertTariffRequest } from './services/dictionariesApi'
+import { FinanceApiError } from './services/financeApi'
 import type { AccrualDto, CorrectHistoricalMeterReadingRequest, CreateAccrualRequest, CreateDebtTransferRequest, CreateExpenseOperationRequest, CreateIncomeOperationRequest, CreateMeterReadingRequest, CreateStaffPaymentRequest, CreateSupplierAccrualRequest, ExpenseWorksheetDto, FeeCampaignAccrualGenerationResultDto, FinanceClient, FinancePagedResult, FinancePageParams, FinanceSummaryDto, FinancialOperationDto, GarageBalanceHistoryDto, GarageIncomeWorksheetDto, GenerateFeeCampaignAccrualsRequest, GenerateRegularCatalogAccrualsRequest, GenerateSupplierGroupSalaryAccrualsRequest, MeterReadingDto, MeterReadingYearPageDto, MissingMeterReadingDto, RegularAccrualGenerationResultDto, RegularCatalogAccrualGenerationResultDto, SupplierAccrualDto, SupplierGroupSalaryAccrualGenerationResultDto } from './services/financeApi'
 import type { CreateFundOperationRequest, FundDto, FundOperationDto, FundOperationPageDto, FundsClient } from './services/fundsApi'
 import type { AccessImportCreatedRecordDto, AccessImportQuarantineItemDto, AccessImportReaderStatusDto, AccessImportRunDto, AccessImportRunLogEntryDto, ImportClient } from './services/importApi'
@@ -4667,7 +4668,8 @@ describe('App', () => {
     const savePaymentFormMeterReading = vi.fn(async (_token: string, request) => {
       if (failNextSave) {
         failNextSave = false
-        throw new Error('Показание уже изменено другим пользователем.')
+        version = 'reading-version-external'
+        throw new FinanceApiError('meter_reading_conflict', 'Показание уже изменено другим пользователем.', 409)
       }
 
       if (request.meterKind === 'water') {
@@ -4742,6 +4744,9 @@ describe('App', () => {
     expect(within(pendingElectricityRow!).getByText('18.00')).toBeInTheDocument()
     expect(within(pendingElectricityRow!).getAllByText('180.00').length).toBeGreaterThan(0)
     expect(within(pendingElectricityRow!).queryByText('240.00')).not.toBeInTheDocument()
+    expect(within(prototype).getByRole('textbox', { name: /^Показание Электроэнергия/ })).toBeDisabled()
+    expect(within(prototype).getByRole('button', { name: /^Сохраняется показание Электроэнергия/ })).toBeDisabled()
+    expect(within(prototype).getByRole('status')).toHaveTextContent('Сохраняем показание')
     await act(async () => releaseFirstElectricitySave?.())
     await waitFor(() => expect(getGarageIncomeWorksheet).toHaveBeenCalledTimes(2))
     const confirmedElectricityInput = within(prototype).getByRole('textbox', { name: /^Показание Электроэнергия/ })
@@ -4778,6 +4783,11 @@ describe('App', () => {
     expect(savePaymentFormMeterReading).toHaveBeenCalledTimes(2)
 
     const electricityInput = within(prototype).getByRole('textbox', { name: /^Показание Электроэнергия/ })
+    await user.type(electricityInput, '-1')
+    await user.click(within(prototype).getByRole('button', { name: /^Сохранить показание Электроэнергия/ }))
+    expect(await within(prototype).findByRole('alert')).toHaveTextContent('Новое показание должно быть 0 или больше')
+    expect(savePaymentFormMeterReading).toHaveBeenCalledTimes(2)
+    await user.clear(electricityInput)
     await user.type(electricityInput, '93')
     failNextSave = true
     await user.click(within(prototype).getByRole('button', { name: /^Сохранить показание Электроэнергия/ }))
@@ -4786,12 +4796,89 @@ describe('App', () => {
     expect(currentValue).toBe(92)
     expect(within(electricityInput.closest('tr')!).getAllByText('240.00').length).toBeGreaterThan(0)
     expect(within(electricityInput.closest('tr')!).queryByText('250.00')).not.toBeInTheDocument()
+    expect(getGarageIncomeWorksheet).toHaveBeenCalledTimes(4)
 
     await user.click(within(prototype).getByRole('button', { name: /^Сохранить показание Электроэнергия/ }))
     await waitFor(() => expect(currentValue).toBe(93))
     await waitFor(() => expect(within(prototype).queryByRole('alert')).not.toBeInTheDocument())
     await waitFor(() => expect(within(within(prototype).getByRole('textbox', { name: /^Показание Электроэнергия/ }).closest('tr')!).getAllByText('250.00').length).toBeGreaterThan(0))
     expect(savePaymentFormMeterReading).toHaveBeenCalledTimes(4)
+    expect(savePaymentFormMeterReading).toHaveBeenLastCalledWith('token', expect.objectContaining({
+      currentValue: 93,
+      expectedVersion: 'reading-version-external',
+    }))
+  })
+
+  it('ignores a completed meter save after another garage becomes active', async () => {
+    const user = userEvent.setup()
+    const currentMonth = getTestCurrentMonthInputValue()
+    const accountingMonth = `${currentMonth}-01`
+    const firstGarage = createGarage({ id: 'garage-stale-a', number: '81-А', ownerName: 'Первый владелец' })
+    const secondGarage = createGarage({ id: 'garage-stale-b', number: '82-Б', ownerName: 'Второй владелец' })
+    let releaseSave: (() => void) | null = null
+    const getGarageIncomeWorksheet = vi.fn(async (_token: string, garageId: string) => createGarageIncomeWorksheet({
+      garageId,
+      garageNumber: garageId === firstGarage.id ? firstGarage.number : secondGarage.number,
+      ownerName: garageId === firstGarage.id ? firstGarage.ownerName : secondGarage.ownerName,
+      monthFrom: accountingMonth,
+      monthTo: accountingMonth,
+      rows: [{
+        accountingMonth,
+        incomeTypeId: garageId === firstGarage.id ? 'electricity-a' : 'electricity-b',
+        incomeTypeName: garageId === firstGarage.id ? 'Электроэнергия А' : 'Электроэнергия Б',
+        meterKind: 'electricity',
+        meterReadingId: `reading-${garageId}`,
+        meterReadingVersion: `version-${garageId}`,
+        meterReadingDate: `${currentMonth}-15`,
+        meterValue: garageId === firstGarage.id ? 10 : 20,
+        meterConsumption: 2,
+        accrualAmount: 20,
+        incomeAmount: 0,
+        debt: 20,
+      }],
+    }))
+    const savePaymentFormMeterReading = vi.fn(async (_token: string, request) => {
+      await new Promise<void>((resolve) => {
+        releaseSave = resolve
+      })
+      return createMeterReading({
+        id: 'reading-garage-stale-a',
+        garageId: firstGarage.id,
+        garageNumber: firstGarage.number,
+        meterKind: 'electricity',
+        accountingMonth,
+        readingDate: request.readingDate,
+        currentValue: request.currentValue,
+        previousValue: 8,
+        consumption: request.currentValue - 8,
+        version: 'version-saved-a',
+      })
+    })
+
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient({ getGarages: async () => [firstGarage, secondGarage] })} financeClient={createFinanceClient({ getGarageIncomeWorksheet, savePaymentFormMeterReading })} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Платежи')
+    const prototype = within(await screen.findByRole('region', { name: 'Платежи' })).getByRole('region', { name: 'Форма платежей' })
+    const search = within(prototype).getByLabelText('Поиск номера гаража или ФИО владельца')
+    await user.type(search, '81-А')
+    await user.click(await within(prototype).findByRole('option', { name: /Гараж\s*81-А\s*Первый владелец/ }))
+    const firstInput = await within(prototype).findByRole('textbox', { name: /^Показание Электроэнергия А/ })
+    await user.clear(firstInput)
+    await user.type(firstInput, '11')
+    await user.click(within(prototype).getByRole('button', { name: /^Сохранить показание Электроэнергия А/ }))
+    await waitFor(() => expect(savePaymentFormMeterReading).toHaveBeenCalledTimes(1))
+
+    await user.clear(search)
+    await user.type(search, '82-Б')
+    await user.click(await within(prototype).findByRole('option', { name: /Гараж\s*82-Б\s*Второй владелец/ }))
+    expect(await within(prototype).findByRole('textbox', { name: /^Показание Электроэнергия Б/ })).toHaveValue('20')
+
+    await act(async () => releaseSave?.())
+    await waitFor(() => expect(within(prototype).queryByRole('textbox', { name: /^Показание Электроэнергия А/ })).not.toBeInTheDocument())
+    expect(within(prototype).getByRole('textbox', { name: /^Показание Электроэнергия Б/ })).toHaveValue('20')
+    expect(getGarageIncomeWorksheet.mock.calls.filter(([, garageId]) => garageId === firstGarage.id)).toHaveLength(1)
   })
 
   it('pays opening debt through full payment when worksheet has no service rows', async () => {
@@ -7049,6 +7136,8 @@ describe('App', () => {
 
   it('keeps dictionary and payment actions read-only without write permissions', async () => {
     const user = userEvent.setup()
+    const currentMonth = getTestCurrentMonthInputValue()
+    const readOnlyGarage = createGarage({ id: 'garage-read-only-meter', number: '95', ownerName: 'Наблюдаемый владелец' })
     const authClient = createAuthClient({
       login: async () =>
         createAuthResponse({
@@ -7061,6 +7150,7 @@ describe('App', () => {
         }),
     })
     const dictionaryClient = createDictionaryClient({
+      getGarages: async () => [readOnlyGarage],
       createOwner: async () => {
         throw new Error('Создание владельца не должно вызываться без dictionaries.write.')
       },
@@ -7069,6 +7159,30 @@ describe('App', () => {
       },
     })
     const financeClient = createFinanceClient({
+      getGarageIncomeWorksheet: async () => createGarageIncomeWorksheet({
+        garageId: readOnlyGarage.id,
+        garageNumber: readOnlyGarage.number,
+        ownerName: readOnlyGarage.ownerName,
+        monthFrom: `${currentMonth}-01`,
+        monthTo: `${currentMonth}-01`,
+        rows: [{
+          accountingMonth: `${currentMonth}-01`,
+          incomeTypeId: 'income-read-only-electricity',
+          incomeTypeName: 'Электроэнергия только просмотр',
+          meterKind: 'electricity',
+          meterReadingId: 'reading-read-only',
+          meterReadingVersion: 'reading-read-only-version',
+          meterReadingDate: `${currentMonth}-15`,
+          meterValue: 77,
+          meterConsumption: 7,
+          accrualAmount: 70,
+          incomeAmount: 0,
+          debt: 70,
+        }],
+      }),
+      savePaymentFormMeterReading: async () => {
+        throw new Error('Сохранение показания не должно вызываться без payments.write.')
+      },
       createIncome: async () => {
         throw new Error('Поступление не должно вызываться без payments.write.')
       },
@@ -7118,6 +7232,12 @@ describe('App', () => {
     await user.click(incomeRow)
     expect(screen.queryByRole('dialog', { name: 'Новое поступление' })).not.toBeInTheDocument()
     expect(within(financePanel).getByRole('alert')).toHaveTextContent('Для записи платежей нужно право payments.write.')
+    const paymentPrototype = within(financePanel).getByRole('region', { name: 'Форма платежей' })
+    await user.type(within(paymentPrototype).getByLabelText('Поиск номера гаража или ФИО владельца'), '95')
+    await user.click(await within(paymentPrototype).findByRole('option', { name: /Гараж\s*95\s*Наблюдаемый владелец/ }))
+    expect(await within(paymentPrototype).findByText('77')).toBeInTheDocument()
+    expect(within(paymentPrototype).queryByRole('textbox', { name: /^Показание Электроэнергия только просмотр/ })).not.toBeInTheDocument()
+    expect(within(paymentPrototype).queryByRole('button', { name: /^Сохранить показание Электроэнергия только просмотр/ })).not.toBeInTheDocument()
     expect(screen.queryByText('Создание владельца не должно вызываться без dictionaries.write.')).not.toBeInTheDocument()
     expect(screen.queryByText('Поступление не должно вызываться без payments.write.')).not.toBeInTheDocument()
   })

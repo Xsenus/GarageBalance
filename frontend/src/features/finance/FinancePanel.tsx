@@ -1,9 +1,10 @@
 import { Fragment, useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
 import type { FormEvent, KeyboardEvent, MouseEvent, ReactNode } from 'react'
-import { ArrowRight, CalendarDays, FileText, Pencil, RotateCcw, Save, Search, Trash2, WalletCards, X } from 'lucide-react'
+import { ArrowRight, CalendarDays, FileText, LoaderCircle, Pencil, RotateCcw, Save, Search, Trash2, WalletCards, X } from 'lucide-react'
 import type { AuthResponse } from '../../services/authApi'
 import type { AccountingTypeDto, DictionaryClient, GarageDto, StaffMemberDto, SupplierDto, SupplierGroupDto, TariffDto } from '../../services/dictionariesApi'
 import type { AccrualDto, CreateAccrualRequest, CreateExpenseOperationRequest, CreateIncomeOperationRequest, CreateMeterReadingRequest, CreateSupplierAccrualRequest, ExpenseWorksheetDto, FinanceClient, FinancePagedResult, FinanceSummaryDto, FinancialOperationDto, GarageIncomeWorksheetDto, GarageOverdueDebtDto, GenerateRegularAccrualsRequest, GenerateSupplierGroupSalaryAccrualsRequest, MeterReadingDto, MissingMeterReadingDto, SupplierAccrualDto } from '../../services/financeApi'
+import { FinanceApiError } from '../../services/financeApi'
 import type { FundDto, FundsClient } from '../../services/fundsApi'
 import type { FormStateClient } from '../../services/formStatesApi'
 import type { IntegrationClient, ReceiptPrintingActionKind } from '../../services/integrationsApi'
@@ -3068,6 +3069,8 @@ function PaymentsPrototypePanel({
   const [garageSearchOpen, setGarageSearchOpen] = useState(false)
   const garageSearchWrapRef = useRef<HTMLDivElement | null>(null)
   const [selectedGarageId, setSelectedGarageId] = useState<string | null>(null)
+  const selectedGarageIdRef = useRef<string | null>(null)
+  const [incomeWorksheetRequests] = useState(() => new LatestRequestSequence())
   const [selectedGarageIds, setSelectedGarageIds] = useState<string[]>([])
   const [overdueDebtDetails, setOverdueDebtDetails] = useState<GarageOverdueDebtDto | null>(null)
   const [overdueDebtLoading, setOverdueDebtLoading] = useState(false)
@@ -3272,6 +3275,7 @@ function PaymentsPrototypePanel({
           const restoredGarageSearch = state.payload.garageSearch ?? ''
           const isRestoredRealGarage = restoredGarageId !== null && realGarageIds.has(restoredGarageId)
           const restoredRealGarage = isRestoredRealGarage ? garageOptions.find((garage) => garage.id === restoredGarageId) ?? null : null
+          selectedGarageIdRef.current = isRestoredRealGarage ? restoredGarageId : null
           setSelectedGarageId(isRestoredRealGarage ? restoredGarageId : null)
           setSelectedGarageIds(restoredGarageIds)
           setIncomeWorksheetMonthFrom(restoredMonthFrom)
@@ -3582,14 +3586,26 @@ function PaymentsPrototypePanel({
     garage: PaymentsPrototypeGarage,
     monthFrom = incomeWorksheetMonthFrom,
     monthTo = incomeWorksheetMonthTo,
+    preservedMeter?: Pick<GarageIncomePrototypeRow, 'meterKind' | 'month' | 'meterDraft' | 'meterError'>,
   ) {
+    const requestId = incomeWorksheetRequests.begin()
     setGarageWorksheetLoadingId(garage.id)
     try {
       const worksheet = await financeClient.getGarageIncomeWorksheet(auth.accessToken, garage.id, {
         monthFrom: `${monthFrom}-01`,
         monthTo: `${monthTo}-01`,
       })
-      const rows = createGarageIncomeRowsFromWorksheet(worksheet)
+      if (!incomeWorksheetRequests.isLatest(requestId) || selectedGarageIdRef.current !== garage.id) {
+        return
+      }
+
+      const rows = createGarageIncomeRowsFromWorksheet(worksheet).map((worksheetRow) => (
+        preservedMeter
+        && worksheetRow.meterKind === preservedMeter.meterKind
+        && worksheetRow.month === preservedMeter.month
+          ? { ...worksheetRow, meterDraft: preservedMeter.meterDraft, meterError: preservedMeter.meterError }
+          : worksheetRow
+      ))
       setGarageRows(rows)
       setGarageWorksheetSummary({
         openingDebt: worksheet.openingDebt,
@@ -3598,9 +3614,13 @@ function PaymentsPrototypePanel({
         closingDebt: worksheet.closingDebt,
       })
     } catch (error) {
-      setPaymentError(error instanceof Error ? error.message : 'Не удалось загрузить форму поступлений гаража.')
+      if (incomeWorksheetRequests.isLatest(requestId) && selectedGarageIdRef.current === garage.id) {
+        setPaymentError(error instanceof Error ? error.message : 'Не удалось загрузить форму поступлений гаража.')
+      }
     } finally {
-      setGarageWorksheetLoadingId((currentId) => (currentId === garage.id ? null : currentId))
+      if (incomeWorksheetRequests.isLatest(requestId) && selectedGarageIdRef.current === garage.id) {
+        setGarageWorksheetLoadingId((currentId) => (currentId === garage.id ? null : currentId))
+      }
     }
   }
 
@@ -3788,6 +3808,7 @@ function PaymentsPrototypePanel({
   }
 
   function activateGarage(garage: PaymentsPrototypeGarage) {
+    selectedGarageIdRef.current = garage.id
     setSelectedGarageId(garage.id)
     setGarageRows([])
     setGarageWorksheetSummary(null)
@@ -3806,6 +3827,8 @@ function PaymentsPrototypePanel({
       if (nextGarage) {
         activateGarage(nextGarage)
       } else {
+        selectedGarageIdRef.current = null
+        incomeWorksheetRequests.invalidate()
         setSelectedGarageId(null)
         setGarageRows([])
         setGarageWorksheetSummary(null)
@@ -3825,6 +3848,8 @@ function PaymentsPrototypePanel({
   }
 
   function clearGarageSelection() {
+    selectedGarageIdRef.current = null
+    incomeWorksheetRequests.invalidate()
     setSelectedGarageIds([])
     setSelectedGarageId(null)
     setGarageRows([])
@@ -3911,6 +3936,10 @@ function PaymentsPrototypePanel({
         meterReadingId: row.meterReadingId ?? undefined,
         expectedVersion: row.meterReadingVersion ?? undefined,
       })
+      if (selectedGarageIdRef.current !== selectedGarage.id) {
+        return
+      }
+
       setGarageRows((currentRows) => currentRows.map((currentRow) => currentRow.id === row.id
         ? {
             ...currentRow,
@@ -3926,11 +3955,24 @@ function PaymentsPrototypePanel({
         : currentRow))
       await loadGarageIncomeWorksheet(selectedGarage)
     } catch (error) {
+      if (selectedGarageIdRef.current !== selectedGarage.id) {
+        return
+      }
+
+      const meterError = error instanceof Error ? error.message : 'Не удалось сохранить показание. Повторите попытку.'
       setGarageRows((currentRows) => currentRows.map((currentRow) => currentRow.id === row.id
-        ? { ...currentRow, meterError: error instanceof Error ? error.message : 'Не удалось сохранить показание. Повторите попытку.' }
+        ? { ...currentRow, meterError }
         : currentRow))
+      if (error instanceof FinanceApiError && error.code === 'meter_reading_conflict') {
+        await loadGarageIncomeWorksheet(selectedGarage, incomeWorksheetMonthFrom, incomeWorksheetMonthTo, {
+          meterKind: row.meterKind,
+          month: row.month,
+          meterDraft: row.meterDraft,
+          meterError,
+        })
+      }
     } finally {
-      setSavingMeterRowId(null)
+      setSavingMeterRowId((currentRowId) => (currentRowId === row.id ? null : currentRowId))
     }
   }
 
@@ -4982,14 +5024,18 @@ function PaymentsPrototypePanel({
                                   <button
                                     type="button"
                                     className="icon-button payments-prototype-meter-save"
-                                    aria-label={`Сохранить показание ${row.service} ${row.monthLabel}`}
-                                    title="Сохранить показание"
+                                    aria-label={savingMeterRowId === row.id ? `Сохраняется показание ${row.service} ${row.monthLabel}` : `Сохранить показание ${row.service} ${row.monthLabel}`}
+                                    title={savingMeterRowId === row.id ? 'Сохраняется показание' : 'Сохранить показание'}
                                     disabled={savingMeterRowId === row.id}
                                     onClick={() => void commitGarageMeterReading(row)}
                                   >
-                                    <Save size={14} aria-hidden="true" />
+                                    {savingMeterRowId === row.id
+                                      ? <LoaderCircle className="payments-prototype-meter-spinner" size={14} aria-hidden="true" />
+                                      : <Save size={14} aria-hidden="true" />}
                                   </button>
-                                  {row.meterError ? <span className="payments-prototype-meter-error" role="alert">{row.meterError}</span> : null}
+                                  {savingMeterRowId === row.id
+                                    ? <span className="payments-prototype-meter-status" role="status" aria-live="polite">Сохраняем показание…</span>
+                                    : row.meterError ? <span className="payments-prototype-meter-error" role="alert">{row.meterError}</span> : null}
                                 </div>
                               ) : row.meter === null ? '' : row.meter.toLocaleString('ru-RU', { maximumFractionDigits: 3 })}
                               {row.meterRequired && row.meter === null ? (
