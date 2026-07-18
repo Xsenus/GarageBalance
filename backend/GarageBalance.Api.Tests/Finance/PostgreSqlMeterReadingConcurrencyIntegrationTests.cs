@@ -137,6 +137,15 @@ public sealed class PostgreSqlMeterReadingConcurrencyIntegrationTests
         Assert.Equal("meter_reading_current_month_required", ordinaryFutureUpdate.ErrorCode);
         Assert.True(corrected.Succeeded, corrected.ErrorMessage);
         Assert.Equal(18m, corrected.Value!.CurrentValue);
+        context.ChangeTracker.Clear();
+        var persistedReadings = await context.MeterReadings
+            .OrderBy(item => item.AccountingMonth)
+            .ToListAsync();
+        Assert.Collection(
+            persistedReadings,
+            item => Assert.Equal(18m, item.CurrentValue),
+            item => Assert.Equal(25m, item.CurrentValue));
+        Assert.DoesNotContain(await context.AuditEvents.ToListAsync(), item => item.Action == "finance.meter_reading_updated");
         var audit = await context.AuditEvents.SingleAsync(item => item.Action == "finance.meter_reading_historical_updated");
         Assert.Equal(actorUserId, audit.ActorUserId);
         using var metadata = JsonDocument.Parse(audit.MetadataJson!);

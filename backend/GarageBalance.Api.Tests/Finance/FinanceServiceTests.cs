@@ -3910,6 +3910,10 @@ public sealed class FinanceServiceTests
         Assert.Equal(21m, currentUpdate.Value!.CurrentValue);
         Assert.False(futureUpdate.Succeeded);
         Assert.Equal("meter_reading_current_month_required", futureUpdate.ErrorCode);
+        Assert.Equal(15m, database.Context.MeterReadings.Single(item => item.Id == past.Value.Id).CurrentValue);
+        Assert.Equal(25m, database.Context.MeterReadings.Single(item => item.Id == future.Value.Id).CurrentValue);
+        var updateAudit = Assert.Single(database.Context.AuditEvents, item => item.Action == "finance.meter_reading_updated");
+        Assert.Contains("за 07.2026", updateAudit.Summary, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -3986,6 +3990,9 @@ public sealed class FinanceServiceTests
         Assert.Equal("meter_reading_historical_month_required", currentResult.ErrorCode);
         Assert.False(futureResult.Succeeded);
         Assert.Equal("meter_reading_historical_month_required", futureResult.ErrorCode);
+        Assert.Equal(110m, database.Context.MeterReadings.Single(item => item.Id == current.Value.Id).CurrentValue);
+        Assert.Equal(120m, database.Context.MeterReadings.Single(item => item.Id == future.Value.Id).CurrentValue);
+        Assert.DoesNotContain(database.Context.AuditEvents, item => item.Action == "finance.meter_reading_historical_updated");
     }
 
     [Fact]
