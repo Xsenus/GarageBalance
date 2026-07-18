@@ -162,6 +162,8 @@ public sealed class BackendPerformanceGuardTests
         Assert.Contains(".Skip(offset)", source, StringComparison.Ordinal);
         Assert.True(CountOccurrences(source, ".Take(limit)") >= 4);
         Assert.True(CountOccurrences(source, ".GroupBy(") >= 2);
+        Assert.Contains("GetActiveIdsAsync", source, StringComparison.Ordinal);
+        Assert.Contains(".Select(garage => garage.Id)", source, StringComparison.Ordinal);
         var balanceMethod = source[
             source.IndexOf("public async Task<GarageBalanceTotalsData> GetBalanceTotalsAsync", StringComparison.Ordinal)..source.IndexOf("public Task<Garage?> FindActiveWithOwnerAsync", StringComparison.Ordinal)];
         Assert.Contains("accrualQuery", balanceMethod, StringComparison.Ordinal);
@@ -236,6 +238,9 @@ public sealed class BackendPerformanceGuardTests
         Assert.Contains("GetTotalBeforeMonthAsync", source, StringComparison.Ordinal);
         Assert.Contains("GetTotalThroughMonthAsync", source, StringComparison.Ordinal);
         Assert.Contains("GetActiveGarageIdsAsync", source, StringComparison.Ordinal);
+        Assert.Contains("CountActiveAnnualRegularForGenerationAsync", source, StringComparison.Ordinal);
+        Assert.Contains("GetActiveAnnualRegularGarageIdsAsync", source, StringComparison.Ordinal);
+        Assert.Contains(".Distinct()", source, StringComparison.Ordinal);
         Assert.Contains("ToHashSetAsync(cancellationToken)", source, StringComparison.Ordinal);
         Assert.Contains(".SumAsync(accrual => accrual.Amount", source, StringComparison.Ordinal);
         Assert.Contains("GetMonthlyBucketsAsync", source, StringComparison.Ordinal);

@@ -1,3 +1,4 @@
+using GarageBalance.Api.Application.Dictionaries;
 using GarageBalance.Api.Application.Finance;
 using GarageBalance.Api.Domain.Dictionaries;
 using GarageBalance.Api.Domain.Finance;
@@ -8,6 +9,84 @@ namespace GarageBalance.Api.Tests.Finance;
 
 public sealed class PostgreSqlAnnualAccrualIntegrationTests
 {
+    [PostgreSqlFact]
+    public async Task AnnualRegularGeneration_SerializesConcurrentMonthsAndKeepsGarageHistoryAfterOwnerChange()
+    {
+        await using var database = await PostgreSqlTestDatabase.CreateAsync();
+        Guid garageId;
+        Guid membershipId;
+        Guid tariffId;
+        await using (var setupContext = database.CreateContext())
+        {
+            var membership = await setupContext.IncomeTypes.SingleAsync(item => item.Code == "membership" && !item.IsArchived);
+            var originalOwner = new Owner { LastName = "Первый", FirstName = "Владелец" };
+            var garage = new Garage { Number = "PG-ANNUAL-IDEMPOTENT", PeopleCount = 1, FloorCount = 1, Owner = originalOwner };
+            var tariff = new Tariff
+            {
+                Name = "PG годовой членский тариф",
+                CalculationBase = TariffCalculationBases.Fixed,
+                Rate = 700m,
+                EffectiveFrom = new DateOnly(2026, 1, 1)
+            };
+            setupContext.AddRange(garage, tariff);
+            await setupContext.SaveChangesAsync();
+            garageId = garage.Id;
+            membershipId = membership.Id;
+            tariffId = tariff.Id;
+        }
+
+        await using var januaryContext = database.CreateContext();
+        await using var julyContext = database.CreateContext();
+        var januaryTask = FinanceServiceTestFactory.Create(januaryContext).GenerateRegularAccrualsAsync(
+            new GenerateRegularAccrualsRequest(membershipId, tariffId, new DateOnly(2026, 1, 1), "Январский запуск"),
+            null,
+            CancellationToken.None);
+        var julyTask = FinanceServiceTestFactory.Create(julyContext).GenerateRegularAccrualsAsync(
+            new GenerateRegularAccrualsRequest(membershipId, tariffId, new DateOnly(2026, 7, 1), "Повторный запуск"),
+            null,
+            CancellationToken.None);
+        var generationResults = await Task.WhenAll(januaryTask, julyTask);
+        Assert.Single(generationResults, result => result.Succeeded);
+        var duplicate = Assert.Single(generationResults, result => !result.Succeeded);
+        Assert.Equal("regular_accruals_empty", duplicate.ErrorCode);
+
+        await using var verificationContext = database.CreateContext();
+        var annualAccrual = Assert.Single(await verificationContext.Accruals
+            .Where(item => item.GarageId == garageId && item.AccountingYear == 2026 && item.Source == AccrualSources.Regular)
+            .ToListAsync());
+        var originalAccrualId = annualAccrual.Id;
+        var replacementOwner = new Owner { LastName = "Новый", FirstName = "Владелец" };
+        verificationContext.Owners.Add(replacementOwner);
+        await verificationContext.SaveChangesAsync();
+        var currentGarage = await verificationContext.Garages.AsNoTracking().SingleAsync(item => item.Id == garageId);
+        var ownerChange = await DictionaryServiceTestFactory.Create(verificationContext).UpdateGarageAsync(
+            garageId,
+            new UpsertGarageRequest(
+                currentGarage.Number,
+                currentGarage.PeopleCount,
+                currentGarage.FloorCount,
+                replacementOwner.Id,
+                currentGarage.StartingBalance,
+                currentGarage.InitialWaterMeterValue,
+                currentGarage.InitialElectricityMeterValue,
+                currentGarage.Comment),
+            null,
+            CancellationToken.None);
+        Assert.True(ownerChange.Succeeded, ownerChange.ErrorMessage);
+
+        var financeService = FinanceServiceTestFactory.Create(verificationContext);
+        var worksheet = await financeService.GetGarageIncomeWorksheetAsync(
+            garageId,
+            new GarageIncomeWorksheetRequest(new DateOnly(2026, 1, 1), new DateOnly(2026, 12, 1)),
+            CancellationToken.None);
+        Assert.True(worksheet.Succeeded, worksheet.ErrorMessage);
+        Assert.Equal("Новый Владелец", worksheet.Value!.OwnerName);
+        Assert.Contains(worksheet.Value.Rows, row => row.AnnualAccrualId == originalAccrualId);
+        Assert.Equal(1, await verificationContext.Accruals.CountAsync(item =>
+            item.GarageId == garageId && item.AccountingYear == 2026 && item.Source == AccrualSources.Regular));
+        Assert.Contains(verificationContext.AuditEvents, item => item.Action == "dictionary.garage_updated");
+    }
+
     [PostgreSqlFact]
     public async Task AnnualAccruals_PersistAccountingYearAndDatabaseRejectsInvalidYear()
     {

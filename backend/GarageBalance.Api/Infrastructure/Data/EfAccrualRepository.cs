@@ -221,21 +221,53 @@ public sealed class EfAccrualRepository(GarageBalanceDbContext dbContext) : IAcc
             accrual.Source == source,
             cancellationToken);
 
+    public Task<int> CountActiveAnnualRegularForGenerationAsync(
+        Guid incomeTypeId,
+        int accountingYear,
+        CancellationToken cancellationToken) =>
+        dbContext.Accruals.AsNoTracking()
+            .Where(accrual =>
+                !accrual.IsCanceled &&
+                !accrual.Garage.IsArchived &&
+                accrual.IncomeTypeId == incomeTypeId &&
+                accrual.AccountingYear == accountingYear &&
+                accrual.Source == AccrualSources.Regular)
+            .Select(accrual => accrual.GarageId)
+            .Distinct()
+            .CountAsync(cancellationToken);
+
+    public async Task<IReadOnlySet<Guid>> GetActiveAnnualRegularGarageIdsAsync(
+        Guid incomeTypeId,
+        int accountingYear,
+        CancellationToken cancellationToken) =>
+        await dbContext.Accruals.AsNoTracking()
+            .Where(accrual =>
+                !accrual.IsCanceled &&
+                accrual.IncomeTypeId == incomeTypeId &&
+                accrual.AccountingYear == accountingYear &&
+                accrual.Source == AccrualSources.Regular)
+            .Select(accrual => accrual.GarageId)
+            .ToHashSetAsync(cancellationToken);
+
     public Task<bool> ActiveDuplicateExistsAsync(
         Guid? ignoredId,
         Guid garageId,
         Guid incomeTypeId,
         DateOnly accountingMonth,
+        int? accountingYear,
         string source,
-        CancellationToken cancellationToken) =>
-        dbContext.Accruals.AsNoTracking().AnyAsync(accrual =>
+        CancellationToken cancellationToken)
+    {
+        var query = dbContext.Accruals.AsNoTracking().Where(accrual =>
             !accrual.IsCanceled &&
             (!ignoredId.HasValue || accrual.Id != ignoredId.Value) &&
             accrual.GarageId == garageId &&
             accrual.IncomeTypeId == incomeTypeId &&
-            accrual.AccountingMonth == accountingMonth &&
-            accrual.Source == source,
-            cancellationToken);
+            accrual.Source == source);
+        return source == AccrualSources.Regular && accountingYear.HasValue
+            ? query.AnyAsync(accrual => accrual.AccountingYear == accountingYear.Value, cancellationToken)
+            : query.AnyAsync(accrual => accrual.AccountingMonth == accountingMonth, cancellationToken);
+    }
 
     public async Task<decimal> GetTotalThroughMonthAsync(Guid garageId, DateOnly accountingMonth, CancellationToken cancellationToken) =>
         await dbContext.Accruals.AsNoTracking()

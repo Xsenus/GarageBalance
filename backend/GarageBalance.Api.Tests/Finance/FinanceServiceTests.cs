@@ -1318,6 +1318,7 @@ public sealed class FinanceServiceTests
         var commandCounter = new SelectCommandCounter();
         await using var database = await TestDatabase.CreateAsync(commandCounter);
         var fixtures = await database.SeedAsync();
+        fixtures.IncomeType.Code = "connection";
         fixtures.Garage.StartingBalance = 100m;
         database.Context.Accruals.Add(new Accrual
         {
@@ -2465,6 +2466,60 @@ public sealed class FinanceServiceTests
     }
 
     [Fact]
+    public async Task AnnualRegularAccrualDuplicateValidation_UsesAccountingYearForCreateUpdateAndRestore()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        fixtures.IncomeType.Code = "membership";
+        await database.Context.SaveChangesAsync();
+        var service = FinanceServiceTestFactory.Create(database.Context);
+        var first = await service.CreateAccrualAsync(
+            new CreateAccrualRequest(fixtures.Garage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 1, 1), 700m, "regular", null),
+            null,
+            CancellationToken.None);
+        Assert.True(first.Succeeded, first.ErrorMessage);
+
+        var duplicateCreate = await service.CreateAccrualAsync(
+            new CreateAccrualRequest(fixtures.Garage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 7, 1), 800m, "regular", null),
+            null,
+            CancellationToken.None);
+        Assert.False(duplicateCreate.Succeeded);
+        Assert.Equal("accrual_duplicate", duplicateCreate.ErrorCode);
+        Assert.Contains("за 2026 год", duplicateCreate.ErrorMessage, StringComparison.Ordinal);
+
+        var nextYear = await service.CreateAccrualAsync(
+            new CreateAccrualRequest(fixtures.Garage.Id, fixtures.IncomeType.Id, new DateOnly(2027, 1, 1), 900m, "regular", null),
+            null,
+            CancellationToken.None);
+        Assert.True(nextYear.Succeeded, nextYear.ErrorMessage);
+        var duplicateUpdate = await service.UpdateAccrualAsync(
+            nextYear.Value!.Id,
+            new CreateAccrualRequest(fixtures.Garage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 8, 1), 900m, "regular", "Исправление года"),
+            null,
+            CancellationToken.None);
+        Assert.False(duplicateUpdate.Succeeded);
+        Assert.Equal("accrual_duplicate", duplicateUpdate.ErrorCode);
+        Assert.Contains("за 2026 год", duplicateUpdate.ErrorMessage, StringComparison.Ordinal);
+
+        var canceled = await service.CancelAccrualAsync(
+            first.Value!.Id,
+            new CancelFinanceEntryRequest("Заменили начисление"),
+            null,
+            CancellationToken.None);
+        Assert.True(canceled.Succeeded, canceled.ErrorMessage);
+        var replacement = await service.CreateAccrualAsync(
+            new CreateAccrualRequest(fixtures.Garage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 9, 1), 750m, "regular", null),
+            null,
+            CancellationToken.None);
+        Assert.True(replacement.Succeeded, replacement.ErrorMessage);
+
+        var duplicateRestore = await service.RestoreAccrualAsync(first.Value.Id, null, CancellationToken.None);
+        Assert.False(duplicateRestore.Succeeded);
+        Assert.Equal("accrual_duplicate", duplicateRestore.ErrorCode);
+        Assert.Contains("за 2026 год", duplicateRestore.ErrorMessage, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task CreateAccrualAsync_AllowsReplacementAfterCancel()
     {
         await using var database = await TestDatabase.CreateAsync();
@@ -3013,6 +3068,130 @@ public sealed class FinanceServiceTests
     }
 
     [Fact]
+    public async Task GenerateRegularAccrualsAsync_DoesNotDuplicateAnnualObligationAcrossMonthsOrOwnerChange()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        fixtures.IncomeType.Code = "membership";
+        var tariff = new Tariff
+        {
+            Name = "Годовой членский тариф",
+            CalculationBase = TariffCalculationBases.Fixed,
+            Rate = 700m,
+            EffectiveFrom = new DateOnly(2026, 1, 1)
+        };
+        database.Context.Tariffs.Add(tariff);
+        await database.Context.SaveChangesAsync();
+        var financeService = FinanceServiceTestFactory.Create(database.Context);
+
+        var firstGeneration = await financeService.GenerateRegularAccrualsAsync(
+            new GenerateRegularAccrualsRequest(fixtures.IncomeType.Id, tariff.Id, new DateOnly(2026, 1, 1), "Первое формирование"),
+            null,
+            CancellationToken.None);
+        Assert.True(firstGeneration.Succeeded, firstGeneration.ErrorMessage);
+        var originalAccrual = Assert.Single(database.Context.Accruals);
+        var originalAccrualId = originalAccrual.Id;
+
+        var replacementOwner = new Owner { LastName = "Новый", FirstName = "Владелец" };
+        database.Context.Owners.Add(replacementOwner);
+        await database.Context.SaveChangesAsync();
+        var ownerChange = await DictionaryServiceTestFactory.Create(database.Context).UpdateGarageAsync(
+            fixtures.Garage.Id,
+            new UpsertGarageRequest(
+                fixtures.Garage.Number,
+                fixtures.Garage.PeopleCount,
+                fixtures.Garage.FloorCount,
+                replacementOwner.Id,
+                fixtures.Garage.StartingBalance,
+                fixtures.Garage.InitialWaterMeterValue,
+                fixtures.Garage.InitialElectricityMeterValue,
+                fixtures.Garage.Comment),
+            null,
+            CancellationToken.None);
+        Assert.True(ownerChange.Succeeded, ownerChange.ErrorMessage);
+
+        var repeatedGeneration = await financeService.GenerateRegularAccrualsAsync(
+            new GenerateRegularAccrualsRequest(fixtures.IncomeType.Id, tariff.Id, new DateOnly(2026, 7, 1), "Повторное формирование"),
+            null,
+            CancellationToken.None);
+        Assert.False(repeatedGeneration.Succeeded);
+        Assert.Equal("regular_accruals_empty", repeatedGeneration.ErrorCode);
+        Assert.Contains("за 2026 год уже сформированы", repeatedGeneration.ErrorMessage, StringComparison.Ordinal);
+        var accrualAfterOwnerChange = Assert.Single(database.Context.Accruals);
+        Assert.Equal(originalAccrualId, accrualAfterOwnerChange.Id);
+        Assert.Equal(fixtures.Garage.Id, accrualAfterOwnerChange.GarageId);
+
+        var worksheet = await financeService.GetGarageIncomeWorksheetAsync(
+            fixtures.Garage.Id,
+            new GarageIncomeWorksheetRequest(new DateOnly(2026, 1, 1), new DateOnly(2026, 12, 1)),
+            CancellationToken.None);
+        Assert.True(worksheet.Succeeded, worksheet.ErrorMessage);
+        Assert.Equal("Новый Владелец", worksheet.Value!.OwnerName);
+        Assert.Contains(worksheet.Value.Rows, row => row.AnnualAccrualId == originalAccrualId);
+
+        var nextYearGeneration = await financeService.GenerateRegularAccrualsAsync(
+            new GenerateRegularAccrualsRequest(fixtures.IncomeType.Id, tariff.Id, new DateOnly(2027, 1, 1), "Новый учетный год"),
+            null,
+            CancellationToken.None);
+        Assert.True(nextYearGeneration.Succeeded, nextYearGeneration.ErrorMessage);
+        Assert.Equal(2, database.Context.Accruals.Count());
+        Assert.Equal([2026, 2027], database.Context.Accruals.OrderBy(item => item.AccountingYear).Select(item => item.AccountingYear!.Value).ToArray());
+    }
+
+    [Fact]
+    public async Task GenerateRegularAccrualsAsync_CreatesAnnualObligationForMissingGarageDespiteHistoricalDuplicates()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        fixtures.IncomeType.Code = "membership";
+        var secondGarage = new Garage { Number = "13", PeopleCount = 1, FloorCount = 1 };
+        var tariff = new Tariff
+        {
+            Name = "Годовой членский тариф",
+            CalculationBase = TariffCalculationBases.Fixed,
+            Rate = 700m,
+            EffectiveFrom = new DateOnly(2026, 1, 1)
+        };
+        database.Context.AddRange(secondGarage, tariff);
+        database.Context.Accruals.AddRange(
+            new Accrual
+            {
+                GarageId = fixtures.Garage.Id,
+                IncomeTypeId = fixtures.IncomeType.Id,
+                AccountingMonth = new DateOnly(2026, 1, 1),
+                AccountingYear = 2026,
+                DueDate = new DateOnly(2026, 6, 30),
+                OverdueFromDate = new DateOnly(2026, 7, 31),
+                Amount = 700m,
+                Source = AccrualSources.Regular
+            },
+            new Accrual
+            {
+                GarageId = fixtures.Garage.Id,
+                IncomeTypeId = fixtures.IncomeType.Id,
+                AccountingMonth = new DateOnly(2026, 7, 1),
+                AccountingYear = 2026,
+                DueDate = new DateOnly(2026, 6, 30),
+                OverdueFromDate = new DateOnly(2026, 7, 31),
+                Amount = 700m,
+                Source = AccrualSources.Regular
+            });
+        await database.Context.SaveChangesAsync();
+        var service = FinanceServiceTestFactory.Create(database.Context);
+
+        var result = await service.GenerateRegularAccrualsAsync(
+            new GenerateRegularAccrualsRequest(fixtures.IncomeType.Id, tariff.Id, new DateOnly(2026, 9, 1), null),
+            null,
+            CancellationToken.None);
+
+        Assert.True(result.Succeeded, result.ErrorMessage);
+        Assert.Equal(1, result.Value!.CreatedCount);
+        Assert.Equal(secondGarage.Id, Assert.Single(result.Value.CreatedAccruals).GarageId);
+        Assert.Equal(2, database.Context.Accruals.Count(item => item.GarageId == fixtures.Garage.Id));
+        Assert.Equal(1, database.Context.Accruals.Count(item => item.GarageId == secondGarage.Id));
+    }
+
+    [Fact]
     public async Task RegularAccrualAutomationRunner_CreatesCurrentBusinessMonthWithoutDuplicates()
     {
         await using var database = await TestDatabase.CreateAsync();
@@ -3250,6 +3429,7 @@ public sealed class FinanceServiceTests
     {
         await using var database = await TestDatabase.CreateAsync();
         var fixtures = await database.SeedAsync();
+        fixtures.IncomeType.Code = "connection";
         var tariff = new Tariff { Name = "Членский тариф", CalculationBase = "fixed", Rate = 300m, EffectiveFrom = new DateOnly(2026, 1, 1) };
         database.Context.Tariffs.Add(tariff);
         await database.Context.SaveChangesAsync();

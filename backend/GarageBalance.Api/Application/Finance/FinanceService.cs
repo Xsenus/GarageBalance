@@ -1432,10 +1432,14 @@ public sealed class FinanceService(
             accrual.GarageId,
             accrual.IncomeTypeId,
             accrual.AccountingMonth,
+            accrual.AccountingYear,
             accrual.Source,
             cancellationToken))
         {
-            return FinanceResult<AccrualDto>.Failure("accrual_duplicate", "Такое начисление за месяц уже внесено.");
+            var duplicateMessage = accrual.Source == AccrualSources.Regular && accrual.AccountingYear.HasValue
+                ? $"Регулярное годовое начисление за {accrual.AccountingYear.Value} год уже активно."
+                : "Такое начисление за месяц уже внесено.";
+            return FinanceResult<AccrualDto>.Failure("accrual_duplicate", duplicateMessage);
         }
 
         accrual.IsCanceled = false;
@@ -1477,9 +1481,13 @@ public sealed class FinanceService(
         }
 
         var month = MonthPeriod.Normalize(request.AccountingMonth);
-        if (await accrualRepository.ActiveDuplicateExistsAsync(null, garage.Id, incomeType.Id, month, source, cancellationToken))
+        var accountingYear = AnnualAccrualPolicy.ResolveAccountingYear(incomeType.Code, month);
+        if (await accrualRepository.ActiveDuplicateExistsAsync(null, garage.Id, incomeType.Id, month, accountingYear, source, cancellationToken))
         {
-            return FinanceResult<AccrualDto>.Failure("accrual_duplicate", "Такое начисление за месяц уже внесено.");
+            var duplicateMessage = source == AccrualSources.Regular && accountingYear.HasValue
+                ? $"Регулярное годовое начисление за {accountingYear.Value} год уже внесено."
+                : "Такое начисление за месяц уже внесено.";
+            return FinanceResult<AccrualDto>.Failure("accrual_duplicate", duplicateMessage);
         }
 
         var dueDates = AccrualDueDates.ForChargeService(month, null);
@@ -1490,7 +1498,7 @@ public sealed class FinanceService(
             IncomeTypeId = incomeType.Id,
             IncomeType = incomeType,
             AccountingMonth = month,
-            AccountingYear = AnnualAccrualPolicy.ResolveAccountingYear(incomeType.Code, month),
+            AccountingYear = accountingYear,
             DueDate = dueDates.DueDate,
             OverdueFromDate = dueDates.OverdueFromDate,
             Amount = MoneyMath.RoundMoney(request.Amount),
@@ -1646,20 +1654,24 @@ public sealed class FinanceService(
         }
 
         var month = MonthPeriod.Normalize(request.AccountingMonth);
+        var accountingYear = AnnualAccrualPolicy.ResolveAccountingYear(incomeType.Code, month);
         if (await accrualRepository.ActiveDuplicateExistsAsync(
             accrual.Id,
             garage.Id,
             incomeType.Id,
             month,
+            accountingYear,
             source,
             cancellationToken))
         {
-            return FinanceResult<AccrualDto>.Failure("accrual_duplicate", "Такое начисление за месяц уже внесено.");
+            var duplicateMessage = source == AccrualSources.Regular && accountingYear.HasValue
+                ? $"Регулярное годовое начисление за {accountingYear.Value} год уже внесено."
+                : "Такое начисление за месяц уже внесено.";
+            return FinanceResult<AccrualDto>.Failure("accrual_duplicate", duplicateMessage);
         }
 
         var amount = MoneyMath.RoundMoney(request.Amount);
         var comment = NormalizeOptional(request.Comment);
-        var accountingYear = AnnualAccrualPolicy.ResolveAccountingYear(incomeType.Code, month);
         if (!accrual.DueDateNeedsReview && AccrualMatches(accrual, garage.Id, incomeType.Id, month, accountingYear, amount, source, comment))
         {
             return FinanceResult<AccrualDto>.Success(ToDto(accrual));
@@ -1950,31 +1962,54 @@ public sealed class FinanceService(
                 setting.TariffId == tariff.Id &&
                 IsChargeServiceDueForMonth(setting, month));
         var dueDates = AccrualDueDates.ForChargeService(month, matchingSetting);
+        var accountingYear = AnnualAccrualPolicy.ResolveAccountingYear(incomeType.Code, month);
+        var activeAnnualGarageIds = accountingYear.HasValue
+            ? await garageRepository.GetActiveIdsAsync(cancellationToken)
+            : null;
+        await using var annualGenerationLock = accountingYear.HasValue
+            ? await accrualPaymentAllocationRepository.AcquireRebuildLockAsync(
+                activeAnnualGarageIds!
+                    .Select(garageId => new AccrualPaymentAllocationKey(garageId, incomeType.Id))
+                    .ToArray(),
+                cancellationToken)
+            : null;
 
-        var existingAccrualCount = await accrualRepository.CountActiveForGenerationAsync(
-            incomeType.Id,
-            month,
-            AccrualSources.Regular,
-            cancellationToken);
+        var existingAccrualCount = accountingYear.HasValue
+            ? await accrualRepository.CountActiveAnnualRegularForGenerationAsync(
+                incomeType.Id,
+                accountingYear.Value,
+                cancellationToken)
+            : await accrualRepository.CountActiveForGenerationAsync(
+                incomeType.Id,
+                month,
+                AccrualSources.Regular,
+                cancellationToken);
         if (existingAccrualCount > 0)
         {
-            var activeGarageCount = await garageRepository.CountActiveAsync(cancellationToken);
+            var activeGarageCount = activeAnnualGarageIds?.Count
+                ?? await garageRepository.CountActiveAsync(cancellationToken);
             if (activeGarageCount > 0 && existingAccrualCount >= activeGarageCount)
             {
+                var periodLabel = accountingYear.HasValue ? $"за {accountingYear.Value} год" : $"за {month:MM.yyyy}";
                 return FinanceResult<RegularAccrualGenerationResultDto>.Failure(
                     "regular_accruals_empty",
-                    $"Регулярные начисления за {month:MM.yyyy} уже сформированы для всех активных гаражей ({activeGarageCount}).");
+                    $"Регулярные начисления {periodLabel} уже сформированы для всех активных гаражей ({activeGarageCount}).");
             }
         }
 
         var garages = await garageRepository.GetAllActiveWithOwnerAsync(cancellationToken);
         IReadOnlySet<Guid> existingGarageIds = existingAccrualCount == 0
             ? new HashSet<Guid>()
-            : await accrualRepository.GetActiveGarageIdsAsync(
-                incomeType.Id,
-                month,
-                AccrualSources.Regular,
-                cancellationToken);
+            : accountingYear.HasValue
+                ? await accrualRepository.GetActiveAnnualRegularGarageIdsAsync(
+                    incomeType.Id,
+                    accountingYear.Value,
+                    cancellationToken)
+                : await accrualRepository.GetActiveGarageIdsAsync(
+                    incomeType.Id,
+                    month,
+                    AccrualSources.Regular,
+                    cancellationToken);
         var pendingGarageIds = garages
             .Where(garage => !existingGarageIds.Contains(garage.Id))
             .Select(garage => garage.Id)
@@ -1995,7 +2030,8 @@ public sealed class FinanceService(
         {
             if (existingGarageIds.Contains(garage.Id))
             {
-                skipped.Add($"Гараж {garage.Number}: регулярное начисление уже есть.");
+                var periodLabel = accountingYear.HasValue ? $" за {accountingYear.Value} год" : null;
+                skipped.Add($"Гараж {garage.Number}: регулярное начисление{periodLabel} уже есть.");
                 continue;
             }
 
@@ -2023,7 +2059,7 @@ public sealed class FinanceService(
                 TariffId = tariff.Id,
                 Tariff = tariff,
                 AccountingMonth = month,
-                AccountingYear = AnnualAccrualPolicy.ResolveAccountingYear(incomeType.Code, month),
+                AccountingYear = accountingYear,
                 DueDate = dueDates.DueDate,
                 OverdueFromDate = dueDates.OverdueFromDate,
                 Amount = amount,
