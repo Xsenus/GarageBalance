@@ -11,6 +11,7 @@ public interface IExpenseReportQuery
         string? search,
         int? limit,
         int offset,
+        ReportSort sort,
         CancellationToken cancellationToken);
 }
 

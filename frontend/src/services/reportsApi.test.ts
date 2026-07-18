@@ -63,6 +63,45 @@ describe('reportsApi', () => {
     expect(fetchMock).toHaveBeenNthCalledWith(6, '/api/reports/fund-changes?dateFrom=2026-06-01&dateTo=2026-06-30&offset=20&limit=20', getRequest())
     expect(fetchMock).toHaveBeenNthCalledWith(7, '/api/reports/garages?monthFrom=2026-06-01&monthTo=2026-07-01&search=12&groupAccruals=true&offset=20&limit=20', getRequest())
   })
+
+  it('forwards the same report sorting to screen and export requests', async () => {
+    const fetchMock = vi.fn().mockImplementation(() => Promise.resolve(new Response('{}', { status: 200, headers: { 'Content-Type': 'application/json' } })))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await reportsApi.getConsolidatedReport('token', { sortBy: 'balance', sortDirection: 'asc' })
+    await reportsApi.exportConsolidatedReportXlsx('token', { sortBy: 'balance', sortDirection: 'asc' })
+    await reportsApi.getGarageReport('token', { sortBy: 'garageNumber', sortDirection: 'desc' })
+    await reportsApi.getIncomeReport('token', { sortBy: 'incomeAmount', sortDirection: 'asc' })
+    await reportsApi.exportIncomeReportXlsx('token', { sortBy: 'incomeAmount', sortDirection: 'asc' })
+    await reportsApi.getExpenseReport('token', { sortBy: 'expenseAmount', sortDirection: 'desc' })
+    await reportsApi.exportExpenseReportXlsx('token', { sortBy: 'expenseAmount', sortDirection: 'desc' })
+    await reportsApi.getCashPaymentReport('token', { sortBy: 'hasReceipt', sortDirection: 'asc' })
+    await reportsApi.exportCashPaymentReportXlsx('token', { sortBy: 'hasReceipt', sortDirection: 'asc' })
+    await reportsApi.getBankDepositReport('token', { sortBy: 'fundName', sortDirection: 'desc' })
+    await reportsApi.exportBankDepositReportXlsx('token', { sortBy: 'fundName', sortDirection: 'desc' })
+    await reportsApi.getFeeReport('token', { sortBy: 'debt', sortDirection: 'asc' })
+    await reportsApi.exportFeeReportXlsx('token', { sortBy: 'debt', sortDirection: 'asc' })
+    await reportsApi.getFundChangeReport('token', { sortBy: 'actorDisplayName', sortDirection: 'desc' })
+    await reportsApi.exportFundChangeReportXlsx('token', { sortBy: 'actorDisplayName', sortDirection: 'desc' })
+
+    expect(fetchMock.mock.calls.map(([url]) => url)).toEqual([
+      '/api/reports/consolidated?sortBy=balance&sortDirection=asc',
+      '/api/reports/consolidated/export/xlsx?sortBy=balance&sortDirection=asc',
+      '/api/reports/garages?sortBy=garageNumber&sortDirection=desc',
+      '/api/reports/income?sortBy=incomeAmount&sortDirection=asc',
+      '/api/reports/income/export/xlsx?sortBy=incomeAmount&sortDirection=asc',
+      '/api/reports/expense?sortBy=expenseAmount&sortDirection=desc',
+      '/api/reports/expense/export/xlsx?sortBy=expenseAmount&sortDirection=desc',
+      '/api/reports/cash-payments?sortBy=hasReceipt&sortDirection=asc',
+      '/api/reports/cash-payments/export/xlsx?sortBy=hasReceipt&sortDirection=asc',
+      '/api/reports/bank-deposits?sortBy=fundName&sortDirection=desc',
+      '/api/reports/bank-deposits/export/xlsx?sortBy=fundName&sortDirection=desc',
+      '/api/reports/fees?sortBy=debt&sortDirection=asc',
+      '/api/reports/fees/export/xlsx?sortBy=debt&sortDirection=asc',
+      '/api/reports/fund-changes?sortBy=actorDisplayName&sortDirection=desc',
+      '/api/reports/fund-changes/export/xlsx?sortBy=actorDisplayName&sortDirection=desc',
+    ])
+  })
 })
 
 function getRequest() {

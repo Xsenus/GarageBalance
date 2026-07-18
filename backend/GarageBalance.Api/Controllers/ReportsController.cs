@@ -19,9 +19,12 @@ public sealed class ReportsController(IReportService reportService) : Controller
         [FromQuery] DateOnly? monthTo,
         [FromQuery] string? search,
         [FromQuery] int? limit,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        [FromQuery] int? offset = null,
+        [FromQuery] string? sortBy = null,
+        [FromQuery] string? sortDirection = null)
     {
-        var result = await reportService.GetConsolidatedReportAsync(new ConsolidatedReportRequest(monthFrom, monthTo, search, limit, GetActorUserId()), cancellationToken);
+        var result = await reportService.GetConsolidatedReportAsync(new ConsolidatedReportRequest(monthFrom, monthTo, search, limit, GetActorUserId(), offset, sortBy, sortDirection), cancellationToken);
         return result.Succeeded
             ? Ok(result.Value)
             : BadRequest(ApiProblemDetails.Create(result.ErrorCode, result.ErrorMessage, StatusCodes.Status400BadRequest));
@@ -37,10 +40,12 @@ public sealed class ReportsController(IReportService reportService) : Controller
         [FromQuery] bool groupAccruals,
         [FromQuery] int? limit,
         [FromQuery] int? offset,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        [FromQuery] string? sortBy = null,
+        [FromQuery] string? sortDirection = null)
     {
         var result = await reportService.GetGarageReportAsync(
-            new GarageReportRequest(monthFrom, monthTo, search, groupAccruals, limit, offset, GetActorUserId()),
+            new GarageReportRequest(monthFrom, monthTo, search, groupAccruals, limit, offset, GetActorUserId(), sortBy, sortDirection),
             cancellationToken);
         return result.Succeeded
             ? Ok(result.Value)
@@ -54,9 +59,11 @@ public sealed class ReportsController(IReportService reportService) : Controller
         [FromQuery] DateOnly? monthFrom,
         [FromQuery] DateOnly? monthTo,
         [FromQuery] string? search,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        [FromQuery] string? sortBy = null,
+        [FromQuery] string? sortDirection = null)
     {
-        var result = await reportService.ExportConsolidatedReportXlsxAsync(new ConsolidatedReportRequest(monthFrom, monthTo, search, ActorUserId: GetActorUserId()), cancellationToken);
+        var result = await reportService.ExportConsolidatedReportXlsxAsync(new ConsolidatedReportRequest(monthFrom, monthTo, search, ActorUserId: GetActorUserId(), SortBy: sortBy, SortDirection: sortDirection), cancellationToken);
         return result.Succeeded
             ? File(result.Value!.Content, result.Value.ContentType, result.Value.FileName)
             : BadRequest(ApiProblemDetails.Create(result.ErrorCode, result.ErrorMessage, StatusCodes.Status400BadRequest));
@@ -69,9 +76,11 @@ public sealed class ReportsController(IReportService reportService) : Controller
         [FromQuery] DateOnly? monthFrom,
         [FromQuery] DateOnly? monthTo,
         [FromQuery] string? search,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        [FromQuery] string? sortBy = null,
+        [FromQuery] string? sortDirection = null)
     {
-        var result = await reportService.ExportConsolidatedReportPdfAsync(new ConsolidatedReportRequest(monthFrom, monthTo, search, ActorUserId: GetActorUserId()), cancellationToken);
+        var result = await reportService.ExportConsolidatedReportPdfAsync(new ConsolidatedReportRequest(monthFrom, monthTo, search, ActorUserId: GetActorUserId(), SortBy: sortBy, SortDirection: sortDirection), cancellationToken);
         return result.Succeeded
             ? File(result.Value!.Content, result.Value.ContentType, result.Value.FileName)
             : BadRequest(ApiProblemDetails.Create(result.ErrorCode, result.ErrorMessage, StatusCodes.Status400BadRequest));
@@ -90,7 +99,9 @@ public sealed class ReportsController(IReportService reportService) : Controller
         [FromQuery] string? rowMode,
         [FromQuery] int? limit,
         [FromQuery] int? offset,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        [FromQuery] string? sortBy = null,
+        [FromQuery] string? sortDirection = null)
     {
         var result = await reportService.GetIncomeReportAsync(
             new IncomeReportRequest(
@@ -103,7 +114,9 @@ public sealed class ReportsController(IReportService reportService) : Controller
                 rowMode,
                 limit,
                 offset,
-                GetActorUserId()),
+                GetActorUserId(),
+                sortBy,
+                sortDirection),
             cancellationToken);
 
         return result.Succeeded
@@ -122,7 +135,9 @@ public sealed class ReportsController(IReportService reportService) : Controller
         [FromQuery] Guid[]? ownerIds,
         [FromQuery] Guid[]? incomeTypeIds,
         [FromQuery] string? rowMode,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        [FromQuery] string? sortBy = null,
+        [FromQuery] string? sortDirection = null)
     {
         var result = await reportService.ExportIncomeReportXlsxAsync(
             new IncomeReportRequest(
@@ -133,7 +148,9 @@ public sealed class ReportsController(IReportService reportService) : Controller
                 ownerIds ?? [],
                 incomeTypeIds ?? [],
                 rowMode,
-                ActorUserId: GetActorUserId()),
+                ActorUserId: GetActorUserId(),
+                SortBy: sortBy,
+                SortDirection: sortDirection),
             cancellationToken);
 
         return result.Succeeded
@@ -152,7 +169,9 @@ public sealed class ReportsController(IReportService reportService) : Controller
         [FromQuery] Guid[]? ownerIds,
         [FromQuery] Guid[]? incomeTypeIds,
         [FromQuery] string? rowMode,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        [FromQuery] string? sortBy = null,
+        [FromQuery] string? sortDirection = null)
     {
         var result = await reportService.ExportIncomeReportPdfAsync(
             new IncomeReportRequest(
@@ -163,7 +182,9 @@ public sealed class ReportsController(IReportService reportService) : Controller
                 ownerIds ?? [],
                 incomeTypeIds ?? [],
                 rowMode,
-                ActorUserId: GetActorUserId()),
+                ActorUserId: GetActorUserId(),
+                SortBy: sortBy,
+                SortDirection: sortDirection),
             cancellationToken);
 
         return result.Succeeded
@@ -183,7 +204,9 @@ public sealed class ReportsController(IReportService reportService) : Controller
         [FromQuery] string? rowMode,
         [FromQuery] int? limit,
         [FromQuery] int? offset,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        [FromQuery] string? sortBy = null,
+        [FromQuery] string? sortDirection = null)
     {
         var result = await reportService.GetExpenseReportAsync(
             new ExpenseReportRequest(
@@ -195,7 +218,9 @@ public sealed class ReportsController(IReportService reportService) : Controller
                 rowMode,
                 limit,
                 offset,
-                GetActorUserId()),
+                GetActorUserId(),
+                sortBy,
+                sortDirection),
             cancellationToken);
 
         return result.Succeeded
@@ -212,10 +237,12 @@ public sealed class ReportsController(IReportService reportService) : Controller
         [FromQuery] string? search,
         [FromQuery] int? limit,
         [FromQuery] int? offset,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        [FromQuery] string? sortBy = null,
+        [FromQuery] string? sortDirection = null)
     {
         var result = await reportService.GetFundChangeReportAsync(
-            new FundChangeReportRequest(dateFrom, dateTo, search, limit, offset, GetActorUserId()),
+            new FundChangeReportRequest(dateFrom, dateTo, search, limit, offset, GetActorUserId(), sortBy, sortDirection),
             cancellationToken);
 
         return result.Succeeded
@@ -230,10 +257,12 @@ public sealed class ReportsController(IReportService reportService) : Controller
         [FromQuery] DateOnly? dateFrom,
         [FromQuery] DateOnly? dateTo,
         [FromQuery] string? search,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        [FromQuery] string? sortBy = null,
+        [FromQuery] string? sortDirection = null)
     {
         var result = await reportService.ExportFundChangeReportXlsxAsync(
-            new FundChangeReportRequest(dateFrom, dateTo, search, ActorUserId: GetActorUserId()),
+            new FundChangeReportRequest(dateFrom, dateTo, search, ActorUserId: GetActorUserId(), SortBy: sortBy, SortDirection: sortDirection),
             cancellationToken);
 
         return result.Succeeded
@@ -248,10 +277,12 @@ public sealed class ReportsController(IReportService reportService) : Controller
         [FromQuery] DateOnly? dateFrom,
         [FromQuery] DateOnly? dateTo,
         [FromQuery] string? search,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        [FromQuery] string? sortBy = null,
+        [FromQuery] string? sortDirection = null)
     {
         var result = await reportService.ExportFundChangeReportPdfAsync(
-            new FundChangeReportRequest(dateFrom, dateTo, search, ActorUserId: GetActorUserId()),
+            new FundChangeReportRequest(dateFrom, dateTo, search, ActorUserId: GetActorUserId(), SortBy: sortBy, SortDirection: sortDirection),
             cancellationToken);
 
         return result.Succeeded
@@ -268,10 +299,12 @@ public sealed class ReportsController(IReportService reportService) : Controller
         [FromQuery] string? search,
         [FromQuery] int? limit,
         [FromQuery] int? offset,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        [FromQuery] string? sortBy = null,
+        [FromQuery] string? sortDirection = null)
     {
         var result = await reportService.GetCashPaymentReportAsync(
-            new CashPaymentReportRequest(dateFrom, dateTo, search, limit, offset, GetActorUserId()),
+            new CashPaymentReportRequest(dateFrom, dateTo, search, limit, offset, GetActorUserId(), sortBy, sortDirection),
             cancellationToken);
 
         return result.Succeeded
@@ -286,10 +319,12 @@ public sealed class ReportsController(IReportService reportService) : Controller
         [FromQuery] DateOnly? dateFrom,
         [FromQuery] DateOnly? dateTo,
         [FromQuery] string? search,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        [FromQuery] string? sortBy = null,
+        [FromQuery] string? sortDirection = null)
     {
         var result = await reportService.ExportCashPaymentReportXlsxAsync(
-            new CashPaymentReportRequest(dateFrom, dateTo, search, ActorUserId: GetActorUserId()),
+            new CashPaymentReportRequest(dateFrom, dateTo, search, ActorUserId: GetActorUserId(), SortBy: sortBy, SortDirection: sortDirection),
             cancellationToken);
 
         return result.Succeeded
@@ -304,10 +339,12 @@ public sealed class ReportsController(IReportService reportService) : Controller
         [FromQuery] DateOnly? dateFrom,
         [FromQuery] DateOnly? dateTo,
         [FromQuery] string? search,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        [FromQuery] string? sortBy = null,
+        [FromQuery] string? sortDirection = null)
     {
         var result = await reportService.ExportCashPaymentReportPdfAsync(
-            new CashPaymentReportRequest(dateFrom, dateTo, search, ActorUserId: GetActorUserId()),
+            new CashPaymentReportRequest(dateFrom, dateTo, search, ActorUserId: GetActorUserId(), SortBy: sortBy, SortDirection: sortDirection),
             cancellationToken);
 
         return result.Succeeded
@@ -324,10 +361,12 @@ public sealed class ReportsController(IReportService reportService) : Controller
         [FromQuery] string? search,
         [FromQuery] int? limit,
         [FromQuery] int? offset,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        [FromQuery] string? sortBy = null,
+        [FromQuery] string? sortDirection = null)
     {
         var result = await reportService.GetBankDepositReportAsync(
-            new BankDepositReportRequest(dateFrom, dateTo, search, limit, offset, GetActorUserId()),
+            new BankDepositReportRequest(dateFrom, dateTo, search, limit, offset, GetActorUserId(), sortBy, sortDirection),
             cancellationToken);
 
         return result.Succeeded
@@ -342,10 +381,12 @@ public sealed class ReportsController(IReportService reportService) : Controller
         [FromQuery] DateOnly? dateFrom,
         [FromQuery] DateOnly? dateTo,
         [FromQuery] string? search,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        [FromQuery] string? sortBy = null,
+        [FromQuery] string? sortDirection = null)
     {
         var result = await reportService.ExportBankDepositReportXlsxAsync(
-            new BankDepositReportRequest(dateFrom, dateTo, search, ActorUserId: GetActorUserId()),
+            new BankDepositReportRequest(dateFrom, dateTo, search, ActorUserId: GetActorUserId(), SortBy: sortBy, SortDirection: sortDirection),
             cancellationToken);
 
         return result.Succeeded
@@ -360,10 +401,12 @@ public sealed class ReportsController(IReportService reportService) : Controller
         [FromQuery] DateOnly? dateFrom,
         [FromQuery] DateOnly? dateTo,
         [FromQuery] string? search,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        [FromQuery] string? sortBy = null,
+        [FromQuery] string? sortDirection = null)
     {
         var result = await reportService.ExportBankDepositReportPdfAsync(
-            new BankDepositReportRequest(dateFrom, dateTo, search, ActorUserId: GetActorUserId()),
+            new BankDepositReportRequest(dateFrom, dateTo, search, ActorUserId: GetActorUserId(), SortBy: sortBy, SortDirection: sortDirection),
             cancellationToken);
 
         return result.Succeeded
@@ -377,10 +420,13 @@ public sealed class ReportsController(IReportService reportService) : Controller
     public async Task<ActionResult<FeeReportDto>> GetFeeReport(
         [FromQuery] string? variation,
         [FromQuery] int? limit,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        [FromQuery] int? offset = null,
+        [FromQuery] string? sortBy = null,
+        [FromQuery] string? sortDirection = null)
     {
         var result = await reportService.GetFeeReportAsync(
-            new FeeReportRequest(variation, limit, GetActorUserId()),
+            new FeeReportRequest(variation, limit, GetActorUserId(), offset, sortBy, sortDirection),
             cancellationToken);
 
         return result.Succeeded
@@ -393,10 +439,12 @@ public sealed class ReportsController(IReportService reportService) : Controller
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> ExportFeeReportXlsx(
         [FromQuery] string? variation,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        [FromQuery] string? sortBy = null,
+        [FromQuery] string? sortDirection = null)
     {
         var result = await reportService.ExportFeeReportXlsxAsync(
-            new FeeReportRequest(variation, ActorUserId: GetActorUserId()),
+            new FeeReportRequest(variation, ActorUserId: GetActorUserId(), SortBy: sortBy, SortDirection: sortDirection),
             cancellationToken);
 
         return result.Succeeded
@@ -409,10 +457,12 @@ public sealed class ReportsController(IReportService reportService) : Controller
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> ExportFeeReportPdf(
         [FromQuery] string? variation,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        [FromQuery] string? sortBy = null,
+        [FromQuery] string? sortDirection = null)
     {
         var result = await reportService.ExportFeeReportPdfAsync(
-            new FeeReportRequest(variation, ActorUserId: GetActorUserId()),
+            new FeeReportRequest(variation, ActorUserId: GetActorUserId(), SortBy: sortBy, SortDirection: sortDirection),
             cancellationToken);
 
         return result.Succeeded
@@ -430,7 +480,9 @@ public sealed class ReportsController(IReportService reportService) : Controller
         [FromQuery] Guid[]? supplierIds,
         [FromQuery] Guid[]? expenseTypeIds,
         [FromQuery] string? rowMode,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        [FromQuery] string? sortBy = null,
+        [FromQuery] string? sortDirection = null)
     {
         var result = await reportService.ExportExpenseReportXlsxAsync(
             new ExpenseReportRequest(
@@ -440,7 +492,9 @@ public sealed class ReportsController(IReportService reportService) : Controller
                 supplierIds ?? [],
                 expenseTypeIds ?? [],
                 rowMode,
-                ActorUserId: GetActorUserId()),
+                ActorUserId: GetActorUserId(),
+                SortBy: sortBy,
+                SortDirection: sortDirection),
             cancellationToken);
 
         return result.Succeeded
@@ -458,7 +512,9 @@ public sealed class ReportsController(IReportService reportService) : Controller
         [FromQuery] Guid[]? supplierIds,
         [FromQuery] Guid[]? expenseTypeIds,
         [FromQuery] string? rowMode,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        [FromQuery] string? sortBy = null,
+        [FromQuery] string? sortDirection = null)
     {
         var result = await reportService.ExportExpenseReportPdfAsync(
             new ExpenseReportRequest(
@@ -468,7 +524,9 @@ public sealed class ReportsController(IReportService reportService) : Controller
                 supplierIds ?? [],
                 expenseTypeIds ?? [],
                 rowMode,
-                ActorUserId: GetActorUserId()),
+                ActorUserId: GetActorUserId(),
+                SortBy: sortBy,
+                SortDirection: sortDirection),
             cancellationToken);
 
         return result.Succeeded

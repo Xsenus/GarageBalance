@@ -771,9 +771,9 @@ public sealed class BackendLayeringTests
         Assert.Contains("IFeeReportQuery feeReportQuery", service, StringComparison.Ordinal);
         Assert.Contains("feeReportQuery.GetActiveCampaignsAsync", service, StringComparison.Ordinal);
         Assert.Contains("feeReportQuery.GetActiveIncomeTypesAsync", service, StringComparison.Ordinal);
-        Assert.Contains("feeReportQuery.GetFeeDataAsync", service, StringComparison.Ordinal);
+        Assert.Contains("feeReportQuery.GetFeeReportPageAsync", service, StringComparison.Ordinal);
         Assert.Contains("BuildFeeGoal", service, StringComparison.Ordinal);
-        Assert.Contains("accrued - paid", service, StringComparison.Ordinal);
+        Assert.Contains("row.Debt", service, StringComparison.Ordinal);
     }
 
     [Fact]

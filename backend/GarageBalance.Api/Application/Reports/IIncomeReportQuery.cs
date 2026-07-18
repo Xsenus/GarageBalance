@@ -12,6 +12,7 @@ public interface IIncomeReportQuery
         string? search,
         int? limit,
         int offset,
+        ReportSort sort,
         CancellationToken cancellationToken);
 }
 

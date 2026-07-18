@@ -6,12 +6,22 @@ namespace GarageBalance.Api.Infrastructure.Data;
 
 public sealed class EfFundChangeReportQuery(GarageBalanceDbContext dbContext) : IFundChangeReportQuery
 {
+    public Task<FundChangeReportData> GetFundChangesAsync(
+        DateOnly dateFrom,
+        DateOnly dateTo,
+        string? search,
+        int offset,
+        int? limit,
+        CancellationToken cancellationToken) =>
+        GetFundChangesAsync(dateFrom, dateTo, search, offset, limit, new ReportSort("date", false), cancellationToken);
+
     public async Task<FundChangeReportData> GetFundChangesAsync(
         DateOnly dateFrom,
         DateOnly dateTo,
         string? search,
         int offset,
         int? limit,
+        ReportSort sort,
         CancellationToken cancellationToken)
     {
         var fromUtc = new DateTimeOffset(dateFrom.ToDateTime(TimeOnly.MinValue), TimeSpan.Zero);
@@ -47,7 +57,7 @@ public sealed class EfFundChangeReportQuery(GarageBalanceDbContext dbContext) : 
             depositTotal = filteredList.Where(row => row.OperationKind == FundOperationKinds.Deposit).Sum(row => row.Amount);
             withdrawalTotal = filteredList.Where(row => row.OperationKind == FundOperationKinds.Withdraw).Sum(row => row.Amount);
             rows = ApplyPage(
-                    filteredList.OrderBy(row => row.CreatedAtUtc).ThenBy(row => row.FundName).ThenBy(row => row.Id),
+                    ApplySort(filteredList, sort).ThenByDescending(row => row.Id),
                     offset,
                     limit)
                 .Select(row => row.ToQueryRow())
@@ -80,8 +90,9 @@ public sealed class EfFundChangeReportQuery(GarageBalanceDbContext dbContext) : 
             withdrawalTotal = totalsByKind
                 .Where(row => row.OperationKind == FundOperationKinds.Withdraw)
                 .Sum(row => row.Total);
-            var ordered = query.OrderBy(operation => operation.CreatedAtUtc).ThenBy(operation => operation.Fund.Name).ThenBy(operation => operation.Id);
-            var pageRows = await ProjectRows(ApplyPage(ordered, offset, limit)).ToListAsync(cancellationToken);
+            var projected = ProjectRows(query);
+            var ordered = ApplySort(projected, sort).ThenByDescending(row => row.Id);
+            var pageRows = await ApplyPage(ordered, offset, limit).ToListAsync(cancellationToken);
             rows = pageRows.Select(row => row.ToQueryRow()).ToList();
         }
 
@@ -93,19 +104,52 @@ public sealed class EfFundChangeReportQuery(GarageBalanceDbContext dbContext) : 
         join actor in dbContext.Users.AsNoTracking()
             on operation.ActorUserId equals (Guid?)actor.Id into actors
         from actor in actors.DefaultIfEmpty()
-        select new FundChangeProjectionRow(
-            operation.Id,
-            operation.FundId,
-            operation.Fund.Name,
-            operation.CreatedAtUtc,
-            operation.OperationKind,
-            operation.Amount,
-            operation.BalanceBefore,
-            operation.BalanceAfter,
-            operation.ActorUserId,
-            actor == null ? null : actor.DisplayName,
-            operation.Reason,
-            operation.IsCanceled);
+        select new FundChangeProjectionRow
+        {
+            Id = operation.Id,
+            FundId = operation.FundId,
+            FundName = operation.Fund.Name,
+            CreatedAtUtc = operation.CreatedAtUtc,
+            OperationKind = operation.OperationKind,
+            ChangeName = operation.OperationKind == FundOperationKinds.Deposit
+                ? "Пополнение"
+                : operation.OperationKind == FundOperationKinds.Withdraw
+                    ? "Изъятие"
+                    : operation.OperationKind,
+            Amount = operation.Amount,
+            BalanceBefore = operation.BalanceBefore,
+            BalanceAfter = operation.BalanceAfter,
+            ActorUserId = operation.ActorUserId,
+            ActorDisplayName = actor == null ? null : actor.DisplayName,
+            Reason = operation.Reason,
+            IsCanceled = operation.IsCanceled
+        };
+
+    private static IOrderedQueryable<FundChangeProjectionRow> ApplySort(IQueryable<FundChangeProjectionRow> query, ReportSort sort) =>
+        sort.Field switch
+        {
+            "fundName" => sort.Descending ? query.OrderByDescending(row => row.FundName) : query.OrderBy(row => row.FundName),
+            "changeName" => sort.Descending ? query.OrderByDescending(row => row.ChangeName) : query.OrderBy(row => row.ChangeName),
+            "amount" => sort.Descending ? query.OrderByDescending(row => row.Amount) : query.OrderBy(row => row.Amount),
+            "balanceBefore" => sort.Descending ? query.OrderByDescending(row => row.BalanceBefore) : query.OrderBy(row => row.BalanceBefore),
+            "balanceAfter" => sort.Descending ? query.OrderByDescending(row => row.BalanceAfter) : query.OrderBy(row => row.BalanceAfter),
+            "actorDisplayName" => sort.Descending ? query.OrderByDescending(row => row.ActorDisplayName) : query.OrderBy(row => row.ActorDisplayName),
+            "reason" => sort.Descending ? query.OrderByDescending(row => row.Reason) : query.OrderBy(row => row.Reason),
+            _ => sort.Descending ? query.OrderByDescending(row => row.CreatedAtUtc) : query.OrderBy(row => row.CreatedAtUtc)
+        };
+
+    private static IOrderedEnumerable<FundChangeProjectionRow> ApplySort(IEnumerable<FundChangeProjectionRow> rows, ReportSort sort) =>
+        sort.Field switch
+        {
+            "fundName" => sort.Descending ? rows.OrderByDescending(row => row.FundName, StringComparer.Ordinal) : rows.OrderBy(row => row.FundName, StringComparer.Ordinal),
+            "changeName" => sort.Descending ? rows.OrderByDescending(row => row.ChangeName, StringComparer.Ordinal) : rows.OrderBy(row => row.ChangeName, StringComparer.Ordinal),
+            "amount" => sort.Descending ? rows.OrderByDescending(row => row.Amount) : rows.OrderBy(row => row.Amount),
+            "balanceBefore" => sort.Descending ? rows.OrderByDescending(row => row.BalanceBefore) : rows.OrderBy(row => row.BalanceBefore),
+            "balanceAfter" => sort.Descending ? rows.OrderByDescending(row => row.BalanceAfter) : rows.OrderBy(row => row.BalanceAfter),
+            "actorDisplayName" => sort.Descending ? rows.OrderByDescending(row => row.ActorDisplayName, StringComparer.Ordinal) : rows.OrderBy(row => row.ActorDisplayName, StringComparer.Ordinal),
+            "reason" => sort.Descending ? rows.OrderByDescending(row => row.Reason, StringComparer.Ordinal) : rows.OrderBy(row => row.Reason, StringComparer.Ordinal),
+            _ => sort.Descending ? rows.OrderByDescending(row => row.CreatedAtUtc) : rows.OrderBy(row => row.CreatedAtUtc)
+        };
 
     private static IQueryable<T> ApplyPage<T>(IQueryable<T> query, int offset, int? limit)
     {
@@ -122,20 +166,22 @@ public sealed class EfFundChangeReportQuery(GarageBalanceDbContext dbContext) : 
     private bool IsSqliteProvider() =>
         dbContext.Database.ProviderName?.Contains("Sqlite", StringComparison.OrdinalIgnoreCase) == true;
 
-    private sealed record FundChangeProjectionRow(
-        Guid Id,
-        Guid FundId,
-        string FundName,
-        DateTimeOffset CreatedAtUtc,
-        string OperationKind,
-        decimal Amount,
-        decimal BalanceBefore,
-        decimal BalanceAfter,
-        Guid? ActorUserId,
-        string? ActorDisplayName,
-        string Reason,
-        bool IsCanceled)
+    private sealed class FundChangeProjectionRow
     {
+        public Guid Id { get; init; }
+        public Guid FundId { get; init; }
+        public string FundName { get; init; } = string.Empty;
+        public DateTimeOffset CreatedAtUtc { get; init; }
+        public string OperationKind { get; init; } = string.Empty;
+        public string ChangeName { get; init; } = string.Empty;
+        public decimal Amount { get; init; }
+        public decimal BalanceBefore { get; init; }
+        public decimal BalanceAfter { get; init; }
+        public Guid? ActorUserId { get; init; }
+        public string? ActorDisplayName { get; init; }
+        public string Reason { get; init; } = string.Empty;
+        public bool IsCanceled { get; init; }
+
         public FundChangeReportQueryRow ToQueryRow() =>
             new(Id, FundId, FundName, CreatedAtUtc, OperationKind, Amount, BalanceBefore, BalanceAfter, ActorUserId, ActorDisplayName, Reason);
     }

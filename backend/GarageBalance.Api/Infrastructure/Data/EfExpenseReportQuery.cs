@@ -14,6 +14,18 @@ public sealed class EfExpenseReportQuery(GarageBalanceDbContext dbContext) : IEx
     private const string PaymentRows = "payments";
     private const string StartingBalanceRows = "starting_balance";
 
+    public Task<ExpenseReportQueryData> GetRowsAsync(
+        DateOnly dateFrom,
+        DateOnly dateTo,
+        string rowMode,
+        IReadOnlySet<Guid> supplierIds,
+        IReadOnlySet<Guid> expenseTypeIds,
+        string? search,
+        int? limit,
+        int offset,
+        CancellationToken cancellationToken) =>
+        GetRowsAsync(dateFrom, dateTo, rowMode, supplierIds, expenseTypeIds, search, limit, offset, new ReportSort("date", false), cancellationToken);
+
     public async Task<ExpenseReportQueryData> GetRowsAsync(
         DateOnly dateFrom,
         DateOnly dateTo,
@@ -23,8 +35,24 @@ public sealed class EfExpenseReportQuery(GarageBalanceDbContext dbContext) : IEx
         string? search,
         int? limit,
         int offset,
+        ReportSort sort,
         CancellationToken cancellationToken)
     {
+        if (IsNpgsql())
+        {
+            return await GetPostgresRowsAsync(
+                dateFrom,
+                dateTo,
+                rowMode,
+                supplierIds,
+                expenseTypeIds,
+                search,
+                limit,
+                offset,
+                sort,
+                cancellationToken);
+        }
+
         var rows = new List<ExpenseReportRowDto>();
         var accrualTotal = 0m;
         var expenseTotal = 0m;
@@ -231,12 +259,256 @@ public sealed class EfExpenseReportQuery(GarageBalanceDbContext dbContext) : IEx
         }
 
         var visibleRows = ApplyPage(
-                rows.OrderBy(row => row.Date).ThenBy(row => row.SupplierName).ThenBy(row => row.RowType),
+                ApplySort(rows, sort)
+                    .ThenBy(row => row.SupplierName, StringComparer.Ordinal)
+                    .ThenBy(row => row.ExpenseTypeName, StringComparer.Ordinal)
+                    .ThenBy(row => row.SupplierId),
                 offset,
                 limit)
             .ToList();
         return new ExpenseReportQueryData(accrualTotal, expenseTotal, rowCount, visibleRows);
     }
+
+    private async Task<ExpenseReportQueryData> GetPostgresRowsAsync(
+        DateOnly dateFrom,
+        DateOnly dateTo,
+        string rowMode,
+        IReadOnlySet<Guid> supplierIds,
+        IReadOnlySet<Guid> expenseTypeIds,
+        string? search,
+        int? limit,
+        int offset,
+        ReportSort sort,
+        CancellationToken cancellationToken)
+    {
+        var normalizedSearch = search?.Trim().ToLowerInvariant();
+        var hasSearch = !string.IsNullOrWhiteSpace(normalizedSearch);
+        IQueryable<ExpenseReportProjection>? reportRows = null;
+        var aggregateQuery = dbContext.SupplierAccruals.AsNoTracking()
+            .Where(_ => false)
+            .Select(_ => new { Category = 0, Total = 0m, Count = 0 });
+
+        if (rowMode is AllRows or AccrualRows)
+        {
+            if (expenseTypeIds.Count == 0)
+            {
+                var startingBalances = dbContext.Suppliers.AsNoTracking()
+                    .Where(supplier => !supplier.IsArchived && supplier.StartingBalance != 0);
+                if (supplierIds.Count > 0)
+                {
+                    startingBalances = startingBalances.Where(supplier => supplierIds.Contains(supplier.Id));
+                }
+
+                if (hasSearch && !"Стартовый баланс".Contains(search!.Trim(), StringComparison.OrdinalIgnoreCase))
+                {
+                    startingBalances = startingBalances.Where(supplier => supplier.Name.ToLower().Contains(normalizedSearch!));
+                }
+
+                aggregateQuery = aggregateQuery.Concat(startingBalances
+                    .GroupBy(_ => 1)
+                    .Select(group => new
+                    {
+                        Category = StartingBalanceTotalCategory,
+                        Total = group.Sum(supplier => supplier.StartingBalance),
+                        Count = group.Count()
+                    }));
+
+                reportRows = startingBalances.Select(supplier => new ExpenseReportProjection
+                {
+                    RowType = StartingBalanceRows,
+                    Date = dateFrom,
+                    AccountingMonth = dateFrom,
+                    SupplierId = supplier.Id,
+                    SupplierName = supplier.Name,
+                    ExpenseTypeId = Guid.Empty,
+                    ExpenseTypeName = "Стартовый баланс",
+                    AccrualAmount = supplier.StartingBalance,
+                    ExpenseAmount = 0m,
+                    Difference = supplier.StartingBalance,
+                    DocumentNumber = null,
+                    Comment = "Начальное обязательство перед поставщиком",
+                    CreatedAtUtc = supplier.CreatedAtUtc,
+                    RowId = supplier.Id
+                });
+            }
+
+            var accruals = dbContext.SupplierAccruals.AsNoTracking()
+                .Where(accrual => !accrual.IsCanceled && accrual.AccountingMonth >= dateFrom && accrual.AccountingMonth <= dateTo);
+            if (supplierIds.Count > 0)
+            {
+                accruals = accruals.Where(accrual => supplierIds.Contains(accrual.SupplierId));
+            }
+
+            if (expenseTypeIds.Count > 0)
+            {
+                accruals = accruals.Where(accrual => expenseTypeIds.Contains(accrual.ExpenseTypeId));
+            }
+
+            if (hasSearch)
+            {
+                accruals = accruals.Where(accrual =>
+                    accrual.Supplier.Name.ToLower().Contains(normalizedSearch!) ||
+                    accrual.ExpenseType.Name.ToLower().Contains(normalizedSearch!) ||
+                    (accrual.DocumentNumber != null && accrual.DocumentNumber.ToLower().Contains(normalizedSearch!)));
+            }
+
+            aggregateQuery = aggregateQuery.Concat(accruals
+                .GroupBy(_ => 1)
+                .Select(group => new
+                {
+                    Category = AccrualTotalCategory,
+                    Total = group.Sum(accrual => accrual.Amount),
+                    Count = group.Count()
+                }));
+
+            var projectedAccruals = accruals.Select(accrual => new ExpenseReportProjection
+            {
+                RowType = AccrualRows,
+                Date = accrual.AccountingMonth,
+                AccountingMonth = accrual.AccountingMonth,
+                SupplierId = accrual.SupplierId,
+                SupplierName = accrual.Supplier.Name,
+                ExpenseTypeId = accrual.ExpenseTypeId,
+                ExpenseTypeName = accrual.ExpenseType.Name,
+                AccrualAmount = accrual.Amount,
+                ExpenseAmount = 0m,
+                Difference = accrual.Amount,
+                DocumentNumber = accrual.DocumentNumber,
+                Comment = accrual.Comment,
+                CreatedAtUtc = accrual.CreatedAtUtc,
+                RowId = accrual.Id
+            });
+            reportRows = reportRows == null ? projectedAccruals : reportRows.Concat(projectedAccruals);
+        }
+
+        if (rowMode is AllRows or PaymentRows)
+        {
+            var payments = dbContext.FinancialOperations.AsNoTracking()
+                .Where(operation =>
+                    !operation.IsCanceled &&
+                    operation.OperationKind == FinancialOperationKinds.Expense &&
+                    operation.SupplierId != null &&
+                    operation.ExpenseTypeId != null &&
+                    operation.OperationDate >= dateFrom &&
+                    operation.OperationDate <= dateTo);
+            if (supplierIds.Count > 0)
+            {
+                payments = payments.Where(operation => supplierIds.Contains(operation.SupplierId!.Value));
+            }
+
+            if (expenseTypeIds.Count > 0)
+            {
+                payments = payments.Where(operation => expenseTypeIds.Contains(operation.ExpenseTypeId!.Value));
+            }
+
+            if (hasSearch)
+            {
+                payments = payments.Where(operation =>
+                    operation.Supplier!.Name.ToLower().Contains(normalizedSearch!) ||
+                    operation.ExpenseType!.Name.ToLower().Contains(normalizedSearch!) ||
+                    (operation.DocumentNumber != null && operation.DocumentNumber.ToLower().Contains(normalizedSearch!)));
+            }
+
+            aggregateQuery = aggregateQuery.Concat(payments
+                .GroupBy(_ => 1)
+                .Select(group => new
+                {
+                    Category = ExpenseTotalCategory,
+                    Total = group.Sum(operation => operation.Amount),
+                    Count = group.Count()
+                }));
+
+            var projectedPayments = payments.Select(operation => new ExpenseReportProjection
+            {
+                RowType = PaymentRows,
+                Date = operation.OperationDate,
+                AccountingMonth = operation.AccountingMonth,
+                SupplierId = operation.SupplierId!.Value,
+                SupplierName = operation.Supplier!.Name,
+                ExpenseTypeId = operation.ExpenseTypeId!.Value,
+                ExpenseTypeName = operation.ExpenseType!.Name,
+                AccrualAmount = 0m,
+                ExpenseAmount = operation.Amount,
+                Difference = -operation.Amount,
+                DocumentNumber = operation.DocumentNumber,
+                Comment = operation.Comment,
+                CreatedAtUtc = operation.CreatedAtUtc,
+                RowId = operation.Id
+            });
+            reportRows = reportRows == null ? projectedPayments : reportRows.Concat(projectedPayments);
+        }
+
+        if (reportRows == null)
+        {
+            return new ExpenseReportQueryData(0m, 0m, 0, []);
+        }
+
+        var aggregates = await aggregateQuery.ToListAsync(cancellationToken);
+        var rowCount = aggregates.Sum(row => row.Count);
+        if (rowCount == 0)
+        {
+            return new ExpenseReportQueryData(0m, 0m, 0, []);
+        }
+        var accrualTotal = aggregates.Where(row => row.Category is StartingBalanceTotalCategory or AccrualTotalCategory).Sum(row => row.Total);
+        var expenseTotal = aggregates.Where(row => row.Category == ExpenseTotalCategory).Sum(row => row.Total);
+
+        var sortableRows = reportRows.Select(row => new ExpenseReportSortableProjection
+        {
+            RowType = row.RowType,
+            Date = row.Date,
+            AccountingMonth = row.AccountingMonth,
+            SupplierId = row.SupplierId,
+            SupplierName = row.SupplierName,
+            ExpenseTypeId = row.ExpenseTypeId,
+            ExpenseTypeName = row.ExpenseTypeName,
+            AccrualAmount = row.AccrualAmount,
+            ExpenseAmount = row.ExpenseAmount,
+            Difference = row.Difference,
+            DocumentNumber = row.DocumentNumber,
+            Comment = row.Comment,
+            CreatedAtUtc = row.CreatedAtUtc,
+            RowId = row.RowId
+        });
+        var ordered = ApplyPostgresSort(sortableRows, sort)
+            .ThenBy(row => row.SupplierName)
+            .ThenBy(row => row.ExpenseTypeName)
+            .ThenBy(row => row.RowId);
+        IQueryable<ExpenseReportSortableProjection> page = offset > 0 ? ordered.Skip(offset) : ordered;
+        if (limit is > 0)
+        {
+            page = page.Take(limit.Value);
+        }
+
+        var rows = await page
+            .Select(row => new ExpenseReportRowDto(
+                row.RowType,
+                row.Date,
+                row.AccountingMonth,
+                row.SupplierId,
+                row.SupplierName,
+                row.ExpenseTypeId,
+                row.ExpenseTypeName,
+                row.AccrualAmount,
+                row.ExpenseAmount,
+                row.Difference,
+                row.DocumentNumber,
+                row.Comment))
+            .ToListAsync(cancellationToken);
+        return new ExpenseReportQueryData(accrualTotal, expenseTotal, rowCount, rows);
+    }
+
+    private static IOrderedQueryable<ExpenseReportSortableProjection> ApplyPostgresSort(IQueryable<ExpenseReportSortableProjection> rows, ReportSort sort) =>
+        sort.Field switch
+        {
+            "accountingMonth" => sort.Descending ? rows.OrderByDescending(row => row.AccountingMonth) : rows.OrderBy(row => row.AccountingMonth),
+            "supplierName" => sort.Descending ? rows.OrderByDescending(row => row.SupplierName) : rows.OrderBy(row => row.SupplierName),
+            "expenseTypeName" => sort.Descending ? rows.OrderByDescending(row => row.ExpenseTypeName) : rows.OrderBy(row => row.ExpenseTypeName),
+            "accrualAmount" => sort.Descending ? rows.OrderByDescending(row => row.AccrualAmount) : rows.OrderBy(row => row.AccrualAmount),
+            "expenseAmount" => sort.Descending ? rows.OrderByDescending(row => row.ExpenseAmount) : rows.OrderBy(row => row.ExpenseAmount),
+            "difference" => sort.Descending ? rows.OrderByDescending(row => row.Difference) : rows.OrderBy(row => row.Difference),
+            "documentNumber" => sort.Descending ? rows.OrderByDescending(row => row.DocumentNumber) : rows.OrderBy(row => row.DocumentNumber),
+            _ => sort.Descending ? rows.OrderByDescending(row => row.Date) : rows.OrderBy(row => row.Date)
+        };
 
     private static IQueryable<T> ApplyLimit<T>(IQueryable<T> query, int? limit) =>
         limit is > 0 ? query.Take(limit.Value) : query;
@@ -249,4 +521,42 @@ public sealed class EfExpenseReportQuery(GarageBalanceDbContext dbContext) : IEx
 
     private static int? GetFetchLimit(int offset, int? limit) =>
         limit is > 0 ? (int)Math.Min((long)offset + limit.Value, int.MaxValue) : null;
+
+    private bool IsNpgsql() =>
+        dbContext.Database.ProviderName?.Contains("Npgsql", StringComparison.OrdinalIgnoreCase) == true;
+
+    private static IOrderedEnumerable<ExpenseReportRowDto> ApplySort(IEnumerable<ExpenseReportRowDto> rows, ReportSort sort) =>
+        sort.Field switch
+        {
+            "accountingMonth" => sort.Descending ? rows.OrderByDescending(row => row.AccountingMonth) : rows.OrderBy(row => row.AccountingMonth),
+            "supplierName" => sort.Descending ? rows.OrderByDescending(row => row.SupplierName, StringComparer.Ordinal) : rows.OrderBy(row => row.SupplierName, StringComparer.Ordinal),
+            "expenseTypeName" => sort.Descending ? rows.OrderByDescending(row => row.ExpenseTypeName, StringComparer.Ordinal) : rows.OrderBy(row => row.ExpenseTypeName, StringComparer.Ordinal),
+            "accrualAmount" => sort.Descending ? rows.OrderByDescending(row => row.AccrualAmount) : rows.OrderBy(row => row.AccrualAmount),
+            "expenseAmount" => sort.Descending ? rows.OrderByDescending(row => row.ExpenseAmount) : rows.OrderBy(row => row.ExpenseAmount),
+            "difference" => sort.Descending ? rows.OrderByDescending(row => row.Difference) : rows.OrderBy(row => row.Difference),
+            "documentNumber" => sort.Descending ? rows.OrderByDescending(row => row.DocumentNumber, StringComparer.Ordinal) : rows.OrderBy(row => row.DocumentNumber, StringComparer.Ordinal),
+            _ => sort.Descending ? rows.OrderByDescending(row => row.Date) : rows.OrderBy(row => row.Date)
+        };
+
+    private sealed class ExpenseReportProjection : ExpenseReportSortableProjection
+    {
+    }
+
+    private class ExpenseReportSortableProjection
+    {
+        public string RowType { get; init; } = string.Empty;
+        public DateOnly Date { get; init; }
+        public DateOnly AccountingMonth { get; init; }
+        public Guid SupplierId { get; init; }
+        public string SupplierName { get; init; } = string.Empty;
+        public Guid ExpenseTypeId { get; init; }
+        public string ExpenseTypeName { get; init; } = string.Empty;
+        public decimal AccrualAmount { get; init; }
+        public decimal ExpenseAmount { get; init; }
+        public decimal Difference { get; init; }
+        public string? DocumentNumber { get; init; }
+        public string? Comment { get; init; }
+        public DateTimeOffset CreatedAtUtc { get; init; }
+        public Guid RowId { get; init; }
+    }
 }

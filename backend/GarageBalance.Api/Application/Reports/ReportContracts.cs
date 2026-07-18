@@ -5,7 +5,10 @@ public sealed record ConsolidatedReportRequest(
     DateOnly? MonthTo,
     string? Search,
     int? Limit = null,
-    Guid? ActorUserId = null);
+    Guid? ActorUserId = null,
+    int? Offset = null,
+    string? SortBy = null,
+    string? SortDirection = null);
 
 public sealed record GarageReportRequest(
     DateOnly? MonthFrom,
@@ -14,7 +17,9 @@ public sealed record GarageReportRequest(
     bool GroupAccruals,
     int? Limit = null,
     int? Offset = null,
-    Guid? ActorUserId = null);
+    Guid? ActorUserId = null,
+    string? SortBy = null,
+    string? SortDirection = null);
 
 public sealed record IncomeReportRequest(
     DateOnly? DateFrom,
@@ -26,7 +31,9 @@ public sealed record IncomeReportRequest(
     string? RowMode,
     int? Limit = null,
     int? Offset = null,
-    Guid? ActorUserId = null);
+    Guid? ActorUserId = null,
+    string? SortBy = null,
+    string? SortDirection = null);
 
 public sealed record ExpenseReportRequest(
     DateOnly? DateFrom,
@@ -37,7 +44,9 @@ public sealed record ExpenseReportRequest(
     string? RowMode,
     int? Limit = null,
     int? Offset = null,
-    Guid? ActorUserId = null);
+    Guid? ActorUserId = null,
+    string? SortBy = null,
+    string? SortDirection = null);
 
 public sealed record FundChangeReportRequest(
     DateOnly? DateFrom,
@@ -45,7 +54,9 @@ public sealed record FundChangeReportRequest(
     string? Search,
     int? Limit = null,
     int? Offset = null,
-    Guid? ActorUserId = null);
+    Guid? ActorUserId = null,
+    string? SortBy = null,
+    string? SortDirection = null);
 
 public sealed record CashPaymentReportRequest(
     DateOnly? DateFrom,
@@ -53,7 +64,9 @@ public sealed record CashPaymentReportRequest(
     string? Search,
     int? Limit = null,
     int? Offset = null,
-    Guid? ActorUserId = null);
+    Guid? ActorUserId = null,
+    string? SortBy = null,
+    string? SortDirection = null);
 
 public sealed record BankDepositReportRequest(
     DateOnly? DateFrom,
@@ -61,12 +74,17 @@ public sealed record BankDepositReportRequest(
     string? Search,
     int? Limit = null,
     int? Offset = null,
-    Guid? ActorUserId = null);
+    Guid? ActorUserId = null,
+    string? SortBy = null,
+    string? SortDirection = null);
 
 public sealed record FeeReportRequest(
     string? Variation,
     int? Limit = null,
-    Guid? ActorUserId = null);
+    Guid? ActorUserId = null,
+    int? Offset = null,
+    string? SortBy = null,
+    string? SortDirection = null);
 
 public sealed record ConsolidatedReportDto(
     DateOnly PeriodFrom,

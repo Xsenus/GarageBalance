@@ -552,7 +552,7 @@ public sealed class ReportServiceTests
         Assert.True(result.Succeeded);
         Assert.Equal(2, result.Value!.RowCount);
         var row = Assert.Single(result.Value.Rows);
-        Assert.Equal("PKO-2", row.DocumentNumber);
+        Assert.Equal("PKO-1", row.DocumentNumber);
         Assert.Equal(2200m, result.Value.IncomeTotal);
         Assert.Equal(-2200m, result.Value.Debt);
         Assert.Equal(1, result.Value.Offset);
@@ -577,7 +577,7 @@ public sealed class ReportServiceTests
         Assert.True(result.Succeeded);
         Assert.Equal(2, result.Value!.RowCount);
         Assert.Equal(2200m, result.Value.IncomeTotal);
-        Assert.Equal("MATCH-2", Assert.Single(result.Value.Rows).DocumentNumber);
+        Assert.Equal("MATCH-1", Assert.Single(result.Value.Rows).DocumentNumber);
     }
 
     [Fact]
@@ -718,7 +718,7 @@ public sealed class ReportServiceTests
         Assert.True(result.Succeeded);
         Assert.Equal(2, result.Value!.RowCount);
         var row = Assert.Single(result.Value.Rows);
-        Assert.Equal("RKO-2", row.DocumentNumber);
+        Assert.Equal("RKO-1", row.DocumentNumber);
         Assert.Equal(700m, result.Value.ExpenseTotal);
         Assert.Equal(-700m, result.Value.Difference);
         Assert.Equal(1, result.Value.Offset);
@@ -743,7 +743,7 @@ public sealed class ReportServiceTests
         Assert.True(result.Succeeded);
         Assert.Equal(2, result.Value!.RowCount);
         Assert.Equal(700m, result.Value.ExpenseTotal);
-        Assert.Equal("MATCH-2", Assert.Single(result.Value.Rows).DocumentNumber);
+        Assert.Equal("MATCH-1", Assert.Single(result.Value.Rows).DocumentNumber);
     }
 
     [Fact]
@@ -1171,9 +1171,9 @@ public sealed class ReportServiceTests
         Assert.Equal(1, result.Value.Offset);
         Assert.Equal(1, result.Value.Limit);
         var row = Assert.Single(result.Value.Rows);
-        Assert.Equal(FundOperationKinds.Withdraw, row.ChangeKind);
-        Assert.Equal("Изъятие", row.ChangeName);
-        Assert.Equal(1200m, row.BalanceAfter);
+        Assert.Equal(FundOperationKinds.Deposit, row.ChangeKind);
+        Assert.Equal("Пополнение", row.ChangeName);
+        Assert.Equal(1500m, row.BalanceAfter);
         Assert.Equal("Администратор ГСК", row.ActorDisplayName);
         Assert.DoesNotContain(result.Value.Rows, row => row.Reason == "Canceled fund operation");
         Assert.Contains(database.Context.AuditEvents, auditEvent =>

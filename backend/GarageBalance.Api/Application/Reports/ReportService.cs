@@ -35,14 +35,27 @@ public sealed class ReportService(
             return ReportResult<ConsolidatedReportDto>.Failure("period_invalid", "Дата окончания отчета не может быть раньше даты начала.");
         }
 
-        var monthlyData = await consolidatedMonthlyReportQuery.GetMonthlyDataAsync(periodFrom, periodTo, cancellationToken);
+        if (!TryNormalizeReportSort<ConsolidatedReportDto>(ReportSortKind.Consolidated, request.SortBy, request.SortDirection, out var sort, out var sortFailure))
+        {
+            return sortFailure!;
+        }
+
+        var monthlyOffset = Math.Max(request.Offset ?? 0, 0);
+        int? monthlyLimit = request.Limit is > 0 ? NormalizeReportLimit(request.Limit.Value) : null;
+        var monthlyData = await consolidatedMonthlyReportQuery.GetMonthlyDataAsync(
+            periodFrom,
+            periodTo,
+            sort,
+            monthlyOffset,
+            monthlyLimit,
+            cancellationToken);
         var incomeByMonth = monthlyData.IncomeByMonth.ToDictionary(row => row.Month);
         var expenseByMonth = monthlyData.ExpenseByMonth.ToDictionary(row => row.Month);
         var accrualByMonth = monthlyData.AccrualByMonth.ToDictionary(row => row.Month);
         var readingsByMonth = monthlyData.MeterReadingsByMonth.ToDictionary(row => row.Month);
 
         var months = MonthPeriod.Enumerate(periodFrom, periodTo).ToList();
-        var monthlyRows = months
+        var allMonthlyRows = months
             .Select(month =>
             {
                 incomeByMonth.TryGetValue(month, out var income);
@@ -61,6 +74,18 @@ public sealed class ReportService(
                     accrual.Count + (startingBalance != 0 ? 1 : 0),
                     readings.Count);
             })
+            .ToList();
+        var monthlyRows = monthlyData.MonthlyRows
+            .Select(row => new MonthlyReportRowDto(
+                row.AccountingMonth,
+                row.IncomeTotal,
+                row.ExpenseTotal,
+                row.AccrualTotal,
+                row.Balance,
+                row.Debt,
+                row.OperationCount,
+                row.AccrualCount,
+                row.MeterReadingCount))
             .ToList();
 
         int? garageRowLimit = request.Limit is > 0 ? NormalizeReportLimit(request.Limit.Value) : null;
@@ -82,14 +107,14 @@ public sealed class ReportService(
         var report = new ConsolidatedReportDto(
             periodFrom,
             periodTo,
-            monthlyRows.Sum(row => row.IncomeTotal),
-            monthlyRows.Sum(row => row.ExpenseTotal),
-            monthlyRows.Sum(row => row.AccrualTotal),
-            monthlyRows.Sum(row => row.Balance),
-            monthlyRows.Sum(row => row.Debt),
-            monthlyRows.Sum(row => row.OperationCount),
-            monthlyRows.Sum(row => row.AccrualCount),
-            monthlyRows.Sum(row => row.MeterReadingCount),
+            allMonthlyRows.Sum(row => row.IncomeTotal),
+            allMonthlyRows.Sum(row => row.ExpenseTotal),
+            allMonthlyRows.Sum(row => row.AccrualTotal),
+            allMonthlyRows.Sum(row => row.Balance),
+            allMonthlyRows.Sum(row => row.Debt),
+            allMonthlyRows.Sum(row => row.OperationCount),
+            allMonthlyRows.Sum(row => row.AccrualCount),
+            allMonthlyRows.Sum(row => row.MeterReadingCount),
             monthlyRows,
             garageData.RowCount,
             garageRows,
@@ -112,6 +137,9 @@ public sealed class ReportService(
             new Dictionary<string, object?>
             {
                 ["limit"] = request.Limit,
+                ["offset"] = request.Offset,
+                ["sortBy"] = sort.Field,
+                ["sortDirection"] = sort.Descending ? "desc" : "asc",
                 ["monthlyRowCount"] = report.MonthlyRows.Count,
                 ["visibleGarageRows"] = report.GarageRows.Count
             },
@@ -129,6 +157,11 @@ public sealed class ReportService(
             return ReportResult<GarageDetailReportDto>.Failure("period_invalid", "Дата окончания отчета не может быть раньше даты начала.");
         }
 
+        if (!TryNormalizeReportSort<GarageDetailReportDto>(ReportSortKind.Garages, request.SortBy, request.SortDirection, out var sort, out var sortFailure))
+        {
+            return sortFailure!;
+        }
+
         var offset = Math.Max(request.Offset ?? 0, 0);
         var limit = NormalizeReportLimit(request.Limit ?? 25);
         var data = await garageReportQuery.GetRowsAsync(
@@ -138,6 +171,7 @@ public sealed class ReportService(
             request.GroupAccruals,
             offset,
             limit,
+            sort,
             cancellationToken);
         var rows = data.Rows.Select(row => new GarageDetailReportRowDto(
                 row.AccountingMonth,
@@ -175,6 +209,8 @@ public sealed class ReportService(
                 ["groupAccruals"] = request.GroupAccruals,
                 ["limit"] = request.Limit,
                 ["offset"] = request.Offset,
+                ["sortBy"] = sort.Field,
+                ["sortDirection"] = sort.Descending ? "desc" : "asc",
                 ["visibleRowCount"] = report.Rows.Count
             },
             cancellationToken);
@@ -307,6 +343,11 @@ public sealed class ReportService(
             return ReportResult<IncomeReportDto>.Failure("period_invalid", "Дата окончания отчета не может быть раньше даты начала.");
         }
 
+        if (!TryNormalizeReportSort<IncomeReportDto>(ReportSortKind.Income, request.SortBy, request.SortDirection, out var sort, out var sortFailure))
+        {
+            return sortFailure!;
+        }
+
         var rowMode = string.IsNullOrWhiteSpace(request.RowMode)
             ? IncomeReportAllRows
             : request.RowMode.Trim().ToLowerInvariant();
@@ -327,6 +368,7 @@ public sealed class ReportService(
             request.Search,
             limit,
             offset,
+            sort,
             cancellationToken);
         var report = new IncomeReportDto(
             dateFrom,
@@ -348,7 +390,7 @@ public sealed class ReportService(
             report.DateTo,
             report.RowCount,
             request.Search,
-            BuildIncomeReportMetadata(request, rowMode, report.Rows.Count),
+            BuildIncomeReportMetadata(request, rowMode, report.Rows.Count, sort),
             cancellationToken);
 
         return ReportResult<IncomeReportDto>.Success(report);
@@ -360,6 +402,11 @@ public sealed class ReportService(
         if (dateTo < dateFrom)
         {
             return ReportResult<ExpenseReportDto>.Failure("period_invalid", "Дата окончания отчета не может быть раньше даты начала.");
+        }
+
+        if (!TryNormalizeReportSort<ExpenseReportDto>(ReportSortKind.Expense, request.SortBy, request.SortDirection, out var sort, out var sortFailure))
+        {
+            return sortFailure!;
         }
 
         var rowMode = string.IsNullOrWhiteSpace(request.RowMode)
@@ -381,6 +428,7 @@ public sealed class ReportService(
             request.Search,
             limit,
             offset,
+            sort,
             cancellationToken);
         var report = new ExpenseReportDto(
             dateFrom,
@@ -402,7 +450,7 @@ public sealed class ReportService(
             report.DateTo,
             report.RowCount,
             request.Search,
-            BuildExpenseReportMetadata(request, rowMode, report.Rows.Count),
+            BuildExpenseReportMetadata(request, rowMode, report.Rows.Count, sort),
             cancellationToken);
 
         return ReportResult<ExpenseReportDto>.Success(report);
@@ -416,9 +464,14 @@ public sealed class ReportService(
             return ReportResult<FundChangeReportDto>.Failure("period_invalid", "Дата окончания отчета не может быть раньше даты начала.");
         }
 
+        if (!TryNormalizeReportSort<FundChangeReportDto>(ReportSortKind.FundChanges, request.SortBy, request.SortDirection, out var sort, out var sortFailure))
+        {
+            return sortFailure!;
+        }
+
         var offset = Math.Max(request.Offset ?? 0, 0);
         int? limit = request.Limit is > 0 ? NormalizeReportLimit(request.Limit.Value) : null;
-        var data = await fundChangeReportQuery.GetFundChangesAsync(dateFrom, dateTo, request.Search, offset, limit, cancellationToken);
+        var data = await fundChangeReportQuery.GetFundChangesAsync(dateFrom, dateTo, request.Search, offset, limit, sort, cancellationToken);
         var rows = data.Rows
             .Select(row => new FundChangeReportRowDto(
                 row.Id,
@@ -453,6 +506,10 @@ public sealed class ReportService(
                 ["withdrawalTotal"] = report.WithdrawalTotal,
                 ["limit"] = request.Limit,
                 ["offset"] = request.Offset
+                ,
+                ["sortBy"] = sort.Field
+                ,
+                ["sortDirection"] = sort.Descending ? "desc" : "asc"
             },
             cancellationToken);
 
@@ -552,9 +609,14 @@ public sealed class ReportService(
             return ReportResult<CashPaymentReportDto>.Failure("period_invalid", "Дата окончания отчета не может быть раньше даты начала.");
         }
 
+        if (!TryNormalizeReportSort<CashPaymentReportDto>(ReportSortKind.CashPayments, request.SortBy, request.SortDirection, out var sort, out var sortFailure))
+        {
+            return sortFailure!;
+        }
+
         var offset = Math.Max(request.Offset ?? 0, 0);
         int? limit = request.Limit is > 0 ? NormalizeReportLimit(request.Limit.Value) : null;
-        var data = await cashMovementReportQuery.GetCashPaymentsAsync(dateFrom, dateTo, request.Search, offset, limit, cancellationToken);
+        var data = await cashMovementReportQuery.GetCashPaymentsAsync(dateFrom, dateTo, request.Search, offset, limit, sort, cancellationToken);
 
         var rows = data.Operations
             .Select(operation => new CashPaymentReportRowDto(
@@ -586,6 +648,10 @@ public sealed class ReportService(
                 ["total"] = report.Total,
                 ["limit"] = request.Limit,
                 ["offset"] = request.Offset
+                ,
+                ["sortBy"] = sort.Field
+                ,
+                ["sortDirection"] = sort.Descending ? "desc" : "asc"
             },
             cancellationToken);
 
@@ -682,9 +748,14 @@ public sealed class ReportService(
             return ReportResult<BankDepositReportDto>.Failure("period_invalid", "Дата окончания отчета не может быть раньше даты начала.");
         }
 
+        if (!TryNormalizeReportSort<BankDepositReportDto>(ReportSortKind.BankDeposits, request.SortBy, request.SortDirection, out var sort, out var sortFailure))
+        {
+            return sortFailure!;
+        }
+
         var offset = Math.Max(request.Offset ?? 0, 0);
         int? limit = request.Limit is > 0 ? NormalizeReportLimit(request.Limit.Value) : null;
-        var data = await cashMovementReportQuery.GetBankDepositsAsync(dateFrom, dateTo, request.Search, offset, limit, cancellationToken);
+        var data = await cashMovementReportQuery.GetBankDepositsAsync(dateFrom, dateTo, request.Search, offset, limit, sort, cancellationToken);
 
         var rows = data.Operations
             .Select(operation => new BankDepositReportRowDto(
@@ -712,6 +783,10 @@ public sealed class ReportService(
                 ["total"] = report.Total,
                 ["limit"] = request.Limit,
                 ["offset"] = request.Offset
+                ,
+                ["sortBy"] = sort.Field
+                ,
+                ["sortDirection"] = sort.Descending ? "desc" : "asc"
             },
             cancellationToken);
 
@@ -796,6 +871,11 @@ public sealed class ReportService(
 
     public async Task<ReportResult<FeeReportDto>> GetFeeReportAsync(FeeReportRequest request, CancellationToken cancellationToken)
     {
+        if (!TryNormalizeReportSort<FeeReportDto>(ReportSortKind.Fees, request.SortBy, request.SortDirection, out var sort, out var sortFailure))
+        {
+            return sortFailure!;
+        }
+
         var variation = request.Variation?.Trim();
         var campaigns = (await feeReportQuery.GetActiveCampaignsAsync(cancellationToken)).ToList();
         var hasFeeCampaigns = campaigns.Count > 0;
@@ -849,9 +929,15 @@ public sealed class ReportService(
         }
 
         var feeEntryIds = feeEntries.Select(entry => entry.Id).ToList();
-        var feeData = hasFeeCampaigns
-            ? await feeReportQuery.GetFeeCampaignDataAsync(feeEntryIds, cancellationToken)
-            : await feeReportQuery.GetFeeDataAsync(feeEntryIds, cancellationToken);
+        var offset = Math.Max(request.Offset ?? 0, 0);
+        int? limit = request.Limit is > 0 ? NormalizeReportLimit(request.Limit.Value) : null;
+        var feeData = await feeReportQuery.GetFeeReportPageAsync(
+            feeEntryIds,
+            hasFeeCampaigns,
+            sort,
+            offset,
+            limit,
+            cancellationToken);
 
         var summaryRows = feeEntries
             .Select(entry =>
@@ -863,64 +949,41 @@ public sealed class ReportService(
             .Where(row => row.FeeAmount != 0 || row.Collected != 0 || !string.IsNullOrWhiteSpace(variation))
             .ToList();
 
-        var accrualLookup = feeData.AccrualsByGarage.ToDictionary(row => (row.GarageId, row.IncomeTypeId));
-        var paymentLookup = feeData.PaymentsByGarage.ToDictionary(row => (row.GarageId, row.IncomeTypeId));
-        var incomeTypeNames = feeEntries.ToDictionary(entry => entry.Id, entry => entry.Name);
-        var feeGarageRows = accrualLookup.Keys
-            .Concat(paymentLookup.Keys)
-            .Distinct()
-            .Select(key =>
-            {
-                accrualLookup.TryGetValue(key, out var accrual);
-                paymentLookup.TryGetValue(key, out var payment);
-                feeData.GaragesById.TryGetValue(key.GarageId, out var garage);
-                var accrued = accrual?.Accrued ?? 0m;
-                var paid = payment?.Paid ?? 0m;
-                return new FeeReportGarageRowDto(
-                    key.GarageId,
-                    accrual?.GarageNumber ?? garage?.GarageNumber ?? string.Empty,
-                    FormatOwnerName(
-                        accrual?.OwnerLastName ?? garage?.OwnerLastName,
-                        accrual?.OwnerFirstName ?? garage?.OwnerFirstName,
-                        accrual?.OwnerMiddleName ?? garage?.OwnerMiddleName),
-                    key.IncomeTypeId,
-                    incomeTypeNames[key.IncomeTypeId],
-                    accrued,
-                    paid,
-                    payment?.LastPaymentDate,
-                    accrued - paid);
-            })
-            .OrderBy(row => row.FeeName)
-            .ThenBy(row => row.GarageNumber)
+        var feeGarageRows = feeData.GarageRows
+            .Select(row => new FeeReportGarageRowDto(
+                row.GarageId,
+                row.GarageNumber,
+                FormatOwnerName(row.OwnerLastName, row.OwnerFirstName, row.OwnerMiddleName),
+                row.FeeEntryId,
+                row.FeeName,
+                row.Accrued,
+                row.Paid,
+                row.LastPaymentDate,
+                row.Debt))
             .ToList();
-        var debtorRows = feeGarageRows
-            .Where(row => row.Debt > 0)
+        var debtorRows = feeData.DebtorRows
             .Select(row => new FeeReportDebtorRowDto(
                 row.GarageId,
                 row.GarageNumber,
-                row.OwnerName,
-                row.IncomeTypeId,
+                FormatOwnerName(row.OwnerLastName, row.OwnerFirstName, row.OwnerMiddleName),
+                row.FeeEntryId,
                 row.FeeName,
                 row.Paid,
                 row.LastPaymentDate,
                 row.Debt))
-            .OrderBy(row => row.FeeName)
-            .ThenBy(row => row.GarageNumber)
             .ToList();
 
-        var rowCount = summaryRows.Count + feeGarageRows.Count;
+        var rowCount = summaryRows.Count + feeData.GarageRowCount;
         var visibleSummaryRows = ApplyRowLimit(summaryRows, request.Limit);
-        var visibleGarageRows = ApplyRowLimit(feeGarageRows, request.Limit);
-        var visibleDebtorRows = ApplyRowLimit(debtorRows, request.Limit);
         var report = new FeeReportDto(
             variation ?? "Все сборы",
             summaryRows.Sum(row => row.FeeAmount),
             summaryRows.Sum(row => row.Collected),
-            debtorRows.Sum(row => row.Debt),
+            feeData.DebtTotal,
             rowCount,
             visibleSummaryRows,
-            visibleGarageRows,
-            visibleDebtorRows);
+            feeGarageRows,
+            debtorRows);
 
         await AddFeeReportAuditAsync(request, report, cancellationToken);
 
@@ -1301,7 +1364,7 @@ public sealed class ReportService(
         await unitOfWork.SaveChangesAsync(cancellationToken);
     }
 
-    private static Dictionary<string, object?> BuildIncomeReportMetadata(IncomeReportRequest request, string rowMode, int visibleRowCount)
+    private static Dictionary<string, object?> BuildIncomeReportMetadata(IncomeReportRequest request, string rowMode, int visibleRowCount, ReportSort sort)
     {
         return new Dictionary<string, object?>
         {
@@ -1312,11 +1375,13 @@ public sealed class ReportService(
             ["ownerFilterCount"] = request.OwnerIds.Count,
             ["incomeTypeFilterCount"] = request.IncomeTypeIds.Count,
             ["limit"] = request.Limit,
-            ["offset"] = request.Offset
+            ["offset"] = request.Offset,
+            ["sortBy"] = sort.Field,
+            ["sortDirection"] = sort.Descending ? "desc" : "asc"
         };
     }
 
-    private static Dictionary<string, object?> BuildExpenseReportMetadata(ExpenseReportRequest request, string rowMode, int visibleRowCount)
+    private static Dictionary<string, object?> BuildExpenseReportMetadata(ExpenseReportRequest request, string rowMode, int visibleRowCount, ReportSort sort)
     {
         return new Dictionary<string, object?>
         {
@@ -1326,7 +1391,9 @@ public sealed class ReportService(
             ["supplierFilterCount"] = request.SupplierIds.Count,
             ["expenseTypeFilterCount"] = request.ExpenseTypeIds.Count,
             ["limit"] = request.Limit,
-            ["offset"] = request.Offset
+            ["offset"] = request.Offset,
+            ["sortBy"] = sort.Field,
+            ["sortDirection"] = sort.Descending ? "desc" : "asc"
         };
     }
 
@@ -1351,7 +1418,10 @@ public sealed class ReportService(
                 ["collectedTotal"] = report.CollectedTotal,
                 ["debtTotal"] = report.DebtTotal,
                 ["variation"] = report.Variation,
-                ["limit"] = request.Limit
+                ["limit"] = request.Limit,
+                ["offset"] = request.Offset,
+                ["sortBy"] = request.SortBy,
+                ["sortDirection"] = request.SortDirection
             },
             cancellationToken);
     }
@@ -1380,7 +1450,10 @@ public sealed class ReportService(
                 ["collectedTotal"] = report.CollectedTotal,
                 ["debtTotal"] = report.DebtTotal,
                 ["variation"] = report.Variation,
-                ["limit"] = request.Limit
+                ["limit"] = request.Limit,
+                ["offset"] = request.Offset,
+                ["sortBy"] = request.SortBy,
+                ["sortDirection"] = request.SortDirection
             },
             cancellationToken);
     }
@@ -1430,6 +1503,29 @@ public sealed class ReportService(
         return limit is > 0
             ? rows.Take(NormalizeReportLimit(limit.Value))
             : rows;
+    }
+
+    private static IEnumerable<T> ApplyPage<T>(IEnumerable<T> rows, int offset, int? limit)
+    {
+        var page = offset > 0 ? rows.Skip(offset) : rows;
+        return limit is > 0 ? page.Take(NormalizeReportLimit(limit.Value)) : page;
+    }
+
+    private static bool TryNormalizeReportSort<T>(
+        ReportSortKind kind,
+        string? sortBy,
+        string? sortDirection,
+        out ReportSort sort,
+        out ReportResult<T>? failure)
+    {
+        if (ReportSorting.TryNormalize(kind, sortBy, sortDirection, out sort, out var errorCode, out var errorMessage))
+        {
+            failure = null;
+            return true;
+        }
+
+        failure = ReportResult<T>.Failure(errorCode!, errorMessage!);
+        return false;
     }
 
     private static string BuildCashPaymentPurpose(FinancialOperation operation)

@@ -18,6 +18,19 @@ public sealed class EfIncomeReportQuery(GarageBalanceDbContext dbContext) : IInc
     private const string PaymentRows = "payments";
     private const string StartingBalanceRows = "starting_balance";
 
+    public Task<IncomeReportQueryData> GetRowsAsync(
+        DateOnly dateFrom,
+        DateOnly dateTo,
+        string rowMode,
+        IReadOnlySet<Guid> garageIds,
+        IReadOnlySet<Guid> ownerIds,
+        IReadOnlySet<Guid> incomeTypeIds,
+        string? search,
+        int? limit,
+        int offset,
+        CancellationToken cancellationToken) =>
+        GetRowsAsync(dateFrom, dateTo, rowMode, garageIds, ownerIds, incomeTypeIds, search, limit, offset, new ReportSort("date", false), cancellationToken);
+
     public async Task<IncomeReportQueryData> GetRowsAsync(
         DateOnly dateFrom,
         DateOnly dateTo,
@@ -28,8 +41,25 @@ public sealed class EfIncomeReportQuery(GarageBalanceDbContext dbContext) : IInc
         string? search,
         int? limit,
         int offset,
+        ReportSort sort,
         CancellationToken cancellationToken)
     {
+        if (IsNpgsql())
+        {
+            return await GetPostgresRowsAsync(
+                dateFrom,
+                dateTo,
+                rowMode,
+                garageIds,
+                ownerIds,
+                incomeTypeIds,
+                search,
+                limit,
+                offset,
+                sort,
+                cancellationToken);
+        }
+
         var rows = new List<IncomeReportRowDto>();
         var accrualTotal = 0m;
         var incomeTotal = 0m;
@@ -276,12 +306,309 @@ public sealed class EfIncomeReportQuery(GarageBalanceDbContext dbContext) : IInc
         }
 
         var visibleRows = ApplyPage(
-                rows.OrderBy(row => row.Date).ThenBy(row => row.GarageNumber).ThenBy(row => row.RowType),
+                ApplySort(rows, sort)
+                    .ThenByDescending(row => row.CreatedAtUtc)
+                    .ThenBy(row => row.GarageNumber, StringComparer.Ordinal)
+                    .ThenBy(row => row.GarageId),
                 offset,
                 limit)
             .ToList();
         return new IncomeReportQueryData(accrualTotal, incomeTotal, rowCount, visibleRows);
     }
+
+    private async Task<IncomeReportQueryData> GetPostgresRowsAsync(
+        DateOnly dateFrom,
+        DateOnly dateTo,
+        string rowMode,
+        IReadOnlySet<Guid> garageIds,
+        IReadOnlySet<Guid> ownerIds,
+        IReadOnlySet<Guid> incomeTypeIds,
+        string? search,
+        int? limit,
+        int offset,
+        ReportSort sort,
+        CancellationToken cancellationToken)
+    {
+        var normalizedSearch = search?.Trim().ToLowerInvariant();
+        var hasSearch = !string.IsNullOrWhiteSpace(normalizedSearch);
+        IQueryable<IncomeReportProjection>? reportRows = null;
+        var aggregateQuery = dbContext.Accruals.AsNoTracking()
+            .Where(_ => false)
+            .Select(_ => new { Category = 0, Total = 0m, Count = 0 });
+
+        if (rowMode is AllRows or AccrualRows)
+        {
+            if (incomeTypeIds.Count == 0)
+            {
+                var startingBalances = dbContext.Garages.AsNoTracking()
+                    .Where(garage => !garage.IsArchived && garage.StartingBalance != 0);
+                if (garageIds.Count > 0)
+                {
+                    startingBalances = startingBalances.Where(garage => garageIds.Contains(garage.Id));
+                }
+
+                if (ownerIds.Count > 0)
+                {
+                    startingBalances = startingBalances.Where(garage => garage.OwnerId != null && ownerIds.Contains(garage.OwnerId.Value));
+                }
+
+                if (hasSearch && !"Стартовый баланс".Contains(search!.Trim(), StringComparison.OrdinalIgnoreCase))
+                {
+                    startingBalances = startingBalances.Where(garage =>
+                        garage.Number.ToLower().Contains(normalizedSearch!) ||
+                        (garage.Owner != null && (
+                            garage.Owner.LastName.ToLower().Contains(normalizedSearch!) ||
+                            garage.Owner.FirstName.ToLower().Contains(normalizedSearch!) ||
+                            (garage.Owner.MiddleName != null && garage.Owner.MiddleName.ToLower().Contains(normalizedSearch!)) ||
+                            (garage.Owner.LastName + " " + garage.Owner.FirstName + " " + (garage.Owner.MiddleName ?? string.Empty)).ToLower().Contains(normalizedSearch!))));
+                }
+
+                aggregateQuery = aggregateQuery.Concat(startingBalances
+                    .GroupBy(_ => 1)
+                    .Select(group => new
+                    {
+                        Category = StartingBalanceTotalCategory,
+                        Total = group.Sum(garage => garage.StartingBalance),
+                        Count = group.Count()
+                    }));
+
+                reportRows = startingBalances.Select(garage => new IncomeReportProjection
+                {
+                    RowType = StartingBalanceRows,
+                    Date = dateFrom,
+                    AccountingMonth = dateFrom,
+                    GarageId = garage.Id,
+                    GarageNumber = garage.Number,
+                    OwnerId = garage.OwnerId,
+                    OwnerName = garage.Owner == null ? null : garage.Owner.LastName + " " + garage.Owner.FirstName + " " + (garage.Owner.MiddleName ?? string.Empty),
+                    IncomeTypeId = Guid.Empty,
+                    IncomeTypeName = "Стартовый баланс",
+                    AccrualAmount = garage.StartingBalance,
+                    IncomeAmount = 0m,
+                    Debt = garage.StartingBalance,
+                    DocumentNumber = null,
+                    Comment = "Начальная задолженность гаража",
+                    CreatedAtUtc = garage.CreatedAtUtc,
+                    RowId = garage.Id,
+                    PaymentOperationId = null
+                });
+            }
+
+            var accruals = dbContext.Accruals.AsNoTracking()
+                .Where(accrual => !accrual.IsCanceled && accrual.AccountingMonth >= dateFrom && accrual.AccountingMonth <= dateTo);
+            if (garageIds.Count > 0)
+            {
+                accruals = accruals.Where(accrual => garageIds.Contains(accrual.GarageId));
+            }
+
+            if (ownerIds.Count > 0)
+            {
+                accruals = accruals.Where(accrual => accrual.Garage.OwnerId != null && ownerIds.Contains(accrual.Garage.OwnerId.Value));
+            }
+
+            if (incomeTypeIds.Count > 0)
+            {
+                accruals = accruals.Where(accrual => incomeTypeIds.Contains(accrual.IncomeTypeId));
+            }
+
+            if (hasSearch)
+            {
+                accruals = accruals.Where(accrual =>
+                    accrual.Garage.Number.ToLower().Contains(normalizedSearch!) ||
+                    (accrual.Garage.Owner != null && (
+                        accrual.Garage.Owner.LastName.ToLower().Contains(normalizedSearch!) ||
+                        accrual.Garage.Owner.FirstName.ToLower().Contains(normalizedSearch!) ||
+                        (accrual.Garage.Owner.MiddleName != null && accrual.Garage.Owner.MiddleName.ToLower().Contains(normalizedSearch!)) ||
+                        (accrual.Garage.Owner.LastName + " " + accrual.Garage.Owner.FirstName + " " + (accrual.Garage.Owner.MiddleName ?? string.Empty)).ToLower().Contains(normalizedSearch!))) ||
+                    accrual.IncomeType.Name.ToLower().Contains(normalizedSearch!));
+            }
+
+            aggregateQuery = aggregateQuery.Concat(accruals
+                .GroupBy(_ => 1)
+                .Select(group => new
+                {
+                    Category = AccrualTotalCategory,
+                    Total = group.Sum(accrual => accrual.Amount),
+                    Count = group.Count()
+                }));
+
+            var projectedAccruals = accruals.Select(accrual => new IncomeReportProjection
+            {
+                RowType = AccrualRows,
+                Date = accrual.AccountingMonth,
+                AccountingMonth = accrual.AccountingMonth,
+                GarageId = accrual.GarageId,
+                GarageNumber = accrual.Garage.Number,
+                OwnerId = accrual.Garage.OwnerId,
+                OwnerName = accrual.Garage.Owner == null ? null : accrual.Garage.Owner.LastName + " " + accrual.Garage.Owner.FirstName + " " + (accrual.Garage.Owner.MiddleName ?? string.Empty),
+                IncomeTypeId = accrual.IncomeTypeId,
+                IncomeTypeName = accrual.IncomeType.Name,
+                AccrualAmount = accrual.Amount,
+                IncomeAmount = 0m,
+                Debt = accrual.Amount,
+                DocumentNumber = null,
+                Comment = accrual.Comment,
+                CreatedAtUtc = accrual.CreatedAtUtc,
+                RowId = accrual.Id,
+                PaymentOperationId = null
+            });
+            reportRows = reportRows == null ? projectedAccruals : reportRows.Concat(projectedAccruals);
+        }
+
+        if (rowMode is AllRows or PaymentRows)
+        {
+            var payments = dbContext.FinancialOperations.AsNoTracking()
+                .Where(operation =>
+                    !operation.IsCanceled &&
+                    operation.OperationKind == FinancialOperationKinds.Income &&
+                    operation.GarageId != null &&
+                    operation.IncomeTypeId != null &&
+                    operation.OperationDate >= dateFrom &&
+                    operation.OperationDate <= dateTo);
+            if (garageIds.Count > 0)
+            {
+                payments = payments.Where(operation => garageIds.Contains(operation.GarageId!.Value));
+            }
+
+            if (ownerIds.Count > 0)
+            {
+                payments = payments.Where(operation => operation.Garage!.OwnerId != null && ownerIds.Contains(operation.Garage.OwnerId.Value));
+            }
+
+            if (incomeTypeIds.Count > 0)
+            {
+                payments = payments.Where(operation => incomeTypeIds.Contains(operation.IncomeTypeId!.Value));
+            }
+
+            if (hasSearch)
+            {
+                payments = payments.Where(operation =>
+                    operation.Garage!.Number.ToLower().Contains(normalizedSearch!) ||
+                    (operation.Garage.Owner != null && (
+                        operation.Garage.Owner.LastName.ToLower().Contains(normalizedSearch!) ||
+                        operation.Garage.Owner.FirstName.ToLower().Contains(normalizedSearch!) ||
+                        (operation.Garage.Owner.MiddleName != null && operation.Garage.Owner.MiddleName.ToLower().Contains(normalizedSearch!)) ||
+                        (operation.Garage.Owner.LastName + " " + operation.Garage.Owner.FirstName + " " + (operation.Garage.Owner.MiddleName ?? string.Empty)).ToLower().Contains(normalizedSearch!))) ||
+                    operation.IncomeType!.Name.ToLower().Contains(normalizedSearch!) ||
+                    (operation.DocumentNumber != null && operation.DocumentNumber.ToLower().Contains(normalizedSearch!)));
+            }
+
+            aggregateQuery = aggregateQuery.Concat(payments
+                .GroupBy(_ => 1)
+                .Select(group => new
+                {
+                    Category = IncomeTotalCategory,
+                    Total = group.Sum(operation => operation.Amount),
+                    Count = group.Count()
+                }));
+
+            var projectedPayments = payments.Select(operation => new IncomeReportProjection
+            {
+                RowType = PaymentRows,
+                Date = operation.OperationDate,
+                AccountingMonth = operation.AccountingMonth,
+                GarageId = operation.GarageId!.Value,
+                GarageNumber = operation.Garage!.Number,
+                OwnerId = operation.Garage.OwnerId,
+                OwnerName = operation.Garage.Owner == null ? null : operation.Garage.Owner.LastName + " " + operation.Garage.Owner.FirstName + " " + (operation.Garage.Owner.MiddleName ?? string.Empty),
+                IncomeTypeId = operation.IncomeTypeId!.Value,
+                IncomeTypeName = operation.IncomeType!.Name,
+                AccrualAmount = 0m,
+                IncomeAmount = operation.Amount,
+                Debt = -operation.Amount,
+                DocumentNumber = operation.DocumentNumber,
+                Comment = operation.Comment,
+                CreatedAtUtc = operation.CreatedAtUtc,
+                RowId = operation.Id,
+                PaymentOperationId = operation.Id
+            });
+            reportRows = reportRows == null ? projectedPayments : reportRows.Concat(projectedPayments);
+        }
+
+        if (reportRows == null)
+        {
+            return new IncomeReportQueryData(0m, 0m, 0, []);
+        }
+
+        var aggregates = await aggregateQuery.ToListAsync(cancellationToken);
+        var rowCount = aggregates.Sum(row => row.Count);
+        if (rowCount == 0)
+        {
+            return new IncomeReportQueryData(0m, 0m, 0, []);
+        }
+        var accrualTotal = aggregates.Where(row => row.Category is StartingBalanceTotalCategory or AccrualTotalCategory).Sum(row => row.Total);
+        var incomeTotal = aggregates.Where(row => row.Category == IncomeTotalCategory).Sum(row => row.Total);
+
+        var sortableRows = reportRows.Select(row => new IncomeReportSortableProjection
+        {
+            RowType = row.RowType,
+            Date = row.Date,
+            AccountingMonth = row.AccountingMonth,
+            GarageId = row.GarageId,
+            GarageNumber = row.GarageNumber,
+            OwnerId = row.OwnerId,
+            OwnerName = row.OwnerName,
+            IncomeTypeId = row.IncomeTypeId,
+            IncomeTypeName = row.IncomeTypeName,
+            AccrualAmount = row.AccrualAmount,
+            IncomeAmount = row.IncomeAmount,
+            Debt = row.Debt,
+            DocumentNumber = row.DocumentNumber,
+            Comment = row.Comment,
+            CreatedAtUtc = row.CreatedAtUtc,
+            RowId = row.RowId,
+            PaymentOperationId = row.PaymentOperationId
+        });
+        var ordered = ApplyPostgresSort(sortableRows, sort)
+            .ThenByDescending(row => row.CreatedAtUtc)
+            .ThenBy(row => row.GarageNumber)
+            .ThenBy(row => row.RowId);
+        IQueryable<IncomeReportSortableProjection> page = offset > 0 ? ordered.Skip(offset) : ordered;
+        if (limit is > 0)
+        {
+            page = page.Take(limit.Value);
+        }
+
+        var projectedRows = await page.ToListAsync(cancellationToken);
+        var paymentIds = projectedRows.Where(row => row.PaymentOperationId.HasValue).Select(row => row.PaymentOperationId!.Value).ToArray();
+        var visiblePayments = paymentIds.Length == 0
+            ? []
+            : await dbContext.FinancialOperations.AsNoTracking().Where(operation => paymentIds.Contains(operation.Id)).ToListAsync(cancellationToken);
+        var debtAfterPayments = await CalculateDebtAfterPaymentsAsync(visiblePayments, cancellationToken);
+        var rows = projectedRows.Select(row => new IncomeReportRowDto(
+                row.RowType,
+                row.Date,
+                row.AccountingMonth,
+                row.GarageId,
+                row.GarageNumber,
+                row.OwnerId,
+                row.OwnerName,
+                row.IncomeTypeId,
+                row.IncomeTypeName,
+                row.AccrualAmount,
+                row.IncomeAmount,
+                row.Debt,
+                row.DocumentNumber,
+                row.Comment,
+                row.CreatedAtUtc,
+                row.PaymentOperationId.HasValue ? debtAfterPayments.GetValueOrDefault(row.PaymentOperationId.Value) : null))
+            .ToList();
+        return new IncomeReportQueryData(accrualTotal, incomeTotal, rowCount, rows);
+    }
+
+    private static IOrderedQueryable<IncomeReportSortableProjection> ApplyPostgresSort(IQueryable<IncomeReportSortableProjection> rows, ReportSort sort) =>
+        sort.Field switch
+        {
+            "accountingMonth" => sort.Descending ? rows.OrderByDescending(row => row.AccountingMonth) : rows.OrderBy(row => row.AccountingMonth),
+            "garageNumber" => sort.Descending ? rows.OrderByDescending(row => row.GarageNumber) : rows.OrderBy(row => row.GarageNumber),
+            "ownerName" => sort.Descending ? rows.OrderByDescending(row => row.OwnerName) : rows.OrderBy(row => row.OwnerName),
+            "incomeTypeName" => sort.Descending ? rows.OrderByDescending(row => row.IncomeTypeName) : rows.OrderBy(row => row.IncomeTypeName),
+            "accrualAmount" => sort.Descending ? rows.OrderByDescending(row => row.AccrualAmount) : rows.OrderBy(row => row.AccrualAmount),
+            "incomeAmount" => sort.Descending ? rows.OrderByDescending(row => row.IncomeAmount) : rows.OrderBy(row => row.IncomeAmount),
+            "debt" => sort.Descending ? rows.OrderByDescending(row => row.Debt) : rows.OrderBy(row => row.Debt),
+            "documentNumber" => sort.Descending ? rows.OrderByDescending(row => row.DocumentNumber) : rows.OrderBy(row => row.DocumentNumber),
+            _ => sort.Descending ? rows.OrderByDescending(row => row.Date) : rows.OrderBy(row => row.Date)
+        };
 
     private async Task<IReadOnlyDictionary<Guid, decimal>> CalculateDebtAfterPaymentsAsync(
         IReadOnlyList<FinancialOperation> operations,
@@ -395,6 +722,48 @@ public sealed class EfIncomeReportQuery(GarageBalanceDbContext dbContext) : IInc
     private static int? GetFetchLimit(int offset, int? limit) =>
         limit is > 0 ? (int)Math.Min((long)offset + limit.Value, int.MaxValue) : null;
 
+    private bool IsNpgsql() =>
+        dbContext.Database.ProviderName?.Contains("Npgsql", StringComparison.OrdinalIgnoreCase) == true;
+
+    private static IOrderedEnumerable<IncomeReportRowDto> ApplySort(IEnumerable<IncomeReportRowDto> rows, ReportSort sort) =>
+        sort.Field switch
+        {
+            "accountingMonth" => sort.Descending ? rows.OrderByDescending(row => row.AccountingMonth) : rows.OrderBy(row => row.AccountingMonth),
+            "garageNumber" => sort.Descending ? rows.OrderByDescending(row => row.GarageNumber, StringComparer.Ordinal) : rows.OrderBy(row => row.GarageNumber, StringComparer.Ordinal),
+            "ownerName" => sort.Descending ? rows.OrderByDescending(row => row.OwnerName, StringComparer.Ordinal) : rows.OrderBy(row => row.OwnerName, StringComparer.Ordinal),
+            "incomeTypeName" => sort.Descending ? rows.OrderByDescending(row => row.IncomeTypeName, StringComparer.Ordinal) : rows.OrderBy(row => row.IncomeTypeName, StringComparer.Ordinal),
+            "accrualAmount" => sort.Descending ? rows.OrderByDescending(row => row.AccrualAmount) : rows.OrderBy(row => row.AccrualAmount),
+            "incomeAmount" => sort.Descending ? rows.OrderByDescending(row => row.IncomeAmount) : rows.OrderBy(row => row.IncomeAmount),
+            "debt" => sort.Descending ? rows.OrderByDescending(row => row.Debt) : rows.OrderBy(row => row.Debt),
+            "documentNumber" => sort.Descending ? rows.OrderByDescending(row => row.DocumentNumber, StringComparer.Ordinal) : rows.OrderBy(row => row.DocumentNumber, StringComparer.Ordinal),
+            _ => sort.Descending ? rows.OrderByDescending(row => row.Date) : rows.OrderBy(row => row.Date)
+        };
+
     private readonly record struct IncomeDebtAccrualRow(Guid GarageId, DateOnly AccountingMonth, decimal Amount);
     private readonly record struct IncomeDebtPaymentRow(Guid OperationId, Guid GarageId, DateOnly OperationDate, DateTimeOffset CreatedAtUtc, decimal Amount);
+
+    private sealed class IncomeReportProjection : IncomeReportSortableProjection
+    {
+    }
+
+    private class IncomeReportSortableProjection
+    {
+        public string RowType { get; init; } = string.Empty;
+        public DateOnly Date { get; init; }
+        public DateOnly AccountingMonth { get; init; }
+        public Guid GarageId { get; init; }
+        public string GarageNumber { get; init; } = string.Empty;
+        public Guid? OwnerId { get; init; }
+        public string? OwnerName { get; init; }
+        public Guid IncomeTypeId { get; init; }
+        public string IncomeTypeName { get; init; } = string.Empty;
+        public decimal AccrualAmount { get; init; }
+        public decimal IncomeAmount { get; init; }
+        public decimal Debt { get; init; }
+        public string? DocumentNumber { get; init; }
+        public string? Comment { get; init; }
+        public DateTimeOffset CreatedAtUtc { get; init; }
+        public Guid RowId { get; init; }
+        public Guid? PaymentOperationId { get; init; }
+    }
 }

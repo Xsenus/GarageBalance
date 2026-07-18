@@ -10,6 +10,7 @@ public interface ICashMovementReportQuery
         string? search,
         int offset,
         int? limit,
+        ReportSort sort,
         CancellationToken cancellationToken);
 
     Task<BankDepositReportData> GetBankDepositsAsync(
@@ -18,6 +19,7 @@ public interface ICashMovementReportQuery
         string? search,
         int offset,
         int? limit,
+        ReportSort sort,
         CancellationToken cancellationToken);
 }
 

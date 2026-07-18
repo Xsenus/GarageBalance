@@ -8,6 +8,7 @@ public interface IFundChangeReportQuery
         string? search,
         int offset,
         int? limit,
+        ReportSort sort,
         CancellationToken cancellationToken);
 }
 

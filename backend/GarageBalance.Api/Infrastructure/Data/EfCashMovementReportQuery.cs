@@ -12,6 +12,7 @@ public sealed class EfCashMovementReportQuery(GarageBalanceDbContext dbContext) 
         string? search,
         int offset,
         int? limit,
+        ReportSort sort,
         CancellationToken cancellationToken)
     {
         var query = dbContext.FinancialOperations.AsNoTracking()
@@ -45,16 +46,12 @@ public sealed class EfCashMovementReportQuery(GarageBalanceDbContext dbContext) 
                 .SingleOrDefaultAsync(cancellationToken);
             var rowCount = totals?.RowCount ?? 0;
             var total = totals?.Total ?? 0m;
-            var ordered = query.OrderBy(operation => operation.OperationDate).ThenBy(operation => operation.DocumentNumber).ThenBy(operation => operation.Id);
+            var ordered = ApplyCashPaymentSort(query, sort).ThenByDescending(operation => operation.Id);
             var operations = await ApplyPage(ordered, offset, limit).ToListAsync(cancellationToken);
             return new CashPaymentReportData(operations, total, rowCount);
         }
 
-        var fallbackOperations = await query
-            .OrderBy(operation => operation.OperationDate)
-            .ThenBy(operation => operation.DocumentNumber)
-            .ThenBy(operation => operation.Id)
-            .ToListAsync(cancellationToken);
+        var fallbackOperations = await query.ToListAsync(cancellationToken);
         if (!string.IsNullOrWhiteSpace(search))
         {
             var normalizedSearch = search.Trim();
@@ -66,8 +63,11 @@ public sealed class EfCashMovementReportQuery(GarageBalanceDbContext dbContext) 
                 .ToList();
         }
 
+        var orderedFallbackOperations = ApplyCashPaymentSort(fallbackOperations, sort)
+            .ThenByDescending(operation => operation.Id)
+            .ToList();
         return new CashPaymentReportData(
-            ApplyPage(fallbackOperations, offset, limit).ToList(),
+            ApplyPage(orderedFallbackOperations, offset, limit).ToList(),
             fallbackOperations.Sum(operation => operation.Amount),
             fallbackOperations.Count);
     }
@@ -78,6 +78,7 @@ public sealed class EfCashMovementReportQuery(GarageBalanceDbContext dbContext) 
         string? search,
         int offset,
         int? limit,
+        ReportSort sort,
         CancellationToken cancellationToken)
     {
         var fromUtc = new DateTimeOffset(dateFrom.ToDateTime(TimeOnly.MinValue), TimeSpan.Zero);
@@ -112,7 +113,7 @@ public sealed class EfCashMovementReportQuery(GarageBalanceDbContext dbContext) 
                     .ToList();
             }
 
-            operations = operations.OrderBy(operation => operation.CreatedAtUtc).ThenBy(operation => operation.Fund.Name).ThenBy(operation => operation.Id).ToList();
+            operations = ApplyBankDepositSort(operations, sort).ThenByDescending(operation => operation.Id).ToList();
             return new BankDepositReportData(
                 ApplyPage(operations, offset, limit).ToList(),
                 operations.Sum(operation => operation.Amount),
@@ -137,16 +138,68 @@ public sealed class EfCashMovementReportQuery(GarageBalanceDbContext dbContext) 
             .SingleOrDefaultAsync(cancellationToken);
         var rowCount = totals?.RowCount ?? 0;
         var total = totals?.Total ?? 0m;
-        var orderedQuery = query.OrderBy(operation => operation.CreatedAtUtc).ThenBy(operation => operation.Fund.Name).ThenBy(operation => operation.Id);
+        var orderedQuery = ApplyBankDepositSort(query, sort).ThenByDescending(operation => operation.Id);
         var result = await ApplyPage(orderedQuery, offset, limit).ToListAsync(cancellationToken);
         return new BankDepositReportData(result, total, rowCount);
     }
 
-    private static IQueryable<T> ApplyLimit<T>(IQueryable<T> query, int? limit) =>
-        limit is > 0 ? query.Take(limit.Value) : query;
+    private static IOrderedQueryable<FinancialOperation> ApplyCashPaymentSort(IQueryable<FinancialOperation> query, ReportSort sort) =>
+        sort.Field switch
+        {
+            "amount" => sort.Descending ? query.OrderByDescending(operation => operation.Amount) : query.OrderBy(operation => operation.Amount),
+            "hasReceipt" => sort.Descending
+                ? query.OrderByDescending(operation => operation.DocumentNumber != null && operation.DocumentNumber != string.Empty)
+                : query.OrderBy(operation => operation.DocumentNumber != null && operation.DocumentNumber != string.Empty),
+            "purpose" => sort.Descending
+                ? query.OrderByDescending(operation => (operation.ExpenseType == null ? string.Empty : operation.ExpenseType.Name) + ": " + (operation.Supplier == null ? string.Empty : operation.Supplier.Name))
+                : query.OrderBy(operation => (operation.ExpenseType == null ? string.Empty : operation.ExpenseType.Name) + ": " + (operation.Supplier == null ? string.Empty : operation.Supplier.Name)),
+            "supplierName" => sort.Descending
+                ? query.OrderByDescending(operation => operation.Supplier == null ? string.Empty : operation.Supplier.Name)
+                : query.OrderBy(operation => operation.Supplier == null ? string.Empty : operation.Supplier.Name),
+            "expenseTypeName" => sort.Descending
+                ? query.OrderByDescending(operation => operation.ExpenseType == null ? string.Empty : operation.ExpenseType.Name)
+                : query.OrderBy(operation => operation.ExpenseType == null ? string.Empty : operation.ExpenseType.Name),
+            "documentNumber" => sort.Descending ? query.OrderByDescending(operation => operation.DocumentNumber) : query.OrderBy(operation => operation.DocumentNumber),
+            _ => sort.Descending ? query.OrderByDescending(operation => operation.OperationDate) : query.OrderBy(operation => operation.OperationDate)
+        };
 
-    private static IEnumerable<T> ApplyLimit<T>(IEnumerable<T> items, int? limit) =>
-        limit is > 0 ? items.Take(limit.Value) : items;
+    private static IOrderedEnumerable<FinancialOperation> ApplyCashPaymentSort(IEnumerable<FinancialOperation> operations, ReportSort sort) =>
+        sort.Field switch
+        {
+            "amount" => sort.Descending ? operations.OrderByDescending(operation => operation.Amount) : operations.OrderBy(operation => operation.Amount),
+            "hasReceipt" => sort.Descending ? operations.OrderByDescending(operation => !string.IsNullOrWhiteSpace(operation.DocumentNumber)) : operations.OrderBy(operation => !string.IsNullOrWhiteSpace(operation.DocumentNumber)),
+            "purpose" => sort.Descending ? operations.OrderByDescending(BuildCashPaymentPurpose, StringComparer.Ordinal) : operations.OrderBy(BuildCashPaymentPurpose, StringComparer.Ordinal),
+            "supplierName" => sort.Descending ? operations.OrderByDescending(operation => operation.Supplier?.Name, StringComparer.Ordinal) : operations.OrderBy(operation => operation.Supplier?.Name, StringComparer.Ordinal),
+            "expenseTypeName" => sort.Descending ? operations.OrderByDescending(operation => operation.ExpenseType?.Name, StringComparer.Ordinal) : operations.OrderBy(operation => operation.ExpenseType?.Name, StringComparer.Ordinal),
+            "documentNumber" => sort.Descending ? operations.OrderByDescending(operation => operation.DocumentNumber, StringComparer.Ordinal) : operations.OrderBy(operation => operation.DocumentNumber, StringComparer.Ordinal),
+            _ => sort.Descending ? operations.OrderByDescending(operation => operation.OperationDate) : operations.OrderBy(operation => operation.OperationDate)
+        };
+
+    private static IOrderedQueryable<FundOperation> ApplyBankDepositSort(IQueryable<FundOperation> query, ReportSort sort) =>
+        sort.Field switch
+        {
+            "amount" => sort.Descending ? query.OrderByDescending(operation => operation.Amount) : query.OrderBy(operation => operation.Amount),
+            "fundName" => sort.Descending ? query.OrderByDescending(operation => operation.Fund.Name) : query.OrderBy(operation => operation.Fund.Name),
+            "comment" => sort.Descending ? query.OrderByDescending(operation => operation.Reason) : query.OrderBy(operation => operation.Reason),
+            _ => sort.Descending ? query.OrderByDescending(operation => operation.CreatedAtUtc) : query.OrderBy(operation => operation.CreatedAtUtc)
+        };
+
+    private static IOrderedEnumerable<FundOperation> ApplyBankDepositSort(IEnumerable<FundOperation> operations, ReportSort sort) =>
+        sort.Field switch
+        {
+            "amount" => sort.Descending ? operations.OrderByDescending(operation => operation.Amount) : operations.OrderBy(operation => operation.Amount),
+            "fundName" => sort.Descending ? operations.OrderByDescending(operation => operation.Fund.Name, StringComparer.Ordinal) : operations.OrderBy(operation => operation.Fund.Name, StringComparer.Ordinal),
+            "comment" => sort.Descending ? operations.OrderByDescending(operation => operation.Reason, StringComparer.Ordinal) : operations.OrderBy(operation => operation.Reason, StringComparer.Ordinal),
+            _ => sort.Descending ? operations.OrderByDescending(operation => operation.CreatedAtUtc) : operations.OrderBy(operation => operation.CreatedAtUtc)
+        };
+
+    private static string BuildCashPaymentPurpose(FinancialOperation operation)
+    {
+        var parts = new[] { operation.ExpenseType?.Name, operation.Supplier?.Name }
+            .Where(part => !string.IsNullOrWhiteSpace(part));
+        var purpose = string.Join(": ", parts);
+        return string.IsNullOrWhiteSpace(purpose) ? operation.Comment ?? "Оплата из кассы" : purpose;
+    }
 
     private static IQueryable<T> ApplyPage<T>(IQueryable<T> query, int offset, int? limit)
     {

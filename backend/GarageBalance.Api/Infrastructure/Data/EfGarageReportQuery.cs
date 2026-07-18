@@ -9,6 +9,16 @@ public sealed class EfGarageReportQuery(GarageBalanceDbContext dbContext) : IGar
     private const string StartingBalanceName = "Стартовый баланс";
     private const string GroupedIncomeTypeName = "ИТОГО";
 
+    public Task<GarageReportQueryData> GetRowsAsync(
+        DateOnly periodFrom,
+        DateOnly periodTo,
+        string? search,
+        bool groupAccruals,
+        int offset,
+        int limit,
+        CancellationToken cancellationToken) =>
+        GetRowsAsync(periodFrom, periodTo, search, groupAccruals, offset, limit, new ReportSort("accountingMonth", true), cancellationToken);
+
     public async Task<GarageReportQueryData> GetRowsAsync(
         DateOnly periodFrom,
         DateOnly periodTo,
@@ -16,6 +26,7 @@ public sealed class EfGarageReportQuery(GarageBalanceDbContext dbContext) : IGar
         bool groupAccruals,
         int offset,
         int limit,
+        ReportSort sort,
         CancellationToken cancellationToken)
     {
         var dateTo = periodTo.AddMonths(1).AddDays(-1);
@@ -170,10 +181,24 @@ public sealed class EfGarageReportQuery(GarageBalanceDbContext dbContext) : IGar
             return new GarageReportQueryData(0m, 0m, 0, []);
         }
 
-        var rows = await groupedRows
-            .OrderBy(row => row.AccountingMonth)
+        var orderedRows = sort.Field switch
+        {
+            "garageNumber" => sort.Descending ? groupedRows.OrderByDescending(row => row.GarageNumber) : groupedRows.OrderBy(row => row.GarageNumber),
+            "ownerName" => sort.Descending
+                ? groupedRows.OrderByDescending(row => (row.OwnerLastName ?? string.Empty) + " " + (row.OwnerFirstName ?? string.Empty) + " " + (row.OwnerMiddleName ?? string.Empty))
+                : groupedRows.OrderBy(row => (row.OwnerLastName ?? string.Empty) + " " + (row.OwnerFirstName ?? string.Empty) + " " + (row.OwnerMiddleName ?? string.Empty)),
+            "incomeTypeName" => sort.Descending ? groupedRows.OrderByDescending(row => row.IncomeTypeName) : groupedRows.OrderBy(row => row.IncomeTypeName),
+            "accrualAmount" => sort.Descending ? groupedRows.OrderByDescending(row => row.AccrualAmount) : groupedRows.OrderBy(row => row.AccrualAmount),
+            "incomeAmount" => sort.Descending ? groupedRows.OrderByDescending(row => row.IncomeAmount) : groupedRows.OrderBy(row => row.IncomeAmount),
+            "difference" => sort.Descending
+                ? groupedRows.OrderByDescending(row => row.AccrualAmount - row.IncomeAmount)
+                : groupedRows.OrderBy(row => row.AccrualAmount - row.IncomeAmount),
+            _ => sort.Descending ? groupedRows.OrderByDescending(row => row.AccountingMonth) : groupedRows.OrderBy(row => row.AccountingMonth)
+        };
+        var rows = await orderedRows
             .ThenBy(row => row.GarageNumber)
             .ThenBy(row => row.IncomeTypeName)
+            .ThenBy(row => row.AccountingMonth)
             .ThenBy(row => row.GarageId)
             .Skip(offset)
             .Take(limit)

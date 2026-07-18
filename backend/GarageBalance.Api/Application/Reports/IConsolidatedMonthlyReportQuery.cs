@@ -6,6 +6,14 @@ public interface IConsolidatedMonthlyReportQuery
         DateOnly periodFrom,
         DateOnly periodTo,
         CancellationToken cancellationToken);
+
+    Task<ConsolidatedMonthlyReportData> GetMonthlyDataAsync(
+        DateOnly periodFrom,
+        DateOnly periodTo,
+        ReportSort sort,
+        int offset,
+        int? limit,
+        CancellationToken cancellationToken);
 }
 
 public sealed record ConsolidatedMonthlyReportData(
@@ -15,7 +23,20 @@ public sealed record ConsolidatedMonthlyReportData(
     IReadOnlyList<CountByMonth> MeterReadingsByMonth,
     decimal GarageStartingBalanceTotal,
     IReadOnlyList<NamedAmountTotal> IncomeBreakdown,
-    IReadOnlyList<NamedAmountTotal> ExpenseBreakdown);
+    IReadOnlyList<NamedAmountTotal> ExpenseBreakdown,
+    IReadOnlyList<MonthlyReportQueryRow> MonthlyRows,
+    int MonthlyRowCount);
+
+public sealed record MonthlyReportQueryRow(
+    DateOnly AccountingMonth,
+    decimal IncomeTotal,
+    decimal ExpenseTotal,
+    decimal AccrualTotal,
+    decimal Balance,
+    decimal Debt,
+    int OperationCount,
+    int AccrualCount,
+    int MeterReadingCount);
 
 public readonly record struct AmountCountByMonth(DateOnly Month, decimal Amount, int Count);
 

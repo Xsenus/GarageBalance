@@ -235,13 +235,13 @@ export type FeeReportDto = {
 }
 
 export type ReportClient = {
-  getConsolidatedReport(accessToken: string, params?: { monthFrom?: string; monthTo?: string; search?: string; limit?: number }): Promise<ConsolidatedReportDto>
+  getConsolidatedReport(accessToken: string, params?: { monthFrom?: string; monthTo?: string; search?: string; limit?: number; offset?: number; sortBy?: string; sortDirection?: string }): Promise<ConsolidatedReportDto>
   getGarageReport(
     accessToken: string,
-    params?: { monthFrom?: string; monthTo?: string; search?: string; groupAccruals?: boolean; offset?: number; limit?: number },
+    params?: { monthFrom?: string; monthTo?: string; search?: string; groupAccruals?: boolean; offset?: number; limit?: number; sortBy?: string; sortDirection?: string },
   ): Promise<GarageDetailReportDto>
-  exportConsolidatedReportXlsx(accessToken: string, params?: { monthFrom?: string; monthTo?: string; search?: string }): Promise<Blob>
-  exportConsolidatedReportPdf(accessToken: string, params?: { monthFrom?: string; monthTo?: string; search?: string }): Promise<Blob>
+  exportConsolidatedReportXlsx(accessToken: string, params?: { monthFrom?: string; monthTo?: string; search?: string; sortBy?: string; sortDirection?: string }): Promise<Blob>
+  exportConsolidatedReportPdf(accessToken: string, params?: { monthFrom?: string; monthTo?: string; search?: string; sortBy?: string; sortDirection?: string }): Promise<Blob>
   getIncomeReport(
     accessToken: string,
     params?: {
@@ -254,6 +254,8 @@ export type ReportClient = {
       rowMode?: string
       limit?: number
       offset?: number
+      sortBy?: string
+      sortDirection?: string
     },
   ): Promise<IncomeReportDto>
   exportIncomeReportXlsx(
@@ -266,6 +268,8 @@ export type ReportClient = {
       ownerIds?: string[]
       incomeTypeIds?: string[]
       rowMode?: string
+      sortBy?: string
+      sortDirection?: string
     },
   ): Promise<Blob>
   exportIncomeReportPdf(
@@ -278,6 +282,8 @@ export type ReportClient = {
       ownerIds?: string[]
       incomeTypeIds?: string[]
       rowMode?: string
+      sortBy?: string
+      sortDirection?: string
     },
   ): Promise<Blob>
   getExpenseReport(
@@ -291,6 +297,8 @@ export type ReportClient = {
       rowMode?: string
       limit?: number
       offset?: number
+      sortBy?: string
+      sortDirection?: string
     },
   ): Promise<ExpenseReportDto>
   getFundChangeReport(
@@ -301,6 +309,8 @@ export type ReportClient = {
       search?: string
       offset?: number
       limit?: number
+      sortBy?: string
+      sortDirection?: string
     },
   ): Promise<FundChangeReportDto>
   exportFundChangeReportXlsx(
@@ -309,6 +319,8 @@ export type ReportClient = {
       dateFrom?: string
       dateTo?: string
       search?: string
+      sortBy?: string
+      sortDirection?: string
     },
   ): Promise<Blob>
   exportFundChangeReportPdf(
@@ -317,6 +329,8 @@ export type ReportClient = {
       dateFrom?: string
       dateTo?: string
       search?: string
+      sortBy?: string
+      sortDirection?: string
     },
   ): Promise<Blob>
   getCashPaymentReport(
@@ -327,6 +341,8 @@ export type ReportClient = {
       search?: string
       offset?: number
       limit?: number
+      sortBy?: string
+      sortDirection?: string
     },
   ): Promise<CashPaymentReportDto>
   exportCashPaymentReportXlsx(
@@ -335,6 +351,8 @@ export type ReportClient = {
       dateFrom?: string
       dateTo?: string
       search?: string
+      sortBy?: string
+      sortDirection?: string
     },
   ): Promise<Blob>
   exportCashPaymentReportPdf(
@@ -343,6 +361,8 @@ export type ReportClient = {
       dateFrom?: string
       dateTo?: string
       search?: string
+      sortBy?: string
+      sortDirection?: string
     },
   ): Promise<Blob>
   getBankDepositReport(
@@ -353,6 +373,8 @@ export type ReportClient = {
       search?: string
       offset?: number
       limit?: number
+      sortBy?: string
+      sortDirection?: string
     },
   ): Promise<BankDepositReportDto>
   exportBankDepositReportXlsx(
@@ -361,6 +383,8 @@ export type ReportClient = {
       dateFrom?: string
       dateTo?: string
       search?: string
+      sortBy?: string
+      sortDirection?: string
     },
   ): Promise<Blob>
   exportBankDepositReportPdf(
@@ -369,6 +393,8 @@ export type ReportClient = {
       dateFrom?: string
       dateTo?: string
       search?: string
+      sortBy?: string
+      sortDirection?: string
     },
   ): Promise<Blob>
   getFeeReport(
@@ -376,18 +402,25 @@ export type ReportClient = {
     params?: {
       variation?: string
       limit?: number
+      offset?: number
+      sortBy?: string
+      sortDirection?: string
     },
   ): Promise<FeeReportDto>
   exportFeeReportXlsx(
     accessToken: string,
     params?: {
       variation?: string
+      sortBy?: string
+      sortDirection?: string
     },
   ): Promise<Blob>
   exportFeeReportPdf(
     accessToken: string,
     params?: {
       variation?: string
+      sortBy?: string
+      sortDirection?: string
     },
   ): Promise<Blob>
   exportExpenseReportXlsx(
@@ -399,6 +432,8 @@ export type ReportClient = {
       supplierIds?: string[]
       expenseTypeIds?: string[]
       rowMode?: string
+      sortBy?: string
+      sortDirection?: string
     },
   ): Promise<Blob>
   exportExpenseReportPdf(
@@ -410,6 +445,8 @@ export type ReportClient = {
       supplierIds?: string[]
       expenseTypeIds?: string[]
       rowMode?: string
+      sortBy?: string
+      sortDirection?: string
     },
   ): Promise<Blob>
 }
@@ -448,6 +485,15 @@ async function requestBlob(accessToken: string, path: string, init?: RequestInit
   return response.blob()
 }
 
+function appendReportSort(searchParams: URLSearchParams, params: { sortBy?: string; sortDirection?: string }) {
+  if (params.sortBy) {
+    searchParams.set('sortBy', params.sortBy)
+  }
+  if (params.sortDirection) {
+    searchParams.set('sortDirection', params.sortDirection)
+  }
+}
+
 function buildIncomeReportQuery(params: Parameters<ReportClient['getIncomeReport']>[1] = {}) {
   const searchParams = new URLSearchParams()
   if (params.dateFrom) {
@@ -477,6 +523,7 @@ function buildIncomeReportQuery(params: Parameters<ReportClient['getIncomeReport
   for (const incomeTypeId of params.incomeTypeIds ?? []) {
     searchParams.append('incomeTypeIds', incomeTypeId)
   }
+  appendReportSort(searchParams, params)
   return searchParams.toString()
 }
 
@@ -494,6 +541,10 @@ function buildConsolidatedReportQuery(params: Parameters<ReportClient['getConsol
   if (params.limit) {
     searchParams.set('limit', String(params.limit))
   }
+  if (params.offset !== undefined) {
+    searchParams.set('offset', String(params.offset))
+  }
+  appendReportSort(searchParams, params)
   return searchParams.toString()
 }
 
@@ -517,6 +568,7 @@ function buildGarageReportQuery(params: Parameters<ReportClient['getGarageReport
   if (params.limit) {
     searchParams.set('limit', String(params.limit))
   }
+  appendReportSort(searchParams, params)
   return searchParams.toString()
 }
 
@@ -546,6 +598,7 @@ function buildExpenseReportQuery(params: Parameters<ReportClient['getExpenseRepo
   for (const expenseTypeId of params.expenseTypeIds ?? []) {
     searchParams.append('expenseTypeIds', expenseTypeId)
   }
+  appendReportSort(searchParams, params)
   return searchParams.toString()
 }
 
@@ -566,6 +619,7 @@ function buildFundChangeReportQuery(params: Parameters<ReportClient['getFundChan
   if (params.limit) {
     searchParams.set('limit', String(params.limit))
   }
+  appendReportSort(searchParams, params)
   return searchParams.toString()
 }
 
@@ -586,6 +640,7 @@ function buildCashPaymentReportQuery(params: Parameters<ReportClient['getCashPay
   if (params.limit) {
     searchParams.set('limit', String(params.limit))
   }
+  appendReportSort(searchParams, params)
   return searchParams.toString()
 }
 
@@ -606,6 +661,7 @@ function buildBankDepositReportQuery(params: Parameters<ReportClient['getBankDep
   if (params.limit) {
     searchParams.set('limit', String(params.limit))
   }
+  appendReportSort(searchParams, params)
   return searchParams.toString()
 }
 
@@ -617,6 +673,10 @@ function buildFeeReportQuery(params: Parameters<ReportClient['getFeeReport']>[1]
   if (params.limit) {
     searchParams.set('limit', String(params.limit))
   }
+  if (params.offset !== undefined) {
+    searchParams.set('offset', String(params.offset))
+  }
+  appendReportSort(searchParams, params)
   return searchParams.toString()
 }
 

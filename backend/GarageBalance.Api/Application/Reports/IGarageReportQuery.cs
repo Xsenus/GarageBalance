@@ -9,6 +9,7 @@ public interface IGarageReportQuery
         bool groupAccruals,
         int offset,
         int limit,
+        ReportSort sort,
         CancellationToken cancellationToken);
 }
 
