@@ -4339,6 +4339,29 @@ public sealed class FinanceServiceTests
     }
 
     [Fact]
+    public async Task CreateMeterReadingAsync_AllowsSameValueWithZeroConsumption()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        var service = FinanceServiceTestFactory.Create(database.Context);
+
+        var first = await service.CreateMeterReadingAsync(
+            new CreateMeterReadingRequest(fixtures.Garage.Id, MeterKinds.Water, new DateOnly(2026, 5, 1), new DateOnly(2026, 5, 20), 15.125m, null),
+            null,
+            CancellationToken.None);
+        var same = await service.CreateMeterReadingAsync(
+            new CreateMeterReadingRequest(fixtures.Garage.Id, MeterKinds.Water, new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 20), 15.125m, null),
+            null,
+            CancellationToken.None);
+
+        Assert.True(first.Succeeded, first.ErrorMessage);
+        Assert.True(same.Succeeded, same.ErrorMessage);
+        Assert.Equal(15.125m, same.Value!.PreviousValue);
+        Assert.Equal(15.125m, same.Value.CurrentValue);
+        Assert.Equal(0m, same.Value.Consumption);
+    }
+
+    [Fact]
     public async Task CreateMeterReadingAsync_RejectsDuplicateGarageKindAndMonth()
     {
         await using var database = await TestDatabase.CreateAsync();

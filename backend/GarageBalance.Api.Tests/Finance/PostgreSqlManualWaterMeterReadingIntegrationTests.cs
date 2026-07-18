@@ -69,11 +69,50 @@ public sealed class PostgreSqlManualWaterMeterReadingIntegrationTests
                 null),
             null,
             CancellationToken.None);
+        var same = await service.CreateMeterReadingAsync(
+            new CreateMeterReadingRequest(
+                garageId,
+                MeterKinds.Water,
+                new DateOnly(2026, 7, 1),
+                new DateOnly(2026, 7, 20),
+                18m,
+                null),
+            null,
+            CancellationToken.None);
+        var fractional = await service.CreateMeterReadingAsync(
+            new CreateMeterReadingRequest(
+                garageId,
+                MeterKinds.Water,
+                new DateOnly(2026, 8, 1),
+                new DateOnly(2026, 8, 20),
+                18.375m,
+                null),
+            null,
+            CancellationToken.None);
+        var decreased = await service.CreateMeterReadingAsync(
+            new CreateMeterReadingRequest(
+                garageId,
+                MeterKinds.Water,
+                new DateOnly(2026, 9, 1),
+                new DateOnly(2026, 9, 20),
+                18.25m,
+                null),
+            null,
+            CancellationToken.None);
 
         Assert.True(first.Succeeded, first.ErrorMessage);
         Assert.True(next.Succeeded, next.ErrorMessage);
         Assert.Equal(15m, next.Value!.PreviousValue);
         Assert.Equal(3m, next.Value.Consumption);
-        Assert.Equal(2, await context.MeterReadings.CountAsync());
+        Assert.True(same.Succeeded, same.ErrorMessage);
+        Assert.Equal(18m, same.Value!.PreviousValue);
+        Assert.Equal(0m, same.Value.Consumption);
+        Assert.True(fractional.Succeeded, fractional.ErrorMessage);
+        Assert.Equal(18m, fractional.Value!.PreviousValue);
+        Assert.Equal(18.375m, fractional.Value.CurrentValue);
+        Assert.Equal(0.375m, fractional.Value.Consumption);
+        Assert.False(decreased.Succeeded);
+        Assert.Equal("meter_reading_decreased", decreased.ErrorCode);
+        Assert.Equal(4, await context.MeterReadings.CountAsync());
     }
 }
