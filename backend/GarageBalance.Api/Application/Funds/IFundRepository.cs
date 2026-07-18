@@ -4,6 +4,7 @@ namespace GarageBalance.Api.Application.Funds;
 
 public interface IFundRepository
 {
+    Task<IAsyncDisposable> AcquireAllocationLockAsync(CancellationToken cancellationToken);
     Task<IReadOnlyList<Fund>> GetFundsAsync(CancellationToken cancellationToken);
     Task<IReadOnlyList<FundOperation>> GetRecentOperationsAsync(int limit, bool includeCanceled, CancellationToken cancellationToken);
     Task<FundOperationPageData> GetOperationsPageAsync(int offset, int limit, bool includeCanceled, CancellationToken cancellationToken);

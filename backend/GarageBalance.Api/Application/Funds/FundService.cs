@@ -72,6 +72,7 @@ public sealed class FundService(
 
     public async Task<FundResult<FundOperationDto>> CreateOperationAsync(Guid fundId, CreateFundOperationRequest request, Guid? actorUserId, CancellationToken cancellationToken)
     {
+        await using var allocationLock = await repository.AcquireAllocationLockAsync(cancellationToken);
         var fund = await repository.FindFundForUpdateAsync(fundId, cancellationToken);
         if (fund is null)
         {
@@ -174,6 +175,7 @@ public sealed class FundService(
             return FundResult<FundOperationDto>.Failure("fund_operation_amount_invalid", "Сумма операции фонда должна быть больше нуля.");
         }
 
+        await using var allocationLock = await repository.AcquireAllocationLockAsync(cancellationToken);
         var operation = await repository.FindOperationForUpdateAsync(operationId, cancellationToken);
         if (operation is null)
         {
@@ -197,21 +199,24 @@ public sealed class FundService(
             return FundResult<FundOperationDto>.Success(ToDto(operation));
         }
 
-        if (operation.OperationKind == FundOperationKinds.Deposit && amount > oldAmount)
+        var additionalAllocatedAmount = CalculateAdditionalAllocatedAmount(
+            operation.OperationKind,
+            oldAmount,
+            amount);
+        if (additionalAllocatedAmount > 0m)
         {
             var availableToDistribute = await CalculateAvailableToDistributeAsync(cancellationToken);
-            var additionalAmount = amount - oldAmount;
-            if (additionalAmount > availableToDistribute)
+            if (additionalAllocatedAmount > availableToDistribute)
             {
                 return FundResult<FundOperationDto>.Failure(
                     "fund_distribution_amount_exceeded",
-                    $"Сумма увеличения пополнения не может превышать доступную к распределению сумму {MoneyFormatting.Format(availableToDistribute)} руб.");
+                    $"Изменение операции не может увеличить распределенную сумму больше доступной к распределению суммы {MoneyFormatting.Format(availableToDistribute)} руб.");
             }
 
             if (operation.IsCashToBankTransfer)
             {
                 var availableCash = await CalculateAvailableCashAsync(cancellationToken);
-                if (additionalAmount > availableCash)
+                if (additionalAllocatedAmount > availableCash)
                 {
                     return FundResult<FundOperationDto>.Failure(
                         "cash_amount_insufficient",
@@ -242,6 +247,7 @@ public sealed class FundService(
             return FundResult<FundOperationDto>.Failure("fund_operation_cancel_reason_required", "Для отмены операции фонда нужна причина.");
         }
 
+        await using var allocationLock = await repository.AcquireAllocationLockAsync(cancellationToken);
         var operation = await repository.FindOperationForUpdateAsync(operationId, cancellationToken);
         if (operation is null)
         {
@@ -251,6 +257,17 @@ public sealed class FundService(
         if (operation.IsCanceled)
         {
             return FundResult<FundOperationDto>.Failure("fund_operation_already_canceled", "Операция фонда уже отменена.");
+        }
+
+        if (operation.OperationKind == FundOperationKinds.Withdraw)
+        {
+            var availableToDistribute = await CalculateAvailableToDistributeAsync(cancellationToken);
+            if (operation.Amount > availableToDistribute)
+            {
+                return FundResult<FundOperationDto>.Failure(
+                    "fund_distribution_amount_exceeded",
+                    $"Отмена изъятия не может превышать доступную к распределению сумму {MoneyFormatting.Format(availableToDistribute)} руб.");
+            }
         }
 
         if (!await CanCancelWithoutNegativeBalanceAsync(operation, cancellationToken))
@@ -269,6 +286,7 @@ public sealed class FundService(
 
     public async Task<FundResult<FundOperationDto>> RestoreOperationAsync(Guid operationId, Guid? actorUserId, CancellationToken cancellationToken)
     {
+        await using var allocationLock = await repository.AcquireAllocationLockAsync(cancellationToken);
         var operation = await repository.FindOperationForUpdateAsync(operationId, cancellationToken);
         if (operation is null)
         {
@@ -627,6 +645,17 @@ public sealed class FundService(
     private static string FormatOperationKind(string operationKind)
     {
         return operationKind == FundOperationKinds.Deposit ? "пополнение" : "изъятие";
+    }
+
+    private static decimal CalculateAdditionalAllocatedAmount(
+        string operationKind,
+        decimal oldAmount,
+        decimal newAmount)
+    {
+        var difference = operationKind == FundOperationKinds.Deposit
+            ? newAmount - oldAmount
+            : oldAmount - newAmount;
+        return MoneyMath.RoundMoney(Math.Max(difference, 0m));
     }
 
     private sealed record DefaultFundDefinition(string Name, int SortOrder, bool AllowOperations);

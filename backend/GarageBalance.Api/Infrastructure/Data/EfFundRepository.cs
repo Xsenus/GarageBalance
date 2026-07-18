@@ -1,11 +1,48 @@
 using GarageBalance.Api.Application.Funds;
 using GarageBalance.Api.Domain.Finance;
 using Microsoft.EntityFrameworkCore;
+using System.Data;
+using System.Data.Common;
 
 namespace GarageBalance.Api.Infrastructure.Data;
 
 public sealed class EfFundRepository(GarageBalanceDbContext dbContext) : IFundRepository
 {
+    private const long FundAllocationLockKey = 0x474246554E44;
+
+    public async Task<IAsyncDisposable> AcquireAllocationLockAsync(CancellationToken cancellationToken)
+    {
+        if (!dbContext.Database.IsNpgsql())
+        {
+            return NoOpAsyncDisposable.Instance;
+        }
+
+        var connection = dbContext.Database.GetDbConnection();
+        var closeConnection = connection.State == ConnectionState.Closed;
+        if (closeConnection)
+        {
+            await connection.OpenAsync(cancellationToken);
+        }
+
+        try
+        {
+            await ExecuteAdvisoryLockCommandAsync(
+                connection,
+                "SELECT pg_advisory_lock(@lock_key)",
+                cancellationToken);
+            return new PostgreSqlAdvisoryLockLease(connection, closeConnection);
+        }
+        catch
+        {
+            if (closeConnection)
+            {
+                await connection.CloseAsync();
+            }
+
+            throw;
+        }
+    }
+
     public async Task<IReadOnlyList<Fund>> GetFundsAsync(CancellationToken cancellationToken)
     {
         return await dbContext.Funds.AsNoTracking()
@@ -128,4 +165,56 @@ public sealed class EfFundRepository(GarageBalanceDbContext dbContext) : IFundRe
 
     private bool IsSqliteProvider() =>
         dbContext.Database.ProviderName?.Contains("Sqlite", StringComparison.OrdinalIgnoreCase) == true;
+
+    private static async Task ExecuteAdvisoryLockCommandAsync(
+        DbConnection connection,
+        string commandText,
+        CancellationToken cancellationToken)
+    {
+        await using var command = connection.CreateCommand();
+        command.CommandText = commandText;
+        var parameter = command.CreateParameter();
+        parameter.ParameterName = "lock_key";
+        parameter.Value = FundAllocationLockKey;
+        command.Parameters.Add(parameter);
+        await command.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    private sealed class PostgreSqlAdvisoryLockLease(
+        DbConnection connection,
+        bool closeConnection) : IAsyncDisposable
+    {
+        private bool disposed;
+
+        public async ValueTask DisposeAsync()
+        {
+            if (disposed)
+            {
+                return;
+            }
+
+            disposed = true;
+            try
+            {
+                await ExecuteAdvisoryLockCommandAsync(
+                    connection,
+                    "SELECT pg_advisory_unlock(@lock_key)",
+                    CancellationToken.None);
+            }
+            finally
+            {
+                if (closeConnection)
+                {
+                    await connection.CloseAsync();
+                }
+            }
+        }
+    }
+
+    private sealed class NoOpAsyncDisposable : IAsyncDisposable
+    {
+        public static NoOpAsyncDisposable Instance { get; } = new();
+
+        public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+    }
 }

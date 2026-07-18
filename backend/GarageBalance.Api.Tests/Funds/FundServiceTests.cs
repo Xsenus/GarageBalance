@@ -332,6 +332,48 @@ public sealed class FundServiceTests
     }
 
     [Fact]
+    public async Task UpdateOperationAsync_RejectsWithdrawalDecreaseThatWouldRedistributeUsedIncome()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = CreateService(database.Context);
+        var funds = await service.GetFundsAsync(CancellationToken.None);
+        var firstFund = funds.First(fund => fund.AllowOperations);
+        var secondFund = funds.Last(fund => fund.AllowOperations && fund.Id != firstFund.Id);
+        await SeedIncomeAsync(database.Context, 1000m);
+        var firstDeposit = await service.CreateOperationAsync(
+            firstFund.Id,
+            new CreateFundOperationRequest("deposit", 700m, "Первое распределение"),
+            null,
+            CancellationToken.None);
+        var withdrawal = await service.CreateOperationAsync(
+            firstFund.Id,
+            new CreateFundOperationRequest("withdraw", 300m, "Возврат в свободный остаток"),
+            null,
+            CancellationToken.None);
+        Assert.True(firstDeposit.Succeeded);
+        Assert.True(withdrawal.Succeeded);
+        Assert.True((await service.CreateOperationAsync(
+            secondFund.Id,
+            new CreateFundOperationRequest("deposit", 600m, "Повторное распределение свободного остатка"),
+            null,
+            CancellationToken.None)).Succeeded);
+        database.Context.AuditEvents.RemoveRange(database.Context.AuditEvents);
+        await database.Context.SaveChangesAsync();
+
+        var result = await service.UpdateOperationAsync(
+            withdrawal.Value!.Id,
+            new UpdateFundOperationRequest(299.99m, "Уменьшение изъятия"),
+            null,
+            CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Equal("fund_distribution_amount_exceeded", result.ErrorCode);
+        Assert.Equal(300m, (await database.Context.FundOperations.SingleAsync(item => item.Id == withdrawal.Value.Id)).Amount);
+        Assert.Equal(1000m, await database.Context.Funds.SumAsync(fund => fund.Balance));
+        Assert.Empty(database.Context.AuditEvents);
+    }
+
+    [Fact]
     public async Task UpdateOperationAsync_RejectsCashToBankIncreaseAboveActualCash()
     {
         await using var database = await TestDatabase.CreateAsync();
@@ -473,6 +515,47 @@ public sealed class FundServiceTests
         Assert.False(await database.Context.FundOperations.AnyAsync(operation => operation.Id == deposit.Value.Id && operation.IsCanceled));
         Assert.Equal(50m, (await database.Context.Funds.SingleAsync(fund => fund.Id == targetFund.Id)).Balance);
         Assert.DoesNotContain(database.Context.AuditEvents, item => item.Action == "fund.operation_canceled");
+    }
+
+    [Fact]
+    public async Task CancelOperationAsync_RejectsWithdrawalThatWouldRedistributeUsedIncome()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = CreateService(database.Context);
+        var funds = await service.GetFundsAsync(CancellationToken.None);
+        var firstFund = funds.First(fund => fund.AllowOperations);
+        var secondFund = funds.Last(fund => fund.AllowOperations && fund.Id != firstFund.Id);
+        await SeedIncomeAsync(database.Context, 1000m);
+        Assert.True((await service.CreateOperationAsync(
+            firstFund.Id,
+            new CreateFundOperationRequest("deposit", 700m, "Первое распределение"),
+            null,
+            CancellationToken.None)).Succeeded);
+        var withdrawal = await service.CreateOperationAsync(
+            firstFund.Id,
+            new CreateFundOperationRequest("withdraw", 300m, "Возврат в свободный остаток"),
+            null,
+            CancellationToken.None);
+        Assert.True(withdrawal.Succeeded);
+        Assert.True((await service.CreateOperationAsync(
+            secondFund.Id,
+            new CreateFundOperationRequest("deposit", 600m, "Повторное распределение свободного остатка"),
+            null,
+            CancellationToken.None)).Succeeded);
+        database.Context.AuditEvents.RemoveRange(database.Context.AuditEvents);
+        await database.Context.SaveChangesAsync();
+
+        var result = await service.CancelOperationAsync(
+            withdrawal.Value!.Id,
+            new CancelFundOperationRequest("Возвращаем изъятие"),
+            null,
+            CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Equal("fund_distribution_amount_exceeded", result.ErrorCode);
+        Assert.False(await database.Context.FundOperations.AnyAsync(item => item.Id == withdrawal.Value.Id && item.IsCanceled));
+        Assert.Equal(1000m, await database.Context.Funds.SumAsync(fund => fund.Balance));
+        Assert.Empty(database.Context.AuditEvents);
     }
 
     [Fact]
