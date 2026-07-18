@@ -5,6 +5,38 @@ namespace GarageBalance.Api.Tests.Finance;
 
 public sealed class AccrualDueDatesTests
 {
+    [Theory]
+    [InlineData("membership", 6, 30, 7, 31)]
+    [InlineData("target", 6, 30, 7, 31)]
+    [InlineData("outdoor_lighting", 12, 31, 1, 1)]
+    public void ForIncomeType_UsesStableAnnualDeadlineWithoutLinkedSetting(
+        string incomeTypeCode,
+        int dueMonth,
+        int dueDay,
+        int overdueMonth,
+        int overdueDay)
+    {
+        var result = AccrualDueDates.ForIncomeType(
+            new DateOnly(2026, 9, 1),
+            incomeTypeCode,
+            setting: null);
+
+        Assert.Equal(new DateOnly(2026, dueMonth, dueDay), result.DueDate);
+        var overdueYear = overdueMonth == 1 ? 2027 : 2026;
+        Assert.Equal(new DateOnly(overdueYear, overdueMonth, overdueDay), result.OverdueFromDate);
+    }
+
+    [Fact]
+    public void ForIncomeType_UsesConfiguredAnnualDeadlineWhenAvailable()
+    {
+        var setting = CreateSetting(periodicityMonths: 12, dueDay: 15, dueMonth: 5, graceDays: 10);
+
+        var result = AccrualDueDates.ForIncomeType(new DateOnly(2026, 9, 1), "membership", setting);
+
+        Assert.Equal(new DateOnly(2026, 5, 15), result.DueDate);
+        Assert.Equal(new DateOnly(2026, 5, 26), result.OverdueFromDate);
+    }
+
     [Fact]
     public void ForChargeService_MonthlyChargeBecomesOverdueAfterFollowingPaymentMonthAndGracePeriod()
     {

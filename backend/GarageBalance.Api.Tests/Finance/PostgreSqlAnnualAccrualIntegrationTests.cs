@@ -10,6 +10,111 @@ namespace GarageBalance.Api.Tests.Finance;
 public sealed class PostgreSqlAnnualAccrualIntegrationTests
 {
     [PostgreSqlFact]
+    public async Task AnnualDeadlines_FromMigratedCatalogDriveOverdueDebtBoundariesAndOutstandingAmounts()
+    {
+        await using var database = await PostgreSqlTestDatabase.CreateAsync();
+        await using var context = database.CreateContext();
+        var garage = new Garage { Number = "PG-ANNUAL-DEADLINES", PeopleCount = 1, FloorCount = 1 };
+        context.Garages.Add(garage);
+        await context.SaveChangesAsync();
+        var annualServices = await context.ChargeServiceSettings.AsNoTracking()
+            .Where(setting =>
+                !setting.IsArchived &&
+                setting.IsRegular &&
+                setting.IncomeTypeId.HasValue &&
+                setting.TariffId.HasValue &&
+                (setting.IncomeType!.Code == "membership" ||
+                 setting.IncomeType.Code == "target" ||
+                 setting.IncomeType.Code == "outdoor_lighting"))
+            .Select(setting => new
+            {
+                IncomeTypeId = setting.IncomeTypeId!.Value,
+                IncomeTypeCode = setting.IncomeType!.Code!,
+                TariffId = setting.TariffId!.Value
+            })
+            .ToDictionaryAsync(setting => setting.IncomeTypeCode, StringComparer.Ordinal);
+        Assert.Equal(3, annualServices.Count);
+        var financeService = FinanceServiceTestFactory.Create(context);
+
+        foreach (var service in annualServices.Values)
+        {
+            var generated = await financeService.GenerateRegularAccrualsAsync(
+                new GenerateRegularAccrualsRequest(
+                    service.IncomeTypeId,
+                    service.TariffId,
+                    new DateOnly(2026, 9, 1),
+                    "Проверка годовых сроков"),
+                null,
+                CancellationToken.None);
+            Assert.True(generated.Succeeded, generated.ErrorMessage);
+        }
+
+        var garageAccruals = await context.Accruals
+            .Where(accrual => accrual.GarageId == garage.Id && accrual.AccountingYear == 2026)
+            .Include(accrual => accrual.IncomeType)
+            .ToDictionaryAsync(accrual => accrual.IncomeType.Code!);
+        Assert.Equal(new DateOnly(2026, 6, 30), garageAccruals["membership"].DueDate);
+        Assert.Equal(new DateOnly(2026, 7, 31), garageAccruals["membership"].OverdueFromDate);
+        Assert.Equal(new DateOnly(2026, 6, 30), garageAccruals["target"].DueDate);
+        Assert.Equal(new DateOnly(2026, 7, 31), garageAccruals["target"].OverdueFromDate);
+        Assert.Equal(new DateOnly(2026, 12, 31), garageAccruals["outdoor_lighting"].DueDate);
+        Assert.Equal(new DateOnly(2027, 1, 1), garageAccruals["outdoor_lighting"].OverdueFromDate);
+
+        var membershipOutstanding = 100m;
+        var membershipPayment = await financeService.CreateIncomeAsync(
+            new CreateIncomeOperationRequest(
+                garage.Id,
+                annualServices["membership"].IncomeTypeId,
+                new DateOnly(2026, 7, 30),
+                new DateOnly(2026, 7, 1),
+                garageAccruals["membership"].Amount - membershipOutstanding,
+                "PG-ANNUAL-MEMBERSHIP-PARTIAL",
+                "Частичная оплата"),
+            null,
+            CancellationToken.None);
+        Assert.True(membershipPayment.Succeeded, membershipPayment.ErrorMessage);
+        var targetPayment = await financeService.CreateIncomeAsync(
+            new CreateIncomeOperationRequest(
+                garage.Id,
+                annualServices["target"].IncomeTypeId,
+                new DateOnly(2026, 7, 30),
+                new DateOnly(2026, 7, 1),
+                garageAccruals["target"].Amount,
+                "PG-ANNUAL-TARGET-FULL",
+                "Полная оплата"),
+            null,
+            CancellationToken.None);
+        Assert.True(targetPayment.Succeeded, targetPayment.ErrorMessage);
+
+        var beforeOverdue = await FinanceServiceTestFactory.Create(
+            context,
+            new FixedTimeProvider(new DateTimeOffset(2026, 7, 30, 12, 0, 0, TimeSpan.Zero)))
+            .GetGarageOverdueDebtAsync(garage.Id, CancellationToken.None);
+        Assert.True(beforeOverdue.Succeeded, beforeOverdue.ErrorMessage);
+        Assert.Empty(beforeOverdue.Value!.Rows);
+
+        var membershipOverdue = await FinanceServiceTestFactory.Create(
+            context,
+            new FixedTimeProvider(new DateTimeOffset(2026, 7, 31, 12, 0, 0, TimeSpan.Zero)))
+            .GetGarageOverdueDebtAsync(garage.Id, CancellationToken.None);
+        Assert.True(membershipOverdue.Succeeded, membershipOverdue.ErrorMessage);
+        var membershipRow = Assert.Single(membershipOverdue.Value!.Rows);
+        Assert.Equal(annualServices["membership"].IncomeTypeId, membershipRow.IncomeTypeId);
+        Assert.Equal(membershipOutstanding, membershipRow.OutstandingAmount);
+        Assert.Equal(membershipOutstanding, membershipOverdue.Value.Total);
+
+        var nextYearOverdue = await FinanceServiceTestFactory.Create(
+            context,
+            new FixedTimeProvider(new DateTimeOffset(2027, 1, 1, 12, 0, 0, TimeSpan.Zero)))
+            .GetGarageOverdueDebtAsync(garage.Id, CancellationToken.None);
+        Assert.True(nextYearOverdue.Succeeded, nextYearOverdue.ErrorMessage);
+        Assert.Equal(2, nextYearOverdue.Value!.Rows.Count);
+        Assert.Contains(nextYearOverdue.Value.Rows, row => row.IncomeTypeId == annualServices["membership"].IncomeTypeId && row.OutstandingAmount == membershipOutstanding);
+        Assert.Contains(nextYearOverdue.Value.Rows, row => row.IncomeTypeId == annualServices["outdoor_lighting"].IncomeTypeId && row.OutstandingAmount == garageAccruals["outdoor_lighting"].Amount);
+        Assert.DoesNotContain(nextYearOverdue.Value.Rows, row => row.IncomeTypeId == annualServices["target"].IncomeTypeId);
+    }
+
+    [PostgreSqlFact]
     public async Task AnnualRegularGeneration_SerializesConcurrentMonthsAndKeepsGarageHistoryAfterOwnerChange()
     {
         await using var database = await PostgreSqlTestDatabase.CreateAsync();
@@ -130,5 +235,10 @@ public sealed class PostgreSqlAnnualAccrualIntegrationTests
         });
 
         await Assert.ThrowsAsync<DbUpdateException>(() => context.SaveChangesAsync());
+    }
+
+    private sealed class FixedTimeProvider(DateTimeOffset utcNow) : TimeProvider
+    {
+        public override DateTimeOffset GetUtcNow() => utcNow;
     }
 }

@@ -4,6 +4,32 @@ namespace GarageBalance.Api.Domain.Finance;
 
 public readonly record struct AccrualDueDates(DateOnly DueDate, DateOnly OverdueFromDate)
 {
+    public static AccrualDueDates ForIncomeType(
+        DateOnly accountingMonth,
+        string? incomeTypeCode,
+        ChargeServiceSetting? setting)
+    {
+        if (AnnualAccrualPolicy.IsAnnualIncomeType(incomeTypeCode) &&
+            setting?.PeriodicityMonths >= 12 &&
+            setting.PaymentDueDay.HasValue &&
+            setting.PaymentDueMonth.HasValue)
+        {
+            var configuredDueDate = CreateClampedDate(
+                accountingMonth.Year,
+                setting.PaymentDueMonth.Value,
+                setting.PaymentDueDay.Value);
+            return FromDueDate(configuredDueDate, setting.OverdueGraceDays);
+        }
+
+        var year = accountingMonth.Year;
+        return incomeTypeCode?.Trim().ToLowerInvariant() switch
+        {
+            "membership" or "target" => FromDueDate(new DateOnly(year, 6, 30), overdueGraceDays: 30),
+            "outdoor_lighting" => FromDueDate(new DateOnly(year, 12, 31), overdueGraceDays: 0),
+            _ => ForChargeService(accountingMonth, setting)
+        };
+    }
+
     public static AccrualDueDates ForChargeService(DateOnly accountingMonth, ChargeServiceSetting? setting)
     {
         var month = new DateOnly(accountingMonth.Year, accountingMonth.Month, 1);

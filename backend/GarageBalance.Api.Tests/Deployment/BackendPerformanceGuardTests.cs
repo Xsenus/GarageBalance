@@ -403,6 +403,9 @@ public sealed class BackendPerformanceGuardTests
         Assert.Matches(
             BoundedQueryRegex(@"GetActiveRegularAsync[\s\S]*?Where\(setting => !setting\.IsArchived && setting\.IsRegular\)[\s\S]*?OrderBy\(setting => setting\.Name\)[\s\S]*?ToListAsync\(cancellationToken\)"),
             source);
+        Assert.Matches(
+            BoundedQueryRegex(@"GetActiveRegularForDueDatesAsync[\s\S]*?IncomeTypeId == incomeTypeId[\s\S]*?Take\(2\)[\s\S]*?ToListAsync\(cancellationToken\)"),
+            source);
     }
 
     [Fact]

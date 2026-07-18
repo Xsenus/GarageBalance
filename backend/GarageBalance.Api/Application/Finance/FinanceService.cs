@@ -1490,7 +1490,15 @@ public sealed class FinanceService(
             return FinanceResult<AccrualDto>.Failure("accrual_duplicate", duplicateMessage);
         }
 
-        var dueDates = AccrualDueDates.ForChargeService(month, null);
+        var dueDateSetting = accountingYear.HasValue
+            ? SelectChargeServiceSettingForDueDates(
+                await chargeServiceSettingRepository.GetActiveRegularForDueDatesAsync(
+                    incomeType.Id,
+                    tariffId: null,
+                    cancellationToken),
+                month)
+            : null;
+        var dueDates = AccrualDueDates.ForIncomeType(month, incomeType.Code, dueDateSetting);
         var accrual = new Accrual
         {
             GarageId = garage.Id,
@@ -1708,7 +1716,15 @@ public sealed class FinanceService(
         accrual.IncomeType = incomeType;
         accrual.AccountingMonth = month;
         accrual.AccountingYear = accountingYear;
-        var updatedDueDates = AccrualDueDates.ForChargeService(month, null);
+        var dueDateSetting = accountingYear.HasValue
+            ? SelectChargeServiceSettingForDueDates(
+                await chargeServiceSettingRepository.GetActiveRegularForDueDatesAsync(
+                    incomeType.Id,
+                    tariffId: null,
+                    cancellationToken),
+                month)
+            : null;
+        var updatedDueDates = AccrualDueDates.ForIncomeType(month, incomeType.Code, dueDateSetting);
         accrual.DueDate = updatedDueDates.DueDate;
         accrual.OverdueFromDate = updatedDueDates.OverdueFromDate;
         accrual.DueDateNeedsReview = false;
@@ -1956,12 +1972,13 @@ public sealed class FinanceService(
                 "Выбранный тариф не подходит для этого вида регулярного начисления.");
         }
 
-        var matchingSetting = (await chargeServiceSettingRepository.GetActiveRegularAsync(cancellationToken))
-            .FirstOrDefault(setting =>
-                setting.IncomeTypeId == incomeType.Id &&
-                setting.TariffId == tariff.Id &&
-                IsChargeServiceDueForMonth(setting, month));
-        var dueDates = AccrualDueDates.ForChargeService(month, matchingSetting);
+        var matchingSetting = SelectChargeServiceSettingForDueDates(
+            await chargeServiceSettingRepository.GetActiveRegularForDueDatesAsync(
+                incomeType.Id,
+                tariff.Id,
+                cancellationToken),
+            month);
+        var dueDates = AccrualDueDates.ForIncomeType(month, incomeType.Code, matchingSetting);
         var accountingYear = AnnualAccrualPolicy.ResolveAccountingYear(incomeType.Code, month);
         var activeAnnualGarageIds = accountingYear.HasValue
             ? await garageRepository.GetActiveIdsAsync(cancellationToken)
@@ -2440,6 +2457,14 @@ public sealed class FinanceService(
             "membership" or "target" or "entry" or "connection" => calculationBase == TariffCalculationBases.Fixed,
             _ => true
         };
+    }
+
+    private static ChargeServiceSetting? SelectChargeServiceSettingForDueDates(
+        IReadOnlyList<ChargeServiceSetting> candidates,
+        DateOnly accountingMonth)
+    {
+        var matchingMonth = candidates.FirstOrDefault(setting => IsChargeServiceDueForMonth(setting, accountingMonth));
+        return matchingMonth ?? (candidates.Count == 1 ? candidates[0] : null);
     }
 
     private static bool IsChargeServiceDueForMonth(ChargeServiceSetting setting, DateOnly month)

@@ -1034,6 +1034,7 @@ public sealed class FinanceServiceTests
     {
         await using var database = await TestDatabase.CreateAsync();
         var fixtures = await database.SeedAsync();
+        fixtures.IncomeType.Code = "connection";
         await RemoveSeededBankTransferAsync(database.Context);
         var service = FinanceServiceTestFactory.Create(database.Context);
         var request = new CreateIncomeOperationRequest(
@@ -2320,8 +2321,8 @@ public sealed class FinanceServiceTests
         Assert.Equal(2026, result.Value.AccountingYear);
         Assert.Equal("manual", result.Value.Source);
         Assert.Equal("12", result.Value.GarageNumber);
-        Assert.Equal(new DateOnly(2026, 7, 31), result.Value.DueDate);
-        Assert.Equal(new DateOnly(2026, 8, 31), result.Value.OverdueFromDate);
+        Assert.Equal(new DateOnly(2026, 6, 30), result.Value.DueDate);
+        Assert.Equal(new DateOnly(2026, 7, 31), result.Value.OverdueFromDate);
         var audit = Assert.Single(database.Context.AuditEvents, item => item.Action == "finance.accrual_created");
         Assert.Equal(actorUserId, audit.ActorUserId);
         Assert.Contains("Создано начисление 700.00", audit.Summary, StringComparison.Ordinal);
@@ -3136,6 +3137,95 @@ public sealed class FinanceServiceTests
         Assert.True(nextYearGeneration.Succeeded, nextYearGeneration.ErrorMessage);
         Assert.Equal(2, database.Context.Accruals.Count());
         Assert.Equal([2026, 2027], database.Context.Accruals.OrderBy(item => item.AccountingYear).Select(item => item.AccountingYear!.Value).ToArray());
+    }
+
+    [Fact]
+    public async Task GenerateRegularAccrualsAsync_KeepsAnnualDeadlineInAccountingYearWhenGeneratedLate()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        fixtures.IncomeType.Code = "membership";
+        var tariff = new Tariff
+        {
+            Name = "Годовой членский тариф",
+            CalculationBase = TariffCalculationBases.Fixed,
+            Rate = 700m,
+            EffectiveFrom = new DateOnly(2026, 1, 1)
+        };
+        database.Context.Tariffs.Add(tariff);
+        database.Context.ChargeServiceSettings.Add(new ChargeServiceSetting
+        {
+            Name = "Годовой членский взнос",
+            IsRegular = true,
+            PeriodicityMonths = 12,
+            AccrualStartMonth = 1,
+            PaymentDueDay = 30,
+            PaymentDueMonth = 6,
+            OverdueGraceDays = 30,
+            IncomeTypeId = fixtures.IncomeType.Id,
+            Tariff = tariff,
+            UnitName = "руб."
+        });
+        await database.Context.SaveChangesAsync();
+        var service = FinanceServiceTestFactory.Create(database.Context);
+
+        var result = await service.GenerateRegularAccrualsAsync(
+            new GenerateRegularAccrualsRequest(fixtures.IncomeType.Id, tariff.Id, new DateOnly(2026, 9, 1), null),
+            null,
+            CancellationToken.None);
+
+        Assert.True(result.Succeeded, result.ErrorMessage);
+        var accrual = Assert.Single(database.Context.Accruals);
+        Assert.Equal(2026, accrual.AccountingYear);
+        Assert.Equal(new DateOnly(2026, 6, 30), accrual.DueDate);
+        Assert.Equal(new DateOnly(2026, 7, 31), accrual.OverdueFromDate);
+    }
+
+    [Fact]
+    public async Task CreateAndUpdateAccrualAsync_UseStableAnnualDeadlinesWithoutLinkedSetting()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        fixtures.IncomeType.Code = "membership";
+        var outdoorLighting = new IncomeType
+        {
+            Name = "Наружное освещение",
+            Code = "outdoor_lighting"
+        };
+        database.Context.IncomeTypes.Add(outdoorLighting);
+        await database.Context.SaveChangesAsync();
+        var service = FinanceServiceTestFactory.Create(database.Context);
+
+        var created = await service.CreateAccrualAsync(
+            new CreateAccrualRequest(
+                fixtures.Garage.Id,
+                fixtures.IncomeType.Id,
+                new DateOnly(2026, 9, 1),
+                700m,
+                AccrualSources.Manual,
+                "Ручной членский взнос"),
+            null,
+            CancellationToken.None);
+
+        Assert.True(created.Succeeded, created.ErrorMessage);
+        Assert.Equal(new DateOnly(2026, 6, 30), created.Value!.DueDate);
+        Assert.Equal(new DateOnly(2026, 7, 31), created.Value.OverdueFromDate);
+
+        var updated = await service.UpdateAccrualAsync(
+            created.Value.Id,
+            new CreateAccrualRequest(
+                fixtures.Garage.Id,
+                outdoorLighting.Id,
+                new DateOnly(2026, 10, 1),
+                700m,
+                AccrualSources.Manual,
+                "Перенесено на наружное освещение"),
+            null,
+            CancellationToken.None);
+
+        Assert.True(updated.Succeeded, updated.ErrorMessage);
+        Assert.Equal(new DateOnly(2026, 12, 31), updated.Value!.DueDate);
+        Assert.Equal(new DateOnly(2027, 1, 1), updated.Value.OverdueFromDate);
     }
 
     [Fact]
