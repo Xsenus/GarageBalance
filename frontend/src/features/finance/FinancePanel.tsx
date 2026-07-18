@@ -3148,7 +3148,7 @@ function PaymentsPrototypePanel({
         id: garage.id,
         number: garage.number,
         ownerName: garage.ownerName?.trim() || 'Владелец не указан',
-        phone: '',
+        phone: garage.ownerPhone?.trim() || 'Не указан',
         peopleCount: garage.peopleCount,
         floorCount: garage.floorCount,
         balance: garage.balance,

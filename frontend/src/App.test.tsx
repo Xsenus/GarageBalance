@@ -4239,7 +4239,9 @@ describe('App', () => {
     const garageOption = await within(prototype).findByRole('option', { name: /Гараж\s*77\s*Кузнецова Мария/ })
     await user.click(garageOption)
 
-    expect(within(prototype).getByLabelText('Выбранный гараж')).toHaveTextContent('Кузнецова Мария')
+    const selectedGarageHeader = within(prototype).getByLabelText('Выбранный гараж')
+    expect(selectedGarageHeader).toHaveTextContent('Кузнецова Мария')
+    expect(within(selectedGarageHeader).getByText('Не указан')).toBeInTheDocument()
     expect(within(prototype).getByRole('region', { name: 'Параметры выбранного гаража' })).toHaveTextContent('4')
     expect(within(prototype).getByRole('table', { name: 'Поступления гаража 77' })).toBeInTheDocument()
   })
@@ -4591,7 +4593,7 @@ describe('App', () => {
 
   it('loads selected garage income worksheet from finance backend', async () => {
     const user = userEvent.setup()
-    const garageFromDictionary = createGarage({ id: 'garage-77', number: '77', ownerName: 'Кузнецова Мария', peopleCount: 4, floorCount: 2, startingBalance: -7200 })
+    const garageFromDictionary = createGarage({ id: 'garage-77', number: '77', ownerName: 'Кузнецова Мария', ownerPhone: '+7 900 111-22-33', peopleCount: 4, floorCount: 2, startingBalance: -7200 })
     const getGarageIncomeWorksheet = vi.fn(async (_token: string, garageId: string) => createGarageIncomeWorksheet({
       garageId,
       garageNumber: '77',
@@ -4626,6 +4628,8 @@ describe('App', () => {
     const prototype = within(await screen.findByRole('region', { name: 'Платежи' })).getByRole('region', { name: 'Форма платежей' })
     await user.type(within(prototype).getByLabelText('Поиск номера гаража или ФИО владельца'), '77')
     await user.click(await within(prototype).findByRole('option', { name: /Гараж\s*77\s*Кузнецова Мария/ }))
+
+    expect(within(prototype).getByLabelText('Выбранный гараж')).toHaveTextContent('+7 900 111-22-33')
 
     const currentMonth = getTestCurrentMonthInputValue()
     const previousMonth = addTestMonths(currentMonth, -1)
@@ -7941,13 +7945,14 @@ describe('App', () => {
 
   it('confirms garage dictionary edits with owner label and money diff', async () => {
     const user = userEvent.setup()
-    const currentOwner = createOwner({ id: 'owner-current', lastName: 'Иванов', firstName: 'Иван' })
-    const nextOwner = createOwner({ id: 'owner-next', lastName: 'Петров', firstName: 'Петр' })
+    const currentOwner = createOwner({ id: 'owner-current', lastName: 'Иванов', firstName: 'Иван', phone: '+7 900 000-00-01' })
+    const nextOwner = createOwner({ id: 'owner-next', lastName: 'Петров', firstName: 'Петр', phone: '+7 900 000-00-02' })
     let garage = createGarage({
       id: 'garage-12',
       number: '12',
       ownerId: currentOwner.id,
       ownerName: currentOwner.fullName,
+      ownerPhone: currentOwner.phone,
       startingBalance: 100,
     })
     const updateGarage = vi.fn(async (_token: string, id: string, request: UpsertGarageRequest) => {
@@ -7957,6 +7962,7 @@ describe('App', () => {
         id,
         ownerId: owner.id,
         ownerName: owner.fullName,
+        ownerPhone: owner.phone,
         startingBalance: request.startingBalance,
       })
       return garage
@@ -8023,6 +8029,15 @@ describe('App', () => {
     })))
     expect(await within(dictionaryPanel).findByText('Петров Петр')).toBeInTheDocument()
     expect(within(dictionaryPanel).getByText('350.00')).toBeInTheDocument()
+
+    await openSection(user, 'Платежи')
+    const paymentsPrototype = within(await screen.findByRole('region', { name: 'Платежи' })).getByRole('region', { name: 'Форма платежей' })
+    await user.type(within(paymentsPrototype).getByLabelText('Поиск номера гаража или ФИО владельца'), '12')
+    await user.click(await within(paymentsPrototype).findByRole('option', { name: /Гараж\s*12\s*Петров Петр/ }))
+    const selectedGarageHeader = within(paymentsPrototype).getByLabelText('Выбранный гараж')
+    expect(selectedGarageHeader).toHaveTextContent('Петров Петр')
+    expect(selectedGarageHeader).toHaveTextContent('+7 900 000-00-02')
+    expect(selectedGarageHeader).not.toHaveTextContent('+7 900 000-00-01')
   })
 
   it('confirms supplier dictionary edits with group label and money diff', async () => {
