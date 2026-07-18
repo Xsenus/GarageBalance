@@ -2,7 +2,7 @@ import { useEffect, useId, useRef, useState } from 'react'
 import type { CSSProperties, ReactNode } from 'react'
 import { FileSpreadsheet, FileText } from 'lucide-react'
 import type { AuthResponse } from '../../services/authApi'
-import type { AccountingTypeDto, DictionaryClient, GarageDto, SupplierDto } from '../../services/dictionariesApi'
+import type { AccountingTypeDto, DictionaryClient, GarageDto, StaffMemberDto, SupplierDto } from '../../services/dictionariesApi'
 import type { BankDepositReportDto, CashPaymentReportDto, ConsolidatedReportDto, ExpenseReportDto, FeeReportDto, FundChangeReportDto, GarageDetailReportDto, IncomeReportDto, ReportClient } from '../../services/reportsApi'
 import { TableLoadingState } from '../../shared/AsyncState'
 import { buildReportFileName, buildSnapshotReportFileName, downloadBlob } from '../../shared/fileExports'
@@ -26,6 +26,70 @@ type ReportDateRange = {
 }
 
 const dictionaryScreenRequestLimit = 100
+
+type ReportFilterOption = {
+  value: string
+  label: string
+}
+
+function getSelectedFilterLabel(selectedValues: string[], options: ReportFilterOption[], allLabel: string) {
+  if (selectedValues.length === 0) {
+    return allLabel
+  }
+
+  const selectedLabels = options.filter((option) => selectedValues.includes(option.value)).map((option) => option.label)
+  return selectedLabels.length > 0 ? selectedLabels.join(', ') : allLabel
+}
+
+function ReportMultiSelect({
+  label,
+  ariaLabel,
+  allLabel,
+  options,
+  selectedValues,
+  onChange,
+}: {
+  label: string
+  ariaLabel: string
+  allLabel: string
+  options: ReportFilterOption[]
+  selectedValues: string[]
+  onChange: (values: string[]) => void
+}) {
+  const selectId = useId()
+  const statusId = useId()
+  const isAllSelected = selectedValues.length === 0
+
+  return (
+    <div className="report-workbook-filter-wide report-workbook-multi-select">
+      <div className="report-workbook-multi-select-heading">
+        <label htmlFor={selectId}>{label}</label>
+        <button
+          className="link-button"
+          type="button"
+          aria-label={`${allLabel}: сбросить выбор`}
+          aria-pressed={isAllSelected}
+          onClick={() => onChange([])}
+        >
+          Все
+        </button>
+      </div>
+      <select
+        id={selectId}
+        multiple
+        aria-label={ariaLabel}
+        aria-describedby={statusId}
+        value={selectedValues}
+        onChange={(event) => onChange(Array.from(event.currentTarget.selectedOptions, (option) => option.value))}
+      >
+        {options.map((option) => <option value={option.value} key={option.value}>{option.label}</option>)}
+      </select>
+      <span className="report-workbook-multi-select-status" id={statusId} role="status" aria-live="polite">
+        {isAllSelected ? allLabel : `Выбрано: ${selectedValues.length}`}
+      </span>
+    </div>
+  )
+}
 
 const reportWorkbookTabs: Array<{ key: ReportWorkbookTab; label: string; meta: string }> = [
   { key: 'consolidated', label: 'Консолидированный', meta: 'месяцы' },
@@ -52,8 +116,6 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
   const today = getLocalDateInputValue()
   const currentMonth = getCurrentMonthInputValue(today)
   const previousMonth = getPreviousMonthInputValue(currentMonth)
-  const garageOptionsId = useId()
-  const supplierOptionsId = useId()
   const feeOptionsId = useId()
   const [activeReportTab, setActiveReportTab] = useState<ReportWorkbookTab>('consolidated')
   const [monthlyFilters, setMonthlyFilters] = useState<Record<ReportMonthlyFilterKey, ReportMonthRange>>({
@@ -67,19 +129,16 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
     bankDeposits: { dateFrom: today, dateTo: today },
     funds: { dateFrom: today, dateTo: today },
   })
-  const [garageFilter, setGarageFilter] = useState('')
-  const [counterpartyFilter, setCounterpartyFilter] = useState('')
-  const [incomeGarageFilter, setIncomeGarageFilter] = useState('')
+  const [selectedGarageIds, setSelectedGarageIds] = useState<string[]>([])
+  const [selectedCounterpartyKeys, setSelectedCounterpartyKeys] = useState<string[]>([])
+  const [selectedIncomeGarageIds, setSelectedIncomeGarageIds] = useState<string[]>([])
   const [feeVariationFilter, setFeeVariationFilter] = useState('Сбор на ворота')
-  const [appliedGarageFilter, setAppliedGarageFilter] = useState('')
-  const [appliedCounterpartyFilter, setAppliedCounterpartyFilter] = useState('')
-  const [appliedIncomeGarageFilter, setAppliedIncomeGarageFilter] = useState('')
   const [appliedFeeVariationFilter, setAppliedFeeVariationFilter] = useState('Сбор на ворота')
   const [garages, setGarages] = useState<GarageDto[]>([])
   const [suppliers, setSuppliers] = useState<SupplierDto[]>([])
+  const [staffMembers, setStaffMembers] = useState<StaffMemberDto[]>([])
   const [incomeTypes, setIncomeTypes] = useState<AccountingTypeDto[]>([])
-  const [expenseTypes, setExpenseTypes] = useState<AccountingTypeDto[]>([])
-  const loadedReportDictionaries = useRef({ garages: false, suppliers: false, incomeTypes: false, expenseTypes: false })
+  const loadedReportDictionaries = useRef({ garages: false, suppliers: false, staffMembers: false, incomeTypes: false })
   const [reportDataSettled, setReportDataSettled] = useState<Partial<Record<ReportWorkbookTab, boolean>>>({})
   const [dictionaryError, setDictionaryError] = useState<string | null>(null)
   const [consolidatedReport, setConsolidatedReport] = useState<ConsolidatedReportDto | null>(null)
@@ -124,39 +183,6 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
   const [fundChangeReportError, setFundChangeReportError] = useState<string | null>(null)
 
   useEffect(() => {
-    if (garageFilter === appliedGarageFilter) {
-      return undefined
-    }
-    const handle = window.setTimeout(() => {
-      setAppliedGarageFilter(garageFilter)
-      setGaragePageRequest((current) => current.offset === 0 ? current : { ...current, offset: 0 })
-    }, 350)
-    return () => window.clearTimeout(handle)
-  }, [appliedGarageFilter, garageFilter])
-
-  useEffect(() => {
-    if (counterpartyFilter === appliedCounterpartyFilter) {
-      return undefined
-    }
-    const handle = window.setTimeout(() => {
-      setAppliedCounterpartyFilter(counterpartyFilter)
-      setPayoutPageRequest((current) => current.offset === 0 ? current : { ...current, offset: 0 })
-    }, 350)
-    return () => window.clearTimeout(handle)
-  }, [appliedCounterpartyFilter, counterpartyFilter])
-
-  useEffect(() => {
-    if (incomeGarageFilter === appliedIncomeGarageFilter) {
-      return undefined
-    }
-    const handle = window.setTimeout(() => {
-      setAppliedIncomeGarageFilter(incomeGarageFilter)
-      setIncomePageRequest((current) => current.offset === 0 ? current : { ...current, offset: 0 })
-    }, 350)
-    return () => window.clearTimeout(handle)
-  }, [appliedIncomeGarageFilter, incomeGarageFilter])
-
-  useEffect(() => {
     if (feeVariationFilter === appliedFeeVariationFilter) {
       return undefined
     }
@@ -179,8 +205,8 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
     async function loadReportDictionaries() {
       const needsGarages = activeReportTab === 'garages' || activeReportTab === 'income'
       const needsSuppliers = activeReportTab === 'payouts'
+      const needsStaffMembers = activeReportTab === 'payouts'
       const needsIncomeTypes = activeReportTab === 'fees'
-      const needsExpenseTypes = activeReportTab === 'payouts'
       const requests: Promise<void>[] = []
 
       if (needsGarages && !loadedReportDictionaries.current.garages) {
@@ -199,6 +225,14 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
           }
         }))
       }
+      if (needsStaffMembers && !loadedReportDictionaries.current.staffMembers) {
+        requests.push(dictionaryClient.getStaffMembers(auth.accessToken, undefined, undefined, dictionaryScreenRequestLimit).then((loaded) => {
+          if (!ignore) {
+            setStaffMembers(loaded.filter((member) => !member.isArchived))
+            loadedReportDictionaries.current.staffMembers = true
+          }
+        }))
+      }
       if (needsIncomeTypes && !loadedReportDictionaries.current.incomeTypes) {
         requests.push(dictionaryClient.getIncomeTypes(auth.accessToken, undefined, dictionaryScreenRequestLimit).then((loaded) => {
           if (!ignore) {
@@ -207,15 +241,6 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
           }
         }))
       }
-      if (needsExpenseTypes && !loadedReportDictionaries.current.expenseTypes) {
-        requests.push(dictionaryClient.getExpenseTypes(auth.accessToken, undefined, dictionaryScreenRequestLimit).then((loaded) => {
-          if (!ignore) {
-            setExpenseTypes(loaded.filter((item) => !item.isArchived))
-            loadedReportDictionaries.current.expenseTypes = true
-          }
-        }))
-      }
-
       if (requests.length === 0) {
         return
       }
@@ -326,7 +351,7 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
         const report = await reportClient.getGarageReport(auth.accessToken, {
           monthFrom: getReportMonthStart(filter.monthFrom),
           monthTo: getReportMonthStart(filter.monthTo),
-          search: appliedGarageFilter.trim() || undefined,
+          garageIds: selectedGarageIds,
           groupAccruals: garageAccrualsGrouped,
           offset: garagePageRequest.offset,
           limit: garagePageRequest.limit,
@@ -351,7 +376,7 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
     return () => {
       ignore = true
     }
-  }, [activeReportTab, appliedGarageFilter, auth.accessToken, garageAccrualsGrouped, garagePageRequest.limit, garagePageRequest.offset, monthlyFilters.garages, reportClient])
+  }, [activeReportTab, auth.accessToken, garageAccrualsGrouped, garagePageRequest.limit, garagePageRequest.offset, monthlyFilters.garages, reportClient, selectedGarageIds])
 
   useEffect(() => {
     if (activeReportTab !== 'payouts') {
@@ -366,10 +391,13 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
       setPayoutReportError(null)
       try {
         const filter = monthlyFilters.payouts
+        const supplierIds = selectedCounterpartyKeys.filter((key) => key.startsWith('supplier:')).map((key) => key.slice('supplier:'.length))
+        const staffMemberIds = selectedCounterpartyKeys.filter((key) => key.startsWith('staff:')).map((key) => key.slice('staff:'.length))
         const report = await reportClient.getExpenseReport(auth.accessToken, {
           dateFrom: getReportMonthStart(filter.monthFrom),
           dateTo: getReportMonthEnd(filter.monthTo),
-          search: appliedCounterpartyFilter.trim() || undefined,
+          supplierIds,
+          staffMemberIds,
           offset: payoutPageRequest.offset,
           limit: payoutPageRequest.limit,
         })
@@ -393,7 +421,7 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
     return () => {
       ignore = true
     }
-  }, [activeReportTab, appliedCounterpartyFilter, auth.accessToken, monthlyFilters.payouts, payoutPageRequest.limit, payoutPageRequest.offset, reportClient])
+  }, [activeReportTab, auth.accessToken, monthlyFilters.payouts, payoutPageRequest.limit, payoutPageRequest.offset, reportClient, selectedCounterpartyKeys])
 
   useEffect(() => {
     if (activeReportTab !== 'income') {
@@ -411,7 +439,7 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
         const report = await reportClient.getIncomeReport(auth.accessToken, {
           dateFrom: filter.dateFrom,
           dateTo: filter.dateTo,
-          search: appliedIncomeGarageFilter.trim() || undefined,
+          garageIds: selectedIncomeGarageIds,
           rowMode: 'payments',
           offset: incomePageRequest.offset,
           limit: incomePageRequest.limit,
@@ -436,7 +464,7 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
     return () => {
       ignore = true
     }
-  }, [activeReportTab, appliedIncomeGarageFilter, auth.accessToken, dateFilters.income, incomePageRequest.limit, incomePageRequest.offset, reportClient])
+  }, [activeReportTab, auth.accessToken, dateFilters.income, incomePageRequest.limit, incomePageRequest.offset, reportClient, selectedIncomeGarageIds])
 
   useEffect(() => {
     if (activeReportTab !== 'cashPayments') {
@@ -556,12 +584,15 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
   }, [activeReportTab, auth.accessToken, dateFilters.funds, fundChangePageRequest.limit, fundChangePageRequest.offset, reportClient])
 
   const selectedTab = reportWorkbookTabs.find((tab) => tab.key === activeReportTab) ?? reportWorkbookTabs[0]
-  const garageFilterLabel = garageFilter.trim() || 'Все гаражи'
-  const incomeGarageFilterLabel = incomeGarageFilter.trim() || 'Все гаражи'
-  const counterpartyFilterLabel = counterpartyFilter.trim() || 'Все поставщики и сотрудники'
+  const garageFilterLabel = getSelectedFilterLabel(selectedGarageIds, garages.map((garage) => ({ value: garage.id, label: `Гараж ${garage.number}` })), 'Все гаражи')
+  const incomeGarageFilterLabel = getSelectedFilterLabel(selectedIncomeGarageIds, garages.map((garage) => ({ value: garage.id, label: `Гараж ${garage.number}` })), 'Все гаражи')
+  const counterpartyOptions = [
+    ...suppliers.map((supplier) => ({ value: `supplier:${supplier.id}`, label: supplier.name })),
+    ...staffMembers.map((member) => ({ value: `staff:${member.id}`, label: member.fullName })),
+  ]
+  const counterpartyFilterLabel = getSelectedFilterLabel(selectedCounterpartyKeys, counterpartyOptions, 'Все поставщики и сотрудники')
   const feeVariationLabel = feeVariationFilter.trim() || 'Все сборы'
   const feeOptions = Array.from(new Set(['Сбор на ворота', 'Вступительный взнос', 'Целевой взнос', ...incomeTypes.map((item) => item.name)]))
-  const counterpartyOptions = Array.from(new Set([...suppliers.map((supplier) => supplier.name), ...expenseTypes.map((item) => item.name), 'Электрик', 'Председатель', 'Бухгалтерия']))
 
   function updateMonthlyFilter(key: ReportMonthlyFilterKey, field: keyof ReportMonthRange, value: string) {
     if (key === 'garages') {
@@ -849,16 +880,17 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
             from: 'Месяц с',
             to: 'Месяц по',
             extra: (
-              <label className="report-workbook-filter-wide">
-                <span>Гаражи</span>
-                <input
-                  aria-label="Гаражи"
-                  list={garageOptionsId}
-                  value={garageFilter}
-                  onChange={(event) => setGarageFilter(event.target.value)}
-                  placeholder="Гараж или номер"
-                />
-              </label>
+              <ReportMultiSelect
+                label="Гаражи"
+                ariaLabel="Гаражи"
+                allLabel="Все гаражи"
+                options={garages.map((garage) => ({ value: garage.id, label: `Гараж ${garage.number} · ${garage.ownerName ?? 'без владельца'}` }))}
+                selectedValues={selectedGarageIds}
+                onChange={(values) => {
+                  setGaragePageRequest((current) => current.offset === 0 ? current : { ...current, offset: 0 })
+                  setSelectedGarageIds(values)
+                }}
+              />
             ),
           })}
           {garageReportLoading ? <TableLoadingState label="Загружаем отчет по гаражам..." /> : null}
@@ -914,16 +946,17 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
             from: 'Месяц с',
             to: 'Месяц по',
             extra: (
-              <label className="report-workbook-filter-wide">
-                <span>Поставщики/сотрудники</span>
-                <input
-                  aria-label="Поставщики или сотрудники"
-                  list={supplierOptionsId}
-                  value={counterpartyFilter}
-                  onChange={(event) => setCounterpartyFilter(event.target.value)}
-                  placeholder="Поставщик или сотрудник"
-                />
-              </label>
+              <ReportMultiSelect
+                label="Поставщики/сотрудники"
+                ariaLabel="Поставщики или сотрудники"
+                allLabel="Все поставщики и сотрудники"
+                options={counterpartyOptions}
+                selectedValues={selectedCounterpartyKeys}
+                onChange={(values) => {
+                  setPayoutPageRequest((current) => current.offset === 0 ? current : { ...current, offset: 0 })
+                  setSelectedCounterpartyKeys(values)
+                }}
+              />
             ),
           })}
           {payoutReportLoading ? <TableLoadingState label="Загружаем выплаты..." /> : null}
@@ -965,16 +998,17 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
             from: 'С',
             to: 'По',
             extra: (
-              <label className="report-workbook-filter-wide">
-                <span>Гаражи</span>
-                <input
-                  aria-label="Гаражи по поступлениям"
-                  list={garageOptionsId}
-                  value={incomeGarageFilter}
-                  onChange={(event) => setIncomeGarageFilter(event.target.value)}
-                  placeholder="Гараж или номер"
-                />
-              </label>
+              <ReportMultiSelect
+                label="Гаражи"
+                ariaLabel="Гаражи по поступлениям"
+                allLabel="Все гаражи"
+                options={garages.map((garage) => ({ value: garage.id, label: `Гараж ${garage.number} · ${garage.ownerName ?? 'без владельца'}` }))}
+                selectedValues={selectedIncomeGarageIds}
+                onChange={(values) => {
+                  setIncomePageRequest((current) => current.offset === 0 ? current : { ...current, offset: 0 })
+                  setSelectedIncomeGarageIds(values)
+                }}
+              />
             ),
           })}
           {incomeReportLoading ? <TableLoadingState label="Загружаем поступления..." /> : null}
@@ -1237,12 +1271,6 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
       {reportDataError ? <FormError>{reportDataError}</FormError> : null}
       {reportExportMessage ? <p className="form-success">{reportExportMessage}</p> : null}
 
-      <datalist id={garageOptionsId}>
-        {garages.map((garage) => <option value={`Гараж ${garage.number}`} key={garage.id} />)}
-      </datalist>
-      <datalist id={supplierOptionsId}>
-        {counterpartyOptions.map((item) => <option value={item} key={item} />)}
-      </datalist>
       <datalist id={feeOptionsId}>
         {feeOptions.map((item) => <option value={item} key={item} />)}
       </datalist>

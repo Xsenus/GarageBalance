@@ -6764,6 +6764,50 @@ button.operation-row:focus-visible {
   min-width: 220px;
 }
 
+.report-workbook-multi-select {
+  display: grid;
+  gap: 5px;
+}
+
+.report-workbook-filter .report-workbook-multi-select-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.report-workbook-filter .report-workbook-multi-select-heading label {
+  display: block;
+}
+
+.report-workbook-multi-select-heading .link-button {
+  min-height: 24px;
+  padding: 1px 4px;
+  font-size: 12px;
+}
+
+.report-workbook-filter .report-workbook-multi-select select {
+  width: 100%;
+  min-height: 74px;
+  border: 1px solid #d0d5dd;
+  border-radius: 7px;
+  background: #ffffff;
+  color: #101828;
+  padding: 7px 9px;
+  font: inherit;
+}
+
+.report-workbook-filter .report-workbook-multi-select select:focus {
+  border-color: #111827;
+  outline: 0;
+  box-shadow: 0 0 0 3px rgba(17, 24, 39, 0.08);
+}
+
+.report-workbook-multi-select-status {
+  color: #667085;
+  font-size: 12px;
+}
+
 .report-period-button {
   min-height: 38px;
   align-self: end;
