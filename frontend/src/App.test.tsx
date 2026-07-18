@@ -4774,8 +4774,18 @@ describe('App', () => {
       meterReadingId: undefined,
       expectedVersion: undefined,
     })))
-    await waitFor(() => expect(within(prototype).getByRole('textbox', { name: /^Показание Водоснабжение/ })).toHaveValue('120'))
-    expect(within(within(prototype).getByRole('textbox', { name: /^Показание Водоснабжение/ }).closest('td')!).queryByText('Введите обязательное показание')).not.toBeInTheDocument()
+    const confirmedWaterInput = await within(prototype).findByRole('textbox', { name: /^Показание Водоснабжение/ })
+    await waitFor(() => expect(confirmedWaterInput).toHaveValue('120'))
+    const confirmedWaterCell = confirmedWaterInput.closest('td')!
+    const confirmedWaterRow = confirmedWaterInput.closest('tr')!
+    expect(confirmedWaterInput).not.toHaveAttribute('aria-invalid')
+    expect(confirmedWaterCell).not.toHaveClass('payments-prototype-required-cell')
+    expect(within(confirmedWaterCell).queryByText('Введите обязательное показание')).not.toBeInTheDocument()
+    expect(within(confirmedWaterRow).getByText('5.00')).toBeInTheDocument()
+    expect(within(confirmedWaterRow).getAllByText('250.00').length).toBeGreaterThan(0)
+    const membershipAfterWater = within(prototype).getByRole('textbox', { name: /^Платеж Членский взнос/ })
+    expect(membershipAfterWater).toBeEnabled()
+    expect(within(membershipAfterWater.closest('tr')!).getAllByText('700.00').length).toBeGreaterThan(0)
 
     await user.clear(within(prototype).getByRole('textbox', { name: /^Показание Электроэнергия/ }))
     await user.click(within(prototype).getByRole('button', { name: /^Сохранить показание Электроэнергия/ }))

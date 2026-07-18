@@ -43,6 +43,15 @@ describe('accessible dynamic messages', () => {
     expect(formFeedbackSource).toContain('<div className="form-error validation-summary" role="alert" aria-label={title}>')
   })
 
+  it('keeps a missing required meter reading visibly and accessibly highlighted', () => {
+    expect(financePanelSource).toContain("row.meterRequired && row.meter === null ? 'payments-prototype-required-cell' : undefined")
+    expect(financePanelSource).toContain("aria-describedby={row.meterRequired && row.meter === null ? `required-meter-${row.id}` : undefined}")
+    expect(financePanelSource).toContain("aria-invalid={row.meterError || (row.meterRequired && row.meter === null) ? 'true' : undefined}")
+    expect(financePanelSource).toContain('Введите обязательное показание')
+    expect(normalizedAppCss).toMatch(/\.payments-prototype-required-cell \{\n\s+background: #fff1ed !important;\n\}/u)
+    expect(normalizedAppCss).toMatch(/\.payments-prototype-meter-required-hint \{[\s\S]*?color: #b42318;/u)
+  })
+
   it('keeps detail dialogs named, described and modal', () => {
     const dialogLines = workspaceSource
       .split(/\r?\n/)
