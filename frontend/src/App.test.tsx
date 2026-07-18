@@ -3341,6 +3341,12 @@ describe('App', () => {
     const savedSalaryAccrualRequests: GenerateSupplierGroupSalaryAccrualsRequest[] = []
     const savedFundOperationRequests: Array<{ fundId: string; request: CreateFundOperationRequest }> = []
     const searchGaragesPage = vi.fn(async () => ({ items: [garage, secondGarage], totalCount: 2, offset: 0, limit: 20 }))
+    const getIncomePaymentWarning = vi.fn(async () => ({
+      isElectricityPayment: true,
+      previousPaymentDate: '2026-06-01',
+      daysSincePreviousPayment: 29,
+      requiresConfirmation: true,
+    }))
     const dictionaryClient = createDictionaryClient({
       getGarages: async () => [garage, secondGarage],
       getGaragesPage: searchGaragesPage,
@@ -3348,6 +3354,7 @@ describe('App', () => {
       getExpenseTypes: async () => expenseTypes,
     })
     const financeClient = createFinanceClient({
+      getIncomePaymentWarning,
       createIncome: async (_token, request) => {
         savedIncomeRequests.push(request)
         const requestIncomeType = incomeTypes.find((item) => item.id === request.incomeTypeId) ?? incomeType
@@ -3785,6 +3792,22 @@ describe('App', () => {
     await waitFor(() => expect(electricityPaymentInput).toHaveValue('5 674.00'))
     await user.click(electricityPaymentInput)
     await user.keyboard('{Enter}')
+    await waitFor(() => expect(getIncomePaymentWarning).toHaveBeenCalledWith('token', {
+      garageId: garage.id,
+      incomeTypeId: incomeType.id,
+      operationDate: '2026-06-30',
+    }))
+    expect(savedIncomeRequests).toHaveLength(0)
+    const firstEarlyPaymentDialog = await screen.findByRole('dialog', { name: 'Оплата электроэнергии раньше 30 дней' })
+    expect(firstEarlyPaymentDialog).toHaveTextContent('Предыдущая оплата была 01.06.2026 — прошло 29 календ. дн.')
+    await user.click(within(firstEarlyPaymentDialog).getByRole('button', { name: 'Вернуться к платежу' }))
+    expect(savedIncomeRequests).toHaveLength(0)
+    expect(electricityPaymentInput).toHaveValue('5 674.00')
+
+    await user.click(electricityPaymentInput)
+    await user.keyboard('{Enter}')
+    const repeatedEarlyPaymentDialog = await screen.findByRole('dialog', { name: 'Оплата электроэнергии раньше 30 дней' })
+    await user.click(within(repeatedEarlyPaymentDialog).getByRole('button', { name: 'Все равно провести' }))
     await waitFor(() => expect(savedIncomeRequests[0]).toMatchObject({
       garageId: garage.id,
       incomeTypeId: incomeType.id,
@@ -3792,7 +3815,9 @@ describe('App', () => {
       accountingMonth: '2026-06-01',
       amount: 5674,
     }))
+    expect(getIncomePaymentWarning).toHaveBeenCalledTimes(2)
     expect(electricityPaymentInput).toHaveValue('')
+    await waitFor(() => expect(electricityPaymentInput).toHaveFocus())
     expect(within(prototype).getAllByText('5 674.00').length).toBeGreaterThanOrEqual(2)
 
     const addGarageAccrualButton = within(prototype).getByRole('button', { name: 'Добавить начисление гаражу' })

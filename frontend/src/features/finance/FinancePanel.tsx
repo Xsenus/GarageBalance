@@ -161,6 +161,12 @@ type GaragePaymentReceiptActionState = {
   error: string | null
 }
 
+type EarlyElectricityPaymentConfirmationState = {
+  row: GarageIncomePrototypeRow
+  previousPaymentDate: string
+  daysSincePreviousPayment: number
+}
+
 const receiptPrintingActionLabels: Record<ReceiptPrintingActionKind, { title: string; button: string; saving: string; description: string }> = {
   print: {
     title: 'Сформировать квитанцию?',
@@ -3109,6 +3115,8 @@ function PaymentsPrototypePanel({
   const [historyActionSaving, setHistoryActionSaving] = useState(false)
   const [receiptActionSaving, setReceiptActionSaving] = useState(false)
   const [receiptActionStatus, setReceiptActionStatus] = useState<string | null>(null)
+  const [earlyElectricityPaymentConfirmation, setEarlyElectricityPaymentConfirmation] = useState<EarlyElectricityPaymentConfirmationState | null>(null)
+  const earlyElectricityPaymentTriggerRef = useRef<HTMLElement | null>(null)
   const availableGarages = useMemo(() => {
     const uniqueGarages = new Map<string, GarageDto>()
     for (const garage of [...garages, ...garageSearchGarages]) {
@@ -3956,7 +3964,7 @@ function PaymentsPrototypePanel({
       ?? null
   }
 
-  async function commitGaragePayment(row: GarageIncomePrototypeRow) {
+  async function commitGaragePayment(row: GarageIncomePrototypeRow, warningConfirmed = false) {
     const amount = parsePaymentMoney(row.paymentDraft)
     if (!Number.isFinite(amount) || amount <= 0) {
       return
@@ -3980,6 +3988,24 @@ function PaymentsPrototypePanel({
     setPaymentError(null)
 
     try {
+      if (!warningConfirmed && incomeType.code?.trim().toLowerCase() === 'electricity') {
+        const warningTrigger = document.activeElement instanceof HTMLElement ? document.activeElement : null
+        const warning = await financeClient.getIncomePaymentWarning(auth.accessToken, {
+          garageId: selectedGarage.id,
+          incomeTypeId: incomeType.id,
+          operationDate: getLocalDateInputValue(),
+        })
+        if (warning.requiresConfirmation && warning.previousPaymentDate && warning.daysSincePreviousPayment !== null) {
+          earlyElectricityPaymentTriggerRef.current = warningTrigger
+          setEarlyElectricityPaymentConfirmation({
+            row,
+            previousPaymentDate: warning.previousPaymentDate,
+            daysSincePreviousPayment: warning.daysSincePreviousPayment,
+          })
+          return
+        }
+      }
+
       const operation = await financeClient.createIncome(auth.accessToken, {
         garageId: selectedGarage.id,
         incomeTypeId: incomeType.id,
@@ -4002,6 +4028,30 @@ function PaymentsPrototypePanel({
     } finally {
       setSavingPaymentRowId(null)
     }
+  }
+
+  function closeEarlyElectricityPaymentConfirmation() {
+    const trigger = earlyElectricityPaymentTriggerRef.current
+    setEarlyElectricityPaymentConfirmation(null)
+    window.setTimeout(() => {
+      if (trigger?.isConnected) {
+        trigger.focus()
+      }
+      earlyElectricityPaymentTriggerRef.current = null
+    }, 0)
+  }
+
+  function confirmEarlyElectricityPayment(pendingPayment: EarlyElectricityPaymentConfirmationState) {
+    const trigger = earlyElectricityPaymentTriggerRef.current
+    setEarlyElectricityPaymentConfirmation(null)
+    earlyElectricityPaymentTriggerRef.current = null
+    void commitGaragePayment(pendingPayment.row, true).finally(() => {
+      window.setTimeout(() => {
+        if (trigger?.isConnected) {
+          trigger.focus()
+        }
+      }, 0)
+    })
   }
 
   function getRowsForFullPayment(period: string) {
@@ -5206,7 +5256,55 @@ function PaymentsPrototypePanel({
           onConfirm={confirmReceiptAction}
         />
       ) : null}
+      {earlyElectricityPaymentConfirmation ? (
+        <EarlyElectricityPaymentConfirmationDialog
+          state={earlyElectricityPaymentConfirmation}
+          onClose={closeEarlyElectricityPaymentConfirmation}
+          onConfirm={() => confirmEarlyElectricityPayment(earlyElectricityPaymentConfirmation)}
+        />
+      ) : null}
     </section>
+  )
+}
+
+function EarlyElectricityPaymentConfirmationDialog({
+  state,
+  onClose,
+  onConfirm,
+}: {
+  state: EarlyElectricityPaymentConfirmationState
+  onClose: () => void
+  onConfirm: () => void
+}) {
+  const dialogRef = useFocusTrap<HTMLElement>(true)
+  const cancelRef = useFocusOnOpen<HTMLButtonElement>(true)
+  useEscapeKey(true, onClose)
+
+  return (
+    <div className="modal-backdrop" role="presentation" onMouseDown={onClose}>
+      <section ref={dialogRef} className="detail-dialog payments-prototype-dialog payments-prototype-dialog--wide" role="dialog" aria-modal="true" aria-labelledby="early-electricity-payment-title" aria-describedby="early-electricity-payment-description" onMouseDown={(event) => event.stopPropagation()}>
+        <div className="detail-dialog-header">
+          <div>
+            <p className="eyebrow">Проверка интервала оплаты</p>
+            <h3 id="early-electricity-payment-title">Оплата электроэнергии раньше 30 дней</h3>
+            <p>{state.row.service} · {formatPaymentPrototypeValue(parsePaymentMoney(state.row.paymentDraft))}</p>
+          </div>
+          <button className="icon-button" type="button" aria-label="Закрыть предупреждение ранней оплаты" onClick={onClose}>
+            <X size={18} aria-hidden="true" />
+          </button>
+        </div>
+        <div className="dictionary-modal-form payments-prototype-modal-form">
+          <p className="confirmation-text" id="early-electricity-payment-description">
+            Предыдущая оплата была {formatDateOnly(state.previousPaymentDate)} — прошло {state.daysSincePreviousPayment} календ. дн. Проверьте платеж или подтвердите продолжение.
+          </p>
+          <p className="form-hint">Подтверждение не меняет сумму и не требует комментария.</p>
+          <div className="detail-dialog-actions">
+            <button ref={cancelRef} className="ghost-button" type="button" onClick={onClose}>Вернуться к платежу</button>
+            <button className="secondary-button" type="button" onClick={onConfirm}>Все равно провести</button>
+          </div>
+        </div>
+      </section>
+    </div>
   )
 }
 
