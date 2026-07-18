@@ -22,7 +22,8 @@ public sealed record FundOperationDto(
     string Reason,
     DateTimeOffset CreatedAtUtc,
     bool IsCanceled,
-    bool IsCashToBankTransfer);
+    bool IsCashToBankTransfer,
+    bool IsAutomaticIncomeAssignment);
 
 public sealed record FundOperationPageDto(
     IReadOnlyList<FundOperationDto> Items,

@@ -507,7 +507,9 @@ export function FundsPrototypePanel({ auth, fundsClient }: { auth: AuthResponse;
                 </td>
                 <td>
                   <div className="funds-operation-actions">
-                    {fundOperation.isCanceled ? (
+                    {fundOperation.isAutomaticIncomeAssignment ? (
+                      <span className="funds-operation-managed-label">Управляется поступлением</span>
+                    ) : fundOperation.isCanceled ? (
                       <button className="funds-action-button" type="button" aria-label={`Вернуть операцию фонда ${fundOperation.fundName}`} title={`Вернуть операцию фонда ${fundOperation.fundName}`} data-tooltip="Вернуть" onClick={() => openFundStatusAction('restore', fundOperation)}>
                         <RotateCcw size={16} aria-hidden="true" />
                       </button>

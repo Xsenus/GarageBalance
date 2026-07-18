@@ -6124,6 +6124,249 @@ public sealed class FinanceServiceTests
         await context.SaveChangesAsync();
     }
 
+    [Fact]
+    public async Task IncomeDestinationAssignment_FollowsCreateUpdateCancelAndRestoreLifecycle()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        await RemoveSeededBankTransferAsync(database.Context);
+        var firstIncomeType = AddOtherIncomeDestination(database.Context);
+        var secondFund = new Fund
+        {
+            Name = "Целевой фонд",
+            NormalizedName = "ЦЕЛЕВОЙ ФОНД"
+        };
+        var secondIncomeType = new IncomeType
+        {
+            Name = "Целевое поступление",
+            Code = "target_income",
+            DestinationFund = secondFund,
+            DestinationFundId = secondFund.Id
+        };
+        database.Context.AddRange(secondFund, secondIncomeType);
+        await database.Context.SaveChangesAsync();
+        var service = FinanceServiceTestFactory.Create(database.Context);
+        var fundService = new FundService(
+            new EfFundRepository(database.Context),
+            new EfFinanceAvailableBalanceQuery(database.Context),
+            new AuditEventWriter(database.Context));
+        var actorUserId = Guid.NewGuid();
+        var request = new CreateIncomeOperationRequest(
+            fixtures.Garage.Id,
+            firstIncomeType.Id,
+            new DateOnly(2026, 7, 10),
+            new DateOnly(2026, 7, 1),
+            400m,
+            "PKO-FUND-1",
+            null);
+
+        var created = await service.CreateIncomeAsync(request, actorUserId, CancellationToken.None);
+
+        Assert.True(created.Succeeded, created.ErrorMessage);
+        var createdOperationId = created.Value!.Id;
+        var assignment = await database.Context.FundOperations
+            .Include(operation => operation.Fund)
+            .SingleAsync(operation => operation.SourceFinancialOperationId == createdOperationId);
+        Assert.Equal(firstIncomeType.DestinationFundId, assignment.FundId);
+        Assert.Equal(400m, assignment.Amount);
+        Assert.False(assignment.IsCanceled);
+        Assert.Equal(400m, assignment.Fund.Balance);
+        Assert.Contains(database.Context.AuditEvents, item => item.Action == "fund.income_assignment_created");
+        var automaticDto = Assert.Single(
+            await fundService.GetOperationsAsync(100, includeCanceled: true, CancellationToken.None),
+            item => item.Id == assignment.Id);
+        Assert.True(automaticDto.IsAutomaticIncomeAssignment);
+        var manualUpdate = await fundService.UpdateOperationAsync(
+            assignment.Id,
+            new UpdateFundOperationRequest(350m, "Ручное изменение"),
+            actorUserId,
+            CancellationToken.None);
+        var manualCancel = await fundService.CancelOperationAsync(
+            assignment.Id,
+            new CancelFundOperationRequest("Ручная отмена"),
+            actorUserId,
+            CancellationToken.None);
+        Assert.Equal("fund_operation_managed_by_income", manualUpdate.ErrorCode);
+        Assert.Equal("fund_operation_managed_by_income", manualCancel.ErrorCode);
+
+        var reduced = await service.UpdateIncomeAsync(
+            createdOperationId,
+            request with { Amount = 250m },
+            actorUserId,
+            CancellationToken.None);
+
+        Assert.True(reduced.Succeeded, reduced.ErrorMessage);
+        Assert.Equal(250m, assignment.Amount);
+        Assert.Equal(250m, assignment.Fund.Balance);
+
+        var moved = await service.UpdateIncomeAsync(
+            createdOperationId,
+            request with { IncomeTypeId = secondIncomeType.Id, Amount = 300m },
+            actorUserId,
+            CancellationToken.None);
+
+        Assert.True(moved.Succeeded, moved.ErrorMessage);
+        Assert.Equal(secondFund.Id, assignment.FundId);
+        Assert.Equal(300m, assignment.Amount);
+        Assert.Equal(0m, firstIncomeType.DestinationFund!.Balance);
+        Assert.Equal(300m, secondFund.Balance);
+
+        var removedDestination = await service.UpdateIncomeAsync(
+            createdOperationId,
+            request with { IncomeTypeId = fixtures.IncomeType.Id, Amount = 300m },
+            actorUserId,
+            CancellationToken.None);
+
+        Assert.True(removedDestination.Succeeded, removedDestination.ErrorMessage);
+        Assert.True(assignment.IsCanceled);
+        Assert.Equal(0m, secondFund.Balance);
+
+        var restoredDestination = await service.UpdateIncomeAsync(
+            createdOperationId,
+            request with { IncomeTypeId = firstIncomeType.Id, Amount = 275m },
+            actorUserId,
+            CancellationToken.None);
+
+        Assert.True(restoredDestination.Succeeded, restoredDestination.ErrorMessage);
+        Assert.False(assignment.IsCanceled);
+        Assert.Equal(firstIncomeType.DestinationFundId, assignment.FundId);
+        Assert.Equal(275m, firstIncomeType.DestinationFund!.Balance);
+
+        var canceled = await service.CancelOperationAsync(
+            createdOperationId,
+            new CancelFinanceEntryRequest("Ошибочное поступление"),
+            actorUserId,
+            CancellationToken.None);
+
+        Assert.True(canceled.Succeeded, canceled.ErrorMessage);
+        Assert.True(assignment.IsCanceled);
+        Assert.Equal(0m, firstIncomeType.DestinationFund.Balance);
+        Assert.Contains(database.Context.AuditEvents, item => item.Action == "fund.income_assignment_canceled");
+        var manualRestore = await fundService.RestoreOperationAsync(assignment.Id, actorUserId, CancellationToken.None);
+        Assert.Equal("fund_operation_managed_by_income", manualRestore.ErrorCode);
+
+        var restored = await service.RestoreOperationAsync(createdOperationId, actorUserId, CancellationToken.None);
+
+        Assert.True(restored.Succeeded, restored.ErrorMessage);
+        Assert.False(assignment.IsCanceled);
+        Assert.Equal(275m, firstIncomeType.DestinationFund.Balance);
+        Assert.Contains(database.Context.AuditEvents, item => item.Action == "fund.income_assignment_restored");
+    }
+
+    [Fact]
+    public async Task CancelIncomeAsync_RejectsWhenAutomaticFundAssignmentWasSpent()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        await RemoveSeededBankTransferAsync(database.Context);
+        var incomeType = AddOtherIncomeDestination(database.Context);
+        incomeType.DestinationFund!.AllowOperations = true;
+        await database.Context.SaveChangesAsync();
+        var financeService = FinanceServiceTestFactory.Create(database.Context);
+        var fundService = new FundService(
+            new EfFundRepository(database.Context),
+            new EfFinanceAvailableBalanceQuery(database.Context),
+            new AuditEventWriter(database.Context));
+        var created = await financeService.CreateIncomeAsync(
+            new CreateIncomeOperationRequest(
+                fixtures.Garage.Id,
+                incomeType.Id,
+                new DateOnly(2026, 7, 10),
+                new DateOnly(2026, 7, 1),
+                400m,
+                "PKO-FUND-SPENT",
+                null),
+            null,
+            CancellationToken.None);
+        Assert.True(created.Succeeded, created.ErrorMessage);
+        Assert.True((await fundService.CreateOperationAsync(
+            incomeType.DestinationFund.Id,
+            new CreateFundOperationRequest(FundOperationKinds.Withdraw, 300m, "Использование назначения"),
+            null,
+            CancellationToken.None)).Succeeded);
+
+        var result = await financeService.CancelOperationAsync(
+            created.Value!.Id,
+            new CancelFinanceEntryRequest("Отмена использованного поступления"),
+            null,
+            CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Equal("fund_balance_insufficient", result.ErrorCode);
+        Assert.False((await database.Context.FinancialOperations.SingleAsync(item => item.Id == created.Value.Id)).IsCanceled);
+        Assert.False((await database.Context.FundOperations.SingleAsync(item => item.SourceFinancialOperationId == created.Value.Id)).IsCanceled);
+        Assert.Equal(100m, incomeType.DestinationFund.Balance);
+        Assert.DoesNotContain(database.Context.AuditEvents, item => item.Action == "fund.income_assignment_canceled");
+    }
+
+    [Fact]
+    public async Task RestoreIncomeAsync_CreatesMissingLegacyFundAssignment()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        await RemoveSeededBankTransferAsync(database.Context);
+        var incomeType = AddOtherIncomeDestination(database.Context);
+        var operation = new FinancialOperation
+        {
+            OperationKind = FinancialOperationKinds.Income,
+            OperationDate = new DateOnly(2026, 6, 15),
+            AccountingMonth = new DateOnly(2026, 6, 1),
+            Amount = 180m,
+            DocumentNumber = "LEGACY-ROUTED-INCOME",
+            Garage = fixtures.Garage,
+            GarageId = fixtures.Garage.Id,
+            IncomeType = incomeType,
+            IncomeTypeId = incomeType.Id,
+            IsCanceled = true
+        };
+        database.Context.FinancialOperations.Add(operation);
+        await database.Context.SaveChangesAsync();
+
+        var result = await FinanceServiceTestFactory.Create(database.Context)
+            .RestoreOperationAsync(operation.Id, null, CancellationToken.None);
+
+        Assert.True(result.Succeeded, result.ErrorMessage);
+        var assignment = await database.Context.FundOperations
+            .SingleAsync(item => item.SourceFinancialOperationId == operation.Id);
+        Assert.False(assignment.IsCanceled);
+        Assert.Equal(180m, assignment.Amount);
+        Assert.Equal(incomeType.DestinationFundId, assignment.FundId);
+        Assert.Equal(180m, incomeType.DestinationFund!.Balance);
+    }
+
+    [Fact]
+    public async Task CreateIncomeAsync_RollsBackIncomeAssignmentAndAuditsWhenFundInsertFails()
+    {
+        var failure = new FundOperationInsertFailureInterceptor();
+        await using var database = await TestDatabase.CreateAsync(failure);
+        var fixtures = await database.SeedAsync();
+        await RemoveSeededBankTransferAsync(database.Context);
+        var incomeType = AddOtherIncomeDestination(database.Context);
+        await database.Context.SaveChangesAsync();
+        failure.Enabled = true;
+        var service = FinanceServiceTestFactory.Create(database.Context);
+
+        var exception = await Assert.ThrowsAsync<DbUpdateException>(() => service.CreateIncomeAsync(
+            new CreateIncomeOperationRequest(
+                fixtures.Garage.Id,
+                incomeType.Id,
+                new DateOnly(2026, 7, 12),
+                new DateOnly(2026, 7, 1),
+                220m,
+                "PKO-FUND-ROLLBACK",
+                null),
+            null,
+            CancellationToken.None));
+        Assert.IsType<InvalidOperationException>(exception.InnerException);
+
+        failure.Enabled = false;
+        database.Context.ChangeTracker.Clear();
+        Assert.DoesNotContain(database.Context.FinancialOperations, item => item.DocumentNumber == "PKO-FUND-ROLLBACK");
+        Assert.DoesNotContain(database.Context.FundOperations, item => item.SourceFinancialOperationId != null);
+        Assert.DoesNotContain(database.Context.AuditEvents, item => item.Action == "finance.income_created");
+        Assert.DoesNotContain(database.Context.AuditEvents, item => item.Action == "fund.income_assignment_created");
+    }
+
     private static IncomeType AddOtherIncomeDestination(GarageBalanceDbContext context)
     {
         var fund = new Fund
@@ -6302,6 +6545,25 @@ public sealed class FinanceServiceTests
             {
                 throw new InvalidOperationException("Имитирована ошибка пересчета связанного начисления.");
             }
+        }
+    }
+
+    private sealed class FundOperationInsertFailureInterceptor : DbCommandInterceptor
+    {
+        public bool Enabled { get; set; }
+
+        public override ValueTask<InterceptionResult<DbDataReader>> ReaderExecutingAsync(
+            DbCommand command,
+            CommandEventData eventData,
+            InterceptionResult<DbDataReader> result,
+            CancellationToken cancellationToken = default)
+        {
+            if (Enabled && command.CommandText.Contains("INSERT INTO \"fund_operations\"", StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException("Имитирована ошибка сохранения автоматического назначения фонда.");
+            }
+
+            return base.ReaderExecutingAsync(command, eventData, result, cancellationToken);
         }
     }
 }

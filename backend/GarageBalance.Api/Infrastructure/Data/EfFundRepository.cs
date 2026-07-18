@@ -120,6 +120,17 @@ public sealed class EfFundRepository(GarageBalanceDbContext dbContext) : IFundRe
             .SingleOrDefaultAsync(operation => operation.Id == operationId, cancellationToken);
     }
 
+    public Task<FundOperation?> FindIncomeAssignmentForUpdateAsync(
+        Guid sourceFinancialOperationId,
+        CancellationToken cancellationToken)
+    {
+        return dbContext.FundOperations
+            .Include(operation => operation.Fund)
+            .SingleOrDefaultAsync(
+                operation => operation.SourceFinancialOperationId == sourceFinancialOperationId,
+                cancellationToken);
+    }
+
     public async Task<FundTotalsData> GetTotalsAsync(CancellationToken cancellationToken)
     {
         var totals = await dbContext.Funds.AsNoTracking()

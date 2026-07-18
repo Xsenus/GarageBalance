@@ -31,6 +31,7 @@ erDiagram
     expense_types ||--o{ supplier_accruals : classifies
 
     funds ||--o{ fund_operations : changes
+    financial_operations ||--o| fund_operations : automatic_assignment
 
     app_users ||--o{ app_user_roles : assigned
     app_roles ||--o{ app_user_roles : grants
@@ -249,6 +250,7 @@ erDiagram
     fund_operations {
         uuid Id PK
         uuid FundId FK
+        uuid SourceFinancialOperationId FK
         string OperationKind
         decimal Amount
         decimal BalanceBefore
@@ -395,7 +397,7 @@ erDiagram
 - `supplier_accruals` - начисления поставщикам по поставщику, виду выплаты и учетному месяцу. Уникальность: `SupplierId + ExpenseTypeId + AccountingMonth + Source + DocumentNumber`.
 - `meter_readings` - показания воды и электричества. Уникальность: `GarageId + MeterKind + AccountingMonth`; `HasGapWarning` фиксирует разрыв истории.
 - `funds` - фонды учета с нормализованным именем, балансом, порядком сортировки и флагами системности/разрешенных операций. `NormalizedName` уникален, `SortOrder` индексируется.
-- `fund_operations` - операции пополнения, изъятия, сдачи кассы в банк и распределения фонда. Хранит сумму, баланс до/после, обязательную причину, признак отмены и пользователя-инициатора; индексы покрывают `FundId`, `CreatedAtUtc`, `OperationKind` и `IsCanceled`.
+- `fund_operations` - операции пополнения, изъятия, сдачи кассы в банк и распределения фонда. Nullable-ссылка `SourceFinancialOperationId` связывает автоматическое назначение с единственным исходным поступлением; частичный уникальный индекс запрещает второе назначение того же поступления. Таблица хранит сумму, баланс до/после, обязательную причину, признак отмены и пользователя-инициатора; индексы покрывают `FundId`, `SourceFinancialOperationId`, `CreatedAtUtc`, `OperationKind` и `IsCanceled`.
 - `form_states` - серверное хранение состояния рабочих форм-прототипов. `Scope` уникален, `PayloadJson` хранит JSON состояния, `UpdatedAtUtc` индексируется.
 
 Начисления считаются по `AccountingMonth`, фактические поступления и выплаты - по `OperationDate`, а отчеты дополнительно показывают учетный месяц для сверки.

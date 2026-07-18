@@ -33,6 +33,9 @@ internal static class FinanceServiceTestFactory
             new EfTariffRepository(dbContext),
             new EfFeeCampaignRepository(dbContext),
             new EfChargeServiceSettingRepository(dbContext),
+            new IncomeFundAssignmentService(
+                new EfFundRepository(dbContext),
+                new AuditEventWriter(dbContext)),
             new EfApplicationUnitOfWork(dbContext),
             new AuditEventWriter(dbContext),
             timeProvider ?? TimeProvider.System);

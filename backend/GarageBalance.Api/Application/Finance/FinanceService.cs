@@ -2,6 +2,7 @@ using System.Globalization;
 using GarageBalance.Api.Application.Audit;
 using GarageBalance.Api.Application.Common;
 using GarageBalance.Api.Application.Dictionaries;
+using GarageBalance.Api.Application.Funds;
 using GarageBalance.Api.Domain.Dictionaries;
 using GarageBalance.Api.Domain.Finance;
 
@@ -30,6 +31,7 @@ public sealed class FinanceService(
     ITariffRepository tariffRepository,
     IFeeCampaignRepository feeCampaignRepository,
     IChargeServiceSettingRepository chargeServiceSettingRepository,
+    IIncomeFundAssignmentService incomeFundAssignmentService,
     IApplicationUnitOfWork unitOfWork,
     IAuditEventWriter auditEventWriter,
     TimeProvider timeProvider) : IFinanceService
@@ -798,6 +800,8 @@ public sealed class FinanceService(
             return FinanceResult<FinancialOperationDto>.Failure("operation_duplicate", "Операция с таким документом и датой уже внесена.");
         }
 
+        await using var fundAssignmentLock = await incomeFundAssignmentService.AcquireUpdateLockAsync(cancellationToken);
+
         var operation = new FinancialOperation
         {
             OperationKind = FinancialOperationKinds.Income,
@@ -823,6 +827,13 @@ public sealed class FinanceService(
             operation.Id,
             cancellationToken);
         AddAudit(actorUserId, "finance.income_created", operation, FormatIncomeCreatedAuditSummary(operation));
+        var assignmentResult = await incomeFundAssignmentService.CreateAsync(operation, actorUserId, cancellationToken);
+        if (!assignmentResult.Succeeded)
+        {
+            return FinanceResult<FinancialOperationDto>.Failure(
+                assignmentResult.ErrorCode!,
+                assignmentResult.ErrorMessage!);
+        }
         await unitOfWork.SaveChangesAsync(cancellationToken);
         return FinanceResult<FinancialOperationDto>.Success(await ToDtoAsync(operation, cancellationToken));
     }
@@ -1098,6 +1109,7 @@ public sealed class FinanceService(
             return FinanceResult<FinancialOperationDto>.Success(await ToDtoAsync(operation, cancellationToken));
         }
 
+        await using var fundAssignmentLock = await incomeFundAssignmentService.AcquireUpdateLockAsync(cancellationToken);
         await using var cashBalanceLock = amount < operation.Amount
             ? await financeAvailableBalanceQuery.AcquireUpdateLockAsync(cashExpense: true, cancellationToken)
             : null;
@@ -1111,6 +1123,20 @@ public sealed class FinanceService(
                     "cash_amount_insufficient",
                     $"Уменьшение поступления превышает доступный остаток в кассе {MoneyFormatting.Format(availableCashAmount)}.");
             }
+        }
+
+        var assignmentResult = await incomeFundAssignmentService.UpdateAsync(
+            operation,
+            incomeType.DestinationFundId,
+            incomeType.Name,
+            amount,
+            actorUserId,
+            cancellationToken);
+        if (!assignmentResult.Succeeded)
+        {
+            return FinanceResult<FinancialOperationDto>.Failure(
+                assignmentResult.ErrorCode!,
+                assignmentResult.ErrorMessage!);
         }
 
         var oldAllocationKey = new AccrualPaymentAllocationKey(operation.GarageId!.Value, operation.IncomeTypeId!.Value);
@@ -1283,6 +1309,9 @@ public sealed class FinanceService(
             return FinanceResult<FinancialOperationDto>.Failure("operation_already_canceled", "Финансовая операция уже отменена.");
         }
 
+        await using var fundAssignmentLock = operation.OperationKind == FinancialOperationKinds.Income
+            ? await incomeFundAssignmentService.AcquireUpdateLockAsync(cancellationToken)
+            : null;
         await using var cashBalanceLock = operation.OperationKind == FinancialOperationKinds.Income
             ? await financeAvailableBalanceQuery.AcquireUpdateLockAsync(cashExpense: true, cancellationToken)
             : null;
@@ -1294,6 +1323,21 @@ public sealed class FinanceService(
                 return FinanceResult<FinancialOperationDto>.Failure(
                     "cash_amount_insufficient",
                     $"Поступление нельзя отменить: доступный остаток в кассе составляет {MoneyFormatting.Format(availableCashAmount)}.");
+            }
+        }
+
+        if (operation.OperationKind == FinancialOperationKinds.Income)
+        {
+            var assignmentResult = await incomeFundAssignmentService.CancelAsync(
+                operation,
+                reason,
+                actorUserId,
+                cancellationToken);
+            if (!assignmentResult.Succeeded)
+            {
+                return FinanceResult<FinancialOperationDto>.Failure(
+                    assignmentResult.ErrorCode!,
+                    assignmentResult.ErrorMessage!);
             }
         }
 
@@ -1332,6 +1376,10 @@ public sealed class FinanceService(
             return FinanceResult<FinancialOperationDto>.Failure("operation_duplicate", "Операция с таким документом и датой уже внесена.");
         }
 
+        await using var fundAssignmentLock = operation.OperationKind == FinancialOperationKinds.Income
+            ? await incomeFundAssignmentService.AcquireUpdateLockAsync(cancellationToken)
+            : null;
+
         if (operation.OperationKind == FinancialOperationKinds.Expense)
         {
             if (operation.StaffMemberId is not null)
@@ -1366,6 +1414,20 @@ public sealed class FinanceService(
                         "bank_amount_insufficient",
                         $"Сумма выплаты превышает доступный остаток на банковском счете {MoneyFormatting.Format(availableBankAmount)}.");
                 }
+            }
+        }
+
+        if (operation.OperationKind == FinancialOperationKinds.Income)
+        {
+            var assignmentResult = await incomeFundAssignmentService.RestoreAsync(
+                operation,
+                actorUserId,
+                cancellationToken);
+            if (!assignmentResult.Succeeded)
+            {
+                return FinanceResult<FinancialOperationDto>.Failure(
+                    assignmentResult.ErrorCode!,
+                    assignmentResult.ErrorMessage!);
             }
         }
 

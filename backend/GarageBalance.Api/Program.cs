@@ -80,6 +80,8 @@ builder.Services.AddScoped<IFinancialOperationRepository, EfFinancialOperationRe
 builder.Services.AddScoped<IAccrualRepository, EfAccrualRepository>();
 builder.Services.AddScoped<IAccrualPaymentAllocationRepository, EfAccrualPaymentAllocationRepository>();
 builder.Services.AddScoped<ISupplierAccrualRepository, EfSupplierAccrualRepository>();
+builder.Services.AddScoped<IFundRepository, EfFundRepository>();
+builder.Services.AddScoped<IIncomeFundAssignmentService, IncomeFundAssignmentService>();
 builder.Services.AddScoped<IFinanceService>(services => new FinanceService(
     services.GetRequiredService<IStaffMemberRepository>(),
     services.GetRequiredService<IGarageRepository>(),
@@ -103,10 +105,10 @@ builder.Services.AddScoped<IFinanceService>(services => new FinanceService(
     services.GetRequiredService<ITariffRepository>(),
     services.GetRequiredService<IFeeCampaignRepository>(),
     services.GetRequiredService<IChargeServiceSettingRepository>(),
+    services.GetRequiredService<IIncomeFundAssignmentService>(),
     services.GetRequiredService<IApplicationUnitOfWork>(),
     services.GetRequiredService<IAuditEventWriter>(),
     services.GetRequiredService<TimeProvider>()));
-builder.Services.AddScoped<IFundRepository, EfFundRepository>();
 builder.Services.AddScoped<IFundService, FundService>();
 builder.Services.AddScoped<IImportRepository, EfImportRepository>();
 builder.Services.AddScoped<IImportService, ImportService>();

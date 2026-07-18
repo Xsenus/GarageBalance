@@ -39,7 +39,7 @@
 | Users | 3 | create/update/restore, diff и причина отключения | отдельной матрицы прав пока нет |
 | Dictionaries | 36 | create/update/archive/restore для текущих справочников, diff на update, причина archive | начисление участников сборов и полная UI-связка сборов остаются следующим срезом |
 | Finance | 25 | create/update/cancel/restore/generate, diff на update, связанные месяц/гараж/контрагент/документ, перенос задолженности | следующие объектные строки начислений и выплат синхронизируются отдельными срезами |
-| Funds | 5 | пополнение, изъятие, изменение, отмена и восстановление операций фонда | фактические финансовые модели фондов расширяются следующими срезами |
+| Funds | 9 | ручные операции фонда и полный жизненный цикл автоматического назначения поступления | назначение синхронизируется с исходным поступлением и защищено от ручного изменения |
 | Import | 8 | dry-run, отчет, заявки на импорт/rollback, карантин, fingerprints, безопасная metadata | фактический импорт/rollback еще не завершены |
 | Integrations | 6 | secret upsert без plaintext-секретов, diff состояния секрета, запрос и retry синхронизации 1C Fresh без раскрытия токена, действия печати квитанций | реальный обмен, фискальное устройство и конфликты будущих интеграций впереди |
 | Reports | 10 | формирование/выгрузка, период, строка, формат, audit-writing export через POST | report actions покрыты общими report-service и endpoint тестами |
@@ -144,6 +144,10 @@
 | `fund.operation_updated` | `fund_operation` | Да | Да | Да | `FundServiceTests`, `FundsControllerTests` | diff суммы и основания, no-op не создает событие |
 | `fund.operation_canceled` | `fund_operation` | Нет | Да | Да | `FundServiceTests`, `FundsControllerTests` | отмена требует reason и пересчитывает остаток |
 | `fund.operation_restored` | `fund_operation` | Нет | Нет | Да | `FundServiceTests`, `FundsControllerTests` | восстановление отмененной операции с проверкой активной последовательности и лимитов |
+| `fund.income_assignment_created` | `fund_operation` | Нет | Нет | Да | `FinanceServiceTests`, `PostgreSqlIncomeFundAssignmentIntegrationTests` | автоматическое назначение поступления в связанный фонд; migration-backfill сохраняет ссылку на исходный документ |
+| `fund.income_assignment_updated` | `fund_operation` | Да | Нет | Да | `FinanceServiceTests` | синхронно меняет сумму или фонд при изменении исходного поступления |
+| `fund.income_assignment_canceled` | `fund_operation` | Да | Да | Да | `FinanceServiceTests`, `PostgreSqlIncomeFundAssignmentIntegrationTests` | отменяется атомарно с поступлением и отклоняется, если назначенная сумма уже использована |
+| `fund.income_assignment_restored` | `fund_operation` | Да | Нет | Да | `FinanceServiceTests`, `PostgreSqlIncomeFundAssignmentIntegrationTests` | восстанавливается атомарно с поступлением, включая историческую запись без прежней связи |
 
 ## Import
 

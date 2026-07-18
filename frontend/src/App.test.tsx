@@ -5734,6 +5734,32 @@ describe('App', () => {
     expect(within(fundsPanel).getByLabelText('Сумма к распределению')).toHaveTextContent('—')
   })
 
+  it('marks automatic income assignments as managed and hides manual fund actions', async () => {
+    const user = userEvent.setup()
+    const automaticOperation = createFundOperation({
+      fundId: 'fund-other',
+      fundName: 'Прочее',
+      reason: 'Автоматическое назначение поступления «Прочие доходы»',
+      isAutomaticIncomeAssignment: true,
+    })
+    const fundsClient = createFundsClient({
+      getOperations: async () => [automaticOperation],
+    })
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} fundsClient={fundsClient} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    const dashboardTiles = await screen.findByRole('group', { name: 'Главные разделы' })
+    await user.click(within(dashboardTiles).getByRole('button', { name: /Управление\s+фондами/i }))
+
+    const fundsPanel = await screen.findByRole('region', { name: 'Управление фондами' })
+    const operationsTable = await within(fundsPanel).findByRole('table', { name: 'Операции фондов' })
+    expect(within(operationsTable).getByText('Управляется поступлением')).toBeInTheDocument()
+    expect(within(operationsTable).queryByRole('button', { name: 'Изменить операцию фонда Прочее' })).not.toBeInTheDocument()
+    expect(within(operationsTable).queryByRole('button', { name: 'Отменить операцию фонда Прочее' })).not.toBeInTheDocument()
+    expect(within(operationsTable).queryByRole('button', { name: 'Создать обратную операцию фонда Прочее' })).not.toBeInTheDocument()
+  })
+
   it('shows shared fund skeletons and reveals each data region independently', async () => {
     const user = userEvent.setup()
     let resolveFunds!: (funds: FundDto[]) => void
@@ -14350,6 +14376,7 @@ function createFundOperation(overrides: Partial<FundOperationDto> = {}): FundOpe
     reason: 'Распределение средств',
     createdAtUtc: '2026-06-30T10:00:00Z',
     isCanceled: false,
+    isAutomaticIncomeAssignment: false,
     ...overrides,
   }
 }

@@ -20,6 +20,7 @@ export type FundOperationDto = {
   createdAtUtc: string
   isCanceled: boolean
   isCashToBankTransfer?: boolean
+  isAutomaticIncomeAssignment?: boolean
 }
 
 export type FundOperationPageDto = {

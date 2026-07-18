@@ -4405,6 +4405,13 @@ h1 {
   gap: 8px;
 }
 
+.funds-operation-managed-label {
+  color: var(--text-muted);
+  font-size: 0.78rem;
+  line-height: 1.25;
+  text-align: right;
+}
+
 .funds-distribution {
   display: inline-grid;
   width: min(360px, 100%);

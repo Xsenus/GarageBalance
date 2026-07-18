@@ -187,6 +187,13 @@ public sealed class FundService(
             return FundResult<FundOperationDto>.Failure("fund_operation_canceled", "Нельзя изменить отмененную операцию фонда.");
         }
 
+        if (operation.SourceFinancialOperationId.HasValue)
+        {
+            return FundResult<FundOperationDto>.Failure(
+                "fund_operation_managed_by_income",
+                "Автоматическая операция фонда управляется связанным поступлением.");
+        }
+
         await using var cashBalanceLock = operation.IsCashToBankTransfer
             ? await financeAvailableBalanceQuery.AcquireUpdateLockAsync(cashExpense: true, cancellationToken)
             : null;
@@ -259,6 +266,13 @@ public sealed class FundService(
             return FundResult<FundOperationDto>.Failure("fund_operation_already_canceled", "Операция фонда уже отменена.");
         }
 
+        if (operation.SourceFinancialOperationId.HasValue)
+        {
+            return FundResult<FundOperationDto>.Failure(
+                "fund_operation_managed_by_income",
+                "Автоматическая операция фонда управляется связанным поступлением.");
+        }
+
         if (operation.OperationKind == FundOperationKinds.Withdraw)
         {
             var availableToDistribute = await CalculateAvailableToDistributeAsync(cancellationToken);
@@ -296,6 +310,13 @@ public sealed class FundService(
         if (!operation.IsCanceled)
         {
             return FundResult<FundOperationDto>.Failure("fund_operation_not_canceled", "Операция фонда уже активна.");
+        }
+
+        if (operation.SourceFinancialOperationId.HasValue)
+        {
+            return FundResult<FundOperationDto>.Failure(
+                "fund_operation_managed_by_income",
+                "Автоматическая операция фонда управляется связанным поступлением.");
         }
 
         await using var cashBalanceLock = operation.IsCashToBankTransfer
@@ -616,7 +637,8 @@ public sealed class FundService(
             operation.Reason,
             operation.CreatedAtUtc,
             operation.IsCanceled,
-            operation.IsCashToBankTransfer);
+            operation.IsCashToBankTransfer,
+            operation.SourceFinancialOperationId.HasValue);
     }
 
     private static IReadOnlyDictionary<string, object?> ToOperationAuditValues(FundOperation operation)

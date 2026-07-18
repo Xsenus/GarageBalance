@@ -574,12 +574,19 @@ public sealed class GarageBalanceDbContext(DbContextOptions<GarageBalanceDbConte
             entity.Property(operation => operation.Reason).HasMaxLength(1000).IsRequired();
             entity.Property(operation => operation.IsCanceled).HasDefaultValue(false);
             entity.HasIndex(operation => operation.FundId);
+            entity.HasIndex(operation => operation.SourceFinancialOperationId)
+                .IsUnique()
+                .HasFilter("\"SourceFinancialOperationId\" IS NOT NULL");
             entity.HasIndex(operation => operation.CreatedAtUtc);
             entity.HasIndex(operation => operation.OperationKind);
             entity.HasIndex(operation => operation.IsCanceled);
             entity.HasOne(operation => operation.Fund)
                 .WithMany(fund => fund.Operations)
                 .HasForeignKey(operation => operation.FundId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(operation => operation.SourceFinancialOperation)
+                .WithMany()
+                .HasForeignKey(operation => operation.SourceFinancialOperationId)
                 .OnDelete(DeleteBehavior.Restrict);
         });
 
