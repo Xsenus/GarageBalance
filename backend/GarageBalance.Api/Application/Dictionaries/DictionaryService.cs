@@ -1753,7 +1753,7 @@ public sealed class DictionaryService(
             return DictionaryResult<IrregularPaymentDto>.Failure("irregular_payment_not_found", "Нерегулярный платеж не найден.");
         }
 
-        if (await irregularPaymentRepository.IsUsedAsync(payment.Name, cancellationToken))
+        if (await irregularPaymentRepository.IsUsedAsync(payment.Id, cancellationToken))
         {
             return DictionaryResult<IrregularPaymentDto>.Failure("irregular_payment_used", "Удаление недоступно: нерегулярный платеж уже используется в платежах или начислениях.");
         }
@@ -2601,7 +2601,7 @@ public sealed class DictionaryService(
             payment.Amount,
             payment.IsActive,
             payment.IsArchived,
-            await irregularPaymentRepository.IsUsedAsync(payment.Name, cancellationToken));
+            await irregularPaymentRepository.IsUsedAsync(payment.Id, cancellationToken));
     }
 
     private static FeeCampaignDto ToFeeCampaignDto(FeeCampaign campaign)

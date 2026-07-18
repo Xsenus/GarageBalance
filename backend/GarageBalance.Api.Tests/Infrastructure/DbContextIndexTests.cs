@@ -49,7 +49,8 @@ public sealed class DbContextIndexTests
 
     [Theory]
     [InlineData(typeof(FinancialOperation), "\"IsCanceled\" = false AND \"DocumentNumber\" IS NOT NULL", nameof(FinancialOperation.OperationKind), nameof(FinancialOperation.OperationDate), nameof(FinancialOperation.DocumentNumber))]
-    [InlineData(typeof(Accrual), "\"IsCanceled\" = false", nameof(Accrual.GarageId), nameof(Accrual.IncomeTypeId), nameof(Accrual.AccountingMonth), nameof(Accrual.Source))]
+    [InlineData(typeof(Accrual), "\"IsCanceled\" = false AND \"IrregularPaymentId\" IS NULL", nameof(Accrual.GarageId), nameof(Accrual.IncomeTypeId), nameof(Accrual.AccountingMonth), nameof(Accrual.Source))]
+    [InlineData(typeof(Accrual), "\"IsCanceled\" = false AND \"IrregularPaymentId\" IS NOT NULL", nameof(Accrual.GarageId), nameof(Accrual.IrregularPaymentId), nameof(Accrual.AccountingMonth))]
     [InlineData(typeof(SupplierAccrual), "\"IsCanceled\" = false", nameof(SupplierAccrual.SupplierId), nameof(SupplierAccrual.ExpenseTypeId), nameof(SupplierAccrual.AccountingMonth), nameof(SupplierAccrual.Source), nameof(SupplierAccrual.DocumentNumber))]
     [InlineData(typeof(MeterReading), "\"IsCanceled\" = false", nameof(MeterReading.GarageId), nameof(MeterReading.MeterKind), nameof(MeterReading.AccountingMonth))]
     public void ActiveFinanceEntries_HavePartialUniqueIndexes(Type entityType, string filter, params string[] propertyNames)

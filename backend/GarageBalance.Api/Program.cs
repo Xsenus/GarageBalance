@@ -99,6 +99,7 @@ builder.Services.AddScoped<IFinanceService>(services => new FinanceService(
     services.GetRequiredService<ISupplierRepository>(),
     services.GetRequiredService<IExpenseTypeRepository>(),
     services.GetRequiredService<IIncomeTypeRepository>(),
+    services.GetRequiredService<IIrregularPaymentRepository>(),
     services.GetRequiredService<ITariffRepository>(),
     services.GetRequiredService<IFeeCampaignRepository>(),
     services.GetRequiredService<IChargeServiceSettingRepository>(),

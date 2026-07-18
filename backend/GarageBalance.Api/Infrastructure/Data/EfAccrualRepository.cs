@@ -269,6 +269,20 @@ public sealed class EfAccrualRepository(GarageBalanceDbContext dbContext) : IAcc
             : query.AnyAsync(accrual => accrual.AccountingMonth == accountingMonth, cancellationToken);
     }
 
+    public Task<bool> ActiveIrregularDuplicateExistsAsync(
+        Guid? ignoredId,
+        Guid garageId,
+        Guid irregularPaymentId,
+        DateOnly accountingMonth,
+        CancellationToken cancellationToken) =>
+        dbContext.Accruals.AsNoTracking().AnyAsync(accrual =>
+            !accrual.IsCanceled &&
+            (!ignoredId.HasValue || accrual.Id != ignoredId.Value) &&
+            accrual.GarageId == garageId &&
+            accrual.IrregularPaymentId == irregularPaymentId &&
+            accrual.AccountingMonth == accountingMonth,
+            cancellationToken);
+
     public async Task<decimal> GetTotalThroughMonthAsync(Guid garageId, DateOnly accountingMonth, CancellationToken cancellationToken) =>
         await dbContext.Accruals.AsNoTracking()
             .Where(accrual => !accrual.IsCanceled && accrual.GarageId == garageId && accrual.AccountingMonth <= accountingMonth)
@@ -281,13 +295,15 @@ public sealed class EfAccrualRepository(GarageBalanceDbContext dbContext) : IAcc
             .Include(accrual => accrual.Garage)
             .ThenInclude(garage => garage.Owner)
             .Include(accrual => accrual.IncomeType)
+            .Include(accrual => accrual.IrregularPayment)
             .Where(accrual => !accrual.IsCanceled);
 
     private IQueryable<Accrual> TrackedAggregate() =>
         dbContext.Accruals
             .Include(accrual => accrual.Garage)
             .ThenInclude(garage => garage.Owner)
-            .Include(accrual => accrual.IncomeType);
+            .Include(accrual => accrual.IncomeType)
+            .Include(accrual => accrual.IrregularPayment);
 
     private static IQueryable<Accrual> ApplyPeriod(IQueryable<Accrual> query, DateOnly? monthFrom, DateOnly? monthTo)
     {
@@ -314,6 +330,7 @@ public sealed class EfAccrualRepository(GarageBalanceDbContext dbContext) : IAcc
         return query.Where(accrual =>
             accrual.Garage.Number.ToLower().Contains(normalizedSearch) ||
             accrual.IncomeType.Name.ToLower().Contains(normalizedSearch) ||
+            (accrual.IrregularPayment != null && accrual.IrregularPayment.Name.ToLower().Contains(normalizedSearch)) ||
             (accrual.Comment != null && accrual.Comment.ToLower().Contains(normalizedSearch)));
     }
 
@@ -324,6 +341,7 @@ public sealed class EfAccrualRepository(GarageBalanceDbContext dbContext) : IAcc
     private static bool AccrualMatchesSearch(Accrual accrual, string normalizedSearch) =>
         accrual.Garage.Number.Contains(normalizedSearch, StringComparison.OrdinalIgnoreCase) ||
         accrual.IncomeType.Name.Contains(normalizedSearch, StringComparison.OrdinalIgnoreCase) ||
+        (accrual.IrregularPayment?.Name.Contains(normalizedSearch, StringComparison.OrdinalIgnoreCase) ?? false) ||
         (accrual.Comment?.Contains(normalizedSearch, StringComparison.OrdinalIgnoreCase) ?? false);
 
     private bool IsSqliteProvider() =>

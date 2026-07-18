@@ -31,7 +31,7 @@ import type { AuthClient, AuthResponse } from './services/authApi'
 import { DictionaryApiError } from './services/dictionariesApi'
 import type { AccountingTypeDto, ChargeServiceSettingDto, DictionaryClient, FeeCampaignDto, GarageDto, IrregularPaymentDto, OwnerDto, PagedResult, StaffDepartmentDto, StaffMemberDto, SupplierContactDto, SupplierDto, SupplierGroupDto, TariffDto, UpsertGarageRequest, UpsertStaffMemberRequest, UpsertSupplierRequest, UpsertTariffRequest } from './services/dictionariesApi'
 import { FinanceApiError } from './services/financeApi'
-import type { AccrualDto, CorrectHistoricalMeterReadingRequest, CreateAccrualRequest, CreateDebtTransferRequest, CreateExpenseOperationRequest, CreateIncomeOperationRequest, CreateMeterReadingRequest, CreateStaffPaymentRequest, CreateSupplierAccrualRequest, ExpenseWorksheetDto, FeeCampaignAccrualGenerationResultDto, FinanceClient, FinancePagedResult, FinancePageParams, FinanceSummaryDto, FinancialOperationDto, GarageBalanceHistoryDto, GarageIncomeWorksheetDto, GenerateFeeCampaignAccrualsRequest, GenerateRegularCatalogAccrualsRequest, GenerateSupplierGroupSalaryAccrualsRequest, MeterReadingDto, MeterReadingYearPageDto, MissingMeterReadingDto, RegularAccrualGenerationResultDto, RegularCatalogAccrualGenerationResultDto, SupplierAccrualDto, SupplierGroupSalaryAccrualGenerationResultDto } from './services/financeApi'
+import type { AccrualDto, CorrectHistoricalMeterReadingRequest, CreateDebtTransferRequest, CreateExpenseOperationRequest, CreateIncomeOperationRequest, CreateIrregularAccrualRequest, CreateMeterReadingRequest, CreateStaffPaymentRequest, CreateSupplierAccrualRequest, ExpenseWorksheetDto, FeeCampaignAccrualGenerationResultDto, FinanceClient, FinancePagedResult, FinancePageParams, FinanceSummaryDto, FinancialOperationDto, GarageBalanceHistoryDto, GarageIncomeWorksheetDto, GenerateFeeCampaignAccrualsRequest, GenerateRegularCatalogAccrualsRequest, GenerateSupplierGroupSalaryAccrualsRequest, MeterReadingDto, MeterReadingYearPageDto, MissingMeterReadingDto, RegularAccrualGenerationResultDto, RegularCatalogAccrualGenerationResultDto, SupplierAccrualDto, SupplierGroupSalaryAccrualGenerationResultDto } from './services/financeApi'
 import type { CreateFundOperationRequest, FundDto, FundOperationDto, FundOperationPageDto, FundsClient } from './services/fundsApi'
 import type { AccessImportCreatedRecordDto, AccessImportQuarantineItemDto, AccessImportReaderStatusDto, AccessImportRunDto, AccessImportRunLogEntryDto, ImportClient } from './services/importApi'
 import type { IntegrationClient, IntegrationSecretSettingDto, OneCFreshIntegrationStatusDto, OneCFreshSyncDto, OneCFreshSyncPreviewDto, OneCFreshSyncRequest, ReceiptPrintingActionDto, ReceiptPrintingActionRequest, ReceiptPrintingIntegrationStatusDto } from './services/integrationsApi'
@@ -3326,7 +3326,9 @@ describe('App', () => {
     const secondGarage = createGarage({ id: 'garage-2', number: '2', ownerName: 'Иванов Петр', peopleCount: 1, floorCount: 2, startingBalance: 0 })
     const incomeType = createAccountingType({ id: 'income-electricity', name: 'Электроэнергия', code: 'electricity' })
     const waterIncomeType = createAccountingType({ id: 'income-water', name: 'Водоснабжение', code: 'water' })
-    const incomeTypes = [incomeType, waterIncomeType]
+    const otherPaymentsIncomeType = createAccountingType({ id: 'income-other-payments', name: 'Прочие оплаты', code: 'other_payments' })
+    const incomeTypes = [incomeType, waterIncomeType, otherPaymentsIncomeType]
+    const irregularPayment = createIrregularPayment({ id: 'irregular-access-card', name: 'Карта доступа', amount: 750 })
     const electricityExpenseType = createAccountingType({ id: 'expense-type-1', name: 'Электроэнергия', code: 'electricity' })
     const advanceExpenseType = createAccountingType({ id: 'expense-advance', name: 'Авансовые выплаты', code: 'advance_payment' })
     const noReceiptExpenseType = createAccountingType({ id: 'expense-no-receipt', name: 'Выплата без чека', code: 'no_receipt' })
@@ -3334,7 +3336,7 @@ describe('App', () => {
     let atomicAdvanceAmount = 16500
     let expenseWorksheetRequestCount = 0
     const savedIncomeRequests: CreateIncomeOperationRequest[] = []
-    const savedAccrualRequests: CreateAccrualRequest[] = []
+    const savedAccrualRequests: CreateIrregularAccrualRequest[] = []
     const savedRegularAccrualRequests: GenerateRegularCatalogAccrualsRequest[] = []
     const savedExpenseRequests: CreateExpenseOperationRequest[] = []
     const savedStaffPaymentRequests: CreateStaffPaymentRequest[] = []
@@ -3353,6 +3355,7 @@ describe('App', () => {
       getGaragesPage: searchGaragesPage,
       getIncomeTypes: async () => incomeTypes,
       getExpenseTypes: async () => expenseTypes,
+      getIrregularPayments: async () => [irregularPayment],
     })
     const financeClient = createFinanceClient({
       getIncomePaymentWarning,
@@ -3373,19 +3376,20 @@ describe('App', () => {
           garageDebtAfter: 0,
         })
       },
-      createAccrual: async (_token, request) => {
+      createIrregularAccrual: async (_token, request) => {
         savedAccrualRequests.push(request)
-        const requestIncomeType = incomeTypes.find((item) => item.id === request.incomeTypeId) ?? incomeType
         return createAccrual({
           id: `garage-accrual-${savedAccrualRequests.length}`,
           garageId: request.garageId,
           garageNumber: garage.number,
           ownerName: garage.ownerName,
-          incomeTypeId: request.incomeTypeId,
-          incomeTypeName: requestIncomeType.name,
+          incomeTypeId: 'income-other-payments',
+          incomeTypeName: 'Прочие оплаты',
+          irregularPaymentId: irregularPayment.id,
+          irregularPaymentName: irregularPayment.name,
           accountingMonth: request.accountingMonth,
-          amount: request.amount,
-          source: request.source,
+          amount: irregularPayment.amount,
+          source: 'manual',
           comment: request.comment ?? null,
         })
       },
@@ -3840,13 +3844,11 @@ describe('App', () => {
     expect(fullPaymentAction.querySelector('.lucide-wallet-cards')).not.toBeNull()
     await user.click(addGarageAccrualButton)
     const garageAccrualDialog = await screen.findByRole('dialog', { name: 'Новое начисление' })
-    const garageIncomeTypeCombobox = within(garageAccrualDialog).getByRole('combobox', { name: 'Вид начисления гаража' })
+    const garageIncomeTypeCombobox = within(garageAccrualDialog).getByRole('combobox', { name: 'Нерегулярный платёж гаража' })
     expect(garageIncomeTypeCombobox).toHaveClass('select-control__trigger')
-    expect(garageIncomeTypeCombobox).toHaveTextContent(incomeType.name)
-    await user.click(garageIncomeTypeCombobox)
-    await user.click(within(garageAccrualDialog).getByRole('option', { name: waterIncomeType.name }))
-    await user.clear(within(garageAccrualDialog).getByLabelText('Сумма начисления гаража'))
-    await user.type(within(garageAccrualDialog).getByLabelText('Сумма начисления гаража'), '750')
+    expect(garageIncomeTypeCombobox).toHaveTextContent(irregularPayment.name)
+    expect(within(garageAccrualDialog).getByLabelText('Сумма нерегулярного начисления гаража')).toHaveValue('750.00')
+    expect(within(garageAccrualDialog).getByLabelText('Сумма нерегулярного начисления гаража')).toHaveAttribute('readonly')
     const garageAccrualMonth = within(garageAccrualDialog).getByLabelText('Месяц начисления гаража')
     expect(garageAccrualMonth).toHaveValue('06.2026')
     expect(garageAccrualMonth.closest('.localized-date-picker')).not.toBeNull()
@@ -3859,10 +3861,8 @@ describe('App', () => {
     await waitFor(() => expect(savedAccrualRequests).toHaveLength(1))
     expect(savedAccrualRequests[0]).toMatchObject({
       garageId: garage.id,
-      incomeTypeId: waterIncomeType.id,
+      irregularPaymentId: irregularPayment.id,
       accountingMonth: '2026-06-01',
-      amount: 750,
-      source: 'manual',
       comment: 'Доначисление воды',
     })
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Новое начисление' })).not.toBeInTheDocument())
@@ -3933,15 +3933,25 @@ describe('App', () => {
     await user.type(fullPaymentAmount, '6000')
     await user.type(within(fullPaymentDialog).getByLabelText('Комментарий к полной оплате'), 'Оплата остатка')
     await user.click(within(fullPaymentDialog).getByRole('button', { name: 'Провести оплату' }))
-    await waitFor(() => expect(savedIncomeRequests).toHaveLength(2))
-    expect(savedIncomeRequests[1]).toMatchObject({
-      garageId: garage.id,
-      incomeTypeId: waterIncomeType.id,
-      operationDate: '2026-06-30',
-      accountingMonth: '2026-06-01',
-      amount: 6000,
-      comment: 'Полная оплата Водоснабжение июн.26: Оплата остатка',
-    })
+    await waitFor(() => expect(savedIncomeRequests).toHaveLength(3))
+    expect(savedIncomeRequests.slice(1)).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        garageId: garage.id,
+        incomeTypeId: waterIncomeType.id,
+        operationDate: '2026-06-30',
+        accountingMonth: '2026-06-01',
+        amount: 5750,
+        comment: 'Полная оплата Водоснабжение июн.26: Оплата остатка',
+      }),
+      expect.objectContaining({
+        garageId: garage.id,
+        incomeTypeId: otherPaymentsIncomeType.id,
+        operationDate: '2026-06-30',
+        accountingMonth: '2026-06-01',
+        amount: 250,
+        comment: 'Полная оплата Карта доступа июн.26: Оплата остатка',
+      }),
+    ]))
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Полная оплата' })).not.toBeInTheDocument())
     await waitFor(() => expect(fullPaymentButton).toHaveFocus())
 
@@ -14524,6 +14534,7 @@ function createFinanceClient(overrides: Partial<FinanceClient> = {}): FinanceCli
       return { ...target, isCanceled: false }
     },
     createAccrual: async () => accrual,
+    createIrregularAccrual: async () => accrual,
     createDebtTransfer: async (_token, request) => createAccrual({
       id: 'debt-transfer-accrual',
       garageId: request.garageId,
@@ -15935,6 +15946,8 @@ function createAccrual(overrides: Partial<AccrualDto>): AccrualDto {
     isCanceled: false,
     dueDate: '2026-07-31',
     overdueFromDate: '2026-08-31',
+    irregularPaymentId: null,
+    irregularPaymentName: null,
     ...overrides,
   }
 }

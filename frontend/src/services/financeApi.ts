@@ -99,6 +99,8 @@ export type AccrualDto = {
   isCanceled: boolean
   dueDate: string
   overdueFromDate: string
+  irregularPaymentId: string | null
+  irregularPaymentName: string | null
 }
 
 export type AccrualDueDateReviewDto = {
@@ -452,6 +454,13 @@ export type CreateMeterReadingRequest = {
   expectedVersion?: string
 }
 
+export type CreateIrregularAccrualRequest = {
+  garageId: string
+  irregularPaymentId: string
+  accountingMonth: string
+  comment?: string
+}
+
 export type SavePaymentFormMeterReadingRequest = CreateMeterReadingRequest & {
   meterReadingId?: string
 }
@@ -491,6 +500,7 @@ export type FinanceClient = {
   cancelOperation(accessToken: string, operationId: string, request: CancelFinanceEntryRequest): Promise<FinancialOperationDto>
   restoreOperation(accessToken: string, operationId: string): Promise<FinancialOperationDto>
   createAccrual(accessToken: string, request: CreateAccrualRequest): Promise<AccrualDto>
+  createIrregularAccrual(accessToken: string, request: CreateIrregularAccrualRequest): Promise<AccrualDto>
   createDebtTransfer(accessToken: string, request: CreateDebtTransferRequest): Promise<AccrualDto>
   updateAccrual(accessToken: string, accrualId: string, request: CreateAccrualRequest): Promise<AccrualDto>
   cancelAccrual(accessToken: string, accrualId: string, request: CancelFinanceEntryRequest): Promise<AccrualDto>
@@ -697,6 +707,9 @@ export const financeApi: FinanceClient = {
   },
   createAccrual(accessToken, request) {
     return requestJson(accessToken, '/api/finance/accruals', { method: 'POST', body: JSON.stringify(request) })
+  },
+  createIrregularAccrual(accessToken, request) {
+    return requestJson(accessToken, '/api/finance/accruals/irregular', { method: 'POST', body: JSON.stringify(request) })
   },
   createDebtTransfer(accessToken, request) {
     return requestJson(accessToken, '/api/finance/accruals/debt-transfer', { method: 'POST', body: JSON.stringify(request) })

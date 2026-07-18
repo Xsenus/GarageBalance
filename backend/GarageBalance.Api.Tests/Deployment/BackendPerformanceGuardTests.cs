@@ -389,9 +389,10 @@ public sealed class BackendPerformanceGuardTests
         var source = ReadApiSource("Infrastructure/Data/EfIrregularPaymentRepository.cs");
         Assert.Contains(".Take(limit)", source, StringComparison.Ordinal);
         Assert.Contains(".ToListAsync(cancellationToken)", source, StringComparison.Ordinal);
-        Assert.Contains("var incomeTypeIds = dbContext.IncomeTypes.AsNoTracking()", source, StringComparison.Ordinal);
-        Assert.Contains(".Select(incomeType => incomeType.Id)", source, StringComparison.Ordinal);
-        Assert.True(CountOccurrences(source, ".AnyAsync(") >= 3);
+        Assert.Contains("accrual.IrregularPaymentId == id", source, StringComparison.Ordinal);
+        Assert.Contains("join accrual in dbContext.Accruals.AsNoTracking() on payment.Id equals accrual.IrregularPaymentId", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("incomeType.Name == name", source, StringComparison.Ordinal);
+        Assert.True(CountOccurrences(source, ".AnyAsync(") >= 2);
     }
 
     [Fact]

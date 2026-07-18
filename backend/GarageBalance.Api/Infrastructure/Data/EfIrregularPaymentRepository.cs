@@ -35,21 +35,9 @@ public sealed class EfIrregularPaymentRepository(GarageBalanceDbContext dbContex
             item => !item.IsArchived && item.Name == name && (!ignoredId.HasValue || item.Id != ignoredId.Value),
             cancellationToken);
 
-    public async Task<bool> IsUsedAsync(string name, CancellationToken cancellationToken)
-    {
-        var incomeTypeIds = dbContext.IncomeTypes.AsNoTracking()
-            .Where(incomeType => incomeType.Name == name)
-            .Select(incomeType => incomeType.Id);
-
-        return await dbContext.Accruals.AsNoTracking()
-                .AnyAsync(accrual => !accrual.IsCanceled && incomeTypeIds.Contains(accrual.IncomeTypeId), cancellationToken)
-            || await dbContext.FinancialOperations.AsNoTracking()
-                .AnyAsync(operation =>
-                    !operation.IsCanceled &&
-                    operation.IncomeTypeId.HasValue &&
-                    incomeTypeIds.Contains(operation.IncomeTypeId.Value),
-                    cancellationToken);
-    }
+    public Task<bool> IsUsedAsync(Guid id, CancellationToken cancellationToken) =>
+        dbContext.Accruals.AsNoTracking()
+            .AnyAsync(accrual => !accrual.IsCanceled && accrual.IrregularPaymentId == id, cancellationToken);
 
     public async Task<IReadOnlySet<string>> GetUsedNamesAsync(IReadOnlyCollection<string> names, CancellationToken cancellationToken)
     {
@@ -58,21 +46,12 @@ public sealed class EfIrregularPaymentRepository(GarageBalanceDbContext dbContex
             return new HashSet<string>(StringComparer.Ordinal);
         }
 
-        var incomeTypes = dbContext.IncomeTypes.AsNoTracking()
-            .Where(incomeType => names.Contains(incomeType.Name))
-            .Select(incomeType => new { incomeType.Id, incomeType.Name });
-
-        var usedByAccruals = from incomeType in incomeTypes
-                             join accrual in dbContext.Accruals.AsNoTracking() on incomeType.Id equals accrual.IncomeTypeId
-                             where !accrual.IsCanceled
-                             select incomeType.Name;
-        var usedByOperations = from incomeType in incomeTypes
-                               join operation in dbContext.FinancialOperations.AsNoTracking() on incomeType.Id equals operation.IncomeTypeId
-                               where !operation.IsCanceled
-                               select incomeType.Name;
+        var usedByAccruals = from payment in dbContext.IrregularPayments.AsNoTracking()
+                             join accrual in dbContext.Accruals.AsNoTracking() on payment.Id equals accrual.IrregularPaymentId
+                             where names.Contains(payment.Name) && !accrual.IsCanceled
+                             select payment.Name;
 
         return (await usedByAccruals
-                .Concat(usedByOperations)
                 .Distinct()
                 .ToListAsync(cancellationToken))
             .ToHashSet(StringComparer.Ordinal);

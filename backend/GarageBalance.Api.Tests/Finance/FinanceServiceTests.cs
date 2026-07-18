@@ -2335,6 +2335,95 @@ public sealed class FinanceServiceTests
     }
 
     [Fact]
+    public async Task CreateIrregularAccrualAsync_UsesTemplateAmountAndOtherPaymentsDestination()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        var destinationFund = new Fund
+        {
+            Name = "Прочее",
+            NormalizedName = "ПРОЧЕЕ",
+            Balance = 0m
+        };
+        var otherPayments = new IncomeType
+        {
+            Name = "Переименованное назначение",
+            Code = "other_payments",
+            IsSystem = true,
+            DestinationFund = destinationFund
+        };
+        var parkingCard = new IrregularPayment { Name = "Карта доступа", Amount = 1250.555m };
+        var lockRepair = new IrregularPayment { Name = "Ремонт замка", Amount = 700m };
+        database.Context.AddRange(destinationFund, otherPayments, parkingCard, lockRepair);
+        await database.Context.SaveChangesAsync();
+        var service = FinanceServiceTestFactory.Create(database.Context);
+
+        var first = await service.CreateIrregularAccrualAsync(
+            new CreateIrregularAccrualRequest(fixtures.Garage.Id, parkingCard.Id, new DateOnly(2026, 8, 17), "Выдана новая карта"),
+            Guid.NewGuid(),
+            CancellationToken.None);
+        var second = await service.CreateIrregularAccrualAsync(
+            new CreateIrregularAccrualRequest(fixtures.Garage.Id, lockRepair.Id, new DateOnly(2026, 8, 1), null),
+            null,
+            CancellationToken.None);
+        var duplicate = await service.CreateIrregularAccrualAsync(
+            new CreateIrregularAccrualRequest(fixtures.Garage.Id, parkingCard.Id, new DateOnly(2026, 8, 1), null),
+            null,
+            CancellationToken.None);
+
+        Assert.True(first.Succeeded);
+        Assert.True(second.Succeeded);
+        Assert.Equal(1250.56m, first.Value!.Amount);
+        Assert.Equal(otherPayments.Id, first.Value.IncomeTypeId);
+        Assert.Equal("Переименованное назначение", first.Value.IncomeTypeName);
+        Assert.Equal(parkingCard.Id, first.Value.IrregularPaymentId);
+        Assert.Equal("Карта доступа", first.Value.IrregularPaymentName);
+        Assert.Equal(new DateOnly(2026, 8, 1), first.Value.AccountingMonth);
+        Assert.False(duplicate.Succeeded);
+        Assert.Equal("accrual_duplicate", duplicate.ErrorCode);
+        var stored = await database.Context.Accruals.SingleAsync(item => item.Id == first.Value.Id);
+        Assert.Equal(otherPayments.Id, stored.IncomeTypeId);
+        Assert.Equal(parkingCard.Id, stored.IrregularPaymentId);
+        var audit = Assert.Single(database.Context.AuditEvents, item => item.Action == "finance.irregular_accrual_created" && item.EntityId == first.Value.Id.ToString());
+        Assert.Contains("Карта доступа", audit.Summary, StringComparison.Ordinal);
+        Assert.Contains(destinationFund.Id.ToString(), audit.Summary, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData(false, false, "irregular_payment_not_found")]
+    [InlineData(true, true, "other_payments_destination_not_configured")]
+    public async Task CreateIrregularAccrualAsync_RejectsUnavailableTemplateOrDestination(
+        bool templateIsActive,
+        bool addIncomeType,
+        string expectedErrorCode)
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        var payment = new IrregularPayment { Name = "Разовая услуга", Amount = 500m, IsActive = templateIsActive };
+        database.Context.Add(payment);
+        if (addIncomeType)
+        {
+            database.Context.Add(new IncomeType
+            {
+                Name = "Прочие оплаты без фонда",
+                Code = "other_payments",
+                IsSystem = true
+            });
+        }
+        await database.Context.SaveChangesAsync();
+        var service = FinanceServiceTestFactory.Create(database.Context);
+
+        var result = await service.CreateIrregularAccrualAsync(
+            new CreateIrregularAccrualRequest(fixtures.Garage.Id, payment.Id, new DateOnly(2026, 8, 1), null),
+            null,
+            CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Equal(expectedErrorCode, result.ErrorCode);
+        Assert.Empty(database.Context.Accruals.Where(item => item.IrregularPaymentId == payment.Id));
+    }
+
+    [Fact]
     public async Task CreateDebtTransferAsync_CreatesAndAccumulatesSystemAccrualWithAudit()
     {
         await using var database = await TestDatabase.CreateAsync();

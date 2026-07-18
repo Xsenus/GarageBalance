@@ -2260,6 +2260,7 @@ public sealed class DictionaryServiceTests
         {
             GarageId = garage.Value!.Id,
             IncomeTypeId = incomeType.Value!.Id,
+            IrregularPaymentId = created.Value!.Id,
             AccountingMonth = new DateOnly(2026, 7, 1),
             Amount = 1500m,
             Source = AccrualSources.Manual
@@ -2281,7 +2282,7 @@ public sealed class DictionaryServiceTests
     }
 
     [Fact]
-    public async Task IrregularPaymentAsync_IgnoresCanceledUsageAndBlocksActiveIncomeOperation()
+    public async Task IrregularPaymentAsync_IgnoresCanceledAccrualAndBlocksActiveLinkedAccrual()
     {
         await using var database = await TestDatabase.CreateAsync();
         var service = DictionaryServiceTestFactory.Create(database.Context);
@@ -2294,10 +2295,20 @@ public sealed class DictionaryServiceTests
         {
             GarageId = garage.Value!.Id,
             IncomeTypeId = canceledIncomeType.Value!.Id,
+            IrregularPaymentId = canceledPayment.Value!.Id,
             AccountingMonth = new DateOnly(2026, 7, 1),
             Amount = 100m,
             Source = AccrualSources.Manual,
             IsCanceled = true
+        });
+        database.Context.Accruals.Add(new Accrual
+        {
+            GarageId = garage.Value.Id,
+            IncomeTypeId = activeIncomeType.Value!.Id,
+            IrregularPaymentId = activePayment.Value!.Id,
+            AccountingMonth = new DateOnly(2026, 7, 1),
+            Amount = 200m,
+            Source = AccrualSources.Manual
         });
         database.Context.FinancialOperations.AddRange(
             new FinancialOperation

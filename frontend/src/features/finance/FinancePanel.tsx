@@ -2,7 +2,7 @@ import { Fragment, useCallback, useEffect, useId, useMemo, useRef, useState } fr
 import type { FormEvent, KeyboardEvent, MouseEvent, ReactNode } from 'react'
 import { ArrowRight, CalendarDays, FileText, LoaderCircle, Pencil, RotateCcw, Save, Search, Trash2, WalletCards, X } from 'lucide-react'
 import type { AuthResponse } from '../../services/authApi'
-import type { AccountingTypeDto, DictionaryClient, GarageDto, StaffMemberDto, SupplierDto, SupplierGroupDto, TariffDto } from '../../services/dictionariesApi'
+import type { AccountingTypeDto, DictionaryClient, GarageDto, IrregularPaymentDto, StaffMemberDto, SupplierDto, SupplierGroupDto, TariffDto } from '../../services/dictionariesApi'
 import type { AccrualDto, CreateAccrualRequest, CreateExpenseOperationRequest, CreateIncomeOperationRequest, CreateMeterReadingRequest, CreateSupplierAccrualRequest, ExpenseWorksheetDto, FinanceClient, FinancePagedResult, FinanceSummaryDto, FinancialOperationDto, GarageIncomeWorksheetDto, GarageOverdueDebtDto, GenerateRegularAccrualsRequest, GenerateSupplierGroupSalaryAccrualsRequest, MeterReadingDto, MissingMeterReadingDto, SupplierAccrualDto } from '../../services/financeApi'
 import { FinanceApiError } from '../../services/financeApi'
 import type { FundDto, FundsClient } from '../../services/fundsApi'
@@ -104,6 +104,7 @@ type PaymentsPrototypeGarage = {
 
 type GarageIncomePrototypeRow = {
   id: string
+  incomeTypeId: string | null
   month: string
   monthLabel: string
   service: string
@@ -218,9 +219,8 @@ type DebtTransferPrototypeSubmitRequest = {
 }
 
 type GarageAccrualPrototypeSubmitRequest = {
-  incomeTypeId: string
+  irregularPaymentId: string
   accountingMonth: string
-  amount: number
   comment: string
 }
 
@@ -295,6 +295,7 @@ function createGarageIncomeRowsFromWorksheet(worksheet: GarageIncomeWorksheetDto
     const rowKey = row.incomeTypeId ?? row.incomeTypeName.toLocaleLowerCase('ru-RU').replace(/\s+/g, '-')
     return {
       id: `garage-${worksheet.garageId}-${month}-${rowKey}`,
+      incomeTypeId: row.incomeTypeId,
       month,
       monthLabel: formatPaymentPrototypeMonthLabel(row.accountingMonth),
       service: row.incomeTypeName,
@@ -362,6 +363,7 @@ export function FinancePanel({
   const [suppliers, setSuppliers] = useState<SupplierDto[]>([])
   const [staffMembers, setStaffMembers] = useState<StaffMemberDto[]>([])
   const [incomeTypes, setIncomeTypes] = useState<AccountingTypeDto[]>([])
+  const [irregularPayments, setIrregularPayments] = useState<IrregularPaymentDto[]>([])
   const [expenseTypes, setExpenseTypes] = useState<AccountingTypeDto[]>([])
   const [tariffs, setTariffs] = useState<TariffDto[]>([])
   const [operations, setOperations] = useState<FinancialOperationDto[]>([])
@@ -584,7 +586,8 @@ export function FinancePanel({
         dictionaryClient.getIncomeTypes(auth.accessToken, undefined, dictionaryScreenRequestLimit),
         dictionaryClient.getExpenseTypes(auth.accessToken, undefined, dictionaryScreenRequestLimit),
         dictionaryClient.getTariffs(auth.accessToken, undefined, dictionaryScreenRequestLimit),
-      ]).then(([loadedSupplierGroups, loadedSuppliers, loadedStaffMembers, loadedIncomeTypes, loadedExpenseTypes, loadedTariffs]) => {
+        dictionaryClient.getIrregularPayments(auth.accessToken, undefined, dictionaryScreenRequestLimit),
+      ]).then(([loadedSupplierGroups, loadedSuppliers, loadedStaffMembers, loadedIncomeTypes, loadedExpenseTypes, loadedTariffs, loadedIrregularPayments]) => {
         if (generation !== financeReferenceBundleGenerationRef.current) {
           return
         }
@@ -595,6 +598,7 @@ export function FinancePanel({
         setIncomeTypes(loadedIncomeTypes)
         setExpenseTypes(loadedExpenseTypes)
         setTariffs(loadedTariffs)
+        setIrregularPayments(loadedIrregularPayments)
         setIncomeForm((value) => ({ ...value, incomeTypeId: value.incomeTypeId || loadedIncomeTypes[0]?.id || '' }))
         setExpenseForm((value) => ({ ...value, supplierId: value.supplierId || loadedSuppliers[0]?.id || '', expenseTypeId: value.expenseTypeId || loadedExpenseTypes[0]?.id || '' }))
         setAccrualForm((value) => ({ ...value, incomeTypeId: value.incomeTypeId || loadedIncomeTypes[0]?.id || '' }))
@@ -2255,6 +2259,7 @@ export function FinancePanel({
         formStateClient={formStateClient}
         garages={garages}
         incomeTypes={incomeTypes}
+        irregularPayments={irregularPayments}
         integrationClient={integrationClient}
         loading={paymentsPrototypeLoading}
         supplierGroups={supplierGroups}
@@ -3038,6 +3043,7 @@ function PaymentsPrototypePanel({
   formStateClient,
   garages,
   incomeTypes,
+  irregularPayments,
   integrationClient,
   loading,
   supplierGroups,
@@ -3056,6 +3062,7 @@ function PaymentsPrototypePanel({
   formStateClient: FormStateClient
   garages: GarageDto[]
   incomeTypes: AccountingTypeDto[]
+  irregularPayments: IrregularPaymentDto[]
   integrationClient: IntegrationClient
   loading: boolean
   supplierGroups: SupplierGroupDto[]
@@ -4001,11 +4008,12 @@ function PaymentsPrototypePanel({
       : row))
   }
 
-  function findIncomeTypeForPayment(serviceName: string) {
+  function findIncomeTypeForPayment(serviceName: string, incomeTypeId?: string | null) {
     const normalizedService = serviceName.trim().toLocaleLowerCase('ru-RU')
     const activeIncomeTypes = incomeTypes.filter((incomeType) => !incomeType.isArchived)
 
-    return activeIncomeTypes.find((incomeType) => incomeType.name.trim().toLocaleLowerCase('ru-RU') === normalizedService)
+    return activeIncomeTypes.find((incomeType) => incomeType.id === incomeTypeId)
+      ?? activeIncomeTypes.find((incomeType) => incomeType.name.trim().toLocaleLowerCase('ru-RU') === normalizedService)
       ?? activeIncomeTypes.find((incomeType) => {
         const normalizedTypeName = incomeType.name.trim().toLocaleLowerCase('ru-RU')
         return normalizedTypeName.length > 0 && (normalizedTypeName.includes(normalizedService) || normalizedService.includes(normalizedTypeName))
@@ -4024,7 +4032,7 @@ function PaymentsPrototypePanel({
       return
     }
 
-    const incomeType = findIncomeTypeForPayment(row.service)
+    const incomeType = findIncomeTypeForPayment(row.service, row.incomeTypeId)
     if (!incomeType) {
       setPaymentError(`Не найден вид поступления для услуги "${row.service}". Добавьте его в справочник и повторите сохранение.`)
       return
@@ -4154,7 +4162,7 @@ function PaymentsPrototypePanel({
         break
       }
 
-      const incomeType = findIncomeTypeForPayment(row.service)
+      const incomeType = findIncomeTypeForPayment(row.service, row.incomeTypeId)
       if (!incomeType) {
         return `Не найден вид поступления для услуги "${row.service}". Добавьте его в справочник и повторите сохранение.`
       }
@@ -4256,7 +4264,7 @@ function PaymentsPrototypePanel({
     const transferTime = new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })
     const sourceLabel = formatPaymentPrototypeMonthLabel(request.sourceMonth)
     const targetLabel = formatPaymentPrototypeMonthLabel(request.targetMonth)
-    await financeClient.createDebtTransfer(auth.accessToken, {
+    const savedAccrual = await financeClient.createDebtTransfer(auth.accessToken, {
       garageId: selectedGarage.id,
       sourceMonth: `${request.sourceMonth}-01`,
       targetMonth: `${request.targetMonth}-01`,
@@ -4299,6 +4307,7 @@ function PaymentsPrototypePanel({
             month: request.targetMonth,
             monthLabel: targetLabel,
             service: transferService,
+            incomeTypeId: savedAccrual.incomeTypeId,
             annualAccrualId: null,
             meterKind: null,
             meterReadingId: null,
@@ -4341,24 +4350,23 @@ function PaymentsPrototypePanel({
       return 'Выберите гараж из справочника, чтобы сохранить начисление в истории операций.'
     }
 
-    const incomeType = incomeTypes.find((item) => item.id === request.incomeTypeId && !item.isArchived) ?? null
-    if (!incomeType) {
-      return 'Выберите вид начисления из справочника поступлений.'
+    const irregularPayment = irregularPayments.find((item) => item.id === request.irregularPaymentId && item.isActive && !item.isArchived) ?? null
+    if (!irregularPayment) {
+      return 'Выберите активный нерегулярный платёж из справочника.'
     }
 
-    const savedAccrual = await financeClient.createAccrual(auth.accessToken, {
+    const savedAccrual = await financeClient.createIrregularAccrual(auth.accessToken, {
       garageId: selectedGarage.id,
-      incomeTypeId: incomeType.id,
+      irregularPaymentId: irregularPayment.id,
       accountingMonth: request.accountingMonth,
-      amount: request.amount,
-      source: 'manual',
       comment: request.comment.trim() || undefined,
     })
     const month = savedAccrual.accountingMonth.slice(0, 7)
     const monthLabel = formatPaymentPrototypeMonthLabel(savedAccrual.accountingMonth)
 
     setGarageRows((currentRows) => {
-      const existingRow = currentRows.find((row) => row.month === month && row.service.trim().toLocaleLowerCase('ru-RU') === savedAccrual.incomeTypeName.trim().toLocaleLowerCase('ru-RU'))
+      const serviceName = savedAccrual.irregularPaymentName ?? irregularPayment.name
+      const existingRow = currentRows.find((row) => row.month === month && row.service.trim().toLocaleLowerCase('ru-RU') === serviceName.trim().toLocaleLowerCase('ru-RU'))
       if (existingRow) {
         return currentRows.map((row) => row.id === existingRow.id
           ? { ...row, payable: row.payable + savedAccrual.amount, debt: row.debt + savedAccrual.amount }
@@ -4371,7 +4379,8 @@ function PaymentsPrototypePanel({
           id: `garage-accrual-${savedAccrual.id}`,
           month,
           monthLabel,
-          service: savedAccrual.incomeTypeName,
+          service: serviceName,
+          incomeTypeId: savedAccrual.incomeTypeId,
           annualAccrualId: savedAccrual.accountingYear ? savedAccrual.id : null,
           meterKind: null,
           meterReadingId: null,
@@ -4442,6 +4451,7 @@ function PaymentsPrototypePanel({
               month,
               monthLabel: formatPaymentPrototypeMonthLabel(accrual.accountingMonth),
               service: accrual.incomeTypeName,
+              incomeTypeId: accrual.incomeTypeId,
               annualAccrualId: accrual.accountingYear ? accrual.id : null,
               meterKind: null,
               meterReadingId: null,
@@ -5263,7 +5273,7 @@ function PaymentsPrototypePanel({
       ) : null}
       {garageAccrualDialogOpen ? (
         <GarageAccrualPrototypeDialog
-          incomeTypes={incomeTypes.filter((incomeType) => !incomeType.isArchived)}
+          irregularPayments={irregularPayments.filter((payment) => payment.isActive && !payment.isArchived)}
           onClose={closeGarageAccrualDialog}
           onSubmit={commitGarageAccrual}
         />
@@ -6400,19 +6410,18 @@ function RegularAccrualPrototypeDialog({
 }
 
 function GarageAccrualPrototypeDialog({
-  incomeTypes,
+  irregularPayments,
   onClose,
   onSubmit,
 }: {
-  incomeTypes: AccountingTypeDto[]
+  irregularPayments: IrregularPaymentDto[]
   onClose: () => void
   onSubmit: (request: GarageAccrualPrototypeSubmitRequest) => Promise<string | null>
 }) {
   const dialogRef = useFocusTrap<HTMLElement>(true)
   const cancelRef = useFocusOnOpen<HTMLButtonElement>(true)
-  const [incomeTypeId, setIncomeTypeId] = useState(incomeTypes[0]?.id ?? '')
+  const [irregularPaymentId, setIrregularPaymentId] = useState(irregularPayments[0]?.id ?? '')
   const [accountingMonth, setAccountingMonth] = useState(getLocalDateInputValue().slice(0, 7))
-  const [amount, setAmount] = useState('')
   const [comment, setComment] = useState('')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -6420,27 +6429,20 @@ function GarageAccrualPrototypeDialog({
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    const parsedAmount = parsePaymentMoney(amount)
-    if (!incomeTypeId) {
-      setError('Выберите вид начисления из справочника поступлений.')
+    if (!irregularPaymentId) {
+      setError('Выберите активный нерегулярный платёж из справочника.')
       return
     }
     if (!/^\d{4}-\d{2}$/.test(accountingMonth)) {
       setError('Укажите месяц начисления.')
       return
     }
-    if (!Number.isFinite(parsedAmount) || parsedAmount <= 0) {
-      setError('Укажите сумму начисления больше нуля.')
-      return
-    }
-
     setSaving(true)
     setError(null)
     try {
       const submitError = await onSubmit({
-        incomeTypeId,
+        irregularPaymentId,
         accountingMonth: `${accountingMonth}-01`,
-        amount: parsedAmount,
         comment,
       })
       if (submitError) {
@@ -6467,24 +6469,27 @@ function GarageAccrualPrototypeDialog({
           </button>
         </div>
         <form className="dictionary-modal-form payments-prototype-modal-form" onSubmit={handleSubmit}>
-          <FormField label="Вид начисления">
+          <FormField label="Нерегулярный платёж">
             <SelectControl
-              aria-label="Вид начисления гаража"
-              value={incomeTypeId}
-              options={incomeTypes.length > 0
-                ? incomeTypes.map((incomeType) => ({ value: incomeType.id, label: incomeType.name }))
-                : [{ value: '', label: 'Нет видов поступлений' }]}
-              onChange={(nextIncomeTypeId) => {
-                setIncomeTypeId(nextIncomeTypeId)
+              aria-label="Нерегулярный платёж гаража"
+              value={irregularPaymentId}
+              options={irregularPayments.length > 0
+                ? irregularPayments.map((payment) => ({ value: payment.id, label: `${payment.name} — ${formatPaymentPrototypeValue(payment.amount)}` }))
+                : [{ value: '', label: 'Нет активных нерегулярных платежей' }]}
+              onChange={(nextIrregularPaymentId) => {
+                setIrregularPaymentId(nextIrregularPaymentId)
                 setError(null)
               }}
             />
           </FormField>
           <FormField label="Сумма">
-            <MoneyTextInput aria-label="Сумма начисления гаража" value={amount} onValueChange={(nextAmount) => {
-              setAmount(nextAmount)
-              setError(null)
-            }} />
+            <input
+              aria-label="Сумма нерегулярного начисления гаража"
+              value={irregularPayments.find((payment) => payment.id === irregularPaymentId)
+                ? formatPaymentPrototypeValue(irregularPayments.find((payment) => payment.id === irregularPaymentId)!.amount)
+                : ''}
+              readOnly
+            />
           </FormField>
           <FormField label="Месяц">
             <LocalizedDatePicker ariaLabel="Месяц начисления гаража" mode="month" value={accountingMonth} onChange={(nextAccountingMonth) => {

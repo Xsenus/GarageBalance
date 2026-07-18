@@ -710,6 +710,40 @@ public sealed class FinanceControllerTests
     }
 
     [Fact]
+    public async Task CreateIrregularAccrual_PassesActorAndRequestToService()
+    {
+        var actorUserId = Guid.NewGuid();
+        var request = new CreateIrregularAccrualRequest(Guid.NewGuid(), Guid.NewGuid(), new DateOnly(2026, 8, 1), "Новая карта");
+        var service = new FakeFinanceService
+        {
+            CreateIrregularAccrualResult = FinanceResult<AccrualDto>.Success(CreateAccrual())
+        };
+        var controller = CreateController(service, actorUserId);
+
+        var result = await controller.CreateIrregularAccrual(request, CancellationToken.None);
+
+        Assert.IsType<CreatedAtActionResult>(result.Result);
+        Assert.Equal(actorUserId, service.LastActorUserId);
+        Assert.Same(request, service.LastIrregularAccrualRequest);
+    }
+
+    [Fact]
+    public async Task CreateIrregularAccrual_ReturnsNotFoundForUnavailableTemplate()
+    {
+        var controller = CreateController(new FakeFinanceService
+        {
+            CreateIrregularAccrualResult = FinanceResult<AccrualDto>.Failure("irregular_payment_not_found", "Платёж не найден.")
+        });
+
+        var result = await controller.CreateIrregularAccrual(
+            new CreateIrregularAccrualRequest(Guid.NewGuid(), Guid.NewGuid(), new DateOnly(2026, 8, 1), null),
+            CancellationToken.None);
+
+        var notFound = Assert.IsType<NotFoundObjectResult>(result.Result);
+        Assert.Equal("irregular_payment_not_found", Assert.IsType<ProblemDetails>(notFound.Value).Title);
+    }
+
+    [Fact]
     public async Task CreateDebtTransfer_PassesActorUserIdAndRequestToService()
     {
         var actorUserId = Guid.NewGuid();
@@ -1600,6 +1634,7 @@ public sealed class FinanceControllerTests
         public GenerateRegularCatalogAccrualsRequest? LastRegularCatalogAccrualGenerationRequest { get; private set; }
         public GenerateFeeCampaignAccrualsRequest? LastFeeCampaignAccrualGenerationRequest { get; private set; }
         public GenerateSupplierGroupSalaryAccrualsRequest? LastSupplierGroupSalaryAccrualGenerationRequest { get; private set; }
+        public CreateIrregularAccrualRequest? LastIrregularAccrualRequest { get; private set; }
         public FinanceResult<GarageBalanceHistoryDto> GarageBalanceHistoryResult { get; init; } = FinanceResult<GarageBalanceHistoryDto>.Failure("not_configured", "Not configured.");
         public FinanceResult<GarageOverdueDebtDto> GarageOverdueDebtResult { get; init; } = FinanceResult<GarageOverdueDebtDto>.Failure("not_configured", "Not configured.");
         public FinanceResult<GarageIncomeWorksheetDto> GarageIncomeWorksheetResult { get; init; } = FinanceResult<GarageIncomeWorksheetDto>.Failure("not_configured", "Not configured.");
@@ -1614,6 +1649,7 @@ public sealed class FinanceControllerTests
         public FinanceResult<FinancialOperationDto> CancelOperationResult { get; init; } = FinanceResult<FinancialOperationDto>.Failure("not_configured", "Not configured.");
         public FinanceResult<FinancialOperationDto> RestoreOperationResult { get; init; } = FinanceResult<FinancialOperationDto>.Failure("not_configured", "Not configured.");
         public FinanceResult<AccrualDto> CreateAccrualResult { get; init; } = FinanceResult<AccrualDto>.Failure("not_configured", "Not configured.");
+        public FinanceResult<AccrualDto> CreateIrregularAccrualResult { get; init; } = FinanceResult<AccrualDto>.Failure("not_configured", "Not configured.");
         public FinanceResult<AccrualDto> CreateDebtTransferResult { get; init; } = FinanceResult<AccrualDto>.Failure("not_configured", "Not configured.");
         public FinanceResult<AccrualDto> UpdateAccrualResult { get; init; } = FinanceResult<AccrualDto>.Failure("not_configured", "Not configured.");
         public FinanceResult<AccrualDto> CancelAccrualResult { get; init; } = FinanceResult<AccrualDto>.Failure("not_configured", "Not configured.");
@@ -1800,6 +1836,13 @@ public sealed class FinanceControllerTests
         {
             LastActorUserId = actorUserId;
             return Task.FromResult(CreateAccrualResult);
+        }
+
+        public Task<FinanceResult<AccrualDto>> CreateIrregularAccrualAsync(CreateIrregularAccrualRequest request, Guid? actorUserId, CancellationToken cancellationToken)
+        {
+            LastActorUserId = actorUserId;
+            LastIrregularAccrualRequest = request;
+            return Task.FromResult(CreateIrregularAccrualResult);
         }
 
         public Task<FinanceResult<AccrualDto>> CreateDebtTransferAsync(CreateDebtTransferRequest request, Guid? actorUserId, CancellationToken cancellationToken)

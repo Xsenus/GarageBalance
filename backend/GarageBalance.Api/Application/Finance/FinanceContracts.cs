@@ -106,7 +106,9 @@ public sealed record AccrualDto(
     string? Comment,
     bool IsCanceled,
     DateOnly DueDate,
-    DateOnly OverdueFromDate);
+    DateOnly OverdueFromDate,
+    Guid? IrregularPaymentId = null,
+    string? IrregularPaymentName = null);
 
 public sealed record AccrualDueDateReviewDto(
     Guid AccrualId,
@@ -138,6 +140,12 @@ public sealed record CreateAccrualRequest(
     DateOnly AccountingMonth,
     [Range(0.01, 999999999)] decimal Amount,
     [Required, MaxLength(40)] string Source,
+    [MaxLength(1000)] string? Comment);
+
+public sealed record CreateIrregularAccrualRequest(
+    Guid GarageId,
+    Guid IrregularPaymentId,
+    DateOnly AccountingMonth,
     [MaxLength(1000)] string? Comment);
 
 public sealed record CreateDebtTransferRequest(

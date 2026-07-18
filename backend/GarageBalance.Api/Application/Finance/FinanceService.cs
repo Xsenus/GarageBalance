@@ -26,6 +26,7 @@ public sealed class FinanceService(
     ISupplierRepository supplierRepository,
     IExpenseTypeRepository expenseTypeRepository,
     IIncomeTypeRepository incomeTypeRepository,
+    IIrregularPaymentRepository irregularPaymentRepository,
     ITariffRepository tariffRepository,
     IFeeCampaignRepository feeCampaignRepository,
     IChargeServiceSettingRepository chargeServiceSettingRepository,
@@ -38,6 +39,7 @@ public sealed class FinanceService(
     private const int MaxBalanceHistoryMonths = 60;
     private const int EarlyElectricityPaymentWarningDays = 30;
     private const string DebtTransferIncomeTypeCode = "debt_transfer";
+    private const string OtherPaymentsIncomeTypeCode = "other_payments";
     private const string DebtTransferIncomeTypeName = "Перенос задолженности";
     private const string AdvancePaymentExpenseTypeName = "Авансовые выплаты";
     private const string NoReceiptPaymentExpenseTypeName = "Выплата без чека";
@@ -1427,14 +1429,22 @@ public sealed class FinanceService(
             return FinanceResult<AccrualDto>.Failure("accrual_not_canceled", "Начисление уже активно.");
         }
 
-        if (await accrualRepository.ActiveDuplicateExistsAsync(
-            accrual.Id,
-            accrual.GarageId,
-            accrual.IncomeTypeId,
-            accrual.AccountingMonth,
-            accrual.AccountingYear,
-            accrual.Source,
-            cancellationToken))
+        var duplicateExists = accrual.IrregularPaymentId.HasValue
+            ? await accrualRepository.ActiveIrregularDuplicateExistsAsync(
+                accrual.Id,
+                accrual.GarageId,
+                accrual.IrregularPaymentId.Value,
+                accrual.AccountingMonth,
+                cancellationToken)
+            : await accrualRepository.ActiveDuplicateExistsAsync(
+                accrual.Id,
+                accrual.GarageId,
+                accrual.IncomeTypeId,
+                accrual.AccountingMonth,
+                accrual.AccountingYear,
+                accrual.Source,
+                cancellationToken);
+        if (duplicateExists)
         {
             var duplicateMessage = accrual.Source == AccrualSources.Regular && accrual.AccountingYear.HasValue
                 ? $"Регулярное годовое начисление за {accrual.AccountingYear.Value} год уже активно."
@@ -1451,6 +1461,85 @@ public sealed class FinanceService(
             accrual.Id,
             cancellationToken);
         AddAudit(actorUserId, "finance.accrual_restored", accrual, FormatAccrualRestoredAuditSummary(accrual));
+        await unitOfWork.SaveChangesAsync(cancellationToken);
+        return FinanceResult<AccrualDto>.Success(ToDto(accrual));
+    }
+
+    public async Task<FinanceResult<AccrualDto>> CreateIrregularAccrualAsync(
+        CreateIrregularAccrualRequest request,
+        Guid? actorUserId,
+        CancellationToken cancellationToken)
+    {
+        var garage = await garageRepository.FindActiveWithOwnerAsync(request.GarageId, cancellationToken);
+        if (garage is null)
+        {
+            return FinanceResult<AccrualDto>.Failure("garage_not_found", "Гараж для начисления не найден.");
+        }
+
+        var irregularPayment = await irregularPaymentRepository.FindActiveAsync(request.IrregularPaymentId, cancellationToken);
+        if (irregularPayment is null || !irregularPayment.IsActive)
+        {
+            return FinanceResult<AccrualDto>.Failure("irregular_payment_not_found", "Активный нерегулярный платёж не найден.");
+        }
+
+        var incomeType = await incomeTypeRepository.FindFirstActiveByCodeAsync(OtherPaymentsIncomeTypeCode, cancellationToken);
+        if (incomeType is null || !incomeType.IsSystem || !incomeType.DestinationFundId.HasValue)
+        {
+            return FinanceResult<AccrualDto>.Failure(
+                "other_payments_destination_not_configured",
+                "Системное назначение «Прочие оплаты» не настроено или не связано с фондом.");
+        }
+
+        var month = MonthPeriod.Normalize(request.AccountingMonth);
+        if (await accrualRepository.ActiveIrregularDuplicateExistsAsync(
+            null,
+            garage.Id,
+            irregularPayment.Id,
+            month,
+            cancellationToken))
+        {
+            return FinanceResult<AccrualDto>.Failure(
+                "accrual_duplicate",
+                "Этот нерегулярный платёж за выбранный месяц уже начислен гаражу.");
+        }
+
+        var amount = MoneyMath.RoundMoney(irregularPayment.Amount);
+        if (amount <= 0)
+        {
+            return FinanceResult<AccrualDto>.Failure(
+                "irregular_payment_amount_invalid",
+                "Сумма нерегулярного платежа должна быть больше нуля.");
+        }
+
+        var dueDates = AccrualDueDates.ForIncomeType(month, incomeType.Code, setting: null);
+        var accrual = new Accrual
+        {
+            GarageId = garage.Id,
+            Garage = garage,
+            IncomeTypeId = incomeType.Id,
+            IncomeType = incomeType,
+            IrregularPaymentId = irregularPayment.Id,
+            IrregularPayment = irregularPayment,
+            AccountingMonth = month,
+            DueDate = dueDates.DueDate,
+            OverdueFromDate = dueDates.OverdueFromDate,
+            Amount = amount,
+            Source = AccrualSources.Manual,
+            Comment = NormalizeOptional(request.Comment)
+        };
+
+        accrualRepository.Add(accrual);
+        await RebuildPaymentAllocationsAsync(
+            [new AccrualPaymentAllocationKey(accrual.GarageId, accrual.IncomeTypeId)],
+            actorUserId,
+            "Создание нерегулярного начисления",
+            accrual.Id,
+            cancellationToken);
+        AddAudit(
+            actorUserId,
+            "finance.irregular_accrual_created",
+            accrual,
+            $"Создано нерегулярное начисление «{irregularPayment.Name}» {MoneyFormatting.Format(accrual.Amount)} по гаражу {garage.Number} за {month:MM.yyyy}; назначение «{incomeType.Name}», фонд {incomeType.DestinationFundId}.");
         await unitOfWork.SaveChangesAsync(cancellationToken);
         return FinanceResult<AccrualDto>.Success(ToDto(accrual));
     }
@@ -1642,6 +1731,13 @@ public sealed class FinanceService(
         if (accrual is null)
         {
             return FinanceResult<AccrualDto>.Failure("accrual_not_found", "Начисление не найдено.");
+        }
+
+        if (accrual.IrregularPaymentId.HasValue)
+        {
+            return FinanceResult<AccrualDto>.Failure(
+                "irregular_accrual_edit_not_supported",
+                "Нерегулярное начисление нельзя переназначить как обычное. Отмените его и создайте заново из справочника.");
         }
 
         if (accrual.IsCanceled)
@@ -4038,7 +4134,9 @@ public sealed class FinanceService(
             accrual.Comment,
             accrual.IsCanceled,
             accrual.DueDate,
-            accrual.OverdueFromDate);
+            accrual.OverdueFromDate,
+            accrual.IrregularPaymentId,
+            accrual.IrregularPayment?.Name);
     }
 
     private static SupplierAccrualDto ToDto(SupplierAccrual accrual)

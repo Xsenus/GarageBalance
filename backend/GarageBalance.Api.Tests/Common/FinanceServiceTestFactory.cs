@@ -29,6 +29,7 @@ internal static class FinanceServiceTestFactory
             new EfSupplierRepository(dbContext),
             new EfExpenseTypeRepository(dbContext),
             new EfIncomeTypeRepository(dbContext),
+            new EfIrregularPaymentRepository(dbContext),
             new EfTariffRepository(dbContext),
             new EfFeeCampaignRepository(dbContext),
             new EfChargeServiceSettingRepository(dbContext),
