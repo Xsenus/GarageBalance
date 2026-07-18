@@ -19,6 +19,7 @@ public sealed class PostgreSqlExpenseWorksheetIntegrationTests
         Guid expenseTypeId;
         await using (var seedContext = database.CreateContext())
         {
+            await ClearIncomeDestinationLinksAsync(seedContext);
             seedContext.FinancialOperations.RemoveRange(seedContext.FinancialOperations);
             seedContext.FundOperations.RemoveRange(seedContext.FundOperations);
             seedContext.Funds.RemoveRange(seedContext.Funds);
@@ -111,6 +112,7 @@ public sealed class PostgreSqlExpenseWorksheetIntegrationTests
     {
         await using var database = await PostgreSqlTestDatabase.CreateAsync();
         await using var context = database.CreateContext();
+        await ClearIncomeDestinationLinksAsync(context);
         context.FinancialOperations.RemoveRange(context.FinancialOperations);
         context.FundOperations.RemoveRange(context.FundOperations);
         context.Funds.RemoveRange(context.Funds);
@@ -186,6 +188,7 @@ public sealed class PostgreSqlExpenseWorksheetIntegrationTests
         Guid expenseTypeId;
         await using (var seedContext = database.CreateContext())
         {
+            await ClearIncomeDestinationLinksAsync(seedContext);
             seedContext.FinancialOperations.RemoveRange(seedContext.FinancialOperations);
             seedContext.FundOperations.RemoveRange(seedContext.FundOperations);
             seedContext.Funds.RemoveRange(seedContext.Funds);
@@ -487,4 +490,9 @@ public sealed class PostgreSqlExpenseWorksheetIntegrationTests
         Assert.Equal(0m, row.ExpenseAmount);
         AssertExpenseCarry(row, carriedDebt, 0m, carriedDebt, 0m);
     }
+
+    private static Task ClearIncomeDestinationLinksAsync(GarageBalanceDbContext context) =>
+        context.IncomeTypes
+            .Where(item => item.DestinationFundId.HasValue)
+            .ExecuteUpdateAsync(setters => setters.SetProperty(item => item.DestinationFundId, (Guid?)null));
 }

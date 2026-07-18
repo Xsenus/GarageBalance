@@ -286,6 +286,11 @@ public sealed class GarageBalanceDbContext(DbContextOptions<GarageBalanceDbConte
             entity.Property(item => item.Code).HasMaxLength(80);
             entity.HasIndex(item => item.Name).IsUnique().HasFilter("\"IsArchived\" = false");
             entity.HasIndex(item => item.Code);
+            entity.HasIndex(item => item.DestinationFundId);
+            entity.HasOne(item => item.DestinationFund)
+                .WithMany()
+                .HasForeignKey(item => item.DestinationFundId)
+                .OnDelete(DeleteBehavior.Restrict);
         });
 
         modelBuilder.Entity<ExpenseType>(entity =>
