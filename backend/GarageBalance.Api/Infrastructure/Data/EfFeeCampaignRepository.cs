@@ -49,6 +49,9 @@ public sealed class EfFeeCampaignRepository(GarageBalanceDbContext dbContext) : 
             item => !item.IsArchived && item.Name == name && (!ignoredId.HasValue || item.Id != ignoredId.Value),
             cancellationToken);
 
+    public Task<bool> HasAccrualsAsync(Guid id, CancellationToken cancellationToken) =>
+        dbContext.Accruals.AsNoTracking().AnyAsync(item => item.FeeCampaignId == id, cancellationToken);
+
     public void Add(FeeCampaign campaign) => dbContext.FeeCampaigns.Add(campaign);
 
     private static IQueryable<FeeCampaign> WithDetails(IQueryable<FeeCampaign> query) =>

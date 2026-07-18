@@ -2550,6 +2550,57 @@ public sealed class DictionaryServiceTests
     }
 
     [Fact]
+    public async Task UpdateFeeCampaignAsync_LocksParticipantCompositionAfterFirstAccrual()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var otherIncome = await AddOtherIncomeDestinationAsync(database.Context);
+        var service = DictionaryServiceTestFactory.Create(database.Context);
+        var owner = new Owner { LastName = "Иванов", FirstName = "Иван" };
+        var firstGarage = new Garage { Number = "1", PeopleCount = 1, FloorCount = 1, Owner = owner };
+        var secondGarage = new Garage { Number = "2", PeopleCount = 1, FloorCount = 1, Owner = owner };
+        database.Context.AddRange(owner, firstGarage, secondGarage);
+        await database.Context.SaveChangesAsync();
+
+        var created = await service.CreateFeeCampaignAsync(
+            new UpsertFeeCampaignRequest("Сбор на ворота", otherIncome.Id, null, 500m, 5000m, new DateOnly(2026, 5, 1), null, false, 30, [firstGarage.Id]),
+            null,
+            CancellationToken.None);
+        Assert.True(created.Succeeded, created.ErrorMessage);
+
+        database.Context.Accruals.Add(new Accrual
+        {
+            GarageId = firstGarage.Id,
+            IncomeTypeId = otherIncome.Id,
+            FeeCampaignId = created.Value!.Id,
+            AccountingMonth = new DateOnly(2026, 6, 1),
+            DueDate = new DateOnly(2026, 6, 30),
+            OverdueFromDate = new DateOnly(2026, 7, 31),
+            Amount = 500m,
+            Source = AccrualSources.FeeCampaign
+        });
+        await database.Context.SaveChangesAsync();
+
+        var participantChange = await service.UpdateFeeCampaignAsync(
+            created.Value.Id,
+            new UpsertFeeCampaignRequest("Сбор на ворота", otherIncome.Id, null, 500m, 5000m, new DateOnly(2026, 5, 1), null, false, 30, [secondGarage.Id]),
+            null,
+            CancellationToken.None);
+        var detailsChange = await service.UpdateFeeCampaignAsync(
+            created.Value.Id,
+            new UpsertFeeCampaignRequest("Сбор на ворота", otherIncome.Id, "Уточненная цель", 500m, 6000m, new DateOnly(2026, 5, 1), null, false, 30, [firstGarage.Id]),
+            null,
+            CancellationToken.None);
+
+        Assert.False(participantChange.Succeeded);
+        Assert.Equal("fee_campaign_participants_locked", participantChange.ErrorCode);
+        Assert.Contains("Исторический состав", participantChange.ErrorMessage, StringComparison.Ordinal);
+        Assert.True(detailsChange.Succeeded, detailsChange.ErrorMessage);
+        Assert.Equal("Уточненная цель", detailsChange.Value!.Goal);
+        Assert.Equal(6000m, detailsChange.Value.TargetAmount);
+        Assert.Equal([firstGarage.Id], detailsChange.Value.ParticipantGarageIds);
+    }
+
+    [Fact]
     public async Task CreateFeeCampaignAsync_RejectsMissingOtherIncomeDestination()
     {
         await using var database = await TestDatabase.CreateAsync();

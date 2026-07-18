@@ -9,5 +9,6 @@ public interface IFeeCampaignRepository
     Task<FeeCampaign?> FindActiveForAccrualGenerationAsync(Guid id, CancellationToken cancellationToken);
     Task<FeeCampaign?> FindArchivedWithDetailsAsync(Guid id, CancellationToken cancellationToken);
     Task<bool> ActiveDuplicateExistsAsync(Guid? ignoredId, string name, CancellationToken cancellationToken);
+    Task<bool> HasAccrualsAsync(Guid id, CancellationToken cancellationToken);
     void Add(FeeCampaign campaign);
 }

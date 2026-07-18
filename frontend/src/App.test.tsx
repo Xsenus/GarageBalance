@@ -709,6 +709,51 @@ describe('App', () => {
     expect(within(feeCampaignsSection).getByText('12, 27')).toBeInTheDocument()
   })
 
+  it('keeps fee campaign editor open when accrued participant composition is locked', async () => {
+    const user = userEvent.setup()
+    const targetIncomeType = createAccountingType({ id: 'income-type-other-income', name: 'Прочие доходы', code: 'other_income', isSystem: true })
+    const firstGarage = createGarage({ id: 'garage-first', number: '12', ownerName: 'Иванов Иван' })
+    const secondGarage = createGarage({ id: 'garage-second', number: '27', ownerName: 'Петров Петр' })
+    const campaign = createFeeCampaign({
+      id: 'fee-campaign-accrued',
+      name: 'Сбор на ворота',
+      incomeTypeId: targetIncomeType.id,
+      incomeTypeName: targetIncomeType.name,
+      appliesToAllGarages: false,
+      participantGarageIds: [firstGarage.id],
+    })
+    let updateCalls = 0
+    const dictionaryClient = createDictionaryClient({
+      getGarages: async () => [firstGarage, secondGarage],
+      getIncomeTypes: async () => [targetIncomeType],
+      getFeeCampaigns: async () => [campaign],
+      updateFeeCampaign: async () => {
+        updateCalls += 1
+        throw new Error('Нельзя изменить состав участников сбора после создания начислений. Исторический состав должен оставаться неизменным.')
+      },
+    })
+
+    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Тарифы и сборы')
+    const tariffsPanel = await screen.findByRole('region', { name: 'Тарифы и сборы' })
+    const feeCampaignsSection = within(tariffsPanel).getByLabelText('Объявленные сборы')
+    await user.click(await within(feeCampaignsSection).findByRole('button', { name: 'Изменить сбор Сбор на ворота' }))
+    const editDialog = await screen.findByRole('dialog', { name: 'Изменить сбор' })
+    expect(within(editDialog).getByLabelText('Гараж 12')).toBeChecked()
+    await user.click(within(editDialog).getByLabelText('Гараж 27'))
+    await user.click(within(editDialog).getByRole('button', { name: 'Сохранить' }))
+    const confirmationDialog = await screen.findByRole('dialog', { name: 'Подтвердите изменения сбора' })
+    await user.click(within(confirmationDialog).getByRole('button', { name: 'Сохранить изменения' }))
+
+    expect(updateCalls).toBe(1)
+    const alerts = await screen.findAllByRole('alert')
+    expect(alerts.some((alert) => alert.textContent?.includes('Исторический состав должен оставаться неизменным.'))).toBe(true)
+    expect(screen.getByRole('dialog', { name: 'Изменить сбор' })).toBeInTheDocument()
+    expect(within(screen.getByRole('dialog', { name: 'Изменить сбор' })).getByLabelText('Гараж 27')).toBeChecked()
+  })
+
   it('generates announced fee campaign accruals from tariffs page', async () => {
     const user = userEvent.setup()
     const targetIncomeType = createAccountingType({ id: 'income-type-other-income', name: 'Прочие доходы', code: 'other_income', isSystem: true })

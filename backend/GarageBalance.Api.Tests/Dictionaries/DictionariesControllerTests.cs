@@ -380,6 +380,30 @@ public sealed class DictionariesControllerTests
     }
 
     [Fact]
+    public async Task UpdateFeeCampaign_ReturnsConflictWhenHistoricalParticipantsAreChanged()
+    {
+        var campaignId = Guid.NewGuid();
+        var incomeTypeId = Guid.NewGuid();
+        var service = new FakeDictionaryService
+        {
+            UpdateFeeCampaignResult = DictionaryResult<FeeCampaignDto>.Failure(
+                "fee_campaign_participants_locked",
+                "Нельзя изменить состав участников сбора после создания начислений.")
+        };
+        var controller = CreateController(service, Guid.NewGuid());
+
+        var result = await controller.UpdateFeeCampaign(
+            campaignId,
+            new UpsertFeeCampaignRequest("Gate campaign", incomeTypeId, null, 500m, 33500m, new DateOnly(2026, 5, 4), null, false, 30, [Guid.NewGuid()]),
+            CancellationToken.None);
+
+        var conflict = Assert.IsType<ConflictObjectResult>(result.Result);
+        var problem = Assert.IsType<ProblemDetails>(conflict.Value);
+        Assert.Equal("fee_campaign_participants_locked", problem.Title);
+        Assert.Equal(StatusCodes.Status409Conflict, problem.Status);
+    }
+
+    [Fact]
     public async Task ArchiveFeeCampaign_ReturnsNoContentAndPassesActorUserId()
     {
         var actorUserId = Guid.NewGuid();

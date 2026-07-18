@@ -1,3 +1,4 @@
+using GarageBalance.Api.Application.Dictionaries;
 using GarageBalance.Api.Application.Finance;
 using GarageBalance.Api.Domain.Dictionaries;
 using GarageBalance.Api.Domain.Finance;
@@ -9,6 +10,95 @@ namespace GarageBalance.Api.Tests.Finance;
 
 public sealed class PostgreSqlFeeCampaignRoutingIntegrationTests
 {
+    [PostgreSqlFact]
+    public async Task Campaigns_GenerateForAllOrUpdatedSelectionAndLockHistoricalParticipants()
+    {
+        await using var database = await PostgreSqlTestDatabase.CreateAsync();
+        var owner = new Owner { LastName = "Иванов", FirstName = "Иван" };
+        var firstGarage = new Garage { Number = "FEE-ALL-1", PeopleCount = 1, FloorCount = 1, Owner = owner };
+        var secondGarage = new Garage { Number = "FEE-ALL-2", PeopleCount = 1, FloorCount = 1, Owner = owner };
+        var thirdGarage = new Garage { Number = "FEE-ALL-3", PeopleCount = 1, FloorCount = 1, Owner = owner };
+        var archivedGarage = new Garage { Number = "FEE-ARCHIVED", PeopleCount = 1, FloorCount = 1, Owner = owner, IsArchived = true };
+        Guid otherIncomeId;
+        Guid allCampaignId;
+        Guid selectedCampaignId;
+
+        await using (var setupContext = database.CreateContext())
+        {
+            setupContext.AddRange(owner, firstGarage, secondGarage, thirdGarage, archivedGarage);
+            await setupContext.SaveChangesAsync();
+            otherIncomeId = await setupContext.IncomeTypes
+                .Where(item => item.Code == "other_income")
+                .Select(item => item.Id)
+                .SingleAsync();
+            var dictionaries = DictionaryServiceTestFactory.Create(setupContext);
+            var allCampaign = await dictionaries.CreateFeeCampaignAsync(
+                CampaignRequest("Сбор для всех", otherIncomeId, true, []),
+                null,
+                CancellationToken.None);
+            var selectedCampaign = await dictionaries.CreateFeeCampaignAsync(
+                CampaignRequest("Выборочный сбор", otherIncomeId, false, [firstGarage.Id]),
+                null,
+                CancellationToken.None);
+            Assert.True(allCampaign.Succeeded, allCampaign.ErrorMessage);
+            Assert.True(selectedCampaign.Succeeded, selectedCampaign.ErrorMessage);
+            allCampaignId = allCampaign.Value!.Id;
+            selectedCampaignId = selectedCampaign.Value!.Id;
+
+            var changedBeforeGeneration = await dictionaries.UpdateFeeCampaignAsync(
+                selectedCampaignId,
+                CampaignRequest("Выборочный сбор", otherIncomeId, false, [firstGarage.Id, secondGarage.Id]),
+                null,
+                CancellationToken.None);
+            Assert.True(changedBeforeGeneration.Succeeded, changedBeforeGeneration.ErrorMessage);
+            Assert.Equal([firstGarage.Id, secondGarage.Id], changedBeforeGeneration.Value!.ParticipantGarageIds);
+        }
+
+        await using (var generationContext = database.CreateContext())
+        {
+            var finance = FinanceServiceTestFactory.Create(generationContext);
+            var allResult = await finance.GenerateFeeCampaignAccrualsAsync(
+                new GenerateFeeCampaignAccrualsRequest(allCampaignId, new DateOnly(2026, 6, 1), null),
+                null,
+                CancellationToken.None);
+            var selectedResult = await finance.GenerateFeeCampaignAccrualsAsync(
+                new GenerateFeeCampaignAccrualsRequest(selectedCampaignId, new DateOnly(2026, 6, 1), null),
+                null,
+                CancellationToken.None);
+
+            Assert.True(allResult.Succeeded, allResult.ErrorMessage);
+            Assert.Equal(3, allResult.Value!.CreatedCount);
+            Assert.DoesNotContain(allResult.Value.CreatedAccruals, item => item.GarageId == archivedGarage.Id);
+            Assert.True(selectedResult.Succeeded, selectedResult.ErrorMessage);
+            Assert.Equal(2, selectedResult.Value!.CreatedCount);
+            Assert.Equal(
+                new[] { firstGarage.Id, secondGarage.Id }.Order().ToArray(),
+                selectedResult.Value.CreatedAccruals.Select(item => item.GarageId).Order().ToArray());
+        }
+
+        await using (var updateContext = database.CreateContext())
+        {
+            var dictionaries = DictionaryServiceTestFactory.Create(updateContext);
+            var rejected = await dictionaries.UpdateFeeCampaignAsync(
+                selectedCampaignId,
+                CampaignRequest("Выборочный сбор", otherIncomeId, false, [thirdGarage.Id]),
+                null,
+                CancellationToken.None);
+
+            Assert.False(rejected.Succeeded);
+            Assert.Equal("fee_campaign_participants_locked", rejected.ErrorCode);
+            var storedParticipants = await updateContext.FeeCampaignGarages
+                .Where(item => item.FeeCampaignId == selectedCampaignId)
+                .Select(item => item.GarageId)
+                .Order()
+                .ToArrayAsync();
+            Assert.Equal(new[] { firstGarage.Id, secondGarage.Id }.Order().ToArray(), storedParticipants);
+            Assert.Equal(2, await updateContext.Accruals.CountAsync(item => item.FeeCampaignId == selectedCampaignId));
+            Assert.Single(updateContext.AuditEvents, item =>
+                item.Action == "dictionary.fee_campaign_updated" && item.EntityId == selectedCampaignId.ToString());
+        }
+    }
+
     [PostgreSqlFact]
     public async Task MigratedDatabase_RoutesDifferentCampaignsToStableDestinationAndRejectsCampaignDuplicate()
     {
@@ -93,4 +183,21 @@ public sealed class PostgreSqlFeeCampaignRoutingIntegrationTests
             AppliesToAllGarages = true,
             OverdueGraceDays = 30
         };
+
+    private static UpsertFeeCampaignRequest CampaignRequest(
+        string name,
+        Guid incomeTypeId,
+        bool appliesToAllGarages,
+        IReadOnlyList<Guid> participantGarageIds) =>
+        new(
+            name,
+            incomeTypeId,
+            null,
+            500m,
+            5000m,
+            new DateOnly(2026, 5, 1),
+            null,
+            appliesToAllGarages,
+            30,
+            participantGarageIds);
 }

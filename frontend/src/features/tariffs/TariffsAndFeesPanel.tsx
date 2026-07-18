@@ -2741,8 +2741,12 @@ function AddFeePrototypeDialog({
       return
     }
 
-    await onSave(pendingConfirmation.request)
-    setPendingConfirmation(null)
+    try {
+      await onSave(pendingConfirmation.request)
+      setPendingConfirmation(null)
+    } catch {
+      setPendingConfirmation(null)
+    }
   }
 
   return (
