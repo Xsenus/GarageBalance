@@ -109,6 +109,7 @@ public sealed class PostgreSqlReportSortingIntegrationTests
         var supplierA = new Supplier { Name = "Поставщик Альфа", Group = supplierGroup };
         var supplierB = new Supplier { Name = "Поставщик Бета", Group = supplierGroup };
         var incomeType = new IncomeType { Name = $"Взнос сортировка {Guid.NewGuid():N}" };
+        var secondIncomeType = new IncomeType { Name = $"Дополнительный взнос сортировка {Guid.NewGuid():N}" };
         var expenseType = new ExpenseType { Name = $"Выплата сортировка {Guid.NewGuid():N}" };
         var fund = new Fund
         {
@@ -116,15 +117,17 @@ public sealed class PostgreSqlReportSortingIntegrationTests
             NormalizedName = $"report-sort-{Guid.NewGuid():N}",
             SortOrder = 50
         };
-        context.AddRange(ownerA, ownerB, garageA, garageB, supplierGroup, supplierA, supplierB, incomeType, expenseType, fund);
+        context.AddRange(ownerA, ownerB, garageA, garageB, supplierGroup, supplierA, supplierB, incomeType, secondIncomeType, expenseType, fund);
         context.Accruals.AddRange(
             CreateAccrual(garageA, incomeType, january, 1000m),
+            CreateAccrual(garageA, secondIncomeType, january, 200m),
             CreateAccrual(garageB, incomeType, february, 500m));
         context.SupplierAccruals.AddRange(
             CreateSupplierAccrual(supplierA, expenseType, january, 400m),
             CreateSupplierAccrual(supplierB, expenseType, february, 100m));
         context.FinancialOperations.AddRange(
             CreateIncome(garageA, incomeType, january, 100m, "IN-100"),
+            CreateIncome(garageA, secondIncomeType, january, 50m, "IN-50"),
             CreateIncome(garageB, incomeType, february, 300m, "IN-300"),
             CreateExpense(supplierA, expenseType, january, 50m, "OUT-50"),
             CreateExpense(supplierB, expenseType, february, 200m, "OUT-200"));
@@ -146,7 +149,24 @@ public sealed class PostgreSqlReportSortingIntegrationTests
             new ReportSort("incomeAmount", true),
             CancellationToken.None);
         Assert.Equal(2, income.RowCount);
+        Assert.Equal(400m, income.IncomeTotal);
         Assert.Equal(300m, Assert.Single(income.Rows).IncomeAmount);
+        var incomeSecondPage = await new EfIncomeReportQuery(context).GetRowsAsync(
+            january,
+            february.AddMonths(1).AddDays(-1),
+            "payments",
+            new HashSet<Guid>(),
+            new HashSet<Guid>(),
+            new HashSet<Guid> { incomeType.Id },
+            null,
+            1,
+            1,
+            new ReportSort("incomeAmount", true),
+            CancellationToken.None);
+        Assert.Equal(income.RowCount, incomeSecondPage.RowCount);
+        Assert.Equal(income.AccrualTotal, incomeSecondPage.AccrualTotal);
+        Assert.Equal(income.IncomeTotal, incomeSecondPage.IncomeTotal);
+        Assert.Single(incomeSecondPage.Rows);
 
         var expense = await new EfExpenseReportQuery(context).GetRowsAsync(
             january,
@@ -160,7 +180,23 @@ public sealed class PostgreSqlReportSortingIntegrationTests
             new ReportSort("expenseAmount", true),
             CancellationToken.None);
         Assert.Equal(2, expense.RowCount);
+        Assert.Equal(250m, expense.ExpenseTotal);
         Assert.Equal(200m, Assert.Single(expense.Rows).ExpenseAmount);
+        var expenseSecondPage = await new EfExpenseReportQuery(context).GetRowsAsync(
+            january,
+            february.AddMonths(1).AddDays(-1),
+            "payments",
+            new HashSet<Guid>(),
+            new HashSet<Guid> { expenseType.Id },
+            null,
+            1,
+            1,
+            new ReportSort("expenseAmount", true),
+            CancellationToken.None);
+        Assert.Equal(expense.RowCount, expenseSecondPage.RowCount);
+        Assert.Equal(expense.AccrualTotal, expenseSecondPage.AccrualTotal);
+        Assert.Equal(expense.ExpenseTotal, expenseSecondPage.ExpenseTotal);
+        Assert.Single(expenseSecondPage.Rows);
 
         var consolidated = await new EfConsolidatedMonthlyReportQuery(context).GetMonthlyDataAsync(
             january,
@@ -171,6 +207,20 @@ public sealed class PostgreSqlReportSortingIntegrationTests
             CancellationToken.None);
         Assert.Equal(2, consolidated.MonthlyRowCount);
         Assert.Equal(february, Assert.Single(consolidated.MonthlyRows).AccountingMonth);
+        var consolidatedSecondPage = await new EfConsolidatedMonthlyReportQuery(context).GetMonthlyDataAsync(
+            january,
+            february,
+            new ReportSort("incomeTotal", true),
+            1,
+            1,
+            CancellationToken.None);
+        Assert.Equal(consolidated.MonthlyRowCount, consolidatedSecondPage.MonthlyRowCount);
+        Assert.Equal(consolidated.IncomeByMonth, consolidatedSecondPage.IncomeByMonth);
+        Assert.Equal(consolidated.ExpenseByMonth, consolidatedSecondPage.ExpenseByMonth);
+        Assert.Equal(consolidated.AccrualByMonth, consolidatedSecondPage.AccrualByMonth);
+        Assert.Equal(consolidated.IncomeBreakdown, consolidatedSecondPage.IncomeBreakdown);
+        Assert.Equal(consolidated.ExpenseBreakdown, consolidatedSecondPage.ExpenseBreakdown);
+        Assert.Single(consolidatedSecondPage.MonthlyRows);
 
         var garages = await new EfGarageReportQuery(context).GetRowsAsync(
             january,
@@ -181,8 +231,36 @@ public sealed class PostgreSqlReportSortingIntegrationTests
             1,
             new ReportSort("difference", true),
             CancellationToken.None);
-        Assert.Equal(2, garages.RowCount);
+        Assert.Equal(3, garages.RowCount);
+        Assert.Equal(1700m, garages.AccrualTotal);
+        Assert.Equal(450m, garages.IncomeTotal);
         Assert.Equal(900m, Assert.Single(garages.Rows).AccrualAmount - garages.Rows[0].IncomeAmount);
+        var garageSecondPage = await new EfGarageReportQuery(context).GetRowsAsync(
+            january,
+            february,
+            null,
+            false,
+            1,
+            1,
+            new ReportSort("difference", true),
+            CancellationToken.None);
+        Assert.Equal(garages.RowCount, garageSecondPage.RowCount);
+        Assert.Equal(garages.AccrualTotal, garageSecondPage.AccrualTotal);
+        Assert.Equal(garages.IncomeTotal, garageSecondPage.IncomeTotal);
+        Assert.Single(garageSecondPage.Rows);
+        var groupedGarages = await new EfGarageReportQuery(context).GetRowsAsync(
+            january,
+            february,
+            null,
+            true,
+            1,
+            1,
+            new ReportSort("difference", true),
+            CancellationToken.None);
+        Assert.Equal(2, groupedGarages.RowCount);
+        Assert.Equal(garages.AccrualTotal, groupedGarages.AccrualTotal);
+        Assert.Equal(garages.IncomeTotal, groupedGarages.IncomeTotal);
+        Assert.Single(groupedGarages.Rows);
 
         var cash = await new EfCashMovementReportQuery(context).GetCashPaymentsAsync(
             january,
@@ -193,7 +271,12 @@ public sealed class PostgreSqlReportSortingIntegrationTests
             new ReportSort("amount", true),
             CancellationToken.None);
         Assert.Equal(2, cash.RowCount);
+        Assert.Equal(250m, cash.Total);
         Assert.Equal(200m, Assert.Single(cash.Operations).Amount);
+        var cashSecondPage = await new EfCashMovementReportQuery(context).GetCashPaymentsAsync(january, february.AddMonths(1).AddDays(-1), null, 1, 1, new ReportSort("amount", true), CancellationToken.None);
+        Assert.Equal(cash.RowCount, cashSecondPage.RowCount);
+        Assert.Equal(cash.Total, cashSecondPage.Total);
+        Assert.Single(cashSecondPage.Operations);
 
         var bank = await new EfCashMovementReportQuery(context).GetBankDepositsAsync(
             january,
@@ -204,7 +287,12 @@ public sealed class PostgreSqlReportSortingIntegrationTests
             new ReportSort("amount", true),
             CancellationToken.None);
         Assert.Equal(2, bank.RowCount);
+        Assert.Equal(260m, bank.Total);
         Assert.Equal(180m, Assert.Single(bank.Operations).Amount);
+        var bankSecondPage = await new EfCashMovementReportQuery(context).GetBankDepositsAsync(january, february.AddMonths(1).AddDays(-1), null, 1, 1, new ReportSort("amount", true), CancellationToken.None);
+        Assert.Equal(bank.RowCount, bankSecondPage.RowCount);
+        Assert.Equal(bank.Total, bankSecondPage.Total);
+        Assert.Single(bankSecondPage.Operations);
 
         var fundChanges = await new EfFundChangeReportQuery(context).GetFundChangesAsync(
             january,
@@ -215,7 +303,14 @@ public sealed class PostgreSqlReportSortingIntegrationTests
             new ReportSort("amount", true),
             CancellationToken.None);
         Assert.Equal(2, fundChanges.RowCount);
+        Assert.Equal(260m, fundChanges.DepositTotal);
+        Assert.Equal(0m, fundChanges.WithdrawalTotal);
         Assert.Equal(180m, Assert.Single(fundChanges.Rows).Amount);
+        var fundChangesSecondPage = await new EfFundChangeReportQuery(context).GetFundChangesAsync(january, february.AddMonths(1).AddDays(-1), null, 1, 1, new ReportSort("amount", true), CancellationToken.None);
+        Assert.Equal(fundChanges.RowCount, fundChangesSecondPage.RowCount);
+        Assert.Equal(fundChanges.DepositTotal, fundChangesSecondPage.DepositTotal);
+        Assert.Equal(fundChanges.WithdrawalTotal, fundChangesSecondPage.WithdrawalTotal);
+        Assert.Single(fundChangesSecondPage.Rows);
 
         var fees = await new EfFeeReportQuery(context).GetFeeReportPageAsync(
             [incomeType.Id],
@@ -225,7 +320,22 @@ public sealed class PostgreSqlReportSortingIntegrationTests
             1,
             CancellationToken.None);
         Assert.Equal(2, fees.GarageRowCount);
+        Assert.Equal(1100m, fees.DebtTotal);
+        Assert.Equal(1500m, fees.AccrualTotals[incomeType.Id]);
+        Assert.Equal(400m, fees.CollectedTotals[incomeType.Id]);
         Assert.Equal(900m, Assert.Single(fees.GarageRows).Debt);
+        var feesSecondPage = await new EfFeeReportQuery(context).GetFeeReportPageAsync(
+            [incomeType.Id],
+            false,
+            new ReportSort("debt", true),
+            1,
+            1,
+            CancellationToken.None);
+        Assert.Equal(fees.GarageRowCount, feesSecondPage.GarageRowCount);
+        Assert.Equal(fees.DebtTotal, feesSecondPage.DebtTotal);
+        Assert.Equal(fees.AccrualTotals[incomeType.Id], feesSecondPage.AccrualTotals[incomeType.Id]);
+        Assert.Equal(fees.CollectedTotals[incomeType.Id], feesSecondPage.CollectedTotals[incomeType.Id]);
+        Assert.Single(feesSecondPage.GarageRows);
 
         foreach (var descending in new[] { false, true })
         {
