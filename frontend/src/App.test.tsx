@@ -13717,6 +13717,204 @@ describe('App', () => {
     expect(within(reportsPanel).queryByText('Загружаем сдачу кассы в банк...')).not.toBeInTheDocument()
   })
 
+  it('announces empty states for every report without showing them during loading', async () => {
+    const user = userEvent.setup()
+    const reportClient = createReportClient({
+      getConsolidatedReport: async () => createConsolidatedReport({ monthlyRows: [], incomeBreakdown: [], expenseBreakdown: [], operationCount: 0 }),
+      getGarageReport: async () => createGarageDetailReport({ rows: [], rowCount: 0 }),
+      getExpenseReport: async () => createExpenseReport({ rows: [], rowCount: 0 }),
+      getIncomeReport: async () => createIncomeReport({ rows: [], rowCount: 0 }),
+      getCashPaymentReport: async () => createCashPaymentReport({ rows: [], rowCount: 0 }),
+      getBankDepositReport: async () => createBankDepositReport({ rows: [], rowCount: 0 }),
+      getFeeReport: async () => createFeeReport({ summaryRows: [], garageRows: [], rowCount: 0 }),
+      getFundChangeReport: async () => createFundChangeReport({ rows: [], rowCount: 0 }),
+    })
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={reportClient} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Отчеты')
+    const reportsPanel = await screen.findByRole('region', { name: 'Отчеты' })
+
+    expect(await within(reportsPanel).findByText('Данных за период нет')).toHaveAttribute('role', 'status')
+
+    const emptyReports: Array<[string, string]> = [
+      ['По гаражам', 'Данных за период нет'],
+      ['По выплатам', 'Данных за период нет'],
+      ['Поступления', 'Данных за период нет'],
+      ['Оплаты из кассы', 'Операций за период нет'],
+      ['Сдача кассы в банк', 'Операций за период нет'],
+      ['Сборы', 'Данных по сбору нет'],
+      ['Изменение фондов', 'Операций за период нет'],
+    ]
+    for (const [tabName, emptyMessage] of emptyReports) {
+      await openReportTab(user, reportsPanel, tabName)
+      const emptyState = await within(reportsPanel).findByText(emptyMessage)
+      expect(emptyState).toHaveAttribute('role', 'status')
+      expect(emptyState).toHaveClass('report-workbook-empty-state')
+    }
+  })
+
+  it('shows permission denied errors inside every report and does not leak them between tabs', async () => {
+    const user = userEvent.setup()
+    const denied = (reportName: string) => async () => {
+      throw new Error(`Недостаточно прав: ${reportName}`)
+    }
+    const reportClient = createReportClient({
+      getConsolidatedReport: denied('консолидированный отчет'),
+      getGarageReport: denied('отчет по гаражам'),
+      getExpenseReport: denied('отчет по выплатам'),
+      getIncomeReport: denied('отчет по поступлениям'),
+      getCashPaymentReport: denied('отчет по оплатам из кассы'),
+      getBankDepositReport: denied('отчет по сдаче кассы в банк'),
+      getFeeReport: denied('отчет по сборам'),
+      getFundChangeReport: denied('отчет по изменению фондов'),
+    })
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={reportClient} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Отчеты')
+    const reportsPanel = await screen.findByRole('region', { name: 'Отчеты' })
+
+    const deniedReports: Array<[string | null, string]> = [
+      [null, 'Недостаточно прав: консолидированный отчет'],
+      ['По гаражам', 'Недостаточно прав: отчет по гаражам'],
+      ['По выплатам', 'Недостаточно прав: отчет по выплатам'],
+      ['Поступления', 'Недостаточно прав: отчет по поступлениям'],
+      ['Оплаты из кассы', 'Недостаточно прав: отчет по оплатам из кассы'],
+      ['Сдача кассы в банк', 'Недостаточно прав: отчет по сдаче кассы в банк'],
+      ['Сборы', 'Недостаточно прав: отчет по сборам'],
+      ['Изменение фондов', 'Недостаточно прав: отчет по изменению фондов'],
+    ]
+    let previousMessage: string | null = null
+    for (const [tabName, message] of deniedReports) {
+      if (tabName) await openReportTab(user, reportsPanel, tabName)
+      expect(await within(reportsPanel).findByText(message)).toHaveAttribute('role', 'alert')
+      if (previousMessage) expect(within(reportsPanel).queryByText(previousMessage)).not.toBeInTheDocument()
+      previousMessage = message
+    }
+  })
+
+  it('ignores stale responses for every report after filters or tabs change', async () => {
+    const user = userEvent.setup()
+    function deferred<T>() {
+      let resolve!: (value: T) => void
+      const promise = new Promise<T>((complete) => { resolve = complete })
+      return { promise, resolve }
+    }
+
+    const staleConsolidated = deferred<ConsolidatedReportDto>()
+    const staleGarage = deferred<GarageDetailReportDto>()
+    const stalePayout = deferred<ExpenseReportDto>()
+    const staleIncome = deferred<IncomeReportDto>()
+    const staleCash = deferred<CashPaymentReportDto>()
+    const staleBank = deferred<BankDepositReportDto>()
+    const staleFee = deferred<FeeReportDto>()
+    const staleFund = deferred<FundChangeReportDto>()
+    const reportClient = createReportClient({
+      getConsolidatedReport: vi.fn()
+        .mockImplementationOnce(() => staleConsolidated.promise)
+        .mockResolvedValue(createConsolidatedReport()),
+      getGarageReport: vi.fn()
+        .mockImplementationOnce(() => staleGarage.promise)
+        .mockResolvedValue(createGarageDetailReport()),
+      getExpenseReport: vi.fn()
+        .mockImplementationOnce(() => stalePayout.promise)
+        .mockResolvedValue(createExpenseReport()),
+      getIncomeReport: vi.fn()
+        .mockImplementationOnce(() => staleIncome.promise)
+        .mockResolvedValue(createIncomeReport({ rows: createIncomeReport().rows.filter((row) => row.rowType === 'payments'), rowCount: 1 })),
+      getCashPaymentReport: vi.fn()
+        .mockImplementationOnce(() => staleCash.promise)
+        .mockResolvedValue(createCashPaymentReport()),
+      getBankDepositReport: vi.fn()
+        .mockImplementationOnce(() => staleBank.promise)
+        .mockResolvedValue(createBankDepositReport()),
+      getFeeReport: vi.fn()
+        .mockImplementationOnce(() => staleFee.promise)
+        .mockResolvedValue(createFeeReport()),
+      getFundChangeReport: vi.fn()
+        .mockImplementationOnce(() => staleFund.promise)
+        .mockResolvedValue(createFundChangeReport()),
+    })
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={reportClient} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Отчеты')
+    const reportsPanel = await screen.findByRole('region', { name: 'Отчеты' })
+
+    expect(await within(reportsPanel).findByRole('status', { name: 'Загружаем сводный отчёт' })).toBeInTheDocument()
+    expect(within(reportsPanel).queryByText('Данных за период нет')).not.toBeInTheDocument()
+    fireEvent.change(within(reportsPanel).getByLabelText('Месяц с'), { target: { value: '2026-05' } })
+    expect(await within(reportsPanel).findByText('06.2026')).toBeInTheDocument()
+    await act(async () => staleConsolidated.resolve(createConsolidatedReport({
+      monthlyRows: [{ ...createConsolidatedReport().monthlyRows[0], accountingMonth: '1999-01-01' }],
+    })))
+    expect(within(reportsPanel).queryByText('01.1999')).not.toBeInTheDocument()
+
+    const staleTabs: Array<{
+      tab: string
+      latestText: string
+      staleText: string
+      resolve: () => void
+    }> = [
+      {
+        tab: 'По гаражам',
+        latestText: 'Членский взнос',
+        staleText: 'СТАРЫЙ ГАРАЖ',
+        resolve: () => staleGarage.resolve(createGarageDetailReport({ rows: [{ ...createGarageDetailReport().rows[0], garageNumber: 'СТАРЫЙ ГАРАЖ' }] })),
+      },
+      {
+        tab: 'По выплатам',
+        latestText: 'Водоканал',
+        staleText: 'СТАРЫЙ ПОСТАВЩИК',
+        resolve: () => stalePayout.resolve(createExpenseReport({ rows: [{ ...createExpenseReport().rows[0], supplierName: 'СТАРЫЙ ПОСТАВЩИК' }] })),
+      },
+      {
+        tab: 'Поступления',
+        latestText: 'Членский взнос',
+        staleText: 'СТАРЫЙ ГАРАЖ ПОСТУПЛЕНИЯ',
+        resolve: () => staleIncome.resolve(createIncomeReport({ rows: [{ ...createIncomeReport().rows[1], garageNumber: 'СТАРЫЙ ГАРАЖ ПОСТУПЛЕНИЯ' }], rowCount: 1 })),
+      },
+      {
+        tab: 'Оплаты из кассы',
+        latestText: 'Оплата воды',
+        staleText: 'СТАРАЯ ОПЛАТА ИЗ КАССЫ',
+        resolve: () => staleCash.resolve(createCashPaymentReport({ rows: [{ ...createCashPaymentReport().rows[0], comment: 'СТАРАЯ ОПЛАТА ИЗ КАССЫ' }] })),
+      },
+      {
+        tab: 'Сдача кассы в банк',
+        latestText: 'Сдача наличных в банк',
+        staleText: 'СТАРАЯ СДАЧА В БАНК',
+        resolve: () => staleBank.resolve(createBankDepositReport({ rows: [{ ...createBankDepositReport().rows[0], comment: 'СТАРАЯ СДАЧА В БАНК' }] })),
+      },
+      {
+        tab: 'Сборы',
+        latestText: 'Сбор на ворота',
+        staleText: 'СТАРЫЙ СБОР',
+        resolve: () => staleFee.resolve(createFeeReport({ summaryRows: [{ ...createFeeReport().summaryRows[0], name: 'СТАРЫЙ СБОР' }] })),
+      },
+      {
+        tab: 'Изменение фондов',
+        latestText: 'Распределение средств',
+        staleText: 'СТАРОЕ ИЗМЕНЕНИЕ ФОНДА',
+        resolve: () => staleFund.resolve(createFundChangeReport({ rows: [{ ...createFundChangeReport().rows[0], reason: 'СТАРОЕ ИЗМЕНЕНИЕ ФОНДА' }] })),
+      },
+    ]
+
+    for (const scenario of staleTabs) {
+      await openReportTab(user, reportsPanel, scenario.tab)
+      await waitFor(() => expect(within(reportsPanel).getByRole('status', { name: /Загружаем/ })).toBeInTheDocument())
+      await openReportTab(user, reportsPanel, 'Консолидированный')
+      await openReportTab(user, reportsPanel, scenario.tab)
+      expect((await within(reportsPanel).findAllByText(scenario.latestText)).length).toBeGreaterThan(0)
+      await act(async () => scenario.resolve())
+      expect(within(reportsPanel).queryByText(scenario.staleText)).not.toBeInTheDocument()
+    }
+  })
+
   it('keeps report export errors visible without announcing a ready file', async () => {
     const user = userEvent.setup()
     const exportCashPaymentReportXlsx = vi.fn()

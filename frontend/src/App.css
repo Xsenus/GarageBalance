@@ -6905,6 +6905,20 @@ button.operation-row:focus-visible {
   text-align: center;
 }
 
+.report-workbook-empty-cell {
+  grid-column: 1 / -1;
+  border-right: 1px solid #111827;
+  border-bottom: 1px solid #111827;
+}
+
+.report-workbook-empty-state {
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  padding: 22px 16px;
+  text-align: center;
+}
+
 .report-sort-button {
   display: inline-flex;
   align-items: center;

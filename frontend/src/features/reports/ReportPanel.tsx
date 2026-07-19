@@ -4,7 +4,7 @@ import { FileSpreadsheet, FileText } from 'lucide-react'
 import type { AuthResponse } from '../../services/authApi'
 import type { AccountingTypeDto, DictionaryClient, GarageDto, StaffMemberDto, SupplierDto } from '../../services/dictionariesApi'
 import type { BankDepositReportDto, CashPaymentReportDto, ConsolidatedReportDto, ExpenseReportDto, FeeReportDto, FundChangeReportDto, GarageDetailReportDto, IncomeReportDto, ReportClient } from '../../services/reportsApi'
-import { TableLoadingState } from '../../shared/AsyncState'
+import { EmptyState, TableLoadingState } from '../../shared/AsyncState'
 import { buildReportFileName, buildSnapshotReportFileName, downloadBlob } from '../../shared/fileExports'
 import { FormError } from '../../shared/formFeedback'
 import { formatMoney, formatMonth, formatOperationTime, getCurrentMonthInputValue, getLocalDateInputValue, getPreviousMonthInputValue } from '../../shared/formatters'
@@ -37,15 +37,6 @@ type ReportFilterOption = {
 type ReportColumn = {
   label: string
   sortField?: string
-}
-
-function getSelectedFilterLabel(selectedValues: string[], options: ReportFilterOption[], allLabel: string) {
-  if (selectedValues.length === 0) {
-    return allLabel
-  }
-
-  const selectedLabels = options.filter((option) => selectedValues.includes(option.value)).map((option) => option.label)
-  return selectedLabels.length > 0 ? selectedLabels.join(', ') : allLabel
 }
 
 function ReportMultiSelect({
@@ -151,6 +142,7 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
   const [dictionaryError, setDictionaryError] = useState<string | null>(null)
   const [consolidatedReport, setConsolidatedReport] = useState<ConsolidatedReportDto | null>(null)
   const [consolidatedReportLoading, setConsolidatedReportLoading] = useState(true)
+  const [consolidatedReportError, setConsolidatedReportError] = useState<string | null>(null)
   const [consolidatedPageNumber, setConsolidatedPageNumber] = useState(1)
   const [consolidatedPageSize, setConsolidatedPageSize] = useState(25)
   const [garageReport, setGarageReport] = useState<GarageDetailReportDto | null>(null)
@@ -175,6 +167,7 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
   const [bankDepositReportError, setBankDepositReportError] = useState<string | null>(null)
   const [feeReport, setFeeReport] = useState<FeeReportDto | null>(null)
   const [feeReportLoading, setFeeReportLoading] = useState(false)
+  const [feeReportError, setFeeReportError] = useState<string | null>(null)
   const [feeSummaryPageNumber, setFeeSummaryPageNumber] = useState(1)
   const [feeSummaryPageSize, setFeeSummaryPageSize] = useState(25)
   const [feeDetailPageNumber, setFeeDetailPageNumber] = useState(1)
@@ -275,7 +268,8 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
 
     async function loadConsolidatedReport() {
       setConsolidatedReportLoading(true)
-      setReportDataError(null)
+      setConsolidatedReport(null)
+      setConsolidatedReportError(null)
       try {
         const consolidatedFilter = monthlyFilters.consolidated
         const monthFrom = getReportMonthStart(consolidatedFilter.monthFrom)
@@ -297,7 +291,7 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
         setConsolidatedReportLoading(false)
       } catch (caught) {
         if (!ignore) {
-          setReportDataError(caught instanceof Error ? caught.message : 'Не удалось загрузить расчетные данные отчетов.')
+          setConsolidatedReportError(caught instanceof Error ? caught.message : 'Не удалось загрузить расчетные данные отчетов.')
           setConsolidatedReportLoading(false)
         }
       }
@@ -319,7 +313,8 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
     async function loadFeeReport() {
       setReportDataSettled((current) => ({ ...current, fees: false }))
       setFeeReportLoading(true)
-      setReportDataError(null)
+      setFeeReport(null)
+      setFeeReportError(null)
       try {
         const sort = reportSorts.fees
         const report = await reportClient.getFeeReport(auth.accessToken, {
@@ -333,7 +328,7 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
         }
       } catch (caught) {
         if (!ignore) {
-          setReportDataError(caught instanceof Error ? caught.message : 'Не удалось загрузить отчет по сборам.')
+          setFeeReportError(caught instanceof Error ? caught.message : 'Не удалось загрузить отчет по сборам.')
         }
       } finally {
         if (!ignore) {
@@ -359,6 +354,7 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
     async function loadGarageReport() {
       setReportDataSettled((current) => ({ ...current, garages: false }))
       setGarageReportLoading(true)
+      setGarageReport(null)
       setGarageReportError(null)
       try {
         const filter = monthlyFilters.garages
@@ -405,6 +401,7 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
     async function loadPayoutReport() {
       setReportDataSettled((current) => ({ ...current, payouts: false }))
       setPayoutReportLoading(true)
+      setPayoutReport(null)
       setPayoutReportError(null)
       try {
         const filter = monthlyFilters.payouts
@@ -453,6 +450,7 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
     async function loadIncomeReport() {
       setReportDataSettled((current) => ({ ...current, income: false }))
       setIncomeReportLoading(true)
+      setIncomeReport(null)
       setIncomeReportError(null)
       try {
         const filter = dateFilters.income
@@ -498,6 +496,7 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
 
     async function loadCashPayments() {
       setCashPaymentReportLoading(true)
+      setCashPaymentReport(null)
       setCashPaymentReportError(null)
       try {
         const filter = dateFilters.cashPayments
@@ -540,6 +539,7 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
 
     async function loadBankDeposits() {
       setBankDepositReportLoading(true)
+      setBankDepositReport(null)
       setBankDepositReportError(null)
       try {
         const filter = dateFilters.bankDeposits
@@ -582,6 +582,7 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
 
     async function loadFundChanges() {
       setFundChangeReportLoading(true)
+      setFundChangeReport(null)
       setFundChangeReportError(null)
       try {
         const filter = dateFilters.funds
@@ -616,13 +617,10 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
   }, [activeReportTab, auth.accessToken, dateFilters.funds, fundChangePageRequest.limit, fundChangePageRequest.offset, reportClient, reportSorts.funds])
 
   const selectedTab = reportWorkbookTabs.find((tab) => tab.key === activeReportTab) ?? reportWorkbookTabs[0]
-  const garageFilterLabel = getSelectedFilterLabel(selectedGarageIds, garages.map((garage) => ({ value: garage.id, label: `Гараж ${garage.number}` })), 'Все гаражи')
-  const incomeGarageFilterLabel = getSelectedFilterLabel(selectedIncomeGarageIds, garages.map((garage) => ({ value: garage.id, label: `Гараж ${garage.number}` })), 'Все гаражи')
   const counterpartyOptions = [
     ...suppliers.map((supplier) => ({ value: `supplier:${supplier.id}`, label: supplier.name })),
     ...staffMembers.map((member) => ({ value: `staff:${member.id}`, label: member.fullName })),
   ]
-  const counterpartyFilterLabel = getSelectedFilterLabel(selectedCounterpartyKeys, counterpartyOptions, 'Все поставщики и сотрудники')
   const feeVariationLabel = feeVariationFilter.trim() || 'Все сборы'
   const feeOptions = Array.from(new Set(['Сбор на ворота', 'Вступительный взнос', 'Целевой взнос', ...incomeTypes.map((item) => item.name)]))
 
@@ -945,6 +943,7 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
     rows: Array<Array<ReactNode>>,
     footer?: Array<ReactNode>,
     sortOptions?: { tab: ReportWorkbookTab; disabled?: boolean },
+    emptyMessage?: string,
   ) {
     const normalizedColumns = columns.map((column) => typeof column === 'string' ? { label: column } : column)
     const sort = sortOptions ? reportSorts[sortOptions.tab] : undefined
@@ -985,6 +984,13 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
               {row.map((cell, cellIndex) => <span role="cell" key={`${ariaLabel}-${rowIndex}-${cellIndex}`}>{cell}</span>)}
             </div>
           ))}
+          {rows.length === 0 && emptyMessage ? (
+            <div className="report-workbook-row report-workbook-row--empty" role="row" style={{ '--report-columns': normalizedColumns.length } as CSSProperties}>
+              <div className="report-workbook-empty-cell" role="cell">
+                <EmptyState className="report-workbook-empty-state">{emptyMessage}</EmptyState>
+              </div>
+            </div>
+          ) : null}
           {footer ? (
             <div className="report-workbook-row report-workbook-row--footer" role="row" style={{ '--report-columns': normalizedColumns.length } as CSSProperties}>
               {footer.map((cell, cellIndex) => <span role="cell" key={`${ariaLabel}-footer-${cellIndex}`}>{cell}</span>)}
@@ -1033,12 +1039,14 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
             {renderReportExportButton('pdf', 'consolidated-pdf', () => void downloadConsolidatedReport('pdf'))}
           </div>
           {consolidatedReportLoading ? <TableLoadingState label="Загружаем сводный отчёт" /> : null}
+          {consolidatedReportError ? <FormError>{consolidatedReportError}</FormError> : null}
           {renderReportTable(
             'Консолидированный отчет',
             [{ label: 'Месяц', sortField: 'accountingMonth' }, { label: 'Поступления', sortField: 'incomeTotal' }, { label: 'Выплаты', sortField: 'expenseTotal' }, 'Разница', { label: 'Начисления', sortField: 'accrualTotal' }, 'На начало месяца', { label: 'На конец месяца', sortField: 'balance' }, { label: 'Задолженность', sortField: 'debt' }, { label: 'Операции', sortField: 'operationCount' }],
-            consolidatedReportLoading ? [] : consolidatedPage.items.length > 0 ? consolidatedPage.items : [['', 'Данных за период нет', '', '', '', '', '', '', '']],
+            consolidatedReportLoading ? [] : consolidatedPage.items,
             consolidatedReport ? ['ИТОГО', formatMoney(consolidatedReport.incomeTotal), formatMoney(consolidatedReport.expenseTotal), formatMoney(consolidatedReport.incomeTotal - consolidatedReport.expenseTotal), formatMoney(consolidatedReport.accrualTotal), '', formatMoney(consolidatedReport.balance), formatMoney(consolidatedReport.debt), String(consolidatedReport.operationCount)] : undefined,
             { tab: 'consolidated', disabled: consolidatedReportLoading },
+            consolidatedReportLoading || consolidatedReportError ? undefined : 'Данных за период нет',
           )}
           <TablePagination
             ariaLabel="Пагинация консолидированного отчета"
@@ -1082,9 +1090,6 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
           formatMoney(row.incomeAmount),
           formatMoney(row.difference),
         ]) ?? []
-      const emptyGarageRow = garageAccrualsGrouped
-        ? ['', garageFilterLabel, '', 'Данных за период нет', '']
-        : ['', garageFilterLabel, '', 'Данных за период нет', '', '']
       const garageReportFooter = garageReport
         ? garageAccrualsGrouped
           ? ['ИТОГО', '', formatMoney(garageReport.accrualTotal), formatMoney(garageReport.incomeTotal), formatMoney(garageReport.difference)]
@@ -1143,9 +1148,10 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
           {renderReportTable(
             'Отчет по гаражам',
             garageReportColumns,
-            garageReportLoading ? [] : reportRows.length > 0 ? reportRows : [emptyGarageRow],
+            garageReportLoading ? [] : reportRows,
             garageReportLoading ? undefined : garageReportFooter,
             { tab: 'garages', disabled: garageReportLoading },
+            garageReportLoading || garageReportError ? undefined : 'Данных за период нет',
           )}
           <TablePagination ariaLabel="Пагинация отчета по гаражам" totalCount={garagePage.totalCount} offset={garagePage.offset} limit={garagePage.limit} visibleCount={garagePage.items.length} disabled={garageReportLoading} pageSizeLabel="Количество строк отчета по гаражам" onPageChange={(page) => setGaragePageRequest((current) => ({ ...current, offset: (page - 1) * current.limit }))} onPageSizeChange={(limit) => setGaragePageRequest({ offset: 0, limit })} />
         </ReportWorkbookSheet>
@@ -1200,9 +1206,10 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
           {renderReportTable(
             'Отчет по выплатам',
             [{ label: 'Месяц', sortField: 'accountingMonth' }, { label: 'Услуга', sortField: 'expenseTypeName' }, { label: 'Поставщик/сотрудник', sortField: 'supplierName' }, { label: 'Начисления', sortField: 'accrualAmount' }, { label: 'Выплаты', sortField: 'expenseAmount' }, { label: 'Разница', sortField: 'difference' }],
-            payoutReportLoading ? [] : reportRows.length > 0 ? reportRows : [['', '', counterpartyFilterLabel, 'Данных за период нет', '', '']],
+            payoutReportLoading ? [] : reportRows,
             !payoutReportLoading && payoutReport ? ['ИТОГО', '', '', formatMoney(payoutReport.accrualTotal), formatMoney(payoutReport.expenseTotal), formatMoney(payoutReport.difference)] : undefined,
             { tab: 'payouts', disabled: payoutReportLoading },
+            payoutReportLoading || payoutReportError ? undefined : 'Данных за период нет',
           )}
           <TablePagination ariaLabel="Пагинация отчета по выплатам" totalCount={payoutPage.totalCount} offset={payoutPage.offset} limit={payoutPage.limit} visibleCount={payoutPage.items.length} disabled={payoutReportLoading} pageSizeLabel="Количество строк отчета по выплатам" onPageChange={(page) => setPayoutPageRequest((current) => ({ ...current, offset: (page - 1) * current.limit }))} onPageSizeChange={(limit) => setPayoutPageRequest({ offset: 0, limit })} />
         </ReportWorkbookSheet>
@@ -1253,9 +1260,10 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
           {renderReportTable(
             'Отчет по поступлениям',
             [{ label: 'Гараж', sortField: 'garageNumber' }, { label: 'Дата', sortField: 'date' }, 'Время', { label: 'Сумма платежа', sortField: 'incomeAmount' }, { label: 'Назначение платежа', sortField: 'incomeTypeName' }, { label: 'Остаток долга после платежа', sortField: 'debt' }],
-            incomeReportLoading ? [] : incomeRows.length > 0 ? incomeRows : [[incomeGarageFilterLabel, '', '', 'Данных за период нет', '', '']],
+            incomeReportLoading ? [] : incomeRows,
             !incomeReportLoading && incomeReport ? ['ИТОГО', '', '', formatMoney(incomeReport.incomeTotal), '', ''] : undefined,
             { tab: 'income', disabled: incomeReportLoading },
+            incomeReportLoading || incomeReportError ? undefined : 'Данных за период нет',
           )}
           <TablePagination ariaLabel="Пагинация отчета по поступлениям" totalCount={incomePage.totalCount} offset={incomePage.offset} limit={incomePage.limit} visibleCount={incomePage.items.length} disabled={incomeReportLoading} pageSizeLabel="Количество строк отчета по поступлениям" onPageChange={(page) => setIncomePageRequest((current) => ({ ...current, offset: (page - 1) * current.limit }))} onPageSizeChange={(limit) => setIncomePageRequest({ offset: 0, limit })} />
         </ReportWorkbookSheet>
@@ -1289,9 +1297,10 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
           {renderReportTable(
             'Отчет по оплатам из кассы',
             [{ label: 'Дата', sortField: 'date' }, { label: 'Сумма', sortField: 'amount' }, { label: 'Наличие чека', sortField: 'hasReceipt' }, { label: 'Назначение', sortField: 'purpose' }, 'Комментарий'],
-            cashPaymentReportLoading ? [] : cashRows.length > 0 ? cashRows : [['', 'Операций за период нет', '', '', '']],
+            cashPaymentReportLoading ? [] : cashRows,
             !cashPaymentReportLoading && cashPaymentReport ? ['ИТОГО', formatMoney(cashPaymentReport.total), '', '', `${cashPaymentReport.rowCount} операций`] : undefined,
             { tab: 'cashPayments', disabled: cashPaymentReportLoading },
+            cashPaymentReportLoading || cashPaymentReportError ? undefined : 'Операций за период нет',
           )}
           <TablePagination ariaLabel="Пагинация отчета по оплатам из кассы" totalCount={cashPaymentPage.totalCount} offset={cashPaymentPage.offset} limit={cashPaymentPage.limit} visibleCount={cashPaymentPage.items.length} disabled={cashPaymentReportLoading} pageSizeLabel="Количество строк отчета по оплатам из кассы" onPageChange={(page) => setCashPaymentPageRequest((current) => ({ ...current, offset: (page - 1) * current.limit }))} onPageSizeChange={(limit) => setCashPaymentPageRequest({ offset: 0, limit })} />
         </ReportWorkbookSheet>
@@ -1323,9 +1332,10 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
           {renderReportTable(
             'Отчет по сдаче кассы в банк',
             [{ label: 'Дата', sortField: 'date' }, { label: 'Сумма', sortField: 'amount' }, { label: 'Комментарий', sortField: 'comment' }],
-            bankDepositReportLoading ? [] : bankRows.length > 0 ? bankRows : [['', 'Операций за период нет', '']],
+            bankDepositReportLoading ? [] : bankRows,
             !bankDepositReportLoading && bankDepositReport ? ['ИТОГО', formatMoney(bankDepositReport.total), `${bankDepositReport.rowCount} операций`] : undefined,
             { tab: 'bankDeposits', disabled: bankDepositReportLoading },
+            bankDepositReportLoading || bankDepositReportError ? undefined : 'Операций за период нет',
           )}
           <TablePagination ariaLabel="Пагинация отчета по сдаче кассы в банк" totalCount={bankDepositPage.totalCount} offset={bankDepositPage.offset} limit={bankDepositPage.limit} visibleCount={bankDepositPage.items.length} disabled={bankDepositReportLoading} pageSizeLabel="Количество строк отчета по сдаче кассы в банк" onPageChange={(page) => setBankDepositPageRequest((current) => ({ ...current, offset: (page - 1) * current.limit }))} onPageSizeChange={(limit) => setBankDepositPageRequest({ offset: 0, limit })} />
         </ReportWorkbookSheet>
@@ -1366,13 +1376,11 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
         row.lastPaymentDate ?? '',
         formatMoney(row.debt),
       ])
-      const feeDetailEmptyRow = feeDetailMode === 'debtors'
-        ? ['', '', '', '', '', 'Должников нет']
-        : ['', '', '', '', '', 'Данных по гаражам нет']
       const feeDetailTableName = feeDetailMode === 'debtors' ? 'Должники по сбору' : 'Гаражи по сбору'
       return (
-        <ReportWorkbookSheet title="Отчёт по сборам">
+          <ReportWorkbookSheet title="Отчёт по сборам">
           {feeReportLoading ? <TableLoadingState label="Загружаем отчёт по сборам" /> : null}
+          {feeReportError ? <FormError>{feeReportError}</FormError> : null}
           <div className="report-workbook-filter report-workbook-filter--single" aria-label="Фильтры отчета по сборам">
             <label className="report-workbook-filter-wide">
               <span>Вариация сбора</span>
@@ -1387,8 +1395,10 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
             {renderReportTable(
               'Отчет по сборам',
               ['Наименование', 'Цель', 'Сумма сбора', 'Собрано'],
-              summaryRows.length > 0 ? summaryRows : [[feeVariationLabel, 'Данных по сбору нет', '', '']],
+              summaryRows,
               feeReport ? ['ИТОГО', '', formatMoney(feeReport.accruedTotal), formatMoney(feeReport.collectedTotal)] : undefined,
+              undefined,
+              feeReportLoading || feeReportError ? undefined : 'Данных по сбору нет',
             )}
             <TablePagination
               ariaLabel="Пагинация отчета по сборам"
@@ -1431,9 +1441,10 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
                   {renderReportTable(
                     feeDetailTableName,
                     [{ label: 'Гараж', sortField: 'garageNumber' }, { label: 'Владелец', sortField: 'ownerName' }, { label: 'Начислено', sortField: 'accrued' }, { label: 'Оплачено', sortField: 'paid' }, { label: 'Дата', sortField: 'lastPaymentDate' }, { label: 'Задолженность', sortField: 'debt' }],
-                    feeDetailTableRows.length > 0 ? feeDetailTableRows : [feeDetailEmptyRow],
+                    feeDetailTableRows,
                     undefined,
                     { tab: 'fees', disabled: feeReportLoading },
+                    feeReportLoading || feeReportError ? undefined : feeDetailMode === 'debtors' ? 'Должников нет' : 'Данных по гаражам нет',
                   )}
                   <TablePagination
                     ariaLabel="Пагинация детализации сбора"
@@ -1466,9 +1477,6 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
       row.actorDisplayName ?? '',
       row.reason,
     ]) ?? []
-    const visibleFundRows = fundRows.length > 0
-      ? fundRows
-      : [['', '', 'Операций за период нет', '', '', '', '', '']]
     const fundPage = {
       items: fundChangeReport?.rows ?? [],
       totalCount: fundChangeReport?.rowCount ?? 0,
@@ -1495,9 +1503,10 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
         {renderReportTable(
           'Отчет по изменению фондов',
           [{ label: 'Фонд', sortField: 'fundName' }, { label: 'Дата', sortField: 'date' }, { label: 'Изменение', sortField: 'changeName' }, { label: 'Сумма', sortField: 'amount' }, { label: 'Сумма до', sortField: 'balanceBefore' }, { label: 'Сумма после', sortField: 'balanceAfter' }, { label: 'Пользователь', sortField: 'actorDisplayName' }, { label: 'Комментарий', sortField: 'reason' }],
-          fundChangeReportLoading ? [] : visibleFundRows,
+          fundChangeReportLoading ? [] : fundRows,
           undefined,
           { tab: 'funds', disabled: fundChangeReportLoading },
+          fundChangeReportLoading || fundChangeReportError ? undefined : 'Операций за период нет',
         )}
         <TablePagination ariaLabel="Пагинация отчета по изменению фондов" totalCount={fundPage.totalCount} offset={fundPage.offset} limit={fundPage.limit} visibleCount={fundPage.items.length} disabled={fundChangeReportLoading} pageSizeLabel="Количество строк отчета по изменению фондов" onPageChange={(page) => setFundChangePageRequest((current) => ({ ...current, offset: (page - 1) * current.limit }))} onPageSizeChange={(limit) => setFundChangePageRequest({ offset: 0, limit })} />
       </ReportWorkbookSheet>
