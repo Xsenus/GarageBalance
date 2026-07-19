@@ -1,6 +1,7 @@
 using GarageBalance.Api.Application.Reports;
 using GarageBalance.Api.Domain.Finance;
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
 
 namespace GarageBalance.Api.Infrastructure.Data;
 
@@ -44,6 +45,23 @@ public sealed class EfGarageReportQuery(GarageBalanceDbContext dbContext) : IGar
         CancellationToken cancellationToken)
     {
         var dateTo = periodTo.AddMonths(1).AddDays(-1);
+        if (IsNpgsql())
+        {
+            return await GetPostgresRowsAsync(
+                periodFrom,
+                periodTo,
+                dateTo,
+                search,
+                selectedGarageIds,
+                ownerIds,
+                incomeTypeIds,
+                groupAccruals,
+                offset,
+                limit,
+                sort,
+                cancellationToken);
+        }
+
         var garages = dbContext.Garages.AsNoTracking().Where(garage => !garage.IsArchived);
         if (selectedGarageIds.Count > 0)
         {
@@ -245,6 +263,216 @@ public sealed class EfGarageReportQuery(GarageBalanceDbContext dbContext) : IGar
                     row.IncomeAmount))
                 .ToList());
     }
+
+    private async Task<GarageReportQueryData> GetPostgresRowsAsync(
+        DateOnly periodFrom,
+        DateOnly periodTo,
+        DateOnly dateTo,
+        string? search,
+        IReadOnlySet<Guid> selectedGarageIds,
+        IReadOnlySet<Guid> ownerIds,
+        IReadOnlySet<Guid> incomeTypeIds,
+        bool groupAccruals,
+        int offset,
+        int? limit,
+        ReportSort sort,
+        CancellationToken cancellationToken)
+    {
+        const int PageCategory = 1;
+        const int TotalsCategory = 2;
+        var normalizedSearch = search?.Trim().ToLowerInvariant();
+        var hasSearch = !string.IsNullOrWhiteSpace(normalizedSearch);
+        var sortColumn = sort.Field switch
+        {
+            "garageNumber" => "garage_number",
+            "ownerName" => "owner_name",
+            "incomeTypeName" => "income_type_name",
+            "accrualAmount" => "accrual_amount",
+            "incomeAmount" => "income_amount",
+            "difference" => "difference",
+            _ => "accounting_month"
+        };
+        var direction = sort.Descending ? "DESC" : "ASC";
+        var garageClause = selectedGarageIds.Count > 0 ? "AND garage.\"Id\" = ANY(@garage_ids)" : string.Empty;
+        var ownerClause = ownerIds.Count > 0 ? "AND garage.\"OwnerId\" = ANY(@owner_ids)" : string.Empty;
+        var incomeTypeClause = incomeTypeIds.Count > 0 ? "AND income_type.\"Id\" = ANY(@income_type_ids)" : string.Empty;
+        var searchClause = hasSearch
+            ? """
+              AND (STRPOS(LOWER(garage."Number"), @search) > 0
+                   OR STRPOS(LOWER(owner."LastName"), @search) > 0
+                   OR STRPOS(LOWER(owner."FirstName"), @search) > 0
+                   OR STRPOS(LOWER(owner."MiddleName"), @search) > 0
+                   OR STRPOS(LOWER(owner."LastName" || ' ' || owner."FirstName"), @search) > 0
+                   OR STRPOS(LOWER(owner."LastName" || ' ' || owner."FirstName" || ' ' || COALESCE(owner."MiddleName", '')), @search) > 0)
+              """
+            : string.Empty;
+        var groupedRowsSql = groupAccruals
+            ? """
+              SELECT accounting_month, garage_id, garage_number,
+                     owner_last_name, owner_first_name, owner_middle_name,
+                     COALESCE(owner_last_name, '') || ' ' || COALESCE(owner_first_name, '') || ' ' || COALESCE(owner_middle_name, '') AS owner_name,
+                     NULL::uuid AS income_type_id, 'ИТОГО'::text AS income_type_name,
+                     SUM(accrual_amount) AS accrual_amount, SUM(income_amount) AS income_amount,
+                     SUM(accrual_amount) - SUM(income_amount) AS difference
+              FROM source_rows
+              GROUP BY accounting_month, garage_id, garage_number,
+                       owner_last_name, owner_first_name, owner_middle_name
+              """
+            : """
+              SELECT accounting_month, garage_id, garage_number,
+                     owner_last_name, owner_first_name, owner_middle_name,
+                     COALESCE(owner_last_name, '') || ' ' || COALESCE(owner_first_name, '') || ' ' || COALESCE(owner_middle_name, '') AS owner_name,
+                     income_type_id, income_type_name,
+                     SUM(accrual_amount) AS accrual_amount, SUM(income_amount) AS income_amount,
+                     SUM(accrual_amount) - SUM(income_amount) AS difference
+              FROM source_rows
+              GROUP BY accounting_month, garage_id, garage_number,
+                       owner_last_name, owner_first_name, owner_middle_name,
+                       income_type_id, income_type_name
+              """;
+        var limitClause = limit is > 0 ? "LIMIT @limit" : string.Empty;
+        var sql = $$"""
+            WITH filtered_garages AS (
+                SELECT garage."Id" AS garage_id,
+                       garage."Number" AS garage_number,
+                       garage."StartingBalance" AS starting_balance,
+                       owner."LastName" AS owner_last_name,
+                       owner."FirstName" AS owner_first_name,
+                       owner."MiddleName" AS owner_middle_name
+                FROM garages garage
+                LEFT JOIN owners owner ON owner."Id" = garage."OwnerId"
+                WHERE garage."IsArchived" = FALSE
+                  {{garageClause}}
+                  {{ownerClause}}
+                  {{searchClause}}
+            ), source_rows AS (
+                SELECT @period_from::date AS accounting_month,
+                       garage_id, garage_number,
+                       owner_last_name, owner_first_name, owner_middle_name,
+                       NULL::uuid AS income_type_id,
+                       'Стартовый баланс'::text AS income_type_name,
+                       starting_balance AS accrual_amount,
+                       0::numeric AS income_amount
+                FROM filtered_garages
+                WHERE @include_starting_balances = TRUE
+                  AND starting_balance <> 0
+                UNION ALL
+                SELECT accrual."AccountingMonth", garage.garage_id, garage.garage_number,
+                       garage.owner_last_name, garage.owner_first_name, garage.owner_middle_name,
+                       income_type."Id", income_type."Name", accrual."Amount", 0::numeric
+                FROM accruals accrual
+                INNER JOIN filtered_garages garage ON garage.garage_id = accrual."GarageId"
+                INNER JOIN income_types income_type ON income_type."Id" = accrual."IncomeTypeId"
+                WHERE accrual."IsCanceled" = FALSE
+                  AND accrual."AccountingMonth" >= @period_from::date
+                  AND accrual."AccountingMonth" <= @period_to::date
+                  {{incomeTypeClause}}
+                UNION ALL
+                SELECT operation."AccountingMonth", garage.garage_id, garage.garage_number,
+                       garage.owner_last_name, garage.owner_first_name, garage.owner_middle_name,
+                       income_type."Id", income_type."Name", 0::numeric, operation."Amount"
+                FROM financial_operations operation
+                INNER JOIN filtered_garages garage ON garage.garage_id = operation."GarageId"
+                INNER JOIN income_types income_type ON income_type."Id" = operation."IncomeTypeId"
+                WHERE operation."IsCanceled" = FALSE
+                  AND operation."OperationKind" = 'income'
+                  AND operation."GarageId" IS NOT NULL
+                  AND operation."IncomeTypeId" IS NOT NULL
+                  AND operation."OperationDate" >= @period_from::date
+                  AND operation."OperationDate" <= @date_to::date
+                  {{incomeTypeClause}}
+            ), grouped_rows AS (
+                {{groupedRowsSql}}
+            ), page_rows AS (
+                SELECT grouped_rows.*,
+                       ROW_NUMBER() OVER (
+                           ORDER BY {{sortColumn}} {{direction}}, garage_number, income_type_name, accounting_month, garage_id)::int AS row_order
+                FROM grouped_rows
+                ORDER BY {{sortColumn}} {{direction}}, garage_number, income_type_name, accounting_month, garage_id
+                OFFSET @offset
+                {{limitClause}}
+            )
+            SELECT {{PageCategory}} AS "Category", row_order AS "RowOrder",
+                   accounting_month AS "AccountingMonth", garage_id AS "GarageId", garage_number AS "GarageNumber",
+                   owner_last_name AS "OwnerLastName", owner_first_name AS "OwnerFirstName", owner_middle_name AS "OwnerMiddleName",
+                   income_type_id AS "IncomeTypeId", income_type_name AS "IncomeTypeName",
+                   accrual_amount AS "AccrualAmount", income_amount AS "IncomeAmount",
+                   0::numeric AS "AccrualTotal", 0::numeric AS "IncomeTotal", 0 AS "RowCount"
+            FROM page_rows
+            UNION ALL
+            SELECT {{TotalsCategory}}, 0, NULL::date, NULL::uuid, NULL::text,
+                   NULL::text, NULL::text, NULL::text, NULL::uuid, NULL::text,
+                   0::numeric, 0::numeric,
+                   COALESCE(SUM(accrual_amount), 0), COALESCE(SUM(income_amount), 0), COUNT(*)::int
+            FROM grouped_rows
+            ORDER BY "Category", "RowOrder"
+            """;
+        var parameters = new List<object>
+        {
+            new NpgsqlParameter<bool>("include_starting_balances", incomeTypeIds.Count == 0),
+            new NpgsqlParameter<DateOnly>("period_from", periodFrom),
+            new NpgsqlParameter<DateOnly>("period_to", periodTo),
+            new NpgsqlParameter<DateOnly>("date_to", dateTo),
+            new NpgsqlParameter<int>("offset", offset)
+        };
+        if (selectedGarageIds.Count > 0)
+        {
+            parameters.Add(new NpgsqlParameter<Guid[]>("garage_ids", selectedGarageIds.ToArray()));
+        }
+        if (ownerIds.Count > 0)
+        {
+            parameters.Add(new NpgsqlParameter<Guid[]>("owner_ids", ownerIds.ToArray()));
+        }
+        if (incomeTypeIds.Count > 0)
+        {
+            parameters.Add(new NpgsqlParameter<Guid[]>("income_type_ids", incomeTypeIds.ToArray()));
+        }
+        if (hasSearch)
+        {
+            parameters.Add(new NpgsqlParameter<string>("search", normalizedSearch!));
+        }
+        if (limit is > 0)
+        {
+            parameters.Add(new NpgsqlParameter<int>("limit", limit.Value));
+        }
+
+        var combinedRows = await dbContext.Database
+            .SqlQueryRaw<GarageReportCombinedQueryRow>(sql, parameters.ToArray())
+            .ToListAsync(cancellationToken);
+        var totals = combinedRows.Single(row => row.Category == TotalsCategory);
+        var rows = combinedRows
+            .Where(row => row.Category == PageCategory)
+            .Select(row => new GarageReportQueryRow(
+                row.AccountingMonth!.Value,
+                row.GarageId!.Value,
+                row.GarageNumber!,
+                row.OwnerLastName,
+                row.OwnerFirstName,
+                row.OwnerMiddleName,
+                row.IncomeTypeId,
+                row.IncomeTypeName!,
+                row.AccrualAmount,
+                row.IncomeAmount))
+            .ToList();
+        return new GarageReportQueryData(totals.AccrualTotal, totals.IncomeTotal, totals.RowCount, rows);
+    }
+
+    private sealed record GarageReportCombinedQueryRow(
+        int Category,
+        int RowOrder,
+        DateOnly? AccountingMonth,
+        Guid? GarageId,
+        string? GarageNumber,
+        string? OwnerLastName,
+        string? OwnerFirstName,
+        string? OwnerMiddleName,
+        Guid? IncomeTypeId,
+        string? IncomeTypeName,
+        decimal AccrualAmount,
+        decimal IncomeAmount,
+        decimal AccrualTotal,
+        decimal IncomeTotal,
+        int RowCount);
 
     private bool IsNpgsql() =>
         dbContext.Database.ProviderName?.Contains("Npgsql", StringComparison.OrdinalIgnoreCase) ?? false;

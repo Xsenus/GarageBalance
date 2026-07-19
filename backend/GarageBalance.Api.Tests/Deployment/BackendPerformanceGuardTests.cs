@@ -617,6 +617,8 @@ public sealed class BackendPerformanceGuardTests
     public void GarageReportScreenQuery_AggregatesCountsTotalsAndPageInDatabase()
     {
         var source = ReadApiSource("Infrastructure/Data/EfGarageReportQuery.cs");
+        var postgresMethod = source[
+            source.IndexOf("private async Task<GarageReportQueryData> GetPostgresRowsAsync", StringComparison.Ordinal)..source.IndexOf("private sealed record GarageReportCombinedQueryRow", StringComparison.Ordinal)];
 
         Assert.True(CountOccurrences(source, ".Concat(") >= 2, "Garage report sources must remain a SQL UNION ALL pipeline.");
         Assert.True(CountOccurrences(source, ".GroupBy(") >= 2, "Expanded and grouped garage modes must aggregate before paging.");
@@ -630,6 +632,15 @@ public sealed class BackendPerformanceGuardTests
         Assert.Contains("limit is > 0 ? page.Take(limit.Value) : page", source, StringComparison.Ordinal);
         Assert.Contains("if (IsNpgsql())", source, StringComparison.Ordinal);
         Assert.Contains("matchingGarageIds", source, StringComparison.Ordinal);
+        Assert.Contains("WITH filtered_garages AS", postgresMethod, StringComparison.Ordinal);
+        Assert.Contains("COALESCE(SUM(accrual_amount), 0)", postgresMethod, StringComparison.Ordinal);
+        Assert.Contains("COALESCE(SUM(income_amount), 0)", postgresMethod, StringComparison.Ordinal);
+        Assert.Contains("COUNT(*)::int", postgresMethod, StringComparison.Ordinal);
+        Assert.Contains("SqlQueryRaw<GarageReportCombinedQueryRow>", postgresMethod, StringComparison.Ordinal);
+        Assert.Equal(1, CountOccurrences(postgresMethod, ".ToListAsync(cancellationToken)"));
+        Assert.Equal(1, CountOccurrences(postgresMethod, "FROM financial_operations"));
+        Assert.Equal(1, CountOccurrences(postgresMethod, "FROM accruals"));
+        Assert.Equal(1, CountOccurrences(postgresMethod, "FROM garages"));
     }
 
     [Fact]
@@ -1054,6 +1065,8 @@ public sealed class BackendPerformanceGuardTests
         Assert.Contains("PostgreSqlExpenseReportAllQueryIntegrationTests.AllRowsLoadAccrualPaymentTotalsAndBoundedPageInOneCommand", document, StringComparison.Ordinal);
         Assert.Contains("Sixty-fifth income-all command consolidation audit", document, StringComparison.Ordinal);
         Assert.Contains("PostgreSqlIncomeReportAllQueryIntegrationTests.AllRowsLoadTotalsBoundedPageAndSequentialDebtInAtMostTwoCommands", document, StringComparison.Ordinal);
+        Assert.Contains("Sixty-sixth garage-report command consolidation audit", document, StringComparison.Ordinal);
+        Assert.Contains("PostgreSqlGarageReportQueryIntegrationTests.GarageReportReturnsTotalsCountAndBoundedGroupedOrExpandedPageInOneCommand", document, StringComparison.Ordinal);
         Assert.Contains("Shared end-user release `0.758.0`", document, StringComparison.Ordinal);
         Assert.Contains("limit", document, StringComparison.Ordinal);
         Assert.Contains("rowCount", document, StringComparison.Ordinal);
