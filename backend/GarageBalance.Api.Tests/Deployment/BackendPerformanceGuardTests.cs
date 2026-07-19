@@ -179,11 +179,18 @@ public sealed class BackendPerformanceGuardTests
     {
         var source = ReadApiSource("Infrastructure/Data/EfMissingMeterReadingQuery.cs");
 
+        Assert.Contains("dbContext.Database.IsNpgsql()", source, StringComparison.Ordinal);
+        Assert.Contains("GetPostgreSqlCandidatesAsync", source, StringComparison.Ordinal);
+        Assert.Contains("SqlQuery<MissingMeterCandidateRow>", source, StringComparison.Ordinal);
+        Assert.Contains("COUNT(*) FILTER", source, StringComparison.Ordinal);
+        Assert.Contains("FROM meter_readings AS reading", source, StringComparison.Ordinal);
+        Assert.Contains("GROUP BY reading.\"GarageId\"", source, StringComparison.Ordinal);
+        Assert.Contains("LEFT JOIN (", source, StringComparison.Ordinal);
+        Assert.Contains("LIMIT {{limit}}", source, StringComparison.Ordinal);
         Assert.Contains("!dbContext.MeterReadings.Any", source, StringComparison.Ordinal);
-        Assert.True(CountOccurrences(source, ".Take(limit)") >= 3);
+        Assert.True(CountOccurrences(source, ".Take(limit)") >= 2);
         Assert.True(CountOccurrences(source, ".ToListAsync(cancellationToken)") >= 2);
         Assert.Contains(".Where(garage => !garage.IsArchived)", source, StringComparison.Ordinal);
-        Assert.Contains("normalizedSearch is not null && IsSqliteProvider()", source, StringComparison.Ordinal);
         Assert.Contains("CandidateMatchesSearch", source, StringComparison.Ordinal);
         Assert.Contains("HasWaterReading", source, StringComparison.Ordinal);
         Assert.Contains("HasElectricityReading", source, StringComparison.Ordinal);
@@ -328,6 +335,7 @@ public sealed class BackendPerformanceGuardTests
         Assert.Contains("Разделы системы загружаются быстрее и стабильнее", releaseNotes, StringComparison.Ordinal);
         Assert.Contains("только один приоритетный контакт для каждой видимой строки", releaseNotes, StringComparison.Ordinal);
         Assert.Contains("Сводка фондов считает поступления и выплаты за один проход", releaseNotes, StringComparison.Ordinal);
+        Assert.Contains("Проверка отсутствующих показаний воды и электричества теперь один раз", releaseNotes, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -915,6 +923,8 @@ public sealed class BackendPerformanceGuardTests
         Assert.Contains("PostgreSqlSupplierPrimaryContactIntegrationTests.SupplierPage_ProjectsOneRankedContactPerSupplierInPostgreSql", document, StringComparison.Ordinal);
         Assert.Contains("Forty-ninth fund-totals aggregation audit", document, StringComparison.Ordinal);
         Assert.Contains("PostgreSqlFundTotalsIntegrationTests.GetTotalsAsync_KeepsFinancialTotalsWhenFundCatalogIsEmptyAndUsesOneUnionQuery", document, StringComparison.Ordinal);
+        Assert.Contains("Fiftieth missing-meter-reading aggregation audit", document, StringComparison.Ordinal);
+        Assert.Contains("PostgreSqlMissingMeterReadingQueryIntegrationTests.GetMissingAsync_AggregatesMonthlyReadingStatusOnceAndKeepsMissingKindsExact", document, StringComparison.Ordinal);
         Assert.Contains("Shared end-user release `0.758.0`", document, StringComparison.Ordinal);
         Assert.Contains("limit", document, StringComparison.Ordinal);
         Assert.Contains("rowCount", document, StringComparison.Ordinal);

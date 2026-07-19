@@ -21,57 +21,54 @@ public sealed class EfMissingMeterReadingQuery(GarageBalanceDbContext dbContext)
 
         var includeWater = meterKinds.Contains(MeterKinds.Water, StringComparer.Ordinal);
         var includeElectricity = meterKinds.Contains(MeterKinds.Electricity, StringComparer.Ordinal);
-        var garagesQuery = dbContext.Garages.AsNoTracking()
-            .Where(garage => !garage.IsArchived)
-            .Where(garage =>
-                (includeWater && !dbContext.MeterReadings.Any(reading =>
-                    !reading.IsCanceled &&
-                    reading.GarageId == garage.Id &&
-                    reading.AccountingMonth == accountingMonth &&
-                    reading.MeterKind == MeterKinds.Water)) ||
-                (includeElectricity && !dbContext.MeterReadings.Any(reading =>
-                    !reading.IsCanceled &&
-                    reading.GarageId == garage.Id &&
-                    reading.AccountingMonth == accountingMonth &&
-                    reading.MeterKind == MeterKinds.Electricity)));
-
-        if (normalizedSearch is not null && !IsSqliteProvider())
-        {
-            garagesQuery = ApplySearch(garagesQuery, normalizedSearch);
-        }
-
-        var candidateQuery = garagesQuery
-            .OrderBy(garage => garage.Number)
-            .Select(garage => new MissingMeterCandidate(
-                garage.Id,
-                garage.Number,
-                garage.Owner == null ? null : garage.Owner.LastName,
-                garage.Owner == null ? null : garage.Owner.FirstName,
-                garage.Owner == null ? null : garage.Owner.MiddleName,
-                dbContext.MeterReadings.Any(reading =>
-                    !reading.IsCanceled &&
-                    reading.GarageId == garage.Id &&
-                    reading.AccountingMonth == accountingMonth &&
-                    reading.MeterKind == MeterKinds.Water),
-                dbContext.MeterReadings.Any(reading =>
-                    !reading.IsCanceled &&
-                    reading.GarageId == garage.Id &&
-                    reading.AccountingMonth == accountingMonth &&
-                    reading.MeterKind == MeterKinds.Electricity)));
-
         IReadOnlyList<MissingMeterCandidate> candidates;
-        if (normalizedSearch is not null && IsSqliteProvider())
+        if (dbContext.Database.IsNpgsql())
         {
-            candidates = (await candidateQuery.ToListAsync(cancellationToken))
-                .Where(candidate => CandidateMatchesSearch(candidate, normalizedSearch))
-                .Take(limit)
-                .ToList();
+            candidates = await GetPostgreSqlCandidatesAsync(
+                accountingMonth,
+                normalizedSearch,
+                includeWater,
+                includeElectricity,
+                limit,
+                cancellationToken);
         }
         else
         {
-            candidates = await candidateQuery
+            var garagesQuery = dbContext.Garages.AsNoTracking()
+                .Where(garage => !garage.IsArchived)
+                .Where(garage =>
+                    (includeWater && !dbContext.MeterReadings.Any(reading =>
+                        !reading.IsCanceled &&
+                        reading.GarageId == garage.Id &&
+                        reading.AccountingMonth == accountingMonth &&
+                        reading.MeterKind == MeterKinds.Water)) ||
+                    (includeElectricity && !dbContext.MeterReadings.Any(reading =>
+                        !reading.IsCanceled &&
+                        reading.GarageId == garage.Id &&
+                        reading.AccountingMonth == accountingMonth &&
+                        reading.MeterKind == MeterKinds.Electricity)));
+            var candidateQuery = garagesQuery
+                .OrderBy(garage => garage.Number)
+                .Select(garage => new MissingMeterCandidate(
+                    garage.Id,
+                    garage.Number,
+                    garage.Owner == null ? null : garage.Owner.LastName,
+                    garage.Owner == null ? null : garage.Owner.FirstName,
+                    garage.Owner == null ? null : garage.Owner.MiddleName,
+                    dbContext.MeterReadings.Any(reading =>
+                        !reading.IsCanceled &&
+                        reading.GarageId == garage.Id &&
+                        reading.AccountingMonth == accountingMonth &&
+                        reading.MeterKind == MeterKinds.Water),
+                    dbContext.MeterReadings.Any(reading =>
+                        !reading.IsCanceled &&
+                        reading.GarageId == garage.Id &&
+                        reading.AccountingMonth == accountingMonth &&
+                        reading.MeterKind == MeterKinds.Electricity)));
+            candidates = (await candidateQuery.ToListAsync(cancellationToken))
+                .Where(candidate => normalizedSearch is null || CandidateMatchesSearch(candidate, normalizedSearch))
                 .Take(limit)
-                .ToListAsync(cancellationToken);
+                .ToList();
         }
 
         return candidates
@@ -86,14 +83,75 @@ public sealed class EfMissingMeterReadingQuery(GarageBalanceDbContext dbContext)
             .ToList();
     }
 
-    private static IQueryable<Garage> ApplySearch(IQueryable<Garage> query, string normalizedSearch) =>
-        query.Where(garage =>
-            garage.Number.ToLower().Contains(normalizedSearch) ||
-            (garage.Owner != null && (
-                garage.Owner.LastName.ToLower().Contains(normalizedSearch) ||
-                garage.Owner.FirstName.ToLower().Contains(normalizedSearch) ||
-                (garage.Owner.MiddleName != null && garage.Owner.MiddleName.ToLower().Contains(normalizedSearch)) ||
-                (garage.Owner.LastName + " " + garage.Owner.FirstName + " " + (garage.Owner.MiddleName ?? string.Empty)).ToLower().Contains(normalizedSearch))));
+    private async Task<IReadOnlyList<MissingMeterCandidate>> GetPostgreSqlCandidatesAsync(
+        DateOnly accountingMonth,
+        string? normalizedSearch,
+        bool includeWater,
+        bool includeElectricity,
+        int limit,
+        CancellationToken cancellationToken)
+    {
+        var rows = await dbContext.Database.SqlQuery<MissingMeterCandidateRow>($$"""
+            SELECT
+                garage."Id" AS "GarageId",
+                garage."Number" AS "GarageNumber",
+                owner."LastName" AS "OwnerLastName",
+                owner."FirstName" AS "OwnerFirstName",
+                owner."MiddleName" AS "OwnerMiddleName",
+                COALESCE(reading_status."HasWaterReading", FALSE) AS "HasWaterReading",
+                COALESCE(reading_status."HasElectricityReading", FALSE) AS "HasElectricityReading"
+            FROM garages AS garage
+            LEFT JOIN owners AS owner ON owner."Id" = garage."OwnerId"
+            LEFT JOIN (
+                SELECT
+                    reading."GarageId",
+                    COUNT(*) FILTER (WHERE reading."MeterKind" = {{MeterKinds.Water}}) > 0 AS "HasWaterReading",
+                    COUNT(*) FILTER (WHERE reading."MeterKind" = {{MeterKinds.Electricity}}) > 0 AS "HasElectricityReading"
+                FROM meter_readings AS reading
+                WHERE reading."IsCanceled" = FALSE
+                  AND reading."AccountingMonth" = {{accountingMonth}}
+                  AND reading."MeterKind" IN ({{MeterKinds.Water}}, {{MeterKinds.Electricity}})
+                GROUP BY reading."GarageId"
+            ) AS reading_status ON reading_status."GarageId" = garage."Id"
+            WHERE garage."IsArchived" = FALSE
+              AND (
+                    ({{includeWater}} AND NOT COALESCE(reading_status."HasWaterReading", FALSE))
+                 OR ({{includeElectricity}} AND NOT COALESCE(reading_status."HasElectricityReading", FALSE))
+              )
+              AND (
+                    {{normalizedSearch}}::text IS NULL
+                 OR STRPOS(LOWER(garage."Number"), {{normalizedSearch}}) > 0
+                 OR STRPOS(LOWER(owner."LastName"), {{normalizedSearch}}) > 0
+                 OR STRPOS(LOWER(owner."FirstName"), {{normalizedSearch}}) > 0
+                 OR STRPOS(LOWER(COALESCE(owner."MiddleName", '')), {{normalizedSearch}}) > 0
+                 OR STRPOS(LOWER(CONCAT_WS(' ', owner."LastName", owner."FirstName", owner."MiddleName")), {{normalizedSearch}}) > 0
+              )
+            ORDER BY garage."Number"
+            LIMIT {{limit}}
+            """).ToListAsync(cancellationToken);
+
+        return rows
+            .Select(row => new MissingMeterCandidate(
+                row.GarageId,
+                row.GarageNumber,
+                row.OwnerLastName,
+                row.OwnerFirstName,
+                row.OwnerMiddleName,
+                row.HasWaterReading,
+                row.HasElectricityReading))
+            .ToList();
+    }
+
+    private sealed class MissingMeterCandidateRow
+    {
+        public Guid GarageId { get; set; }
+        public string GarageNumber { get; set; } = string.Empty;
+        public string? OwnerLastName { get; set; }
+        public string? OwnerFirstName { get; set; }
+        public string? OwnerMiddleName { get; set; }
+        public bool HasWaterReading { get; set; }
+        public bool HasElectricityReading { get; set; }
+    }
 
     private static bool CandidateMatchesSearch(MissingMeterCandidate candidate, string normalizedSearch) =>
         candidate.GarageNumber.Contains(normalizedSearch, StringComparison.OrdinalIgnoreCase) ||
@@ -120,9 +178,6 @@ public sealed class EfMissingMeterReadingQuery(GarageBalanceDbContext dbContext)
         return string.Join(' ', new[] { candidate.OwnerLastName, candidate.OwnerFirstName, candidate.OwnerMiddleName }
             .Where(part => !string.IsNullOrWhiteSpace(part)));
     }
-
-    private bool IsSqliteProvider() =>
-        dbContext.Database.ProviderName?.Contains("Sqlite", StringComparison.OrdinalIgnoreCase) == true;
 
     private sealed record MissingMeterCandidate(
         Guid GarageId,
