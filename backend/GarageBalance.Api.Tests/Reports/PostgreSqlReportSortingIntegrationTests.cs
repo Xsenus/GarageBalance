@@ -4,6 +4,7 @@ using GarageBalance.Api.Domain.Finance;
 using GarageBalance.Api.Infrastructure.Data;
 using GarageBalance.Api.Tests.Common;
 using Microsoft.EntityFrameworkCore;
+using System.Diagnostics;
 
 namespace GarageBalance.Api.Tests.Reports;
 
@@ -419,6 +420,147 @@ public sealed class PostgreSqlReportSortingIntegrationTests
                 Assert.Single(page.GarageRows);
             }
         }
+    }
+
+    [PostgreSqlFact]
+    public async Task HistoricalReportQueriesStayPagedAndCompleteAtRealisticVolume()
+    {
+        const int garageCount = 300;
+        const int monthCount = 36;
+        const int pageSize = 25;
+        var expectedRowCount = garageCount * monthCount;
+        var expectedAccrualTotal = expectedRowCount * 100m;
+        var expectedIncomeTotal = expectedRowCount * 60m;
+        var firstMonth = new DateOnly(2023, 1, 1);
+        var lastMonth = firstMonth.AddMonths(monthCount - 1);
+        var dateTo = lastMonth.AddMonths(1).AddDays(-1);
+
+        await using var database = await PostgreSqlTestDatabase.CreateAsync();
+        await using var context = database.CreateContext();
+        var incomeType = new IncomeType { Name = $"REPORT-PERFORMANCE-{Guid.NewGuid():N}" };
+        var garages = Enumerable.Range(1, garageCount)
+            .Select(index => new Garage
+            {
+                Number = $"PERF-{index:000}",
+                PeopleCount = 1,
+                FloorCount = 1
+            })
+            .ToArray();
+        context.Add(incomeType);
+        context.Garages.AddRange(garages);
+        await context.SaveChangesAsync();
+        context.ChangeTracker.Clear();
+
+        var accruals = new List<Accrual>(expectedRowCount);
+        var payments = new List<FinancialOperation>(expectedRowCount);
+        foreach (var garage in garages)
+        {
+            for (var monthOffset = 0; monthOffset < monthCount; monthOffset++)
+            {
+                var month = firstMonth.AddMonths(monthOffset);
+                accruals.Add(new Accrual
+                {
+                    GarageId = garage.Id,
+                    IncomeTypeId = incomeType.Id,
+                    AccountingMonth = month,
+                    DueDate = month.AddMonths(1).AddDays(-1),
+                    OverdueFromDate = month.AddMonths(1),
+                    Amount = 100m,
+                    Source = "report_performance_test"
+                });
+                payments.Add(new FinancialOperation
+                {
+                    OperationKind = FinancialOperationKinds.Income,
+                    OperationDate = month.AddDays(14),
+                    AccountingMonth = month,
+                    Amount = 60m,
+                    GarageId = garage.Id,
+                    IncomeTypeId = incomeType.Id,
+                    DocumentNumber = $"PERF-{garage.Number}-{month:yyyyMM}",
+                    CreatedAtUtc = new DateTimeOffset(month.AddDays(14).ToDateTime(new TimeOnly(12, 0)), TimeSpan.Zero)
+                });
+            }
+        }
+
+        context.ChangeTracker.AutoDetectChangesEnabled = false;
+        context.Accruals.AddRange(accruals);
+        context.FinancialOperations.AddRange(payments);
+        await context.SaveChangesAsync();
+        context.ChangeTracker.AutoDetectChangesEnabled = true;
+        context.ChangeTracker.Clear();
+        await context.Database.ExecuteSqlRawAsync("ANALYZE accruals; ANALYZE financial_operations; ANALYZE garages;");
+
+        var stopwatch = Stopwatch.StartNew();
+        var income = await new EfIncomeReportQuery(context).GetRowsAsync(
+            firstMonth,
+            dateTo,
+            "all",
+            new HashSet<Guid>(),
+            new HashSet<Guid>(),
+            new HashSet<Guid> { incomeType.Id },
+            null,
+            pageSize,
+            0,
+            new ReportSort("date", true),
+            CancellationToken.None);
+        var incomeElapsed = stopwatch.Elapsed;
+        Assert.Equal(expectedRowCount * 2, income.RowCount);
+        Assert.Equal(expectedAccrualTotal, income.AccrualTotal);
+        Assert.Equal(expectedIncomeTotal, income.IncomeTotal);
+        Assert.Equal(pageSize, income.Rows.Count);
+
+        stopwatch.Restart();
+        var garagesReport = await new EfGarageReportQuery(context).GetRowsAsync(
+            firstMonth,
+            lastMonth,
+            null,
+            new HashSet<Guid>(),
+            new HashSet<Guid>(),
+            new HashSet<Guid> { incomeType.Id },
+            false,
+            0,
+            pageSize,
+            new ReportSort("difference", true),
+            CancellationToken.None);
+        var garagesElapsed = stopwatch.Elapsed;
+        Assert.Equal(expectedRowCount, garagesReport.RowCount);
+        Assert.Equal(expectedAccrualTotal, garagesReport.AccrualTotal);
+        Assert.Equal(expectedIncomeTotal, garagesReport.IncomeTotal);
+        Assert.Equal(pageSize, garagesReport.Rows.Count);
+
+        stopwatch.Restart();
+        var consolidated = await new EfConsolidatedMonthlyReportQuery(context).GetMonthlyDataAsync(
+            firstMonth,
+            lastMonth,
+            new ReportSort("accountingMonth", true),
+            0,
+            12,
+            CancellationToken.None);
+        var consolidatedElapsed = stopwatch.Elapsed;
+        Assert.Equal(monthCount, consolidated.MonthlyRowCount);
+        Assert.Equal(12, consolidated.MonthlyRows.Count);
+        Assert.Equal(expectedAccrualTotal, consolidated.AccrualByMonth.Sum(row => row.Amount));
+        Assert.Equal(expectedIncomeTotal, consolidated.IncomeByMonth.Sum(row => row.Amount));
+
+        stopwatch.Restart();
+        var fees = await new EfFeeReportQuery(context).GetFeeReportPageAsync(
+            [incomeType.Id],
+            false,
+            new ReportSort("debt", true),
+            0,
+            pageSize,
+            CancellationToken.None);
+        var feesElapsed = stopwatch.Elapsed;
+        Assert.Equal(garageCount, fees.GarageRowCount);
+        Assert.Equal(pageSize, fees.GarageRows.Count);
+        Assert.Equal(expectedAccrualTotal, fees.AccrualTotals[incomeType.Id]);
+        Assert.Equal(expectedIncomeTotal, fees.CollectedTotals[incomeType.Id]);
+        Assert.Equal(expectedAccrualTotal - expectedIncomeTotal, fees.DebtTotal);
+
+        var totalQueryTime = incomeElapsed + garagesElapsed + consolidatedElapsed + feesElapsed;
+        Assert.True(
+            totalQueryTime < TimeSpan.FromSeconds(15),
+            $"Realistic report queries took {totalQueryTime.TotalSeconds:F2}s: income {incomeElapsed.TotalSeconds:F2}s, garages {garagesElapsed.TotalSeconds:F2}s, consolidated {consolidatedElapsed.TotalSeconds:F2}s, fees {feesElapsed.TotalSeconds:F2}s.");
     }
 
     private static Accrual CreateAccrual(Garage garage, IncomeType incomeType, DateOnly month, decimal amount) =>
