@@ -349,6 +349,7 @@ public sealed class BackendPerformanceGuardTests
         Assert.Contains("Отчет «Оплаты из кассы» теперь за одно обращение к базе", releaseNotes, StringComparison.Ordinal);
         Assert.Contains("Отчет «Сдача кассы в банк» теперь за одно обращение к базе", releaseNotes, StringComparison.Ordinal);
         Assert.Contains("Отчет «Изменения фондов» теперь за одно обращение к базе", releaseNotes, StringComparison.Ordinal);
+        Assert.Contains("Отчет по поступлениям больше не перечитывает видимые платежи", releaseNotes, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -532,6 +533,12 @@ public sealed class BackendPerformanceGuardTests
         Assert.Contains("StartingBalanceTotalCategory", incomeSource, StringComparison.Ordinal);
         Assert.Contains("AccrualTotalCategory", incomeSource, StringComparison.Ordinal);
         Assert.Contains("IncomeTotalCategory", incomeSource, StringComparison.Ordinal);
+        var incomePostgresMethod = incomeSource[
+            incomeSource.IndexOf("private async Task<IncomeReportQueryData> GetPostgresRowsAsync", StringComparison.Ordinal)..incomeSource.IndexOf("private static IOrderedQueryable<IncomeReportSortableProjection> ApplyPostgresSort", StringComparison.Ordinal)];
+        Assert.Contains("visiblePaymentTargets = projectedRows", incomePostgresMethod, StringComparison.Ordinal);
+        Assert.Contains("new IncomeDebtTarget(", incomePostgresMethod, StringComparison.Ordinal);
+        Assert.DoesNotContain("paymentIds.Contains(operation.Id)", incomePostgresMethod, StringComparison.Ordinal);
+        Assert.DoesNotContain("visiblePayments", incomePostgresMethod, StringComparison.Ordinal);
         var incomeDebtMethod = incomeSource[
             incomeSource.IndexOf("private async Task<IReadOnlyDictionary<Guid, decimal>> CalculateDebtAfterPaymentsAsync", StringComparison.Ordinal)..incomeSource.IndexOf("private static IQueryable<T> ApplyLimit", StringComparison.Ordinal)];
         Assert.Contains("startingBalanceQuery", incomeDebtMethod, StringComparison.Ordinal);
@@ -996,6 +1003,8 @@ public sealed class BackendPerformanceGuardTests
         Assert.Contains("PostgreSqlBankDepositReportQueryIntegrationTests.BankDepositPageUsesOneCommandAndPreservesTotalsSearchAndProjection", document, StringComparison.Ordinal);
         Assert.Contains("Fifty-eighth fund-change-report command audit", document, StringComparison.Ordinal);
         Assert.Contains("PostgreSqlFundChangeReportQueryIntegrationTests.FundChangePageUsesOneCommandAndPreservesTotalsSearchActorAndProjection", document, StringComparison.Ordinal);
+        Assert.Contains("Fifty-ninth income-payment-page reuse audit", document, StringComparison.Ordinal);
+        Assert.Contains("PostgreSqlIncomeReportPaymentQueryIntegrationTests.PaymentPageReusesProjectedTargetsAndLoadsTotalsPageAndDebtInThreeCommands", document, StringComparison.Ordinal);
         Assert.Contains("Shared end-user release `0.758.0`", document, StringComparison.Ordinal);
         Assert.Contains("limit", document, StringComparison.Ordinal);
         Assert.Contains("rowCount", document, StringComparison.Ordinal);

@@ -260,7 +260,13 @@ public sealed class EfIncomeReportQuery(GarageBalanceDbContext dbContext) : IInc
                     paymentsQuery.OrderBy(operation => operation.OperationDate).ThenBy(operation => operation.Garage!.Number).ThenBy(operation => operation.Id),
                     fetchLimit)
                 .ToListAsync(cancellationToken);
-            var debtAfterPayments = await CalculateDebtAfterPaymentsAsync(payments, cancellationToken);
+            var debtAfterPayments = await CalculateDebtAfterPaymentsAsync(
+                payments.Select(operation => new IncomeDebtTarget(
+                    operation.Id,
+                    operation.GarageId!.Value,
+                    operation.AccountingMonth,
+                    operation.OperationDate)).ToList(),
+                cancellationToken);
             rows.AddRange(payments.Select(operation => new IncomeReportRowDto(
                 PaymentRows,
                 operation.OperationDate,
@@ -570,11 +576,15 @@ public sealed class EfIncomeReportQuery(GarageBalanceDbContext dbContext) : IInc
         }
 
         var projectedRows = await page.ToListAsync(cancellationToken);
-        var paymentIds = projectedRows.Where(row => row.PaymentOperationId.HasValue).Select(row => row.PaymentOperationId!.Value).ToArray();
-        var visiblePayments = paymentIds.Length == 0
-            ? []
-            : await dbContext.FinancialOperations.AsNoTracking().Where(operation => paymentIds.Contains(operation.Id)).ToListAsync(cancellationToken);
-        var debtAfterPayments = await CalculateDebtAfterPaymentsAsync(visiblePayments, cancellationToken);
+        var visiblePaymentTargets = projectedRows
+            .Where(row => row.PaymentOperationId.HasValue)
+            .Select(row => new IncomeDebtTarget(
+                row.PaymentOperationId!.Value,
+                row.GarageId,
+                row.AccountingMonth,
+                row.Date))
+            .ToList();
+        var debtAfterPayments = await CalculateDebtAfterPaymentsAsync(visiblePaymentTargets, cancellationToken);
         var rows = projectedRows.Select(row => new IncomeReportRowDto(
                 row.RowType,
                 row.Date,
@@ -611,18 +621,18 @@ public sealed class EfIncomeReportQuery(GarageBalanceDbContext dbContext) : IInc
         };
 
     private async Task<IReadOnlyDictionary<Guid, decimal>> CalculateDebtAfterPaymentsAsync(
-        IReadOnlyList<FinancialOperation> operations,
+        IReadOnlyList<IncomeDebtTarget> targets,
         CancellationToken cancellationToken)
     {
-        if (operations.Count == 0)
+        if (targets.Count == 0)
         {
             return new Dictionary<Guid, decimal>();
         }
 
-        var garageIds = operations.Select(operation => operation.GarageId!.Value).Distinct().ToArray();
-        var targetAccountingMonths = operations.ToDictionary(operation => operation.Id, operation => operation.AccountingMonth);
-        var maxOperationDate = operations.Max(operation => operation.OperationDate);
-        var maxAccountingMonth = operations.Max(operation => operation.AccountingMonth);
+        var garageIds = targets.Select(target => target.GarageId).Distinct().ToArray();
+        var targetAccountingMonths = targets.ToDictionary(target => target.OperationId, target => target.AccountingMonth);
+        var maxOperationDate = targets.Max(target => target.OperationDate);
+        var maxAccountingMonth = targets.Max(target => target.AccountingMonth);
         var startingBalanceQuery = dbContext.Garages.AsNoTracking()
             .Where(garage => garageIds.Contains(garage.Id))
             .Select(garage => new
@@ -741,6 +751,7 @@ public sealed class EfIncomeReportQuery(GarageBalanceDbContext dbContext) : IInc
 
     private readonly record struct IncomeDebtAccrualRow(Guid GarageId, DateOnly AccountingMonth, decimal Amount);
     private readonly record struct IncomeDebtPaymentRow(Guid OperationId, Guid GarageId, DateOnly OperationDate, DateTimeOffset CreatedAtUtc, decimal Amount);
+    private readonly record struct IncomeDebtTarget(Guid OperationId, Guid GarageId, DateOnly AccountingMonth, DateOnly OperationDate);
 
     private sealed class IncomeReportProjection : IncomeReportSortableProjection
     {
