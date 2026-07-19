@@ -2,6 +2,7 @@ using GarageBalance.Api.Application.Reports;
 using GarageBalance.Api.Domain.Dictionaries;
 using GarageBalance.Api.Domain.Finance;
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
 
 namespace GarageBalance.Api.Infrastructure.Data;
 
@@ -14,14 +15,134 @@ public sealed class EfConsolidatedGarageReportQuery(GarageBalanceDbContext dbCon
         int? limit,
         CancellationToken cancellationToken)
     {
+        if (IsNpgsql())
+        {
+            return GetPostgresRowsAsync(search, periodFrom, periodTo, limit, cancellationToken);
+        }
+
         if (string.IsNullOrWhiteSpace(search))
         {
             return GetRowsWithoutSearchAsync(periodFrom, periodTo, limit, cancellationToken);
         }
 
-        return IsNpgsql()
-            ? GetRowsWithServerSearchAsync(search, periodFrom, periodTo, limit, cancellationToken)
-            : GetRowsWithClientSearchAsync(search, periodFrom, periodTo, limit, cancellationToken);
+        return GetRowsWithClientSearchAsync(search, periodFrom, periodTo, limit, cancellationToken);
+    }
+
+    private async Task<ConsolidatedGarageRowsData> GetPostgresRowsAsync(
+        string? search,
+        DateOnly periodFrom,
+        DateOnly periodTo,
+        int? limit,
+        CancellationToken cancellationToken)
+    {
+        const int PageCategory = 1;
+        const int CountCategory = 2;
+        var searchClause = string.IsNullOrWhiteSpace(search)
+            ? string.Empty
+            : """
+              AND (
+                  LOWER(garage."Number") LIKE '%' || @search || '%'
+                  OR LOWER(owner."LastName") LIKE '%' || @search || '%'
+                  OR LOWER(owner."FirstName") LIKE '%' || @search || '%'
+                  OR LOWER(COALESCE(owner."MiddleName", '')) LIKE '%' || @search || '%'
+                  OR LOWER(owner."LastName" || ' ' || owner."FirstName") LIKE '%' || @search || '%'
+                  OR LOWER(owner."LastName" || ' ' || owner."FirstName" || ' ' || COALESCE(owner."MiddleName", '')) LIKE '%' || @search || '%'
+              )
+              """;
+        var limitClause = limit is > 0 ? "LIMIT @limit" : string.Empty;
+        var sql = $$"""
+            WITH income_totals AS (
+                SELECT "GarageId" AS garage_id, SUM("Amount") AS amount
+                FROM financial_operations
+                WHERE "IsCanceled" = FALSE
+                  AND "OperationKind" = 'income'
+                  AND "GarageId" IS NOT NULL
+                  AND "AccountingMonth" >= @period_from::date
+                  AND "AccountingMonth" <= @period_to::date
+                GROUP BY "GarageId"
+            ), accrual_totals AS (
+                SELECT "GarageId" AS garage_id, SUM("Amount") AS amount
+                FROM accruals
+                WHERE "IsCanceled" = FALSE
+                  AND "AccountingMonth" >= @period_from::date
+                  AND "AccountingMonth" <= @period_to::date
+                GROUP BY "GarageId"
+            ), reading_totals AS (
+                SELECT "GarageId" AS garage_id, COUNT(*)::int AS row_count
+                FROM meter_readings
+                WHERE "IsCanceled" = FALSE
+                  AND "AccountingMonth" >= @period_from::date
+                  AND "AccountingMonth" <= @period_to::date
+                GROUP BY "GarageId"
+            ), filtered_rows AS (
+                SELECT garage."Id" AS garage_id,
+                       garage."Number" AS garage_number,
+                       owner."LastName" AS owner_last_name,
+                       owner."FirstName" AS owner_first_name,
+                       owner."MiddleName" AS owner_middle_name,
+                       COALESCE(income_totals.amount, 0) AS income_total,
+                       garage."StartingBalance" + COALESCE(accrual_totals.amount, 0) AS accrual_total,
+                       COALESCE(reading_totals.row_count, 0)::int AS meter_reading_count
+                FROM garages garage
+                LEFT JOIN owners owner ON owner."Id" = garage."OwnerId"
+                LEFT JOIN income_totals ON income_totals.garage_id = garage."Id"
+                LEFT JOIN accrual_totals ON accrual_totals.garage_id = garage."Id"
+                LEFT JOIN reading_totals ON reading_totals.garage_id = garage."Id"
+                WHERE garage."IsArchived" = FALSE
+                  {{searchClause}}
+                  AND (COALESCE(income_totals.amount, 0) <> 0
+                       OR garage."StartingBalance" + COALESCE(accrual_totals.amount, 0) <> 0
+                       OR COALESCE(reading_totals.row_count, 0) <> 0)
+            ), page_rows AS (
+                SELECT filtered_rows.*,
+                       ROW_NUMBER() OVER (ORDER BY garage_number, garage_id)::int AS row_order
+                FROM filtered_rows
+                ORDER BY garage_number, garage_id
+                {{limitClause}}
+            )
+            SELECT {{PageCategory}} AS "Category", row_order AS "RowOrder", garage_id AS "GarageId",
+                   garage_number AS "GarageNumber", owner_last_name AS "OwnerLastName",
+                   owner_first_name AS "OwnerFirstName", owner_middle_name AS "OwnerMiddleName",
+                   income_total AS "IncomeTotal", accrual_total AS "AccrualTotal",
+                   meter_reading_count AS "MeterReadingCount", 0 AS "RowCount"
+            FROM page_rows
+            UNION ALL
+            SELECT {{CountCategory}}, 0, NULL::uuid, NULL::text, NULL::text, NULL::text, NULL::text,
+                   0::numeric, 0::numeric, 0, COUNT(*)::int
+            FROM filtered_rows
+            ORDER BY "Category", "RowOrder"
+            """;
+        var parameters = new List<object>
+        {
+            new NpgsqlParameter<DateOnly>("period_from", periodFrom),
+            new NpgsqlParameter<DateOnly>("period_to", periodTo)
+        };
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            parameters.Add(new NpgsqlParameter<string>("search", search.Trim().ToLowerInvariant()));
+        }
+        if (limit is > 0)
+        {
+            parameters.Add(new NpgsqlParameter<int>("limit", limit.Value));
+        }
+
+        var queryRows = await dbContext.Database
+            .SqlQueryRaw<ConsolidatedGarageCombinedQueryRow>(sql, parameters.ToArray())
+            .ToListAsync(cancellationToken);
+        var rowCount = queryRows.Single(row => row.Category == CountCategory).RowCount;
+        var rows = queryRows
+            .Where(row => row.Category == PageCategory)
+            .Select(row => new ConsolidatedGarageRowData(
+                row.GarageId!.Value,
+                row.GarageNumber!,
+                row.OwnerLastName,
+                row.OwnerFirstName,
+                row.OwnerMiddleName,
+                row.IncomeTotal,
+                row.AccrualTotal,
+                row.MeterReadingCount))
+            .ToList();
+        return new ConsolidatedGarageRowsData(rowCount, rows);
     }
 
     private async Task<ConsolidatedGarageRowsData> GetRowsWithoutSearchAsync(
@@ -32,31 +153,6 @@ public sealed class EfConsolidatedGarageReportQuery(GarageBalanceDbContext dbCon
     {
         var garages = dbContext.Garages.AsNoTracking().Where(garage => !garage.IsArchived);
         return await ExecuteBoundedRowsAsync(
-            BuildRowsQuery(garages, periodFrom, periodTo),
-            limit,
-            cancellationToken);
-    }
-
-    private Task<ConsolidatedGarageRowsData> GetRowsWithServerSearchAsync(
-        string search,
-        DateOnly periodFrom,
-        DateOnly periodTo,
-        int? limit,
-        CancellationToken cancellationToken)
-    {
-        var normalizedServerSearch = search.Trim().ToLowerInvariant();
-        var garages = dbContext.Garages.AsNoTracking()
-            .Where(garage =>
-                !garage.IsArchived &&
-                (garage.Number.ToLower().Contains(normalizedServerSearch) ||
-                 (garage.Owner != null && (
-                     garage.Owner.LastName.ToLower().Contains(normalizedServerSearch) ||
-                     garage.Owner.FirstName.ToLower().Contains(normalizedServerSearch) ||
-                     (garage.Owner.MiddleName != null && garage.Owner.MiddleName.ToLower().Contains(normalizedServerSearch)) ||
-                     (garage.Owner.LastName + " " + garage.Owner.FirstName).ToLower().Contains(normalizedServerSearch) ||
-                     (garage.Owner.LastName + " " + garage.Owner.FirstName + " " + (garage.Owner.MiddleName ?? string.Empty)).ToLower().Contains(normalizedServerSearch)))));
-
-        return ExecuteBoundedRowsAsync(
             BuildRowsQuery(garages, periodFrom, periodTo),
             limit,
             cancellationToken);
@@ -238,4 +334,17 @@ public sealed class EfConsolidatedGarageReportQuery(GarageBalanceDbContext dbCon
         public ConsolidatedGarageRowData ToData() =>
             new(GarageId, GarageNumber, OwnerLastName, OwnerFirstName, OwnerMiddleName, IncomeTotal, AccrualTotal, MeterReadingCount);
     }
+
+    private sealed record ConsolidatedGarageCombinedQueryRow(
+        int Category,
+        int RowOrder,
+        Guid? GarageId,
+        string? GarageNumber,
+        string? OwnerLastName,
+        string? OwnerFirstName,
+        string? OwnerMiddleName,
+        decimal IncomeTotal,
+        decimal AccrualTotal,
+        int MeterReadingCount,
+        int RowCount);
 }

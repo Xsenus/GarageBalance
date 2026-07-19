@@ -345,6 +345,7 @@ public sealed class BackendPerformanceGuardTests
         Assert.Contains("Балансовые показатели гаражей теперь рассчитываются за один проход", releaseNotes, StringComparison.Ordinal);
         Assert.Contains("Отчет по взносам теперь за одно обращение к базе", releaseNotes, StringComparison.Ordinal);
         Assert.Contains("Сводный месячный отчет теперь за одно обращение к базе", releaseNotes, StringComparison.Ordinal);
+        Assert.Contains("Таблица гаражей в сводном отчете теперь за одно обращение к базе", releaseNotes, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -549,14 +550,14 @@ public sealed class BackendPerformanceGuardTests
         Assert.True(
             CountOccurrences(garageSource, ".GroupBy(") >= 3,
             "Search-compatible consolidated garage fallback must aggregate income, accrual and readings by garage.");
-        Assert.Matches(
-            BoundedQueryRegex(@"GetRowsWithServerSearchAsync[\s\S]*?\.Where\(garage =>[\s\S]*?BuildRowsQuery\(garages, periodFrom, periodTo\)[\s\S]*?ExecuteBoundedRowsAsync"),
-            garageSource);
-        var serverSearchMethod = garageSource[
-            garageSource.IndexOf("private Task<ConsolidatedGarageRowsData> GetRowsWithServerSearchAsync", StringComparison.Ordinal)..garageSource.IndexOf("private IQueryable<ConsolidatedGarageProjectionRow> BuildRowsQuery", StringComparison.Ordinal)];
-        Assert.DoesNotContain("ToListAsync", serverSearchMethod, StringComparison.Ordinal);
-        Assert.DoesNotContain("ToList()", serverSearchMethod, StringComparison.Ordinal);
-        Assert.Contains("garage.Owner.LastName.ToLower().Contains(normalizedServerSearch)", garageSource, StringComparison.Ordinal);
+        var postgresGarageStart = garageSource.IndexOf("private async Task<ConsolidatedGarageRowsData> GetPostgresRowsAsync", StringComparison.Ordinal);
+        var fallbackGarageStart = garageSource.IndexOf("private async Task<ConsolidatedGarageRowsData> GetRowsWithoutSearchAsync", StringComparison.Ordinal);
+        var postgresGarageSource = garageSource[postgresGarageStart..fallbackGarageStart];
+        Assert.Contains("LOWER(owner.\"LastName\")", postgresGarageSource, StringComparison.Ordinal);
+        Assert.Contains("LIMIT @limit", postgresGarageSource, StringComparison.Ordinal);
+        Assert.Contains("FROM page_rows", postgresGarageSource, StringComparison.Ordinal);
+        Assert.Contains("COUNT(*)::int", postgresGarageSource, StringComparison.Ordinal);
+        Assert.Equal(1, CountOccurrences(postgresGarageSource, ".ToListAsync(cancellationToken)"));
         Assert.Contains(".Concat(accrualByGarageQuery)", garageSource, StringComparison.Ordinal);
         Assert.Contains(".Concat(readingsByGarageQuery)", garageSource, StringComparison.Ordinal);
         Assert.True(
@@ -722,6 +723,15 @@ public sealed class BackendPerformanceGuardTests
         Assert.Contains("incomeByGarageQuery", consolidatedGarageReport, StringComparison.Ordinal);
         Assert.Contains(".Concat(accrualByGarageQuery)", consolidatedGarageReport, StringComparison.Ordinal);
         Assert.Contains(".Concat(readingsByGarageQuery)", consolidatedGarageReport, StringComparison.Ordinal);
+        var postgresStart = consolidatedGarageReport.IndexOf("private async Task<ConsolidatedGarageRowsData> GetPostgresRowsAsync", StringComparison.Ordinal);
+        var fallbackStart = consolidatedGarageReport.IndexOf("private async Task<ConsolidatedGarageRowsData> GetRowsWithoutSearchAsync", StringComparison.Ordinal);
+        var postgresSource = consolidatedGarageReport[postgresStart..fallbackStart];
+        Assert.Equal(1, CountOccurrences(postgresSource, "SqlQueryRaw<ConsolidatedGarageCombinedQueryRow>"));
+        Assert.Equal(1, CountOccurrences(postgresSource, ".ToListAsync(cancellationToken)"));
+        Assert.Equal(1, CountOccurrences(postgresSource, "FROM financial_operations"));
+        Assert.Equal(1, CountOccurrences(postgresSource, "FROM accruals"));
+        Assert.Equal(1, CountOccurrences(postgresSource, "FROM meter_readings"));
+        Assert.Equal(1, CountOccurrences(postgresSource, "FROM garages"));
     }
 
     [Fact]
@@ -962,6 +972,8 @@ public sealed class BackendPerformanceGuardTests
         Assert.Contains("FeeCampaignPageUsesTheSameSingleCommandPipeline", document, StringComparison.Ordinal);
         Assert.Contains("Fifty-fourth consolidated-monthly-report command audit", document, StringComparison.Ordinal);
         Assert.Contains("PostgreSqlConsolidatedMonthlyReportQueryIntegrationTests.MonthlyReportBuildsAllSectionsFromOneCommandAndOneBaseScan", document, StringComparison.Ordinal);
+        Assert.Contains("Fifty-fifth consolidated-garage-report aggregation audit", document, StringComparison.Ordinal);
+        Assert.Contains("PostgreSqlConsolidatedGarageReportQueryIntegrationTests.GarageRowsReturnCountAndBoundedPageInOneAggregatedCommand", document, StringComparison.Ordinal);
         Assert.Contains("Shared end-user release `0.758.0`", document, StringComparison.Ordinal);
         Assert.Contains("limit", document, StringComparison.Ordinal);
         Assert.Contains("rowCount", document, StringComparison.Ordinal);
