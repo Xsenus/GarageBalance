@@ -10,7 +10,7 @@ namespace GarageBalance.Api.Tests.Reports;
 public sealed class PostgreSqlReportSortingIntegrationTests
 {
     [PostgreSqlFact]
-    public async Task GarageAndExpenseReportsSupportSingleMultipleAndAllSelections()
+    public async Task GarageAndExpenseReportsSupportSingleMultipleAllAndUnknownSelections()
     {
         await using var database = await PostgreSqlTestDatabase.CreateAsync();
         await using var context = database.CreateContext();
@@ -69,6 +69,20 @@ public sealed class PostgreSqlReportSortingIntegrationTests
         var ownerSelection = await garageQuery.GetRowsAsync(january, february, null, new HashSet<Guid> { firstGarage.Id, secondGarage.Id }, new HashSet<Guid> { firstOwner.Id }, new HashSet<Guid> { incomeType.Id }, false, 0, 20, new ReportSort("garageNumber", false), CancellationToken.None);
         Assert.Equal(firstGarage.Id, Assert.Single(ownerSelection.Rows).GarageId);
 
+        var unknownGarageSelection = await garageQuery.GetRowsAsync(january, february, null, new HashSet<Guid> { Guid.NewGuid() }, new HashSet<Guid>(), new HashSet<Guid>(), false, 0, 20, new ReportSort("garageNumber", false), CancellationToken.None);
+        Assert.Empty(unknownGarageSelection.Rows);
+        Assert.Equal(0, unknownGarageSelection.RowCount);
+        Assert.Equal(0m, unknownGarageSelection.AccrualTotal);
+        Assert.Equal(0m, unknownGarageSelection.IncomeTotal);
+
+        var unknownOwnerSelection = await garageQuery.GetRowsAsync(january, february, null, new HashSet<Guid>(), new HashSet<Guid> { Guid.NewGuid() }, new HashSet<Guid>(), false, 0, 20, new ReportSort("garageNumber", false), CancellationToken.None);
+        Assert.Empty(unknownOwnerSelection.Rows);
+        Assert.Equal(0, unknownOwnerSelection.RowCount);
+
+        var unknownIncomeTypeSelection = await garageQuery.GetRowsAsync(january, february, null, new HashSet<Guid>(), new HashSet<Guid>(), new HashSet<Guid> { Guid.NewGuid() }, false, 0, 20, new ReportSort("garageNumber", false), CancellationToken.None);
+        Assert.Empty(unknownIncomeTypeSelection.Rows);
+        Assert.Equal(0, unknownIncomeTypeSelection.RowCount);
+
         var expenseQuery = new EfExpenseReportQuery(context);
         var allCounterparties = await expenseQuery.GetRowsAsync(january, periodEnd, "all", new HashSet<Guid>(), new HashSet<Guid>(), new HashSet<Guid>(), null, 20, 0, new ReportSort("date", false), CancellationToken.None);
         Assert.Equal(5, allCounterparties.RowCount);
@@ -92,6 +106,24 @@ public sealed class PostgreSqlReportSortingIntegrationTests
         Assert.Equal(3, mixed.Rows.Count);
         Assert.Equal(800m, mixed.AccrualTotal);
         Assert.Equal(125m, mixed.ExpenseTotal);
+
+        var unknownCounterparties = await expenseQuery.GetRowsAsync(january, periodEnd, "all", new HashSet<Guid> { Guid.NewGuid() }, new HashSet<Guid> { Guid.NewGuid() }, new HashSet<Guid>(), null, 20, 0, new ReportSort("date", false), CancellationToken.None);
+        Assert.Empty(unknownCounterparties.Rows);
+        Assert.Equal(0, unknownCounterparties.RowCount);
+        Assert.Equal(0m, unknownCounterparties.AccrualTotal);
+        Assert.Equal(0m, unknownCounterparties.ExpenseTotal);
+
+        var validStaffAndUnknownSupplier = await expenseQuery.GetRowsAsync(january, periodEnd, "all", new HashSet<Guid> { Guid.NewGuid() }, new HashSet<Guid> { staff.Id }, new HashSet<Guid> { salaryType.Id }, null, 20, 0, new ReportSort("date", false), CancellationToken.None);
+        Assert.Equal(3, validStaffAndUnknownSupplier.RowCount);
+        Assert.All(validStaffAndUnknownSupplier.Rows, row => Assert.Equal("staff", row.CounterpartyKind));
+
+        var validSupplierAndUnknownStaff = await expenseQuery.GetRowsAsync(january, periodEnd, "all", new HashSet<Guid> { supplier.Id }, new HashSet<Guid> { Guid.NewGuid() }, new HashSet<Guid> { supplierExpenseType.Id }, null, 20, 0, new ReportSort("date", false), CancellationToken.None);
+        Assert.Equal(2, validSupplierAndUnknownStaff.RowCount);
+        Assert.All(validSupplierAndUnknownStaff.Rows, row => Assert.Equal("supplier", row.CounterpartyKind));
+
+        var unknownExpenseTypeSelection = await expenseQuery.GetRowsAsync(january, periodEnd, "all", new HashSet<Guid> { supplier.Id }, new HashSet<Guid> { staff.Id }, new HashSet<Guid> { Guid.NewGuid() }, null, 20, 0, new ReportSort("date", false), CancellationToken.None);
+        Assert.Empty(unknownExpenseTypeSelection.Rows);
+        Assert.Equal(0, unknownExpenseTypeSelection.RowCount);
     }
 
     [PostgreSqlFact]

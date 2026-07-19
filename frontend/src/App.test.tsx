@@ -13309,7 +13309,7 @@ describe('App', () => {
     ]))
   })
 
-  it('sends single and multiple report selections, resets pagination and supports the All mode', async () => {
+  it('sends single, multiple and empty report selections and excludes archived filter dictionaries', async () => {
     const user = userEvent.setup()
     const baseReportClient = createReportClient()
     const garageRequests: Array<{ garageIds?: string[]; offset?: number }> = []
