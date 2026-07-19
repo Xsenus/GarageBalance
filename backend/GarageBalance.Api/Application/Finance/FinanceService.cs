@@ -2767,7 +2767,10 @@ public sealed class FinanceService(
 
             try
             {
-                return await CreateMeterReadingAsync(saveRequest, actorUserId, cancellationToken);
+                var createResult = await CreateMeterReadingAsync(saveRequest, actorUserId, cancellationToken);
+                return createResult.ErrorCode == "meter_reading_duplicate"
+                    ? MeterReadingConflict()
+                    : createResult;
             }
             catch (ApplicationPersistenceConflictException)
             {

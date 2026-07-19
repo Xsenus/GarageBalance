@@ -156,48 +156,51 @@ public sealed class PostgreSqlMeterReadingConcurrencyIntegrationTests
     public async Task PaymentFormCommand_CreatesSingleReadingWhenRequestsRace()
     {
         await using var database = await PostgreSqlTestDatabase.CreateAsync();
-        Guid garageId;
-        await using (var seedContext = database.CreateContext())
+        for (var attempt = 0; attempt < 5; attempt++)
         {
-            var garage = new Garage
+            Guid garageId;
+            await using (var seedContext = database.CreateContext())
             {
-                Number = "PG-METER-CREATE-RACE",
-                PeopleCount = 1,
-                FloorCount = 1,
-                InitialWaterMeterValue = 10m
-            };
-            seedContext.Add(garage);
-            await seedContext.SaveChangesAsync();
-            garageId = garage.Id;
+                var garage = new Garage
+                {
+                    Number = $"PG-METER-CREATE-RACE-{attempt}",
+                    PeopleCount = 1,
+                    FloorCount = 1,
+                    InitialWaterMeterValue = 10m
+                };
+                seedContext.Add(garage);
+                await seedContext.SaveChangesAsync();
+                garageId = garage.Id;
+            }
+
+            var start = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            async Task<FinanceResult<MeterReadingDto>> CreateAsync(decimal value)
+            {
+                await using var context = database.CreateContext();
+                var service = FinanceServiceTestFactory.Create(context);
+                await start.Task;
+                return await service.SavePaymentFormMeterReadingAsync(
+                    new SavePaymentFormMeterReadingRequest(
+                        garageId,
+                        MeterKinds.Water,
+                        new DateOnly(2026, 6, 1),
+                        new DateOnly(2026, 6, 20),
+                        value,
+                        null),
+                    null,
+                    CancellationToken.None);
+            }
+
+            var requests = new[] { CreateAsync(15m + attempt), CreateAsync(25m + attempt) };
+            start.SetResult();
+            var results = await Task.WhenAll(requests);
+
+            Assert.Single(results, result => result.Succeeded);
+            var conflict = Assert.Single(results, result => !result.Succeeded);
+            Assert.Equal("meter_reading_conflict", conflict.ErrorCode);
+            await using var assertionContext = database.CreateContext();
+            Assert.Equal(1, await assertionContext.MeterReadings.CountAsync(item => item.GarageId == garageId));
         }
-
-        var start = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        async Task<FinanceResult<MeterReadingDto>> CreateAsync(decimal value)
-        {
-            await using var context = database.CreateContext();
-            var service = FinanceServiceTestFactory.Create(context);
-            await start.Task;
-            return await service.SavePaymentFormMeterReadingAsync(
-                new SavePaymentFormMeterReadingRequest(
-                    garageId,
-                    MeterKinds.Water,
-                    new DateOnly(2026, 6, 1),
-                    new DateOnly(2026, 6, 20),
-                    value,
-                    null),
-                null,
-                CancellationToken.None);
-        }
-
-        var requests = new[] { CreateAsync(15m), CreateAsync(16m) };
-        start.SetResult();
-        var results = await Task.WhenAll(requests);
-
-        Assert.Single(results, result => result.Succeeded);
-        var conflict = Assert.Single(results, result => !result.Succeeded);
-        Assert.Equal("meter_reading_conflict", conflict.ErrorCode);
-        await using var assertionContext = database.CreateContext();
-        Assert.Equal(1, await assertionContext.MeterReadings.CountAsync());
     }
 
     [PostgreSqlFact]
