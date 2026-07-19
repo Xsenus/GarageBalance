@@ -365,275 +365,238 @@ public sealed class EfIncomeReportQuery(GarageBalanceDbContext dbContext) : IInc
                 cancellationToken);
         }
 
+        return await GetPostgresAllRowsAsync(
+            dateFrom,
+            dateTo,
+            garageIds,
+            ownerIds,
+            incomeTypeIds,
+            search,
+            limit,
+            offset,
+            sort,
+            cancellationToken);
+    }
+
+    private async Task<IncomeReportQueryData> GetPostgresAllRowsAsync(
+        DateOnly dateFrom,
+        DateOnly dateTo,
+        IReadOnlySet<Guid> garageIds,
+        IReadOnlySet<Guid> ownerIds,
+        IReadOnlySet<Guid> incomeTypeIds,
+        string? search,
+        int? limit,
+        int offset,
+        ReportSort sort,
+        CancellationToken cancellationToken)
+    {
+        const int PageCategory = 1;
+        const int TotalsCategory = 2;
         var normalizedSearch = search?.Trim().ToLowerInvariant();
         var hasSearch = !string.IsNullOrWhiteSpace(normalizedSearch);
-        IQueryable<IncomeReportProjection>? reportRows = null;
-        var aggregateQuery = dbContext.Accruals.AsNoTracking()
-            .Where(_ => false)
-            .Select(_ => new { Category = 0, Total = 0m, Count = 0 });
-
-        if (rowMode is AllRows or AccrualRows)
+        var includeStartingBalances = incomeTypeIds.Count == 0;
+        var sortColumn = sort.Field switch
         {
-            if (incomeTypeIds.Count == 0)
-            {
-                var startingBalances = dbContext.Garages.AsNoTracking()
-                    .Where(garage => !garage.IsArchived && garage.StartingBalance != 0);
-                if (garageIds.Count > 0)
-                {
-                    startingBalances = startingBalances.Where(garage => garageIds.Contains(garage.Id));
-                }
-
-                if (ownerIds.Count > 0)
-                {
-                    startingBalances = startingBalances.Where(garage => garage.OwnerId != null && ownerIds.Contains(garage.OwnerId.Value));
-                }
-
-                if (hasSearch && !"Стартовый баланс".Contains(search!.Trim(), StringComparison.OrdinalIgnoreCase))
-                {
-                    startingBalances = startingBalances.Where(garage =>
-                        garage.Number.ToLower().Contains(normalizedSearch!) ||
-                        (garage.Owner != null && (
-                            garage.Owner.LastName.ToLower().Contains(normalizedSearch!) ||
-                            garage.Owner.FirstName.ToLower().Contains(normalizedSearch!) ||
-                            (garage.Owner.MiddleName != null && garage.Owner.MiddleName.ToLower().Contains(normalizedSearch!)) ||
-                            (garage.Owner.LastName + " " + garage.Owner.FirstName + " " + (garage.Owner.MiddleName ?? string.Empty)).ToLower().Contains(normalizedSearch!))));
-                }
-
-                aggregateQuery = aggregateQuery.Concat(startingBalances
-                    .GroupBy(_ => 1)
-                    .Select(group => new
-                    {
-                        Category = StartingBalanceTotalCategory,
-                        Total = group.Sum(garage => garage.StartingBalance),
-                        Count = group.Count()
-                    }));
-
-                reportRows = startingBalances.Select(garage => new IncomeReportProjection
-                {
-                    RowType = StartingBalanceRows,
-                    Date = dateFrom,
-                    AccountingMonth = dateFrom,
-                    GarageId = garage.Id,
-                    GarageNumber = garage.Number,
-                    OwnerId = garage.OwnerId,
-                    OwnerName = garage.Owner == null ? null : garage.Owner.LastName + " " + garage.Owner.FirstName + " " + (garage.Owner.MiddleName ?? string.Empty),
-                    IncomeTypeId = Guid.Empty,
-                    IncomeTypeName = "Стартовый баланс",
-                    AccrualAmount = garage.StartingBalance,
-                    IncomeAmount = 0m,
-                    Debt = garage.StartingBalance,
-                    DocumentNumber = null,
-                    Comment = "Начальная задолженность гаража",
-                    CreatedAtUtc = garage.CreatedAtUtc,
-                    RowId = garage.Id,
-                    PaymentOperationId = null
-                });
-            }
-
-            var accruals = dbContext.Accruals.AsNoTracking()
-                .Where(accrual => !accrual.IsCanceled && accrual.AccountingMonth >= dateFrom && accrual.AccountingMonth <= dateTo);
-            if (garageIds.Count > 0)
-            {
-                accruals = accruals.Where(accrual => garageIds.Contains(accrual.GarageId));
-            }
-
-            if (ownerIds.Count > 0)
-            {
-                accruals = accruals.Where(accrual => accrual.Garage.OwnerId != null && ownerIds.Contains(accrual.Garage.OwnerId.Value));
-            }
-
-            if (incomeTypeIds.Count > 0)
-            {
-                accruals = accruals.Where(accrual => incomeTypeIds.Contains(accrual.IncomeTypeId));
-            }
-
-            if (hasSearch)
-            {
-                accruals = accruals.Where(accrual =>
-                    accrual.Garage.Number.ToLower().Contains(normalizedSearch!) ||
-                    (accrual.Garage.Owner != null && (
-                        accrual.Garage.Owner.LastName.ToLower().Contains(normalizedSearch!) ||
-                        accrual.Garage.Owner.FirstName.ToLower().Contains(normalizedSearch!) ||
-                        (accrual.Garage.Owner.MiddleName != null && accrual.Garage.Owner.MiddleName.ToLower().Contains(normalizedSearch!)) ||
-                        (accrual.Garage.Owner.LastName + " " + accrual.Garage.Owner.FirstName + " " + (accrual.Garage.Owner.MiddleName ?? string.Empty)).ToLower().Contains(normalizedSearch!))) ||
-                    accrual.IncomeType.Name.ToLower().Contains(normalizedSearch!));
-            }
-
-            aggregateQuery = aggregateQuery.Concat(accruals
-                .GroupBy(_ => 1)
-                .Select(group => new
-                {
-                    Category = AccrualTotalCategory,
-                    Total = group.Sum(accrual => accrual.Amount),
-                    Count = group.Count()
-                }));
-
-            var projectedAccruals = accruals.Select(accrual => new IncomeReportProjection
-            {
-                RowType = AccrualRows,
-                Date = accrual.AccountingMonth,
-                AccountingMonth = accrual.AccountingMonth,
-                GarageId = accrual.GarageId,
-                GarageNumber = accrual.Garage.Number,
-                OwnerId = accrual.Garage.OwnerId,
-                OwnerName = accrual.Garage.Owner == null ? null : accrual.Garage.Owner.LastName + " " + accrual.Garage.Owner.FirstName + " " + (accrual.Garage.Owner.MiddleName ?? string.Empty),
-                IncomeTypeId = accrual.IncomeTypeId,
-                IncomeTypeName = accrual.IncomeType.Name,
-                AccrualAmount = accrual.Amount,
-                IncomeAmount = 0m,
-                Debt = accrual.Amount,
-                DocumentNumber = null,
-                Comment = accrual.Comment,
-                CreatedAtUtc = accrual.CreatedAtUtc,
-                RowId = accrual.Id,
-                PaymentOperationId = null
-            });
-            reportRows = reportRows == null ? projectedAccruals : reportRows.Concat(projectedAccruals);
+            "accountingMonth" => "accounting_month",
+            "garageNumber" => "garage_number",
+            "ownerName" => "owner_name",
+            "incomeTypeName" => "income_type_name",
+            "accrualAmount" => "accrual_amount",
+            "incomeAmount" => "income_amount",
+            "debt" => "debt",
+            "documentNumber" => "document_number",
+            _ => "row_date"
+        };
+        var direction = sort.Descending ? "DESC" : "ASC";
+        var garageClause = garageIds.Count > 0 ? "AND garage.\"Id\" = ANY(@garage_ids)" : string.Empty;
+        var ownerClause = ownerIds.Count > 0 ? "AND garage.\"OwnerId\" = ANY(@owner_ids)" : string.Empty;
+        var incomeTypeClause = incomeTypeIds.Count > 0 ? "AND income_type.\"Id\" = ANY(@income_type_ids)" : string.Empty;
+        var startingSearchClause = hasSearch && !"Стартовый баланс".Contains(search!.Trim(), StringComparison.OrdinalIgnoreCase)
+            ? """
+              AND (STRPOS(LOWER(garage."Number"), @search) > 0
+                   OR STRPOS(LOWER(owner."LastName"), @search) > 0
+                   OR STRPOS(LOWER(owner."FirstName"), @search) > 0
+                   OR STRPOS(LOWER(owner."MiddleName"), @search) > 0
+                   OR STRPOS(LOWER(owner."LastName" || ' ' || owner."FirstName" || ' ' || COALESCE(owner."MiddleName", '')), @search) > 0)
+              """
+            : string.Empty;
+        var accrualSearchClause = hasSearch
+            ? """
+              AND (STRPOS(LOWER(garage."Number"), @search) > 0
+                   OR STRPOS(LOWER(owner."LastName"), @search) > 0
+                   OR STRPOS(LOWER(owner."FirstName"), @search) > 0
+                   OR STRPOS(LOWER(owner."MiddleName"), @search) > 0
+                   OR STRPOS(LOWER(owner."LastName" || ' ' || owner."FirstName" || ' ' || COALESCE(owner."MiddleName", '')), @search) > 0
+                   OR STRPOS(LOWER(income_type."Name"), @search) > 0)
+              """
+            : string.Empty;
+        var paymentSearchClause = hasSearch
+            ? """
+              AND (STRPOS(LOWER(garage."Number"), @search) > 0
+                   OR STRPOS(LOWER(owner."LastName"), @search) > 0
+                   OR STRPOS(LOWER(owner."FirstName"), @search) > 0
+                   OR STRPOS(LOWER(owner."MiddleName"), @search) > 0
+                   OR STRPOS(LOWER(owner."LastName" || ' ' || owner."FirstName" || ' ' || COALESCE(owner."MiddleName", '')), @search) > 0
+                   OR STRPOS(LOWER(income_type."Name"), @search) > 0
+                   OR STRPOS(LOWER(operation."DocumentNumber"), @search) > 0)
+              """
+            : string.Empty;
+        var limitClause = limit is > 0 ? "LIMIT @limit" : string.Empty;
+        var sql = $$"""
+            WITH filtered_rows AS (
+                SELECT 'starting_balance'::text AS row_type,
+                       @date_from::date AS row_date,
+                       @date_from::date AS accounting_month,
+                       garage."Id" AS garage_id,
+                       garage."Number" AS garage_number,
+                       garage."OwnerId" AS owner_id,
+                       CASE WHEN owner."Id" IS NULL THEN NULL
+                            ELSE owner."LastName" || ' ' || owner."FirstName" || ' ' || COALESCE(owner."MiddleName", '') END AS owner_name,
+                       '00000000-0000-0000-0000-000000000000'::uuid AS income_type_id,
+                       'Стартовый баланс'::text AS income_type_name,
+                       garage."StartingBalance" AS accrual_amount,
+                       0::numeric AS income_amount,
+                       garage."StartingBalance" AS debt,
+                       NULL::text AS document_number,
+                       'Начальная задолженность гаража'::text AS comment,
+                       garage."CreatedAtUtc" AS created_at_utc,
+                       garage."Id" AS row_id,
+                       NULL::uuid AS payment_operation_id
+                FROM garages garage
+                LEFT JOIN owners owner ON owner."Id" = garage."OwnerId"
+                WHERE @include_starting_balances = TRUE
+                  AND garage."IsArchived" = FALSE
+                  AND garage."StartingBalance" <> 0
+                  {{garageClause}}
+                  {{ownerClause}}
+                  {{startingSearchClause}}
+                UNION ALL
+                SELECT 'accruals'::text, accrual."AccountingMonth", accrual."AccountingMonth",
+                       garage."Id", garage."Number", garage."OwnerId",
+                       CASE WHEN owner."Id" IS NULL THEN NULL
+                            ELSE owner."LastName" || ' ' || owner."FirstName" || ' ' || COALESCE(owner."MiddleName", '') END,
+                       income_type."Id", income_type."Name", accrual."Amount", 0::numeric,
+                       accrual."Amount", NULL::text, accrual."Comment", accrual."CreatedAtUtc", accrual."Id", NULL::uuid
+                FROM accruals accrual
+                INNER JOIN garages garage ON garage."Id" = accrual."GarageId"
+                LEFT JOIN owners owner ON owner."Id" = garage."OwnerId"
+                INNER JOIN income_types income_type ON income_type."Id" = accrual."IncomeTypeId"
+                WHERE accrual."IsCanceled" = FALSE
+                  AND accrual."AccountingMonth" >= @date_from::date
+                  AND accrual."AccountingMonth" <= @date_to::date
+                  {{garageClause}}
+                  {{ownerClause}}
+                  {{incomeTypeClause}}
+                  {{accrualSearchClause}}
+                UNION ALL
+                SELECT 'payments'::text, operation."OperationDate", operation."AccountingMonth",
+                       garage."Id", garage."Number", garage."OwnerId",
+                       CASE WHEN owner."Id" IS NULL THEN NULL
+                            ELSE owner."LastName" || ' ' || owner."FirstName" || ' ' || COALESCE(owner."MiddleName", '') END,
+                       income_type."Id", income_type."Name", 0::numeric, operation."Amount",
+                       -operation."Amount", operation."DocumentNumber", operation."Comment",
+                       operation."CreatedAtUtc", operation."Id", operation."Id"
+                FROM financial_operations operation
+                INNER JOIN garages garage ON garage."Id" = operation."GarageId"
+                LEFT JOIN owners owner ON owner."Id" = garage."OwnerId"
+                INNER JOIN income_types income_type ON income_type."Id" = operation."IncomeTypeId"
+                WHERE operation."IsCanceled" = FALSE
+                  AND operation."OperationKind" = 'income'
+                  AND operation."GarageId" IS NOT NULL
+                  AND operation."IncomeTypeId" IS NOT NULL
+                  AND operation."OperationDate" >= @date_from::date
+                  AND operation."OperationDate" <= @date_to::date
+                  {{garageClause}}
+                  {{ownerClause}}
+                  {{incomeTypeClause}}
+                  {{paymentSearchClause}}
+            ), page_rows AS (
+                SELECT filtered_rows.*,
+                       ROW_NUMBER() OVER (
+                           ORDER BY {{sortColumn}} {{direction}}, created_at_utc DESC, garage_number, row_id)::int AS row_order
+                FROM filtered_rows
+                ORDER BY {{sortColumn}} {{direction}}, created_at_utc DESC, garage_number, row_id
+                OFFSET @offset
+                {{limitClause}}
+            )
+            SELECT {{PageCategory}} AS "Category", row_order AS "RowOrder", row_type AS "RowType",
+                   row_date AS "Date", accounting_month AS "AccountingMonth", garage_id AS "GarageId",
+                   garage_number AS "GarageNumber", owner_id AS "OwnerId", owner_name AS "OwnerName",
+                   income_type_id AS "IncomeTypeId", income_type_name AS "IncomeTypeName",
+                   accrual_amount AS "AccrualAmount", income_amount AS "IncomeAmount", debt AS "Debt",
+                   document_number AS "DocumentNumber", comment AS "Comment", created_at_utc AS "CreatedAtUtc",
+                   row_id AS "RowId", payment_operation_id AS "PaymentOperationId",
+                   0::numeric AS "AccrualTotal", 0::numeric AS "IncomeTotal", 0 AS "RowCount"
+            FROM page_rows
+            UNION ALL
+            SELECT {{TotalsCategory}}, 0, NULL::text, NULL::date, NULL::date, NULL::uuid, NULL::text,
+                   NULL::uuid, NULL::text, NULL::uuid, NULL::text, 0::numeric, 0::numeric, 0::numeric,
+                   NULL::text, NULL::text, NULL::timestamptz, NULL::uuid, NULL::uuid,
+                   COALESCE(SUM(accrual_amount), 0), COALESCE(SUM(income_amount), 0), COUNT(*)::int
+            FROM filtered_rows
+            ORDER BY "Category", "RowOrder"
+            """;
+        var parameters = new List<object>
+        {
+            new NpgsqlParameter<bool>("include_starting_balances", includeStartingBalances),
+            new NpgsqlParameter<DateOnly>("date_from", dateFrom),
+            new NpgsqlParameter<DateOnly>("date_to", dateTo),
+            new NpgsqlParameter<int>("offset", offset)
+        };
+        if (garageIds.Count > 0)
+        {
+            parameters.Add(new NpgsqlParameter<Guid[]>("garage_ids", garageIds.ToArray()));
         }
-
-        if (rowMode is AllRows or PaymentRows)
+        if (ownerIds.Count > 0)
         {
-            var payments = dbContext.FinancialOperations.AsNoTracking()
-                .Where(operation =>
-                    !operation.IsCanceled &&
-                    operation.OperationKind == FinancialOperationKinds.Income &&
-                    operation.GarageId != null &&
-                    operation.IncomeTypeId != null &&
-                    operation.OperationDate >= dateFrom &&
-                    operation.OperationDate <= dateTo);
-            if (garageIds.Count > 0)
-            {
-                payments = payments.Where(operation => garageIds.Contains(operation.GarageId!.Value));
-            }
-
-            if (ownerIds.Count > 0)
-            {
-                payments = payments.Where(operation => operation.Garage!.OwnerId != null && ownerIds.Contains(operation.Garage.OwnerId.Value));
-            }
-
-            if (incomeTypeIds.Count > 0)
-            {
-                payments = payments.Where(operation => incomeTypeIds.Contains(operation.IncomeTypeId!.Value));
-            }
-
-            if (hasSearch)
-            {
-                payments = payments.Where(operation =>
-                    operation.Garage!.Number.ToLower().Contains(normalizedSearch!) ||
-                    (operation.Garage.Owner != null && (
-                        operation.Garage.Owner.LastName.ToLower().Contains(normalizedSearch!) ||
-                        operation.Garage.Owner.FirstName.ToLower().Contains(normalizedSearch!) ||
-                        (operation.Garage.Owner.MiddleName != null && operation.Garage.Owner.MiddleName.ToLower().Contains(normalizedSearch!)) ||
-                        (operation.Garage.Owner.LastName + " " + operation.Garage.Owner.FirstName + " " + (operation.Garage.Owner.MiddleName ?? string.Empty)).ToLower().Contains(normalizedSearch!))) ||
-                    operation.IncomeType!.Name.ToLower().Contains(normalizedSearch!) ||
-                    (operation.DocumentNumber != null && operation.DocumentNumber.ToLower().Contains(normalizedSearch!)));
-            }
-
-            aggregateQuery = aggregateQuery.Concat(payments
-                .GroupBy(_ => 1)
-                .Select(group => new
-                {
-                    Category = IncomeTotalCategory,
-                    Total = group.Sum(operation => operation.Amount),
-                    Count = group.Count()
-                }));
-
-            var projectedPayments = payments.Select(operation => new IncomeReportProjection
-            {
-                RowType = PaymentRows,
-                Date = operation.OperationDate,
-                AccountingMonth = operation.AccountingMonth,
-                GarageId = operation.GarageId!.Value,
-                GarageNumber = operation.Garage!.Number,
-                OwnerId = operation.Garage.OwnerId,
-                OwnerName = operation.Garage.Owner == null ? null : operation.Garage.Owner.LastName + " " + operation.Garage.Owner.FirstName + " " + (operation.Garage.Owner.MiddleName ?? string.Empty),
-                IncomeTypeId = operation.IncomeTypeId!.Value,
-                IncomeTypeName = operation.IncomeType!.Name,
-                AccrualAmount = 0m,
-                IncomeAmount = operation.Amount,
-                Debt = -operation.Amount,
-                DocumentNumber = operation.DocumentNumber,
-                Comment = operation.Comment,
-                CreatedAtUtc = operation.CreatedAtUtc,
-                RowId = operation.Id,
-                PaymentOperationId = operation.Id
-            });
-            reportRows = reportRows == null ? projectedPayments : reportRows.Concat(projectedPayments);
+            parameters.Add(new NpgsqlParameter<Guid[]>("owner_ids", ownerIds.ToArray()));
         }
-
-        if (reportRows == null)
+        if (incomeTypeIds.Count > 0)
         {
-            return new IncomeReportQueryData(0m, 0m, 0, []);
+            parameters.Add(new NpgsqlParameter<Guid[]>("income_type_ids", incomeTypeIds.ToArray()));
         }
-
-        var aggregates = await aggregateQuery.ToListAsync(cancellationToken);
-        var rowCount = aggregates.Sum(row => row.Count);
-        if (rowCount == 0)
+        if (hasSearch)
         {
-            return new IncomeReportQueryData(0m, 0m, 0, []);
+            parameters.Add(new NpgsqlParameter<string>("search", normalizedSearch!));
         }
-        var accrualTotal = aggregates.Where(row => row.Category is StartingBalanceTotalCategory or AccrualTotalCategory).Sum(row => row.Total);
-        var incomeTotal = aggregates.Where(row => row.Category == IncomeTotalCategory).Sum(row => row.Total);
-
-        var sortableRows = reportRows.Select(row => new IncomeReportSortableProjection
-        {
-            RowType = row.RowType,
-            Date = row.Date,
-            AccountingMonth = row.AccountingMonth,
-            GarageId = row.GarageId,
-            GarageNumber = row.GarageNumber,
-            OwnerId = row.OwnerId,
-            OwnerName = row.OwnerName,
-            IncomeTypeId = row.IncomeTypeId,
-            IncomeTypeName = row.IncomeTypeName,
-            AccrualAmount = row.AccrualAmount,
-            IncomeAmount = row.IncomeAmount,
-            Debt = row.Debt,
-            DocumentNumber = row.DocumentNumber,
-            Comment = row.Comment,
-            CreatedAtUtc = row.CreatedAtUtc,
-            RowId = row.RowId,
-            PaymentOperationId = row.PaymentOperationId
-        });
-        var ordered = ApplyPostgresSort(sortableRows, sort)
-            .ThenByDescending(row => row.CreatedAtUtc)
-            .ThenBy(row => row.GarageNumber)
-            .ThenBy(row => row.RowId);
-        IQueryable<IncomeReportSortableProjection> page = offset > 0 ? ordered.Skip(offset) : ordered;
         if (limit is > 0)
         {
-            page = page.Take(limit.Value);
+            parameters.Add(new NpgsqlParameter<int>("limit", limit.Value));
         }
 
-        var projectedRows = await page.ToListAsync(cancellationToken);
-        var visiblePaymentTargets = projectedRows
+        var combinedRows = await dbContext.Database
+            .SqlQueryRaw<IncomeAllCombinedQueryRow>(sql, parameters.ToArray())
+            .ToListAsync(cancellationToken);
+        var totals = combinedRows.Single(row => row.Category == TotalsCategory);
+        var pageRows = combinedRows.Where(row => row.Category == PageCategory).ToList();
+        var visiblePaymentTargets = pageRows
             .Where(row => row.PaymentOperationId.HasValue)
             .Select(row => new IncomeDebtTarget(
                 row.PaymentOperationId!.Value,
-                row.GarageId,
-                row.AccountingMonth,
-                row.Date))
+                row.GarageId!.Value,
+                row.AccountingMonth!.Value,
+                row.Date!.Value))
             .ToList();
         var debtAfterPayments = await CalculateDebtAfterPaymentsAsync(visiblePaymentTargets, cancellationToken);
-        var rows = projectedRows.Select(row => new IncomeReportRowDto(
-                row.RowType,
-                row.Date,
-                row.AccountingMonth,
-                row.GarageId,
-                row.GarageNumber,
+        var rows = pageRows.Select(row => new IncomeReportRowDto(
+                row.RowType!,
+                row.Date!.Value,
+                row.AccountingMonth!.Value,
+                row.GarageId!.Value,
+                row.GarageNumber!,
                 row.OwnerId,
                 row.OwnerName,
-                row.IncomeTypeId,
-                row.IncomeTypeName,
+                row.IncomeTypeId!.Value,
+                row.IncomeTypeName!,
                 row.AccrualAmount,
                 row.IncomeAmount,
                 row.Debt,
                 row.DocumentNumber,
                 row.Comment,
-                row.CreatedAtUtc,
+                row.CreatedAtUtc!.Value,
                 row.PaymentOperationId.HasValue ? debtAfterPayments.GetValueOrDefault(row.PaymentOperationId.Value) : null))
             .ToList();
-        return new IncomeReportQueryData(accrualTotal, incomeTotal, rowCount, rows);
+        return new IncomeReportQueryData(totals.AccrualTotal, totals.IncomeTotal, totals.RowCount, rows);
     }
 
     private async Task<IncomeReportQueryData> GetPostgresAccrualRowsAsync(
@@ -1117,6 +1080,30 @@ public sealed class EfIncomeReportQuery(GarageBalanceDbContext dbContext) : IInc
     private readonly record struct IncomeDebtAccrualRow(Guid GarageId, DateOnly AccountingMonth, decimal Amount);
     private readonly record struct IncomeDebtPaymentRow(Guid OperationId, Guid GarageId, DateOnly OperationDate, DateTimeOffset CreatedAtUtc, decimal Amount);
     private readonly record struct IncomeDebtTarget(Guid OperationId, Guid GarageId, DateOnly AccountingMonth, DateOnly OperationDate);
+
+    private sealed record IncomeAllCombinedQueryRow(
+        int Category,
+        int RowOrder,
+        string? RowType,
+        DateOnly? Date,
+        DateOnly? AccountingMonth,
+        Guid? GarageId,
+        string? GarageNumber,
+        Guid? OwnerId,
+        string? OwnerName,
+        Guid? IncomeTypeId,
+        string? IncomeTypeName,
+        decimal AccrualAmount,
+        decimal IncomeAmount,
+        decimal Debt,
+        string? DocumentNumber,
+        string? Comment,
+        DateTimeOffset? CreatedAtUtc,
+        Guid? RowId,
+        Guid? PaymentOperationId,
+        decimal AccrualTotal,
+        decimal IncomeTotal,
+        int RowCount);
 
     private sealed record IncomeAccrualCombinedQueryRow(
         int Category,

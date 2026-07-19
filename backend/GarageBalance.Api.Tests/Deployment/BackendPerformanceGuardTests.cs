@@ -551,17 +551,20 @@ public sealed class BackendPerformanceGuardTests
         Assert.Contains("COALESCE(SUM(expense_amount), 0)", expensePaymentMethod, StringComparison.Ordinal);
         Assert.Contains("SqlQueryRaw<ExpensePaymentCombinedQueryRow>", expensePaymentMethod, StringComparison.Ordinal);
         Assert.Equal(1, CountOccurrences(expensePaymentMethod, ".ToListAsync(cancellationToken)"));
-        Assert.True(CountOccurrences(incomeSource, "aggregateQuery = aggregateQuery.Concat(") >= 3);
-        Assert.True(CountOccurrences(incomeSource, "aggregateQuery.ToListAsync(cancellationToken)") >= 1);
         Assert.Contains("StartingBalanceTotalCategory", incomeSource, StringComparison.Ordinal);
         Assert.Contains("AccrualTotalCategory", incomeSource, StringComparison.Ordinal);
         Assert.Contains("IncomeTotalCategory", incomeSource, StringComparison.Ordinal);
-        var incomePostgresMethod = incomeSource[
-            incomeSource.IndexOf("private async Task<IncomeReportQueryData> GetPostgresRowsAsync", StringComparison.Ordinal)..incomeSource.IndexOf("private static IOrderedQueryable<IncomeReportSortableProjection> ApplyPostgresSort", StringComparison.Ordinal)];
-        Assert.Contains("visiblePaymentTargets = projectedRows", incomePostgresMethod, StringComparison.Ordinal);
-        Assert.Contains("new IncomeDebtTarget(", incomePostgresMethod, StringComparison.Ordinal);
-        Assert.DoesNotContain("paymentIds.Contains(operation.Id)", incomePostgresMethod, StringComparison.Ordinal);
-        Assert.DoesNotContain("visiblePayments", incomePostgresMethod, StringComparison.Ordinal);
+        var incomeAllMethod = incomeSource[
+            incomeSource.IndexOf("private async Task<IncomeReportQueryData> GetPostgresAllRowsAsync", StringComparison.Ordinal)..incomeSource.IndexOf("private async Task<IncomeReportQueryData> GetPostgresAccrualRowsAsync", StringComparison.Ordinal)];
+        Assert.Contains("WITH filtered_rows AS", incomeAllMethod, StringComparison.Ordinal);
+        Assert.Contains("COALESCE(SUM(accrual_amount), 0)", incomeAllMethod, StringComparison.Ordinal);
+        Assert.Contains("COALESCE(SUM(income_amount), 0)", incomeAllMethod, StringComparison.Ordinal);
+        Assert.Contains("SqlQueryRaw<IncomeAllCombinedQueryRow>", incomeAllMethod, StringComparison.Ordinal);
+        Assert.Contains("visiblePaymentTargets = pageRows", incomeAllMethod, StringComparison.Ordinal);
+        Assert.Contains("new IncomeDebtTarget(", incomeAllMethod, StringComparison.Ordinal);
+        Assert.Equal(1, CountOccurrences(incomeAllMethod, ".ToListAsync(cancellationToken)"));
+        Assert.DoesNotContain("paymentIds.Contains(operation.Id)", incomeAllMethod, StringComparison.Ordinal);
+        Assert.DoesNotContain("visiblePayments", incomeAllMethod, StringComparison.Ordinal);
         var incomeAccrualMethod = incomeSource[
             incomeSource.IndexOf("private async Task<IncomeReportQueryData> GetPostgresAccrualRowsAsync", StringComparison.Ordinal)..incomeSource.IndexOf("private async Task<IncomeReportQueryData> GetPostgresPaymentRowsAsync", StringComparison.Ordinal)];
         Assert.Contains("WITH filtered_rows AS", incomeAccrualMethod, StringComparison.Ordinal);
@@ -1049,6 +1052,8 @@ public sealed class BackendPerformanceGuardTests
         Assert.Contains("PostgreSqlExpenseReportAccrualQueryIntegrationTests.AccrualPageLoadsStartingBalanceSupplierAndStaffTotalsInOneCommand", document, StringComparison.Ordinal);
         Assert.Contains("Sixty-fourth expense-all command consolidation audit", document, StringComparison.Ordinal);
         Assert.Contains("PostgreSqlExpenseReportAllQueryIntegrationTests.AllRowsLoadAccrualPaymentTotalsAndBoundedPageInOneCommand", document, StringComparison.Ordinal);
+        Assert.Contains("Sixty-fifth income-all command consolidation audit", document, StringComparison.Ordinal);
+        Assert.Contains("PostgreSqlIncomeReportAllQueryIntegrationTests.AllRowsLoadTotalsBoundedPageAndSequentialDebtInAtMostTwoCommands", document, StringComparison.Ordinal);
         Assert.Contains("Shared end-user release `0.758.0`", document, StringComparison.Ordinal);
         Assert.Contains("limit", document, StringComparison.Ordinal);
         Assert.Contains("rowCount", document, StringComparison.Ordinal);
