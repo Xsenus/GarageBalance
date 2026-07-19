@@ -348,6 +348,7 @@ public sealed class BackendPerformanceGuardTests
         Assert.Contains("Таблица гаражей в сводном отчете теперь за одно обращение к базе", releaseNotes, StringComparison.Ordinal);
         Assert.Contains("Отчет «Оплаты из кассы» теперь за одно обращение к базе", releaseNotes, StringComparison.Ordinal);
         Assert.Contains("Отчет «Сдача кассы в банк» теперь за одно обращение к базе", releaseNotes, StringComparison.Ordinal);
+        Assert.Contains("Отчет «Изменения фондов» теперь за одно обращение к базе", releaseNotes, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -623,21 +624,24 @@ public sealed class BackendPerformanceGuardTests
     }
 
     [Fact]
-    public void FundChangeScreenQuery_UsesDatabaseCountSumsAndLimitBeforeMaterialization()
+    public void FundChangeScreenQuery_UsesOnePostgresCommandForTotalsActorsAndPage()
     {
         var source = ReadApiSource("Infrastructure/Data/EfFundChangeReportQuery.cs");
+        var method = source[
+            source.IndexOf("private async Task<FundChangeReportData> GetPostgresFundChangesAsync", StringComparison.Ordinal)..source.IndexOf("private IQueryable<FundChangeProjectionRow> ProjectRows", StringComparison.Ordinal)];
 
-        Assert.Matches(
-            BoundedQueryRegex(@"GetFundChangesAsync[\s\S]*?GroupBy\(operation => operation\.OperationKind\)[\s\S]*?RowCount = group\.Count\(\)[\s\S]*?Total = group\.Sum\(operation => operation\.Amount\)[\s\S]*?ApplyPage\(ordered, offset, limit\)\.ToListAsync\(cancellationToken\)"),
-            source);
-        Assert.DoesNotContain("query.CountAsync(cancellationToken)", source, StringComparison.Ordinal);
-        Assert.Contains("query.Skip(offset)", source, StringComparison.Ordinal);
-        Assert.Contains("operation.Fund.Name.ToLower().Contains(normalizedSearch)", source, StringComparison.Ordinal);
-        Assert.Contains("operation.OperationKind.ToLower().Contains(normalizedSearch)", source, StringComparison.Ordinal);
-        Assert.Contains("operation.Reason.ToLower().Contains(normalizedSearch)", source, StringComparison.Ordinal);
-        Assert.Contains("join actor in dbContext.Users.AsNoTracking()", source, StringComparison.Ordinal);
-        Assert.Contains("from actor in actors.DefaultIfEmpty()", source, StringComparison.Ordinal);
-        Assert.DoesNotContain("ToDictionaryAsync", source, StringComparison.Ordinal);
+        Assert.Equal(1, CountOccurrences(method, "SqlQueryRaw<FundChangeCombinedQueryRow>"));
+        Assert.Equal(1, CountOccurrences(method, ".ToListAsync(cancellationToken)"));
+        Assert.Equal(1, CountOccurrences(method, "FROM fund_operations"));
+        Assert.Contains("LEFT JOIN app_users actor", method, StringComparison.Ordinal);
+        Assert.Contains("FROM page_rows", method, StringComparison.Ordinal);
+        Assert.Contains("SUM(amount) FILTER", method, StringComparison.Ordinal);
+        Assert.Contains("COUNT(*)::int", method, StringComparison.Ordinal);
+        Assert.Contains("OFFSET @offset", method, StringComparison.Ordinal);
+        Assert.Contains("LIMIT @limit", method, StringComparison.Ordinal);
+        Assert.Contains("LOWER(fund.\"Name\")", method, StringComparison.Ordinal);
+        Assert.Contains("LOWER(operation.\"OperationKind\")", method, StringComparison.Ordinal);
+        Assert.Contains("LOWER(operation.\"Reason\")", method, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -990,6 +994,8 @@ public sealed class BackendPerformanceGuardTests
         Assert.Contains("PostgreSqlCashPaymentReportQueryIntegrationTests.CashPaymentPageUsesOneCommandAndPreservesTotalsSearchAndProjection", document, StringComparison.Ordinal);
         Assert.Contains("Fifty-seventh bank-deposit-report command audit", document, StringComparison.Ordinal);
         Assert.Contains("PostgreSqlBankDepositReportQueryIntegrationTests.BankDepositPageUsesOneCommandAndPreservesTotalsSearchAndProjection", document, StringComparison.Ordinal);
+        Assert.Contains("Fifty-eighth fund-change-report command audit", document, StringComparison.Ordinal);
+        Assert.Contains("PostgreSqlFundChangeReportQueryIntegrationTests.FundChangePageUsesOneCommandAndPreservesTotalsSearchActorAndProjection", document, StringComparison.Ordinal);
         Assert.Contains("Shared end-user release `0.758.0`", document, StringComparison.Ordinal);
         Assert.Contains("limit", document, StringComparison.Ordinal);
         Assert.Contains("rowCount", document, StringComparison.Ordinal);

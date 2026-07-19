@@ -1,6 +1,7 @@
 using GarageBalance.Api.Application.Reports;
 using GarageBalance.Api.Domain.Finance;
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
 
 namespace GarageBalance.Api.Infrastructure.Data;
 
@@ -26,6 +27,11 @@ public sealed class EfFundChangeReportQuery(GarageBalanceDbContext dbContext) : 
     {
         var fromUtc = new DateTimeOffset(dateFrom.ToDateTime(TimeOnly.MinValue), TimeSpan.Zero);
         var toExclusiveUtc = new DateTimeOffset(dateTo.AddDays(1).ToDateTime(TimeOnly.MinValue), TimeSpan.Zero);
+        if (dbContext.Database.IsNpgsql())
+        {
+            return await GetPostgresFundChangesAsync(fromUtc, toExclusiveUtc, search, offset, limit, sort, cancellationToken);
+        }
+
         var query = dbContext.FundOperations.AsNoTracking()
             .Where(operation =>
                 !operation.IsCanceled &&
@@ -97,6 +103,122 @@ public sealed class EfFundChangeReportQuery(GarageBalanceDbContext dbContext) : 
         }
 
         return new FundChangeReportData(rows, depositTotal, withdrawalTotal, rowCount);
+    }
+
+    private async Task<FundChangeReportData> GetPostgresFundChangesAsync(
+        DateTimeOffset fromUtc,
+        DateTimeOffset toExclusiveUtc,
+        string? search,
+        int offset,
+        int? limit,
+        ReportSort sort,
+        CancellationToken cancellationToken)
+    {
+        const int PageCategory = 1;
+        const int TotalsCategory = 2;
+        var sortColumn = sort.Field switch
+        {
+            "fundName" => "fund_name",
+            "changeName" => "change_name",
+            "amount" => "amount",
+            "balanceBefore" => "balance_before",
+            "balanceAfter" => "balance_after",
+            "actorDisplayName" => "actor_display_name",
+            "reason" => "reason",
+            _ => "created_at_utc"
+        };
+        var direction = sort.Descending ? "DESC" : "ASC";
+        var searchClause = string.IsNullOrWhiteSpace(search)
+            ? string.Empty
+            : """
+              AND (LOWER(fund."Name") LIKE '%' || @search || '%'
+                   OR LOWER(operation."OperationKind") LIKE '%' || @search || '%'
+                   OR LOWER(operation."Reason") LIKE '%' || @search || '%')
+              """;
+        var limitClause = limit is > 0 ? "LIMIT @limit" : string.Empty;
+        var sql = $$"""
+            WITH filtered_rows AS (
+                SELECT operation."Id" AS id,
+                       operation."FundId" AS fund_id,
+                       fund."Name" AS fund_name,
+                       operation."CreatedAtUtc" AS created_at_utc,
+                       operation."OperationKind" AS operation_kind,
+                       CASE operation."OperationKind"
+                           WHEN 'deposit' THEN 'Пополнение'
+                           WHEN 'withdraw' THEN 'Изъятие'
+                           ELSE operation."OperationKind"
+                       END AS change_name,
+                       operation."Amount" AS amount,
+                       operation."BalanceBefore" AS balance_before,
+                       operation."BalanceAfter" AS balance_after,
+                       operation."ActorUserId" AS actor_user_id,
+                       actor."DisplayName" AS actor_display_name,
+                       operation."Reason" AS reason
+                FROM fund_operations operation
+                INNER JOIN funds fund ON fund."Id" = operation."FundId"
+                LEFT JOIN app_users actor ON actor."Id" = operation."ActorUserId"
+                WHERE operation."IsCanceled" = FALSE
+                  AND operation."CreatedAtUtc" >= @from_utc
+                  AND operation."CreatedAtUtc" < @to_exclusive_utc
+                  {{searchClause}}
+            ), page_rows AS (
+                SELECT filtered_rows.*,
+                       ROW_NUMBER() OVER (ORDER BY {{sortColumn}} {{direction}}, id DESC)::int AS row_order
+                FROM filtered_rows
+                ORDER BY {{sortColumn}} {{direction}}, id DESC
+                OFFSET @offset
+                {{limitClause}}
+            )
+            SELECT {{PageCategory}} AS "Category", row_order AS "RowOrder", id AS "Id", fund_id AS "FundId",
+                   fund_name AS "FundName", created_at_utc AS "CreatedAtUtc", operation_kind AS "OperationKind",
+                   amount AS "Amount", balance_before AS "BalanceBefore", balance_after AS "BalanceAfter",
+                   actor_user_id AS "ActorUserId", actor_display_name AS "ActorDisplayName", reason AS "Reason",
+                   0::numeric AS "DepositTotal", 0::numeric AS "WithdrawalTotal", 0 AS "RowCount"
+            FROM page_rows
+            UNION ALL
+            SELECT {{TotalsCategory}}, 0, NULL::uuid, NULL::uuid, ''::text, NULL::timestamptz, ''::text,
+                   0::numeric, 0::numeric, 0::numeric, NULL::uuid, NULL::text, ''::text,
+                   COALESCE(SUM(amount) FILTER (WHERE operation_kind = 'deposit'), 0),
+                   COALESCE(SUM(amount) FILTER (WHERE operation_kind = 'withdraw'), 0),
+                   COUNT(*)::int
+            FROM filtered_rows
+            ORDER BY "Category", "RowOrder"
+            """;
+        var parameters = new List<object>
+        {
+            new NpgsqlParameter<DateTimeOffset>("from_utc", fromUtc),
+            new NpgsqlParameter<DateTimeOffset>("to_exclusive_utc", toExclusiveUtc),
+            new NpgsqlParameter<int>("offset", offset)
+        };
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            parameters.Add(new NpgsqlParameter<string>("search", search.Trim().ToLowerInvariant()));
+        }
+        if (limit is > 0)
+        {
+            parameters.Add(new NpgsqlParameter<int>("limit", limit.Value));
+        }
+
+        var result = await dbContext.Database
+            .SqlQueryRaw<FundChangeCombinedQueryRow>(sql, parameters.ToArray())
+            .ToListAsync(cancellationToken);
+        var totals = result.Single(row => row.Category == TotalsCategory);
+        var rows = result
+            .Where(row => row.Category == PageCategory)
+            .Select(row => new FundChangeReportQueryRow(
+                row.Id!.Value,
+                row.FundId!.Value,
+                row.FundName,
+                row.CreatedAtUtc!.Value,
+                row.OperationKind,
+                row.Amount,
+                row.BalanceBefore,
+                row.BalanceAfter,
+                row.ActorUserId,
+                row.ActorDisplayName,
+                row.Reason))
+            .ToList();
+        return new FundChangeReportData(rows, totals.DepositTotal, totals.WithdrawalTotal, totals.RowCount);
     }
 
     private IQueryable<FundChangeProjectionRow> ProjectRows(IQueryable<FundOperation> operations) =>
@@ -185,4 +307,22 @@ public sealed class EfFundChangeReportQuery(GarageBalanceDbContext dbContext) : 
         public FundChangeReportQueryRow ToQueryRow() =>
             new(Id, FundId, FundName, CreatedAtUtc, OperationKind, Amount, BalanceBefore, BalanceAfter, ActorUserId, ActorDisplayName, Reason);
     }
+
+    private sealed record FundChangeCombinedQueryRow(
+        int Category,
+        int RowOrder,
+        Guid? Id,
+        Guid? FundId,
+        string FundName,
+        DateTimeOffset? CreatedAtUtc,
+        string OperationKind,
+        decimal Amount,
+        decimal BalanceBefore,
+        decimal BalanceAfter,
+        Guid? ActorUserId,
+        string? ActorDisplayName,
+        string Reason,
+        decimal DepositTotal,
+        decimal WithdrawalTotal,
+        int RowCount);
 }
