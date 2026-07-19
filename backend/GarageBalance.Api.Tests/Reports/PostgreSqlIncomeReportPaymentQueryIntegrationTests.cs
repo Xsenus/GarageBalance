@@ -12,7 +12,7 @@ namespace GarageBalance.Api.Tests.Reports;
 public sealed class PostgreSqlIncomeReportPaymentQueryIntegrationTests
 {
     [PostgreSqlFact]
-    public async Task PaymentPageReusesProjectedTargetsAndLoadsTotalsPageAndDebtInThreeCommands()
+    public async Task PaymentPageLoadsTotalsPageAndSequentialDebtInTwoCommands()
     {
         var month = new DateOnly(2042, 10, 1);
         var suffix = Guid.NewGuid().ToString("N");
@@ -66,8 +66,10 @@ public sealed class PostgreSqlIncomeReportPaymentQueryIntegrationTests
         Assert.Equal(300m, result.Rows[1].DebtAfterPayment);
         Assert.Equal("PKO-FIRST", result.Rows[0].DocumentNumber);
         Assert.Equal("PKO-SECOND", result.Rows[1].DocumentNumber);
-        Assert.Equal(3, capture.Commands.Count);
-        Assert.Equal(3, capture.Commands.Count(command => command.Contains("financial_operations", StringComparison.OrdinalIgnoreCase)));
+        Assert.Equal(2, capture.Commands.Count);
+        Assert.Equal(2, capture.Commands.Count(command => command.Contains("financial_operations", StringComparison.OrdinalIgnoreCase)));
+        Assert.Contains("WITH filtered_rows AS", capture.Commands[0], StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("COALESCE(SUM(income_amount), 0)", capture.Commands[0], StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain(capture.Commands, command =>
             command.Contains("WHERE f.\"Id\" = ANY", StringComparison.OrdinalIgnoreCase) ||
             command.Contains("WHERE \"f\".\"Id\" = ANY", StringComparison.OrdinalIgnoreCase));
