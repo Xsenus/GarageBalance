@@ -901,6 +901,14 @@ public sealed class BackendPerformanceGuardTests
         Assert.All(requiredFilters, filter => Assert.Contains(filter, source, StringComparison.Ordinal));
         Assert.Contains("join actor in dbContext.Users.AsNoTracking()", source, StringComparison.Ordinal);
         Assert.Contains("from actor in actors.DefaultIfEmpty()", source, StringComparison.Ordinal);
+        Assert.Contains("GetPostgresEventsPageAsync(query, offset, limit, cancellationToken)", source, StringComparison.Ordinal);
+        Assert.Contains("SqlQueryRaw<int>(\"SELECT 1 AS \\\"Value\\\"\")", source, StringComparison.Ordinal);
+        Assert.Contains("TotalCount = query.Count()", source, StringComparison.Ordinal);
+        Assert.Contains(".Concat(totalsRow)", source, StringComparison.Ordinal);
+        var postgresPageStart = source.IndexOf("private async Task<AuditEventPageData> GetPostgresEventsPageAsync", StringComparison.Ordinal);
+        var postgresPageEnd = source.IndexOf("private IQueryable<AuditEventPageProjection> ProjectPageRows", postgresPageStart, StringComparison.Ordinal);
+        var postgresPageMethod = source[postgresPageStart..postgresPageEnd];
+        Assert.Equal(1, CountOccurrences(postgresPageMethod, ".ToListAsync(cancellationToken)"));
         Assert.Contains("page.ActorsById", ReadApiSource("Application/Audit/AuditService.cs"), StringComparison.Ordinal);
         Assert.DoesNotContain("GetActorsAsync(page.Items", ReadApiSource("Application/Audit/AuditService.cs"), StringComparison.Ordinal);
     }
@@ -1067,6 +1075,8 @@ public sealed class BackendPerformanceGuardTests
         Assert.Contains("PostgreSqlIncomeReportAllQueryIntegrationTests.AllRowsLoadTotalsBoundedPageAndSequentialDebtInAtMostTwoCommands", document, StringComparison.Ordinal);
         Assert.Contains("Sixty-sixth garage-report command consolidation audit", document, StringComparison.Ordinal);
         Assert.Contains("PostgreSqlGarageReportQueryIntegrationTests.GarageReportReturnsTotalsCountAndBoundedGroupedOrExpandedPageInOneCommand", document, StringComparison.Ordinal);
+        Assert.Contains("Sixty-seventh audit-page command consolidation audit", document, StringComparison.Ordinal);
+        Assert.Contains("PostgreSqlAuditEventPageQueryIntegrationTests.AuditPageLoadsCountRowsAndActorsInOneCommandForEveryPageShape", document, StringComparison.Ordinal);
         Assert.Contains("Shared end-user release `0.758.0`", document, StringComparison.Ordinal);
         Assert.Contains("limit", document, StringComparison.Ordinal);
         Assert.Contains("rowCount", document, StringComparison.Ordinal);

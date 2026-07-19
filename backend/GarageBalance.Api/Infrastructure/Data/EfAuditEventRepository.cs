@@ -49,6 +49,11 @@ public sealed class EfAuditEventRepository(GarageBalanceDbContext dbContext) : I
 
         query = ApplyDateFilters(query, request);
         query = ApplyNonDateFilters(query, request);
+        if (IsNpgsqlProvider())
+        {
+            return await GetPostgresEventsPageAsync(query, offset, limit, cancellationToken);
+        }
+
         var totalCount = await query.CountAsync(cancellationToken);
         var pageRows = await ProjectPageRows(query
                 .OrderByDescending(auditEvent => auditEvent.CreatedAtUtc)
@@ -56,6 +61,113 @@ public sealed class EfAuditEventRepository(GarageBalanceDbContext dbContext) : I
                 .Take(limit))
             .ToListAsync(cancellationToken);
         return CreatePageData(pageRows, totalCount);
+    }
+
+    private async Task<AuditEventPageData> GetPostgresEventsPageAsync(
+        IQueryable<AuditEvent> query,
+        int offset,
+        int limit,
+        CancellationToken cancellationToken)
+    {
+        const int PageCategory = 1;
+        const int TotalsCategory = 2;
+        var pageRows =
+            from auditEvent in query
+                .OrderByDescending(item => item.CreatedAtUtc)
+                .Skip(offset)
+                .Take(limit)
+            join actor in dbContext.Users.AsNoTracking()
+                on auditEvent.ActorUserId equals (Guid?)actor.Id into actors
+            from actor in actors.DefaultIfEmpty()
+            select new
+            {
+                Category = PageCategory,
+                Id = (Guid?)auditEvent.Id,
+                CreatedAtUtc = (DateTimeOffset?)auditEvent.CreatedAtUtc,
+                auditEvent.ActorUserId,
+                Action = (string?)auditEvent.Action,
+                auditEvent.Section,
+                auditEvent.ActionKind,
+                EntityType = (string?)auditEvent.EntityType,
+                auditEvent.EntityId,
+                auditEvent.EntityDisplayName,
+                auditEvent.RelatedGarageId,
+                auditEvent.RelatedGarageNumber,
+                auditEvent.RelatedAccountingMonth,
+                auditEvent.RelatedCounterpartyId,
+                auditEvent.RelatedCounterpartyName,
+                auditEvent.RelatedDocumentId,
+                auditEvent.RelatedDocumentNumber,
+                Summary = (string?)auditEvent.Summary,
+                auditEvent.MetadataJson,
+                ActorId = actor == null ? null : (Guid?)actor.Id,
+                ActorDisplayName = actor == null ? null : actor.DisplayName,
+                ActorEmail = actor == null ? null : actor.Email,
+                TotalCount = 0
+            };
+        var totalsRow = dbContext.Database
+            .SqlQueryRaw<int>("SELECT 1 AS \"Value\"")
+            .Select(_ => new
+            {
+                Category = TotalsCategory,
+                Id = (Guid?)null,
+                CreatedAtUtc = (DateTimeOffset?)null,
+                ActorUserId = (Guid?)null,
+                Action = (string?)null,
+                Section = (string?)null,
+                ActionKind = (string?)null,
+                EntityType = (string?)null,
+                EntityId = (string?)null,
+                EntityDisplayName = (string?)null,
+                RelatedGarageId = (string?)null,
+                RelatedGarageNumber = (string?)null,
+                RelatedAccountingMonth = (string?)null,
+                RelatedCounterpartyId = (string?)null,
+                RelatedCounterpartyName = (string?)null,
+                RelatedDocumentId = (string?)null,
+                RelatedDocumentNumber = (string?)null,
+                Summary = (string?)null,
+                MetadataJson = (string?)null,
+                ActorId = (Guid?)null,
+                ActorDisplayName = (string?)null,
+                ActorEmail = (string?)null,
+                TotalCount = query.Count()
+            });
+        var combinedRows = await pageRows
+            .Concat(totalsRow)
+            .OrderBy(row => row.Category)
+            .ThenByDescending(row => row.CreatedAtUtc)
+            .ToListAsync(cancellationToken);
+        var totalCount = combinedRows.Single(row => row.Category == TotalsCategory).TotalCount;
+        var projectedRows = combinedRows
+            .Where(row => row.Category == PageCategory)
+            .Select(row => new AuditEventPageProjection(
+                new()
+                {
+                    Id = row.Id!.Value,
+                    CreatedAtUtc = row.CreatedAtUtc!.Value,
+                    ActorUserId = row.ActorUserId,
+                    Action = row.Action!,
+                    Section = row.Section,
+                    ActionKind = row.ActionKind,
+                    EntityType = row.EntityType!,
+                    EntityId = row.EntityId,
+                    EntityDisplayName = row.EntityDisplayName,
+                    RelatedGarageId = row.RelatedGarageId,
+                    RelatedGarageNumber = row.RelatedGarageNumber,
+                    RelatedAccountingMonth = row.RelatedAccountingMonth,
+                    RelatedCounterpartyId = row.RelatedCounterpartyId,
+                    RelatedCounterpartyName = row.RelatedCounterpartyName,
+                    RelatedDocumentId = row.RelatedDocumentId,
+                    RelatedDocumentNumber = row.RelatedDocumentNumber,
+                    Summary = row.Summary!,
+                    MetadataJson = row.MetadataJson
+                },
+                row.ActorId,
+                row.ActorDisplayName,
+                row.ActorEmail))
+            .ToList();
+        return CreatePageData(projectedRows, totalCount);
     }
 
     private IQueryable<AuditEventPageProjection> ProjectPageRows(IQueryable<AuditEvent> query) =>
@@ -339,4 +451,7 @@ public sealed class EfAuditEventRepository(GarageBalanceDbContext dbContext) : I
 
     private bool IsSqliteProvider() =>
         string.Equals(dbContext.Database.ProviderName, "Microsoft.EntityFrameworkCore.Sqlite", StringComparison.Ordinal);
+
+    private bool IsNpgsqlProvider() =>
+        dbContext.Database.ProviderName?.Contains("Npgsql", StringComparison.OrdinalIgnoreCase) == true;
 }
