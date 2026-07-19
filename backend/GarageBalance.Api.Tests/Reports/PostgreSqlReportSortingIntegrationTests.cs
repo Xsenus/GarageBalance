@@ -1,4 +1,5 @@
 using GarageBalance.Api.Application.Reports;
+using GarageBalance.Api.Application.Finance;
 using GarageBalance.Api.Domain.Dictionaries;
 using GarageBalance.Api.Domain.Finance;
 using GarageBalance.Api.Infrastructure.Data;
@@ -491,6 +492,32 @@ public sealed class PostgreSqlReportSortingIntegrationTests
         await context.Database.ExecuteSqlRawAsync("ANALYZE accruals; ANALYZE financial_operations; ANALYZE garages;");
 
         var stopwatch = Stopwatch.StartNew();
+        var debtors = await DictionaryServiceTestFactory.Create(context).GetGaragesPageAsync(
+            null,
+            0,
+            pageSize,
+            "overdueDebt",
+            "desc",
+            CancellationToken.None,
+            debtorsOnly: true);
+        var debtorsElapsed = stopwatch.Elapsed;
+        Assert.Equal(garageCount, debtors.TotalCount);
+        Assert.Equal(pageSize, debtors.Items.Count);
+        Assert.All(debtors.Items, garage => Assert.Equal(1440m, garage.OverdueDebt));
+
+        stopwatch.Restart();
+        var worksheet = await FinanceServiceTestFactory.Create(context).GetGarageIncomeWorksheetAsync(
+            garages[0].Id,
+            new GarageIncomeWorksheetRequest(firstMonth, lastMonth),
+            CancellationToken.None);
+        var worksheetElapsed = stopwatch.Elapsed;
+        Assert.True(worksheet.Succeeded, worksheet.ErrorMessage);
+        Assert.Equal(monthCount, worksheet.Value!.Rows.Count);
+        Assert.Equal(monthCount * 100m, worksheet.Value.AccrualTotal);
+        Assert.Equal(monthCount * 60m, worksheet.Value.IncomeTotal);
+        Assert.Equal(monthCount * 40m, worksheet.Value.ClosingDebt);
+
+        stopwatch.Restart();
         var income = await new EfIncomeReportQuery(context).GetRowsAsync(
             firstMonth,
             dateTo,
@@ -557,10 +584,10 @@ public sealed class PostgreSqlReportSortingIntegrationTests
         Assert.Equal(expectedIncomeTotal, fees.CollectedTotals[incomeType.Id]);
         Assert.Equal(expectedAccrualTotal - expectedIncomeTotal, fees.DebtTotal);
 
-        var totalQueryTime = incomeElapsed + garagesElapsed + consolidatedElapsed + feesElapsed;
+        var totalQueryTime = debtorsElapsed + worksheetElapsed + incomeElapsed + garagesElapsed + consolidatedElapsed + feesElapsed;
         Assert.True(
             totalQueryTime < TimeSpan.FromSeconds(15),
-            $"Realistic report queries took {totalQueryTime.TotalSeconds:F2}s: income {incomeElapsed.TotalSeconds:F2}s, garages {garagesElapsed.TotalSeconds:F2}s, consolidated {consolidatedElapsed.TotalSeconds:F2}s, fees {feesElapsed.TotalSeconds:F2}s.");
+            $"Realistic finance queries took {totalQueryTime.TotalSeconds:F2}s: debtors {debtorsElapsed.TotalSeconds:F2}s, worksheet {worksheetElapsed.TotalSeconds:F2}s, income {incomeElapsed.TotalSeconds:F2}s, garages {garagesElapsed.TotalSeconds:F2}s, consolidated {consolidatedElapsed.TotalSeconds:F2}s, fees {feesElapsed.TotalSeconds:F2}s.");
     }
 
     private static Accrual CreateAccrual(Garage garage, IncomeType incomeType, DateOnly month, decimal amount) =>
