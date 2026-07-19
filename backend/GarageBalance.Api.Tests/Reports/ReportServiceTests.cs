@@ -1,4 +1,5 @@
 using GarageBalance.Api.Application.Audit;
+using GarageBalance.Api.Application.Common;
 using GarageBalance.Api.Application.Finance;
 using GarageBalance.Api.Application.Reports;
 using GarageBalance.Api.Tests.Common;
@@ -10,6 +11,7 @@ using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using System.Data.Common;
+using System.Globalization;
 using System.IO.Compression;
 using System.Text;
 
@@ -56,6 +58,177 @@ public sealed class ReportServiceTests
         Assert.Equal(fixtures.ExpenseType.Id, expenseBreakdown.TypeId);
         Assert.Equal("Вода", expenseBreakdown.Name);
         Assert.Equal(400m, expenseBreakdown.Amount);
+    }
+
+    [Fact]
+    public async Task ReportScreensXlsxAndPdfContainTheSameSyntheticRowsAndTotals()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        var finance = FinanceServiceTestFactory.Create(database.Context);
+        var service = CreateService(database.Context);
+        var month = new DateOnly(2026, 6, 1);
+        var dateFrom = new DateOnly(2026, 6, 1);
+        var dateTo = new DateOnly(2026, 6, 30);
+
+        Assert.True((await finance.CreateAccrualAsync(
+            new CreateAccrualRequest(fixtures.FirstGarage.Id, fixtures.IncomeType.Id, month, 2000m, AccrualSources.Manual, "PARITY-ACCRUAL"),
+            null,
+            CancellationToken.None)).Succeeded);
+        Assert.True((await finance.CreateIncomeAsync(
+            new CreateIncomeOperationRequest(fixtures.FirstGarage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 6, 10), month, 1500m, "PARITY-PKO", "PARITY-INCOME"),
+            null,
+            CancellationToken.None)).Succeeded);
+        Assert.True((await finance.CreateExpenseAsync(
+            new CreateExpenseOperationRequest(fixtures.Supplier.Id, fixtures.ExpenseType.Id, new DateOnly(2026, 6, 12), month, 400m, "PARITY-RKO", "PARITY-EXPENSE"),
+            null,
+            CancellationToken.None)).Succeeded);
+        database.Context.SupplierAccruals.Add(new SupplierAccrual
+        {
+            SupplierId = fixtures.Supplier.Id,
+            ExpenseTypeId = fixtures.ExpenseType.Id,
+            AccountingMonth = month,
+            Amount = 900m,
+            Source = AccrualSources.Manual,
+            DocumentNumber = "PARITY-INVOICE"
+        });
+        var fund = new Fund { Name = "Parity reserve", NormalizedName = "PARITY RESERVE", SortOrder = 100 };
+        database.Context.Funds.Add(fund);
+        database.Context.FundOperations.AddRange(
+            new FundOperation
+            {
+                Fund = fund,
+                OperationKind = FundOperationKinds.Deposit,
+                Amount = 600m,
+                BalanceBefore = 0m,
+                BalanceAfter = 600m,
+                Reason = "PARITY-FUND-DEPOSIT",
+                CreatedAtUtc = new DateTimeOffset(2026, 6, 15, 9, 0, 0, TimeSpan.Zero)
+            },
+            new FundOperation
+            {
+                Fund = fund,
+                OperationKind = FundOperationKinds.Withdraw,
+                Amount = 150m,
+                BalanceBefore = 600m,
+                BalanceAfter = 450m,
+                Reason = "PARITY-FUND-WITHDRAWAL",
+                CreatedAtUtc = new DateTimeOffset(2026, 6, 16, 9, 0, 0, TimeSpan.Zero)
+            },
+            new FundOperation
+            {
+                Fund = fund,
+                OperationKind = FundOperationKinds.Deposit,
+                Amount = 700m,
+                BalanceBefore = 450m,
+                BalanceAfter = 1150m,
+                Reason = "PARITY-BANK-DEPOSIT",
+                IsCashToBankTransfer = true,
+                CreatedAtUtc = new DateTimeOffset(2026, 6, 17, 9, 0, 0, TimeSpan.Zero)
+            });
+        await database.Context.SaveChangesAsync();
+
+        var consolidatedRequest = new ConsolidatedReportRequest(month, month, null);
+        var consolidated = await service.GetConsolidatedReportAsync(consolidatedRequest, CancellationToken.None);
+        Assert.True(consolidated.Succeeded);
+        Assert.Equal((2000m, 1500m, 400m, 1100m, 500m),
+            (consolidated.Value!.AccrualTotal, consolidated.Value.IncomeTotal, consolidated.Value.ExpenseTotal, consolidated.Value.Balance, consolidated.Value.Debt));
+        Assert.Contains(consolidated.Value.GarageRows, row => row.GarageNumber == fixtures.FirstGarage.Number);
+        await AssertReportFormatParityAsync(
+            service.ExportConsolidatedReportXlsxAsync(consolidatedRequest, CancellationToken.None),
+            service.ExportConsolidatedReportPdfAsync(consolidatedRequest, CancellationToken.None),
+            fixtures.FirstGarage.Number,
+            consolidated.Value!.AccrualTotal,
+            consolidated.Value.IncomeTotal,
+            consolidated.Value.ExpenseTotal,
+            consolidated.Value.Balance,
+            consolidated.Value.Debt);
+
+        var garageRequest = new GarageReportRequest(month, month, null, false);
+        var garages = await service.GetGarageReportAsync(garageRequest, CancellationToken.None);
+        Assert.True(garages.Succeeded);
+        Assert.Equal((2000m, 1500m, 500m), (garages.Value!.AccrualTotal, garages.Value.IncomeTotal, garages.Value.Difference));
+        Assert.Contains(garages.Value.Rows, row => row.GarageNumber == fixtures.FirstGarage.Number);
+        await AssertReportFormatParityAsync(
+            service.ExportGarageReportXlsxAsync(garageRequest, CancellationToken.None),
+            service.ExportGarageReportPdfAsync(garageRequest, CancellationToken.None),
+            fixtures.FirstGarage.Number,
+            garages.Value!.AccrualTotal,
+            garages.Value.IncomeTotal,
+            garages.Value.Difference);
+
+        var incomeRequest = new IncomeReportRequest(dateFrom, dateTo, null, [], [], [], "all");
+        var income = await service.GetIncomeReportAsync(incomeRequest, CancellationToken.None);
+        Assert.True(income.Succeeded);
+        Assert.Equal((2000m, 1500m, 500m), (income.Value!.AccrualTotal, income.Value.IncomeTotal, income.Value.Debt));
+        Assert.Contains(income.Value.Rows, row => row.DocumentNumber == "PARITY-PKO");
+        await AssertReportFormatParityAsync(
+            service.ExportIncomeReportXlsxAsync(incomeRequest, CancellationToken.None),
+            service.ExportIncomeReportPdfAsync(incomeRequest, CancellationToken.None),
+            "PARITY-PKO",
+            income.Value!.AccrualTotal,
+            income.Value.IncomeTotal,
+            income.Value.Debt);
+
+        var expenseRequest = new ExpenseReportRequest(dateFrom, dateTo, null, [], [], "all");
+        var expenses = await service.GetExpenseReportAsync(expenseRequest, CancellationToken.None);
+        Assert.True(expenses.Succeeded);
+        Assert.Equal((900m, 400m, 500m), (expenses.Value!.AccrualTotal, expenses.Value.ExpenseTotal, expenses.Value.Difference));
+        Assert.Contains(expenses.Value.Rows, row => row.DocumentNumber == "PARITY-RKO");
+        await AssertReportFormatParityAsync(
+            service.ExportExpenseReportXlsxAsync(expenseRequest, CancellationToken.None),
+            service.ExportExpenseReportPdfAsync(expenseRequest, CancellationToken.None),
+            "PARITY-RKO",
+            expenses.Value!.AccrualTotal,
+            expenses.Value.ExpenseTotal,
+            expenses.Value.Difference);
+
+        var fundRequest = new FundChangeReportRequest(dateFrom, dateTo, null);
+        var fundChanges = await service.GetFundChangeReportAsync(fundRequest, CancellationToken.None);
+        Assert.True(fundChanges.Succeeded);
+        Assert.Equal((1300m, 150m), (fundChanges.Value!.DepositTotal, fundChanges.Value.WithdrawalTotal));
+        Assert.Contains(fundChanges.Value.Rows, row => row.Reason == "PARITY-FUND-DEPOSIT");
+        await AssertReportFormatParityAsync(
+            service.ExportFundChangeReportXlsxAsync(fundRequest, CancellationToken.None),
+            service.ExportFundChangeReportPdfAsync(fundRequest, CancellationToken.None),
+            "PARITY-FUND-DEPOSIT",
+            fundChanges.Value!.DepositTotal,
+            fundChanges.Value.WithdrawalTotal);
+
+        var cashRequest = new CashPaymentReportRequest(dateFrom, dateTo, null);
+        var cashPayments = await service.GetCashPaymentReportAsync(cashRequest, CancellationToken.None);
+        Assert.True(cashPayments.Succeeded);
+        Assert.Equal(400m, cashPayments.Value!.Total);
+        Assert.Contains(cashPayments.Value.Rows, row => row.DocumentNumber == "PARITY-RKO");
+        await AssertReportFormatParityAsync(
+            service.ExportCashPaymentReportXlsxAsync(cashRequest, CancellationToken.None),
+            service.ExportCashPaymentReportPdfAsync(cashRequest, CancellationToken.None),
+            "PARITY-RKO",
+            cashPayments.Value!.Total);
+
+        var bankRequest = new BankDepositReportRequest(dateFrom, dateTo, null);
+        var bankDeposits = await service.GetBankDepositReportAsync(bankRequest, CancellationToken.None);
+        Assert.True(bankDeposits.Succeeded);
+        Assert.Equal(700m, bankDeposits.Value!.Total);
+        Assert.Contains(bankDeposits.Value.Rows, row => row.Comment == "PARITY-BANK-DEPOSIT");
+        await AssertReportFormatParityAsync(
+            service.ExportBankDepositReportXlsxAsync(bankRequest, CancellationToken.None),
+            service.ExportBankDepositReportPdfAsync(bankRequest, CancellationToken.None),
+            "PARITY-BANK-DEPOSIT",
+            bankDeposits.Value!.Total);
+
+        var feeRequest = new FeeReportRequest(fixtures.IncomeType.Name);
+        var fees = await service.GetFeeReportAsync(feeRequest, CancellationToken.None);
+        Assert.True(fees.Succeeded);
+        Assert.Equal((2000m, 1500m, 500m), (fees.Value!.AccruedTotal, fees.Value.CollectedTotal, fees.Value.DebtTotal));
+        Assert.Contains(fees.Value.GarageRows, row => row.GarageNumber == fixtures.FirstGarage.Number);
+        await AssertReportFormatParityAsync(
+            service.ExportFeeReportXlsxAsync(feeRequest, CancellationToken.None),
+            service.ExportFeeReportPdfAsync(feeRequest, CancellationToken.None),
+            fixtures.FirstGarage.Number,
+            fees.Value!.AccruedTotal,
+            fees.Value.CollectedTotal,
+            fees.Value.DebtTotal);
     }
 
     [Fact]
@@ -2330,6 +2503,41 @@ public sealed class ReportServiceTests
 
             return base.ReaderExecutingAsync(command, eventData, result, cancellationToken);
         }
+    }
+
+    private static async Task AssertReportFormatParityAsync(
+        Task<ReportResult<ReportExportFileDto>> xlsxTask,
+        Task<ReportResult<ReportExportFileDto>> pdfTask,
+        string rowMarker,
+        params decimal[] totals)
+    {
+        var xlsx = await xlsxTask;
+        var pdf = await pdfTask;
+        Assert.True(xlsx.Succeeded, xlsx.ErrorMessage);
+        Assert.True(pdf.Succeeded, pdf.ErrorMessage);
+        AssertWorkbookContains(xlsx.Value!.Content, rowMarker);
+        AssertPdfContains(pdf.Value!.Content, rowMarker);
+
+        foreach (var total in totals.Distinct())
+        {
+            AssertWorkbookContainsNumber(xlsx.Value.Content, total);
+            AssertPdfContains(pdf.Value.Content, MoneyFormatting.Format(total));
+        }
+    }
+
+    private static void AssertWorkbookContainsNumber(byte[] content, decimal expected)
+    {
+        var expectedText = expected.ToString(CultureInfo.InvariantCulture);
+        using var stream = new MemoryStream(content);
+        using var archive = new ZipArchive(stream, ZipArchiveMode.Read);
+        var values = archive.Entries
+            .Where(entry => entry.FullName.StartsWith("xl/worksheets/", StringComparison.Ordinal))
+            .Select(ReadEntry)
+            .SelectMany(text => System.Xml.Linq.XDocument.Parse(text)
+                .Descendants()
+                .Where(element => element.Name.LocalName == "v")
+                .Select(element => element.Value));
+        Assert.Contains(expectedText, values);
     }
 
     private static void AssertWorkbookContains(byte[] content, string expected)
