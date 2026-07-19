@@ -858,7 +858,7 @@ public sealed class ReportService(
                 operation.Id,
                 DateOnly.FromDateTime(operation.CreatedAtUtc.UtcDateTime),
                 operation.Amount,
-                operation.Fund.Name,
+                operation.FundName,
                 operation.Reason))
             .ToList();
         var report = new BankDepositReportDto(dateFrom, dateTo, data.Total, data.RowCount, offset, limit ?? data.RowCount, rows);

@@ -1,5 +1,3 @@
-using GarageBalance.Api.Domain.Finance;
-
 namespace GarageBalance.Api.Application.Reports;
 
 public interface ICashMovementReportQuery
@@ -38,6 +36,13 @@ public sealed record CashPaymentQueryRow(
     string? Comment);
 
 public sealed record BankDepositReportData(
-    IReadOnlyList<FundOperation> Operations,
+    IReadOnlyList<BankDepositQueryRow> Operations,
     decimal Total,
     int RowCount);
+
+public sealed record BankDepositQueryRow(
+    Guid Id,
+    DateTimeOffset CreatedAtUtc,
+    decimal Amount,
+    string FundName,
+    string Reason);

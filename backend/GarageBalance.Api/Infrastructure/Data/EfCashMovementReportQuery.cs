@@ -166,6 +166,11 @@ public sealed class EfCashMovementReportQuery(GarageBalanceDbContext dbContext) 
     {
         var fromUtc = new DateTimeOffset(dateFrom.ToDateTime(TimeOnly.MinValue), TimeSpan.Zero);
         var toExclusiveUtc = new DateTimeOffset(dateTo.AddDays(1).ToDateTime(TimeOnly.MinValue), TimeSpan.Zero);
+        if (dbContext.Database.IsNpgsql())
+        {
+            return await GetPostgresBankDepositsAsync(fromUtc, toExclusiveUtc, search, offset, limit, sort, cancellationToken);
+        }
+
         var query = dbContext.FundOperations.AsNoTracking()
             .Include(operation => operation.Fund)
             .Where(operation =>
@@ -175,9 +180,8 @@ public sealed class EfCashMovementReportQuery(GarageBalanceDbContext dbContext) 
                 operation.CreatedAtUtc >= fromUtc &&
                 operation.CreatedAtUtc < toExclusiveUtc);
 
-        if (IsSqliteProvider())
-        {
-            var operations = (await dbContext.FundOperations.AsNoTracking()
+        var operations = IsSqliteProvider()
+            ? (await dbContext.FundOperations.AsNoTracking()
                     .Include(operation => operation.Fund)
                     .ToListAsync(cancellationToken))
                 .Where(operation =>
@@ -186,44 +190,112 @@ public sealed class EfCashMovementReportQuery(GarageBalanceDbContext dbContext) 
                     operation.IsCashToBankTransfer &&
                     operation.CreatedAtUtc >= fromUtc &&
                     operation.CreatedAtUtc < toExclusiveUtc)
-                .ToList();
-            if (!string.IsNullOrWhiteSpace(search))
-            {
-                var normalizedSearch = search.Trim();
-                operations = operations.Where(operation =>
-                        operation.Fund.Name.Contains(normalizedSearch, StringComparison.OrdinalIgnoreCase) ||
-                        operation.Reason.Contains(normalizedSearch, StringComparison.OrdinalIgnoreCase))
-                    .ToList();
-            }
-
-            operations = ApplyBankDepositSort(operations, sort).ThenByDescending(operation => operation.Id).ToList();
-            return new BankDepositReportData(
-                ApplyPage(operations, offset, limit).ToList(),
-                operations.Sum(operation => operation.Amount),
-                operations.Count);
-        }
-
+                .ToList()
+            : await query.ToListAsync(cancellationToken);
         if (!string.IsNullOrWhiteSpace(search))
         {
-            var normalizedSearch = search.Trim().ToLower();
-            query = query.Where(operation =>
-                operation.Fund.Name.ToLower().Contains(normalizedSearch) ||
-                operation.Reason.ToLower().Contains(normalizedSearch));
+            var normalizedSearch = search.Trim();
+            operations = operations.Where(operation =>
+                    operation.Fund.Name.Contains(normalizedSearch, StringComparison.OrdinalIgnoreCase) ||
+                    operation.Reason.Contains(normalizedSearch, StringComparison.OrdinalIgnoreCase))
+                .ToList();
         }
 
-        var totals = await query
-            .GroupBy(_ => 1)
-            .Select(group => new
-            {
-                RowCount = group.Count(),
-                Total = group.Sum(operation => operation.Amount)
-            })
-            .SingleOrDefaultAsync(cancellationToken);
-        var rowCount = totals?.RowCount ?? 0;
-        var total = totals?.Total ?? 0m;
-        var orderedQuery = ApplyBankDepositSort(query, sort).ThenByDescending(operation => operation.Id);
-        var result = await ApplyPage(orderedQuery, offset, limit).ToListAsync(cancellationToken);
-        return new BankDepositReportData(result, total, rowCount);
+        operations = ApplyBankDepositSort(operations, sort).ThenByDescending(operation => operation.Id).ToList();
+        return new BankDepositReportData(
+            ApplyPage(operations, offset, limit).Select(ToBankDepositQueryRow).ToList(),
+            operations.Sum(operation => operation.Amount),
+            operations.Count);
+    }
+
+    private async Task<BankDepositReportData> GetPostgresBankDepositsAsync(
+        DateTimeOffset fromUtc,
+        DateTimeOffset toExclusiveUtc,
+        string? search,
+        int offset,
+        int? limit,
+        ReportSort sort,
+        CancellationToken cancellationToken)
+    {
+        const int PageCategory = 1;
+        const int TotalsCategory = 2;
+        var sortColumn = sort.Field switch
+        {
+            "amount" => "amount",
+            "fundName" => "fund_name",
+            "comment" => "reason",
+            _ => "created_at_utc"
+        };
+        var direction = sort.Descending ? "DESC" : "ASC";
+        var searchClause = string.IsNullOrWhiteSpace(search)
+            ? string.Empty
+            : """
+              AND (LOWER(fund."Name") LIKE '%' || @search || '%'
+                   OR LOWER(operation."Reason") LIKE '%' || @search || '%')
+              """;
+        var limitClause = limit is > 0 ? "LIMIT @limit" : string.Empty;
+        var sql = $$"""
+            WITH filtered_rows AS (
+                SELECT operation."Id" AS id,
+                       operation."CreatedAtUtc" AS created_at_utc,
+                       operation."Amount" AS amount,
+                       fund."Name" AS fund_name,
+                       operation."Reason" AS reason
+                FROM fund_operations operation
+                INNER JOIN funds fund ON fund."Id" = operation."FundId"
+                WHERE operation."IsCanceled" = FALSE
+                  AND operation."OperationKind" = 'deposit'
+                  AND operation."IsCashToBankTransfer" = TRUE
+                  AND operation."CreatedAtUtc" >= @from_utc
+                  AND operation."CreatedAtUtc" < @to_exclusive_utc
+                  {{searchClause}}
+            ), page_rows AS (
+                SELECT filtered_rows.*,
+                       ROW_NUMBER() OVER (ORDER BY {{sortColumn}} {{direction}}, id DESC)::int AS row_order
+                FROM filtered_rows
+                ORDER BY {{sortColumn}} {{direction}}, id DESC
+                OFFSET @offset
+                {{limitClause}}
+            )
+            SELECT {{PageCategory}} AS "Category", row_order AS "RowOrder", id AS "Id",
+                   created_at_utc AS "CreatedAtUtc", amount AS "Amount", fund_name AS "FundName", reason AS "Reason",
+                   0::numeric AS "Total", 0 AS "RowCount"
+            FROM page_rows
+            UNION ALL
+            SELECT {{TotalsCategory}}, 0, NULL::uuid, NULL::timestamptz, 0::numeric, ''::text, ''::text,
+                   COALESCE(SUM(amount), 0), COUNT(*)::int
+            FROM filtered_rows
+            ORDER BY "Category", "RowOrder"
+            """;
+        var parameters = new List<object>
+        {
+            new NpgsqlParameter<DateTimeOffset>("from_utc", fromUtc),
+            new NpgsqlParameter<DateTimeOffset>("to_exclusive_utc", toExclusiveUtc),
+            new NpgsqlParameter<int>("offset", offset)
+        };
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            parameters.Add(new NpgsqlParameter<string>("search", search.Trim().ToLowerInvariant()));
+        }
+        if (limit is > 0)
+        {
+            parameters.Add(new NpgsqlParameter<int>("limit", limit.Value));
+        }
+
+        var rows = await dbContext.Database
+            .SqlQueryRaw<BankDepositCombinedQueryRow>(sql, parameters.ToArray())
+            .ToListAsync(cancellationToken);
+        var totals = rows.Single(row => row.Category == TotalsCategory);
+        var operations = rows
+            .Where(row => row.Category == PageCategory)
+            .Select(row => new BankDepositQueryRow(
+                row.Id!.Value,
+                row.CreatedAtUtc!.Value,
+                row.Amount,
+                row.FundName,
+                row.Reason))
+            .ToList();
+        return new BankDepositReportData(operations, totals.Total, totals.RowCount);
     }
 
     private static IOrderedQueryable<FinancialOperation> ApplyCashPaymentSort(IQueryable<FinancialOperation> query, ReportSort sort) =>
@@ -258,15 +330,6 @@ public sealed class EfCashMovementReportQuery(GarageBalanceDbContext dbContext) 
             _ => sort.Descending ? operations.OrderByDescending(operation => operation.OperationDate) : operations.OrderBy(operation => operation.OperationDate)
         };
 
-    private static IOrderedQueryable<FundOperation> ApplyBankDepositSort(IQueryable<FundOperation> query, ReportSort sort) =>
-        sort.Field switch
-        {
-            "amount" => sort.Descending ? query.OrderByDescending(operation => operation.Amount) : query.OrderBy(operation => operation.Amount),
-            "fundName" => sort.Descending ? query.OrderByDescending(operation => operation.Fund.Name) : query.OrderBy(operation => operation.Fund.Name),
-            "comment" => sort.Descending ? query.OrderByDescending(operation => operation.Reason) : query.OrderBy(operation => operation.Reason),
-            _ => sort.Descending ? query.OrderByDescending(operation => operation.CreatedAtUtc) : query.OrderBy(operation => operation.CreatedAtUtc)
-        };
-
     private static IOrderedEnumerable<FundOperation> ApplyBankDepositSort(IEnumerable<FundOperation> operations, ReportSort sort) =>
         sort.Field switch
         {
@@ -294,6 +357,9 @@ public sealed class EfCashMovementReportQuery(GarageBalanceDbContext dbContext) 
             operation.DocumentNumber,
             operation.Comment);
 
+    private static BankDepositQueryRow ToBankDepositQueryRow(FundOperation operation) =>
+        new(operation.Id, operation.CreatedAtUtc, operation.Amount, operation.Fund.Name, operation.Reason);
+
     private static IQueryable<T> ApplyPage<T>(IQueryable<T> query, int offset, int? limit)
     {
         var page = offset > 0 ? query.Skip(offset) : query;
@@ -319,6 +385,17 @@ public sealed class EfCashMovementReportQuery(GarageBalanceDbContext dbContext) 
         string? ExpenseTypeName,
         string? DocumentNumber,
         string? Comment,
+        decimal Total,
+        int RowCount);
+
+    private sealed record BankDepositCombinedQueryRow(
+        int Category,
+        int RowOrder,
+        Guid? Id,
+        DateTimeOffset? CreatedAtUtc,
+        decimal Amount,
+        string FundName,
+        string Reason,
         decimal Total,
         int RowCount);
 }
