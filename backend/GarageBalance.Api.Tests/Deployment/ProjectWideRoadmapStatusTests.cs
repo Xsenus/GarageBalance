@@ -768,7 +768,7 @@ public sealed class ProjectWideRoadmapStatusTests
 
         Assert.Contains("Отрицательный долг отображается как переплата", checklist, StringComparison.Ordinal);
         Assert.Contains("Платежи распределяются по старейшим долгам", checklist, StringComparison.Ordinal);
-        Assert.Contains("Переплата переносится на будущие месяцы автоматически", checklist, StringComparison.Ordinal);
+        Assert.Contains("нераспределенный остаток автоматически остается переплатой", checklist, StringComparison.Ordinal);
         Assert.Contains("возвращать переплату", checklist, StringComparison.Ordinal);
         Assert.Contains("отрицательное начисление", checklist, StringComparison.Ordinal);
         Assert.Contains("смене владельца гаража", checklist, StringComparison.Ordinal);
@@ -1328,9 +1328,9 @@ public sealed class ProjectWideRoadmapStatusTests
         Assert.Contains("Backend строит месячную ведомость выплат", checklist, StringComparison.Ordinal);
         Assert.Contains("UI позволяет добавить начисление поставщику по счету", checklist, StringComparison.Ordinal);
         Assert.Contains("источник ручного ввода стоимости услуг по счетам", checklist, StringComparison.Ordinal);
-        Assert.Contains("что переносится в следующий месяц", checklist, StringComparison.Ordinal);
+        Assert.Contains("только внутри пары `поставщик + вид выплаты`", checklist, StringComparison.Ordinal);
         Assert.Contains("правило обнуления полностью оплаченных услуг", checklist, StringComparison.Ordinal);
-        Assert.Contains("audit-событие и документ", checklist, StringComparison.Ordinal);
+        Assert.Contains("отдельная операция переноса, строка-дубль и audit-событие", checklist, StringComparison.Ordinal);
         Assert.Contains("Guard `ExpenseExcelScenarioRoadmapItemRequiresBusinessDecisionForRolloverZeroingAndManualCostEntry`", checklist, StringComparison.Ordinal);
 
         Assert.Contains("GetExpenseWorksheetAsync", financeServiceText, StringComparison.Ordinal);
@@ -1469,7 +1469,7 @@ public sealed class ProjectWideRoadmapStatusTests
 
         Assert.Contains("# Balance Model Decision Checklist", balanceChecklistText, StringComparison.Ordinal);
         Assert.Contains("Платежи распределяются по старейшим долгам владельца и поставщика", balanceChecklistText, StringComparison.Ordinal);
-        Assert.Contains("Переплата переносится на будущие месяцы автоматически", balanceChecklistText, StringComparison.Ordinal);
+        Assert.Contains("нераспределенный остаток автоматически остается переплатой", balanceChecklistText, StringComparison.Ordinal);
         Assert.Contains("вручную списывать/возвращать переплату", balanceChecklistText, StringComparison.Ordinal);
         Assert.Contains("отрицательное начисление", balanceChecklistText, StringComparison.Ordinal);
         Assert.Contains("Как показывать переплату в отчетах", balanceChecklistText, StringComparison.Ordinal);
@@ -2237,7 +2237,7 @@ public sealed class ProjectWideRoadmapStatusTests
         Assert.Contains("ContractorGreenExcelColumnsRemainDecisionUntilHeadersFilterTypesAndInteractionRulesAreApproved", roadmapLine, StringComparison.Ordinal);
         Assert.Contains("Зеленые колонки в таблицах контрагентов означают поля, где нужны сортировка и фильтр", sourceAnalysisText, StringComparison.Ordinal);
 
-        Assert.Contains("Статус: требуется решение заказчика", templateText, StringComparison.Ordinal);
+        Assert.Contains("Статус: принцип выбора фильтра утвержден", templateText, StringComparison.Ordinal);
         Assert.Contains("Точный заголовок Excel", templateText, StringComparison.Ordinal);
         Assert.Contains("| Гаражи | `[заполнить]`", templateText, StringComparison.Ordinal);
         Assert.Contains("| Поставщики | `[заполнить]`", templateText, StringComparison.Ordinal);
