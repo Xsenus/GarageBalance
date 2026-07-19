@@ -720,9 +720,9 @@ public sealed class ReportService(
                 operation.OperationDate,
                 operation.Amount,
                 !string.IsNullOrWhiteSpace(operation.DocumentNumber),
-                BuildCashPaymentPurpose(operation),
-                operation.Supplier?.Name,
-                operation.ExpenseType?.Name,
+                BuildCashPaymentPurpose(operation.ExpenseTypeName, operation.SupplierName, operation.Comment),
+                operation.SupplierName,
+                operation.ExpenseTypeName,
                 operation.DocumentNumber,
                 operation.Comment))
             .ToList();
@@ -1626,13 +1626,13 @@ public sealed class ReportService(
         return false;
     }
 
-    private static string BuildCashPaymentPurpose(FinancialOperation operation)
+    private static string BuildCashPaymentPurpose(string? expenseTypeName, string? supplierName, string? comment)
     {
-        var parts = new[] { operation.ExpenseType?.Name, operation.Supplier?.Name }
+        var parts = new[] { expenseTypeName, supplierName }
             .Where(part => !string.IsNullOrWhiteSpace(part));
         var purpose = string.Join(": ", parts);
         return string.IsNullOrWhiteSpace(purpose)
-            ? operation.Comment ?? "Оплата из кассы"
+            ? comment ?? "Оплата из кассы"
             : purpose;
     }
 

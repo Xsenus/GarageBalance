@@ -1,6 +1,7 @@
 using GarageBalance.Api.Application.Reports;
 using GarageBalance.Api.Domain.Finance;
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
 
 namespace GarageBalance.Api.Infrastructure.Data;
 
@@ -15,6 +16,11 @@ public sealed class EfCashMovementReportQuery(GarageBalanceDbContext dbContext) 
         ReportSort sort,
         CancellationToken cancellationToken)
     {
+        if (dbContext.Database.IsNpgsql())
+        {
+            return await GetPostgresCashPaymentsAsync(dateFrom, dateTo, search, offset, limit, sort, cancellationToken);
+        }
+
         var query = dbContext.FinancialOperations.AsNoTracking()
             .Include(operation => operation.Supplier)
             .Include(operation => operation.ExpenseType)
@@ -23,33 +29,6 @@ public sealed class EfCashMovementReportQuery(GarageBalanceDbContext dbContext) 
                 operation.OperationKind == FinancialOperationKinds.Expense &&
                 operation.OperationDate >= dateFrom &&
                 operation.OperationDate <= dateTo);
-
-        if (dbContext.Database.IsNpgsql())
-        {
-            if (!string.IsNullOrWhiteSpace(search))
-            {
-                var normalizedSearch = search.Trim().ToLower();
-                query = query.Where(operation =>
-                    (operation.Supplier != null && operation.Supplier.Name.ToLower().Contains(normalizedSearch)) ||
-                    (operation.ExpenseType != null && operation.ExpenseType.Name.ToLower().Contains(normalizedSearch)) ||
-                    (operation.DocumentNumber != null && operation.DocumentNumber.ToLower().Contains(normalizedSearch)) ||
-                    (operation.Comment != null && operation.Comment.ToLower().Contains(normalizedSearch)));
-            }
-
-            var totals = await query
-                .GroupBy(_ => 1)
-                .Select(group => new
-                {
-                    RowCount = group.Count(),
-                    Total = group.Sum(operation => operation.Amount)
-                })
-                .SingleOrDefaultAsync(cancellationToken);
-            var rowCount = totals?.RowCount ?? 0;
-            var total = totals?.Total ?? 0m;
-            var ordered = ApplyCashPaymentSort(query, sort).ThenByDescending(operation => operation.Id);
-            var operations = await ApplyPage(ordered, offset, limit).ToListAsync(cancellationToken);
-            return new CashPaymentReportData(operations, total, rowCount);
-        }
 
         var fallbackOperations = await query.ToListAsync(cancellationToken);
         if (!string.IsNullOrWhiteSpace(search))
@@ -67,9 +46,113 @@ public sealed class EfCashMovementReportQuery(GarageBalanceDbContext dbContext) 
             .ThenByDescending(operation => operation.Id)
             .ToList();
         return new CashPaymentReportData(
-            ApplyPage(orderedFallbackOperations, offset, limit).ToList(),
+            ApplyPage(orderedFallbackOperations, offset, limit)
+                .Select(ToCashPaymentQueryRow)
+                .ToList(),
             fallbackOperations.Sum(operation => operation.Amount),
             fallbackOperations.Count);
+    }
+
+    private async Task<CashPaymentReportData> GetPostgresCashPaymentsAsync(
+        DateOnly dateFrom,
+        DateOnly dateTo,
+        string? search,
+        int offset,
+        int? limit,
+        ReportSort sort,
+        CancellationToken cancellationToken)
+    {
+        const int PageCategory = 1;
+        const int TotalsCategory = 2;
+        var sortColumn = sort.Field switch
+        {
+            "amount" => "amount",
+            "hasReceipt" => "has_receipt",
+            "purpose" => "purpose",
+            "supplierName" => "supplier_name",
+            "expenseTypeName" => "expense_type_name",
+            "documentNumber" => "document_number",
+            _ => "operation_date"
+        };
+        var direction = sort.Descending ? "DESC" : "ASC";
+        var searchClause = string.IsNullOrWhiteSpace(search)
+            ? string.Empty
+            : """
+              AND (LOWER(supplier."Name") LIKE '%' || @search || '%'
+                   OR LOWER(expense_type."Name") LIKE '%' || @search || '%'
+                   OR LOWER(operation."DocumentNumber") LIKE '%' || @search || '%'
+                   OR LOWER(operation."Comment") LIKE '%' || @search || '%')
+              """;
+        var limitClause = limit is > 0 ? "LIMIT @limit" : string.Empty;
+        var sql = $$"""
+            WITH filtered_rows AS (
+                SELECT operation."Id" AS id,
+                       operation."OperationDate" AS operation_date,
+                       operation."Amount" AS amount,
+                       supplier."Name" AS supplier_name,
+                       expense_type."Name" AS expense_type_name,
+                       operation."DocumentNumber" AS document_number,
+                       operation."Comment" AS comment,
+                       operation."DocumentNumber" IS NOT NULL AND operation."DocumentNumber" <> '' AS has_receipt,
+                       COALESCE(expense_type."Name", '') || ': ' || COALESCE(supplier."Name", '') AS purpose
+                FROM financial_operations operation
+                LEFT JOIN suppliers supplier ON supplier."Id" = operation."SupplierId"
+                LEFT JOIN expense_types expense_type ON expense_type."Id" = operation."ExpenseTypeId"
+                WHERE operation."IsCanceled" = FALSE
+                  AND operation."OperationKind" = 'expense'
+                  AND operation."OperationDate" >= @date_from::date
+                  AND operation."OperationDate" <= @date_to::date
+                  {{searchClause}}
+            ), page_rows AS (
+                SELECT filtered_rows.*,
+                       ROW_NUMBER() OVER (ORDER BY {{sortColumn}} {{direction}}, id DESC)::int AS row_order
+                FROM filtered_rows
+                ORDER BY {{sortColumn}} {{direction}}, id DESC
+                OFFSET @offset
+                {{limitClause}}
+            )
+            SELECT {{PageCategory}} AS "Category", row_order AS "RowOrder", id AS "Id",
+                   operation_date AS "OperationDate", amount AS "Amount", supplier_name AS "SupplierName",
+                   expense_type_name AS "ExpenseTypeName", document_number AS "DocumentNumber", comment AS "Comment",
+                   0::numeric AS "Total", 0 AS "RowCount"
+            FROM page_rows
+            UNION ALL
+            SELECT {{TotalsCategory}}, 0, NULL::uuid, NULL::date, 0::numeric, NULL::text, NULL::text, NULL::text, NULL::text,
+                   COALESCE(SUM(amount), 0), COUNT(*)::int
+            FROM filtered_rows
+            ORDER BY "Category", "RowOrder"
+            """;
+        var parameters = new List<object>
+        {
+            new NpgsqlParameter<DateOnly>("date_from", dateFrom),
+            new NpgsqlParameter<DateOnly>("date_to", dateTo),
+            new NpgsqlParameter<int>("offset", offset)
+        };
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            parameters.Add(new NpgsqlParameter<string>("search", search.Trim().ToLowerInvariant()));
+        }
+        if (limit is > 0)
+        {
+            parameters.Add(new NpgsqlParameter<int>("limit", limit.Value));
+        }
+
+        var rows = await dbContext.Database
+            .SqlQueryRaw<CashPaymentCombinedQueryRow>(sql, parameters.ToArray())
+            .ToListAsync(cancellationToken);
+        var totals = rows.Single(row => row.Category == TotalsCategory);
+        var operations = rows
+            .Where(row => row.Category == PageCategory)
+            .Select(row => new CashPaymentQueryRow(
+                row.Id!.Value,
+                row.OperationDate!.Value,
+                row.Amount,
+                row.SupplierName,
+                row.ExpenseTypeName,
+                row.DocumentNumber,
+                row.Comment))
+            .ToList();
+        return new CashPaymentReportData(operations, totals.Total, totals.RowCount);
     }
 
     public async Task<BankDepositReportData> GetBankDepositsAsync(
@@ -201,6 +284,16 @@ public sealed class EfCashMovementReportQuery(GarageBalanceDbContext dbContext) 
         return string.IsNullOrWhiteSpace(purpose) ? operation.Comment ?? "Оплата из кассы" : purpose;
     }
 
+    private static CashPaymentQueryRow ToCashPaymentQueryRow(FinancialOperation operation) =>
+        new(
+            operation.Id,
+            operation.OperationDate,
+            operation.Amount,
+            operation.Supplier?.Name,
+            operation.ExpenseType?.Name,
+            operation.DocumentNumber,
+            operation.Comment);
+
     private static IQueryable<T> ApplyPage<T>(IQueryable<T> query, int offset, int? limit)
     {
         var page = offset > 0 ? query.Skip(offset) : query;
@@ -215,4 +308,17 @@ public sealed class EfCashMovementReportQuery(GarageBalanceDbContext dbContext) 
 
     private bool IsSqliteProvider() =>
         dbContext.Database.ProviderName?.Contains("Sqlite", StringComparison.OrdinalIgnoreCase) == true;
+
+    private sealed record CashPaymentCombinedQueryRow(
+        int Category,
+        int RowOrder,
+        Guid? Id,
+        DateOnly? OperationDate,
+        decimal Amount,
+        string? SupplierName,
+        string? ExpenseTypeName,
+        string? DocumentNumber,
+        string? Comment,
+        decimal Total,
+        int RowCount);
 }

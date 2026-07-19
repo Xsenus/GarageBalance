@@ -24,9 +24,18 @@ public interface ICashMovementReportQuery
 }
 
 public sealed record CashPaymentReportData(
-    IReadOnlyList<FinancialOperation> Operations,
+    IReadOnlyList<CashPaymentQueryRow> Operations,
     decimal Total,
     int RowCount);
+
+public sealed record CashPaymentQueryRow(
+    Guid Id,
+    DateOnly OperationDate,
+    decimal Amount,
+    string? SupplierName,
+    string? ExpenseTypeName,
+    string? DocumentNumber,
+    string? Comment);
 
 public sealed record BankDepositReportData(
     IReadOnlyList<FundOperation> Operations,

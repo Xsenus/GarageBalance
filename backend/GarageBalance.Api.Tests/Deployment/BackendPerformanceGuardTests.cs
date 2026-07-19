@@ -346,6 +346,7 @@ public sealed class BackendPerformanceGuardTests
         Assert.Contains("Отчет по взносам теперь за одно обращение к базе", releaseNotes, StringComparison.Ordinal);
         Assert.Contains("Сводный месячный отчет теперь за одно обращение к базе", releaseNotes, StringComparison.Ordinal);
         Assert.Contains("Таблица гаражей в сводном отчете теперь за одно обращение к базе", releaseNotes, StringComparison.Ordinal);
+        Assert.Contains("Отчет «Оплаты из кассы» теперь за одно обращение к базе", releaseNotes, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -585,17 +586,21 @@ public sealed class BackendPerformanceGuardTests
     }
 
     [Fact]
-    public void CashPaymentScreenQuery_UsesDatabaseCountSumAndPageBeforeMaterialization()
+    public void CashPaymentScreenQuery_UsesOnePostgresCommandForTotalsAndPage()
     {
         var source = ReadApiSource("Infrastructure/Data/EfCashMovementReportQuery.cs");
+        var method = source[
+            source.IndexOf("private async Task<CashPaymentReportData> GetPostgresCashPaymentsAsync", StringComparison.Ordinal)..source.IndexOf("public async Task<BankDepositReportData> GetBankDepositsAsync", StringComparison.Ordinal)];
 
-        Assert.Matches(
-            BoundedQueryRegex(@"GetCashPaymentsAsync[\s\S]*?IsNpgsql\(\)[\s\S]*?RowCount = group\.Count\(\)[\s\S]*?Total = group\.Sum\(operation => operation\.Amount\)[\s\S]*?ApplyPage\(ordered, offset, limit\)\.ToListAsync\(cancellationToken\)"),
-            source);
-        Assert.DoesNotContain("query.CountAsync(cancellationToken)", source, StringComparison.Ordinal);
-        Assert.Contains("query.Skip(offset)", source, StringComparison.Ordinal);
-        Assert.Contains("operation.Supplier.Name.ToLower().Contains(normalizedSearch)", source, StringComparison.Ordinal);
-        Assert.Contains("operation.ExpenseType.Name.ToLower().Contains(normalizedSearch)", source, StringComparison.Ordinal);
+        Assert.Equal(1, CountOccurrences(method, "SqlQueryRaw<CashPaymentCombinedQueryRow>"));
+        Assert.Equal(1, CountOccurrences(method, ".ToListAsync(cancellationToken)"));
+        Assert.Equal(1, CountOccurrences(method, "FROM financial_operations"));
+        Assert.Contains("FROM page_rows", method, StringComparison.Ordinal);
+        Assert.Contains("COUNT(*)::int", method, StringComparison.Ordinal);
+        Assert.Contains("OFFSET @offset", method, StringComparison.Ordinal);
+        Assert.Contains("LIMIT @limit", method, StringComparison.Ordinal);
+        Assert.Contains("LOWER(supplier.\"Name\")", method, StringComparison.Ordinal);
+        Assert.Contains("LOWER(expense_type.\"Name\")", method, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -974,6 +979,8 @@ public sealed class BackendPerformanceGuardTests
         Assert.Contains("PostgreSqlConsolidatedMonthlyReportQueryIntegrationTests.MonthlyReportBuildsAllSectionsFromOneCommandAndOneBaseScan", document, StringComparison.Ordinal);
         Assert.Contains("Fifty-fifth consolidated-garage-report aggregation audit", document, StringComparison.Ordinal);
         Assert.Contains("PostgreSqlConsolidatedGarageReportQueryIntegrationTests.GarageRowsReturnCountAndBoundedPageInOneAggregatedCommand", document, StringComparison.Ordinal);
+        Assert.Contains("Fifty-sixth cash-payment-report command audit", document, StringComparison.Ordinal);
+        Assert.Contains("PostgreSqlCashPaymentReportQueryIntegrationTests.CashPaymentPageUsesOneCommandAndPreservesTotalsSearchAndProjection", document, StringComparison.Ordinal);
         Assert.Contains("Shared end-user release `0.758.0`", document, StringComparison.Ordinal);
         Assert.Contains("limit", document, StringComparison.Ordinal);
         Assert.Contains("rowCount", document, StringComparison.Ordinal);

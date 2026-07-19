@@ -1140,7 +1140,7 @@ public sealed class ProjectWideRoadmapStatusTests
             "FinancePageQueries_UseCountSkipAndTakeBeforeMaterialization",
             "ScreenReportQueries_UseDatabaseLimitsForVisibleRows",
             "GarageReportScreenQuery_AggregatesCountsTotalsAndPageInDatabase",
-            "CashPaymentScreenQuery_UsesDatabaseCountSumAndPageBeforeMaterialization",
+            "CashPaymentScreenQuery_UsesOnePostgresCommandForTotalsAndPage",
             "BankDepositScreenQuery_UsesDatabaseCountSumAndPageBeforeMaterialization",
             "ImportCreatedRecordsQuery_NormalizesLimitBeforePostgresMaterialization",
             "AuditHistoryQueries_KeepServerSidePaginationAndStructuredFiltersBeforeMaterialization",
