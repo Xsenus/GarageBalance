@@ -123,13 +123,19 @@ public sealed class EfFinancialOperationRepository(GarageBalanceDbContext dbCont
                 operation.OperationDate < operationDate)
             .SumAsync(operation => operation.Amount, cancellationToken);
 
-    public async Task<decimal> GetPreviousSupplierExpenseTotalAsync(Guid ignoredId, Guid supplierId, DateOnly operationDate, CancellationToken cancellationToken) =>
+    public async Task<decimal> GetPreviousSupplierExpenseTotalAsync(
+        Guid ignoredId,
+        Guid supplierId,
+        Guid expenseTypeId,
+        DateOnly operationDate,
+        CancellationToken cancellationToken) =>
         await dbContext.FinancialOperations.AsNoTracking()
             .Where(operation =>
                 !operation.IsCanceled &&
                 operation.Id != ignoredId &&
                 operation.OperationKind == FinancialOperationKinds.Expense &&
                 operation.SupplierId == supplierId &&
+                operation.ExpenseTypeId == expenseTypeId &&
                 operation.OperationDate < operationDate)
             .SumAsync(operation => operation.Amount, cancellationToken);
 

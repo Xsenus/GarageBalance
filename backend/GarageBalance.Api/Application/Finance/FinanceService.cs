@@ -3998,11 +3998,13 @@ public sealed class FinanceService(
     private async Task<decimal> CalculateSupplierDebtBeforeExpenseAsync(FinancialOperation operation, CancellationToken cancellationToken)
     {
         var supplierId = operation.SupplierId!.Value;
+        var expenseTypeId = operation.ExpenseTypeId!.Value;
         var startingBalance = operation.Supplier?.StartingBalance ?? await supplierRepository.GetStartingBalanceAsync(supplierId, cancellationToken);
-        var accrualTotal = await supplierAccrualRepository.GetTotalThroughMonthAsync(supplierId, operation.AccountingMonth, cancellationToken);
+        var accrualTotal = await supplierAccrualRepository.GetTotalThroughMonthAsync(supplierId, expenseTypeId, operation.AccountingMonth, cancellationToken);
         var previousExpenseTotal = await financialOperationRepository.GetPreviousSupplierExpenseTotalAsync(
             operation.Id,
             supplierId,
+            expenseTypeId,
             operation.OperationDate,
             cancellationToken);
 
@@ -4012,13 +4014,19 @@ public sealed class FinanceService(
     private async Task<IReadOnlyList<PaymentAllocationDto>> CalculateSupplierPaymentAllocationsAsync(FinancialOperation operation, CancellationToken cancellationToken)
     {
         var supplierId = operation.SupplierId!.Value;
+        var expenseTypeId = operation.ExpenseTypeId!.Value;
         var startingBalance = operation.Supplier?.StartingBalance ?? await supplierRepository.GetStartingBalanceAsync(supplierId, cancellationToken);
         var previousExpenseTotal = await financialOperationRepository.GetPreviousSupplierExpenseTotalAsync(
             operation.Id,
             supplierId,
+            expenseTypeId,
             operation.OperationDate,
             cancellationToken);
-        var accrualBucketRows = await supplierAccrualRepository.GetMonthlyBucketsThroughMonthAsync(supplierId, operation.AccountingMonth, cancellationToken);
+        var accrualBucketRows = await supplierAccrualRepository.GetMonthlyBucketsThroughMonthAsync(
+            supplierId,
+            expenseTypeId,
+            operation.AccountingMonth,
+            cancellationToken);
         var accrualBuckets = accrualBucketRows
             .Select(bucket => new AllocationDebtBucket("month", bucket.AccountingMonth, $"{bucket.AccountingMonth:MM.yyyy}", bucket.Amount))
             .ToList();

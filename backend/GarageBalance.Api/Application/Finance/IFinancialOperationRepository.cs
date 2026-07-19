@@ -33,7 +33,7 @@ public interface IFinancialOperationRepository
     Task<decimal> GetOpeningDebtPaymentTotalAsync(Guid garageId, DateOnly accountingMonth, string incomeTypeCode, string incomeTypeName, CancellationToken cancellationToken);
     Task<decimal> GetStaffExpenseTotalAsync(Guid staffMemberId, DateOnly accountingMonth, CancellationToken cancellationToken);
     Task<decimal> GetPreviousGarageIncomeTotalAsync(Guid ignoredId, Guid garageId, DateOnly operationDate, CancellationToken cancellationToken);
-    Task<decimal> GetPreviousSupplierExpenseTotalAsync(Guid ignoredId, Guid supplierId, DateOnly operationDate, CancellationToken cancellationToken);
+    Task<decimal> GetPreviousSupplierExpenseTotalAsync(Guid ignoredId, Guid supplierId, Guid expenseTypeId, DateOnly operationDate, CancellationToken cancellationToken);
     Task<DateOnly?> GetPreviousActiveIncomeDateAsync(
         Guid garageId,
         Guid incomeTypeId,

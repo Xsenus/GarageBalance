@@ -111,18 +111,27 @@ public sealed class EfSupplierAccrualRepository(GarageBalanceDbContext dbContext
             .Include(accrual => accrual.ExpenseType)
             .SingleOrDefaultAsync(accrual => accrual.Id == id, cancellationToken);
 
-    public async Task<decimal> GetTotalThroughMonthAsync(Guid supplierId, DateOnly accountingMonth, CancellationToken cancellationToken) =>
+    public async Task<decimal> GetTotalThroughMonthAsync(Guid supplierId, Guid expenseTypeId, DateOnly accountingMonth, CancellationToken cancellationToken) =>
         await dbContext.SupplierAccruals.AsNoTracking()
-            .Where(accrual => !accrual.IsCanceled && accrual.SupplierId == supplierId && accrual.AccountingMonth <= accountingMonth)
+            .Where(accrual =>
+                !accrual.IsCanceled &&
+                accrual.SupplierId == supplierId &&
+                accrual.ExpenseTypeId == expenseTypeId &&
+                accrual.AccountingMonth <= accountingMonth)
             .SumAsync(accrual => accrual.Amount, cancellationToken);
 
     public async Task<IReadOnlyList<SupplierAccrualBucketData>> GetMonthlyBucketsThroughMonthAsync(
         Guid supplierId,
+        Guid expenseTypeId,
         DateOnly accountingMonth,
         CancellationToken cancellationToken)
     {
         var rows = await dbContext.SupplierAccruals.AsNoTracking()
-            .Where(accrual => !accrual.IsCanceled && accrual.SupplierId == supplierId && accrual.AccountingMonth <= accountingMonth)
+            .Where(accrual =>
+                !accrual.IsCanceled &&
+                accrual.SupplierId == supplierId &&
+                accrual.ExpenseTypeId == expenseTypeId &&
+                accrual.AccountingMonth <= accountingMonth)
             .GroupBy(accrual => accrual.AccountingMonth)
             .Select(group => new { AccountingMonth = group.Key, Amount = group.Sum(accrual => accrual.Amount) })
             .OrderBy(bucket => bucket.AccountingMonth)

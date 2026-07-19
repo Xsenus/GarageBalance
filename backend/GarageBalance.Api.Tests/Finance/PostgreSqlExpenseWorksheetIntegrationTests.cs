@@ -362,6 +362,139 @@ public sealed class PostgreSqlExpenseWorksheetIntegrationTests
     }
 
     [PostgreSqlFact]
+    public async Task SupplierThreeMonthScenario_KeepsAdvanceWithinExpenseTypeAndRecalculatesAfterCancellation()
+    {
+        await using var database = await PostgreSqlTestDatabase.CreateAsync();
+        Guid supplierId;
+        Guid serviceTypeId;
+        Guid repairTypeId;
+        await using (var seedContext = database.CreateContext())
+        {
+            await ClearIncomeDestinationLinksAsync(seedContext);
+            seedContext.FinancialOperations.RemoveRange(seedContext.FinancialOperations);
+            seedContext.FundOperations.RemoveRange(seedContext.FundOperations);
+            seedContext.Funds.RemoveRange(seedContext.Funds);
+            var supplierGroup = new SupplierGroup { Name = "Трёхмесячный сценарий поставщика PG" };
+            var supplier = new Supplier { Name = "Поставщик трёхмесячного сценария PG", Group = supplierGroup };
+            var serviceType = new ExpenseType { Name = "Основная услуга сценария PG", Code = "pg_supplier_three_month_service" };
+            var repairType = new ExpenseType { Name = "Ремонт сценария PG", Code = "pg_supplier_three_month_repair" };
+            var bankFund = new Fund
+            {
+                Name = "Банк трёхмесячного сценария PG",
+                NormalizedName = "БАНК ТРЁХМЕСЯЧНОГО СЦЕНАРИЯ PG",
+                Balance = 1000m,
+                AllowOperations = true
+            };
+            supplierId = supplier.Id;
+            serviceTypeId = serviceType.Id;
+            repairTypeId = repairType.Id;
+            seedContext.AddRange(
+                supplierGroup,
+                supplier,
+                serviceType,
+                repairType,
+                bankFund,
+                new FundOperation
+                {
+                    Fund = bankFund,
+                    OperationKind = FundOperationKinds.Deposit,
+                    Amount = 1000m,
+                    BalanceBefore = 0m,
+                    BalanceAfter = 1000m,
+                    Reason = "Банковский остаток для трёхмесячного сценария PG",
+                    IsCashToBankTransfer = true,
+                    CreatedAtUtc = new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero)
+                });
+            await seedContext.SaveChangesAsync();
+        }
+
+        await using var context = database.CreateContext();
+        var service = FinanceServiceTestFactory.Create(context);
+        var actorUserId = Guid.NewGuid();
+        var januaryAccrual = await service.CreateSupplierAccrualAsync(
+            new CreateSupplierAccrualRequest(
+                supplierId, serviceTypeId, new DateOnly(2026, 1, 1), 100m, "manual", "PG-SUP-01", "Счёт за январь PG"),
+            actorUserId,
+            CancellationToken.None);
+        var januaryPartialPayment = await service.CreateExpenseAsync(
+            new CreateExpenseOperationRequest(
+                supplierId, serviceTypeId, new DateOnly(2026, 1, 20), new DateOnly(2026, 1, 1), 40m, "PG-PAY-01", null),
+            actorUserId,
+            CancellationToken.None);
+        var februaryAdvancePayment = await service.CreateExpenseAsync(
+            new CreateExpenseOperationRequest(
+                supplierId, serviceTypeId, new DateOnly(2026, 2, 20), new DateOnly(2026, 2, 1), 100m, "PG-PAY-02", null),
+            actorUserId,
+            CancellationToken.None);
+        var februaryRepairAccrual = await service.CreateSupplierAccrualAsync(
+            new CreateSupplierAccrualRequest(
+                supplierId, repairTypeId, new DateOnly(2026, 2, 1), 30m, "manual", "PG-REP-02", "Отдельный счёт за ремонт PG"),
+            actorUserId,
+            CancellationToken.None);
+        var februaryRepairPayment = await service.CreateExpenseAsync(
+            new CreateExpenseOperationRequest(
+                supplierId, repairTypeId, new DateOnly(2026, 2, 21), new DateOnly(2026, 2, 1), 10m, "PG-REP-PAY-02", null),
+            actorUserId,
+            CancellationToken.None);
+        var marchAccrual = await service.CreateSupplierAccrualAsync(
+            new CreateSupplierAccrualRequest(
+                supplierId, serviceTypeId, new DateOnly(2026, 3, 1), 25m, "manual", "PG-SUP-03", "Счёт за март PG"),
+            actorUserId,
+            CancellationToken.None);
+
+        Assert.True(januaryAccrual.Succeeded);
+        Assert.True(januaryPartialPayment.Succeeded);
+        Assert.Equal(100m, januaryPartialPayment.Value!.SupplierDebtBefore);
+        Assert.Equal(60m, januaryPartialPayment.Value.SupplierDebtAfter);
+        Assert.True(februaryAdvancePayment.Succeeded);
+        Assert.Equal(60m, februaryAdvancePayment.Value!.SupplierDebtBefore);
+        Assert.Equal(-40m, februaryAdvancePayment.Value.SupplierDebtAfter);
+        Assert.Collection(
+            februaryAdvancePayment.Value.PaymentAllocations,
+            debtAllocation =>
+            {
+                Assert.Equal("month", debtAllocation.AllocationKind);
+                Assert.Equal(new DateOnly(2026, 1, 1), debtAllocation.AccountingMonth);
+                Assert.Equal(60m, debtAllocation.PaidAmount);
+            },
+            advanceAllocation =>
+            {
+                Assert.Equal("overpayment", advanceAllocation.AllocationKind);
+                Assert.Equal(40m, advanceAllocation.PaidAmount);
+                Assert.Equal(-40m, advanceAllocation.DebtAfter);
+            });
+        Assert.True(februaryRepairAccrual.Succeeded);
+        Assert.True(februaryRepairPayment.Succeeded);
+        Assert.Equal(30m, februaryRepairPayment.Value!.SupplierDebtBefore);
+        Assert.Equal(20m, februaryRepairPayment.Value.SupplierDebtAfter);
+        Assert.True(marchAccrual.Succeeded);
+
+        var marchBeforeCancellation = await service.GetExpenseWorksheetAsync(
+            new ExpenseWorksheetRequest(new DateOnly(2026, 3, 1)), CancellationToken.None);
+        Assert.True(marchBeforeCancellation.Succeeded);
+        AssertExpenseCarry(FindRow(marchBeforeCancellation.Value!, supplierId, serviceTypeId), 0m, 40m, 0m, 15m);
+        AssertExpenseCarry(FindRow(marchBeforeCancellation.Value!, supplierId, repairTypeId), 20m, 0m, 20m, 0m);
+
+        var cancellation = await service.CancelOperationAsync(
+            februaryAdvancePayment.Value.Id,
+            new CancelFinanceEntryRequest("Отмена февральской выплаты в трёхмесячном сценарии PG"),
+            actorUserId,
+            CancellationToken.None);
+        var marchAfterCancellation = await service.GetExpenseWorksheetAsync(
+            new ExpenseWorksheetRequest(new DateOnly(2026, 3, 1)), CancellationToken.None);
+
+        Assert.True(cancellation.Succeeded);
+        Assert.True(marchAfterCancellation.Succeeded);
+        AssertExpenseCarry(FindRow(marchAfterCancellation.Value!, supplierId, serviceTypeId), 60m, 0m, 85m, 0m);
+        AssertExpenseCarry(FindRow(marchAfterCancellation.Value!, supplierId, repairTypeId), 20m, 0m, 20m, 0m);
+        Assert.Equal(3, await context.SupplierAccruals.CountAsync(accrual => !accrual.IsCanceled));
+        Assert.Equal(2, await context.FinancialOperations.CountAsync(operation => !operation.IsCanceled));
+        Assert.Equal(3, await context.AuditEvents.CountAsync(audit => audit.Action == "finance.supplier_accrual_created"));
+        Assert.Equal(3, await context.AuditEvents.CountAsync(audit => audit.Action == "finance.expense_created"));
+        Assert.Equal(1, await context.AuditEvents.CountAsync(audit => audit.Action == "finance.operation_canceled"));
+    }
+
+    [PostgreSqlFact]
     public async Task ExpenseWorksheet_RecalculatesEmptyMonthsAcrossYearAfterPreviousPaymentCancellationOnPostgreSql()
     {
         await using var database = await PostgreSqlTestDatabase.CreateAsync();
