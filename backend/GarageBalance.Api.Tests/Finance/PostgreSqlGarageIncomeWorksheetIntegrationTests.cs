@@ -9,6 +9,192 @@ namespace GarageBalance.Api.Tests.Finance;
 public sealed class PostgreSqlGarageIncomeWorksheetIntegrationTests
 {
     [PostgreSqlFact]
+    public async Task GarageLedger_ForFourteenMonths_KeepsReadingsAnnualFeesFifoCreditAndOverdueConsistent()
+    {
+        var firstMonth = new DateOnly(2026, 1, 1);
+        var lastMonth = new DateOnly(2027, 2, 1);
+        await using var database = await PostgreSqlTestDatabase.CreateAsync();
+        await using var context = database.CreateContext();
+        var waterType = await context.IncomeTypes.SingleAsync(type => type.Code == MeterKinds.Water && !type.IsArchived);
+        var membershipType = await context.IncomeTypes.SingleAsync(type => type.Code == "membership" && !type.IsArchived);
+        var garage = new Garage
+        {
+            Number = "PG-FOURTEEN-MONTH-LEDGER",
+            PeopleCount = 1,
+            FloorCount = 1,
+            InitialWaterMeterValue = 100m
+        };
+        context.Garages.Add(garage);
+        await context.SaveChangesAsync();
+        var service = FinanceServiceTestFactory.Create(context);
+        var waterAccrualIds = new List<Guid>();
+
+        for (var monthOffset = 0; monthOffset < 14; monthOffset++)
+        {
+            var month = firstMonth.AddMonths(monthOffset);
+            var reading = await service.CreateMeterReadingAsync(
+                new CreateMeterReadingRequest(
+                    garage.Id,
+                    MeterKinds.Water,
+                    month,
+                    month.AddDays(19),
+                    101m + monthOffset,
+                    $"Показание за {month:MM.yyyy}"),
+                null,
+                CancellationToken.None);
+            Assert.True(reading.Succeeded, reading.ErrorMessage);
+            Assert.Equal(100m + monthOffset, reading.Value!.PreviousValue);
+            Assert.Equal(1m, reading.Value.Consumption);
+
+            var accrual = await service.CreateAccrualAsync(
+                new CreateAccrualRequest(
+                    garage.Id,
+                    waterType.Id,
+                    month,
+                    100m,
+                    AccrualSources.Regular,
+                    $"Вода за {month:MM.yyyy}"),
+                null,
+                CancellationToken.None);
+            Assert.True(accrual.Succeeded, accrual.ErrorMessage);
+            waterAccrualIds.Add(accrual.Value!.Id);
+        }
+
+        var membership2026 = await service.CreateAccrualAsync(
+            new CreateAccrualRequest(
+                garage.Id,
+                membershipType.Id,
+                firstMonth,
+                700m,
+                AccrualSources.Regular,
+                "Членский взнос за 2026 год"),
+            null,
+            CancellationToken.None);
+        var membership2027 = await service.CreateAccrualAsync(
+            new CreateAccrualRequest(
+                garage.Id,
+                membershipType.Id,
+                new DateOnly(2027, 1, 1),
+                800m,
+                AccrualSources.Regular,
+                "Членский взнос за 2027 год"),
+            null,
+            CancellationToken.None);
+        Assert.True(membership2026.Succeeded, membership2026.ErrorMessage);
+        Assert.True(membership2027.Succeeded, membership2027.ErrorMessage);
+        Assert.Equal(2026, membership2026.Value!.AccountingYear);
+        Assert.Equal(2027, membership2027.Value!.AccountingYear);
+
+        var partialWater = await service.CreateIncomeAsync(
+            new CreateIncomeOperationRequest(
+                garage.Id,
+                waterType.Id,
+                new DateOnly(2026, 3, 10),
+                new DateOnly(2026, 3, 1),
+                250m,
+                "PG-14-WATER-PARTIAL",
+                "Частичная оплата воды"),
+            null,
+            CancellationToken.None);
+        Assert.True(partialWater.Succeeded, partialWater.ErrorMessage);
+        var partialWaterAllocations = await context.AccrualPaymentAllocations
+            .Where(allocation => allocation.IsActive && waterAccrualIds.Contains(allocation.AccrualId))
+            .OrderBy(allocation => allocation.Accrual.AccountingMonth)
+            .Select(allocation => allocation.Amount)
+            .ToArrayAsync();
+        Assert.Equal([100m, 100m, 50m], partialWaterAllocations);
+
+        var partialMembership = await service.CreateIncomeAsync(
+            new CreateIncomeOperationRequest(
+                garage.Id,
+                membershipType.Id,
+                new DateOnly(2026, 7, 30),
+                new DateOnly(2026, 7, 1),
+                300m,
+                "PG-14-MEMBERSHIP-PARTIAL",
+                "Частичная оплата членского взноса"),
+            null,
+            CancellationToken.None);
+        var waterWithCredit = await service.CreateIncomeAsync(
+            new CreateIncomeOperationRequest(
+                garage.Id,
+                waterType.Id,
+                new DateOnly(2027, 2, 10),
+                lastMonth,
+                1200m,
+                "PG-14-WATER-CREDIT",
+                "Погашение воды с переплатой"),
+            null,
+            CancellationToken.None);
+        Assert.True(partialMembership.Succeeded, partialMembership.ErrorMessage);
+        Assert.True(waterWithCredit.Succeeded, waterWithCredit.ErrorMessage);
+
+        var waterAllocations = await context.AccrualPaymentAllocations
+            .Where(allocation => allocation.IsActive && waterAccrualIds.Contains(allocation.AccrualId))
+            .GroupBy(allocation => allocation.AccrualId)
+            .Select(group => group.Sum(allocation => allocation.Amount))
+            .ToArrayAsync();
+        Assert.Equal(14, waterAllocations.Length);
+        Assert.All(waterAllocations, amount => Assert.Equal(100m, amount));
+        var membershipAllocation = await context.AccrualPaymentAllocations
+            .Where(allocation => allocation.IsActive && allocation.AccrualId == membership2026.Value.Id)
+            .SumAsync(allocation => allocation.Amount);
+        Assert.Equal(300m, membershipAllocation);
+        var waterIncomeTotal = await context.FinancialOperations
+            .Where(operation => !operation.IsCanceled && operation.IncomeTypeId == waterType.Id)
+            .SumAsync(operation => operation.Amount);
+        Assert.Equal(50m, waterIncomeTotal - waterAllocations.Sum());
+
+        var worksheet = await service.GetGarageIncomeWorksheetAsync(
+            garage.Id,
+            new GarageIncomeWorksheetRequest(firstMonth, lastMonth),
+            CancellationToken.None);
+        Assert.True(worksheet.Succeeded, worksheet.ErrorMessage);
+        Assert.Equal(14, worksheet.Value!.Rows.Count(row => row.IncomeTypeId == waterType.Id));
+        Assert.Equal(2900m, worksheet.Value.AccrualTotal);
+        Assert.Equal(1750m, worksheet.Value.IncomeTotal);
+        Assert.Equal(1150m, worksheet.Value.ClosingDebt);
+        var lastWaterRow = Assert.Single(worksheet.Value.Rows, row =>
+            row.IncomeTypeId == waterType.Id && row.AccountingMonth == lastMonth);
+        Assert.Equal(114m, lastWaterRow.MeterValue);
+        Assert.Equal(1m, lastWaterRow.MeterConsumption);
+        Assert.Equal(0m, lastWaterRow.Debt);
+        Assert.Equal(400m, Assert.Single(worksheet.Value.Rows, row =>
+            row.AnnualAccrualId == membership2026.Value.Id &&
+            row.AccountingMonth == new DateOnly(2026, 12, 1)).Debt);
+        Assert.Equal(800m, Assert.Single(worksheet.Value.Rows, row =>
+            row.AnnualAccrualId == membership2027.Value.Id &&
+            row.AccountingMonth == lastMonth).Debt);
+
+        var history = await service.GetGarageBalanceHistoryAsync(
+            garage.Id,
+            new GarageBalanceHistoryRequest(firstMonth, lastMonth),
+            CancellationToken.None);
+        Assert.True(history.Succeeded, history.ErrorMessage);
+        Assert.Equal(14, history.Value!.Rows.Count);
+        Assert.Equal(2900m, history.Value.AccrualTotal);
+        Assert.Equal(1750m, history.Value.IncomeTotal);
+        Assert.Equal(1150m, history.Value.Debt);
+
+        var overdue = await FinanceServiceTestFactory.Create(
+                context,
+                new FixedTimeProvider(new DateTimeOffset(2027, 3, 1, 12, 0, 0, TimeSpan.Zero)))
+            .GetGarageOverdueDebtAsync(garage.Id, CancellationToken.None);
+        Assert.True(overdue.Succeeded, overdue.ErrorMessage);
+        var overdueMembership = Assert.Single(overdue.Value!.Rows);
+        Assert.Equal(membershipType.Id, overdueMembership.IncomeTypeId);
+        Assert.Equal(firstMonth, overdueMembership.AccountingMonth);
+        Assert.Equal(700m, overdueMembership.OriginalAmount);
+        Assert.Equal(350m, overdueMembership.PaidAmount);
+        Assert.Equal(350m, overdueMembership.OutstandingAmount);
+        Assert.Equal(350m, overdue.Value.Total);
+
+        Assert.Equal(14, await context.AuditEvents.CountAsync(audit => audit.Action == "finance.meter_reading_created"));
+        Assert.Equal(16, await context.AuditEvents.CountAsync(audit => audit.Action == "finance.accrual_created"));
+        Assert.Equal(3, await context.AuditEvents.CountAsync(audit => audit.Action == "finance.income_created"));
+    }
+
+    [PostgreSqlFact]
     public async Task AnnualObligations_ForEverySystemType_HandlePartialFullOverpaymentAndNewYear()
     {
         await using var database = await PostgreSqlTestDatabase.CreateAsync();
@@ -283,5 +469,10 @@ public sealed class PostgreSqlGarageIncomeWorksheetIntegrationTests
         var missingWater = Assert.Single(result.Value.Rows, item => item.MeterKind == MeterKinds.Water);
         Assert.Null(missingWater.MeterValue);
         Assert.Equal(0m, missingWater.AccrualAmount);
+    }
+
+    private sealed class FixedTimeProvider(DateTimeOffset utcNow) : TimeProvider
+    {
+        public override DateTimeOffset GetUtcNow() => utcNow;
     }
 }
