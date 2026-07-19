@@ -289,7 +289,10 @@ public sealed class BackendPerformanceGuardTests
         Assert.Contains("IsSqliteProvider() && sortBy is \"debt\" or \"contactPerson\" or \"phone\" or \"email\"", source, StringComparison.Ordinal);
         Assert.Contains("ApplyPageSorting(query, sortBy, sortDescending)", source, StringComparison.Ordinal);
         Assert.Contains("supplierIds.Contains(contact.SupplierId) && !contact.IsArchived", source, StringComparison.Ordinal);
+        Assert.Contains(".GroupBy(contact => contact.SupplierId)", source, StringComparison.Ordinal);
         Assert.Contains("contact.Status == \"Работает\"", source, StringComparison.Ordinal);
+        Assert.Contains(".ThenBy(contact => contact.Id)", source, StringComparison.Ordinal);
+        Assert.Contains(".First())", source, StringComparison.Ordinal);
         Assert.Contains("SupplierPrimaryContactData", source, StringComparison.Ordinal);
         Assert.Contains(".Skip(offset)", source, StringComparison.Ordinal);
         Assert.True(CountOccurrences(source, ".Take(limit)") >= 2);
@@ -306,6 +309,21 @@ public sealed class BackendPerformanceGuardTests
         Assert.Contains("paymentQuery", debtMethod, StringComparison.Ordinal);
         Assert.Equal(2, CountOccurrences(debtMethod, ".Concat("));
         Assert.Equal(1, CountOccurrences(debtMethod, ".ToListAsync(cancellationToken)"));
+    }
+
+    [Fact]
+    public void PerformanceOptimizationRelease_ExplainsBoundedSupplierContactLoading()
+    {
+        var releaseNotes = File.ReadAllText(Path.Combine(
+            FindRepositoryRoot(),
+            "backend",
+            "GarageBalance.Api",
+            "AppReleases",
+            "releases.json"));
+
+        Assert.Contains("\"version\": \"0.758.0\"", releaseNotes, StringComparison.Ordinal);
+        Assert.Contains("Разделы системы загружаются быстрее и стабильнее", releaseNotes, StringComparison.Ordinal);
+        Assert.Contains("только один приоритетный контакт для каждой видимой строки", releaseNotes, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -889,6 +907,9 @@ public sealed class BackendPerformanceGuardTests
         Assert.Contains("main JS gzip: `180 KiB`", document, StringComparison.Ordinal);
         Assert.Contains("EXPLAIN (ANALYZE, BUFFERS)", document, StringComparison.Ordinal);
         Assert.Contains("GIN trigram indexes", document, StringComparison.Ordinal);
+        Assert.Contains("Forty-eighth supplier-primary-contact projection audit", document, StringComparison.Ordinal);
+        Assert.Contains("PostgreSqlSupplierPrimaryContactIntegrationTests.SupplierPage_ProjectsOneRankedContactPerSupplierInPostgreSql", document, StringComparison.Ordinal);
+        Assert.Contains("Shared end-user release `0.758.0`", document, StringComparison.Ordinal);
         Assert.Contains("limit", document, StringComparison.Ordinal);
         Assert.Contains("rowCount", document, StringComparison.Ordinal);
         Assert.Contains("CountAsync", document, StringComparison.Ordinal);

@@ -239,14 +239,24 @@ public sealed class EfSupplierRepository(GarageBalanceDbContext dbContext) : ISu
 
         var contacts = await dbContext.SupplierContacts.AsNoTracking()
             .Where(contact => supplierIds.Contains(contact.SupplierId) && !contact.IsArchived)
-            .OrderByDescending(contact => contact.Status == "Работает")
-            .ThenBy(contact => contact.FullName)
+            .GroupBy(contact => contact.SupplierId)
+            .Select(group => group
+                .OrderByDescending(contact => contact.Status == "Работает")
+                .ThenBy(contact => contact.FullName)
+                .ThenBy(contact => contact.Id)
+                .Select(contact => new
+                {
+                    contact.SupplierId,
+                    contact.FullName,
+                    contact.Phone,
+                    contact.Email
+                })
+                .First())
             .ToListAsync(cancellationToken);
         return contacts
-            .GroupBy(contact => contact.SupplierId)
             .ToDictionary(
-                group => group.Key,
-                group => new SupplierPrimaryContactData(group.First().FullName, group.First().Phone, group.First().Email));
+                contact => contact.SupplierId,
+                contact => new SupplierPrimaryContactData(contact.FullName, contact.Phone, contact.Email));
     }
 
     private static IOrderedEnumerable<Supplier> ApplySqlitePageSorting(
