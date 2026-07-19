@@ -539,7 +539,7 @@ public sealed class BackendPerformanceGuardTests
         Assert.DoesNotContain("groupedRows.CountAsync(cancellationToken)", source, StringComparison.Ordinal);
         Assert.Contains("if (summary is null)", source, StringComparison.Ordinal);
         Assert.Contains(".Skip(offset)", source, StringComparison.Ordinal);
-        Assert.Contains(".Take(limit)", source, StringComparison.Ordinal);
+        Assert.Contains("limit is > 0 ? page.Take(limit.Value) : page", source, StringComparison.Ordinal);
         Assert.Contains("if (IsNpgsql())", source, StringComparison.Ordinal);
         Assert.Contains("matchingGarageIds", source, StringComparison.Ordinal);
     }

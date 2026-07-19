@@ -55,6 +55,52 @@ public sealed class ReportsController(IReportService reportService) : Controller
             : BadRequest(ApiProblemDetails.Create(result.ErrorCode, result.ErrorMessage, StatusCodes.Status400BadRequest));
     }
 
+    [HttpPost("garages/export/xlsx")]
+    [ProducesResponseType<FileContentResult>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> ExportGarageReportXlsx(
+        [FromQuery] DateOnly? monthFrom,
+        [FromQuery] DateOnly? monthTo,
+        [FromQuery] string? search,
+        [FromQuery] bool groupAccruals,
+        CancellationToken cancellationToken,
+        [FromQuery] string? sortBy = null,
+        [FromQuery] string? sortDirection = null,
+        [FromQuery] Guid[]? garageIds = null,
+        [FromQuery] Guid[]? ownerIds = null,
+        [FromQuery] Guid[]? incomeTypeIds = null)
+    {
+        var result = await reportService.ExportGarageReportXlsxAsync(
+            new GarageReportRequest(monthFrom, monthTo, search, groupAccruals, ActorUserId: GetActorUserId(), SortBy: sortBy, SortDirection: sortDirection, GarageIds: garageIds ?? [], OwnerIds: ownerIds ?? [], IncomeTypeIds: incomeTypeIds ?? []),
+            cancellationToken);
+        return result.Succeeded
+            ? File(result.Value!.Content, result.Value.ContentType, result.Value.FileName)
+            : BadRequest(ApiProblemDetails.Create(result.ErrorCode, result.ErrorMessage, StatusCodes.Status400BadRequest));
+    }
+
+    [HttpPost("garages/export/pdf")]
+    [ProducesResponseType<FileContentResult>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> ExportGarageReportPdf(
+        [FromQuery] DateOnly? monthFrom,
+        [FromQuery] DateOnly? monthTo,
+        [FromQuery] string? search,
+        [FromQuery] bool groupAccruals,
+        CancellationToken cancellationToken,
+        [FromQuery] string? sortBy = null,
+        [FromQuery] string? sortDirection = null,
+        [FromQuery] Guid[]? garageIds = null,
+        [FromQuery] Guid[]? ownerIds = null,
+        [FromQuery] Guid[]? incomeTypeIds = null)
+    {
+        var result = await reportService.ExportGarageReportPdfAsync(
+            new GarageReportRequest(monthFrom, monthTo, search, groupAccruals, ActorUserId: GetActorUserId(), SortBy: sortBy, SortDirection: sortDirection, GarageIds: garageIds ?? [], OwnerIds: ownerIds ?? [], IncomeTypeIds: incomeTypeIds ?? []),
+            cancellationToken);
+        return result.Succeeded
+            ? File(result.Value!.Content, result.Value.ContentType, result.Value.FileName)
+            : BadRequest(ApiProblemDetails.Create(result.ErrorCode, result.ErrorMessage, StatusCodes.Status400BadRequest));
+    }
+
     [HttpPost("consolidated/export/xlsx")]
     [ProducesResponseType<FileContentResult>(StatusCodes.Status200OK)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]

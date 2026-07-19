@@ -6,6 +6,8 @@ public sealed class ApiEndpointDocumentationTests
     [InlineData("/api/import/access/runs/{id}/report")]
     [InlineData("/api/reports/consolidated/export/xlsx")]
     [InlineData("/api/reports/consolidated/export/pdf")]
+    [InlineData("/api/reports/garages/export/xlsx")]
+    [InlineData("/api/reports/garages/export/pdf")]
     [InlineData("/api/reports/income/export/xlsx")]
     [InlineData("/api/reports/income/export/pdf")]
     [InlineData("/api/reports/expense/export/xlsx")]

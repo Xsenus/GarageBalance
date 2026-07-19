@@ -148,7 +148,10 @@ public sealed class ReportService(
         return ReportResult<ConsolidatedReportDto>.Success(report);
     }
 
-    public async Task<ReportResult<GarageDetailReportDto>> GetGarageReportAsync(GarageReportRequest request, CancellationToken cancellationToken)
+    public Task<ReportResult<GarageDetailReportDto>> GetGarageReportAsync(GarageReportRequest request, CancellationToken cancellationToken) =>
+        BuildGarageReportAsync(request, NormalizeReportLimit(request.Limit ?? 25), cancellationToken);
+
+    private async Task<ReportResult<GarageDetailReportDto>> BuildGarageReportAsync(GarageReportRequest request, int? queryLimit, CancellationToken cancellationToken)
     {
         var periodFrom = MonthPeriod.Normalize(request.MonthFrom ?? MonthPeriod.CurrentLocalMonth());
         var periodTo = MonthPeriod.Normalize(request.MonthTo ?? periodFrom);
@@ -162,8 +165,7 @@ public sealed class ReportService(
             return sortFailure!;
         }
 
-        var offset = Math.Max(request.Offset ?? 0, 0);
-        var limit = NormalizeReportLimit(request.Limit ?? 25);
+        var offset = queryLimit.HasValue ? Math.Max(request.Offset ?? 0, 0) : 0;
         var data = await garageReportQuery.GetRowsAsync(
             periodFrom,
             periodTo,
@@ -173,7 +175,7 @@ public sealed class ReportService(
             (request.IncomeTypeIds ?? []).ToHashSet(),
             request.GroupAccruals,
             offset,
-            limit,
+            queryLimit,
             sort,
             cancellationToken);
         var rows = data.Rows.Select(row => new GarageDetailReportRowDto(
@@ -196,7 +198,7 @@ public sealed class ReportService(
             data.RowCount,
             rows,
             offset,
-            limit);
+            queryLimit ?? data.RowCount);
 
         await AddReportAuditAsync(
             request.ActorUserId,
@@ -213,8 +215,8 @@ public sealed class ReportService(
                 ["garageFilterCount"] = request.GarageIds?.Count ?? 0,
                 ["ownerFilterCount"] = request.OwnerIds?.Count ?? 0,
                 ["incomeTypeFilterCount"] = request.IncomeTypeIds?.Count ?? 0,
-                ["limit"] = request.Limit,
-                ["offset"] = request.Offset,
+                ["limit"] = queryLimit,
+                ["offset"] = offset,
                 ["sortBy"] = sort.Field,
                 ["sortDirection"] = sort.Descending ? "desc" : "asc",
                 ["visibleRowCount"] = report.Rows.Count
@@ -222,6 +224,93 @@ public sealed class ReportService(
             cancellationToken);
 
         return ReportResult<GarageDetailReportDto>.Success(report);
+    }
+
+    public async Task<ReportResult<ReportExportFileDto>> ExportGarageReportXlsxAsync(GarageReportRequest request, CancellationToken cancellationToken)
+    {
+        var reportResult = await BuildGarageReportAsync(request, null, cancellationToken);
+        if (!reportResult.Succeeded)
+        {
+            return ReportResult<ReportExportFileDto>.Failure(reportResult.ErrorCode!, reportResult.ErrorMessage!);
+        }
+
+        var report = reportResult.Value!;
+        var headers = request.GroupAccruals
+            ? new[] { "Месяц", "Гараж", "Владелец", "Начислено", "Поступило", "Разница" }
+            : new[] { "Месяц", "Гараж", "Владелец", "Вид поступления", "Начислено", "Поступило", "Разница" };
+        var rows = report.Rows.Select(row => request.GroupAccruals
+            ? (IReadOnlyList<XlsxCell>)
+            [
+                XlsxCell.Text(row.AccountingMonth.ToString("yyyy-MM")),
+                XlsxCell.Text(row.GarageNumber),
+                XlsxCell.Text(row.OwnerName),
+                XlsxCell.Number(row.AccrualAmount),
+                XlsxCell.Number(row.IncomeAmount),
+                XlsxCell.Number(row.Difference)
+            ]
+            :
+            [
+                XlsxCell.Text(row.AccountingMonth.ToString("yyyy-MM")),
+                XlsxCell.Text(row.GarageNumber),
+                XlsxCell.Text(row.OwnerName),
+                XlsxCell.Text(row.IncomeTypeName),
+                XlsxCell.Number(row.AccrualAmount),
+                XlsxCell.Number(row.IncomeAmount),
+                XlsxCell.Number(row.Difference)
+            ]).ToArray();
+        var content = XlsxWorkbookBuilder.Build(
+            [
+                new XlsxSheet("Гаражи", headers, rows),
+                new XlsxSheet(
+                    "Итоги",
+                    ["Период с", "Период по", "Начислено", "Поступило", "Разница", "Строк"],
+                    [[
+                        XlsxCell.Text(report.PeriodFrom.ToString("yyyy-MM-dd")),
+                        XlsxCell.Text(report.PeriodTo.ToString("yyyy-MM-dd")),
+                        XlsxCell.Number(report.AccrualTotal),
+                        XlsxCell.Number(report.IncomeTotal),
+                        XlsxCell.Number(report.Difference),
+                        XlsxCell.Number(report.RowCount)
+                    ]])
+            ]);
+        var file = new ReportExportFileDto(
+            BuildExportFileName("garages", report.PeriodFrom, report.PeriodTo, "xlsx"),
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            content);
+        await AddReportExportAuditAsync(request.ActorUserId, "Отчет по гаражам", "xlsx", file.FileName, report.PeriodFrom, report.PeriodTo, report.RowCount, request.Search, cancellationToken);
+
+        return ReportResult<ReportExportFileDto>.Success(file);
+    }
+
+    public async Task<ReportResult<ReportExportFileDto>> ExportGarageReportPdfAsync(GarageReportRequest request, CancellationToken cancellationToken)
+    {
+        var reportResult = await BuildGarageReportAsync(request, null, cancellationToken);
+        if (!reportResult.Succeeded)
+        {
+            return ReportResult<ReportExportFileDto>.Failure(reportResult.ErrorCode!, reportResult.ErrorMessage!);
+        }
+
+        var report = reportResult.Value!;
+        var lines = new List<string>
+        {
+            $"Period: {report.PeriodFrom:yyyy-MM-dd} - {report.PeriodTo:yyyy-MM-dd}",
+            $"Accrued: {FormatAmount(report.AccrualTotal)} | Income: {FormatAmount(report.IncomeTotal)} | Difference: {FormatAmount(report.Difference)} | Rows: {report.RowCount}",
+            string.Empty,
+            request.GroupAccruals
+                ? "Month | Garage | Owner | Accrued | Income | Difference"
+                : "Month | Garage | Owner | Income type | Accrued | Income | Difference"
+        };
+        lines.AddRange(report.Rows.Select(row => request.GroupAccruals
+            ? string.Join(" | ", row.AccountingMonth.ToString("yyyy-MM"), row.GarageNumber, row.OwnerName ?? string.Empty, FormatAmount(row.AccrualAmount), FormatAmount(row.IncomeAmount), FormatAmount(row.Difference))
+            : string.Join(" | ", row.AccountingMonth.ToString("yyyy-MM"), row.GarageNumber, row.OwnerName ?? string.Empty, row.IncomeTypeName, FormatAmount(row.AccrualAmount), FormatAmount(row.IncomeAmount), FormatAmount(row.Difference))));
+        var content = PdfReportDocumentBuilder.Build("GarageBalance garage report", lines);
+        var file = new ReportExportFileDto(
+            BuildExportFileName("garages", report.PeriodFrom, report.PeriodTo, "pdf"),
+            "application/pdf",
+            content);
+        await AddReportExportAuditAsync(request.ActorUserId, "Отчет по гаражам", "pdf", file.FileName, report.PeriodFrom, report.PeriodTo, report.RowCount, request.Search, cancellationToken);
+
+        return ReportResult<ReportExportFileDto>.Success(file);
     }
 
     public async Task<ReportResult<ReportExportFileDto>> ExportConsolidatedReportXlsxAsync(ConsolidatedReportRequest request, CancellationToken cancellationToken)
@@ -1471,6 +1560,7 @@ public sealed class ReportService(
         return reportTitle switch
         {
             "Сводный отчет" => "consolidated",
+            "Отчет по гаражам" => "garages",
             "Отчет по поступлениям" => "income",
             "Отчет по выплатам" => "expense",
             "Отчет по оплатам из кассы" => "cash_payments",

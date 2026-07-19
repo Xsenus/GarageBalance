@@ -11,7 +11,7 @@ public interface IGarageReportQuery
         IReadOnlySet<Guid> incomeTypeIds,
         bool groupAccruals,
         int offset,
-        int limit,
+        int? limit,
         ReportSort sort,
         CancellationToken cancellationToken);
 }

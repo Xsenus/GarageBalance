@@ -242,6 +242,14 @@ export type ReportClient = {
     accessToken: string,
     params?: { monthFrom?: string; monthTo?: string; search?: string; garageIds?: string[]; ownerIds?: string[]; incomeTypeIds?: string[]; groupAccruals?: boolean; offset?: number; limit?: number; sortBy?: string; sortDirection?: string },
   ): Promise<GarageDetailReportDto>
+  exportGarageReportXlsx(
+    accessToken: string,
+    params?: { monthFrom?: string; monthTo?: string; search?: string; garageIds?: string[]; ownerIds?: string[]; incomeTypeIds?: string[]; groupAccruals?: boolean; sortBy?: string; sortDirection?: string },
+  ): Promise<Blob>
+  exportGarageReportPdf(
+    accessToken: string,
+    params?: { monthFrom?: string; monthTo?: string; search?: string; garageIds?: string[]; ownerIds?: string[]; incomeTypeIds?: string[]; groupAccruals?: boolean; sortBy?: string; sortDirection?: string },
+  ): Promise<Blob>
   exportConsolidatedReportXlsx(accessToken: string, params?: { monthFrom?: string; monthTo?: string; search?: string; sortBy?: string; sortDirection?: string }): Promise<Blob>
   exportConsolidatedReportPdf(accessToken: string, params?: { monthFrom?: string; monthTo?: string; search?: string; sortBy?: string; sortDirection?: string }): Promise<Blob>
   getIncomeReport(
@@ -705,6 +713,14 @@ export const reportsApi: ReportClient = {
   getGarageReport(accessToken, params = {}) {
     const query = buildGarageReportQuery(params)
     return requestJson(accessToken, `/api/reports/garages${query ? `?${query}` : ''}`)
+  },
+  exportGarageReportXlsx(accessToken, params = {}) {
+    const query = buildGarageReportQuery(params)
+    return requestBlob(accessToken, `/api/reports/garages/export/xlsx${query ? `?${query}` : ''}`, { method: 'POST' })
+  },
+  exportGarageReportPdf(accessToken, params = {}) {
+    const query = buildGarageReportQuery(params)
+    return requestBlob(accessToken, `/api/reports/garages/export/pdf${query ? `?${query}` : ''}`, { method: 'POST' })
   },
   exportConsolidatedReportXlsx(accessToken, params = {}) {
     const query = buildConsolidatedReportQuery(params)

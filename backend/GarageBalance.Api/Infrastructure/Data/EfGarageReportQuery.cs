@@ -15,7 +15,7 @@ public sealed class EfGarageReportQuery(GarageBalanceDbContext dbContext) : IGar
         string? search,
         bool groupAccruals,
         int offset,
-        int limit,
+        int? limit,
         CancellationToken cancellationToken) =>
         GetRowsAsync(periodFrom, periodTo, search, new HashSet<Guid>(), new HashSet<Guid>(), new HashSet<Guid>(), groupAccruals, offset, limit, new ReportSort("accountingMonth", true), cancellationToken);
 
@@ -25,7 +25,7 @@ public sealed class EfGarageReportQuery(GarageBalanceDbContext dbContext) : IGar
         string? search,
         bool groupAccruals,
         int offset,
-        int limit,
+        int? limit,
         ReportSort sort,
         CancellationToken cancellationToken) =>
         GetRowsAsync(periodFrom, periodTo, search, new HashSet<Guid>(), new HashSet<Guid>(), new HashSet<Guid>(), groupAccruals, offset, limit, sort, cancellationToken);
@@ -39,7 +39,7 @@ public sealed class EfGarageReportQuery(GarageBalanceDbContext dbContext) : IGar
         IReadOnlySet<Guid> incomeTypeIds,
         bool groupAccruals,
         int offset,
-        int limit,
+        int? limit,
         ReportSort sort,
         CancellationToken cancellationToken)
     {
@@ -220,14 +220,13 @@ public sealed class EfGarageReportQuery(GarageBalanceDbContext dbContext) : IGar
                 : groupedRows.OrderBy(row => row.AccrualAmount - row.IncomeAmount),
             _ => sort.Descending ? groupedRows.OrderByDescending(row => row.AccountingMonth) : groupedRows.OrderBy(row => row.AccountingMonth)
         };
-        var rows = await orderedRows
+        var page = orderedRows
             .ThenBy(row => row.GarageNumber)
             .ThenBy(row => row.IncomeTypeName)
             .ThenBy(row => row.AccountingMonth)
             .ThenBy(row => row.GarageId)
-            .Skip(offset)
-            .Take(limit)
-            .ToListAsync(cancellationToken);
+            .Skip(offset);
+        var rows = await (limit is > 0 ? page.Take(limit.Value) : page).ToListAsync(cancellationToken);
 
         return new GarageReportQueryData(
             summary.AccrualTotal,

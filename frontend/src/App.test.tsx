@@ -13180,7 +13180,7 @@ describe('App', () => {
     expect(cashXlsxButton).toHaveAttribute('data-tooltip', 'Скачать XLSX')
     expect(cashXlsxButton.querySelector('svg')).toHaveAttribute('aria-hidden', 'true')
     await user.click(cashXlsxButton)
-    await waitFor(() => expect(exportCashPaymentReportXlsx).toHaveBeenCalledWith(expect.any(String), { dateFrom: today, dateTo: today }))
+    await waitFor(() => expect(exportCashPaymentReportXlsx).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ dateFrom: today, dateTo: today })))
 
     await openReportTab(user, reportsPanel, 'Сдача кассы в банк')
     expect(within(reportsPanel).getByText('Отчёт по сдаче кассы в банк')).toBeInTheDocument()
@@ -13199,7 +13199,7 @@ describe('App', () => {
     expect(bankPdfButton).toHaveAttribute('data-tooltip', 'Скачать PDF')
     expect(bankPdfButton.querySelector('svg')).toHaveAttribute('aria-hidden', 'true')
     await user.click(bankPdfButton)
-    await waitFor(() => expect(exportBankDepositReportPdf).toHaveBeenCalledWith(expect.any(String), { dateFrom: today, dateTo: today }))
+    await waitFor(() => expect(exportBankDepositReportPdf).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ dateFrom: today, dateTo: today })))
 
     await openReportTab(user, reportsPanel, 'Сборы')
     expect(within(reportsPanel).getByText('Отчёт по сборам')).toBeInTheDocument()
@@ -13212,7 +13212,7 @@ describe('App', () => {
     const feeXlsxButton = within(reportsPanel).getByRole('button', { name: 'Скачать XLSX' })
     expect(feeXlsxButton.querySelector('svg')).toHaveAttribute('aria-hidden', 'true')
     await user.click(feeXlsxButton)
-    await waitFor(() => expect(exportFeeReportXlsx).toHaveBeenCalledWith(expect.any(String), { variation: 'Членский взнос' }))
+    await waitFor(() => expect(exportFeeReportXlsx).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ variation: 'Членский взнос' })))
     expect(within(reportsPanel).queryByRole('table', { name: 'Должники по сбору' })).not.toBeInTheDocument()
     const showFeeDebtorsButton = within(reportsPanel).getByRole('button', { name: 'Показать должников' })
     await user.click(within(feeSummaryTable).getByRole('button', { name: 'Открыть детализацию сбора Членский взнос' }))
@@ -13257,7 +13257,7 @@ describe('App', () => {
     expect(fundXlsxButton).toHaveAttribute('title', 'Скачать XLSX')
     expect(fundXlsxButton.querySelector('svg')).toHaveAttribute('aria-hidden', 'true')
     await user.click(fundXlsxButton)
-    await waitFor(() => expect(exportFundChangeReportXlsx).toHaveBeenCalledWith(expect.any(String), { dateFrom: today, dateTo: today }))
+    await waitFor(() => expect(exportFundChangeReportXlsx).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ dateFrom: today, dateTo: today })))
   })
 
   it('paginates and groups garage report rows on the server', async () => {
@@ -13482,6 +13482,91 @@ describe('App', () => {
     await openReportTab(user, reportsPanel, 'Изменение фондов')
     await user.click(await within(reportsPanel).findByRole('button', { name: /Сортировать Пользователь/ }))
     await waitFor(() => expect(requests.funds).toContainEqual(expect.objectContaining({ sortBy: 'actorDisplayName', sortDirection: 'asc' })))
+  })
+
+  it('keeps active filters, grouping and sorting when every report is exported', async () => {
+    const user = userEvent.setup()
+    const exportConsolidatedReportXlsx = vi.fn(async () => new Blob(['consolidated']))
+    const exportGarageReportXlsx = vi.fn(async () => new Blob(['garages']))
+    const exportExpenseReportXlsx = vi.fn(async () => new Blob(['expense']))
+    const exportIncomeReportXlsx = vi.fn(async () => new Blob(['income']))
+    const exportCashPaymentReportXlsx = vi.fn(async () => new Blob(['cash']))
+    const exportBankDepositReportXlsx = vi.fn(async () => new Blob(['bank']))
+    const exportFeeReportXlsx = vi.fn(async () => new Blob(['fees']))
+    const exportFundChangeReportXlsx = vi.fn(async () => new Blob(['funds']))
+    const baseReportClient = createReportClient()
+    const reportClient = createReportClient({
+      getGarageReport: async (token, params) => ({ ...await baseReportClient.getGarageReport(token, params), rowCount: 30, offset: params?.offset ?? 0, limit: params?.limit ?? 25 }),
+      exportConsolidatedReportXlsx,
+      exportGarageReportXlsx,
+      exportExpenseReportXlsx,
+      exportIncomeReportXlsx,
+      exportCashPaymentReportXlsx,
+      exportBankDepositReportXlsx,
+      exportFeeReportXlsx,
+      exportFundChangeReportXlsx,
+    })
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={reportClient} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Отчеты')
+    const reportsPanel = await screen.findByRole('region', { name: 'Отчеты' })
+    const exportXlsx = async (groupName: string) => user.click(within(within(reportsPanel).getByRole('group', { name: groupName })).getByRole('button', { name: 'Скачать XLSX' }))
+
+    await user.click(await within(reportsPanel).findByRole('button', { name: /Сортировать Месяц/ }))
+    await exportXlsx('Выгрузка консолидированного отчета')
+    await waitFor(() => expect(exportConsolidatedReportXlsx).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ sortBy: 'accountingMonth', sortDirection: 'asc' })))
+
+    await openReportTab(user, reportsPanel, 'По гаражам')
+    const garageFilter = within(reportsPanel).getByLabelText('Гаражи')
+    await waitFor(() => expect(within(garageFilter).getAllByRole('option').length).toBeGreaterThan(0))
+    await user.selectOptions(garageFilter, 'garage-1')
+    await user.click(within(reportsPanel).getByRole('button', { name: 'Страница 2' }))
+    await user.click(within(reportsPanel).getByRole('button', { name: /Сортировать Гараж/ }))
+    await user.click(within(reportsPanel).getByRole('button', { name: 'Сгруппировать начисления' }))
+    await exportXlsx('Выгрузка отчета по гаражам')
+    await waitFor(() => expect(exportGarageReportXlsx).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ garageIds: ['garage-1'], groupAccruals: true, sortBy: 'garageNumber', sortDirection: 'asc' })))
+
+    await openReportTab(user, reportsPanel, 'По выплатам')
+    const counterpartyFilter = within(reportsPanel).getByLabelText('Поставщики или сотрудники')
+    await waitFor(() => expect(within(counterpartyFilter).getAllByRole('option').length).toBeGreaterThan(1))
+    await user.selectOptions(counterpartyFilter, ['supplier:supplier-1', 'staff:staff-member-1'])
+    await user.click(within(reportsPanel).getByRole('button', { name: /Сортировать Поставщик\/сотрудник/ }))
+    await exportXlsx('Выгрузка отчета по выплатам')
+    await waitFor(() => expect(exportExpenseReportXlsx).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ supplierIds: ['supplier-1'], staffMemberIds: ['staff-member-1'], sortBy: 'supplierName', sortDirection: 'asc' })))
+
+    await openReportTab(user, reportsPanel, 'Поступления')
+    const incomeGarageFilter = within(reportsPanel).getByLabelText('Гаражи по поступлениям')
+    await user.selectOptions(incomeGarageFilter, 'garage-1')
+    await user.click(within(reportsPanel).getByRole('button', { name: /Сортировать Сумма платежа/ }))
+    await exportXlsx('Выгрузка отчета по поступлениям')
+    await waitFor(() => expect(exportIncomeReportXlsx).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ garageIds: ['garage-1'], sortBy: 'incomeAmount', sortDirection: 'asc' })))
+
+    await openReportTab(user, reportsPanel, 'Оплаты из кассы')
+    await user.click(within(reportsPanel).getByRole('button', { name: /Сортировать Наличие чека/ }))
+    await exportXlsx('Выгрузка отчета по оплатам из кассы')
+    await waitFor(() => expect(exportCashPaymentReportXlsx).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ sortBy: 'hasReceipt', sortDirection: 'asc' })))
+
+    await openReportTab(user, reportsPanel, 'Сдача кассы в банк')
+    await user.click(within(reportsPanel).getByRole('button', { name: /Сортировать Комментарий/ }))
+    await exportXlsx('Выгрузка отчета по сдаче кассы в банк')
+    await waitFor(() => expect(exportBankDepositReportXlsx).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ sortBy: 'comment', sortDirection: 'asc' })))
+
+    await openReportTab(user, reportsPanel, 'Сборы')
+    const feeFilter = within(reportsPanel).getByLabelText('Вариация сбора')
+    await user.clear(feeFilter)
+    await user.type(feeFilter, 'Членский взнос')
+    await waitFor(() => expect(within(reportsPanel).getByRole('table', { name: 'Отчет по сборам' })).toHaveTextContent('Членский взнос'))
+    await user.click(within(reportsPanel).getByRole('button', { name: 'Показать должников' }))
+    await user.click(within(reportsPanel).getByRole('button', { name: /Сортировать Задолженность/ }))
+    await exportXlsx('Выгрузка отчета по сборам')
+    await waitFor(() => expect(exportFeeReportXlsx).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ variation: 'Членский взнос', sortBy: 'debt', sortDirection: 'asc' })))
+
+    await openReportTab(user, reportsPanel, 'Изменение фондов')
+    await user.click(within(reportsPanel).getByRole('button', { name: /Сортировать Пользователь/ }))
+    await exportXlsx('Выгрузка отчета по изменению фондов')
+    await waitFor(() => expect(exportFundChangeReportXlsx).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ sortBy: 'actorDisplayName', sortDirection: 'asc' })))
   })
 
   it('shows loading and error states for the paged garage report', async () => {
@@ -14919,6 +15004,8 @@ function createReportClient(overrides: Partial<ReportClient> = {}): ReportClient
         limit: params?.limit ?? 25,
       })
     },
+    exportGarageReportXlsx: async () => new Blob(['garages xlsx'], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }),
+    exportGarageReportPdf: async () => new Blob(['garages pdf'], { type: 'application/pdf' }),
     exportConsolidatedReportXlsx: async () => new Blob(['consolidated xlsx'], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }),
     exportConsolidatedReportPdf: async () => new Blob(['consolidated pdf'], { type: 'application/pdf' }),
     getIncomeReport: async (_token, params) => {

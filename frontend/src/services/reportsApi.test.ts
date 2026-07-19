@@ -26,6 +26,8 @@ describe('reportsApi', () => {
     await reportsApi.exportFeeReportPdf('token', { variation: 'Сбор на ворота' })
     await reportsApi.exportFundChangeReportXlsx('token', { dateFrom: '2026-06-01', dateTo: '2026-06-30', search: 'фонд' })
     await reportsApi.exportFundChangeReportPdf('token', { dateFrom: '2026-06-01', dateTo: '2026-06-30', search: 'фонд' })
+    await reportsApi.exportGarageReportXlsx('token', { monthFrom: '2026-06-01', monthTo: '2026-07-01', garageIds: ['garage-1'], groupAccruals: true })
+    await reportsApi.exportGarageReportPdf('token', { monthFrom: '2026-06-01', monthTo: '2026-07-01', garageIds: ['garage-1'], groupAccruals: true })
 
     expect(fetchMock).toHaveBeenNthCalledWith(1, '/api/reports/consolidated/export/xlsx?monthFrom=2026-06-01&monthTo=2026-06-01&search=12', postRequest())
     expect(fetchMock).toHaveBeenNthCalledWith(2, '/api/reports/consolidated/export/pdf?monthFrom=2026-06-01&monthTo=2026-06-01&search=12', postRequest())
@@ -41,6 +43,8 @@ describe('reportsApi', () => {
     expect(fetchMock).toHaveBeenNthCalledWith(12, '/api/reports/fees/export/pdf?variation=%D0%A1%D0%B1%D0%BE%D1%80+%D0%BD%D0%B0+%D0%B2%D0%BE%D1%80%D0%BE%D1%82%D0%B0', postRequest())
     expect(fetchMock).toHaveBeenNthCalledWith(13, '/api/reports/fund-changes/export/xlsx?dateFrom=2026-06-01&dateTo=2026-06-30&search=%D1%84%D0%BE%D0%BD%D0%B4', postRequest())
     expect(fetchMock).toHaveBeenNthCalledWith(14, '/api/reports/fund-changes/export/pdf?dateFrom=2026-06-01&dateTo=2026-06-30&search=%D1%84%D0%BE%D0%BD%D0%B4', postRequest())
+    expect(fetchMock).toHaveBeenNthCalledWith(15, '/api/reports/garages/export/xlsx?monthFrom=2026-06-01&monthTo=2026-07-01&groupAccruals=true&garageIds=garage-1', postRequest())
+    expect(fetchMock).toHaveBeenNthCalledWith(16, '/api/reports/garages/export/pdf?monthFrom=2026-06-01&monthTo=2026-07-01&groupAccruals=true&garageIds=garage-1', postRequest())
   })
 
   it('loads paged garage, income, expense, cash, bank and fund reports with other dedicated filtered endpoints', async () => {
@@ -71,6 +75,7 @@ describe('reportsApi', () => {
     await reportsApi.getConsolidatedReport('token', { sortBy: 'balance', sortDirection: 'asc' })
     await reportsApi.exportConsolidatedReportXlsx('token', { sortBy: 'balance', sortDirection: 'asc' })
     await reportsApi.getGarageReport('token', { sortBy: 'garageNumber', sortDirection: 'desc' })
+    await reportsApi.exportGarageReportXlsx('token', { sortBy: 'garageNumber', sortDirection: 'desc' })
     await reportsApi.getIncomeReport('token', { sortBy: 'incomeAmount', sortDirection: 'asc' })
     await reportsApi.exportIncomeReportXlsx('token', { sortBy: 'incomeAmount', sortDirection: 'asc' })
     await reportsApi.getExpenseReport('token', { sortBy: 'expenseAmount', sortDirection: 'desc' })
@@ -88,6 +93,7 @@ describe('reportsApi', () => {
       '/api/reports/consolidated?sortBy=balance&sortDirection=asc',
       '/api/reports/consolidated/export/xlsx?sortBy=balance&sortDirection=asc',
       '/api/reports/garages?sortBy=garageNumber&sortDirection=desc',
+      '/api/reports/garages/export/xlsx?sortBy=garageNumber&sortDirection=desc',
       '/api/reports/income?sortBy=incomeAmount&sortDirection=asc',
       '/api/reports/income/export/xlsx?sortBy=incomeAmount&sortDirection=asc',
       '/api/reports/expense?sortBy=expenseAmount&sortDirection=desc',

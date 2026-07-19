@@ -688,8 +688,116 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
     }))
   }
 
+  async function downloadConsolidatedReport(extension: 'xlsx' | 'pdf') {
+    const filter = monthlyFilters.consolidated
+    const params = {
+      monthFrom: getReportMonthStart(filter.monthFrom),
+      monthTo: getReportMonthStart(filter.monthTo),
+      sortBy: reportSorts.consolidated?.field,
+      sortDirection: reportSorts.consolidated?.direction,
+    }
+    const exportKey = `consolidated-${extension}`
+    setReportExporting(exportKey)
+    setReportExportMessage(null)
+    setReportDataError(null)
+    try {
+      const blob = extension === 'xlsx'
+        ? await reportClient.exportConsolidatedReportXlsx(auth.accessToken, params)
+        : await reportClient.exportConsolidatedReportPdf(auth.accessToken, params)
+      downloadBlob(blob, buildReportFileName('consolidated', params.monthFrom, params.monthTo, extension))
+      setReportExportMessage(extension === 'xlsx' ? 'Отчет XLSX готов.' : 'Отчет PDF готов.')
+    } catch (caught) {
+      setReportDataError(caught instanceof Error ? caught.message : 'Не удалось выгрузить отчет.')
+    } finally {
+      setReportExporting(null)
+    }
+  }
+
+  async function downloadGarageReport(extension: 'xlsx' | 'pdf') {
+    const filter = monthlyFilters.garages
+    const params = {
+      monthFrom: getReportMonthStart(filter.monthFrom),
+      monthTo: getReportMonthStart(filter.monthTo),
+      garageIds: selectedGarageIds,
+      groupAccruals: garageAccrualsGrouped,
+      sortBy: reportSorts.garages?.field,
+      sortDirection: reportSorts.garages?.direction,
+    }
+    const exportKey = `garages-${extension}`
+    setReportExporting(exportKey)
+    setReportExportMessage(null)
+    setReportDataError(null)
+    try {
+      const blob = extension === 'xlsx'
+        ? await reportClient.exportGarageReportXlsx(auth.accessToken, params)
+        : await reportClient.exportGarageReportPdf(auth.accessToken, params)
+      downloadBlob(blob, buildReportFileName('garages', params.monthFrom, params.monthTo, extension))
+      setReportExportMessage(extension === 'xlsx' ? 'Отчет XLSX готов.' : 'Отчет PDF готов.')
+    } catch (caught) {
+      setReportDataError(caught instanceof Error ? caught.message : 'Не удалось выгрузить отчет.')
+    } finally {
+      setReportExporting(null)
+    }
+  }
+
+  async function downloadPayoutReport(extension: 'xlsx' | 'pdf') {
+    const filter = monthlyFilters.payouts
+    const supplierIds = selectedCounterpartyKeys.filter((key) => key.startsWith('supplier:')).map((key) => key.slice('supplier:'.length))
+    const staffMemberIds = selectedCounterpartyKeys.filter((key) => key.startsWith('staff:')).map((key) => key.slice('staff:'.length))
+    const params = {
+      dateFrom: getReportMonthStart(filter.monthFrom),
+      dateTo: getReportMonthEnd(filter.monthTo),
+      supplierIds,
+      staffMemberIds,
+      sortBy: reportSorts.payouts?.field,
+      sortDirection: reportSorts.payouts?.direction,
+    }
+    const exportKey = `payouts-${extension}`
+    setReportExporting(exportKey)
+    setReportExportMessage(null)
+    setReportDataError(null)
+    try {
+      const blob = extension === 'xlsx'
+        ? await reportClient.exportExpenseReportXlsx(auth.accessToken, params)
+        : await reportClient.exportExpenseReportPdf(auth.accessToken, params)
+      downloadBlob(blob, buildReportFileName('expense', params.dateFrom, params.dateTo, extension))
+      setReportExportMessage(extension === 'xlsx' ? 'Отчет XLSX готов.' : 'Отчет PDF готов.')
+    } catch (caught) {
+      setReportDataError(caught instanceof Error ? caught.message : 'Не удалось выгрузить отчет.')
+    } finally {
+      setReportExporting(null)
+    }
+  }
+
+  async function downloadIncomeReport(extension: 'xlsx' | 'pdf') {
+    const filter = dateFilters.income
+    const params = {
+      ...filter,
+      garageIds: selectedIncomeGarageIds,
+      sortBy: reportSorts.income?.field,
+      sortDirection: reportSorts.income?.direction,
+    }
+    const exportKey = `income-${extension}`
+    setReportExporting(exportKey)
+    setReportExportMessage(null)
+    setReportDataError(null)
+    try {
+      const blob = extension === 'xlsx'
+        ? await reportClient.exportIncomeReportXlsx(auth.accessToken, params)
+        : await reportClient.exportIncomeReportPdf(auth.accessToken, params)
+      downloadBlob(blob, buildReportFileName('income', filter.dateFrom, filter.dateTo, extension))
+      setReportExportMessage(extension === 'xlsx' ? 'Отчет XLSX готов.' : 'Отчет PDF готов.')
+    } catch (caught) {
+      setReportDataError(caught instanceof Error ? caught.message : 'Не удалось выгрузить отчет.')
+    } finally {
+      setReportExporting(null)
+    }
+  }
+
   async function downloadCashOrBankReport(type: 'cashPayments' | 'bankDeposits', extension: 'xlsx' | 'pdf') {
     const filter = dateFilters[type]
+    const sort = reportSorts[type]
+    const params = { ...filter, sortBy: sort?.field, sortDirection: sort?.direction }
     const exportKey = `${type}-${extension}`
     setReportExporting(exportKey)
     setReportExportMessage(null)
@@ -697,11 +805,11 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
     try {
       const blob = type === 'cashPayments'
         ? extension === 'xlsx'
-          ? await reportClient.exportCashPaymentReportXlsx(auth.accessToken, filter)
-          : await reportClient.exportCashPaymentReportPdf(auth.accessToken, filter)
+          ? await reportClient.exportCashPaymentReportXlsx(auth.accessToken, params)
+          : await reportClient.exportCashPaymentReportPdf(auth.accessToken, params)
         : extension === 'xlsx'
-          ? await reportClient.exportBankDepositReportXlsx(auth.accessToken, filter)
-          : await reportClient.exportBankDepositReportPdf(auth.accessToken, filter)
+          ? await reportClient.exportBankDepositReportXlsx(auth.accessToken, params)
+          : await reportClient.exportBankDepositReportPdf(auth.accessToken, params)
       const reportType = type === 'cashPayments' ? 'cash-payments' : 'bank-deposits'
       downloadBlob(blob, buildReportFileName(reportType, filter.dateFrom, filter.dateTo, extension))
       setReportExportMessage(extension === 'xlsx' ? 'Отчет XLSX готов.' : 'Отчет PDF готов.')
@@ -714,14 +822,15 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
 
   async function downloadFeeReport(extension: 'xlsx' | 'pdf') {
     const exportKey = `fees-${extension}`
-    const variation = feeVariationFilter.trim() || undefined
+    const variation = appliedFeeVariationFilter.trim() || undefined
+    const params = { variation, sortBy: reportSorts.fees?.field, sortDirection: reportSorts.fees?.direction }
     setReportExporting(exportKey)
     setReportExportMessage(null)
     setReportDataError(null)
     try {
       const blob = extension === 'xlsx'
-        ? await reportClient.exportFeeReportXlsx(auth.accessToken, { variation })
-        : await reportClient.exportFeeReportPdf(auth.accessToken, { variation })
+        ? await reportClient.exportFeeReportXlsx(auth.accessToken, params)
+        : await reportClient.exportFeeReportPdf(auth.accessToken, params)
       downloadBlob(blob, buildSnapshotReportFileName('fees', extension))
       setReportExportMessage(extension === 'xlsx' ? 'Отчет XLSX готов.' : 'Отчет PDF готов.')
     } catch (caught) {
@@ -733,14 +842,15 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
 
   async function downloadFundChangeReport(extension: 'xlsx' | 'pdf') {
     const filter = dateFilters.funds
+    const params = { ...filter, sortBy: reportSorts.funds?.field, sortDirection: reportSorts.funds?.direction }
     const exportKey = `funds-${extension}`
     setReportExporting(exportKey)
     setReportExportMessage(null)
     setReportDataError(null)
     try {
       const blob = extension === 'xlsx'
-        ? await reportClient.exportFundChangeReportXlsx(auth.accessToken, filter)
-        : await reportClient.exportFundChangeReportPdf(auth.accessToken, filter)
+        ? await reportClient.exportFundChangeReportXlsx(auth.accessToken, params)
+        : await reportClient.exportFundChangeReportPdf(auth.accessToken, params)
       downloadBlob(blob, buildReportFileName('fund-changes', filter.dateFrom, filter.dateTo, extension))
       setReportExportMessage(extension === 'xlsx' ? 'Отчет XLSX готов.' : 'Отчет PDF готов.')
     } catch (caught) {
@@ -918,6 +1028,10 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
       return (
         <ReportWorkbookSheet title="Консолидированный отчёт">
           {renderMonthlyFilter('consolidated', { from: 'Месяц с', to: 'Месяц по' })}
+          <div className="report-workbook-toolbar" role="group" aria-label="Выгрузка консолидированного отчета">
+            {renderReportExportButton('xlsx', 'consolidated-xlsx', () => void downloadConsolidatedReport('xlsx'))}
+            {renderReportExportButton('pdf', 'consolidated-pdf', () => void downloadConsolidatedReport('pdf'))}
+          </div>
           {consolidatedReportLoading ? <TableLoadingState label="Загружаем сводный отчёт" /> : null}
           {renderReportTable(
             'Консолидированный отчет',
@@ -1022,6 +1136,10 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
               {garageAccrualsGrouped ? 'Разгруппировать начисления' : 'Сгруппировать начисления'}
             </button>
           </div>
+          <div className="report-workbook-toolbar" role="group" aria-label="Выгрузка отчета по гаражам">
+            {renderReportExportButton('xlsx', 'garages-xlsx', () => void downloadGarageReport('xlsx'))}
+            {renderReportExportButton('pdf', 'garages-pdf', () => void downloadGarageReport('pdf'))}
+          </div>
           {renderReportTable(
             'Отчет по гаражам',
             garageReportColumns,
@@ -1070,6 +1188,10 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
           })}
           {payoutReportLoading ? <TableLoadingState label="Загружаем выплаты..." /> : null}
           {payoutReportError ? <FormError>{payoutReportError}</FormError> : null}
+          <div className="report-workbook-toolbar" role="group" aria-label="Выгрузка отчета по выплатам">
+            {renderReportExportButton('xlsx', 'payouts-xlsx', () => void downloadPayoutReport('xlsx'))}
+            {renderReportExportButton('pdf', 'payouts-pdf', () => void downloadPayoutReport('pdf'))}
+          </div>
           <div className="report-workbook-summary-row">
             <strong>ИТОГО начислений</strong>
             <strong>ИТОГО выплат</strong>
@@ -1123,6 +1245,10 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
           })}
           {incomeReportLoading ? <TableLoadingState label="Загружаем поступления..." /> : null}
           {incomeReportError ? <FormError>{incomeReportError}</FormError> : null}
+          <div className="report-workbook-toolbar" role="group" aria-label="Выгрузка отчета по поступлениям">
+            {renderReportExportButton('xlsx', 'income-xlsx', () => void downloadIncomeReport('xlsx'))}
+            {renderReportExportButton('pdf', 'income-pdf', () => void downloadIncomeReport('pdf'))}
+          </div>
           <div className="report-workbook-summary-row report-workbook-summary-row--single"><strong>ИТОГО</strong></div>
           {renderReportTable(
             'Отчет по поступлениям',

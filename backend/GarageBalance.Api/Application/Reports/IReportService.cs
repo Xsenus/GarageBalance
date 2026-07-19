@@ -6,6 +6,10 @@ public interface IReportService
 
     Task<ReportResult<GarageDetailReportDto>> GetGarageReportAsync(GarageReportRequest request, CancellationToken cancellationToken);
 
+    Task<ReportResult<ReportExportFileDto>> ExportGarageReportXlsxAsync(GarageReportRequest request, CancellationToken cancellationToken);
+
+    Task<ReportResult<ReportExportFileDto>> ExportGarageReportPdfAsync(GarageReportRequest request, CancellationToken cancellationToken);
+
     Task<ReportResult<ReportExportFileDto>> ExportConsolidatedReportXlsxAsync(ConsolidatedReportRequest request, CancellationToken cancellationToken);
 
     Task<ReportResult<ReportExportFileDto>> ExportConsolidatedReportPdfAsync(ConsolidatedReportRequest request, CancellationToken cancellationToken);

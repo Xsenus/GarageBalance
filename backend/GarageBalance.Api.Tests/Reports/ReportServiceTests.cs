@@ -441,6 +441,41 @@ public sealed class ReportServiceTests
     }
 
     [Fact]
+    public async Task ExportGarageReports_KeepFiltersGroupingAndSortAndIgnoreScreenPage()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        var finance = FinanceServiceTestFactory.Create(database.Context);
+        var service = CreateService(database.Context);
+        await finance.CreateAccrualAsync(new CreateAccrualRequest(fixtures.FirstGarage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 6, 1), 1200m, "regular", null), null, CancellationToken.None);
+        await finance.CreateAccrualAsync(new CreateAccrualRequest(fixtures.SecondGarage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 6, 1), 800m, "regular", null), null, CancellationToken.None);
+        var request = new GarageReportRequest(
+            new DateOnly(2026, 6, 1),
+            new DateOnly(2026, 6, 1),
+            null,
+            true,
+            1,
+            1,
+            Guid.NewGuid(),
+            "garageNumber",
+            "desc",
+            [fixtures.FirstGarage.Id, fixtures.SecondGarage.Id]);
+
+        var xlsx = await service.ExportGarageReportXlsxAsync(request, CancellationToken.None);
+        var pdf = await service.ExportGarageReportPdfAsync(request, CancellationToken.None);
+
+        Assert.True(xlsx.Succeeded);
+        Assert.Equal("garagebalance-garages-20260601-20260601.xlsx", xlsx.Value!.FileName);
+        AssertWorkbookContains(xlsx.Value.Content, "Гаражи");
+        AssertWorkbookContains(xlsx.Value.Content, fixtures.FirstGarage.Number);
+        AssertWorkbookContains(xlsx.Value.Content, fixtures.SecondGarage.Number);
+        Assert.True(pdf.Succeeded);
+        Assert.Equal("garagebalance-garages-20260601-20260601.pdf", pdf.Value!.FileName);
+        Assert.StartsWith("%PDF-1.4", System.Text.Encoding.ASCII.GetString(pdf.Value.Content));
+        Assert.Contains(database.Context.AuditEvents, auditEvent => auditEvent.Action == "reports.garages_exported" && auditEvent.EntityType == "report");
+    }
+
+    [Fact]
     public async Task ExportConsolidatedReportXlsxAsync_ReturnsWorkbookWithMonthlyAndGarageRows()
     {
         await using var database = await TestDatabase.CreateAsync();

@@ -11,6 +11,8 @@ public sealed class ReportsControllerTests
     [Theory]
     [InlineData(nameof(ReportsController.ExportConsolidatedReportXlsx), "consolidated/export/xlsx")]
     [InlineData(nameof(ReportsController.ExportConsolidatedReportPdf), "consolidated/export/pdf")]
+    [InlineData(nameof(ReportsController.ExportGarageReportXlsx), "garages/export/xlsx")]
+    [InlineData(nameof(ReportsController.ExportGarageReportPdf), "garages/export/pdf")]
     [InlineData(nameof(ReportsController.ExportIncomeReportXlsx), "income/export/xlsx")]
     [InlineData(nameof(ReportsController.ExportIncomeReportPdf), "income/export/pdf")]
     [InlineData(nameof(ReportsController.ExportExpenseReportXlsx), "expense/export/xlsx")]
@@ -111,6 +113,34 @@ public sealed class ReportsControllerTests
         Assert.NotNull(method);
         var getAttribute = Assert.Single(method.GetCustomAttributes(typeof(HttpGetAttribute), inherit: true).Cast<HttpGetAttribute>());
         Assert.Equal("garages", getAttribute.Template);
+    }
+
+    [Fact]
+    public async Task ExportGarageReportXlsx_ReturnsFileAndPassesScreenFiltersGroupingAndSort()
+    {
+        var export = new ReportExportFileDto("garagebalance-garages-20260601-20260701.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", [1, 2, 3]);
+        var service = new FakeReportService { GarageXlsxExportResult = ReportResult<ReportExportFileDto>.Success(export) };
+        var controller = new ReportsController(service);
+        var garageIds = new[] { Guid.NewGuid(), Guid.NewGuid() };
+
+        var result = await controller.ExportGarageReportXlsx(
+            new DateOnly(2026, 6, 1),
+            new DateOnly(2026, 7, 1),
+            null,
+            true,
+            CancellationToken.None,
+            "garageNumber",
+            "desc",
+            garageIds);
+
+        var file = Assert.IsType<FileContentResult>(result);
+        Assert.Equal(export.FileName, file.FileDownloadName);
+        Assert.Equal(garageIds, service.GarageRequest?.GarageIds);
+        Assert.True(service.GarageRequest?.GroupAccruals);
+        Assert.Equal("garageNumber", service.GarageRequest?.SortBy);
+        Assert.Equal("desc", service.GarageRequest?.SortDirection);
+        Assert.Null(service.GarageRequest?.Limit);
+        Assert.Null(service.GarageRequest?.Offset);
     }
 
     [Fact]
@@ -908,6 +938,10 @@ public sealed class ReportsControllerTests
         public ReportResult<GarageDetailReportDto> GarageResult { get; init; } = ReportResult<GarageDetailReportDto>.Failure("not_configured", "Not configured.");
         public GarageReportRequest? GarageRequest { get; private set; }
 
+        public ReportResult<ReportExportFileDto> GarageXlsxExportResult { get; init; } = ReportResult<ReportExportFileDto>.Failure("not_configured", "Not configured.");
+
+        public ReportResult<ReportExportFileDto> GaragePdfExportResult { get; init; } = ReportResult<ReportExportFileDto>.Failure("not_configured", "Not configured.");
+
         public ReportResult<ReportExportFileDto> ConsolidatedXlsxExportResult { get; init; } = ReportResult<ReportExportFileDto>.Failure("not_configured", "Not configured.");
 
         public ReportResult<ReportExportFileDto> ConsolidatedPdfExportResult { get; init; } = ReportResult<ReportExportFileDto>.Failure("not_configured", "Not configured.");
@@ -964,6 +998,18 @@ public sealed class ReportsControllerTests
         {
             GarageRequest = request;
             return Task.FromResult(GarageResult);
+        }
+
+        public Task<ReportResult<ReportExportFileDto>> ExportGarageReportXlsxAsync(GarageReportRequest request, CancellationToken cancellationToken)
+        {
+            GarageRequest = request;
+            return Task.FromResult(GarageXlsxExportResult);
+        }
+
+        public Task<ReportResult<ReportExportFileDto>> ExportGarageReportPdfAsync(GarageReportRequest request, CancellationToken cancellationToken)
+        {
+            GarageRequest = request;
+            return Task.FromResult(GaragePdfExportResult);
         }
 
         public Task<ReportResult<ReportExportFileDto>> ExportConsolidatedReportXlsxAsync(ConsolidatedReportRequest request, CancellationToken cancellationToken)

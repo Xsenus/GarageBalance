@@ -1,6 +1,6 @@
 import type { AccessImportRunDto } from '../services/importApi'
 
-export function buildReportFileName(type: 'consolidated' | 'income' | 'expense' | 'cash-payments' | 'bank-deposits' | 'fund-changes', dateFrom: string, dateTo: string, extension: 'xlsx' | 'pdf'): string {
+export function buildReportFileName(type: 'consolidated' | 'garages' | 'income' | 'expense' | 'cash-payments' | 'bank-deposits' | 'fund-changes', dateFrom: string, dateTo: string, extension: 'xlsx' | 'pdf'): string {
   return `garagebalance-${type}-${dateFrom.replaceAll('-', '')}-${dateTo.replaceAll('-', '')}.${extension}`
 }
 

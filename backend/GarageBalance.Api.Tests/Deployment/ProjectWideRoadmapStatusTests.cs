@@ -2936,17 +2936,19 @@ public sealed class ProjectWideRoadmapStatusTests
         Assert.Contains("XlsxExportRoadmapItemIsCompleteWhenCurrentReportWorkbooksRoutesAndUiClientsAreCovered", xlsxLine, StringComparison.Ordinal);
 
         Assert.Contains("POST /api/reports/consolidated/export/xlsx", verification, StringComparison.Ordinal);
+        Assert.Contains("POST /api/reports/garages/export/xlsx", verification, StringComparison.Ordinal);
         Assert.Contains("POST /api/reports/income/export/xlsx", verification, StringComparison.Ordinal);
         Assert.Contains("POST /api/reports/expense/export/xlsx", verification, StringComparison.Ordinal);
         Assert.Contains("POST /api/reports/cash-payments/export/xlsx", verification, StringComparison.Ordinal);
         Assert.Contains("POST /api/reports/bank-deposits/export/xlsx", verification, StringComparison.Ordinal);
         Assert.Contains("POST /api/reports/fees/export/xlsx", verification, StringComparison.Ordinal);
         Assert.Contains("POST /api/reports/fund-changes/export/xlsx", verification, StringComparison.Ordinal);
-        Assert.Contains("Новая запись \"Что нового\" не нужна", verification, StringComparison.Ordinal);
+        Assert.Contains("каждая из восьми вкладок", verification, StringComparison.Ordinal);
 
         Assert.Contains("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", xlsxBuilderText, StringComparison.Ordinal);
         Assert.Contains("ExportConsolidatedReportXlsxAsync_ReturnsWorkbookWithMonthlyAndGarageRows", reportServiceTestsText, StringComparison.Ordinal);
         Assert.Contains("ExportConsolidatedReportXlsxAsync_AppliesGarageSearchFilter", reportServiceTestsText, StringComparison.Ordinal);
+        Assert.Contains("ExportGarageReports_KeepFiltersGroupingAndSortAndIgnoreScreenPage", reportServiceTestsText, StringComparison.Ordinal);
         Assert.Contains("ExportIncomeReportXlsxAsync_ReturnsWorkbookWithFilteredRows", reportServiceTestsText, StringComparison.Ordinal);
         Assert.Contains("ExportExpenseReportXlsxAsync_ReturnsWorkbookWithFilteredRows", reportServiceTestsText, StringComparison.Ordinal);
         Assert.Contains("ExportCashPaymentReportXlsxAsync_ReturnsWorkbookWithFilteredRows", reportServiceTestsText, StringComparison.Ordinal);
@@ -2958,6 +2960,7 @@ public sealed class ProjectWideRoadmapStatusTests
 
         Assert.Contains("ExportReportActions_UsePostBecauseExportsWriteAuditEvents", controllerTestsText, StringComparison.Ordinal);
         Assert.Contains("consolidated/export/xlsx", controllerTestsText, StringComparison.Ordinal);
+        Assert.Contains("garages/export/xlsx", controllerTestsText, StringComparison.Ordinal);
         Assert.Contains("income/export/xlsx", controllerTestsText, StringComparison.Ordinal);
         Assert.Contains("expense/export/xlsx", controllerTestsText, StringComparison.Ordinal);
         Assert.Contains("fund-changes/export/xlsx", controllerTestsText, StringComparison.Ordinal);
