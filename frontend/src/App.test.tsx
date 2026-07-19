@@ -9552,6 +9552,111 @@ describe('App', () => {
     expect(within(financePanel).getByText('Оплата счета поставщика')).toBeInTheDocument()
   })
 
+  it('reloads the whole UI between key financial steps and reads every result from the server clients', async () => {
+    const user = userEvent.setup()
+    const dictionaryClient = createDictionaryClient()
+    const financeClient = createStatefulFinanceClient()
+    const fundsClient = createFundsClient()
+    const sharedProps = {
+      authClient: createAuthClient(),
+      dictionaryClient,
+      financeClient,
+      fundsClient,
+      importClient: createImportClient(),
+      reportClient: createReportClient(),
+      releaseClient: createReleaseClient(),
+      userClient: createUserClient(),
+    }
+    const renderReloadedApp = () => render(<App {...sharedProps} />)
+
+    let view = renderReloadedApp()
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Платежи')
+    let financePanel = await screen.findByRole('region', { name: 'Платежи' })
+
+    await user.clear(within(financePanel).getByLabelText('Сумма начисления'))
+    await user.type(within(financePanel).getByLabelText('Сумма начисления'), '900')
+    await user.type(within(financePanel).getByLabelText('Комментарий начисления'), 'RELOAD-ACCRUAL')
+    await user.click(within(financePanel).getAllByRole('button', { name: 'Начислить' })[0])
+    await user.clear(within(financePanel).getByLabelText('Сумма поступления'))
+    await user.type(within(financePanel).getByLabelText('Сумма поступления'), '300')
+    await user.type(within(financePanel).getByLabelText('Документ поступления'), 'RELOAD-PKO')
+    await user.click(within(financePanel).getAllByRole('button', { name: 'Провести' })[0])
+    expect(await within(financePanel).findByText('Долг: 900.00 → 600.00')).toBeInTheDocument()
+
+    view.unmount()
+    view = renderReloadedApp()
+    expect(screen.queryByRole('region', { name: 'Вход в систему' })).not.toBeInTheDocument()
+    await openSection(user, 'Платежи')
+    financePanel = await screen.findByRole('region', { name: 'Платежи' })
+    expect(await within(financePanel).findByText('RELOAD-PKO')).toBeInTheDocument()
+    await user.click(within(financePanel).getByRole('tab', { name: /Начисления владельцам/ }))
+    expect(await within(financePanel).findByText('RELOAD-ACCRUAL')).toBeInTheDocument()
+
+    await financeClient.createSupplierAccrual('persisted-session', {
+      supplierId: 'supplier-1',
+      expenseTypeId: 'expense-type-1',
+      accountingMonth: '2026-06-01',
+      amount: 650,
+      source: 'manual',
+      documentNumber: 'RELOAD-INV',
+    })
+    await financeClient.createExpense('persisted-session', {
+      supplierId: 'supplier-1',
+      expenseTypeId: 'expense-type-1',
+      operationDate: '2026-06-30',
+      accountingMonth: '2026-06-01',
+      amount: 250,
+      documentNumber: 'RELOAD-RKO',
+    })
+
+    view.unmount()
+    view = renderReloadedApp()
+    await openSection(user, 'Платежи')
+    financePanel = await screen.findByRole('region', { name: 'Платежи' })
+    await user.click(within(financePanel).getByRole('tab', { name: /Расходы/ }))
+    expect(await within(financePanel).findByText('RELOAD-RKO')).toBeInTheDocument()
+    await user.click(within(financePanel).getByRole('tab', { name: /Начисления поставщикам/ }))
+    expect(await within(financePanel).findByText('RELOAD-INV')).toBeInTheDocument()
+
+    await financeClient.createMeterReading('persisted-session', {
+      garageId: 'garage-1',
+      meterKind: 'water',
+      accountingMonth: '2026-06-01',
+      readingDate: '2026-06-30',
+      currentValue: 17.25,
+      comment: 'RELOAD-METER',
+    })
+
+    view.unmount()
+    view = renderReloadedApp()
+    await openSection(user, 'Платежи')
+    financePanel = await screen.findByRole('region', { name: 'Платежи' })
+    await user.click(within(financePanel).getByRole('tab', { name: /Счетчики/ }))
+    const meterTable = await within(financePanel).findByRole('table', { name: 'Последние показания' })
+    expect(await within(meterTable).findByText('7.25')).toBeInTheDocument()
+
+    await fundsClient.createOperation('persisted-session', 'fund-target', {
+      operationKind: 'deposit',
+      amount: 1500,
+      reason: 'RELOAD-FUND',
+    })
+
+    view.unmount()
+    renderReloadedApp()
+    await openSection(user, 'Фонды')
+    const fundsPanel = await screen.findByRole('region', { name: 'Управление фондами' })
+    const fundsTable = await within(fundsPanel).findByRole('table', { name: 'Фонды и собранные суммы' })
+    const targetFundRow = within(fundsTable).getByText('Целевые взносы').closest('tr')
+    expect(targetFundRow).not.toBeNull()
+    expect(within(targetFundRow as HTMLTableRowElement).getByText('1 500.00 руб.')).toBeInTheDocument()
+    const fundOperationsTable = await within(fundsPanel).findByRole('table', { name: 'Операции фондов' })
+    expect(within(fundOperationsTable).getByText('Целевые взносы')).toBeInTheDocument()
+    expect(within(fundOperationsTable).getAllByText('1 500.00 руб.')).toHaveLength(2)
+    expect(within(fundOperationsTable).getByText('Активна')).toBeInTheDocument()
+  })
+
   it('searches garage by owner before creating income operation', async () => {
     const user = userEvent.setup()
     const defaultGarage = createGarage({ id: 'garage-1', number: '12', ownerName: 'Иванов Иван' })
