@@ -1180,6 +1180,9 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, integ
                   setSearch('')
                   if (section.key !== activeSection) {
                     setLoading(true)
+                    if (section.key !== 'owners' && section.key !== 'garages' && section.key !== 'suppliers') {
+                      setEditorReferencesLoading(false)
+                    }
                   }
                   setActiveSection(section.key)
                 }} key={section.key}>

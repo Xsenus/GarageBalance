@@ -7506,6 +7506,7 @@ describe('App', () => {
         }),
     })
     const dictionaryClient = createDictionaryClient({
+      getGarages: () => new Promise<GarageDto[]>(() => undefined),
       createOwner: async () => {
         throw new Error('Создание владельца не должно вызываться без dictionaries.write.')
       },
