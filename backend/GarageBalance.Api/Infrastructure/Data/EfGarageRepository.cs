@@ -9,8 +9,7 @@ public sealed class EfGarageRepository(GarageBalanceDbContext dbContext, TimePro
 {
     private const int AccrualBalanceCategory = 1;
     private const int IncomeBalanceCategory = 2;
-    private const int OverdueAccrualBalanceCategory = 3;
-    private const int AllocatedIncomeBalanceCategory = 4;
+    private const int AllocationBalanceCategory = 3;
     private DateOnly Today => DateOnly.FromDateTime((timeProvider ?? TimeProvider.System).GetUtcNow().UtcDateTime);
 
     public async Task<IReadOnlyList<GarageListItemData>> GetListAsync(
@@ -90,6 +89,7 @@ public sealed class EfGarageRepository(GarageBalanceDbContext dbContext, TimePro
             return EmptyBalanceTotals();
         }
 
+        var today = Today;
         var accrualQuery = dbContext.Accruals.AsNoTracking()
             .Where(accrual => !accrual.IsCanceled && garageIds.Contains(accrual.GarageId))
             .GroupBy(accrual => accrual.GarageId)
@@ -97,7 +97,16 @@ public sealed class EfGarageRepository(GarageBalanceDbContext dbContext, TimePro
             {
                 Category = AccrualBalanceCategory,
                 GarageId = group.Key,
-                Amount = group.Sum(accrual => accrual.Amount)
+                AccrualAmount = group.Sum(accrual => accrual.Amount),
+                IncomeAmount = 0m,
+                OverdueAccrualAmount = group.Sum(accrual =>
+                    !accrual.DueDateNeedsReview && accrual.OverdueFromDate <= today
+                        ? accrual.Amount
+                        : 0m),
+                OverdueAccrualCount = group.Count(accrual =>
+                    !accrual.DueDateNeedsReview && accrual.OverdueFromDate <= today),
+                AllocatedIncomeAmount = 0m,
+                OverdueAllocatedAmount = 0m
             });
         var incomeQuery = dbContext.FinancialOperations.AsNoTracking()
             .Where(operation =>
@@ -110,61 +119,60 @@ public sealed class EfGarageRepository(GarageBalanceDbContext dbContext, TimePro
             {
                 Category = IncomeBalanceCategory,
                 GarageId = group.Key,
-                Amount = group.Sum(operation => operation.Amount)
+                AccrualAmount = 0m,
+                IncomeAmount = group.Sum(operation => operation.Amount),
+                OverdueAccrualAmount = 0m,
+                OverdueAccrualCount = 0,
+                AllocatedIncomeAmount = 0m,
+                OverdueAllocatedAmount = 0m
             });
-        var today = Today;
-        var overdueAccrualQuery = dbContext.Accruals.AsNoTracking()
-            .Where(accrual =>
-                !accrual.IsCanceled &&
-                !accrual.DueDateNeedsReview &&
-                accrual.OverdueFromDate <= today &&
-                garageIds.Contains(accrual.GarageId))
-            .GroupBy(accrual => accrual.GarageId)
-            .Select(group => new
+        var allocationQuery =
+            from allocation in dbContext.AccrualPaymentAllocations.AsNoTracking()
+            join accrual in dbContext.Accruals.AsNoTracking() on allocation.AccrualId equals accrual.Id
+            join operation in dbContext.FinancialOperations.AsNoTracking()
+                on allocation.FinancialOperationId equals operation.Id
+            where allocation.IsActive &&
+                  !accrual.IsCanceled &&
+                  !operation.IsCanceled &&
+                  garageIds.Contains(accrual.GarageId)
+            group new { allocation.Amount, accrual.DueDateNeedsReview, accrual.OverdueFromDate }
+                by accrual.GarageId
+            into allocationGroup
+            select new
             {
-                Category = OverdueAccrualBalanceCategory,
-                GarageId = group.Key,
-                Amount = group.Sum(accrual => accrual.Amount) -
-                    dbContext.AccrualPaymentAllocations
-                        .Where(allocation =>
-                            allocation.IsActive &&
-                            !allocation.Accrual.IsCanceled &&
-                            !allocation.Accrual.DueDateNeedsReview &&
-                            allocation.Accrual.OverdueFromDate <= today &&
-                            allocation.Accrual.GarageId == group.Key &&
-                            !allocation.FinancialOperation.IsCanceled)
-                        .Sum(allocation => (decimal?)allocation.Amount) ?? 0m
-            });
-        var allocatedIncomeQuery = dbContext.AccrualPaymentAllocations.AsNoTracking()
-            .Where(allocation =>
-                allocation.IsActive &&
-                !allocation.Accrual.IsCanceled &&
-                !allocation.FinancialOperation.IsCanceled &&
-                garageIds.Contains(allocation.Accrual.GarageId))
-            .GroupBy(allocation => allocation.Accrual.GarageId)
-            .Select(group => new
-            {
-                Category = AllocatedIncomeBalanceCategory,
-                GarageId = group.Key,
-                Amount = group.Sum(allocation => allocation.Amount)
-            });
+                Category = AllocationBalanceCategory,
+                GarageId = allocationGroup.Key,
+                AccrualAmount = 0m,
+                IncomeAmount = 0m,
+                OverdueAccrualAmount = 0m,
+                OverdueAccrualCount = 0,
+                AllocatedIncomeAmount = allocationGroup.Sum(item => item.Amount),
+                OverdueAllocatedAmount = allocationGroup.Sum(item =>
+                    !item.DueDateNeedsReview && item.OverdueFromDate <= today
+                        ? item.Amount
+                        : 0m)
+            };
         var rows = await accrualQuery
             .Concat(incomeQuery)
-            .Concat(overdueAccrualQuery)
-            .Concat(allocatedIncomeQuery)
+            .Concat(allocationQuery)
             .ToListAsync(cancellationToken);
         var accrualTotals = rows
             .Where(row => row.Category == AccrualBalanceCategory)
-            .ToDictionary(row => row.GarageId, row => row.Amount);
+            .ToDictionary(row => row.GarageId, row => row.AccrualAmount);
         var incomeTotals = rows
             .Where(row => row.Category == IncomeBalanceCategory)
-            .ToDictionary(row => row.GarageId, row => row.Amount);
-        var overdueAccrualTotals = rows
-            .Where(row => row.Category == OverdueAccrualBalanceCategory)
-            .ToDictionary(row => row.GarageId, row => row.Amount);
+            .ToDictionary(row => row.GarageId, row => row.IncomeAmount);
         var allocatedIncomeTotals = rows
-            .Where(row => row.Category == AllocatedIncomeBalanceCategory)
-            .ToDictionary(row => row.GarageId, row => row.Amount);
+            .Where(row => row.Category == AllocationBalanceCategory)
+            .ToDictionary(row => row.GarageId, row => row.AllocatedIncomeAmount);
+        var overdueAllocatedTotals = rows
+            .Where(row => row.Category == AllocationBalanceCategory)
+            .ToDictionary(row => row.GarageId, row => row.OverdueAllocatedAmount);
+        var overdueAccrualTotals = rows
+            .Where(row => row.Category == AccrualBalanceCategory && row.OverdueAccrualCount > 0)
+            .ToDictionary(
+                row => row.GarageId,
+                row => row.OverdueAccrualAmount - overdueAllocatedTotals.GetValueOrDefault(row.GarageId));
         return new GarageBalanceTotalsData(accrualTotals, incomeTotals, overdueAccrualTotals, allocatedIncomeTotals);
     }
 

@@ -171,6 +171,11 @@ public sealed class BackendPerformanceGuardTests
             source.IndexOf("public async Task<GarageBalanceTotalsData> GetBalanceTotalsAsync", StringComparison.Ordinal)..source.IndexOf("public Task<Garage?> FindActiveWithOwnerAsync", StringComparison.Ordinal)];
         Assert.Contains("accrualQuery", balanceMethod, StringComparison.Ordinal);
         Assert.Contains(".Concat(incomeQuery)", balanceMethod, StringComparison.Ordinal);
+        Assert.Contains("allocationQuery", balanceMethod, StringComparison.Ordinal);
+        Assert.Contains("OverdueAccrualAmount = group.Sum", balanceMethod, StringComparison.Ordinal);
+        Assert.Contains("OverdueAllocatedAmount = allocationGroup.Sum", balanceMethod, StringComparison.Ordinal);
+        Assert.DoesNotContain("overdueAccrualQuery", balanceMethod, StringComparison.Ordinal);
+        Assert.Equal(2, CountOccurrences(balanceMethod, ".Concat("));
         Assert.Equal(1, CountOccurrences(balanceMethod, ".ToListAsync(cancellationToken)"));
     }
 
@@ -336,6 +341,7 @@ public sealed class BackendPerformanceGuardTests
         Assert.Contains("только один приоритетный контакт для каждой видимой строки", releaseNotes, StringComparison.Ordinal);
         Assert.Contains("Сводка фондов считает поступления и выплаты за один проход", releaseNotes, StringComparison.Ordinal);
         Assert.Contains("Проверка отсутствующих показаний воды и электричества теперь один раз", releaseNotes, StringComparison.Ordinal);
+        Assert.Contains("Балансовые показатели гаражей теперь рассчитываются за один проход", releaseNotes, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -925,6 +931,8 @@ public sealed class BackendPerformanceGuardTests
         Assert.Contains("PostgreSqlFundTotalsIntegrationTests.GetTotalsAsync_KeepsFinancialTotalsWhenFundCatalogIsEmptyAndUsesOneUnionQuery", document, StringComparison.Ordinal);
         Assert.Contains("Fiftieth missing-meter-reading aggregation audit", document, StringComparison.Ordinal);
         Assert.Contains("PostgreSqlMissingMeterReadingQueryIntegrationTests.GetMissingAsync_AggregatesMonthlyReadingStatusOnceAndKeepsMissingKindsExact", document, StringComparison.Ordinal);
+        Assert.Contains("Fifty-first garage-balance aggregation audit", document, StringComparison.Ordinal);
+        Assert.Contains("PostgreSqlGarageBalanceTotalsIntegrationTests.BalanceTotals_AggregateEachFinancialSourceOnceWithoutChangingRules", document, StringComparison.Ordinal);
         Assert.Contains("Shared end-user release `0.758.0`", document, StringComparison.Ordinal);
         Assert.Contains("limit", document, StringComparison.Ordinal);
         Assert.Contains("rowCount", document, StringComparison.Ordinal);
