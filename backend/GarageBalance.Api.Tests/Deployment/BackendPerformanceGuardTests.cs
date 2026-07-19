@@ -337,6 +337,7 @@ public sealed class BackendPerformanceGuardTests
             "releases.json"));
 
         Assert.Contains("\"version\": \"0.758.0\"", releaseNotes, StringComparison.Ordinal);
+        Assert.Contains("История баланса гаража теперь одновременно считает входящий долг", releaseNotes, StringComparison.Ordinal);
         Assert.Contains("Разделы системы загружаются быстрее и стабильнее", releaseNotes, StringComparison.Ordinal);
         Assert.Contains("только один приоритетный контакт для каждой видимой строки", releaseNotes, StringComparison.Ordinal);
         Assert.Contains("Сводка фондов считает поступления и выплаты за один проход", releaseNotes, StringComparison.Ordinal);
@@ -684,13 +685,15 @@ public sealed class BackendPerformanceGuardTests
         var serviceSource = ReadApiSource("Application/Finance/FinanceService.cs");
 
         Assert.Contains("garageQuery", source, StringComparison.Ordinal);
-        Assert.Contains("previousAccrualQuery", source, StringComparison.Ordinal);
-        Assert.Contains("previousIncomeQuery", source, StringComparison.Ordinal);
-        Assert.Contains("accrualBucketQuery", source, StringComparison.Ordinal);
-        Assert.Contains("incomeBucketQuery", source, StringComparison.Ordinal);
-        Assert.Contains(".GroupBy(accrual => accrual.AccountingMonth)", source, StringComparison.Ordinal);
-        Assert.Contains(".GroupBy(operation => operation.AccountingMonth)", source, StringComparison.Ordinal);
-        Assert.Equal(4, CountOccurrences(source, ".Concat("));
+        Assert.Contains("accrualQuery", source, StringComparison.Ordinal);
+        Assert.Contains("incomeQuery", source, StringComparison.Ordinal);
+        Assert.Contains("IsPrevious = accrual.AccountingMonth < monthFrom", source, StringComparison.Ordinal);
+        Assert.Contains("IsPrevious = operation.AccountingMonth < monthFrom", source, StringComparison.Ordinal);
+        Assert.Contains("accrual.AccountingMonth <= monthTo", source, StringComparison.Ordinal);
+        Assert.Contains("operation.AccountingMonth <= monthTo", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("previousAccrualQuery", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("previousIncomeQuery", source, StringComparison.Ordinal);
+        Assert.Equal(2, CountOccurrences(source, ".Concat("));
         Assert.Equal(1, CountOccurrences(source, ".ToListAsync(cancellationToken)"));
         Assert.Contains("garageBalanceHistoryQuery.GetAsync", serviceSource, StringComparison.Ordinal);
     }
@@ -933,6 +936,8 @@ public sealed class BackendPerformanceGuardTests
         Assert.Contains("PostgreSqlMissingMeterReadingQueryIntegrationTests.GetMissingAsync_AggregatesMonthlyReadingStatusOnceAndKeepsMissingKindsExact", document, StringComparison.Ordinal);
         Assert.Contains("Fifty-first garage-balance aggregation audit", document, StringComparison.Ordinal);
         Assert.Contains("PostgreSqlGarageBalanceTotalsIntegrationTests.BalanceTotals_AggregateEachFinancialSourceOnceWithoutChangingRules", document, StringComparison.Ordinal);
+        Assert.Contains("Fifty-second garage-balance-history aggregation audit", document, StringComparison.Ordinal);
+        Assert.Contains("PostgreSqlGarageBalanceHistoryQueryIntegrationTests.GetAsync_AggregatesOpeningAndMonthlyValuesWithOneScanPerFinancialSource", document, StringComparison.Ordinal);
         Assert.Contains("Shared end-user release `0.758.0`", document, StringComparison.Ordinal);
         Assert.Contains("limit", document, StringComparison.Ordinal);
         Assert.Contains("rowCount", document, StringComparison.Ordinal);

@@ -31,81 +31,57 @@ public sealed class EfGarageBalanceHistoryQuery(GarageBalanceDbContext dbContext
                 AccountingMonth = (DateOnly?)null,
                 Amount = garage.StartingBalance
             });
-        var previousAccrualQuery = dbContext.Accruals.AsNoTracking()
-            .Where(accrual => !accrual.IsCanceled && accrual.GarageId == garageId && accrual.AccountingMonth < monthFrom)
-            .GroupBy(_ => 1)
-            .Select(group => new
-            {
-                Category = PreviousAccrualCategory,
-                GarageId = (Guid?)null,
-                GarageNumber = (string?)null,
-                OwnerLastName = (string?)null,
-                OwnerFirstName = (string?)null,
-                OwnerMiddleName = (string?)null,
-                AccountingMonth = (DateOnly?)null,
-                Amount = group.Sum(accrual => accrual.Amount)
-            });
-        var previousIncomeQuery = dbContext.FinancialOperations.AsNoTracking()
-            .Where(operation =>
-                !operation.IsCanceled &&
-                operation.OperationKind == FinancialOperationKinds.Income &&
-                operation.GarageId == garageId &&
-                operation.AccountingMonth < monthFrom)
-            .GroupBy(_ => 1)
-            .Select(group => new
-            {
-                Category = PreviousIncomeCategory,
-                GarageId = (Guid?)null,
-                GarageNumber = (string?)null,
-                OwnerLastName = (string?)null,
-                OwnerFirstName = (string?)null,
-                OwnerMiddleName = (string?)null,
-                AccountingMonth = (DateOnly?)null,
-                Amount = group.Sum(operation => operation.Amount)
-            });
-        var accrualBucketQuery = dbContext.Accruals.AsNoTracking()
+        var accrualQuery = dbContext.Accruals.AsNoTracking()
             .Where(accrual =>
                 !accrual.IsCanceled &&
                 accrual.GarageId == garageId &&
-                accrual.AccountingMonth >= monthFrom &&
                 accrual.AccountingMonth <= monthTo)
-            .GroupBy(accrual => accrual.AccountingMonth)
+            .GroupBy(accrual => new
+            {
+                IsPrevious = accrual.AccountingMonth < monthFrom,
+                AccountingMonth = accrual.AccountingMonth < monthFrom
+                    ? (DateOnly?)null
+                    : accrual.AccountingMonth
+            })
             .Select(group => new
             {
-                Category = AccrualBucketCategory,
+                Category = group.Key.IsPrevious ? PreviousAccrualCategory : AccrualBucketCategory,
                 GarageId = (Guid?)null,
                 GarageNumber = (string?)null,
                 OwnerLastName = (string?)null,
                 OwnerFirstName = (string?)null,
                 OwnerMiddleName = (string?)null,
-                AccountingMonth = (DateOnly?)group.Key,
+                group.Key.AccountingMonth,
                 Amount = group.Sum(accrual => accrual.Amount)
             });
-        var incomeBucketQuery = dbContext.FinancialOperations.AsNoTracking()
+        var incomeQuery = dbContext.FinancialOperations.AsNoTracking()
             .Where(operation =>
                 !operation.IsCanceled &&
                 operation.OperationKind == FinancialOperationKinds.Income &&
                 operation.GarageId == garageId &&
-                operation.AccountingMonth >= monthFrom &&
                 operation.AccountingMonth <= monthTo)
-            .GroupBy(operation => operation.AccountingMonth)
+            .GroupBy(operation => new
+            {
+                IsPrevious = operation.AccountingMonth < monthFrom,
+                AccountingMonth = operation.AccountingMonth < monthFrom
+                    ? (DateOnly?)null
+                    : operation.AccountingMonth
+            })
             .Select(group => new
             {
-                Category = IncomeBucketCategory,
+                Category = group.Key.IsPrevious ? PreviousIncomeCategory : IncomeBucketCategory,
                 GarageId = (Guid?)null,
                 GarageNumber = (string?)null,
                 OwnerLastName = (string?)null,
                 OwnerFirstName = (string?)null,
                 OwnerMiddleName = (string?)null,
-                AccountingMonth = (DateOnly?)group.Key,
+                group.Key.AccountingMonth,
                 Amount = group.Sum(operation => operation.Amount)
             });
 
         var rows = await garageQuery
-            .Concat(previousAccrualQuery)
-            .Concat(previousIncomeQuery)
-            .Concat(accrualBucketQuery)
-            .Concat(incomeBucketQuery)
+            .Concat(accrualQuery)
+            .Concat(incomeQuery)
             .ToListAsync(cancellationToken);
         var garage = rows.SingleOrDefault(row => row.Category == GarageCategory);
         if (garage is null)
