@@ -10,6 +10,10 @@ public sealed class EfFeeReportQuery(GarageBalanceDbContext dbContext) : IFeeRep
 {
     private const int AccrualCategory = 1;
     private const int PaymentCategory = 2;
+    private const int GaragePageCategory = 1;
+    private const int DebtorPageCategory = 2;
+    private const int PageTotalsCategory = 3;
+    private const int SummaryCategory = 4;
 
     public async Task<IReadOnlyList<FeeCampaign>> GetActiveCampaignsAsync(CancellationToken cancellationToken)
     {
@@ -244,6 +248,14 @@ public sealed class EfFeeReportQuery(GarageBalanceDbContext dbContext) : IFeeRep
                   GROUP BY accrual."GarageId", accrual."FeeCampaignId"
               ), fee_names AS (
                   SELECT "Id" AS fee_id, "Name" AS fee_name FROM fee_campaigns WHERE "Id" = ANY(@fee_ids)
+              ), summary_rows AS (
+                  SELECT fee_id, SUM(accrued) AS accrued, SUM(paid) AS paid
+                  FROM (
+                      SELECT fee_id, accrued, 0::numeric AS paid FROM accrual_rows
+                      UNION ALL
+                      SELECT fee_id, 0::numeric AS accrued, paid FROM payment_rows
+                  ) totals
+                  GROUP BY fee_id
               )
               """
             : """
@@ -260,11 +272,18 @@ public sealed class EfFeeReportQuery(GarageBalanceDbContext dbContext) : IFeeRep
                   FROM financial_operations
                   WHERE "IsCanceled" = FALSE
                     AND "OperationKind" = 'income'
-                    AND "GarageId" IS NOT NULL
                     AND "IncomeTypeId" = ANY(@fee_ids)
                   GROUP BY "GarageId", "IncomeTypeId"
               ), fee_names AS (
                   SELECT "Id" AS fee_id, "Name" AS fee_name FROM income_types WHERE "Id" = ANY(@fee_ids)
+              ), summary_rows AS (
+                  SELECT fee_id, SUM(accrued) AS accrued, SUM(paid) AS paid
+                  FROM (
+                      SELECT fee_id, accrued, 0::numeric AS paid FROM accrual_rows
+                      UNION ALL
+                      SELECT fee_id, 0::numeric AS accrued, paid FROM payment_rows
+                  ) totals
+                  GROUP BY fee_id
               )
               """;
         var reportRowsCte = $$"""
@@ -304,65 +323,62 @@ public sealed class EfFeeReportQuery(GarageBalanceDbContext dbContext) : IFeeRep
         };
         var direction = sort.Descending ? "DESC" : "ASC";
         var limitClause = limit is > 0 ? "LIMIT @limit" : string.Empty;
-        var orderClause = $"ORDER BY {sortColumn} {direction}, \"FeeName\" ASC, \"GarageId\" ASC OFFSET @offset {limitClause}";
-        var garageSql = string.Concat(reportRowsCte, " SELECT * FROM report_rows ", orderClause);
-        var debtorSql = string.Concat(reportRowsCte, " SELECT * FROM report_rows WHERE \"Debt\" > 0 ", orderClause);
-        var totalsSql = string.Concat(
+        var combinedSql = string.Concat(
             reportRowsCte,
-            " SELECT COUNT(*)::int AS \"GarageRowCount\", COALESCE(SUM(\"Debt\") FILTER (WHERE \"Debt\" > 0), 0) AS \"DebtTotal\" FROM report_rows");
-        var parameters = CreatePageParameters(feeEntryIds, offset, limit);
-        var garageRows = await dbContext.Database
-            .SqlQueryRaw<FeeReportGarageQueryRow>(garageSql, parameters)
+            $$"""
+              , garage_page AS (
+                  SELECT report_rows.*,
+                         ROW_NUMBER() OVER (ORDER BY {{sortColumn}} {{direction}}, "FeeName" ASC, "GarageId" ASC)::int AS row_order
+                  FROM report_rows
+                  ORDER BY {{sortColumn}} {{direction}}, "FeeName" ASC, "GarageId" ASC
+                  OFFSET @offset {{limitClause}}
+              ), debtor_page AS (
+                  SELECT report_rows.*,
+                         ROW_NUMBER() OVER (ORDER BY {{sortColumn}} {{direction}}, "FeeName" ASC, "GarageId" ASC)::int AS row_order
+                  FROM report_rows
+                  WHERE "Debt" > 0
+                  ORDER BY {{sortColumn}} {{direction}}, "FeeName" ASC, "GarageId" ASC
+                  OFFSET @offset {{limitClause}}
+              )
+              SELECT {{GaragePageCategory}} AS "Category", row_order AS "RowOrder",
+                     "GarageId", "GarageNumber", "OwnerLastName", "OwnerFirstName", "OwnerMiddleName",
+                     "FeeEntryId", "FeeName", "Accrued", "Paid", "LastPaymentDate", "Debt",
+                     0 AS "GarageRowCount", 0::numeric AS "DebtTotal"
+              FROM garage_page
+              UNION ALL
+              SELECT {{DebtorPageCategory}} AS "Category", row_order AS "RowOrder",
+                     "GarageId", "GarageNumber", "OwnerLastName", "OwnerFirstName", "OwnerMiddleName",
+                     "FeeEntryId", "FeeName", "Accrued", "Paid", "LastPaymentDate", "Debt",
+                     0 AS "GarageRowCount", 0::numeric AS "DebtTotal"
+              FROM debtor_page
+              UNION ALL
+              SELECT {{PageTotalsCategory}} AS "Category", 0 AS "RowOrder",
+                     NULL::uuid AS "GarageId", NULL::text AS "GarageNumber", NULL::text AS "OwnerLastName",
+                     NULL::text AS "OwnerFirstName", NULL::text AS "OwnerMiddleName", NULL::uuid AS "FeeEntryId",
+                     NULL::text AS "FeeName", 0::numeric AS "Accrued", 0::numeric AS "Paid",
+                     NULL::date AS "LastPaymentDate", 0::numeric AS "Debt", COUNT(*)::int AS "GarageRowCount",
+                     COALESCE(SUM("Debt") FILTER (WHERE "Debt" > 0), 0) AS "DebtTotal"
+              FROM report_rows
+              UNION ALL
+              SELECT {{SummaryCategory}} AS "Category", 0 AS "RowOrder",
+                     NULL::uuid AS "GarageId", NULL::text AS "GarageNumber", NULL::text AS "OwnerLastName",
+                     NULL::text AS "OwnerFirstName", NULL::text AS "OwnerMiddleName", fee_id AS "FeeEntryId",
+                     NULL::text AS "FeeName", accrued AS "Accrued", paid AS "Paid",
+                     NULL::date AS "LastPaymentDate", 0::numeric AS "Debt", 0 AS "GarageRowCount",
+                     0::numeric AS "DebtTotal"
+              FROM summary_rows
+              ORDER BY "Category", "RowOrder"
+              """);
+        var combinedRows = await dbContext.Database
+            .SqlQueryRaw<FeeReportCombinedQueryRow>(combinedSql, CreatePageParameters(feeEntryIds, offset, limit))
             .ToListAsync(cancellationToken);
-        var debtorRows = await dbContext.Database
-            .SqlQueryRaw<FeeReportGarageQueryRow>(debtorSql, CreatePageParameters(feeEntryIds, offset, limit))
-            .ToListAsync(cancellationToken);
-        var pageTotals = await dbContext.Database
-            .SqlQueryRaw<FeeReportPageTotalsQueryRow>(
-                totalsSql,
-                new NpgsqlParameter<Guid[]>("fee_ids", feeEntryIds.ToArray()))
-            .SingleAsync(cancellationToken);
-
-        var summarySql = useFeeCampaigns
-            ? """
-              SELECT fee_id AS "FeeEntryId", SUM(accrued) AS "Accrued", SUM(paid) AS "Paid"
-              FROM (
-                  SELECT "FeeCampaignId" AS fee_id, SUM("Amount") AS accrued, 0::numeric AS paid
-                  FROM accruals
-                  WHERE "IsCanceled" = FALSE AND "FeeCampaignId" = ANY(@fee_ids)
-                  GROUP BY "FeeCampaignId"
-                  UNION ALL
-                  SELECT accrual."FeeCampaignId" AS fee_id, 0::numeric AS accrued, SUM(allocation."Amount") AS paid
-                  FROM accrual_payment_allocations allocation
-                  INNER JOIN accruals accrual ON accrual."Id" = allocation."AccrualId"
-                  INNER JOIN financial_operations operation ON operation."Id" = allocation."FinancialOperationId"
-                  WHERE allocation."IsActive" = TRUE AND accrual."IsCanceled" = FALSE AND operation."IsCanceled" = FALSE
-                    AND accrual."FeeCampaignId" = ANY(@fee_ids)
-                  GROUP BY accrual."FeeCampaignId"
-              ) totals
-              GROUP BY fee_id
-              """
-            : """
-              SELECT fee_id AS "FeeEntryId", SUM(accrued) AS "Accrued", SUM(paid) AS "Paid"
-              FROM (
-                  SELECT "IncomeTypeId" AS fee_id, SUM("Amount") AS accrued, 0::numeric AS paid
-                  FROM accruals
-                  WHERE "IsCanceled" = FALSE AND "IncomeTypeId" = ANY(@fee_ids)
-                  GROUP BY "IncomeTypeId"
-                  UNION ALL
-                  SELECT "IncomeTypeId" AS fee_id, 0::numeric AS accrued, SUM("Amount") AS paid
-                  FROM financial_operations
-                  WHERE "IsCanceled" = FALSE AND "OperationKind" = 'income' AND "IncomeTypeId" = ANY(@fee_ids)
-                  GROUP BY "IncomeTypeId"
-              ) totals
-              GROUP BY fee_id
-              """;
-        var summaryRows = await dbContext.Database
-            .SqlQueryRaw<FeeReportSummaryQueryRow>(summarySql, new NpgsqlParameter<Guid[]>("fee_ids", feeEntryIds.ToArray()))
-            .ToListAsync(cancellationToken);
+        var garageRows = MapPageRows(combinedRows, GaragePageCategory);
+        var debtorRows = MapPageRows(combinedRows, DebtorPageCategory);
+        var pageTotals = combinedRows.Single(row => row.Category == PageTotalsCategory);
+        var summaryRows = combinedRows.Where(row => row.Category == SummaryCategory && row.FeeEntryId.HasValue).ToList();
         return new FeeReportPageQueryData(
-            summaryRows.ToDictionary(row => row.FeeEntryId, row => row.Accrued),
-            summaryRows.ToDictionary(row => row.FeeEntryId, row => row.Paid),
+            summaryRows.ToDictionary(row => row.FeeEntryId!.Value, row => row.Accrued),
+            summaryRows.ToDictionary(row => row.FeeEntryId!.Value, row => row.Paid),
             garageRows,
             debtorRows,
             pageTotals.GarageRowCount,
@@ -431,6 +447,24 @@ public sealed class EfFeeReportQuery(GarageBalanceDbContext dbContext) : IFeeRep
         return parameters.ToArray();
     }
 
+    private static IReadOnlyList<FeeReportGarageQueryRow> MapPageRows(
+        IEnumerable<FeeReportCombinedQueryRow> rows,
+        int category) =>
+        rows.Where(row => row.Category == category)
+            .Select(row => new FeeReportGarageQueryRow(
+                row.GarageId!.Value,
+                row.GarageNumber!,
+                row.OwnerLastName,
+                row.OwnerFirstName,
+                row.OwnerMiddleName,
+                row.FeeEntryId!.Value,
+                row.FeeName!,
+                row.Accrued,
+                row.Paid,
+                row.LastPaymentDate,
+                row.Debt))
+            .ToList();
+
     private static IOrderedEnumerable<FeeReportGarageQueryRow> ApplySort(IEnumerable<FeeReportGarageQueryRow> rows, ReportSort sort) =>
         sort.Field switch
         {
@@ -451,6 +485,20 @@ public sealed class EfFeeReportQuery(GarageBalanceDbContext dbContext) : IFeeRep
         return limit is > 0 ? page.Take(limit.Value) : page;
     }
 
-    private sealed record FeeReportSummaryQueryRow(Guid FeeEntryId, decimal Accrued, decimal Paid);
-    private sealed record FeeReportPageTotalsQueryRow(int GarageRowCount, decimal DebtTotal);
+    private sealed record FeeReportCombinedQueryRow(
+        int Category,
+        int RowOrder,
+        Guid? GarageId,
+        string? GarageNumber,
+        string? OwnerLastName,
+        string? OwnerFirstName,
+        string? OwnerMiddleName,
+        Guid? FeeEntryId,
+        string? FeeName,
+        decimal Accrued,
+        decimal Paid,
+        DateOnly? LastPaymentDate,
+        decimal Debt,
+        int GarageRowCount,
+        decimal DebtTotal);
 }

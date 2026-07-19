@@ -343,6 +343,7 @@ public sealed class BackendPerformanceGuardTests
         Assert.Contains("Сводка фондов считает поступления и выплаты за один проход", releaseNotes, StringComparison.Ordinal);
         Assert.Contains("Проверка отсутствующих показаний воды и электричества теперь один раз", releaseNotes, StringComparison.Ordinal);
         Assert.Contains("Балансовые показатели гаражей теперь рассчитываются за один проход", releaseNotes, StringComparison.Ordinal);
+        Assert.Contains("Отчет по взносам теперь за одно обращение к базе", releaseNotes, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -724,7 +725,11 @@ public sealed class BackendPerformanceGuardTests
             CountOccurrences(source, "group.Sum(") >= 4,
             "Fee transaction rows must be summed into garage groups before materialization and those groups must supply final totals.");
         Assert.Contains("GetFeeReportPageAsync", source, StringComparison.Ordinal);
-        Assert.Contains("OFFSET @offset {limitClause}", source, StringComparison.Ordinal);
+        Assert.Contains("OFFSET @offset {{limitClause}}", source, StringComparison.Ordinal);
+        Assert.Contains("summary_rows AS", source, StringComparison.Ordinal);
+        Assert.Contains("FROM garage_page", source, StringComparison.Ordinal);
+        Assert.Contains("FROM debtor_page", source, StringComparison.Ordinal);
+        Assert.Contains("FROM summary_rows", source, StringComparison.Ordinal);
         Assert.Contains("var accrualTotals = accrualsByGarage", source, StringComparison.Ordinal);
         Assert.Contains("var collectedTotals = rows", source, StringComparison.Ordinal);
         Assert.Contains("accrualQuery", source, StringComparison.Ordinal);
@@ -734,8 +739,11 @@ public sealed class BackendPerformanceGuardTests
         var feePageStart = source.IndexOf("GetFeeReportPageAsync", StringComparison.Ordinal);
         var feeDataSource = source[feeDataStart..campaignDataStart];
         var campaignDataSource = source[campaignDataStart..feePageStart];
+        var feePageSource = source[feePageStart..];
         Assert.Equal(1, CountOccurrences(feeDataSource, ".ToListAsync(cancellationToken)"));
         Assert.Equal(2, CountOccurrences(campaignDataSource, ".ToListAsync(cancellationToken)"));
+        Assert.Equal(1, CountOccurrences(feePageSource, ".ToListAsync(cancellationToken)"));
+        Assert.Equal(1, CountOccurrences(feePageSource, "SqlQueryRaw<FeeReportCombinedQueryRow>"));
         Assert.Contains("AccrualPaymentAllocations", campaignDataSource, StringComparison.Ordinal);
         Assert.DoesNotContain("missingGarageIds", source, StringComparison.Ordinal);
         Assert.Contains("group.Max(operation => (DateOnly?)operation.OperationDate)", source, StringComparison.Ordinal);
@@ -938,6 +946,9 @@ public sealed class BackendPerformanceGuardTests
         Assert.Contains("PostgreSqlGarageBalanceTotalsIntegrationTests.BalanceTotals_AggregateEachFinancialSourceOnceWithoutChangingRules", document, StringComparison.Ordinal);
         Assert.Contains("Fifty-second garage-balance-history aggregation audit", document, StringComparison.Ordinal);
         Assert.Contains("PostgreSqlGarageBalanceHistoryQueryIntegrationTests.GetAsync_AggregatesOpeningAndMonthlyValuesWithOneScanPerFinancialSource", document, StringComparison.Ordinal);
+        Assert.Contains("Fifty-third fee-report command consolidation audit", document, StringComparison.Ordinal);
+        Assert.Contains("PostgreSqlFeeReportQueryIntegrationTests.FeePageUsesOneCommandAndPreservesPageDebtorsAndCompleteSummary", document, StringComparison.Ordinal);
+        Assert.Contains("FeeCampaignPageUsesTheSameSingleCommandPipeline", document, StringComparison.Ordinal);
         Assert.Contains("Shared end-user release `0.758.0`", document, StringComparison.Ordinal);
         Assert.Contains("limit", document, StringComparison.Ordinal);
         Assert.Contains("rowCount", document, StringComparison.Ordinal);
