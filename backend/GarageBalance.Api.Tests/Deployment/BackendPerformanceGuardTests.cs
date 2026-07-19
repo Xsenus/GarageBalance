@@ -352,6 +352,7 @@ public sealed class BackendPerformanceGuardTests
         Assert.Contains("Отчет по поступлениям больше не перечитывает видимые платежи", releaseNotes, StringComparison.Ordinal);
         Assert.Contains("Режим «Платежи» отчета по поступлениям теперь одновременно получает полные итоги", releaseNotes, StringComparison.Ordinal);
         Assert.Contains("Режим «Платежи» отчета по выплатам теперь одновременно получает полные итоги", releaseNotes, StringComparison.Ordinal);
+        Assert.Contains("Режим «Начисления» отчета по поступлениям теперь одновременно получает итоговую сумму", releaseNotes, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -547,6 +548,12 @@ public sealed class BackendPerformanceGuardTests
         Assert.Contains("new IncomeDebtTarget(", incomePostgresMethod, StringComparison.Ordinal);
         Assert.DoesNotContain("paymentIds.Contains(operation.Id)", incomePostgresMethod, StringComparison.Ordinal);
         Assert.DoesNotContain("visiblePayments", incomePostgresMethod, StringComparison.Ordinal);
+        var incomeAccrualMethod = incomeSource[
+            incomeSource.IndexOf("private async Task<IncomeReportQueryData> GetPostgresAccrualRowsAsync", StringComparison.Ordinal)..incomeSource.IndexOf("private async Task<IncomeReportQueryData> GetPostgresPaymentRowsAsync", StringComparison.Ordinal)];
+        Assert.Contains("WITH filtered_rows AS", incomeAccrualMethod, StringComparison.Ordinal);
+        Assert.Contains("COALESCE(SUM(accrual_amount), 0)", incomeAccrualMethod, StringComparison.Ordinal);
+        Assert.Contains("SqlQueryRaw<IncomeAccrualCombinedQueryRow>", incomeAccrualMethod, StringComparison.Ordinal);
+        Assert.Equal(1, CountOccurrences(incomeAccrualMethod, ".ToListAsync(cancellationToken)"));
         var incomePaymentMethod = incomeSource[
             incomeSource.IndexOf("private async Task<IncomeReportQueryData> GetPostgresPaymentRowsAsync", StringComparison.Ordinal)..incomeSource.IndexOf("private static IOrderedQueryable<IncomeReportSortableProjection> ApplyPostgresSort", StringComparison.Ordinal)];
         Assert.Contains("WITH filtered_rows AS", incomePaymentMethod, StringComparison.Ordinal);
@@ -1022,6 +1029,8 @@ public sealed class BackendPerformanceGuardTests
         Assert.Contains("Sixtieth income-payment command consolidation audit", document, StringComparison.Ordinal);
         Assert.Contains("Sixty-first expense-payment command consolidation audit", document, StringComparison.Ordinal);
         Assert.Contains("PostgreSqlExpenseReportPaymentQueryIntegrationTests.PaymentPageLoadsSupplierAndStaffTotalsAndPageInOneCommand", document, StringComparison.Ordinal);
+        Assert.Contains("Sixty-second income-accrual command consolidation audit", document, StringComparison.Ordinal);
+        Assert.Contains("PostgreSqlIncomeReportAccrualQueryIntegrationTests.AccrualPageLoadsStartingBalanceAccrualTotalsAndPageInOneCommand", document, StringComparison.Ordinal);
         Assert.Contains("Shared end-user release `0.758.0`", document, StringComparison.Ordinal);
         Assert.Contains("limit", document, StringComparison.Ordinal);
         Assert.Contains("rowCount", document, StringComparison.Ordinal);
