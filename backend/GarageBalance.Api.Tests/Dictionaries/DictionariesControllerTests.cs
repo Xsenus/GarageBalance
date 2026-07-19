@@ -41,6 +41,24 @@ public sealed class DictionariesControllerTests
     }
 
     [Fact]
+    public async Task GetGaragesPage_ForwardsGreenColumnFiltersAndRejectsInvalidRanges()
+    {
+        var service = new FakeDictionaryService();
+        var controller = CreateController(service);
+
+        var response = await controller.GetGaragesPage(
+            null, 25, 10, "peopleCount", "asc", true, true, CancellationToken.None,
+            number: "А-", peopleCountMin: 2, peopleCountMax: 4, floorCountMin: 1, floorCountMax: 2);
+        var invalid = await controller.GetGaragesPage(
+            null, 0, 25, null, null, true, false, CancellationToken.None,
+            peopleCountMin: 5, peopleCountMax: 2);
+
+        Assert.IsType<OkObjectResult>(response.Result);
+        Assert.Equal(("А-", 2, 4, 1, 2), service.LastGarageColumnFilters);
+        Assert.IsType<BadRequestObjectResult>(invalid.Result);
+    }
+
+    [Fact]
     public async Task CreateGarage_ReturnsConflictForDuplicateNumber()
     {
         var controller = CreateController(new FakeDictionaryService
@@ -1555,6 +1573,7 @@ public sealed class DictionariesControllerTests
         public (string? Search, int? Limit, bool IncludeArchived) LastOwnerListRequest { get; private set; }
         public (string? Search, int? Limit, bool IncludeArchived) LastGarageListRequest { get; private set; }
         public (string? Search, int? Offset, int? Limit, string? SortBy, string? SortDirection, bool IncludeArchived, bool DebtorsOnly) LastGaragePageRequest { get; private set; }
+        public (string? Number, int? PeopleCountMin, int? PeopleCountMax, int? FloorCountMin, int? FloorCountMax) LastGarageColumnFilters { get; private set; }
         public (string? Search, int? Limit, bool IncludeArchived) LastSupplierGroupListRequest { get; private set; }
         public (Guid? GroupId, string? Search, int? Limit, bool IncludeArchived) LastSupplierListRequest { get; private set; }
         public (Guid? GroupId, string? Search, int? Offset, int? Limit, string? SortBy, string? SortDirection, bool IncludeArchived) LastSupplierPageRequest { get; private set; }
@@ -1669,9 +1688,10 @@ public sealed class DictionariesControllerTests
             return Task.FromResult<IReadOnlyList<GarageDto>>([]);
         }
 
-        public Task<PagedResult<GarageDto>> GetGaragesPageAsync(string? search, int? offset, int? limit, string? sortBy, string? sortDirection, CancellationToken cancellationToken, bool includeArchived = false, bool debtorsOnly = false)
+        public Task<PagedResult<GarageDto>> GetGaragesPageAsync(string? search, int? offset, int? limit, string? sortBy, string? sortDirection, CancellationToken cancellationToken, bool includeArchived = false, bool debtorsOnly = false, string? number = null, int? peopleCountMin = null, int? peopleCountMax = null, int? floorCountMin = null, int? floorCountMax = null)
         {
             LastGaragePageRequest = (search, offset, limit, sortBy, sortDirection, includeArchived, debtorsOnly);
+            LastGarageColumnFilters = (number, peopleCountMin, peopleCountMax, floorCountMin, floorCountMax);
             return Task.FromResult(new PagedResult<GarageDto>([], 0, offset ?? 0, limit ?? 100));
         }
 

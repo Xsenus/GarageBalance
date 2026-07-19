@@ -3,7 +3,7 @@ namespace GarageBalance.Api.Tests.Deployment;
 public sealed class FormsApprovedBusinessRulesDocumentationTests
 {
     [Fact]
-    public void ActiveDecisionChecklistsRecordAllFiveApprovedRulesWithoutClosingRemainingDecisions()
+    public void ActiveDecisionChecklistsRecordApprovedRulesAndCompletedGreenColumnDecision()
     {
         var repositoryRoot = FindRepositoryRoot();
         var docs = Path.Combine(repositoryRoot, "docs");
@@ -23,8 +23,9 @@ public sealed class FormsApprovedBusinessRulesDocumentationTests
 
         Assert.Contains("- [decision] Можно ли вручную списывать/возвращать переплату", balance, StringComparison.Ordinal);
         Assert.Contains("- [decision] Нужно определить источник ручного ввода стоимости услуг по счетам", expense, StringComparison.Ordinal);
-        Assert.Contains("точный перечень колонок и правила взаимодействия требуют решения заказчика", greenColumns, StringComparison.Ordinal);
-        Assert.Contains("- [!] После утверждения зеленых колонок", roadmap, StringComparison.Ordinal);
+        Assert.Contains("| Гаражи | `Номер`", greenColumns, StringComparison.Ordinal);
+        Assert.Contains("у поставщиков и персонала зеленых заголовков нет", greenColumns, StringComparison.Ordinal);
+        Assert.Contains("- [x] Реализовать серверные фильтры зеленых колонок", roadmap, StringComparison.Ordinal);
         Assert.Contains("- [x] Обновить активные decision-checklist после утверждения правил", roadmap, StringComparison.Ordinal);
     }
 

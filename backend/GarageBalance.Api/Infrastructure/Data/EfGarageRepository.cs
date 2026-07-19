@@ -34,6 +34,7 @@ public sealed class EfGarageRepository(GarageBalanceDbContext dbContext, TimePro
 
     public async Task<GaragePageData> GetPageAsync(
         string? normalizedSearch,
+        GarageColumnFilters filters,
         bool includeArchived,
         bool debtorsOnly,
         int offset,
@@ -43,12 +44,13 @@ public sealed class EfGarageRepository(GarageBalanceDbContext dbContext, TimePro
         CancellationToken cancellationToken)
     {
         var query = ApplyArchiveFilter(includeArchived);
-        if (IsSqliteProvider() && (normalizedSearch is not null || sortBy == "overdueDebt" || debtorsOnly))
+        if (IsSqliteProvider() && (normalizedSearch is not null || HasColumnFilters(filters) || sortBy == "overdueDebt" || debtorsOnly))
         {
             var garages = await ProjectListItems(query).ToListAsync(cancellationToken);
             var filtered = normalizedSearch is { } searchValue
                 ? garages.Where(garage => GarageMatchesSearch(garage, searchValue)).ToList()
                 : garages;
+            filtered = filtered.Where(garage => GarageMatchesColumnFilters(garage, filters)).ToList();
             var totals = sortBy == "overdueDebt" || debtorsOnly
                 ? await GetBalanceTotalsAsync(filtered.Select(garage => garage.Id).ToArray(), cancellationToken)
                 : EmptyBalanceTotals();
@@ -65,7 +67,7 @@ public sealed class EfGarageRepository(GarageBalanceDbContext dbContext, TimePro
             return new GaragePageData(pageItems, filtered.Count);
         }
 
-        query = ApplySearch(query, normalizedSearch);
+        query = ApplyColumnFilters(ApplySearch(query, normalizedSearch), filters);
         if (debtorsOnly)
         {
             query = ApplyDebtorsFilter(query);
@@ -283,6 +285,46 @@ public sealed class EfGarageRepository(GarageBalanceDbContext dbContext, TimePro
             _ => query.OrderBy(garage => garage.Number)
         };
     }
+
+    private static IQueryable<Garage> ApplyColumnFilters(IQueryable<Garage> query, GarageColumnFilters filters)
+    {
+        if (filters.Number is { } number)
+        {
+            query = query.Where(garage => garage.Number.ToLower().Contains(number));
+        }
+        if (filters.PeopleCountMin is { } peopleCountMin)
+        {
+            query = query.Where(garage => garage.PeopleCount >= peopleCountMin);
+        }
+        if (filters.PeopleCountMax is { } peopleCountMax)
+        {
+            query = query.Where(garage => garage.PeopleCount <= peopleCountMax);
+        }
+        if (filters.FloorCountMin is { } floorCountMin)
+        {
+            query = query.Where(garage => garage.FloorCount >= floorCountMin);
+        }
+        if (filters.FloorCountMax is { } floorCountMax)
+        {
+            query = query.Where(garage => garage.FloorCount <= floorCountMax);
+        }
+
+        return query;
+    }
+
+    private static bool HasColumnFilters(GarageColumnFilters filters) =>
+        filters.Number is not null ||
+        filters.PeopleCountMin.HasValue ||
+        filters.PeopleCountMax.HasValue ||
+        filters.FloorCountMin.HasValue ||
+        filters.FloorCountMax.HasValue;
+
+    private static bool GarageMatchesColumnFilters(GarageListItemData garage, GarageColumnFilters filters) =>
+        (filters.Number is null || garage.Number.Contains(filters.Number, StringComparison.OrdinalIgnoreCase)) &&
+        (!filters.PeopleCountMin.HasValue || garage.PeopleCount >= filters.PeopleCountMin.Value) &&
+        (!filters.PeopleCountMax.HasValue || garage.PeopleCount <= filters.PeopleCountMax.Value) &&
+        (!filters.FloorCountMin.HasValue || garage.FloorCount >= filters.FloorCountMin.Value) &&
+        (!filters.FloorCountMax.HasValue || garage.FloorCount <= filters.FloorCountMax.Value);
 
     private IQueryable<Garage> ApplyDebtorsFilter(IQueryable<Garage> query)
     {

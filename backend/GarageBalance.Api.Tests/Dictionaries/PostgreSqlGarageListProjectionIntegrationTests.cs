@@ -10,6 +10,37 @@ namespace GarageBalance.Api.Tests.Dictionaries;
 public sealed class PostgreSqlGarageListProjectionIntegrationTests
 {
     [PostgreSqlFact]
+    public async Task GaragePage_AppliesGreenColumnFiltersBeforeCountAndPagination()
+    {
+        await using var database = await PostgreSqlTestDatabase.CreateAsync();
+        await using (var setupContext = database.CreateContext())
+        {
+            setupContext.Garages.AddRange(
+                new Garage { Number = "А-10", PeopleCount = 2, FloorCount = 1 },
+                new Garage { Number = "А-20", PeopleCount = 3, FloorCount = 2, IsArchived = true },
+                new Garage { Number = "Б-30", PeopleCount = 3, FloorCount = 2 },
+                new Garage { Number = "А-40", PeopleCount = 5, FloorCount = 3 });
+            await setupContext.SaveChangesAsync();
+        }
+
+        await using var queryContext = database.CreateContext();
+        var service = DictionaryServiceTestFactory.Create(queryContext);
+        var page = await service.GetGaragesPageAsync(
+            null, 1, 1, "number", "asc", CancellationToken.None,
+            includeArchived: true,
+            number: "а-",
+            peopleCountMin: 2,
+            peopleCountMax: 3,
+            floorCountMin: 1,
+            floorCountMax: 2);
+
+        Assert.Equal(2, page.TotalCount);
+        var garage = Assert.Single(page.Items);
+        Assert.Equal("А-20", garage.Number);
+        Assert.True(garage.IsArchived);
+    }
+
+    [PostgreSqlFact]
     public async Task GarageListAndPage_ProjectCurrentOwnerPhoneWithoutOtherPersonalFields()
     {
         await using var database = await PostgreSqlTestDatabase.CreateAsync();

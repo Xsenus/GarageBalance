@@ -10,7 +10,8 @@ public sealed class FormsComplianceReleaseNotesTests
         ["0.716.0", "0.717.0", "0.718.0", "0.719.0", "0.720.0", "0.721.0", "0.755.0"],
         ["0.723.0", "0.724.0", "0.725.0", "0.726.0", "0.727.0", "0.728.0", "0.729.0", "0.730.0", "0.731.0", "0.732.0", "0.751.0"],
         ["0.738.0", "0.739.0", "0.740.0", "0.741.0", "0.742.0"],
-        ["0.745.0", "0.746.0", "0.747.0", "0.748.0", "0.749.0", "0.750.0"]
+        ["0.745.0", "0.746.0", "0.747.0", "0.748.0", "0.749.0", "0.750.0"],
+        ["0.757.0"]
     ];
 
     [Fact]
@@ -52,6 +53,7 @@ public sealed class FormsComplianceReleaseNotesTests
         Assert.Contains("Показания счетчиков", coverage, StringComparison.Ordinal);
         Assert.Contains("Фонды и назначения", coverage, StringComparison.Ordinal);
         Assert.Contains("Восемь отчетов и экспорт", coverage, StringComparison.Ordinal);
+        Assert.Contains("Зеленые колонки гаражей", coverage, StringComparison.Ordinal);
         Assert.Contains("повторный сводный релиз не создается", coverage, StringComparison.Ordinal);
         Assert.Contains(
             "- [x] Добавить понятные пользователю записи `Что нового` по просрочке, выплатам, счетчикам, фондам и отчетам.",

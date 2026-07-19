@@ -5,7 +5,7 @@ namespace GarageBalance.Api.Application.Dictionaries;
 public interface IGarageRepository
 {
     Task<IReadOnlyList<GarageListItemData>> GetListAsync(string? normalizedSearch, bool includeArchived, int limit, CancellationToken cancellationToken);
-    Task<GaragePageData> GetPageAsync(string? normalizedSearch, bool includeArchived, bool debtorsOnly, int offset, int limit, string sortBy, bool sortDescending, CancellationToken cancellationToken);
+    Task<GaragePageData> GetPageAsync(string? normalizedSearch, GarageColumnFilters filters, bool includeArchived, bool debtorsOnly, int offset, int limit, string sortBy, bool sortDescending, CancellationToken cancellationToken);
     Task<GarageBalanceTotalsData> GetBalanceTotalsAsync(IReadOnlyCollection<Guid> garageIds, CancellationToken cancellationToken);
     Task<Garage?> FindActiveWithOwnerAsync(Guid id, CancellationToken cancellationToken);
     Task<Garage?> FindArchivedWithOwnerAsync(Guid id, CancellationToken cancellationToken);
@@ -19,6 +19,13 @@ public interface IGarageRepository
 }
 
 public sealed record GaragePageData(IReadOnlyList<GarageListItemData> Items, int TotalCount);
+
+public sealed record GarageColumnFilters(
+    string? Number,
+    int? PeopleCountMin,
+    int? PeopleCountMax,
+    int? FloorCountMin,
+    int? FloorCountMax);
 
 public sealed record GarageListItemData(
     Guid Id,

@@ -85,9 +85,14 @@ public sealed class DictionariesController(IDictionaryService dictionaryService)
 
     [HttpGet("garages/page")]
     [ProducesResponseType<PagedResult<GarageDto>>(StatusCodes.Status200OK)]
-    public async Task<ActionResult<PagedResult<GarageDto>>> GetGaragesPage([FromQuery] string? search, [FromQuery] int? offset, [FromQuery] int? limit, [FromQuery] string? sortBy, [FromQuery] string? sortDirection, [FromQuery] bool includeArchived, [FromQuery] bool debtorsOnly, CancellationToken cancellationToken)
+    public async Task<ActionResult<PagedResult<GarageDto>>> GetGaragesPage([FromQuery] string? search, [FromQuery] int? offset, [FromQuery] int? limit, [FromQuery] string? sortBy, [FromQuery] string? sortDirection, [FromQuery] bool includeArchived, [FromQuery] bool debtorsOnly, CancellationToken cancellationToken, [FromQuery] string? number = null, [FromQuery] int? peopleCountMin = null, [FromQuery] int? peopleCountMax = null, [FromQuery] int? floorCountMin = null, [FromQuery] int? floorCountMax = null)
     {
-        return Ok(await dictionaryService.GetGaragesPageAsync(search, offset, limit, sortBy, sortDirection, cancellationToken, includeArchived, debtorsOnly));
+        if (peopleCountMin < 0 || peopleCountMax < 0 || floorCountMin < 0 || floorCountMax < 0 || peopleCountMin > peopleCountMax || floorCountMin > floorCountMax)
+        {
+            return BadRequest(new ProblemDetails { Title = "Некорректный диапазон фильтра.", Detail = "Минимальные и максимальные значения должны быть неотрицательными, а минимум не может превышать максимум." });
+        }
+
+        return Ok(await dictionaryService.GetGaragesPageAsync(search, offset, limit, sortBy, sortDirection, cancellationToken, includeArchived, debtorsOnly, number, peopleCountMin, peopleCountMax, floorCountMin, floorCountMax));
     }
 
     [Authorize(Policy = SystemPermissions.DictionariesWrite)]

@@ -2210,6 +2210,104 @@ describe('App', () => {
     await waitFor(() => expect(requests).toContainEqual({ offset: 0, sortBy: 'overdueDebt', sortDirection: 'asc', debtorsOnly: true }))
   }, 30000)
 
+  it('applies, combines and resets green garage filters from the first page', async () => {
+    const user = userEvent.setup()
+    const requests: Array<{ offset: number; debtorsOnly: boolean; filters?: Record<string, unknown> }> = []
+    const getGaragesPage = vi.fn(async (_token: string, _search?: string, offset = 0, limit = 25, _includeArchived?: boolean, _sortBy?: string, _sortDirection?: string, debtorsOnly = false, filters?: Record<string, unknown>) => {
+      requests.push({ offset, debtorsOnly, filters })
+      const filtered = filters && Object.keys(filters).length > 0
+      return {
+        items: [createGarage({ id: filtered ? 'garage-filtered' : 'garage-all', number: filtered ? 'А-20' : '1', peopleCount: 3, floorCount: 2, overdueDebt: debtorsOnly ? 100 : 0 })],
+        totalCount: filtered ? 1 : 30,
+        offset,
+        limit,
+      }
+    })
+
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient({ getGaragesPage })} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Контрагенты')
+    const panel = await screen.findByRole('region', { name: 'Контрагенты' })
+    const pagination = await within(panel).findByRole('navigation', { name: 'Пагинация гаражей' })
+    await user.click(within(pagination).getByRole('button', { name: 'Страница 2' }))
+
+    await user.type(within(panel).getByLabelText('Фильтр по номеру гаража'), 'А-')
+    await user.type(within(panel).getByLabelText('Минимальное количество человек'), '2')
+    await user.type(within(panel).getByLabelText('Максимальное количество человек'), '4')
+    await user.type(within(panel).getByLabelText('Минимальное количество этажей'), '1')
+    await user.type(within(panel).getByLabelText('Максимальное количество этажей'), '2')
+    await user.click(within(panel).getByRole('button', { name: 'Применить фильтры' }))
+
+    await waitFor(() => expect(requests).toContainEqual({
+      offset: 0,
+      debtorsOnly: false,
+      filters: { number: 'А-', peopleCountMin: 2, peopleCountMax: 4, floorCountMin: 1, floorCountMax: 2 },
+    }))
+    expect(await within(panel).findByRole('button', { name: 'Изменить гараж А-20' })).toBeInTheDocument()
+    await user.click(within(panel).getByRole('button', { name: 'Показать должников' }))
+    await waitFor(() => expect(requests).toContainEqual({
+      offset: 0,
+      debtorsOnly: true,
+      filters: { number: 'А-', peopleCountMin: 2, peopleCountMax: 4, floorCountMin: 1, floorCountMax: 2 },
+    }))
+
+    await user.click(within(panel).getByRole('button', { name: 'Сбросить фильтры' }))
+    await waitFor(() => expect(requests.at(-1)).toEqual({ offset: 0, debtorsOnly: true, filters: undefined }))
+    expect(within(panel).getByLabelText('Фильтр по номеру гаража')).toHaveValue('')
+  }, 30000)
+
+  it('ignores a stale green-filter response after filters are reset', async () => {
+    const user = userEvent.setup()
+    let resolveFilteredPage!: (page: PagedResult<GarageDto>) => void
+    const filteredPage = new Promise<PagedResult<GarageDto>>((resolve) => { resolveFilteredPage = resolve })
+    const currentGarage = createGarage({ id: 'garage-current-reset', number: '7' })
+    const staleGarage = createGarage({ id: 'garage-stale-filter', number: 'А-99' })
+    const getGaragesPage = vi.fn(async (_token: string, _search?: string, offset = 0, limit = 25, _includeArchived?: boolean, _sortBy?: string, _sortDirection?: string, _debtorsOnly?: boolean, filters?: Record<string, unknown>) =>
+      filters ? filteredPage : { items: [currentGarage], totalCount: 1, offset, limit })
+
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient({ getGaragesPage })} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Контрагенты')
+    const panel = await screen.findByRole('region', { name: 'Контрагенты' })
+    await within(panel).findByRole('button', { name: 'Изменить гараж 7' })
+
+    await user.type(within(panel).getByLabelText('Фильтр по номеру гаража'), 'А-')
+    await user.click(within(panel).getByRole('button', { name: 'Применить фильтры' }))
+    await waitFor(() => expect(getGaragesPage).toHaveBeenCalledTimes(2))
+    await user.click(within(panel).getByRole('button', { name: 'Сбросить фильтры' }))
+    expect(await within(panel).findByRole('button', { name: 'Изменить гараж 7' })).toBeInTheDocument()
+    await act(async () => {
+      resolveFilteredPage({ items: [staleGarage], totalCount: 1, offset: 0, limit: 25 })
+      await filteredPage
+    })
+
+    expect(within(panel).queryByRole('button', { name: 'Изменить гараж А-99' })).not.toBeInTheDocument()
+    expect(within(panel).getByRole('button', { name: 'Изменить гараж 7' })).toBeInTheDocument()
+  }, 30000)
+
+  it('shows permission denial returned while applying green garage filters', async () => {
+    const user = userEvent.setup()
+    const garage = createGarage({ id: 'garage-filter-permission', number: '7' })
+    const getGaragesPage = vi.fn(async (_token: string, _search?: string, offset = 0, limit = 25, _includeArchived?: boolean, _sortBy?: string, _sortDirection?: string, _debtorsOnly?: boolean, filters?: Record<string, unknown>) => {
+      if (filters) throw new DictionaryApiError('forbidden', 'Недостаточно прав для фильтрации гаражей.', 403)
+      return { items: [garage], totalCount: 1, offset, limit }
+    })
+
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient({ getGaragesPage })} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Контрагенты')
+    const panel = await screen.findByRole('region', { name: 'Контрагенты' })
+    await within(panel).findByRole('button', { name: 'Изменить гараж 7' })
+    await user.type(within(panel).getByLabelText('Фильтр по номеру гаража'), 'А-')
+    await user.click(within(panel).getByRole('button', { name: 'Применить фильтры' }))
+
+    expect(await within(panel).findByText('Недостаточно прав для фильтрации гаражей.')).toBeInTheDocument()
+    expect(within(panel).getByRole('button', { name: 'Применить фильтры' })).toBeEnabled()
+  })
+
   it('ignores a stale garage debtor page after the filter is switched back', async () => {
     const user = userEvent.setup()
     let resolveDebtorPage!: (page: PagedResult<GarageDto>) => void

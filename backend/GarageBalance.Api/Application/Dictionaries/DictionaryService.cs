@@ -214,14 +214,15 @@ public sealed class DictionaryService(
         return await ToGarageDtosWithBalancesAsync(garages, cancellationToken);
     }
 
-    public async Task<PagedResult<GarageDto>> GetGaragesPageAsync(string? search, int? offset, int? limit, string? sortBy, string? sortDirection, CancellationToken cancellationToken, bool includeArchived = false, bool debtorsOnly = false)
+    public async Task<PagedResult<GarageDto>> GetGaragesPageAsync(string? search, int? offset, int? limit, string? sortBy, string? sortDirection, CancellationToken cancellationToken, bool includeArchived = false, bool debtorsOnly = false, string? number = null, int? peopleCountMin = null, int? peopleCountMax = null, int? floorCountMin = null, int? floorCountMax = null)
     {
         var normalizedSearch = NormalizeSearch(search);
         var normalizedOffset = NormalizeListOffset(offset);
         var normalizedLimit = NormalizeListLimit(limit);
         var normalizedSortBy = sortBy?.Trim() switch { "peopleCount" => "peopleCount", "floorCount" => "floorCount", "owner" => "owner", "phone" => "phone", "overdueDebt" => "overdueDebt", _ => "number" };
         var sortDescending = string.Equals(sortDirection?.Trim(), "desc", StringComparison.OrdinalIgnoreCase);
-        var page = await garageRepository.GetPageAsync(normalizedSearch, includeArchived, debtorsOnly, normalizedOffset, normalizedLimit, normalizedSortBy, sortDescending, cancellationToken);
+        var filters = new GarageColumnFilters(NormalizeSearch(number), peopleCountMin, peopleCountMax, floorCountMin, floorCountMax);
+        var page = await garageRepository.GetPageAsync(normalizedSearch, filters, includeArchived, debtorsOnly, normalizedOffset, normalizedLimit, normalizedSortBy, sortDescending, cancellationToken);
         return new PagedResult<GarageDto>(await ToGarageDtosWithBalancesAsync(page.Items, cancellationToken), page.TotalCount, normalizedOffset, normalizedLimit);
     }
 

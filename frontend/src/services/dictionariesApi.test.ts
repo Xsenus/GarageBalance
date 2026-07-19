@@ -82,4 +82,18 @@ describe('dictionariesApi response cache', () => {
       expect.objectContaining({ headers: expect.objectContaining({ Authorization: 'Bearer token' }) }),
     )
   })
+
+  it('passes garage green-column filters to the page endpoint', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ items: [], totalCount: 0, offset: 0, limit: 25 }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await dictionariesApi.getGaragesPage('token', undefined, 0, 25, true, 'number', 'asc', true, {
+      number: 'А-', peopleCountMin: 2, peopleCountMax: 4, floorCountMin: 1, floorCountMax: 2,
+    })
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/dictionaries/garages/page?offset=0&limit=25&includeArchived=true&sortBy=number&sortDirection=asc&debtorsOnly=true&number=%D0%90-&peopleCountMin=2&peopleCountMax=4&floorCountMin=1&floorCountMax=2',
+      expect.objectContaining({ headers: expect.objectContaining({ Authorization: 'Bearer token' }) }),
+    )
+  })
 })

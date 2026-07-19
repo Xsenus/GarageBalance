@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import type { CSSProperties, FormEvent, MouseEvent, RefObject } from 'react'
 import { FileText, Gauge, Pencil, RotateCcw, Save, Search, Trash2, UserPlus, UsersRound, X } from 'lucide-react'
 import type { AuthResponse } from '../../services/authApi'
-import type { AccountingTypeDto, ChargeServiceSettingDto, DictionaryClient, GarageDto, OwnerDto, StaffDepartmentDto, StaffMemberDto, SupplierContactDto, SupplierDto, SupplierGroupDto, TariffDto, UpsertChargeServiceSettingRequest, UpsertGarageRequest, UpsertOwnerRequest, UpsertStaffMemberRequest, UpsertSupplierContactRequest, UpsertSupplierRequest } from '../../services/dictionariesApi'
+import type { AccountingTypeDto, ChargeServiceSettingDto, DictionaryClient, GarageColumnFilters, GarageDto, OwnerDto, StaffDepartmentDto, StaffMemberDto, SupplierContactDto, SupplierDto, SupplierGroupDto, TariffDto, UpsertChargeServiceSettingRequest, UpsertGarageRequest, UpsertOwnerRequest, UpsertStaffMemberRequest, UpsertSupplierContactRequest, UpsertSupplierRequest } from '../../services/dictionariesApi'
 import type { FinanceClient, GarageBalanceHistoryDto } from '../../services/financeApi'
 import type { FormStateClient } from '../../services/formStatesApi'
 import type { DadataAddressSuggestionDto, DadataPartySuggestionDto, IntegrationClient } from '../../services/integrationsApi'
@@ -68,6 +68,31 @@ type ContractorSection = 'garages' | 'suppliers' | 'staff'
 type ContractorSortDirection = 'asc' | 'desc'
 type ContractorSortableSection = ContractorSection
 type ContractorDebtorFilterSection = 'garages' | 'suppliers'
+type GarageColumnFilterForm = Record<keyof GarageColumnFilters, string>
+
+const emptyGarageColumnFilterForm: GarageColumnFilterForm = {
+  number: '',
+  peopleCountMin: '',
+  peopleCountMax: '',
+  floorCountMin: '',
+  floorCountMax: '',
+}
+
+function toGarageColumnFilters(form: GarageColumnFilterForm): GarageColumnFilters {
+  const number = form.number.trim()
+  const parseOptionalNumber = (value: string) => value === '' ? undefined : Number(value)
+  return {
+    number: number || undefined,
+    peopleCountMin: parseOptionalNumber(form.peopleCountMin),
+    peopleCountMax: parseOptionalNumber(form.peopleCountMax),
+    floorCountMin: parseOptionalNumber(form.floorCountMin),
+    floorCountMax: parseOptionalNumber(form.floorCountMax),
+  }
+}
+
+function hasGarageColumnFilters(filters: GarageColumnFilters) {
+  return Object.values(filters).some((value) => value !== undefined)
+}
 
 type ContractorGarageRow = {
   id: string
@@ -726,6 +751,8 @@ type ContractorsPrototypeSavedState = {
 export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClient, formStateClient, integrationClient, initialTarget = null, onOpenAudit }: { auth: AuthResponse; dictionaryClient: DictionaryClient; financeClient: FinanceClient; formStateClient: FormStateClient; integrationClient: IntegrationClient; initialTarget?: ContractorOpenTarget | null; onOpenAudit: (preset: AuditPanelPreset) => void }) {
   const [activeSection, setActiveSection] = useState<ContractorSection>(initialTarget?.section ?? 'garages')
   const [debtorFilters, setDebtorFilters] = useState<Record<ContractorDebtorFilterSection, boolean>>({ garages: false, suppliers: false })
+  const [garageColumnFilterForm, setGarageColumnFilterForm] = useState<GarageColumnFilterForm>(emptyGarageColumnFilterForm)
+  const [garageColumnFilters, setGarageColumnFilters] = useState<GarageColumnFilters>({})
   const [contractorSort, setContractorSort] = useState<ContractorSortState>({ section: 'garages', key: 'number', direction: 'asc' })
   const [garages, setGarages] = useState<ContractorGarageRow[]>([])
   const [garagePage, setGaragePage] = useState<ContractorPageState>(createContractorPageState)
@@ -1067,16 +1094,24 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
       ? contractorSort
       : { section: 'garages', key: 'number', direction: 'asc' },
     debtorsOnly = debtorFilters.garages,
+    filters = garageColumnFilters,
   ) {
     const requestSequence = ++garagePageRequestSequenceRef.current
     setContractorPageLoading((current) => ({ ...current, garages: true }))
     setGarageContextMenu(null)
     try {
       const page = dictionaryClient.getGaragesPage
-        ? await dictionaryClient.getGaragesPage(auth.accessToken, undefined, offset, limit, true, sort.key, sort.direction, debtorsOnly)
+        ? await (hasGarageColumnFilters(filters)
+            ? dictionaryClient.getGaragesPage(auth.accessToken, undefined, offset, limit, true, sort.key, sort.direction, debtorsOnly, filters)
+            : dictionaryClient.getGaragesPage(auth.accessToken, undefined, offset, limit, true, sort.key, sort.direction, debtorsOnly))
         : createFallbackPage(
             (await dictionaryClient.getGarages(auth.accessToken, undefined, contractorsDictionaryListLimit, true))
-              .filter((garage) => !debtorsOnly || (!garage.isArchived && garage.overdueDebt > 0)),
+              .filter((garage) => !debtorsOnly || (!garage.isArchived && garage.overdueDebt > 0))
+              .filter((garage) => !filters.number || garage.number.toLocaleLowerCase('ru-RU').includes(filters.number.toLocaleLowerCase('ru-RU')))
+              .filter((garage) => filters.peopleCountMin === undefined || garage.peopleCount >= filters.peopleCountMin)
+              .filter((garage) => filters.peopleCountMax === undefined || garage.peopleCount <= filters.peopleCountMax)
+              .filter((garage) => filters.floorCountMin === undefined || garage.floorCount >= filters.floorCountMin)
+              .filter((garage) => filters.floorCountMax === undefined || garage.floorCount <= filters.floorCountMax),
             offset,
             limit,
           )
@@ -1773,6 +1808,7 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
 
   const showGarageDebtorsOnly = debtorFilters.garages
   const showSupplierDebtorsOnly = debtorFilters.suppliers
+  const hasActiveGarageFilters = hasGarageColumnFilters(garageColumnFilters)
   const showDebtorsOnly = activeSection === 'suppliers' ? showSupplierDebtorsOnly : activeSection === 'garages' ? showGarageDebtorsOnly : false
   const toggleDebtorsFilter = (section: ContractorDebtorFilterSection) => {
     const nextValue = !debtorFilters[section]
@@ -1888,6 +1924,39 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
 
       {activeSection === 'garages' ? (
         <section className="contractors-directory-card" aria-label="Гаражи">
+          <form className="contractors-column-filters" aria-label="Фильтры гаражей" onSubmit={(event) => {
+            event.preventDefault()
+            const filters = toGarageColumnFilters(garageColumnFilterForm)
+            setGarageColumnFilters(filters)
+            void loadGaragePage(0, garagePage.limit, undefined, undefined, filters)
+          }}>
+            <label>
+              <span>Номер содержит</span>
+              <input aria-label="Фильтр по номеру гаража" value={garageColumnFilterForm.number} onChange={(event) => setGarageColumnFilterForm((current) => ({ ...current, number: event.target.value }))} />
+            </label>
+            <label>
+              <span>Людей от</span>
+              <input aria-label="Минимальное количество человек" type="number" min="0" value={garageColumnFilterForm.peopleCountMin} onChange={(event) => setGarageColumnFilterForm((current) => ({ ...current, peopleCountMin: event.target.value }))} />
+            </label>
+            <label>
+              <span>Людей до</span>
+              <input aria-label="Максимальное количество человек" type="number" min="0" value={garageColumnFilterForm.peopleCountMax} onChange={(event) => setGarageColumnFilterForm((current) => ({ ...current, peopleCountMax: event.target.value }))} />
+            </label>
+            <label>
+              <span>Этажей от</span>
+              <input aria-label="Минимальное количество этажей" type="number" min="0" value={garageColumnFilterForm.floorCountMin} onChange={(event) => setGarageColumnFilterForm((current) => ({ ...current, floorCountMin: event.target.value }))} />
+            </label>
+            <label>
+              <span>Этажей до</span>
+              <input aria-label="Максимальное количество этажей" type="number" min="0" value={garageColumnFilterForm.floorCountMax} onChange={(event) => setGarageColumnFilterForm((current) => ({ ...current, floorCountMax: event.target.value }))} />
+            </label>
+            <button className="secondary-button" type="submit" disabled={contractorPageLoading.garages}>Применить фильтры</button>
+            <button className="secondary-button" type="button" disabled={Object.values(garageColumnFilterForm).every((value) => value === '')} onClick={() => {
+              setGarageColumnFilterForm(emptyGarageColumnFilterForm)
+              setGarageColumnFilters({})
+              void loadGaragePage(0, garagePage.limit, undefined, undefined, {})
+            }}>Сбросить фильтры</button>
+          </form>
           <div className="contractors-directory-table contractors-directory-table--garages" role="table" aria-label="Гаражи" style={garageTableStyle}>
             <div className="contractors-directory-row contractors-directory-row--header" role="row">
               {contractorGarageColumnDefinitions.map((column) => (
@@ -1938,7 +2007,7 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
             {contractorPageLoading.garages ? <TableLoadingState className="table-loading-state--compact" label="Загружаем гаражи" /> : null}
             {!contractorPageLoading.garages && visibleGarages.length === 0 ? (
               <div className="contractors-directory-row contractors-directory-row--empty" role="row">
-                <span className="contractors-directory-empty-cell" role="cell">{showGarageDebtorsOnly ? 'Гаражей с задолженностью не найдено.' : 'Гаражи пока не настроены.'}</span>
+                <span className="contractors-directory-empty-cell" role="cell">{hasActiveGarageFilters ? 'По заданным фильтрам гаражи не найдены.' : showGarageDebtorsOnly ? 'Гаражей с задолженностью не найдено.' : 'Гаражи пока не настроены.'}</span>
               </div>
             ) : null}
           </div>

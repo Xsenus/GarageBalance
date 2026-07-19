@@ -827,6 +827,41 @@ public sealed class DictionaryServiceTests
     }
 
     [Fact]
+    public async Task GetGaragesPageAsync_CombinesGreenColumnRangesBeforePaginationAndKeepsArchivedRows()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = DictionaryServiceTestFactory.Create(database.Context);
+        database.Context.Garages.AddRange(
+            new Garage { Number = "А-10", PeopleCount = 2, FloorCount = 1 },
+            new Garage { Number = "А-20", PeopleCount = 3, FloorCount = 2, IsArchived = true },
+            new Garage { Number = "Б-30", PeopleCount = 3, FloorCount = 2 },
+            new Garage { Number = "А-40", PeopleCount = 5, FloorCount = 3 });
+        await database.Context.SaveChangesAsync();
+
+        var firstPage = await service.GetGaragesPageAsync(
+            null, 0, 1, "number", "asc", CancellationToken.None,
+            includeArchived: true,
+            number: "а-",
+            peopleCountMin: 2,
+            peopleCountMax: 3,
+            floorCountMin: 1,
+            floorCountMax: 2);
+        var secondPage = await service.GetGaragesPageAsync(
+            null, 1, 1, "number", "asc", CancellationToken.None,
+            includeArchived: true,
+            number: "А-",
+            peopleCountMin: 2,
+            peopleCountMax: 3,
+            floorCountMin: 1,
+            floorCountMax: 2);
+
+        Assert.Equal(2, firstPage.TotalCount);
+        Assert.Equal("А-10", Assert.Single(firstPage.Items).Number);
+        Assert.Equal("А-20", Assert.Single(secondPage.Items).Number);
+        Assert.True(secondPage.Items[0].IsArchived);
+    }
+
+    [Fact]
     public async Task CreateGarageAsync_AllowsSeveralActiveGaragesForOneOwner()
     {
         await using var database = await TestDatabase.CreateAsync();
