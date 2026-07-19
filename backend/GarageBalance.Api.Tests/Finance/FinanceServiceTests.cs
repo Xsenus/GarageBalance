@@ -6198,6 +6198,7 @@ public sealed class FinanceServiceTests
         Assert.True(reduced.Succeeded, reduced.ErrorMessage);
         Assert.Equal(250m, assignment.Amount);
         Assert.Equal(250m, assignment.Fund.Balance);
+        Assert.Contains(database.Context.AuditEvents, item => item.Action == "fund.income_assignment_updated");
 
         var moved = await service.UpdateIncomeAsync(
             createdOperationId,
