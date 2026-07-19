@@ -531,6 +531,13 @@ public sealed class BackendPerformanceGuardTests
         Assert.Contains("StartingBalanceTotalCategory", expenseSource, StringComparison.Ordinal);
         Assert.Contains("AccrualTotalCategory", expenseSource, StringComparison.Ordinal);
         Assert.Contains("ExpenseTotalCategory", expenseSource, StringComparison.Ordinal);
+        var expenseAccrualMethod = expenseSource[
+            expenseSource.IndexOf("private async Task<ExpenseReportQueryData> GetPostgresAccrualRowsAsync", StringComparison.Ordinal)..expenseSource.IndexOf("private async Task<ExpenseReportQueryData> GetPostgresPaymentRowsAsync", StringComparison.Ordinal)];
+        Assert.Contains("WITH filtered_rows AS", expenseAccrualMethod, StringComparison.Ordinal);
+        Assert.Contains("COALESCE(SUM(accrual_amount), 0)", expenseAccrualMethod, StringComparison.Ordinal);
+        Assert.Contains("generate_series", expenseAccrualMethod, StringComparison.Ordinal);
+        Assert.Contains("SqlQueryRaw<ExpenseAccrualCombinedQueryRow>", expenseAccrualMethod, StringComparison.Ordinal);
+        Assert.Equal(1, CountOccurrences(expenseAccrualMethod, ".ToListAsync(cancellationToken)"));
         var expensePaymentMethod = expenseSource[
             expenseSource.IndexOf("private async Task<ExpenseReportQueryData> GetPostgresPaymentRowsAsync", StringComparison.Ordinal)..expenseSource.IndexOf("private static IOrderedQueryable<ExpenseReportSortableProjection> ApplyPostgresSort", StringComparison.Ordinal)];
         Assert.Contains("WITH filtered_rows AS", expensePaymentMethod, StringComparison.Ordinal);
@@ -1031,6 +1038,8 @@ public sealed class BackendPerformanceGuardTests
         Assert.Contains("PostgreSqlExpenseReportPaymentQueryIntegrationTests.PaymentPageLoadsSupplierAndStaffTotalsAndPageInOneCommand", document, StringComparison.Ordinal);
         Assert.Contains("Sixty-second income-accrual command consolidation audit", document, StringComparison.Ordinal);
         Assert.Contains("PostgreSqlIncomeReportAccrualQueryIntegrationTests.AccrualPageLoadsStartingBalanceAccrualTotalsAndPageInOneCommand", document, StringComparison.Ordinal);
+        Assert.Contains("Sixty-third expense-accrual command consolidation audit", document, StringComparison.Ordinal);
+        Assert.Contains("PostgreSqlExpenseReportAccrualQueryIntegrationTests.AccrualPageLoadsStartingBalanceSupplierAndStaffTotalsInOneCommand", document, StringComparison.Ordinal);
         Assert.Contains("Shared end-user release `0.758.0`", document, StringComparison.Ordinal);
         Assert.Contains("limit", document, StringComparison.Ordinal);
         Assert.Contains("rowCount", document, StringComparison.Ordinal);
