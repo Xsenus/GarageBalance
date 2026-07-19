@@ -86,7 +86,10 @@ public sealed class BackendPerformanceGuardTests
         Assert.Contains("EnsureDefaultFundsAsync(funds, cancellationToken)", serviceSource, StringComparison.Ordinal);
         Assert.DoesNotContain("GetNormalizedFundNamesAsync", serviceSource, StringComparison.Ordinal);
         Assert.Equal(3, CountOccurrences(totalsMethod, ".Sum("));
-        Assert.Equal(1, CountOccurrences(totalsMethod, ".FirstOrDefaultAsync(cancellationToken)"));
+        Assert.Equal(2, CountOccurrences(totalsMethod, ".GroupBy("));
+        Assert.Equal(1, CountOccurrences(totalsMethod, ".Concat("));
+        Assert.Equal(1, CountOccurrences(totalsMethod, ".ToListAsync(cancellationToken)"));
+        Assert.DoesNotContain("FirstOrDefaultAsync", totalsMethod, StringComparison.Ordinal);
         Assert.DoesNotContain("SumAsync", totalsMethod, StringComparison.Ordinal);
     }
 
@@ -312,7 +315,7 @@ public sealed class BackendPerformanceGuardTests
     }
 
     [Fact]
-    public void PerformanceOptimizationRelease_ExplainsBoundedSupplierContactLoading()
+    public void PerformanceOptimizationRelease_AccumulatesVerifiedQueryImprovements()
     {
         var releaseNotes = File.ReadAllText(Path.Combine(
             FindRepositoryRoot(),
@@ -324,6 +327,7 @@ public sealed class BackendPerformanceGuardTests
         Assert.Contains("\"version\": \"0.758.0\"", releaseNotes, StringComparison.Ordinal);
         Assert.Contains("Разделы системы загружаются быстрее и стабильнее", releaseNotes, StringComparison.Ordinal);
         Assert.Contains("только один приоритетный контакт для каждой видимой строки", releaseNotes, StringComparison.Ordinal);
+        Assert.Contains("Сводка фондов считает поступления и выплаты за один проход", releaseNotes, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -909,6 +913,8 @@ public sealed class BackendPerformanceGuardTests
         Assert.Contains("GIN trigram indexes", document, StringComparison.Ordinal);
         Assert.Contains("Forty-eighth supplier-primary-contact projection audit", document, StringComparison.Ordinal);
         Assert.Contains("PostgreSqlSupplierPrimaryContactIntegrationTests.SupplierPage_ProjectsOneRankedContactPerSupplierInPostgreSql", document, StringComparison.Ordinal);
+        Assert.Contains("Forty-ninth fund-totals aggregation audit", document, StringComparison.Ordinal);
+        Assert.Contains("PostgreSqlFundTotalsIntegrationTests.GetTotalsAsync_KeepsFinancialTotalsWhenFundCatalogIsEmptyAndUsesOneUnionQuery", document, StringComparison.Ordinal);
         Assert.Contains("Shared end-user release `0.758.0`", document, StringComparison.Ordinal);
         Assert.Contains("limit", document, StringComparison.Ordinal);
         Assert.Contains("rowCount", document, StringComparison.Ordinal);

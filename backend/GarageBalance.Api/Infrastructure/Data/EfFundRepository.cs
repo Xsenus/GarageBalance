@@ -133,23 +133,43 @@ public sealed class EfFundRepository(GarageBalanceDbContext dbContext) : IFundRe
 
     public async Task<FundTotalsData> GetTotalsAsync(CancellationToken cancellationToken)
     {
-        var totals = await dbContext.Funds.AsNoTracking()
-            .Select(_ => new
+        const int financialTotalsCategory = 1;
+        const int allocatedFundTotalsCategory = 2;
+        var financialTotalsQuery = dbContext.FinancialOperations.AsNoTracking()
+            .Where(operation =>
+                !operation.IsCanceled &&
+                (operation.OperationKind == FinancialOperationKinds.Income ||
+                 operation.OperationKind == FinancialOperationKinds.Expense))
+            .GroupBy(_ => financialTotalsCategory)
+            .Select(group => new
             {
-                IncomeTotal = dbContext.FinancialOperations.AsNoTracking()
-                    .Where(operation => !operation.IsCanceled && operation.OperationKind == FinancialOperationKinds.Income)
-                    .Sum(operation => (decimal?)operation.Amount) ?? 0m,
-                ExpenseTotal = dbContext.FinancialOperations.AsNoTracking()
-                    .Where(operation => !operation.IsCanceled && operation.OperationKind == FinancialOperationKinds.Expense)
-                    .Sum(operation => (decimal?)operation.Amount) ?? 0m,
-                AllocatedFundTotal = dbContext.Funds.AsNoTracking()
-                    .Sum(fund => (decimal?)fund.Balance) ?? 0m
-            })
-            .FirstOrDefaultAsync(cancellationToken);
+                Category = financialTotalsCategory,
+                IncomeTotal = group.Sum(operation =>
+                    operation.OperationKind == FinancialOperationKinds.Income ? operation.Amount : 0m),
+                ExpenseTotal = group.Sum(operation =>
+                    operation.OperationKind == FinancialOperationKinds.Expense ? operation.Amount : 0m),
+                AllocatedFundTotal = 0m
+            });
+        var allocatedFundTotalsQuery = dbContext.Funds.AsNoTracking()
+            .GroupBy(_ => allocatedFundTotalsCategory)
+            .Select(group => new
+            {
+                Category = allocatedFundTotalsCategory,
+                IncomeTotal = 0m,
+                ExpenseTotal = 0m,
+                AllocatedFundTotal = group.Sum(fund => fund.Balance)
+            });
+        var totals = await financialTotalsQuery
+            .Concat(allocatedFundTotalsQuery)
+            .ToListAsync(cancellationToken);
 
-        return totals is null
-            ? new FundTotalsData(0m, 0m, 0m)
-            : new FundTotalsData(totals.IncomeTotal, totals.ExpenseTotal, totals.AllocatedFundTotal);
+        var financialTotals = totals.FirstOrDefault(item => item.Category == financialTotalsCategory);
+        var allocatedFundTotals = totals.FirstOrDefault(item => item.Category == allocatedFundTotalsCategory);
+
+        return new FundTotalsData(
+            financialTotals?.IncomeTotal ?? 0m,
+            financialTotals?.ExpenseTotal ?? 0m,
+            allocatedFundTotals?.AllocatedFundTotal ?? 0m);
     }
 
     public async Task<IReadOnlyList<FundOperation>> GetOperationsOrderedAsync(
