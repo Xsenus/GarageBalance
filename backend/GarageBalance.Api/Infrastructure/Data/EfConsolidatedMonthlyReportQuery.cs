@@ -14,6 +14,7 @@ public sealed class EfConsolidatedMonthlyReportQuery(GarageBalanceDbContext dbCo
     private const int StartingBalanceCategory = 4;
     private const int IncomeBreakdownCategory = 5;
     private const int ExpenseBreakdownCategory = 6;
+    private const int MonthlyPageCategory = 7;
 
     public async Task<ConsolidatedMonthlyReportData> GetMonthlyDataAsync(
         DateOnly periodFrom,
@@ -29,6 +30,11 @@ public sealed class EfConsolidatedMonthlyReportQuery(GarageBalanceDbContext dbCo
         int? limit,
         CancellationToken cancellationToken)
     {
+        if (dbContext.Database.IsNpgsql())
+        {
+            return await GetPostgresDataAsync(periodFrom, periodTo, sort, offset, limit, cancellationToken);
+        }
+
         var operations = dbContext.FinancialOperations.AsNoTracking()
             .Where(operation => !operation.IsCanceled && operation.AccountingMonth >= periodFrom && operation.AccountingMonth <= periodTo);
         var accruals = dbContext.Accruals.AsNoTracking()
@@ -163,19 +169,17 @@ public sealed class EfConsolidatedMonthlyReportQuery(GarageBalanceDbContext dbCo
         var garageStartingBalanceTotal = rows
             .Where(row => row.Category == StartingBalanceCategory)
             .Sum(row => row.Amount);
-        var monthlyRows = dbContext.Database.IsNpgsql()
-            ? await GetPostgresMonthlyRowsAsync(periodFrom, periodTo, sort, offset, limit, cancellationToken)
-            : GetFallbackMonthlyRows(
-                periodFrom,
-                periodTo,
-                incomeByMonth,
-                expenseByMonth,
-                accrualByMonth,
-                readingsByMonth,
-                garageStartingBalanceTotal,
-                sort,
-                offset,
-                limit);
+        var monthlyRows = GetFallbackMonthlyRows(
+            periodFrom,
+            periodTo,
+            incomeByMonth,
+            expenseByMonth,
+            accrualByMonth,
+            readingsByMonth,
+            garageStartingBalanceTotal,
+            sort,
+            offset,
+            limit);
 
         return new ConsolidatedMonthlyReportData(
             incomeByMonth,
@@ -189,7 +193,7 @@ public sealed class EfConsolidatedMonthlyReportQuery(GarageBalanceDbContext dbCo
             MonthPeriod.Enumerate(periodFrom, periodTo).Count());
     }
 
-    private async Task<IReadOnlyList<MonthlyReportQueryRow>> GetPostgresMonthlyRowsAsync(
+    private async Task<ConsolidatedMonthlyReportData> GetPostgresDataAsync(
         DateOnly periodFrom,
         DateOnly periodTo,
         ReportSort sort,
@@ -212,39 +216,68 @@ public sealed class EfConsolidatedMonthlyReportQuery(GarageBalanceDbContext dbCo
         var direction = sort.Descending ? "DESC" : "ASC";
         var limitClause = limit is > 0 ? "LIMIT @limit" : string.Empty;
         var sql = $$"""
-            WITH months AS (
+            WITH operations AS MATERIALIZED (
+                SELECT "AccountingMonth", "OperationKind", "IncomeTypeId", "ExpenseTypeId", "Amount"
+                FROM financial_operations
+                WHERE "IsCanceled" = FALSE
+                  AND "AccountingMonth" >= @period_from::date
+                  AND "AccountingMonth" <= @period_to::date
+                  AND "OperationKind" IN ('income', 'expense')
+            ), accrual_source AS MATERIALIZED (
+                SELECT "AccountingMonth", "Amount"
+                FROM accruals
+                WHERE "IsCanceled" = FALSE
+                  AND "AccountingMonth" >= @period_from::date
+                  AND "AccountingMonth" <= @period_to::date
+            ), reading_source AS MATERIALIZED (
+                SELECT "AccountingMonth"
+                FROM meter_readings
+                WHERE "IsCanceled" = FALSE
+                  AND "AccountingMonth" >= @period_from::date
+                  AND "AccountingMonth" <= @period_to::date
+            ), garage_source AS MATERIALIZED (
+                SELECT "StartingBalance"
+                FROM garages
+                WHERE "IsArchived" = FALSE
+            ), months AS (
                 SELECT generate_series(@period_from::date, @period_to::date, interval '1 month')::date AS month
             ), operation_totals AS (
                 SELECT "AccountingMonth" AS month,
                        COALESCE(SUM("Amount") FILTER (WHERE "OperationKind" = 'income'), 0) AS income_total,
                        COALESCE(SUM("Amount") FILTER (WHERE "OperationKind" = 'expense'), 0) AS expense_total,
-                       COUNT(*) FILTER (WHERE "OperationKind" IN ('income', 'expense'))::int AS operation_count
-                FROM financial_operations
-                WHERE "IsCanceled" = FALSE
-                  AND "AccountingMonth" >= @period_from::date
-                  AND "AccountingMonth" <= @period_to::date
+                       COUNT(*) FILTER (WHERE "OperationKind" = 'income')::int AS income_count,
+                       COUNT(*) FILTER (WHERE "OperationKind" = 'expense')::int AS expense_count
+                FROM operations
                 GROUP BY "AccountingMonth"
             ), accrual_totals AS (
                 SELECT "AccountingMonth" AS month,
                        COALESCE(SUM("Amount"), 0) AS accrual_total,
                        COUNT(*)::int AS accrual_count
-                FROM accruals
-                WHERE "IsCanceled" = FALSE
-                  AND "AccountingMonth" >= @period_from::date
-                  AND "AccountingMonth" <= @period_to::date
+                FROM accrual_source
                 GROUP BY "AccountingMonth"
             ), reading_totals AS (
                 SELECT "AccountingMonth" AS month, COUNT(*)::int AS reading_count
-                FROM meter_readings
-                WHERE "IsCanceled" = FALSE
-                  AND "AccountingMonth" >= @period_from::date
-                  AND "AccountingMonth" <= @period_to::date
+                FROM reading_source
                 GROUP BY "AccountingMonth"
             ), starting_balance AS (
-                SELECT COALESCE(SUM("StartingBalance"), 0) AS amount,
-                       COUNT(*) FILTER (WHERE "StartingBalance" <> 0)::int AS row_count
-                FROM garages
-                WHERE "IsArchived" = FALSE
+                SELECT COALESCE(SUM("StartingBalance"), 0) AS amount
+                FROM garage_source
+            ), income_breakdown AS (
+                SELECT operation."IncomeTypeId" AS type_id,
+                       COALESCE(income_type."Name", 'Без вида поступления') AS name,
+                       SUM(operation."Amount") AS amount
+                FROM operations operation
+                LEFT JOIN income_types income_type ON income_type."Id" = operation."IncomeTypeId"
+                WHERE operation."OperationKind" = 'income'
+                GROUP BY operation."IncomeTypeId", income_type."Name"
+            ), expense_breakdown AS (
+                SELECT operation."ExpenseTypeId" AS type_id,
+                       COALESCE(expense_type."Name", 'Без вида выплаты') AS name,
+                       SUM(operation."Amount") AS amount
+                FROM operations operation
+                LEFT JOIN expense_types expense_type ON expense_type."Id" = operation."ExpenseTypeId"
+                WHERE operation."OperationKind" = 'expense'
+                GROUP BY operation."ExpenseTypeId", expense_type."Name"
             ), report_rows AS (
                 SELECT months.month AS "AccountingMonth",
                        COALESCE(operation_totals.income_total, 0) AS "IncomeTotal",
@@ -255,7 +288,7 @@ public sealed class EfConsolidatedMonthlyReportQuery(GarageBalanceDbContext dbCo
                        COALESCE(accrual_totals.accrual_total, 0)
                            + CASE WHEN months.month = @period_from::date THEN starting_balance.amount ELSE 0 END
                            - COALESCE(operation_totals.income_total, 0) AS "Debt",
-                       COALESCE(operation_totals.operation_count, 0)::int AS "OperationCount",
+                       (COALESCE(operation_totals.income_count, 0) + COALESCE(operation_totals.expense_count, 0))::int AS "OperationCount",
                        (COALESCE(accrual_totals.accrual_count, 0)
                            + CASE WHEN months.month = @period_from::date AND starting_balance.amount <> 0 THEN 1 ELSE 0 END)::int AS "AccrualCount",
                        COALESCE(reading_totals.reading_count, 0)::int AS "MeterReadingCount"
@@ -264,12 +297,50 @@ public sealed class EfConsolidatedMonthlyReportQuery(GarageBalanceDbContext dbCo
                 LEFT JOIN operation_totals ON operation_totals.month = months.month
                 LEFT JOIN accrual_totals ON accrual_totals.month = months.month
                 LEFT JOIN reading_totals ON reading_totals.month = months.month
+            ), monthly_page AS (
+                SELECT report_rows.*,
+                       ROW_NUMBER() OVER (ORDER BY {{sortColumn}} {{direction}}, "AccountingMonth" DESC)::int AS row_order
+                FROM report_rows
+                ORDER BY {{sortColumn}} {{direction}}, "AccountingMonth" DESC
+                OFFSET @offset
+                {{limitClause}}
             )
-            SELECT *
-            FROM report_rows
-            ORDER BY {{sortColumn}} {{direction}}, "AccountingMonth" DESC
-            OFFSET @offset
-            {{limitClause}}
+            SELECT {{OperationMonthlyCategory}} AS "Category", 0 AS "RowOrder", month AS "Month", 'income'::text AS "Kind",
+                   NULL::uuid AS "TypeId", NULL::text AS "Name", income_total AS "Amount", income_count AS "Count",
+                   NULL::date AS "AccountingMonth", 0::numeric AS "IncomeTotal", 0::numeric AS "ExpenseTotal",
+                   0::numeric AS "AccrualTotal", 0::numeric AS "Balance", 0::numeric AS "Debt",
+                   0 AS "OperationCount", 0 AS "AccrualCount", 0 AS "MeterReadingCount"
+            FROM operation_totals WHERE income_count > 0
+            UNION ALL
+            SELECT {{OperationMonthlyCategory}}, 0, month, 'expense'::text, NULL::uuid, NULL::text,
+                   expense_total, expense_count, NULL::date, 0::numeric, 0::numeric, 0::numeric, 0::numeric, 0::numeric, 0, 0, 0
+            FROM operation_totals WHERE expense_count > 0
+            UNION ALL
+            SELECT {{AccrualMonthlyCategory}}, 0, month, NULL::text, NULL::uuid, NULL::text,
+                   accrual_total, accrual_count, NULL::date, 0::numeric, 0::numeric, 0::numeric, 0::numeric, 0::numeric, 0, 0, 0
+            FROM accrual_totals
+            UNION ALL
+            SELECT {{MeterReadingMonthlyCategory}}, 0, month, NULL::text, NULL::uuid, NULL::text,
+                   0::numeric, reading_count, NULL::date, 0::numeric, 0::numeric, 0::numeric, 0::numeric, 0::numeric, 0, 0, 0
+            FROM reading_totals
+            UNION ALL
+            SELECT {{StartingBalanceCategory}}, 0, @period_from::date, NULL::text, NULL::uuid, NULL::text,
+                   amount, 0, NULL::date, 0::numeric, 0::numeric, 0::numeric, 0::numeric, 0::numeric, 0, 0, 0
+            FROM starting_balance
+            UNION ALL
+            SELECT {{IncomeBreakdownCategory}}, 0, NULL::date, NULL::text, type_id, name,
+                   amount, 0, NULL::date, 0::numeric, 0::numeric, 0::numeric, 0::numeric, 0::numeric, 0, 0, 0
+            FROM income_breakdown
+            UNION ALL
+            SELECT {{ExpenseBreakdownCategory}}, 0, NULL::date, NULL::text, type_id, name,
+                   amount, 0, NULL::date, 0::numeric, 0::numeric, 0::numeric, 0::numeric, 0::numeric, 0, 0, 0
+            FROM expense_breakdown
+            UNION ALL
+            SELECT {{MonthlyPageCategory}}, row_order, NULL::date, NULL::text, NULL::uuid, NULL::text,
+                   0::numeric, 0, "AccountingMonth", "IncomeTotal", "ExpenseTotal", "AccrualTotal", "Balance", "Debt",
+                   "OperationCount", "AccrualCount", "MeterReadingCount"
+            FROM monthly_page
+            ORDER BY "Category", "RowOrder", "Month", "Name"
             """;
         var parameters = new List<object>
         {
@@ -282,9 +353,64 @@ public sealed class EfConsolidatedMonthlyReportQuery(GarageBalanceDbContext dbCo
             parameters.Add(new NpgsqlParameter<int>("limit", limit.Value));
         }
 
-        return await dbContext.Database
-            .SqlQueryRaw<MonthlyReportQueryRow>(sql, parameters.ToArray())
+        var rows = await dbContext.Database
+            .SqlQueryRaw<ConsolidatedReportCombinedQueryRow>(sql, parameters.ToArray())
             .ToListAsync(cancellationToken);
+        var incomeByMonth = rows
+            .Where(row => row.Category == OperationMonthlyCategory && row.Kind == FinancialOperationKinds.Income)
+            .OrderBy(row => row.Month)
+            .Select(row => new AmountCountByMonth(row.Month!.Value, row.Amount, row.Count))
+            .ToList();
+        var expenseByMonth = rows
+            .Where(row => row.Category == OperationMonthlyCategory && row.Kind == FinancialOperationKinds.Expense)
+            .OrderBy(row => row.Month)
+            .Select(row => new AmountCountByMonth(row.Month!.Value, row.Amount, row.Count))
+            .ToList();
+        var accrualByMonth = rows
+            .Where(row => row.Category == AccrualMonthlyCategory)
+            .OrderBy(row => row.Month)
+            .Select(row => new AmountCountByMonth(row.Month!.Value, row.Amount, row.Count))
+            .ToList();
+        var readingsByMonth = rows
+            .Where(row => row.Category == MeterReadingMonthlyCategory)
+            .OrderBy(row => row.Month)
+            .Select(row => new CountByMonth(row.Month!.Value, row.Count))
+            .ToList();
+        var startingBalance = rows.Single(row => row.Category == StartingBalanceCategory).Amount;
+        var incomeBreakdown = rows
+            .Where(row => row.Category == IncomeBreakdownCategory)
+            .OrderBy(row => row.Name)
+            .Select(row => new NamedAmountTotal(row.TypeId, row.Name!, row.Amount))
+            .ToList();
+        var expenseBreakdown = rows
+            .Where(row => row.Category == ExpenseBreakdownCategory)
+            .OrderBy(row => row.Name)
+            .Select(row => new NamedAmountTotal(row.TypeId, row.Name!, row.Amount))
+            .ToList();
+        var monthlyRows = rows
+            .Where(row => row.Category == MonthlyPageCategory)
+            .Select(row => new MonthlyReportQueryRow(
+                row.AccountingMonth!.Value,
+                row.IncomeTotal,
+                row.ExpenseTotal,
+                row.AccrualTotal,
+                row.Balance,
+                row.Debt,
+                row.OperationCount,
+                row.AccrualCount,
+                row.MeterReadingCount))
+            .ToList();
+
+        return new ConsolidatedMonthlyReportData(
+            incomeByMonth,
+            expenseByMonth,
+            accrualByMonth,
+            readingsByMonth,
+            startingBalance,
+            incomeBreakdown,
+            expenseBreakdown,
+            monthlyRows,
+            MonthPeriod.Enumerate(periodFrom, periodTo).Count());
     }
 
     private static IReadOnlyList<MonthlyReportQueryRow> GetFallbackMonthlyRows(
@@ -339,4 +465,23 @@ public sealed class EfConsolidatedMonthlyReportQuery(GarageBalanceDbContext dbCo
             "meterReadingCount" => sort.Descending ? rows.OrderByDescending(row => row.MeterReadingCount) : rows.OrderBy(row => row.MeterReadingCount),
             _ => sort.Descending ? rows.OrderByDescending(row => row.AccountingMonth) : rows.OrderBy(row => row.AccountingMonth)
         };
+
+    private sealed record ConsolidatedReportCombinedQueryRow(
+        int Category,
+        int RowOrder,
+        DateOnly? Month,
+        string? Kind,
+        Guid? TypeId,
+        string? Name,
+        decimal Amount,
+        int Count,
+        DateOnly? AccountingMonth,
+        decimal IncomeTotal,
+        decimal ExpenseTotal,
+        decimal AccrualTotal,
+        decimal Balance,
+        decimal Debt,
+        int OperationCount,
+        int AccrualCount,
+        int MeterReadingCount);
 }

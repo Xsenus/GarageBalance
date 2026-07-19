@@ -344,6 +344,7 @@ public sealed class BackendPerformanceGuardTests
         Assert.Contains("Проверка отсутствующих показаний воды и электричества теперь один раз", releaseNotes, StringComparison.Ordinal);
         Assert.Contains("Балансовые показатели гаражей теперь рассчитываются за один проход", releaseNotes, StringComparison.Ordinal);
         Assert.Contains("Отчет по взносам теперь за одно обращение к базе", releaseNotes, StringComparison.Ordinal);
+        Assert.Contains("Сводный месячный отчет теперь за одно обращение к базе", releaseNotes, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -654,6 +655,16 @@ public sealed class BackendPerformanceGuardTests
         Assert.Contains("group.Sum(garage => garage.StartingBalance)", source, StringComparison.Ordinal);
         Assert.DoesNotContain("SumAsync(garage => garage.StartingBalance, cancellationToken)", source, StringComparison.Ordinal);
         Assert.DoesNotContain("incomeByMonth.Count == 0 && expenseByMonth.Count == 0", source, StringComparison.Ordinal);
+        var postgresStart = source.IndexOf("private async Task<ConsolidatedMonthlyReportData> GetPostgresDataAsync", StringComparison.Ordinal);
+        var fallbackStart = source.IndexOf("private static IReadOnlyList<MonthlyReportQueryRow> GetFallbackMonthlyRows", StringComparison.Ordinal);
+        var postgresSource = source[postgresStart..fallbackStart];
+        Assert.Equal(1, CountOccurrences(postgresSource, "SqlQueryRaw<ConsolidatedReportCombinedQueryRow>"));
+        Assert.Equal(1, CountOccurrences(postgresSource, ".ToListAsync(cancellationToken)"));
+        Assert.Equal(4, CountOccurrences(postgresSource, "AS MATERIALIZED"));
+        Assert.Equal(1, CountOccurrences(postgresSource, "FROM financial_operations"));
+        Assert.Equal(1, CountOccurrences(postgresSource, "FROM accruals"));
+        Assert.Equal(1, CountOccurrences(postgresSource, "FROM meter_readings"));
+        Assert.Equal(1, CountOccurrences(postgresSource, "FROM garages"));
     }
 
     [Fact]
@@ -949,6 +960,8 @@ public sealed class BackendPerformanceGuardTests
         Assert.Contains("Fifty-third fee-report command consolidation audit", document, StringComparison.Ordinal);
         Assert.Contains("PostgreSqlFeeReportQueryIntegrationTests.FeePageUsesOneCommandAndPreservesPageDebtorsAndCompleteSummary", document, StringComparison.Ordinal);
         Assert.Contains("FeeCampaignPageUsesTheSameSingleCommandPipeline", document, StringComparison.Ordinal);
+        Assert.Contains("Fifty-fourth consolidated-monthly-report command audit", document, StringComparison.Ordinal);
+        Assert.Contains("PostgreSqlConsolidatedMonthlyReportQueryIntegrationTests.MonthlyReportBuildsAllSectionsFromOneCommandAndOneBaseScan", document, StringComparison.Ordinal);
         Assert.Contains("Shared end-user release `0.758.0`", document, StringComparison.Ordinal);
         Assert.Contains("limit", document, StringComparison.Ordinal);
         Assert.Contains("rowCount", document, StringComparison.Ordinal);
