@@ -32,9 +32,11 @@ public sealed class UserGuideTests
         Assert.Contains("связанный гараж", document, StringComparison.Ordinal);
         Assert.Contains("причину или комментарий", document, StringComparison.Ordinal);
         Assert.Contains("Скачать отчет JSON", document, StringComparison.Ordinal);
-        Assert.Contains("Скачать сводный XLSX", document, StringComparison.Ordinal);
-        Assert.Contains("Скачать поступления XLSX/PDF", document, StringComparison.Ordinal);
-        Assert.Contains("Скачать выплаты XLSX/PDF", document, StringComparison.Ordinal);
+        Assert.Contains("восемь рабочих вкладок", document, StringComparison.Ordinal);
+        Assert.Contains("`Оплаты из кассы`", document, StringComparison.Ordinal);
+        Assert.Contains("`Изменение фондов`", document, StringComparison.Ordinal);
+        Assert.Contains("`Скачать XLSX` или `Скачать PDF`", document, StringComparison.Ordinal);
+        Assert.Contains("## 11. Закрытие месяца", document, StringComparison.Ordinal);
         Assert.Contains("GET /api/app-releases", document, StringComparison.Ordinal);
         Assert.Contains("unauthorized", document, StringComparison.Ordinal);
         Assert.Contains("forbidden", document, StringComparison.Ordinal);
