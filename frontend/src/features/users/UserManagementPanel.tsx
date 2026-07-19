@@ -71,12 +71,17 @@ export function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; 
   useEscapeKey(Boolean(deleteTarget), () => closeDeleteDialog())
   useEscapeKey(Boolean(restoreTarget), () => setRestoreTarget(null))
 
+  useEffect(() => {
+    if (!toast) {
+      return undefined
+    }
+
+    const timeoutId = window.setTimeout(() => setToast(null), 3200)
+    return () => window.clearTimeout(timeoutId)
+  }, [toast])
+
   function showToast(text: string, kind: 'success' | 'error' = 'success') {
-    const id = Date.now()
-    setToast({ id, text, kind })
-    window.setTimeout(() => {
-      setToast((current) => (current?.id === id ? null : current))
-    }, 3200)
+    setToast({ id: Date.now(), text, kind })
   }
 
   const getRolesOnce = useCallback(() => {
