@@ -118,7 +118,11 @@ describe('App', () => {
       await user.click(button)
     }
 
-    return within(panel).findByRole('table', { name: new RegExp(`Таблица: (${names.join('|')})`) })
+    const table = await within(panel).findByRole('table', { name: new RegExp(`Таблица: (${names.join('|')})`) })
+    await waitFor(() => {
+      expect(within(panel).queryByRole('status', { name: new RegExp(`Загружаем справочник: (${names.join('|')})`) })).not.toBeInTheDocument()
+    })
+    return table
   }
 
   async function openDictionaryCreateDialog(user: ReturnType<typeof userEvent.setup>, panel: HTMLElement) {

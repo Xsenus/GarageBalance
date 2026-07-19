@@ -351,6 +351,7 @@ public sealed class BackendPerformanceGuardTests
         Assert.Contains("Отчет «Изменения фондов» теперь за одно обращение к базе", releaseNotes, StringComparison.Ordinal);
         Assert.Contains("Отчет по поступлениям больше не перечитывает видимые платежи", releaseNotes, StringComparison.Ordinal);
         Assert.Contains("Режим «Платежи» отчета по поступлениям теперь одновременно получает полные итоги", releaseNotes, StringComparison.Ordinal);
+        Assert.Contains("Режим «Платежи» отчета по выплатам теперь одновременно получает полные итоги", releaseNotes, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -529,6 +530,12 @@ public sealed class BackendPerformanceGuardTests
         Assert.Contains("StartingBalanceTotalCategory", expenseSource, StringComparison.Ordinal);
         Assert.Contains("AccrualTotalCategory", expenseSource, StringComparison.Ordinal);
         Assert.Contains("ExpenseTotalCategory", expenseSource, StringComparison.Ordinal);
+        var expensePaymentMethod = expenseSource[
+            expenseSource.IndexOf("private async Task<ExpenseReportQueryData> GetPostgresPaymentRowsAsync", StringComparison.Ordinal)..expenseSource.IndexOf("private static IOrderedQueryable<ExpenseReportSortableProjection> ApplyPostgresSort", StringComparison.Ordinal)];
+        Assert.Contains("WITH filtered_rows AS", expensePaymentMethod, StringComparison.Ordinal);
+        Assert.Contains("COALESCE(SUM(expense_amount), 0)", expensePaymentMethod, StringComparison.Ordinal);
+        Assert.Contains("SqlQueryRaw<ExpensePaymentCombinedQueryRow>", expensePaymentMethod, StringComparison.Ordinal);
+        Assert.Equal(1, CountOccurrences(expensePaymentMethod, ".ToListAsync(cancellationToken)"));
         Assert.True(CountOccurrences(incomeSource, "aggregateQuery = aggregateQuery.Concat(") >= 3);
         Assert.True(CountOccurrences(incomeSource, "aggregateQuery.ToListAsync(cancellationToken)") >= 1);
         Assert.Contains("StartingBalanceTotalCategory", incomeSource, StringComparison.Ordinal);
@@ -1013,6 +1020,8 @@ public sealed class BackendPerformanceGuardTests
         Assert.Contains("Fifty-ninth income-payment-page reuse audit", document, StringComparison.Ordinal);
         Assert.Contains("PostgreSqlIncomeReportPaymentQueryIntegrationTests.PaymentPageLoadsTotalsPageAndSequentialDebtInTwoCommands", document, StringComparison.Ordinal);
         Assert.Contains("Sixtieth income-payment command consolidation audit", document, StringComparison.Ordinal);
+        Assert.Contains("Sixty-first expense-payment command consolidation audit", document, StringComparison.Ordinal);
+        Assert.Contains("PostgreSqlExpenseReportPaymentQueryIntegrationTests.PaymentPageLoadsSupplierAndStaffTotalsAndPageInOneCommand", document, StringComparison.Ordinal);
         Assert.Contains("Shared end-user release `0.758.0`", document, StringComparison.Ordinal);
         Assert.Contains("limit", document, StringComparison.Ordinal);
         Assert.Contains("rowCount", document, StringComparison.Ordinal);

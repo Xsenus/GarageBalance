@@ -394,6 +394,21 @@ public sealed class EfExpenseReportQuery(GarageBalanceDbContext dbContext) : IEx
         ReportSort sort,
         CancellationToken cancellationToken)
     {
+        if (rowMode == PaymentRows)
+        {
+            return await GetPostgresPaymentRowsAsync(
+                dateFrom,
+                dateTo,
+                supplierIds,
+                staffMemberIds,
+                expenseTypeIds,
+                search,
+                limit,
+                offset,
+                sort,
+                cancellationToken);
+        }
+
         var normalizedSearch = search?.Trim().ToLowerInvariant();
         var hasSearch = !string.IsNullOrWhiteSpace(normalizedSearch);
         var includeSuppliers = supplierIds.Count > 0 || staffMemberIds.Count == 0;
@@ -740,6 +755,180 @@ public sealed class EfExpenseReportQuery(GarageBalanceDbContext dbContext) : IEx
         return new ExpenseReportQueryData(accrualTotal, expenseTotal, rowCount, rows);
     }
 
+    private async Task<ExpenseReportQueryData> GetPostgresPaymentRowsAsync(
+        DateOnly dateFrom,
+        DateOnly dateTo,
+        IReadOnlySet<Guid> supplierIds,
+        IReadOnlySet<Guid> staffMemberIds,
+        IReadOnlySet<Guid> expenseTypeIds,
+        string? search,
+        int? limit,
+        int offset,
+        ReportSort sort,
+        CancellationToken cancellationToken)
+    {
+        const int PageCategory = 1;
+        const int TotalsCategory = 2;
+        var includeSuppliers = supplierIds.Count > 0 || staffMemberIds.Count == 0;
+        var includeStaff = staffMemberIds.Count > 0 || supplierIds.Count == 0;
+        var sortColumn = sort.Field switch
+        {
+            "accountingMonth" => "accounting_month",
+            "supplierName" => "counterparty_name",
+            "expenseTypeName" => "expense_type_name",
+            "accrualAmount" => "accrual_amount",
+            "expenseAmount" => "expense_amount",
+            "difference" => "difference",
+            "documentNumber" => "document_number",
+            _ => "operation_date"
+        };
+        var direction = sort.Descending ? "DESC" : "ASC";
+        var supplierClause = supplierIds.Count > 0 ? "AND operation.\"SupplierId\" = ANY(@supplier_ids)" : string.Empty;
+        var staffClause = staffMemberIds.Count > 0 ? "AND operation.\"StaffMemberId\" = ANY(@staff_ids)" : string.Empty;
+        var expenseTypeClause = expenseTypeIds.Count > 0 ? "AND operation.\"ExpenseTypeId\" = ANY(@expense_type_ids)" : string.Empty;
+        var supplierSearchClause = string.IsNullOrWhiteSpace(search)
+            ? string.Empty
+            : """
+              AND (STRPOS(LOWER(supplier."Name"), @search) > 0
+                   OR STRPOS(LOWER(expense_type."Name"), @search) > 0
+                   OR STRPOS(LOWER(operation."DocumentNumber"), @search) > 0)
+              """;
+        var staffSearchClause = string.IsNullOrWhiteSpace(search)
+            ? string.Empty
+            : """
+              AND (STRPOS(LOWER(member."FullName"), @search) > 0
+                   OR STRPOS(LOWER(expense_type."Name"), @search) > 0
+                   OR STRPOS(LOWER(operation."DocumentNumber"), @search) > 0)
+              """;
+        var limitClause = limit is > 0 ? "LIMIT @limit" : string.Empty;
+        var sql = $$"""
+            WITH filtered_rows AS (
+                SELECT operation."Id" AS id,
+                       operation."OperationDate" AS operation_date,
+                       operation."AccountingMonth" AS accounting_month,
+                       operation."SupplierId" AS counterparty_id,
+                       supplier."Name" AS counterparty_name,
+                       operation."ExpenseTypeId" AS expense_type_id,
+                       expense_type."Name" AS expense_type_name,
+                       0::numeric AS accrual_amount,
+                       operation."Amount" AS expense_amount,
+                       -operation."Amount" AS difference,
+                       operation."DocumentNumber" AS document_number,
+                       operation."Comment" AS comment,
+                       operation."CreatedAtUtc" AS created_at_utc,
+                       NULL::uuid AS staff_member_id,
+                       'supplier'::text AS counterparty_kind
+                FROM financial_operations operation
+                INNER JOIN suppliers supplier ON supplier."Id" = operation."SupplierId"
+                INNER JOIN expense_types expense_type ON expense_type."Id" = operation."ExpenseTypeId"
+                WHERE @include_suppliers = TRUE
+                  AND operation."IsCanceled" = FALSE
+                  AND operation."OperationKind" = 'expense'
+                  AND operation."SupplierId" IS NOT NULL
+                  AND operation."ExpenseTypeId" IS NOT NULL
+                  AND operation."OperationDate" >= @date_from::date
+                  AND operation."OperationDate" <= @date_to::date
+                  {{supplierClause}}
+                  {{expenseTypeClause}}
+                  {{supplierSearchClause}}
+                UNION ALL
+                SELECT operation."Id", operation."OperationDate", operation."AccountingMonth",
+                       operation."StaffMemberId", member."FullName", operation."ExpenseTypeId",
+                       expense_type."Name", 0::numeric, operation."Amount", -operation."Amount",
+                       operation."DocumentNumber", operation."Comment", operation."CreatedAtUtc",
+                       operation."StaffMemberId", 'staff'::text
+                FROM financial_operations operation
+                INNER JOIN staff_members member ON member."Id" = operation."StaffMemberId"
+                INNER JOIN expense_types expense_type ON expense_type."Id" = operation."ExpenseTypeId"
+                WHERE @include_staff = TRUE
+                  AND operation."IsCanceled" = FALSE
+                  AND operation."OperationKind" = 'expense'
+                  AND operation."StaffMemberId" IS NOT NULL
+                  AND operation."ExpenseTypeId" IS NOT NULL
+                  AND operation."OperationDate" >= @date_from::date
+                  AND operation."OperationDate" <= @date_to::date
+                  {{staffClause}}
+                  {{expenseTypeClause}}
+                  {{staffSearchClause}}
+            ), page_rows AS (
+                SELECT filtered_rows.*,
+                       ROW_NUMBER() OVER (
+                           ORDER BY {{sortColumn}} {{direction}}, counterparty_name, expense_type_name, id)::int AS row_order
+                FROM filtered_rows
+                ORDER BY {{sortColumn}} {{direction}}, counterparty_name, expense_type_name, id
+                OFFSET @offset
+                {{limitClause}}
+            )
+            SELECT {{PageCategory}} AS "Category", row_order AS "RowOrder", id AS "Id",
+                   operation_date AS "OperationDate", accounting_month AS "AccountingMonth",
+                   counterparty_id AS "CounterpartyId", counterparty_name AS "CounterpartyName",
+                   expense_type_id AS "ExpenseTypeId", expense_type_name AS "ExpenseTypeName",
+                   accrual_amount AS "AccrualAmount", expense_amount AS "ExpenseAmount", difference AS "Difference",
+                   document_number AS "DocumentNumber", comment AS "Comment", created_at_utc AS "CreatedAtUtc",
+                   staff_member_id AS "StaffMemberId", counterparty_kind AS "CounterpartyKind",
+                   0::numeric AS "ExpenseTotal", 0 AS "RowCount"
+            FROM page_rows
+            UNION ALL
+            SELECT {{TotalsCategory}}, 0, NULL::uuid, NULL::date, NULL::date, NULL::uuid, NULL::text,
+                   NULL::uuid, NULL::text, 0::numeric, 0::numeric, 0::numeric, NULL::text, NULL::text,
+                   NULL::timestamptz, NULL::uuid, NULL::text, COALESCE(SUM(expense_amount), 0), COUNT(*)::int
+            FROM filtered_rows
+            ORDER BY "Category", "RowOrder"
+            """;
+        var parameters = new List<object>
+        {
+            new NpgsqlParameter<bool>("include_suppliers", includeSuppliers),
+            new NpgsqlParameter<bool>("include_staff", includeStaff),
+            new NpgsqlParameter<DateOnly>("date_from", dateFrom),
+            new NpgsqlParameter<DateOnly>("date_to", dateTo),
+            new NpgsqlParameter<int>("offset", offset)
+        };
+        if (supplierIds.Count > 0)
+        {
+            parameters.Add(new NpgsqlParameter<Guid[]>("supplier_ids", supplierIds.ToArray()));
+        }
+        if (staffMemberIds.Count > 0)
+        {
+            parameters.Add(new NpgsqlParameter<Guid[]>("staff_ids", staffMemberIds.ToArray()));
+        }
+        if (expenseTypeIds.Count > 0)
+        {
+            parameters.Add(new NpgsqlParameter<Guid[]>("expense_type_ids", expenseTypeIds.ToArray()));
+        }
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            parameters.Add(new NpgsqlParameter<string>("search", search.Trim().ToLowerInvariant()));
+        }
+        if (limit is > 0)
+        {
+            parameters.Add(new NpgsqlParameter<int>("limit", limit.Value));
+        }
+
+        var combinedRows = await dbContext.Database
+            .SqlQueryRaw<ExpensePaymentCombinedQueryRow>(sql, parameters.ToArray())
+            .ToListAsync(cancellationToken);
+        var totals = combinedRows.Single(row => row.Category == TotalsCategory);
+        var rows = combinedRows
+            .Where(row => row.Category == PageCategory)
+            .Select(row => new ExpenseReportRowDto(
+                PaymentRows,
+                row.OperationDate!.Value,
+                row.AccountingMonth!.Value,
+                row.CounterpartyId!.Value,
+                row.CounterpartyName!,
+                row.ExpenseTypeId!.Value,
+                row.ExpenseTypeName!,
+                row.AccrualAmount,
+                row.ExpenseAmount,
+                row.Difference,
+                row.DocumentNumber,
+                row.Comment,
+                row.StaffMemberId,
+                row.CounterpartyKind!))
+            .ToList();
+        return new ExpenseReportQueryData(0m, totals.ExpenseTotal, totals.RowCount, rows);
+    }
+
     private static IOrderedQueryable<ExpenseReportSortableProjection> ApplyPostgresSort(IQueryable<ExpenseReportSortableProjection> rows, ReportSort sort) =>
         sort.Field switch
         {
@@ -794,6 +983,27 @@ public sealed class EfExpenseReportQuery(GarageBalanceDbContext dbContext) : IEx
     private sealed class ExpenseReportProjection : ExpenseReportSortableProjection
     {
     }
+
+    private sealed record ExpensePaymentCombinedQueryRow(
+        int Category,
+        int RowOrder,
+        Guid? Id,
+        DateOnly? OperationDate,
+        DateOnly? AccountingMonth,
+        Guid? CounterpartyId,
+        string? CounterpartyName,
+        Guid? ExpenseTypeId,
+        string? ExpenseTypeName,
+        decimal AccrualAmount,
+        decimal ExpenseAmount,
+        decimal Difference,
+        string? DocumentNumber,
+        string? Comment,
+        DateTimeOffset? CreatedAtUtc,
+        Guid? StaffMemberId,
+        string? CounterpartyKind,
+        decimal ExpenseTotal,
+        int RowCount);
 
     private class ExpenseReportSortableProjection
     {
