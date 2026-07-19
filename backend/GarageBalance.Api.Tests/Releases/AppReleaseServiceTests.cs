@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.FileProviders;
+using System.Text;
 using System.Text.Json;
 
 namespace GarageBalance.Api.Tests.Releases;
@@ -250,6 +251,39 @@ public sealed class AppReleaseServiceTests
             Path.Combine(FindRepositoryRoot(), "backend", "GarageBalance.Api", "AppReleases", "releases.json"));
 
         Assert.DoesNotContain(staleEndpoint, releasesJson, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ReleaseCatalog_IsUtf8WithoutBomAndHasUniqueIdentifiers()
+    {
+        var path = Path.Combine(FindRepositoryRoot(), "backend", "GarageBalance.Api", "AppReleases", "releases.json");
+        var bytes = File.ReadAllBytes(path);
+
+        Assert.False(bytes.Length >= 3 && bytes[0] == 0xEF && bytes[1] == 0xBB && bytes[2] == 0xBF);
+        var json = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false, throwOnInvalidBytes: true).GetString(bytes);
+        using var document = JsonDocument.Parse(json);
+        var releases = document.RootElement.EnumerateArray().ToArray();
+        var releaseIds = releases.Select(item => item.GetProperty("releaseId").GetString()).ToArray();
+        var versions = releases.Select(item => item.GetProperty("version").GetString()).ToArray();
+        var allowedItemTypes = new HashSet<string>(["new", "improved", "fixed", "important"], StringComparer.Ordinal);
+
+        Assert.Equal(releaseIds.Length, releaseIds.Distinct(StringComparer.Ordinal).Count());
+        Assert.Equal(versions.Length, versions.Distinct(StringComparer.Ordinal).Count());
+        Assert.All(releases, release =>
+        {
+            Assert.False(string.IsNullOrWhiteSpace(release.GetProperty("releaseId").GetString()));
+            Assert.False(string.IsNullOrWhiteSpace(release.GetProperty("version").GetString()));
+            Assert.NotEqual(default, release.GetProperty("publishedAt").GetDateTimeOffset());
+            Assert.False(string.IsNullOrWhiteSpace(release.GetProperty("title").GetString()));
+            Assert.False(string.IsNullOrWhiteSpace(release.GetProperty("summary").GetString()));
+            var items = release.GetProperty("items").EnumerateArray().ToArray();
+            Assert.NotEmpty(items);
+            Assert.All(items, item =>
+            {
+                Assert.Contains(item.GetProperty("type").GetString()!, allowedItemTypes);
+                Assert.False(string.IsNullOrWhiteSpace(item.GetProperty("text").GetString()));
+            });
+        });
     }
 
     private sealed class TempContentRoot : IDisposable
