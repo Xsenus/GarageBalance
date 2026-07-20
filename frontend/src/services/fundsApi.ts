@@ -47,9 +47,9 @@ export type CancelFundOperationRequest = {
 }
 
 export type FundsClient = {
-  getFunds(accessToken: string): Promise<FundDto[]>
-  getOperations(accessToken: string, query?: { limit?: number; includeCanceled?: boolean }): Promise<FundOperationDto[]>
-  getOperationsPage?(accessToken: string, query?: { offset?: number; limit?: number; includeCanceled?: boolean }): Promise<FundOperationPageDto>
+  getFunds(accessToken: string, signal?: AbortSignal): Promise<FundDto[]>
+  getOperations(accessToken: string, query?: { limit?: number; includeCanceled?: boolean }, signal?: AbortSignal): Promise<FundOperationDto[]>
+  getOperationsPage?(accessToken: string, query?: { offset?: number; limit?: number; includeCanceled?: boolean }, signal?: AbortSignal): Promise<FundOperationPageDto>
   createOperation(accessToken: string, fundId: string, request: CreateFundOperationRequest): Promise<FundOperationDto>
   updateOperation(accessToken: string, operationId: string, request: UpdateFundOperationRequest): Promise<FundOperationDto>
   cancelOperation(accessToken: string, operationId: string, request: CancelFundOperationRequest): Promise<FundOperationDto>
@@ -77,10 +77,10 @@ async function requestJson<TResponse>(accessToken: string, path: string, init?: 
 }
 
 export const fundsApi: FundsClient = {
-  getFunds(accessToken) {
-    return requestJson(accessToken, '/api/funds')
+  getFunds(accessToken, signal) {
+    return requestJson(accessToken, '/api/funds', { signal })
   },
-  getOperations(accessToken, query = {}) {
+  getOperations(accessToken, query = {}, signal) {
     const search = new URLSearchParams()
     if (query.limit !== undefined) {
       search.set('limit', String(query.limit))
@@ -90,14 +90,14 @@ export const fundsApi: FundsClient = {
     }
     const queryString = search.toString()
     const suffix = queryString ? `?${queryString}` : ''
-    return requestJson(accessToken, `/api/funds/operations${suffix}`)
+    return requestJson(accessToken, `/api/funds/operations${suffix}`, { signal })
   },
-  getOperationsPage(accessToken, query = {}) {
+  getOperationsPage(accessToken, query = {}, signal) {
     const search = new URLSearchParams()
     search.set('offset', String(query.offset ?? 0))
     search.set('limit', String(query.limit ?? 25))
     search.set('includeCanceled', String(query.includeCanceled ?? false))
-    return requestJson(accessToken, `/api/funds/operations/page?${search.toString()}`)
+    return requestJson(accessToken, `/api/funds/operations/page?${search.toString()}`, { signal })
   },
   createOperation(accessToken, fundId, request) {
     return requestJson(accessToken, `/api/funds/${fundId}/operations`, { method: 'POST', body: JSON.stringify(request) })

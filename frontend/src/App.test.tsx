@@ -6101,6 +6101,37 @@ describe('App', () => {
     expect(within(fundsPanel).queryByRole('status', { name: 'Загружаем операции фондов' })).not.toBeInTheDocument()
   })
 
+  it('finishes a failed fund load and lets the user retry both data regions', async () => {
+    const user = userEvent.setup()
+    const getFunds = vi.fn()
+      .mockRejectedValueOnce(new Error('Фонды временно недоступны.'))
+      .mockResolvedValueOnce([createFund({ id: 'fund-electricity', name: 'Электроэнергия' })])
+    const getOperationsPage = vi.fn()
+      .mockRejectedValueOnce(new Error('Операции фондов временно недоступны.'))
+      .mockResolvedValueOnce({ items: [], totalCount: 0, offset: 0, limit: 25 })
+    const fundsClient = createFundsClient({ getFunds, getOperationsPage })
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} fundsClient={fundsClient} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    const dashboardTiles = await screen.findByRole('group', { name: 'Главные разделы' })
+    await user.click(within(dashboardTiles).getByRole('button', { name: /Управление\s+фондами/i }))
+
+    const fundsPanel = await screen.findByRole('region', { name: 'Управление фондами' })
+    const retryButton = await within(fundsPanel).findByRole('button', { name: 'Повторить загрузку фондов' })
+    expect(within(fundsPanel).getByRole('alert')).toHaveTextContent(/временно недоступны/i)
+    expect(within(fundsPanel).queryByRole('status', { name: 'Загружаем фонды' })).not.toBeInTheDocument()
+    expect(within(fundsPanel).queryByRole('status', { name: 'Загружаем операции фондов' })).not.toBeInTheDocument()
+
+    await user.click(retryButton)
+
+    expect(await within(fundsPanel).findByRole('table', { name: 'Фонды и собранные суммы' })).toHaveTextContent('Электроэнергия')
+    expect(await within(fundsPanel).findByRole('table', { name: 'Операции фондов' })).toHaveTextContent('Операций фондов пока нет.')
+    expect(within(fundsPanel).queryByRole('alert')).not.toBeInTheDocument()
+    expect(getFunds).toHaveBeenCalledTimes(2)
+    expect(getOperationsPage).toHaveBeenCalledTimes(2)
+  })
+
   it('lets administrator expand the sidebar and remembers the choice', async () => {
     const user = userEvent.setup()
     const { unmount } = render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)

@@ -6273,6 +6273,30 @@ h1 {
   margin: 0;
 }
 
+.funds-load-error {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.funds-load-error .form-error {
+  flex: 1;
+  margin: 0;
+}
+
+.funds-load-error .ghost-button {
+  flex: 0 0 auto;
+}
+
+@media (max-width: 720px) {
+  .funds-load-error {
+    align-items: stretch;
+    flex-direction: column;
+  }
+}
+
 .audit-event-row {
   display: grid;
   grid-template-columns: 190px 220px 120px minmax(150px, 1fr) minmax(220px, 1.4fr) minmax(130px, 0.8fr) minmax(150px, 1fr) minmax(150px, 1fr) minmax(160px, 1fr) 54px;
