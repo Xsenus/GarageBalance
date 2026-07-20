@@ -3518,6 +3518,105 @@ describe('App', () => {
     expect(correctHistoricalMeterReading).not.toHaveBeenCalled()
   })
 
+  it('keeps locally loaded garages selectable while the refreshed garage search is pending', async () => {
+    const user = userEvent.setup()
+    const garage = createGarage({ id: 'garage-local-search', number: '1', ownerName: 'Иванов Иван' })
+    const pendingSearch = new Promise<PagedResult<GarageDto>>(() => undefined)
+    const getGaragesPage = vi.fn(() => pendingSearch)
+
+    render(<App
+      authClient={createAuthClient()}
+      dictionaryClient={createDictionaryClient({ getGarages: async () => [garage], getGaragesPage })}
+      financeClient={createFinanceClient()}
+      importClient={createImportClient()}
+      reportClient={createReportClient()}
+      releaseClient={createReleaseClient()}
+      userClient={createUserClient()}
+    />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Платежи')
+    const prototype = within(await screen.findByRole('region', { name: 'Платежи' })).getByRole('region', { name: 'Форма платежей' })
+
+    await user.type(within(prototype).getByLabelText('Поиск номера гаража или ФИО владельца'), '1')
+    await waitFor(() => expect(getGaragesPage).toHaveBeenCalledWith('token', '1', 0, 20))
+    const localOption = within(prototype).getByRole('option', { name: /Гараж\s*1\s*Иванов Иван/ })
+    expect(within(prototype).getByRole('listbox', { name: 'Найденные гаражи' })).toHaveAttribute('aria-busy', 'true')
+    expect(within(prototype).queryByText('Ищем гаражи...')).not.toBeInTheDocument()
+
+    await user.click(localOption)
+    expect(within(prototype).getByLabelText('Выбранные гаражи')).toHaveTextContent('Гараж 1')
+  })
+
+  it('finishes a stalled garage search with a clear retry message', async () => {
+    const user = userEvent.setup()
+    const nativeSetTimeout = window.setTimeout.bind(window)
+    const setTimeoutSpy = vi.spyOn(window, 'setTimeout').mockImplementation(((handler: TimerHandler, timeout?: number, ...argumentsList: unknown[]) => (
+      nativeSetTimeout(handler, timeout === 10_000 ? 0 : timeout, ...argumentsList)
+    )) as typeof window.setTimeout)
+    const getGaragesPage = vi.fn(() => new Promise<PagedResult<GarageDto>>(() => undefined))
+
+    render(<App
+      authClient={createAuthClient()}
+      dictionaryClient={createDictionaryClient({ getGarages: async () => [], getGaragesPage })}
+      financeClient={createFinanceClient()}
+      importClient={createImportClient()}
+      reportClient={createReportClient()}
+      releaseClient={createReleaseClient()}
+      userClient={createUserClient()}
+    />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Платежи')
+    const prototype = within(await screen.findByRole('region', { name: 'Платежи' })).getByRole('region', { name: 'Форма платежей' })
+    await user.type(within(prototype).getByLabelText('Поиск номера гаража или ФИО владельца'), '404')
+    const timeoutAlert = await within(prototype).findByRole('alert')
+    setTimeoutSpy.mockRestore()
+
+    expect(getGaragesPage).toHaveBeenCalledWith('token', '404', 0, 20)
+    expect(timeoutAlert).toHaveTextContent('Поиск гаражей занял слишком много времени. Повторите запрос.')
+    expect(within(prototype).getByRole('listbox', { name: 'Найденные гаражи' })).toHaveAttribute('aria-busy', 'false')
+  })
+
+  it('ignores an outdated garage-search response after the query changes', async () => {
+    const user = userEvent.setup()
+    let resolveFirst!: (page: PagedResult<GarageDto>) => void
+    let resolveSecond!: (page: PagedResult<GarageDto>) => void
+    const firstRequest = new Promise<PagedResult<GarageDto>>((resolve) => { resolveFirst = resolve })
+    const secondRequest = new Promise<PagedResult<GarageDto>>((resolve) => { resolveSecond = resolve })
+    const getGaragesPage = vi.fn((_token: string, search?: string) => search === '1' ? firstRequest : secondRequest)
+
+    render(<App
+      authClient={createAuthClient()}
+      dictionaryClient={createDictionaryClient({ getGarages: async () => [], getGaragesPage })}
+      financeClient={createFinanceClient()}
+      importClient={createImportClient()}
+      reportClient={createReportClient()}
+      releaseClient={createReleaseClient()}
+      userClient={createUserClient()}
+    />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Платежи')
+    const prototype = within(await screen.findByRole('region', { name: 'Платежи' })).getByRole('region', { name: 'Форма платежей' })
+    const search = within(prototype).getByLabelText('Поиск номера гаража или ФИО владельца')
+    await user.type(search, '1')
+    await waitFor(() => expect(getGaragesPage).toHaveBeenCalledWith('token', '1', 0, 20))
+    await user.clear(search)
+    await user.type(search, '2')
+    await waitFor(() => expect(getGaragesPage).toHaveBeenCalledWith('token', '2', 0, 20))
+
+    await act(async () => resolveSecond({ items: [createGarage({ id: 'garage-new-query', number: '2', ownerName: 'Новый результат' })], totalCount: 1, offset: 0, limit: 20 }))
+    expect(await within(prototype).findByRole('option', { name: /Гараж\s*2\s*Новый результат/ })).toBeInTheDocument()
+    await act(async () => resolveFirst({ items: [createGarage({ id: 'garage-old-query', number: '1', ownerName: 'Устаревший результат' })], totalCount: 1, offset: 0, limit: 20 }))
+
+    expect(within(prototype).queryByText('Устаревший результат')).not.toBeInTheDocument()
+    expect(within(prototype).getByText('Новый результат')).toBeInTheDocument()
+  })
+
   it('shows payments prototype and opens payment form modals', async () => {
     const user = userEvent.setup()
     const garage = createGarage({ id: 'garage-1', number: '1', ownerName: 'Иванов Иван', peopleCount: 3, floorCount: 1, startingBalance: -5300, balance: 999999, overdueDebt: 999999 })

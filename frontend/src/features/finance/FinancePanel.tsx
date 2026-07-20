@@ -36,6 +36,7 @@ const financeScreenRequestLimit = 50
 const financePreviewRequestLimit = 8
 const dictionaryScreenRequestLimit = 100
 const paymentsFormStateScope = 'payments-prototype'
+const garageSearchTimeoutMs = 10_000
 
 type FinanceRecord = FinancialOperationDto | AccrualDto | SupplierAccrualDto | MeterReadingDto
 type FinancePreviewStatuses = {
@@ -3081,6 +3082,7 @@ function PaymentsPrototypePanel({
   const [garageSearchError, setGarageSearchError] = useState<string | null>(null)
   const [garageSearchOpen, setGarageSearchOpen] = useState(false)
   const garageSearchWrapRef = useRef<HTMLDivElement | null>(null)
+  const garageSearchRequestSequenceRef = useRef(0)
   const [selectedGarageId, setSelectedGarageId] = useState<string | null>(null)
   const selectedGarageIdRef = useRef<string | null>(null)
   const [incomeWorksheetRequests] = useState(() => new LatestRequestSequence())
@@ -3174,6 +3176,7 @@ function PaymentsPrototypePanel({
 
   useEffect(() => {
     const query = garageSearch.trim()
+    const requestSequence = ++garageSearchRequestSequenceRef.current
     if (!query) {
       setGarageSearchGarages([])
       setGarageSearchLoading(false)
@@ -3181,7 +3184,7 @@ function PaymentsPrototypePanel({
       return
     }
 
-    let cancelled = false
+    let requestTimeoutHandle = 0
     const handle = window.setTimeout(() => {
       setGarageSearchLoading(true)
       setGarageSearchError(null)
@@ -3189,27 +3192,37 @@ function PaymentsPrototypePanel({
         ? dictionaryClient.getGaragesPage(auth.accessToken, query, 0, 20)
             .then((page) => page.items)
         : dictionaryClient.getGarages(auth.accessToken, query, 20)
-      void request
+      const timeout = new Promise<GarageDto[]>((_resolve, reject) => {
+        requestTimeoutHandle = window.setTimeout(
+          () => reject(new Error('Поиск гаражей занял слишком много времени. Повторите запрос.')),
+          garageSearchTimeoutMs,
+        )
+      })
+      void Promise.race([request, timeout])
         .then((foundGarages) => {
-          if (!cancelled) {
+          if (garageSearchRequestSequenceRef.current === requestSequence) {
             setGarageSearchGarages(foundGarages)
           }
         })
         .catch((error: unknown) => {
-          if (!cancelled) {
+          if (garageSearchRequestSequenceRef.current === requestSequence) {
             setGarageSearchError(error instanceof Error ? error.message : 'Не удалось выполнить поиск гаражей.')
           }
         })
         .finally(() => {
-          if (!cancelled) {
+          window.clearTimeout(requestTimeoutHandle)
+          if (garageSearchRequestSequenceRef.current === requestSequence) {
             setGarageSearchLoading(false)
           }
         })
     }, 250)
 
     return () => {
-      cancelled = true
       window.clearTimeout(handle)
+      window.clearTimeout(requestTimeoutHandle)
+      if (garageSearchRequestSequenceRef.current === requestSequence) {
+        garageSearchRequestSequenceRef.current += 1
+      }
     }
   }, [auth.accessToken, dictionaryClient, garageSearch])
 
@@ -4809,10 +4822,10 @@ function PaymentsPrototypePanel({
             />
           </label>
           {shouldShowGarageResults ? (
-            <div className="payments-prototype-search-results" id={garageSearchListId} role="listbox" aria-label="Найденные гаражи">
-              {garageSearchLoading ? <span className="payments-prototype-search-empty" role="status">Ищем гаражи...</span> : null}
+            <div className="payments-prototype-search-results" id={garageSearchListId} role="listbox" aria-label="Найденные гаражи" aria-busy={garageSearchLoading}>
+              {garageSearchLoading && garageSearchResults.length === 0 ? <span className="payments-prototype-search-empty" role="status">Ищем гаражи...</span> : null}
               {garageSearchError ? <span className="payments-prototype-search-empty" role="alert">{garageSearchError}</span> : null}
-              {!garageSearchLoading && garageSearchResults.length > 0 ? garageSearchResults.map((garage) => (
+              {garageSearchResults.length > 0 ? garageSearchResults.map((garage) => (
                 <label className="payments-prototype-search-option" key={garage.id} role="option" aria-selected={selectedGarageIds.includes(garage.id)}>
                   <input
                     type="checkbox"

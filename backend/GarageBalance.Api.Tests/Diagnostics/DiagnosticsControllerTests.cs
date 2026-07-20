@@ -8,8 +8,15 @@ using GarageBalance.Api.Domain.Security;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.Abstractions;
+using Microsoft.AspNetCore.Mvc.ModelBinding;
+using Microsoft.AspNetCore.Mvc.ModelBinding.Validation;
 using Microsoft.AspNetCore.RateLimiting;
+using Microsoft.AspNetCore.Routing;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using System.ComponentModel.DataAnnotations;
+using System.Reflection;
 
 namespace GarageBalance.Api.Tests.Diagnostics;
 
@@ -21,12 +28,14 @@ public sealed class DiagnosticsControllerTests
         var logger = new CaptureLogger<DiagnosticsController>();
         var controller = CreateController(logger);
 
-        var result = controller.ReportClientError(new ClientErrorReportRequest(
-            "client-error-123",
-            "TypeError",
-            "ФИО и адрес из введенной формы не должны попасть в журнал",
-            "at OwnerForm password=real-secret owner@example.org +7 913 111-22-33 token:abc123",
-            "/settings"));
+        var result = controller.ReportClientError(new ClientErrorReportRequest
+        {
+            ClientErrorId = "client-error-123",
+            ErrorName = "TypeError",
+            Message = "ФИО и адрес из введенной формы не должны попасть в журнал",
+            ComponentStack = "at OwnerForm password=real-secret owner@example.org +7 913 111-22-33 token:abc123",
+            Route = "/settings"
+        });
 
         Assert.IsType<AcceptedResult>(result);
         var message = Assert.Single(logger.Messages);
@@ -36,6 +45,45 @@ public sealed class DiagnosticsControllerTests
         Assert.DoesNotContain("real-secret", message, StringComparison.Ordinal);
         Assert.DoesNotContain("owner@example.org", message, StringComparison.Ordinal);
         Assert.DoesNotContain("ФИО и адрес", message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ClientErrorReportRequest_UsesPropertyValidationOnARegularClass()
+    {
+        var requestType = typeof(ClientErrorReportRequest);
+
+        Assert.Null(requestType.GetMethod("<Clone>$", BindingFlags.Instance | BindingFlags.NonPublic));
+        Assert.Contains(requestType.GetProperty(nameof(ClientErrorReportRequest.ClientErrorId))!
+            .GetCustomAttributes<ValidationAttribute>(), attribute => attribute is RequiredAttribute);
+        Assert.Contains(requestType.GetProperty(nameof(ClientErrorReportRequest.ComponentStack))!
+            .GetCustomAttributes<ValidationAttribute>(), attribute => attribute is MaxLengthAttribute { Length: 8000 });
+    }
+
+    [Fact]
+    public void ClientErrorReportRequest_CanBeValidatedByMvc()
+    {
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddControllers();
+        using var serviceProvider = services.BuildServiceProvider();
+        var validator = serviceProvider.GetRequiredService<IObjectModelValidator>();
+        var actionContext = new ActionContext(
+            new DefaultHttpContext { RequestServices = serviceProvider },
+            new RouteData(),
+            new ActionDescriptor(),
+            new ModelStateDictionary());
+        var request = new ClientErrorReportRequest
+        {
+            ClientErrorId = "client-error-456",
+            ErrorName = "TypeError",
+            Message = "Ошибка интерфейса",
+            ComponentStack = "at PaymentsPanel",
+            Route = "/payments"
+        };
+
+        validator.Validate(actionContext, validationState: null, prefix: string.Empty, model: request);
+
+        Assert.True(actionContext.ModelState.IsValid);
     }
 
     [Fact]
