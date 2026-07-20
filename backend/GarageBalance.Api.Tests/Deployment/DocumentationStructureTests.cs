@@ -20,6 +20,7 @@ public sealed partial class DocumentationStructureTests
         "monthly-cycle-checklist.md",
         "postgres-backup-restore.md",
         "reports-guide.md",
+        "roadmaps/docker-user-distribution-roadmap.md",
         "security-data-protection.md",
         "testing-guide.md",
         "troubleshooting-guide.md",

@@ -23,11 +23,24 @@ GarageBalance — веб-приложение для финансового уч
 
 ### Требования
 
-- Git.
-- Docker Desktop или Docker Engine с Compose.
+- Docker Desktop для Windows в режиме Linux containers.
 - Свободные локальные порты `5173`, `5080` и `5432`.
 
-### 1. Подготовьте конфигурацию
+Git, .NET SDK и Node.js конечному пользователю не требуются.
+
+### Готовый пользовательский релиз
+
+1. На странице [Releases](https://github.com/Xsenus/GarageBalance/releases) скачайте `GarageBalance-Docker-ВЕРСИЯ.zip`.
+2. Полностью распакуйте архив, например в `C:\GarageBalance`.
+3. Запустите `start.cmd` и дождитесь открытия браузера.
+
+Скрипт проверит Docker, сам создаст локальный `.env` с уникальными секретами, загрузит готовые образы приложения, запустит PostgreSQL, применит миграции и дождётся успешного `/health`. При первом открытии создайте администратора.
+
+Для обновления распакуйте новый ZIP поверх прежней папки и запустите `update.cmd`: перед заменой контейнеров будет создана и проверена резервная копия. `backup.cmd`, `diagnostics.cmd` и `stop.cmd` доступны в той же папке. Полная инструкция: [docs/docker-install-update-guide.md](docs/docker-install-update-guide.md).
+
+### Запуск исходного кода разработчиком
+
+Если необходимо собрать контейнеры из исходников, установите Git и выполните:
 
 ```powershell
 git clone https://github.com/Xsenus/GarageBalance.git
@@ -42,7 +55,7 @@ Copy-Item .env.example .env
 
 Файл `.env` содержит секреты и не должен попадать в Git.
 
-### 2. Запустите приложение
+После замены `POSTGRES_PASSWORD` и `JWT_SIGNING_KEY` в `.env`:
 
 ```powershell
 docker compose config
@@ -57,7 +70,7 @@ docker compose ps
 
 При первом открытии создайте первого администратора, затем войдите под его учётной записью.
 
-### 3. Остановка и повторный запуск
+Остановка и повторный запуск:
 
 ```powershell
 docker compose stop
@@ -65,8 +78,6 @@ docker compose start
 ```
 
 Команда `docker compose down -v` удаляет постоянные тома с базой и ключами защиты. Не используйте её для рабочей установки.
-
-Полная инструкция по установке, обновлению и сохранности данных: [docs/docker-install-update-guide.md](docs/docker-install-update-guide.md).
 
 ## Локальная разработка
 
@@ -131,6 +142,7 @@ npm run check:bundle
 
 ```powershell
 .\infrastructure\scripts\verify-package-privacy.ps1
+.\infrastructure\scripts\check-docker-distribution.ps1
 git diff --check
 ```
 

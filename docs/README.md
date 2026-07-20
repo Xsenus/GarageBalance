@@ -18,7 +18,7 @@
 
 ## Установка и обновление
 
-- [Docker-установка](docker-install-update-guide.md) — основной способ локальной установки.
+- [Docker-установка](docker-install-update-guide.md) — готовый ZIP для пользователя, сборка из исходников, обновление и сохранность данных.
 - [Локальный ПК без домена](local-pc-install-checklist.md) — установка на одном Windows-компьютере.
 - [VPS, домен и TLS](vps-deployment-checklist.md) — staging/production-подобное развёртывание.
 - [Обновление версии](version-update-checklist.md) — безопасная публикация и rollback.
@@ -31,6 +31,7 @@
 - [Тестирование](testing-guide.md) — быстрые и полные проверки.
 - [Производительность](final-performance-checklist.md) — постоянные ограничения для запросов и интерфейса.
 - [Интеграции](integrations-guide.md) — импорт Access, 1C Fresh и печать документов.
+- [Активный roadmap Docker-дистрибутива](roadmaps/docker-user-distribution-roadmap.md) — подготовка сценария «Docker Desktop + один ZIP» и оставшаяся приемка на чистом Windows-компьютере.
 
 ## Правила актуальности
 

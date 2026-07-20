@@ -1,0 +1,87 @@
+name: garagebalance
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    container_name: garagebalance-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-garagebalance}
+      POSTGRES_USER: ${POSTGRES_USER:-garagebalance}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?GarageBalance environment is not initialized}
+    ports:
+      - "${POSTGRES_BIND_ADDRESS:-127.0.0.1}:${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ${BACKUP_HOST_PATH:-./backups}:/backups
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-garagebalance} -d ${POSTGRES_DB:-garagebalance}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  api:
+    image: ghcr.io/xsenus/garagebalance-api:${GARAGEBALANCE_VERSION:?GarageBalance version is not configured}
+    pull_policy: never
+    container_name: garagebalance-api
+    restart: unless-stopped
+    init: true
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Production}
+      ASPNETCORE_URLS: http://+:8080
+      ConnectionStrings__DefaultConnection: Host=postgres;Port=5432;Database=${POSTGRES_DB:-garagebalance};Username=${POSTGRES_USER:-garagebalance};Password=${POSTGRES_PASSWORD:?GarageBalance environment is not initialized}
+      Jwt__SigningKey: ${JWT_SIGNING_KEY:?GarageBalance environment is not initialized}
+      DataProtection__KeysPath: ${DATA_PROTECTION_KEYS_PATH:-/var/lib/garagebalance/keys}
+      Cors__AllowedOrigins__0: ${FRONTEND_ORIGIN:-http://127.0.0.1:5173}
+      Database__ApplyMigrationsOnStartup: ${APPLY_MIGRATIONS_ON_STARTUP:-true}
+      Database__RequirePreMigrationBackup: ${REQUIRE_PRE_MIGRATION_BACKUP:-true}
+      DatabaseBackup__Enabled: ${DATABASE_BACKUP_ENABLED:-true}
+      DatabaseBackup__AutomaticEnabled: ${DATABASE_BACKUP_AUTOMATIC_ENABLED:-true}
+      DatabaseBackup__Directory: /backups
+      DatabaseBackup__IntervalHours: ${DATABASE_BACKUP_INTERVAL_HOURS:-24}
+      DatabaseBackup__RetentionCount: ${DATABASE_BACKUP_RETENTION_COUNT:-30}
+      DatabaseBackup__PgDumpPath: pg_dump
+      DatabaseBackup__PgRestorePath: pg_restore
+      DiagnosticLogging__Enabled: ${DIAGNOSTIC_LOGGING_ENABLED:-true}
+      DiagnosticLogging__Directory: /logs
+      DiagnosticLogging__RetentionDays: ${DIAGNOSTIC_LOGGING_RETENTION_DAYS:-14}
+      DiagnosticLogging__MaxFileSizeMb: ${DIAGNOSTIC_LOGGING_MAX_FILE_SIZE_MB:-10}
+      DiagnosticLogging__PackageDays: ${DIAGNOSTIC_PACKAGE_DAYS:-7}
+      DiagnosticLogging__PackageMaxSizeMb: ${DIAGNOSTIC_PACKAGE_MAX_SIZE_MB:-20}
+    volumes:
+      - data-protection-keys:${DATA_PROTECTION_KEYS_PATH:-/var/lib/garagebalance/keys}
+      - ${BACKUP_HOST_PATH:-./backups}:/backups
+      - ${LOG_HOST_PATH:-./logs}:/logs
+    ports:
+      - "${API_BIND_ADDRESS:-127.0.0.1}:${API_PORT:-5080}:8080"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8080/health > /dev/null"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 45s
+    stop_grace_period: 30s
+
+  frontend:
+    image: ghcr.io/xsenus/garagebalance-frontend:${GARAGEBALANCE_VERSION:?GarageBalance version is not configured}
+    pull_policy: never
+    container_name: garagebalance-frontend
+    restart: unless-stopped
+    init: true
+    depends_on:
+      api:
+        condition: service_healthy
+    ports:
+      - "${FRONTEND_BIND_ADDRESS:-127.0.0.1}:${FRONTEND_PORT:-5173}:80"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://127.0.0.1/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  postgres-data:
+  data-protection-keys:

@@ -80,6 +80,8 @@ dotnet format --verify-no-changes
 
 Для автоматической выкладки в `master` эти проверки выполняет `.github/workflows/deploy-staging.yml`. Если GitHub Actions падает на любом шаге, релиз не отправляется на VPS.
 
+Для готового пользовательского Docker ZIP эти же обязательные проверки выполняет `.github/workflows/publish-docker-release.yml`. Workflow не публикует images и установочный архив, пока backend/frontend quality gate не пройдет полностью.
+
 ## 5. Миграционный SQL
 
 Перед применением миграций сформировать idempotent SQL:
@@ -95,6 +97,17 @@ dotnet format --verify-no-changes
 - [ ] Если схема менялась, миграции применяются только после backup и restore-check.
 
 ## 6. Применение обновления
+
+Публикация готового Docker-релиза владельцем проекта:
+
+```powershell
+git tag v0.759.0
+git push origin v0.759.0
+```
+
+Tag `vX.Y.Z` запускает `Publish Docker release`: GitHub Actions проверяет код, собирает versioned API/frontend images, сохраняет их внутри `GarageBalance-Docker-X.Y.Z.zip`, вычисляет SHA-256 и прикладывает оба файла к GitHub Release. Tag создается только для уже проверенного commit и только после отдельного разрешения на push.
+
+Обновление готовой пользовательской установки: распаковать новый ZIP поверх существующей папки и запустить `update.cmd`. Команда сама создает проверенный backup до импорта новой версии; `.env`, база, ключи, backups и логи сохраняются.
 
 Локальный Docker-вариант:
 

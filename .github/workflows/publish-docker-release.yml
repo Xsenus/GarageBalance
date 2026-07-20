@@ -1,0 +1,225 @@
+name: Publish Docker release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release version without v prefix"
+        required: true
+        type: string
+
+concurrency:
+  group: garagebalance-docker-release-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  packages: write
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true
+  API_IMAGE: ghcr.io/xsenus/garagebalance-api
+  FRONTEND_IMAGE: ghcr.io/xsenus/garagebalance-frontend
+  GARAGEBALANCE_POSTGRES_TEST_CONNECTION: Host=127.0.0.1;Port=5432;Database=garagebalance_test;Username=garagebalance_test;Password=garagebalance_test_password
+
+jobs:
+  prepare:
+    name: Validate release version
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - name: Resolve version
+        id: version
+        shell: bash
+        env:
+          MANUAL_VERSION: ${{ inputs.version }}
+        run: |
+          if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
+            VERSION="${GITHUB_REF_NAME#v}"
+          else
+            VERSION="${MANUAL_VERSION}"
+          fi
+          if [[ ! "${VERSION}" =~ ^[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$ ]]; then
+            echo "Invalid GarageBalance version: ${VERSION}" >&2
+            exit 1
+          fi
+          echo "version=${VERSION}" >> "${GITHUB_OUTPUT}"
+
+  verify:
+    name: Verify release sources
+    needs: prepare
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: garagebalance_test
+          POSTGRES_PASSWORD: garagebalance_test_password
+          POSTGRES_DB: garagebalance_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U garagebalance_test -d garagebalance_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Restore tools and dependencies
+        run: |
+          dotnet restore GarageBalance.slnx
+          dotnet tool restore
+          npm ci --prefix frontend
+
+      - name: Check privacy and distribution contracts
+        shell: pwsh
+        run: |
+          ./infrastructure/scripts/verify-package-privacy.ps1
+          ./infrastructure/scripts/check-docker-distribution.ps1
+
+      - name: Test backend
+        shell: pwsh
+        run: |
+          dotnet test GarageBalance.slnx --configuration Release --no-restore `
+            --collect:"XPlat Code Coverage" `
+            --settings backend-coverage.runsettings `
+            --results-directory artifacts/coverage-backend
+          ./infrastructure/scripts/verify-backend-coverage.ps1 `
+            -ResultsDirectory artifacts/coverage-backend
+
+      - name: Check backend formatting
+        run: dotnet format GarageBalance.slnx --verify-no-changes --no-restore
+
+      - name: Test and build frontend
+        working-directory: frontend
+        run: |
+          npm run test:coverage
+          npm run lint
+          npm run build
+          npm run check:bundle
+
+      - name: Generate idempotent migration SQL
+        run: |
+          mkdir -p artifacts
+          dotnet tool run dotnet-ef migrations script --idempotent \
+            --project backend/GarageBalance.Api/GarageBalance.Api.csproj \
+            --startup-project backend/GarageBalance.Api/GarageBalance.Api.csproj \
+            --output artifacts/deploy-migrations.sql
+          test -s artifacts/deploy-migrations.sql
+
+  publish:
+    name: Build images and installation ZIP
+    needs:
+      - prepare
+      - verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      VERSION: ${{ needs.prepare.outputs.version }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and publish API image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: backend/GarageBalance.Api/Dockerfile
+          platforms: linux/amd64
+          push: true
+          tags: ${{ env.API_IMAGE }}:${{ env.VERSION }}
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.version=${{ env.VERSION }}
+
+      - name: Build and publish frontend image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: frontend/Dockerfile
+          platforms: linux/amd64
+          push: true
+          tags: ${{ env.FRONTEND_IMAGE }}:${{ env.VERSION }}
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.version=${{ env.VERSION }}
+
+      - name: Assemble autonomous Windows package
+        shell: bash
+        run: |
+          set -euo pipefail
+          package_root="artifacts/GarageBalance-${VERSION}"
+          mkdir -p "${package_root}/images"
+          cp -a distribution/docker/. "${package_root}/"
+          sed -i "s/__GARAGEBALANCE_VERSION__/${VERSION}/g" \
+            "${package_root}/.env.example" \
+            "${package_root}/release-version.txt"
+
+          docker pull "${API_IMAGE}:${VERSION}"
+          docker pull "${FRONTEND_IMAGE}:${VERSION}"
+          docker save "${API_IMAGE}:${VERSION}" | gzip -9 > \
+            "${package_root}/images/garagebalance-api-${VERSION}.tar.gz"
+          docker save "${FRONTEND_IMAGE}:${VERSION}" | gzip -9 > \
+            "${package_root}/images/garagebalance-frontend-${VERSION}.tar.gz"
+
+          test -s "${package_root}/images/garagebalance-api-${VERSION}.tar.gz"
+          test -s "${package_root}/images/garagebalance-frontend-${VERSION}.tar.gz"
+          (cd artifacts && zip -9 -r "GarageBalance-Docker-${VERSION}.zip" "GarageBalance-${VERSION}")
+          (
+            cd artifacts
+            sha256sum "GarageBalance-Docker-${VERSION}.zip" > \
+              "GarageBalance-Docker-${VERSION}.sha256"
+          )
+
+      - name: Upload installation artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: GarageBalance-Docker-${{ env.VERSION }}
+          path: |
+            artifacts/GarageBalance-Docker-${{ env.VERSION }}.zip
+            artifacts/GarageBalance-Docker-${{ env.VERSION }}.sha256
+          retention-days: 30
+
+      - name: Create GitHub Release
+        if: github.ref_type == 'tag'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "${GITHUB_REF_NAME}" \
+            "artifacts/GarageBalance-Docker-${VERSION}.zip" \
+            "artifacts/GarageBalance-Docker-${VERSION}.sha256" \
+            --verify-tag \
+            --generate-notes \
+            --title "GarageBalance ${VERSION}"
