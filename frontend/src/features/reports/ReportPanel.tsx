@@ -1,6 +1,6 @@
 import { useEffect, useId, useRef, useState } from 'react'
 import type { CSSProperties, ReactNode } from 'react'
-import { FileSpreadsheet, FileText } from 'lucide-react'
+import { FileSpreadsheet, FileText, LoaderCircle } from 'lucide-react'
 import type { AuthResponse } from '../../services/authApi'
 import type { AccountingTypeDto, DictionaryClient, GarageDto, StaffMemberDto, SupplierDto } from '../../services/dictionariesApi'
 import type { BankDepositReportDto, CashPaymentReportDto, ConsolidatedReportDto, ExpenseReportDto, FeeReportDto, FundChangeReportDto, GarageDetailReportDto, IncomeReportDto, ReportClient } from '../../services/reportsApi'
@@ -8,6 +8,7 @@ import { EmptyState, TableLoadingState } from '../../shared/AsyncState'
 import { buildReportFileName, buildSnapshotReportFileName, downloadBlob } from '../../shared/fileExports'
 import { FormError } from '../../shared/formFeedback'
 import { formatMoney, formatMonth, formatOperationTime, getCurrentMonthInputValue, getLocalDateInputValue, getPreviousMonthInputValue } from '../../shared/formatters'
+import { LocalizedDatePicker } from '../../shared/LocalizedDatePicker'
 import { createClientPage } from '../../shared/pagination'
 import { advanceReportSort } from '../../shared/reportSorting'
 import type { ReportSort } from '../../shared/reportSorting'
@@ -860,49 +861,54 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
 
   function renderReportExportButton(extension: 'xlsx' | 'pdf', exportKey: string, onClick: () => void) {
     const label = extension === 'xlsx' ? 'Скачать XLSX' : 'Скачать PDF'
-    const loadingLabel = extension === 'xlsx' ? 'Готовим XLSX...' : 'Готовим PDF...'
     const Icon = extension === 'xlsx' ? FileSpreadsheet : FileText
+    const isExporting = reportExporting === exportKey
 
     return (
-      <button className="secondary-button report-export-button" type="button" aria-label={label} title={label} data-tooltip={label} disabled={reportExporting !== null} onClick={onClick}>
-        <Icon size={16} aria-hidden="true" />
-        <span>{reportExporting === exportKey ? loadingLabel : label}</span>
+      <button className={`secondary-button report-export-button report-export-button--${extension}`} type="button" aria-label={label} aria-busy={isExporting} title={label} data-tooltip={label} disabled={reportExporting !== null} onClick={onClick}>
+        {isExporting ? <LoaderCircle className="report-export-button__spinner" size={18} aria-hidden="true" /> : <Icon size={18} aria-hidden="true" />}
       </button>
     )
   }
 
-  function renderMonthlyFilter(key: ReportMonthlyFilterKey, labels: { from: string; to: string; extra?: ReactNode }) {
+  function renderMonthlyFilter(key: ReportMonthlyFilterKey, labels: { from: string; to: string; extra?: ReactNode; actions?: ReactNode }) {
     const filter = monthlyFilters[key]
     return (
       <div className="report-workbook-filter" aria-label={`Фильтры отчета ${labels.from}`}>
-        <label>
-          <span>{labels.from}</span>
-          <input aria-label={labels.from} type="month" value={filter.monthFrom} onChange={(event) => updateMonthlyFilter(key, 'monthFrom', event.target.value)} />
-        </label>
-        <label>
-          <span>{labels.to}</span>
-          <input aria-label={labels.to} type="month" value={filter.monthTo} onChange={(event) => updateMonthlyFilter(key, 'monthTo', event.target.value)} />
-        </label>
-        <button className="link-button report-period-button" type="button" onClick={() => applyPreviousMonth(key)}>Предыдущий</button>
-        {labels.extra}
+        <div className="report-workbook-filter__fields">
+          <label>
+            <span>{labels.from}</span>
+            <LocalizedDatePicker ariaLabel={labels.from} mode="month" value={filter.monthFrom} onChange={(value) => updateMonthlyFilter(key, 'monthFrom', value)} required />
+          </label>
+          <label>
+            <span>{labels.to}</span>
+            <LocalizedDatePicker ariaLabel={labels.to} mode="month" value={filter.monthTo} onChange={(value) => updateMonthlyFilter(key, 'monthTo', value)} required />
+          </label>
+          <button className="link-button report-period-button" type="button" onClick={() => applyPreviousMonth(key)}>Предыдущий</button>
+        </div>
+        {labels.actions ? <div className="report-workbook-filter__actions" role="group" aria-label="Действия с отчетом">{labels.actions}</div> : null}
+        {labels.extra ? <div className="report-workbook-filter__extra">{labels.extra}</div> : null}
       </div>
     )
   }
 
-  function renderDateFilter(key: ReportDateFilterKey, labels: { from: string; to: string; extra?: ReactNode }) {
+  function renderDateFilter(key: ReportDateFilterKey, labels: { from: string; to: string; extra?: ReactNode; actions?: ReactNode }) {
     const filter = dateFilters[key]
     return (
       <div className="report-workbook-filter" aria-label={`Фильтры отчета ${labels.from}`}>
-        <label>
-          <span>{labels.from}</span>
-          <input aria-label={labels.from} type="date" value={filter.dateFrom} onChange={(event) => updateDateFilter(key, 'dateFrom', event.target.value)} />
-        </label>
-        <label>
-          <span>{labels.to}</span>
-          <input aria-label={labels.to} type="date" value={filter.dateTo} onChange={(event) => updateDateFilter(key, 'dateTo', event.target.value)} />
-        </label>
-        <button className="link-button report-period-button" type="button" onClick={() => applyToday(key)}>Сегодня</button>
-        {labels.extra}
+        <div className="report-workbook-filter__fields">
+          <label>
+            <span>{labels.from}</span>
+            <LocalizedDatePicker ariaLabel={labels.from} mode="date" value={filter.dateFrom} onChange={(value) => updateDateFilter(key, 'dateFrom', value)} required />
+          </label>
+          <label>
+            <span>{labels.to}</span>
+            <LocalizedDatePicker ariaLabel={labels.to} mode="date" value={filter.dateTo} onChange={(value) => updateDateFilter(key, 'dateTo', value)} required />
+          </label>
+          <button className="link-button report-period-button" type="button" onClick={() => applyToday(key)}>Сегодня</button>
+        </div>
+        {labels.actions ? <div className="report-workbook-filter__actions" role="group" aria-label="Действия с отчетом">{labels.actions}</div> : null}
+        {labels.extra ? <div className="report-workbook-filter__extra">{labels.extra}</div> : null}
       </div>
     )
   }
@@ -1033,11 +1039,11 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
       const consolidatedPage = createClientPage(monthlyRows, consolidatedPageNumber, consolidatedPageSize)
       return (
         <ReportWorkbookSheet title="Консолидированный отчёт">
-          {renderMonthlyFilter('consolidated', { from: 'Месяц с', to: 'Месяц по' })}
-          <div className="report-workbook-toolbar" role="group" aria-label="Выгрузка консолидированного отчета">
-            {renderReportExportButton('xlsx', 'consolidated-xlsx', () => void downloadConsolidatedReport('xlsx'))}
-            {renderReportExportButton('pdf', 'consolidated-pdf', () => void downloadConsolidatedReport('pdf'))}
-          </div>
+          {renderMonthlyFilter('consolidated', {
+            from: 'Месяц с',
+            to: 'Месяц по',
+            actions: <>{renderReportExportButton('xlsx', 'consolidated-xlsx', () => void downloadConsolidatedReport('xlsx'))}{renderReportExportButton('pdf', 'consolidated-pdf', () => void downloadConsolidatedReport('pdf'))}</>,
+          })}
           {consolidatedReportLoading ? <TableLoadingState label="Загружаем сводный отчёт" /> : null}
           {consolidatedReportError ? <FormError>{consolidatedReportError}</FormError> : null}
           {renderReportTable(
@@ -1106,6 +1112,24 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
           {renderMonthlyFilter('garages', {
             from: 'Месяц с',
             to: 'Месяц по',
+            actions: (
+              <>
+                <button
+                  className="secondary-button report-group-button"
+                  type="button"
+                  aria-pressed={garageAccrualsGrouped}
+                  disabled={garageReportLoading}
+                  onClick={() => {
+                    setGaragePageRequest((current) => ({ ...current, offset: 0 }))
+                    setGarageAccrualsGrouped((current) => !current)
+                  }}
+                >
+                  {garageAccrualsGrouped ? 'Разгруппировать начисления' : 'Сгруппировать начисления'}
+                </button>
+                {renderReportExportButton('xlsx', 'garages-xlsx', () => void downloadGarageReport('xlsx'))}
+                {renderReportExportButton('pdf', 'garages-pdf', () => void downloadGarageReport('pdf'))}
+              </>
+            ),
             extra: (
               <ReportMultiSelect
                 label="Гаражи"
@@ -1126,24 +1150,6 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
             <strong>ИТОГО начислений</strong>
             <strong>ИТОГО поступлений</strong>
             <strong>Разница</strong>
-          </div>
-          <div className="report-workbook-toolbar" role="group" aria-label="Группировка отчета по гаражам">
-            <button
-              className="secondary-button"
-              type="button"
-              aria-pressed={garageAccrualsGrouped}
-              disabled={garageReportLoading}
-              onClick={() => {
-                setGaragePageRequest((current) => ({ ...current, offset: 0 }))
-                setGarageAccrualsGrouped((current) => !current)
-              }}
-            >
-              {garageAccrualsGrouped ? 'Разгруппировать начисления' : 'Сгруппировать начисления'}
-            </button>
-          </div>
-          <div className="report-workbook-toolbar" role="group" aria-label="Выгрузка отчета по гаражам">
-            {renderReportExportButton('xlsx', 'garages-xlsx', () => void downloadGarageReport('xlsx'))}
-            {renderReportExportButton('pdf', 'garages-pdf', () => void downloadGarageReport('pdf'))}
           </div>
           {renderReportTable(
             'Отчет по гаражам',
@@ -1178,6 +1184,7 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
           {renderMonthlyFilter('payouts', {
             from: 'Месяц с',
             to: 'Месяц по',
+            actions: <>{renderReportExportButton('xlsx', 'payouts-xlsx', () => void downloadPayoutReport('xlsx'))}{renderReportExportButton('pdf', 'payouts-pdf', () => void downloadPayoutReport('pdf'))}</>,
             extra: (
               <ReportMultiSelect
                 label="Поставщики/сотрудники"
@@ -1194,10 +1201,6 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
           })}
           {payoutReportLoading ? <TableLoadingState label="Загружаем выплаты..." /> : null}
           {payoutReportError ? <FormError>{payoutReportError}</FormError> : null}
-          <div className="report-workbook-toolbar" role="group" aria-label="Выгрузка отчета по выплатам">
-            {renderReportExportButton('xlsx', 'payouts-xlsx', () => void downloadPayoutReport('xlsx'))}
-            {renderReportExportButton('pdf', 'payouts-pdf', () => void downloadPayoutReport('pdf'))}
-          </div>
           <div className="report-workbook-summary-row">
             <strong>ИТОГО начислений</strong>
             <strong>ИТОГО выплат</strong>
@@ -1236,6 +1239,7 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
           {renderDateFilter('income', {
             from: 'С',
             to: 'По',
+            actions: <>{renderReportExportButton('xlsx', 'income-xlsx', () => void downloadIncomeReport('xlsx'))}{renderReportExportButton('pdf', 'income-pdf', () => void downloadIncomeReport('pdf'))}</>,
             extra: (
               <ReportMultiSelect
                 label="Гаражи"
@@ -1252,10 +1256,6 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
           })}
           {incomeReportLoading ? <TableLoadingState label="Загружаем поступления..." /> : null}
           {incomeReportError ? <FormError>{incomeReportError}</FormError> : null}
-          <div className="report-workbook-toolbar" role="group" aria-label="Выгрузка отчета по поступлениям">
-            {renderReportExportButton('xlsx', 'income-xlsx', () => void downloadIncomeReport('xlsx'))}
-            {renderReportExportButton('pdf', 'income-pdf', () => void downloadIncomeReport('pdf'))}
-          </div>
           <div className="report-workbook-summary-row report-workbook-summary-row--single"><strong>ИТОГО</strong></div>
           {renderReportTable(
             'Отчет по поступлениям',
@@ -1286,13 +1286,9 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
       }
       return (
         <ReportWorkbookSheet title="Отчёт по оплатам из кассы">
-          {renderDateFilter('cashPayments', { from: 'С', to: 'По' })}
+          {renderDateFilter('cashPayments', { from: 'С', to: 'По', actions: <>{renderReportExportButton('xlsx', 'cashPayments-xlsx', () => void downloadCashOrBankReport('cashPayments', 'xlsx'))}{renderReportExportButton('pdf', 'cashPayments-pdf', () => void downloadCashOrBankReport('cashPayments', 'pdf'))}</> })}
           {cashPaymentReportLoading ? <TableLoadingState label="Загружаем оплаты из кассы..." /> : null}
           {cashPaymentReportError ? <FormError>{cashPaymentReportError}</FormError> : null}
-          <div className="report-workbook-toolbar" role="group" aria-label="Выгрузка отчета по оплатам из кассы">
-            {renderReportExportButton('xlsx', 'cashPayments-xlsx', () => void downloadCashOrBankReport('cashPayments', 'xlsx'))}
-            {renderReportExportButton('pdf', 'cashPayments-pdf', () => void downloadCashOrBankReport('cashPayments', 'pdf'))}
-          </div>
           <div className="report-workbook-summary-row report-workbook-summary-row--single"><strong>ИТОГО</strong></div>
           {renderReportTable(
             'Отчет по оплатам из кассы',
@@ -1321,13 +1317,9 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
       }
       return (
         <ReportWorkbookSheet title="Отчёт по сдаче кассы в банк">
-          {renderDateFilter('bankDeposits', { from: 'С', to: 'По' })}
+          {renderDateFilter('bankDeposits', { from: 'С', to: 'По', actions: <>{renderReportExportButton('xlsx', 'bankDeposits-xlsx', () => void downloadCashOrBankReport('bankDeposits', 'xlsx'))}{renderReportExportButton('pdf', 'bankDeposits-pdf', () => void downloadCashOrBankReport('bankDeposits', 'pdf'))}</> })}
           {bankDepositReportLoading ? <TableLoadingState label="Загружаем сдачу кассы в банк..." /> : null}
           {bankDepositReportError ? <FormError>{bankDepositReportError}</FormError> : null}
-          <div className="report-workbook-toolbar" role="group" aria-label="Выгрузка отчета по сдаче кассы в банк">
-            {renderReportExportButton('xlsx', 'bankDeposits-xlsx', () => void downloadCashOrBankReport('bankDeposits', 'xlsx'))}
-            {renderReportExportButton('pdf', 'bankDeposits-pdf', () => void downloadCashOrBankReport('bankDeposits', 'pdf'))}
-          </div>
           <div className="report-workbook-summary-row report-workbook-summary-row--single"><strong>ИТОГО</strong></div>
           {renderReportTable(
             'Отчет по сдаче кассы в банк',
@@ -1382,14 +1374,16 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
           {feeReportLoading ? <TableLoadingState label="Загружаем отчёт по сборам" /> : null}
           {feeReportError ? <FormError>{feeReportError}</FormError> : null}
           <div className="report-workbook-filter report-workbook-filter--single" aria-label="Фильтры отчета по сборам">
-            <label className="report-workbook-filter-wide">
-              <span>Вариация сбора</span>
-              <input aria-label="Вариация сбора" list={feeOptionsId} value={feeVariationFilter} onChange={(event) => setFeeVariationFilter(event.target.value)} placeholder="Название сбора" />
-            </label>
-          </div>
-          <div className="report-workbook-toolbar" role="group" aria-label="Выгрузка отчета по сборам">
-            {renderReportExportButton('xlsx', 'fees-xlsx', () => void downloadFeeReport('xlsx'))}
-            {renderReportExportButton('pdf', 'fees-pdf', () => void downloadFeeReport('pdf'))}
+            <div className="report-workbook-filter__fields">
+              <label className="report-workbook-filter-wide">
+                <span>Вариация сбора</span>
+                <input aria-label="Вариация сбора" list={feeOptionsId} value={feeVariationFilter} onChange={(event) => setFeeVariationFilter(event.target.value)} placeholder="Название сбора" />
+              </label>
+            </div>
+            <div className="report-workbook-filter__actions" role="group" aria-label="Действия с отчетом">
+              {renderReportExportButton('xlsx', 'fees-xlsx', () => void downloadFeeReport('xlsx'))}
+              {renderReportExportButton('pdf', 'fees-pdf', () => void downloadFeeReport('pdf'))}
+            </div>
           </div>
           <div className="report-workbook-split">
             {renderReportTable(
@@ -1486,11 +1480,7 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
 
     return (
       <ReportWorkbookSheet title="Отчёт по изменению фондов">
-        {renderDateFilter('funds', { from: 'С', to: 'По' })}
-        <div className="report-workbook-toolbar" role="group" aria-label="Выгрузка отчета по изменению фондов">
-          {renderReportExportButton('xlsx', 'funds-xlsx', () => void downloadFundChangeReport('xlsx'))}
-          {renderReportExportButton('pdf', 'funds-pdf', () => void downloadFundChangeReport('pdf'))}
-        </div>
+        {renderDateFilter('funds', { from: 'С', to: 'По', actions: <>{renderReportExportButton('xlsx', 'funds-xlsx', () => void downloadFundChangeReport('xlsx'))}{renderReportExportButton('pdf', 'funds-pdf', () => void downloadFundChangeReport('pdf'))}</> })}
         {fundChangeReportLoading ? <TableLoadingState label="Загружаем изменения фондов..." /> : null}
         {fundChangeReportError ? <FormError>{fundChangeReportError}</FormError> : null}
         {fundChangeReport ? (

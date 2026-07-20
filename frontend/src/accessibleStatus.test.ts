@@ -79,8 +79,10 @@ describe('accessible dynamic messages', () => {
   })
 
   it('keeps report workbook period filters typed and quickly adjustable', () => {
-    expect(reportPanelSource).toContain('type="month"')
-    expect(reportPanelSource).toContain('type="date"')
+    expect(reportPanelSource).toContain('<LocalizedDatePicker ariaLabel={labels.from} mode="month"')
+    expect(reportPanelSource).toContain('<LocalizedDatePicker ariaLabel={labels.from} mode="date"')
+    expect(reportPanelSource).not.toContain('type="month"')
+    expect(reportPanelSource).not.toContain('type="date"')
     expect(reportPanelSource).toContain('applyPreviousMonth')
     expect(reportPanelSource).toContain('applyToday')
     expect(reportPanelSource).toContain('report-period-button')
@@ -160,6 +162,7 @@ describe('accessible dynamic messages', () => {
     expect(dictionaryPanelSource).toContain("from '../../shared/LocalizedDatePicker'")
     expect(dictionaryPanelSource).not.toContain('<select')
     expect(dictionaryPanelSource).not.toContain('type="date"')
+    expect(dictionaryPanelSource).not.toContain('type="month"')
     expect(dictionaryPanelSource.match(/<SelectControl\b/g)?.length).toBeGreaterThanOrEqual(7)
     expect(dictionaryPanelSource.match(/<LocalizedDatePicker\b/g)?.length).toBeGreaterThanOrEqual(2)
     expect(financePanelSource).toContain('aria-label="Гараж для поступления"')
@@ -180,6 +183,16 @@ describe('accessible dynamic messages', () => {
     expect(financePanelSource).not.toContain('aria-label="Месяц изменяемого платежа" type="month"')
     expect(financePanelSource).not.toContain("aria-label={getFinanceToolbarLabel('periodFrom')} type=\"month\"")
     expect(financePanelSource).not.toContain("aria-label={getFinanceToolbarLabel('periodTo')} type=\"month\"")
+    expect(financePanelSource).not.toContain('type="date"')
+    expect(financePanelSource).not.toContain('type="month"')
+    expect(reportPanelSource).toContain("from '../../shared/LocalizedDatePicker'")
+    expect(reportPanelSource).not.toContain('type="date"')
+    expect(reportPanelSource).not.toContain('type="month"')
+    expect(reportPanelSource).toContain('className={`secondary-button report-export-button report-export-button--${extension}`}')
+    expect(reportPanelSource).not.toContain('<span>{reportExporting === exportKey')
+    expect(normalizedAppCss).toMatch(/\.report-workbook-filter \{[\s\S]*?grid-template-columns: minmax\(0, 1fr\) auto;/u)
+    expect(normalizedAppCss).toMatch(/\.report-workbook-filter__actions \{[\s\S]*?justify-content: flex-end;/u)
+    expect(normalizedAppCss).toContain('.report-workbook-filter__fields > label:first-child .localized-date-picker__popover')
   })
 
   it('keeps text inputs and textareas consistently styled and labeled', () => {

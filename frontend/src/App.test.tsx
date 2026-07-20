@@ -13240,9 +13240,16 @@ describe('App', () => {
     const consolidatedMonthFrom = within(reportsPanel).getByLabelText('Месяц с') as HTMLInputElement
     const consolidatedMonthTo = within(reportsPanel).getByLabelText('Месяц по') as HTMLInputElement
     const initialMonth = consolidatedMonthFrom.value
-    const [yearText, monthText] = initialMonth.split('-')
+    const [monthText, yearText] = initialMonth.split('.')
     const previousDate = new Date(Number(yearText), Number(monthText) - 2, 1)
-    const previousMonth = `${previousDate.getFullYear()}-${String(previousDate.getMonth() + 1).padStart(2, '0')}`
+    const previousMonth = `${String(previousDate.getMonth() + 1).padStart(2, '0')}.${previousDate.getFullYear()}`
+    await user.click(within(reportsPanel).getByRole('button', { name: 'Открыть календарь: Месяц с' }))
+    expect(within(reportsPanel).getByRole('dialog', { name: 'Месяц с: календарь' })).toBeInTheDocument()
+    await user.keyboard('{Escape}')
+    const consolidatedExportButton = within(reportsPanel).getByRole('button', { name: 'Скачать XLSX' })
+    expect(consolidatedExportButton).toHaveClass('report-export-button', 'report-export-button--xlsx')
+    expect(consolidatedExportButton).toHaveTextContent('')
+    expect(consolidatedExportButton.closest('.report-workbook-filter')).toContainElement(consolidatedMonthFrom)
     await user.click(within(reportsPanel).getByRole('button', { name: 'Предыдущий' }))
     expect(consolidatedMonthFrom).toHaveValue(previousMonth)
     expect(consolidatedMonthTo).toHaveValue(previousMonth)
@@ -13262,6 +13269,9 @@ describe('App', () => {
     expect(garageReportTable).toHaveTextContent('Поступления')
     const groupGarageAccrualsButton = within(reportsPanel).getByRole('button', { name: 'Сгруппировать начисления' })
     expect(groupGarageAccrualsButton).toHaveAttribute('aria-pressed', 'false')
+    const garageFilterActions = groupGarageAccrualsButton.closest('.report-workbook-filter__actions')
+    expect(garageFilterActions).toContainElement(within(reportsPanel).getByRole('button', { name: 'Скачать XLSX' }))
+    expect(garageFilterActions?.closest('.report-workbook-filter')).toContainElement(within(reportsPanel).getByLabelText('Месяц с'))
     await user.click(groupGarageAccrualsButton)
     expect(within(reportsPanel).getByRole('button', { name: 'Разгруппировать начисления' })).toHaveAttribute('aria-pressed', 'true')
     const groupedGarageReportTable = within(reportsPanel).getByRole('table', { name: 'Отчет по гаражам' })
@@ -13529,8 +13539,10 @@ describe('App', () => {
     const incomeDateFrom = within(reportsPanel).getByLabelText('С') as HTMLInputElement
     const incomeDateTo = within(reportsPanel).getByLabelText('По') as HTMLInputElement
     const today = incomeDateFrom.value
-    fireEvent.change(incomeDateFrom, { target: { value: '2026-01-01' } })
-    fireEvent.change(incomeDateTo, { target: { value: '2026-01-02' } })
+    const [todayDay, todayMonth, todayYear] = today.split('.')
+    const todayIso = `${todayYear}-${todayMonth}-${todayDay}`
+    fireEvent.change(incomeDateFrom, { target: { value: '01.01.2026' } })
+    fireEvent.change(incomeDateTo, { target: { value: '02.01.2026' } })
     await user.click(within(reportsPanel).getByRole('button', { name: 'Сегодня' }))
     expect(incomeDateFrom).toHaveValue(today)
     expect(incomeDateTo).toHaveValue(today)
@@ -13569,7 +13581,7 @@ describe('App', () => {
     expect(cashXlsxButton).toHaveAttribute('data-tooltip', 'Скачать XLSX')
     expect(cashXlsxButton.querySelector('svg')).toHaveAttribute('aria-hidden', 'true')
     await user.click(cashXlsxButton)
-    await waitFor(() => expect(exportCashPaymentReportXlsx).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ dateFrom: today, dateTo: today })))
+    await waitFor(() => expect(exportCashPaymentReportXlsx).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ dateFrom: todayIso, dateTo: todayIso })))
 
     await openReportTab(user, reportsPanel, 'Сдача кассы в банк')
     expect(within(reportsPanel).getByText('Отчёт по сдаче кассы в банк')).toBeInTheDocument()
@@ -13588,7 +13600,7 @@ describe('App', () => {
     expect(bankPdfButton).toHaveAttribute('data-tooltip', 'Скачать PDF')
     expect(bankPdfButton.querySelector('svg')).toHaveAttribute('aria-hidden', 'true')
     await user.click(bankPdfButton)
-    await waitFor(() => expect(exportBankDepositReportPdf).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ dateFrom: today, dateTo: today })))
+    await waitFor(() => expect(exportBankDepositReportPdf).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ dateFrom: todayIso, dateTo: todayIso })))
 
     await openReportTab(user, reportsPanel, 'Сборы')
     expect(within(reportsPanel).getByText('Отчёт по сборам')).toBeInTheDocument()
@@ -13646,7 +13658,7 @@ describe('App', () => {
     expect(fundXlsxButton).toHaveAttribute('title', 'Скачать XLSX')
     expect(fundXlsxButton.querySelector('svg')).toHaveAttribute('aria-hidden', 'true')
     await user.click(fundXlsxButton)
-    await waitFor(() => expect(exportFundChangeReportXlsx).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ dateFrom: today, dateTo: today })))
+    await waitFor(() => expect(exportFundChangeReportXlsx).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ dateFrom: todayIso, dateTo: todayIso })))
   })
 
   it('paginates and groups garage report rows on the server', async () => {
@@ -13901,10 +13913,10 @@ describe('App', () => {
     await user.click(screen.getByRole('button', { name: 'Войти' }))
     await openSection(user, 'Отчеты')
     const reportsPanel = await screen.findByRole('region', { name: 'Отчеты' })
-    const exportXlsx = async (groupName: string) => user.click(within(within(reportsPanel).getByRole('group', { name: groupName })).getByRole('button', { name: 'Скачать XLSX' }))
+    const exportXlsx = async () => user.click(within(reportsPanel).getByRole('button', { name: 'Скачать XLSX' }))
 
     await user.click(await within(reportsPanel).findByRole('button', { name: /Сортировать Месяц/ }))
-    await exportXlsx('Выгрузка консолидированного отчета')
+    await exportXlsx()
     await waitFor(() => expect(exportConsolidatedReportXlsx).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ sortBy: 'accountingMonth', sortDirection: 'asc' })))
 
     await openReportTab(user, reportsPanel, 'По гаражам')
@@ -13914,7 +13926,7 @@ describe('App', () => {
     await user.click(within(reportsPanel).getByRole('button', { name: 'Страница 2' }))
     await user.click(within(reportsPanel).getByRole('button', { name: /Сортировать Гараж/ }))
     await user.click(within(reportsPanel).getByRole('button', { name: 'Сгруппировать начисления' }))
-    await exportXlsx('Выгрузка отчета по гаражам')
+    await exportXlsx()
     await waitFor(() => expect(exportGarageReportXlsx).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ garageIds: ['garage-1'], groupAccruals: true, sortBy: 'garageNumber', sortDirection: 'asc' })))
 
     await openReportTab(user, reportsPanel, 'По выплатам')
@@ -13922,24 +13934,24 @@ describe('App', () => {
     await waitFor(() => expect(within(counterpartyFilter).getAllByRole('option').length).toBeGreaterThan(1))
     await user.selectOptions(counterpartyFilter, ['supplier:supplier-1', 'staff:staff-member-1'])
     await user.click(within(reportsPanel).getByRole('button', { name: /Сортировать Поставщик\/сотрудник/ }))
-    await exportXlsx('Выгрузка отчета по выплатам')
+    await exportXlsx()
     await waitFor(() => expect(exportExpenseReportXlsx).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ supplierIds: ['supplier-1'], staffMemberIds: ['staff-member-1'], sortBy: 'supplierName', sortDirection: 'asc' })))
 
     await openReportTab(user, reportsPanel, 'Поступления')
     const incomeGarageFilter = within(reportsPanel).getByLabelText('Гаражи по поступлениям')
     await user.selectOptions(incomeGarageFilter, 'garage-1')
     await user.click(within(reportsPanel).getByRole('button', { name: /Сортировать Сумма платежа/ }))
-    await exportXlsx('Выгрузка отчета по поступлениям')
+    await exportXlsx()
     await waitFor(() => expect(exportIncomeReportXlsx).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ garageIds: ['garage-1'], sortBy: 'incomeAmount', sortDirection: 'asc' })))
 
     await openReportTab(user, reportsPanel, 'Оплаты из кассы')
     await user.click(within(reportsPanel).getByRole('button', { name: /Сортировать Наличие чека/ }))
-    await exportXlsx('Выгрузка отчета по оплатам из кассы')
+    await exportXlsx()
     await waitFor(() => expect(exportCashPaymentReportXlsx).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ sortBy: 'hasReceipt', sortDirection: 'asc' })))
 
     await openReportTab(user, reportsPanel, 'Сдача кассы в банк')
     await user.click(within(reportsPanel).getByRole('button', { name: /Сортировать Комментарий/ }))
-    await exportXlsx('Выгрузка отчета по сдаче кассы в банк')
+    await exportXlsx()
     await waitFor(() => expect(exportBankDepositReportXlsx).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ sortBy: 'comment', sortDirection: 'asc' })))
 
     await openReportTab(user, reportsPanel, 'Сборы')
@@ -13949,12 +13961,12 @@ describe('App', () => {
     await waitFor(() => expect(within(reportsPanel).getByRole('table', { name: 'Отчет по сборам' })).toHaveTextContent('Членский взнос'))
     await user.click(within(reportsPanel).getByRole('button', { name: 'Показать должников' }))
     await user.click(within(reportsPanel).getByRole('button', { name: /Сортировать Задолженность/ }))
-    await exportXlsx('Выгрузка отчета по сборам')
+    await exportXlsx()
     await waitFor(() => expect(exportFeeReportXlsx).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ variation: 'Членский взнос', sortBy: 'debt', sortDirection: 'asc' })))
 
     await openReportTab(user, reportsPanel, 'Изменение фондов')
     await user.click(within(reportsPanel).getByRole('button', { name: /Сортировать Пользователь/ }))
-    await exportXlsx('Выгрузка отчета по изменению фондов')
+    await exportXlsx()
     await waitFor(() => expect(exportFundChangeReportXlsx).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ sortBy: 'actorDisplayName', sortDirection: 'asc' })))
   })
 
@@ -14236,7 +14248,7 @@ describe('App', () => {
 
     expect(await within(reportsPanel).findByRole('status', { name: 'Загружаем сводный отчёт' })).toBeInTheDocument()
     expect(within(reportsPanel).queryByText('Данных за период нет')).not.toBeInTheDocument()
-    fireEvent.change(within(reportsPanel).getByLabelText('Месяц с'), { target: { value: '2026-05' } })
+    fireEvent.change(within(reportsPanel).getByLabelText('Месяц с'), { target: { value: '05.2026' } })
     expect(await within(reportsPanel).findByText('06.2026')).toBeInTheDocument()
     await act(async () => staleConsolidated.resolve(createConsolidatedReport({
       monthlyRows: [{ ...createConsolidatedReport().monthlyRows[0], accountingMonth: '1999-01-01' }],

@@ -2005,8 +2005,8 @@ export function FinancePanel({
             </select>
           ))}
           <div className="inline-fields">
-            {financeField('incomeDate', <input aria-label="Дата поступления" type="date" value={incomeForm.operationDate} onChange={(event) => setIncomeForm({ ...incomeForm, operationDate: event.target.value })} required />)}
-            {financeField('incomeMonth', <input aria-label="Месяц поступления" type="month" value={incomeForm.accountingMonth.slice(0, 7)} onChange={(event) => setIncomeForm({ ...incomeForm, accountingMonth: `${event.target.value}-01` })} required />)}
+            {financeField('incomeDate', <LocalizedDatePicker ariaLabel="Дата поступления" mode="date" value={incomeForm.operationDate} onChange={(operationDate) => setIncomeForm({ ...incomeForm, operationDate })} required />)}
+            {financeField('incomeMonth', <LocalizedDatePicker ariaLabel="Месяц поступления" mode="month" value={incomeForm.accountingMonth.slice(0, 7)} onChange={(accountingMonth) => setIncomeForm({ ...incomeForm, accountingMonth: `${accountingMonth}-01` })} required />)}
           </div>
           <div className="inline-fields">
             {financeField('incomeAmount', <MoneyInput aria-label="Сумма поступления" min="0.01" value={incomeForm.amount} onValueChange={(amount) => setIncomeForm({ ...incomeForm, amount })} required />)}
@@ -2046,8 +2046,8 @@ export function FinancePanel({
             </select>
           ))}
           <div className="inline-fields">
-            {financeField('expenseDate', <input aria-label="Дата выплаты" type="date" value={expenseForm.operationDate} onChange={(event) => setExpenseForm({ ...expenseForm, operationDate: event.target.value })} required />)}
-            {financeField('expenseMonth', <input aria-label="Месяц выплаты" type="month" value={expenseForm.accountingMonth.slice(0, 7)} onChange={(event) => setExpenseForm({ ...expenseForm, accountingMonth: `${event.target.value}-01` })} required />)}
+            {financeField('expenseDate', <LocalizedDatePicker ariaLabel="Дата выплаты" mode="date" value={expenseForm.operationDate} onChange={(operationDate) => setExpenseForm({ ...expenseForm, operationDate })} required />)}
+            {financeField('expenseMonth', <LocalizedDatePicker ariaLabel="Месяц выплаты" mode="month" value={expenseForm.accountingMonth.slice(0, 7)} onChange={(accountingMonth) => setExpenseForm({ ...expenseForm, accountingMonth: `${accountingMonth}-01` })} required />)}
           </div>
           <div className="inline-fields">
             {financeField('expenseAmount', <MoneyInput aria-label="Сумма выплаты" min="0.01" value={expenseForm.amount} onValueChange={(amount) => setExpenseForm({ ...expenseForm, amount })} required />)}
@@ -2087,7 +2087,7 @@ export function FinancePanel({
             </select>
           ))}
           <div className="inline-fields">
-            {financeField('accrualMonth', <input aria-label="Месяц начисления" type="month" value={accrualForm.accountingMonth.slice(0, 7)} onChange={(event) => setAccrualForm({ ...accrualForm, accountingMonth: `${event.target.value}-01` })} required />)}
+          {financeField('accrualMonth', <LocalizedDatePicker ariaLabel="Месяц начисления" mode="month" value={accrualForm.accountingMonth.slice(0, 7)} onChange={(accountingMonth) => setAccrualForm({ ...accrualForm, accountingMonth: `${accountingMonth}-01` })} required />)}
             {financeField('accrualAmount', <MoneyInput aria-label="Сумма начисления" min="0.01" value={accrualForm.amount} onValueChange={(amount) => setAccrualForm({ ...accrualForm, amount })} required />)}
           </div>
           {financeField('accrualSource', <input aria-label="Источник начисления" value={formatAccrualSource(accrualForm.source)} readOnly />)}
@@ -2132,7 +2132,7 @@ export function FinancePanel({
               ))}
             </select>
           ))}
-          {financeField('regularMonth', <input aria-label="Месяц регулярного начисления" type="month" value={regularForm.accountingMonth.slice(0, 7)} onChange={(event) => setRegularForm({ ...regularForm, accountingMonth: `${event.target.value}-01` })} required />)}
+          {financeField('regularMonth', <LocalizedDatePicker ariaLabel="Месяц регулярного начисления" mode="month" value={regularForm.accountingMonth.slice(0, 7)} onChange={(accountingMonth) => setRegularForm({ ...regularForm, accountingMonth: `${accountingMonth}-01` })} required />)}
           {financeField('regularComment', <input aria-label="Комментарий к регулярному начислению" placeholder="Комментарий" value={regularForm.comment} onChange={(event) => setRegularForm({ ...regularForm, comment: event.target.value })} />)}
           <FormValidationSummary title={getFinanceEditorValidationTitle('regularAccruals')} items={regularValidationErrors} />
           {regularStatus ? <p className="form-hint">{regularStatus}</p> : null}
@@ -2168,7 +2168,7 @@ export function FinancePanel({
             </select>
           ))}
           <div className="inline-fields">
-            {financeField('supplierAccrualMonth', <input aria-label="Месяц начисления поставщику" type="month" value={supplierAccrualForm.accountingMonth.slice(0, 7)} onChange={(event) => setSupplierAccrualForm({ ...supplierAccrualForm, accountingMonth: `${event.target.value}-01` })} required />)}
+          {financeField('supplierAccrualMonth', <LocalizedDatePicker ariaLabel="Месяц начисления поставщику" mode="month" value={supplierAccrualForm.accountingMonth.slice(0, 7)} onChange={(accountingMonth) => setSupplierAccrualForm({ ...supplierAccrualForm, accountingMonth: `${accountingMonth}-01` })} required />)}
             {financeField('supplierAccrualAmount', <MoneyInput aria-label="Сумма начисления поставщику" min="0.01" value={supplierAccrualForm.amount} onValueChange={(amount) => setSupplierAccrualForm({ ...supplierAccrualForm, amount })} required />)}
           </div>
           {financeField('supplierAccrualSource', <input aria-label="Источник начисления поставщику" value={formatAccrualSource(supplierAccrualForm.source)} readOnly />)}
@@ -2197,7 +2197,7 @@ export function FinancePanel({
             </select>
           ))}
           <div className="inline-fields">
-            {financeField('salaryMonth', <input aria-label="Месяц зарплаты" type="month" value={salaryForm.accountingMonth.slice(0, 7)} onChange={(event) => setSalaryForm({ ...salaryForm, accountingMonth: `${event.target.value}-01` })} required />)}
+          {financeField('salaryMonth', <LocalizedDatePicker ariaLabel="Месяц зарплаты" mode="month" value={salaryForm.accountingMonth.slice(0, 7)} onChange={(accountingMonth) => setSalaryForm({ ...salaryForm, accountingMonth: `${accountingMonth}-01` })} required />)}
             {financeField('salaryAmount', <MoneyInput aria-label="Сумма зарплаты" min="0.01" value={salaryForm.amount} onValueChange={(amount) => setSalaryForm({ ...salaryForm, amount })} required />)}
           </div>
           <div className="inline-fields">
@@ -2231,8 +2231,8 @@ export function FinancePanel({
           </select>
         ))}
         <div className="inline-fields">
-          {financeField('meterMonth', <input aria-label="Месяц показания" type="month" value={meterForm.accountingMonth.slice(0, 7)} onChange={(event) => setMeterForm({ ...meterForm, accountingMonth: `${event.target.value}-01` })} required />)}
-          {financeField('meterDate', <input aria-label="Дата показания" type="date" value={meterForm.readingDate} onChange={(event) => setMeterForm({ ...meterForm, readingDate: event.target.value })} required />)}
+          {financeField('meterMonth', <LocalizedDatePicker ariaLabel="Месяц показания" mode="month" value={meterForm.accountingMonth.slice(0, 7)} onChange={(accountingMonth) => setMeterForm({ ...meterForm, accountingMonth: `${accountingMonth}-01` })} required />)}
+          {financeField('meterDate', <LocalizedDatePicker ariaLabel="Дата показания" mode="date" value={meterForm.readingDate} onChange={(readingDate) => setMeterForm({ ...meterForm, readingDate })} required />)}
         </div>
         <div className="inline-fields">
           {financeField('meterCurrentValue', <input aria-label="Текущее показание" type="number" min="0" step="0.001" value={meterForm.currentValue} onChange={(event) => setMeterForm({ ...meterForm, currentValue: Number(event.target.value) })} required />)}
@@ -2407,8 +2407,8 @@ export function FinancePanel({
             ))}
           </select>
           <div className="inline-fields">
-            <input aria-label="Дата поступления" type="date" value={incomeForm.operationDate} onChange={(event) => setIncomeForm({ ...incomeForm, operationDate: event.target.value })} required />
-            <input aria-label="Месяц поступления" type="month" value={incomeForm.accountingMonth.slice(0, 7)} onChange={(event) => setIncomeForm({ ...incomeForm, accountingMonth: `${event.target.value}-01` })} required />
+            <LocalizedDatePicker ariaLabel="Дата поступления" mode="date" value={incomeForm.operationDate} onChange={(operationDate) => setIncomeForm({ ...incomeForm, operationDate })} required />
+            <LocalizedDatePicker ariaLabel="Месяц поступления" mode="month" value={incomeForm.accountingMonth.slice(0, 7)} onChange={(accountingMonth) => setIncomeForm({ ...incomeForm, accountingMonth: `${accountingMonth}-01` })} required />
           </div>
           <div className="inline-fields">
             <MoneyInput aria-label="Сумма поступления" min="0.01" value={incomeForm.amount} onValueChange={(amount) => setIncomeForm({ ...incomeForm, amount })} required />
@@ -2444,8 +2444,8 @@ export function FinancePanel({
             ))}
           </select>
           <div className="inline-fields">
-            <input aria-label="Дата выплаты" type="date" value={expenseForm.operationDate} onChange={(event) => setExpenseForm({ ...expenseForm, operationDate: event.target.value })} required />
-            <input aria-label="Месяц выплаты" type="month" value={expenseForm.accountingMonth.slice(0, 7)} onChange={(event) => setExpenseForm({ ...expenseForm, accountingMonth: `${event.target.value}-01` })} required />
+            <LocalizedDatePicker ariaLabel="Дата выплаты" mode="date" value={expenseForm.operationDate} onChange={(operationDate) => setExpenseForm({ ...expenseForm, operationDate })} required />
+            <LocalizedDatePicker ariaLabel="Месяц выплаты" mode="month" value={expenseForm.accountingMonth.slice(0, 7)} onChange={(accountingMonth) => setExpenseForm({ ...expenseForm, accountingMonth: `${accountingMonth}-01` })} required />
           </div>
           <div className="inline-fields">
             <MoneyInput aria-label="Сумма выплаты" min="0.01" value={expenseForm.amount} onValueChange={(amount) => setExpenseForm({ ...expenseForm, amount })} required />
@@ -2481,7 +2481,7 @@ export function FinancePanel({
             ))}
           </select>
           <div className="inline-fields">
-            <input aria-label="Месяц начисления" type="month" value={accrualForm.accountingMonth.slice(0, 7)} onChange={(event) => setAccrualForm({ ...accrualForm, accountingMonth: `${event.target.value}-01` })} required />
+          <LocalizedDatePicker ariaLabel="Месяц начисления" mode="month" value={accrualForm.accountingMonth.slice(0, 7)} onChange={(accountingMonth) => setAccrualForm({ ...accrualForm, accountingMonth: `${accountingMonth}-01` })} required />
             <MoneyInput aria-label="Сумма начисления" min="0.01" value={accrualForm.amount} onValueChange={(amount) => setAccrualForm({ ...accrualForm, amount })} required />
           </div>
           <input aria-label="Комментарий начисления" placeholder="Комментарий" value={accrualForm.comment} onChange={(event) => setAccrualForm({ ...accrualForm, comment: event.target.value })} required />
@@ -2514,7 +2514,7 @@ export function FinancePanel({
             ))}
           </select>
           <div className="inline-fields">
-            <input aria-label="Месяц начисления поставщику" type="month" value={supplierAccrualForm.accountingMonth.slice(0, 7)} onChange={(event) => setSupplierAccrualForm({ ...supplierAccrualForm, accountingMonth: `${event.target.value}-01` })} required />
+          <LocalizedDatePicker ariaLabel="Месяц начисления поставщику" mode="month" value={supplierAccrualForm.accountingMonth.slice(0, 7)} onChange={(accountingMonth) => setSupplierAccrualForm({ ...supplierAccrualForm, accountingMonth: `${accountingMonth}-01` })} required />
             <MoneyInput aria-label="Сумма начисления поставщику" min="0.01" value={supplierAccrualForm.amount} onValueChange={(amount) => setSupplierAccrualForm({ ...supplierAccrualForm, amount })} required />
           </div>
           <div className="inline-fields">
@@ -2557,7 +2557,7 @@ export function FinancePanel({
               </option>
             ))}
           </select>
-          <input aria-label="Месяц регулярных начислений" type="month" value={regularForm.accountingMonth.slice(0, 7)} onChange={(event) => setRegularForm({ ...regularForm, accountingMonth: `${event.target.value}-01` })} required />
+          <LocalizedDatePicker ariaLabel="Месяц регулярных начислений" mode="month" value={regularForm.accountingMonth.slice(0, 7)} onChange={(accountingMonth) => setRegularForm({ ...regularForm, accountingMonth: `${accountingMonth}-01` })} required />
           <input aria-label="Комментарий регулярных начислений" placeholder="Комментарий" value={regularForm.comment} onChange={(event) => setRegularForm({ ...regularForm, comment: event.target.value })} />
           <FormValidationSummary title={getFinanceEditorValidationTitle('regularAccruals', 'batch')} items={regularValidationErrors} />
           <button className="secondary-button" type="submit" disabled={!canWritePayments || saving === 'regular-accruals' || !regularForm.incomeTypeId || !regularForm.tariffId}>
@@ -2583,8 +2583,8 @@ export function FinancePanel({
             <option value="electricity">Электричество</option>
           </select>
           <div className="inline-fields">
-            <input aria-label="Месяц показания" type="month" value={meterForm.accountingMonth.slice(0, 7)} onChange={(event) => setMeterForm({ ...meterForm, accountingMonth: `${event.target.value}-01` })} required />
-            <input aria-label="Дата показания" type="date" value={meterForm.readingDate} onChange={(event) => setMeterForm({ ...meterForm, readingDate: event.target.value })} required />
+            <LocalizedDatePicker ariaLabel="Месяц показания" mode="month" value={meterForm.accountingMonth.slice(0, 7)} onChange={(accountingMonth) => setMeterForm({ ...meterForm, accountingMonth: `${accountingMonth}-01` })} required />
+            <LocalizedDatePicker ariaLabel="Дата показания" mode="date" value={meterForm.readingDate} onChange={(readingDate) => setMeterForm({ ...meterForm, readingDate })} required />
           </div>
           <div className="inline-fields">
             <input aria-label="Новое показание" type="number" min="0" step="0.001" value={meterForm.currentValue} onChange={(event) => setMeterForm({ ...meterForm, currentValue: Number(event.target.value) })} required />

@@ -6830,14 +6830,52 @@ button.operation-row:focus-visible {
 
 .report-workbook-filter {
   display: grid;
-  grid-template-columns: minmax(150px, 190px) minmax(150px, 190px) auto minmax(220px, 1fr);
-  gap: 10px;
-  align-items: end;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px 16px;
+  align-items: start;
   padding: 0 16px;
 }
 
 .report-workbook-filter--single {
-  grid-template-columns: minmax(260px, 420px);
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.report-workbook-filter__fields {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 10px;
+  min-width: 0;
+}
+
+.report-workbook-filter__fields > label {
+  flex: 0 1 190px;
+}
+
+.report-workbook-filter__fields > label:first-child .localized-date-picker__popover {
+  right: auto;
+  left: 0;
+}
+
+.report-workbook-filter--single .report-workbook-filter__fields > label {
+  flex-basis: 420px;
+}
+
+.report-workbook-filter__actions {
+  display: flex;
+  align-items: end;
+  justify-content: flex-end;
+  gap: 8px;
+  min-height: 38px;
+}
+
+.report-workbook-filter__extra {
+  grid-column: 1 / -1;
+  min-width: 0;
+}
+
+.report-workbook-filter__extra .report-workbook-filter-wide {
+  width: 100%;
 }
 
 .report-workbook-filter label {
@@ -6918,6 +6956,64 @@ button.operation-row:focus-visible {
   min-height: 38px;
   align-self: end;
   padding: 0 4px 8px;
+}
+
+.report-group-button {
+  min-height: 38px;
+  white-space: nowrap;
+}
+
+.report-export-button {
+  position: relative;
+  display: inline-grid;
+  width: 40px;
+  min-width: 40px;
+  min-height: 38px;
+  padding: 0;
+  place-items: center;
+}
+
+.report-export-button--xlsx {
+  color: #067647;
+}
+
+.report-export-button--pdf {
+  color: #b42318;
+}
+
+.report-export-button__spinner {
+  animation: report-export-spin 0.8s linear infinite;
+}
+
+@keyframes report-export-spin {
+  to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .report-export-button__spinner {
+    animation: none;
+  }
+}
+
+@media (max-width: 720px) {
+  .report-workbook-filter,
+  .report-workbook-filter--single {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .report-workbook-filter__actions {
+    grid-row: 2;
+    justify-content: flex-start;
+  }
+
+  .report-workbook-filter__extra {
+    grid-row: 3;
+  }
+
+  .report-workbook-filter__fields > label,
+  .report-workbook-filter--single .report-workbook-filter__fields > label {
+    flex: 1 1 100%;
+  }
 }
 
 .report-workbook-summary-row {

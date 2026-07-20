@@ -1317,11 +1317,11 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, integ
             }}>
               <label>
                 Период с
-                <input aria-label="Начало периода истории баланса" type="month" value={balanceHistoryFilters.monthFrom} onChange={(event) => setBalanceHistoryFilters((value) => ({ ...value, monthFrom: event.target.value }))} required />
+                  <LocalizedDatePicker ariaLabel="Начало периода истории баланса" mode="month" value={balanceHistoryFilters.monthFrom} onChange={(monthFrom) => setBalanceHistoryFilters((value) => ({ ...value, monthFrom }))} required />
               </label>
               <label>
                 Период по
-                <input aria-label="Конец периода истории баланса" type="month" value={balanceHistoryFilters.monthTo} onChange={(event) => setBalanceHistoryFilters((value) => ({ ...value, monthTo: event.target.value }))} required />
+                  <LocalizedDatePicker ariaLabel="Конец периода истории баланса" mode="month" value={balanceHistoryFilters.monthTo} onChange={(monthTo) => setBalanceHistoryFilters((value) => ({ ...value, monthTo }))} required />
               </label>
               <button className="secondary-button" type="submit" disabled={balanceHistoryLoading}>
                 <Search size={16} />
