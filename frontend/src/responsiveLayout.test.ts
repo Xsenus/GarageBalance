@@ -165,6 +165,13 @@ describe('responsive layout styles', () => {
     expect(normalizedAppCss).toContain('.meter-readings-data-row > span:not(:first-child) {\n  display: block;\n  min-height: 32px;')
   })
 
+  it('styles report exports as compact format-specific icon buttons', () => {
+    expect(normalizedAppCss).toContain('.report-export-button {\n  position: relative;\n  display: inline-grid;\n  width: 40px;\n  min-width: 40px;\n  height: 40px;\n  border: 1px solid transparent;\n  border-radius: 10px;')
+    expect(normalizedAppCss).toContain('.report-export-button--xlsx {\n  border-color: #abefc6;\n  background: #ecfdf3;\n  color: #067647;')
+    expect(normalizedAppCss).toContain('.report-export-button--pdf {\n  border-color: #fecdca;\n  background: #fff1f3;\n  color: #b42318;')
+    expect(normalizedAppCss).toContain('.report-export-button:hover::after,\n.report-export-button:focus-visible::after {\n  opacity: 1;')
+  })
+
   it('keeps contractor pagination visible while the directory table scrolls', () => {
     expect(normalizedAppCss).toContain('.workspace--contractors {\n  display: flex;\n  height: 100dvh;\n  min-height: 0;\n  flex-direction: column;\n  overflow: hidden;\n  box-sizing: border-box;')
     expect(normalizedAppCss).toContain('.workspace--contractors > .contractors-page--directory {\n  display: flex;\n  min-height: 0;\n  flex: 1 1 auto;\n  flex-direction: column;')

@@ -866,7 +866,7 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
 
     return (
       <button className={`secondary-button report-export-button report-export-button--${extension}`} type="button" aria-label={label} aria-busy={isExporting} title={label} data-tooltip={label} disabled={reportExporting !== null} onClick={onClick}>
-        {isExporting ? <LoaderCircle className="report-export-button__spinner" size={18} aria-hidden="true" /> : <Icon size={18} aria-hidden="true" />}
+        {isExporting ? <LoaderCircle className="report-export-button__spinner" size={19} aria-hidden="true" /> : <Icon size={19} strokeWidth={2.1} aria-hidden="true" />}
       </button>
     )
   }

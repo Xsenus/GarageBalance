@@ -13249,7 +13249,7 @@ describe('App', () => {
     expect(within(reportsPanel).getByRole('dialog', { name: 'Месяц с: календарь' })).toBeInTheDocument()
     await user.keyboard('{Escape}')
     const consolidatedExportButton = within(reportsPanel).getByRole('button', { name: 'Скачать XLSX' })
-    expect(consolidatedExportButton).toHaveClass('report-export-button', 'report-export-button--xlsx')
+    expect(consolidatedExportButton).toHaveClass('secondary-button', 'report-export-button', 'report-export-button--xlsx')
     expect(consolidatedExportButton).toHaveTextContent('')
     expect(consolidatedExportButton.closest('.report-workbook-filter')).toContainElement(consolidatedMonthFrom)
     await user.click(within(reportsPanel).getByRole('button', { name: 'Предыдущий' }))
