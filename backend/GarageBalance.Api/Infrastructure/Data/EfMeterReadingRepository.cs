@@ -1,4 +1,5 @@
 using GarageBalance.Api.Application.Finance;
+using GarageBalance.Api.Domain.Dictionaries;
 using GarageBalance.Api.Domain.Finance;
 using Microsoft.EntityFrameworkCore;
 
@@ -47,11 +48,117 @@ public sealed class EfMeterReadingRepository(GarageBalanceDbContext dbContext) :
         }
 
         query = ApplySearch(query, normalizedSearch);
+        if (dbContext.Database.IsNpgsql())
+        {
+            return await GetPostgresPageAsync(query, offset, limit, cancellationToken);
+        }
+
         var totalCount = await query.CountAsync(cancellationToken);
         var items = await Order(query)
             .Skip(offset)
             .Take(limit)
             .ToListAsync(cancellationToken);
+        return new MeterReadingPageData(items, totalCount);
+    }
+
+    private async Task<MeterReadingPageData> GetPostgresPageAsync(
+        IQueryable<MeterReading> query,
+        int offset,
+        int limit,
+        CancellationToken cancellationToken)
+    {
+        const int PageCategory = 1;
+        const int TotalsCategory = 2;
+        var pageRows = Order(query)
+            .Skip(offset)
+            .Take(limit)
+            .Select(reading => new
+            {
+                Category = PageCategory,
+                Id = (Guid?)reading.Id,
+                GarageId = (Guid?)reading.GarageId,
+                GarageNumber = (string?)reading.Garage.Number,
+                OwnerId = reading.Garage.OwnerId,
+                OwnerLastName = reading.Garage.Owner == null ? null : reading.Garage.Owner.LastName,
+                OwnerFirstName = reading.Garage.Owner == null ? null : reading.Garage.Owner.FirstName,
+                OwnerMiddleName = reading.Garage.Owner == null ? null : reading.Garage.Owner.MiddleName,
+                MeterKind = (string?)reading.MeterKind,
+                AccountingMonth = (DateOnly?)reading.AccountingMonth,
+                ReadingDate = (DateOnly?)reading.ReadingDate,
+                CurrentValue = (decimal?)reading.CurrentValue,
+                PreviousValue = (decimal?)reading.PreviousValue,
+                Consumption = (decimal?)reading.Consumption,
+                HasGapWarning = (bool?)reading.HasGapWarning,
+                Comment = reading.Comment,
+                IsCanceled = (bool?)reading.IsCanceled,
+                Version = (Guid?)reading.Version,
+                TotalCount = 0
+            });
+        var totalsRow = dbContext.Database
+            .SqlQueryRaw<int>("SELECT 1 AS \"Value\"")
+            .Select(_ => new
+            {
+                Category = TotalsCategory,
+                Id = (Guid?)null,
+                GarageId = (Guid?)null,
+                GarageNumber = (string?)null,
+                OwnerId = (Guid?)null,
+                OwnerLastName = (string?)null,
+                OwnerFirstName = (string?)null,
+                OwnerMiddleName = (string?)null,
+                MeterKind = (string?)null,
+                AccountingMonth = (DateOnly?)null,
+                ReadingDate = (DateOnly?)null,
+                CurrentValue = (decimal?)null,
+                PreviousValue = (decimal?)null,
+                Consumption = (decimal?)null,
+                HasGapWarning = (bool?)null,
+                Comment = (string?)null,
+                IsCanceled = (bool?)null,
+                Version = (Guid?)null,
+                TotalCount = query.Count()
+            });
+        var rows = await pageRows
+            .Concat(totalsRow)
+            .OrderBy(row => row.Category)
+            .ThenByDescending(row => row.AccountingMonth)
+            .ThenBy(row => row.GarageNumber)
+            .ThenBy(row => row.MeterKind)
+            .ToListAsync(cancellationToken);
+        var totalCount = rows.Single(row => row.Category == TotalsCategory).TotalCount;
+        var items = rows
+            .Where(row => row.Category == PageCategory)
+            .Select(row => new MeterReading
+            {
+                Id = row.Id!.Value,
+                GarageId = row.GarageId!.Value,
+                Garage = new Garage
+                {
+                    Id = row.GarageId.Value,
+                    Number = row.GarageNumber!,
+                    OwnerId = row.OwnerId,
+                    Owner = row.OwnerId is null
+                        ? null
+                        : new Owner
+                        {
+                            Id = row.OwnerId.Value,
+                            LastName = row.OwnerLastName!,
+                            FirstName = row.OwnerFirstName!,
+                            MiddleName = row.OwnerMiddleName
+                        }
+                },
+                MeterKind = row.MeterKind!,
+                AccountingMonth = row.AccountingMonth!.Value,
+                ReadingDate = row.ReadingDate!.Value,
+                CurrentValue = row.CurrentValue!.Value,
+                PreviousValue = row.PreviousValue!.Value,
+                Consumption = row.Consumption!.Value,
+                HasGapWarning = row.HasGapWarning!.Value,
+                Comment = row.Comment,
+                IsCanceled = row.IsCanceled!.Value,
+                Version = row.Version!.Value
+            })
+            .ToList();
         return new MeterReadingPageData(items, totalCount);
     }
 

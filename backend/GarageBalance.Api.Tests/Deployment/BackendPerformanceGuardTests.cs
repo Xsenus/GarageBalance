@@ -221,6 +221,14 @@ public sealed class BackendPerformanceGuardTests
         Assert.Contains("GetNextActiveAsync", source, StringComparison.Ordinal);
         Assert.Contains(".OrderBy(reading => reading.AccountingMonth)", source, StringComparison.Ordinal);
         Assert.Contains("GetActiveAsync", source, StringComparison.Ordinal);
+        Assert.Contains("GetPostgresPageAsync(query, offset, limit, cancellationToken)", source, StringComparison.Ordinal);
+        Assert.Contains("SqlQueryRaw<int>(\"SELECT 1 AS \\\"Value\\\"\")", source, StringComparison.Ordinal);
+        Assert.Contains("TotalCount = query.Count()", source, StringComparison.Ordinal);
+        Assert.Contains(".Concat(totalsRow)", source, StringComparison.Ordinal);
+        var postgresPageStart = source.IndexOf("private async Task<MeterReadingPageData> GetPostgresPageAsync", StringComparison.Ordinal);
+        var postgresPageEnd = source.IndexOf("public async Task<MeterReadingYearPageData> GetYearPageAsync", postgresPageStart, StringComparison.Ordinal);
+        var postgresPageMethod = source[postgresPageStart..postgresPageEnd];
+        Assert.Equal(1, CountOccurrences(postgresPageMethod, ".ToListAsync(cancellationToken)"));
     }
 
     [Fact]
@@ -1088,6 +1096,8 @@ public sealed class BackendPerformanceGuardTests
         Assert.Contains("PostgreSqlAuditEventPageQueryIntegrationTests.AuditPageLoadsCountRowsAndActorsInOneCommandForEveryPageShape", document, StringComparison.Ordinal);
         Assert.Contains("Sixty-eighth meter-reading-year command consolidation audit", document, StringComparison.Ordinal);
         Assert.Contains("PostgreSqlMeterReadingYearPageIntegrationTests.YearPageLoadsTotalGaragesAndReadingsInOneCommandForEveryPageShape", document, StringComparison.Ordinal);
+        Assert.Contains("Sixty-ninth meter-reading-page command consolidation audit", document, StringComparison.Ordinal);
+        Assert.Contains("PostgreSqlMeterReadingPageIntegrationTests.ReadingPageLoadsCountRowsGarageAndOwnerInOneCommandForEveryPageShape", document, StringComparison.Ordinal);
         Assert.Contains("Shared end-user release `0.758.0`", document, StringComparison.Ordinal);
         Assert.Contains("limit", document, StringComparison.Ordinal);
         Assert.Contains("rowCount", document, StringComparison.Ordinal);
