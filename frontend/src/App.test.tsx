@@ -484,6 +484,7 @@ describe('App', () => {
     await user.click(within(monthOptions).getByRole('option', { name: 'Декабрь' }))
     expect(accrualStartMonthControl).toHaveTextContent('Декабрь')
     expect(within(serviceDialog).getByLabelText('Перенос долга в просроченный')).toHaveValue('30')
+    expect(within(serviceDialog).getByLabelText('Перенос долга в просроченный').closest('.contractors-service-secondary-grid')).toContainElement(within(serviceDialog).getByLabelText('Единица измерения'))
     expect(within(serviceDialog).getByLabelText('По счетчику')).toBeChecked()
     expect(within(serviceDialog).getByLabelText('Пороговая тарификация')).toBeChecked()
     expect(within(serviceDialog).getByLabelText('Цена за единицу 1')).toBeInTheDocument()

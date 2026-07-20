@@ -214,8 +214,9 @@ describe('responsive layout styles', () => {
     expect(normalizedAppCss).toContain('.contractors-tariff-dialog .contractors-service-period-grid--schedule {\n  grid-template-columns: minmax(140px, 0.55fr) minmax(220px, 1fr) minmax(300px, 1.25fr);')
     expect(normalizedAppCss).toContain('.contractors-tariff-dialog .contractors-inline-field--date .select-control {\n  flex: 1 1 auto;')
     expect(normalizedAppCss).toContain('.contractors-service-cost-grid {\n  display: grid;\n  grid-template-columns: repeat(3, minmax(0, 1fr));')
+    expect(normalizedAppCss).toContain('.contractors-service-secondary-grid {\n  display: grid;\n  grid-template-columns: repeat(2, minmax(0, 1fr));\n  gap: 12px;\n  align-items: end;')
     expect(normalizedAppCss).toContain('.contractors-service-cost-field {\n  grid-column: 3;')
-    expect(normalizedAppCss).toContain('.contractors-tariff-dialog .contractors-service-period-grid--catalogs,\n  .contractors-tariff-dialog .contractors-service-period-grid--schedule,\n  .contractors-fee-two-column-grid,\n  .contractors-fee-date-grid,\n  .contractors-service-period-grid,\n  .contractors-service-flags,\n  .contractors-service-cost-grid {\n    grid-template-columns: 1fr;')
+    expect(normalizedAppCss).toContain('.contractors-tariff-dialog .contractors-service-period-grid--catalogs,\n  .contractors-tariff-dialog .contractors-service-period-grid--schedule,\n  .contractors-service-secondary-grid,\n  .contractors-fee-two-column-grid,\n  .contractors-fee-date-grid,\n  .contractors-service-period-grid,\n  .contractors-service-flags,\n  .contractors-service-cost-grid {\n    grid-template-columns: 1fr;')
     expect(normalizedAppCss).toContain('.contractors-service-cost-field {\n    grid-column: 1;')
   })
 

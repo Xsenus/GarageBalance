@@ -2362,6 +2362,13 @@ h1 {
   align-items: end;
 }
 
+.contractors-service-secondary-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  align-items: end;
+}
+
 .contractors-service-flags {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -8165,6 +8172,7 @@ button.operation-row:focus-visible {
 
   .contractors-tariff-dialog .contractors-service-period-grid--catalogs,
   .contractors-tariff-dialog .contractors-service-period-grid--schedule,
+  .contractors-service-secondary-grid,
   .contractors-fee-two-column-grid,
   .contractors-fee-date-grid,
   .contractors-service-period-grid,

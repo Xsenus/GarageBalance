@@ -2524,12 +2524,17 @@ export function AddServicePrototypeDialog({
                   </div>
                 </FormField>
               </div>
-              <FormField label="Перенос долга в просроченный">
-                <div className="contractors-inline-field">
-                  <input aria-label="Перенос долга в просроченный" inputMode="numeric" value={overdueGraceDays} onChange={(event) => setOverdueGraceDays(event.target.value)} />
-                  <span>дн.</span>
-                </div>
-              </FormField>
+              <div className="contractors-service-secondary-grid">
+                <FormField label="Перенос долга в просроченный">
+                  <div className="contractors-inline-field">
+                    <input aria-label="Перенос долга в просроченный" inputMode="numeric" value={overdueGraceDays} onChange={(event) => setOverdueGraceDays(event.target.value)} />
+                    <span>дн.</span>
+                  </div>
+                </FormField>
+                <FormField label="Единица измерения">
+                  <input aria-label="Единица измерения" list="contractor-service-unit-options" value={unitName} onChange={(event) => setUnitName(event.target.value)} />
+                </FormField>
+              </div>
               <div className="contractors-service-flags">
                 <label className="contractors-check-row">
                   <input
@@ -2550,9 +2555,6 @@ export function AddServicePrototypeDialog({
                   <span>Пороговая тарификация</span>
                 </label>
               </div>
-              <FormField label="Единица измерения">
-                <input aria-label="Единица измерения" list="contractor-service-unit-options" value={unitName} onChange={(event) => setUnitName(event.target.value)} />
-              </FormField>
               <datalist id="contractor-service-unit-options">
                 {unitOptions.map((unit) => (
                   <option key={unit} value={unit} />
