@@ -123,6 +123,14 @@ public sealed class BackendPerformanceGuardTests
         Assert.Contains("GetPreviousGarageIncomeTotalAsync", source, StringComparison.Ordinal);
         Assert.Contains("GetPreviousSupplierExpenseTotalAsync", source, StringComparison.Ordinal);
         Assert.DoesNotContain(".GroupBy(operation => operation.AccountingMonth)", source, StringComparison.Ordinal);
+        Assert.Contains("GetPostgresPageAsync(query, offset, limit, cancellationToken)", source, StringComparison.Ordinal);
+        Assert.Contains("SqlQueryRaw<int>(\"SELECT 1 AS \\\"Value\\\"\")", source, StringComparison.Ordinal);
+        Assert.Contains("TotalCount = query.Count()", source, StringComparison.Ordinal);
+        Assert.Contains(".Concat(totalsRow)", source, StringComparison.Ordinal);
+        var postgresPageStart = source.IndexOf("private async Task<FinancialOperationPageData> GetPostgresPageAsync", StringComparison.Ordinal);
+        var postgresPageEnd = source.IndexOf("public Task<FinancialOperation?> FindForUpdateAsync", postgresPageStart, StringComparison.Ordinal);
+        var postgresPageMethod = source[postgresPageStart..postgresPageEnd];
+        Assert.Equal(1, CountOccurrences(postgresPageMethod, ".ToListAsync(cancellationToken)"));
         Assert.Contains(".SumAsync(operation => operation.Amount", source, StringComparison.Ordinal);
     }
 
@@ -388,6 +396,7 @@ public sealed class BackendPerformanceGuardTests
         Assert.Contains("Режим «Начисления» отчета по поступлениям теперь одновременно получает итоговую сумму", releaseNotes, StringComparison.Ordinal);
         Assert.Contains("Журнал начислений теперь за одно обращение к базе получает количество найденных записей", releaseNotes, StringComparison.Ordinal);
         Assert.Contains("Журнал начислений поставщикам теперь за одно обращение к базе получает количество найденных записей", releaseNotes, StringComparison.Ordinal);
+        Assert.Contains("Журнал поступлений и выплат теперь за одно обращение к базе получает количество найденных операций", releaseNotes, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -1120,6 +1129,8 @@ public sealed class BackendPerformanceGuardTests
         Assert.Contains("PostgreSqlAccrualPageIntegrationTests.AccrualPageLoadsCountRowsAndRelatedNamesInOneCommandForEveryPageShape", document, StringComparison.Ordinal);
         Assert.Contains("Seventy-first supplier-accrual-page command consolidation audit", document, StringComparison.Ordinal);
         Assert.Contains("PostgreSqlSupplierAccrualPageIntegrationTests.SupplierAccrualPageLoadsCountRowsAndRelatedNamesInOneCommandForEveryPageShape", document, StringComparison.Ordinal);
+        Assert.Contains("Seventy-second financial-operation-page command consolidation audit", document, StringComparison.Ordinal);
+        Assert.Contains("PostgreSqlFinancialOperationPageIntegrationTests.OperationPageLoadsCountMixedRowsAndRelatedNamesInOneCommandForEveryPageShape", document, StringComparison.Ordinal);
         Assert.Contains("Shared end-user release `0.758.0`", document, StringComparison.Ordinal);
         Assert.Contains("limit", document, StringComparison.Ordinal);
         Assert.Contains("rowCount", document, StringComparison.Ordinal);
