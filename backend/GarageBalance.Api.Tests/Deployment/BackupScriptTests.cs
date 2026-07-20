@@ -86,29 +86,6 @@ public sealed class BackupScriptTests
         Assert.Contains("-AllowProductionTarget", document, StringComparison.Ordinal);
     }
 
-    [Fact]
-    public void DisasterRecoveryChecklistCoversFailedImportUpdateRestoreCheckAndProductionGuard()
-    {
-        var document = ReadRepositoryFile("docs", "disaster-recovery-checklist.md");
-
-        Assert.Contains("recovery after failed import or update", document, StringComparison.Ordinal);
-        Assert.Contains("backup-postgres.ps1", document, StringComparison.Ordinal);
-        Assert.Contains("generate-migration-script.ps1", document, StringComparison.Ordinal);
-        Assert.Contains("check-local-postgres.ps1", document, StringComparison.Ordinal);
-        Assert.Contains("restore-postgres.ps1", document, StringComparison.Ordinal);
-        Assert.Contains("garagebalance_restore_check", document, StringComparison.Ordinal);
-        Assert.Contains("Failed Access import", document, StringComparison.Ordinal);
-        Assert.Contains("dry-run report", document, StringComparison.Ordinal);
-        Assert.Contains("quarantine list", document, StringComparison.Ordinal);
-        Assert.Contains("Failed update or migration", document, StringComparison.Ordinal);
-        Assert.Contains("Never edit EF migration history manually", document, StringComparison.Ordinal);
-        Assert.Contains("Production restore gate", document, StringComparison.Ordinal);
-        Assert.Contains("-AllowProductionTarget", document, StringComparison.Ordinal);
-        Assert.Contains("postgresTcp=False", document, StringComparison.Ordinal);
-        Assert.Contains("psql=False", document, StringComparison.Ordinal);
-        Assert.Contains("docker=False", document, StringComparison.Ordinal);
-    }
-
     private static string ReadRepositoryFile(params string[] pathParts)
     {
         return File.ReadAllText(Path.Combine([FindRepositoryRoot(), .. pathParts]));

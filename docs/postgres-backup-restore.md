@@ -1,4 +1,4 @@
-# PostgreSQL backup and restore
+# Backup и восстановление PostgreSQL
 
 Эта инструкция описывает ручной и регулярный backup PostgreSQL для локальной установки GarageBalance и проверочное восстановление перед импортом Access, обновлением версии или миграциями.
 
@@ -87,7 +87,7 @@
 - [ ] Задача запущена вручную хотя бы один раз после регистрации.
 - [ ] После ручного запуска появился новый `.pgdump` в `C:\GarageBalance\Backups`, файл больше 0 байт.
 - [ ] Последний backup восстановлен через `restore-postgres.ps1 -TargetDatabase garagebalance_restore_check -DropAndCreate`.
-- [ ] Результат первого запуска, путь к backup-файлу и результат restore-check записаны в roadmap history или журнал работ администратора.
+- [ ] Результат первого запуска, путь к backup-файлу и результат restore-check записаны в журнал работ администратора.
 
 ## Перед импортом и обновлением
 
@@ -102,7 +102,7 @@
 
 - [ ] `check-local-postgres.ps1 -RequirePsql` завершился `localPostgresPreflight=OK`.
 - [ ] `backup-postgres.ps1` создал `.pgdump` в выбранной папке backup.
-- [ ] Backup-файл больше 0 байт, имя файла записано в roadmap history или журнал работ.
+- [ ] Backup-файл больше 0 байт, имя файла записано в журнал технических работ.
 - [ ] `restore-postgres.ps1 -TargetDatabase garagebalance_restore_check -DropAndCreate` восстановил backup в проверочную базу.
 - [ ] Повторная проверка восстановленной базы не показывает ошибок подключения и миграций.
 - [ ] Восстановление в рабочую базу не выполнялось без явного `-AllowProductionTarget`.

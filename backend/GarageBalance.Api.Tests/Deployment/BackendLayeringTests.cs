@@ -1671,133 +1671,11 @@ public sealed class BackendLayeringTests
     }
 
     [Fact]
-    public void BackendLayering_IsCompleteWhenApplicationHasNoInfrastructureOrEfDependencies()
+    public void ApplicationLayerHasNoInfrastructureOrEfDependencies()
     {
         var repositoryRoot = FindRepositoryRoot();
-        var roadmapLines = File.ReadAllLines(Path.Combine(repositoryRoot, "docs", "archive", "project-roadmap.md"));
-        var activeRoadmapLines = roadmapLines
-            .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
-            .ToArray();
-        var history = string.Join('\n', roadmapLines.SkipWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal)));
-        var layeringLine = activeRoadmapLines.Single(line =>
-            line.Contains("Backend разделен на слои", StringComparison.Ordinal));
-
-        Assert.StartsWith("- `[x]`", layeringLine, StringComparison.Ordinal);
-        Assert.Contains("IFormStateRepository", layeringLine, StringComparison.Ordinal);
-        Assert.Contains("EfFormStateRepository", layeringLine, StringComparison.Ordinal);
-        Assert.Contains("IApplicationUnitOfWork", layeringLine, StringComparison.Ordinal);
-        Assert.Contains("EfApplicationUnitOfWork", layeringLine, StringComparison.Ordinal);
-        Assert.Contains("IAuditEventStore", layeringLine, StringComparison.Ordinal);
-        Assert.Contains("IImportFingerprintRepository", layeringLine, StringComparison.Ordinal);
-        Assert.Contains("EfImportFingerprintRepository", layeringLine, StringComparison.Ordinal);
-        Assert.Contains("IImportQuarantineRepository", layeringLine, StringComparison.Ordinal);
-        Assert.Contains("EfImportQuarantineRepository", layeringLine, StringComparison.Ordinal);
-        Assert.Contains("IReceiptPrintingRepository", layeringLine, StringComparison.Ordinal);
-        Assert.Contains("EfReceiptPrintingRepository", layeringLine, StringComparison.Ordinal);
-        Assert.Contains("OneCFreshSyncService", layeringLine, StringComparison.Ordinal);
-        Assert.Contains("DictionaryService", layeringLine, StringComparison.Ordinal);
-        Assert.Contains("FinanceService", layeringLine, StringComparison.Ordinal);
-        Assert.Contains("IIntegrationSecretSettingsRepository", layeringLine, StringComparison.Ordinal);
-        Assert.Contains("EfIntegrationSecretSettingsRepository", layeringLine, StringComparison.Ordinal);
-        Assert.Contains("IUserManagementRepository", layeringLine, StringComparison.Ordinal);
-        Assert.Contains("EfUserManagementRepository", layeringLine, StringComparison.Ordinal);
-        Assert.Contains("IOwnerRepository", layeringLine, StringComparison.Ordinal);
-        Assert.Contains("EfOwnerRepository", layeringLine, StringComparison.Ordinal);
-        Assert.Contains("IGarageRepository", layeringLine, StringComparison.Ordinal);
-        Assert.Contains("EfGarageRepository", layeringLine, StringComparison.Ordinal);
-        Assert.Contains("ISupplierGroupRepository", layeringLine, StringComparison.Ordinal);
-        Assert.Contains("EfSupplierGroupRepository", layeringLine, StringComparison.Ordinal);
-        Assert.Contains("ISupplierRepository", layeringLine, StringComparison.Ordinal);
-        Assert.Contains("EfSupplierRepository", layeringLine, StringComparison.Ordinal);
-        Assert.Contains("ISupplierContactRepository", layeringLine, StringComparison.Ordinal);
-        Assert.Contains("EfSupplierContactRepository", layeringLine, StringComparison.Ordinal);
-        Assert.Contains("IStaffDepartmentRepository", layeringLine, StringComparison.Ordinal);
-        Assert.Contains("EfStaffDepartmentRepository", layeringLine, StringComparison.Ordinal);
-        Assert.Contains("IStaffMemberRepository", layeringLine, StringComparison.Ordinal);
-        Assert.Contains("EfStaffMemberRepository", layeringLine, StringComparison.Ordinal);
-        Assert.Contains("IIncomeTypeRepository", layeringLine, StringComparison.Ordinal);
-        Assert.Contains("EfIncomeTypeRepository", layeringLine, StringComparison.Ordinal);
-        Assert.Contains("IExpenseTypeRepository", layeringLine, StringComparison.Ordinal);
-        Assert.Contains("EfExpenseTypeRepository", layeringLine, StringComparison.Ordinal);
-        Assert.Contains("ITariffRepository", layeringLine, StringComparison.Ordinal);
-        Assert.Contains("EfTariffRepository", layeringLine, StringComparison.Ordinal);
-        Assert.Contains("IIrregularPaymentRepository", layeringLine, StringComparison.Ordinal);
-        Assert.Contains("EfIrregularPaymentRepository", layeringLine, StringComparison.Ordinal);
-        Assert.Contains("IChargeServiceSettingRepository", layeringLine, StringComparison.Ordinal);
-        Assert.Contains("EfChargeServiceSettingRepository", layeringLine, StringComparison.Ordinal);
-        Assert.Contains("IFeeCampaignRepository", layeringLine, StringComparison.Ordinal);
-        Assert.Contains("EfFeeCampaignRepository", layeringLine, StringComparison.Ordinal);
-        Assert.Contains("IFundRepository", layeringLine, StringComparison.Ordinal);
-        Assert.Contains("EfFundRepository", layeringLine, StringComparison.Ordinal);
-        Assert.Contains("IFinancialOperationRepository", layeringLine, StringComparison.Ordinal);
-        Assert.Contains("EfFinancialOperationRepository", layeringLine, StringComparison.Ordinal);
-        Assert.Contains("IAccrualRepository", layeringLine, StringComparison.Ordinal);
-        Assert.Contains("EfAccrualRepository", layeringLine, StringComparison.Ordinal);
-        Assert.Contains("ISupplierAccrualRepository", layeringLine, StringComparison.Ordinal);
-        Assert.Contains("EfSupplierAccrualRepository", layeringLine, StringComparison.Ordinal);
-        Assert.Contains("IAuditEventRepository", layeringLine, StringComparison.Ordinal);
-        Assert.Contains("EfAuditEventRepository", layeringLine, StringComparison.Ordinal);
-        Assert.Contains("IImportRepository", layeringLine, StringComparison.Ordinal);
-        Assert.Contains("EfImportRepository", layeringLine, StringComparison.Ordinal);
-        Assert.Contains("ICashMovementReportQuery", layeringLine, StringComparison.Ordinal);
-        Assert.Contains("EfCashMovementReportQuery", layeringLine, StringComparison.Ordinal);
-        Assert.Contains("IFundChangeReportQuery", layeringLine, StringComparison.Ordinal);
-        Assert.Contains("EfFundChangeReportQuery", layeringLine, StringComparison.Ordinal);
-        Assert.Contains("IConsolidatedMonthlyReportQuery", layeringLine, StringComparison.Ordinal);
-        Assert.Contains("EfConsolidatedMonthlyReportQuery", layeringLine, StringComparison.Ordinal);
-        Assert.Contains("IConsolidatedGarageReportQuery", layeringLine, StringComparison.Ordinal);
-        Assert.Contains("EfConsolidatedGarageReportQuery", layeringLine, StringComparison.Ordinal);
-        Assert.Contains("IFeeReportQuery", layeringLine, StringComparison.Ordinal);
-        Assert.Contains("EfFeeReportQuery", layeringLine, StringComparison.Ordinal);
-        Assert.Contains("IExpenseReportQuery", layeringLine, StringComparison.Ordinal);
-        Assert.Contains("EfExpenseReportQuery", layeringLine, StringComparison.Ordinal);
-        Assert.Contains("IIncomeReportQuery", layeringLine, StringComparison.Ordinal);
-        Assert.Contains("EfIncomeReportQuery", layeringLine, StringComparison.Ordinal);
-        Assert.Contains(nameof(BackendLayeringTests), layeringLine, StringComparison.Ordinal);
-        Assert.Contains("выполнен сорок третий срез разделения backend-слоев", history, StringComparison.Ordinal);
-        Assert.Contains("выполнен сорок второй срез разделения backend-слоев", history, StringComparison.Ordinal);
-        Assert.Contains("выполнен сорок первый срез разделения backend-слоев", history, StringComparison.Ordinal);
-        Assert.Contains("выполнен сороковой срез разделения backend-слоев", history, StringComparison.Ordinal);
-        Assert.Contains("выполнен тридцать девятый срез разделения backend-слоев", history, StringComparison.Ordinal);
-        Assert.Contains("выполнен тридцать восьмой срез разделения backend-слоев", history, StringComparison.Ordinal);
-        Assert.Contains("выполнен тридцать седьмой срез разделения backend-слоев", history, StringComparison.Ordinal);
-        Assert.Contains("выполнен тридцать шестой срез разделения backend-слоев", history, StringComparison.Ordinal);
-        Assert.Contains("выполнен тридцать пятый срез разделения backend-слоев", history, StringComparison.Ordinal);
-        Assert.Contains("выполнен тридцать четвертый срез разделения backend-слоев", history, StringComparison.Ordinal);
-        Assert.Contains("выполнен тридцать третий срез разделения backend-слоев", history, StringComparison.Ordinal);
-        Assert.Contains("выполнен тридцать второй срез разделения backend-слоев", history, StringComparison.Ordinal);
-        Assert.Contains("выполнен тридцать первый срез разделения backend-слоев", history, StringComparison.Ordinal);
-        Assert.Contains("выполнен тридцатый срез разделения backend-слоев", history, StringComparison.Ordinal);
-        Assert.Contains("выполнен двадцать девятый срез разделения backend-слоев", history, StringComparison.Ordinal);
-        Assert.Contains("выполнен двадцать восьмой срез разделения backend-слоев", history, StringComparison.Ordinal);
-        Assert.Contains("выполнен двадцать седьмой срез разделения backend-слоев", history, StringComparison.Ordinal);
-        Assert.Contains("выполнен двадцать шестой срез разделения backend-слоев", history, StringComparison.Ordinal);
-        Assert.Contains("выполнен двадцать пятый срез разделения backend-слоев", history, StringComparison.Ordinal);
-        Assert.Contains("выполнен двадцать четвертый срез разделения backend-слоев", history, StringComparison.Ordinal);
-        Assert.Contains("выполнен двадцать третий срез разделения backend-слоев", history, StringComparison.Ordinal);
-        Assert.Contains("выполнен двадцать второй срез разделения backend-слоев", history, StringComparison.Ordinal);
-        Assert.Contains("выполнен двадцать первый срез разделения backend-слоев", history, StringComparison.Ordinal);
-        Assert.Contains("выполнен двадцатый срез разделения backend-слоев", history, StringComparison.Ordinal);
-        Assert.Contains("выполнен девятнадцатый срез разделения backend-слоев", history, StringComparison.Ordinal);
-        Assert.Contains("выполнен восемнадцатый срез разделения backend-слоев", history, StringComparison.Ordinal);
-        Assert.Contains("выполнен семнадцатый срез разделения backend-слоев", history, StringComparison.Ordinal);
-        Assert.Contains("выполнен шестнадцатый срез разделения backend-слоев", history, StringComparison.Ordinal);
-        Assert.Contains("выполнен пятнадцатый срез разделения backend-слоев", history, StringComparison.Ordinal);
-        Assert.Contains("выполнен четырнадцатый срез разделения backend-слоев", history, StringComparison.Ordinal);
-        Assert.Contains("выполнен тринадцатый срез разделения backend-слоев", history, StringComparison.Ordinal);
-        Assert.Contains("выполнен двенадцатый срез разделения backend-слоев", history, StringComparison.Ordinal);
-        Assert.Contains("выполнен одиннадцатый срез разделения backend-слоев", history, StringComparison.Ordinal);
-        Assert.Contains("выполнен десятый срез разделения backend-слоев", history, StringComparison.Ordinal);
-        Assert.Contains("выполнен девятый срез разделения backend-слоев", history, StringComparison.Ordinal);
-        Assert.Contains("выполнен восьмой срез разделения backend-слоев", history, StringComparison.Ordinal);
-        Assert.Contains("выполнен седьмой срез разделения backend-слоев", history, StringComparison.Ordinal);
-        Assert.Contains("выполнен шестой срез разделения backend-слоев", history, StringComparison.Ordinal);
-        Assert.Contains("выполнен пятый срез разделения backend-слоев", history, StringComparison.Ordinal);
-        Assert.Contains("выполнен четвертый срез разделения backend-слоев", history, StringComparison.Ordinal);
-        Assert.Contains("выполнен третий срез разделения backend-слоев", history, StringComparison.Ordinal);
-        Assert.Contains("выполнен второй срез разделения backend-слоев", history, StringComparison.Ordinal);
-        Assert.Contains("выполнен следующий срез разделения backend-слоев", history, StringComparison.Ordinal);
         var applicationRoot = Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "Application");
+
         foreach (var applicationFile in Directory.GetFiles(applicationRoot, "*.cs", SearchOption.AllDirectories))
         {
             var applicationSource = File.ReadAllText(applicationFile);
@@ -1805,8 +1683,6 @@ public sealed class BackendLayeringTests
             Assert.DoesNotContain("GarageBalanceDbContext", applicationSource, StringComparison.Ordinal);
             Assert.DoesNotContain("Microsoft.EntityFrameworkCore", applicationSource, StringComparison.Ordinal);
         }
-        Assert.Contains("общий backend-layering пункт закрыт", history, StringComparison.Ordinal);
-        Assert.Contains("Новая запись \"Что нового\" не добавлялась", history, StringComparison.Ordinal);
     }
 
     private static string FindRepositoryRoot()

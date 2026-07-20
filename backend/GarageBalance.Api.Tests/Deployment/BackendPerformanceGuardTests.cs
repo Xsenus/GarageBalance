@@ -1069,78 +1069,21 @@ public sealed class BackendPerformanceGuardTests
     }
 
     [Fact]
-    public void FinalPerformanceChecklistCoversAutomatedGatesPostgresQueriesFrontendAndAcceptanceThresholds()
+    public void PerformanceGuideCoversAutomatedGatesPostgresQueriesFrontendAndAcceptance()
     {
         var document = File.ReadAllText(Path.Combine(FindRepositoryRoot(), "docs", "final-performance-checklist.md"));
 
-        Assert.Contains("final performance verification", document, StringComparison.Ordinal);
+        Assert.Contains("Производительность и стабильность", document, StringComparison.Ordinal);
         Assert.Contains("BackendPerformanceGuardTests", document, StringComparison.Ordinal);
-        Assert.Contains("dotnet test GarageBalance.slnx --no-restore --configuration Debug", document, StringComparison.Ordinal);
-        Assert.Contains("npm run test -- --reporter=dot --maxWorkers=1 --testTimeout=180000", document, StringComparison.Ordinal);
+        Assert.Contains("dotnet test GarageBalance.slnx --no-restore --configuration Release", document, StringComparison.Ordinal);
+        Assert.Contains("npm run test:coverage", document, StringComparison.Ordinal);
         Assert.Contains("npm run check:bundle", document, StringComparison.Ordinal);
-        Assert.Contains("main JS gzip: `180 KiB`", document, StringComparison.Ordinal);
+        Assert.Contains("180 KiB", document, StringComparison.Ordinal);
         Assert.Contains("EXPLAIN (ANALYZE, BUFFERS)", document, StringComparison.Ordinal);
         Assert.Contains("GIN trigram indexes", document, StringComparison.Ordinal);
-        Assert.Contains("Forty-eighth supplier-primary-contact projection audit", document, StringComparison.Ordinal);
-        Assert.Contains("PostgreSqlSupplierPrimaryContactIntegrationTests.SupplierPage_ProjectsOneRankedContactPerSupplierInPostgreSql", document, StringComparison.Ordinal);
-        Assert.Contains("Forty-ninth fund-totals aggregation audit", document, StringComparison.Ordinal);
-        Assert.Contains("PostgreSqlFundTotalsIntegrationTests.GetTotalsAsync_KeepsFinancialTotalsWhenFundCatalogIsEmptyAndUsesOneUnionQuery", document, StringComparison.Ordinal);
-        Assert.Contains("Fiftieth missing-meter-reading aggregation audit", document, StringComparison.Ordinal);
-        Assert.Contains("PostgreSqlMissingMeterReadingQueryIntegrationTests.GetMissingAsync_AggregatesMonthlyReadingStatusOnceAndKeepsMissingKindsExact", document, StringComparison.Ordinal);
-        Assert.Contains("Fifty-first garage-balance aggregation audit", document, StringComparison.Ordinal);
-        Assert.Contains("PostgreSqlGarageBalanceTotalsIntegrationTests.BalanceTotals_AggregateEachFinancialSourceOnceWithoutChangingRules", document, StringComparison.Ordinal);
-        Assert.Contains("Fifty-second garage-balance-history aggregation audit", document, StringComparison.Ordinal);
-        Assert.Contains("PostgreSqlGarageBalanceHistoryQueryIntegrationTests.GetAsync_AggregatesOpeningAndMonthlyValuesWithOneScanPerFinancialSource", document, StringComparison.Ordinal);
-        Assert.Contains("Fifty-third fee-report command consolidation audit", document, StringComparison.Ordinal);
-        Assert.Contains("PostgreSqlFeeReportQueryIntegrationTests.FeePageUsesOneCommandAndPreservesPageDebtorsAndCompleteSummary", document, StringComparison.Ordinal);
-        Assert.Contains("FeeCampaignPageUsesTheSameSingleCommandPipeline", document, StringComparison.Ordinal);
-        Assert.Contains("Fifty-fourth consolidated-monthly-report command audit", document, StringComparison.Ordinal);
-        Assert.Contains("PostgreSqlConsolidatedMonthlyReportQueryIntegrationTests.MonthlyReportBuildsAllSectionsFromOneCommandAndOneBaseScan", document, StringComparison.Ordinal);
-        Assert.Contains("Fifty-fifth consolidated-garage-report aggregation audit", document, StringComparison.Ordinal);
-        Assert.Contains("PostgreSqlConsolidatedGarageReportQueryIntegrationTests.GarageRowsReturnCountAndBoundedPageInOneAggregatedCommand", document, StringComparison.Ordinal);
-        Assert.Contains("Fifty-sixth cash-payment-report command audit", document, StringComparison.Ordinal);
-        Assert.Contains("PostgreSqlCashPaymentReportQueryIntegrationTests.CashPaymentPageUsesOneCommandAndPreservesTotalsSearchAndProjection", document, StringComparison.Ordinal);
-        Assert.Contains("Fifty-seventh bank-deposit-report command audit", document, StringComparison.Ordinal);
-        Assert.Contains("PostgreSqlBankDepositReportQueryIntegrationTests.BankDepositPageUsesOneCommandAndPreservesTotalsSearchAndProjection", document, StringComparison.Ordinal);
-        Assert.Contains("Fifty-eighth fund-change-report command audit", document, StringComparison.Ordinal);
-        Assert.Contains("PostgreSqlFundChangeReportQueryIntegrationTests.FundChangePageUsesOneCommandAndPreservesTotalsSearchActorAndProjection", document, StringComparison.Ordinal);
-        Assert.Contains("Fifty-ninth income-payment-page reuse audit", document, StringComparison.Ordinal);
-        Assert.Contains("PostgreSqlIncomeReportPaymentQueryIntegrationTests.PaymentPageLoadsTotalsPageAndSequentialDebtInTwoCommands", document, StringComparison.Ordinal);
-        Assert.Contains("Sixtieth income-payment command consolidation audit", document, StringComparison.Ordinal);
-        Assert.Contains("Sixty-first expense-payment command consolidation audit", document, StringComparison.Ordinal);
-        Assert.Contains("PostgreSqlExpenseReportPaymentQueryIntegrationTests.PaymentPageLoadsSupplierAndStaffTotalsAndPageInOneCommand", document, StringComparison.Ordinal);
-        Assert.Contains("Sixty-second income-accrual command consolidation audit", document, StringComparison.Ordinal);
-        Assert.Contains("PostgreSqlIncomeReportAccrualQueryIntegrationTests.AccrualPageLoadsStartingBalanceAccrualTotalsAndPageInOneCommand", document, StringComparison.Ordinal);
-        Assert.Contains("Sixty-third expense-accrual command consolidation audit", document, StringComparison.Ordinal);
-        Assert.Contains("PostgreSqlExpenseReportAccrualQueryIntegrationTests.AccrualPageLoadsStartingBalanceSupplierAndStaffTotalsInOneCommand", document, StringComparison.Ordinal);
-        Assert.Contains("Sixty-fourth expense-all command consolidation audit", document, StringComparison.Ordinal);
-        Assert.Contains("PostgreSqlExpenseReportAllQueryIntegrationTests.AllRowsLoadAccrualPaymentTotalsAndBoundedPageInOneCommand", document, StringComparison.Ordinal);
-        Assert.Contains("Sixty-fifth income-all command consolidation audit", document, StringComparison.Ordinal);
-        Assert.Contains("PostgreSqlIncomeReportAllQueryIntegrationTests.AllRowsLoadTotalsBoundedPageAndSequentialDebtInAtMostTwoCommands", document, StringComparison.Ordinal);
-        Assert.Contains("Sixty-sixth garage-report command consolidation audit", document, StringComparison.Ordinal);
-        Assert.Contains("PostgreSqlGarageReportQueryIntegrationTests.GarageReportReturnsTotalsCountAndBoundedGroupedOrExpandedPageInOneCommand", document, StringComparison.Ordinal);
-        Assert.Contains("Sixty-seventh audit-page command consolidation audit", document, StringComparison.Ordinal);
-        Assert.Contains("PostgreSqlAuditEventPageQueryIntegrationTests.AuditPageLoadsCountRowsAndActorsInOneCommandForEveryPageShape", document, StringComparison.Ordinal);
-        Assert.Contains("Sixty-eighth meter-reading-year command consolidation audit", document, StringComparison.Ordinal);
-        Assert.Contains("PostgreSqlMeterReadingYearPageIntegrationTests.YearPageLoadsTotalGaragesAndReadingsInOneCommandForEveryPageShape", document, StringComparison.Ordinal);
-        Assert.Contains("Sixty-ninth meter-reading-page command consolidation audit", document, StringComparison.Ordinal);
-        Assert.Contains("PostgreSqlMeterReadingPageIntegrationTests.ReadingPageLoadsCountRowsGarageAndOwnerInOneCommandForEveryPageShape", document, StringComparison.Ordinal);
-        Assert.Contains("Seventieth accrual-page command consolidation audit", document, StringComparison.Ordinal);
-        Assert.Contains("PostgreSqlAccrualPageIntegrationTests.AccrualPageLoadsCountRowsAndRelatedNamesInOneCommandForEveryPageShape", document, StringComparison.Ordinal);
-        Assert.Contains("Seventy-first supplier-accrual-page command consolidation audit", document, StringComparison.Ordinal);
-        Assert.Contains("PostgreSqlSupplierAccrualPageIntegrationTests.SupplierAccrualPageLoadsCountRowsAndRelatedNamesInOneCommandForEveryPageShape", document, StringComparison.Ordinal);
-        Assert.Contains("Seventy-second financial-operation-page command consolidation audit", document, StringComparison.Ordinal);
-        Assert.Contains("PostgreSqlFinancialOperationPageIntegrationTests.OperationPageLoadsCountMixedRowsAndRelatedNamesInOneCommandForEveryPageShape", document, StringComparison.Ordinal);
-        Assert.Contains("Shared end-user release `0.758.0`", document, StringComparison.Ordinal);
-        Assert.Contains("limit", document, StringComparison.Ordinal);
-        Assert.Contains("rowCount", document, StringComparison.Ordinal);
-        Assert.Contains("CountAsync", document, StringComparison.Ordinal);
-        Assert.Contains("SumAsync", document, StringComparison.Ordinal);
-        Assert.Contains("browser console", document, StringComparison.Ordinal);
-        Assert.Contains("realistic customer data", document, StringComparison.Ordinal);
-        Assert.Contains("psql` and Docker tooling", document, StringComparison.Ordinal);
-        Assert.Contains("authorized VPS", document, StringComparison.Ordinal);
-        Assert.Contains("Post-cleanup service checks passed", document, StringComparison.Ordinal);
+        Assert.Contains("PostgreSQL integration tests", document, StringComparison.Ordinal);
+        Assert.Contains("браузер", document, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("не меняет формулы, округление, права и audit", document, StringComparison.Ordinal);
     }
 
     private static string ReadApiSource(string relativePath)

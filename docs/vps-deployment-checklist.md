@@ -1,4 +1,4 @@
-# Checklist: VPS + domain + TLS
+# Развёртывание на VPS с доменом и TLS
 
 Документ фиксирует безопасную процедуру тестового и будущего production-размещения GarageBalance на VPS с доменом `sgk.blagodaty.ru`. Реальные пароли, токены, `.env`, дампы PostgreSQL и приватные файлы импорта в Git не добавляются.
 
@@ -185,7 +185,7 @@ server {
 - [ ] При необходимости восстановить backup в отдельную проверочную базу.
 - [ ] Только после проверки восстановленной базы переключать рабочую БД.
 - [ ] Запустить сервис и проверить `curl -fsS https://sgk.blagodaty.ru/health`.
-- [ ] Записать причину rollback и результат проверки в roadmap history.
+- [ ] Записать причину rollback и результат проверки в журнал технических работ.
 
 ## 10. Что нельзя делать
 
@@ -204,4 +204,4 @@ server {
 - [ ] Проверены `systemctl status garagebalance-staging.service`, `journalctl -u garagebalance-staging.service -n 100 --no-pager`, `nginx -t` и `systemctl reload nginx`.
 - [ ] Проверены `curl -fsS https://sgk.blagodaty.ru/health`, открытие `https://sgk.blagodaty.ru` на desktop/mobile и hard refresh frontend.
 - [ ] Выполнен smoke входа, справочников, платежей, отчетов, импорта dry-run, audit и "Что нового".
-- [ ] В roadmap history записаны commit, workflow run, release id, backup-файл, health-check и все оставшиеся блокеры.
+- [ ] В журнале технических работ записаны commit, workflow run, release id, backup-файл, health-check и все оставшиеся блокеры.

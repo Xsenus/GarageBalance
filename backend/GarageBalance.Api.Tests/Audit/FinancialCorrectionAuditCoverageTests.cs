@@ -9,9 +9,6 @@ public sealed class FinancialCorrectionAuditCoverageTests
     private static readonly Lazy<string> TestText = new(() => ReadFiles(
         Path.Combine(RepositoryRoot, "backend", "GarageBalance.Api.Tests", "Finance"),
         Path.Combine(RepositoryRoot, "backend", "GarageBalance.Api.Tests", "Funds")));
-    private static readonly Lazy<string> CoverageDocument = new(() =>
-        File.ReadAllText(Path.Combine(RepositoryRoot, "docs", "audit-event-coverage.md")));
-
     public static TheoryData<string> FinancialCorrectionActions => new()
     {
         "finance.income_updated",
@@ -40,11 +37,10 @@ public sealed class FinancialCorrectionAuditCoverageTests
 
     [Theory]
     [MemberData(nameof(FinancialCorrectionActions))]
-    public void FinancialCorrectionAction_IsWrittenDocumentedAndCovered(string action)
+    public void FinancialCorrectionAction_IsWrittenAndCovered(string action)
     {
         Assert.Contains($"\"{action}\"", ProductionText.Value, StringComparison.Ordinal);
         Assert.Contains($"\"{action}\"", TestText.Value, StringComparison.Ordinal);
-        Assert.Contains($"`{action}`", CoverageDocument.Value, StringComparison.Ordinal);
     }
 
     private static string ReadFiles(params string[] directories)

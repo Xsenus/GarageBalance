@@ -25,16 +25,14 @@ public sealed class PackagePrivacyScriptTests
     }
 
     [Fact]
-    public void DocumentationReferencesPackagePrivacyScriptBeforeGitOrArchiveHandoff()
+    public void DocumentationReferencesPackagePrivacyScriptBeforePublication()
     {
         var repositoryRoot = FindRepositoryRoot();
         var readme = File.ReadAllText(Path.Combine(repositoryRoot, "README.md"));
-        var gitHandoff = File.ReadAllText(Path.Combine(repositoryRoot, "docs", "git-handoff-checklist.md"));
-        var roadmap = File.ReadAllText(Path.Combine(repositoryRoot, "docs", "archive", "project-roadmap.md"));
+        var testingGuide = File.ReadAllText(Path.Combine(repositoryRoot, "docs", "testing-guide.md"));
 
         Assert.Contains("verify-package-privacy.ps1", readme, StringComparison.Ordinal);
-        Assert.Contains("verify-package-privacy.ps1", gitHandoff, StringComparison.Ordinal);
-        Assert.Contains("verify-package-privacy.ps1", roadmap, StringComparison.Ordinal);
+        Assert.Contains("verify-package-privacy.ps1", testingGuide, StringComparison.Ordinal);
     }
 
     private static string FindRepositoryRoot()

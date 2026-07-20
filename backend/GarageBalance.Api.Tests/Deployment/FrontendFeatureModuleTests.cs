@@ -52,7 +52,7 @@ public sealed class FrontendFeatureModuleTests
         Assert.Contains("sidebarExpandedStorageKey", shellText, StringComparison.Ordinal);
         Assert.Contains("const navigation: NavigationItem[]", shellText, StringComparison.Ordinal);
         Assert.Contains("<Workspace activeSection={effectiveActiveSection}", shellText, StringComparison.Ordinal);
-        Assert.Contains("frontend/src/features/workspace/AppShell.tsx", File.ReadAllText(Path.Combine(repositoryRoot, "docs", "archive", "project-roadmap.md")), StringComparison.Ordinal);
+        Assert.Contains("frontend/src/features/workspace/AppShell.tsx", File.ReadAllText(Path.Combine(repositoryRoot, "docs", "development-guide.md")), StringComparison.Ordinal);
     }
 
     [Fact]
@@ -71,7 +71,7 @@ public sealed class FrontendFeatureModuleTests
         Assert.Contains("function AccessNotice(", featureText, StringComparison.Ordinal);
         Assert.Contains("case 'payments':", featureText, StringComparison.Ordinal);
         Assert.Contains("<FinancePanel", featureText, StringComparison.Ordinal);
-        Assert.Contains("frontend/src/features/workspace/Workspace.tsx", File.ReadAllText(Path.Combine(repositoryRoot, "docs", "archive", "project-roadmap.md")), StringComparison.Ordinal);
+        Assert.Contains("frontend/src/features/workspace/Workspace.tsx", File.ReadAllText(Path.Combine(repositoryRoot, "docs", "development-guide.md")), StringComparison.Ordinal);
     }
 
     [Fact]
@@ -89,7 +89,7 @@ public sealed class FrontendFeatureModuleTests
         Assert.Contains("financeClient.createIncome", featureText, StringComparison.Ordinal);
         Assert.Contains("financeClient.cancelOperation", featureText, StringComparison.Ordinal);
         Assert.Contains("integrationClient.registerReceiptPrintingAction", featureText, StringComparison.Ordinal);
-        Assert.Contains("frontend/src/features/finance/FinancePanel.tsx", File.ReadAllText(Path.Combine(repositoryRoot, "docs", "archive", "project-roadmap.md")), StringComparison.Ordinal);
+        Assert.Contains("frontend/src/features/finance/FinancePanel.tsx", File.ReadAllText(Path.Combine(repositoryRoot, "docs", "development-guide.md")), StringComparison.Ordinal);
     }
 
     [Fact]
@@ -116,7 +116,7 @@ public sealed class FrontendFeatureModuleTests
         Assert.Contains("ariaLabel=\"Пагинация персонала\"", featureText, StringComparison.Ordinal);
         Assert.Contains("financeClient.getGarageBalanceHistory", featureText, StringComparison.Ordinal);
         Assert.Contains("onOpenAudit", featureText, StringComparison.Ordinal);
-        Assert.Contains("frontend/src/features/contractors/ContractorsPanel.tsx", File.ReadAllText(Path.Combine(repositoryRoot, "docs", "archive", "project-roadmap.md")), StringComparison.Ordinal);
+        Assert.Contains("frontend/src/features/contractors/ContractorsPanel.tsx", File.ReadAllText(Path.Combine(repositoryRoot, "docs", "development-guide.md")), StringComparison.Ordinal);
     }
 
     [Fact]
@@ -133,7 +133,7 @@ public sealed class FrontendFeatureModuleTests
         Assert.Contains("dictionaryClient.createChargeServiceSetting", featureText, StringComparison.Ordinal);
         Assert.Contains("dictionaryClient.createFeeCampaign", featureText, StringComparison.Ordinal);
         Assert.Contains("financeClient.generateFeeCampaignAccruals", featureText, StringComparison.Ordinal);
-        Assert.Contains("frontend/src/features/tariffs/TariffsAndFeesPanel.tsx", File.ReadAllText(Path.Combine(repositoryRoot, "docs", "archive", "project-roadmap.md")), StringComparison.Ordinal);
+        Assert.Contains("frontend/src/features/tariffs/TariffsAndFeesPanel.tsx", File.ReadAllText(Path.Combine(repositoryRoot, "docs", "development-guide.md")), StringComparison.Ordinal);
     }
 
     [Fact]
@@ -143,7 +143,7 @@ public sealed class FrontendFeatureModuleTests
         var appText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "App.tsx")) + File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "features", "workspace", "Workspace.tsx"));
         var dictionaryPanelText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "features", "dictionaries", "DictionaryPanel.tsx"));
         var roadmapLine = File
-            .ReadLines(Path.Combine(repositoryRoot, "docs", "archive", "project-roadmap.md"))
+            .ReadLines(Path.Combine(repositoryRoot, "docs", "development-guide.md"))
             .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
             .Single(line => line.Contains("Frontend разделять на feature-модули", StringComparison.Ordinal));
 
@@ -170,7 +170,7 @@ public sealed class FrontendFeatureModuleTests
         var dictionaryListText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "shared", "DictionaryList.tsx"));
         var dictionaryPanelText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "features", "dictionaries", "DictionaryPanel.tsx"));
         var roadmapLine = File
-            .ReadLines(Path.Combine(repositoryRoot, "docs", "archive", "project-roadmap.md"))
+            .ReadLines(Path.Combine(repositoryRoot, "docs", "development-guide.md"))
             .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
             .Single(line => line.Contains("Frontend разделять на feature-модули", StringComparison.Ordinal));
 
@@ -200,7 +200,7 @@ public sealed class FrontendFeatureModuleTests
             "users",
             "UserManagementPanel.tsx"));
         var roadmapLine = File
-            .ReadLines(Path.Combine(repositoryRoot, "docs", "archive", "project-roadmap.md"))
+            .ReadLines(Path.Combine(repositoryRoot, "docs", "development-guide.md"))
             .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
             .Single(line => line.Contains("Frontend разделять на feature-модули", StringComparison.Ordinal));
 
@@ -232,7 +232,7 @@ public sealed class FrontendFeatureModuleTests
             "reports",
             "ReportPanel.tsx"));
         var roadmapLine = File
-            .ReadLines(Path.Combine(repositoryRoot, "docs", "archive", "project-roadmap.md"))
+            .ReadLines(Path.Combine(repositoryRoot, "docs", "development-guide.md"))
             .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
             .Single(line => line.Contains("Frontend разделять на feature-модули", StringComparison.Ordinal));
 
@@ -258,7 +258,7 @@ public sealed class FrontendFeatureModuleTests
         var auditPanelText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "features", "audit", "AuditPanel.tsx"));
         var navigationContractsText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "shared", "workspaceNavigation.ts"));
         var roadmapLine = File
-            .ReadLines(Path.Combine(repositoryRoot, "docs", "archive", "project-roadmap.md"))
+            .ReadLines(Path.Combine(repositoryRoot, "docs", "development-guide.md"))
             .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
             .Single(line => line.Contains("Frontend разделять на feature-модули", StringComparison.Ordinal));
 
@@ -294,7 +294,7 @@ public sealed class FrontendFeatureModuleTests
         var editingHelpersText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "shared", "prototypeEditing.ts"));
         var editingHelpersTestsText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "shared", "prototypeEditing.test.ts"));
         var roadmapLine = File
-            .ReadLines(Path.Combine(repositoryRoot, "docs", "archive", "project-roadmap.md"))
+            .ReadLines(Path.Combine(repositoryRoot, "docs", "development-guide.md"))
             .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
             .Single(line => line.Contains("Frontend разделять на feature-модули", StringComparison.Ordinal));
 
@@ -327,7 +327,7 @@ public sealed class FrontendFeatureModuleTests
             "import",
             "ImportPanel.tsx"));
         var roadmapLine = File
-            .ReadLines(Path.Combine(repositoryRoot, "docs", "archive", "project-roadmap.md"))
+            .ReadLines(Path.Combine(repositoryRoot, "docs", "development-guide.md"))
             .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
             .Single(line => line.Contains("Frontend разделять на feature-модули", StringComparison.Ordinal));
 
@@ -359,7 +359,7 @@ public sealed class FrontendFeatureModuleTests
             "funds",
             "FundsPanel.tsx"));
         var roadmapLine = File
-            .ReadLines(Path.Combine(repositoryRoot, "docs", "archive", "project-roadmap.md"))
+            .ReadLines(Path.Combine(repositoryRoot, "docs", "development-guide.md"))
             .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
             .Single(line => line.Contains("Frontend разделять на feature-модули", StringComparison.Ordinal));
 
@@ -392,7 +392,7 @@ public sealed class FrontendFeatureModuleTests
             "PasswordPanel.tsx"));
         var formFieldText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "shared", "FormField.tsx"));
         var roadmapLine = File
-            .ReadLines(Path.Combine(repositoryRoot, "docs", "archive", "project-roadmap.md"))
+            .ReadLines(Path.Combine(repositoryRoot, "docs", "development-guide.md"))
             .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
             .Single(line => line.Contains("Frontend разделять на feature-модули", StringComparison.Ordinal));
 
@@ -425,7 +425,7 @@ public sealed class FrontendFeatureModuleTests
             "auth",
             "AuthGate.tsx"));
         var roadmapLine = File
-            .ReadLines(Path.Combine(repositoryRoot, "docs", "archive", "project-roadmap.md"))
+            .ReadLines(Path.Combine(repositoryRoot, "docs", "development-guide.md"))
             .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
             .Single(line => line.Contains("Frontend разделять на feature-модули", StringComparison.Ordinal));
 
@@ -454,7 +454,7 @@ public sealed class FrontendFeatureModuleTests
             "releases",
             "ReleasePanel.tsx"));
         var roadmapLine = File
-            .ReadLines(Path.Combine(repositoryRoot, "docs", "archive", "project-roadmap.md"))
+            .ReadLines(Path.Combine(repositoryRoot, "docs", "development-guide.md"))
             .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
             .Single(line => line.Contains("Frontend разделять на feature-модули", StringComparison.Ordinal));
 

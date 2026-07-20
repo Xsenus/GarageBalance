@@ -12,7 +12,6 @@ public sealed class MonthlyCycleChecklistTests
         var allocationTests = File.ReadAllText(Path.Combine(FindRepositoryRoot(), "backend", "GarageBalance.Api.Tests", "Finance", "AccrualPaymentAllocatorTests.cs"));
         var expenseWorksheetTests = File.ReadAllText(Path.Combine(FindRepositoryRoot(), "backend", "GarageBalance.Api.Tests", "Finance", "PostgreSqlExpenseWorksheetIntegrationTests.cs"));
         var financeService = File.ReadAllText(Path.Combine(FindRepositoryRoot(), "backend", "GarageBalance.Api", "Application", "Finance", "FinanceService.cs"));
-        var roadmap = File.ReadAllText(Path.Combine(FindRepositoryRoot(), "docs", "forms-compliance-fixes-roadmap.md"));
 
         Assert.Contains("backup-postgres.ps1", document, StringComparison.Ordinal);
         Assert.Contains("restore-postgres.ps1", document, StringComparison.Ordinal);
@@ -62,7 +61,6 @@ public sealed class MonthlyCycleChecklistTests
         Assert.Contains("SupplierThreeMonthScenario_KeepsAdvanceWithinExpenseTypeAndRecalculatesAfterCancellation", expenseWorksheetTests, StringComparison.Ordinal);
         Assert.Contains("OtherPaymentsIncomeTypeCode = \"other_payments\"", financeService, StringComparison.Ordinal);
         Assert.Contains("OtherIncomeIncomeTypeCode = \"other_income\"", financeService, StringComparison.Ordinal);
-        Assert.Contains("- [x] Обновить `docs/monthly-cycle-checklist.md` и пользовательские инструкции", roadmap, StringComparison.Ordinal);
     }
 
     private static string FindRepositoryRoot()

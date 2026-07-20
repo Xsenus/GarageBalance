@@ -27,7 +27,7 @@ public sealed class TroubleshootingGuideTests
         Assert.Contains("Принтер", document, StringComparison.Ordinal);
         Assert.Contains("connection string", document, StringComparison.Ordinal);
         Assert.Contains(".pgdump", document, StringComparison.Ordinal);
-        Assert.Contains("roadmap history", document, StringComparison.Ordinal);
+        Assert.Contains("журнале технических работ", document, StringComparison.Ordinal);
     }
 
     private static string FindRepositoryRoot()
