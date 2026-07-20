@@ -2035,8 +2035,11 @@ h1 {
   grid-template-columns: minmax(180px, 0.7fr) minmax(220px, 0.8fr) minmax(320px, 1.5fr);
 }
 
-.contractors-supplier-footer-grid textarea {
-  min-height: 40px;
+.contractors-supplier-footer-grid .form-field > input,
+.contractors-supplier-footer-grid .form-field > textarea {
+  box-sizing: border-box;
+  height: 76px;
+  min-height: 76px;
 }
 
 .suggestion-combobox {
