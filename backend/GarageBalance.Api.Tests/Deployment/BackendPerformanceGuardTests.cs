@@ -237,6 +237,15 @@ public sealed class BackendPerformanceGuardTests
         Assert.Contains("new MeterReadingYearGarageData(garage.Id, garage.Number)", source, StringComparison.Ordinal);
         Assert.Contains("new MeterReadingYearValueData(", source, StringComparison.Ordinal);
         Assert.Contains("garageIds.Contains(reading.GarageId)", source, StringComparison.Ordinal);
+        Assert.Contains("GetPostgresYearPageAsync(year, meterKind, offset, limit, cancellationToken)", source, StringComparison.Ordinal);
+        Assert.Contains("SqlQuery<MeterReadingYearPageRow>", source, StringComparison.Ordinal);
+        Assert.Contains("COUNT(*) OVER () AS \"TotalCount\"", source, StringComparison.Ordinal);
+        Assert.Contains("LEFT JOIN meter_readings AS reading", source, StringComparison.Ordinal);
+        Assert.Contains("WHERE NOT EXISTS (SELECT 1 FROM paged_garages)", source, StringComparison.Ordinal);
+        var postgresYearPageStart = source.IndexOf("private async Task<MeterReadingYearPageData> GetPostgresYearPageAsync", StringComparison.Ordinal);
+        var postgresYearPageEnd = source.IndexOf("private sealed class MeterReadingYearPageRow", postgresYearPageStart, StringComparison.Ordinal);
+        var postgresYearPageMethod = source[postgresYearPageStart..postgresYearPageEnd];
+        Assert.Equal(1, CountOccurrences(postgresYearPageMethod, ".ToListAsync(cancellationToken)"));
     }
 
     [Fact]
@@ -1077,6 +1086,8 @@ public sealed class BackendPerformanceGuardTests
         Assert.Contains("PostgreSqlGarageReportQueryIntegrationTests.GarageReportReturnsTotalsCountAndBoundedGroupedOrExpandedPageInOneCommand", document, StringComparison.Ordinal);
         Assert.Contains("Sixty-seventh audit-page command consolidation audit", document, StringComparison.Ordinal);
         Assert.Contains("PostgreSqlAuditEventPageQueryIntegrationTests.AuditPageLoadsCountRowsAndActorsInOneCommandForEveryPageShape", document, StringComparison.Ordinal);
+        Assert.Contains("Sixty-eighth meter-reading-year command consolidation audit", document, StringComparison.Ordinal);
+        Assert.Contains("PostgreSqlMeterReadingYearPageIntegrationTests.YearPageLoadsTotalGaragesAndReadingsInOneCommandForEveryPageShape", document, StringComparison.Ordinal);
         Assert.Contains("Shared end-user release `0.758.0`", document, StringComparison.Ordinal);
         Assert.Contains("limit", document, StringComparison.Ordinal);
         Assert.Contains("rowCount", document, StringComparison.Ordinal);
