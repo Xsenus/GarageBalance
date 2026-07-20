@@ -1,4 +1,5 @@
 using GarageBalance.Api.Application.Finance;
+using GarageBalance.Api.Domain.Dictionaries;
 using GarageBalance.Api.Domain.Finance;
 using Microsoft.EntityFrameworkCore;
 
@@ -47,11 +48,94 @@ public sealed class EfSupplierAccrualRepository(GarageBalanceDbContext dbContext
         }
 
         query = ApplySearch(query, normalizedSearch);
+        if (dbContext.Database.IsNpgsql())
+        {
+            return await GetPostgresPageAsync(query, offset, limit, cancellationToken);
+        }
+
         var totalCount = await query.CountAsync(cancellationToken);
         var items = await Order(query)
             .Skip(offset)
             .Take(limit)
             .ToListAsync(cancellationToken);
+        return new SupplierAccrualPageData(items, totalCount);
+    }
+
+    private async Task<SupplierAccrualPageData> GetPostgresPageAsync(
+        IQueryable<SupplierAccrual> query,
+        int offset,
+        int limit,
+        CancellationToken cancellationToken)
+    {
+        const int PageCategory = 1;
+        const int TotalsCategory = 2;
+        var pageRows = Order(query)
+            .Skip(offset)
+            .Take(limit)
+            .Select(accrual => new
+            {
+                Category = PageCategory,
+                Id = (Guid?)accrual.Id,
+                SupplierId = (Guid?)accrual.SupplierId,
+                SupplierName = (string?)accrual.Supplier.Name,
+                ExpenseTypeId = (Guid?)accrual.ExpenseTypeId,
+                ExpenseTypeName = (string?)accrual.ExpenseType.Name,
+                AccountingMonth = (DateOnly?)accrual.AccountingMonth,
+                Amount = (decimal?)accrual.Amount,
+                Source = (string?)accrual.Source,
+                accrual.DocumentNumber,
+                accrual.Comment,
+                IsCanceled = (bool?)accrual.IsCanceled,
+                CreatedAtUtc = (DateTimeOffset?)accrual.CreatedAtUtc,
+                UpdatedAtUtc = (DateTimeOffset?)accrual.UpdatedAtUtc,
+                TotalCount = 0
+            });
+        var totalsRow = dbContext.Database
+            .SqlQueryRaw<int>("SELECT 1 AS \"Value\"")
+            .Select(_ => new
+            {
+                Category = TotalsCategory,
+                Id = (Guid?)null,
+                SupplierId = (Guid?)null,
+                SupplierName = (string?)null,
+                ExpenseTypeId = (Guid?)null,
+                ExpenseTypeName = (string?)null,
+                AccountingMonth = (DateOnly?)null,
+                Amount = (decimal?)null,
+                Source = (string?)null,
+                DocumentNumber = (string?)null,
+                Comment = (string?)null,
+                IsCanceled = (bool?)null,
+                CreatedAtUtc = (DateTimeOffset?)null,
+                UpdatedAtUtc = (DateTimeOffset?)null,
+                TotalCount = query.Count()
+            });
+        var rows = await pageRows
+            .Concat(totalsRow)
+            .OrderBy(row => row.Category)
+            .ThenByDescending(row => row.AccountingMonth)
+            .ThenBy(row => row.SupplierName)
+            .ToListAsync(cancellationToken);
+        var totalCount = rows.Single(row => row.Category == TotalsCategory).TotalCount;
+        var items = rows
+            .Where(row => row.Category == PageCategory)
+            .Select(row => new SupplierAccrual
+            {
+                Id = row.Id!.Value,
+                SupplierId = row.SupplierId!.Value,
+                Supplier = new Supplier { Id = row.SupplierId.Value, Name = row.SupplierName! },
+                ExpenseTypeId = row.ExpenseTypeId!.Value,
+                ExpenseType = new ExpenseType { Id = row.ExpenseTypeId.Value, Name = row.ExpenseTypeName! },
+                AccountingMonth = row.AccountingMonth!.Value,
+                Amount = row.Amount!.Value,
+                Source = row.Source!,
+                DocumentNumber = row.DocumentNumber,
+                Comment = row.Comment,
+                IsCanceled = row.IsCanceled!.Value,
+                CreatedAtUtc = row.CreatedAtUtc!.Value,
+                UpdatedAtUtc = row.UpdatedAtUtc!.Value
+            })
+            .ToList();
         return new SupplierAccrualPageData(items, totalCount);
     }
 
