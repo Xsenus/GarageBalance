@@ -278,6 +278,14 @@ public sealed class BackendPerformanceGuardTests
         Assert.Contains("GetMonthlyBucketsAsync", source, StringComparison.Ordinal);
         Assert.DoesNotContain("GetIncomeTypeBucketsAsync", source, StringComparison.Ordinal);
         Assert.Contains(".GroupBy(accrual => accrual.AccountingMonth)", source, StringComparison.Ordinal);
+        Assert.Contains("GetPostgresPageAsync(query, offset, limit, cancellationToken)", source, StringComparison.Ordinal);
+        Assert.Contains("SqlQueryRaw<int>(\"SELECT 1 AS \\\"Value\\\"\")", source, StringComparison.Ordinal);
+        Assert.Contains("TotalCount = query.Count()", source, StringComparison.Ordinal);
+        Assert.Contains(".Concat(totalsRow)", source, StringComparison.Ordinal);
+        var postgresPageStart = source.IndexOf("private async Task<AccrualPageData> GetPostgresPageAsync", StringComparison.Ordinal);
+        var postgresPageEnd = source.IndexOf("public async Task<AccrualPageData> GetDueDateReviewPageAsync", postgresPageStart, StringComparison.Ordinal);
+        var postgresPageMethod = source[postgresPageStart..postgresPageEnd];
+        Assert.Equal(1, CountOccurrences(postgresPageMethod, ".ToListAsync(cancellationToken)"));
     }
 
     [Fact]
@@ -370,6 +378,7 @@ public sealed class BackendPerformanceGuardTests
         Assert.Contains("Режим «Платежи» отчета по поступлениям теперь одновременно получает полные итоги", releaseNotes, StringComparison.Ordinal);
         Assert.Contains("Режим «Платежи» отчета по выплатам теперь одновременно получает полные итоги", releaseNotes, StringComparison.Ordinal);
         Assert.Contains("Режим «Начисления» отчета по поступлениям теперь одновременно получает итоговую сумму", releaseNotes, StringComparison.Ordinal);
+        Assert.Contains("Журнал начислений теперь за одно обращение к базе получает количество найденных записей", releaseNotes, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -1098,6 +1107,8 @@ public sealed class BackendPerformanceGuardTests
         Assert.Contains("PostgreSqlMeterReadingYearPageIntegrationTests.YearPageLoadsTotalGaragesAndReadingsInOneCommandForEveryPageShape", document, StringComparison.Ordinal);
         Assert.Contains("Sixty-ninth meter-reading-page command consolidation audit", document, StringComparison.Ordinal);
         Assert.Contains("PostgreSqlMeterReadingPageIntegrationTests.ReadingPageLoadsCountRowsGarageAndOwnerInOneCommandForEveryPageShape", document, StringComparison.Ordinal);
+        Assert.Contains("Seventieth accrual-page command consolidation audit", document, StringComparison.Ordinal);
+        Assert.Contains("PostgreSqlAccrualPageIntegrationTests.AccrualPageLoadsCountRowsAndRelatedNamesInOneCommandForEveryPageShape", document, StringComparison.Ordinal);
         Assert.Contains("Shared end-user release `0.758.0`", document, StringComparison.Ordinal);
         Assert.Contains("limit", document, StringComparison.Ordinal);
         Assert.Contains("rowCount", document, StringComparison.Ordinal);

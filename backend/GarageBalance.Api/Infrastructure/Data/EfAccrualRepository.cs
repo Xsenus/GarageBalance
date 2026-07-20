@@ -46,11 +46,147 @@ public sealed class EfAccrualRepository(GarageBalanceDbContext dbContext) : IAcc
         }
 
         query = ApplySearch(query, normalizedSearch);
+        if (dbContext.Database.IsNpgsql())
+        {
+            return await GetPostgresPageAsync(query, offset, limit, cancellationToken);
+        }
+
         var totalCount = await query.CountAsync(cancellationToken);
         var items = await Order(query)
             .Skip(offset)
             .Take(limit)
             .ToListAsync(cancellationToken);
+        return new AccrualPageData(items, totalCount);
+    }
+
+    private async Task<AccrualPageData> GetPostgresPageAsync(
+        IQueryable<Accrual> query,
+        int offset,
+        int limit,
+        CancellationToken cancellationToken)
+    {
+        const int PageCategory = 1;
+        const int TotalsCategory = 2;
+        var pageRows = Order(query)
+            .Skip(offset)
+            .Take(limit)
+            .Select(accrual => new
+            {
+                Category = PageCategory,
+                Id = (Guid?)accrual.Id,
+                GarageId = (Guid?)accrual.GarageId,
+                GarageNumber = (string?)accrual.Garage.Number,
+                OwnerId = accrual.Garage.OwnerId,
+                OwnerLastName = accrual.Garage.Owner == null ? null : accrual.Garage.Owner.LastName,
+                OwnerFirstName = accrual.Garage.Owner == null ? null : accrual.Garage.Owner.FirstName,
+                OwnerMiddleName = accrual.Garage.Owner == null ? null : accrual.Garage.Owner.MiddleName,
+                IncomeTypeId = (Guid?)accrual.IncomeTypeId,
+                IncomeTypeName = (string?)accrual.IncomeType.Name,
+                accrual.IrregularPaymentId,
+                IrregularPaymentName = accrual.IrregularPayment == null ? null : accrual.IrregularPayment.Name,
+                accrual.FeeCampaignId,
+                FeeCampaignName = accrual.FeeCampaign == null ? null : accrual.FeeCampaign.Name,
+                accrual.TariffId,
+                AccountingMonth = (DateOnly?)accrual.AccountingMonth,
+                accrual.AccountingYear,
+                DueDate = (DateOnly?)accrual.DueDate,
+                OverdueFromDate = (DateOnly?)accrual.OverdueFromDate,
+                DueDateNeedsReview = (bool?)accrual.DueDateNeedsReview,
+                accrual.DueDateReviewReason,
+                Amount = (decimal?)accrual.Amount,
+                Source = (string?)accrual.Source,
+                accrual.Comment,
+                IsCanceled = (bool?)accrual.IsCanceled,
+                CreatedAtUtc = (DateTimeOffset?)accrual.CreatedAtUtc,
+                UpdatedAtUtc = (DateTimeOffset?)accrual.UpdatedAtUtc,
+                TotalCount = 0
+            });
+        var totalsRow = dbContext.Database
+            .SqlQueryRaw<int>("SELECT 1 AS \"Value\"")
+            .Select(_ => new
+            {
+                Category = TotalsCategory,
+                Id = (Guid?)null,
+                GarageId = (Guid?)null,
+                GarageNumber = (string?)null,
+                OwnerId = (Guid?)null,
+                OwnerLastName = (string?)null,
+                OwnerFirstName = (string?)null,
+                OwnerMiddleName = (string?)null,
+                IncomeTypeId = (Guid?)null,
+                IncomeTypeName = (string?)null,
+                IrregularPaymentId = (Guid?)null,
+                IrregularPaymentName = (string?)null,
+                FeeCampaignId = (Guid?)null,
+                FeeCampaignName = (string?)null,
+                TariffId = (Guid?)null,
+                AccountingMonth = (DateOnly?)null,
+                AccountingYear = (int?)null,
+                DueDate = (DateOnly?)null,
+                OverdueFromDate = (DateOnly?)null,
+                DueDateNeedsReview = (bool?)null,
+                DueDateReviewReason = (string?)null,
+                Amount = (decimal?)null,
+                Source = (string?)null,
+                Comment = (string?)null,
+                IsCanceled = (bool?)null,
+                CreatedAtUtc = (DateTimeOffset?)null,
+                UpdatedAtUtc = (DateTimeOffset?)null,
+                TotalCount = query.Count()
+            });
+        var rows = await pageRows
+            .Concat(totalsRow)
+            .OrderBy(row => row.Category)
+            .ThenByDescending(row => row.AccountingMonth)
+            .ThenBy(row => row.GarageNumber)
+            .ToListAsync(cancellationToken);
+        var totalCount = rows.Single(row => row.Category == TotalsCategory).TotalCount;
+        var items = rows
+            .Where(row => row.Category == PageCategory)
+            .Select(row => new Accrual
+            {
+                Id = row.Id!.Value,
+                GarageId = row.GarageId!.Value,
+                Garage = new Garage
+                {
+                    Id = row.GarageId.Value,
+                    Number = row.GarageNumber!,
+                    OwnerId = row.OwnerId,
+                    Owner = row.OwnerId is null
+                        ? null
+                        : new Owner
+                        {
+                            Id = row.OwnerId.Value,
+                            LastName = row.OwnerLastName!,
+                            FirstName = row.OwnerFirstName!,
+                            MiddleName = row.OwnerMiddleName
+                        }
+                },
+                IncomeTypeId = row.IncomeTypeId!.Value,
+                IncomeType = new IncomeType { Id = row.IncomeTypeId.Value, Name = row.IncomeTypeName! },
+                IrregularPaymentId = row.IrregularPaymentId,
+                IrregularPayment = row.IrregularPaymentId is null
+                    ? null
+                    : new IrregularPayment { Id = row.IrregularPaymentId.Value, Name = row.IrregularPaymentName! },
+                FeeCampaignId = row.FeeCampaignId,
+                FeeCampaign = row.FeeCampaignId is null
+                    ? null
+                    : new FeeCampaign { Id = row.FeeCampaignId.Value, Name = row.FeeCampaignName! },
+                TariffId = row.TariffId,
+                AccountingMonth = row.AccountingMonth!.Value,
+                AccountingYear = row.AccountingYear,
+                DueDate = row.DueDate!.Value,
+                OverdueFromDate = row.OverdueFromDate!.Value,
+                DueDateNeedsReview = row.DueDateNeedsReview!.Value,
+                DueDateReviewReason = row.DueDateReviewReason,
+                Amount = row.Amount!.Value,
+                Source = row.Source!,
+                Comment = row.Comment,
+                IsCanceled = row.IsCanceled!.Value,
+                CreatedAtUtc = row.CreatedAtUtc!.Value,
+                UpdatedAtUtc = row.UpdatedAtUtc!.Value
+            })
+            .ToList();
         return new AccrualPageData(items, totalCount);
     }
 
