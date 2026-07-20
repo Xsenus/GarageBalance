@@ -242,6 +242,7 @@ describe('responsive layout styles', () => {
 
   it('keeps staff rate in the right column and submit actions at the right edge', () => {
     expect(normalizedAppCss).toContain('.contractors-staff-fields {\n  display: grid;\n  grid-template-columns: repeat(2, minmax(0, 1fr));')
+    expect(normalizedAppCss).toContain('.contractors-staff-rate-field input {\n  text-align: right;\n  font-variant-numeric: tabular-nums;')
     expect(normalizedAppCss).toContain('.contractors-dialog-submit-actions {\n  display: inline-flex;\n  align-items: center;\n  gap: 8px;\n  margin-left: auto;')
     expect(normalizedAppCss).toContain('.contractors-supplier-footer-grid,\n  .contractors-staff-fields {\n    grid-template-columns: 1fr;')
   })

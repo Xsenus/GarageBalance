@@ -1906,6 +1906,7 @@ describe('App', () => {
     expect(within(employeeDialog).getByLabelText('Отдел сотрудника').closest('.contractors-staff-fields')).not.toBeNull()
     expect(within(employeeDialog).getByRole('combobox', { name: 'Отдел сотрудника' })).toHaveClass('select-control__trigger')
     expect(within(employeeDialog).getByLabelText('Ставка сотрудника').closest('.contractors-staff-fields')).not.toBeNull()
+    expect(within(employeeDialog).getByLabelText('Ставка сотрудника').closest('.contractors-staff-rate-field')).not.toBeNull()
     const employeeSubmitActions = within(employeeDialog).getByRole('button', { name: /Сохранить/i }).closest('.contractors-dialog-submit-actions')
     expect(employeeSubmitActions).not.toBeNull()
     expect(within(employeeSubmitActions as HTMLElement).getByRole('button', { name: 'Отмена' })).toBeInTheDocument()

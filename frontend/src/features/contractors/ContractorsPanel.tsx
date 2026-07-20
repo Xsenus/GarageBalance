@@ -3553,7 +3553,7 @@ function EmployeePrototypeDialog({ departments, item, onClose, onOpenFinancialRe
                 />
               </FormField>
               <FormField label="Ставка">
-                <div className="contractors-inline-field">
+                <div className="contractors-inline-field contractors-staff-rate-field">
                   <MoneyTextInput
                     aria-label="Ставка сотрудника"
                     value={form.rate}

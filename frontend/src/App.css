@@ -1767,6 +1767,11 @@ h1 {
   font-variant-numeric: tabular-nums;
 }
 
+.contractors-staff-rate-field input {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
 .detail-dialog.contractors-tariff-dialog {
   width: min(1120px, calc(100vw - 48px));
 }
