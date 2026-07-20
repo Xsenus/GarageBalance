@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest'
 
 describe('index.html metadata', () => {
   const indexHtml = readFileSync(resolve(process.cwd(), 'index.html'), 'utf8')
+  const mainSource = readFileSync(resolve(process.cwd(), 'src/main.tsx'), 'utf8')
 
   it('uses Russian document metadata for the production shell', () => {
     expect(indexHtml).toContain('<html lang="ru">')
@@ -17,5 +18,16 @@ describe('index.html metadata', () => {
     expect(indexHtml).toContain('role="status"')
     expect(indexHtml).toContain('Подключаем GarageBalance…')
     expect(indexHtml).toContain('Для работы GarageBalance необходимо включить JavaScript.')
+  })
+
+  it('replaces an endless bootstrap spinner with a retryable error', () => {
+    expect(indexHtml).toContain("window.setTimeout(showBootstrapError, 20000)")
+    expect(indexHtml).toContain("window.addEventListener('error'")
+    expect(indexHtml).toContain("window.addEventListener('unhandledrejection'")
+    expect(indexHtml).toContain("window.addEventListener('garagebalance:bootstrap-ready'")
+    expect(indexHtml).toContain('Не удалось загрузить GarageBalance')
+    expect(indexHtml).toContain('Повторить загрузку')
+    expect(indexHtml).toContain('window.location.reload()')
+    expect(mainSource).toContain("window.dispatchEvent(new Event('garagebalance:bootstrap-ready'))")
   })
 })

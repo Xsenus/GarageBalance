@@ -9,6 +9,10 @@
       .app-bootstrap-loader { min-height: 100vh; display: grid; place-items: center; background: #f5f7fb; color: #344054; font: 600 14px/1.45 Inter, system-ui, sans-serif; }
       .app-bootstrap-loader__card { display: grid; justify-items: center; gap: 14px; border: 1px solid #d7e3fb; border-radius: 12px; background: #fff; box-shadow: 0 18px 45px rgba(16, 24, 40, .09); padding: 28px 36px; }
       .app-bootstrap-loader__spinner { width: 30px; height: 30px; border: 3px solid #dbe7ff; border-top-color: #155eef; border-radius: 50%; animation: app-bootstrap-spin .8s linear infinite; }
+      .app-bootstrap-loader__message { margin: 0; text-align: center; }
+      .app-bootstrap-loader__hint { max-width: 360px; margin: -4px 0 0; color: #667085; font-weight: 400; text-align: center; }
+      .app-bootstrap-loader__retry { min-height: 40px; border: 0; border-radius: 8px; background: #155eef; color: #fff; cursor: pointer; font: inherit; padding: 9px 18px; }
+      .app-bootstrap-loader__retry:hover { background: #004eeb; }
       @keyframes app-bootstrap-spin { to { transform: rotate(360deg); } }
       @media (prefers-reduced-motion: reduce) { .app-bootstrap-loader__spinner { animation-duration: 1.8s; } }
     </style>
@@ -23,6 +27,64 @@
       </div>
     </div>
     <noscript>Для работы GarageBalance необходимо включить JavaScript.</noscript>
+    <script>
+      (() => {
+        const root = document.getElementById('root')
+        let bootstrapFinished = false
+
+        const showBootstrapError = () => {
+          if (bootstrapFinished || !root) return
+          bootstrapFinished = true
+          window.clearTimeout(bootstrapTimeout)
+
+          const loader = document.createElement('div')
+          loader.className = 'app-bootstrap-loader'
+          loader.setAttribute('role', 'alert')
+
+          const card = document.createElement('div')
+          card.className = 'app-bootstrap-loader__card'
+
+          const message = document.createElement('p')
+          message.className = 'app-bootstrap-loader__message'
+          message.textContent = 'Не удалось загрузить GarageBalance'
+
+          const hint = document.createElement('p')
+          hint.className = 'app-bootstrap-loader__hint'
+          hint.textContent = 'Проверьте подключение к интернету и повторите загрузку страницы.'
+
+          const retry = document.createElement('button')
+          retry.className = 'app-bootstrap-loader__retry'
+          retry.type = 'button'
+          retry.textContent = 'Повторить загрузку'
+          retry.addEventListener('click', () => window.location.reload())
+
+          card.append(message, hint, retry)
+          loader.append(card)
+          root.replaceChildren(loader)
+        }
+
+        const bootstrapTimeout = window.setTimeout(showBootstrapError, 20000)
+
+        window.addEventListener('garagebalance:bootstrap-ready', () => {
+          bootstrapFinished = true
+          window.clearTimeout(bootstrapTimeout)
+        }, { once: true })
+
+        window.addEventListener('error', (event) => {
+          if (!bootstrapFinished) {
+            console.error('GarageBalance bootstrap failed.', event.error ?? event.message)
+            showBootstrapError()
+          }
+        }, true)
+
+        window.addEventListener('unhandledrejection', (event) => {
+          if (!bootstrapFinished) {
+            console.error('GarageBalance bootstrap promise failed.', event.reason)
+            showBootstrapError()
+          }
+        }, { once: true })
+      })()
+    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
