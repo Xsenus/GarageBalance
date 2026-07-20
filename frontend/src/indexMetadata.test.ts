@@ -11,4 +11,11 @@ describe('index.html metadata', () => {
     expect(indexHtml).toContain('<meta name="viewport" content="width=device-width, initial-scale=1.0" />')
     expect(indexHtml).toContain('<title>GarageBalance - учет ГСК</title>')
   })
+
+  it('shows a branded connection state before the React bundle is ready', () => {
+    expect(indexHtml).toContain('class="app-bootstrap-loader"')
+    expect(indexHtml).toContain('role="status"')
+    expect(indexHtml).toContain('Подключаем GarageBalance…')
+    expect(indexHtml).toContain('Для работы GarageBalance необходимо включить JavaScript.')
+  })
 })

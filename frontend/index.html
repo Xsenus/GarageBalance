@@ -5,9 +5,24 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>GarageBalance - учет ГСК</title>
+    <style>
+      .app-bootstrap-loader { min-height: 100vh; display: grid; place-items: center; background: #f5f7fb; color: #344054; font: 600 14px/1.45 Inter, system-ui, sans-serif; }
+      .app-bootstrap-loader__card { display: grid; justify-items: center; gap: 14px; border: 1px solid #d7e3fb; border-radius: 12px; background: #fff; box-shadow: 0 18px 45px rgba(16, 24, 40, .09); padding: 28px 36px; }
+      .app-bootstrap-loader__spinner { width: 30px; height: 30px; border: 3px solid #dbe7ff; border-top-color: #155eef; border-radius: 50%; animation: app-bootstrap-spin .8s linear infinite; }
+      @keyframes app-bootstrap-spin { to { transform: rotate(360deg); } }
+      @media (prefers-reduced-motion: reduce) { .app-bootstrap-loader__spinner { animation-duration: 1.8s; } }
+    </style>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <div class="app-bootstrap-loader" role="status" aria-live="polite">
+        <div class="app-bootstrap-loader__card">
+          <span class="app-bootstrap-loader__spinner" aria-hidden="true"></span>
+          <span>Подключаем GarageBalance…</span>
+        </div>
+      </div>
+    </div>
+    <noscript>Для работы GarageBalance необходимо включить JavaScript.</noscript>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

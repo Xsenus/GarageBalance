@@ -1393,13 +1393,15 @@ h1 {
 }
 
 .contractors-column-filters {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: minmax(180px, 1.35fr) repeat(4, minmax(116px, 0.75fr)) auto auto;
   align-items: end;
-  gap: 10px;
-  border-bottom: 1px solid #eaecf0;
-  background: #f8fafc;
-  padding: 12px 16px;
+  gap: 12px;
+  margin: 12px;
+  border: 1px solid #d7e3fb;
+  border-radius: 8px;
+  background: linear-gradient(135deg, #f8fbff 0%, #eef4ff 100%);
+  padding: 14px;
 }
 
 .contractors-column-filters label {
@@ -1411,12 +1413,37 @@ h1 {
 }
 
 .contractors-column-filters input {
-  width: 132px;
+  width: 100%;
   min-height: 38px;
+  border-color: #b9c9e8;
+  background: #ffffff;
 }
 
-.contractors-column-filters label:first-child input {
-  width: 180px;
+.contractors-column-filters input:focus {
+  border-color: #175cd3;
+  box-shadow: 0 0 0 3px rgba(23, 92, 211, 0.12);
+}
+
+.contractors-column-filters .secondary-button {
+  min-height: 40px;
+  white-space: nowrap;
+}
+
+.contractors-table-refresh {
+  position: sticky;
+  z-index: 3;
+  bottom: 12px;
+  justify-self: center;
+  width: max-content;
+  margin: 8px auto;
+  border: 1px solid #b2ccff;
+  border-radius: 999px;
+  background: #eff4ff;
+  box-shadow: 0 8px 20px rgba(16, 24, 40, 0.12);
+  color: #1849a9;
+  padding: 7px 12px;
+  font-size: 13px;
+  font-weight: 700;
 }
 
 .contractors-staff-directory-grid {
@@ -1495,6 +1522,10 @@ h1 {
 }
 
 @media (max-width: 1180px) {
+  .contractors-column-filters {
+    grid-template-columns: repeat(3, minmax(140px, 1fr));
+  }
+
   .contractors-staff-directory-grid {
     grid-template-columns: minmax(0, 1fr);
     min-height: 0;
@@ -1720,6 +1751,20 @@ h1 {
 .detail-dialog.contractors-dialog--supplier {
   width: min(1280px, calc(100vw - 48px));
   max-height: min(860px, calc(100dvh - 48px));
+}
+
+.detail-dialog.contractors-dialog--staff {
+  width: min(700px, calc(100vw - 48px));
+  min-height: 400px;
+}
+
+.contractors-dialog--staff .contractors-modal-form {
+  min-height: 300px;
+  align-content: space-between;
+}
+
+.contractors-staff-rate-cell {
+  font-variant-numeric: tabular-nums;
 }
 
 .detail-dialog.contractors-tariff-dialog {
@@ -2112,6 +2157,10 @@ h1 {
     max-height: 176px;
   }
 
+  .contractors-column-filters {
+    grid-template-columns: 1fr;
+  }
+
   .suggestion-status {
     display: -webkit-box;
     height: 33px;
@@ -2121,8 +2170,14 @@ h1 {
   }
 
   .detail-dialog.contractors-dialog--garage,
-  .detail-dialog.contractors-dialog--supplier {
+  .detail-dialog.contractors-dialog--supplier,
+  .detail-dialog.contractors-dialog--staff {
     width: 100%;
+  }
+
+  .detail-dialog.contractors-dialog--staff,
+  .contractors-dialog--staff .contractors-modal-form {
+    min-height: 0;
   }
 
   .contractors-garage-form-columns,

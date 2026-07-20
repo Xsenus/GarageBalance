@@ -6,7 +6,7 @@ import type { AccountingTypeDto, ChargeServiceSettingDto, DictionaryClient, Gara
 import type { FinanceClient, GarageBalanceHistoryDto } from '../../services/financeApi'
 import type { FormStateClient } from '../../services/formStatesApi'
 import type { DadataAddressSuggestionDto, DadataPartySuggestionDto, IntegrationClient } from '../../services/integrationsApi'
-import { hasPermission, permissions } from '../../shared/accessControl'
+import { hasPermission, isAdministrator, permissions } from '../../shared/accessControl'
 import { TableLoadingState } from '../../shared/AsyncState'
 import { FormError } from '../../shared/formFeedback'
 import { FormField } from '../../shared/FormField'
@@ -1086,6 +1086,7 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
   }, [staffColumnWidths])
   const canReadContractorHistory = hasPermission(auth, permissions.auditRead)
   const canManageTariffs = hasPermission(auth, permissions.tariffsManage)
+  const canUseGarageColumnFilters = isAdministrator(auth)
 
   async function loadGaragePage(
     offset = garagePage.offset,
@@ -1096,22 +1097,23 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
     debtorsOnly = debtorFilters.garages,
     filters = garageColumnFilters,
   ) {
+    const effectiveFilters = canUseGarageColumnFilters ? filters : {}
     const requestSequence = ++garagePageRequestSequenceRef.current
     setContractorPageLoading((current) => ({ ...current, garages: true }))
     setGarageContextMenu(null)
     try {
       const page = dictionaryClient.getGaragesPage
-        ? await (hasGarageColumnFilters(filters)
-            ? dictionaryClient.getGaragesPage(auth.accessToken, undefined, offset, limit, true, sort.key, sort.direction, debtorsOnly, filters)
+        ? await (hasGarageColumnFilters(effectiveFilters)
+            ? dictionaryClient.getGaragesPage(auth.accessToken, undefined, offset, limit, true, sort.key, sort.direction, debtorsOnly, effectiveFilters)
             : dictionaryClient.getGaragesPage(auth.accessToken, undefined, offset, limit, true, sort.key, sort.direction, debtorsOnly))
         : createFallbackPage(
             (await dictionaryClient.getGarages(auth.accessToken, undefined, contractorsDictionaryListLimit, true))
               .filter((garage) => !debtorsOnly || (!garage.isArchived && garage.overdueDebt > 0))
-              .filter((garage) => !filters.number || garage.number.toLocaleLowerCase('ru-RU').includes(filters.number.toLocaleLowerCase('ru-RU')))
-              .filter((garage) => filters.peopleCountMin === undefined || garage.peopleCount >= filters.peopleCountMin)
-              .filter((garage) => filters.peopleCountMax === undefined || garage.peopleCount <= filters.peopleCountMax)
-              .filter((garage) => filters.floorCountMin === undefined || garage.floorCount >= filters.floorCountMin)
-              .filter((garage) => filters.floorCountMax === undefined || garage.floorCount <= filters.floorCountMax),
+              .filter((garage) => !effectiveFilters.number || garage.number.toLocaleLowerCase('ru-RU').includes(effectiveFilters.number.toLocaleLowerCase('ru-RU')))
+              .filter((garage) => effectiveFilters.peopleCountMin === undefined || garage.peopleCount >= effectiveFilters.peopleCountMin)
+              .filter((garage) => effectiveFilters.peopleCountMax === undefined || garage.peopleCount <= effectiveFilters.peopleCountMax)
+              .filter((garage) => effectiveFilters.floorCountMin === undefined || garage.floorCount >= effectiveFilters.floorCountMin)
+              .filter((garage) => effectiveFilters.floorCountMax === undefined || garage.floorCount <= effectiveFilters.floorCountMax),
             offset,
             limit,
           )
@@ -1808,7 +1810,7 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
 
   const showGarageDebtorsOnly = debtorFilters.garages
   const showSupplierDebtorsOnly = debtorFilters.suppliers
-  const hasActiveGarageFilters = hasGarageColumnFilters(garageColumnFilters)
+  const hasActiveGarageFilters = canUseGarageColumnFilters && hasGarageColumnFilters(garageColumnFilters)
   const showDebtorsOnly = activeSection === 'suppliers' ? showSupplierDebtorsOnly : activeSection === 'garages' ? showGarageDebtorsOnly : false
   const toggleDebtorsFilter = (section: ContractorDebtorFilterSection) => {
     const nextValue = !debtorFilters[section]
@@ -1878,7 +1880,7 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
         <div className="contractors-actions">
           {activeSection === 'garages' ? (
             <>
-              <button className="secondary-button" type="button" onClick={() => toggleDebtorsFilter('garages')}>{debtorsButtonLabel}</button>
+              <button className="secondary-button" type="button" aria-busy={contractorPageLoading.garages} onClick={() => toggleDebtorsFilter('garages')}>{debtorsButtonLabel}</button>
               <button className="secondary-button create-action-button" type="button" onClick={() => setModal({ type: 'garage' })}>
                 <Gauge size={17} aria-hidden="true" />
                 <span>Добавить гараж</span>
@@ -1924,7 +1926,7 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
 
       {activeSection === 'garages' ? (
         <section className="contractors-directory-card" aria-label="Гаражи">
-          <form className="contractors-column-filters" aria-label="Фильтры гаражей" onSubmit={(event) => {
+          {canUseGarageColumnFilters ? <form className="contractors-column-filters" aria-label="Фильтры гаражей" onSubmit={(event) => {
             event.preventDefault()
             const filters = toGarageColumnFilters(garageColumnFilterForm)
             setGarageColumnFilters(filters)
@@ -1956,7 +1958,7 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
               setGarageColumnFilters({})
               void loadGaragePage(0, garagePage.limit, undefined, undefined, {})
             }}>Сбросить фильтры</button>
-          </form>
+          </form> : null}
           <div className="contractors-directory-table contractors-directory-table--garages" role="table" aria-label="Гаражи" style={garageTableStyle}>
             <div className="contractors-directory-row contractors-directory-row--header" role="row">
               {contractorGarageColumnDefinitions.map((column) => (
@@ -1973,7 +1975,7 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
                 </span>
               ))}
             </div>
-            {!contractorPageLoading.garages ? visibleGarages.map((row) => (
+            {visibleGarages.map((row) => (
               <div className={row.isDeleted ? 'contractors-directory-row contractors-directory-row--deleted' : 'contractors-directory-row'} role="row" key={row.id} onContextMenu={(event) => openGarageContextMenu(event, row)}>
                 <span role="cell" className="contractors-directory-cell--center">{row.number}</span>
                 <span role="cell" className="contractors-directory-cell--center">{row.peopleCount}</span>
@@ -2003,8 +2005,9 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
                   )}
                 </span>
               </div>
-            )) : null}
-            {contractorPageLoading.garages ? <TableLoadingState className="table-loading-state--compact" label="Загружаем гаражи" /> : null}
+            ))}
+            {contractorPageLoading.garages && visibleGarages.length === 0 ? <TableLoadingState className="table-loading-state--compact" label="Загружаем гаражи" /> : null}
+            {contractorPageLoading.garages && visibleGarages.length > 0 ? <div className="contractors-table-refresh" role="status" aria-label="Обновляем список гаражей" aria-live="polite">Обновляем список гаражей…</div> : null}
             {!contractorPageLoading.garages && visibleGarages.length === 0 ? (
               <div className="contractors-directory-row contractors-directory-row--empty" role="row">
                 <span className="contractors-directory-empty-cell" role="cell">{hasActiveGarageFilters ? 'По заданным фильтрам гаражи не найдены.' : showGarageDebtorsOnly ? 'Гаражей с задолженностью не найдено.' : 'Гаражи пока не настроены.'}</span>
@@ -2126,7 +2129,7 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
                 <div className={row.isDeleted ? 'contractors-directory-row contractors-directory-row--deleted' : 'contractors-directory-row'} role="row" key={row.id} onContextMenu={(event) => openEmployeeContextMenu(event, row)}>
                   <span role="cell">{row.fullName}</span>
                   <span role="cell">{row.department}</span>
-                  <span role="cell">{row.isDeleted ? 'Удален' : formatStaffRate(row.rate)}</span>
+                  <span role="cell" className="contractors-directory-cell--right contractors-staff-rate-cell">{row.isDeleted ? 'Удален' : formatStaffRate(row.rate)}</span>
                   <span role="cell" className="contractors-row-actions">
                     {row.isDeleted ? (
                       <button className="icon-button" type="button" aria-label={`Восстановить сотрудника ${row.fullName}`} title="Восстановить" onClick={() => restoreEmployee(row)}>
@@ -3528,7 +3531,7 @@ function EmployeePrototypeDialog({ departments, item, onClose, onOpenFinancialRe
   return (
     <>
       <div className="modal-backdrop" role="presentation" onMouseDown={onClose}>
-        <section ref={dialogRef} className="detail-dialog contractors-dialog" role="dialog" aria-modal="true" aria-labelledby="employee-dialog-title" onMouseDown={(event) => event.stopPropagation()}>
+        <section ref={dialogRef} className="detail-dialog contractors-dialog contractors-dialog--staff" role="dialog" aria-modal="true" aria-labelledby="employee-dialog-title" onMouseDown={(event) => event.stopPropagation()}>
           <div className="detail-dialog-header">
             <h3 id="employee-dialog-title">{item ? form.fullName : 'Новый сотрудник'}</h3>
             <button className="icon-button" type="button" aria-label="Закрыть форму сотрудника" onClick={onClose}><X size={18} /></button>

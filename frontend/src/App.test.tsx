@@ -1901,6 +1901,7 @@ describe('App', () => {
 
     await user.click(addEmployeeButton)
     employeeDialog = await screen.findByRole('dialog', { name: 'Новый сотрудник' })
+    expect(employeeDialog).toHaveClass('contractors-dialog--staff')
     expect(within(employeeDialog).getByLabelText('Отдел сотрудника').closest('.contractors-staff-fields')).not.toBeNull()
     expect(within(employeeDialog).getByRole('combobox', { name: 'Отдел сотрудника' })).toHaveClass('select-control__trigger')
     expect(within(employeeDialog).getByLabelText('Ставка сотрудника').closest('.contractors-staff-fields')).not.toBeNull()
@@ -1916,7 +1917,7 @@ describe('App', () => {
     await user.type(within(employeeDialog).getByLabelText('Ставка сотрудника'), '25000')
     await user.click(within(employeeDialog).getByRole('button', { name: /Сохранить/i }))
     await waitFor(() => expect(within(within(contractorsPanel).getByRole('table', { name: 'Персонал' })).getByText('Смирнов Алексей')).toBeInTheDocument())
-    expect(within(within(contractorsPanel).getByRole('table', { name: 'Персонал' })).getByText('25 000.00')).toBeInTheDocument()
+    expect(within(within(contractorsPanel).getByRole('table', { name: 'Персонал' })).getByText('25 000.00')).toHaveClass('contractors-directory-cell--right', 'contractors-staff-rate-cell')
     expect(addEmployeeButton).toHaveFocus()
 
     const staffTable = within(contractorsPanel).getByRole('table', { name: 'Персонал' })
@@ -2261,6 +2262,36 @@ describe('App', () => {
     expect(within(panel).getByLabelText('Фильтр по номеру гаража')).toHaveValue('')
   }, 30000)
 
+  it('shows green garage filters only to administrators', async () => {
+    const user = userEvent.setup()
+    const getGaragesPage = vi.fn(async (_token: string, _search?: string, offset = 0, limit = 25, _includeArchived?: boolean, _sortBy?: string, _sortDirection?: string, _debtorsOnly?: boolean, _filters?: Record<string, unknown>) => {
+      void [_includeArchived, _sortBy, _sortDirection, _debtorsOnly, _filters]
+      return {
+        items: [createGarage({ id: 'operator-garage', number: '7' })],
+        totalCount: 1,
+        offset,
+        limit,
+      }
+    })
+    const operatorAuth = createAuthResponse({
+      user: {
+        roles: ['operator'],
+        permissions: ['dictionaries.read', 'dictionaries.write'],
+      },
+    })
+
+    render(<App authClient={createAuthClient({ login: async () => operatorAuth })} dictionaryClient={createDictionaryClient({ getGaragesPage })} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Контрагенты')
+    const panel = await screen.findByRole('region', { name: 'Контрагенты' })
+    await within(panel).findByRole('button', { name: 'Изменить гараж 7' })
+
+    expect(within(panel).queryByRole('form', { name: 'Фильтры гаражей' })).not.toBeInTheDocument()
+    expect(within(panel).queryByLabelText('Фильтр по номеру гаража')).not.toBeInTheDocument()
+    expect(getGaragesPage.mock.calls.every((call) => call[8] === undefined)).toBe(true)
+  })
+
   it('ignores a stale green-filter response after filters are reset', async () => {
     const user = userEvent.setup()
     let resolveFilteredPage!: (page: PagedResult<GarageDto>) => void
@@ -2330,6 +2361,9 @@ describe('App', () => {
 
     await user.click(within(panel).getByRole('button', { name: 'Показать должников' }))
     await waitFor(() => expect(getGaragesPage).toHaveBeenLastCalledWith('token', undefined, 0, 25, true, 'number', 'asc', true))
+    expect(within(panel).getByRole('button', { name: 'Изменить гараж 7' })).toBeInTheDocument()
+    expect(within(panel).getByRole('status', { name: 'Обновляем список гаражей' })).toHaveTextContent('Обновляем список гаражей…')
+    expect(within(panel).getByRole('button', { name: 'Показать все гаражи' })).toHaveAttribute('aria-busy', 'true')
     await user.click(within(panel).getByRole('button', { name: 'Показать все гаражи' }))
     expect(await within(panel).findByRole('button', { name: 'Изменить гараж 7' })).toBeInTheDocument()
     await act(async () => {

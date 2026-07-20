@@ -38,6 +38,12 @@ describe('responsive layout styles', () => {
     expect(normalizedAppCss).toContain('.detail-dialog-actions {\n  position: sticky;')
   })
 
+  it('makes the staff dialog wider and taller while keeping it responsive', () => {
+    expect(normalizedAppCss).toContain('.detail-dialog.contractors-dialog--staff {\n  width: min(700px, calc(100vw - 48px));\n  min-height: 400px;')
+    expect(normalizedAppCss).toContain('.contractors-dialog--staff .contractors-modal-form {\n  min-height: 300px;\n  align-content: space-between;')
+    expect(normalizedAppCss).toContain('.detail-dialog.contractors-dialog--supplier,\n  .detail-dialog.contractors-dialog--staff {\n    width: 100%;')
+  })
+
   it('opens address suggestions upward and limits the visible rows', () => {
     expect(normalizedAppCss).toContain('.suggestion-options {\n  position: absolute;')
     expect(normalizedAppCss).toContain('max-height: 284px;\n  overflow-y: auto;\n  overscroll-behavior: contain;\n  scrollbar-gutter: stable;')
