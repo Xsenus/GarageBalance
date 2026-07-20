@@ -12,6 +12,7 @@ import { FormError } from '../../shared/formFeedback'
 import { FormField } from '../../shared/FormField'
 import { MoneyTextInput } from '../../shared/MoneyInput'
 import { formatDateOnly, formatDebtAmount, formatDebtLabel, formatMoney, formatMonth, getDebtClassName } from '../../shared/formatters'
+import { LocalizedDatePicker } from '../../shared/LocalizedDatePicker'
 import { useEscapeKey, useFocusOnOpen, useFocusTrap, useRestoreFocusOnClose } from '../../shared/focusHooks'
 import { createClientPage, createFallbackPage } from '../../shared/pagination'
 import { TablePagination } from '../../shared/TablePagination'
@@ -2407,11 +2408,11 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
             }}>
               <label>
                 Период с
-                <input aria-label="Начало периода финансового отчета гаража" type="month" value={garageFinancialReportFilters.monthFrom} onChange={(event) => setGarageFinancialReportFilters((value) => ({ ...value, monthFrom: event.target.value }))} required />
+                <LocalizedDatePicker ariaLabel="Начало периода финансового отчета гаража" mode="month" value={garageFinancialReportFilters.monthFrom} onChange={(monthFrom) => setGarageFinancialReportFilters((value) => ({ ...value, monthFrom }))} required />
               </label>
               <label>
                 Период по
-                <input aria-label="Конец периода финансового отчета гаража" type="month" value={garageFinancialReportFilters.monthTo} onChange={(event) => setGarageFinancialReportFilters((value) => ({ ...value, monthTo: event.target.value }))} required />
+                <LocalizedDatePicker ariaLabel="Конец периода финансового отчета гаража" mode="month" value={garageFinancialReportFilters.monthTo} onChange={(monthTo) => setGarageFinancialReportFilters((value) => ({ ...value, monthTo }))} required />
               </label>
               <button className="secondary-button" type="submit" disabled={garageFinancialReportLoading}>
                 <Search size={16} />
@@ -2489,11 +2490,11 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
             }}>
               <label>
                 Период с
-                <input aria-label="Начало периода финансового отчета контрагента" type="month" value={contractorFinancialReportFilters.monthFrom} onChange={(event) => setContractorFinancialReportFilters((value) => ({ ...value, monthFrom: event.target.value }))} required />
+                <LocalizedDatePicker ariaLabel="Начало периода финансового отчета контрагента" mode="month" value={contractorFinancialReportFilters.monthFrom} onChange={(monthFrom) => setContractorFinancialReportFilters((value) => ({ ...value, monthFrom }))} required />
               </label>
               <label>
                 Период по
-                <input aria-label="Конец периода финансового отчета контрагента" type="month" value={contractorFinancialReportFilters.monthTo} onChange={(event) => setContractorFinancialReportFilters((value) => ({ ...value, monthTo: event.target.value }))} required />
+                <LocalizedDatePicker ariaLabel="Конец периода финансового отчета контрагента" mode="month" value={contractorFinancialReportFilters.monthTo} onChange={(monthTo) => setContractorFinancialReportFilters((value) => ({ ...value, monthTo }))} required />
               </label>
               <button className="secondary-button" type="submit" disabled={contractorFinancialReportLoading}>
                 <Search size={16} />
@@ -2503,7 +2504,7 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
             {contractorFinancialReportError ? <FormError>{contractorFinancialReportError}</FormError> : null}
             {contractorFinancialReport ? (
               <>
-                <div className="balance-history-summary" aria-label="Итоги финансового отчета контрагента">
+                <div className="balance-history-summary contractor-financial-report__summary" aria-label="Итоги финансового отчета контрагента">
                   <div>
                     <span>Начислено</span>
                     <strong>{formatMoney(contractorFinancialReport.accrualTotal)}</strong>
@@ -2541,9 +2542,9 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
                           <td>{formatDateOnly(row.date)}</td>
                           <td>{row.documentNumber}</td>
                           <td>{row.description}</td>
-                          <td className="money-accrual">{row.accrualAmount > 0 ? formatMoney(row.accrualAmount) : '—'}</td>
-                          <td className="money-expense">{row.paymentAmount > 0 ? formatMoney(row.paymentAmount) : '—'}</td>
-                          <td className={getDebtClassName(row.balanceAfter)}>{formatDebtAmount(row.balanceAfter)}</td>
+                          <td className="money-accrual contractor-financial-report__amount">{row.accrualAmount > 0 ? formatMoney(row.accrualAmount) : '—'}</td>
+                          <td className="money-expense contractor-financial-report__amount">{row.paymentAmount > 0 ? formatMoney(row.paymentAmount) : '—'}</td>
+                          <td className={`${getDebtClassName(row.balanceAfter)} contractor-financial-report__amount`}>{formatDebtAmount(row.balanceAfter)}</td>
                         </tr>
                       ))}
                     </tbody>

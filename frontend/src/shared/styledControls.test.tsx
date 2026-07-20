@@ -228,4 +228,10 @@ describe('styled form controls', () => {
     await user.click(screen.getByRole('button', { name: 'Очистить' }))
     expect(screen.getByLabelText('Учетный месяц')).toHaveValue('')
   })
+
+  it('preserves native required validation for mandatory localized periods', () => {
+    render(<LocalizedDatePicker ariaLabel="Обязательный месяц" mode="month" value="" required onChange={() => undefined} />)
+
+    expect(screen.getByLabelText('Обязательный месяц')).toBeRequired()
+  })
 })

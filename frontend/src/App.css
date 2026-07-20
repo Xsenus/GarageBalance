@@ -7336,6 +7336,14 @@ button.operation-row:focus-visible {
   font-size: 16px;
 }
 
+.contractor-financial-report__summary div {
+  text-align: center;
+}
+
+.contractor-financial-report__amount {
+  text-align: right;
+}
+
 .garage-balance-table-scroll {
   max-height: 360px;
 }
