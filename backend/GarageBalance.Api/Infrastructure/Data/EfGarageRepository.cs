@@ -1,16 +1,17 @@
 using GarageBalance.Api.Application.Dictionaries;
+using GarageBalance.Api.Application.Settings;
 using GarageBalance.Api.Domain.Dictionaries;
 using GarageBalance.Api.Domain.Finance;
 using Microsoft.EntityFrameworkCore;
 
 namespace GarageBalance.Api.Infrastructure.Data;
 
-public sealed class EfGarageRepository(GarageBalanceDbContext dbContext, TimeProvider? timeProvider = null) : IGarageRepository
+public sealed class EfGarageRepository(GarageBalanceDbContext dbContext, IBusinessDateProvider? businessDateProvider = null) : IGarageRepository
 {
     private const int AccrualBalanceCategory = 1;
     private const int IncomeBalanceCategory = 2;
     private const int AllocationBalanceCategory = 3;
-    private DateOnly Today => DateOnly.FromDateTime((timeProvider ?? TimeProvider.System).GetUtcNow().UtcDateTime);
+    private DateOnly Today => businessDateProvider?.Today ?? DateOnly.FromDateTime(DateTime.UtcNow);
 
     public async Task<IReadOnlyList<GarageListItemData>> GetListAsync(
         string? normalizedSearch,

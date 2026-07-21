@@ -3,6 +3,7 @@ using GarageBalance.Api.Application.Audit;
 using GarageBalance.Api.Application.Common;
 using GarageBalance.Api.Application.Dictionaries;
 using GarageBalance.Api.Application.Funds;
+using GarageBalance.Api.Application.Settings;
 using GarageBalance.Api.Domain.Dictionaries;
 using GarageBalance.Api.Domain.Finance;
 
@@ -34,7 +35,8 @@ public sealed class FinanceService(
     IIncomeFundAssignmentService incomeFundAssignmentService,
     IApplicationUnitOfWork unitOfWork,
     IAuditEventWriter auditEventWriter,
-    TimeProvider timeProvider) : IFinanceService
+    TimeProvider timeProvider,
+    IBusinessDateProvider businessDateProvider) : IFinanceService
 {
     private const int DefaultListLimit = 100;
     private const int MaxListLimit = 500;
@@ -331,7 +333,7 @@ public sealed class FinanceService(
             return FinanceResult<GarageOverdueDebtDto>.Failure("garage_not_found", "Гараж для расшифровки просрочки не найден.");
         }
 
-        var asOfDate = DateOnly.FromDateTime(timeProvider.GetUtcNow().UtcDateTime);
+        var asOfDate = businessDateProvider.Today;
         var accruals = await accrualRepository.GetOverdueDebtDetailsAsync(garageId, asOfDate, cancellationToken);
         var totals = await garageRepository.GetBalanceTotalsAsync([garageId], cancellationToken);
         var unallocatedIncome = Math.Max(
@@ -3048,7 +3050,7 @@ public sealed class FinanceService(
 
     private DateOnly GetCurrentAccountingMonth()
     {
-        return MonthPeriod.Normalize(DateOnly.FromDateTime(timeProvider.GetLocalNow().DateTime));
+        return MonthPeriod.Normalize(businessDateProvider.Today);
     }
 
     private static FinanceResult<MeterReadingDto> HistoricalMeterReadingMonthRequired() =>

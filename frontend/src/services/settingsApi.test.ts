@@ -52,6 +52,35 @@ describe('settingsApi', () => {
     await expect(settingsApi.getPaymentDisplaySettings('token')).rejects.toThrow('Настройка недоступна.')
   })
 
+  it('loads and updates the administrator business date', async () => {
+    const current = {
+      systemDate: '2026-07-21', effectiveDate: '2026-07-21', overrideDate: null,
+      isOverrideActive: false, updatedAtUtc: null, automation: null,
+    }
+    const updated = {
+      ...current,
+      effectiveDate: '2026-08-05', overrideDate: '2026-08-05', isOverrideActive: true,
+      updatedAtUtc: '2026-07-21T09:00:00Z',
+      automation: { succeeded: true, createdCount: 2, skippedCount: 3, message: 'Готово' },
+    }
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify(current), { status: 200, headers: { 'Content-Type': 'application/json' } }))
+      .mockResolvedValueOnce(new Response(JSON.stringify(updated), { status: 200, headers: { 'Content-Type': 'application/json' } }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await expect(settingsApi.getBusinessDateSettings('token')).resolves.toEqual(current)
+    await expect(settingsApi.updateBusinessDateSettings('token', { overrideDate: '2026-08-05' })).resolves.toEqual(updated)
+
+    expect(fetchMock).toHaveBeenNthCalledWith(1, '/api/settings/business-date', expect.objectContaining({
+      headers: expect.objectContaining({ Authorization: 'Bearer token' }),
+    }))
+    expect(fetchMock).toHaveBeenNthCalledWith(2, '/api/settings/business-date', expect.objectContaining({
+      method: 'PUT',
+      body: JSON.stringify({ overrideDate: '2026-08-05' }),
+      headers: expect.objectContaining({ Authorization: 'Bearer token' }),
+    }))
+  })
+
   it('loads backup status and creates a manual backup with an audit reason', async () => {
     const status = {
       enabled: true,

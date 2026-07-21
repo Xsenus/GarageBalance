@@ -919,6 +919,28 @@ h1 {
   overflow-wrap: anywhere;
 }
 
+.settings-card--business-date {
+  width: 100%;
+  grid-template-columns: minmax(280px, 0.65fr) minmax(0, 1fr);
+}
+
+.settings-card--business-date .summary-strip {
+  grid-template-columns: repeat(3, minmax(120px, 1fr));
+}
+
+.form-warning {
+  padding: 11px 13px;
+  border: 1px solid #f5c97b;
+  border-radius: 8px;
+  background: #fff8e8;
+  color: #7a4d00;
+  font-weight: 600;
+}
+
+.dialog-actions--start {
+  justify-content: flex-start;
+}
+
 .settings-card-intro {
   align-self: center;
 }

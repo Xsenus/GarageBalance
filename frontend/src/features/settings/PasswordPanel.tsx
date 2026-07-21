@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
-import { DatabaseBackup, Download, Eye, FileWarning, KeyRound, PlugZap, RefreshCw, ShieldCheck, SlidersHorizontal, X } from 'lucide-react'
+import { CalendarClock, DatabaseBackup, Download, Eye, FileWarning, KeyRound, PlugZap, RefreshCw, ShieldCheck, SlidersHorizontal, X } from 'lucide-react'
 import type { AuthClient, AuthResponse, CurrentUserDto } from '../../services/authApi'
 import type { IntegrationClient, OneCFreshIntegrationStatusDto, OneCFreshSyncDto, OneCFreshSyncPreviewDto, ReceiptPrintingIntegrationStatusDto } from '../../services/integrationsApi'
-import type { ApplicationSettingsClient, DatabaseBackupStatusDto, DiagnosticLogStatusDto } from '../../services/settingsApi'
-import { hasPermission, permissions } from '../../shared/accessControl'
+import type { ApplicationSettingsClient, BusinessDateSettingsDto, DatabaseBackupStatusDto, DiagnosticLogStatusDto } from '../../services/settingsApi'
+import { hasPermission, isAdministrator, permissions } from '../../shared/accessControl'
 import { LoadingSkeleton } from '../../shared/AsyncState'
+import { LocalizedDatePicker } from '../../shared/LocalizedDatePicker'
 import { formatSensitiveChange } from '../../shared/changePreview'
 import { FormField } from '../../shared/FormField'
 import { FormError, FormValidationSummary } from '../../shared/formFeedback'
@@ -18,7 +19,7 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
   const integrationSettingsVisible = import.meta.env.VITE_SHOW_INTEGRATION_SETTINGS === 'true'
   const dadataSettingsVisible = hasPermission(auth, permissions.usersManage)
   const integrationTabVisible = integrationSettingsVisible || dadataSettingsVisible
-  const [activeSettingsTab, setActiveSettingsTab] = useState<'security' | 'display' | 'backups' | 'diagnostics' | 'integrations'>(() => (
+  const [activeSettingsTab, setActiveSettingsTab] = useState<'security' | 'business-date' | 'display' | 'backups' | 'diagnostics' | 'integrations'>(() => (
     integrationSettingsVisible && (hasPermission(auth, permissions.importRun) || hasPermission(auth, permissions.paymentsWrite))
       ? 'integrations'
       : 'security'
@@ -67,11 +68,19 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
   const [diagnosticError, setDiagnosticError] = useState<string | null>(null)
   const [diagnosticMessage, setDiagnosticMessage] = useState<string | null>(null)
   const [diagnosticReloadToken, setDiagnosticReloadToken] = useState(0)
+  const [businessDateSettings, setBusinessDateSettings] = useState<BusinessDateSettingsDto | null>(null)
+  const [businessDateDraft, setBusinessDateDraft] = useState('')
+  const [businessDateLoading, setBusinessDateLoading] = useState(false)
+  const [businessDateSaving, setBusinessDateSaving] = useState(false)
+  const [businessDateError, setBusinessDateError] = useState<string | null>(null)
+  const [businessDateMessage, setBusinessDateMessage] = useState<string | null>(null)
+  const [businessDateConfirmation, setBusinessDateConfirmation] = useState<{ overrideDate: string | null } | null>(null)
   const canViewIntegrationStatus = integrationSettingsVisible && hasPermission(auth, permissions.importRun)
   const canViewReceiptPrintingStatus = integrationSettingsVisible && hasPermission(auth, permissions.paymentsWrite)
   const canManageIntegrationSettings = integrationSettingsVisible && hasPermission(auth, permissions.usersManage)
   const canManageDadataSettings = dadataSettingsVisible
   const canManageApplicationSettings = hasPermission(auth, permissions.usersManage)
+  const canManageBusinessDate = isAdministrator(auth)
   useRestoreFocusOnClose(Boolean(pendingPasswordChange))
   const confirmationCancelRef = useFocusOnOpen<HTMLButtonElement>(Boolean(pendingPasswordChange))
   const confirmationDialogRef = useFocusTrap<HTMLElement>(Boolean(pendingPasswordChange))
@@ -83,6 +92,27 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
   useEscapeKey(Boolean(pendingPasswordChange) && !saving, () => setPendingPasswordChange(null))
   useEscapeKey(Boolean(oneCFreshSyncConfirmation) && !oneCFreshSyncSaving, () => closeOneCFreshSyncConfirmation())
   useEscapeKey(Boolean(backupConfirmation) && !backupCreating, () => setBackupConfirmation(null))
+  useEscapeKey(Boolean(businessDateConfirmation) && !businessDateSaving, () => setBusinessDateConfirmation(null))
+
+  useEffect(() => {
+    if (!canManageBusinessDate || activeSettingsTab !== 'business-date') return
+    let ignore = false
+    setBusinessDateLoading(true)
+    setBusinessDateError(null)
+    settingsClient.getBusinessDateSettings(auth.accessToken)
+      .then((settings) => {
+        if (ignore) return
+        setBusinessDateSettings(settings)
+        setBusinessDateDraft(settings.overrideDate ?? settings.systemDate)
+      })
+      .catch((caught: unknown) => {
+        if (!ignore) setBusinessDateError(caught instanceof Error ? caught.message : 'Не удалось загрузить рабочую дату.')
+      })
+      .finally(() => {
+        if (!ignore) setBusinessDateLoading(false)
+      })
+    return () => { ignore = true }
+  }, [activeSettingsTab, auth.accessToken, canManageBusinessDate, settingsClient])
 
   useEffect(() => {
     if (!canManageApplicationSettings || activeSettingsTab !== 'display') {
@@ -239,6 +269,26 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
       setPaymentDisplaySettingsError(caught instanceof Error ? caught.message : 'Не удалось сохранить настройку отображения платежей.')
     } finally {
       setPaymentDisplaySettingsSaving(false)
+    }
+  }
+
+  async function confirmBusinessDateChange() {
+    if (!businessDateConfirmation) return
+    setBusinessDateSaving(true)
+    setBusinessDateError(null)
+    setBusinessDateMessage(null)
+    try {
+      const settings = await settingsClient.updateBusinessDateSettings(auth.accessToken, businessDateConfirmation)
+      setBusinessDateSettings(settings)
+      setBusinessDateDraft(settings.overrideDate ?? settings.systemDate)
+      setBusinessDateConfirmation(null)
+      setBusinessDateMessage(settings.automation?.message ?? (settings.isOverrideActive
+        ? `Рабочая дата установлена: ${formatBusinessDate(settings.effectiveDate)}.`
+        : 'Восстановлена автоматическая системная дата.'))
+    } catch (caught) {
+      setBusinessDateError(caught instanceof Error ? caught.message : 'Не удалось изменить рабочую дату.')
+    } finally {
+      setBusinessDateSaving(false)
     }
   }
 
@@ -484,6 +534,20 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
               <KeyRound size={17} aria-hidden="true" />
               <span>Безопасность</span>
             </button>
+            {canManageBusinessDate ? (
+              <button
+                id="settings-business-date-tab"
+                className={activeSettingsTab === 'business-date' ? 'settings-tab is-active' : 'settings-tab'}
+                type="button"
+                role="tab"
+                aria-controls="settings-business-date-panel"
+                aria-selected={activeSettingsTab === 'business-date'}
+                onClick={() => setActiveSettingsTab('business-date')}
+              >
+                <CalendarClock size={17} aria-hidden="true" />
+                <span>Рабочая дата</span>
+              </button>
+            ) : null}
             {canManageApplicationSettings ? (
               <button
                 id="settings-display-tab"
@@ -579,6 +643,43 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
             <span>{saving ? 'Сохраняем...' : 'Изменить пароль'}</span>
           </button>
         </form>
+      </section>
+      ) : null}
+      {canManageBusinessDate && activeSettingsTab === 'business-date' ? (
+      <section className="password-panel settings-card settings-card--business-date" aria-label="Эмулятор рабочей даты">
+        <div className="settings-card-intro">
+          <p className="eyebrow">Администрирование</p>
+          <h2>Эмулятор рабочей даты</h2>
+          <p>Позволяет безопасно проверить начисления, перенос долга в просроченный и попадание гаражей в список должников без изменения дат документов и технических журналов.</p>
+        </div>
+        <div className="dictionary-form settings-card-form">
+          {businessDateLoading ? <LoadingSkeleton className="loading-skeleton--compact" label="Загружаем рабочую дату" rows={2} columns={3} /> : null}
+          {businessDateSettings && !businessDateLoading ? (
+            <>
+              <div className="summary-strip" aria-label="Состояние рабочей даты">
+                <div><span>Системная дата</span><strong>{formatBusinessDate(businessDateSettings.systemDate)}</strong></div>
+                <div><span>Рабочая дата</span><strong className={businessDateSettings.isOverrideActive ? 'warning-text' : 'status-active'}>{formatBusinessDate(businessDateSettings.effectiveDate)}</strong></div>
+                <div><span>Режим</span><strong>{businessDateSettings.isOverrideActive ? 'Тестовая дата' : 'Автоматически'}</strong></div>
+              </div>
+              {businessDateSettings.isOverrideActive ? (
+                <div className="form-warning" role="status">Расчёты сейчас выполняются на тестовую дату. Верните системную дату после проверки.</div>
+              ) : null}
+              <FormField label="Новая рабочая дата">
+                <LocalizedDatePicker ariaLabel="Новая рабочая дата" mode="date" value={businessDateDraft} disabled={businessDateSaving} onChange={(value) => { setBusinessDateDraft(value); setBusinessDateMessage(null) }} required />
+              </FormField>
+              <p className="form-hint">После подтверждения система сразу сформирует регулярные начисления выбранного месяца. Уже созданные начисления не дублируются.</p>
+              <div className="dialog-actions dialog-actions--start">
+                <button className="secondary-button" type="button" disabled={!businessDateDraft || businessDateSaving} onClick={() => setBusinessDateConfirmation({ overrideDate: businessDateDraft })}>
+                  <CalendarClock size={16} aria-hidden="true" />
+                  <span>Установить рабочую дату</span>
+                </button>
+                <button className="ghost-button" type="button" disabled={!businessDateSettings.isOverrideActive || businessDateSaving} onClick={() => setBusinessDateConfirmation({ overrideDate: null })}>Вернуть системную дату</button>
+              </div>
+            </>
+          ) : null}
+          {businessDateError ? <FormError>{businessDateError}</FormError> : null}
+          {businessDateMessage ? <div className="form-success" role="status" aria-live="polite">{businessDateMessage}</div> : null}
+        </div>
       </section>
       ) : null}
       {canManageApplicationSettings && activeSettingsTab === 'display' ? (
@@ -944,6 +1045,31 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
       ) : null}
         </div>
       </section>
+      {businessDateConfirmation ? (
+        <div className="modal-backdrop" role="presentation" onMouseDown={() => !businessDateSaving && setBusinessDateConfirmation(null)}>
+          <section className="detail-dialog dictionary-confirmation-dialog" role="dialog" aria-modal="true" aria-labelledby="business-date-confirmation-title" aria-describedby="business-date-confirmation-description" onMouseDown={(event) => event.stopPropagation()}>
+            <div className="dialog-heading">
+              <div>
+                <p className="eyebrow">Рабочая дата</p>
+                <h3 id="business-date-confirmation-title">{businessDateConfirmation.overrideDate ? 'Включить тестовую дату?' : 'Вернуть системную дату?'}</h3>
+              </div>
+              <button className="icon-button" type="button" aria-label="Закрыть подтверждение рабочей даты" onClick={() => setBusinessDateConfirmation(null)} disabled={businessDateSaving}><X size={18} aria-hidden="true" /></button>
+            </div>
+            <p className="confirmation-text" id="business-date-confirmation-description">
+              {businessDateConfirmation.overrideDate
+                ? `Расчёты задолженности и должников будут выполнены на ${formatBusinessDate(businessDateConfirmation.overrideDate)}. Регулярные начисления этого месяца сформируются автоматически.`
+                : 'Расчёты снова будут использовать текущую дату сервера. Регулярные начисления текущего месяца будут проверены автоматически.'}
+            </p>
+            <div className="dialog-actions">
+              <button className="ghost-button" type="button" onClick={() => setBusinessDateConfirmation(null)} disabled={businessDateSaving}>Отмена</button>
+              <button className="secondary-button" type="button" onClick={() => void confirmBusinessDateChange()} disabled={businessDateSaving}>
+                <CalendarClock size={16} aria-hidden="true" />
+                <span>{businessDateSaving ? 'Применяем и рассчитываем...' : 'Подтвердить'}</span>
+              </button>
+            </div>
+          </section>
+        </div>
+      ) : null}
       {backupConfirmation ? (
         <div className="modal-backdrop" role="presentation" onMouseDown={() => !backupCreating && setBackupConfirmation(null)}>
           <section ref={backupConfirmationDialogRef} className="detail-dialog dictionary-confirmation-dialog" role="dialog" aria-modal="true" aria-labelledby="database-backup-confirmation-title" aria-describedby="database-backup-confirmation-description" onMouseDown={(event) => event.stopPropagation()}>
@@ -1061,6 +1187,11 @@ function formatBackupKind(kind: string) {
   if (kind === 'automatic') return 'Автоматическая'
   if (kind === 'pre_update') return 'Перед обновлением'
   return kind
+}
+
+function formatBusinessDate(value: string) {
+  const [year, month, day] = value.split('-')
+  return year && month && day ? `${day}.${month}.${year}` : value
 }
 
 function formatFileSize(sizeBytes: number) {

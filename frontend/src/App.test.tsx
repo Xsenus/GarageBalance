@@ -19,6 +19,8 @@ vi.mock('./services/settingsApi', () => ({
   settingsApi: {
     getPaymentDisplaySettings: vi.fn(async () => ({ showAllGarageOperationsByDefault: true })),
     updatePaymentDisplaySettings: vi.fn(async (_accessToken: string, request: { showAllGarageOperationsByDefault: boolean }) => request),
+    getBusinessDateSettings: vi.fn(async () => ({ systemDate: '2026-07-21', effectiveDate: '2026-07-21', overrideDate: null, isOverrideActive: false, updatedAtUtc: null, automation: null })),
+    updateBusinessDateSettings: vi.fn(async (_accessToken: string, request: { overrideDate: string | null }) => ({ systemDate: '2026-07-21', effectiveDate: request.overrideDate ?? '2026-07-21', overrideDate: request.overrideDate, isOverrideActive: request.overrideDate !== null, updatedAtUtc: '2026-07-21T09:00:00Z', automation: null })),
   },
 }))
 
@@ -6526,6 +6528,36 @@ describe('App', () => {
     expect(await within(displayPanel).findByText('Настройка отображения платежей сохранена.')).toHaveAttribute('role', 'status')
   })
 
+  it('lets only the administrator confirm a business date and starts automatic accruals', async () => {
+    const user = userEvent.setup()
+    const updateBusinessDateSettings = vi.fn(async (_accessToken: string, request: { overrideDate: string | null }) => ({
+      systemDate: '2026-07-21',
+      effectiveDate: request.overrideDate ?? '2026-07-21',
+      overrideDate: request.overrideDate,
+      isOverrideActive: request.overrideDate !== null,
+      updatedAtUtc: '2026-07-21T09:00:00Z',
+      automation: { succeeded: true, createdCount: 2, skippedCount: 3, message: 'Начисления за 08.2026: создано 2, пропущено 3.' },
+    }))
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} integrationClient={createIntegrationClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} settingsClient={createSettingsClient({ updateBusinessDateSettings })} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Настройки')
+    const settings = await screen.findByRole('region', { name: 'Настройки' })
+    await user.click(within(settings).getByRole('tab', { name: 'Рабочая дата' }))
+    const panel = await within(settings).findByRole('region', { name: 'Эмулятор рабочей даты' })
+    const dateInput = within(panel).getByLabelText('Новая рабочая дата')
+    await waitFor(() => expect(dateInput).toHaveValue('21.07.2026'))
+    await user.clear(dateInput)
+    await user.type(dateInput, '05.08.2026')
+    await user.click(within(panel).getByRole('button', { name: 'Установить рабочую дату' }))
+    const confirmation = await screen.findByRole('dialog', { name: 'Включить тестовую дату?' })
+    await user.click(within(confirmation).getByRole('button', { name: 'Подтвердить' }))
+
+    await waitFor(() => expect(updateBusinessDateSettings).toHaveBeenCalledWith('token', { overrideDate: '2026-08-05' }))
+    expect(await within(panel).findByText('Начисления за 08.2026: создано 2, пропущено 3.')).toHaveAttribute('role', 'status')
+  })
+
   it('shows portable backup status and creates a verified manual copy from settings', async () => {
     const user = userEvent.setup()
     const existingBackup = {
@@ -6695,6 +6727,11 @@ describe('App', () => {
     const tabList = within(settings).getByRole('tablist', { name: 'Разделы настроек' })
     expect(within(tabList).getByRole('tab', { name: 'Безопасность' })).toHaveAttribute('aria-selected', 'true')
     expect(within(settings).getByRole('region', { name: 'Безопасность аккаунта' })).toBeInTheDocument()
+    if (auth.user.roles.includes('administrator')) {
+      expect(within(tabList).getByRole('tab', { name: 'Рабочая дата' })).toBeInTheDocument()
+    } else {
+      expect(within(tabList).queryByRole('tab', { name: 'Рабочая дата' })).not.toBeInTheDocument()
+    }
     if (auth.user.permissions.includes('users.manage')) {
       expect(within(tabList).getByRole('tab', { name: 'Отображение' })).toBeInTheDocument()
       expect(within(tabList).getByRole('tab', { name: 'Резервные копии' })).toBeInTheDocument()
@@ -14696,6 +14733,22 @@ function createSettingsClient(overrides: Partial<ApplicationSettingsClient> = {}
   return {
     getPaymentDisplaySettings: async () => ({ showAllGarageOperationsByDefault: false }),
     updatePaymentDisplaySettings: async (_accessToken, request) => request,
+    getBusinessDateSettings: async () => ({
+      systemDate: '2026-07-21',
+      effectiveDate: '2026-07-21',
+      overrideDate: null,
+      isOverrideActive: false,
+      updatedAtUtc: null,
+      automation: null,
+    }),
+    updateBusinessDateSettings: async (_accessToken, request) => ({
+      systemDate: '2026-07-21',
+      effectiveDate: request.overrideDate ?? '2026-07-21',
+      overrideDate: request.overrideDate,
+      isOverrideActive: request.overrideDate !== null,
+      updatedAtUtc: '2026-07-21T09:00:00Z',
+      automation: { succeeded: true, createdCount: 2, skippedCount: 3, message: 'Начисления сформированы.' },
+    }),
     getDatabaseBackups: async () => ({
       enabled: true,
       automaticEnabled: true,

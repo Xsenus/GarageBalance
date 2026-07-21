@@ -108,7 +108,8 @@ builder.Services.AddScoped<IFinanceService>(services => new FinanceService(
     services.GetRequiredService<IIncomeFundAssignmentService>(),
     services.GetRequiredService<IApplicationUnitOfWork>(),
     services.GetRequiredService<IAuditEventWriter>(),
-    services.GetRequiredService<TimeProvider>()));
+    services.GetRequiredService<TimeProvider>(),
+    services.GetRequiredService<IBusinessDateProvider>()));
 builder.Services.AddScoped<IFundService, FundService>();
 builder.Services.AddScoped<IImportRepository, EfImportRepository>();
 builder.Services.AddScoped<IImportService, ImportService>();
@@ -162,10 +163,12 @@ builder.Services
         "Finance:RegularAccrualAutomation:TimeZoneId must contain a valid system time zone identifier.")
     .ValidateOnStart();
 builder.Services.AddSingleton(TimeProvider.System);
+builder.Services.AddSingleton<IBusinessDateProvider, BusinessDateProvider>();
 builder.Services.AddHostedService<DatabaseStartupHostedService>();
+builder.Services.AddHostedService<BusinessDateSettingsInitializer>();
 builder.Services.AddHostedService<AppReleaseCatalogSynchronizer>();
 builder.Services.AddHostedService<DatabaseBackupWorker>();
-builder.Services.AddScoped<RegularAccrualAutomationRunner>();
+builder.Services.AddScoped<IRegularAccrualAutomationRunner, RegularAccrualAutomationRunner>();
 builder.Services.AddHostedService<RegularAccrualAutomationWorker>();
 builder.Services.AddScoped<IReportService, ReportService>();
 builder.Services.AddScoped<ICashMovementReportQuery, EfCashMovementReportQuery>();

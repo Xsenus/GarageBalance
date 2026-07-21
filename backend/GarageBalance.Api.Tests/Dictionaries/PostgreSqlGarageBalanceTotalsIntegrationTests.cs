@@ -73,7 +73,7 @@ public sealed class PostgreSqlGarageBalanceTotalsIntegrationTests
 
         var totals = await new EfGarageRepository(
                 queryContext,
-                new FixedTimeProvider(new DateTimeOffset(2026, 7, 20, 12, 0, 0, TimeSpan.Zero)))
+                TestBusinessDateProvider.From(new FixedTimeProvider(new DateTimeOffset(2026, 7, 20, 12, 0, 0, TimeSpan.Zero))))
             .GetBalanceTotalsAsync([selectedGarage.Id], CancellationToken.None);
 
         Assert.Equal(450m, totals.AccrualTotals[selectedGarage.Id]);

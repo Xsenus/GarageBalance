@@ -20,11 +20,15 @@ public sealed class SettingsControllerTests
         var updateAction = typeof(SettingsController).GetMethod(nameof(SettingsController.UpdatePaymentDisplaySettings));
         var backupStatusAction = typeof(SettingsController).GetMethod(nameof(SettingsController.GetDatabaseBackups));
         var backupCreateAction = typeof(SettingsController).GetMethod(nameof(SettingsController.CreateDatabaseBackup));
+        var getBusinessDateAction = typeof(SettingsController).GetMethod(nameof(SettingsController.GetBusinessDateSettings));
+        var updateBusinessDateAction = typeof(SettingsController).GetMethod(nameof(SettingsController.UpdateBusinessDateSettings));
 
         Assert.Equal(SystemPermissions.PaymentsRead, Assert.Single(getAction!.GetCustomAttributes<AuthorizeAttribute>()).Policy);
         Assert.Equal(SystemPermissions.UsersManage, Assert.Single(updateAction!.GetCustomAttributes<AuthorizeAttribute>()).Policy);
         Assert.Equal(SystemPermissions.UsersManage, Assert.Single(backupStatusAction!.GetCustomAttributes<AuthorizeAttribute>()).Policy);
         Assert.Equal(SystemPermissions.UsersManage, Assert.Single(backupCreateAction!.GetCustomAttributes<AuthorizeAttribute>()).Policy);
+        Assert.Equal(SystemRoles.Administrator, Assert.Single(getBusinessDateAction!.GetCustomAttributes<AuthorizeAttribute>()).Roles);
+        Assert.Equal(SystemRoles.Administrator, Assert.Single(updateBusinessDateAction!.GetCustomAttributes<AuthorizeAttribute>()).Roles);
     }
 
     [Fact]
@@ -75,6 +79,32 @@ public sealed class SettingsControllerTests
 
         var ok = Assert.IsType<OkObjectResult>(result.Result);
         Assert.Same(backupService.Status, ok.Value);
+    }
+
+    [Fact]
+    public async Task UpdateBusinessDate_PassesActorAndReturnsUpdatedValue()
+    {
+        var actorUserId = Guid.NewGuid();
+        var service = new FakeService();
+        var controller = new SettingsController(service, new FakeBackupService())
+        {
+            ControllerContext = new ControllerContext
+            {
+                HttpContext = new DefaultHttpContext
+                {
+                    User = new ClaimsPrincipal(new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, actorUserId.ToString())], "Test"))
+                }
+            }
+        };
+        var request = new UpdateBusinessDateRequest(new DateOnly(2026, 8, 5));
+
+        var result = await controller.UpdateBusinessDateSettings(request, CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var dto = Assert.IsType<BusinessDateSettingsDto>(ok.Value);
+        Assert.Equal(new DateOnly(2026, 8, 5), dto.EffectiveDate);
+        Assert.Same(request, service.ReceivedBusinessDateRequest);
+        Assert.Equal(actorUserId, service.ReceivedActorUserId);
     }
 
     [Fact]
@@ -130,6 +160,7 @@ public sealed class SettingsControllerTests
         public PaymentDisplaySettingsDto Current { get; set; } = new(false);
         public UpdatePaymentDisplaySettingsRequest? ReceivedRequest { get; private set; }
         public Guid? ReceivedActorUserId { get; private set; }
+        public UpdateBusinessDateRequest? ReceivedBusinessDateRequest { get; private set; }
 
         public Task<PaymentDisplaySettingsDto> GetPaymentDisplaySettingsAsync(CancellationToken cancellationToken) => Task.FromResult(Current);
 
@@ -139,6 +170,23 @@ public sealed class SettingsControllerTests
             ReceivedActorUserId = actorUserId;
             Current = new PaymentDisplaySettingsDto(request.ShowAllGarageOperationsByDefault);
             return Task.FromResult(Current);
+        }
+
+        public Task<BusinessDateSettingsDto> GetBusinessDateSettingsAsync(CancellationToken cancellationToken) =>
+            Task.FromResult(new BusinessDateSettingsDto(new DateOnly(2026, 7, 21), new DateOnly(2026, 7, 21), null, false, null, null));
+
+        public Task<BusinessDateSettingsDto> UpdateBusinessDateSettingsAsync(UpdateBusinessDateRequest request, Guid? actorUserId, CancellationToken cancellationToken)
+        {
+            ReceivedBusinessDateRequest = request;
+            ReceivedActorUserId = actorUserId;
+            var effectiveDate = request.OverrideDate ?? new DateOnly(2026, 7, 21);
+            return Task.FromResult(new BusinessDateSettingsDto(
+                new DateOnly(2026, 7, 21),
+                effectiveDate,
+                request.OverrideDate,
+                request.OverrideDate.HasValue,
+                DateTimeOffset.UtcNow,
+                new RegularAccrualAutomationSummaryDto(true, 1, 0, "Готово")));
         }
     }
 

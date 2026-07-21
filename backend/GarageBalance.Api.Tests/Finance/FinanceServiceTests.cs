@@ -3400,8 +3400,7 @@ public sealed class FinanceServiceTests
 
         var runner = new RegularAccrualAutomationRunner(
             FinanceServiceTestFactory.Create(database.Context),
-            new FixedTimeProvider(new DateTimeOffset(2026, 7, 31, 19, 30, 0, TimeSpan.Zero)),
-            Options.Create(new RegularAccrualAutomationOptions { TimeZoneId = "Asia/Novosibirsk" }),
+            new TestBusinessDateProvider(new DateOnly(2026, 8, 1)),
             NullLogger<RegularAccrualAutomationRunner>.Instance);
 
         await runner.RunCurrentMonthAsync(CancellationToken.None);

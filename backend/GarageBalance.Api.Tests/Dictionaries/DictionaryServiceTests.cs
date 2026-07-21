@@ -696,14 +696,11 @@ public sealed class DictionaryServiceTests
         });
         await database.Context.SaveChangesAsync();
 
-        var beforeGrace = await new EfGarageRepository(
-                database.Context,
-                new FixedTimeProvider(new DateTimeOffset(2026, 7, 30, 12, 0, 0, TimeSpan.Zero)))
-            .GetBalanceTotalsAsync([garage.Id], CancellationToken.None);
-        var afterGrace = await new EfGarageRepository(
-                database.Context,
-                new FixedTimeProvider(new DateTimeOffset(2026, 7, 31, 12, 0, 0, TimeSpan.Zero)))
-            .GetBalanceTotalsAsync([garage.Id], CancellationToken.None);
+        var businessDate = new TestBusinessDateProvider(new DateOnly(2026, 7, 30));
+        var garageRepository = new EfGarageRepository(database.Context, businessDate);
+        var beforeGrace = await garageRepository.GetBalanceTotalsAsync([garage.Id], CancellationToken.None);
+        businessDate.SetOverride(new DateOnly(2026, 7, 31));
+        var afterGrace = await garageRepository.GetBalanceTotalsAsync([garage.Id], CancellationToken.None);
 
         Assert.Equal(0m, beforeGrace.OverdueAccrualTotals.GetValueOrDefault(garage.Id));
         Assert.Equal(1m, afterGrace.OverdueAccrualTotals.GetValueOrDefault(garage.Id));

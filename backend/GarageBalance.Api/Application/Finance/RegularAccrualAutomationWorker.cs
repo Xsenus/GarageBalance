@@ -23,7 +23,7 @@ public sealed class RegularAccrualAutomationWorker(
             try
             {
                 using var scope = scopeFactory.CreateScope();
-                var runner = scope.ServiceProvider.GetRequiredService<RegularAccrualAutomationRunner>();
+                var runner = scope.ServiceProvider.GetRequiredService<IRegularAccrualAutomationRunner>();
                 await runner.RunCurrentMonthAsync(stoppingToken);
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)

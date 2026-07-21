@@ -12,7 +12,7 @@ internal static class FinanceServiceTestFactory
     public static FinanceService Create(GarageBalanceDbContext dbContext, TimeProvider? timeProvider = null) =>
         new(
             new EfStaffMemberRepository(dbContext),
-            new EfGarageRepository(dbContext, timeProvider),
+            new EfGarageRepository(dbContext, TestBusinessDateProvider.From(timeProvider)),
             new EfMissingMeterReadingQuery(dbContext),
             new EfGarageIncomeWorksheetQuery(dbContext),
             new EfGarageBalanceHistoryQuery(dbContext),
@@ -38,5 +38,6 @@ internal static class FinanceServiceTestFactory
                 new AuditEventWriter(dbContext)),
             new EfApplicationUnitOfWork(dbContext),
             new AuditEventWriter(dbContext),
-            timeProvider ?? TimeProvider.System);
+            timeProvider ?? TimeProvider.System,
+            TestBusinessDateProvider.From(timeProvider));
 }

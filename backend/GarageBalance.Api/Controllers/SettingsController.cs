@@ -32,6 +32,35 @@ public sealed class SettingsController(
         return Ok(await applicationSettingsService.UpdatePaymentDisplaySettingsAsync(request, GetActorUserId(), cancellationToken));
     }
 
+    [HttpGet("business-date")]
+    [Authorize(Roles = SystemRoles.Administrator)]
+    [ProducesResponseType<BusinessDateSettingsDto>(StatusCodes.Status200OK)]
+    public async Task<ActionResult<BusinessDateSettingsDto>> GetBusinessDateSettings(CancellationToken cancellationToken)
+    {
+        return Ok(await applicationSettingsService.GetBusinessDateSettingsAsync(cancellationToken));
+    }
+
+    [HttpPut("business-date")]
+    [Authorize(Roles = SystemRoles.Administrator)]
+    [ProducesResponseType<BusinessDateSettingsDto>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    public async Task<ActionResult<BusinessDateSettingsDto>> UpdateBusinessDateSettings(
+        UpdateBusinessDateRequest request,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            return Ok(await applicationSettingsService.UpdateBusinessDateSettingsAsync(request, GetActorUserId(), cancellationToken));
+        }
+        catch (BusinessDateValidationException exception)
+        {
+            return Problem(
+                statusCode: StatusCodes.Status400BadRequest,
+                title: "business_date_out_of_range",
+                detail: exception.Message);
+        }
+    }
+
     [HttpGet("backups")]
     [Authorize(Policy = SystemPermissions.UsersManage)]
     [ProducesResponseType<DatabaseBackupStatusDto>(StatusCodes.Status200OK)]

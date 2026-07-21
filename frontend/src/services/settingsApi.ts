@@ -2,6 +2,20 @@ export type PaymentDisplaySettingsDto = {
   showAllGarageOperationsByDefault: boolean
 }
 
+export type BusinessDateSettingsDto = {
+  systemDate: string
+  effectiveDate: string
+  overrideDate: string | null
+  isOverrideActive: boolean
+  updatedAtUtc: string | null
+  automation: {
+    succeeded: boolean
+    createdCount: number
+    skippedCount: number
+    message: string
+  } | null
+}
+
 export type DatabaseBackupFileDto = {
   fileName: string
   sizeBytes: number
@@ -35,6 +49,8 @@ export type DiagnosticLogStatusDto = {
 export type ApplicationSettingsClient = {
   getPaymentDisplaySettings(accessToken: string): Promise<PaymentDisplaySettingsDto>
   updatePaymentDisplaySettings(accessToken: string, request: PaymentDisplaySettingsDto): Promise<PaymentDisplaySettingsDto>
+  getBusinessDateSettings(accessToken: string): Promise<BusinessDateSettingsDto>
+  updateBusinessDateSettings(accessToken: string, request: { overrideDate: string | null }): Promise<BusinessDateSettingsDto>
   getDatabaseBackups(accessToken: string): Promise<DatabaseBackupStatusDto>
   createDatabaseBackup(accessToken: string, request: { reason: string }): Promise<DatabaseBackupFileDto>
   getDiagnosticLogStatus(accessToken: string): Promise<DiagnosticLogStatusDto>
@@ -79,6 +95,12 @@ export const settingsApi: ApplicationSettingsClient = {
   },
   updatePaymentDisplaySettings(accessToken, request) {
     return requestJson(accessToken, '/api/settings/payments/display', { method: 'PUT', body: JSON.stringify(request) })
+  },
+  getBusinessDateSettings(accessToken) {
+    return requestJson(accessToken, '/api/settings/business-date')
+  },
+  updateBusinessDateSettings(accessToken, request) {
+    return requestJson(accessToken, '/api/settings/business-date', { method: 'PUT', body: JSON.stringify(request) })
   },
   getDatabaseBackups(accessToken) {
     return requestJson(accessToken, '/api/settings/backups')

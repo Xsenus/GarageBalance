@@ -101,8 +101,8 @@ dotnet format --verify-no-changes
 Публикация готового Docker-релиза владельцем проекта:
 
 ```powershell
-git tag v0.759.0
-git push origin v0.759.0
+git tag v0.760.0
+git push origin v0.760.0
 ```
 
 Tag `vX.Y.Z` запускает `Publish Docker release`: GitHub Actions проверяет код, локально собирает versioned API/frontend images, добавляет официальный PostgreSQL image, сохраняет все три образа внутри `GarageBalance-Docker-X.Y.Z.zip`, вычисляет SHA-256 и прикладывает ZIP с checksum к GitHub Release. Отдельные application packages в GHCR не публикуются. Tag создается только для уже проверенного commit и только после отдельного разрешения на push.
