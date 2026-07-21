@@ -85,6 +85,34 @@ public sealed class DockerDistributionTests
         Assert.Equal("__GARAGEBALANCE_VERSION__", File.ReadAllText(Path.Combine(distribution, "release-version.txt")).Trim());
     }
 
+    [Fact]
+    public void WindowsLanGuideMatchesSupportedComposeSettingsAndSafeFirewallScope()
+    {
+        var root = FindRepositoryRoot();
+        var distribution = DistributionDirectory();
+        var guide = File.ReadAllText(Path.Combine(root, "docs", "docker-windows-lan-guide.md"));
+        var bundleReadme = File.ReadAllText(Path.Combine(distribution, "README.txt"));
+        var environment = File.ReadAllText(Path.Combine(distribution, ".env.example"));
+        var compose = File.ReadAllText(Path.Combine(distribution, "docker-compose.yml"));
+
+        Assert.Contains("FRONTEND_BIND_ADDRESS=0.0.0.0", guide, StringComparison.Ordinal);
+        Assert.Contains("FRONTEND_ORIGIN=http://192.168.1.50:8080", guide, StringComparison.Ordinal);
+        Assert.Contains("API_BIND_ADDRESS=127.0.0.1", guide, StringComparison.Ordinal);
+        Assert.Contains("POSTGRES_BIND_ADDRESS=127.0.0.1", guide, StringComparison.Ordinal);
+        Assert.Contains("New-NetFirewallRule", guide, StringComparison.Ordinal);
+        Assert.Contains("-RemoteAddress LocalSubnet", guide, StringComparison.Ordinal);
+        Assert.Contains("backup.cmd", guide, StringComparison.Ordinal);
+        Assert.Contains("не копирует `.env`", guide, StringComparison.Ordinal);
+        Assert.Contains("garagebalance_data-protection-keys", guide, StringComparison.Ordinal);
+        Assert.Contains("docker-windows-lan-guide.md", bundleReadme, StringComparison.Ordinal);
+
+        foreach (var variable in new[] { "FRONTEND_BIND_ADDRESS", "FRONTEND_PORT", "FRONTEND_ORIGIN", "API_BIND_ADDRESS", "POSTGRES_BIND_ADDRESS" })
+        {
+            Assert.Contains($"{variable}=", environment, StringComparison.Ordinal);
+            Assert.Contains($"${{{variable}", compose, StringComparison.Ordinal);
+        }
+    }
+
     private static int CountOccurrences(string value, string search)
     {
         var count = 0;

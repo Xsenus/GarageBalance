@@ -13,6 +13,7 @@ public sealed partial class DocumentationStructureTests
         "development-guide.md",
         "diagnostic-logging-guide.md",
         "docker-install-update-guide.md",
+        "docker-windows-lan-guide.md",
         "final-performance-checklist.md",
         "integrations-guide.md",
         "local-pc-install-checklist.md",
