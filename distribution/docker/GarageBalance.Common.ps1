@@ -222,7 +222,8 @@ function Import-GarageBalanceImages {
     $imageDirectory = Join-Path $script:GarageBalanceRoot "images"
     $archives = @(
         (Join-Path $imageDirectory "garagebalance-api-$Version.tar.gz"),
-        (Join-Path $imageDirectory "garagebalance-frontend-$Version.tar.gz")
+        (Join-Path $imageDirectory "garagebalance-frontend-$Version.tar.gz"),
+        (Join-Path $imageDirectory "postgres-17-alpine.tar.gz")
     )
 
     foreach ($archive in $archives) {

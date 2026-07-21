@@ -9,9 +9,11 @@ public sealed class DockerDistributionTests
         var compose = File.ReadAllText(Path.Combine(distribution, "docker-compose.yml"));
 
         Assert.Contains("name: garagebalance", compose, StringComparison.Ordinal);
-        Assert.Contains("ghcr.io/xsenus/garagebalance-api:${GARAGEBALANCE_VERSION", compose, StringComparison.Ordinal);
-        Assert.Contains("ghcr.io/xsenus/garagebalance-frontend:${GARAGEBALANCE_VERSION", compose, StringComparison.Ordinal);
-        Assert.Equal(2, CountOccurrences(compose, "pull_policy: never"));
+        Assert.Contains("image: garagebalance-api:${GARAGEBALANCE_VERSION", compose, StringComparison.Ordinal);
+        Assert.Contains("image: garagebalance-frontend:${GARAGEBALANCE_VERSION", compose, StringComparison.Ordinal);
+        Assert.Contains("image: postgres:17-alpine", compose, StringComparison.Ordinal);
+        Assert.Equal(3, CountOccurrences(compose, "pull_policy: never"));
+        Assert.DoesNotContain("ghcr.io/", compose, StringComparison.Ordinal);
         Assert.Contains("postgres-data:/var/lib/postgresql/data", compose, StringComparison.Ordinal);
         Assert.Contains("data-protection-keys:${DATA_PROTECTION_KEYS_PATH", compose, StringComparison.Ordinal);
         Assert.DoesNotContain("build:", compose, StringComparison.Ordinal);
@@ -55,7 +57,11 @@ public sealed class DockerDistributionTests
         Assert.Contains("npm run test:coverage", workflow, StringComparison.Ordinal);
         Assert.Contains("check-docker-distribution.ps1", workflow, StringComparison.Ordinal);
         Assert.Contains("docker/build-push-action@v6", workflow, StringComparison.Ordinal);
+        Assert.Equal(2, CountOccurrences(workflow, "load: true"));
+        Assert.DoesNotContain("docker/login-action", workflow, StringComparison.Ordinal);
+        Assert.DoesNotContain("push: true", workflow, StringComparison.Ordinal);
         Assert.Contains("docker save", workflow, StringComparison.Ordinal);
+        Assert.Contains("postgres-17-alpine.tar.gz", workflow, StringComparison.Ordinal);
         Assert.Contains("GarageBalance-Docker-${VERSION}.zip", workflow, StringComparison.Ordinal);
         Assert.Contains("sha256sum", workflow, StringComparison.Ordinal);
         Assert.Contains("gh release create", workflow, StringComparison.Ordinal);
@@ -83,6 +89,29 @@ public sealed class DockerDistributionTests
         Assert.Contains("JWT_SIGNING_KEY=__GENERATE__", environment, StringComparison.Ordinal);
         Assert.Contains("GARAGEBALANCE_VERSION=__GARAGEBALANCE_VERSION__", environment, StringComparison.Ordinal);
         Assert.Equal("__GARAGEBALANCE_VERSION__", File.ReadAllText(Path.Combine(distribution, "release-version.txt")).Trim());
+    }
+
+    [Fact]
+    public void OfflineBundleImportsEveryImageRequiredByCompose()
+    {
+        var distribution = DistributionDirectory();
+        var common = File.ReadAllText(Path.Combine(distribution, "GarageBalance.Common.ps1"));
+        var compose = File.ReadAllText(Path.Combine(distribution, "docker-compose.yml"));
+        var workflow = File.ReadAllText(Path.Combine(FindRepositoryRoot(), ".github", "workflows", "publish-docker-release.yml"));
+
+        foreach (var archive in new[]
+        {
+            "garagebalance-api-$Version.tar.gz",
+            "garagebalance-frontend-$Version.tar.gz",
+            "postgres-17-alpine.tar.gz"
+        })
+        {
+            Assert.Contains(archive, common, StringComparison.Ordinal);
+            Assert.Contains(archive.Replace("$Version", "${VERSION}", StringComparison.Ordinal), workflow, StringComparison.Ordinal);
+        }
+
+        Assert.Contains("image: postgres:17-alpine", compose, StringComparison.Ordinal);
+        Assert.DoesNotContain("docker pull", common, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]

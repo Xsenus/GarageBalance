@@ -10,7 +10,7 @@
 
 - Windows 10/11 x64;
 - установленный и запущенный Docker Desktop в режиме Linux containers;
-- интернет при первом запуске, чтобы Docker загрузил официальный PostgreSQL image;
+- интернет только для скачивания Docker Desktop и установочного ZIP; после скачивания ZIP установка работает автономно;
 - свободные локальные порты `5173`, `5080` и `5432`.
 
 Git, .NET SDK, Node.js, PostgreSQL и ручная генерация паролей не нужны.
@@ -27,7 +27,7 @@ Git, .NET SDK, Node.js, PostgreSQL и ручная генерация парол
 
 - проверяет Docker Engine и Compose v2;
 - создает `.env` и криптографически стойкие уникальные секреты;
-- загружает готовые API/frontend images из ZIP без входа в container registry;
+- загружает готовые API, frontend и PostgreSQL images из ZIP без входа в container registry и без обращения к Docker Hub;
 - создает постоянные volumes базы и ключей защиты;
 - запускает PostgreSQL, API и frontend;
 - применяет EF Core migrations и ждёт успешного `/health`.

@@ -10,11 +10,11 @@
 ## Предположения и решения
 
 - Целевая пользовательская ОС первого дистрибутива — Windows 10/11 x64 с Docker Desktop и Linux containers.
-- Release-архив содержит готовые backend/frontend image-архивы; PostgreSQL загружается из публичного Docker Hub при первом запуске.
+- Release-архив содержит готовые backend, frontend и PostgreSQL image-архивы; после скачивания ZIP установка не обращается к registry или Docker Hub.
 - Compose project всегда называется `garagebalance`, поэтому обновление из новой папки повторно подключает существующие volumes.
-- PostgreSQL, ключи защиты, backup и логи не входят в release ZIP и переживают замену контейнеров.
+- Рабочая база PostgreSQL, ключи защиты, backup и логи не входят в release ZIP и переживают замену контейнеров; ZIP содержит только чистый PostgreSQL image без пользовательских данных.
 - Версия фиксируется в release bundle и в `.env`; `latest` не используется как единственный источник истины.
-- GHCR-образы публикуются дополнительно. Автономный ZIP не зависит от видимости packages и не требует `docker login`.
+- Отдельные application packages в GHCR не публикуются: единственный пользовательский артефакт — автономный ZIP с checksum.
 
 ## Этап 1. Формат дистрибутива
 
@@ -36,8 +36,8 @@
 
 - [x] Добавить workflow для tag `v*` и ручной проверки.
 - [x] Запускать полный backend/frontend quality gate перед публикацией.
-- [x] Собирать и публиковать versioned backend/frontend images в GHCR.
-- [x] Сохранять оба images в автономный установочный ZIP.
+- [x] Локально собирать versioned backend/frontend images без публикации в GHCR.
+- [x] Сохранять API, frontend и PostgreSQL images в автономный установочный ZIP.
 - [x] Добавлять SHA-256 checksum и GitHub Actions artifact.
 - [x] Для tag создавать GitHub Release с ZIP и checksum.
 
@@ -63,8 +63,8 @@
 ## Риски и открытые вопросы
 
 - [acceptance] Нужна финальная проверка на чистой Windows 10/11 с запущенным Docker Desktop.
-- [acceptance] После первой GHCR-публикации владелец должен проверить видимость packages; автономный ZIP от этого не зависит.
-- [decision] Поддержка Windows ARM64 и полностью offline PostgreSQL image может быть добавлена отдельным релизным вариантом после проверки спроса.
+- [x] Первый GitHub Release опубликован, ZIP и SHA-256 скачаны и проверены.
+- [decision] Поддержка Windows ARM64 может быть добавлена отдельным релизным вариантом после проверки спроса.
 
 ## История выполнения
 
@@ -73,3 +73,4 @@
 - 2026-07-20: реальный первый запуск из временного ZIP выявил несовместимость `pg_dump 16` с PostgreSQL 17: обязательный предмиграционный backup безопасно остановил API. Dockerfile переведен на PostgreSQL client 17, добавлен регрессионный контракт совпадения major-версий; требуется повторная сборка и smoke-test.
 - 2026-07-20: повторно собраны production images и автономный пакет. Первый запуск, 65 миграций, frontend/API health 200, автоматические и ручные backups, `pg_restore --list`, update, diagnostics без секретов и безопасный stop прошли на Docker Engine 28.3.3; тестовые контейнеры и volumes удалены. Остается приемка ZIP на отдельном чистом Windows-компьютере и первая tag-публикация.
 - 2026-07-21: тег `v0.758.0` опубликован, release workflow успешно создал versioned images, автономный ZIP и SHA-256. Добавлена постоянная пошаговая инструкция для Windows: смена портов, безопасный доступ из локальной сети, правило Windows Firewall только для `Private/LocalSubnet`, состав полного аварийного комплекта, обновление и диагностика. Приемка на отдельном чистом Windows-компьютере остается открытой.
+- 2026-07-21: по решению владельца двойная публикация ZIP и GHCR заменена одним полностью автономным ZIP. В архив включен PostgreSQL 17 Alpine image, Compose запрещает сетевое скачивание всех трех образов, release workflow больше не публикует packages и не запрашивает package-write permission. Локальный offline smoke-test с предварительным удалением application images подтвердил импорт 3/3 образов, применение 65 миграций, создание резервных копий и frontend/API health 200; тестовые контейнеры и volumes удалены. Остается приемка на отдельном чистом Windows-компьютере.

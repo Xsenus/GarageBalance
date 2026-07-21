@@ -1,5 +1,18 @@
 [
   {
+    "releaseId": "2026-07-21-fully-offline-docker-package",
+    "version": "0.759.0",
+    "publishedAt": "2026-07-21T10:00:00+07:00",
+    "title": "Docker-установка стала полностью автономной",
+    "summary": "Для установки GarageBalance после скачивания релизного архива больше не требуется подключение к интернету.",
+    "items": [
+      {
+        "type": "improved",
+        "text": "Установочный ZIP теперь содержит все необходимое: образы GarageBalance API, веб-интерфейса и PostgreSQL. Пользователю достаточно заранее скачать один архив, установить Docker Desktop и запустить start.cmd; отдельные пакеты, вход в registry и загрузка PostgreSQL во время установки не нужны."
+      }
+    ]
+  },
+  {
     "releaseId": "2026-07-20-system-performance-optimization",
     "version": "0.758.0",
     "publishedAt": "2026-07-20T00:30:00+07:00",

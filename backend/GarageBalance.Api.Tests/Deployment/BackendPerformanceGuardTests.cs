@@ -377,7 +377,8 @@ public sealed class BackendPerformanceGuardTests
             "AppReleases",
             "releases.json"));
 
-        Assert.Contains("\"version\": \"0.758.0\"", releaseNotes, StringComparison.Ordinal);
+        Assert.Contains("\"version\": \"0.759.0\"", releaseNotes, StringComparison.Ordinal);
+        Assert.Contains("Docker-установка стала полностью автономной", releaseNotes, StringComparison.Ordinal);
         Assert.Contains("История баланса гаража теперь одновременно считает входящий долг", releaseNotes, StringComparison.Ordinal);
         Assert.Contains("Разделы системы загружаются быстрее и стабильнее", releaseNotes, StringComparison.Ordinal);
         Assert.Contains("только один приоритетный контакт для каждой видимой строки", releaseNotes, StringComparison.Ordinal);

@@ -58,12 +58,22 @@ $composeText = [System.IO.File]::ReadAllText((Join-Path $distribution "docker-co
 foreach ($requiredFragment in @(
     "name: garagebalance",
     "pull_policy: never",
+    "image: postgres:17-alpine",
+    "image: garagebalance-api:",
+    "image: garagebalance-frontend:",
     "postgres-data:",
     "data-protection-keys:"
 )) {
     if (-not $composeText.Contains($requiredFragment)) {
         throw "Docker Compose distribution contract is missing: $requiredFragment"
     }
+}
+if ($composeText.Contains("ghcr.io/")) {
+    throw "The autonomous Docker distribution must not depend on GHCR."
+}
+$pullPolicyCount = ([regex]::Matches($composeText, "(?m)^\s+pull_policy:\s+never\s*$")).Count
+if ($pullPolicyCount -ne 3) {
+    throw "Every release service must use pull_policy: never for offline startup."
 }
 
 $docker = Get-Command docker -ErrorAction SilentlyContinue

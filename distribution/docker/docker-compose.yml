@@ -3,6 +3,7 @@ name: garagebalance
 services:
   postgres:
     image: postgres:17-alpine
+    pull_policy: never
     container_name: garagebalance-postgres
     restart: unless-stopped
     environment:
@@ -21,7 +22,7 @@ services:
       retries: 10
 
   api:
-    image: ghcr.io/xsenus/garagebalance-api:${GARAGEBALANCE_VERSION:?GarageBalance version is not configured}
+    image: garagebalance-api:${GARAGEBALANCE_VERSION:?GarageBalance version is not configured}
     pull_policy: never
     container_name: garagebalance-api
     restart: unless-stopped
@@ -66,7 +67,7 @@ services:
     stop_grace_period: 30s
 
   frontend:
-    image: ghcr.io/xsenus/garagebalance-frontend:${GARAGEBALANCE_VERSION:?GarageBalance version is not configured}
+    image: garagebalance-frontend:${GARAGEBALANCE_VERSION:?GarageBalance version is not configured}
     pull_policy: never
     container_name: garagebalance-frontend
     restart: unless-stopped
