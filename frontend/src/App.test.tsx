@@ -3190,6 +3190,121 @@ describe('App', () => {
     expect(within(tariffsPanel).queryByRole('button', { name: 'Вернуть услугу Охрана' })).not.toBeInTheDocument()
   })
 
+  it('edits a charge service in one form and keeps the draft after a failed save', async () => {
+    const user = userEvent.setup()
+    const serviceIncomeType = createAccountingType({ id: 'income-security', name: 'Охрана', code: 'membership' })
+    const serviceTariff = createTariff({ id: 'tariff-security', name: 'Тариф охраны', calculationBase: 'fixed', rate: 1200 })
+    let serviceSetting = createChargeServiceSetting({
+      id: 'service-security',
+      name: 'Охрана',
+      isRegular: true,
+      periodicityMonths: 12,
+      accrualStartMonth: 3,
+      paymentDueDay: 25,
+      paymentDueMonth: 4,
+      overdueGraceDays: 20,
+      incomeTypeId: serviceIncomeType.id,
+      tariffId: serviceTariff.id,
+      isMetered: true,
+      hasTieredTariff: true,
+      unitName: 'руб.',
+    })
+    const updateRequests: unknown[] = []
+    const dictionaryClient = createDictionaryClient({
+      getIncomeTypes: async () => [serviceIncomeType],
+      getTariffs: async () => [serviceTariff],
+      getChargeServiceSettings: async () => [serviceSetting],
+      updateChargeServiceSetting: async (_token, id, request) => {
+        updateRequests.push(request)
+        if (updateRequests.length === 1) {
+          throw new Error('Услугу временно не удалось сохранить.')
+        }
+
+        serviceSetting = createChargeServiceSetting({
+          id,
+          name: request.name,
+          isRegular: request.isRegular,
+          periodicityMonths: request.periodicityMonths ?? null,
+          accrualStartMonth: request.accrualStartMonth ?? null,
+          paymentDueDay: request.paymentDueDay ?? null,
+          paymentDueMonth: request.paymentDueMonth ?? null,
+          overdueGraceDays: request.overdueGraceDays,
+          incomeTypeId: request.incomeTypeId ?? null,
+          tariffId: request.tariffId ?? null,
+          isMetered: request.isMetered,
+          hasTieredTariff: request.hasTieredTariff,
+          unitName: request.unitName ?? null,
+        })
+        return serviceSetting
+      },
+    })
+
+    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Тарифы и сборы')
+    const tariffsPanel = await screen.findByRole('region', { name: 'Тарифы и сборы' })
+    await waitFor(() => expect(within(tariffsPanel).getAllByRole('button', { name: 'Изменить услугу Охрана' })).toHaveLength(1))
+
+    await user.click(within(tariffsPanel).getByRole('button', { name: 'Изменить услугу Охрана' }))
+    const editDialog = await screen.findByRole('dialog', { name: 'Изменить услугу' })
+    expect(within(editDialog).getByLabelText('Наименование услуги')).toHaveValue('Охрана')
+    expect(within(editDialog).getByLabelText('Регулярные платежи')).toBeChecked()
+    expect(within(editDialog).getByLabelText('Регулярные платежи')).toBeDisabled()
+    expect(within(editDialog).getByText('Тип услуги нельзя менять после создания. Остальные параметры доступны для редактирования.')).toBeInTheDocument()
+    expect(within(editDialog).getByRole('combobox', { name: 'Периодичность регулярной услуги' })).toHaveTextContent('Ежегодно')
+    expect(within(editDialog).getByRole('combobox', { name: 'Месяц начисления ежегодной услуги' })).toHaveTextContent('Март')
+    expect(within(editDialog).getByLabelText('День оплаты')).toHaveValue('25')
+    expect(within(editDialog).getByRole('combobox', { name: 'Месяц оплаты' })).toHaveTextContent('Апрель')
+    expect(within(editDialog).getByLabelText('Перенос долга в просроченный')).toHaveValue('20')
+    expect(within(editDialog).getByLabelText('Единица измерения')).toHaveValue('руб.')
+    expect(within(editDialog).getByLabelText('По счетчику')).toBeChecked()
+    expect(within(editDialog).getByLabelText('Пороговая тарификация')).toBeChecked()
+
+    await user.clear(within(editDialog).getByLabelText('Наименование услуги'))
+    await user.type(within(editDialog).getByLabelText('Наименование услуги'), 'Охрана территории')
+    await user.click(within(editDialog).getByRole('combobox', { name: 'Периодичность регулярной услуги' }))
+    await user.click(within(editDialog).getByRole('option', { name: 'Ежемесячно' }))
+    await user.clear(within(editDialog).getByLabelText('День оплаты'))
+    await user.type(within(editDialog).getByLabelText('День оплаты'), '15')
+    await user.clear(within(editDialog).getByLabelText('Перенос долга в просроченный'))
+    await user.type(within(editDialog).getByLabelText('Перенос долга в просроченный'), '10')
+    await user.clear(within(editDialog).getByLabelText('Единица измерения'))
+    await user.type(within(editDialog).getByLabelText('Единица измерения'), 'гараж')
+    await user.click(within(editDialog).getByLabelText('По счетчику'))
+    expect(within(editDialog).getByLabelText('Пороговая тарификация')).not.toBeChecked()
+    expect(within(editDialog).getByLabelText('Пороговая тарификация')).toBeDisabled()
+
+    await user.click(within(editDialog).getByRole('button', { name: 'Сохранить изменения' }))
+    expect(await within(editDialog).findByText('Услугу временно не удалось сохранить.')).toBeInTheDocument()
+    expect(within(editDialog).getByLabelText('Наименование услуги')).toHaveValue('Охрана территории')
+    expect(updateRequests).toHaveLength(1)
+
+    await user.click(within(editDialog).getByRole('button', { name: 'Сохранить изменения' }))
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Изменить услугу' })).not.toBeInTheDocument())
+    expect(updateRequests).toHaveLength(2)
+    expect(updateRequests[1]).toEqual({
+      name: 'Охрана территории',
+      isRegular: true,
+      periodicityMonths: 1,
+      accrualStartMonth: 1,
+      paymentDueDay: 15,
+      paymentDueMonth: null,
+      overdueGraceDays: 10,
+      isMetered: false,
+      hasTieredTariff: false,
+      unitName: 'гараж',
+      incomeTypeId: serviceIncomeType.id,
+      tariffId: serviceTariff.id,
+    })
+    expect(within(tariffsPanel).getByRole('button', { name: 'Изменить услугу Охрана территории' })).toBeInTheDocument()
+    expect(within(tariffsPanel).getByRole('combobox', { name: 'Охрана территории: Периодичность: значение' })).toHaveTextContent('Ежемесячно')
+    expect(within(tariffsPanel).getByLabelText('Охрана территории: Оплата до: день')).toHaveValue('15')
+    expect(within(tariffsPanel).getByRole('combobox', { name: 'Охрана территории: Охрана территории: по счетчику' })).toHaveValue('Нет')
+    expect(within(tariffsPanel).getByRole('combobox', { name: 'Охрана территории: Охрана территории: пороговая тарификация' })).toHaveValue('Нет')
+  })
+
   it('keeps backend tariff dictionaries above stale saved tariff form state', async () => {
     const user = userEvent.setup()
     vi.mocked(formStatesApi.getState).mockImplementation(async () => ({
