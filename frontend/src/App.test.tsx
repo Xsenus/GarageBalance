@@ -217,6 +217,30 @@ describe('App', () => {
     expect(window.sessionStorage.getItem('garagebalance.auth.session')).toBeNull()
   })
 
+  it('returns to the login form when the active session expires', async () => {
+    window.sessionStorage.setItem('garagebalance.auth.session', JSON.stringify(createAuthResponse({
+      expiresAtUtc: new Date(Date.now() + 50).toISOString(),
+    })))
+
+    render(
+      <App
+        authClient={createAuthClient()}
+        dictionaryClient={createDictionaryClient()}
+        financeClient={createFinanceClient()}
+        importClient={createImportClient()}
+        reportClient={createReportClient()}
+        releaseClient={createReleaseClient()}
+        userClient={createUserClient()}
+      />,
+    )
+
+    expect(screen.queryByRole('region', { name: 'Вход в систему' })).not.toBeInTheDocument()
+
+    expect(await screen.findByRole('region', { name: 'Вход в систему' }, { timeout: 1_000 })).toBeInTheDocument()
+    expect(window.sessionStorage.getItem('garagebalance.auth.session')).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Главное меню' })).not.toBeInTheDocument()
+  })
+
   it('does not call protected workspace clients before authentication', () => {
     render(
       <App

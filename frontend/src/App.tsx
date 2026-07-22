@@ -27,6 +27,7 @@ import { settingsApi } from './services/settingsApi'
 import type { ApplicationSettingsClient } from './services/settingsApi'
 import { clearStoredAuthSession, loadStoredAuthSession, saveStoredAuthSession } from './shared/sessionStorage'
 import { useClientErrorReporting } from './shared/useClientErrorReporting'
+import { useSessionExpiration } from './shared/useSessionExpiration'
 import './App.css'
 
 type AppProps = {
@@ -72,6 +73,8 @@ function App({ authClient = authApi, auditClient = auditApi, dictionaryClient = 
     clearStoredAuthSession(authSessionStorageKey)
     setAuth(null)
   }
+
+  useSessionExpiration(auth?.expiresAtUtc, handleLogout)
 
   if (!auth) {
     return (

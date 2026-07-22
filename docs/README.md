@@ -32,6 +32,7 @@
 - [Тестирование](testing-guide.md) — быстрые и полные проверки.
 - [Производительность](final-performance-checklist.md) — постоянные ограничения для запросов и интерфейса.
 - [Интеграции](integrations-guide.md) — импорт Access, 1C Fresh и печать документов.
+- [Активный roadmap замечаний заказчика](roadmaps/customer-comments-2026-07-22-roadmap.md) — последовательная реализация комментариев от 22.07.2026 и текущее состояние каждого пункта.
 - [Активный roadmap Docker-дистрибутива](roadmaps/docker-user-distribution-roadmap.md) — подготовка сценария «Docker Desktop + один ZIP» и оставшаяся приемка на чистом Windows-компьютере.
 
 ## Правила актуальности
