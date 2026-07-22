@@ -2063,7 +2063,7 @@ h1 {
 }
 
 .contractors-supplier-footer-grid {
-  grid-template-columns: minmax(180px, 0.7fr) minmax(220px, 0.8fr) minmax(320px, 1.5fr);
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .contractors-supplier-footer-grid .form-field > input,

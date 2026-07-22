@@ -251,7 +251,7 @@ describe('responsive layout styles', () => {
     expect(normalizedAppCss).toContain('.contractors-dialog--supplier .contractors-modal-form {\n  gap: 9px;')
     expect(normalizedAppCss).toContain('.contractors-supplier-lookup-grid {\n  grid-template-columns: minmax(150px, 0.6fr) minmax(170px, 0.65fr) minmax(170px, 0.65fr) minmax(300px, 1.6fr);')
     expect(normalizedAppCss).toContain('.contractors-supplier-lookup-grid > .form-field {\n  align-content: start;')
-    expect(normalizedAppCss).toContain('.contractors-supplier-footer-grid {\n  grid-template-columns: minmax(180px, 0.7fr) minmax(220px, 0.8fr) minmax(320px, 1.5fr);')
+    expect(normalizedAppCss).toContain('.contractors-supplier-footer-grid {\n  grid-template-columns: minmax(0, 1fr);')
     expect(normalizedAppCss).toContain('.contractors-supplier-footer-grid .form-field > input,\n.contractors-supplier-footer-grid .form-field > textarea {\n  box-sizing: border-box;\n  height: 76px;\n  min-height: 76px;')
     expect(normalizedAppCss).toContain('.contractors-contacts-preview--editable {\n  min-height: 196px;\n  max-height: 280px;')
     expect(normalizedAppCss).toContain('.contractors-contacts-row > span {\n  min-width: 0;')

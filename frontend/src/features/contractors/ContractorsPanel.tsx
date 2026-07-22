@@ -271,12 +271,13 @@ function getSupplierPrimaryContact(supplier: ContractorSupplierRow) {
 
 function normalizeSupplierPrototype(supplier: ContractorSupplierRow): ContractorSupplierRow {
   const primaryContact = getSupplierPrimaryContact(supplier)
+  const hasManagedContacts = supplier.contacts.length > 0
 
   return {
     ...supplier,
-    contactPerson: primaryContact?.fullName ?? supplier.contactPerson,
-    phone: primaryContact?.phone ?? supplier.phone,
-    email: primaryContact?.email ?? supplier.email,
+    contactPerson: primaryContact?.fullName ?? (hasManagedContacts ? '' : supplier.contactPerson),
+    phone: primaryContact?.phone ?? (hasManagedContacts ? '' : supplier.phone),
+    email: primaryContact?.email ?? (hasManagedContacts ? '' : supplier.email),
   }
 }
 
@@ -3462,8 +3463,6 @@ function SupplierPrototypeDialog({ accessToken, integrationClient, item, service
               ))}
             </div>
             <div className="contractors-supplier-footer-grid">
-              <FormField label="Телефон"><PhoneInput aria-label="Телефон поставщика" value={form.phone} onValueChange={(phone) => setForm({ ...form, phone })} /></FormField>
-              <FormField label="Почта"><input aria-label="Почта поставщика" type="email" value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} /></FormField>
               <FormField label="Комментарий"><textarea aria-label="Комментарий поставщика" value={form.comment} onChange={(event) => setForm({ ...form, comment: event.target.value })} /></FormField>
             </div>
             <div className="detail-dialog-actions contractors-dialog-actions contractors-garage-actions">
