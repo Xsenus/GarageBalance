@@ -46,7 +46,7 @@ describe('accessControl', () => {
     expect(rolePermissionGroups).toEqual([
       { label: 'Пользователи', permission: permissions.usersManage },
       { label: 'Справочники', permission: permissions.dictionariesWrite },
-      { label: 'Тарифы', permission: permissions.tariffsManage },
+      { label: 'Тарифы и сборы', permission: permissions.tariffsManage },
       { label: 'Платежи', permission: permissions.paymentsWrite },
       { label: 'Исторические показания', permission: permissions.historicalMeterReadingsCorrect },
       { label: 'Отчеты', permission: permissions.reportsRead },

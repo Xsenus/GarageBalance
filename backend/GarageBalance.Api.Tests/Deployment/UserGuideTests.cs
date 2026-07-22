@@ -19,7 +19,8 @@ public sealed class UserGuideTests
         Assert.Contains("audit.read", document, StringComparison.Ordinal);
         Assert.Contains("Пользователи", document, StringComparison.Ordinal);
         Assert.Contains("Справочники", document, StringComparison.Ordinal);
-        Assert.Contains("Тарифы", document, StringComparison.Ordinal);
+        Assert.Contains("## 5. Тарифы и сборы", document, StringComparison.Ordinal);
+        Assert.Contains("Раздел \"Тарифы и сборы\" доступен пользователям с `dictionaries.read`", document, StringComparison.Ordinal);
         Assert.Contains("Платежи", document, StringComparison.Ordinal);
         Assert.Contains("Импорт Access", document, StringComparison.Ordinal);
         Assert.Contains("Отчеты", document, StringComparison.Ordinal);

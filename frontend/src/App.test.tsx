@@ -300,7 +300,7 @@ describe('App', () => {
     expect(within(roleMatrix).getByText('Администратор')).toBeInTheDocument()
     expect(within(roleMatrix).getByText('Бухгалтер')).toBeInTheDocument()
     expect(within(roleMatrix).getByText('История изменений')).toBeInTheDocument()
-    expect(within(roleMatrix).getByRole('cell', { name: 'Бухгалтер: Тарифы - разрешено' })).toHaveTextContent('Да')
+    expect(within(roleMatrix).getByRole('cell', { name: 'Бухгалтер: Тарифы и сборы - разрешено' })).toHaveTextContent('Да')
     expect(await within(roleMatrix).findByRole('cell', { name: 'Оператор: Отчеты - нет доступа' })).toHaveTextContent('Нет')
 
     await openSection(user, 'Справочники')

@@ -19,7 +19,7 @@ export type Permission = (typeof permissions)[keyof typeof permissions]
 export const rolePermissionGroups: ReadonlyArray<{ label: string; permission: Permission }> = [
   { label: 'Пользователи', permission: permissions.usersManage },
   { label: 'Справочники', permission: permissions.dictionariesWrite },
-  { label: 'Тарифы', permission: permissions.tariffsManage },
+  { label: 'Тарифы и сборы', permission: permissions.tariffsManage },
   { label: 'Платежи', permission: permissions.paymentsWrite },
   { label: 'Исторические показания', permission: permissions.historicalMeterReadingsCorrect },
   { label: 'Отчеты', permission: permissions.reportsRead },

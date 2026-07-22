@@ -21,7 +21,7 @@ public sealed class MonthlyCycleChecklistTests
         Assert.Contains("payments.write", document, StringComparison.Ordinal);
         Assert.Contains("reports.read", document, StringComparison.Ordinal);
         Assert.Contains("Справочники", document, StringComparison.Ordinal);
-        Assert.Contains("Тарифы", document, StringComparison.Ordinal);
+        Assert.Contains("Открыть раздел \"Тарифы и сборы\"", document, StringComparison.Ordinal);
         Assert.Contains("Показания", document, StringComparison.Ordinal);
         Assert.Contains("Регулярные начисления", document, StringComparison.Ordinal);
         Assert.Contains("meter_water", document, StringComparison.Ordinal);
