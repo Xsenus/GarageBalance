@@ -14,6 +14,7 @@ import { MoneyTextInput } from '../../shared/MoneyInput'
 import { PhoneInput } from '../../shared/PhoneInput'
 import { formatDateOnly, formatDebtAmount, formatDebtLabel, formatMoney, formatMonth, getDebtClassName } from '../../shared/formatters'
 import { LocalizedDatePicker } from '../../shared/LocalizedDatePicker'
+import { createSupplierStartingBalanceEntries } from './contractorFinancialReport'
 import { useEscapeKey, useFocusOnOpen, useFocusTrap, useRestoreFocusOnClose } from '../../shared/focusHooks'
 import { createClientPage, createFallbackPage } from '../../shared/pagination'
 import { TablePagination } from '../../shared/TablePagination'
@@ -1375,7 +1376,12 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
             accrualAmount: accrual.amount,
             paymentAmount: 0,
           }))
-        setContractorFinancialReport(buildContractorFinancialReport([...accrualEntries, ...operationEntries]))
+        const startingBalanceEntries = createSupplierStartingBalanceEntries(
+          target.row.id,
+          parsePrototypeMoney(target.row.startingBalance),
+          filters.monthFrom,
+        )
+        setContractorFinancialReport(buildContractorFinancialReport([...startingBalanceEntries, ...accrualEntries, ...operationEntries]))
       } else {
         const staffAccrualEntries = createStaffFinancialReportEntries(target.row, filters.monthFrom, filters.monthTo)
         setContractorFinancialReport(buildContractorFinancialReport([...staffAccrualEntries, ...operationEntries]))
@@ -2527,7 +2533,7 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
                           <td>{formatDateOnly(row.date)}</td>
                           <td>{row.documentNumber}</td>
                           <td>{row.description}</td>
-                          <td className="money-accrual contractor-financial-report__amount">{row.accrualAmount > 0 ? formatMoney(row.accrualAmount) : '—'}</td>
+                          <td className="money-accrual contractor-financial-report__amount">{row.accrualAmount !== 0 ? formatMoney(row.accrualAmount) : '—'}</td>
                           <td className="money-expense contractor-financial-report__amount">{row.paymentAmount > 0 ? formatMoney(row.paymentAmount) : '—'}</td>
                           <td className={`${getDebtClassName(row.balanceAfter)} contractor-financial-report__amount`}>{formatDebtAmount(row.balanceAfter)}</td>
                         </tr>

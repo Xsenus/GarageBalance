@@ -2720,6 +2720,7 @@ describe('App', () => {
       groupId: '44444444-4444-4444-8444-444444444444',
       groupName: 'Коммунальные услуги',
       contactPerson: 'Иванов П.В.',
+      startingBalance: 250,
     })
     const department = createStaffDepartment({
       id: '55555555-5555-4555-8555-555555555555',
@@ -2832,6 +2833,10 @@ describe('App', () => {
     await user.click(reportCalendarTrigger)
     const supplierSummary = within(supplierReport).getByLabelText('Итоги финансового отчета контрагента')
     expect(supplierSummary).toHaveClass('contractor-financial-report__summary')
+    expect(supplierSummary).toHaveTextContent(/Начислено1\s250\.00/)
+    expect(supplierSummary).toHaveTextContent(/Оплачено600\.00/)
+    expect(supplierSummary).toHaveTextContent(/Задолженность650\.00/)
+    expect(supplierSummary).toHaveTextContent('Строк3')
     const supplierReportTable = within(supplierReport).getByRole('table', { name: 'Финансовый отчет поставщика' })
     expect(supplierReportTable).toBeInTheDocument()
     for (const row of within(supplierReportTable).getAllByRole('row').slice(1)) {
@@ -2840,6 +2845,10 @@ describe('App', () => {
       expect(cells[5]).toHaveClass('contractor-financial-report__amount')
       expect(cells[6]).toHaveClass('contractor-financial-report__amount')
     }
+    const startingBalanceRow = within(supplierReportTable).getByText('Стартовый баланс').closest('tr')
+    expect(startingBalanceRow).not.toBeNull()
+    expect(within(startingBalanceRow as HTMLElement).getAllByRole('cell')[4]).toHaveTextContent('250.00')
+    expect(within(startingBalanceRow as HTMLElement).getAllByRole('cell')[6]).toHaveTextContent('250.00')
     expect(within(supplierReport).getByText('INV-1')).toBeInTheDocument()
     expect(within(supplierReport).getByText('RKO-1')).toBeInTheDocument()
     expect(within(supplierReport).queryByRole('table', { name: 'История изменений контрагента' })).not.toBeInTheDocument()
