@@ -161,6 +161,15 @@ export type MeterReadingYearValueDto = {
   version: string
 }
 
+export type SupplierOpeningBalanceDto = {
+  supplierId: string
+  monthFrom: string
+  startingBalance: number
+  priorAccrualTotal: number
+  priorPaymentTotal: number
+  openingBalance: number
+}
+
 export type MeterReadingYearPageDto = {
   garages: MeterReadingYearGarageDto[]
   readings: MeterReadingYearValueDto[]
@@ -483,6 +492,7 @@ export type FinanceClient = {
   getAccrualDueDateReviewPage?(accessToken: string, params?: Pick<FinancePageParams, 'offset' | 'limit'>): Promise<FinancePagedResult<AccrualDueDateReviewDto>>
   getSupplierAccruals(accessToken: string, limit?: number): Promise<SupplierAccrualDto[]>
   getSupplierAccrualsPage(accessToken: string, params?: FinancePageParams): Promise<FinancePagedResult<SupplierAccrualDto>>
+  getSupplierOpeningBalance(accessToken: string, supplierId: string, monthFrom: string): Promise<SupplierOpeningBalanceDto>
   getMeterReadings(accessToken: string, limit?: number): Promise<MeterReadingDto[]>
   getMeterReadingsPage(accessToken: string, params?: FinancePageParams & { meterKind?: 'water' | 'electricity' }): Promise<FinancePagedResult<MeterReadingDto>>
   getMeterReadingYearPage(accessToken: string, params: { year: number; meterKind: 'water' | 'electricity'; offset?: number; limit?: number }): Promise<MeterReadingYearPageDto>
@@ -678,6 +688,11 @@ export const financeApi: FinanceClient = {
       dateFrom: toMonthStart(params.monthFrom),
       dateTo: toMonthEnd(params.monthTo),
       search: params.search,
+    }))
+  },
+  getSupplierOpeningBalance(accessToken, supplierId, monthFrom) {
+    return requestJson(accessToken, withQuery(`/api/finance/suppliers/${supplierId}/opening-balance`, {
+      monthFrom: toMonthStart(monthFrom),
     }))
   },
   getIncomePaymentWarning(accessToken, request) {

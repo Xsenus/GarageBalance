@@ -237,6 +237,21 @@ public sealed class FinanceController(IFinanceService financeService) : Controll
         return result.Succeeded ? Ok(result.Value) : ToError(result);
     }
 
+    [HttpGet("suppliers/{supplierId:guid}/opening-balance")]
+    [ProducesResponseType<SupplierOpeningBalanceDto>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<SupplierOpeningBalanceDto>> GetSupplierOpeningBalance(
+        Guid supplierId,
+        [FromQuery] DateOnly? monthFrom,
+        CancellationToken cancellationToken)
+    {
+        var result = await financeService.GetSupplierOpeningBalanceAsync(
+            supplierId,
+            new SupplierOpeningBalanceRequest(monthFrom),
+            cancellationToken);
+        return result.Succeeded ? Ok(result.Value) : ToError(result);
+    }
+
     [Authorize(Policy = SystemPermissions.PaymentsWrite)]
     [HttpPost("income")]
     [ProducesResponseType<FinancialOperationDto>(StatusCodes.Status201Created)]

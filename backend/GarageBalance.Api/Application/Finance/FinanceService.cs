@@ -744,6 +744,30 @@ public sealed class FinanceService(
         };
     }
 
+    public async Task<FinanceResult<SupplierOpeningBalanceDto>> GetSupplierOpeningBalanceAsync(
+        Guid supplierId,
+        SupplierOpeningBalanceRequest request,
+        CancellationToken cancellationToken)
+    {
+        var monthFrom = MonthPeriod.Normalize(request.MonthFrom ?? MonthPeriod.CurrentLocalMonth());
+        var data = await supplierRepository.GetOpeningBalanceAsync(supplierId, monthFrom, cancellationToken);
+        if (data is null)
+        {
+            return FinanceResult<SupplierOpeningBalanceDto>.Failure("supplier_not_found", "Поставщик для финансового отчёта не найден.");
+        }
+
+        var startingBalance = MoneyMath.RoundMoney(data.StartingBalance);
+        var priorAccrualTotal = MoneyMath.RoundMoney(data.PriorAccrualTotal);
+        var priorPaymentTotal = MoneyMath.RoundMoney(data.PriorPaymentTotal);
+        return FinanceResult<SupplierOpeningBalanceDto>.Success(new SupplierOpeningBalanceDto(
+            supplierId,
+            monthFrom,
+            startingBalance,
+            priorAccrualTotal,
+            priorPaymentTotal,
+            MoneyMath.RoundMoney(startingBalance + priorAccrualTotal - priorPaymentTotal)));
+    }
+
     public async Task<FinanceResult<IncomePaymentWarningDto>> GetIncomePaymentWarningAsync(
         IncomePaymentWarningRequest request,
         CancellationToken cancellationToken)

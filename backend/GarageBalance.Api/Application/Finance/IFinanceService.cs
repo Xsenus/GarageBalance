@@ -32,6 +32,8 @@ public interface IFinanceService
 
     Task<FinanceResult<ExpenseWorksheetDto>> GetExpenseWorksheetAsync(ExpenseWorksheetRequest request, CancellationToken cancellationToken);
 
+    Task<FinanceResult<SupplierOpeningBalanceDto>> GetSupplierOpeningBalanceAsync(Guid supplierId, SupplierOpeningBalanceRequest request, CancellationToken cancellationToken);
+
     Task<FinanceSummaryDto> GetSummaryAsync(FinancialOperationListRequest request, CancellationToken cancellationToken);
 
     Task<FinanceResult<IncomePaymentWarningDto>> GetIncomePaymentWarningAsync(IncomePaymentWarningRequest request, CancellationToken cancellationToken);

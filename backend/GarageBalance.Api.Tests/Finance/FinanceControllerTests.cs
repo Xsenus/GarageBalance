@@ -10,6 +10,38 @@ namespace GarageBalance.Api.Tests.Finance;
 public sealed class FinanceControllerTests
 {
     [Fact]
+    public async Task GetSupplierOpeningBalance_ReturnsValueAndPassesPeriodToService()
+    {
+        var supplierId = Guid.NewGuid();
+        var monthFrom = new DateOnly(2026, 6, 1);
+        var dto = new SupplierOpeningBalanceDto(supplierId, monthFrom, 250m, 500m, 100m, 650m);
+        var service = new FakeFinanceService
+        {
+            SupplierOpeningBalanceResult = FinanceResult<SupplierOpeningBalanceDto>.Success(dto)
+        };
+
+        var result = await CreateController(service).GetSupplierOpeningBalance(supplierId, monthFrom, CancellationToken.None);
+
+        Assert.Same(dto, Assert.IsType<OkObjectResult>(result.Result).Value);
+        Assert.Equal(supplierId, service.LastSupplierOpeningBalanceSupplierId);
+        Assert.Equal(monthFrom, service.LastSupplierOpeningBalanceRequest?.MonthFrom);
+    }
+
+    [Fact]
+    public async Task GetSupplierOpeningBalance_ReturnsNotFoundForMissingSupplier()
+    {
+        var controller = CreateController(new FakeFinanceService
+        {
+            SupplierOpeningBalanceResult = FinanceResult<SupplierOpeningBalanceDto>.Failure("supplier_not_found", "Не найден.")
+        });
+
+        var result = await controller.GetSupplierOpeningBalance(Guid.NewGuid(), null, CancellationToken.None);
+
+        var notFound = Assert.IsType<NotFoundObjectResult>(result.Result);
+        Assert.Equal("supplier_not_found", Assert.IsType<ProblemDetails>(notFound.Value).Extensions["code"]);
+    }
+
+    [Fact]
     public async Task ListEndpoints_PassLimitToService()
     {
         var service = new FakeFinanceService();
@@ -1614,6 +1646,7 @@ public sealed class FinanceControllerTests
         public Guid? LastGarageBalanceHistoryGarageId { get; private set; }
         public Guid? LastGarageOverdueDebtGarageId { get; private set; }
         public Guid? LastGarageIncomeWorksheetGarageId { get; private set; }
+        public Guid? LastSupplierOpeningBalanceSupplierId { get; private set; }
         public CancelFinanceEntryRequest? LastCancelRequest { get; private set; }
         public FinancialOperationListRequest? LastFinancialOperationListRequest { get; private set; }
         public CreateStaffPaymentRequest? LastStaffPaymentRequest { get; private set; }
@@ -1627,6 +1660,7 @@ public sealed class FinanceControllerTests
         public GarageBalanceHistoryRequest? LastGarageBalanceHistoryRequest { get; private set; }
         public GarageIncomeWorksheetRequest? LastGarageIncomeWorksheetRequest { get; private set; }
         public ExpenseWorksheetRequest? LastExpenseWorksheetRequest { get; private set; }
+        public SupplierOpeningBalanceRequest? LastSupplierOpeningBalanceRequest { get; private set; }
         public FinancialOperationListRequest? LastSummaryRequest { get; private set; }
         public CreateGarageDebtPaymentRequest? LastGarageDebtPaymentRequest { get; private set; }
         public IncomePaymentWarningRequest? LastIncomePaymentWarningRequest { get; private set; }
@@ -1639,6 +1673,7 @@ public sealed class FinanceControllerTests
         public FinanceResult<GarageOverdueDebtDto> GarageOverdueDebtResult { get; init; } = FinanceResult<GarageOverdueDebtDto>.Failure("not_configured", "Not configured.");
         public FinanceResult<GarageIncomeWorksheetDto> GarageIncomeWorksheetResult { get; init; } = FinanceResult<GarageIncomeWorksheetDto>.Failure("not_configured", "Not configured.");
         public FinanceResult<ExpenseWorksheetDto> ExpenseWorksheetResult { get; init; } = FinanceResult<ExpenseWorksheetDto>.Failure("not_configured", "Not configured.");
+        public FinanceResult<SupplierOpeningBalanceDto> SupplierOpeningBalanceResult { get; init; } = FinanceResult<SupplierOpeningBalanceDto>.Failure("not_configured", "Not configured.");
         public FinanceResult<FinancialOperationDto> CreateIncomeResult { get; init; } = FinanceResult<FinancialOperationDto>.Failure("not_configured", "Not configured.");
         public FinanceResult<IncomePaymentWarningDto> IncomePaymentWarningResult { get; init; } = FinanceResult<IncomePaymentWarningDto>.Failure("not_configured", "Not configured.");
         public FinanceResult<FinancialOperationDto> CreateGarageDebtPaymentResult { get; init; } = FinanceResult<FinancialOperationDto>.Failure("not_configured", "Not configured.");
@@ -1761,6 +1796,13 @@ public sealed class FinanceControllerTests
         {
             LastExpenseWorksheetRequest = request;
             return Task.FromResult(ExpenseWorksheetResult);
+        }
+
+        public Task<FinanceResult<SupplierOpeningBalanceDto>> GetSupplierOpeningBalanceAsync(Guid supplierId, SupplierOpeningBalanceRequest request, CancellationToken cancellationToken)
+        {
+            LastSupplierOpeningBalanceSupplierId = supplierId;
+            LastSupplierOpeningBalanceRequest = request;
+            return Task.FromResult(SupplierOpeningBalanceResult);
         }
 
         public Task<FinanceSummaryDto> GetSummaryAsync(FinancialOperationListRequest request, CancellationToken cancellationToken)

@@ -14,7 +14,7 @@ import { MoneyTextInput } from '../../shared/MoneyInput'
 import { PhoneInput } from '../../shared/PhoneInput'
 import { formatDateOnly, formatDebtAmount, formatDebtLabel, formatMoney, formatMonth, getDebtClassName } from '../../shared/formatters'
 import { LocalizedDatePicker } from '../../shared/LocalizedDatePicker'
-import { createSupplierStartingBalanceEntries } from './contractorFinancialReport'
+import { createSupplierOpeningBalanceEntries } from './contractorFinancialReport'
 import { useEscapeKey, useFocusOnOpen, useFocusTrap, useRestoreFocusOnClose } from '../../shared/focusHooks'
 import { createClientPage, createFallbackPage } from '../../shared/pagination'
 import { TablePagination } from '../../shared/TablePagination'
@@ -164,10 +164,12 @@ type ContractorFinancialReportRow = {
   description: string
   accrualAmount: number
   paymentAmount: number
+  sortOrder?: number
   balanceAfter: number
 }
 
 type ContractorFinancialReport = {
+  openingBalance: number
   accrualTotal: number
   paymentTotal: number
   balance: number
@@ -353,11 +355,16 @@ function compareContractorReportEntries(
     return dateComparison
   }
 
+  const orderComparison = (left.sortOrder ?? 0) - (right.sortOrder ?? 0)
+  if (orderComparison !== 0) {
+    return orderComparison
+  }
+
   return left.description.localeCompare(right.description)
 }
 
-function buildContractorFinancialReport(entries: Array<Omit<ContractorFinancialReportRow, 'balanceAfter'>>): ContractorFinancialReport {
-  let balance = 0
+function buildContractorFinancialReport(entries: Array<Omit<ContractorFinancialReportRow, 'balanceAfter'>>, openingBalance = 0): ContractorFinancialReport {
+  let balance = openingBalance
   let accrualTotal = 0
   let paymentTotal = 0
   const rows = [...entries].sort(compareContractorReportEntries).map((entry) => {
@@ -372,6 +379,7 @@ function buildContractorFinancialReport(entries: Array<Omit<ContractorFinancialR
   })
 
   return {
+    openingBalance,
     accrualTotal,
     paymentTotal,
     balance,
@@ -1359,12 +1367,15 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
         }))
 
       if (target.type === 'supplier') {
-        const accrualsPage = await financeClient.getSupplierAccrualsPage(auth.accessToken, {
-          monthFrom: filters.monthFrom,
-          monthTo: filters.monthTo,
-          supplierId: target.row.id,
-          limit: 500,
-        })
+        const [accrualsPage, openingBalance] = await Promise.all([
+          financeClient.getSupplierAccrualsPage(auth.accessToken, {
+            monthFrom: filters.monthFrom,
+            monthTo: filters.monthTo,
+            supplierId: target.row.id,
+            limit: 500,
+          }),
+          financeClient.getSupplierOpeningBalance(auth.accessToken, target.row.id, filters.monthFrom),
+        ])
         const accrualEntries = accrualsPage.items
           .filter((accrual) => !accrual.isCanceled)
           .map((accrual) => ({
@@ -1376,12 +1387,16 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
             accrualAmount: accrual.amount,
             paymentAmount: 0,
           }))
-        const startingBalanceEntries = createSupplierStartingBalanceEntries(
+        const openingBalanceEntries = createSupplierOpeningBalanceEntries(
           target.row.id,
-          parsePrototypeMoney(target.row.startingBalance),
+          openingBalance.openingBalance,
           filters.monthFrom,
+          openingBalance.priorAccrualTotal !== 0 || openingBalance.priorPaymentTotal !== 0,
         )
-        setContractorFinancialReport(buildContractorFinancialReport([...startingBalanceEntries, ...accrualEntries, ...operationEntries]))
+        setContractorFinancialReport(buildContractorFinancialReport(
+          [...openingBalanceEntries, ...accrualEntries, ...operationEntries],
+          openingBalance.openingBalance,
+        ))
       } else {
         const staffAccrualEntries = createStaffFinancialReportEntries(target.row, filters.monthFrom, filters.monthTo)
         setContractorFinancialReport(buildContractorFinancialReport([...staffAccrualEntries, ...operationEntries]))
@@ -2496,6 +2511,12 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
             {contractorFinancialReport ? (
               <>
                 <div className="balance-history-summary contractor-financial-report__summary" aria-label="Итоги финансового отчета контрагента">
+                  {contractorFinancialReportTarget.type === 'supplier' ? (
+                    <div>
+                      <span>Входящий остаток</span>
+                      <strong className={getDebtClassName(contractorFinancialReport.openingBalance)}>{formatDebtAmount(contractorFinancialReport.openingBalance)}</strong>
+                    </div>
+                  ) : null}
                   <div>
                     <span>Начислено</span>
                     <strong>{formatMoney(contractorFinancialReport.accrualTotal)}</strong>

@@ -2790,6 +2790,14 @@ describe('App', () => {
       offset: 0,
       limit: params?.limit ?? 500,
     }))
+    const getSupplierOpeningBalance = vi.fn(async (_token: string, requestedSupplierId: string, monthFrom: string) => ({
+      supplierId: requestedSupplierId,
+      monthFrom: `${monthFrom}-01`,
+      startingBalance: 250,
+      priorAccrualTotal: 500,
+      priorPaymentTotal: 100,
+      openingBalance: 650,
+    }))
     const dictionaryClient = createDictionaryClient({
       getSupplierGroups: async () => [createGroup({ id: supplier.groupId, name: supplier.groupName })],
       getSuppliers: async () => [supplier],
@@ -2810,7 +2818,7 @@ describe('App', () => {
     ])
     const auditClient = createAuditClient({ getEvents })
 
-    render(<App authClient={createAuthClient()} auditClient={auditClient} dictionaryClient={dictionaryClient} financeClient={createFinanceClient({ getOperationsPage, getSupplierAccrualsPage })} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+    render(<App authClient={createAuthClient()} auditClient={auditClient} dictionaryClient={dictionaryClient} financeClient={createFinanceClient({ getOperationsPage, getSupplierAccrualsPage, getSupplierOpeningBalance })} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
     await user.click(screen.getByRole('button', { name: 'Войти' }))
@@ -2833,9 +2841,10 @@ describe('App', () => {
     await user.click(reportCalendarTrigger)
     const supplierSummary = within(supplierReport).getByLabelText('Итоги финансового отчета контрагента')
     expect(supplierSummary).toHaveClass('contractor-financial-report__summary')
-    expect(supplierSummary).toHaveTextContent(/Начислено1\s250\.00/)
+    expect(supplierSummary).toHaveTextContent(/Входящий остаток650\.00/)
+    expect(supplierSummary).toHaveTextContent(/Начислено1\s000\.00/)
     expect(supplierSummary).toHaveTextContent(/Оплачено600\.00/)
-    expect(supplierSummary).toHaveTextContent(/Задолженность650\.00/)
+    expect(supplierSummary).toHaveTextContent(/Задолженность1\s050\.00/)
     expect(supplierSummary).toHaveTextContent('Строк3')
     const supplierReportTable = within(supplierReport).getByRole('table', { name: 'Финансовый отчет поставщика' })
     expect(supplierReportTable).toBeInTheDocument()
@@ -2845,15 +2854,16 @@ describe('App', () => {
       expect(cells[5]).toHaveClass('contractor-financial-report__amount')
       expect(cells[6]).toHaveClass('contractor-financial-report__amount')
     }
-    const startingBalanceRow = within(supplierReportTable).getByText('Стартовый баланс').closest('tr')
-    expect(startingBalanceRow).not.toBeNull()
-    expect(within(startingBalanceRow as HTMLElement).getAllByRole('cell')[4]).toHaveTextContent('250.00')
-    expect(within(startingBalanceRow as HTMLElement).getAllByRole('cell')[6]).toHaveTextContent('250.00')
+    const openingBalanceRow = within(supplierReportTable).getByText('Входящий остаток').closest('tr')
+    expect(openingBalanceRow).not.toBeNull()
+    expect(within(openingBalanceRow as HTMLElement).getAllByRole('cell')[4]).toHaveTextContent('—')
+    expect(within(openingBalanceRow as HTMLElement).getAllByRole('cell')[6]).toHaveTextContent('650.00')
     expect(within(supplierReport).getByText('INV-1')).toBeInTheDocument()
     expect(within(supplierReport).getByText('RKO-1')).toBeInTheDocument()
     expect(within(supplierReport).queryByRole('table', { name: 'История изменений контрагента' })).not.toBeInTheDocument()
     expect(within(supplierReport).getByRole('button', { name: 'Открыть в истории изменений' })).toBeInTheDocument()
     expect(getSupplierAccrualsPage).toHaveBeenCalledWith('token', expect.objectContaining({ supplierId, limit: 500 }))
+    expect(getSupplierOpeningBalance).toHaveBeenCalledWith('token', supplierId, '2026-01')
     expect(getOperationsPage).toHaveBeenCalledWith('token', expect.objectContaining({ supplierId, operationKind: 'expense', limit: 500 }))
     expect(getEvents).not.toHaveBeenCalled()
     await user.keyboard('{Escape}')
@@ -16093,6 +16103,14 @@ function createFinanceClient(overrides: Partial<FinanceClient> = {}): FinanceCli
     getAccrualsPage: async () => ({ items: [accrual], totalCount: 1, offset: 0, limit: 25 }),
     getSupplierAccruals: async () => [supplierAccrual],
     getSupplierAccrualsPage: async () => ({ items: [supplierAccrual], totalCount: 1, offset: 0, limit: 25 }),
+    getSupplierOpeningBalance: async (_token, supplierId) => ({
+      supplierId,
+      monthFrom: '2026-06-01',
+      startingBalance: 0,
+      priorAccrualTotal: 0,
+      priorPaymentTotal: 0,
+      openingBalance: 0,
+    }),
     getMeterReadings: async () => [meterReading],
     getMeterReadingsPage: async () => ({ items: [meterReading], totalCount: 1, offset: 0, limit: 25 }),
     getMeterReadingYearPage: async () => ({

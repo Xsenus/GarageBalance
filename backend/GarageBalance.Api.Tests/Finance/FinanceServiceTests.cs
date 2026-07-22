@@ -21,6 +21,76 @@ public sealed class FinanceServiceTests
 {
     private const decimal SeededBankAmount = 1000000m;
 
+    [Fact]
+    public async Task GetSupplierOpeningBalanceAsync_UsesOnlyActiveHistoryBeforeSelectedPeriod()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        fixtures.Supplier.StartingBalance = 250m;
+        await database.Context.SaveChangesAsync();
+        var service = FinanceServiceTestFactory.Create(database.Context);
+
+        var priorAccrual = await service.CreateSupplierAccrualAsync(
+            new CreateSupplierAccrualRequest(fixtures.Supplier.Id, fixtures.ExpenseType.Id, new DateOnly(2026, 5, 1), 500m, "manual", "INV-prior", "Предыдущее начисление"),
+            null,
+            CancellationToken.None);
+        var canceledAccrual = await service.CreateSupplierAccrualAsync(
+            new CreateSupplierAccrualRequest(fixtures.Supplier.Id, fixtures.ExpenseType.Id, new DateOnly(2026, 4, 1), 70m, "manual", "INV-canceled", "Отменённое начисление"),
+            null,
+            CancellationToken.None);
+        Assert.True(priorAccrual.Succeeded);
+        Assert.True(canceledAccrual.Succeeded);
+        Assert.True((await service.CancelSupplierAccrualAsync(canceledAccrual.Value!.Id, new CancelFinanceEntryRequest("Ошибка"), null, CancellationToken.None)).Succeeded);
+
+        var priorPayment = await service.CreateExpenseAsync(
+            new CreateExpenseOperationRequest(fixtures.Supplier.Id, fixtures.ExpenseType.Id, new DateOnly(2026, 5, 20), new DateOnly(2026, 5, 1), 100m, "RKO-prior", null),
+            null,
+            CancellationToken.None);
+        var canceledPayment = await service.CreateExpenseAsync(
+            new CreateExpenseOperationRequest(fixtures.Supplier.Id, fixtures.ExpenseType.Id, new DateOnly(2026, 4, 20), new DateOnly(2026, 4, 1), 30m, "RKO-canceled", null),
+            null,
+            CancellationToken.None);
+        Assert.True(priorPayment.Succeeded);
+        Assert.True(canceledPayment.Succeeded);
+        Assert.True((await service.CancelOperationAsync(canceledPayment.Value!.Id, new CancelFinanceEntryRequest("Ошибка"), null, CancellationToken.None)).Succeeded);
+
+        Assert.True((await service.CreateSupplierAccrualAsync(
+            new CreateSupplierAccrualRequest(fixtures.Supplier.Id, fixtures.ExpenseType.Id, new DateOnly(2026, 6, 1), 1000m, "manual", "INV-current", "Начисление периода"),
+            null,
+            CancellationToken.None)).Succeeded);
+        Assert.True((await service.CreateExpenseAsync(
+            new CreateExpenseOperationRequest(fixtures.Supplier.Id, fixtures.ExpenseType.Id, new DateOnly(2026, 6, 20), new DateOnly(2026, 6, 1), 600m, "RKO-current", null),
+            null,
+            CancellationToken.None)).Succeeded);
+
+        var result = await service.GetSupplierOpeningBalanceAsync(
+            fixtures.Supplier.Id,
+            new SupplierOpeningBalanceRequest(new DateOnly(2026, 6, 18)),
+            CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+        Assert.Equal(new DateOnly(2026, 6, 1), result.Value!.MonthFrom);
+        Assert.Equal(250m, result.Value.StartingBalance);
+        Assert.Equal(500m, result.Value.PriorAccrualTotal);
+        Assert.Equal(100m, result.Value.PriorPaymentTotal);
+        Assert.Equal(650m, result.Value.OpeningBalance);
+    }
+
+    [Fact]
+    public async Task GetSupplierOpeningBalanceAsync_ReturnsFailureForMissingSupplier()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        await database.SeedAsync();
+
+        var result = await FinanceServiceTestFactory.Create(database.Context).GetSupplierOpeningBalanceAsync(
+            Guid.NewGuid(),
+            new SupplierOpeningBalanceRequest(new DateOnly(2026, 6, 1)),
+            CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Equal("supplier_not_found", result.ErrorCode);
+    }
+
     [Theory]
     [InlineData(29, true)]
     [InlineData(30, false)]

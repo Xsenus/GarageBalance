@@ -28,6 +28,7 @@ describe('financeApi', () => {
       supplierId: 'supplier-77',
       limit: 25,
     })
+    await financeApi.getSupplierOpeningBalance('token', 'supplier-77', '2026-06')
 
     expect(fetchMock).toHaveBeenNthCalledWith(1, '/api/finance/operations/page?operationKind=income&garageId=garage-77&supplierId=supplier-77&staffMemberId=staff-77&limit=25', {
       headers: {
@@ -36,6 +37,12 @@ describe('financeApi', () => {
       },
     })
     expect(fetchMock).toHaveBeenNthCalledWith(2, '/api/finance/supplier-accruals/page?supplierId=supplier-77&limit=25', {
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: 'Bearer token',
+      },
+    })
+    expect(fetchMock).toHaveBeenNthCalledWith(3, '/api/finance/suppliers/supplier-77/opening-balance?monthFrom=2026-06-01', {
       headers: {
         'Content-Type': 'application/json',
         Authorization: 'Bearer token',

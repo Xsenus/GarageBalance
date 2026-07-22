@@ -10,6 +10,7 @@ public interface ISupplierRepository
     Task<Supplier?> FindArchivedWithGroupAsync(Guid id, CancellationToken cancellationToken);
     Task<IReadOnlyList<Supplier>> GetActiveByGroupAsync(Guid groupId, CancellationToken cancellationToken);
     Task<decimal> GetStartingBalanceAsync(Guid id, CancellationToken cancellationToken);
+    Task<SupplierOpeningBalanceData?> GetOpeningBalanceAsync(Guid id, DateOnly monthFrom, CancellationToken cancellationToken);
     Task<IReadOnlyDictionary<Guid, decimal>> GetDebtTotalsAsync(IReadOnlyCollection<Guid> ids, CancellationToken cancellationToken);
     Task<bool> ActiveDuplicateExistsAsync(Guid? ignoredId, Guid groupId, string name, CancellationToken cancellationToken);
     void Add(Supplier supplier);
@@ -20,3 +21,8 @@ public sealed record SupplierPageData(IReadOnlyList<SupplierPageItem> Items, int
 public sealed record SupplierPageItem(Supplier Supplier, SupplierPrimaryContactData? PrimaryContact);
 
 public sealed record SupplierPrimaryContactData(string FullName, string? Phone, string? Email);
+
+public sealed record SupplierOpeningBalanceData(
+    decimal StartingBalance,
+    decimal PriorAccrualTotal,
+    decimal PriorPaymentTotal);

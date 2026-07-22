@@ -430,6 +430,17 @@ public sealed record CreateGarageDebtPaymentRequest(
 public sealed record ExpenseWorksheetRequest(
     DateOnly? AccountingMonth);
 
+public sealed record SupplierOpeningBalanceRequest(
+    DateOnly? MonthFrom);
+
+public sealed record SupplierOpeningBalanceDto(
+    Guid SupplierId,
+    DateOnly MonthFrom,
+    decimal StartingBalance,
+    decimal PriorAccrualTotal,
+    decimal PriorPaymentTotal,
+    decimal OpeningBalance);
+
 public sealed record ExpenseWorksheetRowDto(
     string RowKind,
     Guid? SupplierId,

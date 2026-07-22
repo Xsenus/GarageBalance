@@ -84,6 +84,54 @@ public sealed class EfSupplierRepository(GarageBalanceDbContext dbContext) : ISu
             .Select(supplier => supplier.StartingBalance)
             .SingleAsync(cancellationToken);
 
+    public async Task<SupplierOpeningBalanceData?> GetOpeningBalanceAsync(
+        Guid id,
+        DateOnly monthFrom,
+        CancellationToken cancellationToken)
+    {
+        var startingBalanceQuery = dbContext.Suppliers.AsNoTracking()
+            .Where(supplier => supplier.Id == id)
+            .Select(supplier => new
+            {
+                Category = StartingBalanceDebtCategory,
+                Amount = supplier.StartingBalance
+            });
+        var accrualQuery = dbContext.SupplierAccruals.AsNoTracking()
+            .Where(accrual => accrual.SupplierId == id && !accrual.IsCanceled && accrual.AccountingMonth < monthFrom)
+            .GroupBy(_ => 1)
+            .Select(group => new
+            {
+                Category = AccrualDebtCategory,
+                Amount = group.Sum(item => item.Amount)
+            });
+        var paymentQuery = dbContext.FinancialOperations.AsNoTracking()
+            .Where(operation =>
+                operation.SupplierId == id &&
+                !operation.IsCanceled &&
+                operation.OperationKind == FinancialOperationKinds.Expense &&
+                operation.AccountingMonth < monthFrom)
+            .GroupBy(_ => 1)
+            .Select(group => new
+            {
+                Category = PaymentDebtCategory,
+                Amount = group.Sum(item => item.Amount)
+            });
+        var rows = await startingBalanceQuery
+            .Concat(accrualQuery)
+            .Concat(paymentQuery)
+            .ToListAsync(cancellationToken);
+        var startingBalance = rows.SingleOrDefault(row => row.Category == StartingBalanceDebtCategory);
+        if (startingBalance is null)
+        {
+            return null;
+        }
+
+        return new SupplierOpeningBalanceData(
+            startingBalance.Amount,
+            rows.SingleOrDefault(row => row.Category == AccrualDebtCategory)?.Amount ?? 0m,
+            rows.SingleOrDefault(row => row.Category == PaymentDebtCategory)?.Amount ?? 0m);
+    }
+
     public async Task<IReadOnlyDictionary<Guid, decimal>> GetDebtTotalsAsync(IReadOnlyCollection<Guid> ids, CancellationToken cancellationToken)
     {
         if (ids.Count == 0)
