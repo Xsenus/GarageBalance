@@ -446,6 +446,9 @@ function mergeChargeServicesIntoPrototypeRows(rows: ContractorTariffRow[], setti
     if (row.title === 'Перенос долга в просроченный') {
       return [{ ...common, backendServiceSettingId: setting.id, serviceSettingKind: 'overdue-days' as const, amount: String(setting.overdueGraceDays) }]
     }
+    if (row.group && row.calculationBase) {
+      return [{ ...common, backendServiceSettingId: setting.id, serviceSettingKind: 'main' as const }]
+    }
     return [common]
   })
   const unmatchedSettings = settings.filter((setting) => !matchedSettings.has(setting.name.toLocaleLowerCase('ru')))
@@ -1956,6 +1959,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
               const isServiceSaving = Boolean(serviceSetting && tariffSavingRowId === `charge-service-${serviceSetting.id}`)
               const isRowDisabled = row.isDeleted || tariffSavingRowId === row.id || isServiceSaving
               const isCustomThreshold = Boolean(row.threshold && row.isCustomThreshold)
+              const showsServiceCalculationFlags = row.serviceSettingKind === 'main' || Boolean(row.group)
 
               return (
                 <Fragment key={row.id}>
@@ -2107,28 +2111,32 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
                     ) : null}
                   </span>
                   <span role="cell">
-                    <select
-                      aria-label={`${row.category}: ${row.title}: пороговая тарификация`}
-                      className="contractors-editable-select"
-                      disabled={!canManageTariffs || isRowDisabled}
-                      value={row.tiered ? 'Да' : 'Нет'}
-                    onChange={(event) => commitTariffBooleanChange(row, 'tiered', event.target.value === 'Да')}
-                    >
-                      <option>Да</option>
-                      <option>Нет</option>
-                    </select>
+                    {showsServiceCalculationFlags ? (
+                      <select
+                        aria-label={`${row.category}: ${row.title}: пороговая тарификация`}
+                        className="contractors-editable-select"
+                        disabled={!canManageTariffs || isRowDisabled}
+                        value={row.tiered ? 'Да' : 'Нет'}
+                        onChange={(event) => commitTariffBooleanChange(row, 'tiered', event.target.value === 'Да')}
+                      >
+                        <option>Да</option>
+                        <option>Нет</option>
+                      </select>
+                    ) : null}
                   </span>
                   <span role="cell">
-                    <select
-                      aria-label={`${row.category}: ${row.title}: по счетчику`}
-                      className="contractors-editable-select"
-                      disabled={!canManageTariffs || isRowDisabled}
-                      value={row.byMeter ? 'Да' : 'Нет'}
-                    onChange={(event) => commitTariffBooleanChange(row, 'byMeter', event.target.value === 'Да')}
-                    >
-                      <option>Да</option>
-                      <option>Нет</option>
-                    </select>
+                    {showsServiceCalculationFlags ? (
+                      <select
+                        aria-label={`${row.category}: ${row.title}: по счетчику`}
+                        className="contractors-editable-select"
+                        disabled={!canManageTariffs || isRowDisabled}
+                        value={row.byMeter ? 'Да' : 'Нет'}
+                        onChange={(event) => commitTariffBooleanChange(row, 'byMeter', event.target.value === 'Да')}
+                      >
+                        <option>Да</option>
+                        <option>Нет</option>
+                      </select>
+                    ) : null}
                   </span>
                 </div>
                 {row.id === lastElectricityThresholdRowId ? (

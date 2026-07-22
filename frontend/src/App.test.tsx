@@ -1115,6 +1115,13 @@ describe('App', () => {
     const waterRateInput = await within(tariffsPanel).findByLabelText('Вода: Тариф на воду: значение')
     expect(waterRateInput).toHaveValue('1 250.00')
     expect(within(tariffsPanel).getByLabelText('Наружное освещение: Наружное освещение: значение')).toHaveValue('300.00')
+    expect(within(tariffsPanel).getAllByRole('combobox', { name: /Электроэнергия: .*: пороговая тарификация/i })).toHaveLength(1)
+    expect(within(tariffsPanel).getAllByRole('combobox', { name: /Электроэнергия: .*: по счетчику/i })).toHaveLength(1)
+    expect(within(tariffsPanel).queryByRole('combobox', { name: 'Электроэнергия: От 1 кВт: пороговая тарификация' })).not.toBeInTheDocument()
+    expect(within(tariffsPanel).queryByRole('combobox', { name: 'Электроэнергия: От 1 кВт: по счетчику' })).not.toBeInTheDocument()
+    expect(within(tariffsPanel).getByRole('button', { name: 'Изменить услугу Членский взнос' })).toBeInTheDocument()
+    expect(within(tariffsPanel).queryByRole('combobox', { name: 'Членский взнос: Периодичность: пороговая тарификация' })).not.toBeInTheDocument()
+    expect(within(tariffsPanel).queryByRole('combobox', { name: 'Членский взнос: Периодичность: по счетчику' })).not.toBeInTheDocument()
 
     await user.clear(waterRateInput)
     await user.type(waterRateInput, '1300{Enter}')
@@ -3303,8 +3310,12 @@ describe('App', () => {
     expect(within(tariffsPanel).getByRole('button', { name: 'Изменить услугу Охрана территории' })).toBeInTheDocument()
     expect(within(tariffsPanel).getByRole('combobox', { name: 'Охрана территории: Периодичность: значение' })).toHaveTextContent('Ежемесячно')
     expect(within(tariffsPanel).getByLabelText('Охрана территории: Оплата до: день')).toHaveValue('15')
+    expect(within(tariffsPanel).getAllByRole('combobox', { name: /Охрана территории: .*: по счетчику/i })).toHaveLength(1)
+    expect(within(tariffsPanel).getAllByRole('combobox', { name: /Охрана территории: .*: пороговая тарификация/i })).toHaveLength(1)
     expect(within(tariffsPanel).getByRole('combobox', { name: 'Охрана территории: Охрана территории: по счетчику' })).toHaveValue('Нет')
     expect(within(tariffsPanel).getByRole('combobox', { name: 'Охрана территории: Охрана территории: пороговая тарификация' })).toHaveValue('Нет')
+    expect(within(tariffsPanel).queryByRole('combobox', { name: 'Охрана территории: Периодичность: по счетчику' })).not.toBeInTheDocument()
+    expect(within(tariffsPanel).queryByRole('combobox', { name: 'Охрана территории: Оплата до: пороговая тарификация' })).not.toBeInTheDocument()
   })
 
   it('keeps backend tariff dictionaries above stale saved tariff form state', async () => {
