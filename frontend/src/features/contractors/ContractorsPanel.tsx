@@ -3215,7 +3215,6 @@ function SupplierPrototypeDialog({ accessToken, integrationClient, item, service
   const [form, setForm] = useState<ContractorSupplierRow>(item
     ? { ...item, serviceId: initialService?.id ?? item.serviceId, service: initialService?.name ?? item.service }
     : { ...createEmptySupplierPrototype(), serviceId: initialService?.id ?? null, service: initialService?.name ?? '' })
-  const [saveChanges, setSaveChanges] = useState<PrototypeChangeEntry[]>([])
   const [partySuggestions, setPartySuggestions] = useState<DadataPartySuggestionDto[]>([])
   const [partySuggestionsOpen, setPartySuggestionsOpen] = useState(false)
   const [partySuggestionStatus, setPartySuggestionStatus] = useState('')
@@ -3228,12 +3227,12 @@ function SupplierPrototypeDialog({ accessToken, integrationClient, item, service
   useRestoreFocusOnClose(true)
   useRestoreFocusOnClose(Boolean(contactDeleteTarget))
   useRestoreFocusOnClose(Boolean(contactRestoreTarget))
-  const dialogRef = useFocusTrap<HTMLElement>(saveChanges.length === 0 && !contactDeleteTarget && !contactRestoreTarget)
+  const dialogRef = useFocusTrap<HTMLElement>(!contactDeleteTarget && !contactRestoreTarget)
   const contactDeleteDialogRef = useFocusTrap<HTMLElement>(Boolean(contactDeleteTarget))
   const contactDeleteCancelRef = useFocusOnOpen<HTMLButtonElement>(Boolean(contactDeleteTarget))
   const contactRestoreDialogRef = useFocusTrap<HTMLElement>(Boolean(contactRestoreTarget))
   const contactRestoreCancelRef = useFocusOnOpen<HTMLButtonElement>(Boolean(contactRestoreTarget))
-  useEscapeKey(saveChanges.length === 0 && !contactDeleteTarget && !contactRestoreTarget, onClose)
+  useEscapeKey(!contactDeleteTarget && !contactRestoreTarget, onClose)
   useEscapeKey(Boolean(contactContextMenu), () => setContactContextMenu(null))
   useEscapeKey(Boolean(contactDeleteTarget), () => closeContactDeleteDialog())
   useEscapeKey(Boolean(contactRestoreTarget), () => closeContactRestoreDialog())
@@ -3265,25 +3264,18 @@ function SupplierPrototypeDialog({ accessToken, integrationClient, item, service
 
   function saveAndClose() {
     onSave(normalizeSupplierPrototype(form))
-    setSaveChanges([])
     onClose()
   }
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
 
-    if (!item) {
-      saveAndClose()
-      return
-    }
-
-    const changes = getSupplierPrototypeChanges(item, form)
-    if (changes.length === 0) {
+    if (item && getSupplierPrototypeChanges(item, form).length === 0) {
       onClose()
       return
     }
 
-    setSaveChanges(changes)
+    saveAndClose()
   }
 
   function addContact() {
@@ -3519,9 +3511,6 @@ function SupplierPrototypeDialog({ accessToken, integrationClient, item, service
         </div>
       ) : null}
 
-      {item && saveChanges.length > 0 ? (
-        <PrototypeChangeConfirmationDialog changes={saveChanges} objectName={item.name || 'Поставщик'} onCancel={() => setSaveChanges([])} onConfirm={saveAndClose} title="Подтвердить изменения поставщика" />
-      ) : null}
       {contactDeleteTarget ? (
         <SupplierContactDeleteConfirmationDialog
           contact={contactDeleteTarget}
