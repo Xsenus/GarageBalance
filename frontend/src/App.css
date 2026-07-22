@@ -1819,6 +1819,10 @@ h1 {
   grid-template-columns: minmax(140px, 0.55fr) minmax(220px, 1fr) minmax(300px, 1.25fr);
 }
 
+.contractors-tariff-dialog .contractors-service-period-grid--schedule-monthly {
+  grid-template-columns: minmax(180px, 0.7fr) minmax(360px, 1.3fr);
+}
+
 .contractors-tariff-dialog .contractors-inline-field--date .select-control {
   flex: 1 1 auto;
 }
@@ -2448,6 +2452,12 @@ h1 {
 .contractors-inline-field span {
   color: #475467;
   font-size: 13px;
+}
+
+.contractors-date-suffix {
+  color: #475467;
+  font-size: 13px;
+  line-height: 1.35;
 }
 
 .contractors-threshold-grid {

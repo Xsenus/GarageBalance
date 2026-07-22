@@ -40,7 +40,7 @@ public sealed class AccrualDueDatesTests
     [Fact]
     public void ForChargeService_MonthlyChargeBecomesOverdueAfterFollowingPaymentMonthAndGracePeriod()
     {
-        var setting = CreateSetting(periodicityMonths: 1, dueDay: 30, dueMonth: 1, graceDays: 30);
+        var setting = CreateSetting(periodicityMonths: 1, dueDay: 30, dueMonth: null, graceDays: 30);
 
         var result = AccrualDueDates.ForChargeService(new DateOnly(2026, 5, 1), setting);
 
@@ -73,7 +73,7 @@ public sealed class AccrualDueDatesTests
     [Fact]
     public void ForChargeService_ClampsConfiguredDayToEndOfShortMonth()
     {
-        var setting = CreateSetting(periodicityMonths: 1, dueDay: 31, dueMonth: 1, graceDays: 0);
+        var setting = CreateSetting(periodicityMonths: 1, dueDay: 31, dueMonth: null, graceDays: 0);
 
         var result = AccrualDueDates.ForChargeService(new DateOnly(2027, 1, 1), setting);
 
@@ -84,7 +84,7 @@ public sealed class AccrualDueDatesTests
     [Fact]
     public void ForChargeService_ClampsConfiguredDayToLeapYearFebruaryEnd()
     {
-        var setting = CreateSetting(periodicityMonths: 1, dueDay: 31, dueMonth: 1, graceDays: 0);
+        var setting = CreateSetting(periodicityMonths: 1, dueDay: 31, dueMonth: null, graceDays: 0);
 
         var result = AccrualDueDates.ForChargeService(new DateOnly(2024, 1, 1), setting);
 
@@ -95,7 +95,7 @@ public sealed class AccrualDueDatesTests
     [Fact]
     public void ForChargeService_DecemberChargeMovesPaymentDateToNextYear()
     {
-        var setting = CreateSetting(periodicityMonths: 1, dueDay: 31, dueMonth: 1, graceDays: 0);
+        var setting = CreateSetting(periodicityMonths: 1, dueDay: 31, dueMonth: null, graceDays: 0);
 
         var result = AccrualDueDates.ForChargeService(new DateOnly(2026, 12, 1), setting);
 
@@ -119,7 +119,7 @@ public sealed class AccrualDueDatesTests
             AccrualDueDates.FromDueDate(new DateOnly(2026, 1, 1), -1));
     }
 
-    private static ChargeServiceSetting CreateSetting(int periodicityMonths, int dueDay, int dueMonth, int graceDays)
+    private static ChargeServiceSetting CreateSetting(int periodicityMonths, int dueDay, int? dueMonth, int graceDays)
     {
         return new ChargeServiceSetting
         {

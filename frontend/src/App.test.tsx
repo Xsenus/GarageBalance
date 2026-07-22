@@ -493,19 +493,27 @@ describe('App', () => {
     await user.type(serviceCostInput, '1000000')
     await user.tab()
     expect(serviceCostInput).toHaveValue('1 000 000.00')
-    expect(within(serviceDialog).queryByLabelText('Периодичность')).not.toBeInTheDocument()
+    expect(within(serviceDialog).queryByRole('combobox', { name: 'Периодичность регулярной услуги' })).not.toBeInTheDocument()
     await user.click(within(serviceDialog).getByLabelText('Регулярные платежи'))
-    expect(within(serviceDialog).getByLabelText('Периодичность')).toHaveValue('12')
-    for (const comboboxName of ['Вид поступления регулярной услуги', 'Способ расчёта регулярной услуги', 'Тариф регулярной услуги', 'Учитывать платеж с', 'Месяц оплаты']) {
+    const periodicityControl = within(serviceDialog).getByRole('combobox', { name: 'Периодичность регулярной услуги' })
+    expect(periodicityControl).toHaveTextContent('Ежемесячно')
+    expect(within(serviceDialog).queryByRole('combobox', { name: 'Месяц начисления ежегодной услуги' })).not.toBeInTheDocument()
+    expect(within(serviceDialog).queryByRole('combobox', { name: 'Месяц оплаты' })).not.toBeInTheDocument()
+    expect(within(serviceDialog).getByText('числа следующего месяца')).toBeInTheDocument()
+    await user.click(periodicityControl)
+    const periodicityOptions = within(serviceDialog).getByRole('listbox', { name: 'Периодичность регулярной услуги: варианты' })
+    expect(within(periodicityOptions).getAllByRole('option')).toHaveLength(2)
+    await user.click(within(periodicityOptions).getByRole('option', { name: 'Ежегодно' }))
+    for (const comboboxName of ['Вид поступления регулярной услуги', 'Способ расчёта регулярной услуги', 'Тариф регулярной услуги', 'Периодичность регулярной услуги', 'Месяц начисления ежегодной услуги', 'Месяц оплаты']) {
       expect(within(serviceDialog).getByRole('combobox', { name: comboboxName })).toHaveClass('select-control__trigger')
     }
     expect(within(serviceDialog).getByRole('combobox', { name: 'Способ расчёта регулярной услуги' })).toBeDisabled()
-    const accrualStartMonthControl = within(serviceDialog).getByRole('combobox', { name: 'Учитывать платеж с' })
+    const accrualStartMonthControl = within(serviceDialog).getByRole('combobox', { name: 'Месяц начисления ежегодной услуги' })
     expect(accrualStartMonthControl).toHaveTextContent('Январь')
     expect(within(serviceDialog).getByLabelText('День оплаты')).toHaveValue('30')
     expect(within(serviceDialog).getByRole('combobox', { name: 'Месяц оплаты' })).toHaveTextContent('Июль')
     await user.click(accrualStartMonthControl)
-    const monthOptions = within(serviceDialog).getByRole('listbox', { name: 'Учитывать платеж с: варианты' })
+    const monthOptions = within(serviceDialog).getByRole('listbox', { name: 'Месяц начисления ежегодной услуги: варианты' })
     expect(within(monthOptions).getAllByRole('option')).toHaveLength(12)
     await user.click(within(monthOptions).getByRole('option', { name: 'Декабрь' }))
     expect(accrualStartMonthControl).toHaveTextContent('Декабрь')
@@ -2986,6 +2994,16 @@ describe('App', () => {
     expect(within(serviceDialog).getByText('Определяет, к какому виду будут относиться начисления и платежи по услуге.')).toBeInTheDocument()
     expect(within(serviceDialog).getByText('Определяется выбранным тарифом и показывает, как рассчитывается сумма.')).toBeInTheDocument()
     expect(within(serviceDialog).getByText('Конкретная ставка, которая применяется при начислении услуги.')).toBeInTheDocument()
+    const createPeriodicityControl = within(serviceDialog).getByRole('combobox', { name: 'Периодичность регулярной услуги' })
+    expect(createPeriodicityControl).toHaveTextContent('Ежемесячно')
+    expect(within(serviceDialog).queryByRole('combobox', { name: 'Месяц оплаты' })).not.toBeInTheDocument()
+    expect(within(serviceDialog).getByText('Выбранного числа месяца, следующего за месяцем начисления.')).toBeInTheDocument()
+    await user.clear(within(serviceDialog).getByLabelText('День оплаты'))
+    await user.type(within(serviceDialog).getByLabelText('День оплаты'), '32')
+    await user.click(within(serviceDialog).getByRole('button', { name: 'Сохранить' }))
+    expect(within(serviceDialog).getByText('Для ежемесячной услуги укажите день оплаты от 1 до 31.')).toBeInTheDocument()
+    await user.clear(within(serviceDialog).getByLabelText('День оплаты'))
+    await user.type(within(serviceDialog).getByLabelText('День оплаты'), '30')
 
     await user.click(incomeTypeControl)
     await user.click(within(serviceDialog).getByRole('option', { name: waterIncomeType.name }))
@@ -2995,10 +3013,17 @@ describe('App', () => {
     await user.click(within(serviceDialog).getByRole('option', { name: serviceIncomeType.name }))
     expect(tariffControl).toHaveTextContent('Тариф охраны — 1 200.00 руб.')
     expect(calculationBaseControl).toHaveTextContent('Фиксированно')
-    await user.clear(within(serviceDialog).getByLabelText('День оплаты'))
-    await user.type(within(serviceDialog).getByLabelText('День оплаты'), '28')
+    await user.click(createPeriodicityControl)
+    await user.click(within(serviceDialog).getByRole('option', { name: 'Ежегодно' }))
+    expect(within(serviceDialog).getByRole('combobox', { name: 'Месяц начисления ежегодной услуги' })).toHaveTextContent('Январь')
     await user.click(within(serviceDialog).getByRole('combobox', { name: 'Месяц оплаты' }))
     await user.click(within(serviceDialog).getByRole('option', { name: 'Февраль' }))
+    await user.clear(within(serviceDialog).getByLabelText('День оплаты'))
+    await user.type(within(serviceDialog).getByLabelText('День оплаты'), '29')
+    await user.click(within(serviceDialog).getByRole('button', { name: 'Сохранить' }))
+    expect(within(serviceDialog).getByText('Для месяца "Февраль" укажите день от 1 до 28.')).toBeInTheDocument()
+    await user.clear(within(serviceDialog).getByLabelText('День оплаты'))
+    await user.type(within(serviceDialog).getByLabelText('День оплаты'), '28')
     await user.clear(within(serviceDialog).getByLabelText('Единица измерения'))
     await user.type(within(serviceDialog).getByLabelText('Единица измерения'), 'руб.')
     await user.click(within(serviceDialog).getByRole('button', { name: 'Сохранить' }))
@@ -3018,29 +3043,28 @@ describe('App', () => {
       unitName: 'руб.',
     }))
     await waitFor(() => expect(within(tariffsPanel).getAllByText('Охрана').length).toBeGreaterThan(0))
-    expect(within(tariffsPanel).getByLabelText('Охрана: Периодичность: значение')).toHaveValue('12')
+    expect(within(tariffsPanel).getByRole('combobox', { name: 'Охрана: Периодичность: значение' })).toHaveTextContent('Ежегодно')
     expect(within(tariffsPanel).getByLabelText('Охрана: Оплата до: день')).toHaveValue('28')
     const dueDateValue = within(tariffsPanel).getByLabelText('Охрана: Оплата до: день').closest('.contractors-date-value')
     expect(dueDateValue).not.toBeNull()
     expect(within(dueDateValue as HTMLElement).getByLabelText('Охрана: Оплата до: месяц')).toHaveValue('фев')
 
-    const periodicityInput = within(tariffsPanel).getByLabelText('Охрана: Периодичность: значение')
-    await user.clear(periodicityInput)
-    await user.type(periodicityInput, '6')
-    await user.keyboard('{Enter}')
+    const periodicityControl = within(tariffsPanel).getByRole('combobox', { name: 'Охрана: Периодичность: значение' })
+    await user.click(periodicityControl)
+    await user.click(within(tariffsPanel).getByRole('option', { name: 'Ежемесячно' }))
     let confirmationDialog = await screen.findByRole('dialog', { name: 'Подтвердить изменение?' })
     expect(within(confirmationDialog).getByText('Периодичность')).toBeInTheDocument()
+    expect(within(confirmationDialog).getByText('Ежегодно')).toBeInTheDocument()
+    expect(within(confirmationDialog).getByText('Ежемесячно')).toBeInTheDocument()
     const cancelConfirmationButton = within(confirmationDialog).getByRole('button', { name: 'Отмена' })
     await waitFor(() => expect(cancelConfirmationButton).toHaveFocus())
     await user.keyboard('{Escape}')
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Подтвердить изменение?' })).not.toBeInTheDocument())
-    await waitFor(() => expect(periodicityInput).toHaveFocus())
     expect(updatedServiceRequest).toBeNull()
-    expect(periodicityInput).toHaveValue('12')
+    expect(periodicityControl).toHaveTextContent('Ежегодно')
 
-    await user.clear(periodicityInput)
-    await user.type(periodicityInput, '6')
-    await user.keyboard('{Enter}')
+    await user.click(periodicityControl)
+    await user.click(within(tariffsPanel).getByRole('option', { name: 'Ежемесячно' }))
     confirmationDialog = await screen.findByRole('dialog', { name: 'Подтвердить изменение?' })
     expect(within(confirmationDialog).getByText('Периодичность')).toBeInTheDocument()
     await user.click(within(confirmationDialog).getByRole('button', { name: 'Сохранить' }))
@@ -3048,10 +3072,10 @@ describe('App', () => {
     await waitFor(() => expect(updatedServiceRequest).toMatchObject({
       name: 'Охрана',
       isRegular: true,
-      periodicityMonths: 6,
+      periodicityMonths: 1,
       accrualStartMonth: 1,
       paymentDueDay: 28,
-      paymentDueMonth: 2,
+      paymentDueMonth: null,
       overdueGraceDays: 30,
       incomeTypeId: serviceIncomeType.id,
       tariffId: serviceTariff.id,
@@ -3059,7 +3083,11 @@ describe('App', () => {
       hasTieredTariff: true,
       unitName: 'руб.',
     }))
-    expect(within(tariffsPanel).getByLabelText('Охрана: Периодичность: значение')).toHaveValue('6')
+    expect(within(tariffsPanel).getByRole('combobox', { name: 'Охрана: Периодичность: значение' })).toHaveTextContent('Ежемесячно')
+    const monthlyDueDateValue = within(tariffsPanel).getByLabelText('Охрана: Оплата до: день').closest('.contractors-date-value')
+    expect(monthlyDueDateValue).not.toBeNull()
+    expect(within(monthlyDueDateValue as HTMLElement).queryByRole('combobox', { name: 'Охрана: Оплата до: месяц' })).not.toBeInTheDocument()
+    expect(within(monthlyDueDateValue as HTMLElement).getByText('числа следующего месяца')).toBeInTheDocument()
 
     expect(within(tariffsPanel).queryByRole('button', { name: 'Архивировать услугу Охрана' })).not.toBeInTheDocument()
     expect(within(tariffsPanel).queryByRole('button', { name: 'Вернуть услугу Охрана' })).not.toBeInTheDocument()
@@ -3139,7 +3167,7 @@ describe('App', () => {
     await waitFor(() => expect(within(tariffsPanel).getByLabelText('Вода: Тариф воды из БД: значение')).toHaveValue('125.00'))
     expect(within(tariffsPanel).queryByText('Старый сбор')).not.toBeInTheDocument()
     expect(within(tariffsPanel).getByLabelText('Сумма: Сбор на ворота из БД')).toHaveValue('777.00')
-    expect(within(tariffsPanel).getByLabelText('Охрана из БД: Периодичность: значение')).toHaveValue('12')
+    expect(within(tariffsPanel).getByRole('combobox', { name: 'Охрана из БД: Периодичность: значение' })).toHaveTextContent('Ежегодно')
     expect(within(tariffsPanel).getByLabelText('Охрана из БД: Оплата до: день')).toHaveValue('25')
     expect(within(tariffsPanel).getByLabelText('Охрана из БД: Оплата до: месяц')).toHaveValue('дек')
     expect(within(tariffsPanel).getByLabelText('Охрана из БД: Перенос долга в просроченный: значение')).toHaveValue('45')

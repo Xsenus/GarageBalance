@@ -2089,14 +2089,29 @@ public sealed class DictionaryService(
 
         if (request.IsRegular)
         {
-            if (!request.PeriodicityMonths.HasValue || request.PeriodicityMonths.Value <= 0)
+            if (!request.PeriodicityMonths.HasValue)
             {
                 return DictionaryResult<object>.Failure("charge_service_periodicity_required", "Для регулярной услуги укажите периодичность.");
+            }
+
+            if (request.PeriodicityMonths.Value is not 1 and not 12)
+            {
+                return DictionaryResult<object>.Failure("charge_service_periodicity_invalid", "Периодичность регулярной услуги должна быть ежемесячной или ежегодной.");
             }
 
             if (!request.AccrualStartMonth.HasValue)
             {
                 return DictionaryResult<object>.Failure("charge_service_accrual_start_month_required", "Для регулярной услуги укажите месяц начала учета.");
+            }
+
+            if (!request.PaymentDueDay.HasValue)
+            {
+                return DictionaryResult<object>.Failure("charge_service_payment_day_required", "Для регулярной услуги укажите день оплаты.");
+            }
+
+            if (request.PeriodicityMonths.Value == 12 && !request.PaymentDueMonth.HasValue)
+            {
+                return DictionaryResult<object>.Failure("charge_service_annual_payment_month_required", "Для ежегодной услуги укажите месяц оплаты.");
             }
         }
 
@@ -2105,17 +2120,23 @@ public sealed class DictionaryService(
             return DictionaryResult<object>.Failure("charge_service_month_invalid", "Месяц должен быть от 1 до 12.");
         }
 
-        if (request.PaymentDueDay.HasValue != request.PaymentDueMonth.HasValue)
+        if (!request.IsRegular && request.PaymentDueDay.HasValue != request.PaymentDueMonth.HasValue)
         {
             return DictionaryResult<object>.Failure("charge_service_payment_date_incomplete", "Для даты оплаты заполните и день, и месяц.");
         }
 
-        if (request.PaymentDueDay.HasValue && request.PaymentDueMonth.HasValue)
+        var normalizedPaymentDueMonth = NormalizeChargeServicePaymentDueMonth(request);
+        if (request.PaymentDueDay.HasValue)
         {
-            var maxDay = DateTime.DaysInMonth(2026, request.PaymentDueMonth.Value);
+            var maxDay = normalizedPaymentDueMonth.HasValue
+                ? DateTime.DaysInMonth(2026, normalizedPaymentDueMonth.Value)
+                : 31;
             if (request.PaymentDueDay.Value < 1 || request.PaymentDueDay.Value > maxDay)
             {
-                return DictionaryResult<object>.Failure("charge_service_payment_day_invalid", $"В выбранном месяце нельзя указать день больше {maxDay}.");
+                var message = normalizedPaymentDueMonth.HasValue
+                    ? $"В выбранном месяце нельзя указать день больше {maxDay}."
+                    : "Для ежемесячной услуги укажите день оплаты от 1 до 31.";
+                return DictionaryResult<object>.Failure("charge_service_payment_day_invalid", message);
             }
         }
 
@@ -2171,7 +2192,7 @@ public sealed class DictionaryService(
         setting.PeriodicityMonths = request.IsRegular ? request.PeriodicityMonths : null;
         setting.AccrualStartMonth = request.IsRegular ? request.AccrualStartMonth : null;
         setting.PaymentDueDay = request.PaymentDueDay;
-        setting.PaymentDueMonth = request.PaymentDueMonth;
+        setting.PaymentDueMonth = NormalizeChargeServicePaymentDueMonth(request);
         setting.OverdueGraceDays = request.OverdueGraceDays;
         setting.IncomeTypeId = request.IsRegular ? request.IncomeTypeId : null;
         setting.TariffId = request.IsRegular ? request.TariffId : null;
@@ -2187,7 +2208,7 @@ public sealed class DictionaryService(
             setting.PeriodicityMonths == (request.IsRegular ? request.PeriodicityMonths : null) &&
             setting.AccrualStartMonth == (request.IsRegular ? request.AccrualStartMonth : null) &&
             setting.PaymentDueDay == request.PaymentDueDay &&
-            setting.PaymentDueMonth == request.PaymentDueMonth &&
+            setting.PaymentDueMonth == NormalizeChargeServicePaymentDueMonth(request) &&
             setting.OverdueGraceDays == request.OverdueGraceDays &&
             setting.IncomeTypeId == (request.IsRegular ? request.IncomeTypeId : null) &&
             setting.TariffId == (request.IsRegular ? request.TariffId : null) &&
@@ -2195,6 +2216,9 @@ public sealed class DictionaryService(
             setting.HasTieredTariff == (request.IsRegular && request.IsMetered && request.HasTieredTariff) &&
             StringEquals(setting.UnitName, NormalizeOptional(request.UnitName));
     }
+
+    private static int? NormalizeChargeServicePaymentDueMonth(UpsertChargeServiceSettingRequest request) =>
+        request.IsRegular && request.PeriodicityMonths == 1 ? null : request.PaymentDueMonth;
 
     private static bool IsIncomeTypeCompatibleWithTariff(string? incomeTypeCode, string calculationBase)
     {

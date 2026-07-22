@@ -1964,7 +1964,7 @@ public sealed class DictionaryServiceTests
         Assert.Equal(1, result.Value.PeriodicityMonths);
         Assert.Equal(1, result.Value.AccrualStartMonth);
         Assert.Equal(30, result.Value.PaymentDueDay);
-        Assert.Equal(6, result.Value.PaymentDueMonth);
+        Assert.Null(result.Value.PaymentDueMonth);
         Assert.Equal(30, result.Value.OverdueGraceDays);
         Assert.True(result.Value.IsMetered);
         Assert.True(result.Value.HasTieredTariff);
@@ -2074,7 +2074,7 @@ public sealed class DictionaryServiceTests
         var service = DictionaryServiceTestFactory.Create(database.Context);
 
         var februaryResult = await service.CreateChargeServiceSettingAsync(
-            new UpsertChargeServiceSettingRequest("Членский взнос", true, 1, 1, 29, 2, 30, false, false, "руб."),
+            new UpsertChargeServiceSettingRequest("Членский взнос", true, 12, 1, 29, 2, 30, false, false, "руб."),
             Guid.NewGuid(),
             CancellationToken.None);
         var tieredResult = await service.CreateChargeServiceSettingAsync(
@@ -2086,6 +2086,41 @@ public sealed class DictionaryServiceTests
         Assert.Equal("charge_service_payment_day_invalid", februaryResult.ErrorCode);
         Assert.False(tieredResult.Succeeded);
         Assert.Equal("charge_service_tiered_requires_meter", tieredResult.ErrorCode);
+        Assert.Empty(database.Context.ChargeServiceSettings);
+        Assert.Empty(database.Context.AuditEvents);
+    }
+
+    [Fact]
+    public async Task CreateChargeServiceSettingAsync_RequiresSupportedPeriodicityAndMatchingPaymentDeadline()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = DictionaryServiceTestFactory.Create(database.Context);
+
+        var unsupportedPeriodicity = await service.CreateChargeServiceSettingAsync(
+            new UpsertChargeServiceSettingRequest("Раз в полгода", true, 6, 1, 30, 6, 30, false, false, "руб."),
+            null,
+            CancellationToken.None);
+        var monthlyWithoutDay = await service.CreateChargeServiceSettingAsync(
+            new UpsertChargeServiceSettingRequest("Без дня оплаты", true, 1, 1, null, null, 30, false, false, "руб."),
+            null,
+            CancellationToken.None);
+        var annualWithoutMonth = await service.CreateChargeServiceSettingAsync(
+            new UpsertChargeServiceSettingRequest("Без месяца оплаты", true, 12, 1, 30, null, 30, false, false, "руб."),
+            null,
+            CancellationToken.None);
+        var invalidMonthlyDay = await service.CreateChargeServiceSettingAsync(
+            new UpsertChargeServiceSettingRequest("Неверный день", true, 1, 1, 32, null, 30, false, false, "руб."),
+            null,
+            CancellationToken.None);
+
+        Assert.Equal("charge_service_periodicity_invalid", unsupportedPeriodicity.ErrorCode);
+        Assert.Equal("Периодичность регулярной услуги должна быть ежемесячной или ежегодной.", unsupportedPeriodicity.ErrorMessage);
+        Assert.Equal("charge_service_payment_day_required", monthlyWithoutDay.ErrorCode);
+        Assert.Equal("Для регулярной услуги укажите день оплаты.", monthlyWithoutDay.ErrorMessage);
+        Assert.Equal("charge_service_annual_payment_month_required", annualWithoutMonth.ErrorCode);
+        Assert.Equal("Для ежегодной услуги укажите месяц оплаты.", annualWithoutMonth.ErrorMessage);
+        Assert.Equal("charge_service_payment_day_invalid", invalidMonthlyDay.ErrorCode);
+        Assert.Equal("Для ежемесячной услуги укажите день оплаты от 1 до 31.", invalidMonthlyDay.ErrorMessage);
         Assert.Empty(database.Context.ChargeServiceSettings);
         Assert.Empty(database.Context.AuditEvents);
     }

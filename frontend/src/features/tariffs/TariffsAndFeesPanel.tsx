@@ -36,6 +36,7 @@ type ContractorTariffRow = {
   amount?: string
   dateDay?: string
   dateMonth?: string
+  monthlyDue?: boolean
   unit?: string
   threshold?: string
   byMeter: boolean
@@ -108,6 +109,20 @@ const contractorTariffMonthOptions = [
   { value: 'дек', label: 'Декабрь', maxDay: 31 },
 ]
 
+const regularServicePeriodicityOptions = [
+  { value: '1', label: 'Ежемесячно' },
+  { value: '12', label: 'Ежегодно' },
+]
+
+function normalizeRegularServicePeriodicity(periodicityMonths?: number | string | null) {
+  return Number(periodicityMonths) >= 12 ? '12' : '1'
+}
+
+function formatRegularServicePeriodicity(periodicityMonths?: number | string | null) {
+  const value = normalizeRegularServicePeriodicity(periodicityMonths)
+  return regularServicePeriodicityOptions.find((option) => option.value === value)?.label ?? value
+}
+
 function createEditableDrafts(rows: Array<{ id: string; title?: string; amount?: string; unit?: string; dateDay?: string; dateMonth?: string }>) {
   return rows.reduce<Record<string, ContractorTariffDraft>>((drafts, row) => {
     drafts[row.id] = { title: row.title ?? '', amount: row.amount ?? '', unit: row.unit ?? '', dateDay: row.dateDay ?? '', dateMonth: row.dateMonth ?? '' }
@@ -119,7 +134,7 @@ function formatContractorTariffDate(day: string, month: string) {
   return `${day.padStart(2, '0')} ${month}`.trim()
 }
 
-function getContractorTariffDateError(day: string, month: string) {
+function getContractorTariffDateError(day: string, month: string, dayOnly = false) {
   const trimmedDay = day.trim()
   const monthOption = contractorTariffMonthOptions.find((option) => option.value === month)
 
@@ -127,13 +142,17 @@ function getContractorTariffDateError(day: string, month: string) {
     return 'Укажите день числом от 1 до 31.'
   }
 
-  if (!monthOption) {
+  if (!dayOnly && !monthOption) {
     return 'Выберите месяц.'
   }
 
   const numericDay = Number(trimmedDay)
-  if (numericDay < 1 || numericDay > monthOption.maxDay) {
-    return `В месяце "${monthOption.label}" можно указать день от 1 до ${monthOption.maxDay}.`
+  const maxDay = dayOnly ? 31 : monthOption!.maxDay
+  if (numericDay < 1 || numericDay > maxDay) {
+    if (dayOnly) {
+      return 'Укажите день числом от 1 до 31.'
+    }
+    return `В месяце "${monthOption!.label}" можно указать день от 1 до ${monthOption!.maxDay}.`
   }
 
   return null
@@ -257,6 +276,8 @@ function getContractorTariffMonthValue(monthNumber?: number | null) {
 }
 
 function createChargeServiceRows(setting: ChargeServiceSettingDto): ContractorTariffRow[] {
+  const periodicityMonths = normalizeRegularServicePeriodicity(setting.periodicityMonths)
+  const isMonthly = periodicityMonths === '1'
   const rows: ContractorTariffRow[] = [
     {
       id: `charge-service-${setting.id}-main`,
@@ -281,8 +302,7 @@ function createChargeServiceRows(setting: ChargeServiceSettingDto): ContractorTa
         serviceSettingKind: 'periodicity',
         category: setting.name,
         title: 'Периодичность',
-        amount: String(setting.periodicityMonths ?? 12),
-        unit: 'мес.',
+        amount: periodicityMonths,
         byMeter: setting.isMetered,
         tiered: setting.hasTieredTariff,
         isDeleted: setting.isArchived,
@@ -294,19 +314,8 @@ function createChargeServiceRows(setting: ChargeServiceSettingDto): ContractorTa
         category: setting.name,
         title: 'Оплата до',
         dateDay: setting.paymentDueDay ? String(setting.paymentDueDay).padStart(2, '0') : '01',
-        dateMonth: getContractorTariffMonthValue(setting.paymentDueMonth),
-        byMeter: setting.isMetered,
-        tiered: setting.hasTieredTariff,
-        isDeleted: setting.isArchived,
-      },
-      {
-        id: `charge-service-${setting.id}-start-date`,
-        backendServiceSettingId: setting.id,
-        serviceSettingKind: 'start-date',
-        category: setting.name,
-        title: 'Учитывать платеж с',
-        dateDay: '01',
-        dateMonth: getContractorTariffMonthValue(setting.accrualStartMonth),
+        dateMonth: isMonthly ? undefined : getContractorTariffMonthValue(setting.paymentDueMonth),
+        monthlyDue: isMonthly,
         byMeter: setting.isMetered,
         tiered: setting.hasTieredTariff,
         isDeleted: setting.isArchived,
@@ -324,6 +333,20 @@ function createChargeServiceRows(setting: ChargeServiceSettingDto): ContractorTa
         isDeleted: setting.isArchived,
       },
     )
+    if (!isMonthly) {
+      rows.splice(3, 0, {
+        id: `charge-service-${setting.id}-start-date`,
+        backendServiceSettingId: setting.id,
+        serviceSettingKind: 'start-date',
+        category: setting.name,
+        title: 'Месяц начисления',
+        dateDay: '01',
+        dateMonth: getContractorTariffMonthValue(setting.accrualStartMonth),
+        byMeter: setting.isMetered,
+        tiered: setting.hasTieredTariff,
+        isDeleted: setting.isArchived,
+      })
+    }
   }
 
   return rows
@@ -335,7 +358,7 @@ function mergeChargeServicesIntoPrototypeRows(rows: ContractorTariffRow[], setti
   const matchedSettings = new Map(settings
     .filter((setting) => normalizedCategories.has(setting.name.toLocaleLowerCase('ru')))
     .map((setting) => [setting.name.toLocaleLowerCase('ru'), setting]))
-  const mergedRows = rowsWithoutBackendServices.map((row) => {
+  const mergedRows = rowsWithoutBackendServices.flatMap((row) => {
     const setting = matchedSettings.get(row.category.toLocaleLowerCase('ru'))
     if (!setting) {
       return row
@@ -347,25 +370,30 @@ function mergeChargeServicesIntoPrototypeRows(rows: ContractorTariffRow[], setti
       tiered: setting.hasTieredTariff,
       isDeleted: setting.isArchived,
     }
+    const periodicityMonths = normalizeRegularServicePeriodicity(setting.periodicityMonths)
+    const isMonthly = periodicityMonths === '1'
     if (row.title === 'Периодичность') {
-      return { ...common, backendServiceSettingId: setting.id, serviceSettingKind: 'periodicity' as const, amount: String(setting.periodicityMonths ?? 12) }
+      return [{ ...common, backendServiceSettingId: setting.id, serviceSettingKind: 'periodicity' as const, amount: periodicityMonths, unit: undefined }]
     }
     if (row.title === 'Учитывать платеж с') {
-      return { ...common, backendServiceSettingId: setting.id, serviceSettingKind: 'start-date' as const, dateDay: '01', dateMonth: getContractorTariffMonthValue(setting.accrualStartMonth) }
+      return isMonthly
+        ? []
+        : [{ ...common, backendServiceSettingId: setting.id, serviceSettingKind: 'start-date' as const, title: 'Месяц начисления', dateDay: '01', dateMonth: getContractorTariffMonthValue(setting.accrualStartMonth) }]
     }
     if (row.title === 'Оплата до' || row.title === 'Оплата за год до') {
-      return {
+      return [{
         ...common,
         backendServiceSettingId: setting.id,
         serviceSettingKind: 'due-date' as const,
         dateDay: setting.paymentDueDay ? String(setting.paymentDueDay).padStart(2, '0') : row.dateDay,
-        dateMonth: setting.paymentDueMonth ? getContractorTariffMonthValue(setting.paymentDueMonth) : row.dateMonth,
-      }
+        dateMonth: isMonthly ? undefined : (setting.paymentDueMonth ? getContractorTariffMonthValue(setting.paymentDueMonth) : row.dateMonth),
+        monthlyDue: isMonthly,
+      }]
     }
     if (row.title === 'Перенос долга в просроченный') {
-      return { ...common, backendServiceSettingId: setting.id, serviceSettingKind: 'overdue-days' as const, amount: String(setting.overdueGraceDays) }
+      return [{ ...common, backendServiceSettingId: setting.id, serviceSettingKind: 'overdue-days' as const, amount: String(setting.overdueGraceDays) }]
     }
-    return common
+    return [common]
   })
   const unmatchedSettings = settings.filter((setting) => !matchedSettings.has(setting.name.toLocaleLowerCase('ru')))
   return [
@@ -409,20 +437,11 @@ function mergeIrregularPaymentsIntoPrototypeRows(rows: ContractorOneTimeRow[], p
   return [...mergedRows, ...extraRows]
 }
 
-type TariffPrototypePendingChange =
+type TariffPrototypePendingChange = (
   | {
     kind: 'tariff-text'
     rowId: string
     field: 'title' | 'amount' | 'unit'
-    objectName: string
-    fieldLabel: string
-    previousValue: string
-    nextValue: string
-  }
-  | {
-    kind: 'tariff-boolean'
-    rowId: string
-    field: 'tiered' | 'byMeter'
     objectName: string
     fieldLabel: string
     previousValue: string
@@ -447,6 +466,15 @@ type TariffPrototypePendingChange =
     nextValue: string
   }
   | {
+    kind: 'tariff-boolean'
+    rowId: string
+    field: 'tiered' | 'byMeter'
+    objectName: string
+    fieldLabel: string
+    previousValue: string
+    nextValue: string
+  }
+  | {
     kind: 'one-time-active'
     rowId: string
     objectName: string
@@ -454,6 +482,10 @@ type TariffPrototypePendingChange =
     previousValue: string
     nextValue: string
   }
+) & {
+  previousDisplayValue?: string
+  nextDisplayValue?: string
+}
 
 function getTariffTextFieldLabel(row: ContractorTariffRow, field: 'title' | 'amount' | 'unit') {
   if (field === 'title') {
@@ -800,13 +832,13 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
         },
       }))
     } else if (pendingChange?.kind === 'tariff-date') {
-      const [previousDay = '', previousMonth = ''] = pendingChange.previousValue.split(' ')
+      const sourceRow = tariffRows.find((row) => row.id === pendingChange.rowId)
       setTariffDrafts((drafts) => ({
         ...drafts,
         [pendingChange.rowId]: {
           ...drafts[pendingChange.rowId],
-          dateDay: previousDay,
-          dateMonth: previousMonth,
+          dateDay: sourceRow?.dateDay ?? '',
+          dateMonth: sourceRow?.dateMonth ?? '',
         },
       }))
     } else if (pendingChange?.kind === 'one-time-amount') {
@@ -924,9 +956,13 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
     const overdueRow = relatedRows.find((item) => item.serviceSettingKind === 'overdue-days')
     const isRegular = setting.isRegular || Boolean(startRow || dueRow || overdueRow)
     const dueDay = dueRow?.dateDay ? Number(dueRow.dateDay) : setting.paymentDueDay
-    const dueMonth = dueRow?.dateMonth ? getContractorTariffMonthNumber(dueRow.dateMonth) : setting.paymentDueMonth
-    const startMonth = startRow?.dateMonth ? getContractorTariffMonthNumber(startRow.dateMonth) : setting.accrualStartMonth
-    const periodicityMonths = parsePrototypeAmount(periodicityRow?.amount ?? '') ?? setting.periodicityMonths ?? 12
+    const periodicityMonths = Number(normalizeRegularServicePeriodicity(periodicityRow?.amount ?? setting.periodicityMonths))
+    const dueMonth = periodicityMonths === 1
+      ? null
+      : (dueRow?.dateMonth ? getContractorTariffMonthNumber(dueRow.dateMonth) : setting.paymentDueMonth)
+    const startMonth = periodicityMonths === 1
+      ? setting.accrualStartMonth ?? 1
+      : (startRow?.dateMonth ? getContractorTariffMonthNumber(startRow.dateMonth) : setting.accrualStartMonth)
     const overdueGraceDays = parsePrototypeAmount(overdueRow?.amount ?? '') ?? setting.overdueGraceDays
     const isMetered = mainRow?.byMeter ?? setting.isMetered
     const hasTieredTariff = isMetered ? (mainRow?.tiered ?? setting.hasTieredTariff) : false
@@ -934,10 +970,10 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
     return {
       name: (mainRow?.title ?? setting.name).trim() || setting.name,
       isRegular,
-      periodicityMonths: isRegular ? Math.trunc(periodicityMonths) : null,
+      periodicityMonths: isRegular ? periodicityMonths : null,
       accrualStartMonth: isRegular ? startMonth ?? 1 : null,
       paymentDueDay: isRegular ? dueDay ?? 1 : null,
-      paymentDueMonth: isRegular ? dueMonth ?? 1 : null,
+      paymentDueMonth: isRegular ? dueMonth : null,
       overdueGraceDays: Math.trunc(overdueGraceDays),
       isMetered,
       hasTieredTariff,
@@ -1191,11 +1227,36 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
     })
   }
 
+  const commitTariffPeriodicityChange = (row: ContractorTariffRow, nextValue: string) => {
+    const normalizedNextValue = normalizeRegularServicePeriodicity(nextValue)
+    const previousValue = normalizeRegularServicePeriodicity(row.amount)
+    setTariffDrafts((drafts) => ({
+      ...drafts,
+      [row.id]: { ...drafts[row.id], amount: normalizedNextValue },
+    }))
+
+    if (normalizedNextValue === previousValue) {
+      return
+    }
+
+    setPendingChange({
+      kind: 'tariff-text',
+      rowId: row.id,
+      field: 'amount',
+      objectName: `${row.category}: ${row.title}`,
+      fieldLabel: 'Периодичность',
+      previousValue,
+      nextValue: normalizedNextValue,
+      previousDisplayValue: formatRegularServicePeriodicity(previousValue),
+      nextDisplayValue: formatRegularServicePeriodicity(normalizedNextValue),
+    })
+  }
+
   const commitTariffDateChange = async (row: ContractorTariffRow) => {
     const draft = tariffDrafts[row.id] ?? { title: row.title, amount: '', unit: '', dateDay: '', dateMonth: row.dateMonth ?? '' }
     const nextDay = (draft.dateDay ?? '').trim().padStart(2, '0')
-    const nextMonth = draft.dateMonth || row.dateMonth || contractorTariffMonthOptions[0].value
-    const dateError = getContractorTariffDateError(nextDay, nextMonth)
+    const nextMonth = row.monthlyDue ? '' : (draft.dateMonth || row.dateMonth || contractorTariffMonthOptions[0].value)
+    const dateError = getContractorTariffDateError(nextDay, nextMonth, row.monthlyDue)
 
     if (dateError) {
       setTariffDateErrors((errors) => ({ ...errors, [row.id]: dateError }))
@@ -1208,8 +1269,12 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
       return nextErrors
     })
 
-    const previousValue = formatContractorTariffDate(row.dateDay ?? '', row.dateMonth ?? '')
-    const nextValue = formatContractorTariffDate(nextDay, nextMonth)
+    const previousValue = row.monthlyDue
+      ? `${row.dateDay ?? ''} числа следующего месяца`.trim()
+      : formatContractorTariffDate(row.dateDay ?? '', row.dateMonth ?? '')
+    const nextValue = row.monthlyDue
+      ? `${nextDay} числа следующего месяца`
+      : formatContractorTariffDate(nextDay, nextMonth)
 
     if (nextValue === previousValue) {
       setTariffDrafts((drafts) => ({
@@ -1763,7 +1828,15 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
                     ) : null}
                   </span>
                   <span role="cell" className="contractors-value-cell">
-                    {row.dateDay !== undefined ? (
+                    {row.serviceSettingKind === 'periodicity' ? (
+                      <SelectControl
+                        aria-label={`${row.category}: ${row.title}: значение`}
+                        value={normalizeRegularServicePeriodicity(tariffDrafts[row.id]?.amount ?? row.amount)}
+                        options={regularServicePeriodicityOptions}
+                        disabled={!canManageTariffs || isRowDisabled}
+                        onChange={(value) => commitTariffPeriodicityChange(row, value)}
+                      />
+                    ) : row.dateDay !== undefined ? (
                       <div className="contractors-date-value">
                         <input
                           aria-label={`${row.category}: ${row.title}: день`}
@@ -1784,7 +1857,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
                           }}
                           onKeyDown={(event) => handleEditableInputKeyDown(event, () => commitTariffDateChange(row))}
                         />
-                        <select
+                        {!row.monthlyDue ? <select
                           aria-label={`${row.category}: ${row.title}: месяц`}
                           className="contractors-editable-select contractors-editable-select--month"
                           disabled={!canManageTariffs || isRowDisabled}
@@ -1802,7 +1875,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
                           {contractorTariffMonthOptions.map((month) => (
                             <option key={month.value} value={month.value}>{month.label}</option>
                           ))}
-                        </select>
+                        </select> : <span className="contractors-date-suffix">числа следующего месяца</span>}
                         {tariffDateErrors[row.id] ? <span id={`${row.id}-date-error`} className="contractors-field-error" role="alert">{tariffDateErrors[row.id]}</span> : null}
                       </div>
                     ) : isTariffMoneyAmount(row) ? (
@@ -1829,7 +1902,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
                     )}
                   </span>
                   <span role="cell">
-                    {row.dateDay === undefined ? (
+                    {row.dateDay === undefined && row.serviceSettingKind !== 'periodicity' ? (
                       <input
                         aria-label={`${row.category}: ${row.title}: единица`}
                         className="contractors-editable-input contractors-editable-input--unit"
@@ -2085,11 +2158,11 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
               <div className="tariff-change-values-row">
                 <div>
                   <span>Было</span>
-                  <strong>{formatPrototypeChangeValue(pendingChange.previousValue)}</strong>
+                  <strong>{formatPrototypeChangeValue(pendingChange.previousDisplayValue ?? pendingChange.previousValue)}</strong>
                 </div>
                 <div>
                   <span>Стало</span>
-                  <strong>{formatPrototypeChangeValue(pendingChange.nextValue)}</strong>
+                  <strong>{formatPrototypeChangeValue(pendingChange.nextDisplayValue ?? pendingChange.nextValue)}</strong>
                 </div>
               </div>
             </div>
@@ -2417,7 +2490,7 @@ export function AddServicePrototypeDialog({
   const [tariffId, setTariffId] = useState(() => chooseRegularTariffId(incomeTypes[0]?.id ?? '', '', incomeTypes, tariffs))
   const [isByMeter, setIsByMeter] = useState(true)
   const [isTiered, setIsTiered] = useState(true)
-  const [periodicityMonths, setPeriodicityMonths] = useState('12')
+  const [periodicityMonths, setPeriodicityMonths] = useState('1')
   const [accrualStartMonth, setAccrualStartMonth] = useState(contractorTariffMonthOptions[0].value)
   const [paymentDueDay, setPaymentDueDay] = useState('30')
   const [paymentDueMonth, setPaymentDueMonth] = useState(contractorTariffMonthOptions[6].value)
@@ -2431,6 +2504,7 @@ export function AddServicePrototypeDialog({
   const calculationBaseOption = selectedTariff
     ? calculationBaseOptions.find((option) => option.value === selectedTariff.calculationBase)
     : null
+  const isMonthly = periodicityMonths === '1'
   useRestoreFocusOnClose(true)
   const dialogRef = useFocusTrap<HTMLElement>(true)
   useEscapeKey(true, onClose)
@@ -2441,7 +2515,9 @@ export function AddServicePrototypeDialog({
     const parsedPeriodicity = Number(periodicityMonths)
     const parsedDueDay = Number(paymentDueDay)
     const parsedOverdueDays = Number(overdueGraceDays)
-    const dueMonthOption = contractorTariffMonthOptions.find((month) => month.value === paymentDueMonth)
+    const dueMonthOption = isMonthly
+      ? null
+      : contractorTariffMonthOptions.find((month) => month.value === paymentDueMonth)
 
     if (!trimmedName) {
       setError('Укажите наименование услуги.')
@@ -2459,13 +2535,16 @@ export function AddServicePrototypeDialog({
         return
       }
 
-      if (!Number.isInteger(parsedPeriodicity) || parsedPeriodicity < 1 || parsedPeriodicity > 120) {
-        setError('Периодичность должна быть числом от 1 до 120 месяцев.')
+      if (parsedPeriodicity !== 1 && parsedPeriodicity !== 12) {
+        setError('Выберите ежемесячную или ежегодную периодичность.')
         return
       }
 
-      if (!Number.isInteger(parsedDueDay) || !dueMonthOption || parsedDueDay < 1 || parsedDueDay > dueMonthOption.maxDay) {
-        setError(`Для месяца "${dueMonthOption?.label ?? 'не выбран'}" укажите день от 1 до ${dueMonthOption?.maxDay ?? 31}.`)
+      const maxDueDay = dueMonthOption?.maxDay ?? 31
+      if (!Number.isInteger(parsedDueDay) || parsedDueDay < 1 || parsedDueDay > maxDueDay) {
+        setError(isMonthly
+          ? 'Для ежемесячной услуги укажите день оплаты от 1 до 31.'
+          : `Для месяца "${dueMonthOption?.label ?? 'не выбран'}" укажите день от 1 до ${maxDueDay}.`)
         return
       }
 
@@ -2494,9 +2573,9 @@ export function AddServicePrototypeDialog({
       name: trimmedName,
       isRegular,
       periodicityMonths: isRegular ? parsedPeriodicity : null,
-      accrualStartMonth: isRegular ? getContractorTariffMonthNumber(accrualStartMonth) ?? 1 : null,
+      accrualStartMonth: isRegular ? (isMonthly ? 1 : getContractorTariffMonthNumber(accrualStartMonth) ?? 1) : null,
       paymentDueDay: isRegular ? parsedDueDay : null,
-      paymentDueMonth: isRegular ? getContractorTariffMonthNumber(paymentDueMonth) ?? 1 : null,
+      paymentDueMonth: isRegular && !isMonthly ? getContractorTariffMonthNumber(paymentDueMonth) ?? 1 : null,
       overdueGraceDays: isRegular ? parsedOverdueDays : 0,
       isMetered: isRegular && isByMeter,
       hasTieredTariff: isRegular && isByMeter && isTiered,
@@ -2569,17 +2648,19 @@ export function AddServicePrototypeDialog({
                   />
                 </FormField>
               </div>
-              <div className="contractors-service-period-grid contractors-service-period-grid--schedule">
-                <FormField label="Периодичность">
-                  <input aria-label="Периодичность" inputMode="numeric" value={periodicityMonths} onChange={(event) => setPeriodicityMonths(event.target.value)} />
+              <div className={`contractors-service-period-grid contractors-service-period-grid--schedule${isMonthly ? ' contractors-service-period-grid--schedule-monthly' : ''}`}>
+                <FormField label="Периодичность" hint={isMonthly ? 'Начисление создаётся каждый месяц.' : 'Начисление создаётся один раз в год.'}>
+                  <SelectControl aria-label="Периодичность регулярной услуги" value={periodicityMonths} options={regularServicePeriodicityOptions} onChange={setPeriodicityMonths} />
                 </FormField>
-                <FormField label="Учитывать платеж с">
-                  <SelectControl aria-label="Учитывать платеж с" value={accrualStartMonth} options={contractorTariffMonthOptions} onChange={setAccrualStartMonth} />
-                </FormField>
-                <FormField label="Оплатить до">
+                {!isMonthly ? <FormField label="Месяц начисления" hint="В этом месяце ежегодная услуга попадёт в начисления.">
+                  <SelectControl aria-label="Месяц начисления ежегодной услуги" value={accrualStartMonth} options={contractorTariffMonthOptions} onChange={setAccrualStartMonth} />
+                </FormField> : null}
+                <FormField label="Оплатить до" hint={isMonthly ? 'Выбранного числа месяца, следующего за месяцем начисления.' : 'Выбранной календарной даты после ежегодного начисления.'}>
                   <div className="contractors-inline-field contractors-inline-field--date">
                     <input aria-label="День оплаты" inputMode="numeric" maxLength={2} value={paymentDueDay} onChange={(event) => setPaymentDueDay(event.target.value)} />
-                    <SelectControl aria-label="Месяц оплаты" value={paymentDueMonth} options={contractorTariffMonthOptions} onChange={setPaymentDueMonth} />
+                    {!isMonthly
+                      ? <SelectControl aria-label="Месяц оплаты" value={paymentDueMonth} options={contractorTariffMonthOptions} onChange={setPaymentDueMonth} />
+                      : <span className="contractors-date-suffix">числа следующего месяца</span>}
                   </div>
                 </FormField>
               </div>
