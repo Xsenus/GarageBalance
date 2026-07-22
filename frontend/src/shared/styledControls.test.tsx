@@ -109,6 +109,33 @@ describe('styled form controls', () => {
     expect(listbox.querySelectorAll('[role="option"]')).toHaveLength(4)
   })
 
+  it('closes an open select when an outside control stops bubbling mouse events', async () => {
+    const user = userEvent.setup()
+    render(
+      <div onMouseDown={(event) => event.stopPropagation()}>
+        <SelectControl
+          aria-label="Отдел"
+          value="accounting"
+          options={[
+            { value: 'accounting', label: 'Бухгалтерия' },
+            { value: 'security', label: 'Охрана' },
+          ]}
+          onChange={() => undefined}
+        />
+        <input aria-label="ФИО сотрудника" />
+      </div>,
+    )
+
+    const control = screen.getByRole('combobox', { name: 'Отдел' })
+    await user.click(control)
+    expect(screen.getByRole('listbox', { name: 'Отдел: варианты' })).toBeInTheDocument()
+
+    await user.click(screen.getByLabelText('ФИО сотрудника'))
+
+    expect(control).toHaveAttribute('aria-expanded', 'false')
+    expect(screen.queryByRole('listbox', { name: 'Отдел: варианты' })).not.toBeInTheDocument()
+  })
+
   it('accepts localized dates and returns an ISO filter value', async () => {
     const user = userEvent.setup()
     function Example() {

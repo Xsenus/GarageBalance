@@ -46,8 +46,8 @@ export function SelectControl({
     const closeOnOutsidePointer = (event: MouseEvent) => {
       if (!rootRef.current?.contains(event.target as Node)) setOpen(false)
     }
-    document.addEventListener('mousedown', closeOnOutsidePointer)
-    return () => document.removeEventListener('mousedown', closeOnOutsidePointer)
+    document.addEventListener('mousedown', closeOnOutsidePointer, true)
+    return () => document.removeEventListener('mousedown', closeOnOutsidePointer, true)
   }, [effectiveOpen])
 
   useEffect(() => {
