@@ -110,6 +110,7 @@ export type TariffDto = {
   electricityFirstRate: number | null
   electricitySecondRate: number | null
   electricityThirdRate: number | null
+  electricityTiers?: ElectricityTariffTierDto[]
   effectiveFrom: string
   comment: string | null
   isArchived: boolean
@@ -201,6 +202,14 @@ export type UpsertSupplierRequest = {
   chargeServiceSettingId?: string | null
 }
 
+export type ElectricityTariffTierDto = {
+  id: string
+  name: string
+  upperBound: number | null
+  rate: number
+  isCustom: boolean
+}
+
 export type UpsertSupplierContactRequest = {
   supplierId: string
   fullName: string
@@ -240,6 +249,13 @@ export type UpsertTariffRequest = {
   electricityFirstRate?: number
   electricitySecondRate?: number
   electricityThirdRate?: number
+  electricityTiers?: Array<{
+    id?: string
+    name: string
+    upperBound?: number
+    rate: number
+  }>
+  electricityTierChangeReason?: string
 }
 
 export type UpsertIrregularPaymentRequest = {

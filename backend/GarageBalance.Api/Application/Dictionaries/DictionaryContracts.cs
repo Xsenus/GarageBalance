@@ -147,7 +147,21 @@ public sealed record TariffDto(
     string? ElectricityThirdTierName = null,
     decimal? ElectricityFirstRate = null,
     decimal? ElectricitySecondRate = null,
-    decimal? ElectricityThirdRate = null);
+    decimal? ElectricityThirdRate = null,
+    IReadOnlyList<ElectricityTariffTierDto>? ElectricityTiers = null);
+
+public sealed record ElectricityTariffTierDto(
+    Guid Id,
+    string Name,
+    decimal? UpperBound,
+    decimal Rate,
+    bool IsCustom);
+
+public sealed record UpsertElectricityTariffTierRequest(
+    Guid? Id,
+    [Required, MaxLength(120)] string Name,
+    [Range(0.0001, 999999999)] decimal? UpperBound,
+    [Range(0.0001, 999999999)] decimal Rate);
 
 public sealed record UpsertTariffRequest(
     [Required, MaxLength(200)] string Name,
@@ -162,7 +176,9 @@ public sealed record UpsertTariffRequest(
     [MaxLength(120)] string? ElectricityThirdTierName = null,
     [Range(0.0001, 999999999)] decimal? ElectricityFirstRate = null,
     [Range(0.0001, 999999999)] decimal? ElectricitySecondRate = null,
-    [Range(0.0001, 999999999)] decimal? ElectricityThirdRate = null);
+    [Range(0.0001, 999999999)] decimal? ElectricityThirdRate = null,
+    IReadOnlyList<UpsertElectricityTariffTierRequest>? ElectricityTiers = null,
+    [MaxLength(1000)] string? ElectricityTierChangeReason = null);
 
 public sealed record ChargeServiceSettingDto(
     Guid Id,

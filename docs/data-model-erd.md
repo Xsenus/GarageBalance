@@ -140,6 +140,7 @@ erDiagram
         decimal ElectricityFirstRate
         decimal ElectricitySecondRate
         decimal ElectricityThirdRate
+        jsonb ElectricityTiersJson
         bool IsArchived
     }
 
@@ -384,7 +385,7 @@ erDiagram
 - `staff_departments` - отделы персонала. Активное название уникально через filtered unique index по `Name` при `IsArchived = false`.
 - `staff_members` - сотрудники с отделом и ставкой. Связь `StaffMember.DepartmentId -> staff_departments.Id` использует `DeleteBehavior.Restrict`, чтобы отдел с сотрудниками не исчезал физически; индексы покрывают `FullName` и `DepartmentId`.
 - `income_types` и `expense_types` - виды поступлений и выплат. `Name` уникален, `Code` индексируется, системные значения seeded через migration `DefaultAccountingTypes`.
-- `tariffs` - тарифы с базой расчета `fixed`, `people`, `meter_water`, `meter_electricity`, ставкой, датой действия и порогами электроэнергии. Уникальность: `Name + EffectiveFrom`; индексы покрывают `CalculationBase` и `EffectiveFrom`.
+- `tariffs` - тарифы с базой расчета `fixed`, `people`, `meter_water`, `meter_electricity`, ставкой и датой действия. Упорядоченный `ElectricityTiersJson` атомарно хранит от 2 до 20 ступеней электроэнергии: стабильный идентификатор, название, возрастающую верхнюю границу (у последней ступени границы нет), ставку и признак пользовательского порога. Старые три пары полей сохраняются для обратной совместимости существующих данных. Уникальность: `Name + EffectiveFrom`; индексы покрывают `CalculationBase` и `EffectiveFrom`.
 - `charge_service_settings` - настройки услуг раздела "Тарифы и сборы": регулярность, режим начисления (`PeriodicityMonths = 1` для ежемесячного и `12` для ежегодного), месяц ежегодного начисления, день оплаты, необязательный месяц оплаты для ежегодного режима, перенос долга, единица измерения, признаки счетчика и пороговой тарификации, а также ссылки на `IncomeTypeId` и `TariffId` для генерации начислений. Для ежемесячного режима срок рассчитывается в следующем месяце после начисления; для ежегодного — по выбранной календарной дате. Активное имя уникально через filtered unique index по `Name` при `IsArchived = false`; индексы покрывают `IsRegular`, `IsMetered`, `HasTieredTariff`, `IncomeTypeId` и `TariffId`.
 - `irregular_payments` - нерегулярные платежи с суммой, активностью и архивностью. Активное имя уникально через filtered unique index по `Name` при `IsArchived = false`; индекс `IsActive` используется для рабочих списков.
 - `fee_campaigns` - объявленные сборы: название, связанный вид поступления, цель, сумма взноса, плановая сумма сбора, период действия, правило участия всех гаражей и срок переноса долга в просроченный. Активное название уникально через filtered unique index по `Name` при `IsArchived = false`; индексы покрывают `IncomeTypeId`, `StartsOn` и `IsArchived`.

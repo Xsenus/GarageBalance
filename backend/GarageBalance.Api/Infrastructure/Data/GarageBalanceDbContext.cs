@@ -318,6 +318,7 @@ public sealed class GarageBalanceDbContext(DbContextOptions<GarageBalanceDbConte
             entity.Property(item => item.ElectricityFirstRate).HasPrecision(18, 4);
             entity.Property(item => item.ElectricitySecondRate).HasPrecision(18, 4);
             entity.Property(item => item.ElectricityThirdRate).HasPrecision(18, 4);
+            entity.Property(item => item.ElectricityTiersJson).HasColumnType("jsonb");
             entity.Property(item => item.Comment).HasMaxLength(1000);
             entity.HasIndex(item => new { item.Name, item.EffectiveFrom }).IsUnique().HasFilter("\"IsArchived\" = false");
             entity.HasIndex(item => item.CalculationBase);

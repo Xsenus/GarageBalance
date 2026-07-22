@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Text.Json;
 using GarageBalance.Api.Application.Audit;
 using GarageBalance.Api.Application.Common;
 using GarageBalance.Api.Domain.Dictionaries;
@@ -65,6 +66,7 @@ public sealed class DictionaryService(
         ["electricityFirstRate"] = "Цена за ед. порога 1",
         ["electricitySecondRate"] = "Цена за ед. порога 2",
         ["electricityThirdRate"] = "Цена сверх порога 2",
+        ["electricityTiers"] = "Ступени тарифа электроэнергии",
         ["isRegular"] = "Регулярные платежи",
         ["periodicityMonths"] = "Периодичность",
         ["accrualStartMonth"] = "Учитывать платеж с",
@@ -1424,7 +1426,7 @@ public sealed class DictionaryService(
             return DictionaryResult<TariffDto>.Failure("tariff_calculation_base_invalid", "База расчета тарифа должна быть fixed, people, meter_water или meter_electricity.");
         }
 
-        var electricityTiers = ValidateElectricityTiers(calculationBase, request);
+        var electricityTiers = ValidateElectricityTiers(calculationBase, request, tariff);
         if (!electricityTiers.Succeeded)
         {
             return DictionaryResult<TariffDto>.Failure(electricityTiers.ErrorCode!, electricityTiers.ErrorMessage!);
@@ -1453,6 +1455,7 @@ public sealed class DictionaryService(
             return DictionaryResult<TariffDto>.Success(ToTariffDto(tariff));
         }
 
+        var oldElectricityTiers = ReadElectricityTiers(tariff);
         var oldValues = new Dictionary<string, object?>
         {
             ["name"] = tariff.Name,
@@ -1467,7 +1470,8 @@ public sealed class DictionaryService(
             ["electricityThirdTierName"] = tariff.ElectricityThirdTierName,
             ["electricityFirstRate"] = tariff.ElectricityFirstRate,
             ["electricitySecondRate"] = tariff.ElectricitySecondRate,
-            ["electricityThirdRate"] = tariff.ElectricityThirdRate
+            ["electricityThirdRate"] = tariff.ElectricityThirdRate,
+            ["electricityTiers"] = oldElectricityTiers.Count == 0 ? null : oldElectricityTiers
         };
         var newValues = new Dictionary<string, object?>
         {
@@ -1483,7 +1487,8 @@ public sealed class DictionaryService(
             ["electricityThirdTierName"] = electricityTiers.Value?.ThirdTierName,
             ["electricityFirstRate"] = electricityTiers.Value?.FirstRate,
             ["electricitySecondRate"] = electricityTiers.Value?.SecondRate,
-            ["electricityThirdRate"] = electricityTiers.Value?.ThirdRate
+            ["electricityThirdRate"] = electricityTiers.Value?.ThirdRate,
+            ["electricityTiers"] = electricityTiers.Value?.Items
         };
 
         tariff.Name = name;
@@ -1494,7 +1499,15 @@ public sealed class DictionaryService(
         tariff.UpdatedAtUtc = DateTimeOffset.UtcNow;
         ApplyElectricityTiers(tariff, electricityTiers.Value);
 
-        AddAudit(actorUserId, "dictionary.tariff_updated", "tariff", tariff.Id, $"Изменен тариф {FormatTariffAuditDetails(tariff)}.", oldValues: oldValues, newValues: newValues);
+        AddAudit(
+            actorUserId,
+            "dictionary.tariff_updated",
+            "tariff",
+            tariff.Id,
+            $"Изменен тариф {FormatTariffAuditDetails(tariff)}.",
+            NormalizeOptional(request.ElectricityTierChangeReason),
+            oldValues,
+            newValues);
         await unitOfWork.SaveChangesAsync(cancellationToken);
         return DictionaryResult<TariffDto>.Success(ToTariffDto(tariff));
     }
@@ -2005,19 +2018,104 @@ public sealed class DictionaryService(
     private static string FormatTariffAuditDetails(Tariff tariff)
     {
         var baseDetails = $"{tariff.Name} с {tariff.EffectiveFrom:dd.MM.yyyy}, база {tariff.CalculationBase}, ставка {MoneyFormatting.Format(tariff.Rate)}";
-        if (!HasElectricityTiers(tariff))
+        var tiers = ReadElectricityTiers(tariff);
+        if (tiers.Count == 0)
         {
             return baseDetails;
         }
 
-        return $"{baseDetails}, электричество: {tariff.ElectricityFirstTierName ?? "Порог 1"} до {tariff.ElectricityFirstThreshold!.Value.ToString("0.####", CultureInfo.InvariantCulture)} кВт по {MoneyFormatting.Format(tariff.ElectricityFirstRate!.Value)}, {tariff.ElectricitySecondTierName ?? "Порог 2"} до {tariff.ElectricitySecondThreshold!.Value.ToString("0.####", CultureInfo.InvariantCulture)} кВт по {MoneyFormatting.Format(tariff.ElectricitySecondRate!.Value)}, {tariff.ElectricityThirdTierName ?? "Порог 3"} по {MoneyFormatting.Format(tariff.ElectricityThirdRate!.Value)}";
+        var tierDetails = string.Join(", ", tiers.Select(tier =>
+            tier.UpperBound.HasValue
+                ? $"{tier.Name} до {tier.UpperBound.Value.ToString("0.####", CultureInfo.InvariantCulture)} кВт по {MoneyFormatting.Format(tier.Rate)}"
+                : $"{tier.Name} по {MoneyFormatting.Format(tier.Rate)}"));
+        return $"{baseDetails}, электричество: {tierDetails}";
     }
 
-    private static DictionaryResult<ElectricityTierConfig?> ValidateElectricityTiers(string calculationBase, UpsertTariffRequest request)
+    private static DictionaryResult<ElectricityTierConfig?> ValidateElectricityTiers(string calculationBase, UpsertTariffRequest request, Tariff? existingTariff = null)
     {
         if (calculationBase != TariffCalculationBases.MeterElectricity)
         {
             return DictionaryResult<ElectricityTierConfig?>.Success(null);
+        }
+
+        if (request.ElectricityTiers is not null)
+        {
+            if (request.ElectricityTiers.Count is < 2 or > 20)
+            {
+                return DictionaryResult<ElectricityTierConfig?>.Failure(
+                    "tariff_electricity_tier_count_invalid",
+                    "Для электроэнергии укажите от 2 до 20 тарифных ступеней.");
+            }
+
+            var existingTiers = existingTariff is null
+                ? []
+                : ReadElectricityTiers(existingTariff);
+            var normalized = new List<ElectricityTierConfigItem>(request.ElectricityTiers.Count);
+            decimal? previousUpperBound = null;
+            for (var index = 0; index < request.ElectricityTiers.Count; index++)
+            {
+                var requestedTier = request.ElectricityTiers[index];
+                var name = requestedTier.Name.Trim();
+                if (name.Length == 0)
+                {
+                    return DictionaryResult<ElectricityTierConfig?>.Failure(
+                        "tariff_electricity_tier_name_required",
+                        $"Укажите название ступени {index + 1}.");
+                }
+
+                var rate = MoneyMath.RoundRate(requestedTier.Rate);
+                if (rate <= 0)
+                {
+                    return DictionaryResult<ElectricityTierConfig?>.Failure(
+                        "tariff_electricity_tier_rate_positive_required",
+                        $"Ставка ступени «{name}» должна быть больше 0.");
+                }
+
+                var isLast = index == request.ElectricityTiers.Count - 1;
+                decimal? upperBound = requestedTier.UpperBound.HasValue
+                    ? MoneyMath.RoundMeterValue(requestedTier.UpperBound.Value)
+                    : null;
+                if (!isLast && !upperBound.HasValue)
+                {
+                    return DictionaryResult<ElectricityTierConfig?>.Failure(
+                        "tariff_electricity_tier_upper_bound_required",
+                        $"Для ступени «{name}» укажите верхнюю границу.");
+                }
+
+                if (isLast && upperBound.HasValue)
+                {
+                    return DictionaryResult<ElectricityTierConfig?>.Failure(
+                        "tariff_electricity_last_tier_unbounded_required",
+                        "Последняя ступень электроэнергии должна применяться без верхней границы.");
+                }
+
+                if (upperBound.HasValue && (upperBound <= 0 || previousUpperBound.HasValue && upperBound <= previousUpperBound))
+                {
+                    return DictionaryResult<ElectricityTierConfig?>.Failure(
+                        "tariff_electricity_tier_upper_bound_invalid",
+                        "Границы ступеней электроэнергии должны быть положительными и строго возрастать.");
+                }
+
+                var existingTier = requestedTier.Id.HasValue
+                    ? existingTiers.FirstOrDefault(tier => tier.Id == requestedTier.Id.Value)
+                    : null;
+                if (existingTariff is not null && requestedTier.Id.HasValue && existingTier is null)
+                {
+                    return DictionaryResult<ElectricityTierConfig?>.Failure(
+                        "tariff_electricity_tier_not_found",
+                        "Одна из изменяемых ступеней тарифа не найдена. Обновите страницу и повторите действие.");
+                }
+
+                normalized.Add(new ElectricityTierConfigItem(
+                    requestedTier.Id ?? Guid.NewGuid(),
+                    name,
+                    upperBound,
+                    rate,
+                    existingTier?.IsCustom ?? true));
+                previousUpperBound = upperBound;
+            }
+
+            return DictionaryResult<ElectricityTierConfig?>.Success(new ElectricityTierConfig(normalized, true));
         }
 
         var values = new decimal?[]
@@ -2064,11 +2162,19 @@ public sealed class DictionaryService(
                 "Второй порог электроэнергии должен быть больше первого.");
         }
 
-        return DictionaryResult<ElectricityTierConfig?>.Success(new ElectricityTierConfig(firstThreshold, secondThreshold, firstTierName, secondTierName, thirdTierName, firstRate, secondRate, thirdRate));
+        return DictionaryResult<ElectricityTierConfig?>.Success(new ElectricityTierConfig(
+        [
+            new ElectricityTierConfigItem(Guid.Empty, firstTierName, firstThreshold, firstRate, false),
+            new ElectricityTierConfigItem(Guid.Empty, secondTierName, secondThreshold, secondRate, false),
+            new ElectricityTierConfigItem(Guid.Empty, thirdTierName, null, thirdRate, false)
+        ], false));
     }
 
     private static void ApplyElectricityTiers(Tariff tariff, ElectricityTierConfig? tiers)
     {
+        tariff.ElectricityTiersJson = tiers?.UsesGenericConfiguration == true
+            ? JsonSerializer.Serialize(tiers.Items)
+            : null;
         tariff.ElectricityFirstThreshold = tiers?.FirstThreshold;
         tariff.ElectricitySecondThreshold = tiers?.SecondThreshold;
         tariff.ElectricityFirstTierName = tiers?.FirstTierName;
@@ -2077,6 +2183,44 @@ public sealed class DictionaryService(
         tariff.ElectricityFirstRate = tiers?.FirstRate;
         tariff.ElectricitySecondRate = tiers?.SecondRate;
         tariff.ElectricityThirdRate = tiers?.ThirdRate;
+    }
+
+    private static IReadOnlyList<ElectricityTierConfigItem> ReadElectricityTiers(Tariff tariff)
+    {
+        if (!string.IsNullOrWhiteSpace(tariff.ElectricityTiersJson))
+        {
+            try
+            {
+                var stored = JsonSerializer.Deserialize<List<ElectricityTierConfigItem>>(tariff.ElectricityTiersJson);
+                if (stored is { Count: >= 2 })
+                {
+                    return stored;
+                }
+            }
+            catch (JsonException)
+            {
+                // Старые поля ниже остаются безопасным вариантом чтения поврежденной конфигурации.
+            }
+        }
+
+        if (!HasElectricityTiers(tariff))
+        {
+            return [];
+        }
+
+        return
+        [
+            new ElectricityTierConfigItem(CreateLegacyTierId(tariff.Id, 1), tariff.ElectricityFirstTierName ?? "Порог 1", tariff.ElectricityFirstThreshold, tariff.ElectricityFirstRate!.Value, false),
+            new ElectricityTierConfigItem(CreateLegacyTierId(tariff.Id, 2), tariff.ElectricitySecondTierName ?? "Порог 2", tariff.ElectricitySecondThreshold, tariff.ElectricitySecondRate!.Value, false),
+            new ElectricityTierConfigItem(CreateLegacyTierId(tariff.Id, 3), tariff.ElectricityThirdTierName ?? "Порог 3", null, tariff.ElectricityThirdRate!.Value, false)
+        ];
+    }
+
+    private static Guid CreateLegacyTierId(Guid tariffId, int tierNumber)
+    {
+        var bytes = tariffId.ToByteArray();
+        bytes[^1] ^= (byte)tierNumber;
+        return new Guid(bytes);
     }
 
     private static DictionaryResult<object> ValidateChargeServiceSettingRequest(UpsertChargeServiceSettingRequest request)
@@ -2500,6 +2644,9 @@ public sealed class DictionaryService(
             tariff.Rate == rate &&
             tariff.EffectiveFrom == effectiveFrom &&
             StringEquals(tariff.Comment, comment) &&
+            StringEquals(
+                tariff.ElectricityTiersJson,
+                tiers?.UsesGenericConfiguration == true ? JsonSerializer.Serialize(tiers.Items) : null) &&
             tariff.ElectricityFirstThreshold == tiers?.FirstThreshold &&
             tariff.ElectricitySecondThreshold == tiers?.SecondThreshold &&
             StringEquals(tariff.ElectricityFirstTierName, tiers?.FirstTierName) &&
@@ -2721,16 +2868,31 @@ public sealed class DictionaryService(
             tariff.ElectricityThirdTierName,
             tariff.ElectricityFirstRate,
             tariff.ElectricitySecondRate,
-            tariff.ElectricityThirdRate);
+            tariff.ElectricityThirdRate,
+            ReadElectricityTiers(tariff)
+                .Select(tier => new ElectricityTariffTierDto(tier.Id, tier.Name, tier.UpperBound, tier.Rate, tier.IsCustom))
+                .ToArray());
     }
 
     private sealed record ElectricityTierConfig(
-        decimal FirstThreshold,
-        decimal SecondThreshold,
-        string FirstTierName,
-        string SecondTierName,
-        string ThirdTierName,
-        decimal FirstRate,
-        decimal SecondRate,
-        decimal ThirdRate);
+        IReadOnlyList<ElectricityTierConfigItem> Items,
+        bool UsesGenericConfiguration)
+    {
+        private bool HasLegacyShape => Items.Count == 3;
+        public decimal? FirstThreshold => HasLegacyShape ? Items[0].UpperBound : null;
+        public decimal? SecondThreshold => HasLegacyShape ? Items[1].UpperBound : null;
+        public string? FirstTierName => HasLegacyShape ? Items[0].Name : null;
+        public string? SecondTierName => HasLegacyShape ? Items[1].Name : null;
+        public string? ThirdTierName => HasLegacyShape ? Items[2].Name : null;
+        public decimal? FirstRate => HasLegacyShape ? Items[0].Rate : null;
+        public decimal? SecondRate => HasLegacyShape ? Items[1].Rate : null;
+        public decimal? ThirdRate => HasLegacyShape ? Items[2].Rate : null;
+    }
+
+    private sealed record ElectricityTierConfigItem(
+        Guid Id,
+        string Name,
+        decimal? UpperBound,
+        decimal Rate,
+        bool IsCustom);
 }

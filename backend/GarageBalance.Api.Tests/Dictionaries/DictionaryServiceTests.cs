@@ -2091,6 +2091,182 @@ public sealed class DictionaryServiceTests
     }
 
     [Fact]
+    public async Task ElectricityTiers_AddPersistDeleteAndAuditReason()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = DictionaryServiceTestFactory.Create(database.Context);
+        var actorUserId = Guid.NewGuid();
+        var created = await service.CreateTariffAsync(
+            new UpsertTariffRequest(
+                "Электроэнергия",
+                "meter_electricity",
+                2m,
+                new DateOnly(2026, 7, 1),
+                null,
+                ElectricityTiers:
+                [
+                    new(null, "До 50", 50m, 2m),
+                    new(null, "До 100", 100m, 3m),
+                    new(null, "Свыше 100", null, 5m)
+                ]),
+            actorUserId,
+            CancellationToken.None);
+
+        Assert.True(created.Succeeded);
+        Assert.Equal(3, created.Value!.ElectricityTiers!.Count);
+        Assert.All(created.Value.ElectricityTiers, tier => Assert.True(tier.IsCustom));
+        Assert.False(string.IsNullOrWhiteSpace((await database.Context.Tariffs.SingleAsync()).ElectricityTiersJson));
+
+        var original = created.Value.ElectricityTiers;
+        var added = await service.UpdateTariffAsync(
+            created.Value.Id,
+            new UpsertTariffRequest(
+                "Электроэнергия",
+                "meter_electricity",
+                2m,
+                new DateOnly(2026, 7, 1),
+                null,
+                ElectricityTiers:
+                [
+                    new(original[0].Id, original[0].Name, original[0].UpperBound, original[0].Rate),
+                    new(original[1].Id, original[1].Name, original[1].UpperBound, original[1].Rate),
+                    new(null, "До 150", 150m, 4m),
+                    new(original[2].Id, original[2].Name, null, original[2].Rate)
+                ]),
+            actorUserId,
+            CancellationToken.None);
+
+        Assert.True(added.Succeeded);
+        Assert.Equal(4, added.Value!.ElectricityTiers!.Count);
+        var customTier = Assert.Single(added.Value.ElectricityTiers, tier => tier.Name == "До 150");
+        Assert.True(customTier.IsCustom);
+
+        var deleted = await service.UpdateTariffAsync(
+            created.Value.Id,
+            new UpsertTariffRequest(
+                "Электроэнергия",
+                "meter_electricity",
+                2m,
+                new DateOnly(2026, 7, 1),
+                null,
+                ElectricityTiers: added.Value.ElectricityTiers
+                    .Where(tier => tier.Id != customTier.Id)
+                    .Select(tier => new UpsertElectricityTariffTierRequest(tier.Id, tier.Name, tier.UpperBound, tier.Rate))
+                    .ToArray(),
+                ElectricityTierChangeReason: "Порог добавлен ошибочно"),
+            actorUserId,
+            CancellationToken.None);
+
+        Assert.True(deleted.Succeeded);
+        Assert.Equal(3, deleted.Value!.ElectricityTiers!.Count);
+        Assert.DoesNotContain(deleted.Value.ElectricityTiers, tier => tier.Id == customTier.Id);
+        var deleteAudit = database.Context.AuditEvents
+            .Where(item => item.Action == "dictionary.tariff_updated")
+            .AsEnumerable()
+            .OrderByDescending(item => item.CreatedAtUtc)
+            .First();
+        using var deleteMetadata = JsonDocument.Parse(deleteAudit.MetadataJson!);
+        Assert.Equal("Порог добавлен ошибочно", deleteMetadata.RootElement.GetProperty("reason").GetString());
+    }
+
+    [Fact]
+    public async Task CreateTariffAsync_RejectsUnorderedVariableElectricityTiers()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = DictionaryServiceTestFactory.Create(database.Context);
+
+        var result = await service.CreateTariffAsync(
+            new UpsertTariffRequest(
+                "Электроэнергия",
+                "meter_electricity",
+                2m,
+                new DateOnly(2026, 7, 1),
+                null,
+                ElectricityTiers:
+                [
+                    new(null, "До 100", 100m, 2m),
+                    new(null, "До 50", 50m, 3m),
+                    new(null, "Свыше", null, 5m)
+                ]),
+            null,
+            CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Equal("tariff_electricity_tier_upper_bound_invalid", result.ErrorCode);
+        Assert.Empty(database.Context.Tariffs);
+    }
+
+    [Fact]
+    public async Task VariableElectricityTiers_RejectIncompleteLastAndUnknownExistingTiers()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = DictionaryServiceTestFactory.Create(database.Context);
+        var date = new DateOnly(2026, 7, 1);
+
+        var incomplete = await service.CreateTariffAsync(
+            new UpsertTariffRequest(
+                "Неполный тариф",
+                "meter_electricity",
+                2m,
+                date,
+                null,
+                ElectricityTiers:
+                [
+                    new(null, "Первая", null, 2m),
+                    new(null, "Последняя", null, 3m)
+                ]),
+            null,
+            CancellationToken.None);
+        var boundedLast = await service.CreateTariffAsync(
+            new UpsertTariffRequest(
+                "Ограниченный последний тариф",
+                "meter_electricity",
+                2m,
+                date,
+                null,
+                ElectricityTiers:
+                [
+                    new(null, "Первая", 50m, 2m),
+                    new(null, "Последняя", 100m, 3m)
+                ]),
+            null,
+            CancellationToken.None);
+        var created = await service.CreateTariffAsync(
+            new UpsertTariffRequest(
+                "Рабочий тариф",
+                "meter_electricity",
+                2m,
+                date,
+                null,
+                ElectricityTiers:
+                [
+                    new(null, "Первая", 50m, 2m),
+                    new(null, "Последняя", null, 3m)
+                ]),
+            null,
+            CancellationToken.None);
+        var unknown = await service.UpdateTariffAsync(
+            created.Value!.Id,
+            new UpsertTariffRequest(
+                "Рабочий тариф",
+                "meter_electricity",
+                2m,
+                date,
+                null,
+                ElectricityTiers:
+                [
+                    new(Guid.NewGuid(), "Первая", 50m, 2m),
+                    new(created.Value.ElectricityTiers![1].Id, "Последняя", null, 3m)
+                ]),
+            null,
+            CancellationToken.None);
+
+        Assert.Equal("tariff_electricity_tier_upper_bound_required", incomplete.ErrorCode);
+        Assert.Equal("tariff_electricity_last_tier_unbounded_required", boundedLast.ErrorCode);
+        Assert.Equal("tariff_electricity_tier_not_found", unknown.ErrorCode);
+    }
+
+    [Fact]
     public async Task CreateChargeServiceSettingAsync_RequiresSupportedPeriodicityAndMatchingPaymentDeadline()
     {
         await using var database = await TestDatabase.CreateAsync();

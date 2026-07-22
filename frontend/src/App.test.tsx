@@ -935,6 +935,12 @@ describe('App', () => {
     const restoredIrregularPaymentIds: string[] = []
     const waterTariff = createTariff({ id: 'tariff-water', name: 'Тариф на воду', calculationBase: 'meter_water', rate: 1250 })
     const lightingTariff = createTariff({ id: 'tariff-lighting', name: 'Наружное освещение', calculationBase: 'fixed', rate: 300 })
+    let electricityTiers = [
+      { id: '11111111-1111-1111-1111-111111111111', name: 'От 0 кВт', upperBound: 1, rate: 2, isCustom: false },
+      { id: '22222222-2222-2222-2222-222222222222', name: 'От 1 кВт', upperBound: 3, rate: 3, isCustom: false },
+      { id: '33333333-3333-3333-3333-333333333333', name: 'От 3 кВт', upperBound: null, rate: 5, isCustom: false },
+    ]
+    const thresholdUpdateRequests: UpsertTariffRequest[] = []
     const electricityTariff = createTariff({
       id: 'tariff-electricity',
       name: 'Электроэнергия',
@@ -948,6 +954,7 @@ describe('App', () => {
       electricityFirstRate: 2,
       electricitySecondRate: 3,
       electricityThirdRate: 5,
+      electricityTiers,
     })
     const membershipSetting = createChargeServiceSetting({
       id: 'membership',
@@ -981,14 +988,35 @@ describe('App', () => {
         effectiveFrom: request.effectiveFrom,
         comment: request.comment ?? null,
       }),
-      updateTariff: async (_token, id, request) => createTariff({
-        id,
-        name: request.name,
-        calculationBase: request.calculationBase,
-        rate: request.rate,
-        effectiveFrom: request.effectiveFrom,
-        comment: request.comment ?? null,
-      }),
+      updateTariff: async (_token, id, request) => {
+        if (request.calculationBase === 'meter_electricity') {
+          thresholdUpdateRequests.push(request)
+          electricityTiers = (request.electricityTiers ?? []).map((tier, index) => ({
+            id: tier.id ?? `44444444-4444-4444-4444-${String(index + 1).padStart(12, '0')}`,
+            name: tier.name,
+            upperBound: tier.upperBound ?? null,
+            rate: tier.rate,
+            isCustom: tier.id == null || electricityTiers.find((current) => current.id === tier.id)?.isCustom === true,
+          }))
+        }
+        return createTariff({
+          id,
+          name: request.name,
+          calculationBase: request.calculationBase,
+          rate: request.rate,
+          effectiveFrom: request.effectiveFrom,
+          comment: request.comment ?? null,
+          electricityFirstThreshold: request.electricityFirstThreshold ?? null,
+          electricitySecondThreshold: request.electricitySecondThreshold ?? null,
+          electricityFirstTierName: request.electricityFirstTierName ?? null,
+          electricitySecondTierName: request.electricitySecondTierName ?? null,
+          electricityThirdTierName: request.electricityThirdTierName ?? null,
+          electricityFirstRate: request.electricityFirstRate ?? null,
+          electricitySecondRate: request.electricitySecondRate ?? null,
+          electricityThirdRate: request.electricityThirdRate ?? null,
+          electricityTiers,
+        })
+      },
       createIrregularPayment: async (_token, request) => createIrregularPayment({
         id: `irregular-${request.name}`,
         name: request.name,
@@ -1095,13 +1123,20 @@ describe('App', () => {
     const addThresholdButton = within(tariffsPanel).getByRole('button', { name: 'Добавить порог' })
     expect(addThresholdButton).toHaveClass('tariffs-add-threshold-button')
     await user.click(addThresholdButton)
-    const customThresholdNameInput = within(tariffsPanel).getByLabelText('Электроэнергия: Порог 4: наименование')
-    expect(customThresholdNameInput).toHaveValue('Порог 4')
-    const electricityThresholdInput = within(tariffsPanel).getByLabelText('Электроэнергия: Порог 4: значение')
-    expect(electricityThresholdInput).toBeInTheDocument()
-    await user.type(electricityThresholdInput, '7.5{Enter}')
-    expect(screen.queryByRole('dialog', { name: 'Подтвердить изменение?' })).not.toBeInTheDocument()
+    const createThresholdDialog = await screen.findByRole('dialog', { name: 'Добавить порог электроэнергии' })
+    expect(within(createThresholdDialog).getByLabelText('Название нового порога')).toHaveValue('Порог 4')
+    await user.type(within(createThresholdDialog).getByLabelText('Верхняя граница нового порога'), '2')
+    await user.click(within(createThresholdDialog).getByRole('button', { name: 'Добавить' }))
+    expect(within(createThresholdDialog).getByRole('alert')).toHaveTextContent('Верхняя граница должна быть больше 3.00 кВт·ч.')
+    await user.clear(within(createThresholdDialog).getByLabelText('Верхняя граница нового порога'))
+    await user.type(within(createThresholdDialog).getByLabelText('Верхняя граница нового порога'), '5')
+    await user.clear(within(createThresholdDialog).getByLabelText('Ставка нового порога'))
+    await user.type(within(createThresholdDialog).getByLabelText('Ставка нового порога'), '7.5')
+    await user.click(within(createThresholdDialog).getByRole('button', { name: 'Добавить' }))
+    const electricityThresholdInput = await within(tariffsPanel).findByLabelText('Электроэнергия: Порог 4: значение')
     expect(electricityThresholdInput).toHaveValue('7.50')
+    expect(thresholdUpdateRequests.at(-1)?.electricityTiers).toHaveLength(4)
+    expect(thresholdUpdateRequests.at(-1)?.electricityTiers?.[2]).toMatchObject({ name: 'Порог 4', upperBound: 5, rate: 7.5 })
     const deleteThresholdButton = within(tariffsPanel).getByRole('button', { name: 'Удалить порог Порог 4' })
     await user.click(deleteThresholdButton)
     const thresholdDeleteDialog = await screen.findByRole('dialog', { name: 'Удалить порог тарификации?' })
@@ -1119,6 +1154,8 @@ describe('App', () => {
     await user.type(within(reopenedThresholdDeleteDialog).getByLabelText('Причина удаления порога'), 'Лишний порог добавлен ошибочно')
     await user.click(within(reopenedThresholdDeleteDialog).getByRole('button', { name: 'Удалить' }))
     await waitFor(() => expect(within(tariffsPanel).queryByLabelText('Электроэнергия: Порог 4: значение')).not.toBeInTheDocument())
+    expect(thresholdUpdateRequests.at(-1)?.electricityTiers).toHaveLength(3)
+    expect(thresholdUpdateRequests.at(-1)?.electricityTierChangeReason).toBe('Лишний порог добавлен ошибочно')
 
     const entryFeeInput = within(tariffsPanel).getByLabelText('Сумма: Вступительный взнос')
     await user.clear(entryFeeInput)

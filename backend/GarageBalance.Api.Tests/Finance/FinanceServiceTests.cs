@@ -3816,6 +3816,45 @@ public sealed class FinanceServiceTests
     }
 
     [Fact]
+    public async Task GenerateRegularAccrualsAsync_CalculatesVariableElectricityTiersFromPersistedConfiguration()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        fixtures.IncomeType.Code = "electricity";
+        var tariff = new Tariff
+        {
+            Name = "Электроэнергия",
+            CalculationBase = "meter_electricity",
+            Rate = 2m,
+            ElectricityTiersJson = """
+                [
+                  {"Id":"11111111-1111-1111-1111-111111111111","Name":"До 50","UpperBound":50,"Rate":2,"IsCustom":false},
+                  {"Id":"22222222-2222-2222-2222-222222222222","Name":"До 100","UpperBound":100,"Rate":3,"IsCustom":false},
+                  {"Id":"33333333-3333-3333-3333-333333333333","Name":"До 150","UpperBound":150,"Rate":4,"IsCustom":true},
+                  {"Id":"44444444-4444-4444-4444-444444444444","Name":"Свыше 150","UpperBound":null,"Rate":5,"IsCustom":false}
+                ]
+                """,
+            EffectiveFrom = new DateOnly(2026, 1, 1)
+        };
+        database.Context.Tariffs.Add(tariff);
+        await database.Context.SaveChangesAsync();
+        var service = FinanceServiceTestFactory.Create(database.Context);
+        await service.CreateMeterReadingAsync(
+            new CreateMeterReadingRequest(fixtures.Garage.Id, "electricity", new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 20), 230m, null),
+            null,
+            CancellationToken.None);
+
+        var result = await service.GenerateRegularAccrualsAsync(
+            new GenerateRegularAccrualsRequest(fixtures.IncomeType.Id, tariff.Id, new DateOnly(2026, 6, 1), null),
+            null,
+            CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+        Assert.Equal(370m, result.Value!.TotalAmount);
+        Assert.Contains("до 150 кВт по 4.00", result.Value.CreatedAccruals[0].Comment, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task GenerateRegularAccrualsAsync_UsesConstantSelectCountForManyGaragesAndMeterReadings()
     {
         var commandCounter = new SelectCommandCounter();

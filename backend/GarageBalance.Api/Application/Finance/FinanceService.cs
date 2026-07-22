@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Text.Json;
 using GarageBalance.Api.Application.Audit;
 using GarageBalance.Api.Application.Common;
 using GarageBalance.Api.Application.Dictionaries;
@@ -3480,42 +3481,77 @@ public sealed class FinanceService(
             return AmountCalculationResult.Failure("нет показания счетчика за месяц.");
         }
 
-        if (!HasElectricityTiers(tariff))
+        var tiers = ReadElectricityTiers(tariff);
+        if (tiers.Count == 0)
         {
             return AmountCalculationResult.Success(MoneyMath.RoundMoney(reading.Consumption * tariff.Rate));
         }
 
-        var firstThreshold = tariff.ElectricityFirstThreshold!.Value;
-        var secondThreshold = tariff.ElectricitySecondThreshold!.Value;
-        var firstVolume = Math.Min(reading.Consumption, firstThreshold);
-        var secondVolume = Math.Min(Math.Max(reading.Consumption - firstThreshold, 0m), secondThreshold - firstThreshold);
-        var thirdVolume = Math.Max(reading.Consumption - secondThreshold, 0m);
-        var amount =
-            firstVolume * tariff.ElectricityFirstRate!.Value +
-            secondVolume * tariff.ElectricitySecondRate!.Value +
-            thirdVolume * tariff.ElectricityThirdRate!.Value;
+        var amount = 0m;
+        var lowerBound = 0m;
+        foreach (var tier in tiers)
+        {
+            var upperBound = tier.UpperBound ?? reading.Consumption;
+            var volume = Math.Max(Math.Min(reading.Consumption, upperBound) - lowerBound, 0m);
+            amount += volume * tier.Rate;
+            if (!tier.UpperBound.HasValue || reading.Consumption <= upperBound)
+            {
+                break;
+            }
+
+            lowerBound = upperBound;
+        }
 
         return AmountCalculationResult.Success(MoneyMath.RoundMoney(amount));
     }
 
     private static string FormatTariffRateSnapshot(Tariff tariff)
     {
-        if (!HasElectricityTiers(tariff))
+        var tiers = ReadElectricityTiers(tariff);
+        if (tiers.Count == 0)
         {
             return $"ставка {MoneyFormatting.Format(tariff.Rate)}";
         }
 
-        return $"пороги электроэнергии до {tariff.ElectricityFirstThreshold!.Value.ToString("0.####", RussianCulture)} кВт по {MoneyFormatting.Format(tariff.ElectricityFirstRate!.Value)}, до {tariff.ElectricitySecondThreshold!.Value.ToString("0.####", RussianCulture)} кВт по {MoneyFormatting.Format(tariff.ElectricitySecondRate!.Value)}, свыше по {MoneyFormatting.Format(tariff.ElectricityThirdRate!.Value)}";
+        var details = string.Join(", ", tiers.Select(tier => tier.UpperBound.HasValue
+            ? $"до {tier.UpperBound.Value.ToString("0.####", RussianCulture)} кВт по {MoneyFormatting.Format(tier.Rate)}"
+            : $"свыше по {MoneyFormatting.Format(tier.Rate)}"));
+        return $"пороги электроэнергии {details}";
     }
 
-    private static bool HasElectricityTiers(Tariff tariff)
+    private static IReadOnlyList<ElectricityTierSnapshot> ReadElectricityTiers(Tariff tariff)
     {
+        if (!string.IsNullOrWhiteSpace(tariff.ElectricityTiersJson))
+        {
+            try
+            {
+                var stored = JsonSerializer.Deserialize<List<ElectricityTierSnapshot>>(tariff.ElectricityTiersJson);
+                if (stored is { Count: >= 2 })
+                {
+                    return stored;
+                }
+            }
+            catch (JsonException)
+            {
+                // При поврежденном JSON старые поля тарифа остаются безопасным резервом.
+            }
+        }
+
         return tariff.ElectricityFirstThreshold.HasValue
             && tariff.ElectricitySecondThreshold.HasValue
             && tariff.ElectricityFirstRate.HasValue
             && tariff.ElectricitySecondRate.HasValue
-            && tariff.ElectricityThirdRate.HasValue;
+            && tariff.ElectricityThirdRate.HasValue
+                ?
+                [
+                    new ElectricityTierSnapshot(tariff.ElectricityFirstThreshold, tariff.ElectricityFirstRate.Value),
+                    new ElectricityTierSnapshot(tariff.ElectricitySecondThreshold, tariff.ElectricitySecondRate.Value),
+                    new ElectricityTierSnapshot(null, tariff.ElectricityThirdRate.Value)
+                ]
+                : [];
     }
+
+    private sealed record ElectricityTierSnapshot(decimal? UpperBound, decimal Rate);
 
     private static string[] NormalizeMeterKindFilter(string? meterKind)
     {
