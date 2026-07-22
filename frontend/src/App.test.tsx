@@ -31,7 +31,7 @@ import type { ApplicationSettingsClient } from './services/settingsApi'
 import type { AuditClient, AuditEventDto } from './services/auditApi'
 import type { AuthClient, AuthResponse } from './services/authApi'
 import { DictionaryApiError } from './services/dictionariesApi'
-import type { AccountingTypeDto, ChargeServiceSettingDto, DictionaryClient, FeeCampaignDto, GarageDto, IrregularPaymentDto, OwnerDto, PagedResult, StaffDepartmentDto, StaffMemberDto, SupplierContactDto, SupplierDto, SupplierGroupDto, TariffDto, UpsertGarageRequest, UpsertStaffMemberRequest, UpsertSupplierRequest, UpsertTariffRequest } from './services/dictionariesApi'
+import type { AccountingTypeDto, ChargeServiceSettingDto, DictionaryClient, FeeCampaignDto, GarageDto, IrregularPaymentDto, OwnerDto, PagedResult, StaffDepartmentDto, StaffMemberDto, SupplierContactDto, SupplierDto, SupplierGroupDto, TariffDto, UpsertGarageRequest, UpsertIrregularPaymentRequest, UpsertStaffMemberRequest, UpsertSupplierRequest, UpsertTariffRequest } from './services/dictionariesApi'
 import { FinanceApiError } from './services/financeApi'
 import type { AccrualDto, CorrectHistoricalMeterReadingRequest, CreateDebtTransferRequest, CreateExpenseOperationRequest, CreateIncomeOperationRequest, CreateIrregularAccrualRequest, CreateMeterReadingRequest, CreateStaffPaymentRequest, CreateSupplierAccrualRequest, ExpenseWorksheetDto, FeeCampaignAccrualGenerationResultDto, FinanceClient, FinancePagedResult, FinancePageParams, FinanceSummaryDto, FinancialOperationDto, GarageBalanceHistoryDto, GarageIncomeWorksheetDto, GenerateFeeCampaignAccrualsRequest, GenerateRegularCatalogAccrualsRequest, GenerateSupplierGroupSalaryAccrualsRequest, MeterReadingDto, MeterReadingYearPageDto, MissingMeterReadingDto, RegularAccrualGenerationResultDto, RegularCatalogAccrualGenerationResultDto, SupplierAccrualDto, SupplierGroupSalaryAccrualGenerationResultDto } from './services/financeApi'
 import type { CreateFundOperationRequest, FundDto, FundOperationDto, FundOperationPageDto, FundsClient } from './services/fundsApi'
@@ -1615,6 +1615,7 @@ describe('App', () => {
     await user.click(addContractorServiceButton)
     serviceDialog = await screen.findByRole('dialog', { name: 'Добавить услугу' })
     await user.type(within(serviceDialog).getByLabelText('Наименование услуги'), 'Уборка территории')
+    await user.type(within(serviceDialog).getByLabelText('Стоимость услуги'), '1000')
     await user.click(within(serviceDialog).getByRole('button', { name: /Сохранить/i }))
     await waitFor(() => expect(addContractorServiceButton).toHaveFocus())
 
@@ -2847,6 +2848,63 @@ describe('App', () => {
       electricitySecondRate: 3,
       electricityThirdRate: 5,
     }))
+  })
+
+  it('creates a non-regular service as an irregular payment without meter or tier flags', async () => {
+    const user = userEvent.setup()
+    let createdChargeServiceRequest: unknown = null
+    let createdIrregularPaymentRequest: UpsertIrregularPaymentRequest | null = null
+    const dictionaryClient = createDictionaryClient({
+      getChargeServiceSettings: async () => [createChargeServiceSetting({
+        id: 'legacy-irregular-snow-removal',
+        name: 'Старый вывоз снега',
+        isRegular: false,
+        isMetered: true,
+        hasTieredTariff: true,
+      })],
+      createChargeServiceSetting: async (_token, request) => {
+        createdChargeServiceRequest = request
+        return createChargeServiceSetting()
+      },
+      createIrregularPayment: async (_token, request) => {
+        createdIrregularPaymentRequest = request
+        return createIrregularPayment({
+          id: 'irregular-snow-removal',
+          name: request.name,
+          amount: request.amount,
+          isActive: request.isActive,
+        })
+      },
+    })
+
+    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Тарифы и сборы')
+    const tariffsPanel = await screen.findByRole('region', { name: 'Тарифы и сборы' })
+    await waitFor(() => expect(within(tariffsPanel).queryByRole('status', { name: 'Загружаем тарифы и услуги' })).not.toBeInTheDocument())
+    expect(within(tariffsPanel).queryByText('Старый вывоз снега')).not.toBeInTheDocument()
+
+    await user.click(within(tariffsPanel).getByRole('button', { name: 'Добавить услугу' }))
+    const serviceDialog = await screen.findByRole('dialog', { name: 'Добавить услугу' })
+    await user.type(within(serviceDialog).getByLabelText('Наименование услуги'), 'Вывоз снега')
+    await user.click(within(serviceDialog).getByRole('button', { name: 'Сохранить' }))
+    expect(within(serviceDialog).getByText('Укажите корректную стоимость нерегулярной услуги.')).toBeInTheDocument()
+
+    await user.type(within(serviceDialog).getByLabelText('Стоимость услуги'), '1500')
+    await user.click(within(serviceDialog).getByRole('button', { name: 'Сохранить' }))
+
+    await waitFor(() => expect(createdIrregularPaymentRequest).toEqual({
+      name: 'Вывоз снега',
+      amount: 1500,
+      isActive: true,
+    }))
+    expect(createdChargeServiceRequest).toBeNull()
+    const irregularRegion = within(tariffsPanel).getByRole('region', { name: 'Нерегулярные платежи' })
+    expect(within(irregularRegion).getByLabelText('Сумма: Вывоз снега')).toHaveValue('1 500.00')
+    expect(within(tariffsPanel).queryByLabelText('Вывоз снега: По счетчику')).not.toBeInTheDocument()
+    expect(within(tariffsPanel).queryByLabelText('Вывоз снега: Пороговая тарификация')).not.toBeInTheDocument()
   })
 
   it('creates a charge service setting, renders saved rows and keeps archive actions hidden', async () => {

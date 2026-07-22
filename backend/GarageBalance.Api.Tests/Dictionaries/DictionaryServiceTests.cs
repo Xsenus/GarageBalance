@@ -2584,6 +2584,27 @@ public sealed class DictionaryServiceTests
     }
 
     [Fact]
+    public async Task CreateChargeServiceSettingAsync_ClearsMeterFlagsForNonRegularCatalogService()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = DictionaryServiceTestFactory.Create(database.Context);
+
+        var result = await service.CreateChargeServiceSettingAsync(
+            new UpsertChargeServiceSettingRequest("Вывоз снега", false, null, null, null, null, 0, true, true, "руб."),
+            Guid.NewGuid(),
+            CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+        Assert.False(result.Value!.IsRegular);
+        Assert.False(result.Value.IsMetered);
+        Assert.False(result.Value.HasTieredTariff);
+        var saved = Assert.Single(database.Context.ChargeServiceSettings);
+        Assert.False(saved.IsMetered);
+        Assert.False(saved.HasTieredTariff);
+        Assert.Single(database.Context.AuditEvents, item => item.Action == "dictionary.charge_service_created");
+    }
+
+    [Fact]
     public async Task UpdateFeeCampaignAsync_LocksParticipantCompositionAfterFirstAccrual()
     {
         await using var database = await TestDatabase.CreateAsync();

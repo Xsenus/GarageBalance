@@ -2117,7 +2117,7 @@ public sealed class DictionaryService(
             }
         }
 
-        if (request.HasTieredTariff && !request.IsMetered)
+        if (request.IsRegular && request.HasTieredTariff && !request.IsMetered)
         {
             return DictionaryResult<object>.Failure("charge_service_tiered_requires_meter", "Пороговая тарификация доступна только для услуг по счетчику.");
         }
@@ -2173,8 +2173,8 @@ public sealed class DictionaryService(
         setting.OverdueGraceDays = request.OverdueGraceDays;
         setting.IncomeTypeId = request.IsRegular ? request.IncomeTypeId : null;
         setting.TariffId = request.IsRegular ? request.TariffId : null;
-        setting.IsMetered = request.IsMetered;
-        setting.HasTieredTariff = request.HasTieredTariff;
+        setting.IsMetered = request.IsRegular && request.IsMetered;
+        setting.HasTieredTariff = request.IsRegular && request.IsMetered && request.HasTieredTariff;
         setting.UnitName = NormalizeOptional(request.UnitName);
     }
 
@@ -2189,8 +2189,8 @@ public sealed class DictionaryService(
             setting.OverdueGraceDays == request.OverdueGraceDays &&
             setting.IncomeTypeId == (request.IsRegular ? request.IncomeTypeId : null) &&
             setting.TariffId == (request.IsRegular ? request.TariffId : null) &&
-            setting.IsMetered == request.IsMetered &&
-            setting.HasTieredTariff == request.HasTieredTariff &&
+            setting.IsMetered == (request.IsRegular && request.IsMetered) &&
+            setting.HasTieredTariff == (request.IsRegular && request.IsMetered && request.HasTieredTariff) &&
             StringEquals(setting.UnitName, NormalizeOptional(request.UnitName));
     }
 

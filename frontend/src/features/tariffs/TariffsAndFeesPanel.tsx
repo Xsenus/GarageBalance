@@ -228,7 +228,10 @@ function createTariffRowsFromBackend(tariffs: TariffDto[], settings: ChargeServi
     .filter((row) => Boolean(row.calculationBase && findTariffForPrototypeRow(tariffs, row)))
     .map((row) => row.category))
   const rowsBackedByTariffs = contractorTariffRows.filter((row) => backedCategories.has(row.category))
-  return mergeChargeServicesIntoPrototypeRows(mergeTariffsIntoPrototypeRows(rowsBackedByTariffs, tariffs), settings)
+  return mergeChargeServicesIntoPrototypeRows(
+    mergeTariffsIntoPrototypeRows(rowsBackedByTariffs, tariffs),
+    settings.filter((setting) => setting.isRegular),
+  )
 }
 
 function getContractorTariffMonthNumber(monthValue?: string | null) {
@@ -1437,6 +1440,28 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
     }
   }
 
+  async function createIrregularService(request: UpsertIrregularPaymentRequest) {
+    if (!canManageTariffs) {
+      return
+    }
+
+    setTariffSavingRowId('new-service')
+    setTariffPersistenceError(null)
+    setOneTimeActionMessage(null)
+    try {
+      const savedPayment = await dictionaryClient.createIrregularPayment(auth.accessToken, request)
+      const nextRows = mergeIrregularPaymentsIntoPrototypeRows(oneTimeRows, [savedPayment])
+      setOneTimeRows(nextRows)
+      setOneTimeDrafts(createEditableDrafts(nextRows))
+      setModal(null)
+    } catch (caught) {
+      setTariffPersistenceError(caught instanceof Error ? caught.message : 'Не удалось добавить нерегулярную услугу.')
+      throw caught
+    } finally {
+      setTariffSavingRowId(null)
+    }
+  }
+
   async function createFeeCampaign(request: UpsertFeeCampaignRequest) {
     if (!canManageTariffs) {
       return
@@ -2334,6 +2359,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
           isSaving={tariffSavingRowId === 'new-service'}
           incomeTypes={backendIncomeTypes.filter((incomeType) => !incomeType.isArchived)}
           onClose={() => setModal(null)}
+          onSaveIrregular={createIrregularService}
           onSave={createServiceSetting}
           tariffs={backendTariffs.filter((tariff) => !tariff.isArchived)}
           unitOptions={Array.from(new Set(tariffRows
@@ -2371,6 +2397,7 @@ export function AddServicePrototypeDialog({
   isSaving,
   incomeTypes,
   onClose,
+  onSaveIrregular,
   onSave,
   tariffs,
   unitOptions,
@@ -2378,6 +2405,7 @@ export function AddServicePrototypeDialog({
   isSaving: boolean
   incomeTypes: AccountingTypeDto[]
   onClose: () => void
+  onSaveIrregular?: (request: UpsertIrregularPaymentRequest) => Promise<void>
   onSave: (request: UpsertChargeServiceSettingRequest) => Promise<void>
   tariffs: TariffDto[]
   unitOptions: string[]
@@ -2439,6 +2467,20 @@ export function AddServicePrototypeDialog({
         setError('Перенос долга должен быть числом от 0 до 366 дней.')
         return
       }
+    } else if (onSaveIrregular) {
+      const parsedCost = parsePrototypeAmount(cost)
+      if (parsedCost == null) {
+        setError('Укажите корректную стоимость нерегулярной услуги.')
+        return
+      }
+
+      setError(null)
+      await onSaveIrregular({
+        name: trimmedName,
+        amount: parsedCost,
+        isActive: true,
+      })
+      return
     }
 
     setError(null)
@@ -2450,8 +2492,8 @@ export function AddServicePrototypeDialog({
       paymentDueDay: isRegular ? parsedDueDay : null,
       paymentDueMonth: isRegular ? getContractorTariffMonthNumber(paymentDueMonth) ?? 1 : null,
       overdueGraceDays: isRegular ? parsedOverdueDays : 0,
-      isMetered: isByMeter,
-      hasTieredTariff: isByMeter && isTiered,
+      isMetered: isRegular && isByMeter,
+      hasTieredTariff: isRegular && isByMeter && isTiered,
       unitName: unitName.trim() || null,
       incomeTypeId: isRegular ? incomeTypeId : null,
       tariffId: isRegular ? tariffId : null,
