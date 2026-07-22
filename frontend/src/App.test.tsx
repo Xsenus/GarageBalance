@@ -496,9 +496,10 @@ describe('App', () => {
     expect(within(serviceDialog).queryByLabelText('Периодичность')).not.toBeInTheDocument()
     await user.click(within(serviceDialog).getByLabelText('Регулярные платежи'))
     expect(within(serviceDialog).getByLabelText('Периодичность')).toHaveValue('12')
-    for (const comboboxName of ['Вид начисления регулярной услуги', 'Тариф регулярной услуги', 'Учитывать платеж с', 'Месяц оплаты']) {
+    for (const comboboxName of ['Вид поступления регулярной услуги', 'Способ расчёта регулярной услуги', 'Тариф регулярной услуги', 'Учитывать платеж с', 'Месяц оплаты']) {
       expect(within(serviceDialog).getByRole('combobox', { name: comboboxName })).toHaveClass('select-control__trigger')
     }
+    expect(within(serviceDialog).getByRole('combobox', { name: 'Способ расчёта регулярной услуги' })).toBeDisabled()
     const accrualStartMonthControl = within(serviceDialog).getByRole('combobox', { name: 'Учитывать платеж с' })
     expect(accrualStartMonthControl).toHaveTextContent('Январь')
     expect(within(serviceDialog).getByLabelText('День оплаты')).toHaveValue('30')
@@ -2913,10 +2914,12 @@ describe('App', () => {
     let updatedServiceRequest: unknown = null
     let serviceSettings: ChargeServiceSettingDto[] = []
     const serviceIncomeType = createAccountingType({ id: 'income-security', name: 'Охрана', code: 'membership' })
+    const waterIncomeType = createAccountingType({ id: 'income-water', name: 'Водоснабжение', code: 'water' })
     const serviceTariff = createTariff({ id: 'tariff-security', name: 'Тариф охраны', calculationBase: 'fixed', rate: 1200 })
+    const waterTariff = createTariff({ id: 'tariff-water', name: 'Тариф воды', calculationBase: 'meter_water', rate: 48.5 })
     const dictionaryClient = createDictionaryClient({
-      getIncomeTypes: async () => [serviceIncomeType],
-      getTariffs: async () => [serviceTariff],
+      getIncomeTypes: async () => [serviceIncomeType, waterIncomeType],
+      getTariffs: async () => [serviceTariff, waterTariff],
       getChargeServiceSettings: async (_token, _search, _limit, includeArchived = false) => (
         serviceSettings.filter((setting) => includeArchived || !setting.isArchived)
       ),
@@ -2973,8 +2976,25 @@ describe('App', () => {
     const serviceDialog = await screen.findByRole('dialog', { name: 'Добавить услугу' })
     await user.type(within(serviceDialog).getByLabelText('Наименование услуги'), 'Охрана')
     await user.click(within(serviceDialog).getByLabelText('Регулярные платежи'))
-    expect(within(serviceDialog).getByRole('combobox', { name: 'Вид начисления регулярной услуги' })).toHaveTextContent(serviceIncomeType.name)
-    expect(within(serviceDialog).getByRole('combobox', { name: 'Тариф регулярной услуги' })).toHaveTextContent(serviceTariff.name)
+    const incomeTypeControl = within(serviceDialog).getByRole('combobox', { name: 'Вид поступления регулярной услуги' })
+    const calculationBaseControl = within(serviceDialog).getByRole('combobox', { name: 'Способ расчёта регулярной услуги' })
+    const tariffControl = within(serviceDialog).getByRole('combobox', { name: 'Тариф регулярной услуги' })
+    expect(incomeTypeControl).toHaveTextContent(serviceIncomeType.name)
+    expect(calculationBaseControl).toHaveTextContent('Фиксированно')
+    expect(calculationBaseControl).toBeDisabled()
+    expect(tariffControl).toHaveTextContent('Тариф охраны — 1 200.00 руб.')
+    expect(within(serviceDialog).getByText('Определяет, к какому виду будут относиться начисления и платежи по услуге.')).toBeInTheDocument()
+    expect(within(serviceDialog).getByText('Определяется выбранным тарифом и показывает, как рассчитывается сумма.')).toBeInTheDocument()
+    expect(within(serviceDialog).getByText('Конкретная ставка, которая применяется при начислении услуги.')).toBeInTheDocument()
+
+    await user.click(incomeTypeControl)
+    await user.click(within(serviceDialog).getByRole('option', { name: waterIncomeType.name }))
+    expect(tariffControl).toHaveTextContent('Тариф воды — 48.50 руб.')
+    expect(calculationBaseControl).toHaveTextContent('По счетчику воды')
+    await user.click(incomeTypeControl)
+    await user.click(within(serviceDialog).getByRole('option', { name: serviceIncomeType.name }))
+    expect(tariffControl).toHaveTextContent('Тариф охраны — 1 200.00 руб.')
+    expect(calculationBaseControl).toHaveTextContent('Фиксированно')
     await user.clear(within(serviceDialog).getByLabelText('День оплаты'))
     await user.type(within(serviceDialog).getByLabelText('День оплаты'), '28')
     await user.click(within(serviceDialog).getByRole('combobox', { name: 'Месяц оплаты' }))

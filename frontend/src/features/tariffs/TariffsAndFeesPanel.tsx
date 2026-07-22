@@ -12,7 +12,8 @@ import type { ChangePreview } from '../../shared/changePreview'
 import { appendChangePreview, formatChangeDate, formatChangeNumber, formatChangeText } from '../../shared/changePreview'
 import { FormError } from '../../shared/formFeedback'
 import { FormField } from '../../shared/FormField'
-import { formatDateOnly, formatMoney, getCurrentMonthInputValue, getLocalDateInputValue } from '../../shared/formatters'
+import { getTariffCalculationBaseOptions } from '../../shared/dictionaryWorkbench'
+import { formatDateOnly, formatMoney, formatTariffRateSummary, getCurrentMonthInputValue, getLocalDateInputValue } from '../../shared/formatters'
 import { useEscapeKey, useFocusOnOpen, useFocusTrap, useRestoreFocusOnClose } from '../../shared/focusHooks'
 import { LocalizedDatePicker } from '../../shared/LocalizedDatePicker'
 import { MoneyTextInput } from '../../shared/MoneyInput'
@@ -2425,6 +2426,11 @@ export function AddServicePrototypeDialog({
   const [cost, setCost] = useState('')
   const [error, setError] = useState<string | null>(null)
   const compatibleTariffs = getCompatibleRegularTariffs(incomeTypeId, incomeTypes, tariffs)
+  const selectedTariff = compatibleTariffs.find((tariff) => tariff.id === tariffId) ?? null
+  const calculationBaseOptions = getTariffCalculationBaseOptions()
+  const calculationBaseOption = selectedTariff
+    ? calculationBaseOptions.find((option) => option.value === selectedTariff.calculationBase)
+    : null
   useRestoreFocusOnClose(true)
   const dialogRef = useFocusTrap<HTMLElement>(true)
   useEscapeKey(true, onClose)
@@ -2444,7 +2450,7 @@ export function AddServicePrototypeDialog({
 
     if (isRegular) {
       if (!incomeTypeId) {
-        setError('Выберите вид начисления для регулярной услуги.')
+        setError('Выберите вид поступления для регулярной услуги.')
         return
       }
 
@@ -2524,9 +2530,9 @@ export function AddServicePrototypeDialog({
           {isRegular ? (
             <>
               <div className="contractors-service-period-grid contractors-service-period-grid--catalogs">
-                <FormField label="Вид начисления">
+                <FormField label="Вид поступления" hint="Определяет, к какому виду будут относиться начисления и платежи по услуге.">
                   <SelectControl
-                    aria-label="Вид начисления регулярной услуги"
+                    aria-label="Вид поступления регулярной услуги"
                     value={incomeTypeId}
                     options={incomeTypes.length > 0
                       ? incomeTypes.map((incomeType) => ({ value: incomeType.id, label: incomeType.name }))
@@ -2538,12 +2544,23 @@ export function AddServicePrototypeDialog({
                     }}
                   />
                 </FormField>
-                <FormField label="Тариф">
+                <FormField label="Способ расчёта" hint="Определяется выбранным тарифом и показывает, как рассчитывается сумма.">
+                  <SelectControl
+                    aria-label="Способ расчёта регулярной услуги"
+                    value={selectedTariff?.calculationBase ?? ''}
+                    options={calculationBaseOption
+                      ? [{ value: calculationBaseOption.value, label: calculationBaseOption.label }]
+                      : [{ value: '', label: 'Сначала выберите тариф' }]}
+                    disabled
+                    onChange={() => undefined}
+                  />
+                </FormField>
+                <FormField label="Тариф" hint="Конкретная ставка, которая применяется при начислении услуги.">
                   <SelectControl
                     aria-label="Тариф регулярной услуги"
                     value={tariffId}
                     options={compatibleTariffs.length > 0
-                      ? compatibleTariffs.map((tariff) => ({ value: tariff.id, label: tariff.name }))
+                      ? compatibleTariffs.map((tariff) => ({ value: tariff.id, label: `${tariff.name} — ${formatTariffRateSummary(tariff)} руб.` }))
                       : [{ value: '', label: 'Нет совместимых тарифов' }]}
                     onChange={(nextTariffId) => {
                       setTariffId(nextTariffId)

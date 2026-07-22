@@ -73,6 +73,8 @@ public sealed class DictionaryService(
         ["overdueGraceDays"] = "Перенос долга в просроченный",
         ["isMetered"] = "По счетчику",
         ["hasTieredTariff"] = "Пороговая тарификация",
+        ["incomeTypeId"] = "Вид поступления",
+        ["tariffId"] = "Тариф",
         ["unitName"] = "Единица измерения",
         ["amount"] = "Сумма",
         ["goal"] = "Цель",
@@ -2134,7 +2136,7 @@ public sealed class DictionaryService(
 
         if (request.IncomeTypeId.HasValue != request.TariffId.HasValue)
         {
-            return DictionaryResult<object>.Failure("charge_service_regular_link_incomplete", "Для регулярной услуги заполните и вид начисления, и тариф.");
+            return DictionaryResult<object>.Failure("charge_service_regular_link_incomplete", "Для регулярной услуги заполните и вид поступления, и тариф.");
         }
 
         if (!request.IncomeTypeId.HasValue)
@@ -2145,7 +2147,7 @@ public sealed class DictionaryService(
         var incomeType = await incomeTypeRepository.FindActiveAsync(request.IncomeTypeId.Value, cancellationToken);
         if (incomeType is null)
         {
-            return DictionaryResult<object>.Failure("charge_service_income_type_not_found", "Вид начисления для услуги не найден.");
+            return DictionaryResult<object>.Failure("charge_service_income_type_not_found", "Вид поступления для услуги не найден.");
         }
 
         var tariff = await tariffRepository.FindActiveAsync(request.TariffId!.Value, cancellationToken);
@@ -2156,7 +2158,7 @@ public sealed class DictionaryService(
 
         if (!IsIncomeTypeCompatibleWithTariff(incomeType.Code, tariff.CalculationBase))
         {
-            return DictionaryResult<object>.Failure("charge_service_tariff_mismatch", "Выбранный тариф не подходит для вида начисления услуги.");
+            return DictionaryResult<object>.Failure("charge_service_tariff_mismatch", "Выбранный тариф не подходит для вида поступления услуги.");
         }
 
         return DictionaryResult<object>.Success(new object());

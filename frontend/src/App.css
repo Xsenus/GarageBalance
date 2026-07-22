@@ -1812,7 +1812,7 @@ h1 {
 }
 
 .contractors-tariff-dialog .contractors-service-period-grid--catalogs {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
 .contractors-tariff-dialog .contractors-service-period-grid--schedule {

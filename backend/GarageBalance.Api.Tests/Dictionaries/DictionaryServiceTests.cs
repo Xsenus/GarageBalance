@@ -1994,21 +1994,43 @@ public sealed class DictionaryServiceTests
             new UpsertChargeServiceSettingRequest("Вода как членский", true, 1, 1, 30, 6, 30, true, false, "м3", incomeType.Id, waterTariff.Id),
             null,
             CancellationToken.None);
+        var incomplete = await service.CreateChargeServiceSettingAsync(
+            new UpsertChargeServiceSettingRequest("Без вида поступления", true, 1, 1, 30, 6, 30, false, false, "руб.", null, tariff.Id),
+            null,
+            CancellationToken.None);
+        var missingIncomeType = await service.CreateChargeServiceSettingAsync(
+            new UpsertChargeServiceSettingRequest("Несуществующий вид поступления", true, 1, 1, 30, 6, 30, false, false, "руб.", Guid.NewGuid(), tariff.Id),
+            null,
+            CancellationToken.None);
 
         Assert.True(result.Succeeded);
         Assert.Equal(incomeType.Id, result.Value!.IncomeTypeId);
         Assert.Equal(tariff.Id, result.Value.TariffId);
         Assert.False(mismatch.Succeeded);
         Assert.Equal("charge_service_tariff_mismatch", mismatch.ErrorCode);
+        Assert.Equal("Выбранный тариф не подходит для вида поступления услуги.", mismatch.ErrorMessage);
+        Assert.False(incomplete.Succeeded);
+        Assert.Equal("charge_service_regular_link_incomplete", incomplete.ErrorCode);
+        Assert.Equal("Для регулярной услуги заполните и вид поступления, и тариф.", incomplete.ErrorMessage);
+        Assert.False(missingIncomeType.Succeeded);
+        Assert.Equal("charge_service_income_type_not_found", missingIncomeType.ErrorCode);
+        Assert.Equal("Вид поступления для услуги не найден.", missingIncomeType.ErrorMessage);
     }
 
     [Fact]
     public async Task UpdateChargeServiceSettingAsync_WritesChangedFieldsAndSkipsNoOp()
     {
         await using var database = await TestDatabase.CreateAsync();
+        var firstIncomeType = new IncomeType { Name = "Вода", Code = "other_income" };
+        var secondIncomeType = new IncomeType { Name = "Водоснабжение", Code = "other_income" };
+        var firstTariff = new Tariff { Name = "Вода 2025", CalculationBase = "meter_water", Rate = 40m, EffectiveFrom = new DateOnly(2025, 1, 1) };
+        var secondTariff = new Tariff { Name = "Вода 2026", CalculationBase = "meter_water", Rate = 50m, EffectiveFrom = new DateOnly(2026, 1, 1) };
+        database.Context.IncomeTypes.AddRange(firstIncomeType, secondIncomeType);
+        database.Context.Tariffs.AddRange(firstTariff, secondTariff);
+        await database.Context.SaveChangesAsync();
         var service = DictionaryServiceTestFactory.Create(database.Context);
         var created = await service.CreateChargeServiceSettingAsync(
-            new UpsertChargeServiceSettingRequest("Вода", true, 1, 1, 30, 6, 30, true, false, "м3"),
+            new UpsertChargeServiceSettingRequest("Вода", true, 1, 1, 30, 6, 30, true, false, "м3", firstIncomeType.Id, firstTariff.Id),
             null,
             CancellationToken.None);
         database.Context.AuditEvents.RemoveRange(database.Context.AuditEvents);
@@ -2017,7 +2039,7 @@ public sealed class DictionaryServiceTests
         var actorUserId = Guid.NewGuid();
         var result = await service.UpdateChargeServiceSettingAsync(
             created.Value!.Id,
-            new UpsertChargeServiceSettingRequest("Водоснабжение", true, 12, 2, 31, 12, 45, true, false, "куб."),
+            new UpsertChargeServiceSettingRequest("Водоснабжение", true, 12, 2, 31, 12, 45, true, false, "куб.", secondIncomeType.Id, secondTariff.Id),
             actorUserId,
             CancellationToken.None);
 
@@ -2032,10 +2054,12 @@ public sealed class DictionaryServiceTests
         Assert.Contains("Наименование", changedFields, StringComparison.Ordinal);
         Assert.Contains("Периодичность", changedFields, StringComparison.Ordinal);
         Assert.Contains("День оплаты", changedFields, StringComparison.Ordinal);
+        Assert.Contains("Вид поступления", changedFields, StringComparison.Ordinal);
+        Assert.Contains("Тариф", changedFields, StringComparison.Ordinal);
 
         var noOp = await service.UpdateChargeServiceSettingAsync(
             created.Value.Id,
-            new UpsertChargeServiceSettingRequest("Водоснабжение", true, 12, 2, 31, 12, 45, true, false, "куб."),
+            new UpsertChargeServiceSettingRequest("Водоснабжение", true, 12, 2, 31, 12, 45, true, false, "куб.", secondIncomeType.Id, secondTariff.Id),
             actorUserId,
             CancellationToken.None);
 
