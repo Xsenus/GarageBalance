@@ -22,7 +22,8 @@ public sealed class EfFeeCampaignRepository(GarageBalanceDbContext dbContext) : 
         }
 
         return await query
-            .OrderBy(item => item.StartsOn)
+            .OrderBy(item => item.IsArchived)
+            .ThenByDescending(item => item.StartsOn)
             .ThenBy(item => item.Name)
             .Take(limit)
             .ToListAsync(cancellationToken);

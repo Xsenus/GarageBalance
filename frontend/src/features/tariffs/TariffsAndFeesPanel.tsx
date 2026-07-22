@@ -593,6 +593,14 @@ function getFeeCampaignChangePreview(
   return changes
 }
 
+function mergeFeeCampaignSnapshots(currentCampaigns: FeeCampaignDto[], loadedCampaigns: FeeCampaignDto[]) {
+  const currentIds = new Set(currentCampaigns.map((campaign) => campaign.id))
+  return [
+    ...currentCampaigns,
+    ...loadedCampaigns.filter((campaign) => !currentIds.has(campaign.id)),
+  ]
+}
+
 type TariffsPrototypeSavedState = {
   tariffRows: ContractorTariffRow[]
   oneTimeRows: ContractorOneTimeRow[]
@@ -610,6 +618,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
   const [feeCampaignActiveGarageCount, setFeeCampaignActiveGarageCount] = useState(0)
   const feeCampaignGarageOptionsLoadedRef = useRef(false)
   const feeCampaignGarageOptionsRequestRef = useRef<Promise<boolean> | null>(null)
+  const feeCampaignMutationVersionRef = useRef(0)
   const [feeCampaigns, setFeeCampaigns] = useState<FeeCampaignDto[]>([])
   const [feeCampaignPageNumber, setFeeCampaignPageNumber] = useState(1)
   const [feeCampaignPageSize, setFeeCampaignPageSize] = useState(10)
@@ -705,14 +714,19 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
     }
 
     async function loadFeeCampaigns() {
+      const mutationVersionAtStart = feeCampaignMutationVersionRef.current
       setFeeCampaignsLoading(true)
       try {
         const loadedFeeCampaigns = await dictionaryClient.getFeeCampaigns(auth.accessToken, undefined, dictionaryScreenRequestLimit, true)
         if (!ignore) {
-          setFeeCampaigns(loadedFeeCampaigns)
+          if (feeCampaignMutationVersionRef.current === mutationVersionAtStart) {
+            setFeeCampaigns(loadedFeeCampaigns)
+          } else {
+            setFeeCampaigns((currentCampaigns) => mergeFeeCampaignSnapshots(currentCampaigns, loadedFeeCampaigns))
+          }
         }
       } catch (caught) {
-        if (!ignore) {
+        if (!ignore && feeCampaignMutationVersionRef.current === mutationVersionAtStart) {
           setTariffPersistenceError(caught instanceof Error ? caught.message : 'Не удалось загрузить объявленные сборы.')
         }
       } finally {
@@ -1619,7 +1633,9 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
     setFeeCampaignActionMessage(null)
     try {
       const savedCampaign = await dictionaryClient.createFeeCampaign(auth.accessToken, request)
+      feeCampaignMutationVersionRef.current += 1
       setFeeCampaigns((currentCampaigns) => [savedCampaign, ...currentCampaigns.filter((campaign) => campaign.id !== savedCampaign.id)])
+      setFeeCampaignsLoading(false)
       setModal(null)
     } catch (caught) {
       setTariffPersistenceError(caught instanceof Error ? caught.message : 'Не удалось объявить сбор.')
@@ -1687,6 +1703,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
     setFeeCampaignActionMessage(null)
     try {
       const savedCampaign = await dictionaryClient.updateFeeCampaign(auth.accessToken, feeCampaignEditTarget.id, request)
+      feeCampaignMutationVersionRef.current += 1
       setFeeCampaigns((currentCampaigns) => currentCampaigns.map((campaign) => (
         campaign.id === savedCampaign.id ? savedCampaign : campaign
       )))
@@ -1708,6 +1725,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
     setFeeCampaignActionMessage(null)
     try {
       await dictionaryClient.archiveFeeCampaign(auth.accessToken, feeCampaignArchiveTarget.id, feeCampaignArchiveReason.trim())
+      feeCampaignMutationVersionRef.current += 1
       setFeeCampaigns((currentCampaigns) => currentCampaigns.map((campaign) => (
         campaign.id === feeCampaignArchiveTarget.id ? { ...campaign, isArchived: true } : campaign
       )))
@@ -1728,6 +1746,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
     setFeeCampaignActionMessage(null)
     try {
       const restoredCampaign = await dictionaryClient.restoreFeeCampaign(auth.accessToken, feeCampaignRestoreTarget.id)
+      feeCampaignMutationVersionRef.current += 1
       setFeeCampaigns((currentCampaigns) => currentCampaigns.map((currentCampaign) => (
         currentCampaign.id === restoredCampaign.id ? restoredCampaign : currentCampaign
       )))

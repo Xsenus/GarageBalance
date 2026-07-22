@@ -755,6 +755,54 @@ describe('App', () => {
     expect(within(feeCampaignsSection).getByText('12, 27')).toBeInTheDocument()
   })
 
+  it('keeps a newly created fee campaign when the initial list finishes later', async () => {
+    const user = userEvent.setup()
+    const targetIncomeType = createAccountingType({ id: 'income-type-other-income', name: 'Прочие доходы', code: 'other_income', isSystem: true })
+    const staleCampaign = createFeeCampaign({ id: 'fee-campaign-existing', name: 'Существующий сбор', incomeTypeId: targetIncomeType.id, incomeTypeName: targetIncomeType.name })
+    let resolveFeeCampaigns!: (campaigns: FeeCampaignDto[]) => void
+    const feeCampaignsPromise = new Promise<FeeCampaignDto[]>((resolve) => { resolveFeeCampaigns = resolve })
+    const dictionaryClient = createDictionaryClient({
+      getIncomeTypes: async () => [targetIncomeType],
+      getFeeCampaigns: async () => feeCampaignsPromise,
+      createFeeCampaign: async (_token, request) => createFeeCampaign({
+        id: 'fee-campaign-gates',
+        name: request.name,
+        incomeTypeId: targetIncomeType.id,
+        incomeTypeName: targetIncomeType.name,
+        contributionAmount: request.contributionAmount,
+        targetAmount: request.targetAmount,
+        startsOn: request.startsOn,
+        endsOn: request.endsOn ?? null,
+        appliesToAllGarages: request.appliesToAllGarages,
+        participantGarageIds: request.participantGarageIds ?? [],
+        overdueGraceDays: request.overdueGraceDays,
+      }),
+    })
+
+    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Тарифы и сборы')
+    const tariffsPanel = await screen.findByRole('region', { name: 'Тарифы и сборы' }, { timeout: 15_000 })
+    const feeCampaignsSection = within(tariffsPanel).getByLabelText('Объявленные сборы')
+    expect(within(feeCampaignsSection).getByText('Загружаем объявленные сборы')).toBeInTheDocument()
+
+    const createButton = within(tariffsPanel).getAllByRole('button', { name: 'Объявить сбор' })[0]
+    await waitFor(() => expect(createButton).toBeEnabled())
+    await user.click(createButton)
+    const createDialog = await screen.findByRole('dialog', { name: 'Добавить сбор' })
+    await user.type(within(createDialog).getByLabelText('Наименование сбора'), 'Сбор на ворота')
+    await user.type(within(createDialog).getByLabelText('Сумма взноса'), '500')
+    await user.click(within(createDialog).getByRole('button', { name: 'Объявить сбор' }))
+
+    expect(await within(feeCampaignsSection).findByText('Сбор на ворота')).toBeInTheDocument()
+    expect(within(feeCampaignsSection).queryByText('Загружаем объявленные сборы')).not.toBeInTheDocument()
+
+    await act(async () => resolveFeeCampaigns([staleCampaign]))
+    expect(await within(feeCampaignsSection).findByText('Существующий сбор')).toBeInTheDocument()
+    expect(within(feeCampaignsSection).getByText('Сбор на ворота')).toBeInTheDocument()
+  })
+
   it('keeps fee campaign editor open when accrued participant composition is locked', async () => {
     const user = userEvent.setup()
     const targetIncomeType = createAccountingType({ id: 'income-type-other-income', name: 'Прочие доходы', code: 'other_income', isSystem: true })

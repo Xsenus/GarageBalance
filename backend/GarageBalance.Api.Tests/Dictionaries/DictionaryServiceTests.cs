@@ -111,6 +111,35 @@ public sealed class DictionaryServiceTests
     }
 
     [Fact]
+    public async Task GetFeeCampaignsAsync_PrioritizesNewestActiveCampaignsBeforeArchivedRows()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var otherIncome = await AddOtherIncomeDestinationAsync(database.Context);
+        var service = DictionaryServiceTestFactory.Create(database.Context);
+        var oldestActive = await service.CreateFeeCampaignAsync(
+            new UpsertFeeCampaignRequest("Старый активный сбор", otherIncome.Id, null, 100m, 0m, new DateOnly(2026, 1, 1), null, true, 30),
+            null,
+            CancellationToken.None);
+        var archived = await service.CreateFeeCampaignAsync(
+            new UpsertFeeCampaignRequest("Архивный сбор", otherIncome.Id, null, 100m, 0m, new DateOnly(2026, 4, 1), null, true, 30),
+            null,
+            CancellationToken.None);
+        var newestActive = await service.CreateFeeCampaignAsync(
+            new UpsertFeeCampaignRequest("Новый активный сбор", otherIncome.Id, null, 100m, 0m, new DateOnly(2026, 5, 1), null, true, 30),
+            null,
+            CancellationToken.None);
+        Assert.True(oldestActive.Succeeded, oldestActive.ErrorMessage);
+        Assert.True(archived.Succeeded, archived.ErrorMessage);
+        Assert.True(newestActive.Succeeded, newestActive.ErrorMessage);
+        Assert.True((await service.ArchiveFeeCampaignAsync(archived.Value!.Id, "Сбор завершён", null, CancellationToken.None)).Succeeded);
+
+        var campaigns = await service.GetFeeCampaignsAsync(null, CancellationToken.None, 2, includeArchived: true);
+
+        Assert.Equal([newestActive.Value!.Id, oldestActive.Value!.Id], campaigns.Select(campaign => campaign.Id));
+        Assert.All(campaigns, campaign => Assert.False(campaign.IsArchived));
+    }
+
+    [Fact]
     public async Task ListMethods_SearchSupplierGroupsAndAccountingTypes()
     {
         await using var database = await TestDatabase.CreateAsync();
