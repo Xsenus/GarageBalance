@@ -665,7 +665,7 @@ public sealed class DictionaryService(
         var comment = NormalizeOptional(request.Comment);
         if (SupplierMatches(supplier, name, group.Id, chargeService?.Id, inn, legalAddress, contactPerson, phone, email, startingBalance, comment))
         {
-            return DictionaryResult<SupplierDto>.Success(ToSupplierDto(supplier));
+            return DictionaryResult<SupplierDto>.Success(await ToSupplierDtoWithDebtAsync(supplier, cancellationToken));
         }
 
         if (await supplierRepository.ActiveDuplicateExistsAsync(id, group.Id, name, cancellationToken))
@@ -716,7 +716,7 @@ public sealed class DictionaryService(
 
         AddAudit(actorUserId, "dictionary.supplier_updated", "supplier", supplier.Id, $"Обновлен поставщик {supplier.Name}.", oldValues: oldValues, newValues: newValues);
         await unitOfWork.SaveChangesAsync(cancellationToken);
-        return DictionaryResult<SupplierDto>.Success(ToSupplierDto(supplier));
+        return DictionaryResult<SupplierDto>.Success(await ToSupplierDtoWithDebtAsync(supplier, cancellationToken));
     }
 
     public async Task<DictionaryResult<SupplierDto>> ArchiveSupplierAsync(Guid id, string reason, Guid? actorUserId, CancellationToken cancellationToken)
@@ -2883,6 +2883,12 @@ public sealed class DictionaryService(
             debt ?? supplier.StartingBalance,
             supplier.ChargeServiceSettingId,
             supplier.ChargeServiceSetting?.Name);
+    }
+
+    private async Task<SupplierDto> ToSupplierDtoWithDebtAsync(Supplier supplier, CancellationToken cancellationToken)
+    {
+        var debtTotals = await supplierRepository.GetDebtTotalsAsync([supplier.Id], cancellationToken);
+        return ToSupplierDto(supplier, debtTotals.GetValueOrDefault(supplier.Id, supplier.StartingBalance));
     }
 
     private static SupplierDto ToSupplierDto(Supplier supplier, SupplierPrimaryContactData? primaryContact, decimal? debt = null)

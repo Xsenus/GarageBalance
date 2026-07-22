@@ -1414,6 +1414,53 @@ public sealed class DictionaryServiceTests
     }
 
     [Fact]
+    public async Task UpdateSupplierAsync_ReturnsFullDebtForUnchangedAndUpdatedSupplier()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = DictionaryServiceTestFactory.Create(database.Context);
+        var group = await service.CreateSupplierGroupAsync(new UpsertSupplierGroupRequest("Коммунальные услуги"), null, CancellationToken.None);
+        var supplier = await service.CreateSupplierAsync(
+            new UpsertSupplierRequest("Водоканал", group.Value!.Id, null, null, null, null, null, 100m, null),
+            null,
+            CancellationToken.None);
+        var expenseType = await service.CreateExpenseTypeAsync(new UpsertAccountingTypeRequest("Водоснабжение", "water_supply"), null, CancellationToken.None);
+        database.Context.SupplierAccruals.Add(new SupplierAccrual
+        {
+            SupplierId = supplier.Value!.Id,
+            ExpenseTypeId = expenseType.Value!.Id,
+            AccountingMonth = new DateOnly(2026, 7, 1),
+            Amount = 900m,
+            Source = "manual"
+        });
+        database.Context.FinancialOperations.Add(new FinancialOperation
+        {
+            OperationKind = FinancialOperationKinds.Expense,
+            SupplierId = supplier.Value.Id,
+            ExpenseTypeId = expenseType.Value.Id,
+            OperationDate = new DateOnly(2026, 7, 15),
+            AccountingMonth = new DateOnly(2026, 7, 1),
+            Amount = 250m
+        });
+        await database.Context.SaveChangesAsync();
+
+        var unchanged = await service.UpdateSupplierAsync(
+            supplier.Value.Id,
+            new UpsertSupplierRequest("Водоканал", group.Value.Id, null, null, null, null, null, 100m, null),
+            Guid.NewGuid(),
+            CancellationToken.None);
+        var updated = await service.UpdateSupplierAsync(
+            supplier.Value.Id,
+            new UpsertSupplierRequest("Водоканал", group.Value.Id, null, null, null, null, null, 200m, "Уточнен входящий остаток"),
+            Guid.NewGuid(),
+            CancellationToken.None);
+
+        Assert.True(unchanged.Succeeded);
+        Assert.Equal(750m, unchanged.Value!.Debt);
+        Assert.True(updated.Succeeded);
+        Assert.Equal(850m, updated.Value!.Debt);
+    }
+
+    [Fact]
     public async Task RestoreSupplierAsync_RejectsArchivedSupplierGroup()
     {
         await using var database = await TestDatabase.CreateAsync();

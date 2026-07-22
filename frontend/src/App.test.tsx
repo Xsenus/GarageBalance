@@ -2883,7 +2883,7 @@ describe('App', () => {
     })))
   }, 30000)
 
-  it('edits the supplier starting balance in the contractor card', async () => {
+  it('keeps the full supplier debt after editing the starting balance', async () => {
     const user = userEvent.setup()
     const group = createGroup({ id: 'group-water', name: 'Коммунальные услуги' })
     let supplier = createSupplier({
@@ -2939,6 +2939,8 @@ describe('App', () => {
     if (!supplierRow) {
       throw new Error('Строка поставщика Водоканал не найдена после сохранения.')
     }
+    expect(within(supplierRow as HTMLElement).getByText('850.00')).toBeInTheDocument()
+    expect(within(supplierRow as HTMLElement).queryByText('200.00')).not.toBeInTheDocument()
     await user.click(within(supplierRow as HTMLElement).getByRole('button', { name: 'Изменить поставщика Водоканал' }))
     const reopenedSupplierDialog = await screen.findByRole('dialog', { name: 'Водоканал' })
     expect(within(reopenedSupplierDialog).getByLabelText('Стартовый баланс поставщика')).toHaveValue('200.00')
