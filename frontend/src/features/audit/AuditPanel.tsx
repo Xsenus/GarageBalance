@@ -2,13 +2,13 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ArrowLeft, FileSpreadsheet, FileText, RefreshCw, X } from 'lucide-react'
 import type { AuthResponse } from '../../services/authApi'
 import type { AuditClient, AuditEventDto } from '../../services/auditApi'
-import { hasPermission, permissions } from '../../shared/accessControl'
 import { TableLoadingState } from '../../shared/AsyncState'
 import { buildAuditExportFileName, downloadBlob } from '../../shared/fileExports'
 import { FormField } from '../../shared/FormField'
 import { FormError, FormValidationSummary } from '../../shared/formFeedback'
 import { formatAuditDateTime } from '../../shared/formatters'
 import { useEscapeKey, useFocusOnOpen, useFocusTrap, useRestoreFocusOnClose } from '../../shared/focusHooks'
+import { canAccessWorkspaceSection } from '../../shared/workspaceNavigation'
 import { LocalizedDatePicker } from '../../shared/LocalizedDatePicker'
 import { createEmptyPage } from '../../shared/pagination'
 import type { PagedItems } from '../../shared/pagination'
@@ -191,31 +191,31 @@ function getAuditContractorOpenTarget(auditEvent: AuditEventDto): ContractorOpen
 }
 function getAuditWorkspaceTarget(auth: AuthResponse, auditEvent: AuditEventDto): { section: WorkspaceSection; label: string } | null {
   if (auditEvent.entityType === 'owner' || auditEvent.entityType === 'garage' || auditEvent.entityType === 'supplier' || auditEvent.entityType === 'staff_member') {
-    return hasPermission(auth, permissions.dictionariesRead) ? { section: 'contractors', label: 'Контрагенты' } : null
+    return canAccessWorkspaceSection(auth, 'contractors') ? { section: 'contractors', label: 'Контрагенты' } : null
   }
 
   if (auditEvent.entityType === 'tariff' || auditEvent.section === 'dictionary') {
-    return hasPermission(auth, permissions.dictionariesRead) ? { section: 'tariffsAndFees', label: 'Тарифы и сборы' } : null
+    return canAccessWorkspaceSection(auth, 'tariffsAndFees') ? { section: 'tariffsAndFees', label: 'Тарифы и сборы' } : null
   }
 
   if (auditEvent.entityType === 'meter_reading') {
-    return hasPermission(auth, permissions.paymentsRead) ? { section: 'meterReadings', label: 'Показания' } : null
+    return canAccessWorkspaceSection(auth, 'meterReadings') ? { section: 'meterReadings', label: 'Показания' } : null
   }
 
   if (auditEvent.section === 'finance' || auditEvent.entityType === 'financial_operation' || auditEvent.entityType === 'accrual' || auditEvent.entityType === 'supplier_accrual') {
-    return hasPermission(auth, permissions.paymentsRead) ? { section: 'payments', label: 'Платежи' } : null
+    return canAccessWorkspaceSection(auth, 'payments') ? { section: 'payments', label: 'Платежи' } : null
   }
 
   if (auditEvent.section === 'users' || auditEvent.entityType === 'app_user') {
-    return hasPermission(auth, permissions.usersManage) ? { section: 'users', label: 'Пользователи' } : null
+    return canAccessWorkspaceSection(auth, 'users') ? { section: 'users', label: 'Пользователи' } : null
   }
 
   if (auditEvent.section === 'import' || auditEvent.entityType === 'access_import_run') {
-    return hasPermission(auth, permissions.importRun) ? { section: 'import', label: 'Импорт' } : null
+    return canAccessWorkspaceSection(auth, 'import') ? { section: 'import', label: 'Импорт' } : null
   }
 
   if (auditEvent.section === 'reports' || auditEvent.section === 'report' || auditEvent.entityType === 'report' || auditEvent.entityType === 'report_export') {
-    return hasPermission(auth, permissions.reportsRead) && hasPermission(auth, permissions.dictionariesRead) ? { section: 'reports', label: 'Отчеты' } : null
+    return canAccessWorkspaceSection(auth, 'reports') ? { section: 'reports', label: 'Отчеты' } : null
   }
 
   if (auditEvent.section === 'app_releases') {

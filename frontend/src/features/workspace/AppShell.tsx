@@ -24,7 +24,8 @@ import type { ReleaseClient } from '../../services/releasesApi'
 import type { ReportClient } from '../../services/reportsApi'
 import type { UserManagementClient } from '../../services/usersApi'
 import type { ApplicationSettingsClient } from '../../services/settingsApi'
-import { hasAnyPermission, isAdministrator, permissions } from '../../shared/accessControl'
+import { isAdministrator } from '../../shared/accessControl'
+import { canAccessWorkspaceSection } from '../../shared/workspaceNavigation'
 import type { AuditPanelPreset, WorkspaceOpenContext, WorkspaceSection } from '../../shared/workspaceNavigation'
 import { Workspace } from './Workspace'
 import { preloadWorkspaceSection } from './workspaceSectionLoader'
@@ -35,21 +36,20 @@ type NavigationItem = {
   section: WorkspaceSection
   label: string
   icon: typeof Gauge
-  requiredAny?: readonly string[]
 }
 
 const navigation: NavigationItem[] = [
   { section: 'dashboard', label: 'Главное меню', icon: Gauge },
-  { section: 'users', label: 'Пользователи', icon: ShieldCheck, requiredAny: [permissions.usersManage] },
-  { section: 'tariffsAndFees', label: 'Тарифы и сборы', icon: FileSpreadsheet, requiredAny: [permissions.dictionariesRead] },
-  { section: 'contractors', label: 'Контрагенты', icon: UsersRound, requiredAny: [permissions.dictionariesRead] },
-  { section: 'dictionaries', label: 'Справочники', icon: UsersRound, requiredAny: [permissions.dictionariesRead] },
-  { section: 'meterReadings', label: 'Показания', icon: FileSpreadsheet, requiredAny: [permissions.paymentsRead] },
-  { section: 'payments', label: 'Платежи', icon: WalletCards, requiredAny: [permissions.paymentsRead] },
-  { section: 'funds', label: 'Фонды', icon: WalletCards, requiredAny: [permissions.reportsRead] },
-  { section: 'reports', label: 'Отчеты', icon: FileSpreadsheet, requiredAny: [permissions.reportsRead] },
-  { section: 'import', label: 'Импорт', icon: DatabaseZap, requiredAny: [permissions.importRun] },
-  { section: 'audit', label: 'История изменений', icon: FileText, requiredAny: [permissions.auditRead] },
+  { section: 'users', label: 'Пользователи', icon: ShieldCheck },
+  { section: 'tariffsAndFees', label: 'Тарифы и сборы', icon: FileSpreadsheet },
+  { section: 'contractors', label: 'Контрагенты', icon: UsersRound },
+  { section: 'dictionaries', label: 'Справочники', icon: UsersRound },
+  { section: 'meterReadings', label: 'Показания', icon: FileSpreadsheet },
+  { section: 'payments', label: 'Платежи', icon: WalletCards },
+  { section: 'funds', label: 'Фонды', icon: WalletCards },
+  { section: 'reports', label: 'Отчеты', icon: FileSpreadsheet },
+  { section: 'import', label: 'Импорт', icon: DatabaseZap },
+  { section: 'audit', label: 'История изменений', icon: FileText },
   { section: 'releases', label: 'Что нового', icon: BookOpenCheck },
   { section: 'settings', label: 'Настройки', icon: LockKeyhole },
 ]
@@ -94,8 +94,8 @@ export function AuthenticatedAppShell({ auth, authClient, auditClient, dictionar
   const [workspaceOpenContext, setWorkspaceOpenContext] = useState<WorkspaceOpenContext | null>(null)
   const [isSidebarExpanded, setSidebarExpanded] = useState(loadStoredSidebarExpanded)
 
-  const activeNavigationItem = navigation.find((entry) => entry.section === activeSection)
-  const effectiveActiveSection = activeNavigationItem && hasAnyPermission(auth, activeNavigationItem.requiredAny) ? activeSection : 'dashboard'
+  const effectiveActiveSection = canAccessWorkspaceSection(auth, activeSection) ? activeSection : 'dashboard'
+  const visibleNavigation = navigation.filter((item) => canAccessWorkspaceSection(auth, item.section))
   const showSidebar = isAdministrator(auth)
   const sidebarModeClass = isSidebarExpanded ? 'app-shell--sidebar-expanded' : 'app-shell--sidebar-collapsed'
   const sidebarToggleLabel = isSidebarExpanded ? 'Свернуть панель' : 'Развернуть панель'
@@ -116,12 +116,18 @@ export function AuthenticatedAppShell({ auth, authClient, auditClient, dictionar
   }
 
   function openWorkspaceSection(section: WorkspaceSection, context: WorkspaceOpenContext | null = null) {
+    const canOpen = canAccessWorkspaceSection(auth, section)
     setAuditPreset(null)
-    setWorkspaceOpenContext(context)
-    setActiveSection(section)
+    setWorkspaceOpenContext(canOpen ? context : null)
+    setActiveSection(canOpen ? section : 'dashboard')
   }
 
   function openAuditWithPreset(preset: AuditPanelPreset) {
+    if (!canAccessWorkspaceSection(auth, 'audit')) {
+      openWorkspaceSection('dashboard')
+      return
+    }
+
     setAuditPreset(preset)
     setWorkspaceOpenContext(null)
     setActiveSection('audit')
@@ -143,12 +149,11 @@ export function AuthenticatedAppShell({ auth, authClient, auditClient, dictionar
           </div>
 
           <nav className="nav-list" aria-label="Основные разделы">
-            {navigation.map((item) => {
+            {visibleNavigation.map((item) => {
               const Icon = item.icon
-              const canOpen = hasAnyPermission(auth, item.requiredAny)
               const isActive = effectiveActiveSection === item.section
               return (
-                <button className={isActive ? 'nav-item active' : 'nav-item'} type="button" key={item.section} disabled={!canOpen} aria-label={item.label} title={item.label} aria-current={isActive ? 'page' : undefined} onPointerEnter={() => preloadWorkspaceSection(item.section)} onFocus={() => preloadWorkspaceSection(item.section)} onClick={() => openWorkspaceSection(item.section)}>
+                <button className={isActive ? 'nav-item active' : 'nav-item'} type="button" key={item.section} aria-label={item.label} title={item.label} aria-current={isActive ? 'page' : undefined} onPointerEnter={() => preloadWorkspaceSection(item.section)} onFocus={() => preloadWorkspaceSection(item.section)} onClick={() => openWorkspaceSection(item.section)}>
                   <Icon size={18} />
                   <span>{item.label}</span>
                 </button>

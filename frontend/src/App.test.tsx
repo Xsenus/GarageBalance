@@ -7666,9 +7666,10 @@ describe('App', () => {
     const operatorTiles = await screen.findByRole('group', { name: 'Главные разделы' })
     expect(within(operatorTiles).getByRole('button', { name: 'Контрагенты' })).toBeEnabled()
     expect(within(operatorTiles).getByRole('button', { name: 'Платежи' })).toBeEnabled()
-    expect(within(operatorTiles).getByRole('button', { name: 'Отчёты' })).toBeDisabled()
     expect(within(operatorTiles).getByRole('button', { name: 'Настройки' })).toBeEnabled()
-    expect(within(operatorTiles).getByRole('button', { name: /Управление\s+фондами/i })).toBeDisabled()
+    expect(within(operatorTiles).queryByRole('button', { name: 'Отчёты' })).not.toBeInTheDocument()
+    expect(within(operatorTiles).queryByRole('button', { name: /Управление\s+фондами/i })).not.toBeInTheDocument()
+    expect(within(operatorTiles).getAllByRole('button')).toHaveLength(5)
 
     await user.click(within(operatorTiles).getByRole('button', { name: 'Контрагенты' }))
     expect(await screen.findByRole('region', { name: 'Контрагенты' })).toBeInTheDocument()
@@ -7794,7 +7795,7 @@ describe('App', () => {
     expect(screen.queryByText('Поступление не должно вызываться без payments.write.')).not.toBeInTheDocument()
   })
 
-  it('keeps reports closed without dictionary read permission for filters', async () => {
+  it('hides reports without dictionary read permission for filters', async () => {
     const user = userEvent.setup()
     let reportCalls = 0
     const authClient = createAuthClient({
@@ -7827,11 +7828,11 @@ describe('App', () => {
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
     await user.click(screen.getByRole('button', { name: 'Войти' }))
-    await openSection(user, 'Отчеты')
 
-    const reportsNotice = await screen.findByLabelText('Отчеты недоступны')
-    expect(within(reportsNotice).getByText('Для фильтров отчетов нужно право чтения справочников.')).toBeInTheDocument()
-    expect(within(reportsNotice).getByText('Требуется право: dictionaries.read')).toBeInTheDocument()
+    const dashboardTiles = await screen.findByRole('group', { name: 'Главные разделы' })
+    expect(within(dashboardTiles).queryByRole('button', { name: 'Отчёты' })).not.toBeInTheDocument()
+    expect(within(dashboardTiles).getByRole('button', { name: /Управление\s+фондами/i })).toBeEnabled()
+    expect(screen.queryByLabelText('Отчеты недоступны')).not.toBeInTheDocument()
     expect(screen.queryByText('Консолидированный отчет за период')).not.toBeInTheDocument()
     expect(screen.queryByText('Отчеты не должны загружаться без dictionaries.read.')).not.toBeInTheDocument()
     expect(reportCalls).toBe(0)
@@ -12928,7 +12929,7 @@ describe('App', () => {
 
     expect(within(detailDialog).getByText('Garage 12')).toBeInTheDocument()
     expect(within(detailDialog).queryByRole('button', { name: 'Открыть раздел: Контрагенты' })).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Контрагенты' })).toBeDisabled()
+    expect(screen.queryByRole('button', { name: 'Контрагенты' })).not.toBeInTheDocument()
   })
 
   it('opens reports workspace from audit event detail when the user has report access', async () => {

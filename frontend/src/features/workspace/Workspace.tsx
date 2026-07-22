@@ -14,10 +14,11 @@ import type { ReleaseClient } from '../../services/releasesApi'
 import type { UserManagementClient } from '../../services/usersApi'
 import type { ApplicationSettingsClient } from '../../services/settingsApi'
 import { diagnosticsApi } from '../../services/diagnosticsApi'
-import { hasAnyPermission, hasPermission, permissions } from '../../shared/accessControl'
+import { hasPermission, permissions } from '../../shared/accessControl'
 import { AsyncErrorBoundary, TableLoadingState } from '../../shared/AsyncState'
 import { isLazyChunkLoadError, recoverFromLazyChunkError } from '../../shared/lazyChunkRecovery'
 import { useEscapeKey, useFocusOnOpen, useFocusTrap, useRestoreFocusOnClose } from '../../shared/focusHooks'
+import { canAccessWorkspaceSection } from '../../shared/workspaceNavigation'
 import type { AuditPanelPreset, WorkspaceOpenContext, WorkspaceSection } from '../../shared/workspaceNavigation'
 import { AuditPanel, ContractorsPrototypePanel, DictionaryPanelV2, FinancePanel, FundsPrototypePanel, ImportPanel, MeterReadingsPrototypePanel, PasswordPanel, preloadWorkspaceSection, ReleasePanel, ReportPanel, TariffsAndFeesPrototypePanel, UserManagementPanel } from './workspaceSectionLoader'
 
@@ -64,14 +65,14 @@ export function WorkspaceSectionErrorBoundary({ children, onReturn, accessToken 
   )
 }
 
-const dashboardTiles: { title: string; section: WorkspaceSection; requiredAny?: readonly string[] }[] = [
-  { title: 'Тарифы\nи сборы', section: 'tariffsAndFees', requiredAny: [permissions.dictionariesRead] },
-  { title: 'Контрагенты', section: 'contractors', requiredAny: [permissions.dictionariesRead] },
-  { title: 'Счётчики', section: 'meterReadings', requiredAny: [permissions.paymentsRead] },
-  { title: 'Платежи', section: 'payments', requiredAny: [permissions.paymentsRead] },
-  { title: 'Отчёты', section: 'reports', requiredAny: [permissions.reportsRead] },
+const dashboardTiles: { title: string; section: WorkspaceSection }[] = [
+  { title: 'Тарифы\nи сборы', section: 'tariffsAndFees' },
+  { title: 'Контрагенты', section: 'contractors' },
+  { title: 'Счётчики', section: 'meterReadings' },
+  { title: 'Платежи', section: 'payments' },
+  { title: 'Отчёты', section: 'reports' },
   { title: 'Настройки', section: 'settings' },
-  { title: 'Управление\nфондами', section: 'funds', requiredAny: [permissions.reportsRead] },
+  { title: 'Управление\nфондами', section: 'funds' },
 ]
 
 export function Workspace({
@@ -136,26 +137,22 @@ export function Workspace({
         return (
           <section className="dashboard-home" aria-label="Панель">
             <div className="dashboard-tile-grid" role="group" aria-label="Главные разделы">
-              {dashboardTiles.map((tile) => {
-                const canOpen = hasAnyPermission(auth, tile.requiredAny)
-                return (
-                  <button
-                    className="dashboard-tile"
-                    type="button"
-                    key={tile.title}
-                    aria-label={tile.title.replace('\n', ' ')}
-                    title={tile.title.replace('\n', ' ')}
-                    disabled={!canOpen}
-                    onPointerEnter={() => preloadWorkspaceSection(tile.section)}
-                    onFocus={() => preloadWorkspaceSection(tile.section)}
-                    onClick={() => onOpenSection(tile.section)}
-                  >
-                    {tile.title.split('\n').map((line) => (
-                      <span key={line}>{line}</span>
-                    ))}
-                  </button>
-                )
-              })}
+              {dashboardTiles.filter((tile) => canAccessWorkspaceSection(auth, tile.section)).map((tile) => (
+                <button
+                  className="dashboard-tile"
+                  type="button"
+                  key={tile.title}
+                  aria-label={tile.title.replace('\n', ' ')}
+                  title={tile.title.replace('\n', ' ')}
+                  onPointerEnter={() => preloadWorkspaceSection(tile.section)}
+                  onFocus={() => preloadWorkspaceSection(tile.section)}
+                  onClick={() => onOpenSection(tile.section)}
+                >
+                  {tile.title.split('\n').map((line) => (
+                    <span key={line}>{line}</span>
+                  ))}
+                </button>
+              ))}
             </div>
           </section>
         )
