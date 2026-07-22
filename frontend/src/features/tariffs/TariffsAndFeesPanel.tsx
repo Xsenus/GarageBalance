@@ -1783,7 +1783,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
         accountingMonth: `${feeCampaignGenerateMonth}-01`,
         comment: feeCampaignGenerateComment.trim() || undefined,
       })
-      setFeeCampaignActionMessage(`Создано начислений: ${result.createdCount}; сумма: ${formatMoney(result.totalAmount)} руб.; пропущено: ${result.skippedCount}.`)
+      setFeeCampaignActionMessage(`Доначислено: ${result.createdCount}; сумма: ${formatMoney(result.totalAmount)} руб.; уже было начислено: ${result.skippedCount}.`)
       closeFeeCampaignGenerateDialog()
     } catch (caught) {
       setFeeCampaignActionMessage(caught instanceof Error ? caught.message : 'Не удалось начислить сбор.')
@@ -2218,13 +2218,13 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
                       </button>
                     ) : (
                       <>
-                        <button className="ghost-button" type="button" disabled={!canManageTariffs || feeCampaignSavingId === campaign.id} onClick={() => {
+                        <button className="ghost-button" type="button" aria-label={`Доначислить сбор ${campaign.name}`} title="Ручное дозаполнение начислений" disabled={!canManageTariffs || feeCampaignSavingId === campaign.id} onClick={() => {
                           setFeeCampaignGenerateTarget(campaign)
                           setFeeCampaignGenerateMonth(getCurrentMonthInputValue())
                           setFeeCampaignGenerateComment('')
                         }}>
                           <FileText size={16} aria-hidden="true" />
-                          <span>Начислить</span>
+                          <span>Доначислить</span>
                         </button>
                         <button className="icon-button" type="button" aria-label={`Изменить сбор ${campaign.name}`} disabled={!canManageTariffs || feeCampaignSavingId === campaign.id || feeCampaignGarageOptionsLoading} onClick={() => void openFeeCampaignEditDialog(campaign)}>
                           <Pencil size={16} />
@@ -2579,15 +2579,15 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
           <section ref={feeCampaignGenerateDialogRef} className="detail-dialog contractors-dialog" role="dialog" aria-modal="true" aria-labelledby="fee-campaign-generate-title" aria-describedby="fee-campaign-generate-description" onMouseDown={(event) => event.stopPropagation()}>
             <div className="detail-dialog-header">
               <div>
-                <p className="eyebrow">Начисление</p>
-                <h3 id="fee-campaign-generate-title">Начислить сбор?</h3>
+                <p className="eyebrow">Ручное дозаполнение</p>
+                <h3 id="fee-campaign-generate-title">Доначислить сбор</h3>
                 <p>{feeCampaignGenerateTarget.name}</p>
               </div>
               <button className="icon-button" type="button" aria-label="Закрыть форму начисления сбора" onClick={closeFeeCampaignGenerateDialog}>
                 <X size={18} />
               </button>
             </div>
-            <p className="confirmation-text" id="fee-campaign-generate-description">Backend создаст начисления по активным гаражам и запишет действие в историю изменений.</p>
+            <p className="confirmation-text" id="fee-campaign-generate-description">Действующие сборы начисляются автоматически за рабочий месяц. Эта форма нужна для ручного дозаполнения: начисления появятся только у участников, которым выбранный сбор за этот месяц еще не начислялся. Повторные начисления не создаются, действие записывается в историю изменений.</p>
             <FormField label="Месяц начисления">
               <LocalizedDatePicker
                 ariaLabel="Месяц начисления сбора"
@@ -2596,14 +2596,14 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
                 disabled={feeCampaignSavingId === feeCampaignGenerateTarget.id}
                 onChange={setFeeCampaignGenerateMonth} />
             </FormField>
-            <FormField label="Комментарий">
-              <textarea aria-label="Комментарий к начислению сбора" value={feeCampaignGenerateComment} onChange={(event) => setFeeCampaignGenerateComment(event.target.value)} placeholder="Например: начисление по решению правления" />
+            <FormField label="Комментарий к ручному начислению" hint="Необязательно. Укажите причину, если начисления дозаполняются вручную.">
+              <textarea aria-label="Комментарий к ручному начислению сбора" value={feeCampaignGenerateComment} onChange={(event) => setFeeCampaignGenerateComment(event.target.value)} placeholder="Например: дозаполнение после уточнения участников" />
             </FormField>
             <div className="detail-dialog-actions contractors-dialog-actions">
               <button ref={feeCampaignGenerateCancelRef} className="ghost-button" type="button" onClick={closeFeeCampaignGenerateDialog}>Отмена</button>
               <button className="secondary-button" type="button" onClick={generateFeeCampaignAccruals} disabled={!feeCampaignGenerateMonth || feeCampaignSavingId === feeCampaignGenerateTarget.id}>
                 <Save size={16} />
-                <span>Начислить</span>
+                <span>Доначислить</span>
               </button>
             </div>
           </section>

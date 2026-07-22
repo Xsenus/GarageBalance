@@ -848,7 +848,7 @@ describe('App', () => {
     expect(within(screen.getByRole('dialog', { name: 'Изменить сбор' })).getByLabelText('Гараж 27')).toBeChecked()
   })
 
-  it('generates announced fee campaign accruals from tariffs page', async () => {
+  it('explains and performs manual fee campaign completion from tariffs page', async () => {
     const user = userEvent.setup()
     const targetIncomeType = createAccountingType({ id: 'income-type-other-income', name: 'Прочие доходы', code: 'other_income', isSystem: true })
     const campaign = createFeeCampaign({ id: 'fee-campaign-active', name: 'Сбор на ворота', incomeTypeId: targetIncomeType.id, incomeTypeName: targetIncomeType.name })
@@ -885,30 +885,35 @@ describe('App', () => {
     const feeCampaignsSection = within(tariffsPanel).getByLabelText('Объявленные сборы')
     expect(await within(feeCampaignsSection).findByText(campaign.name)).toBeInTheDocument()
 
-    await user.click(within(feeCampaignsSection).getAllByRole('button', { name: 'Начислить' })[0])
-    const generateDialog = await screen.findByRole('dialog', { name: 'Начислить сбор?' })
+    await user.click(within(feeCampaignsSection).getByRole('button', { name: 'Доначислить сбор Сбор на ворота' }))
+    const generateDialog = await screen.findByRole('dialog', { name: 'Доначислить сбор' })
+    expect(within(generateDialog).getByText(/Действующие сборы начисляются автоматически за рабочий месяц/)).toBeInTheDocument()
+    expect(within(generateDialog).getByText(/начисления появятся только у участников, которым выбранный сбор за этот месяц еще не начислялся/)).toBeInTheDocument()
+    expect(within(generateDialog).getByText(/Повторные начисления не создаются/)).toBeInTheDocument()
+    expect(within(generateDialog).getByText('Необязательно. Укажите причину, если начисления дозаполняются вручную.')).toBeInTheDocument()
     const feeCampaignMonth = within(generateDialog).getByLabelText('Месяц начисления сбора')
     expect(feeCampaignMonth).toHaveValue('06.2026')
     expect(feeCampaignMonth.closest('.localized-date-picker')).not.toBeNull()
     const generateCancelButton = within(generateDialog).getByRole('button', { name: 'Отмена' })
-    const generateConfirmButton = within(generateDialog).getByRole('button', { name: 'Начислить' })
+    const generateConfirmButton = within(generateDialog).getByRole('button', { name: 'Доначислить' })
     expect(Boolean(generateCancelButton.compareDocumentPosition(generateConfirmButton) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true)
     await waitFor(() => expect(generateCancelButton).toHaveFocus())
     await user.keyboard('{Escape}')
-    expect(screen.queryByRole('dialog', { name: 'Начислить сбор?' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('dialog', { name: 'Доначислить сбор' })).not.toBeInTheDocument()
     expect(generateRequests).toHaveLength(0)
 
-    await user.click(within(feeCampaignsSection).getAllByRole('button', { name: 'Начислить' })[0])
-    const reopenedGenerateDialog = await screen.findByRole('dialog', { name: 'Начислить сбор?' })
+    await user.click(within(feeCampaignsSection).getByRole('button', { name: 'Доначислить сбор Сбор на ворота' }))
+    const reopenedGenerateDialog = await screen.findByRole('dialog', { name: 'Доначислить сбор' })
     expect(within(reopenedGenerateDialog).getByLabelText('Месяц начисления сбора')).toHaveValue('06.2026')
-    await user.type(within(reopenedGenerateDialog).getByLabelText('Комментарий к начислению сбора'), 'Решение правления')
-    await user.click(within(reopenedGenerateDialog).getByRole('button', { name: 'Начислить' }))
+    await user.type(within(reopenedGenerateDialog).getByLabelText('Комментарий к ручному начислению сбора'), 'Решение правления')
+    await user.click(within(reopenedGenerateDialog).getByRole('button', { name: 'Доначислить' }))
     await waitFor(() => expect(generateRequests).toHaveLength(1))
     expect(generateRequests[0]).toMatchObject({
       accountingMonth: '2026-06-01',
       comment: 'Решение правления',
     })
-    expect(await within(feeCampaignsSection).findByText(/Создано начислений: 3/)).toBeInTheDocument()
+    expect(await within(feeCampaignsSection).findByText(/Доначислено: 3/)).toBeInTheDocument()
+    expect(within(feeCampaignsSection).getByText(/уже было начислено: 1/)).toBeInTheDocument()
   })
 
   it('archives and restores announced fee campaigns from tariffs page', async () => {

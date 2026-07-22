@@ -33,6 +33,24 @@ public sealed class EfFeeCampaignRepository(GarageBalanceDbContext dbContext) : 
         WithDetails(dbContext.FeeCampaigns)
             .SingleOrDefaultAsync(item => item.Id == id && !item.IsArchived, cancellationToken);
 
+    public async Task<IReadOnlyList<FeeCampaign>> GetActiveAccrualCandidatesAsync(
+        DateOnly accountingMonth,
+        int limit,
+        CancellationToken cancellationToken)
+    {
+        var monthEnd = accountingMonth.AddMonths(1).AddDays(-1);
+        return await dbContext.FeeCampaigns
+            .AsNoTracking()
+            .Where(item =>
+                !item.IsArchived &&
+                item.StartsOn <= monthEnd &&
+                (!item.EndsOn.HasValue || item.EndsOn.Value >= accountingMonth))
+            .OrderBy(item => item.StartsOn)
+            .ThenBy(item => item.Id)
+            .Take(limit)
+            .ToListAsync(cancellationToken);
+    }
+
     public Task<FeeCampaign?> FindActiveForAccrualGenerationAsync(Guid id, CancellationToken cancellationToken) =>
         dbContext.FeeCampaigns
             .Include(item => item.IncomeType)

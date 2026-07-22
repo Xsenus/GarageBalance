@@ -1923,6 +1923,18 @@ public sealed class FinanceControllerTests
             return Task.FromResult(GenerateFeeCampaignAccrualsResult);
         }
 
+        public Task<FinanceResult<ActiveFeeCampaignAccrualGenerationResultDto>> GenerateActiveFeeCampaignAccrualsAsync(GenerateActiveFeeCampaignAccrualsRequest request, Guid? actorUserId, CancellationToken cancellationToken) =>
+            Task.FromResult(FinanceResult<ActiveFeeCampaignAccrualGenerationResultDto>.Success(
+                new ActiveFeeCampaignAccrualGenerationResultDto(
+                    request.AccountingMonth,
+                    0,
+                    0,
+                    0,
+                    0m,
+                    [],
+                    [],
+                    [])));
+
         public Task<FinanceResult<SupplierGroupSalaryAccrualGenerationResultDto>> GenerateSupplierGroupSalaryAccrualsAsync(GenerateSupplierGroupSalaryAccrualsRequest request, Guid? actorUserId, CancellationToken cancellationToken)
         {
             LastActorUserId = actorUserId;

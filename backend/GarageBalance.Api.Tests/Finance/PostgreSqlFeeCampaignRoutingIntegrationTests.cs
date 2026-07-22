@@ -171,6 +171,50 @@ public sealed class PostgreSqlFeeCampaignRoutingIntegrationTests
         }
     }
 
+    [PostgreSqlFact]
+    public async Task ActiveCampaignAutomation_UsesPostgreSqlMonthWindowAndRemainsIdempotent()
+    {
+        await using var database = await PostgreSqlTestDatabase.CreateAsync();
+        var builder = new AccountingTestDataBuilder();
+        var garage = builder.BuildGarage(number: "FEE-AUTO-PG-1");
+        Guid dueCampaignId;
+
+        await using (var setupContext = database.CreateContext())
+        {
+            var destination = await setupContext.IncomeTypes.SingleAsync(item => item.Code == "other_income");
+            var dueCampaign = CreateCampaign("Автоматический сбор PostgreSQL", destination, 650m);
+            dueCampaign.StartsOn = new DateOnly(2026, 8, 20);
+            dueCampaign.EndsOn = new DateOnly(2026, 8, 31);
+            var futureCampaign = CreateCampaign("Будущий сбор PostgreSQL", destination, 700m);
+            futureCampaign.StartsOn = new DateOnly(2026, 9, 1);
+            setupContext.AddRange(garage, dueCampaign, futureCampaign);
+            await setupContext.SaveChangesAsync();
+            dueCampaignId = dueCampaign.Id;
+        }
+
+        await using (var generationContext = database.CreateContext())
+        {
+            var service = FinanceServiceTestFactory.Create(generationContext);
+            var request = new GenerateActiveFeeCampaignAccrualsRequest(new DateOnly(2026, 8, 1), "Автоматический запуск PostgreSQL");
+
+            var first = await service.GenerateActiveFeeCampaignAccrualsAsync(request, null, CancellationToken.None);
+            var second = await service.GenerateActiveFeeCampaignAccrualsAsync(request, null, CancellationToken.None);
+
+            Assert.True(first.Succeeded, first.ErrorMessage);
+            Assert.Equal(1, first.Value!.CreatedCount);
+            Assert.Equal(dueCampaignId, Assert.Single(first.Value.CampaignResults).FeeCampaignId);
+            Assert.True(second.Succeeded, second.ErrorMessage);
+            Assert.Equal(0, second.Value!.CreatedCount);
+            Assert.Single(second.Value.SkippedCampaigns);
+        }
+
+        await using var verificationContext = database.CreateContext();
+        var accrual = await verificationContext.Accruals.AsNoTracking().SingleAsync();
+        Assert.Equal(dueCampaignId, accrual.FeeCampaignId);
+        Assert.Equal(new DateOnly(2026, 8, 1), accrual.AccountingMonth);
+        Assert.Contains("Автоматический запуск PostgreSQL", accrual.Comment, StringComparison.Ordinal);
+    }
+
     private static FeeCampaign CreateCampaign(string name, IncomeType incomeType, decimal contributionAmount) =>
         new()
         {

@@ -78,6 +78,8 @@ public interface IFinanceService
 
     Task<FinanceResult<FeeCampaignAccrualGenerationResultDto>> GenerateFeeCampaignAccrualsAsync(GenerateFeeCampaignAccrualsRequest request, Guid? actorUserId, CancellationToken cancellationToken);
 
+    Task<FinanceResult<ActiveFeeCampaignAccrualGenerationResultDto>> GenerateActiveFeeCampaignAccrualsAsync(GenerateActiveFeeCampaignAccrualsRequest request, Guid? actorUserId, CancellationToken cancellationToken);
+
     Task<FinanceResult<SupplierGroupSalaryAccrualGenerationResultDto>> GenerateSupplierGroupSalaryAccrualsAsync(GenerateSupplierGroupSalaryAccrualsRequest request, Guid? actorUserId, CancellationToken cancellationToken);
 
     Task<FinanceResult<MeterReadingDto>> CreateMeterReadingAsync(CreateMeterReadingRequest request, Guid? actorUserId, CancellationToken cancellationToken);

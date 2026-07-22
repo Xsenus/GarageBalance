@@ -3396,6 +3396,18 @@ public sealed class FinanceServiceTests
             Tariff = tariff,
             UnitName = "руб."
         });
+        AddOtherIncomeDestination(database.Context);
+        var campaign = new FeeCampaign
+        {
+            Name = "Автоматический сбор на ворота",
+            IncomeType = fixtures.IncomeType,
+            ContributionAmount = 700m,
+            TargetAmount = 700m,
+            StartsOn = new DateOnly(2026, 8, 1),
+            AppliesToAllGarages = true,
+            OverdueGraceDays = 30
+        };
+        database.Context.FeeCampaigns.Add(campaign);
         await database.Context.SaveChangesAsync();
 
         var runner = new RegularAccrualAutomationRunner(
@@ -3403,16 +3415,174 @@ public sealed class FinanceServiceTests
             new TestBusinessDateProvider(new DateOnly(2026, 8, 1)),
             NullLogger<RegularAccrualAutomationRunner>.Instance);
 
-        await runner.RunCurrentMonthAsync(CancellationToken.None);
-        await runner.RunCurrentMonthAsync(CancellationToken.None);
+        var firstRun = await runner.RunCurrentMonthAsync(CancellationToken.None);
+        var secondRun = await runner.RunCurrentMonthAsync(CancellationToken.None);
 
-        var accrual = Assert.Single(database.Context.Accruals);
-        Assert.Equal(new DateOnly(2026, 8, 1), accrual.AccountingMonth);
-        Assert.Equal(500m, accrual.Amount);
-        Assert.Contains("Автоматическое ежемесячное формирование", accrual.Comment, StringComparison.Ordinal);
+        var regularAccrual = Assert.Single(database.Context.Accruals, item => item.FeeCampaignId == null);
+        Assert.Equal(new DateOnly(2026, 8, 1), regularAccrual.AccountingMonth);
+        Assert.Equal(500m, regularAccrual.Amount);
+        Assert.Contains("Автоматическое ежемесячное формирование", regularAccrual.Comment, StringComparison.Ordinal);
+        var feeCampaignAccrual = Assert.Single(database.Context.Accruals, item => item.FeeCampaignId == campaign.Id);
+        Assert.Equal(700m, feeCampaignAccrual.Amount);
+        Assert.Contains("Автоматическое начисление действующих сборов", feeCampaignAccrual.Comment, StringComparison.Ordinal);
+        Assert.True(firstRun.Succeeded);
+        Assert.Equal(2, firstRun.CreatedCount);
+        Assert.Contains("действующие сборы — создано 1", firstRun.Message, StringComparison.Ordinal);
+        Assert.True(secondRun.Succeeded);
+        Assert.Equal(0, secondRun.CreatedCount);
+        Assert.Equal(2, database.Context.Accruals.Count());
         Assert.Contains(
             database.Context.AuditEvents,
             item => item.Action == "finance.regular_catalog_accruals_generated" && item.ActorUserId == null);
+        Assert.Contains(
+            database.Context.AuditEvents,
+            item => item.Action == "finance.fee_campaign_accruals_generated" && item.ActorUserId == null);
+    }
+
+    [Fact]
+    public async Task GenerateActiveFeeCampaignAccrualsAsync_ProcessesOnlyDueCampaignsAndTreatsRepeatAsNoOp()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        AddOtherIncomeDestination(database.Context);
+        var dueCampaign = new FeeCampaign
+        {
+            Name = "Действующий сбор",
+            IncomeType = fixtures.IncomeType,
+            ContributionAmount = 600m,
+            TargetAmount = 600m,
+            StartsOn = new DateOnly(2026, 8, 15),
+            EndsOn = new DateOnly(2026, 8, 31),
+            AppliesToAllGarages = true,
+            OverdueGraceDays = 30
+        };
+        database.Context.FeeCampaigns.AddRange(
+            dueCampaign,
+            new FeeCampaign
+            {
+                Name = "Будущий сбор",
+                IncomeType = fixtures.IncomeType,
+                ContributionAmount = 700m,
+                TargetAmount = 700m,
+                StartsOn = new DateOnly(2026, 9, 1),
+                AppliesToAllGarages = true,
+                OverdueGraceDays = 30
+            },
+            new FeeCampaign
+            {
+                Name = "Завершенный сбор",
+                IncomeType = fixtures.IncomeType,
+                ContributionAmount = 800m,
+                TargetAmount = 800m,
+                StartsOn = new DateOnly(2026, 1, 1),
+                EndsOn = new DateOnly(2026, 7, 31),
+                AppliesToAllGarages = true,
+                OverdueGraceDays = 30
+            });
+        await database.Context.SaveChangesAsync();
+        var service = FinanceServiceTestFactory.Create(database.Context);
+        var request = new GenerateActiveFeeCampaignAccrualsRequest(new DateOnly(2026, 8, 15), "Автоматический запуск");
+
+        var first = await service.GenerateActiveFeeCampaignAccrualsAsync(request, null, CancellationToken.None);
+        var second = await service.GenerateActiveFeeCampaignAccrualsAsync(request, null, CancellationToken.None);
+
+        Assert.True(first.Succeeded, first.ErrorMessage);
+        Assert.Equal(1, first.Value!.CampaignCount);
+        Assert.Equal(1, first.Value.CreatedCount);
+        Assert.Equal(600m, first.Value.TotalAmount);
+        Assert.Empty(first.Value.FailedCampaigns);
+        Assert.Equal(dueCampaign.Id, Assert.Single(first.Value.CampaignResults).FeeCampaignId);
+        Assert.True(second.Succeeded, second.ErrorMessage);
+        Assert.Equal(0, second.Value!.CreatedCount);
+        Assert.Contains(second.Value.SkippedCampaigns, item => item.Contains("Действующий сбор", StringComparison.Ordinal));
+        Assert.Single(database.Context.Accruals);
+    }
+
+    [Fact]
+    public async Task GenerateActiveFeeCampaignAccrualsAsync_RejectsMoreThanBoundedCampaignLimit()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        for (var index = 0; index < 501; index++)
+        {
+            database.Context.FeeCampaigns.Add(new FeeCampaign
+            {
+                Name = $"Массовый сбор {index:D3}",
+                IncomeType = fixtures.IncomeType,
+                ContributionAmount = 100m,
+                TargetAmount = 100m,
+                StartsOn = new DateOnly(2026, 1, 1),
+                AppliesToAllGarages = true,
+                OverdueGraceDays = 30
+            });
+        }
+        await database.Context.SaveChangesAsync();
+
+        var result = await FinanceServiceTestFactory.Create(database.Context).GenerateActiveFeeCampaignAccrualsAsync(
+            new GenerateActiveFeeCampaignAccrualsRequest(new DateOnly(2026, 8, 1), null),
+            null,
+            CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Equal("active_fee_campaign_limit_exceeded", result.ErrorCode);
+        Assert.Empty(database.Context.Accruals);
+    }
+
+    [Fact]
+    public async Task GenerateActiveFeeCampaignAccrualsAsync_ReportsCampaignFailureForAutomationRetry()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        database.Context.FeeCampaigns.Add(new FeeCampaign
+        {
+            Name = "Сбор без назначения дохода",
+            IncomeType = fixtures.IncomeType,
+            ContributionAmount = 500m,
+            TargetAmount = 500m,
+            StartsOn = new DateOnly(2026, 1, 1),
+            AppliesToAllGarages = true,
+            OverdueGraceDays = 30
+        });
+        await database.Context.SaveChangesAsync();
+
+        var result = await FinanceServiceTestFactory.Create(database.Context).GenerateActiveFeeCampaignAccrualsAsync(
+            new GenerateActiveFeeCampaignAccrualsRequest(new DateOnly(2026, 8, 1), null),
+            null,
+            CancellationToken.None);
+
+        Assert.True(result.Succeeded, result.ErrorMessage);
+        Assert.Equal(0, result.Value!.CreatedCount);
+        Assert.Contains(result.Value.FailedCampaigns, item => item.Contains("Прочие доходы", StringComparison.Ordinal));
+        Assert.Empty(database.Context.Accruals);
+    }
+
+    [Fact]
+    public async Task RegularAccrualAutomationRunner_ReportsFailedFeeCampaignForRetry()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        database.Context.FeeCampaigns.Add(new FeeCampaign
+        {
+            Name = "Проблемный автоматический сбор",
+            IncomeType = fixtures.IncomeType,
+            ContributionAmount = 500m,
+            TargetAmount = 500m,
+            StartsOn = new DateOnly(2026, 1, 1),
+            AppliesToAllGarages = true,
+            OverdueGraceDays = 30
+        });
+        await database.Context.SaveChangesAsync();
+        var runner = new RegularAccrualAutomationRunner(
+            FinanceServiceTestFactory.Create(database.Context),
+            new TestBusinessDateProvider(new DateOnly(2026, 8, 1)),
+            NullLogger<RegularAccrualAutomationRunner>.Instance);
+
+        var result = await runner.RunCurrentMonthAsync(CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Equal(0, result.CreatedCount);
+        Assert.Contains("Проблемный автоматический сбор", result.Message, StringComparison.Ordinal);
+        Assert.Contains("Фоновая задача повторит попытку", result.Message, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -3425,6 +3595,13 @@ public sealed class FinanceServiceTests
 
         Assert.Equal(TimeSpan.FromMinutes(15), options.GetDelayAfterRun(failed: false));
         Assert.Equal(TimeSpan.FromMinutes(5), options.GetDelayAfterRun(failed: true));
+    }
+
+    [Fact]
+    public void RegularAccrualAutomationWorker_RetriesUnsuccessfulRunSooner()
+    {
+        Assert.False(RegularAccrualAutomationWorker.DidRunFail(new RegularAccrualAutomationRunResult(true, 2, 1, "Готово")));
+        Assert.True(RegularAccrualAutomationWorker.DidRunFail(new RegularAccrualAutomationRunResult(false, 1, 0, "Нужен повтор")));
     }
 
     [Fact]

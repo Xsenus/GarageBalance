@@ -30,46 +30,58 @@ public sealed class RegularAccrualAutomationRunner(
     {
         var accountingMonth = new DateOnly(businessDate.Year, businessDate.Month, 1);
 
-        var result = await financeService.GenerateRegularCatalogAccrualsAsync(
+        var regularResult = await financeService.GenerateRegularCatalogAccrualsAsync(
             new GenerateRegularCatalogAccrualsRequest(accountingMonth, "Автоматическое ежемесячное формирование"),
             actorUserId,
             cancellationToken);
-
-        if (result.Succeeded)
+        var regularCreatedCount = regularResult.Succeeded ? regularResult.Value!.CreatedCount : 0;
+        var regularSkippedCount = regularResult.Succeeded ? regularResult.Value!.SkippedCount : 0;
+        var failures = new List<string>();
+        if (!regularResult.Succeeded && regularResult.ErrorCode is not ("regular_catalog_empty" or "regular_catalog_accruals_empty"))
         {
-            logger.LogInformation(
-                "Regular accrual automation completed for {AccountingMonth}: created {CreatedCount}, skipped {SkippedCount}.",
-                accountingMonth,
-                result.Value!.CreatedCount,
-                result.Value.SkippedCount);
-            return new RegularAccrualAutomationRunResult(
-                true,
-                result.Value.CreatedCount,
-                result.Value.SkippedCount,
-                $"Начисления за {accountingMonth:MM.yyyy}: создано {result.Value.CreatedCount}, пропущено {result.Value.SkippedCount}.");
+            failures.Add($"регулярные услуги: {regularResult.ErrorCode}");
         }
 
-        if (result.ErrorCode is "regular_catalog_empty" or "regular_catalog_accruals_empty")
+        var feeCampaignResult = await financeService.GenerateActiveFeeCampaignAccrualsAsync(
+            new GenerateActiveFeeCampaignAccrualsRequest(accountingMonth, "Автоматическое начисление действующих сборов"),
+            actorUserId,
+            cancellationToken);
+        var feeCampaignCreatedCount = feeCampaignResult.Succeeded ? feeCampaignResult.Value!.CreatedCount : 0;
+        var feeCampaignSkippedCount = feeCampaignResult.Succeeded ? feeCampaignResult.Value!.SkippedCount : 0;
+        if (!feeCampaignResult.Succeeded)
         {
-            logger.LogInformation(
-                "Regular accrual automation has no rows to create for {AccountingMonth}: {ErrorCode}.",
-                accountingMonth,
-                result.ErrorCode);
-            return new RegularAccrualAutomationRunResult(
-                true,
-                0,
-                0,
-                $"За {accountingMonth:MM.yyyy} нет настроенных регулярных начислений.");
+            failures.Add($"действующие сборы: {feeCampaignResult.ErrorCode}");
+        }
+        else
+        {
+            failures.AddRange(feeCampaignResult.Value!.FailedCampaigns.Select(failure => $"сбор: {failure}"));
         }
 
-        logger.LogWarning(
-            "Regular accrual automation did not complete for {AccountingMonth}: {ErrorCode}.",
+        var createdCount = regularCreatedCount + feeCampaignCreatedCount;
+        var skippedCount = regularSkippedCount + feeCampaignSkippedCount;
+        if (failures.Count > 0)
+        {
+            logger.LogWarning(
+                "Accrual automation did not complete for {AccountingMonth}: {Failures}.",
+                accountingMonth,
+                string.Join("; ", failures));
+            return new RegularAccrualAutomationRunResult(
+                false,
+                createdCount,
+                skippedCount,
+                $"Начисления за {accountingMonth:MM.yyyy} созданы частично: {string.Join("; ", failures)}. Фоновая задача повторит попытку.");
+        }
+
+        logger.LogInformation(
+            "Accrual automation completed for {AccountingMonth}: regular created {RegularCreatedCount}, fee campaign created {FeeCampaignCreatedCount}, skipped {SkippedCount}.",
             accountingMonth,
-            result.ErrorCode);
+            regularCreatedCount,
+            feeCampaignCreatedCount,
+            skippedCount);
         return new RegularAccrualAutomationRunResult(
-            false,
-            0,
-            0,
-            $"Рабочая дата сохранена, но автоматическое формирование начислений не завершилось ({result.ErrorCode}). Фоновая задача повторит попытку.");
+            true,
+            createdCount,
+            skippedCount,
+            $"Начисления за {accountingMonth:MM.yyyy}: регулярные услуги — создано {regularCreatedCount}; действующие сборы — создано {feeCampaignCreatedCount}; пропущено {skippedCount}.");
     }
 }

@@ -24,7 +24,8 @@ public sealed class RegularAccrualAutomationWorker(
             {
                 using var scope = scopeFactory.CreateScope();
                 var runner = scope.ServiceProvider.GetRequiredService<IRegularAccrualAutomationRunner>();
-                await runner.RunCurrentMonthAsync(stoppingToken);
+                var run = await runner.RunCurrentMonthAsync(stoppingToken);
+                failed = DidRunFail(run);
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {
@@ -49,4 +50,6 @@ public sealed class RegularAccrualAutomationWorker(
             }
         }
     }
+
+    internal static bool DidRunFail(RegularAccrualAutomationRunResult run) => !run.Succeeded;
 }

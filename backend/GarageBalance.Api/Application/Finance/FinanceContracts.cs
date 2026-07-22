@@ -181,6 +181,10 @@ public sealed record GenerateFeeCampaignAccrualsRequest(
     DateOnly AccountingMonth,
     [MaxLength(1000)] string? Comment);
 
+public sealed record GenerateActiveFeeCampaignAccrualsRequest(
+    DateOnly AccountingMonth,
+    [MaxLength(1000)] string? Comment);
+
 public sealed record GenerateSupplierGroupSalaryAccrualsRequest(
     Guid SupplierGroupId,
     DateOnly AccountingMonth,
@@ -222,6 +226,16 @@ public sealed record FeeCampaignAccrualGenerationResultDto(
     decimal TotalAmount,
     IReadOnlyList<AccrualDto> CreatedAccruals,
     IReadOnlyList<string> SkippedGarages);
+
+public sealed record ActiveFeeCampaignAccrualGenerationResultDto(
+    DateOnly AccountingMonth,
+    int CampaignCount,
+    int CreatedCount,
+    int SkippedCount,
+    decimal TotalAmount,
+    IReadOnlyList<FeeCampaignAccrualGenerationResultDto> CampaignResults,
+    IReadOnlyList<string> SkippedCampaigns,
+    IReadOnlyList<string> FailedCampaigns);
 
 public sealed record SupplierGroupSalaryAccrualGenerationResultDto(
     DateOnly AccountingMonth,

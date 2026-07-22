@@ -41,6 +41,7 @@ public sealed class FinanceService(
 {
     private const int DefaultListLimit = 100;
     private const int MaxListLimit = 500;
+    private const int MaxAutomaticFeeCampaigns = 500;
     private const int MaxBalanceHistoryMonths = 60;
     private const int EarlyElectricityPaymentWarningDays = 30;
     private const string DebtTransferIncomeTypeCode = "debt_transfer";
@@ -2417,7 +2418,7 @@ public sealed class FinanceService(
                 "Системное назначение «Прочие доходы» не настроено или не связано с фондом.");
         }
 
-        if (campaign.StartsOn > month)
+        if (MonthPeriod.Normalize(campaign.StartsOn) > month)
         {
             return FinanceResult<FeeCampaignAccrualGenerationResultDto>.Failure("fee_campaign_not_started", "Сбор еще не действует в выбранном месяце.");
         }
@@ -2524,6 +2525,60 @@ public sealed class FinanceService(
             created,
             skipped);
         return FinanceResult<FeeCampaignAccrualGenerationResultDto>.Success(result);
+    }
+
+    public async Task<FinanceResult<ActiveFeeCampaignAccrualGenerationResultDto>> GenerateActiveFeeCampaignAccrualsAsync(
+        GenerateActiveFeeCampaignAccrualsRequest request,
+        Guid? actorUserId,
+        CancellationToken cancellationToken)
+    {
+        var month = MonthPeriod.Normalize(request.AccountingMonth);
+        var candidates = await feeCampaignRepository.GetActiveAccrualCandidatesAsync(
+            month,
+            MaxAutomaticFeeCampaigns + 1,
+            cancellationToken);
+        if (candidates.Count > MaxAutomaticFeeCampaigns)
+        {
+            return FinanceResult<ActiveFeeCampaignAccrualGenerationResultDto>.Failure(
+                "active_fee_campaign_limit_exceeded",
+                $"За {month:MM.yyyy} найдено больше {MaxAutomaticFeeCampaigns} действующих сборов. Архивируйте завершенные сборы или начислите их вручную.");
+        }
+
+        var campaignResults = new List<FeeCampaignAccrualGenerationResultDto>();
+        var skippedCampaigns = new List<string>();
+        var failedCampaigns = new List<string>();
+        foreach (var candidate in candidates)
+        {
+            var result = await GenerateFeeCampaignAccrualsAsync(
+                new GenerateFeeCampaignAccrualsRequest(candidate.Id, month, request.Comment),
+                actorUserId,
+                cancellationToken);
+            if (result.Succeeded)
+            {
+                campaignResults.Add(result.Value!);
+            }
+            else if (result.ErrorCode == "fee_campaign_accruals_empty")
+            {
+                skippedCampaigns.Add($"{candidate.Name}: начисления за {month:MM.yyyy} уже созданы.");
+            }
+            else
+            {
+                failedCampaigns.Add($"{candidate.Name}: {result.ErrorMessage}");
+            }
+        }
+
+        var createdCount = campaignResults.Sum(result => result.CreatedCount);
+        var skippedCount = campaignResults.Sum(result => result.SkippedCount) + skippedCampaigns.Count;
+        return FinanceResult<ActiveFeeCampaignAccrualGenerationResultDto>.Success(
+            new ActiveFeeCampaignAccrualGenerationResultDto(
+                month,
+                candidates.Count,
+                createdCount,
+                skippedCount,
+                campaignResults.Sum(result => result.TotalAmount),
+                campaignResults,
+                skippedCampaigns,
+                failedCampaigns));
     }
 
     public async Task<FinanceResult<SupplierGroupSalaryAccrualGenerationResultDto>> GenerateSupplierGroupSalaryAccrualsAsync(GenerateSupplierGroupSalaryAccrualsRequest request, Guid? actorUserId, CancellationToken cancellationToken)
