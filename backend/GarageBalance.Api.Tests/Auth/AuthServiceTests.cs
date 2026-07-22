@@ -15,7 +15,7 @@ public sealed class AuthServiceTests
         var service = CreateService(repository);
 
         var result = await service.BootstrapAdminAsync(
-            new BootstrapAdminRequest("admin@example.com", "StrongPass123", "Главный администратор"),
+            new BootstrapAdminRequest("admin@example.com", "password", "Главный администратор"),
             CancellationToken.None);
 
         Assert.True(result.Succeeded);
@@ -52,7 +52,7 @@ public sealed class AuthServiceTests
         var service = CreateService(repository);
 
         var result = await service.BootstrapAdminAsync(
-            new BootstrapAdminRequest("admin@example.com", "password", "Администратор"),
+            new BootstrapAdminRequest("admin@example.com", "short", "Администратор"),
             CancellationToken.None);
 
         Assert.False(result.Succeeded);
@@ -269,7 +269,7 @@ public sealed class AuthServiceTests
 
         var result = await service.ChangeOwnPasswordAsync(
             principal,
-            new ChangeOwnPasswordRequest("StrongPass123", "password"),
+            new ChangeOwnPasswordRequest("StrongPass123", "short"),
             CancellationToken.None);
 
         Assert.False(result.Succeeded);

@@ -23,21 +23,6 @@ public sealed class PasswordPolicyValidator : IPasswordPolicyValidator
             return PasswordPolicyResult.Failure($"Пароль должен быть не короче {MinimumLength} символов.");
         }
 
-        if (!password.Any(char.IsUpper))
-        {
-            return PasswordPolicyResult.Failure("Пароль должен содержать хотя бы одну заглавную букву.");
-        }
-
-        if (!password.Any(char.IsLower))
-        {
-            return PasswordPolicyResult.Failure("Пароль должен содержать хотя бы одну строчную букву.");
-        }
-
-        if (!password.Any(char.IsDigit))
-        {
-            return PasswordPolicyResult.Failure("Пароль должен содержать хотя бы одну цифру.");
-        }
-
         return PasswordPolicyResult.Success();
     }
 }

@@ -35,19 +35,18 @@ import {
 } from './validation'
 
 describe('shared validation helpers', () => {
-  it('accepts strong passwords and reports every missing password policy part', () => {
-    expect(getPasswordPolicyErrors('StrongPass123')).toEqual([])
+  it('accepts any non-blank password of at least eight characters', () => {
+    expect(getPasswordPolicyErrors('password')).toEqual([])
+    expect(getPasswordPolicyErrors('PASSWORD')).toEqual([])
+    expect(getPasswordPolicyErrors('12345678')).toEqual([])
+    expect(getPasswordPolicyErrors('пароль12')).toEqual([])
     expect(getPasswordPolicyErrors('')).toEqual(['Укажите пароль.'])
-    expect(getPasswordPolicyErrors('weak')).toEqual([
-      'Пароль должен быть не короче 8 символов.',
-      'Добавьте заглавную букву в пароль.',
-      'Добавьте хотя бы одну цифру в пароль.',
-    ])
-    expect(getPasswordPolicyErrors('Сильный123')).toEqual([])
+    expect(getPasswordPolicyErrors('        ')).toEqual(['Укажите пароль.'])
+    expect(getPasswordPolicyErrors('1234567')).toEqual(['Пароль должен быть не короче 8 символов.'])
   })
 
   it('validates login and bootstrap auth forms', () => {
-    expect(getAuthValidationErrors('login', 'admin@example.com', '', 'StrongPass123')).toEqual([])
+    expect(getAuthValidationErrors('login', 'admin@example.com', '', 'password')).toEqual([])
     expect(getAuthValidationErrors('bootstrap', 'admin@example.com', '', 'StrongPass123')).toEqual(['Укажите имя пользователя.'])
     expect(getAuthValidationErrors('login', 'bad-email', '', '')).toEqual([
       'Проверьте формат email.',
@@ -61,8 +60,6 @@ describe('shared validation helpers', () => {
     expect(getPasswordChangeValidationErrors('', 'short', '')).toEqual([
       'Укажите текущий пароль.',
       'Пароль должен быть не короче 8 символов.',
-      'Добавьте заглавную букву в пароль.',
-      'Добавьте хотя бы одну цифру в пароль.',
       'Повторите новый пароль.',
     ])
     expect(getPasswordChangeValidationErrors('OldPass123', 'NewPass123', 'OtherPass123')).toContain('Новый пароль и повтор пароля не совпадают.')

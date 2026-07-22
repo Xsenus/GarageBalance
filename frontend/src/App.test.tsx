@@ -159,7 +159,7 @@ describe('App', () => {
     expect(screen.getByLabelText('Пароль')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Войти' })).toBeInTheDocument()
     expect(screen.queryByText('GarageBalance')).not.toBeInTheDocument()
-    expect(screen.queryByText('Минимум 8 символов: заглавная буква, строчная буква и цифра.')).not.toBeInTheDocument()
+    expect(screen.queryByText('Минимум 8 символов.')).not.toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: /сначала вход и права/i })).not.toBeInTheDocument()
     expect(screen.queryByLabelText('Имя пользователя')).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Создать администратора' })).not.toBeInTheDocument()
@@ -6387,8 +6387,8 @@ describe('App', () => {
     const passwordPanel = await screen.findByRole('region', { name: 'Безопасность аккаунта' })
 
     await user.type(within(passwordPanel).getByLabelText('Текущий пароль'), 'StrongPass123')
-    await user.type(within(passwordPanel).getByLabelText('Новый пароль'), 'NewStrongPass123')
-    await user.type(within(passwordPanel).getByLabelText('Повтор нового пароля'), 'NewStrongPass123')
+    await user.type(within(passwordPanel).getByLabelText('Новый пароль'), 'password')
+    await user.type(within(passwordPanel).getByLabelText('Повтор нового пароля'), 'password')
     await user.click(within(passwordPanel).getByRole('button', { name: 'Изменить пароль' }))
 
     expect(passwordRequest).toBeNull()
@@ -6398,14 +6398,14 @@ describe('App', () => {
     expect(within(confirmationChanges).getByText('Пароль')).toBeInTheDocument()
     expect(within(confirmationChanges).getByText('Без изменения')).toBeInTheDocument()
     expect(within(confirmationChanges).getByText('изменено')).toBeInTheDocument()
-    expect(confirmation).not.toHaveTextContent('NewStrongPass123')
+    expect(confirmation).not.toHaveTextContent('password')
     expect(within(confirmation).getByRole('button', { name: 'Отмена' })).toHaveFocus()
     await user.click(within(confirmation).getByRole('button', { name: 'Подтвердить смену пароля' }))
 
     expect(passwordRequest).toEqual({
       token: 'token',
       currentPassword: 'StrongPass123',
-      newPassword: 'NewStrongPass123',
+      newPassword: 'password',
     })
     expect(await within(passwordPanel).findByText('Пароль изменен. Используйте новый пароль при следующем входе.')).toHaveAttribute('role', 'status')
     expect(within(passwordPanel).getByLabelText('Текущий пароль')).toHaveValue('')
@@ -6519,12 +6519,12 @@ describe('App', () => {
     const passwordPanel = await screen.findByRole('region', { name: 'Безопасность аккаунта' })
 
     await user.type(within(passwordPanel).getByLabelText('Текущий пароль'), 'StrongPass123')
-    await user.type(within(passwordPanel).getByLabelText('Новый пароль'), 'Password')
-    await user.type(within(passwordPanel).getByLabelText('Повтор нового пароля'), 'Password')
+    await user.type(within(passwordPanel).getByLabelText('Новый пароль'), 'short')
+    await user.type(within(passwordPanel).getByLabelText('Повтор нового пароля'), 'short')
     await user.click(within(passwordPanel).getByRole('button', { name: 'Изменить пароль' }))
 
     expect(await within(passwordPanel).findByText('Проверьте смену пароля')).toBeInTheDocument()
-    expect(within(passwordPanel).getByText('Добавьте хотя бы одну цифру в пароль.')).toBeInTheDocument()
+    expect(within(passwordPanel).getByText('Пароль должен быть не короче 8 символов.')).toBeInTheDocument()
     expect(within(passwordPanel).getByRole('alert')).toBeInTheDocument()
     expect(changeCalled).toBe(false)
   })
@@ -7265,8 +7265,8 @@ describe('App', () => {
     expect(within(dialog).getAllByRole('button').filter((button) => ['Сохранить', 'Отмена'].includes(button.textContent ?? '')).map((button) => button.textContent)).toEqual(['Сохранить', 'Отмена'])
     await user.type(within(dialog).getByLabelText('Email пользователя'), 'operator@example.com')
     await user.type(within(dialog).getByLabelText('Имя пользователя'), 'Оператор')
-    await user.type(within(dialog).getByLabelText('Пароль пользователя'), 'StrongPass123')
-    await user.type(within(dialog).getByLabelText('Подтверждение пароля пользователя'), 'StrongPass123')
+    await user.type(within(dialog).getByLabelText('Пароль пользователя'), 'password')
+    await user.type(within(dialog).getByLabelText('Подтверждение пароля пользователя'), 'password')
     await user.selectOptions(within(dialog).getByLabelText('Роль пользователя'), 'operator')
     await user.click(within(dialog).getByRole('button', { name: 'Сохранить' }))
 
@@ -7299,13 +7299,13 @@ describe('App', () => {
     const dialog = await screen.findByRole('dialog', { name: 'Новый пользователь' })
     await user.type(within(dialog).getByLabelText('Email пользователя'), 'operator@example.com')
     await user.type(within(dialog).getByLabelText('Имя пользователя'), 'Оператор')
-    await user.type(within(dialog).getByLabelText('Пароль пользователя'), 'Password')
-    await user.type(within(dialog).getByLabelText('Подтверждение пароля пользователя'), 'Password')
+    await user.type(within(dialog).getByLabelText('Пароль пользователя'), 'short')
+    await user.type(within(dialog).getByLabelText('Подтверждение пароля пользователя'), 'short')
     await user.selectOptions(within(dialog).getByLabelText('Роль пользователя'), 'operator')
     await user.click(within(dialog).getByRole('button', { name: 'Сохранить' }))
 
     expect(await within(dialog).findByText('Проверьте нового пользователя')).toBeInTheDocument()
-    expect(within(dialog).getByText('Добавьте хотя бы одну цифру в пароль.')).toBeInTheDocument()
+    expect(within(dialog).getByText('Пароль должен быть не короче 8 символов.')).toBeInTheDocument()
     expect(within(dialog).getByRole('alert')).toBeInTheDocument()
     expect(createCalled).toBe(false)
     expect(within(usersPanel).queryByText('operator@example.com')).not.toBeInTheDocument()
@@ -14430,7 +14430,7 @@ describe('App', () => {
     const user = userEvent.setup()
     const authClient = createAuthClient({
       login: async () => {
-        throw new Error('Пароль должен содержать хотя бы одну цифру.')
+        throw new Error('Пароль должен быть не короче 8 символов.')
       },
     })
     render(<App authClient={authClient} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
@@ -14438,7 +14438,7 @@ describe('App', () => {
     await user.type(screen.getByLabelText('Пароль'), 'Password1')
     await user.click(screen.getByRole('button', { name: 'Войти' }))
 
-    expect(await screen.findByText('Пароль должен содержать хотя бы одну цифру.')).toBeInTheDocument()
+    expect(await screen.findByText('Пароль должен быть не короче 8 символов.')).toBeInTheDocument()
     expect(screen.getByRole('alert')).toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: /финансовый учет гск/i })).not.toBeInTheDocument()
   })
@@ -14454,11 +14454,11 @@ describe('App', () => {
     })
     render(<App authClient={authClient} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
 
-    await user.type(screen.getByLabelText('Пароль'), 'Password')
+    await user.type(screen.getByLabelText('Пароль'), 'short')
     await user.click(screen.getByRole('button', { name: 'Войти' }))
 
     expect(await screen.findByText('Проверьте форму входа')).toBeInTheDocument()
-    expect(screen.getByText('Добавьте хотя бы одну цифру в пароль.')).toBeInTheDocument()
+    expect(screen.getByText('Пароль должен быть не короче 8 символов.')).toBeInTheDocument()
     expect(screen.getByRole('alert')).toBeInTheDocument()
     expect(loginCalled).toBe(false)
     expect(screen.queryByRole('heading', { name: /финансовый учет гск/i })).not.toBeInTheDocument()

@@ -634,7 +634,7 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
               <input aria-label="Повтор нового пароля" aria-describedby="own-password-policy-hint" type="password" value={form.repeatPassword} onChange={(event) => setForm({ ...form, repeatPassword: event.target.value })} minLength={8} required />
             </label>
           </div>
-          <p className="form-hint" id="own-password-policy-hint">Минимум 8 символов: заглавная буква, строчная буква и цифра.</p>
+          <p className="form-hint" id="own-password-policy-hint">Минимум 8 символов.</p>
           <FormValidationSummary title="Проверьте смену пароля" items={validationErrors} />
           {error ? <FormError>{error}</FormError> : null}
           {message ? <div className="form-success" role="status" aria-live="polite">{message}</div> : null}

@@ -121,14 +121,14 @@ public sealed class UserManagementServiceTests
         var actorUserId = Guid.NewGuid();
 
         var result = await service.CreateUserAsync(
-            new CreateManagedUserRequest("operator@example.com", "Оператор", "StrongPass123", [SystemRoles.Operator]),
+            new CreateManagedUserRequest("operator@example.com", "Оператор", "password", [SystemRoles.Operator]),
             actorUserId,
             CancellationToken.None);
 
         Assert.True(result.Succeeded);
         Assert.Equal("OPERATOR@EXAMPLE.COM", database.Context.Users.Single().NormalizedEmail);
         Assert.Contains(SystemRoles.Operator, result.Value!.Roles);
-        Assert.DoesNotContain("StrongPass123", database.Context.Users.Single().PasswordHash);
+        Assert.DoesNotContain("password", database.Context.Users.Single().PasswordHash);
         var auditEvent = Assert.Single(database.Context.AuditEvents, item => item.Action == "users.user_created");
         Assert.Equal(actorUserId, auditEvent.ActorUserId);
         Assert.Equal(result.Value.Id.ToString(), auditEvent.EntityId);
@@ -140,8 +140,8 @@ public sealed class UserManagementServiceTests
         Assert.Contains("operator", auditEvent.MetadataJson, StringComparison.Ordinal);
         Assert.DoesNotContain("operator@example.com", auditEvent.Summary, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("operator@example.com", auditEvent.MetadataJson, StringComparison.OrdinalIgnoreCase);
-        Assert.DoesNotContain("StrongPass123", auditEvent.Summary, StringComparison.Ordinal);
-        Assert.DoesNotContain("StrongPass123", auditEvent.MetadataJson, StringComparison.Ordinal);
+        Assert.DoesNotContain("password", auditEvent.Summary, StringComparison.Ordinal);
+        Assert.DoesNotContain("password", auditEvent.MetadataJson, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -170,7 +170,7 @@ public sealed class UserManagementServiceTests
         var service = CreateService(database.Context);
 
         var result = await service.CreateUserAsync(
-            new CreateManagedUserRequest("operator@example.com", "Оператор", "password", [SystemRoles.Operator]),
+            new CreateManagedUserRequest("operator@example.com", "Оператор", "short", [SystemRoles.Operator]),
             null,
             CancellationToken.None);
 
@@ -383,7 +383,7 @@ public sealed class UserManagementServiceTests
 
         var result = await service.UpdateUserAsync(
             created.Value!.Id,
-            new UpdateManagedUserRequest("Пользователь", [SystemRoles.Operator], true, "password"),
+            new UpdateManagedUserRequest("Пользователь", [SystemRoles.Operator], true, "short"),
             Guid.NewGuid(),
             CancellationToken.None);
 

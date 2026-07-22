@@ -606,7 +606,7 @@ export function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; 
                   required={editor.mode === 'create'}
                 />
               </FormField>
-              <p className="form-hint" id="new-user-password-policy-hint">Минимум 8 символов: заглавная буква, строчная буква и цифра.</p>
+              <p className="form-hint" id="new-user-password-policy-hint">Минимум 8 символов.</p>
               <FormValidationSummary title={editor.mode === 'create' ? 'Проверьте нового пользователя' : 'Проверьте пользователя'} items={validationErrors} />
               <div className="detail-dialog-actions">
                 <button className="secondary-button" type="submit" disabled={saving !== null || roles.length === 0}>

@@ -48,23 +48,11 @@ export type ExpenseReportFilters = {
 
 export function getPasswordPolicyErrors(password: string, emptyMessage = 'Укажите пароль.') {
   const errors: string[] = []
-  if (!password) {
+  if (!password.trim()) {
     errors.push(emptyMessage)
   } else {
     if (password.length < 8) {
       errors.push('Пароль должен быть не короче 8 символов.')
-    }
-
-    if (!/[A-ZА-ЯЁ]/.test(password)) {
-      errors.push('Добавьте заглавную букву в пароль.')
-    }
-
-    if (!/[a-zа-яё]/.test(password)) {
-      errors.push('Добавьте строчную букву в пароль.')
-    }
-
-    if (!/\d/.test(password)) {
-      errors.push('Добавьте хотя бы одну цифру в пароль.')
     }
   }
 

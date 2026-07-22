@@ -6,26 +6,28 @@ public sealed class PasswordPolicyValidatorTests
 {
     [Theory]
     [InlineData("")]
-    [InlineData("short1A")]
-    [InlineData("password")]
-    [InlineData("PASSWORD1")]
-    [InlineData("Password")]
-    public void Validate_RejectsWeakPasswords(string password)
+    [InlineData("        ")]
+    [InlineData("1234567")]
+    public void Validate_RejectsBlankOrShortPasswords(string password)
     {
         var validator = new PasswordPolicyValidator();
 
         var result = validator.Validate(password);
 
         Assert.False(result.Succeeded);
-        Assert.False(string.IsNullOrWhiteSpace(result.ErrorMessage));
+        Assert.Equal("Пароль должен быть не короче 8 символов.", result.ErrorMessage);
     }
 
-    [Fact]
-    public void Validate_AcceptsPasswordWithUppercaseLowercaseAndDigit()
+    [Theory]
+    [InlineData("password")]
+    [InlineData("PASSWORD")]
+    [InlineData("12345678")]
+    [InlineData("пароль12")]
+    public void Validate_AcceptsAnyNonBlankPasswordWithMinimumLength(string password)
     {
         var validator = new PasswordPolicyValidator();
 
-        var result = validator.Validate("StrongPass123");
+        var result = validator.Validate(password);
 
         Assert.True(result.Succeeded);
     }

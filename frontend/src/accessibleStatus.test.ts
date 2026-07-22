@@ -552,7 +552,7 @@ describe('accessible dynamic messages', () => {
     ]
 
     for (const hint of passwordPolicyHints) {
-      expect(hint.source).toContain(`id="${hint.id}">Минимум 8 символов: заглавная буква, строчная буква и цифра.</p>`)
+      expect(hint.source).toContain(`id="${hint.id}">Минимум 8 символов.</p>`)
 
       for (const fieldLabel of hint.fields) {
         const fieldIndex = hint.source.indexOf(fieldLabel)
