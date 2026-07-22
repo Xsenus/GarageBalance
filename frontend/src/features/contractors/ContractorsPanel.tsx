@@ -69,7 +69,6 @@ function findStaffForOpenTarget(staff: ContractorStaffRow[], target: ContractorO
 type ContractorSection = 'garages' | 'suppliers' | 'staff'
 type ContractorSortDirection = 'asc' | 'desc'
 type ContractorSortableSection = ContractorSection
-type ContractorDebtorFilterSection = 'garages' | 'suppliers'
 type GarageColumnFilterForm = Record<keyof GarageColumnFilters, string>
 
 const emptyGarageColumnFilterForm: GarageColumnFilterForm = {
@@ -297,10 +296,6 @@ function comparePrototypeText(left: string, right: string) {
 
 function applyContractorSortDirection(value: number, direction: ContractorSortDirection) {
   return direction === 'asc' ? value : -value
-}
-
-function isContractorMoneyDebt(value: string) {
-  return parsePrototypeMoney(value) > 0
 }
 
 function compareContractorGarages(left: ContractorGarageRow, right: ContractorGarageRow, key: Exclude<ContractorGarageColumnKey, 'actions'>) {
@@ -752,7 +747,7 @@ type ContractorsPrototypeSavedState = {
 
 export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClient, formStateClient, integrationClient, initialTarget = null, onOpenAudit }: { auth: AuthResponse; dictionaryClient: DictionaryClient; financeClient: FinanceClient; formStateClient: FormStateClient; integrationClient: IntegrationClient; initialTarget?: ContractorOpenTarget | null; onOpenAudit: (preset: AuditPanelPreset) => void }) {
   const [activeSection, setActiveSection] = useState<ContractorSection>(initialTarget?.section ?? 'garages')
-  const [debtorFilters, setDebtorFilters] = useState<Record<ContractorDebtorFilterSection, boolean>>({ garages: false, suppliers: false })
+  const [showGarageDebtorsOnly, setShowGarageDebtorsOnly] = useState(false)
   const [garageColumnFilterForm, setGarageColumnFilterForm] = useState<GarageColumnFilterForm>(emptyGarageColumnFilterForm)
   const [garageColumnFilters, setGarageColumnFilters] = useState<GarageColumnFilters>({})
   const [contractorSort, setContractorSort] = useState<ContractorSortState>({ section: 'garages', key: 'number', direction: 'asc' })
@@ -1096,7 +1091,7 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
     sort: ContractorSortState = contractorSort.section === 'garages' && isGarageServerSortKey(contractorSort.key)
       ? contractorSort
       : { section: 'garages', key: 'number', direction: 'asc' },
-    debtorsOnly = debtorFilters.garages,
+    debtorsOnly = showGarageDebtorsOnly,
     filters = garageColumnFilters,
   ) {
     const effectiveFilters = canUseGarageColumnFilters ? filters : {}
@@ -1811,26 +1806,18 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
     )
   }
 
-  const showGarageDebtorsOnly = debtorFilters.garages
-  const showSupplierDebtorsOnly = debtorFilters.suppliers
   const hasActiveGarageFilters = canUseGarageColumnFilters && hasGarageColumnFilters(garageColumnFilters)
-  const showDebtorsOnly = activeSection === 'suppliers' ? showSupplierDebtorsOnly : activeSection === 'garages' ? showGarageDebtorsOnly : false
-  const toggleDebtorsFilter = (section: ContractorDebtorFilterSection) => {
-    const nextValue = !debtorFilters[section]
-    setDebtorFilters((currentFilters) => ({ ...currentFilters, [section]: nextValue }))
-    if (section === 'garages') {
-      void loadGaragePage(0, garagePage.limit, undefined, nextValue).then((loaded) => {
-        if (loaded === false) {
-          setDebtorFilters((currentFilters) => ({ ...currentFilters, garages: !nextValue }))
-        }
-      })
-    }
+  const toggleGarageDebtorsFilter = () => {
+    const nextValue = !showGarageDebtorsOnly
+    setShowGarageDebtorsOnly(nextValue)
+    void loadGaragePage(0, garagePage.limit, undefined, nextValue).then((loaded) => {
+      if (loaded === false) {
+        setShowGarageDebtorsOnly(!nextValue)
+      }
+    })
   }
 
   const filteredGarages = garages
-  const filteredSuppliers = showSupplierDebtorsOnly
-    ? suppliers.filter((supplier) => !supplier.isDeleted && isContractorMoneyDebt(supplier.debt))
-    : suppliers
 
   const visibleGarages = useMemo(() => {
     const rows = [...filteredGarages]
@@ -1843,14 +1830,14 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
   }, [filteredGarages, contractorSort])
 
   const visibleSuppliers = useMemo(() => {
-    const rows = [...filteredSuppliers]
+    const rows = [...suppliers]
     if (contractorSort.section !== 'suppliers') {
       return rows
     }
 
     const sortKey = contractorSort.key as ContractorSupplierSortKey
     return rows.sort((left, right) => applyContractorSortDirection(compareContractorSuppliers(left, right, sortKey), contractorSort.direction))
-  }, [filteredSuppliers, contractorSort])
+  }, [suppliers, contractorSort])
 
   const visibleStaff = useMemo(() => {
     const rows = [...staff]
@@ -1862,9 +1849,7 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
     return rows.sort((left, right) => applyContractorSortDirection(compareContractorStaff(left, right, sortKey), contractorSort.direction))
   }, [staff, contractorSort])
   const departmentPage = createClientPage(departments, departmentPageNumber, departmentPageSize)
-  const debtorsButtonLabel = activeSection === 'suppliers'
-    ? showDebtorsOnly ? 'Показать всех поставщиков' : 'Показать должников'
-    : showDebtorsOnly ? 'Показать все гаражи' : 'Показать должников'
+  const debtorsButtonLabel = showGarageDebtorsOnly ? 'Показать все гаражи' : 'Показать должников'
   const contractorFinancialReportTitle = contractorFinancialReportTarget?.type === 'supplier'
     ? contractorFinancialReportTarget.row.name || 'Поставщик без названия'
     : contractorFinancialReportTarget?.row.fullName || 'Сотрудник без ФИО'
@@ -1883,7 +1868,7 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
         <div className="contractors-actions">
           {activeSection === 'garages' ? (
             <>
-              <button className="secondary-button" type="button" aria-busy={contractorPageLoading.garages} onClick={() => toggleDebtorsFilter('garages')}>{debtorsButtonLabel}</button>
+              <button className="secondary-button" type="button" aria-busy={contractorPageLoading.garages} onClick={toggleGarageDebtorsFilter}>{debtorsButtonLabel}</button>
               <button className="secondary-button create-action-button" type="button" onClick={() => setModal({ type: 'garage' })}>
                 <Gauge size={17} aria-hidden="true" />
                 <span>Добавить гараж</span>
@@ -1892,7 +1877,6 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
           ) : null}
           {activeSection === 'suppliers' ? (
             <>
-              <button className="secondary-button" type="button" onClick={() => toggleDebtorsFilter('suppliers')}>{debtorsButtonLabel}</button>
               <button className="secondary-button create-action-button" type="button" onClick={() => setModal({ type: 'supplier' })}>
                 <UsersRound size={17} aria-hidden="true" />
                 <span>Добавить поставщика</span>
@@ -2087,7 +2071,7 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
             {contractorPageLoading.suppliers ? <TableLoadingState className="table-loading-state--compact" label="Загружаем поставщиков" /> : null}
             {!contractorPageLoading.suppliers && visibleSuppliers.length === 0 ? (
               <div className="contractors-directory-row contractors-directory-row--empty" role="row">
-                <span className="contractors-directory-empty-cell" role="cell">{showSupplierDebtorsOnly ? 'Поставщиков с задолженностью не найдено.' : 'Поставщики пока не настроены.'}</span>
+                <span className="contractors-directory-empty-cell" role="cell">Поставщики пока не настроены.</span>
               </div>
             ) : null}
           </div>
@@ -2099,7 +2083,6 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
             visibleCount={visibleSuppliers.length}
             disabled={contractorPageLoading.suppliers}
             pageSizeLabel="Количество строк поставщиков"
-            statusText={showSupplierDebtorsOnly ? `Должников на странице: ${visibleSuppliers.length}` : undefined}
             onPageChange={(page) => void loadSupplierPage((page - 1) * supplierPage.limit)}
             onPageSizeChange={(limit) => void loadSupplierPage(0, limit)}
           />

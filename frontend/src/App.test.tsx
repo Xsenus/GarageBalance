@@ -2874,7 +2874,7 @@ describe('App', () => {
     })))
   }, 30000)
 
-  it('filters contractor debtors and sorts visible contractor rows', async () => {
+  it('filters garage debtors and sorts visible contractor rows without a supplier debtor toggle', async () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
     const firstOwner = createOwner({ id: 'owner-garage-1', lastName: 'Иванов', firstName: 'Иван' })
     const secondOwner = createOwner({ id: 'owner-garage-12', lastName: 'Петров', firstName: 'Петр' })
@@ -2918,23 +2918,21 @@ describe('App', () => {
 
     await user.click(within(contractorsPanel).getByRole('tab', { name: 'Поставщики' }))
     const suppliersTable = await within(contractorsPanel).findByRole('table', { name: 'Поставщики' })
-    expect(within(contractorsPanel).getByRole('button', { name: 'Показать должников' })).toBeInTheDocument()
+    expect(within(contractorsPanel).queryByRole('button', { name: 'Показать должников' })).not.toBeInTheDocument()
+    expect(within(contractorsPanel).queryByRole('button', { name: 'Показать всех поставщиков' })).not.toBeInTheDocument()
     expect(within(suppliersTable).getByText('Энергосбыт')).toBeInTheDocument()
     expect(within(suppliersTable).getByText('ЭкоВывоз')).toBeInTheDocument()
     expect(within(suppliersTable).getByText('Правовой центр')).toBeInTheDocument()
-
-    await user.click(within(contractorsPanel).getByRole('button', { name: 'Показать должников' }))
-    expect(within(contractorsPanel).getByRole('button', { name: 'Показать всех поставщиков' })).toBeInTheDocument()
-    expect(within(suppliersTable).queryByText('Правовой центр')).not.toBeInTheDocument()
 
     await user.click(within(suppliersTable).getByRole('button', { name: 'Задолженность' }))
     await user.click(within(suppliersTable).getByRole('button', { name: 'Задолженность' }))
     const sortedSupplierRows = within(suppliersTable).getAllByRole('row').slice(1)
     expect(within(sortedSupplierRows[0]).getByText('Энергосбыт')).toBeInTheDocument()
     expect(within(sortedSupplierRows[1]).getByText('ЭкоВывоз')).toBeInTheDocument()
+    expect(within(sortedSupplierRows[2]).getByText('Правовой центр')).toBeInTheDocument()
   }, 30000)
 
-  it('shows empty states for contractor debtor filters and empty staff', async () => {
+  it('shows the garage debtor empty state while keeping suppliers and empty staff visible', async () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
     const owner = createOwner({ id: 'owner-no-debt', lastName: 'Петров', firstName: 'Петр' })
     const supplierGroup = createGroup({ id: 'supplier-group-no-debt', name: 'Услуги' })
@@ -2963,10 +2961,8 @@ describe('App', () => {
     await user.click(within(contractorsPanel).getByRole('tab', { name: 'Поставщики' }))
     const suppliersTable = await within(contractorsPanel).findByRole('table', { name: 'Поставщики' })
     expect(within(suppliersTable).getByText('Водоканал')).toBeInTheDocument()
-
-    await user.click(within(contractorsPanel).getByRole('button', { name: 'Показать должников' }))
-    expect(within(suppliersTable).getByRole('cell', { name: 'Поставщиков с задолженностью не найдено.' })).toBeInTheDocument()
-    expect(within(suppliersTable).queryByText('Водоканал')).not.toBeInTheDocument()
+    expect(within(contractorsPanel).queryByRole('button', { name: 'Показать должников' })).not.toBeInTheDocument()
+    expect(within(contractorsPanel).queryByRole('button', { name: 'Показать всех поставщиков' })).not.toBeInTheDocument()
 
     await user.click(within(contractorsPanel).getByRole('tab', { name: 'Персонал' }))
     const staffTable = await within(contractorsPanel).findByRole('table', { name: 'Персонал' })
