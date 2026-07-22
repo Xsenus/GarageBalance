@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import type { CSSProperties, FormEvent, MouseEvent, RefObject } from 'react'
 import { FileText, Gauge, Pencil, RotateCcw, Save, Search, Trash2, UserPlus, UsersRound, X } from 'lucide-react'
 import type { AuthResponse } from '../../services/authApi'
-import type { AccountingTypeDto, ChargeServiceSettingDto, DictionaryClient, GarageColumnFilters, GarageDto, OwnerDto, StaffDepartmentDto, StaffMemberDto, SupplierContactDto, SupplierDto, SupplierGroupDto, TariffDto, UpsertChargeServiceSettingRequest, UpsertGarageRequest, UpsertOwnerRequest, UpsertStaffMemberRequest, UpsertSupplierContactRequest, UpsertSupplierRequest } from '../../services/dictionariesApi'
+import type { AccountingTypeDto, ChargeServiceSettingDto, CreateChargeServiceWithTariffRequest, DictionaryClient, GarageColumnFilters, GarageDto, OwnerDto, StaffDepartmentDto, StaffMemberDto, SupplierContactDto, SupplierDto, SupplierGroupDto, TariffDto, UpsertGarageRequest, UpsertOwnerRequest, UpsertStaffMemberRequest, UpsertSupplierContactRequest, UpsertSupplierRequest } from '../../services/dictionariesApi'
 import type { FinanceClient, GarageBalanceHistoryDto } from '../../services/financeApi'
 import type { FormStateClient } from '../../services/formStatesApi'
 import type { DadataAddressSuggestionDto, DadataPartySuggestionDto, IntegrationClient } from '../../services/integrationsApi'
@@ -1762,12 +1762,13 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
     }
   }
 
-  const saveService = async (request: UpsertChargeServiceSettingRequest) => {
+  const saveServiceWithTariff = async (request: CreateChargeServiceWithTariffRequest) => {
     setServiceSaving(true)
     setFormStateError(null)
     try {
-      const savedService = await dictionaryClient.createChargeServiceSetting(auth.accessToken, request)
-      setChargeServices((currentServices) => [...currentServices.filter((service) => service.id !== savedService.id), savedService])
+      const created = await dictionaryClient.createChargeServiceWithTariff(auth.accessToken, request)
+      setChargeServices((currentServices) => [...currentServices.filter((service) => service.id !== created.service.id), created.service])
+      setServiceTariffs((currentTariffs) => [...currentTariffs.filter((tariff) => tariff.id !== created.tariff.id), created.tariff])
       setModal(null)
     } catch (error) {
       setFormStateError(error instanceof Error ? error.message : 'Не удалось добавить услугу в единый каталог тарифов.')
@@ -2385,7 +2386,7 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
 
       {modal?.type === 'garage' ? <GaragePrototypeDialog accessToken={auth.accessToken} integrationClient={integrationClient} item={modal.item} onClose={() => setModal(null)} onSave={saveGarage} onOpenFinancialReport={openGarageFinancialReport} /> : null}
       {modal?.type === 'supplier' ? <SupplierPrototypeDialog accessToken={auth.accessToken} integrationClient={integrationClient} item={modal.item} services={chargeServices} onClose={() => setModal(null)} onOpenFinancialReport={openSupplierFinancialReport} onSave={saveSupplier} /> : null}
-      {modal?.type === 'service' ? <AddServicePrototypeDialog isSaving={serviceSaving} incomeTypes={serviceIncomeTypes.filter((item) => !item.isArchived)} onClose={() => setModal(null)} onSave={saveService} tariffs={serviceTariffs.filter((item) => !item.isArchived)} /> : null}
+      {modal?.type === 'service' ? <AddServicePrototypeDialog isSaving={serviceSaving} incomeTypes={serviceIncomeTypes.filter((item) => !item.isArchived)} onClose={() => setModal(null)} onCreateWithTariff={saveServiceWithTariff} regularOnly tariffs={serviceTariffs.filter((item) => !item.isArchived)} /> : null}
       {modal?.type === 'employee' ? <EmployeePrototypeDialog departments={departments} item={modal.item} onClose={() => setModal(null)} onOpenFinancialReport={openEmployeeFinancialReport} onSave={saveEmployee} /> : null}
       {modal?.type === 'department' ? <DepartmentPrototypeDialog item={modal.item} onClose={() => setModal(null)} onSave={saveDepartment} /> : null}
 

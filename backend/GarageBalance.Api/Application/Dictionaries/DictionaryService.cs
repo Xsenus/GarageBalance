@@ -1561,6 +1561,88 @@ public sealed class DictionaryService(
         return settings.Select(ToChargeServiceSettingDto).ToList();
     }
 
+    public async Task<DictionaryResult<CreatedChargeServiceWithTariffDto>> CreateChargeServiceWithTariffAsync(
+        CreateChargeServiceWithTariffRequest request,
+        Guid? actorUserId,
+        CancellationToken cancellationToken)
+    {
+        if (!request.Service.IsRegular)
+        {
+            return DictionaryResult<CreatedChargeServiceWithTariffDto>.Failure(
+                "charge_service_tariff_regular_required",
+                "Тариф со ставкой можно создать только для регулярной услуги.");
+        }
+
+        if (request.Rate is < 0.0001m or > 999999999m)
+        {
+            return DictionaryResult<CreatedChargeServiceWithTariffDto>.Failure(
+                "charge_service_rate_invalid",
+                "Стоимость услуги должна быть больше 0 и не превышать 999999999.");
+        }
+
+        var validation = ValidateChargeServiceSettingRequest(request.Service);
+        if (!validation.Succeeded)
+        {
+            return DictionaryResult<CreatedChargeServiceWithTariffDto>.Failure(validation.ErrorCode!, validation.ErrorMessage!);
+        }
+
+        var linkValidation = await ValidateChargeServiceAccountingLinksAsync(request.Service, cancellationToken);
+        if (!linkValidation.Succeeded)
+        {
+            return DictionaryResult<CreatedChargeServiceWithTariffDto>.Failure(linkValidation.ErrorCode!, linkValidation.ErrorMessage!);
+        }
+
+        var name = request.Service.Name.Trim();
+        if (await chargeServiceSettingRepository.ActiveDuplicateExistsAsync(null, name, cancellationToken))
+        {
+            return DictionaryResult<CreatedChargeServiceWithTariffDto>.Failure("charge_service_duplicate", "Услуга с таким наименованием уже существует.");
+        }
+
+        var templateTariff = await tariffRepository.FindActiveAsync(request.Service.TariffId!.Value, cancellationToken);
+        if (templateTariff is null)
+        {
+            return DictionaryResult<CreatedChargeServiceWithTariffDto>.Failure("charge_service_tariff_not_found", "Тариф для услуги не найден.");
+        }
+
+        var tariffName = CreateServiceTariffName(name);
+        if (await tariffRepository.ActiveDuplicateExistsAsync(null, tariffName, request.EffectiveFrom, cancellationToken))
+        {
+            return DictionaryResult<CreatedChargeServiceWithTariffDto>.Failure(
+                "tariff_duplicate",
+                "Тариф для услуги с такой датой действия уже существует.");
+        }
+
+        var tariff = new Tariff
+        {
+            Name = tariffName,
+            CalculationBase = templateTariff.CalculationBase,
+            Rate = MoneyMath.RoundRate(request.Rate),
+            EffectiveFrom = request.EffectiveFrom,
+            Comment = $"Создан вместе с услугой «{name}».",
+            ElectricityFirstThreshold = templateTariff.ElectricityFirstThreshold,
+            ElectricitySecondThreshold = templateTariff.ElectricitySecondThreshold,
+            ElectricityFirstTierName = templateTariff.ElectricityFirstTierName,
+            ElectricitySecondTierName = templateTariff.ElectricitySecondTierName,
+            ElectricityThirdTierName = templateTariff.ElectricityThirdTierName,
+            ElectricityFirstRate = templateTariff.ElectricityFirstRate,
+            ElectricitySecondRate = templateTariff.ElectricitySecondRate,
+            ElectricityThirdRate = templateTariff.ElectricityThirdRate,
+            ElectricityTiersJson = templateTariff.ElectricityTiersJson
+        };
+        var serviceRequest = request.Service with { TariffId = tariff.Id };
+        var setting = new ChargeServiceSetting { Name = name };
+        ApplyChargeServiceSetting(setting, serviceRequest);
+
+        tariffRepository.Add(tariff);
+        chargeServiceSettingRepository.Add(setting);
+        AddAudit(actorUserId, "dictionary.tariff_created", "tariff", tariff.Id, $"Создан тариф {FormatTariffAuditDetails(tariff)} вместе с услугой {name}.");
+        AddAudit(actorUserId, "dictionary.charge_service_created", "charge_service", setting.Id, $"Создана настройка услуги {setting.Name} со ставкой {tariff.Rate.ToString(CultureInfo.InvariantCulture)}.");
+        await unitOfWork.SaveChangesAsync(cancellationToken);
+
+        return DictionaryResult<CreatedChargeServiceWithTariffDto>.Success(
+            new CreatedChargeServiceWithTariffDto(ToChargeServiceSettingDto(setting), ToTariffDto(tariff)));
+    }
+
     public async Task<DictionaryResult<ChargeServiceSettingDto>> CreateChargeServiceSettingAsync(UpsertChargeServiceSettingRequest request, Guid? actorUserId, CancellationToken cancellationToken)
     {
         var validation = ValidateChargeServiceSettingRequest(request);
@@ -2375,6 +2457,13 @@ public sealed class DictionaryService(
 
     private static int? NormalizeChargeServicePaymentDueMonth(UpsertChargeServiceSettingRequest request) =>
         request.IsRegular && request.PeriodicityMonths == 1 ? null : request.PaymentDueMonth;
+
+    private static string CreateServiceTariffName(string serviceName)
+    {
+        const string suffix = " — тариф";
+        var maxServiceNameLength = 200 - suffix.Length;
+        return $"{serviceName[..Math.Min(serviceName.Length, maxServiceNameLength)]}{suffix}";
+    }
 
     private static bool IsIncomeTypeCompatibleWithTariff(string? incomeTypeCode, string calculationBase)
     {

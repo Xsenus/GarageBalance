@@ -3,7 +3,7 @@ import type { FormEvent, MouseEvent } from 'react'
 import { FileSpreadsheet, FileText, Pencil, RotateCcw, Save, Trash2, X } from 'lucide-react'
 import type { AuthResponse } from '../../services/authApi'
 import { DictionaryApiError } from '../../services/dictionariesApi'
-import type { AccountingTypeDto, ChargeServiceSettingDto, DictionaryClient, FeeCampaignDto, GarageDto, IrregularPaymentDto, TariffDto, UpsertChargeServiceSettingRequest, UpsertFeeCampaignRequest, UpsertIrregularPaymentRequest, UpsertTariffRequest } from '../../services/dictionariesApi'
+import type { AccountingTypeDto, ChargeServiceSettingDto, CreateChargeServiceWithTariffRequest, DictionaryClient, FeeCampaignDto, GarageDto, IrregularPaymentDto, TariffDto, UpsertChargeServiceSettingRequest, UpsertFeeCampaignRequest, UpsertIrregularPaymentRequest, UpsertTariffRequest } from '../../services/dictionariesApi'
 import type { FinanceClient } from '../../services/financeApi'
 import type { FormStateClient } from '../../services/formStatesApi'
 import { hasPermission, permissions } from '../../shared/accessControl'
@@ -241,11 +241,20 @@ function findTariffForPrototypeRow(tariffs: TariffDto[], row: ContractorTariffRo
 function mergeTariffsIntoPrototypeRows(rows: ContractorTariffRow[], tariffs: TariffDto[]) {
   const electricityTariff = tariffs.find((tariff) => tariff.calculationBase === 'meter_electricity')
   const mergedWithoutElectricity = rows
-    .filter((row) => row.calculationBase !== 'meter_electricity')
+    .filter((row) => row.calculationBase !== 'meter_electricity' || row.serviceSettingKind === 'main')
     .map((row) => {
-      const tariff = findTariffForPrototypeRow(tariffs, row)
+      const tariff = row.backendTariffId
+        ? tariffs.find((item) => item.id === row.backendTariffId) ?? null
+        : findTariffForPrototypeRow(tariffs, row)
       return tariff && row.calculationBase
-        ? { ...row, backendTariffId: tariff.id, effectiveFrom: tariff.effectiveFrom, amount: formatTariffNumber(tariff.rate), title: tariff.name, unit: getTariffCalculationUnitName(tariff.calculationBase) }
+        ? {
+            ...row,
+            backendTariffId: tariff.id,
+            effectiveFrom: tariff.effectiveFrom,
+            amount: formatTariffNumber(tariff.rate),
+            title: row.serviceSettingKind === 'main' ? row.title : tariff.name,
+            unit: getTariffCalculationUnitName(tariff.calculationBase),
+          }
         : row
     })
 
@@ -335,10 +344,13 @@ function createChargeServiceRows(setting: ChargeServiceSettingDto, tariffs: Tari
       group: setting.name,
       category: setting.name,
       title: setting.name,
-      amount: '',
+      amount: linkedTariff ? formatPrototypeAmount(linkedTariff.rate) : '',
       unit: unitName,
       byMeter: setting.isMetered,
       tiered: setting.hasTieredTariff,
+      calculationBase: linkedTariff?.calculationBase,
+      backendTariffId: linkedTariff?.id,
+      effectiveFrom: linkedTariff?.effectiveFrom,
       isDeleted: setting.isArchived,
     },
   ]
@@ -550,6 +562,10 @@ function getTariffTextFieldLabel(row: ContractorTariffRow, field: 'title' | 'amo
 
   if (field === 'unit') {
     return 'Единица'
+  }
+
+  if (row.serviceSettingKind === 'main') {
+    return 'Стоимость, руб.'
   }
 
   if (row.serviceSettingKind === 'periodicity') {
@@ -1109,7 +1125,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
   }
 
   async function persistTariffRow(row: ContractorTariffRow, nextRows: ContractorTariffRow[], electricityTierChangeReason?: string) {
-    if (row.backendServiceSettingId) {
+    if (row.backendServiceSettingId && (row.serviceSettingKind !== 'main' || !row.backendTariffId)) {
       await persistServiceSettingRow(row, nextRows)
       return true
     }
@@ -1591,7 +1607,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
     }
   }
 
-  async function createServiceSetting(request: UpsertChargeServiceSettingRequest) {
+  async function createServiceWithTariff(request: CreateChargeServiceWithTariffRequest) {
     if (!canManageTariffs) {
       return
     }
@@ -1599,9 +1615,12 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
     setTariffSavingRowId('new-service')
     setTariffPersistenceError(null)
     try {
-      const savedSetting = await dictionaryClient.createChargeServiceSetting(auth.accessToken, request)
+      const created = await dictionaryClient.createChargeServiceWithTariff(auth.accessToken, request)
+      const savedSetting = created.service
+      const nextTariffs = [...backendTariffs.filter((tariff) => tariff.id !== created.tariff.id), created.tariff]
       const nextSettings = [...backendChargeServices.filter((setting) => setting.id !== savedSetting.id), savedSetting]
-      const nextRows = mergeChargeServicesIntoPrototypeRows(tariffRows, nextSettings, backendTariffs)
+      const nextRows = mergeChargeServicesIntoPrototypeRows(tariffRows, nextSettings, nextTariffs)
+      setBackendTariffs(nextTariffs)
       setBackendChargeServices(nextSettings)
       setTariffRows(nextRows)
       setTariffDrafts(createEditableDrafts(nextRows))
@@ -2672,8 +2691,8 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
           isSaving={tariffSavingRowId === 'new-service'}
           incomeTypes={backendIncomeTypes.filter((incomeType) => !incomeType.isArchived)}
           onClose={() => setModal(null)}
+          onCreateWithTariff={createServiceWithTariff}
           onSaveIrregular={createIrregularService}
-          onSave={createServiceSetting}
           tariffs={backendTariffs.filter((tariff) => !tariff.isArchived)}
         />
       ) : null}
@@ -2721,8 +2740,10 @@ export function AddServicePrototypeDialog({
   isSaving,
   incomeTypes,
   onClose,
+  onCreateWithTariff,
   onSaveIrregular,
   onSave,
+  regularOnly = false,
   submitLabel = 'Сохранить',
   tariffs,
   title = 'Добавить услугу',
@@ -2731,15 +2752,17 @@ export function AddServicePrototypeDialog({
   isSaving: boolean
   incomeTypes: AccountingTypeDto[]
   onClose: () => void
+  onCreateWithTariff?: (request: CreateChargeServiceWithTariffRequest) => Promise<void>
   onSaveIrregular?: (request: UpsertIrregularPaymentRequest) => Promise<void>
-  onSave: (request: UpsertChargeServiceSettingRequest) => Promise<void>
+  onSave?: (request: UpsertChargeServiceSettingRequest) => Promise<void>
+  regularOnly?: boolean
   submitLabel?: string
   tariffs: TariffDto[]
   title?: string
 }) {
   const initialIncomeTypeId = initialSetting?.incomeTypeId ?? incomeTypes[0]?.id ?? ''
   const [name, setName] = useState(initialSetting?.name ?? '')
-  const [isRegular, setIsRegular] = useState(initialSetting?.isRegular ?? false)
+  const [isRegular, setIsRegular] = useState(initialSetting?.isRegular ?? regularOnly)
   const [incomeTypeId, setIncomeTypeId] = useState(initialIncomeTypeId)
   const [tariffId, setTariffId] = useState(() => initialSetting?.tariffId ?? chooseRegularTariffId(initialIncomeTypeId, '', incomeTypes, tariffs))
   const [isByMeter, setIsByMeter] = useState(initialSetting?.isMetered ?? true)
@@ -2750,6 +2773,11 @@ export function AddServicePrototypeDialog({
   const [paymentDueMonth, setPaymentDueMonth] = useState(() => getContractorTariffMonthValue(initialSetting?.paymentDueMonth ?? 7))
   const [overdueGraceDays, setOverdueGraceDays] = useState(String(initialSetting?.overdueGraceDays ?? 30))
   const [cost, setCost] = useState('')
+  const [regularRate, setRegularRate] = useState(() => {
+    const initialTariffId = initialSetting?.tariffId ?? chooseRegularTariffId(initialIncomeTypeId, '', incomeTypes, tariffs)
+    const initialTariff = tariffs.find((tariff) => tariff.id === initialTariffId)
+    return initialTariff ? formatTariffDecimal(initialTariff.rate) : ''
+  })
   const [error, setError] = useState<string | null>(null)
   const compatibleTariffs = getCompatibleRegularTariffs(incomeTypeId, incomeTypes, tariffs)
   const selectedTariff = compatibleTariffs.find((tariff) => tariff.id === tariffId) ?? null
@@ -2769,6 +2797,7 @@ export function AddServicePrototypeDialog({
     const parsedPeriodicity = Number(periodicityMonths)
     const parsedDueDay = Number(paymentDueDay)
     const parsedOverdueDays = Number(overdueGraceDays)
+    const parsedRegularRate = parsePrototypeAmount(regularRate)
     const dueMonthOption = isMonthly
       ? null
       : contractorTariffMonthOptions.find((month) => month.value === paymentDueMonth)
@@ -2786,6 +2815,11 @@ export function AddServicePrototypeDialog({
 
       if (!tariffId) {
         setError('Выберите тариф для регулярной услуги.')
+        return
+      }
+
+      if (!initialSetting && (parsedRegularRate == null || parsedRegularRate <= 0 || parsedRegularRate > 999999999)) {
+        setError('Укажите корректную стоимость регулярной услуги.')
         return
       }
 
@@ -2828,7 +2862,7 @@ export function AddServicePrototypeDialog({
 
     setError(null)
     try {
-      await onSave({
+      const serviceRequest: UpsertChargeServiceSettingRequest = {
         name: trimmedName,
         isRegular,
         periodicityMonths: isRegular ? parsedPeriodicity : null,
@@ -2841,7 +2875,16 @@ export function AddServicePrototypeDialog({
         unitName: unitName.trim() || null,
         incomeTypeId: isRegular ? incomeTypeId : null,
         tariffId: isRegular ? tariffId : null,
-      })
+      }
+      if (isRegular && !initialSetting && onCreateWithTariff) {
+        await onCreateWithTariff({
+          service: serviceRequest,
+          rate: parsedRegularRate!,
+          effectiveFrom: getLocalDateInputValue(),
+        })
+      } else if (onSave) {
+        await onSave(serviceRequest)
+      }
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Не удалось сохранить услугу.')
     }
@@ -2862,12 +2905,26 @@ export function AddServicePrototypeDialog({
           <FormField label="Наименование услуги">
             <input aria-label="Наименование услуги" value={name} onChange={(event) => setName(event.target.value)} />
           </FormField>
-          <label className="contractors-switch-row">
-            <span>Регулярные платежи</span>
-            <span className="contractors-switch-control">
-              <input type="checkbox" aria-label="Регулярные платежи" checked={isRegular} disabled={Boolean(initialSetting)} onChange={(event) => setIsRegular(event.target.checked)} />
-            </span>
-          </label>
+          {!regularOnly ? (
+            <label className="contractors-switch-row">
+              <span>Регулярные платежи</span>
+              <span className="contractors-switch-control">
+                <input
+                  type="checkbox"
+                  aria-label="Регулярные платежи"
+                  checked={isRegular}
+                  disabled={Boolean(initialSetting)}
+                  onChange={(event) => {
+                    setIsRegular(event.target.checked)
+                    if (event.target.checked && !regularRate && selectedTariff) {
+                      setRegularRate(formatTariffDecimal(selectedTariff.rate))
+                    }
+                    setError(null)
+                  }}
+                />
+              </span>
+            </label>
+          ) : null}
           {initialSetting ? <p className="form-hint">Тип услуги нельзя менять после создания. Остальные параметры доступны для редактирования.</p> : null}
           {isRegular ? (
             <>
@@ -2880,8 +2937,11 @@ export function AddServicePrototypeDialog({
                       ? incomeTypes.map((incomeType) => ({ value: incomeType.id, label: incomeType.name }))
                       : [{ value: '', label: 'Нет видов поступлений' }]}
                     onChange={(nextIncomeTypeId) => {
+                      const nextTariffId = chooseRegularTariffId(nextIncomeTypeId, tariffId, incomeTypes, tariffs)
                       setIncomeTypeId(nextIncomeTypeId)
-                      setTariffId(chooseRegularTariffId(nextIncomeTypeId, tariffId, incomeTypes, tariffs))
+                      setTariffId(nextTariffId)
+                      const nextTariff = tariffs.find((tariff) => tariff.id === nextTariffId)
+                      setRegularRate(nextTariff ? formatTariffDecimal(nextTariff.rate) : '')
                       setError(null)
                     }}
                   />
@@ -2906,10 +2966,20 @@ export function AddServicePrototypeDialog({
                       : [{ value: '', label: 'Нет совместимых тарифов' }]}
                     onChange={(nextTariffId) => {
                       setTariffId(nextTariffId)
+                      const nextTariff = tariffs.find((tariff) => tariff.id === nextTariffId)
+                      setRegularRate(nextTariff ? formatTariffDecimal(nextTariff.rate) : '')
                       setError(null)
                     }}
                   />
                 </FormField>
+                {!initialSetting ? (
+                  <FormField label="Стоимость" hint="Сохранится вместе с услугой как её действующая ставка.">
+                    <div className="contractors-inline-field">
+                      <MoneyTextInput aria-label="Стоимость регулярной услуги" value={regularRate} onValueChange={setRegularRate} />
+                      <span>руб.</span>
+                    </div>
+                  </FormField>
+                ) : null}
               </div>
               <div className={`contractors-service-period-grid contractors-service-period-grid--schedule${isMonthly ? ' contractors-service-period-grid--schedule-monthly' : ''}`}>
                 <FormField label="Периодичность" hint={isMonthly ? 'Начисление создаётся каждый месяц.' : 'Начисление создаётся один раз в год.'}>

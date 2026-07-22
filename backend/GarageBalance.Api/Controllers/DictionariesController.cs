@@ -682,6 +682,22 @@ public sealed class DictionariesController(IDictionaryService dictionaryService)
     }
 
     [Authorize(Policy = SystemPermissions.TariffsManage)]
+    [HttpPost("charge-services/with-tariff")]
+    [ProducesResponseType<CreatedChargeServiceWithTariffDto>(StatusCodes.Status201Created)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
+    public async Task<ActionResult<CreatedChargeServiceWithTariffDto>> CreateChargeServiceWithTariff(CreateChargeServiceWithTariffRequest request, CancellationToken cancellationToken)
+    {
+        var result = await dictionaryService.CreateChargeServiceWithTariffAsync(request, GetActorUserId(), cancellationToken);
+        if (!result.Succeeded)
+        {
+            return ToError(result);
+        }
+
+        return CreatedAtAction(nameof(GetChargeServiceSettings), new { search = result.Value!.Service.Name }, result.Value);
+    }
+
+    [Authorize(Policy = SystemPermissions.TariffsManage)]
     [HttpPost("charge-services")]
     [ProducesResponseType<ChargeServiceSettingDto>(StatusCodes.Status201Created)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]

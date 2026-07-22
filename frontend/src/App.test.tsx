@@ -31,7 +31,7 @@ import type { ApplicationSettingsClient } from './services/settingsApi'
 import type { AuditClient, AuditEventDto } from './services/auditApi'
 import type { AuthClient, AuthResponse } from './services/authApi'
 import { DictionaryApiError } from './services/dictionariesApi'
-import type { AccountingTypeDto, ChargeServiceSettingDto, DictionaryClient, FeeCampaignDto, GarageDto, IrregularPaymentDto, OwnerDto, PagedResult, StaffDepartmentDto, StaffMemberDto, SupplierContactDto, SupplierDto, SupplierGroupDto, TariffDto, UpsertGarageRequest, UpsertIrregularPaymentRequest, UpsertStaffMemberRequest, UpsertSupplierRequest, UpsertTariffRequest } from './services/dictionariesApi'
+import type { AccountingTypeDto, ChargeServiceSettingDto, CreateChargeServiceWithTariffRequest, DictionaryClient, FeeCampaignDto, GarageDto, IrregularPaymentDto, OwnerDto, PagedResult, StaffDepartmentDto, StaffMemberDto, SupplierContactDto, SupplierDto, SupplierGroupDto, TariffDto, UpsertGarageRequest, UpsertIrregularPaymentRequest, UpsertStaffMemberRequest, UpsertSupplierRequest, UpsertTariffRequest } from './services/dictionariesApi'
 import { FinanceApiError } from './services/financeApi'
 import type { AccrualDto, CorrectHistoricalMeterReadingRequest, CreateDebtTransferRequest, CreateExpenseOperationRequest, CreateIncomeOperationRequest, CreateIrregularAccrualRequest, CreateMeterReadingRequest, CreateStaffPaymentRequest, CreateSupplierAccrualRequest, ExpenseWorksheetDto, FeeCampaignAccrualGenerationResultDto, FinanceClient, FinancePagedResult, FinancePageParams, FinanceSummaryDto, FinancialOperationDto, GarageBalanceHistoryDto, GarageIncomeWorksheetDto, GenerateFeeCampaignAccrualsRequest, GenerateRegularCatalogAccrualsRequest, GenerateSupplierGroupSalaryAccrualsRequest, MeterReadingDto, MeterReadingYearPageDto, MissingMeterReadingDto, RegularAccrualGenerationResultDto, RegularCatalogAccrualGenerationResultDto, SupplierAccrualDto, SupplierGroupSalaryAccrualGenerationResultDto } from './services/financeApi'
 import type { CreateFundOperationRequest, FundDto, FundOperationDto, FundOperationPageDto, FundsClient } from './services/fundsApi'
@@ -1358,6 +1358,9 @@ describe('App', () => {
     let deletedSupplierContactReason: string | null = null
     let archivedStaffMemberReason: string | null = null
     let savedSupplierRequest: UpsertSupplierRequest | null = null
+    let createdContractorServiceRequest: CreateChargeServiceWithTariffRequest | null = null
+    const contractorServiceIncomeType = createAccountingType({ id: 'income-cleaning', name: 'Содержание территории', code: 'membership' })
+    const contractorServiceTariff = createTariff({ id: 'tariff-cleaning', name: 'Тариф содержания территории', calculationBase: 'fixed', rate: 800 })
     const archivedStaffDepartmentRequests: Array<{ id: string; reason: string }> = []
     const updatedStaffDepartmentRequests: Array<{ id: string; name: string }> = []
     const restoredSupplierIds: string[] = []
@@ -1368,6 +1371,8 @@ describe('App', () => {
       createStaffDepartment({ id: '66666666-6666-4666-8666-666666666666', name: 'Бухгалтерия' }),
     ]
     const dictionaryClient = createDictionaryClient({
+      getIncomeTypes: async () => [contractorServiceIncomeType],
+      getTariffs: async () => [contractorServiceTariff],
       getOwners: async () => [contractorOwner],
       getGarages: async () => [contractorGarage],
       updateOwner: async (_token, id, request) => {
@@ -1409,6 +1414,25 @@ describe('App', () => {
         ownerName: 'Новый владелец',
         isArchived: false,
       }),
+      createChargeServiceWithTariff: async (_token, request) => {
+        createdContractorServiceRequest = request
+        const tariff = createTariff({
+          id: 'tariff-cleaning-created',
+          name: 'Уборка территории — тариф',
+          rate: request.rate,
+          effectiveFrom: request.effectiveFrom,
+        })
+        return {
+          tariff,
+          service: createChargeServiceSetting({
+            id: 'service-cleaning-created',
+            name: request.service.name,
+            incomeTypeId: request.service.incomeTypeId ?? null,
+            tariffId: tariff.id,
+            isRegular: request.service.isRegular,
+          }),
+        }
+      },
       createSupplier: async (_token, request) => {
         savedSupplierRequest = request
         return createSupplier({
@@ -1730,9 +1754,21 @@ describe('App', () => {
 
     await user.click(addContractorServiceButton)
     serviceDialog = await screen.findByRole('dialog', { name: 'Добавить услугу' })
+    expect(within(serviceDialog).queryByRole('checkbox', { name: 'Регулярные платежи' })).not.toBeInTheDocument()
     await user.type(within(serviceDialog).getByLabelText('Наименование услуги'), 'Уборка территории')
-    await user.type(within(serviceDialog).getByLabelText('Стоимость услуги'), '1000')
+    const contractorServiceCost = within(serviceDialog).getByLabelText('Стоимость регулярной услуги')
+    await user.clear(contractorServiceCost)
+    await user.type(contractorServiceCost, '1000')
     await user.click(within(serviceDialog).getByRole('button', { name: /Сохранить/i }))
+    await waitFor(() => {
+      if (!createdContractorServiceRequest) {
+        throw new Error(screen.queryByRole('alert')?.textContent ?? 'Запрос не отправлен без сообщения об ошибке.')
+      }
+      expect(createdContractorServiceRequest).toMatchObject({
+        rate: 1000,
+        service: { name: 'Уборка территории', isRegular: true },
+      })
+    })
     await waitFor(() => expect(addContractorServiceButton).toHaveFocus())
 
     const addSupplierButton = within(contractorsPanel).getByRole('button', { name: 'Добавить поставщика' })
@@ -1798,7 +1834,7 @@ describe('App', () => {
     await user.type(within(supplierDialog).getByLabelText('Контакт 1: комментарий'), 'Основной контакт')
     await user.click(within(supplierDialog).getByRole('button', { name: /Сохранить/i }))
     await waitFor(() => expect(within(within(contractorsPanel).getByRole('table', { name: 'Поставщики' })).getByText('Новый подрядчик')).toBeInTheDocument())
-    expect(savedSupplierRequest).toMatchObject({ chargeServiceSettingId: 'charge-service-new' })
+    expect(savedSupplierRequest).toMatchObject({ chargeServiceSettingId: 'service-cleaning-created' })
     expect(addSupplierButton).toHaveFocus()
 
     const suppliersTable = within(contractorsPanel).getByRole('table', { name: 'Поставщики' })
@@ -3027,6 +3063,7 @@ describe('App', () => {
     const user = userEvent.setup()
     let createdServiceRequest: unknown = null
     let updatedServiceRequest: unknown = null
+    let updatedTariffRequest: UpsertTariffRequest | null = null
     let serviceSettings: ChargeServiceSettingDto[] = []
     const serviceIncomeType = createAccountingType({ id: 'income-security', name: 'Охрана', code: 'membership' })
     const waterIncomeType = createAccountingType({ id: 'income-water', name: 'Водоснабжение', code: 'water' })
@@ -3038,25 +3075,44 @@ describe('App', () => {
       getChargeServiceSettings: async (_token, _search, _limit, includeArchived = false) => (
         serviceSettings.filter((setting) => includeArchived || !setting.isArchived)
       ),
-      createChargeServiceSetting: async (_token, request) => {
+      createChargeServiceWithTariff: async (_token, request) => {
         createdServiceRequest = request
+        const createdTariff = createTariff({
+          id: 'tariff-security-created',
+          name: 'Охрана — тариф',
+          calculationBase: serviceTariff.calculationBase,
+          rate: request.rate,
+          effectiveFrom: request.effectiveFrom,
+        })
+        const serviceRequest = request.service
         const savedSetting = createChargeServiceSetting({
           id: 'service-security',
-          name: request.name,
-          isRegular: request.isRegular,
-          periodicityMonths: request.periodicityMonths ?? null,
-          accrualStartMonth: request.accrualStartMonth ?? null,
-          paymentDueDay: request.paymentDueDay ?? null,
-          paymentDueMonth: request.paymentDueMonth ?? null,
-          overdueGraceDays: request.overdueGraceDays,
-          incomeTypeId: request.incomeTypeId ?? null,
-          tariffId: request.tariffId ?? null,
-          isMetered: request.isMetered,
-          hasTieredTariff: request.hasTieredTariff,
-          unitName: request.unitName ?? null,
+          name: serviceRequest.name,
+          isRegular: serviceRequest.isRegular,
+          periodicityMonths: serviceRequest.periodicityMonths ?? null,
+          accrualStartMonth: serviceRequest.accrualStartMonth ?? null,
+          paymentDueDay: serviceRequest.paymentDueDay ?? null,
+          paymentDueMonth: serviceRequest.paymentDueMonth ?? null,
+          overdueGraceDays: serviceRequest.overdueGraceDays,
+          incomeTypeId: serviceRequest.incomeTypeId ?? null,
+          tariffId: createdTariff.id,
+          isMetered: serviceRequest.isMetered,
+          hasTieredTariff: serviceRequest.hasTieredTariff,
+          unitName: serviceRequest.unitName ?? null,
         })
         serviceSettings = [savedSetting]
-        return savedSetting
+        return { service: savedSetting, tariff: createdTariff }
+      },
+      updateTariff: async (_token, id, request) => {
+        updatedTariffRequest = request
+        return createTariff({
+          id,
+          name: request.name,
+          calculationBase: request.calculationBase,
+          rate: request.rate,
+          effectiveFrom: request.effectiveFrom,
+          comment: request.comment ?? null,
+        })
       },
       updateChargeServiceSetting: async (_token, id, request) => {
         updatedServiceRequest = request
@@ -3098,6 +3154,9 @@ describe('App', () => {
     expect(calculationBaseControl).toHaveTextContent('Фиксированно')
     expect(calculationBaseControl).toBeDisabled()
     expect(tariffControl).toHaveTextContent('Тариф охраны — 1 200.00 руб.')
+    const regularCostInput = within(serviceDialog).getByLabelText('Стоимость регулярной услуги')
+    expect(regularCostInput).toHaveValue('1 200.00')
+    expect(within(serviceDialog).getByText('Сохранится вместе с услугой как её действующая ставка.')).toBeInTheDocument()
     expect(within(serviceDialog).getByText('Определяет, к какому виду будут относиться начисления и платежи по услуге.')).toBeInTheDocument()
     expect(within(serviceDialog).getByText('Определяется выбранным тарифом и показывает, как рассчитывается сумма.')).toBeInTheDocument()
     expect(within(serviceDialog).getByText('Конкретная ставка, которая применяется при начислении услуги.')).toBeInTheDocument()
@@ -3115,13 +3174,22 @@ describe('App', () => {
     await user.click(incomeTypeControl)
     await user.click(within(serviceDialog).getByRole('option', { name: waterIncomeType.name }))
     expect(tariffControl).toHaveTextContent('Тариф воды — 48.50 руб.')
+    expect(regularCostInput).toHaveValue('48.50')
     expect(calculationBaseControl).toHaveTextContent('По счетчику воды')
     expect(within(serviceDialog).getByLabelText('Единица измерения')).toHaveValue('м³')
     await user.click(incomeTypeControl)
     await user.click(within(serviceDialog).getByRole('option', { name: serviceIncomeType.name }))
     expect(tariffControl).toHaveTextContent('Тариф охраны — 1 200.00 руб.')
+    expect(regularCostInput).toHaveValue('1 200.00')
     expect(calculationBaseControl).toHaveTextContent('Фиксированно')
     expect(within(serviceDialog).getByLabelText('Единица измерения')).toHaveValue('руб.')
+    await user.clear(regularCostInput)
+    await user.type(regularCostInput, '0')
+    await user.click(within(serviceDialog).getByRole('button', { name: 'Сохранить' }))
+    expect(within(serviceDialog).getByText('Укажите корректную стоимость регулярной услуги.')).toBeInTheDocument()
+    expect(createdServiceRequest).toBeNull()
+    await user.clear(regularCostInput)
+    await user.type(regularCostInput, '1750')
     await user.click(createPeriodicityControl)
     await user.click(within(serviceDialog).getByRole('option', { name: 'Ежегодно' }))
     expect(within(serviceDialog).getByRole('combobox', { name: 'Месяц начисления ежегодной услуги' })).toHaveTextContent('Январь')
@@ -3136,25 +3204,39 @@ describe('App', () => {
     await user.click(within(serviceDialog).getByRole('button', { name: 'Сохранить' }))
 
     await waitFor(() => expect(createdServiceRequest).toMatchObject({
-      name: 'Охрана',
-      isRegular: true,
-      periodicityMonths: 12,
-      accrualStartMonth: 1,
-      paymentDueDay: 28,
-      paymentDueMonth: 2,
-      overdueGraceDays: 30,
-      incomeTypeId: serviceIncomeType.id,
-      tariffId: serviceTariff.id,
-      isMetered: true,
-      hasTieredTariff: true,
-      unitName: 'руб.',
+      service: {
+        name: 'Охрана',
+        isRegular: true,
+        periodicityMonths: 12,
+        accrualStartMonth: 1,
+        paymentDueDay: 28,
+        paymentDueMonth: 2,
+        overdueGraceDays: 30,
+        incomeTypeId: serviceIncomeType.id,
+        tariffId: serviceTariff.id,
+        isMetered: true,
+        hasTieredTariff: true,
+        unitName: 'руб.',
+      },
+      rate: 1750,
+      effectiveFrom: expect.any(String),
     }))
     await waitFor(() => expect(within(tariffsPanel).getAllByText('Охрана').length).toBeGreaterThan(0))
+    const savedServiceCostInput = within(tariffsPanel).getByLabelText('Охрана: Охрана: значение')
+    expect(savedServiceCostInput).toHaveValue('1 750.00')
     expect(within(tariffsPanel).getByRole('combobox', { name: 'Охрана: Периодичность: значение' })).toHaveTextContent('Ежегодно')
     expect(within(tariffsPanel).getByLabelText('Охрана: Оплата до: день')).toHaveValue('28')
     const dueDateValue = within(tariffsPanel).getByLabelText('Охрана: Оплата до: день').closest('.contractors-date-value')
     expect(dueDateValue).not.toBeNull()
     expect(within(dueDateValue as HTMLElement).getByLabelText('Охрана: Оплата до: месяц')).toHaveValue('фев')
+
+    await user.clear(savedServiceCostInput)
+    await user.type(savedServiceCostInput, '1800{Enter}')
+    const rateConfirmationDialog = await screen.findByRole('dialog', { name: 'Подтвердить изменение?' })
+    expect(within(rateConfirmationDialog).getByText('Стоимость, руб.')).toBeInTheDocument()
+    await user.click(within(rateConfirmationDialog).getByRole('button', { name: 'Сохранить' }))
+    await waitFor(() => expect(updatedTariffRequest).toMatchObject({ rate: 1800, calculationBase: 'fixed' }))
+    expect(savedServiceCostInput).toHaveValue('1 800.00')
 
     const periodicityControl = within(tariffsPanel).getByRole('combobox', { name: 'Охрана: Периодичность: значение' })
     await user.click(periodicityControl)
@@ -3185,7 +3267,7 @@ describe('App', () => {
       paymentDueMonth: null,
       overdueGraceDays: 30,
       incomeTypeId: serviceIncomeType.id,
-      tariffId: serviceTariff.id,
+      tariffId: 'tariff-security-created',
       isMetered: true,
       hasTieredTariff: true,
       unitName: 'руб.',
@@ -15547,6 +15629,33 @@ function createDictionaryClient(overrides: Partial<DictionaryClient> = {}): Dict
     archiveTariff: async () => undefined,
     restoreTariff: async () => tariff,
     getChargeServiceSettings: async () => [],
+    createChargeServiceWithTariff: async (_token, request) => {
+      const createdTariff = createTariff({
+        id: 'charge-service-tariff-new',
+        name: `${request.service.name} — тариф`,
+        calculationBase: tariff.calculationBase,
+        rate: request.rate,
+        effectiveFrom: request.effectiveFrom,
+      })
+      return {
+        service: createChargeServiceSetting({
+          id: 'charge-service-new',
+          name: request.service.name,
+          isRegular: request.service.isRegular,
+          periodicityMonths: request.service.periodicityMonths ?? null,
+          accrualStartMonth: request.service.accrualStartMonth ?? null,
+          paymentDueDay: request.service.paymentDueDay ?? null,
+          paymentDueMonth: request.service.paymentDueMonth ?? null,
+          overdueGraceDays: request.service.overdueGraceDays,
+          incomeTypeId: request.service.incomeTypeId ?? null,
+          tariffId: createdTariff.id,
+          isMetered: request.service.isMetered,
+          hasTieredTariff: request.service.hasTieredTariff,
+          unitName: request.service.unitName ?? null,
+        }),
+        tariff: createdTariff,
+      }
+    },
     createChargeServiceSetting: async (_token, request) => createChargeServiceSetting({
       id: 'charge-service-new',
       name: request.name,

@@ -54,6 +54,44 @@ describe('dictionariesApi response cache', () => {
     expect(fetchMock).toHaveBeenCalledTimes(3)
   })
 
+  it('creates a regular service and its tariff through one request', async () => {
+    const response = { service: { id: 'service-1', tariffId: 'tariff-1' }, tariff: { id: 'tariff-1', rate: 1750 } }
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify(response), {
+      status: 201,
+      headers: { 'Content-Type': 'application/json' },
+    }))
+    vi.stubGlobal('fetch', fetchMock)
+    const request = {
+      service: {
+        name: 'Охрана',
+        isRegular: true,
+        periodicityMonths: 1,
+        accrualStartMonth: 1,
+        paymentDueDay: 20,
+        paymentDueMonth: null,
+        overdueGraceDays: 15,
+        incomeTypeId: 'income-security',
+        tariffId: 'tariff-template',
+        isMetered: false,
+        hasTieredTariff: false,
+        unitName: 'руб.',
+      },
+      rate: 1750,
+      effectiveFrom: '2026-07-23',
+    }
+
+    await expect(dictionariesApi.createChargeServiceWithTariff('token', request)).resolves.toEqual(response)
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/dictionaries/charge-services/with-tariff',
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify(request),
+        headers: expect.objectContaining({ Authorization: 'Bearer token' }),
+      }),
+    )
+  })
+
   it('removes a failed response so the next read can retry', async () => {
     const fetchMock = vi.fn()
       .mockResolvedValueOnce(new Response(JSON.stringify({ detail: 'Ошибка' }), { status: 500 }))

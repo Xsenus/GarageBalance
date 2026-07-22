@@ -2004,6 +2004,91 @@ public sealed class DictionaryServiceTests
     }
 
     [Fact]
+    public async Task CreateChargeServiceWithTariffAsync_SavesDedicatedRateAndServiceInOneOperation()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var incomeType = new IncomeType { Name = "Охрана", Code = "membership" };
+        var templateTariff = new Tariff { Name = "Шаблон фиксированного тарифа", CalculationBase = "fixed", Rate = 1200m, EffectiveFrom = new DateOnly(2026, 1, 1) };
+        database.Context.AddRange(incomeType, templateTariff);
+        await database.Context.SaveChangesAsync();
+        var service = DictionaryServiceTestFactory.Create(database.Context);
+        var actorUserId = Guid.NewGuid();
+
+        var result = await service.CreateChargeServiceWithTariffAsync(
+            new CreateChargeServiceWithTariffRequest(
+                new UpsertChargeServiceSettingRequest("Охрана территории", true, 1, 1, 20, null, 15, false, false, "руб.", incomeType.Id, templateTariff.Id),
+                1750.12555m,
+                new DateOnly(2026, 7, 23)),
+            actorUserId,
+            CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+        Assert.Equal("Охрана территории", result.Value!.Service.Name);
+        Assert.Equal(result.Value.Tariff.Id, result.Value.Service.TariffId);
+        Assert.NotEqual(templateTariff.Id, result.Value.Tariff.Id);
+        Assert.Equal("Охрана территории — тариф", result.Value.Tariff.Name);
+        Assert.Equal(1750.1256m, result.Value.Tariff.Rate);
+        Assert.Equal("fixed", result.Value.Tariff.CalculationBase);
+        Assert.Equal(new DateOnly(2026, 7, 23), result.Value.Tariff.EffectiveFrom);
+        Assert.Equal(2, await database.Context.Tariffs.CountAsync());
+        Assert.Single(database.Context.ChargeServiceSettings);
+        Assert.Equal(2, database.Context.AuditEvents.Count());
+        Assert.All(database.Context.AuditEvents, audit => Assert.Equal(actorUserId, audit.ActorUserId));
+    }
+
+    [Fact]
+    public async Task CreateChargeServiceWithTariffAsync_RejectsInvalidModeAndRateWithoutAddingRecords()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = DictionaryServiceTestFactory.Create(database.Context);
+        var baseRequest = new UpsertChargeServiceSettingRequest("Разовая услуга", false, null, null, null, null, 0, false, false, null);
+
+        var nonRegular = await service.CreateChargeServiceWithTariffAsync(
+            new CreateChargeServiceWithTariffRequest(baseRequest, 100m, new DateOnly(2026, 7, 23)),
+            null,
+            CancellationToken.None);
+        var invalidRate = await service.CreateChargeServiceWithTariffAsync(
+            new CreateChargeServiceWithTariffRequest(baseRequest with { IsRegular = true }, 0m, new DateOnly(2026, 7, 23)),
+            null,
+            CancellationToken.None);
+
+        Assert.False(nonRegular.Succeeded);
+        Assert.Equal("charge_service_tariff_regular_required", nonRegular.ErrorCode);
+        Assert.False(invalidRate.Succeeded);
+        Assert.Equal("charge_service_rate_invalid", invalidRate.ErrorCode);
+        Assert.Empty(database.Context.Tariffs);
+        Assert.Empty(database.Context.ChargeServiceSettings);
+        Assert.Empty(database.Context.AuditEvents);
+    }
+
+    [Fact]
+    public async Task CreateChargeServiceWithTariffAsync_RollsBackTariffAndAuditWhenServiceInsertFails()
+    {
+        var failureInterceptor = new ChargeServiceInsertFailureInterceptor();
+        await using var database = await TestDatabase.CreateAsync(failureInterceptor);
+        var incomeType = new IncomeType { Name = "Охрана", Code = "membership" };
+        var templateTariff = new Tariff { Name = "Шаблон фиксированного тарифа", CalculationBase = "fixed", Rate = 1200m, EffectiveFrom = new DateOnly(2026, 1, 1) };
+        database.Context.AddRange(incomeType, templateTariff);
+        await database.Context.SaveChangesAsync();
+        failureInterceptor.Enabled = true;
+        var service = DictionaryServiceTestFactory.Create(database.Context);
+
+        var exception = await Assert.ThrowsAsync<DbUpdateException>(() => service.CreateChargeServiceWithTariffAsync(
+            new CreateChargeServiceWithTariffRequest(
+                new UpsertChargeServiceSettingRequest("Охрана территории", true, 1, 1, 20, null, 15, false, false, "руб.", incomeType.Id, templateTariff.Id),
+                1750m,
+                new DateOnly(2026, 7, 23)),
+            Guid.NewGuid(),
+            CancellationToken.None));
+        Assert.IsType<InvalidOperationException>(exception.InnerException);
+
+        database.Context.ChangeTracker.Clear();
+        Assert.Single(await database.Context.Tariffs.AsNoTracking().ToListAsync());
+        Assert.Empty(await database.Context.ChargeServiceSettings.AsNoTracking().ToListAsync());
+        Assert.Empty(await database.Context.AuditEvents.AsNoTracking().ToListAsync());
+    }
+
+    [Fact]
     public async Task CreateChargeServiceSettingAsync_SavesAccountingLinksAndRejectsMismatch()
     {
         await using var database = await TestDatabase.CreateAsync();
@@ -3180,6 +3265,39 @@ public sealed class DictionaryServiceTests
             if (command.CommandText.TrimStart().StartsWith("SELECT", StringComparison.OrdinalIgnoreCase))
             {
                 Count++;
+            }
+        }
+    }
+
+    private sealed class ChargeServiceInsertFailureInterceptor : DbCommandInterceptor
+    {
+        public bool Enabled { get; set; }
+
+        public override InterceptionResult<DbDataReader> ReaderExecuting(
+            DbCommand command,
+            CommandEventData eventData,
+            InterceptionResult<DbDataReader> result)
+        {
+            ThrowForChargeServiceInsert(command);
+            return result;
+        }
+
+        public override ValueTask<InterceptionResult<DbDataReader>> ReaderExecutingAsync(
+            DbCommand command,
+            CommandEventData eventData,
+            InterceptionResult<DbDataReader> result,
+            CancellationToken cancellationToken = default)
+        {
+            ThrowForChargeServiceInsert(command);
+            return ValueTask.FromResult(result);
+        }
+
+        private void ThrowForChargeServiceInsert(DbCommand command)
+        {
+            if (Enabled &&
+                command.CommandText.Contains("INSERT INTO \"charge_service_settings\"", StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException("Имитирован сбой сохранения услуги.");
             }
         }
     }

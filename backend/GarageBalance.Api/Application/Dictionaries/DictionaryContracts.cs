@@ -210,6 +210,15 @@ public sealed record UpsertChargeServiceSettingRequest(
     Guid? IncomeTypeId = null,
     Guid? TariffId = null);
 
+public sealed record CreateChargeServiceWithTariffRequest(
+    [Required] UpsertChargeServiceSettingRequest Service,
+    [Range(0.0001, 999999999)] decimal Rate,
+    DateOnly EffectiveFrom);
+
+public sealed record CreatedChargeServiceWithTariffDto(
+    ChargeServiceSettingDto Service,
+    TariffDto Tariff);
+
 public sealed record IrregularPaymentDto(
     Guid Id,
     string Name,
