@@ -2944,6 +2944,29 @@ describe('App', () => {
     })))
   }, 30000)
 
+  it('hides the financial report history section without audit permission', async () => {
+    const user = userEvent.setup()
+    const auth = createAuthResponse({
+      user: {
+        permissions: createAuthResponse().user.permissions.filter((permission) => permission !== 'audit.read'),
+      },
+    })
+
+    render(<App authClient={createAuthClient({ login: async () => auth })} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Контрагенты')
+    const contractorsPanel = await screen.findByRole('region', { name: 'Контрагенты' })
+    await user.click(within(contractorsPanel).getByRole('tab', { name: 'Поставщики' }))
+    await user.click(await within(contractorsPanel).findByRole('button', { name: 'Открыть финансовый отчет поставщика Водоканал' }))
+
+    const supplierReport = await screen.findByRole('dialog', { name: 'Водоканал' })
+    expect(within(supplierReport).queryByLabelText('Переход к истории изменений контрагента')).not.toBeInTheDocument()
+    expect(within(supplierReport).queryByText('История изменений доступна пользователям с правом просмотра audit-событий.')).not.toBeInTheDocument()
+    expect(within(supplierReport).queryByRole('button', { name: 'Открыть в истории изменений' })).not.toBeInTheDocument()
+  })
+
   it('shows an error without loading report rows when the full supplier period is unavailable', async () => {
     const user = userEvent.setup()
     const supplierId = '22222222-2222-4222-8222-222222222224'

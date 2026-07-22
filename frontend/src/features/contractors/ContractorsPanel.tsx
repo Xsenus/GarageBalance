@@ -2590,11 +2590,9 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
                   </table>
                   {contractorFinancialReport.rows.length === 0 ? <p className="empty-state" role="status" aria-live="polite">По выбранному периоду строк нет</p> : null}
                 </div>
-                <section className="contractor-history-section" aria-label="Переход к истории изменений контрагента">
-                  <h4>История изменений</h4>
-                  {!canReadContractorHistory ? (
-                    <p className="empty-state" role="status" aria-live="polite">История изменений доступна пользователям с правом просмотра audit-событий.</p>
-                  ) : (
+                {canReadContractorHistory ? (
+                  <section className="contractor-history-section" aria-label="Переход к истории изменений контрагента">
+                    <h4>История изменений</h4>
                     <div className="inline-action-row">
                       <p>Откройте общий журнал с фильтром по этому контрагенту.</p>
                       <button className="secondary-button" type="button" onClick={() => openContractorHistoryInAudit()}>
@@ -2602,8 +2600,8 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
                         <span>Открыть в истории изменений</span>
                       </button>
                     </div>
-                  )}
-                </section>
+                  </section>
+                ) : null}
               </>
             ) : null}
           </section>
