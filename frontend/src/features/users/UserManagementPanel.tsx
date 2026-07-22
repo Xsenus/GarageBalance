@@ -5,20 +5,18 @@ import type { AuthResponse } from '../../services/authApi'
 import type { CreateManagedUserRequest, ManagedRoleDto, ManagedUserDto, PagedManagedUsersDto, UpdateManagedUserRequest, UserManagementClient } from '../../services/usersApi'
 import { permissions, rolePermissionGroups } from '../../shared/accessControl'
 import { TableLoadingState } from '../../shared/AsyncState'
-import type { ChangePreview } from '../../shared/changePreview'
 import { FormError, FormValidationSummary } from '../../shared/formFeedback'
 import { FormField } from '../../shared/FormField'
 import { formatDateTime } from '../../shared/formatters'
 import { useEscapeKey, useFocusOnOpen, useFocusTrap, useRestoreFocusOnClose } from '../../shared/focusHooks'
 import { createEmptyPage } from '../../shared/pagination'
 import { TablePagination } from '../../shared/TablePagination'
-import type { UserEditChange, UserFormState } from '../../shared/userManagement'
+import type { UserFormState } from '../../shared/userManagement'
 import { getPrimaryRoleCode, getRoleLabel, getUserEditorChanges, getUserEditorValidationErrors } from '../../shared/userManagement'
 
 type UserEditorState = { mode: 'create' | 'edit'; user?: ManagedUserDto }
-type UserSaveConfirmationState = { user: ManagedUserDto; changes: UserEditChange[]; request: UpdateManagedUserRequest }
+type UserDeactivationConfirmationState = { user: ManagedUserDto; request: UpdateManagedUserRequest }
 type RolePermissionEditorState = { role: ManagedRoleDto; permissions: string[] }
-type RolePermissionConfirmationState = { role: ManagedRoleDto; changes: ChangePreview[]; permissions: string[] }
 
 export function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; userClient: UserManagementClient }) {
   const [roles, setRoles] = useState<ManagedRoleDto[]>([])
@@ -34,9 +32,8 @@ export function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; 
   const [toast, setToast] = useState<{ id: number; text: string; kind: 'success' | 'error' } | null>(null)
   const [contextMenu, setContextMenu] = useState<{ user: ManagedUserDto; x: number; y: number } | null>(null)
   const [editor, setEditor] = useState<UserEditorState | null>(null)
-  const [saveConfirmation, setSaveConfirmation] = useState<UserSaveConfirmationState | null>(null)
+  const [deactivationConfirmation, setDeactivationConfirmation] = useState<UserDeactivationConfirmationState | null>(null)
   const [roleEditor, setRoleEditor] = useState<RolePermissionEditorState | null>(null)
-  const [roleConfirmation, setRoleConfirmation] = useState<RolePermissionConfirmationState | null>(null)
   const [rolePermissionError, setRolePermissionError] = useState<string | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<ManagedUserDto | null>(null)
   const [restoreTarget, setRestoreTarget] = useState<ManagedUserDto | null>(null)
@@ -46,16 +43,13 @@ export function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; 
   const rolesRequestRef = useRef<{ accessToken: string; client: UserManagementClient; promise: Promise<ManagedRoleDto[]> } | null>(null)
   useRestoreFocusOnClose(Boolean(editor))
   const editorCloseRef = useFocusOnOpen<HTMLButtonElement>(Boolean(editor))
-  const editorDialogRef = useFocusTrap<HTMLElement>(Boolean(editor) && !saveConfirmation)
-  useRestoreFocusOnClose(Boolean(saveConfirmation))
-  const saveConfirmationCancelRef = useFocusOnOpen<HTMLButtonElement>(Boolean(saveConfirmation))
-  const saveConfirmationDialogRef = useFocusTrap<HTMLElement>(Boolean(saveConfirmation))
+  const editorDialogRef = useFocusTrap<HTMLElement>(Boolean(editor) && !deactivationConfirmation)
+  useRestoreFocusOnClose(Boolean(deactivationConfirmation))
+  const deactivationConfirmationCancelRef = useFocusOnOpen<HTMLButtonElement>(Boolean(deactivationConfirmation))
+  const deactivationConfirmationDialogRef = useFocusTrap<HTMLElement>(Boolean(deactivationConfirmation))
   useRestoreFocusOnClose(Boolean(roleEditor))
   const roleEditorCloseRef = useFocusOnOpen<HTMLButtonElement>(Boolean(roleEditor))
-  const roleEditorDialogRef = useFocusTrap<HTMLElement>(Boolean(roleEditor) && !roleConfirmation)
-  useRestoreFocusOnClose(Boolean(roleConfirmation))
-  const roleConfirmationCancelRef = useFocusOnOpen<HTMLButtonElement>(Boolean(roleConfirmation))
-  const roleConfirmationDialogRef = useFocusTrap<HTMLElement>(Boolean(roleConfirmation))
+  const roleEditorDialogRef = useFocusTrap<HTMLElement>(Boolean(roleEditor))
   useRestoreFocusOnClose(Boolean(deleteTarget))
   const deleteCancelRef = useFocusOnOpen<HTMLButtonElement>(Boolean(deleteTarget))
   const deleteDialogRef = useFocusTrap<HTMLElement>(Boolean(deleteTarget))
@@ -64,10 +58,9 @@ export function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; 
   const restoreDialogRef = useFocusTrap<HTMLElement>(Boolean(restoreTarget))
 
   useEscapeKey(Boolean(contextMenu), () => setContextMenu(null))
-  useEscapeKey(Boolean(editor) && !saveConfirmation, () => closeEditor())
-  useEscapeKey(Boolean(saveConfirmation), () => setSaveConfirmation(null))
-  useEscapeKey(Boolean(roleEditor) && !roleConfirmation, () => closeRoleEditor())
-  useEscapeKey(Boolean(roleConfirmation), () => setRoleConfirmation(null))
+  useEscapeKey(Boolean(editor) && !deactivationConfirmation, () => closeEditor())
+  useEscapeKey(Boolean(deactivationConfirmation), () => setDeactivationConfirmation(null))
+  useEscapeKey(Boolean(roleEditor), () => closeRoleEditor())
   useEscapeKey(Boolean(deleteTarget), () => closeDeleteDialog())
   useEscapeKey(Boolean(restoreTarget), () => setRestoreTarget(null))
 
@@ -177,7 +170,7 @@ export function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; 
 
   function closeEditor() {
     setEditor(null)
-    setSaveConfirmation(null)
+    setDeactivationConfirmation(null)
     setValidationErrors([])
   }
 
@@ -209,7 +202,12 @@ export function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; 
         return
       }
 
-      setSaveConfirmation({ user: editor.user, changes, request })
+      if (editor.user.isActive && !request.isActive) {
+        setDeactivationConfirmation({ user: editor.user, request })
+        return
+      }
+
+      await updateEditedUser(editor.user, request)
       return
     }
 
@@ -240,19 +238,14 @@ export function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; 
     }
   }
 
-  async function confirmSaveUser() {
-    if (!saveConfirmation) {
-      return
-    }
-
+  async function updateEditedUser(user: ManagedUserDto, request: UpdateManagedUserRequest) {
     setSaving('edit')
     setError(null)
     try {
-      await userClient.updateUser(auth.accessToken, saveConfirmation.user.id, saveConfirmation.request)
-      setSaveConfirmation(null)
+      await userClient.updateUser(auth.accessToken, user.id, request)
       closeEditor()
       await refreshUsers()
-      showToast('Пользователь изменен.')
+      showToast(user.isActive && !request.isActive ? 'Пользователь отключен.' : 'Пользователь изменен.')
     } catch (caught) {
       const message = caught instanceof Error ? caught.message : 'Не удалось сохранить пользователя.'
       setError(message)
@@ -260,6 +253,14 @@ export function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; 
     } finally {
       setSaving(null)
     }
+  }
+
+  async function confirmDeactivateUser() {
+    if (!deactivationConfirmation) {
+      return
+    }
+
+    await updateEditedUser(deactivationConfirmation.user, deactivationConfirmation.request)
   }
 
   async function deleteUser() {
@@ -322,7 +323,6 @@ export function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; 
 
   function closeRoleEditor() {
     setRoleEditor(null)
-    setRoleConfirmation(null)
     setRolePermissionError(null)
   }
 
@@ -344,7 +344,7 @@ export function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; 
     })
   }
 
-  function saveRolePermissions(event: FormEvent<HTMLFormElement>) {
+  async function saveRolePermissions(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (!roleEditor) {
       return
@@ -355,31 +355,16 @@ export function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; 
       return
     }
 
-    const before = formatRolePermissionLabels(roleEditor.role.permissions)
-    const after = formatRolePermissionLabels(roleEditor.permissions)
-    if (before === after) {
+    if (haveSamePermissions(roleEditor.role.permissions, roleEditor.permissions)) {
       closeRoleEditor()
-      return
-    }
-
-    setRoleConfirmation({
-      role: roleEditor.role,
-      permissions: roleEditor.permissions,
-      changes: [{ field: 'Права', before, after }],
-    })
-  }
-
-  async function confirmRolePermissions() {
-    if (!roleConfirmation) {
       return
     }
 
     setSaving('role')
     setError(null)
     try {
-      const updatedRole = await userClient.updateRolePermissions(auth.accessToken, roleConfirmation.role.code, { permissions: roleConfirmation.permissions })
+      const updatedRole = await userClient.updateRolePermissions(auth.accessToken, roleEditor.role.code, { permissions: roleEditor.permissions })
       setRoles((current) => current.map((role) => (role.code === updatedRole.code ? updatedRole : role)))
-      setRoleConfirmation(null)
       setRoleEditor(null)
       await refreshUsers()
       showToast('Права роли изменены.')
@@ -611,7 +596,7 @@ export function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; 
               <div className="detail-dialog-actions">
                 <button className="secondary-button" type="submit" disabled={saving !== null || roles.length === 0}>
                   <Save size={16} />
-                  <span>Сохранить</span>
+                  <span>{saving === editor.mode ? 'Сохраняем...' : 'Сохранить'}</span>
                 </button>
                 <button className="ghost-button" type="button" onClick={closeEditor}>Отмена</button>
               </div>
@@ -620,37 +605,25 @@ export function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; 
         </div>
       ) : null}
 
-      {saveConfirmation ? (
-        <div className="modal-backdrop" role="presentation" onMouseDown={() => setSaveConfirmation(null)}>
-          <section ref={saveConfirmationDialogRef} className="detail-dialog dictionary-confirmation-dialog" role="dialog" aria-modal="true" aria-labelledby="user-save-confirmation-title" aria-describedby="user-save-confirmation-description" onMouseDown={(event) => event.stopPropagation()}>
+      {deactivationConfirmation ? (
+        <div className="modal-backdrop" role="presentation" onMouseDown={() => setDeactivationConfirmation(null)}>
+          <section ref={deactivationConfirmationDialogRef} className="detail-dialog dictionary-confirmation-dialog" role="dialog" aria-modal="true" aria-labelledby="user-deactivation-confirmation-title" aria-describedby="user-deactivation-confirmation-description" onMouseDown={(event) => event.stopPropagation()}>
             <div className="detail-dialog-header">
               <div>
-                <p className="eyebrow">Изменение</p>
-                <h3 id="user-save-confirmation-title">Подтвердите изменения пользователя</h3>
-                <p>{saveConfirmation.user.displayName}</p>
+                <p className="eyebrow">Отключение</p>
+                <h3 id="user-deactivation-confirmation-title">Отключить пользователя?</h3>
+                <p>{deactivationConfirmation.user.displayName}</p>
               </div>
-              <button className="icon-button" type="button" aria-label="Отменить подтверждение изменений пользователя" onClick={() => setSaveConfirmation(null)} disabled={saving === 'edit'}>
+              <button className="icon-button" type="button" aria-label="Отменить отключение пользователя" onClick={() => setDeactivationConfirmation(null)} disabled={saving === 'edit'}>
                 <X size={18} />
               </button>
             </div>
-            <p className="confirmation-text" id="user-save-confirmation-description">Проверьте, что именно изменится. После подтверждения действие будет записано в историю изменений.</p>
-            <ul className="dictionary-change-list" aria-label="Изменяемые поля пользователя">
-              {saveConfirmation.changes.map((change) => (
-                <li key={`${change.field}-${change.before}-${change.after}`}>
-                  <span className="dictionary-change-field">{change.field}</span>
-                  <span className="dictionary-change-values">
-                    <span className="dictionary-change-value">{change.before}</span>
-                    <span className="dictionary-change-arrow" aria-hidden="true">-&gt;</span>
-                    <span className="dictionary-change-value dictionary-change-value-after">{change.after}</span>
-                  </span>
-                </li>
-              ))}
-            </ul>
+            <p className="confirmation-text" id="user-deactivation-confirmation-description">Пользователь потеряет доступ к системе. Причина и действие будут записаны в историю изменений.</p>
             <div className="detail-dialog-actions">
-              <button ref={saveConfirmationCancelRef} className="ghost-button" type="button" onClick={() => setSaveConfirmation(null)} disabled={saving === 'edit'}>Отмена</button>
-              <button className="secondary-button" type="button" onClick={() => void confirmSaveUser()} disabled={saving === 'edit'}>
-                <Save size={16} />
-                <span>{saving === 'edit' ? 'Сохраняем...' : 'Сохранить изменения'}</span>
+              <button ref={deactivationConfirmationCancelRef} className="ghost-button" type="button" onClick={() => setDeactivationConfirmation(null)} disabled={saving === 'edit'}>Отмена</button>
+              <button className="danger-button" type="button" onClick={() => void confirmDeactivateUser()} disabled={saving === 'edit'}>
+                <Trash2 size={16} />
+                <span>{saving === 'edit' ? 'Отключаем...' : 'Отключить'}</span>
               </button>
             </div>
           </section>
@@ -694,47 +667,10 @@ export function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; 
                 <button className="ghost-button" type="button" onClick={closeRoleEditor} disabled={saving === 'role'}>Отмена</button>
                 <button className="secondary-button" type="submit" disabled={saving === 'role'}>
                   <Save size={16} />
-                  <span>Сохранить</span>
+                  <span>{saving === 'role' ? 'Сохраняем...' : 'Сохранить'}</span>
                 </button>
               </div>
             </form>
-          </section>
-        </div>
-      ) : null}
-
-      {roleConfirmation ? (
-        <div className="modal-backdrop" role="presentation" onMouseDown={() => setRoleConfirmation(null)}>
-          <section ref={roleConfirmationDialogRef} className="detail-dialog dictionary-confirmation-dialog" role="dialog" aria-modal="true" aria-labelledby="role-permissions-confirmation-title" aria-describedby="role-permissions-confirmation-description" onMouseDown={(event) => event.stopPropagation()}>
-            <div className="detail-dialog-header">
-              <div>
-                <p className="eyebrow">Права</p>
-                <h3 id="role-permissions-confirmation-title">Подтвердите изменение прав роли</h3>
-                <p>{roleConfirmation.role.name}</p>
-              </div>
-              <button className="icon-button" type="button" aria-label="Отменить подтверждение изменения прав роли" onClick={() => setRoleConfirmation(null)} disabled={saving === 'role'}>
-                <X size={18} />
-              </button>
-            </div>
-            <p className="confirmation-text" id="role-permissions-confirmation-description">Проверьте набор доступов. После подтверждения изменение будет записано в историю изменений.</p>
-            <ul className="dictionary-change-list" aria-label="Изменяемые поля роли">
-              {roleConfirmation.changes.map((change) => (
-                <li key={`${change.field}-${change.before}-${change.after}`}>
-                  <span className="dictionary-change-field">{change.field}</span>
-                  <span className="dictionary-change-values">
-                    <span className="dictionary-change-value">{change.before}</span>
-                    <span className="dictionary-change-arrow" aria-hidden="true">-&gt;</span>
-                    <span className="dictionary-change-value dictionary-change-value-after">{change.after}</span>
-                  </span>
-                </li>
-              ))}
-            </ul>
-            <div className="detail-dialog-actions">
-              <button ref={roleConfirmationCancelRef} className="ghost-button" type="button" onClick={() => setRoleConfirmation(null)} disabled={saving === 'role'}>Отмена</button>
-              <button className="secondary-button" type="button" onClick={() => void confirmRolePermissions()} disabled={saving === 'role'}>
-                <ShieldCheck size={16} />
-                <span>{saving === 'role' ? 'Сохраняем...' : 'Сохранить права'}</span>
-              </button>
-            </div>
           </section>
         </div>
       ) : null}
@@ -810,20 +746,8 @@ export function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; 
   )
 }
 
-function getRolePermissionLabel(permission: string) {
-  return rolePermissionGroups.find((group) => group.permission === permission)?.label ?? permission
-}
-
-function formatRolePermissionLabels(permissionsList: readonly string[]) {
-  const knownLabels = rolePermissionGroups
-    .filter((group) => permissionsList.includes(group.permission))
-    .map((group) => group.label)
-  const customLabels = permissionsList
-    .filter((permission) => !rolePermissionGroups.some((group) => group.permission === permission))
-    .sort()
-    .map(getRolePermissionLabel)
-  const labels = [...knownLabels, ...customLabels]
-  return labels.length > 0 ? labels.join(', ') : 'Нет прав'
+function haveSamePermissions(current: readonly string[], next: readonly string[]) {
+  return current.length === next.length && current.every((permission) => next.includes(permission))
 }
 
 function RolePermissionMatrix({ roles, onEditRole }: { roles: ManagedRoleDto[]; onEditRole(role: ManagedRoleDto): void }) {

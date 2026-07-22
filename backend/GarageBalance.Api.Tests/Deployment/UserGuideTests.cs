@@ -26,6 +26,8 @@ public sealed class UserGuideTests
         Assert.Contains("Отчеты", document, StringComparison.Ordinal);
         Assert.Contains("История изменений", document, StringComparison.Ordinal);
         Assert.Contains("Что нового", document, StringComparison.Ordinal);
+        Assert.Contains("Обычные изменения пользователя и прав роли сохраняются сразу", document, StringComparison.Ordinal);
+        Assert.Contains("подтверждение остаётся при отключении, удалении и восстановлении доступа", document, StringComparison.Ordinal);
         Assert.Contains("Показывать архивные", document, StringComparison.Ordinal);
         Assert.Contains("Вернуть", document, StringComparison.Ordinal);
         Assert.Contains("было -> стало", document, StringComparison.Ordinal);

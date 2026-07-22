@@ -329,10 +329,16 @@ describe('App', () => {
     expect(within(financePanel).getAllByText('Гараж 12').length).toBeGreaterThan(0)
   })
 
-  it('edits role permissions from matrix with no-op and confirmation', async () => {
+  it('edits role permissions directly and skips unchanged saves', async () => {
     const user = userEvent.setup()
     let roles = createRoles()
+    let updateAttempt = 0
     const updateRolePermissions = vi.fn(async (_token: string, roleCode: string, request: { permissions: string[] }) => {
+      updateAttempt += 1
+      if (updateAttempt === 1) {
+        throw new Error('Не удалось сохранить права роли.')
+      }
+
       const role = roles.find((item) => item.code === roleCode)
       if (!role) {
         throw new Error('Роль не найдена.')
@@ -366,23 +372,16 @@ describe('App', () => {
     await user.click(within(roleDialog).getByLabelText('Оператор: Отчеты'))
     await user.click(within(roleDialog).getByRole('button', { name: 'Сохранить' }))
 
-    const confirmationDialog = await screen.findByRole('dialog', { name: 'Подтвердите изменение прав роли' })
-    const changeList = within(confirmationDialog).getByRole('list', { name: 'Изменяемые поля роли' })
-    expect(changeList).toHaveTextContent('Права')
-    expect(changeList).toHaveTextContent('Платежи')
-    expect(changeList).toHaveTextContent('Отчеты')
-    expect(updateRolePermissions).not.toHaveBeenCalled()
-    await user.keyboard('{Escape}')
-    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Подтвердите изменение прав роли' })).not.toBeInTheDocument())
-    expect(updateRolePermissions).not.toHaveBeenCalled()
-
+    expect((await screen.findAllByText('Не удалось сохранить права роли.')).length).toBeGreaterThan(0)
+    expect(screen.getByRole('dialog', { name: 'Изменить права роли' })).toBeInTheDocument()
     await user.click(within(roleDialog).getByRole('button', { name: 'Сохранить' }))
-    const reopenedConfirmationDialog = await screen.findByRole('dialog', { name: 'Подтвердите изменение прав роли' })
-    await user.click(within(reopenedConfirmationDialog).getByRole('button', { name: 'Сохранить права' }))
 
     await waitFor(() => expect(updateRolePermissions).toHaveBeenCalledWith('token', 'operator', expect.objectContaining({
       permissions: expect.arrayContaining(['reports.read']),
     })))
+    expect(updateRolePermissions).toHaveBeenCalledTimes(2)
+    expect(screen.queryByRole('dialog', { name: 'Подтвердите изменение прав роли' })).not.toBeInTheDocument()
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Изменить права роли' })).not.toBeInTheDocument())
     await waitFor(() => expect(within(roleMatrix).getByRole('cell', { name: 'Оператор: Отчеты - разрешено' })).toHaveTextContent('Да'))
   })
 
@@ -7340,6 +7339,7 @@ describe('App', () => {
     let releaseDeactivationRefresh: (() => void) | undefined
     let deactivationRefresh: Promise<void> | null = null
     let updateCalls = 0
+    let failNextOrdinaryUpdate = true
     let lastUpdateRequest: UpdateManagedUserRequest | null = null
     const userClient: UserManagementClient = {
       ...statefulUserClient,
@@ -7356,6 +7356,11 @@ describe('App', () => {
         updateCalls += 1
         const request = args[2]
         lastUpdateRequest = request
+        if (request.displayName === 'Старший оператор' && failNextOrdinaryUpdate) {
+          failNextOrdinaryUpdate = false
+          throw new Error('Не удалось сохранить пользователя.')
+        }
+
         if (!request.isActive) {
           deactivationReason = request.deactivationReason ?? null
           deactivationRefresh = new Promise((resolve) => {
@@ -7401,34 +7406,15 @@ describe('App', () => {
     const editSaveButton = within(editDialog).getByRole('button', { name: 'Сохранить' })
     await user.click(editSaveButton)
 
-    const saveConfirmationDialog = await screen.findByRole('dialog', { name: 'Подтвердите изменения пользователя' })
-    expect(within(saveConfirmationDialog).getByText('Имя')).toBeInTheDocument()
-    const saveConfirmationChanges = within(saveConfirmationDialog).getByRole('list', { name: 'Изменяемые поля пользователя' })
-    expect(within(saveConfirmationChanges).getByText('Оператор')).toBeInTheDocument()
-    expect(within(saveConfirmationChanges).getByText('Старший оператор')).toBeInTheDocument()
-    expect(updateCalls).toBe(0)
-    const saveConfirmationCancelButton = within(saveConfirmationDialog).getByRole('button', { name: 'Отмена' })
-    const saveConfirmationConfirmButton = within(saveConfirmationDialog).getByRole('button', { name: 'Сохранить изменения' })
-    const saveConfirmationCloseButton = within(saveConfirmationDialog).getByRole('button', { name: 'Отменить подтверждение изменений пользователя' })
-    await waitFor(() => expect(saveConfirmationCancelButton).toHaveFocus())
-    await user.keyboard('{Shift>}{Tab}{/Shift}')
-    expect(saveConfirmationCloseButton).toHaveFocus()
-    await user.keyboard('{Tab}')
-    expect(saveConfirmationCancelButton).toHaveFocus()
-    await user.keyboard('{Tab}')
-    expect(saveConfirmationConfirmButton).toHaveFocus()
-    await user.keyboard('{Escape}')
-    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Подтвердите изменения пользователя' })).not.toBeInTheDocument())
-    await waitFor(() => expect(editSaveButton).toHaveFocus())
-    expect(updateCalls).toBe(0)
-
+    expect((await screen.findAllByText('Не удалось сохранить пользователя.')).length).toBeGreaterThan(0)
+    expect(screen.getByRole('dialog', { name: 'Изменить пользователя' })).toBeInTheDocument()
+    expect(updateCalls).toBe(1)
     await user.click(editSaveButton)
-    const reopenedSaveConfirmationDialog = await screen.findByRole('dialog', { name: 'Подтвердите изменения пользователя' })
-    await user.click(within(reopenedSaveConfirmationDialog).getByRole('button', { name: 'Сохранить изменения' }))
 
     expect(await within(usersPanel).findByText('Старший оператор')).toBeInTheDocument()
-    expect(updateCalls).toBe(1)
+    expect(updateCalls).toBe(2)
     expect(lastUpdateRequest?.newPassword).toBeNull()
+    expect(screen.queryByRole('dialog', { name: 'Подтвердите изменения пользователя' })).not.toBeInTheDocument()
     expect(await screen.findByText('Пользователь изменен.')).toHaveAttribute('role', 'status')
 
     fireEvent.contextMenu(within(usersPanel).getByText('operator@example.com').closest('tr')!)
@@ -7450,7 +7436,7 @@ describe('App', () => {
     expect(deleteReasonInput).toHaveFocus()
     await user.keyboard('{Escape}')
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Удалить пользователя' })).not.toBeInTheDocument())
-    expect(updateCalls).toBe(1)
+    expect(updateCalls).toBe(2)
     expect(within(usersPanel).queryByText('Отключен')).not.toBeInTheDocument()
 
     fireEvent.contextMenu(within(usersPanel).getByText('operator@example.com').closest('tr')!)
@@ -7490,6 +7476,34 @@ describe('App', () => {
 
     expect(await screen.findByText('Пользователь восстановлен.')).toHaveAttribute('role', 'status')
     expect(await within(usersPanel).findByText('Активен')).toBeInTheDocument()
+
+    fireEvent.contextMenu(within(usersPanel).getByText('operator@example.com').closest('tr')!)
+    await user.click(await screen.findByRole('menuitem', { name: 'Изменить' }))
+    const deactivationEditor = await screen.findByRole('dialog', { name: 'Изменить пользователя' })
+    await user.selectOptions(within(deactivationEditor).getByLabelText('Статус пользователя'), 'inactive')
+    await user.type(within(deactivationEditor).getByLabelText('Причина отключения пользователя'), 'Доступ прекращен')
+    const deactivationSaveButton = within(deactivationEditor).getByRole('button', { name: 'Сохранить' })
+    await user.click(deactivationSaveButton)
+
+    const deactivationConfirmation = await screen.findByRole('dialog', { name: 'Отключить пользователя?' })
+    expect(within(deactivationConfirmation).getByText('Пользователь потеряет доступ к системе. Причина и действие будут записаны в историю изменений.')).toBeInTheDocument()
+    expect(updateCalls).toBe(3)
+    await user.keyboard('{Escape}')
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Отключить пользователя?' })).not.toBeInTheDocument())
+    expect(updateCalls).toBe(3)
+    expect(within(within(usersPanel).getByRole('table', { name: 'Список пользователей' })).getByText('Активен')).toBeInTheDocument()
+
+    await user.click(deactivationSaveButton)
+    const reopenedDeactivationConfirmation = await screen.findByRole('dialog', { name: 'Отключить пользователя?' })
+    await user.click(within(reopenedDeactivationConfirmation).getByRole('button', { name: 'Отключить' }))
+    await waitFor(() => expect(updateCalls).toBe(4))
+    await act(async () => {
+      releaseDeactivationRefresh?.()
+      await Promise.resolve()
+    })
+
+    expect(await within(usersPanel).findByText('Отключен')).toBeInTheDocument()
+    expect(deactivationReason).toBe('Доступ прекращен')
   })
 
   it('reuses loaded roles while searching users and retries a failed role request', async () => {
