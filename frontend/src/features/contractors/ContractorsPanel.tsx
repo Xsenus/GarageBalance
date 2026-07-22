@@ -3146,10 +3146,12 @@ function GaragePrototypeDialog({ accessToken, integrationClient, item, onClose, 
               <FormField label="Комментарий"><textarea aria-label="Комментарий гаража" value={form.comment} onChange={(event) => setForm({ ...form, comment: event.target.value })} /></FormField>
             </div>
             <div className="detail-dialog-actions contractors-dialog-actions contractors-garage-actions">
-              <button className="secondary-button contractors-report-button" type="button" onClick={() => onOpenFinancialReport(form)}>
-                <FileText size={16} />
-                <span>Открыть фин. отчет</span>
-              </button>
+              {item ? (
+                <button className="secondary-button contractors-report-button" type="button" onClick={() => onOpenFinancialReport(form)}>
+                  <FileText size={16} />
+                  <span>Открыть фин. отчет</span>
+                </button>
+              ) : null}
               <button className="secondary-button" type="submit"><Save size={17} /><span>Сохранить</span></button>
               <button className="ghost-button" type="button" onClick={onClose}>Отмена</button>
             </div>
@@ -3429,10 +3431,12 @@ function SupplierPrototypeDialog({ accessToken, integrationClient, item, service
               <FormField label="Комментарий"><textarea aria-label="Комментарий поставщика" value={form.comment} onChange={(event) => setForm({ ...form, comment: event.target.value })} /></FormField>
             </div>
             <div className="detail-dialog-actions contractors-dialog-actions contractors-garage-actions">
-              <button className="secondary-button contractors-report-button" type="button" onClick={() => onOpenFinancialReport(form)}>
-                <FileText size={16} />
-                <span>Открыть фин. отчет</span>
-              </button>
+              {item ? (
+                <button className="secondary-button contractors-report-button" type="button" onClick={() => onOpenFinancialReport(form)}>
+                  <FileText size={16} />
+                  <span>Открыть фин. отчет</span>
+                </button>
+              ) : null}
               <button className="secondary-button" type="submit"><Save size={17} /><span>Сохранить</span></button>
               <button className="ghost-button" type="button" onClick={onClose}>Отмена</button>
             </div>
@@ -3567,10 +3571,12 @@ function EmployeePrototypeDialog({ departments, item, onClose, onOpenFinancialRe
               </FormField>
             </div>
             <div className="detail-dialog-actions contractors-dialog-actions contractors-staff-actions">
-              <button className="secondary-button contractors-report-button" type="button" onClick={() => onOpenFinancialReport(form)}>
-                <FileText size={16} />
-                <span>Открыть фин. отчет</span>
-              </button>
+              {item ? (
+                <button className="secondary-button contractors-report-button" type="button" onClick={() => onOpenFinancialReport(form)}>
+                  <FileText size={16} />
+                  <span>Открыть фин. отчет</span>
+                </button>
+              ) : null}
               <div className="contractors-dialog-submit-actions">
                 <button className="secondary-button" type="submit"><Save size={17} /><span>Сохранить</span></button>
                 <button className="ghost-button" type="button" onClick={onClose}>Отмена</button>

@@ -1328,6 +1328,33 @@ describe('App', () => {
     expect(within(tariffsPanel).queryByRole('table', { name: 'История изменений тарифов и сборов', hidden: true })).not.toBeInTheDocument()
   }, 180000)
 
+  it('hides financial report actions until contractor records are saved', async () => {
+    const user = userEvent.setup()
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} integrationClient={createIntegrationClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    const dashboardTiles = await screen.findByRole('group', { name: 'Главные разделы' })
+    await user.click(within(dashboardTiles).getByRole('button', { name: 'Контрагенты' }))
+
+    const contractorsPanel = await screen.findByRole('region', { name: 'Контрагенты' })
+    await user.click(within(contractorsPanel).getByRole('button', { name: 'Добавить гараж' }))
+    const garageDialog = await screen.findByRole('dialog', { name: 'Новый гараж' })
+    expect(within(garageDialog).queryByRole('button', { name: 'Открыть фин. отчет' })).not.toBeInTheDocument()
+    await user.keyboard('{Escape}')
+
+    await user.click(within(contractorsPanel).getByRole('tab', { name: 'Поставщики' }))
+    await user.click(within(contractorsPanel).getByRole('button', { name: 'Добавить поставщика' }))
+    const supplierDialog = await screen.findByRole('dialog', { name: 'Новый поставщик' })
+    expect(within(supplierDialog).queryByRole('button', { name: 'Открыть фин. отчет' })).not.toBeInTheDocument()
+    await user.keyboard('{Escape}')
+
+    await user.click(within(contractorsPanel).getByRole('tab', { name: 'Персонал' }))
+    await user.click(within(contractorsPanel).getByRole('button', { name: 'Добавить сотрудника' }))
+    const employeeDialog = await screen.findByRole('dialog', { name: 'Новый сотрудник' })
+    expect(within(employeeDialog).queryByRole('button', { name: 'Открыть фин. отчет' })).not.toBeInTheDocument()
+  }, 20000)
+
   it('shows contractors tabs and section dialogs without local history access', async () => {
     const user = userEvent.setup()
     const contractorOwner = createOwner({
