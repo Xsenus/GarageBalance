@@ -438,6 +438,8 @@ describe('App', () => {
     const tariffsPanel = await screen.findByRole('region', { name: 'Тарифы и сборы' })
 
     expect(await within(tariffsPanel).findByText('Быстрый тариф воды')).toBeInTheDocument()
+    expect(within(tariffsPanel).getByLabelText('Вода: Быстрый тариф воды: единица')).toHaveValue('м³')
+    expect(within(tariffsPanel).getByLabelText('Вода: Быстрый тариф воды: единица')).toBeDisabled()
     expect(within(tariffsPanel).queryByText('Загружаем тарифы и услуги')).not.toBeInTheDocument()
     expect(within(tariffsPanel).getByText('Загружаем нерегулярные платежи')).toBeInTheDocument()
     expect(within(tariffsPanel).getByText('Загружаем объявленные сборы')).toBeInTheDocument()
@@ -522,8 +524,9 @@ describe('App', () => {
     expect(within(serviceDialog).getByLabelText('По счетчику')).toBeChecked()
     expect(within(serviceDialog).getByLabelText('Пороговая тарификация')).toBeChecked()
     expect(within(serviceDialog).getByLabelText('Цена за единицу 1')).toBeInTheDocument()
-    expect(within(serviceDialog).getByLabelText('Единица измерения')).toHaveAttribute('list', 'contractor-service-unit-options')
-    expect(Array.from(serviceDialog.querySelectorAll<HTMLDataListElement>('#contractor-service-unit-options option')).map((option) => option.value)).toEqual(['руб.'])
+    expect(within(serviceDialog).getByLabelText('Единица измерения')).toHaveValue('')
+    expect(within(serviceDialog).getByLabelText('Единица измерения')).toHaveAttribute('readonly')
+    expect(within(serviceDialog).getByText('Определяется способом расчёта выбранного тарифа.')).toBeInTheDocument()
     expect(within(serviceDialog).getByLabelText('По счетчику').closest('.contractors-service-flags')).toContainElement(within(serviceDialog).getByLabelText('Пороговая тарификация'))
     await user.click(within(serviceDialog).getByLabelText('Пороговая тарификация'))
     expect(within(serviceDialog).queryByLabelText('Цена за единицу 1')).not.toBeInTheDocument()
@@ -3106,10 +3109,12 @@ describe('App', () => {
     await user.click(within(serviceDialog).getByRole('option', { name: waterIncomeType.name }))
     expect(tariffControl).toHaveTextContent('Тариф воды — 48.50 руб.')
     expect(calculationBaseControl).toHaveTextContent('По счетчику воды')
+    expect(within(serviceDialog).getByLabelText('Единица измерения')).toHaveValue('м³')
     await user.click(incomeTypeControl)
     await user.click(within(serviceDialog).getByRole('option', { name: serviceIncomeType.name }))
     expect(tariffControl).toHaveTextContent('Тариф охраны — 1 200.00 руб.')
     expect(calculationBaseControl).toHaveTextContent('Фиксированно')
+    expect(within(serviceDialog).getByLabelText('Единица измерения')).toHaveValue('руб.')
     await user.click(createPeriodicityControl)
     await user.click(within(serviceDialog).getByRole('option', { name: 'Ежегодно' }))
     expect(within(serviceDialog).getByRole('combobox', { name: 'Месяц начисления ежегодной услуги' })).toHaveTextContent('Январь')
@@ -3121,8 +3126,6 @@ describe('App', () => {
     expect(within(serviceDialog).getByText('Для месяца "Февраль" укажите день от 1 до 28.')).toBeInTheDocument()
     await user.clear(within(serviceDialog).getByLabelText('День оплаты'))
     await user.type(within(serviceDialog).getByLabelText('День оплаты'), '28')
-    await user.clear(within(serviceDialog).getByLabelText('Единица измерения'))
-    await user.type(within(serviceDialog).getByLabelText('Единица измерения'), 'руб.')
     await user.click(within(serviceDialog).getByRole('button', { name: 'Сохранить' }))
 
     await waitFor(() => expect(createdServiceRequest).toMatchObject({
@@ -3259,6 +3262,7 @@ describe('App', () => {
     expect(within(editDialog).getByRole('combobox', { name: 'Месяц оплаты' })).toHaveTextContent('Апрель')
     expect(within(editDialog).getByLabelText('Перенос долга в просроченный')).toHaveValue('20')
     expect(within(editDialog).getByLabelText('Единица измерения')).toHaveValue('руб.')
+    expect(within(editDialog).getByLabelText('Единица измерения')).toHaveAttribute('readonly')
     expect(within(editDialog).getByLabelText('По счетчику')).toBeChecked()
     expect(within(editDialog).getByLabelText('Пороговая тарификация')).toBeChecked()
 
@@ -3270,8 +3274,6 @@ describe('App', () => {
     await user.type(within(editDialog).getByLabelText('День оплаты'), '15')
     await user.clear(within(editDialog).getByLabelText('Перенос долга в просроченный'))
     await user.type(within(editDialog).getByLabelText('Перенос долга в просроченный'), '10')
-    await user.clear(within(editDialog).getByLabelText('Единица измерения'))
-    await user.type(within(editDialog).getByLabelText('Единица измерения'), 'гараж')
     await user.click(within(editDialog).getByLabelText('По счетчику'))
     expect(within(editDialog).getByLabelText('Пороговая тарификация')).not.toBeChecked()
     expect(within(editDialog).getByLabelText('Пороговая тарификация')).toBeDisabled()
@@ -3294,7 +3296,7 @@ describe('App', () => {
       overdueGraceDays: 10,
       isMetered: false,
       hasTieredTariff: false,
-      unitName: 'гараж',
+      unitName: 'руб.',
       incomeTypeId: serviceIncomeType.id,
       tariffId: serviceTariff.id,
     })

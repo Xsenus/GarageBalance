@@ -2031,6 +2031,10 @@ public sealed class DictionaryServiceTests
             new UpsertChargeServiceSettingRequest("Несуществующий вид поступления", true, 1, 1, 30, 6, 30, false, false, "руб.", Guid.NewGuid(), tariff.Id),
             null,
             CancellationToken.None);
+        var wrongUnit = await service.CreateChargeServiceSettingAsync(
+            new UpsertChargeServiceSettingRequest("Членский взнос с кубометрами", true, 1, 1, 30, null, 30, false, false, "м³", incomeType.Id, tariff.Id),
+            null,
+            CancellationToken.None);
 
         Assert.True(result.Succeeded);
         Assert.Equal(incomeType.Id, result.Value!.IncomeTypeId);
@@ -2044,6 +2048,11 @@ public sealed class DictionaryServiceTests
         Assert.False(missingIncomeType.Succeeded);
         Assert.Equal("charge_service_income_type_not_found", missingIncomeType.ErrorCode);
         Assert.Equal("Вид поступления для услуги не найден.", missingIncomeType.ErrorMessage);
+        Assert.False(wrongUnit.Succeeded);
+        Assert.Equal("charge_service_unit_mismatch", wrongUnit.ErrorCode);
+        Assert.Equal("Единица измерения для выбранного способа расчета должна быть «руб.».", wrongUnit.ErrorMessage);
+        Assert.Single(database.Context.ChargeServiceSettings);
+        Assert.Single(database.Context.AuditEvents, item => item.Action == "dictionary.charge_service_created");
     }
 
     [Fact]
@@ -2059,7 +2068,7 @@ public sealed class DictionaryServiceTests
         await database.Context.SaveChangesAsync();
         var service = DictionaryServiceTestFactory.Create(database.Context);
         var created = await service.CreateChargeServiceSettingAsync(
-            new UpsertChargeServiceSettingRequest("Вода", true, 1, 1, 30, 6, 30, true, false, "м3", firstIncomeType.Id, firstTariff.Id),
+            new UpsertChargeServiceSettingRequest("Вода", true, 1, 1, 30, 6, 30, true, false, "м³", firstIncomeType.Id, firstTariff.Id),
             null,
             CancellationToken.None);
         database.Context.AuditEvents.RemoveRange(database.Context.AuditEvents);
@@ -2068,7 +2077,7 @@ public sealed class DictionaryServiceTests
         var actorUserId = Guid.NewGuid();
         var result = await service.UpdateChargeServiceSettingAsync(
             created.Value!.Id,
-            new UpsertChargeServiceSettingRequest("Водоснабжение", true, 12, 2, 31, 12, 45, true, false, "куб.", secondIncomeType.Id, secondTariff.Id),
+            new UpsertChargeServiceSettingRequest("Водоснабжение", true, 12, 2, 31, 12, 45, true, false, "м³", secondIncomeType.Id, secondTariff.Id),
             actorUserId,
             CancellationToken.None);
 
@@ -2088,7 +2097,7 @@ public sealed class DictionaryServiceTests
 
         var noOp = await service.UpdateChargeServiceSettingAsync(
             created.Value.Id,
-            new UpsertChargeServiceSettingRequest("Водоснабжение", true, 12, 2, 31, 12, 45, true, false, "куб.", secondIncomeType.Id, secondTariff.Id),
+            new UpsertChargeServiceSettingRequest("Водоснабжение", true, 12, 2, 31, 12, 45, true, false, "м³", secondIncomeType.Id, secondTariff.Id),
             actorUserId,
             CancellationToken.None);
 

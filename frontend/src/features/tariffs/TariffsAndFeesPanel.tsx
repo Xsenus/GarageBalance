@@ -12,7 +12,7 @@ import type { ChangePreview } from '../../shared/changePreview'
 import { appendChangePreview, formatChangeDate, formatChangeNumber, formatChangeText } from '../../shared/changePreview'
 import { FormError } from '../../shared/formFeedback'
 import { FormField } from '../../shared/FormField'
-import { getTariffCalculationBaseOptions } from '../../shared/dictionaryWorkbench'
+import { getTariffCalculationBaseOptions, getTariffCalculationUnitName } from '../../shared/dictionaryWorkbench'
 import { formatDateOnly, formatMoney, formatTariffRateSummary, getCurrentMonthInputValue, getLocalDateInputValue } from '../../shared/formatters'
 import { useEscapeKey, useFocusOnOpen, useFocusTrap, useRestoreFocusOnClose } from '../../shared/focusHooks'
 import { LocalizedDatePicker } from '../../shared/LocalizedDatePicker'
@@ -245,7 +245,7 @@ function mergeTariffsIntoPrototypeRows(rows: ContractorTariffRow[], tariffs: Tar
     .map((row) => {
       const tariff = findTariffForPrototypeRow(tariffs, row)
       return tariff && row.calculationBase
-        ? { ...row, backendTariffId: tariff.id, effectiveFrom: tariff.effectiveFrom, amount: formatTariffNumber(tariff.rate), title: tariff.name }
+        ? { ...row, backendTariffId: tariff.id, effectiveFrom: tariff.effectiveFrom, amount: formatTariffNumber(tariff.rate), title: tariff.name, unit: getTariffCalculationUnitName(tariff.calculationBase) }
         : row
     })
 
@@ -267,7 +267,7 @@ function mergeTariffsIntoPrototypeRows(rows: ContractorTariffRow[], tariffs: Tar
     title: tier.name,
     threshold: 'x',
     amount: formatTariffNumber(tier.rate),
-    unit: 'руб.',
+    unit: getTariffCalculationUnitName(electricityTariff.calculationBase),
     byMeter: true,
     tiered: true,
     calculationBase: 'meter_electricity',
@@ -297,6 +297,7 @@ function createTariffRowsFromBackend(tariffs: TariffDto[], settings: ChargeServi
   return mergeChargeServicesIntoPrototypeRows(
     mergeTariffsIntoPrototypeRows(rowsBackedByTariffs, tariffs),
     settings.filter((setting) => setting.isRegular),
+    tariffs,
   )
 }
 
@@ -321,9 +322,11 @@ function getContractorTariffMonthValue(monthNumber?: number | null) {
   return contractorTariffMonthOptions[monthNumber - 1].value
 }
 
-function createChargeServiceRows(setting: ChargeServiceSettingDto): ContractorTariffRow[] {
+function createChargeServiceRows(setting: ChargeServiceSettingDto, tariffs: TariffDto[]): ContractorTariffRow[] {
   const periodicityMonths = normalizeRegularServicePeriodicity(setting.periodicityMonths)
   const isMonthly = periodicityMonths === '1'
+  const linkedTariff = tariffs.find((tariff) => tariff.id === setting.tariffId)
+  const unitName = linkedTariff ? getTariffCalculationUnitName(linkedTariff.calculationBase) : setting.unitName ?? 'руб.'
   const rows: ContractorTariffRow[] = [
     {
       id: `charge-service-${setting.id}-main`,
@@ -333,7 +336,7 @@ function createChargeServiceRows(setting: ChargeServiceSettingDto): ContractorTa
       category: setting.name,
       title: setting.name,
       amount: '',
-      unit: setting.unitName ?? 'руб.',
+      unit: unitName,
       byMeter: setting.isMetered,
       tiered: setting.hasTieredTariff,
       isDeleted: setting.isArchived,
@@ -398,7 +401,7 @@ function createChargeServiceRows(setting: ChargeServiceSettingDto): ContractorTa
   return rows
 }
 
-function mergeChargeServicesIntoPrototypeRows(rows: ContractorTariffRow[], settings: ChargeServiceSettingDto[]) {
+function mergeChargeServicesIntoPrototypeRows(rows: ContractorTariffRow[], settings: ChargeServiceSettingDto[], tariffs: TariffDto[]) {
   const rowsWithoutBackendServices = rows.filter((row) => !row.backendServiceSettingId)
   const normalizedCategories = new Set(rowsWithoutBackendServices.map((row) => row.category.toLocaleLowerCase('ru')))
   const matchedSettings = new Map(settings
@@ -410,8 +413,12 @@ function mergeChargeServicesIntoPrototypeRows(rows: ContractorTariffRow[], setti
       return row
     }
 
+    const linkedTariff = tariffs.find((tariff) => tariff.id === setting.tariffId)
     const common = {
       ...row,
+      unit: (row.serviceSettingKind === 'main' || row.calculationBase) && linkedTariff
+        ? getTariffCalculationUnitName(linkedTariff.calculationBase)
+        : row.unit,
       byMeter: setting.isMetered,
       tiered: setting.hasTieredTariff,
       isDeleted: setting.isArchived,
@@ -444,7 +451,7 @@ function mergeChargeServicesIntoPrototypeRows(rows: ContractorTariffRow[], setti
   const unmatchedSettings = settings.filter((setting) => !matchedSettings.has(setting.name.toLocaleLowerCase('ru')))
   return [
     ...mergedRows,
-    ...unmatchedSettings.flatMap((setting) => createChargeServiceRows(setting)),
+    ...unmatchedSettings.flatMap((setting) => createChargeServiceRows(setting, tariffs)),
   ]
 }
 
@@ -1052,6 +1059,8 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
     const overdueGraceDays = parsePrototypeAmount(overdueRow?.amount ?? '') ?? setting.overdueGraceDays
     const isMetered = mainRow?.byMeter ?? setting.isMetered
     const hasTieredTariff = isMetered ? (mainRow?.tiered ?? setting.hasTieredTariff) : false
+    const linkedTariff = setting.tariffId ? backendTariffs.find((tariff) => tariff.id === setting.tariffId) : null
+    const unitName = linkedTariff ? getTariffCalculationUnitName(linkedTariff.calculationBase) : setting.unitName
 
     return {
       name: (mainRow?.title ?? setting.name).trim() || setting.name,
@@ -1063,7 +1072,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
       overdueGraceDays: Math.trunc(overdueGraceDays),
       isMetered,
       hasTieredTariff,
-      unitName: (mainRow?.unit ?? setting.unitName ?? '').trim() || null,
+      unitName: unitName?.trim() || null,
       incomeTypeId: isRegular ? setting.incomeTypeId ?? null : null,
       tariffId: isRegular ? setting.tariffId ?? null : null,
     }
@@ -1085,7 +1094,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
       const request = buildChargeServiceRequest(serviceSetting, nextRows)
       const savedSetting = await dictionaryClient.updateChargeServiceSetting(auth.accessToken, serviceSetting.id, request)
       const nextSettings = backendChargeServices.map((setting) => (setting.id === savedSetting.id ? savedSetting : setting))
-      const mergedRows = mergeChargeServicesIntoPrototypeRows(nextRows, nextSettings)
+      const mergedRows = mergeChargeServicesIntoPrototypeRows(nextRows, nextSettings, backendTariffs)
       setBackendChargeServices(nextSettings)
       setTariffRows(mergedRows)
       setTariffDrafts(createEditableDrafts(mergedRows))
@@ -1589,7 +1598,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
     try {
       const savedSetting = await dictionaryClient.createChargeServiceSetting(auth.accessToken, request)
       const nextSettings = [...backendChargeServices.filter((setting) => setting.id !== savedSetting.id), savedSetting]
-      const nextRows = mergeChargeServicesIntoPrototypeRows(tariffRows, nextSettings)
+      const nextRows = mergeChargeServicesIntoPrototypeRows(tariffRows, nextSettings, backendTariffs)
       setBackendChargeServices(nextSettings)
       setTariffRows(nextRows)
       setTariffDrafts(createEditableDrafts(nextRows))
@@ -1612,7 +1621,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
     try {
       const savedSetting = await dictionaryClient.updateChargeServiceSetting(auth.accessToken, chargeServiceEditTarget.id, request)
       const nextSettings = backendChargeServices.map((setting) => (setting.id === savedSetting.id ? savedSetting : setting))
-      const nextRows = mergeChargeServicesIntoPrototypeRows(tariffRows, nextSettings)
+      const nextRows = mergeChargeServicesIntoPrototypeRows(tariffRows, nextSettings, backendTariffs)
       setBackendChargeServices(nextSettings)
       setTariffRows(nextRows)
       setTariffDrafts(createEditableDrafts(nextRows))
@@ -1681,7 +1690,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
       const nextSettings = backendChargeServices.map((setting) => (
         setting.id === chargeServiceArchiveTarget.id ? { ...setting, isArchived: true } : setting
       ))
-      const nextRows = mergeChargeServicesIntoPrototypeRows(tariffRows, nextSettings)
+      const nextRows = mergeChargeServicesIntoPrototypeRows(tariffRows, nextSettings, backendTariffs)
       setBackendChargeServices(nextSettings)
       setTariffRows(nextRows)
       setTariffDrafts(createEditableDrafts(nextRows))
@@ -1705,7 +1714,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
       const nextSettings = backendChargeServices.map((setting) => (
         setting.id === restoredSetting.id ? restoredSetting : setting
       ))
-      const nextRows = mergeChargeServicesIntoPrototypeRows(tariffRows, nextSettings)
+      const nextRows = mergeChargeServicesIntoPrototypeRows(tariffRows, nextSettings, backendTariffs)
       setBackendChargeServices(nextSettings)
       setTariffRows(nextRows)
       setTariffDrafts(createEditableDrafts(nextRows))
@@ -2090,7 +2099,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
                       <input
                         aria-label={`${row.category}: ${row.title}: единица`}
                         className="contractors-editable-input contractors-editable-input--unit"
-                        disabled={!canManageTariffs || isRowDisabled}
+                        disabled={!canManageTariffs || isRowDisabled || Boolean(row.calculationBase || row.serviceSettingKind === 'main')}
                         value={tariffDrafts[row.id]?.unit ?? ''}
                         onChange={(event) => setTariffDrafts((drafts) => ({ ...drafts, [row.id]: { ...drafts[row.id], unit: event.target.value } }))}
                         onKeyDown={(event) => handleEditableInputKeyDown(event, () => commitTariffTextChange(row, 'unit'))}
@@ -2658,10 +2667,6 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
           onSaveIrregular={createIrregularService}
           onSave={createServiceSetting}
           tariffs={backendTariffs.filter((tariff) => !tariff.isArchived)}
-          unitOptions={Array.from(new Set(tariffRows
-            .filter((row) => Boolean(row.calculationBase) || row.serviceSettingKind === 'main')
-            .map((row) => row.unit)
-            .filter((unit): unit is string => Boolean(unit))))}
         />
       ) : null}
       {chargeServiceEditTarget ? (
@@ -2674,10 +2679,6 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
           submitLabel="Сохранить изменения"
           tariffs={backendTariffs.filter((tariff) => !tariff.isArchived)}
           title="Изменить услугу"
-          unitOptions={Array.from(new Set(tariffRows
-            .filter((row) => Boolean(row.calculationBase) || row.serviceSettingKind === 'main')
-            .map((row) => row.unit)
-            .filter((unit): unit is string => Boolean(unit))))}
         />
       ) : null}
       {modal === 'fee' ? (
@@ -2717,7 +2718,6 @@ export function AddServicePrototypeDialog({
   submitLabel = 'Сохранить',
   tariffs,
   title = 'Добавить услугу',
-  unitOptions,
 }: {
   initialSetting?: ChargeServiceSettingDto
   isSaving: boolean
@@ -2728,7 +2728,6 @@ export function AddServicePrototypeDialog({
   submitLabel?: string
   tariffs: TariffDto[]
   title?: string
-  unitOptions: string[]
 }) {
   const initialIncomeTypeId = initialSetting?.incomeTypeId ?? incomeTypes[0]?.id ?? ''
   const [name, setName] = useState(initialSetting?.name ?? '')
@@ -2742,11 +2741,11 @@ export function AddServicePrototypeDialog({
   const [paymentDueDay, setPaymentDueDay] = useState(String(initialSetting?.paymentDueDay ?? 30))
   const [paymentDueMonth, setPaymentDueMonth] = useState(() => getContractorTariffMonthValue(initialSetting?.paymentDueMonth ?? 7))
   const [overdueGraceDays, setOverdueGraceDays] = useState(String(initialSetting?.overdueGraceDays ?? 30))
-  const [unitName, setUnitName] = useState(initialSetting?.unitName ?? unitOptions[0] ?? 'руб.')
   const [cost, setCost] = useState('')
   const [error, setError] = useState<string | null>(null)
   const compatibleTariffs = getCompatibleRegularTariffs(incomeTypeId, incomeTypes, tariffs)
   const selectedTariff = compatibleTariffs.find((tariff) => tariff.id === tariffId) ?? null
+  const unitName = selectedTariff ? getTariffCalculationUnitName(selectedTariff.calculationBase) : ''
   const calculationBaseOptions = getTariffCalculationBaseOptions()
   const calculationBaseOption = selectedTariff
     ? calculationBaseOptions.find((option) => option.value === selectedTariff.calculationBase)
@@ -2927,8 +2926,8 @@ export function AddServicePrototypeDialog({
                     <span>дн.</span>
                   </div>
                 </FormField>
-                <FormField label="Единица измерения">
-                  <input aria-label="Единица измерения" list="contractor-service-unit-options" value={unitName} onChange={(event) => setUnitName(event.target.value)} />
+                <FormField label="Единица измерения" hint="Определяется способом расчёта выбранного тарифа.">
+                  <input aria-label="Единица измерения" value={unitName} readOnly />
                 </FormField>
               </div>
               <div className="contractors-service-flags">
@@ -2951,11 +2950,6 @@ export function AddServicePrototypeDialog({
                   <span>Пороговая тарификация</span>
                 </label>
               </div>
-              <datalist id="contractor-service-unit-options">
-                {unitOptions.map((unit) => (
-                  <option key={unit} value={unit} />
-                ))}
-              </datalist>
               {isTiered ? (
                 <>
                   <div className="contractors-threshold-grid" aria-label="Пороги тарификации">

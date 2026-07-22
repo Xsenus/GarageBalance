@@ -2385,7 +2385,7 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
 
       {modal?.type === 'garage' ? <GaragePrototypeDialog accessToken={auth.accessToken} integrationClient={integrationClient} item={modal.item} onClose={() => setModal(null)} onSave={saveGarage} onOpenFinancialReport={openGarageFinancialReport} /> : null}
       {modal?.type === 'supplier' ? <SupplierPrototypeDialog accessToken={auth.accessToken} integrationClient={integrationClient} item={modal.item} services={chargeServices} onClose={() => setModal(null)} onOpenFinancialReport={openSupplierFinancialReport} onSave={saveSupplier} /> : null}
-      {modal?.type === 'service' ? <AddServicePrototypeDialog isSaving={serviceSaving} incomeTypes={serviceIncomeTypes.filter((item) => !item.isArchived)} onClose={() => setModal(null)} onSave={saveService} tariffs={serviceTariffs.filter((item) => !item.isArchived)} unitOptions={Array.from(new Set(chargeServices.map((item) => item.unitName).filter((unit): unit is string => Boolean(unit))))} /> : null}
+      {modal?.type === 'service' ? <AddServicePrototypeDialog isSaving={serviceSaving} incomeTypes={serviceIncomeTypes.filter((item) => !item.isArchived)} onClose={() => setModal(null)} onSave={saveService} tariffs={serviceTariffs.filter((item) => !item.isArchived)} /> : null}
       {modal?.type === 'employee' ? <EmployeePrototypeDialog departments={departments} item={modal.item} onClose={() => setModal(null)} onOpenFinancialReport={openEmployeeFinancialReport} onSave={saveEmployee} /> : null}
       {modal?.type === 'department' ? <DepartmentPrototypeDialog item={modal.item} onClose={() => setModal(null)} onSave={saveDepartment} /> : null}
 

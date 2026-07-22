@@ -2330,6 +2330,14 @@ public sealed class DictionaryService(
             return DictionaryResult<object>.Failure("charge_service_tariff_mismatch", "Выбранный тариф не подходит для вида поступления услуги.");
         }
 
+        var expectedUnitName = TariffCalculationBases.GetUnitName(tariff.CalculationBase);
+        if (!StringEquals(NormalizeOptional(request.UnitName), expectedUnitName))
+        {
+            return DictionaryResult<object>.Failure(
+                "charge_service_unit_mismatch",
+                $"Единица измерения для выбранного способа расчета должна быть «{expectedUnitName}».");
+        }
+
         return DictionaryResult<object>.Success(new object());
     }
 

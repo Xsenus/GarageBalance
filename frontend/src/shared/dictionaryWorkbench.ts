@@ -199,6 +199,13 @@ const tariffCalculationBaseOptions: TariffCalculationBaseOption[] = [
   { value: 'meter_electricity', label: 'По счетчику электричества' },
 ]
 
+const tariffCalculationUnitNames: Record<string, string> = {
+  fixed: 'руб.',
+  people: 'чел.',
+  meter_water: 'м³',
+  meter_electricity: 'кВт·ч',
+}
+
 const electricityTierCalculationBase = 'meter_electricity'
 
 export function createEmptyOwnerForm(): DictionaryOwnerFormState {
@@ -332,6 +339,10 @@ export function getDictionaryEditorFieldMeta(key: DictionaryEditorFieldKey) {
 
 export function getTariffCalculationBaseOptions() {
   return tariffCalculationBaseOptions
+}
+
+export function getTariffCalculationUnitName(calculationBase: string) {
+  return tariffCalculationUnitNames[calculationBase] ?? ''
 }
 
 export function usesElectricityTariffTiers(calculationBase: string) {

@@ -19,4 +19,16 @@ public static class TariffCalculationBases
     {
         return SupportedValues.Contains(calculationBase);
     }
+
+    public static string GetUnitName(string calculationBase)
+    {
+        return calculationBase switch
+        {
+            Fixed => "руб.",
+            People => "чел.",
+            MeterWater => "м³",
+            MeterElectricity => "кВт·ч",
+            _ => throw new ArgumentOutOfRangeException(nameof(calculationBase), calculationBase, "Unsupported tariff calculation base.")
+        };
+    }
 }
