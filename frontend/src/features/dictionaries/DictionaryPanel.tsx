@@ -22,7 +22,7 @@ import { MoneyInput } from '../../shared/MoneyInput'
 import { PhoneInput } from '../../shared/PhoneInput'
 import { createEmptyPage, createFallbackPage } from '../../shared/pagination'
 import { TablePagination } from '../../shared/TablePagination'
-import { createDefaultGarageBalanceHistoryFilters } from '../../shared/reportFilters'
+import { createDefaultGarageBalanceHistoryFilters, createFullFinancialReportFilters } from '../../shared/reportFilters'
 import { SelectControl } from '../../shared/SelectControl'
 import type { OwnerGarageLinkForm } from '../../shared/validation'
 import { createTariffFormFromDto, getAccountingTypeValidationErrors, getGarageValidationErrors, getOwnerGarageLinkValidationErrors, getOwnerValidationErrors, getSupplierGroupValidationErrors, getSupplierValidationErrors, getTariffValidationErrors, parseOptionalNumberInput, updateTariffCalculationBase, withoutElectricityTierFields } from '../../shared/validation'
@@ -364,11 +364,22 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, integ
   }
 
   async function openBalanceHistory(garage: GarageDto) {
-    const filters = createDefaultGarageBalanceHistoryFilters()
+    const fallbackFilters = createDefaultGarageBalanceHistoryFilters()
     setContextMenu(null)
     setBalanceHistoryGarage(garage)
-    setBalanceHistoryFilters(filters)
-    await loadBalanceHistory(garage.id, filters)
+    setBalanceHistoryFilters(fallbackFilters)
+    setBalanceHistoryLoading(true)
+    setBalanceHistoryError(null)
+
+    try {
+      const period = await financeClient.getFinancialReportPeriod(auth.accessToken, { garageId: garage.id })
+      const filters = createFullFinancialReportFilters(period)
+      setBalanceHistoryFilters(filters)
+      await loadBalanceHistory(garage.id, filters)
+    } catch (error) {
+      setBalanceHistoryError(error instanceof Error ? error.message : 'Не удалось определить полный период истории баланса.')
+      setBalanceHistoryLoading(false)
+    }
   }
 
   function closeBalanceHistory() {

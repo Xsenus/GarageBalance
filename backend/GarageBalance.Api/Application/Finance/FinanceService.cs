@@ -20,6 +20,7 @@ public sealed class FinanceService(
     IExpenseWorksheetQuery expenseWorksheetQuery,
     IFinancialOperationDisplayQuery financialOperationDisplayQuery,
     IFinanceTotalsQuery financeTotalsQuery,
+    IFinancialReportPeriodQuery financialReportPeriodQuery,
     IMeterReadingRepository meterReadingRepository,
     IFinancialOperationRepository financialOperationRepository,
     IAccrualRepository accrualRepository,
@@ -42,7 +43,7 @@ public sealed class FinanceService(
     private const int DefaultListLimit = 100;
     private const int MaxListLimit = 500;
     private const int MaxAutomaticFeeCampaigns = 500;
-    private const int MaxBalanceHistoryMonths = 60;
+    private const int MaxBalanceHistoryMonths = 600;
     private const int EarlyElectricityPaymentWarningDays = 30;
     private const string DebtTransferIncomeTypeCode = "debt_transfer";
     private const string OtherPaymentsIncomeTypeCode = "other_payments";
@@ -766,6 +767,46 @@ public sealed class FinanceService(
             priorAccrualTotal,
             priorPaymentTotal,
             MoneyMath.RoundMoney(startingBalance + priorAccrualTotal - priorPaymentTotal)));
+    }
+
+    public async Task<FinanceResult<FinancialReportPeriodDto>> GetFinancialReportPeriodAsync(
+        FinancialReportPeriodRequest request,
+        CancellationToken cancellationToken)
+    {
+        var targetCount = (request.GarageId.HasValue ? 1 : 0) +
+            (request.SupplierId.HasValue ? 1 : 0) +
+            (request.StaffMemberId.HasValue ? 1 : 0);
+        if (targetCount != 1)
+        {
+            return FinanceResult<FinancialReportPeriodDto>.Failure(
+                "financial_report_target_invalid",
+                "Для финансового отчёта нужно выбрать ровно один гараж, поставщика или сотрудника.");
+        }
+
+        var data = await financialReportPeriodQuery.GetAsync(
+            request.GarageId,
+            request.SupplierId,
+            request.StaffMemberId,
+            cancellationToken);
+        if (data is null)
+        {
+            return FinanceResult<FinancialReportPeriodDto>.Failure(
+                "financial_report_target_not_found",
+                "Запись для финансового отчёта не найдена.");
+        }
+
+        var currentMonth = MonthPeriod.Normalize(businessDateProvider.Today);
+        var months = new[]
+        {
+            data.AccrualMonthFrom,
+            data.OperationMonthFrom,
+            data.AccrualMonthTo,
+            data.OperationMonthTo,
+            currentMonth
+        };
+        return FinanceResult<FinancialReportPeriodDto>.Success(new FinancialReportPeriodDto(
+            months.Where(month => month.HasValue).Min()!.Value,
+            months.Where(month => month.HasValue).Max()!.Value));
     }
 
     public async Task<FinanceResult<IncomePaymentWarningDto>> GetIncomePaymentWarningAsync(

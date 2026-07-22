@@ -20,6 +20,7 @@ internal static class FinanceServiceTestFactory
             new EfExpenseWorksheetQuery(dbContext),
             new EfFinancialOperationDisplayQuery(dbContext),
             new EfFinanceTotalsQuery(dbContext),
+            new EfFinancialReportPeriodQuery(dbContext),
             new EfMeterReadingRepository(dbContext),
             new EfFinancialOperationRepository(dbContext),
             new EfAccrualRepository(dbContext),

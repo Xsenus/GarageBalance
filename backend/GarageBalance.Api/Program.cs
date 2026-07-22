@@ -75,6 +75,7 @@ builder.Services.AddScoped<IFinanceAvailableBalanceQuery, EfFinanceAvailableBala
 builder.Services.AddScoped<IExpenseWorksheetQuery, EfExpenseWorksheetQuery>();
 builder.Services.AddScoped<IFinancialOperationDisplayQuery, EfFinancialOperationDisplayQuery>();
 builder.Services.AddScoped<IFinanceTotalsQuery, EfFinanceTotalsQuery>();
+builder.Services.AddScoped<IFinancialReportPeriodQuery, EfFinancialReportPeriodQuery>();
 builder.Services.AddScoped<IMeterReadingRepository, EfMeterReadingRepository>();
 builder.Services.AddScoped<IFinancialOperationRepository, EfFinancialOperationRepository>();
 builder.Services.AddScoped<IAccrualRepository, EfAccrualRepository>();
@@ -92,6 +93,7 @@ builder.Services.AddScoped<IFinanceService>(services => new FinanceService(
     services.GetRequiredService<IExpenseWorksheetQuery>(),
     services.GetRequiredService<IFinancialOperationDisplayQuery>(),
     services.GetRequiredService<IFinanceTotalsQuery>(),
+    services.GetRequiredService<IFinancialReportPeriodQuery>(),
     services.GetRequiredService<IMeterReadingRepository>(),
     services.GetRequiredService<IFinancialOperationRepository>(),
     services.GetRequiredService<IAccrualRepository>(),

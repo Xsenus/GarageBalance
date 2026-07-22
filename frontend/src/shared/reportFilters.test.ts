@@ -3,6 +3,7 @@ import {
   createDefaultConsolidatedReportFilters,
   createDefaultExpenseReportFilters,
   createDefaultGarageBalanceHistoryFilters,
+  createFullFinancialReportFilters,
   createDefaultIncomeReportFilters,
   loadConsolidatedReportFilters,
   loadExpenseReportFilters,
@@ -54,6 +55,13 @@ describe('report filter storage helpers', () => {
     expect(createDefaultGarageBalanceHistoryFilters(new Date(2026, 1, 10))).toEqual({
       monthFrom: '2025-09',
       monthTo: '2026-02',
+    })
+  })
+
+  it('creates a full financial report period from server month boundaries', () => {
+    expect(createFullFinancialReportFilters({ monthFrom: '2023-02-01', monthTo: '2026-07-01' })).toEqual({
+      monthFrom: '2023-02',
+      monthTo: '2026-07',
     })
   })
 

@@ -34,6 +34,8 @@ public interface IFinanceService
 
     Task<FinanceResult<SupplierOpeningBalanceDto>> GetSupplierOpeningBalanceAsync(Guid supplierId, SupplierOpeningBalanceRequest request, CancellationToken cancellationToken);
 
+    Task<FinanceResult<FinancialReportPeriodDto>> GetFinancialReportPeriodAsync(FinancialReportPeriodRequest request, CancellationToken cancellationToken);
+
     Task<FinanceSummaryDto> GetSummaryAsync(FinancialOperationListRequest request, CancellationToken cancellationToken);
 
     Task<FinanceResult<IncomePaymentWarningDto>> GetIncomePaymentWarningAsync(IncomePaymentWarningRequest request, CancellationToken cancellationToken);

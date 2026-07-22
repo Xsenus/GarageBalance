@@ -170,6 +170,11 @@ export type SupplierOpeningBalanceDto = {
   openingBalance: number
 }
 
+export type FinancialReportPeriodDto = {
+  monthFrom: string
+  monthTo: string
+}
+
 export type MeterReadingYearPageDto = {
   garages: MeterReadingYearGarageDto[]
   readings: MeterReadingYearValueDto[]
@@ -493,6 +498,7 @@ export type FinanceClient = {
   getSupplierAccruals(accessToken: string, limit?: number): Promise<SupplierAccrualDto[]>
   getSupplierAccrualsPage(accessToken: string, params?: FinancePageParams): Promise<FinancePagedResult<SupplierAccrualDto>>
   getSupplierOpeningBalance(accessToken: string, supplierId: string, monthFrom: string): Promise<SupplierOpeningBalanceDto>
+  getFinancialReportPeriod(accessToken: string, params: { garageId?: string; supplierId?: string; staffMemberId?: string }): Promise<FinancialReportPeriodDto>
   getMeterReadings(accessToken: string, limit?: number): Promise<MeterReadingDto[]>
   getMeterReadingsPage(accessToken: string, params?: FinancePageParams & { meterKind?: 'water' | 'electricity' }): Promise<FinancePagedResult<MeterReadingDto>>
   getMeterReadingYearPage(accessToken: string, params: { year: number; meterKind: 'water' | 'electricity'; offset?: number; limit?: number }): Promise<MeterReadingYearPageDto>
@@ -694,6 +700,9 @@ export const financeApi: FinanceClient = {
     return requestJson(accessToken, withQuery(`/api/finance/suppliers/${supplierId}/opening-balance`, {
       monthFrom: toMonthStart(monthFrom),
     }))
+  },
+  getFinancialReportPeriod(accessToken, params) {
+    return requestJson(accessToken, withQuery('/api/finance/financial-report-period', params))
   },
   getIncomePaymentWarning(accessToken, request) {
     return requestJson(accessToken, '/api/finance/income/payment-warning', { method: 'POST', body: JSON.stringify(request) })

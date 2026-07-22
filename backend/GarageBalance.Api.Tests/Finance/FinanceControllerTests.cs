@@ -10,6 +10,38 @@ namespace GarageBalance.Api.Tests.Finance;
 public sealed class FinanceControllerTests
 {
     [Fact]
+    public async Task GetFinancialReportPeriod_ReturnsValueAndPassesTargetToService()
+    {
+        var supplierId = Guid.NewGuid();
+        var dto = new FinancialReportPeriodDto(new DateOnly(2024, 3, 1), new DateOnly(2026, 7, 1));
+        var service = new FakeFinanceService
+        {
+            FinancialReportPeriodResult = FinanceResult<FinancialReportPeriodDto>.Success(dto)
+        };
+
+        var result = await CreateController(service).GetFinancialReportPeriod(null, supplierId, null, CancellationToken.None);
+
+        Assert.Same(dto, Assert.IsType<OkObjectResult>(result.Result).Value);
+        Assert.Equal(supplierId, service.LastFinancialReportPeriodRequest?.SupplierId);
+    }
+
+    [Fact]
+    public async Task GetFinancialReportPeriod_MapsInvalidAndMissingTargets()
+    {
+        var badRequest = await CreateController(new FakeFinanceService
+        {
+            FinancialReportPeriodResult = FinanceResult<FinancialReportPeriodDto>.Failure("financial_report_target_invalid", "Неверная цель.")
+        }).GetFinancialReportPeriod(null, null, null, CancellationToken.None);
+        var notFound = await CreateController(new FakeFinanceService
+        {
+            FinancialReportPeriodResult = FinanceResult<FinancialReportPeriodDto>.Failure("financial_report_target_not_found", "Не найдено.")
+        }).GetFinancialReportPeriod(Guid.NewGuid(), null, null, CancellationToken.None);
+
+        Assert.IsType<BadRequestObjectResult>(badRequest.Result);
+        Assert.IsType<NotFoundObjectResult>(notFound.Result);
+    }
+
+    [Fact]
     public async Task GetSupplierOpeningBalance_ReturnsValueAndPassesPeriodToService()
     {
         var supplierId = Guid.NewGuid();
@@ -1661,6 +1693,7 @@ public sealed class FinanceControllerTests
         public GarageIncomeWorksheetRequest? LastGarageIncomeWorksheetRequest { get; private set; }
         public ExpenseWorksheetRequest? LastExpenseWorksheetRequest { get; private set; }
         public SupplierOpeningBalanceRequest? LastSupplierOpeningBalanceRequest { get; private set; }
+        public FinancialReportPeriodRequest? LastFinancialReportPeriodRequest { get; private set; }
         public FinancialOperationListRequest? LastSummaryRequest { get; private set; }
         public CreateGarageDebtPaymentRequest? LastGarageDebtPaymentRequest { get; private set; }
         public IncomePaymentWarningRequest? LastIncomePaymentWarningRequest { get; private set; }
@@ -1674,6 +1707,7 @@ public sealed class FinanceControllerTests
         public FinanceResult<GarageIncomeWorksheetDto> GarageIncomeWorksheetResult { get; init; } = FinanceResult<GarageIncomeWorksheetDto>.Failure("not_configured", "Not configured.");
         public FinanceResult<ExpenseWorksheetDto> ExpenseWorksheetResult { get; init; } = FinanceResult<ExpenseWorksheetDto>.Failure("not_configured", "Not configured.");
         public FinanceResult<SupplierOpeningBalanceDto> SupplierOpeningBalanceResult { get; init; } = FinanceResult<SupplierOpeningBalanceDto>.Failure("not_configured", "Not configured.");
+        public FinanceResult<FinancialReportPeriodDto> FinancialReportPeriodResult { get; init; } = FinanceResult<FinancialReportPeriodDto>.Failure("not_configured", "Not configured.");
         public FinanceResult<FinancialOperationDto> CreateIncomeResult { get; init; } = FinanceResult<FinancialOperationDto>.Failure("not_configured", "Not configured.");
         public FinanceResult<IncomePaymentWarningDto> IncomePaymentWarningResult { get; init; } = FinanceResult<IncomePaymentWarningDto>.Failure("not_configured", "Not configured.");
         public FinanceResult<FinancialOperationDto> CreateGarageDebtPaymentResult { get; init; } = FinanceResult<FinancialOperationDto>.Failure("not_configured", "Not configured.");
@@ -1803,6 +1837,12 @@ public sealed class FinanceControllerTests
             LastSupplierOpeningBalanceSupplierId = supplierId;
             LastSupplierOpeningBalanceRequest = request;
             return Task.FromResult(SupplierOpeningBalanceResult);
+        }
+
+        public Task<FinanceResult<FinancialReportPeriodDto>> GetFinancialReportPeriodAsync(FinancialReportPeriodRequest request, CancellationToken cancellationToken)
+        {
+            LastFinancialReportPeriodRequest = request;
+            return Task.FromResult(FinancialReportPeriodResult);
         }
 
         public Task<FinanceSummaryDto> GetSummaryAsync(FinancialOperationListRequest request, CancellationToken cancellationToken)

@@ -433,6 +433,15 @@ public sealed record ExpenseWorksheetRequest(
 public sealed record SupplierOpeningBalanceRequest(
     DateOnly? MonthFrom);
 
+public sealed record FinancialReportPeriodRequest(
+    Guid? GarageId,
+    Guid? SupplierId,
+    Guid? StaffMemberId);
+
+public sealed record FinancialReportPeriodDto(
+    DateOnly MonthFrom,
+    DateOnly MonthTo);
+
 public sealed record SupplierOpeningBalanceDto(
     Guid SupplierId,
     DateOnly MonthFrom,

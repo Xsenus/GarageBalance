@@ -18,7 +18,7 @@ import { createSupplierOpeningBalanceEntries } from './contractorFinancialReport
 import { useEscapeKey, useFocusOnOpen, useFocusTrap, useRestoreFocusOnClose } from '../../shared/focusHooks'
 import { createClientPage, createFallbackPage } from '../../shared/pagination'
 import { TablePagination } from '../../shared/TablePagination'
-import { createDefaultGarageBalanceHistoryFilters } from '../../shared/reportFilters'
+import { createDefaultGarageBalanceHistoryFilters, createFullFinancialReportFilters } from '../../shared/reportFilters'
 import { SelectControl } from '../../shared/SelectControl'
 import { formatPrototypeChangeValue } from '../../shared/prototypeEditing'
 import type { AuditPanelPreset, ContractorOpenTarget } from '../../shared/workspaceNavigation'
@@ -1312,14 +1312,24 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
     }
   }
 
-  function openGarageFinancialReport(row: ContractorGarageRow) {
+  async function openGarageFinancialReport(row: ContractorGarageRow) {
     setGarageContextMenu(null)
-    const filters = createDefaultGarageBalanceHistoryFilters()
+    const fallbackFilters = createDefaultGarageBalanceHistoryFilters()
     setGarageFinancialReportTarget(row)
-    setGarageFinancialReportFilters(filters)
+    setGarageFinancialReportFilters(fallbackFilters)
     setGarageFinancialReport(null)
     setGarageFinancialReportError(null)
-    void loadGarageFinancialReport(row, filters)
+    setGarageFinancialReportLoading(true)
+
+    try {
+      const period = await financeClient.getFinancialReportPeriod(auth.accessToken, { garageId: row.id })
+      const filters = createFullFinancialReportFilters(period)
+      setGarageFinancialReportFilters(filters)
+      await loadGarageFinancialReport(row, filters)
+    } catch (error) {
+      setGarageFinancialReportError(error instanceof Error ? error.message : 'Не удалось определить полный период финансового отчета гаража.')
+      setGarageFinancialReportLoading(false)
+    }
   }
 
   function closeGarageFinancialReport() {
@@ -1409,16 +1419,28 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
     }
   }
 
-  function openContractorFinancialReport(target: ContractorFinancialReportTarget) {
+  async function openContractorFinancialReport(target: ContractorFinancialReportTarget) {
     setSupplierContextMenu(null)
     setEmployeeContextMenu(null)
     setModal(null)
-    const filters = createDefaultGarageBalanceHistoryFilters()
+    const fallbackFilters = createDefaultGarageBalanceHistoryFilters()
     setContractorFinancialReportTarget(target)
-    setContractorFinancialReportFilters(filters)
+    setContractorFinancialReportFilters(fallbackFilters)
     setContractorFinancialReport(null)
     setContractorFinancialReportError(null)
-    void loadContractorFinancialReport(target, filters)
+    setContractorFinancialReportLoading(true)
+
+    try {
+      const period = await financeClient.getFinancialReportPeriod(auth.accessToken, target.type === 'supplier'
+        ? { supplierId: target.row.id }
+        : { staffMemberId: target.row.id })
+      const filters = createFullFinancialReportFilters(period)
+      setContractorFinancialReportFilters(filters)
+      await loadContractorFinancialReport(target, filters)
+    } catch (error) {
+      setContractorFinancialReportError(error instanceof Error ? error.message : 'Не удалось определить полный период финансового отчета контрагента.')
+      setContractorFinancialReportLoading(false)
+    }
   }
 
   function closeContractorFinancialReport() {

@@ -1571,6 +1571,7 @@ describe('App', () => {
       ],
     })
     const financeClient = createFinanceClient({
+      getFinancialReportPeriod: async () => ({ monthFrom: '2022-03-01', monthTo: '2026-07-01' }),
       getGarageBalanceHistory: async (_token, garageId, params) => {
         requestedGarageFinancialReportId = garageId
         requestedGarageFinancialReportPeriod = params ?? null
@@ -1711,8 +1712,7 @@ describe('App', () => {
     expect(within(garageFinancialReportDialog).getByText('07.2026')).toBeInTheDocument()
     expect(within(garageFinancialReportDialog).getAllByText('500.00').length).toBeGreaterThan(0)
     expect(requestedGarageFinancialReportId).toBe(contractorGarage.id)
-    expect(requestedGarageFinancialReportPeriod?.monthFrom).toMatch(/^\d{4}-\d{2}$/)
-    expect(requestedGarageFinancialReportPeriod?.monthTo).toMatch(/^\d{4}-\d{2}$/)
+    expect(requestedGarageFinancialReportPeriod).toEqual({ monthFrom: '2022-03', monthTo: '2026-07' })
     await user.keyboard('{Escape}')
     expect(screen.queryByRole('dialog', { name: 'Гараж 1' })).not.toBeInTheDocument()
     await waitFor(() => expect(openGarageFinancialReportButton).toHaveFocus())
@@ -2798,6 +2798,9 @@ describe('App', () => {
       priorPaymentTotal: 100,
       openingBalance: 650,
     }))
+    const getFinancialReportPeriod = vi.fn(async (_token: string, params: Parameters<FinanceClient['getFinancialReportPeriod']>[1]) => params.supplierId
+      ? { monthFrom: '2024-03-01', monthTo: '2026-07-01' }
+      : { monthFrom: '2026-05-01', monthTo: '2026-07-01' })
     const dictionaryClient = createDictionaryClient({
       getSupplierGroups: async () => [createGroup({ id: supplier.groupId, name: supplier.groupName })],
       getSuppliers: async () => [supplier],
@@ -2818,7 +2821,7 @@ describe('App', () => {
     ])
     const auditClient = createAuditClient({ getEvents })
 
-    render(<App authClient={createAuthClient()} auditClient={auditClient} dictionaryClient={dictionaryClient} financeClient={createFinanceClient({ getOperationsPage, getSupplierAccrualsPage, getSupplierOpeningBalance })} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+    render(<App authClient={createAuthClient()} auditClient={auditClient} dictionaryClient={dictionaryClient} financeClient={createFinanceClient({ getOperationsPage, getSupplierAccrualsPage, getSupplierOpeningBalance, getFinancialReportPeriod })} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
     await user.click(screen.getByRole('button', { name: 'Войти' }))
@@ -2835,6 +2838,7 @@ describe('App', () => {
     expect(reportPeriodFrom).toHaveAttribute('placeholder', 'мм.гггг')
     expect(reportPeriodFrom).toBeRequired()
     expect(reportPeriodFrom).not.toHaveAttribute('type', 'month')
+    expect(reportPeriodFrom).toHaveValue('03.2024')
     const reportCalendarTrigger = within(supplierReport).getByRole('button', { name: 'Открыть календарь: Начало периода финансового отчета контрагента' })
     await user.click(reportCalendarTrigger)
     expect(within(supplierReport).getByRole('dialog', { name: 'Начало периода финансового отчета контрагента: календарь' })).toBeInTheDocument()
@@ -2863,7 +2867,8 @@ describe('App', () => {
     expect(within(supplierReport).queryByRole('table', { name: 'История изменений контрагента' })).not.toBeInTheDocument()
     expect(within(supplierReport).getByRole('button', { name: 'Открыть в истории изменений' })).toBeInTheDocument()
     expect(getSupplierAccrualsPage).toHaveBeenCalledWith('token', expect.objectContaining({ supplierId, limit: 500 }))
-    expect(getSupplierOpeningBalance).toHaveBeenCalledWith('token', supplierId, '2026-01')
+    expect(getSupplierOpeningBalance).toHaveBeenCalledWith('token', supplierId, '2024-03')
+    expect(getFinancialReportPeriod).toHaveBeenCalledWith('token', { supplierId })
     expect(getOperationsPage).toHaveBeenCalledWith('token', expect.objectContaining({ supplierId, operationKind: 'expense', limit: 500 }))
     expect(getEvents).not.toHaveBeenCalled()
     await user.keyboard('{Escape}')
@@ -2877,10 +2882,12 @@ describe('App', () => {
     const staffReportCloseButton = within(staffReport).getByRole('button', { name: 'Закрыть финансовый отчет контрагента' })
     await waitFor(() => expect(staffReportCloseButton).toHaveFocus())
     expect(within(staffReport).getByRole('table', { name: 'Финансовый отчет сотрудника' })).toBeInTheDocument()
-    expect(within(staffReport).getAllByText('Начисление зарплаты')).toHaveLength(6)
+    expect(within(staffReport).getByLabelText('Начало периода финансового отчета контрагента')).toHaveValue('05.2026')
+    expect(within(staffReport).getAllByText('Начисление зарплаты')).toHaveLength(3)
     expect(within(staffReport).getByText('RKO-2')).toBeInTheDocument()
     expect(within(staffReport).queryByRole('table', { name: 'История изменений контрагента' })).not.toBeInTheDocument()
     expect(getOperationsPage).toHaveBeenCalledWith('token', expect.objectContaining({ staffMemberId, operationKind: 'expense', limit: 500 }))
+    expect(getFinancialReportPeriod).toHaveBeenCalledWith('token', { staffMemberId })
     await user.click(within(staffReport).getByRole('button', { name: 'Открыть в истории изменений' }))
     expect(screen.queryByRole('dialog', { name: 'Петрова Ольга' })).not.toBeInTheDocument()
     const auditPanel = await screen.findByRole('region', { name: 'История изменений' })
@@ -2892,6 +2899,49 @@ describe('App', () => {
       limit: 25,
     })))
   }, 30000)
+
+  it('shows an error without loading report rows when the full supplier period is unavailable', async () => {
+    const user = userEvent.setup()
+    const supplierId = '22222222-2222-4222-8222-222222222224'
+    const supplier = createSupplier({
+      id: supplierId,
+      name: 'Поставщик без периода',
+      groupId: '44444444-4444-4444-8444-444444444445',
+      groupName: 'Услуги',
+    })
+    const getOperationsPage = vi.fn(async () => ({ items: [], totalCount: 0, offset: 0, limit: 500 }))
+    const getSupplierAccrualsPage = vi.fn(async () => ({ items: [], totalCount: 0, offset: 0, limit: 500 }))
+    const getFinancialReportPeriod = vi.fn(async () => {
+      throw new Error('Не удалось определить период обслуживания.')
+    })
+
+    render(<App
+      authClient={createAuthClient()}
+      dictionaryClient={createDictionaryClient({
+        getSupplierGroups: async () => [createGroup({ id: supplier.groupId, name: supplier.groupName })],
+        getSuppliers: async () => [supplier],
+        getSupplierContacts: async () => [],
+      })}
+      financeClient={createFinanceClient({ getOperationsPage, getSupplierAccrualsPage, getFinancialReportPeriod })}
+      importClient={createImportClient()}
+      reportClient={createReportClient()}
+      releaseClient={createReleaseClient()}
+      userClient={createUserClient()}
+    />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Контрагенты')
+    const panel = await screen.findByRole('region', { name: 'Контрагенты' })
+    await user.click(within(panel).getByRole('tab', { name: 'Поставщики' }))
+    await user.click(await within(panel).findByRole('button', { name: 'Открыть финансовый отчет поставщика Поставщик без периода' }))
+
+    const dialog = await screen.findByRole('dialog', { name: 'Поставщик без периода' })
+    expect(await within(dialog).findByText('Не удалось определить период обслуживания.')).toHaveAttribute('role', 'alert')
+    expect(getFinancialReportPeriod).toHaveBeenCalledWith('token', { supplierId })
+    expect(getOperationsPage).not.toHaveBeenCalled()
+    expect(getSupplierAccrualsPage).not.toHaveBeenCalled()
+  })
 
   it('keeps the full supplier debt after editing the starting balance', async () => {
     const user = userEvent.setup()
@@ -16111,6 +16161,7 @@ function createFinanceClient(overrides: Partial<FinanceClient> = {}): FinanceCli
       priorPaymentTotal: 0,
       openingBalance: 0,
     }),
+    getFinancialReportPeriod: async () => ({ monthFrom: '2026-01-01', monthTo: '2026-07-01' }),
     getMeterReadings: async () => [meterReading],
     getMeterReadingsPage: async () => ({ items: [meterReading], totalCount: 1, offset: 0, limit: 25 }),
     getMeterReadingYearPage: async () => ({

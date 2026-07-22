@@ -22,6 +22,118 @@ public sealed class FinanceServiceTests
     private const decimal SeededBankAmount = 1000000m;
 
     [Fact]
+    public async Task GetFinancialReportPeriodAsync_ReturnsFullActivePeriodForEachCounterpartyType()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        var department = new StaffDepartment { Name = "Бухгалтерия периода" };
+        var staffMember = new StaffMember { FullName = "Сотрудник периода", Department = department, Rate = 100m };
+        database.Context.AddRange(
+            department,
+            staffMember,
+            new Accrual
+            {
+                Garage = fixtures.Garage,
+                IncomeType = fixtures.IncomeType,
+                AccountingMonth = new DateOnly(2023, 2, 1),
+                Amount = 100m,
+                Source = AccrualSources.Manual,
+                Comment = "Начало обслуживания гаража"
+            },
+            new FinancialOperation
+            {
+                OperationKind = FinancialOperationKinds.Income,
+                Garage = fixtures.Garage,
+                IncomeType = fixtures.IncomeType,
+                OperationDate = new DateOnly(2027, 3, 1),
+                AccountingMonth = new DateOnly(2027, 3, 1),
+                Amount = 100m
+            },
+            new SupplierAccrual
+            {
+                Supplier = fixtures.Supplier,
+                ExpenseType = fixtures.ExpenseType,
+                AccountingMonth = new DateOnly(2024, 4, 1),
+                Amount = 200m,
+                Source = AccrualSources.Manual,
+                Comment = "Начало обслуживания поставщика"
+            },
+            new SupplierAccrual
+            {
+                Supplier = fixtures.Supplier,
+                ExpenseType = fixtures.ExpenseType,
+                AccountingMonth = new DateOnly(2022, 1, 1),
+                Amount = 200m,
+                Source = AccrualSources.Manual,
+                Comment = "Отменённое начисление",
+                IsCanceled = true
+            },
+            new FinancialOperation
+            {
+                OperationKind = FinancialOperationKinds.Expense,
+                Supplier = fixtures.Supplier,
+                ExpenseType = fixtures.ExpenseType,
+                OperationDate = new DateOnly(2026, 5, 1),
+                AccountingMonth = new DateOnly(2026, 5, 1),
+                Amount = 100m
+            },
+            new FinancialOperation
+            {
+                OperationKind = FinancialOperationKinds.Expense,
+                StaffMember = staffMember,
+                ExpenseType = fixtures.ExpenseType,
+                OperationDate = new DateOnly(2025, 6, 1),
+                AccountingMonth = new DateOnly(2025, 6, 1),
+                Amount = 100m
+            });
+        await database.Context.SaveChangesAsync();
+        var service = FinanceServiceTestFactory.Create(
+            database.Context,
+            new FixedTimeProvider(new DateTimeOffset(2026, 7, 23, 0, 0, 0, TimeSpan.Zero)));
+
+        var garage = await service.GetFinancialReportPeriodAsync(new FinancialReportPeriodRequest(fixtures.Garage.Id, null, null), CancellationToken.None);
+        var supplier = await service.GetFinancialReportPeriodAsync(new FinancialReportPeriodRequest(null, fixtures.Supplier.Id, null), CancellationToken.None);
+        var staff = await service.GetFinancialReportPeriodAsync(new FinancialReportPeriodRequest(null, null, staffMember.Id), CancellationToken.None);
+
+        Assert.Equal(new FinancialReportPeriodDto(new DateOnly(2023, 2, 1), new DateOnly(2027, 3, 1)), garage.Value);
+        Assert.Equal(new FinancialReportPeriodDto(new DateOnly(2024, 4, 1), new DateOnly(2026, 7, 1)), supplier.Value);
+        Assert.Equal(new FinancialReportPeriodDto(new DateOnly(2025, 6, 1), new DateOnly(2026, 7, 1)), staff.Value);
+    }
+
+    [Fact]
+    public async Task GetFinancialReportPeriodAsync_UsesCurrentMonthWithoutRowsAndRejectsInvalidOrMissingTarget()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        var service = FinanceServiceTestFactory.Create(
+            database.Context,
+            new FixedTimeProvider(new DateTimeOffset(2026, 7, 23, 0, 0, 0, TimeSpan.Zero)));
+
+        var empty = await service.GetFinancialReportPeriodAsync(new FinancialReportPeriodRequest(null, fixtures.Supplier.Id, null), CancellationToken.None);
+        var invalid = await service.GetFinancialReportPeriodAsync(new FinancialReportPeriodRequest(fixtures.Garage.Id, fixtures.Supplier.Id, null), CancellationToken.None);
+        var missing = await service.GetFinancialReportPeriodAsync(new FinancialReportPeriodRequest(null, Guid.NewGuid(), null), CancellationToken.None);
+
+        Assert.Equal(new FinancialReportPeriodDto(new DateOnly(2026, 7, 1), new DateOnly(2026, 7, 1)), empty.Value);
+        Assert.Equal("financial_report_target_invalid", invalid.ErrorCode);
+        Assert.Equal("financial_report_target_not_found", missing.ErrorCode);
+    }
+
+    [Fact]
+    public async Task FinancialReportPeriodQuery_PropagatesCancellation()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        using var cancellationSource = new CancellationTokenSource();
+        cancellationSource.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => new EfFinancialReportPeriodQuery(database.Context).GetAsync(
+            fixtures.Garage.Id,
+            null,
+            null,
+            cancellationSource.Token));
+    }
+
+    [Fact]
     public async Task GetSupplierOpeningBalanceAsync_UsesOnlyActiveHistoryBeforeSelectedPeriod()
     {
         await using var database = await TestDatabase.CreateAsync();
@@ -5618,7 +5730,7 @@ public sealed class FinanceServiceTests
 
     [Theory]
     [InlineData(2026, 7, 2026, 6, "income_worksheet_period_invalid")]
-    [InlineData(2021, 7, 2026, 7, "income_worksheet_period_too_large")]
+    [InlineData(1976, 6, 2026, 7, "income_worksheet_period_too_large")]
     public async Task GetGarageIncomeWorksheetAsync_RejectsInvalidPeriodBeforeDatabaseAccess(
         int fromYear,
         int fromMonth,
@@ -5687,7 +5799,7 @@ public sealed class FinanceServiceTests
 
     [Theory]
     [InlineData(2026, 7, 2026, 6, "balance_history_period_invalid")]
-    [InlineData(2021, 7, 2026, 7, "balance_history_period_too_large")]
+    [InlineData(1976, 6, 2026, 7, "balance_history_period_too_large")]
     public async Task GetGarageBalanceHistoryAsync_RejectsInvalidPeriodBeforeDatabaseAccess(
         int fromYear,
         int fromMonth,

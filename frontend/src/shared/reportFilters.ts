@@ -26,6 +26,13 @@ export function createDefaultGarageBalanceHistoryFilters(date = new Date()) {
   return { monthFrom: formatMonthInputValue(from), monthTo: formatMonthInputValue(to) }
 }
 
+export function createFullFinancialReportFilters(period: { monthFrom: string; monthTo: string }) {
+  return {
+    monthFrom: period.monthFrom.slice(0, 7),
+    monthTo: period.monthTo.slice(0, 7),
+  }
+}
+
 export function loadConsolidatedReportFilters(month: string): ConsolidatedReportFilters {
   const parsed = readSessionJson(reportFilterStorageKeys.consolidated)
   if (!isRecord(parsed)) {
