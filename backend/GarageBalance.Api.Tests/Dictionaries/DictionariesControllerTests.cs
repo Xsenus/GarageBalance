@@ -902,6 +902,25 @@ public sealed class DictionariesControllerTests
     }
 
     [Fact]
+    public async Task CreateOwner_ReturnsBadRequestForInvalidPhone()
+    {
+        var service = new FakeDictionaryService
+        {
+            CreateOwnerResult = DictionaryResult<OwnerDto>.Failure("phone_invalid", "Укажите телефон в формате +7 (999) 123-45-67.")
+        };
+        var controller = CreateController(service);
+
+        var result = await controller.CreateOwner(
+            new UpsertOwnerRequest("Иванов", "Иван", null, "+7 913", null, null),
+            CancellationToken.None);
+
+        var badRequest = Assert.IsType<BadRequestObjectResult>(result.Result);
+        var problem = Assert.IsType<ProblemDetails>(badRequest.Value);
+        Assert.Equal("phone_invalid", problem.Title);
+        Assert.Equal(StatusCodes.Status400BadRequest, problem.Status);
+    }
+
+    [Fact]
     public async Task CreateChargeServiceWithTariff_ReturnsConflictWithoutPartialResponse()
     {
         var controller = CreateController(new FakeDictionaryService

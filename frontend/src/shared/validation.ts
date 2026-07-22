@@ -9,6 +9,7 @@ import type {
   GenerateRegularAccrualsRequest,
   GenerateSupplierGroupSalaryAccrualsRequest,
 } from '../services/financeApi'
+import { isCompleteRussianPhone } from './phoneNumber'
 
 export type OwnerGarageLinkForm = {
   existingGarageId: string
@@ -130,8 +131,8 @@ export function getOwnerValidationErrors(form: UpsertOwnerRequest) {
     errors.push('Укажите имя владельца.')
   }
 
-  if (form.phone?.trim() && form.phone.trim().length < 5) {
-    errors.push('Проверьте телефон владельца.')
+  if (!isCompleteRussianPhone(form.phone)) {
+    errors.push('Телефон владельца должен быть указан в формате +7 (999) 123-45-67.')
   }
 
   return errors
@@ -222,6 +223,10 @@ export function getSupplierValidationErrors(form: UpsertSupplierRequest) {
 
   if (trimmedInn && !/^\d{10}(\d{2})?$/.test(trimmedInn)) {
     errors.push('ИНН поставщика должен содержать 10 или 12 цифр.')
+  }
+
+  if (!isCompleteRussianPhone(form.phone)) {
+    errors.push('Телефон поставщика должен быть указан в формате +7 (999) 123-45-67.')
   }
 
   if (!Number.isFinite(form.startingBalance)) {

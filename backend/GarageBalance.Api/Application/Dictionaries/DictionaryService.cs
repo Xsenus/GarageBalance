@@ -106,12 +106,17 @@ public sealed class DictionaryService(
 
     public async Task<DictionaryResult<OwnerDto>> CreateOwnerAsync(UpsertOwnerRequest request, Guid? actorUserId, CancellationToken cancellationToken)
     {
+        if (!PhoneNumberNormalizer.TryNormalize(request.Phone, out var phone))
+        {
+            return InvalidPhone<OwnerDto>();
+        }
+
         var owner = new Owner
         {
             LastName = request.LastName.Trim(),
             FirstName = request.FirstName.Trim(),
             MiddleName = NormalizeOptional(request.MiddleName),
-            Phone = NormalizeOptional(request.Phone),
+            Phone = phone,
             Address = NormalizeOptional(request.Address),
             MeterNotes = NormalizeOptional(request.MeterNotes)
         };
@@ -133,7 +138,10 @@ public sealed class DictionaryService(
         var lastName = request.LastName.Trim();
         var firstName = request.FirstName.Trim();
         var middleName = NormalizeOptional(request.MiddleName);
-        var phone = NormalizeOptional(request.Phone);
+        if (!PhoneNumberNormalizer.TryNormalize(request.Phone, out var phone))
+        {
+            return InvalidPhone<OwnerDto>();
+        }
         var address = NormalizeOptional(request.Address);
         var meterNotes = NormalizeOptional(request.MeterNotes);
         if (OwnerMatches(owner, lastName, firstName, middleName, phone, address, meterNotes))
@@ -573,6 +581,11 @@ public sealed class DictionaryService(
 
     public async Task<DictionaryResult<SupplierDto>> CreateSupplierAsync(UpsertSupplierRequest request, Guid? actorUserId, CancellationToken cancellationToken)
     {
+        if (!PhoneNumberNormalizer.TryNormalize(request.Phone, out var phone))
+        {
+            return InvalidPhone<SupplierDto>();
+        }
+
         var group = await supplierGroupRepository.FindActiveAsync(request.GroupId, cancellationToken);
         if (group is null)
         {
@@ -603,7 +616,7 @@ public sealed class DictionaryService(
             Inn = NormalizeOptional(request.Inn),
             LegalAddress = NormalizeOptional(request.LegalAddress),
             ContactPerson = NormalizeOptional(request.ContactPerson),
-            Phone = NormalizeOptional(request.Phone),
+            Phone = phone,
             Email = NormalizeOptional(request.Email),
             StartingBalance = MoneyMath.RoundMoney(request.StartingBalance),
             Comment = NormalizeOptional(request.Comment)
@@ -643,7 +656,10 @@ public sealed class DictionaryService(
         var inn = NormalizeOptional(request.Inn);
         var legalAddress = NormalizeOptional(request.LegalAddress);
         var contactPerson = NormalizeOptional(request.ContactPerson);
-        var phone = NormalizeOptional(request.Phone);
+        if (!PhoneNumberNormalizer.TryNormalize(request.Phone, out var phone))
+        {
+            return InvalidPhone<SupplierDto>();
+        }
         var email = NormalizeOptional(request.Email);
         var startingBalance = MoneyMath.RoundMoney(request.StartingBalance);
         var comment = NormalizeOptional(request.Comment);
@@ -759,6 +775,11 @@ public sealed class DictionaryService(
 
     public async Task<DictionaryResult<SupplierContactDto>> CreateSupplierContactAsync(UpsertSupplierContactRequest request, Guid? actorUserId, CancellationToken cancellationToken)
     {
+        if (!PhoneNumberNormalizer.TryNormalize(request.Phone, out var phone))
+        {
+            return InvalidPhone<SupplierContactDto>();
+        }
+
         var supplier = await supplierRepository.FindActiveWithGroupAsync(request.SupplierId, cancellationToken);
         if (supplier is null)
         {
@@ -766,7 +787,7 @@ public sealed class DictionaryService(
         }
 
         var contact = new SupplierContact { FullName = request.FullName.Trim(), SupplierId = supplier.Id, Supplier = supplier };
-        ApplySupplierContact(contact, request);
+        ApplySupplierContact(contact, request, phone);
         supplierContactRepository.Add(contact);
         AddAudit(actorUserId, "dictionary.supplier_contact_created", "supplier_contact", contact.Id, $"Создан контакт {contact.FullName} поставщика {supplier.Name}.");
         await unitOfWork.SaveChangesAsync(cancellationToken);
@@ -775,6 +796,11 @@ public sealed class DictionaryService(
 
     public async Task<DictionaryResult<SupplierContactDto>> UpdateSupplierContactAsync(Guid id, UpsertSupplierContactRequest request, Guid? actorUserId, CancellationToken cancellationToken)
     {
+        if (!PhoneNumberNormalizer.TryNormalize(request.Phone, out var phone))
+        {
+            return InvalidPhone<SupplierContactDto>();
+        }
+
         var contact = await supplierContactRepository.FindActiveWithSupplierAsync(id, cancellationToken);
         if (contact is null)
         {
@@ -787,7 +813,7 @@ public sealed class DictionaryService(
             return DictionaryResult<SupplierContactDto>.Failure("supplier_not_found", "Поставщик не найден.");
         }
 
-        if (SupplierContactMatches(contact, request, supplier.Id))
+        if (SupplierContactMatches(contact, request, supplier.Id, phone))
         {
             return DictionaryResult<SupplierContactDto>.Success(ToSupplierContactDto(contact));
         }
@@ -795,7 +821,7 @@ public sealed class DictionaryService(
         var oldValues = ToSupplierContactAuditValues(contact);
         contact.SupplierId = supplier.Id;
         contact.Supplier = supplier;
-        ApplySupplierContact(contact, request);
+        ApplySupplierContact(contact, request, phone);
         contact.UpdatedAtUtc = DateTimeOffset.UtcNow;
         var newValues = ToSupplierContactAuditValues(contact);
 
@@ -2701,22 +2727,22 @@ public sealed class DictionaryService(
             StringEquals(supplier.Comment, comment);
     }
 
-    private static void ApplySupplierContact(SupplierContact contact, UpsertSupplierContactRequest request)
+    private static void ApplySupplierContact(SupplierContact contact, UpsertSupplierContactRequest request, string? phone)
     {
         contact.FullName = request.FullName.Trim();
         contact.Position = NormalizeOptional(request.Position);
-        contact.Phone = NormalizeOptional(request.Phone);
+        contact.Phone = phone;
         contact.Email = NormalizeOptional(request.Email);
         contact.Status = request.Status.Trim();
         contact.Comment = NormalizeOptional(request.Comment);
     }
 
-    private static bool SupplierContactMatches(SupplierContact contact, UpsertSupplierContactRequest request, Guid supplierId)
+    private static bool SupplierContactMatches(SupplierContact contact, UpsertSupplierContactRequest request, Guid supplierId, string? phone)
     {
         return contact.SupplierId == supplierId &&
             StringEquals(contact.FullName, request.FullName.Trim()) &&
             StringEquals(contact.Position, NormalizeOptional(request.Position)) &&
-            StringEquals(contact.Phone, NormalizeOptional(request.Phone)) &&
+            StringEquals(contact.Phone, phone) &&
             StringEquals(contact.Email, NormalizeOptional(request.Email)) &&
             StringEquals(contact.Status, request.Status.Trim()) &&
             StringEquals(contact.Comment, NormalizeOptional(request.Comment));
@@ -2818,6 +2844,9 @@ public sealed class DictionaryService(
             overdueDebt ?? Math.Max(calculatedBalance, 0m),
             garage.Owner?.Phone);
     }
+
+    private static DictionaryResult<T> InvalidPhone<T>() =>
+        DictionaryResult<T>.Failure("phone_invalid", $"Укажите телефон в формате {PhoneNumberNormalizer.FormatHint}.");
 
     private static GarageDto ToGarageDto(GarageListItemData garage, decimal balance, decimal overdueDebt) =>
         new(

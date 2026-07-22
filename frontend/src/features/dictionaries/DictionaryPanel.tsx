@@ -19,6 +19,7 @@ import { formatDateOnly, formatDebtAmount, formatDebtLabel, formatMoney, formatM
 import { useEscapeKey, useFocusOnOpen, useFocusTrap, useRestoreFocusOnClose } from '../../shared/focusHooks'
 import { LocalizedDatePicker } from '../../shared/LocalizedDatePicker'
 import { MoneyInput } from '../../shared/MoneyInput'
+import { PhoneInput } from '../../shared/PhoneInput'
 import { createEmptyPage, createFallbackPage } from '../../shared/pagination'
 import { TablePagination } from '../../shared/TablePagination'
 import { createDefaultGarageBalanceHistoryFilters } from '../../shared/reportFilters'
@@ -975,7 +976,7 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, integ
             {dictionaryField('ownerMiddleName', <input aria-label={fieldMeta('ownerMiddleName').ariaLabel} placeholder={fieldMeta('ownerMiddleName').placeholder} value={ownerForm.middleName ?? ''} onChange={(event) => setOwnerForm({ ...ownerForm, middleName: event.target.value })} />, { className: 'owner-name-grid__middle-name' })}
           </div>
           <div className="owner-contact-grid">
-            {dictionaryField('ownerPhone', <input aria-label={fieldMeta('ownerPhone').ariaLabel} placeholder={fieldMeta('ownerPhone').placeholder} value={ownerForm.phone ?? ''} onChange={(event) => setOwnerForm({ ...ownerForm, phone: event.target.value })} />)}
+            {dictionaryField('ownerPhone', <PhoneInput aria-label={fieldMeta('ownerPhone').ariaLabel} value={ownerForm.phone ?? ''} onValueChange={(phone) => setOwnerForm({ ...ownerForm, phone })} />)}
             {dictionaryField('ownerAddress', (
               <>
                 <div className="suggestion-combobox">
@@ -1115,7 +1116,7 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, integ
           {dictionaryField('supplierInn', <input aria-label={fieldMeta('supplierInn').ariaLabel} placeholder={fieldMeta('supplierInn').placeholder} value={supplierForm.inn} onChange={(event) => setSupplierForm({ ...supplierForm, inn: event.target.value })} />)}
           {dictionaryField('supplierLegalAddress', <input aria-label={fieldMeta('supplierLegalAddress').ariaLabel} placeholder={fieldMeta('supplierLegalAddress').placeholder} value={supplierForm.legalAddress} onChange={(event) => setSupplierForm({ ...supplierForm, legalAddress: event.target.value })} />)}
           {dictionaryField('supplierContactPerson', <input aria-label={fieldMeta('supplierContactPerson').ariaLabel} placeholder={fieldMeta('supplierContactPerson').placeholder} value={supplierForm.contactPerson} onChange={(event) => setSupplierForm({ ...supplierForm, contactPerson: event.target.value })} />)}
-          {dictionaryField('supplierPhone', <input aria-label={fieldMeta('supplierPhone').ariaLabel} placeholder={fieldMeta('supplierPhone').placeholder} value={supplierForm.phone} onChange={(event) => setSupplierForm({ ...supplierForm, phone: event.target.value })} />)}
+          {dictionaryField('supplierPhone', <PhoneInput aria-label={fieldMeta('supplierPhone').ariaLabel} value={supplierForm.phone} onValueChange={(phone) => setSupplierForm({ ...supplierForm, phone })} />)}
           {dictionaryField('supplierEmail', <input aria-label={fieldMeta('supplierEmail').ariaLabel} placeholder={fieldMeta('supplierEmail').placeholder} value={supplierForm.email} onChange={(event) => setSupplierForm({ ...supplierForm, email: event.target.value })} />)}
           {dictionaryField('supplierStartingBalance', <MoneyInput aria-label={fieldMeta('supplierStartingBalance').ariaLabel} value={supplierForm.startingBalance} onValueChange={(startingBalance) => setSupplierForm({ ...supplierForm, startingBalance })} />, { help: 'Наша задолженность поставщику на начало учета указывается положительным числом, аванс — отрицательным.' })}
           {dictionaryField('supplierComment', <textarea aria-label={fieldMeta('supplierComment').ariaLabel} placeholder={fieldMeta('supplierComment').placeholder} value={supplierForm.comment} onChange={(event) => setSupplierForm({ ...supplierForm, comment: event.target.value })} />)}
@@ -2003,7 +2004,7 @@ export function DictionaryPanel({ auth, dictionaryClient }: { auth: AuthResponse
           <h3>Владельцы</h3>
           <input aria-label="Фамилия владельца" placeholder="Фамилия" value={ownerForm.lastName} onChange={(event) => setOwnerForm({ ...ownerForm, lastName: event.target.value })} required />
           <input aria-label="Имя владельца" placeholder="Имя" value={ownerForm.firstName} onChange={(event) => setOwnerForm({ ...ownerForm, firstName: event.target.value })} required />
-          <input aria-label="Телефон владельца" placeholder="Телефон" value={ownerForm.phone} onChange={(event) => setOwnerForm({ ...ownerForm, phone: event.target.value })} />
+          <PhoneInput aria-label="Телефон владельца" value={ownerForm.phone} onValueChange={(phone) => setOwnerForm({ ...ownerForm, phone })} />
           <FormValidationSummary title="Проверьте владельца" items={ownerValidationErrors} />
           <button className="secondary-button create-action-button" type="submit" disabled={!canWriteDictionaries || saving === 'owner'}>
             <FileText size={16} aria-hidden="true" />

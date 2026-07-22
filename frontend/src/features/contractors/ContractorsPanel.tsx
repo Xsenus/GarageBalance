@@ -11,6 +11,7 @@ import { TableLoadingState } from '../../shared/AsyncState'
 import { FormError } from '../../shared/formFeedback'
 import { FormField } from '../../shared/FormField'
 import { MoneyTextInput } from '../../shared/MoneyInput'
+import { PhoneInput } from '../../shared/PhoneInput'
 import { formatDateOnly, formatDebtAmount, formatDebtLabel, formatMoney, formatMonth, getDebtClassName } from '../../shared/formatters'
 import { LocalizedDatePicker } from '../../shared/LocalizedDatePicker'
 import { useEscapeKey, useFocusOnOpen, useFocusTrap, useRestoreFocusOnClose } from '../../shared/focusHooks'
@@ -3137,7 +3138,7 @@ function GaragePrototypeDialog({ accessToken, integrationClient, item, onClose, 
             </div>
             <div className="contractors-garage-form-details">
               <FormField label="Владелец"><input aria-label="Владелец гаража" value={form.owner} onChange={(event) => setForm({ ...form, owner: event.target.value })} /></FormField>
-              <FormField label="Телефон"><input aria-label="Телефон владельца гаража" value={form.phone} onChange={(event) => setForm({ ...form, phone: event.target.value })} /></FormField>
+              <FormField label="Телефон"><PhoneInput aria-label="Телефон владельца гаража" value={form.phone} onValueChange={(phone) => setForm({ ...form, phone })} /></FormField>
               <DadataAddressField accessToken={accessToken} inputLabel="Адрес гаража" integrationClient={integrationClient} label="Адрес" listboxLabel="Адреса гаражей DaData" suggestionsId="garage-address-suggestions" value={form.address} onChange={(address) => setForm((currentForm) => ({ ...currentForm, address }))} />
             </div>
             <div className="contractors-garage-form-notes">
@@ -3407,7 +3408,7 @@ function SupplierPrototypeDialog({ accessToken, integrationClient, item, service
                   <span role="cell">{index + 1}</span>
                   <span role="cell"><input aria-label={`Контакт ${index + 1}: ФИО`} value={contact.fullName} disabled={contact.isDeleted} onChange={(event) => updateContact(contact.id, { fullName: event.target.value })} /></span>
                   <span role="cell"><input aria-label={`Контакт ${index + 1}: должность`} value={contact.position} disabled={contact.isDeleted} onChange={(event) => updateContact(contact.id, { position: event.target.value })} /></span>
-                  <span role="cell"><input aria-label={`Контакт ${index + 1}: телефон`} value={contact.phone} disabled={contact.isDeleted} onChange={(event) => updateContact(contact.id, { phone: event.target.value })} /></span>
+                  <span role="cell"><PhoneInput aria-label={`Контакт ${index + 1}: телефон`} value={contact.phone} disabled={contact.isDeleted} onValueChange={(phone) => updateContact(contact.id, { phone })} /></span>
                   <span role="cell"><input aria-label={`Контакт ${index + 1}: почта`} value={contact.email} disabled={contact.isDeleted} onChange={(event) => updateContact(contact.id, { email: event.target.value })} /></span>
                   <span role="cell">
                     <SelectControl
@@ -3423,7 +3424,7 @@ function SupplierPrototypeDialog({ accessToken, integrationClient, item, service
               ))}
             </div>
             <div className="contractors-supplier-footer-grid">
-              <FormField label="Телефон"><input aria-label="Телефон поставщика" type="tel" value={form.phone} onChange={(event) => setForm({ ...form, phone: event.target.value })} /></FormField>
+              <FormField label="Телефон"><PhoneInput aria-label="Телефон поставщика" value={form.phone} onValueChange={(phone) => setForm({ ...form, phone })} /></FormField>
               <FormField label="Почта"><input aria-label="Почта поставщика" type="email" value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} /></FormField>
               <FormField label="Комментарий"><textarea aria-label="Комментарий поставщика" value={form.comment} onChange={(event) => setForm({ ...form, comment: event.target.value })} /></FormField>
             </div>

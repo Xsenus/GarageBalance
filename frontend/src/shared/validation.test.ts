@@ -80,7 +80,7 @@ describe('shared validation helpers', () => {
     expect(getOwnerValidationErrors({ lastName: '', firstName: '', middleName: null, phone: '12', address: null, meterNotes: null })).toEqual([
       'Укажите фамилию владельца.',
       'Укажите имя владельца.',
-      'Проверьте телефон владельца.',
+      'Телефон владельца должен быть указан в формате +7 (999) 123-45-67.',
     ])
 
     expect(getOwnerGarageLinkValidationErrors({
@@ -142,6 +142,17 @@ describe('shared validation helpers', () => {
       'ИНН поставщика должен содержать 10 или 12 цифр.',
       'Укажите корректный стартовый баланс поставщика.',
     ])
+    expect(getSupplierValidationErrors({
+      name: 'Поставщик',
+      groupId: 'group-1',
+      inn: null,
+      legalAddress: null,
+      contactPerson: null,
+      phone: '+7 (913) 123',
+      email: null,
+      startingBalance: 0,
+      comment: null,
+    })).toEqual(['Телефон поставщика должен быть указан в формате +7 (999) 123-45-67.'])
     expect(getAccountingTypeValidationErrors({ name: '', code: 'код', isSystem: false }, 'вида поступления')).toEqual([
       'Укажите название вида поступления.',
       'Код вида поступления должен содержать только латиницу, цифры, дефис или подчеркивание.',

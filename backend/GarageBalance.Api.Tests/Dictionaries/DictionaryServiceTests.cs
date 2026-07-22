@@ -21,14 +21,61 @@ public sealed class DictionaryServiceTests
         var actorUserId = Guid.NewGuid();
 
         var result = await service.CreateOwnerAsync(
-            new UpsertOwnerRequest(" Иванов ", " Иван ", " Иванович ", " +7 900 ", " Адрес ", " Счетчик "),
+            new UpsertOwnerRequest(" Иванов ", " Иван ", " Иванович ", " 8 900 123-45-67 ", " Адрес ", " Счетчик "),
             actorUserId,
             CancellationToken.None);
 
         Assert.True(result.Succeeded);
         Assert.Equal("Иванов Иван Иванович", result.Value!.FullName);
-        Assert.Equal("+7 900", result.Value.Phone);
+        Assert.Equal("+7 (900) 123-45-67", result.Value.Phone);
         Assert.Contains(database.Context.AuditEvents, item => item.Action == "dictionary.owner_created" && item.ActorUserId == actorUserId);
+    }
+
+    [Fact]
+    public async Task PhoneFields_NormalizeRecognizedValuesAndRejectIncompleteNumbers()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = DictionaryServiceTestFactory.Create(database.Context);
+        var group = await service.CreateSupplierGroupAsync(new UpsertSupplierGroupRequest("Связь"), null, CancellationToken.None);
+
+        var owner = await service.CreateOwnerAsync(
+            new UpsertOwnerRequest("Иванов", "Иван", null, "9131234567", null, null),
+            null,
+            CancellationToken.None);
+        var supplier = await service.CreateSupplierAsync(
+            new UpsertSupplierRequest("Оператор", group.Value!.Id, null, null, null, "8 913 765 43 21", null, 0, null),
+            null,
+            CancellationToken.None);
+        var contact = await service.CreateSupplierContactAsync(
+            new UpsertSupplierContactRequest(supplier.Value!.Id, "Петров Петр", null, "79130001122", null, "Работает", null),
+            null,
+            CancellationToken.None);
+        var invalidOwner = await service.UpdateOwnerAsync(
+            owner.Value!.Id,
+            new UpsertOwnerRequest("Иванов", "Иван", null, "+7 913", null, null),
+            null,
+            CancellationToken.None);
+        var invalidSupplier = await service.UpdateSupplierAsync(
+            supplier.Value.Id,
+            new UpsertSupplierRequest("Оператор", group.Value.Id, null, null, null, "номер 9131234567", null, 0, null),
+            null,
+            CancellationToken.None);
+        var invalidContact = await service.UpdateSupplierContactAsync(
+            contact.Value!.Id,
+            new UpsertSupplierContactRequest(supplier.Value.Id, "Петров Петр", null, "123", null, "Работает", null),
+            null,
+            CancellationToken.None);
+
+        Assert.Equal("+7 (913) 123-45-67", owner.Value.Phone);
+        Assert.Equal("+7 (913) 765-43-21", supplier.Value.Phone);
+        Assert.Equal("+7 (913) 000-11-22", contact.Value.Phone);
+        Assert.False(invalidOwner.Succeeded);
+        Assert.Equal("phone_invalid", invalidOwner.ErrorCode);
+        Assert.False(invalidSupplier.Succeeded);
+        Assert.Equal("phone_invalid", invalidSupplier.ErrorCode);
+        Assert.False(invalidContact.Succeeded);
+        Assert.Equal("phone_invalid", invalidContact.ErrorCode);
+        Assert.Equal("+7 (913) 123-45-67", (await service.GetOwnersAsync(null, CancellationToken.None)).Single().Phone);
     }
 
     [Fact]
@@ -39,7 +86,7 @@ public sealed class DictionaryServiceTests
         var actorUserId = Guid.NewGuid();
 
         var created = await service.CreateOwnerAsync(
-            new UpsertOwnerRequest("Ivanov", "Ivan", null, "+7 900", "Private address", null),
+            new UpsertOwnerRequest("Ivanov", "Ivan", null, "+7 (900) 123-45-67", "Private address", null),
             actorUserId,
             CancellationToken.None);
         var archived = await service.ArchiveOwnerAsync(created.Value!.Id, "Дубликат карточки", actorUserId, CancellationToken.None);
@@ -51,7 +98,7 @@ public sealed class DictionaryServiceTests
         Assert.Equal("dictionary", createAudit.Section);
         Assert.Equal("create", createAudit.ActionKind);
         Assert.Equal("Создан владелец Ivanov Ivan", createAudit.EntityDisplayName);
-        Assert.DoesNotContain("+7 900", createAudit.MetadataJson, StringComparison.Ordinal);
+        Assert.DoesNotContain("+7 (900) 123-45-67", createAudit.MetadataJson, StringComparison.Ordinal);
         Assert.DoesNotContain("Private address", createAudit.MetadataJson, StringComparison.Ordinal);
 
         var archiveAudit = Assert.Single(database.Context.AuditEvents, item => item.Action == "dictionary.owner_archived");
@@ -68,10 +115,10 @@ public sealed class DictionaryServiceTests
     {
         await using var database = await TestDatabase.CreateAsync();
         var service = DictionaryServiceTestFactory.Create(database.Context);
-        await service.CreateOwnerAsync(new UpsertOwnerRequest("Петров", "Петр", null, "+7 111", null, null), null, CancellationToken.None);
-        await service.CreateOwnerAsync(new UpsertOwnerRequest("Сидоров", "Сергей", null, "+7 222", null, null), null, CancellationToken.None);
+        await service.CreateOwnerAsync(new UpsertOwnerRequest("Петров", "Петр", null, "+7 (911) 000-00-01", null, null), null, CancellationToken.None);
+        await service.CreateOwnerAsync(new UpsertOwnerRequest("Сидоров", "Сергей", null, "+7 (922) 000-00-02", null, null), null, CancellationToken.None);
 
-        var result = await service.GetOwnersAsync("222", CancellationToken.None);
+        var result = await service.GetOwnersAsync("922", CancellationToken.None);
 
         var owner = Assert.Single(result);
         Assert.Equal("Сидоров", owner.LastName);
@@ -325,20 +372,20 @@ public sealed class DictionaryServiceTests
         var service = DictionaryServiceTestFactory.Create(database.Context);
         var actorUserId = Guid.NewGuid();
 
-        var owner = await service.CreateOwnerAsync(new UpsertOwnerRequest("Иванов", "Иван", "Иванович", "+7 900", "Адрес", "Счетчик"), null, CancellationToken.None);
+        var owner = await service.CreateOwnerAsync(new UpsertOwnerRequest("Иванов", "Иван", "Иванович", "+7 (900) 123-45-67", "Адрес", "Счетчик"), null, CancellationToken.None);
         var garage = await service.CreateGarageAsync(new UpsertGarageRequest("12", 2, 1, owner.Value!.Id, 10.005m, 1.2345m, 9.8765m, "Угловой"), null, CancellationToken.None);
         var group = await service.CreateSupplierGroupAsync(new UpsertSupplierGroupRequest("Коммунальные услуги"), null, CancellationToken.None);
-        var supplier = await service.CreateSupplierAsync(new UpsertSupplierRequest("Водоканал", group.Value!.Id, "123", "Юр. адрес", "Петров", "+7 901", "mail@example.com", 20.005m, "Комментарий"), null, CancellationToken.None);
+        var supplier = await service.CreateSupplierAsync(new UpsertSupplierRequest("Водоканал", group.Value!.Id, "123", "Юр. адрес", "Петров", "+7 (901) 123-45-67", "mail@example.com", 20.005m, "Комментарий"), null, CancellationToken.None);
         var incomeType = await service.CreateIncomeTypeAsync(new UpsertAccountingTypeRequest("Членский взнос", "membership"), null, CancellationToken.None);
         var expenseType = await service.CreateExpenseTypeAsync(new UpsertAccountingTypeRequest("Электрик", "electrician"), null, CancellationToken.None);
         var tariff = await service.CreateTariffAsync(new UpsertTariffRequest("Вода", "meter_water", 12.34555m, new DateOnly(2026, 7, 1), "Комментарий"), null, CancellationToken.None);
         database.Context.AuditEvents.RemoveRange(database.Context.AuditEvents);
         await database.Context.SaveChangesAsync();
 
-        Assert.True((await service.UpdateOwnerAsync(owner.Value.Id, new UpsertOwnerRequest(" Иванов ", " Иван ", " Иванович ", " +7 900 ", " Адрес ", " Счетчик "), actorUserId, CancellationToken.None)).Succeeded);
+        Assert.True((await service.UpdateOwnerAsync(owner.Value.Id, new UpsertOwnerRequest(" Иванов ", " Иван ", " Иванович ", " +7 (900) 123-45-67 ", " Адрес ", " Счетчик "), actorUserId, CancellationToken.None)).Succeeded);
         Assert.True((await service.UpdateGarageAsync(garage.Value!.Id, new UpsertGarageRequest(" 12 ", 2, 1, owner.Value.Id, 10.005m, 1.2345m, 9.8765m, " Угловой "), actorUserId, CancellationToken.None)).Succeeded);
         Assert.True((await service.UpdateSupplierGroupAsync(group.Value.Id, new UpsertSupplierGroupRequest(" Коммунальные услуги "), actorUserId, CancellationToken.None)).Succeeded);
-        Assert.True((await service.UpdateSupplierAsync(supplier.Value!.Id, new UpsertSupplierRequest(" Водоканал ", group.Value.Id, " 123 ", " Юр. адрес ", " Петров ", " +7 901 ", " mail@example.com ", 20.005m, " Комментарий "), actorUserId, CancellationToken.None)).Succeeded);
+        Assert.True((await service.UpdateSupplierAsync(supplier.Value!.Id, new UpsertSupplierRequest(" Водоканал ", group.Value.Id, " 123 ", " Юр. адрес ", " Петров ", " +7 (901) 123-45-67 ", " mail@example.com ", 20.005m, " Комментарий "), actorUserId, CancellationToken.None)).Succeeded);
         Assert.True((await service.UpdateIncomeTypeAsync(incomeType.Value!.Id, new UpsertAccountingTypeRequest(" Членский взнос ", " membership "), actorUserId, CancellationToken.None)).Succeeded);
         Assert.True((await service.UpdateExpenseTypeAsync(expenseType.Value!.Id, new UpsertAccountingTypeRequest(" Электрик ", " electrician "), actorUserId, CancellationToken.None)).Succeeded);
         Assert.True((await service.UpdateTariffAsync(tariff.Value!.Id, new UpsertTariffRequest(" Вода ", " meter_water ", 12.34555m, new DateOnly(2026, 7, 1), " Комментарий "), actorUserId, CancellationToken.None)).Succeeded);
@@ -357,7 +404,7 @@ public sealed class DictionaryServiceTests
         var group = await service.CreateSupplierGroupAsync(new UpsertSupplierGroupRequest("Коммунальные услуги"), null, CancellationToken.None);
         var supplier = await service.CreateSupplierAsync(new UpsertSupplierRequest("Водоканал", group.Value!.Id, null, null, null, null, null, 0m, null), null, CancellationToken.None);
         var contact = await service.CreateSupplierContactAsync(
-            new UpsertSupplierContactRequest(supplier.Value!.Id, "Петров И.А.", "Директор", "+7 901", "contact@example.com", "Работает", "Основной"),
+            new UpsertSupplierContactRequest(supplier.Value!.Id, "Петров И.А.", "Директор", "+7 (901) 123-45-67", "contact@example.com", "Работает", "Основной"),
             null,
             CancellationToken.None);
         var department = await service.CreateStaffDepartmentAsync(new UpsertStaffDepartmentRequest("Бухгалтерия"), null, CancellationToken.None);
@@ -373,7 +420,7 @@ public sealed class DictionaryServiceTests
 
         Assert.True((await service.UpdateSupplierContactAsync(
             contact.Value!.Id,
-            new UpsertSupplierContactRequest(supplier.Value.Id, " Петров И.А. ", " Директор ", " +7 901 ", " contact@example.com ", " Работает ", " Основной "),
+            new UpsertSupplierContactRequest(supplier.Value.Id, " Петров И.А. ", " Директор ", " +7 (901) 123-45-67 ", " contact@example.com ", " Работает ", " Основной "),
             actorUserId,
             CancellationToken.None)).Succeeded);
         Assert.True((await service.UpdateStaffDepartmentAsync(
@@ -588,7 +635,7 @@ public sealed class DictionaryServiceTests
 
         var garageByNumber = Assert.Single(byNumber);
         Assert.Equal("Иванов Иван", garageByNumber.OwnerName);
-        Assert.Equal("+7 900 111-22-33", garageByNumber.OwnerPhone);
+        Assert.Equal("+7 (900) 111-22-33", garageByNumber.OwnerPhone);
         var garageByOwner = Assert.Single(byOwner);
         Assert.Equal("21", garageByOwner.Number);
         Assert.Null(garageByOwner.OwnerPhone);
@@ -742,11 +789,11 @@ public sealed class DictionaryServiceTests
         await using var database = await TestDatabase.CreateAsync();
         var service = DictionaryServiceTestFactory.Create(database.Context);
         var zedOwner = await service.CreateOwnerAsync(
-            new UpsertOwnerRequest("Zed", "Owner", null, "+7 900 200", null, null),
+            new UpsertOwnerRequest("Zed", "Owner", null, "+7 (900) 200-00-00", null, null),
             null,
             CancellationToken.None);
         var alphaOwner = await service.CreateOwnerAsync(
-            new UpsertOwnerRequest("Alpha", "Owner", null, "+7 900 100", null, null),
+            new UpsertOwnerRequest("Alpha", "Owner", null, "+7 (900) 100-00-00", null, null),
             null,
             CancellationToken.None);
         var debtGarage = await service.CreateGarageAsync(
@@ -893,7 +940,7 @@ public sealed class DictionaryServiceTests
         await using var database = await TestDatabase.CreateAsync();
         var service = DictionaryServiceTestFactory.Create(database.Context);
         var owner = await service.CreateOwnerAsync(
-            new UpsertOwnerRequest("Семенов", "Андрей", "Петрович", "+7 900 100", null, null),
+            new UpsertOwnerRequest("Семенов", "Андрей", "Петрович", "+7 (900) 100-00-00", null, null),
             null,
             CancellationToken.None);
 
@@ -1042,7 +1089,7 @@ public sealed class DictionaryServiceTests
         Assert.Equal("charge_service_not_found", archivedResult.ErrorCode);
         Assert.True(existingSupplierUpdate.Succeeded);
         Assert.Equal(archived.Value.Id, existingSupplierUpdate.Value!.ChargeServiceSettingId);
-        Assert.Equal("+7 900 000-00-00", existingSupplierUpdate.Value.Phone);
+        Assert.Equal("+7 (900) 000-00-00", existingSupplierUpdate.Value.Phone);
     }
 
     [Fact]
@@ -1109,12 +1156,12 @@ public sealed class DictionaryServiceTests
             CancellationToken.None);
 
         var created = await service.CreateSupplierContactAsync(
-            new UpsertSupplierContactRequest(supplier.Value!.Id, " Петров И.А. ", " Директор ", " +7 ", "contact@example.com", "Работает", " Основной "),
+            new UpsertSupplierContactRequest(supplier.Value!.Id, " Петров И.А. ", " Директор ", " +7 (901) 123-45-67 ", "contact@example.com", "Работает", " Основной "),
             actorUserId,
             CancellationToken.None);
         var updated = await service.UpdateSupplierContactAsync(
             created.Value!.Id,
-            new UpsertSupplierContactRequest(supplier.Value.Id, "Петров И.А.", "Менеджер", "+7", "contact@example.com", "Не работает", "Уволен"),
+            new UpsertSupplierContactRequest(supplier.Value.Id, "Петров И.А.", "Менеджер", "+7 (901) 765-43-21", "contact@example.com", "Не работает", "Уволен"),
             actorUserId,
             CancellationToken.None);
 
@@ -1288,8 +1335,8 @@ public sealed class DictionaryServiceTests
         await service.CreateSupplierAsync(new UpsertSupplierRequest("Водоканал", utilityGroup.Value!.Id, "5401", null, "Мария", null, null, 100, null), null, CancellationToken.None);
         var bankSupplier = await service.CreateSupplierAsync(new UpsertSupplierRequest("Альфа-Банк", bankGroup.Value!.Id, "7728", null, "Ольга", null, null, 0, null), null, CancellationToken.None);
         var waterSupplier = Assert.Single(await service.GetSuppliersAsync(utilityGroup.Value.Id, "5401", CancellationToken.None));
-        await service.CreateSupplierContactAsync(new UpsertSupplierContactRequest(waterSupplier.Id, "Яковлев Яков", null, "+7 999", "z@example.test", "Работает", null), null, CancellationToken.None);
-        await service.CreateSupplierContactAsync(new UpsertSupplierContactRequest(bankSupplier.Value!.Id, "Анна Алексеева", null, "+7 111", "a@example.test", "Работает", null), null, CancellationToken.None);
+        await service.CreateSupplierContactAsync(new UpsertSupplierContactRequest(waterSupplier.Id, "Яковлев Яков", null, "+7 (999) 000-00-09", "z@example.test", "Работает", null), null, CancellationToken.None);
+        await service.CreateSupplierContactAsync(new UpsertSupplierContactRequest(bankSupplier.Value!.Id, "Анна Алексеева", null, "+7 (911) 000-00-01", "a@example.test", "Работает", null), null, CancellationToken.None);
 
         var result = await service.GetSuppliersAsync(utilityGroup.Value.Id, "5401", CancellationToken.None);
 
@@ -1304,7 +1351,7 @@ public sealed class DictionaryServiceTests
         Assert.Equal("Альфа-Банк", safeFallback.Items[0].Name);
         Assert.Equal("Альфа-Банк", primaryContact.Items[0].Name);
         Assert.Equal("Анна Алексеева", primaryContact.Items[0].ContactPerson);
-        Assert.Equal("+7 111", primaryContact.Items[0].Phone);
+        Assert.Equal("+7 (911) 000-00-01", primaryContact.Items[0].Phone);
         Assert.Equal("a@example.test", primaryContact.Items[0].Email);
     }
 
