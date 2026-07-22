@@ -523,13 +523,13 @@ describe('App', () => {
     expect(within(serviceDialog).getByLabelText('Перенос долга в просроченный').closest('.contractors-service-secondary-grid')).toContainElement(within(serviceDialog).getByLabelText('Единица измерения'))
     expect(within(serviceDialog).getByLabelText('По счетчику')).toBeChecked()
     expect(within(serviceDialog).getByLabelText('Пороговая тарификация')).toBeChecked()
-    expect(within(serviceDialog).getByLabelText('Цена за единицу 1')).toBeInTheDocument()
+    expect(within(serviceDialog).getByRole('status')).toHaveTextContent('У выбранного тарифа пороги пока не настроены.')
     expect(within(serviceDialog).getByLabelText('Единица измерения')).toHaveValue('')
     expect(within(serviceDialog).getByLabelText('Единица измерения')).toHaveAttribute('readonly')
     expect(within(serviceDialog).getByText('Определяется способом расчёта выбранного тарифа.')).toBeInTheDocument()
     expect(within(serviceDialog).getByLabelText('По счетчику').closest('.contractors-service-flags')).toContainElement(within(serviceDialog).getByLabelText('Пороговая тарификация'))
     await user.click(within(serviceDialog).getByLabelText('Пороговая тарификация'))
-    expect(within(serviceDialog).queryByLabelText('Цена за единицу 1')).not.toBeInTheDocument()
+    expect(within(serviceDialog).queryByRole('status')).not.toBeInTheDocument()
     expect(within(serviceDialog).queryByRole('button', { name: 'Добавить порог' })).not.toBeInTheDocument()
     await user.keyboard('{Escape}')
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Добавить услугу' })).not.toBeInTheDocument())
@@ -3398,6 +3398,68 @@ describe('App', () => {
     expect(within(tariffsPanel).getByRole('combobox', { name: 'Охрана территории: Охрана территории: пороговая тарификация' })).toHaveValue('Нет')
     expect(within(tariffsPanel).queryByRole('combobox', { name: 'Охрана территории: Периодичность: по счетчику' })).not.toBeInTheDocument()
     expect(within(tariffsPanel).queryByRole('combobox', { name: 'Охрана территории: Оплата до: пороговая тарификация' })).not.toBeInTheDocument()
+  })
+
+  it('shows configured thresholds immediately when tiered billing is enabled', async () => {
+    const user = userEvent.setup()
+    const electricityIncomeType = createAccountingType({ id: 'income-electricity-preview', name: 'Электроэнергия', code: 'electricity' })
+    const electricityTariff = createTariff({
+      id: 'tariff-electricity-preview',
+      name: 'Тариф электроэнергии',
+      calculationBase: 'meter_electricity',
+      rate: 2.5,
+      electricityTiers: [
+        { id: 'tier-preview-1', name: 'Льготный порог', upperBound: 100, rate: 2.5, isCustom: false },
+        { id: 'tier-preview-2', name: 'Основной порог', upperBound: 250, rate: 3.75, isCustom: false },
+        { id: 'tier-preview-3', name: 'Сверх порога', upperBound: null, rate: 5, isCustom: false },
+      ],
+    })
+    const serviceSetting = createChargeServiceSetting({
+      id: 'service-electricity-preview',
+      name: 'Электроэнергия гаражей',
+      isRegular: true,
+      periodicityMonths: 1,
+      accrualStartMonth: 1,
+      paymentDueDay: 20,
+      overdueGraceDays: 30,
+      incomeTypeId: electricityIncomeType.id,
+      tariffId: electricityTariff.id,
+      isMetered: true,
+      hasTieredTariff: false,
+      unitName: 'кВт·ч',
+    })
+    const dictionaryClient = createDictionaryClient({
+      getIncomeTypes: async () => [electricityIncomeType],
+      getTariffs: async () => [electricityTariff],
+      getChargeServiceSettings: async () => [serviceSetting],
+    })
+
+    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Тарифы и сборы')
+    const tariffsPanel = await screen.findByRole('region', { name: 'Тарифы и сборы' })
+    await user.click(await within(tariffsPanel).findByRole('button', { name: 'Изменить услугу Электроэнергия гаражей' }))
+    const editDialog = await screen.findByRole('dialog', { name: 'Изменить услугу' })
+    const tieredCheckbox = within(editDialog).getByLabelText('Пороговая тарификация')
+
+    expect(tieredCheckbox).not.toBeChecked()
+    expect(within(editDialog).queryByRole('group', { name: 'Пороги тарификации выбранного тарифа' })).not.toBeInTheDocument()
+
+    await user.click(tieredCheckbox)
+
+    const thresholds = within(editDialog).getByRole('group', { name: 'Пороги тарификации выбранного тарифа' })
+    expect(within(thresholds).getByLabelText('Льготный порог: верхняя граница')).toHaveValue('100.00')
+    expect(within(thresholds).getByLabelText('Льготный порог: цена за единицу')).toHaveValue('2.50')
+    expect(within(thresholds).getByLabelText('Основной порог: верхняя граница')).toHaveValue('250.00')
+    expect(within(thresholds).getByLabelText('Сверх порога: верхняя граница')).toHaveValue('Без границы')
+    expect(within(thresholds).getByLabelText('Сверх порога: цена за единицу')).toHaveValue('5.00')
+    expect(within(thresholds).getAllByRole('textbox')).toHaveLength(6)
+    within(thresholds).getAllByRole('textbox').forEach((input) => expect(input).toHaveAttribute('readonly'))
+
+    await user.click(tieredCheckbox)
+    expect(within(editDialog).queryByRole('group', { name: 'Пороги тарификации выбранного тарифа' })).not.toBeInTheDocument()
   })
 
   it('keeps backend tariff dictionaries above stale saved tariff form state', async () => {

@@ -208,6 +208,22 @@ function parseTariffAmount(value: string) {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : null
 }
 
+function getElectricityTariffTiers(tariff: TariffDto | null) {
+  if (!tariff || tariff.calculationBase !== 'meter_electricity') {
+    return []
+  }
+
+  if ((tariff.electricityTiers?.length ?? 0) > 0) {
+    return tariff.electricityTiers!
+  }
+
+  return [
+    { id: `${tariff.id}-legacy-1`, name: tariff.electricityFirstTierName ?? 'Порог 1', upperBound: tariff.electricityFirstThreshold, rate: tariff.electricityFirstRate ?? tariff.rate, isCustom: false },
+    { id: `${tariff.id}-legacy-2`, name: tariff.electricitySecondTierName ?? 'Порог 2', upperBound: tariff.electricitySecondThreshold, rate: tariff.electricitySecondRate ?? tariff.rate, isCustom: false },
+    { id: `${tariff.id}-legacy-3`, name: tariff.electricityThirdTierName ?? 'Порог 3', upperBound: null, rate: tariff.electricityThirdRate ?? tariff.rate, isCustom: false },
+  ]
+}
+
 function isTariffMoneyAmount(row: ContractorTariffRow) {
   if (row.serviceSettingKind === 'periodicity' || row.serviceSettingKind === 'overdue-days') {
     return false
@@ -262,13 +278,7 @@ function mergeTariffsIntoPrototypeRows(rows: ContractorTariffRow[], tariffs: Tar
     return mergedWithoutElectricity
   }
 
-  const electricityTiers = (electricityTariff.electricityTiers?.length ?? 0) > 0
-    ? electricityTariff.electricityTiers!
-    : [
-        { id: `${electricityTariff.id}-legacy-1`, name: electricityTariff.electricityFirstTierName ?? 'Порог 1', upperBound: electricityTariff.electricityFirstThreshold, rate: electricityTariff.electricityFirstRate ?? electricityTariff.rate, isCustom: false },
-        { id: `${electricityTariff.id}-legacy-2`, name: electricityTariff.electricitySecondTierName ?? 'Порог 2', upperBound: electricityTariff.electricitySecondThreshold, rate: electricityTariff.electricitySecondRate ?? electricityTariff.rate, isCustom: false },
-        { id: `${electricityTariff.id}-legacy-3`, name: electricityTariff.electricityThirdTierName ?? 'Порог 3', upperBound: null, rate: electricityTariff.electricityThirdRate ?? electricityTariff.rate, isCustom: false },
-      ]
+  const electricityTiers = getElectricityTariffTiers(electricityTariff)
   const electricityRows: ContractorTariffRow[] = electricityTiers.map((tier, index) => ({
     id: `electricity-tier-${tier.id}`,
     group: index === 0 ? 'Электроэнергия' : undefined,
@@ -2781,6 +2791,7 @@ export function AddServicePrototypeDialog({
   const [error, setError] = useState<string | null>(null)
   const compatibleTariffs = getCompatibleRegularTariffs(incomeTypeId, incomeTypes, tariffs)
   const selectedTariff = compatibleTariffs.find((tariff) => tariff.id === tariffId) ?? null
+  const selectedTariffTiers = getElectricityTariffTiers(selectedTariff)
   const unitName = selectedTariff ? getTariffCalculationUnitName(selectedTariff.calculationBase) : ''
   const calculationBaseOptions = getTariffCalculationBaseOptions()
   const calculationBaseOption = selectedTariff
@@ -3029,24 +3040,23 @@ export function AddServicePrototypeDialog({
                 </label>
               </div>
               {isTiered ? (
-                <>
-                  <div className="contractors-threshold-grid" aria-label="Пороги тарификации">
-                    <span>Порог 1</span>
-                    <input aria-label="Порог 1" />
-                    <span>x</span>
-                    <span>Цена за ед.</span>
-                    <input aria-label="Цена за единицу 1" />
-                    <span>Порог 2</span>
-                    <input aria-label="Порог 2" />
-                    <span>x</span>
-                    <span>Цена за ед.</span>
-                    <input aria-label="Цена за единицу 2" />
-                  </div>
-                  <button className="link-button create-action-button create-action-button--subtle" type="button">
-                    <FileSpreadsheet size={15} aria-hidden="true" />
-                    <span>Добавить порог</span>
-                  </button>
-                </>
+                <div role="status" aria-live="polite">
+                  {selectedTariffTiers.length > 0 ? (
+                    <div className="contractors-threshold-grid" role="group" aria-label="Пороги тарификации выбранного тарифа">
+                      {selectedTariffTiers.map((tier) => (
+                        <Fragment key={tier.id}>
+                          <span>{tier.name}</span>
+                          <input aria-label={`${tier.name}: верхняя граница`} value={tier.upperBound == null ? 'Без границы' : formatTariffDecimal(tier.upperBound)} readOnly />
+                          <span>кВт·ч</span>
+                          <span>Цена за ед.</span>
+                          <input aria-label={`${tier.name}: цена за единицу`} value={formatTariffDecimal(tier.rate)} readOnly />
+                        </Fragment>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="form-hint">У выбранного тарифа пороги пока не настроены. Сначала добавьте их в строках тарифа.</p>
+                  )}
+                </div>
               ) : null}
             </>
           ) : (
