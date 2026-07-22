@@ -180,6 +180,24 @@ function parsePrototypeAmount(value: string) {
   return Number.isFinite(parsed) && parsed >= 0 ? parsed : null
 }
 
+function calculateFeeCampaignTargetAmount(contributionAmount: number | null, participantCount: number) {
+  if (contributionAmount === null || contributionAmount <= 0 || participantCount <= 0) {
+    return 0
+  }
+
+  const roundedContribution = Math.round((contributionAmount + Number.EPSILON) * 100) / 100
+  return Math.round((roundedContribution * participantCount + Number.EPSILON) * 100) / 100
+}
+
+function formatFeeCampaignParticipantCount(participantCount: number) {
+  const lastTwoDigits = participantCount % 100
+  if (lastTwoDigits >= 11 && lastTwoDigits <= 14) {
+    return `${participantCount} участников`
+  }
+
+  return `${participantCount} ${participantCount % 10 === 1 ? 'участник' : participantCount % 10 >= 2 && participantCount % 10 <= 4 ? 'участника' : 'участников'}`
+}
+
 function parseTariffAmount(value: string) {
   const normalized = value.replace(/[\s\u00a0]+/g, '').replace(',', '.').trim()
   if (!normalized) {
@@ -589,6 +607,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
   const [backendIncomeTypes, setBackendIncomeTypes] = useState<AccountingTypeDto[]>([])
   const [backendChargeServices, setBackendChargeServices] = useState<ChargeServiceSettingDto[]>([])
   const [feeCampaignGarageOptions, setFeeCampaignGarageOptions] = useState<GarageDto[]>([])
+  const [feeCampaignActiveGarageCount, setFeeCampaignActiveGarageCount] = useState(0)
   const feeCampaignGarageOptionsLoadedRef = useRef(false)
   const feeCampaignGarageOptionsRequestRef = useRef<Promise<boolean> | null>(null)
   const [feeCampaigns, setFeeCampaigns] = useState<FeeCampaignDto[]>([])
@@ -797,10 +816,17 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
     }
 
     setFeeCampaignGarageOptionsLoading(true)
-    const request = dictionaryClient
-      .getGarages(auth.accessToken, undefined, dictionaryScreenRequestLimit)
-      .then((loadedGarages) => {
+    const garageCountRequest = dictionaryClient.getGaragesPage
+      ? dictionaryClient.getGaragesPage(auth.accessToken, undefined, 0, 1)
+      : Promise.resolve(null)
+    const request = Promise
+      .all([
+        dictionaryClient.getGarages(auth.accessToken, undefined, dictionaryScreenRequestLimit),
+        garageCountRequest,
+      ])
+      .then(([loadedGarages, garagePage]) => {
         setFeeCampaignGarageOptions(loadedGarages)
+        setFeeCampaignActiveGarageCount(garagePage?.totalCount ?? loadedGarages.length)
         feeCampaignGarageOptionsLoadedRef.current = true
         return true
       })
@@ -2581,6 +2607,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
       ) : null}
       {modal === 'fee' ? (
         <AddFeePrototypeDialog
+          activeGarageCount={feeCampaignActiveGarageCount}
           garageOptions={feeCampaignGarageOptions}
           incomeTypes={backendIncomeTypes.filter((incomeType) => !incomeType.isArchived && incomeType.code === 'other_income')}
           isSaving={feeCampaignSavingId === 'new-fee-campaign'}
@@ -2590,6 +2617,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
       ) : null}
       {feeCampaignEditTarget ? (
         <AddFeePrototypeDialog
+          activeGarageCount={feeCampaignActiveGarageCount}
           garageOptions={feeCampaignGarageOptions}
           incomeTypes={backendIncomeTypes.filter((incomeType) => !incomeType.isArchived && incomeType.code === 'other_income')}
           initialCampaign={feeCampaignEditTarget}
@@ -2890,6 +2918,7 @@ export function AddServicePrototypeDialog({
 }
 
 function AddFeePrototypeDialog({
+  activeGarageCount,
   garageOptions,
   incomeTypes,
   initialCampaign,
@@ -2899,6 +2928,7 @@ function AddFeePrototypeDialog({
   submitLabel = 'Объявить сбор',
   title = 'Добавить сбор',
 }: {
+  activeGarageCount: number
   garageOptions: GarageDto[]
   initialCampaign?: FeeCampaignDto | null
   incomeTypes: AccountingTypeDto[]
@@ -2912,7 +2942,6 @@ function AddFeePrototypeDialog({
   const [incomeTypeId] = useState(incomeTypes[0]?.id ?? '')
   const [goal, setGoal] = useState(initialCampaign?.goal ?? '')
   const [contributionAmount, setContributionAmount] = useState(initialCampaign ? formatTariffDecimal(initialCampaign.contributionAmount) : '')
-  const [targetAmount, setTargetAmount] = useState(initialCampaign ? formatTariffDecimal(initialCampaign.targetAmount) : '')
   const [startsOn, setStartsOn] = useState(initialCampaign?.startsOn ?? getLocalDateInputValue())
   const [endsOn, setEndsOn] = useState(initialCampaign?.endsOn ?? '')
   const [appliesToAllGarages, setAppliesToAllGarages] = useState(initialCampaign?.appliesToAllGarages ?? true)
@@ -2927,6 +2956,9 @@ function AddFeePrototypeDialog({
   const confirmationCancelRef = useFocusOnOpen<HTMLButtonElement>(Boolean(pendingConfirmation))
   useEscapeKey(!pendingConfirmation, onClose)
   useEscapeKey(Boolean(pendingConfirmation), () => setPendingConfirmation(null))
+  const participantCount = appliesToAllGarages ? activeGarageCount : participantGarageIds.length
+  const parsedContributionAmount = parsePrototypeAmount(contributionAmount)
+  const targetAmount = calculateFeeCampaignTargetAmount(parsedContributionAmount, participantCount)
 
   function toggleParticipantGarage(garageId: string, checked: boolean) {
     setParticipantGarageIds((currentIds) => {
@@ -2942,8 +2974,6 @@ function AddFeePrototypeDialog({
     event.preventDefault()
 
     const trimmedName = name.trim()
-    const parsedContributionAmount = parsePrototypeAmount(contributionAmount)
-    const parsedTargetAmount = parsePrototypeAmount(targetAmount)
     const parsedOverdueGraceDays = Number(overdueGraceDays)
 
     if (!trimmedName) {
@@ -2958,11 +2988,6 @@ function AddFeePrototypeDialog({
 
     if (parsedContributionAmount === null || parsedContributionAmount <= 0) {
       setError('Сумма взноса должна быть больше нуля.')
-      return
-    }
-
-    if (parsedTargetAmount === null || parsedTargetAmount <= 0) {
-      setError('Сумма сбора должна быть больше нуля.')
       return
     }
 
@@ -2991,7 +3016,7 @@ function AddFeePrototypeDialog({
       incomeTypeId,
       goal: goal.trim() || null,
       contributionAmount: parsedContributionAmount,
-      targetAmount: parsedTargetAmount,
+      targetAmount,
       startsOn,
       endsOn: endsOn || null,
       appliesToAllGarages,
@@ -3063,9 +3088,12 @@ function AddFeePrototypeDialog({
             </FormField>
             <FormField label="Сумма сбора">
               <div className="contractors-inline-field contractors-fee-money-field">
-                <MoneyTextInput aria-label="Сумма сбора" value={targetAmount} onValueChange={setTargetAmount} />
+                <input aria-label="Сумма сбора" value={formatTariffDecimal(targetAmount)} readOnly />
                 <span>руб.</span>
               </div>
+              <small className="form-hint" role="status" aria-live="polite">
+                Рассчитано автоматически: {formatFeeCampaignParticipantCount(participantCount)} × {formatTariffDecimal(parsedContributionAmount ?? 0)} руб.
+              </small>
             </FormField>
           </div>
           <label className="contractors-switch-row">

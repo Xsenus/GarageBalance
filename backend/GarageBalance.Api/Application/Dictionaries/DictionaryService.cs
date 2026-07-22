@@ -1849,8 +1849,10 @@ public sealed class DictionaryService(
             return DictionaryResult<FeeCampaignDto>.Failure(participants.ErrorCode!, participants.ErrorMessage!);
         }
 
+        var targetAmount = await CalculateFeeCampaignTargetAmountAsync(request, participants.Value!, cancellationToken);
+
         var campaign = new FeeCampaign { Name = name };
-        ApplyFeeCampaign(campaign, request, incomeType.Id);
+        ApplyFeeCampaign(campaign, request, incomeType.Id, targetAmount);
         campaign.IncomeType = incomeType;
         SyncFeeCampaignParticipants(campaign, participants.Value!);
 
@@ -1893,6 +1895,8 @@ public sealed class DictionaryService(
             return DictionaryResult<FeeCampaignDto>.Failure(participants.ErrorCode!, participants.ErrorMessage!);
         }
 
+        var targetAmount = await CalculateFeeCampaignTargetAmountAsync(request, participants.Value!, cancellationToken);
+
         if (!FeeCampaignParticipantsMatch(campaign, request, participants.Value!) &&
             await feeCampaignRepository.HasAccrualsAsync(campaign.Id, cancellationToken))
         {
@@ -1901,13 +1905,13 @@ public sealed class DictionaryService(
                 "Нельзя изменить состав участников сбора после создания начислений. Исторический состав должен оставаться неизменным.");
         }
 
-        if (FeeCampaignMatches(campaign, request, participants.Value!, incomeType.Id))
+        if (FeeCampaignMatches(campaign, request, participants.Value!, incomeType.Id, targetAmount))
         {
             return DictionaryResult<FeeCampaignDto>.Success(ToFeeCampaignDto(campaign));
         }
 
         var oldValues = ToFeeCampaignAuditValues(campaign);
-        ApplyFeeCampaign(campaign, request, incomeType.Id);
+        ApplyFeeCampaign(campaign, request, incomeType.Id, targetAmount);
         campaign.IncomeType = incomeType;
         SyncFeeCampaignParticipants(campaign, participants.Value!);
         campaign.UpdatedAtUtc = DateTimeOffset.UtcNow;
@@ -2407,11 +2411,6 @@ public sealed class DictionaryService(
             return DictionaryResult<FeeCampaignDto>.Failure("fee_campaign_contribution_amount_invalid", "Сумма взноса не может быть отрицательной.");
         }
 
-        if (MoneyMath.RoundMoney(request.TargetAmount) <= 0m)
-        {
-            return DictionaryResult<FeeCampaignDto>.Failure("fee_campaign_target_amount_invalid", "Сумма сбора должна быть больше нуля.");
-        }
-
         if (request.OverdueGraceDays is < 0 or > 366)
         {
             return DictionaryResult<FeeCampaignDto>.Failure("fee_campaign_overdue_days_invalid", "Перенос долга в просроченный должен быть в диапазоне от 0 до 366 дней.");
@@ -2457,13 +2456,25 @@ public sealed class DictionaryService(
         return DictionaryResult<IReadOnlyList<Garage>>.Success(garages);
     }
 
-    private static void ApplyFeeCampaign(FeeCampaign campaign, UpsertFeeCampaignRequest request, Guid incomeTypeId)
+    private async Task<decimal> CalculateFeeCampaignTargetAmountAsync(
+        UpsertFeeCampaignRequest request,
+        IReadOnlyList<Garage> participants,
+        CancellationToken cancellationToken)
+    {
+        var participantCount = request.AppliesToAllGarages
+            ? await garageRepository.CountActiveAsync(cancellationToken)
+            : participants.Count;
+
+        return MoneyMath.RoundMoney(MoneyMath.RoundMoney(request.ContributionAmount) * participantCount);
+    }
+
+    private static void ApplyFeeCampaign(FeeCampaign campaign, UpsertFeeCampaignRequest request, Guid incomeTypeId, decimal targetAmount)
     {
         campaign.Name = request.Name.Trim();
         campaign.IncomeTypeId = incomeTypeId;
         campaign.Goal = NormalizeOptional(request.Goal);
         campaign.ContributionAmount = MoneyMath.RoundMoney(request.ContributionAmount);
-        campaign.TargetAmount = MoneyMath.RoundMoney(request.TargetAmount);
+        campaign.TargetAmount = targetAmount;
         campaign.StartsOn = request.StartsOn;
         campaign.EndsOn = request.EndsOn;
         campaign.AppliesToAllGarages = request.AppliesToAllGarages;
@@ -2489,13 +2500,14 @@ public sealed class DictionaryService(
         FeeCampaign campaign,
         UpsertFeeCampaignRequest request,
         IReadOnlyList<Garage> participants,
-        Guid incomeTypeId)
+        Guid incomeTypeId,
+        decimal targetAmount)
     {
         return StringEquals(campaign.Name, request.Name.Trim()) &&
             campaign.IncomeTypeId == incomeTypeId &&
             StringEquals(campaign.Goal, NormalizeOptional(request.Goal)) &&
             campaign.ContributionAmount == MoneyMath.RoundMoney(request.ContributionAmount) &&
-            campaign.TargetAmount == MoneyMath.RoundMoney(request.TargetAmount) &&
+            campaign.TargetAmount == targetAmount &&
             campaign.StartsOn == request.StartsOn &&
             campaign.EndsOn == request.EndsOn &&
             campaign.OverdueGraceDays == request.OverdueGraceDays &&

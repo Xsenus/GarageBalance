@@ -2675,6 +2675,11 @@ public sealed class DictionaryServiceTests
         var actorUserId = Guid.NewGuid();
         var incomeType = await service.CreateIncomeTypeAsync(new UpsertAccountingTypeRequest("Gate fee", "gate_fee"), actorUserId, CancellationToken.None);
         Assert.True(incomeType.Succeeded);
+        database.Context.Garages.AddRange(
+            new Garage { Number = "1", PeopleCount = 1, FloorCount = 1 },
+            new Garage { Number = "2", PeopleCount = 1, FloorCount = 1 },
+            new Garage { Number = "3", PeopleCount = 1, FloorCount = 1, IsArchived = true });
+        await database.Context.SaveChangesAsync();
 
         var created = await service.CreateFeeCampaignAsync(
             new UpsertFeeCampaignRequest(" Gate campaign ", incomeType.Value!.Id, "Gate replacement", 500m, 33500m, new DateOnly(2026, 5, 4), new DateOnly(2026, 6, 30), true, 30),
@@ -2705,10 +2710,11 @@ public sealed class DictionaryServiceTests
         Assert.Equal("Gate campaign", created.Value.Name);
         Assert.Equal(otherIncome.Id, created.Value.IncomeTypeId);
         Assert.Equal("Прочие доходы", created.Value.IncomeTypeName);
+        Assert.Equal(1000m, created.Value.TargetAmount);
         Assert.Single(activeCampaigns);
         Assert.True(updated.Succeeded);
         Assert.Equal(600m, updated.Value!.ContributionAmount);
-        Assert.Equal(34000m, updated.Value.TargetAmount);
+        Assert.Equal(1200m, updated.Value.TargetAmount);
         Assert.True(noOp.Succeeded);
         Assert.False(emptyReason.Succeeded);
         Assert.Equal("dictionary_archive_reason_required", emptyReason.ErrorCode);
@@ -2732,6 +2738,10 @@ public sealed class DictionaryServiceTests
         var actorUserId = Guid.NewGuid();
         var incomeType = await service.CreateIncomeTypeAsync(new UpsertAccountingTypeRequest("Gate fee", "gate_fee"), actorUserId, CancellationToken.None);
         Assert.True(incomeType.Succeeded);
+        database.Context.Garages.AddRange(
+            new Garage { Number = "1", PeopleCount = 1, FloorCount = 1 },
+            new Garage { Number = "2", PeopleCount = 1, FloorCount = 1 });
+        await database.Context.SaveChangesAsync();
 
         var emptyName = await service.CreateFeeCampaignAsync(
             new UpsertFeeCampaignRequest(" ", incomeType.Value!.Id, null, 500m, 33500m, new DateOnly(2026, 5, 4), null, true, 30),
@@ -2741,8 +2751,8 @@ public sealed class DictionaryServiceTests
             new UpsertFeeCampaignRequest("No income type", Guid.Empty, null, 500m, 33500m, new DateOnly(2026, 5, 4), null, true, 30),
             actorUserId,
             CancellationToken.None);
-        var invalidTarget = await service.CreateFeeCampaignAsync(
-            new UpsertFeeCampaignRequest("Invalid target", incomeType.Value.Id, null, 500m, 0m, new DateOnly(2026, 5, 4), null, true, 30),
+        var calculatedTarget = await service.CreateFeeCampaignAsync(
+            new UpsertFeeCampaignRequest("Calculated target", incomeType.Value.Id, null, 500m, 0m, new DateOnly(2026, 5, 4), null, true, 30),
             actorUserId,
             CancellationToken.None);
         var invalidPeriod = await service.CreateFeeCampaignAsync(
@@ -2764,8 +2774,8 @@ public sealed class DictionaryServiceTests
         Assert.Equal("fee_campaign_name_required", emptyName.ErrorCode);
         Assert.True(automaticIncomeType.Succeeded);
         Assert.Equal(otherIncome.Id, automaticIncomeType.Value!.IncomeTypeId);
-        Assert.False(invalidTarget.Succeeded);
-        Assert.Equal("fee_campaign_target_amount_invalid", invalidTarget.ErrorCode);
+        Assert.True(calculatedTarget.Succeeded, calculatedTarget.ErrorMessage);
+        Assert.Equal(1000m, calculatedTarget.Value!.TargetAmount);
         Assert.False(invalidPeriod.Succeeded);
         Assert.Equal("fee_campaign_period_invalid", invalidPeriod.ErrorCode);
         Assert.True(activeDuplicate.Succeeded);
@@ -2810,12 +2820,17 @@ public sealed class DictionaryServiceTests
         Assert.Equal("fee_campaign_participant_garage_not_found", invalidArchived.ErrorCode);
         Assert.True(created.Succeeded, created.ErrorMessage);
         Assert.False(created.Value.AppliesToAllGarages);
+        Assert.Equal(1000m, created.Value.TargetAmount);
         Assert.Equal([garage1.Id, garage2.Id], created.Value.ParticipantGarageIds);
         Assert.True(updated.Succeeded, updated.ErrorMessage);
-        Assert.Equal([garage2.Id], updated.Value!.ParticipantGarageIds);
+        Assert.Equal(500m, updated.Value!.TargetAmount);
+        Assert.Equal([garage2.Id], updated.Value.ParticipantGarageIds);
         Assert.Equal([garage2.Id], Assert.Single(loaded).ParticipantGarageIds);
         var audit = Assert.Single(database.Context.AuditEvents, item => item.Action == "dictionary.fee_campaign_updated" && item.ActorUserId == actorUserId);
         Assert.Contains("participantGarageIds", audit.MetadataJson, StringComparison.Ordinal);
+        using var auditMetadata = JsonDocument.Parse(audit.MetadataJson!);
+        Assert.Contains("Сумма сбора", auditMetadata.RootElement.GetProperty("fieldName").GetString(), StringComparison.Ordinal);
+        Assert.Contains("500", auditMetadata.RootElement.GetProperty("newValue").GetString(), StringComparison.Ordinal);
     }
 
     [Fact]
@@ -2886,7 +2901,7 @@ public sealed class DictionaryServiceTests
         Assert.Contains("Исторический состав", participantChange.ErrorMessage, StringComparison.Ordinal);
         Assert.True(detailsChange.Succeeded, detailsChange.ErrorMessage);
         Assert.Equal("Уточненная цель", detailsChange.Value!.Goal);
-        Assert.Equal(6000m, detailsChange.Value.TargetAmount);
+        Assert.Equal(500m, detailsChange.Value.TargetAmount);
         Assert.Equal([firstGarage.Id], detailsChange.Value.ParticipantGarageIds);
     }
 

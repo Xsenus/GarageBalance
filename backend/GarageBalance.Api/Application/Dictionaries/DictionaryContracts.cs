@@ -247,7 +247,7 @@ public sealed record UpsertFeeCampaignRequest(
     Guid IncomeTypeId,
     [MaxLength(500)] string? Goal,
     [Range(0, 999999999)] decimal ContributionAmount,
-    [Range(0.01, 999999999)] decimal TargetAmount,
+    decimal TargetAmount,
     DateOnly StartsOn,
     DateOnly? EndsOn,
     bool AppliesToAllGarages,
