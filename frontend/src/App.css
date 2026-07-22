@@ -2054,7 +2054,7 @@ h1 {
 }
 
 .contractors-supplier-lookup-grid {
-  grid-template-columns: minmax(180px, 0.65fr) minmax(180px, 0.65fr) minmax(320px, 1.7fr);
+  grid-template-columns: minmax(150px, 0.6fr) minmax(170px, 0.65fr) minmax(170px, 0.65fr) minmax(300px, 1.6fr);
   gap: 12px;
 }
 

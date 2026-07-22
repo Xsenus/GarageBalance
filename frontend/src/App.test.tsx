@@ -2883,6 +2883,67 @@ describe('App', () => {
     })))
   }, 30000)
 
+  it('edits the supplier starting balance in the contractor card', async () => {
+    const user = userEvent.setup()
+    const group = createGroup({ id: 'group-water', name: 'Коммунальные услуги' })
+    let supplier = createSupplier({
+      id: '22222222-2222-4222-8222-222222222223',
+      name: 'Водоканал',
+      groupId: group.id,
+      groupName: group.name,
+      startingBalance: 100,
+      debt: 750,
+    })
+    const updateSupplier = vi.fn(async (_token: string, id: string, request: UpsertSupplierRequest) => {
+      supplier = createSupplier({
+        ...supplier,
+        id,
+        startingBalance: request.startingBalance,
+        debt: 850,
+      })
+      return supplier
+    })
+    const dictionaryClient = createDictionaryClient({
+      getSupplierGroups: async () => [group],
+      getSuppliers: async () => [supplier],
+      getSupplierContacts: async () => [],
+      updateSupplier,
+    })
+
+    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Контрагенты')
+    const contractorsPanel = await screen.findByRole('region', { name: 'Контрагенты' })
+    await user.click(within(contractorsPanel).getByRole('tab', { name: 'Поставщики' }))
+    const suppliersTable = await within(contractorsPanel).findByRole('table', { name: 'Поставщики' })
+    let supplierRow = within(suppliersTable).getByText('Водоканал').closest('[role="row"]')
+    if (!supplierRow) {
+      throw new Error('Строка поставщика Водоканал не найдена.')
+    }
+    expect(within(supplierRow as HTMLElement).getByText('750.00')).toBeInTheDocument()
+
+    await user.click(within(supplierRow as HTMLElement).getByRole('button', { name: 'Изменить поставщика Водоканал' }))
+    const supplierDialog = await screen.findByRole('dialog', { name: 'Водоканал' })
+    await user.clear(within(supplierDialog).getByLabelText('Стартовый баланс поставщика'))
+    await user.type(within(supplierDialog).getByLabelText('Стартовый баланс поставщика'), '200')
+    await user.click(within(supplierDialog).getByRole('button', { name: 'Сохранить' }))
+    const confirmationDialog = await screen.findByRole('dialog', { name: 'Подтвердить изменения поставщика' })
+    expect(confirmationDialog).toHaveTextContent('Стартовый баланс')
+    expect(confirmationDialog).toHaveTextContent(/100\.00\s*->\s*200\.00/)
+    await user.click(within(confirmationDialog).getByRole('button', { name: 'Сохранить' }))
+
+    await waitFor(() => expect(updateSupplier).toHaveBeenCalledWith('token', supplier.id, expect.objectContaining({ startingBalance: 200 })))
+    supplierRow = within(suppliersTable).getByText('Водоканал').closest('[role="row"]')
+    if (!supplierRow) {
+      throw new Error('Строка поставщика Водоканал не найдена после сохранения.')
+    }
+    await user.click(within(supplierRow as HTMLElement).getByRole('button', { name: 'Изменить поставщика Водоканал' }))
+    const reopenedSupplierDialog = await screen.findByRole('dialog', { name: 'Водоканал' })
+    expect(within(reopenedSupplierDialog).getByLabelText('Стартовый баланс поставщика')).toHaveValue('200.00')
+  })
+
   it('filters garage debtors and sorts visible contractor rows without a supplier debtor toggle', async () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
     const firstOwner = createOwner({ id: 'owner-garage-1', lastName: 'Иванов', firstName: 'Иван' })

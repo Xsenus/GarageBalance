@@ -2818,6 +2818,7 @@ function getSupplierPrototypeChanges(previous: ContractorSupplierRow, next: Cont
     createPrototypeChangeEntry('Наименование', previous.name, next.name),
     createPrototypeChangeEntry('Услуга', previous.service, next.service),
     createPrototypeChangeEntry('ИНН', previous.inn, next.inn),
+    createPrototypeChangeEntry('Стартовый баланс', previous.startingBalance, next.startingBalance),
     createPrototypeChangeEntry('Задолженность', previous.debt, next.debt),
     createPrototypeChangeEntry('Юридический адрес', previous.legalAddress, next.legalAddress),
     createPrototypeChangeEntry('Контакты', formatSupplierContactSummary(previous.contacts), formatSupplierContactSummary(next.contacts)),
@@ -3369,6 +3370,13 @@ function SupplierPrototypeDialog({ accessToken, integrationClient, item, service
                   ) : null}
                 </div>
                 <SuggestionStatus id="supplier-party-suggestions-status" message={partySuggestionStatus} />
+              </FormField>
+              <FormField label="Стартовый баланс">
+                <MoneyTextInput
+                  aria-label="Стартовый баланс поставщика"
+                  value={form.startingBalance}
+                  onValueChange={(startingBalance) => setForm({ ...form, startingBalance })}
+                />
               </FormField>
               <FormField label="Задолженность"><input aria-label="Задолженность поставщика" value={form.debt && form.debt !== 'Нет' ? formatStaffRate(form.debt) : 'Нет'} readOnly /></FormField>
               <DadataAddressField accessToken={accessToken} inputLabel="Юридический адрес поставщика" integrationClient={integrationClient} label="Юр. адрес" listboxLabel="Адреса DaData" suggestionsId="supplier-address-suggestions" value={form.legalAddress} onChange={(legalAddress) => setForm((currentForm) => ({ ...currentForm, legalAddress }))} />
