@@ -2943,6 +2943,61 @@ describe('App', () => {
     expect(getSupplierAccrualsPage).not.toHaveBeenCalled()
   })
 
+  it('keeps the financial report calendar visible and the dialog stable during initial loading', async () => {
+    const user = userEvent.setup()
+    const supplierId = '22222222-2222-4222-8222-222222222225'
+    const supplier = createSupplier({
+      id: supplierId,
+      name: 'Поставщик с долгим отчетом',
+      groupId: '44444444-4444-4444-8444-444444444446',
+      groupName: 'Услуги',
+    })
+    let resolvePeriod!: (period: { monthFrom: string; monthTo: string }) => void
+    const getFinancialReportPeriod = vi.fn(() => new Promise<{ monthFrom: string; monthTo: string }>((resolve) => {
+      resolvePeriod = resolve
+    }))
+
+    render(<App
+      authClient={createAuthClient()}
+      dictionaryClient={createDictionaryClient({
+        getSupplierGroups: async () => [createGroup({ id: supplier.groupId, name: supplier.groupName })],
+        getSuppliers: async () => [supplier],
+        getSupplierContacts: async () => [],
+      })}
+      financeClient={createFinanceClient({ getFinancialReportPeriod })}
+      importClient={createImportClient()}
+      reportClient={createReportClient()}
+      releaseClient={createReleaseClient()}
+      userClient={createUserClient()}
+    />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Контрагенты')
+    const panel = await screen.findByRole('region', { name: 'Контрагенты' })
+    await user.click(within(panel).getByRole('tab', { name: 'Поставщики' }))
+    await user.click(await within(panel).findByRole('button', { name: 'Открыть финансовый отчет поставщика Поставщик с долгим отчетом' }))
+
+    const dialog = await screen.findByRole('dialog', { name: 'Поставщик с долгим отчетом' })
+    expect(dialog).toHaveClass('financial-report-dialog')
+    expect(dialog).toHaveAttribute('aria-busy', 'true')
+    const loadingState = within(dialog).getByRole('status', { name: 'Загружаем финансовый отчет контрагента' })
+    expect(loadingState).toHaveClass('financial-report-loading-skeleton')
+    expect(loadingState.querySelectorAll('.loading-skeleton-row')).toHaveLength(6)
+    expect(within(dialog).queryByRole('table', { name: 'Финансовый отчет поставщика' })).not.toBeInTheDocument()
+    const showButton = within(dialog).getByRole('button', { name: 'Загружаем...' })
+    expect(showButton).toBeDisabled()
+    expect(showButton.querySelector('.financial-report-button__spinner')).not.toBeNull()
+
+    await user.click(within(dialog).getByRole('button', { name: 'Открыть календарь: Начало периода финансового отчета контрагента' }))
+    expect(within(dialog).getByRole('dialog', { name: 'Начало периода финансового отчета контрагента: календарь' })).toBeInTheDocument()
+
+    await act(async () => resolvePeriod({ monthFrom: '2024-03-01', monthTo: '2026-07-01' }))
+    expect(await within(dialog).findByRole('table', { name: 'Финансовый отчет поставщика' })).toBeInTheDocument()
+    expect(dialog).toHaveAttribute('aria-busy', 'false')
+    expect(within(dialog).queryByRole('status', { name: 'Загружаем финансовый отчет контрагента' })).not.toBeInTheDocument()
+  })
+
   it('keeps the full supplier debt after editing the starting balance', async () => {
     const user = userEvent.setup()
     const group = createGroup({ id: 'group-water', name: 'Коммунальные услуги' })

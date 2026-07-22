@@ -38,6 +38,14 @@ describe('responsive layout styles', () => {
     expect(normalizedAppCss).toContain('.detail-dialog-actions {\n  position: sticky;')
   })
 
+  it('reserves financial report geometry while its data is loading', () => {
+    expect(normalizedAppCss).toContain('.financial-report-dialog {\n  min-height: min(560px, calc(100dvh - 48px));')
+    expect(normalizedAppCss).toContain('.financial-report-loading-skeleton {\n  min-height: 314px;')
+    expect(normalizedAppCss).toContain('.financial-report-loading-skeleton .loading-skeleton-row:first-child {\n  min-height: 72px;')
+    expect(normalizedAppCss).toContain('.financial-report-button__spinner {\n  animation: report-export-spin 0.8s linear infinite;')
+    expect(normalizedAppCss).toContain('.report-export-button__spinner,\n  .financial-report-button__spinner {\n    animation: none;')
+  })
+
   it('makes the staff dialog wider and taller while keeping it responsive', () => {
     expect(normalizedAppCss).toContain('.detail-dialog.contractors-dialog--staff {\n  width: min(700px, calc(100vw - 48px));\n  min-height: 400px;')
     expect(normalizedAppCss).toContain('.contractors-dialog--staff .contractors-modal-form {\n  min-height: 300px;\n  align-content: space-between;')

@@ -7116,7 +7116,8 @@ button.operation-row:focus-visible {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .report-export-button__spinner {
+  .report-export-button__spinner,
+  .financial-report-button__spinner {
     animation: none;
   }
 }
@@ -7539,6 +7540,25 @@ button.operation-row:focus-visible {
 
 .garage-balance-dialog {
   width: min(920px, 100%);
+}
+
+.financial-report-dialog {
+  min-height: min(560px, calc(100dvh - 48px));
+}
+
+.financial-report-loading-skeleton {
+  min-height: 314px;
+  margin-bottom: 14px;
+  border: 1px solid #eaecf0;
+  border-radius: 8px;
+}
+
+.financial-report-loading-skeleton .loading-skeleton-row:first-child {
+  min-height: 72px;
+}
+
+.financial-report-button__spinner {
+  animation: report-export-spin 0.8s linear infinite;
 }
 
 .balance-history-filters {

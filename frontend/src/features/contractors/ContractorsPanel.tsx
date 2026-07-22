@@ -1,13 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { CSSProperties, FormEvent, MouseEvent, RefObject } from 'react'
-import { FileText, Gauge, Pencil, RotateCcw, Save, Search, Trash2, UserPlus, UsersRound, X } from 'lucide-react'
+import { FileText, Gauge, LoaderCircle, Pencil, RotateCcw, Save, Search, Trash2, UserPlus, UsersRound, X } from 'lucide-react'
 import type { AuthResponse } from '../../services/authApi'
 import type { AccountingTypeDto, ChargeServiceSettingDto, CreateChargeServiceWithTariffRequest, DictionaryClient, GarageColumnFilters, GarageDto, OwnerDto, StaffDepartmentDto, StaffMemberDto, SupplierContactDto, SupplierDto, SupplierGroupDto, TariffDto, UpsertGarageRequest, UpsertOwnerRequest, UpsertStaffMemberRequest, UpsertSupplierContactRequest, UpsertSupplierRequest } from '../../services/dictionariesApi'
 import type { FinanceClient, GarageBalanceHistoryDto } from '../../services/financeApi'
 import type { FormStateClient } from '../../services/formStatesApi'
 import type { DadataAddressSuggestionDto, DadataPartySuggestionDto, IntegrationClient } from '../../services/integrationsApi'
 import { hasPermission, isAdministrator, permissions } from '../../shared/accessControl'
-import { TableLoadingState } from '../../shared/AsyncState'
+import { LoadingSkeleton, TableLoadingState } from '../../shared/AsyncState'
 import { FormError } from '../../shared/formFeedback'
 import { FormField } from '../../shared/FormField'
 import { MoneyTextInput } from '../../shared/MoneyInput'
@@ -2419,7 +2419,7 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
 
       {garageFinancialReportTarget ? (
         <div className="modal-backdrop" role="presentation" onMouseDown={closeGarageFinancialReport}>
-          <section ref={garageFinancialReportDialogRef} className="detail-dialog garage-balance-dialog" role="dialog" aria-modal="true" aria-labelledby="contractor-garage-report-title" aria-describedby="contractor-garage-report-owner" onMouseDown={(event) => event.stopPropagation()}>
+          <section ref={garageFinancialReportDialogRef} className="detail-dialog garage-balance-dialog financial-report-dialog" role="dialog" aria-modal="true" aria-busy={garageFinancialReportLoading} aria-labelledby="contractor-garage-report-title" aria-describedby="contractor-garage-report-owner" onMouseDown={(event) => event.stopPropagation()}>
             <div className="detail-dialog-header">
               <div>
                 <p className="eyebrow">Финансовый отчет</p>
@@ -2443,12 +2443,14 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
                 <LocalizedDatePicker ariaLabel="Конец периода финансового отчета гаража" mode="month" value={garageFinancialReportFilters.monthTo} onChange={(monthTo) => setGarageFinancialReportFilters((value) => ({ ...value, monthTo }))} required />
               </label>
               <button className="secondary-button" type="submit" disabled={garageFinancialReportLoading}>
-                <Search size={16} />
+                {garageFinancialReportLoading ? <LoaderCircle className="financial-report-button__spinner" size={16} aria-hidden="true" /> : <Search size={16} />}
                 <span>{garageFinancialReportLoading ? 'Загружаем...' : 'Показать'}</span>
               </button>
             </form>
             {garageFinancialReportError ? <FormError>{garageFinancialReportError}</FormError> : null}
-            {garageFinancialReport ? (
+            {garageFinancialReportLoading && !garageFinancialReport ? (
+              <LoadingSkeleton className="financial-report-loading-skeleton" label="Загружаем финансовый отчет гаража" rows={6} columns={5} />
+            ) : garageFinancialReport ? (
               <>
                 <div className="balance-history-summary" aria-label="Итоги финансового отчета гаража">
                   <div>
@@ -2501,7 +2503,7 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
 
       {contractorFinancialReportTarget ? (
         <div className="modal-backdrop" role="presentation" onMouseDown={closeContractorFinancialReport}>
-          <section ref={contractorFinancialReportDialogRef} className="detail-dialog garage-balance-dialog" role="dialog" aria-modal="true" aria-labelledby={contractorFinancialReportDialogTitleId} aria-describedby={contractorFinancialReportDialogDescriptionId} onMouseDown={(event) => event.stopPropagation()}>
+          <section ref={contractorFinancialReportDialogRef} className="detail-dialog garage-balance-dialog financial-report-dialog" role="dialog" aria-modal="true" aria-busy={contractorFinancialReportLoading} aria-labelledby={contractorFinancialReportDialogTitleId} aria-describedby={contractorFinancialReportDialogDescriptionId} onMouseDown={(event) => event.stopPropagation()}>
             <div className="detail-dialog-header">
               <div>
                 <p className="eyebrow">Финансовый отчет</p>
@@ -2525,12 +2527,14 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
                 <LocalizedDatePicker ariaLabel="Конец периода финансового отчета контрагента" mode="month" value={contractorFinancialReportFilters.monthTo} onChange={(monthTo) => setContractorFinancialReportFilters((value) => ({ ...value, monthTo }))} required />
               </label>
               <button className="secondary-button" type="submit" disabled={contractorFinancialReportLoading}>
-                <Search size={16} />
+                {contractorFinancialReportLoading ? <LoaderCircle className="financial-report-button__spinner" size={16} aria-hidden="true" /> : <Search size={16} />}
                 <span>{contractorFinancialReportLoading ? 'Загружаем...' : 'Показать'}</span>
               </button>
             </form>
             {contractorFinancialReportError ? <FormError>{contractorFinancialReportError}</FormError> : null}
-            {contractorFinancialReport ? (
+            {contractorFinancialReportLoading && !contractorFinancialReport ? (
+              <LoadingSkeleton className="financial-report-loading-skeleton" label="Загружаем финансовый отчет контрагента" rows={6} columns={7} />
+            ) : contractorFinancialReport ? (
               <>
                 <div className="balance-history-summary contractor-financial-report__summary" aria-label="Итоги финансового отчета контрагента">
                   {contractorFinancialReportTarget.type === 'supplier' ? (
