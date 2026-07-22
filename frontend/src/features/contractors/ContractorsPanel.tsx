@@ -2988,9 +2988,10 @@ function SupplierContactRestoreConfirmationDialog({
 }
 
 function SuggestionStatus({ id, message }: { id: string; message: string }) {
+  const isAddressSelectionConfirmation = message === 'Адрес выбран из DaData.'
   return (
     <small
-      className="suggestion-status"
+      className={`suggestion-status${isAddressSelectionConfirmation ? ' suggestion-status--visually-hidden' : ''}`}
       id={id}
       role={message ? 'status' : undefined}
       aria-live={message ? 'polite' : undefined}

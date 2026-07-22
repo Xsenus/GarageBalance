@@ -1038,7 +1038,7 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, integ
                     </div>
                   ) : null}
                 </div>
-                {ownerAddressSuggestionStatus ? <small className="suggestion-status" role="status" aria-live="polite">{ownerAddressSuggestionStatus}</small> : null}
+                {ownerAddressSuggestionStatus ? <small className={`suggestion-status${ownerAddressSuggestionStatus === 'Адрес выбран из DaData.' ? ' suggestion-status--visually-hidden' : ''}`} role="status" aria-live="polite">{ownerAddressSuggestionStatus}</small> : null}
               </>
             ), { className: 'owner-address-field' })}
           </div>

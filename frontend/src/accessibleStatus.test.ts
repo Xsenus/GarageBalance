@@ -37,6 +37,12 @@ describe('accessible dynamic messages', () => {
     expect(liveRegionLines.filter(({ line }) => !line.includes('role="status"'))).toEqual([])
   })
 
+  it('keeps successful DaData address announcements available without a visible hint row', () => {
+    expect(normalizedAppCss).toMatch(
+      /\.suggestion-status\.suggestion-status--visually-hidden \{[\s\S]*?position: absolute;[\s\S]*?width: 1px;[\s\S]*?height: 1px;[\s\S]*?clip-path: inset\(50%\);[\s\S]*?white-space: nowrap;[\s\S]*?\}/u,
+    )
+  })
+
   it('keeps shared form errors and validation summaries exposed as alerts', () => {
     expect(financePanelSource).toContain("import { FormError, FormValidationSummary } from '../../shared/formFeedback'")
     expect(formFeedbackSource).toContain('<div className="form-error" role="alert">')
