@@ -121,6 +121,13 @@ describe('responsive layout styles', () => {
     expect(normalizedAppCss).toContain('.payments-prototype-selected-item {\n    max-width: none;\n    flex-basis: 100%;')
   })
 
+  it('keeps the garage worksheet advance column and five period totals readable', () => {
+    expect(normalizedAppCss).toContain('.payments-prototype-table--garage {\n  min-width: 940px;')
+    expect(normalizedAppCss).toContain('.payments-prototype-period-summary {\n  display: grid;\n  grid-template-columns: repeat(5, minmax(112px, 1fr));')
+    expect(normalizedAppCss).toContain('.payments-prototype-period-summary {\n    grid-template-columns: repeat(2, minmax(0, 1fr));')
+    expect(normalizedAppCss).toContain('.payments-prototype-period-summary {\n    grid-template-columns: 1fr;')
+  })
+
   it('keeps payment history actions compact and horizontal', () => {
     expect(normalizedAppCss).toContain('.payments-prototype-card--history {\n  padding: 0;\n  overflow-x: auto;')
     expect(normalizedAppCss).toContain('.payments-prototype-mini-table {\n  width: 100%;\n  min-width: 820px;')

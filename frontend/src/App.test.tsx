@@ -5739,10 +5739,94 @@ describe('App', () => {
     expect(periodSummary).toHaveTextContent('900')
     expect(periodSummary).toHaveTextContent('Начислено')
     expect(periodSummary).toHaveTextContent('5 674')
-    expect(periodSummary).toHaveTextContent('Оплачено')
+    expect(periodSummary).toHaveTextContent('Внесено')
     expect(periodSummary).toHaveTextContent('1 000')
+    expect(periodSummary).toHaveTextContent('Аванс на конец')
+    expect(periodSummary).toHaveTextContent('0.00')
     expect(periodSummary).toHaveTextContent('Долг на конец')
     expect(periodSummary).toHaveTextContent('5 574')
+  })
+
+  it('caps a garage row payment and shows the excess as advance', async () => {
+    const user = userEvent.setup()
+    const garage = createGarage({ id: 'garage-overpayment', number: '78', ownerName: 'Смирнова Анна' })
+    const waterIncomeType = createAccountingType({ id: 'income-water-overpayment', name: 'Водоснабжение', code: 'water' })
+    const createIncome = vi.fn(async (_token: string, request: CreateIncomeOperationRequest) => createFinancialOperation({
+      id: 'income-overpayment',
+      garageId: request.garageId,
+      garageNumber: garage.number,
+      ownerName: garage.ownerName,
+      incomeTypeId: request.incomeTypeId,
+      incomeTypeName: waterIncomeType.name,
+      operationDate: request.operationDate,
+      accountingMonth: request.accountingMonth,
+      amount: request.amount,
+      garageDebtBefore: 1000,
+      garageDebtAfter: 0,
+    }))
+    const getGarageIncomeWorksheet = vi.fn(async () => createGarageIncomeWorksheet({
+      garageId: garage.id,
+      garageNumber: garage.number,
+      ownerName: garage.ownerName,
+      accrualTotal: 1000,
+      incomeTotal: 0,
+      advanceTotal: 0,
+      debtTotal: 1000,
+      closingDebt: 1000,
+      rows: [{
+        accountingMonth: '2026-06-01',
+        incomeTypeId: waterIncomeType.id,
+        incomeTypeName: waterIncomeType.name,
+        meterKind: null,
+        meterValue: null,
+        meterConsumption: null,
+        accrualAmount: 1000,
+        incomeAmount: 0,
+        advanceAmount: 0,
+        debt: 1000,
+      }],
+    }))
+    render(<App
+      authClient={createAuthClient()}
+      dictionaryClient={createDictionaryClient({
+        getGarages: async () => [garage],
+        getIncomeTypes: async () => [waterIncomeType],
+      })}
+      financeClient={createFinanceClient({ getGarageIncomeWorksheet, createIncome })}
+      importClient={createImportClient()}
+      reportClient={createReportClient()}
+      releaseClient={createReleaseClient()}
+      userClient={createUserClient()}
+    />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Платежи')
+    const prototype = within(await screen.findByRole('region', { name: 'Платежи' })).getByRole('region', { name: 'Форма платежей' })
+    await user.type(within(prototype).getByLabelText('Поиск номера гаража или ФИО владельца'), '78')
+    await user.click(await within(prototype).findByRole('option', { name: /Гараж\s*78\s*Смирнова Анна/ }))
+
+    const incomeTable = within(prototype).getByRole('table', { name: 'Поступления гаража 78' })
+    const paymentInput = await within(incomeTable).findByLabelText('Платеж Водоснабжение июн.26')
+    await user.type(paymentInput, '1250')
+    await user.keyboard('{Enter}')
+
+    await waitFor(() => expect(createIncome).toHaveBeenCalledWith('token', expect.objectContaining({
+      garageId: garage.id,
+      incomeTypeId: waterIncomeType.id,
+      accountingMonth: '2026-06-01',
+      amount: 1250,
+    })))
+    const serviceRow = within(incomeTable).getByText('Водоснабжение').closest('tr')
+    expect(serviceRow).not.toBeNull()
+    const cells = serviceRow!.querySelectorAll('td')
+    expect(cells[6]).toHaveTextContent('1 000.00')
+    expect(cells[7]).toHaveTextContent('250.00')
+    expect(cells[8]).toHaveTextContent('0.00')
+    expect(cells[6]).not.toHaveTextContent('1 250.00')
+    const periodSummary = within(prototype).getByLabelText('Итоги периода поступлений')
+    expect(periodSummary).toHaveTextContent(/Внесено1 250\.00/)
+    expect(periodSummary).toHaveTextContent(/Аванс на конец250\.00/)
   })
 
   it('does not duplicate an annual obligation in full payment and hides its future row after payoff', async () => {
@@ -17678,6 +17762,7 @@ function createGarageIncomeWorksheet(overrides: Partial<GarageIncomeWorksheetDto
     openingDebt: 0,
     accrualTotal: 5674,
     incomeTotal: 1000,
+    advanceTotal: 0,
     debtTotal: 4674,
     closingDebt: 4674,
     rows: [

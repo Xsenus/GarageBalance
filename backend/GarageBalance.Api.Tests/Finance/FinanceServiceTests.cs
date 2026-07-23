@@ -5836,8 +5836,79 @@ public sealed class FinanceServiceTests
 
         var membership = Assert.Single(result.Value.Rows, row => row.IncomeTypeId == fixtures.IncomeType.Id);
         Assert.Equal(0m, membership.AccrualAmount);
-        Assert.Equal(500m, membership.IncomeAmount);
+        Assert.Equal(0m, membership.IncomeAmount);
+        Assert.Equal(500m, membership.AdvanceAmount);
         Assert.Equal(0m, membership.Debt);
+        Assert.Equal(500m, result.Value.AdvanceTotal);
+    }
+
+    [Fact]
+    public async Task GetGarageIncomeWorksheetAsync_CapsAppliedPaymentAndCarriesExcessAsAdvance()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        var serviceType = new IncomeType { Name = "Охрана", Code = "security" };
+        database.Context.IncomeTypes.Add(serviceType);
+        await database.Context.SaveChangesAsync();
+        var service = FinanceServiceTestFactory.Create(database.Context);
+
+        Assert.True((await service.CreateAccrualAsync(
+            new CreateAccrualRequest(fixtures.Garage.Id, serviceType.Id, new DateOnly(2026, 1, 1), 100m, "regular", null),
+            null,
+            CancellationToken.None)).Succeeded);
+        Assert.True((await service.CreateAccrualAsync(
+            new CreateAccrualRequest(fixtures.Garage.Id, serviceType.Id, new DateOnly(2026, 2, 1), 100m, "regular", null),
+            null,
+            CancellationToken.None)).Succeeded);
+        Assert.True((await service.CreateIncomeAsync(
+            new CreateIncomeOperationRequest(fixtures.Garage.Id, serviceType.Id, new DateOnly(2026, 2, 10), new DateOnly(2026, 2, 1), 250m, null, null),
+            null,
+            CancellationToken.None)).Succeeded);
+
+        var overpaidWorksheet = await service.GetGarageIncomeWorksheetAsync(
+            fixtures.Garage.Id,
+            new GarageIncomeWorksheetRequest(new DateOnly(2026, 1, 1), new DateOnly(2026, 2, 1)),
+            CancellationToken.None);
+
+        Assert.True(overpaidWorksheet.Succeeded, overpaidWorksheet.ErrorMessage);
+        var january = Assert.Single(overpaidWorksheet.Value!.Rows, row =>
+            row.IncomeTypeId == serviceType.Id && row.AccountingMonth == new DateOnly(2026, 1, 1));
+        var february = Assert.Single(overpaidWorksheet.Value.Rows, row =>
+            row.IncomeTypeId == serviceType.Id && row.AccountingMonth == new DateOnly(2026, 2, 1));
+        Assert.Equal((100m, 0m, 0m), (january.IncomeAmount, january.AdvanceAmount, january.Debt));
+        Assert.Equal((100m, 50m, 0m), (february.IncomeAmount, february.AdvanceAmount, february.Debt));
+        Assert.Equal(50m, overpaidWorksheet.Value.AdvanceTotal);
+        Assert.All(overpaidWorksheet.Value.Rows, row => Assert.True(row.IncomeAmount <= row.PayableAmount));
+
+        Assert.True((await service.CreateAccrualAsync(
+            new CreateAccrualRequest(fixtures.Garage.Id, serviceType.Id, new DateOnly(2026, 3, 1), 40m, "regular", null),
+            null,
+            CancellationToken.None)).Succeeded);
+        var appliedAdvanceWorksheet = await service.GetGarageIncomeWorksheetAsync(
+            fixtures.Garage.Id,
+            new GarageIncomeWorksheetRequest(new DateOnly(2026, 1, 1), new DateOnly(2026, 3, 1)),
+            CancellationToken.None);
+
+        Assert.True(appliedAdvanceWorksheet.Succeeded, appliedAdvanceWorksheet.ErrorMessage);
+        var march = Assert.Single(appliedAdvanceWorksheet.Value!.Rows, row =>
+            row.IncomeTypeId == serviceType.Id && row.AccountingMonth == new DateOnly(2026, 3, 1));
+        var februaryAfterAccrual = Assert.Single(appliedAdvanceWorksheet.Value.Rows, row =>
+            row.IncomeTypeId == serviceType.Id && row.AccountingMonth == new DateOnly(2026, 2, 1));
+        Assert.Equal((40m, 0m), (march.IncomeAmount, march.Debt));
+        Assert.Equal(10m, februaryAfterAccrual.AdvanceAmount);
+        Assert.Equal(10m, appliedAdvanceWorksheet.Value.AdvanceTotal);
+
+        var marchOnlyWorksheet = await service.GetGarageIncomeWorksheetAsync(
+            fixtures.Garage.Id,
+            new GarageIncomeWorksheetRequest(new DateOnly(2026, 3, 1), new DateOnly(2026, 3, 1)),
+            CancellationToken.None);
+
+        Assert.True(marchOnlyWorksheet.Succeeded, marchOnlyWorksheet.ErrorMessage);
+        Assert.Equal(0m, marchOnlyWorksheet.Value!.OpeningDebt);
+        Assert.Equal(0m, marchOnlyWorksheet.Value.ClosingDebt);
+        Assert.Equal(10m, marchOnlyWorksheet.Value.AdvanceTotal);
+        var marchOnly = Assert.Single(marchOnlyWorksheet.Value.Rows, row => row.IncomeTypeId == serviceType.Id);
+        Assert.Equal((40m, 40m, 0m), (marchOnly.PayableAmount, marchOnly.IncomeAmount, marchOnly.Debt));
     }
 
     [Fact]
@@ -5944,9 +6015,11 @@ public sealed class FinanceServiceTests
         Assert.Equal(new DateOnly(2026, 4, 1), paidRows[^1].AccountingMonth);
         Assert.Equal(400m, paidRows[^1].PayableAmount);
         Assert.Equal(400m, paidRows[^1].IncomeAmount);
+        Assert.Equal(100m, paidRows[^1].AdvanceAmount);
         Assert.Equal(0m, paidRows[^1].Debt);
         Assert.Equal(700m, paidWorksheet.Value.AccrualTotal);
         Assert.Equal(800m, paidWorksheet.Value.IncomeTotal);
+        Assert.Equal(100m, paidWorksheet.Value.AdvanceTotal);
         Assert.Equal(0m, paidWorksheet.Value.ClosingDebt);
 
         var canceledPayment = await service.CancelOperationAsync(
@@ -6049,7 +6122,9 @@ public sealed class FinanceServiceTests
         var row = Assert.Single(result.Value.Rows);
         Assert.Equal(electricityType.Id, row.IncomeTypeId);
         Assert.Equal(500m, row.AccrualAmount);
-        Assert.Equal(125m, row.IncomeAmount);
+        Assert.Equal(0m, row.IncomeAmount);
+        Assert.Equal(125m, row.AdvanceAmount);
+        Assert.Equal(225m, result.Value.AdvanceTotal);
         Assert.Equal(meterReading.Id, row.MeterReadingId);
         Assert.Equal(meterReading.Version, row.MeterReadingVersion);
         Assert.Equal(meterReading.ReadingDate, row.MeterReadingDate);

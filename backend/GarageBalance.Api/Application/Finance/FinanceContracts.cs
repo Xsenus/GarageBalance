@@ -404,6 +404,7 @@ public sealed record GarageIncomeWorksheetRowDto(
     decimal AccrualAmount,
     decimal PayableAmount,
     decimal IncomeAmount,
+    decimal AdvanceAmount,
     decimal Debt);
 
 public sealed record GarageIncomeWorksheetDto(
@@ -416,6 +417,7 @@ public sealed record GarageIncomeWorksheetDto(
     decimal UnrepresentedOpeningDebt,
     decimal AccrualTotal,
     decimal IncomeTotal,
+    decimal AdvanceTotal,
     decimal DebtTotal,
     decimal ClosingDebt,
     IReadOnlyList<GarageIncomeWorksheetRowDto> Rows);

@@ -121,6 +121,7 @@ type GarageIncomePrototypeRow = {
   payable: number
   paymentDraft: string
   paid: number
+  advance: number
   debt: number
   meterRequired?: boolean
 }
@@ -130,6 +131,7 @@ type GarageIncomeWorksheetPeriodSummary = {
   unrepresentedOpeningDebt: number
   accrualTotal: number
   incomeTotal: number
+  advanceTotal: number
   closingDebt: number
 }
 
@@ -302,6 +304,7 @@ function createGarageIncomeRowsFromWorksheet(worksheet: GarageIncomeWorksheetDto
       payable: row.payableAmount ?? row.accrualAmount,
       paymentDraft: '',
       paid: row.incomeAmount,
+      advance: row.advanceAmount ?? 0,
       debt: row.debt,
       meterRequired: row.meterKind !== null && row.meterValue === null,
     }
@@ -3502,6 +3505,7 @@ function PaymentsPrototypePanel({
         unrepresentedOpeningDebt: worksheet.unrepresentedOpeningDebt ?? 0,
         accrualTotal: worksheet.accrualTotal,
         incomeTotal: worksheet.incomeTotal,
+        advanceTotal: worksheet.advanceTotal ?? 0,
         closingDebt: worksheet.closingDebt,
       })
     } catch (error) {
@@ -3915,8 +3919,10 @@ function PaymentsPrototypePanel({
       return
     }
 
-    const nextPaid = row.paid + amount
-    const nextDebt = Math.max(row.payable - nextPaid, 0)
+    const appliedAmount = Math.min(amount, row.debt)
+    const nextPaid = Math.min(row.paid + appliedAmount, row.payable)
+    const nextAdvance = row.advance + Math.max(amount - appliedAmount, 0)
+    const nextDebt = Math.max(row.debt - appliedAmount, 0)
     const accountingMonth = row.month.length === 7 ? `${row.month}-01` : row.month
     setSavingPaymentRowId(row.id)
     setPaymentError(null)
@@ -3951,7 +3957,15 @@ function PaymentsPrototypePanel({
       const paymentTime = new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })
       const historyDebtAfter = operation.garageDebtAfter ?? nextDebt
 
-      setGarageRows((currentRows) => currentRows.map((currentRow) => currentRow.id === row.id ? { ...currentRow, paymentDraft: '', paid: nextPaid, debt: nextDebt } : currentRow))
+      setGarageRows((currentRows) => currentRows.map((currentRow) => currentRow.id === row.id ? { ...currentRow, paymentDraft: '', paid: nextPaid, advance: nextAdvance, debt: nextDebt } : currentRow))
+      setGarageWorksheetSummary((currentSummary) => currentSummary
+        ? {
+            ...currentSummary,
+            incomeTotal: currentSummary.incomeTotal + amount,
+            advanceTotal: currentSummary.advanceTotal + Math.max(amount - appliedAmount, 0),
+            closingDebt: Math.max(currentSummary.closingDebt - appliedAmount, 0),
+          }
+        : currentSummary)
       setHistoryRows((currentRows) => [
         { id: operation.id, date: formatDateOnly(operation.operationDate), time: formatOperationTime(operation.createdAtUtc) || paymentTime, amount: operation.amount, purpose: operation.incomeTypeName ?? row.service, debtAfter: historyDebtAfter },
         ...currentRows,
@@ -4197,6 +4211,7 @@ function PaymentsPrototypePanel({
             payable: allocation.amount,
             paymentDraft: '',
             paid: 0,
+            advance: 0,
             debt: allocation.amount,
           },
         ]
@@ -4270,6 +4285,7 @@ function PaymentsPrototypePanel({
           payable: savedAccrual.amount,
           paymentDraft: '',
           paid: 0,
+          advance: 0,
           debt: savedAccrual.amount,
         },
       ]
@@ -4341,6 +4357,7 @@ function PaymentsPrototypePanel({
               payable: accrual.amount,
               paymentDraft: '',
               paid: 0,
+              advance: 0,
               debt: accrual.amount,
             },
           ]
@@ -4548,7 +4565,8 @@ function PaymentsPrototypePanel({
   }, [])
 
   const paymentTotal = garageWorksheetSummary?.accrualTotal ?? garageRows.reduce((sum, row) => sum + row.payable, 0)
-  const paidTotal = garageWorksheetSummary?.incomeTotal ?? garageRows.reduce((sum, row) => sum + row.paid, 0)
+  const paidTotal = garageRows.reduce((sum, row) => sum + row.paid, 0)
+  const advanceTotal = garageWorksheetSummary?.advanceTotal ?? garageRows.reduce((sum, row) => sum + row.advance, 0)
   const debtTotal = garageWorksheetSummary?.closingDebt ?? garageRows.reduce((sum, row) => sum + row.debt, 0)
   const fullPaymentRowsDebt = getRowsForFullPayment('full').reduce((sum, row) => sum + row.debt, 0)
   const fullPaymentPeriodOptions = [
@@ -4890,8 +4908,12 @@ function PaymentsPrototypePanel({
                   <strong>{formatPaymentPrototypeValue(garageWorksheetSummary.accrualTotal)}</strong>
                 </div>
                 <div>
-                  <span>Оплачено</span>
+                  <span>Внесено</span>
                   <strong>{formatPaymentPrototypeValue(garageWorksheetSummary.incomeTotal)}</strong>
+                </div>
+                <div>
+                  <span>Аванс на конец</span>
+                  <strong className={garageWorksheetSummary.advanceTotal > 0 ? 'money-income' : undefined}>{formatPaymentPrototypeValue(garageWorksheetSummary.advanceTotal)}</strong>
                 </div>
                 <div>
                   <span>Долг на конец</span>
@@ -4910,6 +4932,7 @@ function PaymentsPrototypePanel({
                     <th scope="col">К оплате</th>
                     <th scope="col">Платёж</th>
                     <th scope="col">Оплачено</th>
+                    <th scope="col">Аванс</th>
                     <th scope="col">Задолженность</th>
                   </tr>
                 </thead>
@@ -4917,6 +4940,7 @@ function PaymentsPrototypePanel({
                   {groupedGarageRows.map((group) => {
                     const groupPayable = group.rows.reduce((sum, row) => sum + row.payable, 0)
                     const groupPaid = group.rows.reduce((sum, row) => sum + row.paid, 0)
+                    const groupAdvance = group.rows.reduce((sum, row) => sum + row.advance, 0)
                     const groupDebt = group.rows.reduce((sum, row) => sum + row.debt, 0)
                     return (
                       <Fragment key={group.month}>
@@ -4928,6 +4952,7 @@ function PaymentsPrototypePanel({
                           <td>{formatPaymentMoney(groupPayable)}</td>
                           <td />
                           <td>{formatPaymentMoney(groupPaid)}</td>
+                          <td className={groupAdvance > 0 ? 'money-income' : undefined}>{formatPaymentMoney(groupAdvance)}</td>
                           <td className={groupDebt > 0 ? 'money-expense' : undefined}>{formatPaymentMoney(groupDebt)}</td>
                         </tr>
                         {group.rows.map((row) => (
@@ -4994,6 +5019,7 @@ function PaymentsPrototypePanel({
                               />
                             </td>
                             <td>{formatPaymentMoney(row.paid)}</td>
+                            <td className={row.advance > 0 ? 'money-income' : undefined}>{formatPaymentMoney(row.advance)}</td>
                             <td className={row.debt > 0 ? 'money-expense' : undefined}>{formatPaymentMoney(row.debt)}</td>
                           </tr>
                         ))}
@@ -5002,7 +5028,7 @@ function PaymentsPrototypePanel({
                   })}
                   {groupedGarageRows.length === 0 ? (
                     <tr>
-                      <td colSpan={8}>{garageWorksheetLoadingId === selectedGarage.id ? <TableLoadingState label="Загружаем начисления и поступления" /> : 'Начислений и поступлений за выбранный период пока нет.'}</td>
+                      <td colSpan={9}>{garageWorksheetLoadingId === selectedGarage.id ? <TableLoadingState label="Загружаем начисления и поступления" /> : 'Начислений и поступлений за выбранный период пока нет.'}</td>
                     </tr>
                   ) : null}
                   <tr className="payments-prototype-total-row">
@@ -5013,6 +5039,7 @@ function PaymentsPrototypePanel({
                     <td>{formatPaymentMoney(paymentTotal)}</td>
                     <td />
                     <td>{formatPaymentMoney(paidTotal)}</td>
+                    <td className={advanceTotal > 0 ? 'money-income' : undefined}>{formatPaymentMoney(advanceTotal)}</td>
                     <td className={debtTotal > 0 ? 'money-expense' : undefined}>{formatPaymentMoney(debtTotal)}</td>
                   </tr>
                 </tbody>

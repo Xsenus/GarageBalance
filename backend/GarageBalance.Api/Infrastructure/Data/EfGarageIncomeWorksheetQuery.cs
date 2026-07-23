@@ -14,7 +14,8 @@ public sealed class EfGarageIncomeWorksheetQuery(GarageBalanceDbContext dbContex
     private const int MeterReadingCategory = 5;
     private const int MeterIncomeTypeCategory = 6;
     private const int AnnualAccrualCategory = 7;
-    private const int AnnualAllocationCategory = 8;
+    private const int AllocationCategory = 8;
+    private const int AdvanceCategory = 9;
 
     public async Task<GarageIncomeWorksheetData?> GetAsync(
         Guid garageId,
@@ -39,6 +40,7 @@ public sealed class EfGarageIncomeWorksheetQuery(GarageBalanceDbContext dbContex
                 AccrualId = (Guid?)null,
                 AccountingYear = (int?)null,
                 Amount = garage.StartingBalance,
+                PaymentAccountingMonth = (DateOnly?)null,
                 MeterReadingId = (Guid?)null,
                 MeterReadingVersion = (Guid?)null,
                 MeterKind = (string?)null,
@@ -65,6 +67,7 @@ public sealed class EfGarageIncomeWorksheetQuery(GarageBalanceDbContext dbContex
                 AccrualId = (Guid?)null,
                 AccountingYear = (int?)null,
                 Amount = group.Sum(accrual => accrual.Amount),
+                PaymentAccountingMonth = (DateOnly?)null,
                 MeterReadingId = (Guid?)null,
                 MeterReadingVersion = (Guid?)null,
                 MeterKind = (string?)null,
@@ -95,6 +98,7 @@ public sealed class EfGarageIncomeWorksheetQuery(GarageBalanceDbContext dbContex
                 AccrualId = (Guid?)null,
                 AccountingYear = (int?)null,
                 Amount = group.Sum(operation => operation.Amount),
+                PaymentAccountingMonth = (DateOnly?)null,
                 MeterReadingId = (Guid?)null,
                 MeterReadingVersion = (Guid?)null,
                 MeterKind = (string?)null,
@@ -131,6 +135,7 @@ public sealed class EfGarageIncomeWorksheetQuery(GarageBalanceDbContext dbContex
                 AccrualId = (Guid?)null,
                 AccountingYear = (int?)null,
                 Amount = group.Sum(accrual => accrual.Amount),
+                PaymentAccountingMonth = (DateOnly?)null,
                 MeterReadingId = (Guid?)null,
                 MeterReadingVersion = (Guid?)null,
                 MeterKind = (string?)null,
@@ -170,6 +175,7 @@ public sealed class EfGarageIncomeWorksheetQuery(GarageBalanceDbContext dbContex
                 AccrualId = (Guid?)null,
                 AccountingYear = (int?)null,
                 Amount = group.Sum(operation => operation.Amount),
+                PaymentAccountingMonth = (DateOnly?)null,
                 MeterReadingId = (Guid?)null,
                 MeterReadingVersion = (Guid?)null,
                 MeterKind = (string?)null,
@@ -199,6 +205,7 @@ public sealed class EfGarageIncomeWorksheetQuery(GarageBalanceDbContext dbContex
                 AccrualId = (Guid?)null,
                 AccountingYear = (int?)null,
                 Amount = 0m,
+                PaymentAccountingMonth = (DateOnly?)null,
                 MeterReadingId = (Guid?)reading.Id,
                 MeterReadingVersion = (Guid?)reading.Version,
                 MeterKind = (string?)reading.MeterKind,
@@ -226,6 +233,7 @@ public sealed class EfGarageIncomeWorksheetQuery(GarageBalanceDbContext dbContex
                 AccrualId = (Guid?)null,
                 AccountingYear = (int?)null,
                 Amount = 0m,
+                PaymentAccountingMonth = (DateOnly?)null,
                 MeterReadingId = (Guid?)null,
                 MeterReadingVersion = (Guid?)null,
                 MeterKind = (string?)null,
@@ -258,6 +266,7 @@ public sealed class EfGarageIncomeWorksheetQuery(GarageBalanceDbContext dbContex
                 AccrualId = (Guid?)accrual.Id,
                 AccountingYear = accrual.AccountingYear,
                 Amount = accrual.Amount,
+                PaymentAccountingMonth = (DateOnly?)null,
                 MeterReadingId = (Guid?)null,
                 MeterReadingVersion = (Guid?)null,
                 MeterKind = (string?)null,
@@ -266,34 +275,86 @@ public sealed class EfGarageIncomeWorksheetQuery(GarageBalanceDbContext dbContex
                 Consumption = (decimal?)null,
                 UpdatedAtUtc = (DateTimeOffset?)null
             });
-        var annualAllocationQuery = dbContext.AccrualPaymentAllocations.AsNoTracking()
+        var allocationQuery = dbContext.AccrualPaymentAllocations.AsNoTracking()
             .Where(allocation =>
                 allocation.IsActive &&
                 !allocation.Accrual.IsCanceled &&
                 allocation.Accrual.GarageId == garageId &&
-                allocation.Accrual.AccountingYear >= monthFrom.Year &&
-                allocation.Accrual.AccountingYear <= monthTo.Year &&
                 !allocation.FinancialOperation.IsCanceled &&
                 allocation.FinancialOperation.OperationKind == FinancialOperationKinds.Income &&
                 allocation.FinancialOperation.AccountingMonth <= monthTo &&
-                (allocation.Accrual.IncomeType.Code == "membership" ||
-                 allocation.Accrual.IncomeType.Code == "target" ||
-                 allocation.Accrual.IncomeType.Code == "outdoor_lighting"))
+                (allocation.Accrual.AccountingMonth >= monthFrom ||
+                 allocation.FinancialOperation.AccountingMonth >= monthFrom ||
+                 (allocation.Accrual.AccountingYear >= monthFrom.Year &&
+                  allocation.Accrual.AccountingYear <= monthTo.Year &&
+                  (allocation.Accrual.IncomeType.Code == "membership" ||
+                   allocation.Accrual.IncomeType.Code == "target" ||
+                   allocation.Accrual.IncomeType.Code == "outdoor_lighting"))))
             .Select(allocation => new
             {
-                Category = AnnualAllocationCategory,
+                Category = AllocationCategory,
                 GarageId = (Guid?)null,
                 GarageNumber = (string?)null,
                 OwnerLastName = (string?)null,
                 OwnerFirstName = (string?)null,
                 OwnerMiddleName = (string?)null,
-                AccountingMonth = (DateOnly?)allocation.FinancialOperation.AccountingMonth,
-                IncomeTypeId = (Guid?)null,
+                AccountingMonth = (DateOnly?)allocation.Accrual.AccountingMonth,
+                IncomeTypeId = (Guid?)allocation.Accrual.IncomeTypeId,
                 IncomeTypeName = (string?)null,
-                IncomeTypeCode = (string?)null,
+                IncomeTypeCode = allocation.Accrual.IncomeType.Code,
                 AccrualId = (Guid?)allocation.AccrualId,
                 AccountingYear = allocation.Accrual.AccountingYear,
                 Amount = allocation.Amount,
+                PaymentAccountingMonth = (DateOnly?)allocation.FinancialOperation.AccountingMonth,
+                MeterReadingId = (Guid?)null,
+                MeterReadingVersion = (Guid?)null,
+                MeterKind = (string?)null,
+                ReadingDate = (DateOnly?)null,
+                CurrentValue = (decimal?)null,
+                Consumption = (decimal?)null,
+                UpdatedAtUtc = (DateTimeOffset?)null
+            });
+        var advanceQuery = dbContext.IncomeTypes.AsNoTracking()
+            .Where(incomeType => dbContext.FinancialOperations.Any(operation =>
+                !operation.IsCanceled &&
+                operation.OperationKind == FinancialOperationKinds.Income &&
+                operation.GarageId == garageId &&
+                operation.IncomeTypeId == incomeType.Id &&
+                operation.AccountingMonth <= monthTo))
+            .Select(incomeType => new
+            {
+                Category = AdvanceCategory,
+                GarageId = (Guid?)null,
+                GarageNumber = (string?)null,
+                OwnerLastName = (string?)null,
+                OwnerFirstName = (string?)null,
+                OwnerMiddleName = (string?)null,
+                AccountingMonth = (DateOnly?)null,
+                IncomeTypeId = (Guid?)incomeType.Id,
+                IncomeTypeName = (string?)null,
+                IncomeTypeCode = (string?)null,
+                AccrualId = (Guid?)null,
+                AccountingYear = (int?)null,
+                Amount =
+                    (dbContext.FinancialOperations
+                        .Where(operation =>
+                            !operation.IsCanceled &&
+                            operation.OperationKind == FinancialOperationKinds.Income &&
+                            operation.GarageId == garageId &&
+                            operation.IncomeTypeId == incomeType.Id &&
+                            operation.AccountingMonth <= monthTo)
+                        .Sum(operation => (decimal?)operation.Amount) ?? 0m) -
+                    (dbContext.AccrualPaymentAllocations
+                        .Where(allocation =>
+                            allocation.IsActive &&
+                            !allocation.Accrual.IsCanceled &&
+                            !allocation.FinancialOperation.IsCanceled &&
+                            allocation.FinancialOperation.OperationKind == FinancialOperationKinds.Income &&
+                            allocation.FinancialOperation.GarageId == garageId &&
+                            allocation.FinancialOperation.IncomeTypeId == incomeType.Id &&
+                            allocation.FinancialOperation.AccountingMonth <= monthTo)
+                        .Sum(allocation => (decimal?)allocation.Amount) ?? 0m),
+                PaymentAccountingMonth = (DateOnly?)null,
                 MeterReadingId = (Guid?)null,
                 MeterReadingVersion = (Guid?)null,
                 MeterKind = (string?)null,
@@ -311,7 +372,8 @@ public sealed class EfGarageIncomeWorksheetQuery(GarageBalanceDbContext dbContex
             .Concat(meterReadingQuery)
             .Concat(meterIncomeTypeQuery)
             .Concat(annualAccrualQuery)
-            .Concat(annualAllocationQuery)
+            .Concat(allocationQuery)
+            .Concat(advanceQuery)
             .ToListAsync(cancellationToken);
         var garage = rows.SingleOrDefault(row => row.Category == GarageCategory);
         if (garage is null)
@@ -372,10 +434,17 @@ public sealed class EfGarageIncomeWorksheetQuery(GarageBalanceDbContext dbContex
                     row.IncomeTypeCode!,
                     row.Amount))
                 .ToList(),
-            rows.Where(row => row.Category == AnnualAllocationCategory)
-                .Select(row => new GarageIncomeWorksheetAnnualAllocationData(
+            rows.Where(row => row.Category == AllocationCategory)
+                .Select(row => new GarageIncomeWorksheetAllocationData(
                     row.AccrualId!.Value,
                     row.AccountingMonth!.Value,
+                    row.IncomeTypeId!.Value,
+                    row.PaymentAccountingMonth!.Value,
+                    row.Amount))
+                .ToList(),
+            rows.Where(row => row.Category == AdvanceCategory)
+                .Select(row => new GarageIncomeWorksheetAdvanceData(
+                    row.IncomeTypeId!.Value,
                     row.Amount))
                 .ToList());
     }

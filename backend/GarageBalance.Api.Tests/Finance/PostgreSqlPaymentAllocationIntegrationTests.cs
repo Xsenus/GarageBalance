@@ -11,6 +11,45 @@ namespace GarageBalance.Api.Tests.Finance;
 public sealed class PostgreSqlPaymentAllocationIntegrationTests
 {
     [PostgreSqlFact]
+    public async Task IncomeWorksheet_CapsEveryAccrualAndShowsUnallocatedRemainderAsAdvance()
+    {
+        await using var database = await PostgreSqlTestDatabase.CreateAsync();
+        var ledger = await SeedLedgerAsync(database, "PG-ADVANCE", [60m, 70m]);
+        await using var context = database.CreateContext();
+        var service = FinanceServiceTestFactory.Create(context);
+
+        var payment = await service.CreateIncomeAsync(
+            new CreateIncomeOperationRequest(
+                ledger.GarageId,
+                ledger.IncomeTypeId,
+                new DateOnly(2026, 3, 10),
+                new DateOnly(2026, 3, 1),
+                150m,
+                "PG-ADVANCE-1",
+                null),
+            null,
+            CancellationToken.None);
+        Assert.True(payment.Succeeded, payment.ErrorMessage);
+
+        var worksheet = await service.GetGarageIncomeWorksheetAsync(
+            ledger.GarageId,
+            new GarageIncomeWorksheetRequest(new DateOnly(2026, 1, 1), new DateOnly(2026, 3, 1)),
+            CancellationToken.None);
+
+        Assert.True(worksheet.Succeeded, worksheet.ErrorMessage);
+        var serviceRows = worksheet.Value!.Rows
+            .Where(row => row.IncomeTypeId == ledger.IncomeTypeId)
+            .OrderBy(row => row.AccountingMonth)
+            .ToArray();
+        Assert.Equal(3, serviceRows.Length);
+        Assert.Equal((60m, 0m), (serviceRows[0].IncomeAmount, serviceRows[0].AdvanceAmount));
+        Assert.Equal((70m, 0m), (serviceRows[1].IncomeAmount, serviceRows[1].AdvanceAmount));
+        Assert.Equal((0m, 20m), (serviceRows[2].IncomeAmount, serviceRows[2].AdvanceAmount));
+        Assert.Equal(20m, worksheet.Value.AdvanceTotal);
+        Assert.All(serviceRows, row => Assert.True(row.IncomeAmount <= row.PayableAmount));
+    }
+
+    [PostgreSqlFact]
     public async Task PaymentAllocation_UsesFifo_SerializesConcurrentPayments_AndEnforcesDatabaseConstraints()
     {
         await using var database = await PostgreSqlTestDatabase.CreateAsync();

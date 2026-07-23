@@ -343,6 +343,7 @@ public sealed class FinanceControllerTests
             250m,
             1000m,
             400m,
+            0m,
             600m,
             850m,
             []);

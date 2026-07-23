@@ -416,10 +416,14 @@ public sealed class FinanceService(
             return FinanceResult<GarageIncomeWorksheetDto>.Failure("garage_not_found", "Гараж для формы поступлений не найден.");
         }
 
-        var openingDebt = MoneyMath.RoundMoney(Math.Max(
-            worksheetData.StartingBalance + worksheetData.PreviousAccrualTotal - worksheetData.PreviousIncomeTotal,
-            0m));
-        var annualAllocations = worksheetData.AnnualAllocations
+        var openingBalance = MoneyMath.RoundMoney(
+            worksheetData.StartingBalance + worksheetData.PreviousAccrualTotal - worksheetData.PreviousIncomeTotal);
+        var openingDebt = MoneyMath.RoundMoney(Math.Max(openingBalance, 0m));
+        var annualAccrualIds = worksheetData.AnnualAccruals
+            .Select(accrual => accrual.AccrualId)
+            .ToHashSet();
+        var annualAllocations = worksheetData.Allocations
+            .Where(allocation => annualAccrualIds.Contains(allocation.AccrualId))
             .GroupBy(allocation => allocation.AccrualId)
             .ToDictionary(group => group.Key, group => group.ToList());
         var representedOpeningDebt = MoneyMath.RoundMoney(worksheetData.AnnualAccruals
@@ -428,7 +432,7 @@ public sealed class FinanceService(
             {
                 var allocatedBeforePeriod = annualAllocations
                     .GetValueOrDefault(accrual.AccrualId)?
-                    .Where(allocation => allocation.AccountingMonth < monthFrom)
+                    .Where(allocation => allocation.PaymentAccountingMonth < monthFrom)
                     .Sum(allocation => allocation.Amount) ?? 0m;
                 return Math.Max(accrual.Amount - allocatedBeforePeriod, 0m);
             }));
@@ -443,7 +447,24 @@ public sealed class FinanceService(
                     .First());
 
         var accrualLookup = worksheetData.AccrualBuckets.ToDictionary(bucket => (bucket.AccountingMonth, bucket.IncomeTypeId));
-        var incomeLookup = worksheetData.IncomeBuckets.ToDictionary(bucket => (bucket.AccountingMonth, bucket.IncomeTypeId));
+        var appliedIncomeLookup = worksheetData.Allocations
+            .Where(allocation =>
+                !annualAccrualIds.Contains(allocation.AccrualId) &&
+                allocation.AccrualAccountingMonth >= monthFrom &&
+                allocation.AccrualAccountingMonth <= monthTo)
+            .GroupBy(allocation => (allocation.AccrualAccountingMonth, allocation.IncomeTypeId))
+            .ToDictionary(group => group.Key, group => MoneyMath.RoundMoney(group.Sum(allocation => allocation.Amount)));
+        var appliedPaymentLookup = worksheetData.Allocations
+            .Where(allocation =>
+                allocation.PaymentAccountingMonth >= monthFrom &&
+                allocation.PaymentAccountingMonth <= monthTo)
+            .GroupBy(allocation => (allocation.PaymentAccountingMonth, allocation.IncomeTypeId))
+            .ToDictionary(group => group.Key, group => MoneyMath.RoundMoney(group.Sum(allocation => allocation.Amount)));
+        var advanceLookup = worksheetData.IncomeBuckets.ToDictionary(
+            bucket => (bucket.AccountingMonth, bucket.IncomeTypeId),
+            bucket => MoneyMath.RoundMoney(Math.Max(
+                bucket.Amount - appliedPaymentLookup.GetValueOrDefault((bucket.AccountingMonth, bucket.IncomeTypeId)),
+                0m)));
         var annualObligationKeys = worksheetData.AnnualAccruals
             .Select(accrual => (accrual.AccountingYear, accrual.IncomeTypeId))
             .ToHashSet();
@@ -468,7 +489,8 @@ public sealed class FinanceService(
         var rows = keys.Select(key =>
         {
             var accrualAmount = MoneyMath.RoundMoney(accrualLookup.GetValueOrDefault((key.AccountingMonth, key.IncomeTypeId))?.Amount ?? 0m);
-            var incomeAmount = MoneyMath.RoundMoney(incomeLookup.GetValueOrDefault((key.AccountingMonth, key.IncomeTypeId))?.Amount ?? 0m);
+            var incomeAmount = appliedIncomeLookup.GetValueOrDefault((key.AccountingMonth, key.IncomeTypeId));
+            var advanceAmount = advanceLookup.GetValueOrDefault((key.AccountingMonth, key.IncomeTypeId));
             var debt = MoneyMath.RoundMoney(Math.Max(accrualAmount - incomeAmount, 0m));
             var meterKind = InferMeterKind(key.IncomeTypeName, key.IncomeTypeCode);
             meterReadingByMonthKind.TryGetValue((key.AccountingMonth, meterKind ?? string.Empty), out var reading);
@@ -486,6 +508,7 @@ public sealed class FinanceService(
                 accrualAmount,
                 accrualAmount,
                 incomeAmount,
+                advanceAmount,
                 debt);
         }).ToList();
 
@@ -504,7 +527,7 @@ public sealed class FinanceService(
             for (var month = displayFrom; month <= displayTo; month = month.AddMonths(1))
             {
                 var allocatedBeforeMonth = MoneyMath.RoundMoney(allocations
-                    .Where(allocation => allocation.AccountingMonth < month)
+                    .Where(allocation => allocation.PaymentAccountingMonth < month)
                     .Sum(allocation => allocation.Amount));
                 if (AnnualAccrualPolicy.IsFullyPaid(annualAccrual.Amount, allocatedBeforeMonth))
                 {
@@ -512,7 +535,7 @@ public sealed class FinanceService(
                 }
 
                 var allocatedInMonth = MoneyMath.RoundMoney(allocations
-                    .Where(allocation => allocation.AccountingMonth == month)
+                    .Where(allocation => allocation.PaymentAccountingMonth == month)
                     .Sum(allocation => allocation.Amount));
                 var allocatedThroughMonth = MoneyMath.RoundMoney(allocatedBeforeMonth + allocatedInMonth);
                 rows.Add(new GarageIncomeWorksheetRowDto(
@@ -529,6 +552,7 @@ public sealed class FinanceService(
                     annualAccrual.AccountingMonth == month ? MoneyMath.RoundMoney(annualAccrual.Amount) : 0m,
                     MoneyMath.RoundMoney(Math.Max(annualAccrual.Amount - allocatedBeforeMonth, 0m)),
                     allocatedInMonth,
+                    advanceLookup.GetValueOrDefault((month, annualAccrual.IncomeTypeId)),
                     MoneyMath.RoundMoney(Math.Max(annualAccrual.Amount - allocatedThroughMonth, 0m))));
             }
         }
@@ -540,7 +564,9 @@ public sealed class FinanceService(
 
         var accrualTotal = MoneyMath.RoundMoney(worksheetData.AccrualBuckets.Sum(bucket => bucket.Amount));
         var incomeTotal = MoneyMath.RoundMoney(worksheetData.IncomeBuckets.Sum(bucket => bucket.Amount));
-        var closingDebt = MoneyMath.RoundMoney(Math.Max(openingDebt + accrualTotal - incomeTotal, 0m));
+        var closingBalance = MoneyMath.RoundMoney(openingBalance + accrualTotal - incomeTotal);
+        var advanceTotal = MoneyMath.RoundMoney(worksheetData.Advances.Sum(advance => Math.Max(advance.Amount, 0m)));
+        var closingDebt = MoneyMath.RoundMoney(Math.Max(closingBalance, 0m));
         var debtTotal = closingDebt;
         return FinanceResult<GarageIncomeWorksheetDto>.Success(new GarageIncomeWorksheetDto(
             worksheetData.GarageId,
@@ -552,6 +578,7 @@ public sealed class FinanceService(
             unrepresentedOpeningDebt,
             accrualTotal,
             incomeTotal,
+            advanceTotal,
             debtTotal,
             closingDebt,
             rows));

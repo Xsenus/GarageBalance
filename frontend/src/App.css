@@ -3719,7 +3719,7 @@ h1 {
 }
 
 .payments-prototype-table--garage {
-  min-width: 820px;
+  min-width: 940px;
 }
 
 .payments-prototype-table th,
@@ -3802,7 +3802,7 @@ h1 {
 
 .payments-prototype-period-summary {
   display: grid;
-  grid-template-columns: repeat(4, minmax(120px, 1fr));
+  grid-template-columns: repeat(5, minmax(112px, 1fr));
   gap: 1px;
   border-bottom: 1px solid #e4e7ec;
   background: #e4e7ec;

@@ -247,6 +247,7 @@ export type GarageIncomeWorksheetRowDto = {
   accrualAmount: number
   payableAmount?: number
   incomeAmount: number
+  advanceAmount?: number
   debt: number
 }
 
@@ -260,6 +261,7 @@ export type GarageIncomeWorksheetDto = {
   unrepresentedOpeningDebt?: number
   accrualTotal: number
   incomeTotal: number
+  advanceTotal?: number
   debtTotal: number
   closingDebt: number
   rows: GarageIncomeWorksheetRowDto[]
