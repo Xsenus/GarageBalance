@@ -117,6 +117,65 @@ public sealed class FundService(
         return FundResult<FundDto>.Success(ToDto(fund, availableToDistribute, linkedServices));
     }
 
+    public async Task<FundResult<bool>> DeleteFundAsync(
+        Guid fundId,
+        DeleteFundRequest request,
+        Guid? actorUserId,
+        CancellationToken cancellationToken)
+    {
+        var reason = request.Reason?.Trim();
+        if (string.IsNullOrEmpty(reason))
+        {
+            return FundResult<bool>.Failure(
+                "fund_delete_reason_required",
+                "Укажите причину удаления фонда.");
+        }
+
+        if (reason.Length > 1000)
+        {
+            return FundResult<bool>.Failure(
+                "fund_delete_reason_too_long",
+                "Причина удаления фонда не должна превышать 1000 символов.");
+        }
+
+        await using var allocationLock = await repository.AcquireAllocationLockAsync(cancellationToken);
+        var fund = await repository.FindFundForUpdateAsync(fundId, cancellationToken);
+        if (fund is null)
+        {
+            return FundResult<bool>.Failure("fund_not_found", "Фонд не найден.");
+        }
+
+        var linkedServices = await repository.GetLinkedServicesAsync([fund.Id], cancellationToken);
+        if (linkedServices.Count > 0)
+        {
+            return FundResult<bool>.Failure(
+                "fund_has_linked_services",
+                $"Сначала переназначьте услуги фонда: {string.Join(", ", linkedServices.Select(service => service.ServiceName))}.");
+        }
+
+        if (fund.Balance != 0m)
+        {
+            return FundResult<bool>.Failure(
+                "fund_balance_not_zero",
+                "Фонд с ненулевым остатком пока нельзя удалить. Сначала изымите остаток в общий нераспределенный пул.");
+        }
+
+        var incomeTypes = await repository.GetIncomeTypesForFundUpdateAsync(fund.Id, cancellationToken);
+        foreach (var incomeType in incomeTypes)
+        {
+            incomeType.DestinationFundId = null;
+            incomeType.DestinationFund = null;
+            incomeType.UpdatedAtUtc = DateTimeOffset.UtcNow;
+        }
+
+        fund.IsArchived = true;
+        fund.UpdatedAtUtc = DateTimeOffset.UtcNow;
+        AddFundDeletedAudit(fund, incomeTypes.Count, actorUserId, reason);
+        await repository.SaveChangesAsync(cancellationToken);
+
+        return FundResult<bool>.Success(true);
+    }
+
     public async Task<IReadOnlyList<FundOperationDto>> GetOperationsAsync(int limit, bool includeCanceled, CancellationToken cancellationToken)
     {
         var boundedLimit = Math.Clamp(limit, 1, 100);
@@ -387,6 +446,11 @@ public sealed class FundService(
                 continue;
             }
 
+            if (await repository.SystemFundSlotExistsAsync(definition.SortOrder, cancellationToken))
+            {
+                continue;
+            }
+
             var fund = new Fund
             {
                 Name = definition.Name,
@@ -592,6 +656,33 @@ public sealed class FundService(
             FieldLabels: FundFieldLabels));
     }
 
+    private void AddFundDeletedAudit(Fund fund, int detachedIncomeTypeCount, Guid? actorUserId, string reason)
+    {
+        auditEventWriter.Add(new AuditEventWriteRequest(
+            ActorUserId: actorUserId,
+            Action: "fund.archived",
+            EntityType: "fund",
+            EntityId: fund.Id.ToString(),
+            Summary: $"Удален фонд {fund.Name}.",
+            Section: "funds",
+            ActionKind: "archive",
+            EntityDisplayName: fund.Name,
+            Reason: reason,
+            OldValues: new Dictionary<string, object?>
+            {
+                ["isArchived"] = false
+            },
+            NewValues: new Dictionary<string, object?>
+            {
+                ["isArchived"] = true
+            },
+            FieldLabels: FundFieldLabels,
+            Metadata: new Dictionary<string, object?>
+            {
+                ["detachedIncomeTypeCount"] = detachedIncomeTypeCount
+            }));
+    }
+
     private void AddCancelAudit(Fund fund, FundOperation operation, Guid? actorUserId, string reason)
     {
         AddOperationStatusAudit(
@@ -759,6 +850,7 @@ public sealed class FundService(
 
     private static readonly IReadOnlyDictionary<string, string> FundFieldLabels = new Dictionary<string, string>
     {
-        ["name"] = "Название фонда"
+        ["name"] = "Название фонда",
+        ["isArchived"] = "Удален"
     };
 }

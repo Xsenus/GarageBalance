@@ -28,7 +28,14 @@ type FundEditorDraft = {
   fundId?: string
   originalName?: string
   name: string
+  balance: number
   linkedServices: FundLinkedServiceDto[]
+}
+
+type FundDeleteDraft = {
+  fundId: string
+  fundName: string
+  reason: string
 }
 
 type FundOperationKind = 'withdraw' | 'deposit'
@@ -82,6 +89,8 @@ export function FundsPrototypePanel({ auth, fundsClient }: { auth: AuthResponse;
   const [availableToDistribute, setAvailableToDistribute] = useState<number | null>(null)
   const [fundEditor, setFundEditor] = useState<FundEditorDraft | null>(null)
   const [fundEditorError, setFundEditorError] = useState<string | null>(null)
+  const [fundDelete, setFundDelete] = useState<FundDeleteDraft | null>(null)
+  const [fundDeleteError, setFundDeleteError] = useState<string | null>(null)
   const [fundMessage, setFundMessage] = useState<string | null>(null)
   const [operation, setOperation] = useState<FundOperationDraft | null>(null)
   const [operationEdit, setOperationEdit] = useState<FundOperationEditDraft | null>(null)
@@ -95,9 +104,11 @@ export function FundsPrototypePanel({ auth, fundsClient }: { auth: AuthResponse;
   const [loadError, setLoadError] = useState<string | null>(null)
   const [reloadToken, setReloadToken] = useState(0)
   const [savingFund, setSavingFund] = useState(false)
+  const [deletingFund, setDeletingFund] = useState(false)
   const [savingOperation, setSavingOperation] = useState(false)
   const [savingStatusAction, setSavingStatusAction] = useState(false)
   useRestoreFocusOnClose(Boolean(fundEditor))
+  useRestoreFocusOnClose(Boolean(fundDelete))
   useRestoreFocusOnClose(Boolean(operation))
   useRestoreFocusOnClose(Boolean(operationEdit))
   useRestoreFocusOnClose(Boolean(operationEditConfirmation))
@@ -106,6 +117,8 @@ export function FundsPrototypePanel({ auth, fundsClient }: { auth: AuthResponse;
   const operationCancelRef = useFocusOnOpen<HTMLButtonElement>(Boolean(operation))
   const fundNameRef = useFocusOnOpen<HTMLInputElement>(Boolean(fundEditor))
   const fundEditorDialogRef = useFocusTrap<HTMLElement>(Boolean(fundEditor))
+  const fundDeleteCancelRef = useFocusOnOpen<HTMLButtonElement>(Boolean(fundDelete))
+  const fundDeleteDialogRef = useFocusTrap<HTMLElement>(Boolean(fundDelete))
   const operationDialogRef = useFocusTrap<HTMLElement>(Boolean(operation))
   const operationEditCancelRef = useFocusOnOpen<HTMLButtonElement>(Boolean(operationEdit) && !operationEditConfirmation)
   const operationEditDialogRef = useFocusTrap<HTMLElement>(Boolean(operationEdit) && !operationEditConfirmation)
@@ -118,6 +131,7 @@ export function FundsPrototypePanel({ auth, fundsClient }: { auth: AuthResponse;
   const statusDialogRef = useFocusTrap<HTMLElement>(Boolean(statusAction))
 
   useEscapeKey(Boolean(fundEditor) && !savingFund, () => closeFundEditor())
+  useEscapeKey(Boolean(fundDelete) && !deletingFund, () => closeFundDelete())
   useEscapeKey(Boolean(operation), () => closeFundOperation())
   useEscapeKey(Boolean(operationEdit) && !operationEditConfirmation && !savingOperation, () => closeFundOperationEdit())
   useEscapeKey(Boolean(operationEditConfirmation) && !savingOperation, () => setOperationEditConfirmation(null))
@@ -226,7 +240,7 @@ export function FundsPrototypePanel({ auth, fundsClient }: { auth: AuthResponse;
   }
 
   function openFundCreate() {
-    setFundEditor({ mode: 'create', name: '', linkedServices: [] })
+    setFundEditor({ mode: 'create', name: '', balance: 0, linkedServices: [] })
     setFundEditorError(null)
     setFundMessage(null)
   }
@@ -237,10 +251,55 @@ export function FundsPrototypePanel({ auth, fundsClient }: { auth: AuthResponse;
       fundId: fund.id,
       originalName: fund.name,
       name: fund.name,
+      balance: fund.amount ?? 0,
       linkedServices: fund.linkedServices,
     })
     setFundEditorError(null)
     setFundMessage(null)
+  }
+
+  function openFundDelete() {
+    if (!fundEditor?.fundId || !fundEditor.originalName) {
+      return
+    }
+
+    setFundDelete({ fundId: fundEditor.fundId, fundName: fundEditor.originalName, reason: '' })
+    setFundDeleteError(null)
+  }
+
+  function closeFundDelete() {
+    if (deletingFund) {
+      return
+    }
+
+    setFundDelete(null)
+    setFundDeleteError(null)
+  }
+
+  async function deleteFund() {
+    if (!fundDelete) {
+      return
+    }
+
+    const reason = fundDelete.reason.trim()
+    if (!reason) {
+      setFundDeleteError('Укажите причину удаления фонда.')
+      return
+    }
+
+    setDeletingFund(true)
+    setFundDeleteError(null)
+    try {
+      await fundsClient.deleteFund(auth.accessToken, fundDelete.fundId, { reason })
+      setRows((current) => current.filter((fund) => fund.id !== fundDelete.fundId))
+      setFundMessage(`Фонд «${fundDelete.fundName}» удален.`)
+      setFundDelete(null)
+      setFundEditor(null)
+    } catch (error: unknown) {
+      setFundDeleteError(error instanceof Error ? error.message : 'Не удалось удалить фонд.')
+    } finally {
+      setDeletingFund(false)
+    }
   }
 
   function closeFundEditor() {
@@ -733,6 +792,11 @@ export function FundsPrototypePanel({ auth, fundsClient }: { auth: AuthResponse;
                   ) : (
                     <p className="fund-linked-services-empty">К фонду пока не привязано ни одной услуги.</p>
                   )}
+                  {fundEditor.linkedServices.length > 0 ? (
+                    <p className="fund-delete-restriction">Чтобы удалить фонд, сначала переназначьте все перечисленные услуги.</p>
+                  ) : fundEditor.balance !== 0 ? (
+                    <p className="fund-delete-restriction">Перед удалением изымите остаток в общий нераспределенный пул.</p>
+                  ) : null}
                 </section>
               ) : null}
               {fundEditorError ? <p className="form-error" role="alert">{fundEditorError}</p> : null}
@@ -742,8 +806,59 @@ export function FundsPrototypePanel({ auth, fundsClient }: { auth: AuthResponse;
                   <span>{savingFund ? 'Сохраняем...' : fundEditor.mode === 'create' ? 'Создать фонд' : 'Сохранить название'}</span>
                 </button>
                 <button className="ghost-button" type="button" onClick={closeFundEditor} disabled={savingFund}>Отмена</button>
+                {fundEditor.mode === 'edit' && auth.user.permissions.includes('payments.write') ? (
+                  <button
+                    className="danger-button"
+                    type="button"
+                    onClick={openFundDelete}
+                    disabled={savingFund || fundEditor.linkedServices.length > 0 || fundEditor.balance !== 0}
+                  >
+                    <Trash2 size={16} aria-hidden="true" />
+                    <span>Удалить фонд</span>
+                  </button>
+                ) : null}
               </div>
             </form>
+          </section>
+        </div>
+      ) : null}
+
+      {fundDelete ? (
+        <div className="modal-backdrop" role="presentation" onMouseDown={closeFundDelete}>
+          <section ref={fundDeleteDialogRef} className="detail-dialog dictionary-confirmation-dialog" role="alertdialog" aria-modal="true" aria-labelledby="fund-delete-title" aria-describedby="fund-delete-description" onMouseDown={(event) => event.stopPropagation()}>
+            <div className="detail-dialog-header">
+              <div>
+                <p className="eyebrow">Удаление фонда</p>
+                <h3 id="fund-delete-title">Удалить фонд «{fundDelete.fundName}»?</h3>
+              </div>
+              <button className="icon-button" type="button" onClick={closeFundDelete} aria-label="Закрыть подтверждение удаления фонда" disabled={deletingFund}>
+                <X size={18} aria-hidden="true" />
+              </button>
+            </div>
+            <p id="fund-delete-description">Фонд исчезнет из рабочего списка. История операций сохранится в учете и аудите.</p>
+            <FormField label="Причина удаления">
+              <textarea
+                aria-label="Причина удаления фонда"
+                value={fundDelete.reason}
+                maxLength={1000}
+                required
+                aria-invalid={Boolean(fundDeleteError)}
+                onChange={(event) => {
+                  setFundDelete({ ...fundDelete, reason: event.target.value })
+                  if (fundDeleteError) {
+                    setFundDeleteError(null)
+                  }
+                }}
+              />
+            </FormField>
+            {fundDeleteError ? <p className="form-error" role="alert">{fundDeleteError}</p> : null}
+            <div className="detail-dialog-actions">
+              <button className="danger-button" type="button" onClick={() => void deleteFund()} disabled={deletingFund}>
+                <Trash2 size={16} aria-hidden="true" />
+                <span>{deletingFund ? 'Удаляем...' : 'Удалить фонд'}</span>
+              </button>
+              <button ref={fundDeleteCancelRef} className="ghost-button" type="button" onClick={closeFundDelete} disabled={deletingFund}>Отмена</button>
+            </div>
           </section>
         </div>
       ) : null}

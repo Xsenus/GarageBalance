@@ -7377,6 +7377,128 @@ describe('App', () => {
     expect(within(emptyDialog).getByText('К фонду пока не привязано ни одной услуги.')).toBeInTheDocument()
   })
 
+  it('blocks fund deletion until services are reassigned and the balance is empty', async () => {
+    const user = userEvent.setup()
+    const fundsClient = createFundsClient({
+      getFunds: async () => [
+        createFund({
+          id: 'fund-linked',
+          name: 'Фонд с услугой',
+          linkedServices: [{ id: 'service-1', name: 'Освещение территории' }],
+        }),
+        createFund({
+          id: 'fund-balance',
+          name: 'Фонд с остатком',
+          balance: 2500,
+          sortOrder: 20,
+          linkedServices: [],
+        }),
+      ],
+    })
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} fundsClient={fundsClient} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    const dashboardTiles = await screen.findByRole('group', { name: 'Главные разделы' })
+    await user.click(within(dashboardTiles).getByRole('button', { name: /Управление\s+фондами/i }))
+    const fundsPanel = await screen.findByRole('region', { name: 'Управление фондами' })
+
+    await user.click(await within(fundsPanel).findByRole('button', { name: 'Открыть карточку фонда Фонд с услугой' }))
+    const linkedDialog = await screen.findByRole('dialog', { name: 'Фонд с услугой' })
+    expect(within(linkedDialog).getByText('Чтобы удалить фонд, сначала переназначьте все перечисленные услуги.')).toBeInTheDocument()
+    expect(within(linkedDialog).getByRole('button', { name: 'Удалить фонд' })).toBeDisabled()
+    await user.click(within(linkedDialog).getByRole('button', { name: 'Закрыть карточку фонда' }))
+
+    await user.click(within(fundsPanel).getByRole('button', { name: 'Открыть карточку фонда Фонд с остатком' }))
+    const balanceDialog = await screen.findByRole('dialog', { name: 'Фонд с остатком' })
+    expect(within(balanceDialog).getByText('Перед удалением изымите остаток в общий нераспределенный пул.')).toBeInTheDocument()
+    expect(within(balanceDialog).getByRole('button', { name: 'Удалить фонд' })).toBeDisabled()
+  })
+
+  it('requires a reason and removes an eligible fund after confirmation', async () => {
+    const user = userEvent.setup()
+    const deleteFund = vi.fn(async () => {})
+    const fundsClient = createFundsClient({
+      getFunds: async () => [
+        createFund({ id: 'fund-reserve', name: 'Резервный фонд', isSystem: false }),
+      ],
+      deleteFund,
+    })
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} fundsClient={fundsClient} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    const dashboardTiles = await screen.findByRole('group', { name: 'Главные разделы' })
+    await user.click(within(dashboardTiles).getByRole('button', { name: /Управление\s+фондами/i }))
+    const fundsPanel = await screen.findByRole('region', { name: 'Управление фондами' })
+    await user.click(await within(fundsPanel).findByRole('button', { name: 'Открыть карточку фонда Резервный фонд' }))
+    const fundDialog = await screen.findByRole('dialog', { name: 'Резервный фонд' })
+    await user.click(within(fundDialog).getByRole('button', { name: 'Удалить фонд' }))
+
+    const confirmation = await screen.findByRole('alertdialog', { name: 'Удалить фонд «Резервный фонд»?' })
+    await user.click(within(confirmation).getByRole('button', { name: 'Удалить фонд' }))
+    expect(within(confirmation).getByText('Укажите причину удаления фонда.')).toHaveAttribute('role', 'alert')
+    expect(deleteFund).not.toHaveBeenCalled()
+
+    await user.type(within(confirmation).getByLabelText('Причина удаления фонда'), 'Услуги переназначены')
+    await user.click(within(confirmation).getByRole('button', { name: 'Удалить фонд' }))
+
+    await waitFor(() => expect(deleteFund).toHaveBeenCalledWith(
+      expect.any(String),
+      'fund-reserve',
+      { reason: 'Услуги переназначены' },
+    ))
+    expect(await within(fundsPanel).findByText('Фонд «Резервный фонд» удален.')).toHaveAttribute('role', 'status')
+    expect(within(fundsPanel).queryByText('Резервный фонд')).not.toBeInTheDocument()
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
+  })
+
+  it('keeps fund deletion confirmation open after a server rejection', async () => {
+    const user = userEvent.setup()
+    const fundsClient = createFundsClient({
+      getFunds: async () => [createFund({ id: 'fund-reserve', name: 'Резервный фонд', isSystem: false })],
+      deleteFund: async () => {
+        throw new Error('Сначала переназначьте услуги фонда.')
+      },
+    })
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} fundsClient={fundsClient} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    const dashboardTiles = await screen.findByRole('group', { name: 'Главные разделы' })
+    await user.click(within(dashboardTiles).getByRole('button', { name: /Управление\s+фондами/i }))
+    const fundsPanel = await screen.findByRole('region', { name: 'Управление фондами' })
+    await user.click(await within(fundsPanel).findByRole('button', { name: 'Открыть карточку фонда Резервный фонд' }))
+    await user.click(within(await screen.findByRole('dialog', { name: 'Резервный фонд' })).getByRole('button', { name: 'Удалить фонд' }))
+    const confirmation = await screen.findByRole('alertdialog', { name: 'Удалить фонд «Резервный фонд»?' })
+    await user.type(within(confirmation).getByLabelText('Причина удаления фонда'), 'Проверка удаления')
+    await user.click(within(confirmation).getByRole('button', { name: 'Удалить фонд' }))
+
+    expect(await within(confirmation).findByText('Сначала переназначьте услуги фонда.')).toHaveAttribute('role', 'alert')
+    expect(within(confirmation).getByLabelText('Причина удаления фонда')).toHaveValue('Проверка удаления')
+    expect(within(fundsPanel).getAllByText('Резервный фонд').length).toBeGreaterThanOrEqual(1)
+  })
+
+  it('hides fund deletion from a user without write permission', async () => {
+    const user = userEvent.setup()
+    const authClient = createAuthClient({
+      login: async () => createAuthResponse({ user: { permissions: ['reports.read'] } }),
+    })
+    const fundsClient = createFundsClient({
+      getFunds: async () => [createFund({ id: 'fund-reserve', name: 'Резервный фонд', isSystem: false })],
+    })
+    render(<App authClient={authClient} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} fundsClient={fundsClient} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    const dashboardTiles = await screen.findByRole('group', { name: 'Главные разделы' })
+    await user.click(within(dashboardTiles).getByRole('button', { name: /Управление\s+фондами/i }))
+    const fundsPanel = await screen.findByRole('region', { name: 'Управление фондами' })
+    await user.click(await within(fundsPanel).findByRole('button', { name: 'Открыть карточку фонда Резервный фонд' }))
+
+    expect(within(await screen.findByRole('dialog', { name: 'Резервный фонд' })).queryByRole('button', { name: 'Удалить фонд' })).not.toBeInTheDocument()
+  })
+
   it('shows funds management prototype from dashboard tile', async () => {
     const user = userEvent.setup()
     const fundsClient = createFundsClient()
@@ -17025,6 +17147,9 @@ function createFundsClient(overrides: Partial<FundsClient> = {}): FundsClient {
       funds = funds.map((item) => item.id === fundId ? updated : item)
       operations = operations.map((item) => item.fundId === fundId ? { ...item, fundName: updated.name } : item)
       return updated
+    },
+    deleteFund: async (_token, fundId) => {
+      funds = funds.filter((item) => item.id !== fundId)
     },
     getOperations: async (_token, query) => {
       const includeCanceled = query?.includeCanceled ?? false

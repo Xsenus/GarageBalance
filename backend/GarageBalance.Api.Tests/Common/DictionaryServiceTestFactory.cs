@@ -21,6 +21,7 @@ internal static class DictionaryServiceTestFactory
             new EfIrregularPaymentRepository(dbContext),
             new EfChargeServiceSettingRepository(dbContext),
             new EfFeeCampaignRepository(dbContext),
+            new EfFundRepository(dbContext),
             new EfApplicationUnitOfWork(dbContext),
             new AuditEventWriter(dbContext));
 }

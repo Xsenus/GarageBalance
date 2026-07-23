@@ -9,6 +9,7 @@ public sealed class Fund
     public int SortOrder { get; set; }
     public bool AllowOperations { get; set; } = true;
     public bool IsSystem { get; set; } = true;
+    public bool IsArchived { get; set; }
     public DateTimeOffset CreatedAtUtc { get; set; } = DateTimeOffset.UtcNow;
     public DateTimeOffset UpdatedAtUtc { get; set; } = DateTimeOffset.UtcNow;
     public List<FundOperation> Operations { get; set; } = [];

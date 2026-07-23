@@ -1,4 +1,5 @@
 using GarageBalance.Api.Application.Audit;
+using GarageBalance.Api.Application.Dictionaries;
 using GarageBalance.Api.Application.Funds;
 using GarageBalance.Api.Domain.Dictionaries;
 using GarageBalance.Api.Domain.Finance;
@@ -123,6 +124,105 @@ public sealed class PostgreSqlFundAllocationIntegrationTests
         Assert.DoesNotContain(reloaded, item => item.Name == "Электроэнергия");
         Assert.Single(verificationContext.AuditEvents, item => item.Action == "fund.created" && item.ActorUserId == actorUserId);
         Assert.Single(verificationContext.AuditEvents, item => item.Action == "fund.updated" && item.ActorUserId == actorUserId);
+    }
+
+    [PostgreSqlFact]
+    public async Task ConcurrentFundDeletionAndServiceCreation_PreserveActiveFundInvariant()
+    {
+        await using var database = await PostgreSqlTestDatabase.CreateAsync();
+        Guid fundId;
+        Guid incomeTypeId;
+        Guid tariffId;
+        await using (var setupContext = database.CreateContext())
+        {
+            var fundService = CreateService(setupContext);
+            await fundService.GetFundsAsync(CancellationToken.None);
+            var created = await fundService.CreateFundAsync(
+                new UpsertFundRequest("Фонд охраны"),
+                null,
+                CancellationToken.None);
+            Assert.True(created.Succeeded, created.ErrorMessage);
+            fundId = created.Value!.Id;
+            var incomeType = new IncomeType
+            {
+                Name = "Поступления за охрану",
+                Code = "membership",
+                DestinationFundId = fundId
+            };
+            var tariff = new Tariff
+            {
+                Name = "Охрана",
+                CalculationBase = "fixed",
+                Rate = 100m,
+                EffectiveFrom = new DateOnly(2026, 7, 1)
+            };
+            setupContext.AddRange(incomeType, tariff);
+            await setupContext.SaveChangesAsync();
+            incomeTypeId = incomeType.Id;
+            tariffId = tariff.Id;
+        }
+
+        await using var blockerConnection = new NpgsqlConnection(database.ConnectionString);
+        await blockerConnection.OpenAsync();
+        await ExecuteLockCommandAsync(blockerConnection, "SELECT pg_advisory_lock(@lock_key)");
+
+        await using var deleteContext = database.CreateContext();
+        await using var createContext = database.CreateContext();
+        var deleteTask = CreateService(deleteContext).DeleteFundAsync(
+            fundId,
+            new DeleteFundRequest("Услуги отсутствуют"),
+            null,
+            CancellationToken.None);
+        var createTask = DictionaryServiceTestFactory.Create(createContext).CreateChargeServiceSettingAsync(
+            new UpsertChargeServiceSettingRequest(
+                "Охрана территории",
+                true,
+                1,
+                1,
+                30,
+                null,
+                30,
+                false,
+                false,
+                "руб.",
+                incomeTypeId,
+                tariffId),
+            null,
+            CancellationToken.None);
+
+        var bothCommandsWaitedForAllocationLock = false;
+        try
+        {
+            bothCommandsWaitedForAllocationLock = await WaitForBlockedAllocationCommandsAsync(database.ConnectionString);
+        }
+        finally
+        {
+            await ExecuteLockCommandAsync(blockerConnection, "SELECT pg_advisory_unlock(@lock_key)");
+        }
+
+        var deleteResult = await deleteTask;
+        var createResult = await createTask;
+
+        Assert.True(bothCommandsWaitedForAllocationLock);
+        Assert.NotEqual(deleteResult.Succeeded, createResult.Succeeded);
+        await using var verificationContext = database.CreateContext();
+        var storedFund = await verificationContext.Funds.SingleAsync(fund => fund.Id == fundId);
+        var storedIncomeType = await verificationContext.IncomeTypes.SingleAsync(item => item.Id == incomeTypeId);
+        var storedService = await verificationContext.ChargeServiceSettings
+            .SingleOrDefaultAsync(item => item.Name == "Охрана территории");
+        if (storedFund.IsArchived)
+        {
+            Assert.True(deleteResult.Succeeded);
+            Assert.Null(storedIncomeType.DestinationFundId);
+            Assert.Null(storedService);
+        }
+        else
+        {
+            Assert.True(createResult.Succeeded);
+            Assert.Equal("fund_has_linked_services", deleteResult.ErrorCode);
+            Assert.Equal(fundId, storedIncomeType.DestinationFundId);
+            Assert.NotNull(storedService);
+        }
     }
 
     private static FundService CreateService(GarageBalanceDbContext context) =>

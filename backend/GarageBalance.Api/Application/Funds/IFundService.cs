@@ -8,6 +8,12 @@ public interface IFundService
 
     Task<FundResult<FundDto>> UpdateFundAsync(Guid fundId, UpsertFundRequest request, Guid? actorUserId, CancellationToken cancellationToken);
 
+    Task<FundResult<bool>> DeleteFundAsync(
+        Guid fundId,
+        DeleteFundRequest request,
+        Guid? actorUserId,
+        CancellationToken cancellationToken);
+
     Task<IReadOnlyList<FundOperationDto>> GetOperationsAsync(int limit, bool includeCanceled, CancellationToken cancellationToken);
 
     Task<FundOperationPageDto> GetOperationsPageAsync(int offset, int limit, bool includeCanceled, CancellationToken cancellationToken);

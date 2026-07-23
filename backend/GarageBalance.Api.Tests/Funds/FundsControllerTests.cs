@@ -96,6 +96,50 @@ public sealed class FundsControllerTests
     }
 
     [Fact]
+    public async Task DeleteFund_PassesActorAndReturnsNoContent()
+    {
+        var actorUserId = Guid.NewGuid();
+        var fundId = Guid.NewGuid();
+        var service = new FakeFundService
+        {
+            DeleteFundResult = FundResult<bool>.Success(true)
+        };
+        var controller = CreateController(service, actorUserId);
+
+        var result = await controller.DeleteFund(
+            fundId,
+            new DeleteFundRequest("Фонд больше не используется"),
+            CancellationToken.None);
+
+        Assert.IsType<NoContentResult>(result.Result);
+        Assert.Equal(fundId, service.LastDeletedFundId);
+        Assert.Equal(actorUserId, service.LastActorUserId);
+        Assert.Equal("Фонд больше не используется", service.LastDeleteRequest?.Reason);
+    }
+
+    [Theory]
+    [InlineData("fund_has_linked_services", 409)]
+    [InlineData("fund_balance_not_zero", 409)]
+    [InlineData("fund_not_found", 404)]
+    public async Task DeleteFund_MapsServiceErrors(string errorCode, int expectedStatusCode)
+    {
+        var service = new FakeFundService
+        {
+            DeleteFundResult = FundResult<bool>.Failure(errorCode, "Не удалось удалить фонд.")
+        };
+        var controller = CreateController(service);
+
+        var result = await controller.DeleteFund(
+            Guid.NewGuid(),
+            new DeleteFundRequest("Фонд больше не используется"),
+            CancellationToken.None);
+
+        var objectResult = Assert.IsAssignableFrom<ObjectResult>(result.Result);
+        Assert.Equal(expectedStatusCode, objectResult.StatusCode);
+        Assert.Equal(errorCode, Assert.IsType<ProblemDetails>(objectResult.Value).Title);
+    }
+
+    [Fact]
     public async Task GetOperations_PassesBoundedQueryToService()
     {
         var operation = CreateOperation(isCanceled: true);
@@ -309,6 +353,7 @@ public sealed class FundsControllerTests
     {
         public Guid? LastActorUserId { get; private set; }
         public Guid? LastUpdatedFundId { get; private set; }
+        public Guid? LastDeletedFundId { get; private set; }
         public Guid? LastUpdatedOperationId { get; private set; }
         public Guid? LastCanceledOperationId { get; private set; }
         public Guid? LastRestoredOperationId { get; private set; }
@@ -319,12 +364,14 @@ public sealed class FundsControllerTests
         public bool? LastOperationsPageIncludeCanceled { get; private set; }
         public UpdateFundOperationRequest? LastUpdateRequest { get; private set; }
         public UpsertFundRequest? LastFundRequest { get; private set; }
+        public DeleteFundRequest? LastDeleteRequest { get; private set; }
         public CancelFundOperationRequest? LastCancelRequest { get; private set; }
         public IReadOnlyList<FundOperationDto> Operations { get; init; } = [];
         public IReadOnlyList<FundDto> Funds { get; init; } = [];
         public FundOperationPageDto OperationsPage { get; init; } = new([], 0, 0, 25);
         public FundResult<FundDto> CreateFundResult { get; init; } = FundResult<FundDto>.Failure("not_configured", "Not configured.");
         public FundResult<FundDto> UpdateFundResult { get; init; } = FundResult<FundDto>.Failure("not_configured", "Not configured.");
+        public FundResult<bool> DeleteFundResult { get; init; } = FundResult<bool>.Failure("not_configured", "Not configured.");
         public FundResult<FundOperationDto> UpdateOperationResult { get; init; } = FundResult<FundOperationDto>.Failure("not_configured", "Not configured.");
         public FundResult<FundOperationDto> CancelOperationResult { get; init; } = FundResult<FundOperationDto>.Failure("not_configured", "Not configured.");
         public FundResult<FundOperationDto> RestoreOperationResult { get; init; } = FundResult<FundOperationDto>.Failure("not_configured", "Not configured.");
@@ -347,6 +394,18 @@ public sealed class FundsControllerTests
             LastUpdatedFundId = fundId;
             LastFundRequest = request;
             return Task.FromResult(UpdateFundResult);
+        }
+
+        public Task<FundResult<bool>> DeleteFundAsync(
+            Guid fundId,
+            DeleteFundRequest request,
+            Guid? actorUserId,
+            CancellationToken cancellationToken)
+        {
+            LastActorUserId = actorUserId;
+            LastDeletedFundId = fundId;
+            LastDeleteRequest = request;
+            return Task.FromResult(DeleteFundResult);
         }
 
         public Task<IReadOnlyList<FundOperationDto>> GetOperationsAsync(int limit, bool includeCanceled, CancellationToken cancellationToken)

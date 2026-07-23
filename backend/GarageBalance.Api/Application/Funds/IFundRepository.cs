@@ -1,3 +1,4 @@
+using GarageBalance.Api.Domain.Dictionaries;
 using GarageBalance.Api.Domain.Finance;
 
 namespace GarageBalance.Api.Application.Funds;
@@ -7,8 +8,13 @@ public interface IFundRepository
     Task<IAsyncDisposable> AcquireAllocationLockAsync(CancellationToken cancellationToken);
     Task<IReadOnlyList<Fund>> GetFundsAsync(CancellationToken cancellationToken);
     Task<bool> FundNameExistsAsync(Guid? excludedFundId, string normalizedName, CancellationToken cancellationToken);
+    Task<bool> ActiveFundExistsAsync(Guid fundId, CancellationToken cancellationToken);
+    Task<bool> SystemFundSlotExistsAsync(int sortOrder, CancellationToken cancellationToken);
     Task<IReadOnlyList<FundLinkedServiceData>> GetLinkedServicesAsync(
         IReadOnlyCollection<Guid> fundIds,
+        CancellationToken cancellationToken);
+    Task<IReadOnlyList<IncomeType>> GetIncomeTypesForFundUpdateAsync(
+        Guid fundId,
         CancellationToken cancellationToken);
     Task<IReadOnlyList<FundOperation>> GetRecentOperationsAsync(int limit, bool includeCanceled, CancellationToken cancellationToken);
     Task<FundOperationPageData> GetOperationsPageAsync(int offset, int limit, bool includeCanceled, CancellationToken cancellationToken);

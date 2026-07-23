@@ -578,7 +578,9 @@ public sealed class GarageBalanceDbContext(DbContextOptions<GarageBalanceDbConte
             entity.Property(fund => fund.Name).HasMaxLength(200).IsRequired();
             entity.Property(fund => fund.NormalizedName).HasMaxLength(200).IsRequired();
             entity.Property(fund => fund.Balance).HasPrecision(18, 2);
-            entity.HasIndex(fund => fund.NormalizedName).IsUnique();
+            entity.HasIndex(fund => fund.NormalizedName)
+                .IsUnique()
+                .HasFilter("\"IsArchived\" = false");
             entity.HasIndex(fund => fund.SortOrder);
         });
 

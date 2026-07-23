@@ -1,4 +1,5 @@
 using GarageBalance.Api.Application.Funds;
+using GarageBalance.Api.Domain.Dictionaries;
 using GarageBalance.Api.Domain.Finance;
 using Microsoft.EntityFrameworkCore;
 using System.Data;
@@ -46,6 +47,7 @@ public sealed class EfFundRepository(GarageBalanceDbContext dbContext) : IFundRe
     public async Task<IReadOnlyList<Fund>> GetFundsAsync(CancellationToken cancellationToken)
     {
         return await dbContext.Funds.AsNoTracking()
+            .Where(fund => !fund.IsArchived)
             .OrderBy(fund => fund.SortOrder)
             .ThenBy(fund => fund.Name)
             .ToListAsync(cancellationToken);
@@ -57,9 +59,22 @@ public sealed class EfFundRepository(GarageBalanceDbContext dbContext) : IFundRe
         CancellationToken cancellationToken)
     {
         return dbContext.Funds.AnyAsync(
-            fund => fund.NormalizedName == normalizedName &&
+            fund => !fund.IsArchived &&
+                fund.NormalizedName == normalizedName &&
                 (!excludedFundId.HasValue || fund.Id != excludedFundId.Value),
             cancellationToken);
+    }
+
+    public Task<bool> ActiveFundExistsAsync(Guid fundId, CancellationToken cancellationToken)
+    {
+        return dbContext.Funds.AsNoTracking()
+            .AnyAsync(fund => fund.Id == fundId && !fund.IsArchived, cancellationToken);
+    }
+
+    public Task<bool> SystemFundSlotExistsAsync(int sortOrder, CancellationToken cancellationToken)
+    {
+        return dbContext.Funds.AsNoTracking()
+            .AnyAsync(fund => fund.IsSystem && fund.SortOrder == sortOrder, cancellationToken);
     }
 
     public async Task<IReadOnlyList<FundLinkedServiceData>> GetLinkedServicesAsync(
@@ -84,6 +99,15 @@ public sealed class EfFundRepository(GarageBalanceDbContext dbContext) : IFundRe
                 service.IncomeType!.DestinationFundId!.Value,
                 service.Id,
                 service.Name))
+            .ToListAsync(cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<IncomeType>> GetIncomeTypesForFundUpdateAsync(
+        Guid fundId,
+        CancellationToken cancellationToken)
+    {
+        return await dbContext.IncomeTypes
+            .Where(incomeType => incomeType.DestinationFundId == fundId)
             .ToListAsync(cancellationToken);
     }
 
@@ -150,7 +174,9 @@ public sealed class EfFundRepository(GarageBalanceDbContext dbContext) : IFundRe
 
     public Task<Fund?> FindFundForUpdateAsync(Guid fundId, CancellationToken cancellationToken)
     {
-        return dbContext.Funds.SingleOrDefaultAsync(fund => fund.Id == fundId, cancellationToken);
+        return dbContext.Funds.SingleOrDefaultAsync(
+            fund => fund.Id == fundId && !fund.IsArchived,
+            cancellationToken);
     }
 
     public Task<FundOperation?> FindOperationForUpdateAsync(Guid operationId, CancellationToken cancellationToken)
@@ -191,6 +217,7 @@ public sealed class EfFundRepository(GarageBalanceDbContext dbContext) : IFundRe
                 AllocatedFundTotal = 0m
             });
         var allocatedFundTotalsQuery = dbContext.Funds.AsNoTracking()
+            .Where(fund => !fund.IsArchived)
             .GroupBy(_ => allocatedFundTotalsCategory)
             .Select(group => new
             {

@@ -2165,9 +2165,10 @@ public sealed class DictionaryServiceTests
     public async Task CreateChargeServiceWithTariffAsync_SavesDedicatedRateAndServiceInOneOperation()
     {
         await using var database = await TestDatabase.CreateAsync();
-        var incomeType = new IncomeType { Name = "Охрана", Code = "membership" };
+        var fund = CreateFund("Фонд охраны", 10);
+        var incomeType = new IncomeType { Name = "Охрана", Code = "membership", DestinationFundId = fund.Id };
         var templateTariff = new Tariff { Name = "Шаблон фиксированного тарифа", CalculationBase = "fixed", Rate = 1200m, EffectiveFrom = new DateOnly(2026, 1, 1) };
-        database.Context.AddRange(incomeType, templateTariff);
+        database.Context.AddRange(fund, incomeType, templateTariff);
         await database.Context.SaveChangesAsync();
         var service = DictionaryServiceTestFactory.Create(database.Context);
         var actorUserId = Guid.NewGuid();
@@ -2224,9 +2225,10 @@ public sealed class DictionaryServiceTests
     {
         var failureInterceptor = new ChargeServiceInsertFailureInterceptor();
         await using var database = await TestDatabase.CreateAsync(failureInterceptor);
-        var incomeType = new IncomeType { Name = "Охрана", Code = "membership" };
+        var fund = CreateFund("Фонд охраны", 10);
+        var incomeType = new IncomeType { Name = "Охрана", Code = "membership", DestinationFundId = fund.Id };
         var templateTariff = new Tariff { Name = "Шаблон фиксированного тарифа", CalculationBase = "fixed", Rate = 1200m, EffectiveFrom = new DateOnly(2026, 1, 1) };
-        database.Context.AddRange(incomeType, templateTariff);
+        database.Context.AddRange(fund, incomeType, templateTariff);
         await database.Context.SaveChangesAsync();
         failureInterceptor.Enabled = true;
         var service = DictionaryServiceTestFactory.Create(database.Context);
@@ -2250,9 +2252,11 @@ public sealed class DictionaryServiceTests
     public async Task CreateChargeServiceSettingAsync_SavesAccountingLinksAndRejectsMismatch()
     {
         await using var database = await TestDatabase.CreateAsync();
-        var incomeType = new IncomeType { Name = "Членский взнос", Code = "membership" };
+        var fund = CreateFund("Фонд членских взносов", 10);
+        var incomeType = new IncomeType { Name = "Членский взнос", Code = "membership", DestinationFundId = fund.Id };
         var tariff = new Tariff { Name = "Членский тариф", CalculationBase = "fixed", Rate = 300m, EffectiveFrom = new DateOnly(2026, 1, 1) };
         var waterTariff = new Tariff { Name = "Вода", CalculationBase = "meter_water", Rate = 50m, EffectiveFrom = new DateOnly(2026, 1, 1) };
+        database.Context.Funds.Add(fund);
         database.Context.IncomeTypes.Add(incomeType);
         database.Context.Tariffs.AddRange(tariff, waterTariff);
         await database.Context.SaveChangesAsync();
@@ -2302,10 +2306,13 @@ public sealed class DictionaryServiceTests
     public async Task UpdateChargeServiceSettingAsync_WritesChangedFieldsAndSkipsNoOp()
     {
         await using var database = await TestDatabase.CreateAsync();
-        var firstIncomeType = new IncomeType { Name = "Вода", Code = "other_income" };
-        var secondIncomeType = new IncomeType { Name = "Водоснабжение", Code = "other_income" };
+        var firstFund = CreateFund("Фонд воды 2025", 10);
+        var secondFund = CreateFund("Фонд воды 2026", 20);
+        var firstIncomeType = new IncomeType { Name = "Вода", Code = "other_income", DestinationFundId = firstFund.Id };
+        var secondIncomeType = new IncomeType { Name = "Водоснабжение", Code = "other_income", DestinationFundId = secondFund.Id };
         var firstTariff = new Tariff { Name = "Вода 2025", CalculationBase = "meter_water", Rate = 40m, EffectiveFrom = new DateOnly(2025, 1, 1) };
         var secondTariff = new Tariff { Name = "Вода 2026", CalculationBase = "meter_water", Rate = 50m, EffectiveFrom = new DateOnly(2026, 1, 1) };
+        database.Context.Funds.AddRange(firstFund, secondFund);
         database.Context.IncomeTypes.AddRange(firstIncomeType, secondIncomeType);
         database.Context.Tariffs.AddRange(firstTariff, secondTariff);
         await database.Context.SaveChangesAsync();
@@ -3136,6 +3143,90 @@ public sealed class DictionaryServiceTests
     }
 
     [Fact]
+    public async Task CreateAndRestoreChargeServiceSettingAsync_RejectMissingOrDeletedDestinationFund()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var archivedFund = CreateFund("Удаленный фонд", 10);
+        archivedFund.IsArchived = true;
+        var withoutFund = new IncomeType { Name = "Поступления без фонда", Code = "membership" };
+        var withArchivedFund = new IncomeType
+        {
+            Name = "Поступления удаленного фонда",
+            Code = "membership",
+            DestinationFundId = archivedFund.Id
+        };
+        var tariff = new Tariff
+        {
+            Name = "Членский тариф",
+            CalculationBase = "fixed",
+            Rate = 300m,
+            EffectiveFrom = new DateOnly(2026, 1, 1)
+        };
+        var archivedService = new ChargeServiceSetting
+        {
+            Name = "Архивная услуга",
+            IsRegular = true,
+            PeriodicityMonths = 1,
+            AccrualStartMonth = 1,
+            PaymentDueDay = 30,
+            OverdueGraceDays = 30,
+            UnitName = "руб.",
+            IncomeType = withArchivedFund,
+            Tariff = tariff,
+            IsArchived = true
+        };
+        database.Context.AddRange(archivedFund, withoutFund, withArchivedFund, tariff, archivedService);
+        await database.Context.SaveChangesAsync();
+        var service = DictionaryServiceTestFactory.Create(database.Context);
+
+        var missingDestination = await service.CreateChargeServiceSettingAsync(
+            new UpsertChargeServiceSettingRequest(
+                "Услуга без фонда",
+                true,
+                1,
+                1,
+                30,
+                null,
+                30,
+                false,
+                false,
+                "руб.",
+                withoutFund.Id,
+                tariff.Id),
+            null,
+            CancellationToken.None);
+        var deletedDestination = await service.CreateChargeServiceSettingAsync(
+            new UpsertChargeServiceSettingRequest(
+                "Услуга удаленного фонда",
+                true,
+                1,
+                1,
+                30,
+                null,
+                30,
+                false,
+                false,
+                "руб.",
+                withArchivedFund.Id,
+                tariff.Id),
+            null,
+            CancellationToken.None);
+        var restored = await service.RestoreChargeServiceSettingAsync(
+            archivedService.Id,
+            null,
+            CancellationToken.None);
+
+        Assert.False(missingDestination.Succeeded);
+        Assert.Equal("charge_service_fund_required", missingDestination.ErrorCode);
+        Assert.False(deletedDestination.Succeeded);
+        Assert.Equal("charge_service_fund_not_found", deletedDestination.ErrorCode);
+        Assert.False(restored.Succeeded);
+        Assert.Equal("charge_service_fund_not_found", restored.ErrorCode);
+        Assert.True((await database.Context.ChargeServiceSettings.SingleAsync()).IsArchived);
+        Assert.Empty(database.Context.AuditEvents);
+    }
+
+    [Fact]
     public async Task UpdateFeeCampaignAsync_LocksParticipantCompositionAfterFirstAccrual()
     {
         await using var database = await TestDatabase.CreateAsync();
@@ -3355,6 +3446,17 @@ public sealed class DictionaryServiceTests
         context.AddRange(fund, incomeType);
         await context.SaveChangesAsync();
         return incomeType;
+    }
+
+    private static Fund CreateFund(string name, int sortOrder)
+    {
+        return new Fund
+        {
+            Name = name,
+            NormalizedName = name.ToUpperInvariant(),
+            SortOrder = sortOrder,
+            IsSystem = false
+        };
     }
 
     private sealed class TestDatabase : IAsyncDisposable

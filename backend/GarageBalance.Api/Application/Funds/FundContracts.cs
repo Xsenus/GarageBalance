@@ -19,6 +19,9 @@ public sealed record FundLinkedServiceDto(
 public sealed record UpsertFundRequest(
     [Required, MaxLength(200)] string Name);
 
+public sealed record DeleteFundRequest(
+    [Required, MaxLength(1000)] string Reason);
+
 public sealed record FundOperationDto(
     Guid Id,
     Guid FundId,

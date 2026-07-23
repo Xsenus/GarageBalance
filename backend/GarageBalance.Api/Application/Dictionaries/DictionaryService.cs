@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text.Json;
 using GarageBalance.Api.Application.Audit;
 using GarageBalance.Api.Application.Common;
+using GarageBalance.Api.Application.Funds;
 using GarageBalance.Api.Domain.Dictionaries;
 using GarageBalance.Api.Domain.Finance;
 
@@ -21,6 +22,7 @@ public sealed class DictionaryService(
     IIrregularPaymentRepository irregularPaymentRepository,
     IChargeServiceSettingRepository chargeServiceSettingRepository,
     IFeeCampaignRepository feeCampaignRepository,
+    IFundRepository fundRepository,
     IApplicationUnitOfWork unitOfWork,
     IAuditEventWriter auditEventWriter) : IDictionaryService
 {
@@ -1624,6 +1626,7 @@ public sealed class DictionaryService(
             return DictionaryResult<CreatedChargeServiceWithTariffDto>.Failure(validation.ErrorCode!, validation.ErrorMessage!);
         }
 
+        await using var fundAllocationLock = await fundRepository.AcquireAllocationLockAsync(cancellationToken);
         var linkValidation = await ValidateChargeServiceAccountingLinksAsync(request.Service, cancellationToken);
         if (!linkValidation.Succeeded)
         {
@@ -1689,6 +1692,7 @@ public sealed class DictionaryService(
             return DictionaryResult<ChargeServiceSettingDto>.Failure(validation.ErrorCode!, validation.ErrorMessage!);
         }
 
+        await using var fundAllocationLock = await fundRepository.AcquireAllocationLockAsync(cancellationToken);
         var linkValidation = await ValidateChargeServiceAccountingLinksAsync(request, cancellationToken);
         if (!linkValidation.Succeeded)
         {
@@ -1712,6 +1716,7 @@ public sealed class DictionaryService(
 
     public async Task<DictionaryResult<ChargeServiceSettingDto>> UpdateChargeServiceSettingAsync(Guid id, UpsertChargeServiceSettingRequest request, Guid? actorUserId, CancellationToken cancellationToken)
     {
+        await using var fundAllocationLock = await fundRepository.AcquireAllocationLockAsync(cancellationToken);
         var setting = await chargeServiceSettingRepository.FindActiveAsync(id, cancellationToken);
         if (setting is null)
         {
@@ -1774,6 +1779,7 @@ public sealed class DictionaryService(
 
     public async Task<DictionaryResult<ChargeServiceSettingDto>> RestoreChargeServiceSettingAsync(Guid id, Guid? actorUserId, CancellationToken cancellationToken)
     {
+        await using var fundAllocationLock = await fundRepository.AcquireAllocationLockAsync(cancellationToken);
         var setting = await chargeServiceSettingRepository.FindArchivedAsync(id, cancellationToken);
         if (setting is null)
         {
@@ -1783,6 +1789,12 @@ public sealed class DictionaryService(
         if (await chargeServiceSettingRepository.ActiveDuplicateExistsAsync(id, setting.Name, cancellationToken))
         {
             return DictionaryResult<ChargeServiceSettingDto>.Failure("charge_service_duplicate", "Активная услуга с таким наименованием уже существует.");
+        }
+
+        var fundValidation = await ValidateChargeServiceFundAsync(setting.IncomeTypeId, cancellationToken);
+        if (!fundValidation.Succeeded)
+        {
+            return DictionaryResult<ChargeServiceSettingDto>.Failure(fundValidation.ErrorCode!, fundValidation.ErrorMessage!);
         }
 
         setting.IsArchived = false;
@@ -2447,6 +2459,12 @@ public sealed class DictionaryService(
             return DictionaryResult<object>.Failure("charge_service_income_type_not_found", "Вид поступления для услуги не найден.");
         }
 
+        var fundValidation = await ValidateChargeServiceFundAsync(incomeType.Id, cancellationToken);
+        if (!fundValidation.Succeeded)
+        {
+            return fundValidation;
+        }
+
         var tariff = await tariffRepository.FindActiveAsync(request.TariffId!.Value, cancellationToken);
         if (tariff is null)
         {
@@ -2464,6 +2482,33 @@ public sealed class DictionaryService(
             return DictionaryResult<object>.Failure(
                 "charge_service_unit_mismatch",
                 $"Единица измерения для выбранного способа расчета должна быть «{expectedUnitName}».");
+        }
+
+        return DictionaryResult<object>.Success(new object());
+    }
+
+    private async Task<DictionaryResult<object>> ValidateChargeServiceFundAsync(
+        Guid? incomeTypeId,
+        CancellationToken cancellationToken)
+    {
+        if (!incomeTypeId.HasValue)
+        {
+            return DictionaryResult<object>.Success(new object());
+        }
+
+        var incomeType = await incomeTypeRepository.FindActiveAsync(incomeTypeId.Value, cancellationToken);
+        if (incomeType is null || !incomeType.DestinationFundId.HasValue)
+        {
+            return DictionaryResult<object>.Failure(
+                "charge_service_fund_required",
+                "Для вида поступления услуги должен быть назначен действующий фонд.");
+        }
+
+        if (!await fundRepository.ActiveFundExistsAsync(incomeType.DestinationFundId.Value, cancellationToken))
+        {
+            return DictionaryResult<object>.Failure(
+                "charge_service_fund_not_found",
+                "Фонд вида поступления удален. Выберите другой вид поступления.");
         }
 
         return DictionaryResult<object>.Success(new object());

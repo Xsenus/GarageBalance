@@ -4253,6 +4253,13 @@ h1 {
   color: #64748b;
 }
 
+.fund-linked-services .fund-delete-restriction {
+  padding-top: 8px;
+  border-top: 1px solid #fecaca;
+  color: #b42318;
+  font-weight: 600;
+}
+
 .funds-sheet {
   width: 100%;
   overflow: hidden;

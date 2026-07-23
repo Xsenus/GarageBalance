@@ -230,6 +230,158 @@ public sealed class FundServiceTests
         Assert.Equal("fund_not_found", missing.ErrorCode);
     }
 
+    [Fact]
+    public async Task DeleteFundAsync_RejectsFundWithLinkedServicesAndListsThem()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = CreateService(database.Context);
+        var fund = (await service.GetFundsAsync(CancellationToken.None))
+            .Single(item => item.Name == "Электроэнергия");
+        var incomeType = new IncomeType
+        {
+            Name = "Поступления за электроэнергию",
+            DestinationFundId = fund.Id
+        };
+        database.Context.AddRange(
+            incomeType,
+            new ChargeServiceSetting { Name = "Освещение территории", IncomeType = incomeType },
+            new ChargeServiceSetting { Name = "Электроэнергия по счётчику", IncomeType = incomeType });
+        await database.Context.SaveChangesAsync();
+
+        var result = await service.DeleteFundAsync(
+            fund.Id,
+            new DeleteFundRequest("Услуги ещё не переназначены"),
+            Guid.NewGuid(),
+            CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Equal("fund_has_linked_services", result.ErrorCode);
+        Assert.Contains("Освещение территории", result.ErrorMessage);
+        Assert.Contains("Электроэнергия по счётчику", result.ErrorMessage);
+        Assert.False((await database.Context.Funds.SingleAsync(item => item.Id == fund.Id)).IsArchived);
+        Assert.Equal(fund.Id, (await database.Context.IncomeTypes.SingleAsync()).DestinationFundId);
+        Assert.Empty(database.Context.AuditEvents);
+    }
+
+    [Fact]
+    public async Task DeleteFundAsync_RejectsNonZeroBalanceAndMissingFund()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = CreateService(database.Context);
+        var fund = (await service.GetFundsAsync(CancellationToken.None))
+            .Single(item => item.Name == "Водоснабжение");
+        (await database.Context.Funds.SingleAsync(item => item.Id == fund.Id)).Balance = 10m;
+        await database.Context.SaveChangesAsync();
+
+        var request = new DeleteFundRequest("Фонд больше не используется");
+        var nonZero = await service.DeleteFundAsync(fund.Id, request, null, CancellationToken.None);
+        var missing = await service.DeleteFundAsync(Guid.NewGuid(), request, null, CancellationToken.None);
+
+        Assert.False(nonZero.Succeeded);
+        Assert.Equal("fund_balance_not_zero", nonZero.ErrorCode);
+        Assert.False(missing.Succeeded);
+        Assert.Equal("fund_not_found", missing.ErrorCode);
+        Assert.False((await database.Context.Funds.SingleAsync(item => item.Id == fund.Id)).IsArchived);
+        Assert.Empty(database.Context.AuditEvents);
+    }
+
+    [Theory]
+    [InlineData("", "fund_delete_reason_required")]
+    [InlineData("   ", "fund_delete_reason_required")]
+    public async Task DeleteFundAsync_RejectsMissingReason(string reason, string expectedErrorCode)
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = CreateService(database.Context);
+        var fund = (await service.GetFundsAsync(CancellationToken.None))[0];
+
+        var result = await service.DeleteFundAsync(
+            fund.Id,
+            new DeleteFundRequest(reason),
+            Guid.NewGuid(),
+            CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Equal(expectedErrorCode, result.ErrorCode);
+        Assert.False((await database.Context.Funds.SingleAsync(item => item.Id == fund.Id)).IsArchived);
+        Assert.Empty(database.Context.AuditEvents);
+    }
+
+    [Fact]
+    public async Task DeleteFundAsync_RejectsReasonLongerThanLimit()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = CreateService(database.Context);
+        var fund = (await service.GetFundsAsync(CancellationToken.None))[0];
+
+        var result = await service.DeleteFundAsync(
+            fund.Id,
+            new DeleteFundRequest(new string('П', 1001)),
+            Guid.NewGuid(),
+            CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Equal("fund_delete_reason_too_long", result.ErrorCode);
+        Assert.False((await database.Context.Funds.SingleAsync(item => item.Id == fund.Id)).IsArchived);
+    }
+
+    [Fact]
+    public async Task DeleteFundAsync_ArchivesFundClearsDestinationsAndDoesNotRestoreSystemSlot()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = CreateService(database.Context);
+        var fund = (await service.GetFundsAsync(CancellationToken.None))
+            .Single(item => item.Name == "Вывоз мусора");
+        var actorUserId = Guid.NewGuid();
+        var activeIncomeType = new IncomeType
+        {
+            Name = "Поступления за вывоз мусора",
+            DestinationFundId = fund.Id
+        };
+        var archivedIncomeType = new IncomeType
+        {
+            Name = "Архивные поступления за вывоз мусора",
+            DestinationFundId = fund.Id,
+            IsArchived = true
+        };
+        database.Context.AddRange(activeIncomeType, archivedIncomeType);
+        await database.Context.SaveChangesAsync();
+
+        var result = await service.DeleteFundAsync(
+            fund.Id,
+            new DeleteFundRequest("Услуги переназначены в резервный фонд"),
+            actorUserId,
+            CancellationToken.None);
+
+        Assert.True(result.Succeeded, result.ErrorMessage);
+        var stored = await database.Context.Funds.SingleAsync(item => item.Id == fund.Id);
+        Assert.True(stored.IsArchived);
+        Assert.All(
+            await database.Context.IncomeTypes.Where(item => item.Id == activeIncomeType.Id || item.Id == archivedIncomeType.Id).ToListAsync(),
+            incomeType => Assert.Null(incomeType.DestinationFundId));
+        var visibleFunds = await service.GetFundsAsync(CancellationToken.None);
+        Assert.Equal(6, visibleFunds.Count);
+        Assert.DoesNotContain(visibleFunds, item => item.Id == fund.Id);
+        Assert.Equal(7, await database.Context.Funds.CountAsync());
+
+        var audit = Assert.Single(database.Context.AuditEvents, item => item.Action == "fund.archived");
+        Assert.Equal(actorUserId, audit.ActorUserId);
+        Assert.Equal(fund.Id.ToString(), audit.EntityId);
+        Assert.Equal("archive", audit.ActionKind);
+        using var metadata = JsonDocument.Parse(audit.MetadataJson!);
+        Assert.Equal(
+            "Услуги переназначены в резервный фонд",
+            metadata.RootElement.GetProperty("reason").GetString());
+        Assert.Equal("2", metadata.RootElement.GetProperty("detachedIncomeTypeCount").GetString());
+
+        var replacement = await service.CreateFundAsync(
+            new UpsertFundRequest("Вывоз мусора"),
+            actorUserId,
+            CancellationToken.None);
+        Assert.True(replacement.Succeeded, replacement.ErrorMessage);
+        Assert.NotEqual(fund.Id, replacement.Value!.Id);
+        Assert.False(replacement.Value.IsSystem);
+    }
+
     [Theory]
     [InlineData("")]
     [InlineData("   ")]

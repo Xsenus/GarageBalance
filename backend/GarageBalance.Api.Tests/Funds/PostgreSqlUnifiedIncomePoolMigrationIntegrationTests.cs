@@ -21,6 +21,8 @@ public sealed class PostgreSqlUnifiedIncomePoolMigrationIntegrationTests
         await using (var downgradeContext = database.CreateContext())
         {
             await downgradeContext.GetService<IMigrator>().MigrateAsync(PreviousMigration);
+            await downgradeContext.Database.ExecuteSqlRawAsync(
+                """ALTER TABLE funds ADD COLUMN "IsArchived" boolean NOT NULL DEFAULT FALSE""");
         }
 
         await using (var legacyContext = database.CreateContext())
@@ -76,6 +78,8 @@ public sealed class PostgreSqlUnifiedIncomePoolMigrationIntegrationTests
 
         await using (var migrateContext = database.CreateContext())
         {
+            await migrateContext.Database.ExecuteSqlRawAsync(
+                "ALTER TABLE funds DROP COLUMN \"IsArchived\"");
             await migrateContext.Database.MigrateAsync();
         }
 

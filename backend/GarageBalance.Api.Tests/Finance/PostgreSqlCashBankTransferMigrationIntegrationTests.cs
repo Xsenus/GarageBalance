@@ -21,6 +21,8 @@ public sealed class PostgreSqlCashBankTransferMigrationIntegrationTests
         await using (var downgradeContext = database.CreateContext())
         {
             await downgradeContext.GetService<IMigrator>().MigrateAsync(PreviousMigration);
+            await downgradeContext.Database.ExecuteSqlRawAsync(
+                """ALTER TABLE funds ADD COLUMN "IsArchived" boolean NOT NULL DEFAULT FALSE""");
             downgradeContext.Funds.Add(new Fund
             {
                 Id = fundId,
@@ -55,6 +57,8 @@ public sealed class PostgreSqlCashBankTransferMigrationIntegrationTests
             await downgradeContext.SaveChangesAsync();
             await downgradeContext.Database.ExecuteSqlInterpolatedAsync(
                 $"UPDATE fund_operations SET \"IsCashToBankTransfer\" = TRUE WHERE \"Id\" = {legacyTransferId}");
+            await downgradeContext.Database.ExecuteSqlRawAsync(
+                "ALTER TABLE funds DROP COLUMN \"IsArchived\"");
 
             await downgradeContext.Database.MigrateAsync();
         }

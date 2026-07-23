@@ -50,6 +50,10 @@ export type UpsertFundRequest = {
   name: string
 }
 
+export type DeleteFundRequest = {
+  reason: string
+}
+
 export type CancelFundOperationRequest = {
   reason: string
 }
@@ -58,6 +62,7 @@ export type FundsClient = {
   getFunds(accessToken: string, signal?: AbortSignal): Promise<FundDto[]>
   createFund(accessToken: string, request: UpsertFundRequest): Promise<FundDto>
   updateFund(accessToken: string, fundId: string, request: UpsertFundRequest): Promise<FundDto>
+  deleteFund(accessToken: string, fundId: string, request: DeleteFundRequest): Promise<void>
   getOperations(accessToken: string, query?: { limit?: number; includeCanceled?: boolean }, signal?: AbortSignal): Promise<FundOperationDto[]>
   getOperationsPage?(accessToken: string, query?: { offset?: number; limit?: number; includeCanceled?: boolean }, signal?: AbortSignal): Promise<FundOperationPageDto>
   createOperation(accessToken: string, fundId: string, request: CreateFundOperationRequest): Promise<FundOperationDto>
@@ -86,6 +91,21 @@ async function requestJson<TResponse>(accessToken: string, path: string, init?: 
   return response.json()
 }
 
+async function requestVoid(accessToken: string, path: string, init?: RequestInit): Promise<void> {
+  const response = await fetch(`${apiBaseUrl}${path}`, {
+    ...init,
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      ...init?.headers,
+    },
+  })
+
+  if (!response.ok) {
+    const problem = await response.json().catch(() => null)
+    throw new Error(problem?.detail ?? 'Не удалось выполнить операцию фонда.')
+  }
+}
+
 export const fundsApi: FundsClient = {
   getFunds(accessToken, signal) {
     return requestJson(accessToken, '/api/funds', { signal })
@@ -95,6 +115,13 @@ export const fundsApi: FundsClient = {
   },
   updateFund(accessToken, fundId, request) {
     return requestJson(accessToken, `/api/funds/${fundId}`, { method: 'PUT', body: JSON.stringify(request) })
+  },
+  deleteFund(accessToken, fundId, request) {
+    return requestVoid(accessToken, `/api/funds/${fundId}`, {
+      method: 'DELETE',
+      body: JSON.stringify(request),
+      headers: { 'Content-Type': 'application/json' },
+    })
   },
   getOperations(accessToken, query = {}, signal) {
     const search = new URLSearchParams()
