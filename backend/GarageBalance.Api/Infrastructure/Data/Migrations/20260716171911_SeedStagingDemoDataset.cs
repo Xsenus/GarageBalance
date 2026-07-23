@@ -16,7 +16,7 @@ namespace GarageBalance.Api.Infrastructure.Data.Migrations
                 DECLARE
                     demo_audit_id uuid := md5('garagebalance-staging-demo-dataset-v1')::uuid;
                 BEGIN
-                    IF current_database() <> 'garagebalance_staging' THEN
+                    IF lower(COALESCE(current_setting('garagebalance.demo_seed_enabled', true), 'off')) <> 'on' THEN
                         RETURN;
                     END IF;
 
@@ -531,7 +531,7 @@ namespace GarageBalance.Api.Infrastructure.Data.Migrations
                 """
                 DO $demo$
                 BEGIN
-                    IF current_database() <> 'garagebalance_staging'
+                    IF lower(COALESCE(current_setting('garagebalance.demo_seed_enabled', true), 'off')) <> 'on'
                        OR NOT EXISTS (
                            SELECT 1 FROM audit_events
                            WHERE "Id" = md5('garagebalance-staging-demo-dataset-v1')::uuid) THEN

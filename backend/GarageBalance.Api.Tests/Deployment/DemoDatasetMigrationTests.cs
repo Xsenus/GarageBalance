@@ -5,13 +5,16 @@ public sealed class DemoDatasetMigrationTests
     private const string MigrationFileName = "20260716171911_SeedStagingDemoDataset.cs";
     private const string BalanceMigrationFileName = "20260717021022_BalanceStagingDemoGarages.cs";
     private const string PaymentTimesMigrationFileName = "20260717024639_DiversifyStagingDemoPaymentTimes.cs";
+    private const string CleanupMigrationFileName = "20260723002908_RemoveDemoDatasetFromWorkingDatabases.cs";
 
     [Fact]
-    public void DemoDatasetMigration_IsRestrictedToStagingAndIdempotent()
+    public void DemoDatasetMigration_RequiresExplicitDatabaseOptInAndIsIdempotent()
     {
         var migration = ReadMigration();
 
-        Assert.Contains("current_database() <> 'garagebalance_staging'", migration, StringComparison.Ordinal);
+        Assert.Contains("current_setting('garagebalance.demo_seed_enabled', true)", migration, StringComparison.Ordinal);
+        Assert.Contains("<> 'on'", migration, StringComparison.Ordinal);
+        Assert.DoesNotContain("current_database()", migration, StringComparison.Ordinal);
         Assert.Contains("garagebalance-staging-demo-dataset-v1", migration, StringComparison.Ordinal);
         Assert.Contains("IF EXISTS (SELECT 1 FROM audit_events", migration, StringComparison.Ordinal);
         Assert.Contains("ON CONFLICT", migration, StringComparison.Ordinal);
@@ -83,11 +86,11 @@ public sealed class DemoDatasetMigrationTests
     }
 
     [Fact]
-    public void BalanceMigration_IsRestrictedToSeededStagingDataset()
+    public void BalanceMigration_RequiresExplicitDatabaseOptInAndSeededDataset()
     {
         var migration = ReadMigration(BalanceMigrationFileName);
 
-        Assert.Contains("current_database() <> 'garagebalance_staging'", migration, StringComparison.Ordinal);
+        Assert.Contains("current_setting('garagebalance.demo_seed_enabled', true)", migration, StringComparison.Ordinal);
         Assert.Contains("garagebalance-staging-demo-dataset-v1", migration, StringComparison.Ordinal);
         Assert.Contains("garagebalance-staging-demo-balances-v2", migration, StringComparison.Ordinal);
         Assert.Contains("ON CONFLICT DO NOTHING", migration, StringComparison.Ordinal);
@@ -110,12 +113,12 @@ public sealed class DemoDatasetMigrationTests
     }
 
     [Fact]
-    public void PaymentTimesMigration_OnlyChangesGeneratedStagingPayments()
+    public void PaymentTimesMigration_OnlyChangesExplicitlyEnabledDemoPayments()
     {
         var migration = ReadMigration(PaymentTimesMigrationFileName);
         var upSection = migration[..migration.IndexOf("protected override void Down", StringComparison.Ordinal)];
 
-        Assert.Contains("current_database() <> 'garagebalance_staging'", upSection, StringComparison.Ordinal);
+        Assert.Contains("current_setting('garagebalance.demo_seed_enabled', true)", upSection, StringComparison.Ordinal);
         Assert.Contains("garagebalance-staging-demo-dataset-v1", upSection, StringComparison.Ordinal);
         Assert.Contains("garagebalance-staging-demo-payment-times-v3", upSection, StringComparison.Ordinal);
         Assert.Contains("garagebalance-demo-income-", upSection, StringComparison.Ordinal);
@@ -137,6 +140,26 @@ public sealed class DemoDatasetMigrationTests
         Assert.Contains("'Asia/Novosibirsk'", migration, StringComparison.Ordinal);
         Assert.Contains("'localTimeFrom', '08:00'", migration, StringComparison.Ordinal);
         Assert.Contains("'localTimeTo', '19:55'", migration, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void CleanupMigration_RemovesOnlyDeterministicDemoRecordsOutsideDedicatedDemoDatabase()
+    {
+        var migration = ReadMigration(CleanupMigrationFileName);
+        var upSection = migration[..migration.IndexOf("protected override void Down", StringComparison.Ordinal)];
+
+        Assert.Contains("current_setting('garagebalance.demo_seed_enabled', true)", upSection, StringComparison.Ordinal);
+        Assert.Contains("= 'on'", upSection, StringComparison.Ordinal);
+        Assert.Contains("garagebalance-demo-meter-", upSection, StringComparison.Ordinal);
+        Assert.Contains("garagebalance-demo-accrual-", upSection, StringComparison.Ordinal);
+        Assert.Contains("garagebalance-demo-supplier-accrual-", upSection, StringComparison.Ordinal);
+        Assert.Contains("garagebalance-demo-salary-", upSection, StringComparison.Ordinal);
+        Assert.Contains("garagebalance-demo-balance-adjustment-", upSection, StringComparison.Ordinal);
+        Assert.Contains("SourceFinancialOperationId", upSection, StringComparison.Ordinal);
+        Assert.Contains("NOT EXISTS", upSection, StringComparison.Ordinal);
+        Assert.DoesNotContain("WHERE \"Comment\"", upSection, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("TRUNCATE", upSection, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Intentionally irreversible", migration, StringComparison.Ordinal);
     }
 
     private static string ReadMigration(string migrationFileName = MigrationFileName)
