@@ -17,7 +17,6 @@ public sealed class PostgreSqlMeterReadingConcurrencyIntegrationTests
         await using var database = await PostgreSqlTestDatabase.CreateAsync();
         Guid garageId;
         Guid incomeTypeId;
-        Guid tariffId;
         await using (var seedContext = database.CreateContext())
         {
             var garage = new Garage
@@ -28,18 +27,21 @@ public sealed class PostgreSqlMeterReadingConcurrencyIntegrationTests
                 InitialWaterMeterValue = 10m
             };
             var incomeType = await seedContext.IncomeTypes.SingleAsync(item => item.Code == "water");
-            var tariff = new Tariff
-            {
-                Name = "Вода по счетчику",
-                CalculationBase = TariffCalculationBases.MeterWater,
-                Rate = 50m,
-                EffectiveFrom = new DateOnly(2026, 1, 1)
-            };
-            seedContext.AddRange(garage, tariff);
+            var waterSetting = await seedContext.ChargeServiceSettings
+                .Include(setting => setting.Tariff)
+                .SingleAsync(setting => setting.IncomeTypeId == incomeType.Id && !setting.IsArchived);
+            Assert.NotNull(waterSetting.Tariff);
+            waterSetting.IsRegular = true;
+            waterSetting.IsMetered = true;
+            waterSetting.PeriodicityMonths = 1;
+            waterSetting.AccrualStartMonth = 1;
+            waterSetting.Tariff!.CalculationBase = TariffCalculationBases.MeterWater;
+            waterSetting.Tariff.Rate = 50m;
+            waterSetting.Tariff.EffectiveFrom = new DateOnly(2026, 1, 1);
+            seedContext.Garages.Add(garage);
             await seedContext.SaveChangesAsync();
             garageId = garage.Id;
             incomeTypeId = incomeType.Id;
-            tariffId = tariff.Id;
         }
 
         var now = new FixedTimeProvider(new DateTimeOffset(2026, 6, 20, 12, 0, 0, TimeSpan.Zero));
@@ -49,10 +51,8 @@ public sealed class PostgreSqlMeterReadingConcurrencyIntegrationTests
             new CreateMeterReadingRequest(garageId, MeterKinds.Water, new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 20), 15m, null),
             null,
             CancellationToken.None);
-        Assert.True((await service.GenerateRegularAccrualsAsync(
-            new GenerateRegularAccrualsRequest(incomeTypeId, tariffId, new DateOnly(2026, 6, 1), null),
-            null,
-            CancellationToken.None)).Succeeded);
+        Assert.True(reading.Succeeded, reading.ErrorMessage);
+        Assert.Equal(250m, (await context.Accruals.SingleAsync()).Amount);
 
         var recalculated = await service.UpdateMeterReadingAsync(
             reading.Value!.Id,

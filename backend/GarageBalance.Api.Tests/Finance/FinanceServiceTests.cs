@@ -4117,6 +4117,292 @@ public sealed class FinanceServiceTests
     }
 
     [Fact]
+    public async Task CreateMeterReadingAsync_AppliesActiveWaterRateImmediatelyAndWritesAudit()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        fixtures.IncomeType.Code = "water";
+        var tariff = new Tariff
+        {
+            Name = "Вода по действующей ставке",
+            CalculationBase = TariffCalculationBases.MeterWater,
+            Rate = 50m,
+            EffectiveFrom = new DateOnly(2026, 1, 1)
+        };
+        database.Context.ChargeServiceSettings.Add(new ChargeServiceSetting
+        {
+            Name = "Водоснабжение",
+            IsRegular = true,
+            PeriodicityMonths = 1,
+            AccrualStartMonth = 1,
+            OverdueGraceDays = 30,
+            IncomeType = fixtures.IncomeType,
+            Tariff = tariff,
+            IsMetered = true,
+            UnitName = "м³"
+        });
+        database.Context.ChargeServiceSettings.Add(new ChargeServiceSetting
+        {
+            Name = "Повторная настройка воды",
+            IsRegular = true,
+            PeriodicityMonths = 1,
+            AccrualStartMonth = 1,
+            OverdueGraceDays = 30,
+            IncomeType = fixtures.IncomeType,
+            Tariff = tariff,
+            IsMetered = true,
+            UnitName = "м³"
+        });
+        await database.Context.SaveChangesAsync();
+        var actorUserId = Guid.NewGuid();
+        var service = FinanceServiceTestFactory.Create(
+            database.Context,
+            new FixedTimeProvider(new DateTimeOffset(2026, 6, 20, 12, 0, 0, TimeSpan.Zero)));
+
+        var result = await service.CreateMeterReadingAsync(
+            new CreateMeterReadingRequest(fixtures.Garage.Id, MeterKinds.Water, new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 20), 15.5m, null),
+            actorUserId,
+            CancellationToken.None);
+
+        Assert.True(result.Succeeded, result.ErrorMessage);
+        Assert.Equal(5.5m, result.Value!.Consumption);
+        var accrual = Assert.Single(database.Context.Accruals);
+        Assert.Equal(275m, accrual.Amount);
+        Assert.Equal(tariff.Id, accrual.TariffId);
+        Assert.Equal(AccrualSources.Regular, accrual.Source);
+        Assert.Contains("ставка 50.00", accrual.Comment, StringComparison.Ordinal);
+        Assert.Contains("расход 5,5", accrual.Comment, StringComparison.Ordinal);
+        var audit = Assert.Single(database.Context.AuditEvents, item => item.Action == "finance.metered_accrual_created_from_reading");
+        Assert.Equal(actorUserId, audit.ActorUserId);
+        Assert.Contains("275.00", audit.Summary, StringComparison.Ordinal);
+        var worksheet = await service.GetGarageIncomeWorksheetAsync(
+            fixtures.Garage.Id,
+            new GarageIncomeWorksheetRequest(new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 1)),
+            CancellationToken.None);
+        Assert.True(worksheet.Succeeded, worksheet.ErrorMessage);
+        var waterRow = Assert.Single(worksheet.Value!.Rows, row => row.IncomeTypeId == fixtures.IncomeType.Id);
+        Assert.Equal(275m, waterRow.AccrualAmount);
+        Assert.Equal(275m, waterRow.PayableAmount);
+        Assert.Equal(275m, waterRow.Debt);
+    }
+
+    [Fact]
+    public async Task SavePaymentFormMeterReadingAsync_AppliesActiveTieredElectricityRatesImmediately()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        fixtures.IncomeType.Code = "electricity";
+        var tariff = new Tariff
+        {
+            Name = "Электроэнергия по диапазонам",
+            CalculationBase = TariffCalculationBases.MeterElectricity,
+            Rate = 2m,
+            ElectricityFirstThreshold = 50m,
+            ElectricitySecondThreshold = 100m,
+            ElectricityFirstRate = 2m,
+            ElectricitySecondRate = 3m,
+            ElectricityThirdRate = 5m,
+            EffectiveFrom = new DateOnly(2026, 1, 1)
+        };
+        database.Context.ChargeServiceSettings.Add(new ChargeServiceSetting
+        {
+            Name = "Электроэнергия",
+            IsRegular = true,
+            PeriodicityMonths = 1,
+            AccrualStartMonth = 1,
+            OverdueGraceDays = 30,
+            IncomeType = fixtures.IncomeType,
+            Tariff = tariff,
+            IsMetered = true,
+            HasTieredTariff = true,
+            UnitName = "кВт·ч"
+        });
+        await database.Context.SaveChangesAsync();
+        var service = FinanceServiceTestFactory.Create(
+            database.Context,
+            new FixedTimeProvider(new DateTimeOffset(2026, 6, 20, 12, 0, 0, TimeSpan.Zero)));
+
+        var result = await service.SavePaymentFormMeterReadingAsync(
+            new SavePaymentFormMeterReadingRequest(
+                fixtures.Garage.Id,
+                MeterKinds.Electricity,
+                new DateOnly(2026, 6, 1),
+                new DateOnly(2026, 6, 20),
+                230m,
+                null),
+            null,
+            CancellationToken.None);
+
+        Assert.True(result.Succeeded, result.ErrorMessage);
+        Assert.Equal(130m, result.Value!.Consumption);
+        var accrual = Assert.Single(database.Context.Accruals);
+        Assert.Equal(400m, accrual.Amount);
+        Assert.Equal(tariff.Id, accrual.TariffId);
+        Assert.Contains("пороги электроэнергии до 50 кВт по 2.00, до 100 кВт по 3.00, свыше по 5.00", accrual.Comment, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task UpdateMeterReadingAsync_CreatesPreviouslyMissingCurrentMonthMeteredAccrual()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        fixtures.IncomeType.Code = "water";
+        await database.Context.SaveChangesAsync();
+        var service = FinanceServiceTestFactory.Create(
+            database.Context,
+            new FixedTimeProvider(new DateTimeOffset(2026, 6, 20, 12, 0, 0, TimeSpan.Zero)));
+        var reading = await service.CreateMeterReadingAsync(
+            new CreateMeterReadingRequest(fixtures.Garage.Id, MeterKinds.Water, new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 20), 15m, null),
+            null,
+            CancellationToken.None);
+        var tariff = new Tariff
+        {
+            Name = "Подключенный тариф воды",
+            CalculationBase = TariffCalculationBases.MeterWater,
+            Rate = 50m,
+            EffectiveFrom = new DateOnly(2026, 1, 1)
+        };
+        database.Context.ChargeServiceSettings.Add(new ChargeServiceSetting
+        {
+            Name = "Водоснабжение",
+            IsRegular = true,
+            PeriodicityMonths = 1,
+            AccrualStartMonth = 1,
+            OverdueGraceDays = 30,
+            IncomeType = fixtures.IncomeType,
+            Tariff = tariff,
+            IsMetered = true,
+            UnitName = "м³"
+        });
+        await database.Context.SaveChangesAsync();
+
+        var result = await service.UpdateMeterReadingAsync(
+            reading.Value!.Id,
+            new CreateMeterReadingRequest(
+                fixtures.Garage.Id,
+                MeterKinds.Water,
+                new DateOnly(2026, 6, 1),
+                new DateOnly(2026, 6, 21),
+                18m,
+                null,
+                reading.Value.Version),
+            null,
+            CancellationToken.None);
+
+        Assert.True(reading.Succeeded, reading.ErrorMessage);
+        Assert.True(result.Succeeded, result.ErrorMessage);
+        Assert.Equal(8m, result.Value!.Consumption);
+        Assert.Equal(400m, Assert.Single(database.Context.Accruals).Amount);
+    }
+
+    [Fact]
+    public async Task CreateMeterReadingAsync_AllocatesExistingAdvanceToImmediateMeteredAccrual()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        fixtures.IncomeType.Code = MeterKinds.Water;
+        var tariff = new Tariff
+        {
+            Name = "Вода",
+            CalculationBase = TariffCalculationBases.MeterWater,
+            Rate = 50m,
+            EffectiveFrom = new DateOnly(2026, 1, 1)
+        };
+        database.Context.ChargeServiceSettings.Add(new ChargeServiceSetting
+        {
+            Name = "Водоснабжение",
+            IsRegular = true,
+            PeriodicityMonths = 1,
+            AccrualStartMonth = 1,
+            OverdueGraceDays = 30,
+            IncomeType = fixtures.IncomeType,
+            Tariff = tariff,
+            IsMetered = true,
+            UnitName = "м³"
+        });
+        await database.Context.SaveChangesAsync();
+        var service = FinanceServiceTestFactory.Create(
+            database.Context,
+            new FixedTimeProvider(new DateTimeOffset(2026, 6, 20, 12, 0, 0, TimeSpan.Zero)));
+        var advance = await service.CreateIncomeAsync(
+            new CreateIncomeOperationRequest(
+                fixtures.Garage.Id,
+                fixtures.IncomeType.Id,
+                new DateOnly(2026, 6, 10),
+                new DateOnly(2026, 6, 1),
+                200m,
+                "PKO-water-advance",
+                null),
+            null,
+            CancellationToken.None);
+        Assert.True(advance.Succeeded, advance.ErrorMessage);
+        Assert.Empty(database.Context.AccrualPaymentAllocations.Where(item => item.IsActive));
+
+        var reading = await service.CreateMeterReadingAsync(
+            new CreateMeterReadingRequest(
+                fixtures.Garage.Id,
+                MeterKinds.Water,
+                new DateOnly(2026, 6, 1),
+                new DateOnly(2026, 6, 20),
+                15.5m,
+                null),
+            null,
+            CancellationToken.None);
+
+        Assert.True(reading.Succeeded, reading.ErrorMessage);
+        var allocation = Assert.Single(database.Context.AccrualPaymentAllocations, item => item.IsActive);
+        Assert.Equal(200m, allocation.Amount);
+        Assert.Equal(75m, Assert.Single(database.Context.Accruals).Amount - allocation.Amount);
+    }
+
+    [Fact]
+    public async Task CreateMeterReadingAsync_DoesNotBackfillPastReadingWithCurrentMeteredConfiguration()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        fixtures.IncomeType.Code = MeterKinds.Water;
+        database.Context.ChargeServiceSettings.Add(new ChargeServiceSetting
+        {
+            Name = "Текущая вода",
+            IsRegular = true,
+            PeriodicityMonths = 1,
+            AccrualStartMonth = 1,
+            OverdueGraceDays = 30,
+            IncomeType = fixtures.IncomeType,
+            Tariff = new Tariff
+            {
+                Name = "Текущий тариф воды",
+                CalculationBase = TariffCalculationBases.MeterWater,
+                Rate = 50m,
+                EffectiveFrom = new DateOnly(2026, 1, 1)
+            },
+            IsMetered = true,
+            UnitName = "м³"
+        });
+        await database.Context.SaveChangesAsync();
+        var service = FinanceServiceTestFactory.Create(
+            database.Context,
+            new FixedTimeProvider(new DateTimeOffset(2026, 6, 20, 12, 0, 0, TimeSpan.Zero)));
+
+        var result = await service.CreateMeterReadingAsync(
+            new CreateMeterReadingRequest(
+                fixtures.Garage.Id,
+                MeterKinds.Water,
+                new DateOnly(2026, 5, 1),
+                new DateOnly(2026, 5, 20),
+                15.5m,
+                null),
+            null,
+            CancellationToken.None);
+
+        Assert.True(result.Succeeded, result.ErrorMessage);
+        Assert.Empty(database.Context.Accruals);
+        Assert.DoesNotContain(
+            database.Context.AuditEvents,
+            item => item.Action == "finance.metered_accrual_created_from_reading");
+    }
+
+    [Fact]
     public async Task GenerateRegularAccrualsAsync_RejectsTariffThatDoesNotMatchIncomeType()
     {
         await using var database = await TestDatabase.CreateAsync();

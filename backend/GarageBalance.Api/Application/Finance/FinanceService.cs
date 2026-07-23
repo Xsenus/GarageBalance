@@ -43,6 +43,7 @@ public sealed class FinanceService(
     private const int DefaultListLimit = 100;
     private const int MaxListLimit = 500;
     private const int MaxAutomaticFeeCampaigns = 500;
+    private const int MaxAutomaticMeteredServices = 20;
     private const int MaxBalanceHistoryMonths = 600;
     private const int EarlyElectricityPaymentWarningDays = 30;
     private const string DebtTransferIncomeTypeCode = "debt_transfer";
@@ -2849,8 +2850,29 @@ public sealed class FinanceService(
             Comment = NormalizeOptional(request.Comment)
         };
 
+        var meteredSettings = await GetApplicableMeteredSettingsAsync(reading, cancellationToken);
+        var allocationKeys = meteredSettings
+            .Select(setting => new AccrualPaymentAllocationKey(garage.Id, setting.IncomeTypeId!.Value))
+            .Distinct()
+            .ToArray();
+        await using var allocationLock = await accrualPaymentAllocationRepository.AcquireRebuildLockAsync(
+            allocationKeys,
+            cancellationToken);
+
         meterReadingRepository.Add(reading);
         AddAudit(actorUserId, "finance.meter_reading_created", reading, FormatMeterReadingCreatedAuditSummary(reading));
+        var createdAccrualKeys = await CreateMissingMeteredAccrualsAsync(
+            garage,
+            reading,
+            meteredSettings,
+            actorUserId,
+            cancellationToken);
+        await RebuildPaymentAllocationsAsync(
+            createdAccrualKeys,
+            actorUserId,
+            "Применение тарифа после внесения показания",
+            reading.Id,
+            cancellationToken);
         await unitOfWork.SaveChangesAsync(cancellationToken);
         return FinanceResult<MeterReadingDto>.Success(ToDto(reading));
     }
@@ -3079,8 +3101,10 @@ public sealed class FinanceService(
             .Where(item => item.Calculation.Succeeded && item.Calculation.Value != item.Accrual.Amount)
             .Select(item => (item.Accrual, NewAmount: item.Calculation.Value))
             .ToArray();
+        var meteredSettings = await GetApplicableMeteredSettingsAsync(prospectiveReading, cancellationToken);
         var allocationKeys = accrualRecalculations
             .Select(item => new AccrualPaymentAllocationKey(item.Accrual.GarageId, item.Accrual.IncomeTypeId))
+            .Concat(meteredSettings.Select(setting => new AccrualPaymentAllocationKey(garage.Id, setting.IncomeTypeId!.Value)))
             .Distinct()
             .ToArray();
         await using var allocationLock = await accrualPaymentAllocationRepository.AcquireRebuildLockAsync(
@@ -3147,8 +3171,14 @@ public sealed class FinanceService(
                 oldAccrualValues,
                 newAccrualValues);
         }
+        var createdAccrualKeys = await CreateMissingMeteredAccrualsAsync(
+            garage,
+            reading,
+            meteredSettings,
+            actorUserId,
+            cancellationToken);
         await RebuildPaymentAllocationsAsync(
-            allocationKeys,
+            allocationKeys.Concat(createdAccrualKeys).Distinct().ToArray(),
             actorUserId,
             "Пересчет начисления после изменения показания",
             reading.Id,
@@ -3647,6 +3677,105 @@ public sealed class FinanceService(
             ? $"до {tier.UpperBound.Value.ToString("0.####", RussianCulture)} кВт по {MoneyFormatting.Format(tier.Rate)}"
             : $"свыше по {MoneyFormatting.Format(tier.Rate)}"));
         return $"пороги электроэнергии {details}";
+    }
+
+    private async Task<IReadOnlyList<ChargeServiceSetting>> GetApplicableMeteredSettingsAsync(
+        MeterReading reading,
+        CancellationToken cancellationToken)
+    {
+        if (reading.AccountingMonth != GetCurrentAccountingMonth())
+        {
+            return [];
+        }
+
+        var calculationBase = reading.MeterKind switch
+        {
+            MeterKinds.Water => TariffCalculationBases.MeterWater,
+            MeterKinds.Electricity => TariffCalculationBases.MeterElectricity,
+            _ => null
+        };
+        if (calculationBase is null)
+        {
+            return [];
+        }
+
+        var settings = await chargeServiceSettingRepository.GetActiveRegularMeteredAsync(
+            calculationBase,
+            reading.AccountingMonth,
+            MaxAutomaticMeteredServices,
+            cancellationToken);
+        return settings.Where(setting => IsChargeServiceDueForMonth(setting, reading.AccountingMonth)).ToArray();
+    }
+
+    private async Task<IReadOnlyList<AccrualPaymentAllocationKey>> CreateMissingMeteredAccrualsAsync(
+        Garage garage,
+        MeterReading reading,
+        IReadOnlyList<ChargeServiceSetting> settings,
+        Guid? actorUserId,
+        CancellationToken cancellationToken)
+    {
+        var createdKeys = new List<AccrualPaymentAllocationKey>();
+        var processedIncomeTypeIds = new HashSet<Guid>();
+        foreach (var setting in settings)
+        {
+            var incomeType = setting.IncomeType;
+            var tariff = setting.Tariff;
+            if (incomeType is null || tariff is null || !setting.IncomeTypeId.HasValue || !setting.TariffId.HasValue)
+            {
+                continue;
+            }
+
+            if (!processedIncomeTypeIds.Add(incomeType.Id))
+            {
+                continue;
+            }
+
+            if (await accrualRepository.ActiveDuplicateExistsAsync(
+                ignoredId: null,
+                garage.Id,
+                incomeType.Id,
+                reading.AccountingMonth,
+                accountingYear: null,
+                AccrualSources.Regular,
+                cancellationToken))
+            {
+                continue;
+            }
+
+            var calculation = CalculateRegularAccrualAmount(garage, tariff, reading);
+            if (!calculation.Succeeded || calculation.Value <= 0m)
+            {
+                continue;
+            }
+
+            var dueDates = AccrualDueDates.ForIncomeType(reading.AccountingMonth, incomeType.Code, setting);
+            var accrual = new Accrual
+            {
+                GarageId = garage.Id,
+                Garage = garage,
+                IncomeTypeId = incomeType.Id,
+                IncomeType = incomeType,
+                TariffId = tariff.Id,
+                Tariff = tariff,
+                AccountingMonth = reading.AccountingMonth,
+                DueDate = dueDates.DueDate,
+                OverdueFromDate = dueDates.OverdueFromDate,
+                Amount = calculation.Value,
+                Source = AccrualSources.Regular,
+                Comment = BuildRegularAccrualComment(
+                    tariff,
+                    $"Начисление по показанию {reading.MeterKind}: расход {reading.Consumption.ToString("0.###", RussianCulture)}")
+            };
+            accrualRepository.Add(accrual);
+            AddAudit(
+                actorUserId,
+                "finance.metered_accrual_created_from_reading",
+                accrual,
+                $"По показанию счетчика автоматически создано начисление. {FormatAccrualCreatedAuditSummary(accrual)}");
+            createdKeys.Add(new AccrualPaymentAllocationKey(garage.Id, incomeType.Id));
+        }
+
+        return createdKeys;
     }
 
     private static IReadOnlyList<ElectricityTierSnapshot> ReadElectricityTiers(Tariff tariff)

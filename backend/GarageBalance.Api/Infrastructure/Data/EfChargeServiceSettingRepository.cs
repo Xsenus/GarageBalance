@@ -30,6 +30,28 @@ public sealed class EfChargeServiceSettingRepository(GarageBalanceDbContext dbCo
             .OrderBy(setting => setting.Name)
             .ToListAsync(cancellationToken);
 
+    public async Task<IReadOnlyList<ChargeServiceSetting>> GetActiveRegularMeteredAsync(
+        string calculationBase,
+        DateOnly accountingMonth,
+        int limit,
+        CancellationToken cancellationToken) =>
+        await dbContext.ChargeServiceSettings
+            .Include(setting => setting.IncomeType)
+            .Include(setting => setting.Tariff)
+            .Where(setting =>
+                !setting.IsArchived &&
+                setting.IsRegular &&
+                setting.IsMetered &&
+                setting.IncomeType != null &&
+                !setting.IncomeType.IsArchived &&
+                setting.Tariff != null &&
+                !setting.Tariff.IsArchived &&
+                setting.Tariff.CalculationBase == calculationBase &&
+                setting.Tariff.EffectiveFrom <= accountingMonth)
+            .OrderBy(setting => setting.Name)
+            .Take(limit)
+            .ToListAsync(cancellationToken);
+
     public async Task<IReadOnlyList<ChargeServiceSetting>> GetActiveRegularForDueDatesAsync(
         Guid incomeTypeId,
         Guid? tariffId,

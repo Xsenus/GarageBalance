@@ -10,6 +10,64 @@ namespace GarageBalance.Api.Tests.Finance;
 public sealed class PostgreSqlManualWaterMeterReadingIntegrationTests
 {
     [PostgreSqlFact]
+    public async Task CurrentWaterReading_AppliesConfiguredRateAndAppearsInWorksheetAtomically()
+    {
+        await using var database = await PostgreSqlTestDatabase.CreateAsync();
+        await using var context = database.CreateContext();
+        var currentMonth = MonthPeriod.CurrentLocalMonth();
+        var waterType = await context.IncomeTypes.SingleAsync(type => type.Code == MeterKinds.Water && !type.IsArchived);
+        var garage = new Garage
+        {
+            Number = "PG-CURRENT-WATER-RATE",
+            PeopleCount = 1,
+            FloorCount = 1,
+            InitialWaterMeterValue = 10m
+        };
+        var waterSetting = await context.ChargeServiceSettings
+            .Include(setting => setting.Tariff)
+            .SingleAsync(setting => setting.IncomeTypeId == waterType.Id && !setting.IsArchived);
+        Assert.NotNull(waterSetting.Tariff);
+        waterSetting.IsRegular = true;
+        waterSetting.IsMetered = true;
+        waterSetting.PeriodicityMonths = 1;
+        waterSetting.AccrualStartMonth = 1;
+        waterSetting.Tariff!.CalculationBase = TariffCalculationBases.MeterWater;
+        waterSetting.Tariff.Rate = 50m;
+        waterSetting.Tariff.EffectiveFrom = currentMonth.AddMonths(-1);
+        context.Garages.Add(garage);
+        await context.SaveChangesAsync();
+        var service = FinanceServiceTestFactory.Create(context);
+
+        var reading = await service.SavePaymentFormMeterReadingAsync(
+            new SavePaymentFormMeterReadingRequest(
+                garage.Id,
+                MeterKinds.Water,
+                currentMonth,
+                currentMonth.AddDays(19),
+                15.5m,
+                null),
+            null,
+            CancellationToken.None);
+
+        Assert.True(reading.Succeeded, reading.ErrorMessage);
+        var accrual = await context.Accruals.SingleAsync(item => item.GarageId == garage.Id);
+        Assert.Equal(275m, accrual.Amount);
+        Assert.Equal(waterSetting.TariffId, accrual.TariffId);
+        var worksheet = await service.GetGarageIncomeWorksheetAsync(
+            garage.Id,
+            new GarageIncomeWorksheetRequest(currentMonth, currentMonth),
+            CancellationToken.None);
+        Assert.True(worksheet.Succeeded, worksheet.ErrorMessage);
+        var row = Assert.Single(worksheet.Value!.Rows, item => item.IncomeTypeId == waterType.Id);
+        Assert.Equal(5.5m, row.MeterConsumption);
+        Assert.Equal(275m, row.AccrualAmount);
+        Assert.Equal(275m, row.Debt);
+        Assert.Single(
+            await context.AuditEvents.ToListAsync(),
+            item => item.Action == "finance.metered_accrual_created_from_reading");
+    }
+
+    [PostgreSqlFact]
     public async Task WaterReading_RequiresRealBaselineAndUsesPreviousManualReading()
     {
         await using var database = await PostgreSqlTestDatabase.CreateAsync();
