@@ -22,6 +22,8 @@ public sealed record ExpenseWorksheetData(
     public IReadOnlyList<ExpenseWorksheetSupplierData> SupplierOpeningExpenses { get; init; } = [];
 
     public IReadOnlyList<ExpenseWorksheetStaffExpenseData> StaffOpeningExpenses { get; init; } = [];
+
+    public IReadOnlyList<ExpenseWorksheetIncomeData> OpeningIncomes { get; init; } = [];
 }
 
 public sealed record ExpenseWorksheetSupplierData(

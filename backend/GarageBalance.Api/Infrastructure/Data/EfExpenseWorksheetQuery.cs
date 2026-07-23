@@ -16,6 +16,7 @@ public sealed class EfExpenseWorksheetQuery(GarageBalanceDbContext dbContext) : 
     private const int SupplierOpeningAccrualCategory = 8;
     private const int SupplierOpeningExpenseCategory = 9;
     private const int StaffOpeningExpenseCategory = 10;
+    private const int OpeningIncomeCategory = 11;
 
     public async Task<ExpenseWorksheetData> GetAsync(
         DateOnly accountingMonth,
@@ -153,6 +154,35 @@ public sealed class EfExpenseWorksheetQuery(GarageBalanceDbContext dbContext) : 
             .Select(group => new
             {
                 Category = IncomeCategory,
+                SupplierId = (Guid?)null,
+                StaffMemberId = (Guid?)null,
+                CounterpartyName = (string?)null,
+                TypeId = (Guid?)null,
+                TypeName = (string?)group.Key.IncomeTypeName,
+                TypeCode = group.Key.IncomeTypeCode,
+                Amount = group.Sum(operation => operation.Amount),
+                IncomeTotal = 0m,
+                BankDepositTotal = 0m,
+                CashExpenseTotal = 0m,
+                BankExpenseTotal = 0m,
+                HistoryStartMonth = (DateOnly?)null,
+                StaffCreatedAtUtc = (DateTimeOffset?)null
+            });
+
+        var openingIncomes = dbContext.FinancialOperations.AsNoTracking()
+            .Where(operation =>
+                !operation.IsCanceled &&
+                operation.OperationKind == FinancialOperationKinds.Income &&
+                operation.AccountingMonth < accountingMonth &&
+                operation.IncomeTypeId != null)
+            .GroupBy(operation => new
+            {
+                IncomeTypeName = operation.IncomeType!.Name,
+                IncomeTypeCode = operation.IncomeType.Code
+            })
+            .Select(group => new
+            {
+                Category = OpeningIncomeCategory,
                 SupplierId = (Guid?)null,
                 StaffMemberId = (Guid?)null,
                 CounterpartyName = (string?)null,
@@ -323,6 +353,7 @@ public sealed class EfExpenseWorksheetQuery(GarageBalanceDbContext dbContext) : 
             .Concat(staffMembers)
             .Concat(staffExpenses)
             .Concat(incomes)
+            .Concat(openingIncomes)
             .Concat(supplierOpeningAccruals)
             .Concat(supplierOpeningExpenses)
             .Concat(staffOpeningExpenses)
@@ -400,6 +431,9 @@ public sealed class EfExpenseWorksheetQuery(GarageBalanceDbContext dbContext) : 
                     ExpenseTypeId = row.TypeId!.Value,
                     FirstAccountingMonth = row.HistoryStartMonth
                 })
+                .ToList(),
+            OpeningIncomes = rows.Where(row => row.Category == OpeningIncomeCategory)
+                .Select(row => new ExpenseWorksheetIncomeData(row.TypeName!, row.TypeCode, row.Amount))
                 .ToList()
         };
     }

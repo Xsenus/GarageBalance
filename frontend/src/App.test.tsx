@@ -4737,7 +4737,7 @@ describe('App', () => {
         expenseTotal: 55500,
         balanceTotal: 0,
         collectedTotal: 257100,
-        differenceTotal: 22100,
+        differenceTotal: 61300,
         bankAmount: 234000,
         cashAmount: 201600,
         rows: [
@@ -4765,7 +4765,7 @@ describe('App', () => {
             expenseAmount: 0,
             balance: 0,
             collectedAmount: 15000,
-            difference: 1000,
+            difference: 15000,
           },
           {
             rowKind: 'supplier',
@@ -4778,7 +4778,7 @@ describe('App', () => {
             expenseAmount: 0,
             balance: 0,
             collectedAmount: 29000,
-            difference: -3000,
+            difference: 29000,
           },
           {
             rowKind: 'supplier',
@@ -4791,7 +4791,7 @@ describe('App', () => {
             expenseAmount: 0,
             balance: 0,
             collectedAmount: 13300,
-            difference: -1700,
+            difference: 13300,
           },
           {
             rowKind: 'supplier',
@@ -6844,6 +6844,8 @@ describe('App', () => {
     const getExpenseWorksheet = vi.fn(async (_token: string, params?: { accountingMonth?: string }) => createExpenseWorksheet({
       accountingMonth: params?.accountingMonth ?? '2026-06-01',
       bankAmount: 12000,
+      collectedTotal: 7000,
+      differenceTotal: -3000,
       rows: [
         {
           rowKind: 'supplier',
@@ -6860,7 +6862,7 @@ describe('App', () => {
           accrualAmount: 32000,
           expenseAmount: 10000,
           balance: 22000,
-          collectedAmount: 29000,
+          collectedAmount: 7000,
           difference: -3000,
         },
         {
@@ -6919,6 +6921,74 @@ describe('App', () => {
     expect(within(expenseDialog).getByLabelText('Сумма выплаты')).toHaveValue('29 500.00')
     expect(within(prototype).getByText('12 000.00')).toBeInTheDocument()
     expect(within(prototype).getByText('4 000.00')).toBeInTheDocument()
+  })
+
+  it('shows unused service collections in each following expense month until they are paid', async () => {
+    const user = userEvent.setup()
+    const monthlyAmounts: Record<string, { collected: number; difference: number; expense: number }> = {
+      '2026-06-01': { collected: 9243.81, difference: 9243.81, expense: 0 },
+      '2026-07-01': { collected: 10243.81, difference: 6243.81, expense: 4000 },
+      '2026-08-01': { collected: 6243.81, difference: 6243.81, expense: 0 },
+    }
+    const getExpenseWorksheet = vi.fn(async (_token: string, params?: { accountingMonth?: string }) => {
+      const accountingMonth = params?.accountingMonth ?? '2026-06-01'
+      const amounts = monthlyAmounts[accountingMonth] ?? monthlyAmounts['2026-08-01']
+      return createExpenseWorksheet({
+        accountingMonth,
+        accrualTotal: 12000,
+        expenseTotal: amounts.expense,
+        balanceTotal: 12000 - amounts.expense,
+        collectedTotal: amounts.collected,
+        differenceTotal: amounts.difference,
+        rows: [{
+          rowKind: 'supplier',
+          supplierId: 'supplier-electricity',
+          staffMemberId: null,
+          counterpartyName: 'Энергосбыт',
+          expenseTypeId: 'expense-electricity',
+          expenseTypeName: 'Электроэнергия',
+          openingBalance: 0,
+          openingDebt: 0,
+          openingAdvance: 0,
+          closingDebt: 12000 - amounts.expense,
+          closingAdvance: 0,
+          accrualAmount: 12000,
+          expenseAmount: amounts.expense,
+          balance: 12000 - amounts.expense,
+          collectedAmount: amounts.collected,
+          difference: amounts.difference,
+        }],
+      })
+    })
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient({ getExpenseWorksheet })} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Платежи')
+    const prototype = within(await screen.findByRole('region', { name: 'Платежи' })).getByRole('region', { name: 'Форма платежей' })
+    await user.click(within(prototype).getByRole('tab', { name: 'Выплаты' }))
+
+    const juneTable = await within(prototype).findByRole('table', { name: 'Форма выплат за июнь 2026' })
+    const juneRow = within(juneTable).getByText('Энергосбыт').closest('tr')
+    expect(juneRow).not.toBeNull()
+    expect(within(juneRow!).getAllByText('9 243.81')).toHaveLength(2)
+
+    const monthInput = within(prototype).getByLabelText('Месяц выплат')
+    await user.clear(monthInput)
+    await user.type(monthInput, '07.2026')
+    const julyTable = await within(prototype).findByRole('table', { name: 'Форма выплат за июль 2026' })
+    const julyRow = within(julyTable).getByText('Энергосбыт').closest('tr')
+    expect(julyRow).not.toBeNull()
+    expect(within(julyRow!).getByText('10 243.81')).toBeInTheDocument()
+    expect(within(julyRow!).getByText('6 243.81')).toBeInTheDocument()
+
+    await user.clear(monthInput)
+    await user.type(monthInput, '08.2026')
+    const augustTable = await within(prototype).findByRole('table', { name: 'Форма выплат за август 2026' })
+    const augustRow = within(augustTable).getByText('Энергосбыт').closest('tr')
+    expect(augustRow).not.toBeNull()
+    expect(within(augustRow!).getAllByText('6 243.81')).toHaveLength(2)
+    expect(getExpenseWorksheet).toHaveBeenCalledWith('token', { accountingMonth: '2026-08-01' })
   })
 
   it('does not show prototype expense rows when expense worksheet is unavailable', async () => {
@@ -17998,7 +18068,7 @@ function createExpenseWorksheet(overrides: Partial<ExpenseWorksheetDto>): Expens
     expenseTotal: 25000,
     balanceTotal: 47000,
     collectedTotal: 29000,
-    differenceTotal: -3000,
+    differenceTotal: 19000,
     bankAmount: 12000,
     cashAmount: 4000,
     rows: [
@@ -18018,7 +18088,7 @@ function createExpenseWorksheet(overrides: Partial<ExpenseWorksheetDto>): Expens
         expenseAmount: 10000,
         balance: 22000,
         collectedAmount: 29000,
-        difference: -3000,
+        difference: 19000,
       },
       {
         rowKind: 'staff',

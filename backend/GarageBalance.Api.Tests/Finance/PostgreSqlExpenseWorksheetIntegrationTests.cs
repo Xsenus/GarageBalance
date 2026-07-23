@@ -97,7 +97,7 @@ public sealed class PostgreSqlExpenseWorksheetIntegrationTests
         Assert.Equal("bank_amount_insufficient", rejected.ErrorCode);
         var row = Assert.Single(worksheet.Value!.Rows, item => item.SupplierId == supplierId && item.ExpenseTypeId == expenseTypeId);
         Assert.Equal(100m, row.CollectedAmount);
-        Assert.Equal(-400m, row.Difference);
+        Assert.Equal(-150m, row.Difference);
         Assert.Equal(250m, row.ExpenseAmount);
         Assert.Equal(50m, worksheet.Value.BankAmount);
         Assert.Equal(1, await context.FinancialOperations.CountAsync(operation =>
@@ -247,6 +247,78 @@ public sealed class PostgreSqlExpenseWorksheetIntegrationTests
             .Where(operation => operation.OperationKind == FinancialOperationKinds.Expense && operation.SupplierId == supplierId && operation.ExpenseTypeId == expenseTypeId)
             .SumAsync(operation => operation.Amount));
         Assert.Equal(1, await assertionContext.AuditEvents.CountAsync(audit => audit.Action == "finance.atomic_cash_expense_created"));
+    }
+
+    [PostgreSqlFact]
+    public async Task ExpenseWorksheet_CarriesUnusedCollectionsAcrossMonthsOnPostgreSql()
+    {
+        await using var database = await PostgreSqlTestDatabase.CreateAsync();
+        Guid supplierId;
+        Guid expenseTypeId;
+        await using (var seedContext = database.CreateContext())
+        {
+            await ClearIncomeDestinationLinksAsync(seedContext);
+            seedContext.FinancialOperations.RemoveRange(seedContext.FinancialOperations);
+            var garage = new Garage { Number = "PG-COLLECTION-CARRY", PeopleCount = 1, FloorCount = 1 };
+            var supplierGroup = new SupplierGroup { Name = "Перенос собранных средств PG" };
+            var supplier = new Supplier { Name = "Энергосбыт PG", Group = supplierGroup };
+            var incomeType = new IncomeType { Name = "Электроэнергия PG", Code = "pg_electricity_carry" };
+            var expenseType = new ExpenseType { Name = "Электроэнергия PG", Code = "pg_electricity_carry" };
+            var june = new DateOnly(2026, 6, 1);
+            var july = new DateOnly(2026, 7, 1);
+            supplierId = supplier.Id;
+            expenseTypeId = expenseType.Id;
+            seedContext.AddRange(
+                garage,
+                supplierGroup,
+                supplier,
+                incomeType,
+                expenseType,
+                CreateAccrual(supplier, expenseType, june, 12000m),
+                CreateAccrual(supplier, expenseType, july, 2000m),
+                new FinancialOperation
+                {
+                    OperationKind = FinancialOperationKinds.Income,
+                    OperationDate = june.AddDays(10),
+                    AccountingMonth = june,
+                    Amount = 9243.81m,
+                    Garage = garage,
+                    IncomeType = incomeType
+                },
+                new FinancialOperation
+                {
+                    OperationKind = FinancialOperationKinds.Income,
+                    OperationDate = july.AddDays(10),
+                    AccountingMonth = july,
+                    Amount = 1000m,
+                    Garage = garage,
+                    IncomeType = incomeType
+                },
+                CreateExpense(supplier, null, expenseType, july, 4000m));
+            await seedContext.SaveChangesAsync();
+        }
+
+        await using var assertionContext = database.CreateContext();
+        var service = FinanceServiceTestFactory.Create(assertionContext);
+        var julyWorksheet = await service.GetExpenseWorksheetAsync(
+            new ExpenseWorksheetRequest(new DateOnly(2026, 7, 1)),
+            CancellationToken.None);
+        var augustWorksheet = await service.GetExpenseWorksheetAsync(
+            new ExpenseWorksheetRequest(new DateOnly(2026, 8, 1)),
+            CancellationToken.None);
+
+        Assert.True(julyWorksheet.Succeeded);
+        Assert.True(augustWorksheet.Succeeded);
+        var julyValue = julyWorksheet.Value!;
+        var julyRow = FindRow(julyValue, supplierId, expenseTypeId);
+        Assert.Equal(10243.81m, julyRow.CollectedAmount);
+        Assert.Equal(6243.81m, julyRow.Difference);
+        Assert.Equal(10243.81m, julyValue.CollectedTotal);
+        Assert.Equal(6243.81m, julyValue.DifferenceTotal);
+        var augustRow = FindRow(augustWorksheet.Value!, supplierId, expenseTypeId);
+        Assert.Equal(6243.81m, augustRow.CollectedAmount);
+        Assert.Equal(6243.81m, augustRow.Difference);
+        Assert.Equal(3, await assertionContext.FinancialOperations.CountAsync());
     }
 
     [PostgreSqlFact]

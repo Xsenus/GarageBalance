@@ -2104,7 +2104,7 @@ public sealed class FinanceServiceTests
             CancellationToken.None);
         var row = Assert.Single(worksheet.Value!.Rows, item => item.ExpenseTypeId == fixtures.ExpenseType.Id);
         Assert.Equal(100m, row.CollectedAmount);
-        Assert.Equal(-400m, row.Difference);
+        Assert.Equal(-200m, row.Difference);
         Assert.Equal(300m, row.ExpenseAmount);
         Assert.Single(database.Context.AuditEvents, item => item.Action == "finance.expense_created");
     }
@@ -6495,7 +6495,7 @@ public sealed class FinanceServiceTests
         Assert.Equal(47075m, result.Value.ClosingDebtTotal);
         Assert.Equal(100m, result.Value.ClosingAdvanceTotal);
         Assert.Equal(29000m, result.Value.CollectedTotal);
-        Assert.Equal(-43075m, result.Value.DifferenceTotal);
+        Assert.Equal(19000m, result.Value.DifferenceTotal);
         Assert.Equal(0m, result.Value.CashAmount);
         Assert.Equal(SeededBankAmount - 25100m, result.Value.BankAmount);
 
@@ -6511,7 +6511,7 @@ public sealed class FinanceServiceTests
         Assert.Equal(22000m, supplierRow.ClosingDebt);
         Assert.Equal(0m, supplierRow.ClosingAdvance);
         Assert.Equal(29000m, supplierRow.CollectedAmount);
-        Assert.Equal(-3000m, supplierRow.Difference);
+        Assert.Equal(19000m, supplierRow.Difference);
 
         var expenseOnlyRow = Assert.Single(result.Value.Rows, row => row.ExpenseTypeId == expenseOnlyType.Id);
         Assert.Equal(0m, expenseOnlyRow.AccrualAmount);
@@ -6734,6 +6734,104 @@ public sealed class FinanceServiceTests
         AssertExpenseCarry(Assert.Single(repeatedApril.Value!.Rows), 0m, 50m, 30m, 0m);
         Assert.Equal(4, await database.Context.SupplierAccruals.CountAsync());
         Assert.Equal(3, await database.Context.FinancialOperations.CountAsync());
+    }
+
+    [Fact]
+    public async Task GetExpenseWorksheetAsync_CarriesUnusedCollectionsAndConsumesThemWithLaterPayments()
+    {
+        var commandCounter = new SelectCommandCounter();
+        await using var database = await TestDatabase.CreateAsync(commandCounter);
+        var service = FinanceServiceTestFactory.Create(database.Context);
+        var garage = new Garage { Number = "COLLECTION-CARRY", PeopleCount = 1, FloorCount = 1 };
+        var supplierGroup = new SupplierGroup { Name = "Перенос собранных средств" };
+        var supplier = new Supplier { Name = "Энергосбыт", Group = supplierGroup };
+        var incomeType = new IncomeType { Name = "Электроэнергия", Code = "electricity_carry" };
+        var unrelatedIncomeType = new IncomeType { Name = "Пожертвование", Code = "donation_carry" };
+        var expenseType = new ExpenseType { Name = "Электроэнергия", Code = "electricity_carry" };
+        var june = new DateOnly(2026, 6, 1);
+        var july = new DateOnly(2026, 7, 1);
+        var august = new DateOnly(2026, 8, 1);
+        database.Context.AddRange(
+            garage,
+            supplierGroup,
+            supplier,
+            incomeType,
+            unrelatedIncomeType,
+            expenseType,
+            CreateSupplierAccrual(supplier, expenseType, june, 12000m),
+            CreateSupplierAccrual(supplier, expenseType, july, 2000m),
+            new FinancialOperation
+            {
+                OperationKind = FinancialOperationKinds.Income,
+                OperationDate = june.AddDays(10),
+                AccountingMonth = june,
+                Amount = 9243.81m,
+                Garage = garage,
+                IncomeType = incomeType
+            },
+            new FinancialOperation
+            {
+                OperationKind = FinancialOperationKinds.Income,
+                OperationDate = june.AddDays(11),
+                AccountingMonth = june,
+                Amount = 500m,
+                Garage = garage,
+                IncomeType = incomeType,
+                IsCanceled = true
+            },
+            new FinancialOperation
+            {
+                OperationKind = FinancialOperationKinds.Income,
+                OperationDate = june.AddDays(12),
+                AccountingMonth = june,
+                Amount = 700m,
+                Garage = garage,
+                IncomeType = unrelatedIncomeType
+            },
+            new FinancialOperation
+            {
+                OperationKind = FinancialOperationKinds.Expense,
+                OperationDate = june.AddDays(20),
+                AccountingMonth = june,
+                Amount = 900m,
+                Supplier = supplier,
+                ExpenseType = expenseType,
+                IsCanceled = true
+            },
+            new FinancialOperation
+            {
+                OperationKind = FinancialOperationKinds.Income,
+                OperationDate = july.AddDays(10),
+                AccountingMonth = july,
+                Amount = 1000m,
+                Garage = garage,
+                IncomeType = incomeType
+            },
+            CreateHistoricalExpense(supplier, null, expenseType, july, 4000m));
+        await database.Context.SaveChangesAsync();
+        commandCounter.Reset();
+
+        var juneWorksheet = await service.GetExpenseWorksheetAsync(
+            new ExpenseWorksheetRequest(june), CancellationToken.None);
+        var julyWorksheet = await service.GetExpenseWorksheetAsync(
+            new ExpenseWorksheetRequest(july), CancellationToken.None);
+        var augustWorksheet = await service.GetExpenseWorksheetAsync(
+            new ExpenseWorksheetRequest(august), CancellationToken.None);
+
+        Assert.Equal(3, commandCounter.Count);
+        var juneRow = Assert.Single(juneWorksheet.Value!.Rows);
+        Assert.Equal(9243.81m, juneRow.CollectedAmount);
+        Assert.Equal(9243.81m, juneRow.Difference);
+        var julyRow = Assert.Single(julyWorksheet.Value!.Rows);
+        Assert.Equal(10243.81m, julyRow.CollectedAmount);
+        Assert.Equal(6243.81m, julyRow.Difference);
+        Assert.Equal(10243.81m, julyWorksheet.Value.CollectedTotal);
+        Assert.Equal(6243.81m, julyWorksheet.Value.DifferenceTotal);
+        var augustRow = Assert.Single(augustWorksheet.Value!.Rows);
+        Assert.Equal(6243.81m, augustRow.CollectedAmount);
+        Assert.Equal(6243.81m, augustRow.Difference);
+        Assert.Equal(6, await database.Context.FinancialOperations.CountAsync());
+        Assert.Empty(database.Context.AuditEvents);
     }
 
     [Fact]

@@ -2926,6 +2926,7 @@ function PaymentsPrototypePanel({
   const [expenseRows, setExpenseRows] = useState<PaymentPrototypeRow[]>([])
   const [expenseWorksheetMonth, setExpenseWorksheetMonth] = useState(() => getCurrentMonthInputValue())
   const [expenseBankAmount, setExpenseBankAmount] = useState(0)
+  const [expenseCashAmount, setExpenseCashAmount] = useState(0)
   const [historyRows, setHistoryRows] = useState<GaragePaymentHistoryPrototypeRow[]>([])
   const [paymentHistoryOpen, setPaymentHistoryOpen] = useState(false)
   const [paymentHistoryRequests] = useState(() => new LatestRequestSequence())
@@ -3125,6 +3126,7 @@ function PaymentsPrototypePanel({
         if (!cancelled) {
           setExpenseRows(createExpenseRowsFromWorksheet(worksheet))
           setExpenseBankAmount(worksheet.bankAmount)
+          setExpenseCashAmount(worksheet.cashAmount)
           setPaymentError(null)
         }
       })
@@ -4161,6 +4163,7 @@ function PaymentsPrototypePanel({
     })
     setExpenseRows(createExpenseRowsFromWorksheet(worksheet))
     setExpenseBankAmount(worksheet.bankAmount)
+    setExpenseCashAmount(worksheet.cashAmount)
 
     return null
   }
@@ -4345,8 +4348,7 @@ function PaymentsPrototypePanel({
   const expenseClosingDebtTotal = expenseRows.reduce((sum, row) => sum + row.closingDebt, 0)
   const expenseClosingAdvanceTotal = expenseRows.reduce((sum, row) => sum + row.closingAdvance, 0)
   const expenseCollectedTotal = expenseRows.reduce((sum, row) => sum + (typeof row.collected === 'number' ? row.collected : 0), 0)
-  const expenseDifferenceTotal = expenseCollectedTotal - expenseAccrualTotal
-  const expenseCashTotal = expenseCollectedTotal - expensePaidTotal
+  const expenseDifferenceTotal = expenseRows.reduce((sum, row) => sum + (typeof row.difference === 'number' ? row.difference : 0), 0)
   const expenseMonthLabel = new Intl.DateTimeFormat('ru-RU', { month: 'long', year: 'numeric', timeZone: 'UTC' })
     .format(new Date(`${expenseWorksheetMonth}-01T00:00:00Z`))
     .replace(/\s+г\.$/u, '')
@@ -4923,7 +4925,7 @@ function PaymentsPrototypePanel({
             </div>
             <div>
               <span>Касса</span>
-              <strong>{formatPaymentPrototypeValue(expenseCashTotal)}</strong>
+              <strong>{formatPaymentPrototypeValue(expenseCashAmount)}</strong>
             </div>
             <div>
               <span>ИТОГО</span>

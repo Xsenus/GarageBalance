@@ -597,6 +597,9 @@ public sealed class FinanceService(
         var collectedByIncomeKey = worksheetData.Incomes
             .GroupBy(income => NormalizeFinanceLookupKey(income.IncomeTypeCode ?? income.IncomeTypeName))
             .ToDictionary(group => group.Key, group => MoneyMath.RoundMoney(group.Sum(income => income.Amount)), StringComparer.Ordinal);
+        var openingCollectedByIncomeKey = worksheetData.OpeningIncomes
+            .GroupBy(income => NormalizeFinanceLookupKey(income.IncomeTypeCode ?? income.IncomeTypeName))
+            .ToDictionary(group => group.Key, group => MoneyMath.RoundMoney(group.Sum(income => income.Amount)), StringComparer.Ordinal);
 
         var rows = new List<ExpenseWorksheetRowDto>();
         var supplierAccruals = worksheetData.SupplierAccruals
@@ -626,8 +629,13 @@ public sealed class FinanceService(
             var balance = MoneyMath.RoundMoney(Math.Max(accrualAmount - expenseAmount, 0m));
             var openingBalance = MoneyMath.RoundMoney((openingAccrual?.Amount ?? 0m) - (openingExpense?.Amount ?? 0m));
             var closingBalance = MoneyMath.RoundMoney(openingBalance + accrualAmount - expenseAmount);
-            var collected = TryGetCollectedAmount(collectedByIncomeKey, sample.ExpenseTypeName, sample.ExpenseTypeCode);
-            decimal? difference = collected.HasValue ? MoneyMath.RoundMoney(collected.Value - accrualAmount) : null;
+            var currentCollected = TryGetCollectedAmount(collectedByIncomeKey, sample.ExpenseTypeName, sample.ExpenseTypeCode);
+            var openingCollected = TryGetCollectedAmount(openingCollectedByIncomeKey, sample.ExpenseTypeName, sample.ExpenseTypeCode);
+            var hasCollectedFunds = currentCollected.HasValue || openingCollected.HasValue;
+            decimal? collected = hasCollectedFunds
+                ? MoneyMath.RoundMoney((openingCollected ?? 0m) - (openingExpense?.Amount ?? 0m) + (currentCollected ?? 0m))
+                : null;
+            decimal? difference = collected.HasValue ? MoneyMath.RoundMoney(collected.Value - expenseAmount) : null;
             rows.Add(new ExpenseWorksheetRowDto(
                 "supplier",
                 sample.SupplierId,
@@ -709,7 +717,7 @@ public sealed class FinanceService(
         var closingDebtTotal = MoneyMath.RoundMoney(rows.Sum(row => row.ClosingDebt));
         var closingAdvanceTotal = MoneyMath.RoundMoney(rows.Sum(row => row.ClosingAdvance));
         var collectedTotal = MoneyMath.RoundMoney(rows.Sum(row => row.CollectedAmount ?? 0m));
-        var differenceTotal = MoneyMath.RoundMoney(collectedTotal - accrualTotal);
+        var differenceTotal = MoneyMath.RoundMoney(rows.Sum(row => row.Difference ?? 0m));
         var availableAmounts = CalculateAvailableAmounts(worksheetData.AvailableBalance);
 
         return FinanceResult<ExpenseWorksheetDto>.Success(new ExpenseWorksheetDto(
