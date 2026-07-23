@@ -2060,6 +2060,11 @@ public sealed class FinanceService(
         {
             return FinanceResult<SupplierAccrualDto>.Failure("expense_type_not_found", "Вид начисления поставщику не найден.");
         }
+        var supplierExpenseTypeValidation = ValidateSupplierExpenseTypeLink(supplier, expenseType);
+        if (supplierExpenseTypeValidation is not null)
+        {
+            return supplierExpenseTypeValidation;
+        }
 
         var month = MonthPeriod.Normalize(request.AccountingMonth);
         var documentNumber = NormalizeOptional(request.DocumentNumber);
@@ -2126,6 +2131,11 @@ public sealed class FinanceService(
         if (expenseType is null)
         {
             return FinanceResult<SupplierAccrualDto>.Failure("expense_type_not_found", "Вид начисления поставщику не найден.");
+        }
+        var supplierExpenseTypeValidation = ValidateSupplierExpenseTypeLink(supplier, expenseType);
+        if (supplierExpenseTypeValidation is not null)
+        {
+            return supplierExpenseTypeValidation;
         }
 
         var month = MonthPeriod.Normalize(request.AccountingMonth);
@@ -4494,6 +4504,32 @@ public sealed class FinanceService(
         }
 
         return collectedByIncomeKey.TryGetValue(NormalizeFinanceLookupKey(expenseTypeName), out var byName) ? byName : null;
+    }
+
+    private static FinanceResult<SupplierAccrualDto>? ValidateSupplierExpenseTypeLink(Supplier supplier, ExpenseType expenseType)
+    {
+        if (supplier.ChargeServiceSetting is null || supplier.ChargeServiceSetting.IsArchived)
+        {
+            return FinanceResult<SupplierAccrualDto>.Failure(
+                "supplier_service_not_configured",
+                $"Для поставщика «{supplier.Name}» не настроена действующая услуга.");
+        }
+
+        if (!supplier.ChargeServiceSetting.ExpenseTypeId.HasValue)
+        {
+            return FinanceResult<SupplierAccrualDto>.Failure(
+                "supplier_service_expense_type_not_configured",
+                $"Для услуги «{supplier.ChargeServiceSetting.Name}» не настроен вид начисления поставщику.");
+        }
+
+        if (supplier.ChargeServiceSetting.ExpenseTypeId.Value != expenseType.Id)
+        {
+            return FinanceResult<SupplierAccrualDto>.Failure(
+                "supplier_expense_type_mismatch",
+                $"Поставщику «{supplier.Name}» можно начислять только услугу «{supplier.ChargeServiceSetting.Name}».");
+        }
+
+        return null;
     }
 
     private static bool IsCashExpenseType(ExpenseType? expenseType)

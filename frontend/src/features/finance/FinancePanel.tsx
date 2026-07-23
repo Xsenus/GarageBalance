@@ -28,6 +28,7 @@ import { formatPaymentMoney, parsePaymentMoney } from './paymentMoneyFormatting'
 import { calculateExpenseWorksheetClosingBalance, getExpenseWorksheetCollectedClassName, isAtomicCashExpenseType, toSignedExpenseWorksheetBalance } from './expenseWorksheetBalances'
 import { rankGarageSearchResults } from './garageSearchRanking'
 import { getGarageBalancePresentation } from './garageBalancePresentation'
+import { getFirstLinkedSupplier, getSupplierAccrualExpenseType } from './supplierAccrualLink'
 
 type AccrualBreakdown =
   | { kind: 'garage'; accrual: AccrualDto }
@@ -577,7 +578,17 @@ export function FinancePanel({
         setIncomeForm((value) => ({ ...value, incomeTypeId: value.incomeTypeId || loadedIncomeTypes[0]?.id || '' }))
         setExpenseForm((value) => ({ ...value, supplierId: value.supplierId || loadedSuppliers[0]?.id || '', expenseTypeId: value.expenseTypeId || loadedExpenseTypes[0]?.id || '' }))
         setAccrualForm((value) => ({ ...value, incomeTypeId: value.incomeTypeId || loadedIncomeTypes[0]?.id || '' }))
-        setSupplierAccrualForm((value) => ({ ...value, supplierId: value.supplierId || loadedSuppliers[0]?.id || '', expenseTypeId: value.expenseTypeId || loadedExpenseTypes[0]?.id || '' }))
+        setSupplierAccrualForm((value) => {
+          const requestedSupplier = loadedSuppliers.find((supplier) => supplier.id === value.supplierId)
+          const linkedSupplier = requestedSupplier && getSupplierAccrualExpenseType(requestedSupplier, loadedExpenseTypes)
+            ? requestedSupplier
+            : getFirstLinkedSupplier(loadedSuppliers, loadedExpenseTypes)
+          return {
+            ...value,
+            supplierId: linkedSupplier?.id ?? requestedSupplier?.id ?? loadedSuppliers[0]?.id ?? '',
+            expenseTypeId: getSupplierAccrualExpenseType(linkedSupplier ?? requestedSupplier ?? loadedSuppliers[0], loadedExpenseTypes)?.id ?? '',
+          }
+        })
         setSalaryForm((value) => ({ ...value, supplierGroupId: value.supplierGroupId || loadedSupplierGroups[0]?.id || '' }))
         financeReferenceBundleLoadedRef.current = true
       })
@@ -1224,6 +1235,16 @@ export function FinancePanel({
     }
   }
 
+  function selectSupplierForAccrual(supplierId: string) {
+    const supplier = suppliers.find((item) => item.id === supplierId)
+    setSupplierAccrualForm((value) => ({
+      ...value,
+      supplierId,
+      expenseTypeId: getSupplierAccrualExpenseType(supplier, expenseTypes)?.id ?? '',
+    }))
+    setSupplierAccrualValidationErrors([])
+  }
+
   async function saveSupplierGroupSalaryAccruals(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (!canWritePayments) {
@@ -1560,9 +1581,13 @@ export function FinancePanel({
       setAccrualForm(nextForm)
       initialSnapshot = JSON.stringify(nextForm)
     } else if (record && section === 'supplierAccruals' && 'supplierId' in record && !('operationKind' in record)) {
+      const linkedExpenseTypeId = getSupplierAccrualExpenseType(
+        suppliers.find((supplier) => supplier.id === record.supplierId),
+        expenseTypes,
+      )?.id ?? ''
       const nextForm = {
         supplierId: record.supplierId,
-        expenseTypeId: record.expenseTypeId,
+        expenseTypeId: linkedExpenseTypeId,
         accountingMonth: record.accountingMonth,
         amount: record.amount,
         source: record.source,
@@ -2019,7 +2044,7 @@ export function FinancePanel({
       return (
         <>
           {financeField('supplierAccrualSupplier', (
-            <select aria-label="Поставщик для начисления" value={supplierAccrualForm.supplierId} onChange={(event) => setSupplierAccrualForm({ ...supplierAccrualForm, supplierId: event.target.value })} required>
+            <select aria-label="Поставщик для начисления" value={supplierAccrualForm.supplierId} onChange={(event) => selectSupplierForAccrual(event.target.value)} required>
               <option value="" disabled>
                 Выберите поставщика
               </option>
@@ -2031,15 +2056,12 @@ export function FinancePanel({
             </select>
           ))}
           {financeField('supplierAccrualType', (
-            <select aria-label="Вид начисления поставщику" value={supplierAccrualForm.expenseTypeId} onChange={(event) => setSupplierAccrualForm({ ...supplierAccrualForm, expenseTypeId: event.target.value })} required>
-              <option value="" disabled>
-                Выберите вид
-              </option>
-              {expenseTypes.map((item) => (
-                <option value={item.id} key={item.id}>
-                  {item.name}
+            <select aria-label="Услуга начисления поставщику" value={supplierAccrualForm.expenseTypeId} disabled required>
+              {supplierAccrualForm.expenseTypeId ? (
+                <option value={supplierAccrualForm.expenseTypeId}>
+                  {getSupplierAccrualExpenseType(suppliers.find((supplier) => supplier.id === supplierAccrualForm.supplierId), expenseTypes)?.name}
                 </option>
-              ))}
+              ) : <option value="">Для поставщика услуга не настроена</option>}
             </select>
           ))}
           <div className="inline-fields">
@@ -2362,7 +2384,7 @@ export function FinancePanel({
 
         <form className="dictionary-form" onSubmit={saveSupplierAccrual}>
           <h3>Начисление поставщику</h3>
-          <select aria-label="Поставщик для начисления" value={supplierAccrualForm.supplierId} onChange={(event) => setSupplierAccrualForm({ ...supplierAccrualForm, supplierId: event.target.value })} required>
+          <select aria-label="Поставщик для начисления" value={supplierAccrualForm.supplierId} onChange={(event) => selectSupplierForAccrual(event.target.value)} required>
             <option value="" disabled>
               Выберите поставщика
             </option>
@@ -2372,15 +2394,12 @@ export function FinancePanel({
               </option>
             ))}
           </select>
-          <select aria-label="Вид начисления поставщику" value={supplierAccrualForm.expenseTypeId} onChange={(event) => setSupplierAccrualForm({ ...supplierAccrualForm, expenseTypeId: event.target.value })} required>
-            <option value="" disabled>
-              Выберите вид
-            </option>
-            {expenseTypes.map((item) => (
-              <option value={item.id} key={item.id}>
-                {item.name}
+          <select aria-label="Услуга начисления поставщику" value={supplierAccrualForm.expenseTypeId} disabled required>
+            {supplierAccrualForm.expenseTypeId ? (
+              <option value={supplierAccrualForm.expenseTypeId}>
+                {getSupplierAccrualExpenseType(suppliers.find((supplier) => supplier.id === supplierAccrualForm.supplierId), expenseTypes)?.name}
               </option>
-            ))}
+            ) : <option value="">Для поставщика услуга не настроена</option>}
           </select>
           <div className="inline-fields">
           <LocalizedDatePicker ariaLabel="Месяц начисления поставщику" mode="month" value={supplierAccrualForm.accountingMonth.slice(0, 7)} onChange={(accountingMonth) => setSupplierAccrualForm({ ...supplierAccrualForm, accountingMonth: `${accountingMonth}-01` })} required />
@@ -4207,9 +4226,12 @@ function PaymentsPrototypePanel({
       return 'Выберите поставщика из справочника.'
     }
 
-    const expenseType = expenseTypes.find((item) => item.id === request.expenseTypeId && !item.isArchived) ?? null
+    const expenseType = getSupplierAccrualExpenseType(supplier, expenseTypes)
     if (!expenseType) {
-      return 'Выберите вид начисления из справочника выплат.'
+      return 'Для выбранного поставщика не настроена услуга начисления.'
+    }
+    if (expenseType.id !== request.expenseTypeId) {
+      return 'Услуга начисления не соответствует выбранному поставщику.'
     }
 
     const accrual = await financeClient.createSupplierAccrual(auth.accessToken, {
@@ -5788,8 +5810,9 @@ function NewAccrualPrototypeDialog({
 }) {
   const dialogRef = useFocusTrap<HTMLElement>(true)
   const cancelRef = useFocusOnOpen<HTMLButtonElement>(true)
-  const [supplierId, setSupplierId] = useState(suppliers[0]?.id ?? '')
-  const [expenseTypeId, setExpenseTypeId] = useState(expenseTypes[0]?.id ?? '')
+  const initialSupplier = getFirstLinkedSupplier(suppliers, expenseTypes) ?? suppliers[0]
+  const [supplierId, setSupplierId] = useState(initialSupplier?.id ?? '')
+  const [expenseTypeId, setExpenseTypeId] = useState(getSupplierAccrualExpenseType(initialSupplier, expenseTypes)?.id ?? '')
   const [accountingMonth, setAccountingMonth] = useState(getLocalDateInputValue().slice(0, 7))
   const [amount, setAmount] = useState('')
   const [documentNumber, setDocumentNumber] = useState('')
@@ -5806,7 +5829,7 @@ function NewAccrualPrototypeDialog({
       return
     }
     if (!expenseTypeId) {
-      setError('Выберите вид начисления из справочника выплат.')
+      setError('Для выбранного поставщика не настроена услуга начисления.')
       return
     }
     if (!/^\d{4}-\d{2}$/.test(accountingMonth)) {
@@ -5863,21 +5886,28 @@ function NewAccrualPrototypeDialog({
               disabled={saving}
               onChange={(nextSupplierId) => {
                 setSupplierId(nextSupplierId)
+                setExpenseTypeId(getSupplierAccrualExpenseType(
+                  suppliers.find((supplier) => supplier.id === nextSupplierId),
+                  expenseTypes,
+                )?.id ?? '')
                 setError(null)
               }} />
           </FormField>
-          <FormField label="Вид начисления">
+          <FormField label="Услуга">
             <SelectControl
-              aria-label="Вид начисления поставщику"
+              aria-label="Услуга начисления поставщику"
               value={expenseTypeId}
-              options={expenseTypes.length > 0
-                ? expenseTypes.map((expenseType) => ({ value: expenseType.id, label: expenseType.name }))
-                : [{ value: '', label: 'Нет видов выплат' }]}
-              disabled={saving}
-              onChange={(nextExpenseTypeId) => {
-                setExpenseTypeId(nextExpenseTypeId)
-                setError(null)
-              }} />
+              options={expenseTypeId
+                ? [{
+                    value: expenseTypeId,
+                    label: getSupplierAccrualExpenseType(
+                      suppliers.find((supplier) => supplier.id === supplierId),
+                      expenseTypes,
+                    )?.name ?? 'Связанная услуга',
+                  }]
+                : [{ value: '', label: 'Для поставщика услуга не настроена' }]}
+              onChange={() => undefined}
+              disabled />
           </FormField>
           <FormField label="Месяц">
             <LocalizedDatePicker ariaLabel="Месяц начисления поставщику" mode="month" value={accountingMonth} disabled={saving} onChange={(nextAccountingMonth) => {

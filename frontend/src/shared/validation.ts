@@ -435,7 +435,7 @@ export function getSupplierAccrualValidationErrors(form: CreateSupplierAccrualRe
   }
 
   if (!form.expenseTypeId) {
-    errors.push('Выберите вид начисления поставщику.')
+    errors.push('Для поставщика должна быть настроена услуга начисления.')
   }
 
   if (!isAccountingMonthValue(form.accountingMonth)) {

@@ -74,7 +74,8 @@ public sealed record SupplierDto(
     bool IsArchived,
     decimal Debt = 0,
     Guid? ChargeServiceSettingId = null,
-    string? ChargeServiceSettingName = null);
+    string? ChargeServiceSettingName = null,
+    Guid? ChargeServiceExpenseTypeId = null);
 
 public sealed record UpsertSupplierRequest(
     [Required, MaxLength(240)] string Name,
@@ -194,7 +195,8 @@ public sealed record ChargeServiceSettingDto(
     bool IsMetered,
     bool HasTieredTariff,
     string? UnitName,
-    bool IsArchived);
+    bool IsArchived,
+    Guid? ExpenseTypeId = null);
 
 public sealed record UpsertChargeServiceSettingRequest(
     [Required, MaxLength(200)] string Name,
@@ -208,7 +210,8 @@ public sealed record UpsertChargeServiceSettingRequest(
     bool HasTieredTariff,
     [MaxLength(40)] string? UnitName,
     Guid? IncomeTypeId = null,
-    Guid? TariffId = null);
+    Guid? TariffId = null,
+    Guid? ExpenseTypeId = null);
 
 public sealed record CreateChargeServiceWithTariffRequest(
     [Required] UpsertChargeServiceSettingRequest Service,

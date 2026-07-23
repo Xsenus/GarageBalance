@@ -972,7 +972,13 @@ public sealed class FinanceServiceTests
         await using var database = await TestDatabase.CreateAsync();
         var fixtures = await database.SeedAsync();
         var service = FinanceServiceTestFactory.Create(database.Context);
-        var secondSupplier = new Supplier { Name = "Teploset", GroupId = fixtures.Supplier.GroupId };
+        var secondSupplier = new Supplier
+        {
+            Name = "Teploset",
+            GroupId = fixtures.Supplier.GroupId,
+            ChargeServiceSettingId = fixtures.Supplier.ChargeServiceSettingId,
+            ChargeServiceSetting = fixtures.Supplier.ChargeServiceSetting
+        };
         var department = new StaffDepartment { Name = "Бухгалтерия" };
         var firstStaff = new StaffMember { FullName = "Петрова Ольга", Department = department, Rate = 40000m };
         var secondStaff = new StaffMember { FullName = "Иванов Сергей", Department = department, Rate = 20000m };
@@ -3037,6 +3043,109 @@ public sealed class FinanceServiceTests
     }
 
     [Fact]
+    public async Task CreateSupplierAccrualAsync_RejectsSupplierWithoutConfiguredService()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        fixtures.Supplier.ChargeServiceSettingId = null;
+        fixtures.Supplier.ChargeServiceSetting = null;
+        await database.Context.SaveChangesAsync();
+        var service = FinanceServiceTestFactory.Create(database.Context);
+
+        var result = await service.CreateSupplierAccrualAsync(
+            new CreateSupplierAccrualRequest(fixtures.Supplier.Id, fixtures.ExpenseType.Id, new DateOnly(2026, 6, 1), 1200m, "manual", "INV-no-service", "Счет поставщика"),
+            null,
+            CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Equal("supplier_service_not_configured", result.ErrorCode);
+        Assert.Empty(database.Context.SupplierAccruals);
+        Assert.Empty(database.Context.AuditEvents);
+    }
+
+    [Fact]
+    public async Task CreateSupplierAccrualAsync_RejectsServiceWithoutExpenseType()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        fixtures.Supplier.ChargeServiceSetting!.ExpenseTypeId = null;
+        fixtures.Supplier.ChargeServiceSetting.ExpenseType = null;
+        await database.Context.SaveChangesAsync();
+        var service = FinanceServiceTestFactory.Create(database.Context);
+
+        var result = await service.CreateSupplierAccrualAsync(
+            new CreateSupplierAccrualRequest(fixtures.Supplier.Id, fixtures.ExpenseType.Id, new DateOnly(2026, 6, 1), 1200m, "manual", "INV-no-type", "Счет поставщика"),
+            null,
+            CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Equal("supplier_service_expense_type_not_configured", result.ErrorCode);
+        Assert.Empty(database.Context.SupplierAccruals);
+        Assert.Empty(database.Context.AuditEvents);
+    }
+
+    [Fact]
+    public async Task CreateSupplierAccrualAsync_RejectsExpenseTypeOutsideSupplierServiceLink()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        var unrelatedExpenseType = new ExpenseType
+        {
+            Id = Guid.NewGuid(),
+            Name = "Вывоз снега",
+            Code = "snow_removal",
+        };
+        database.Context.ExpenseTypes.Add(unrelatedExpenseType);
+        await database.Context.SaveChangesAsync();
+        var service = FinanceServiceTestFactory.Create(database.Context);
+
+        var result = await service.CreateSupplierAccrualAsync(
+            new CreateSupplierAccrualRequest(fixtures.Supplier.Id, unrelatedExpenseType.Id, new DateOnly(2026, 6, 1), 1200m, "manual", "INV-mismatch", "Счет поставщика"),
+            null,
+            CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Equal("supplier_expense_type_mismatch", result.ErrorCode);
+        Assert.Empty(database.Context.SupplierAccruals);
+        Assert.Empty(database.Context.AuditEvents);
+    }
+
+    [Fact]
+    public async Task UpdateSupplierAccrualAsync_RejectsExpenseTypeOutsideSupplierServiceLinkAndKeepsOriginal()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        var service = FinanceServiceTestFactory.Create(database.Context);
+        var created = await service.CreateSupplierAccrualAsync(
+            new CreateSupplierAccrualRequest(fixtures.Supplier.Id, fixtures.ExpenseType.Id, new DateOnly(2026, 6, 1), 1200m, "manual", "INV-original", "Исходный счет"),
+            null,
+            CancellationToken.None);
+        var unrelatedExpenseType = new ExpenseType
+        {
+            Id = Guid.NewGuid(),
+            Name = "Вывоз снега",
+            Code = "snow_removal",
+        };
+        database.Context.ExpenseTypes.Add(unrelatedExpenseType);
+        await database.Context.SaveChangesAsync();
+
+        var result = await service.UpdateSupplierAccrualAsync(
+            created.Value!.Id,
+            new CreateSupplierAccrualRequest(fixtures.Supplier.Id, unrelatedExpenseType.Id, new DateOnly(2026, 7, 1), 1500m, "manual", "INV-changed", "Измененный счет"),
+            null,
+            CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Equal("supplier_expense_type_mismatch", result.ErrorCode);
+        var stored = await database.Context.SupplierAccruals.SingleAsync();
+        Assert.Equal(fixtures.ExpenseType.Id, stored.ExpenseTypeId);
+        Assert.Equal(new DateOnly(2026, 6, 1), stored.AccountingMonth);
+        Assert.Equal(1200m, stored.Amount);
+        Assert.Single(database.Context.AuditEvents, item => item.Action == "finance.supplier_accrual_created");
+        Assert.DoesNotContain(database.Context.AuditEvents, item => item.Action == "finance.supplier_accrual_updated");
+    }
+
+    [Fact]
     public async Task CreateSupplierAccrualAsync_RequiresCommentForManualAccrual()
     {
         await using var database = await TestDatabase.CreateAsync();
@@ -3266,12 +3375,22 @@ public sealed class FinanceServiceTests
         await using var database = await TestDatabase.CreateAsync();
         var fixtures = await database.SeedAsync();
         var service = FinanceServiceTestFactory.Create(database.Context);
-        var secondSupplier = new Supplier { Name = "Teploset", GroupId = fixtures.Supplier.GroupId };
-        database.Context.Suppliers.Add(secondSupplier);
+        var secondService = new ChargeServiceSetting
+        {
+            Name = "Теплоснабжение",
+            ExpenseTypeId = fixtures.ExpenseType.Id,
+            ExpenseType = fixtures.ExpenseType
+        };
+        var secondSupplier = new Supplier { Name = "Teploset", GroupId = fixtures.Supplier.GroupId, ChargeServiceSetting = secondService };
+        database.Context.AddRange(secondService, secondSupplier);
         await database.Context.SaveChangesAsync();
 
         Assert.True((await service.CreateSupplierAccrualAsync(new CreateSupplierAccrualRequest(fixtures.Supplier.Id, fixtures.ExpenseType.Id, new DateOnly(2026, 6, 1), 900m, "manual", "INV-1", "Счет первого поставщика"), null, CancellationToken.None)).Succeeded);
-        Assert.True((await service.CreateSupplierAccrualAsync(new CreateSupplierAccrualRequest(secondSupplier.Id, fixtures.ExpenseType.Id, new DateOnly(2026, 6, 1), 1200m, "manual", "INV-2", "Счет второго поставщика"), null, CancellationToken.None)).Succeeded);
+        var secondAccrual = await service.CreateSupplierAccrualAsync(
+            new CreateSupplierAccrualRequest(secondSupplier.Id, fixtures.ExpenseType.Id, new DateOnly(2026, 6, 1), 1200m, "manual", "INV-2", "Счет второго поставщика"),
+            null,
+            CancellationToken.None);
+        Assert.True(secondAccrual.Succeeded, $"{secondAccrual.ErrorCode}: {secondAccrual.ErrorMessage}");
 
         var page = await service.GetSupplierAccrualsPageAsync(new SupplierAccrualListRequest(null, null, null, 25, 0, fixtures.Supplier.Id), CancellationToken.None);
 
@@ -6447,9 +6566,11 @@ public sealed class FinanceServiceTests
         var salaryExpenseType = new ExpenseType { Name = "Зарплата", Code = "salary" };
         var expenseOnlyType = new ExpenseType { Name = "Ремонт", Code = "repair" };
         var accrualOnlyType = new ExpenseType { Name = "Охрана", Code = "security" };
+        var securityService = new ChargeServiceSetting { Name = "Охрана", ExpenseType = accrualOnlyType };
+        var securitySupplier = new Supplier { Name = "Охранная организация", GroupId = fixtures.Supplier.GroupId, ChargeServiceSetting = securityService };
         var staffDepartment = new StaffDepartment { Name = "Бухгалтерия" };
         var staffMember = new StaffMember { FullName = "Петрова Ольга", Department = staffDepartment, Rate = 40000m };
-        database.Context.AddRange(waterIncomeType, unmatchedIncomeType, salaryExpenseType, expenseOnlyType, accrualOnlyType, staffDepartment, staffMember);
+        database.Context.AddRange(waterIncomeType, unmatchedIncomeType, salaryExpenseType, expenseOnlyType, accrualOnlyType, securityService, securitySupplier, staffDepartment, staffMember);
         await database.Context.SaveChangesAsync();
 
         Assert.True((await service.CreateSupplierAccrualAsync(
@@ -6457,7 +6578,7 @@ public sealed class FinanceServiceTests
             null,
             CancellationToken.None)).Succeeded);
         Assert.True((await service.CreateSupplierAccrualAsync(
-            new CreateSupplierAccrualRequest(fixtures.Supplier.Id, accrualOnlyType.Id, month, 75m, "manual", "INV-security", "Счет за охрану"),
+            new CreateSupplierAccrualRequest(securitySupplier.Id, accrualOnlyType.Id, month, 75m, "manual", "INV-security", "Счет за охрану"),
             null,
             CancellationToken.None)).Succeeded);
         Assert.True((await service.CreateExpenseAsync(
@@ -7488,9 +7609,22 @@ public sealed class FinanceServiceTests
             var owner = new Owner { LastName = "Иванов", FirstName = "Иван" };
             var garage = new Garage { Number = "12", PeopleCount = 1, FloorCount = 1, Owner = owner, InitialWaterMeterValue = 10m, InitialElectricityMeterValue = 100m };
             var group = new SupplierGroup { Name = "Коммунальные услуги" };
-            var supplier = new Supplier { Name = "Vodokanal", Group = group };
             var incomeType = new IncomeType { Name = "Членский взнос", Code = "membership" };
             var expenseType = new ExpenseType { Name = "Вода", Code = "water" };
+            var chargeService = new ChargeServiceSetting
+            {
+                Name = "Вода",
+                IsRegular = false,
+                ExpenseTypeId = expenseType.Id,
+                ExpenseType = expenseType
+            };
+            var supplier = new Supplier
+            {
+                Name = "Vodokanal",
+                Group = group,
+                ChargeServiceSettingId = chargeService.Id,
+                ChargeServiceSetting = chargeService
+            };
             var bankFund = new Fund { Name = "Тестовый банк", NormalizedName = "ТЕСТОВЫЙ БАНК", Balance = SeededBankAmount };
             var bankDeposit = new FundOperation
             {
@@ -7504,7 +7638,7 @@ public sealed class FinanceServiceTests
                 CreatedAtUtc = new DateTimeOffset(2000, 1, 1, 0, 0, 0, TimeSpan.Zero)
             };
 
-            Context.AddRange(owner, garage, group, supplier, incomeType, expenseType, bankFund, bankDeposit);
+            Context.AddRange(owner, garage, group, supplier, incomeType, expenseType, chargeService, bankFund, bankDeposit);
             await Context.SaveChangesAsync();
             return new Fixtures(garage, supplier, incomeType, expenseType);
         }

@@ -599,6 +599,12 @@ public sealed class DictionaryService(
         {
             return DictionaryResult<SupplierDto>.Failure("charge_service_not_found", "Услуга из раздела тарифов не найдена.");
         }
+        if (chargeService is not null && !chargeService.ExpenseTypeId.HasValue)
+        {
+            return DictionaryResult<SupplierDto>.Failure(
+                "supplier_service_expense_type_required",
+                "Для выбранной услуги не настроен вид начисления поставщику.");
+        }
 
         var name = request.Name.Trim();
         if (await supplierRepository.ActiveDuplicateExistsAsync(null, group.Id, name, cancellationToken))
@@ -650,6 +656,12 @@ public sealed class DictionaryService(
         if (request.ChargeServiceSettingId.HasValue && chargeService is null)
         {
             return DictionaryResult<SupplierDto>.Failure("charge_service_not_found", "Услуга из раздела тарифов не найдена.");
+        }
+        if (chargeService is not null && !chargeService.ExpenseTypeId.HasValue)
+        {
+            return DictionaryResult<SupplierDto>.Failure(
+                "supplier_service_expense_type_required",
+                "Для выбранной услуги не настроен вид начисления поставщику.");
         }
 
         var name = request.Name.Trim();
@@ -2406,6 +2418,14 @@ public sealed class DictionaryService(
 
     private async Task<DictionaryResult<object>> ValidateChargeServiceAccountingLinksAsync(UpsertChargeServiceSettingRequest request, CancellationToken cancellationToken)
     {
+        if (request.ExpenseTypeId.HasValue &&
+            await expenseTypeRepository.FindActiveAsync(request.ExpenseTypeId.Value, cancellationToken) is null)
+        {
+            return DictionaryResult<object>.Failure(
+                "charge_service_expense_type_not_found",
+                "Вид начисления поставщику для услуги не найден.");
+        }
+
         if (!request.IsRegular)
         {
             return DictionaryResult<object>.Success(new object());
@@ -2459,6 +2479,7 @@ public sealed class DictionaryService(
         setting.PaymentDueMonth = NormalizeChargeServicePaymentDueMonth(request);
         setting.OverdueGraceDays = request.OverdueGraceDays;
         setting.IncomeTypeId = request.IsRegular ? request.IncomeTypeId : null;
+        setting.ExpenseTypeId = request.ExpenseTypeId;
         setting.TariffId = request.IsRegular ? request.TariffId : null;
         setting.IsMetered = request.IsRegular && request.IsMetered;
         setting.HasTieredTariff = request.IsRegular && request.IsMetered && request.HasTieredTariff;
@@ -2475,6 +2496,7 @@ public sealed class DictionaryService(
             setting.PaymentDueMonth == NormalizeChargeServicePaymentDueMonth(request) &&
             setting.OverdueGraceDays == request.OverdueGraceDays &&
             setting.IncomeTypeId == (request.IsRegular ? request.IncomeTypeId : null) &&
+            setting.ExpenseTypeId == request.ExpenseTypeId &&
             setting.TariffId == (request.IsRegular ? request.TariffId : null) &&
             setting.IsMetered == (request.IsRegular && request.IsMetered) &&
             setting.HasTieredTariff == (request.IsRegular && request.IsMetered && request.HasTieredTariff) &&
@@ -2515,6 +2537,7 @@ public sealed class DictionaryService(
             ["paymentDueMonth"] = setting.PaymentDueMonth,
             ["overdueGraceDays"] = setting.OverdueGraceDays,
             ["incomeTypeId"] = setting.IncomeTypeId,
+            ["expenseTypeId"] = setting.ExpenseTypeId,
             ["tariffId"] = setting.TariffId,
             ["isMetered"] = setting.IsMetered,
             ["hasTieredTariff"] = setting.HasTieredTariff,
@@ -2882,7 +2905,8 @@ public sealed class DictionaryService(
             supplier.IsArchived,
             debt ?? supplier.StartingBalance,
             supplier.ChargeServiceSettingId,
-            supplier.ChargeServiceSetting?.Name);
+            supplier.ChargeServiceSetting?.Name,
+            supplier.ChargeServiceSetting?.ExpenseTypeId);
     }
 
     private async Task<SupplierDto> ToSupplierDtoWithDebtAsync(Supplier supplier, CancellationToken cancellationToken)
@@ -2943,7 +2967,8 @@ public sealed class DictionaryService(
             setting.IsMetered,
             setting.HasTieredTariff,
             setting.UnitName,
-            setting.IsArchived);
+            setting.IsArchived,
+            setting.ExpenseTypeId);
     }
 
     private async Task<IReadOnlyList<IrregularPaymentDto>> ToIrregularPaymentDtosAsync(IReadOnlyList<IrregularPayment> payments, CancellationToken cancellationToken)

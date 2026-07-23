@@ -438,6 +438,7 @@ public sealed class PostgreSqlExpenseWorksheetIntegrationTests
     {
         await using var database = await PostgreSqlTestDatabase.CreateAsync();
         Guid supplierId;
+        Guid repairSupplierId;
         Guid serviceTypeId;
         Guid repairTypeId;
         await using (var seedContext = database.CreateContext())
@@ -447,9 +448,12 @@ public sealed class PostgreSqlExpenseWorksheetIntegrationTests
             seedContext.FundOperations.RemoveRange(seedContext.FundOperations);
             seedContext.Funds.RemoveRange(seedContext.Funds);
             var supplierGroup = new SupplierGroup { Name = "Трёхмесячный сценарий поставщика PG" };
-            var supplier = new Supplier { Name = "Поставщик трёхмесячного сценария PG", Group = supplierGroup };
             var serviceType = new ExpenseType { Name = "Основная услуга сценария PG", Code = "pg_supplier_three_month_service" };
             var repairType = new ExpenseType { Name = "Ремонт сценария PG", Code = "pg_supplier_three_month_repair" };
+            var supplierService = new ChargeServiceSetting { Name = "Основная услуга сценария PG", ExpenseType = serviceType };
+            var repairService = new ChargeServiceSetting { Name = "Ремонт сценария PG", ExpenseType = repairType };
+            var supplier = new Supplier { Name = "Поставщик трёхмесячного сценария PG", Group = supplierGroup, ChargeServiceSetting = supplierService };
+            var repairSupplier = new Supplier { Name = "Ремонтная организация сценария PG", Group = supplierGroup, ChargeServiceSetting = repairService };
             var bankFund = new Fund
             {
                 Name = "Банк трёхмесячного сценария PG",
@@ -458,13 +462,17 @@ public sealed class PostgreSqlExpenseWorksheetIntegrationTests
                 AllowOperations = true
             };
             supplierId = supplier.Id;
+            repairSupplierId = repairSupplier.Id;
             serviceTypeId = serviceType.Id;
             repairTypeId = repairType.Id;
             seedContext.AddRange(
                 supplierGroup,
                 supplier,
+                repairSupplier,
                 serviceType,
                 repairType,
+                supplierService,
+                repairService,
                 bankFund,
                 new FundOperation
                 {
@@ -500,12 +508,12 @@ public sealed class PostgreSqlExpenseWorksheetIntegrationTests
             CancellationToken.None);
         var februaryRepairAccrual = await service.CreateSupplierAccrualAsync(
             new CreateSupplierAccrualRequest(
-                supplierId, repairTypeId, new DateOnly(2026, 2, 1), 30m, "manual", "PG-REP-02", "Отдельный счёт за ремонт PG"),
+                repairSupplierId, repairTypeId, new DateOnly(2026, 2, 1), 30m, "manual", "PG-REP-02", "Отдельный счёт за ремонт PG"),
             actorUserId,
             CancellationToken.None);
         var februaryRepairPayment = await service.CreateExpenseAsync(
             new CreateExpenseOperationRequest(
-                supplierId, repairTypeId, new DateOnly(2026, 2, 21), new DateOnly(2026, 2, 1), 10m, "PG-REP-PAY-02", null),
+                repairSupplierId, repairTypeId, new DateOnly(2026, 2, 21), new DateOnly(2026, 2, 1), 10m, "PG-REP-PAY-02", null),
             actorUserId,
             CancellationToken.None);
         var marchAccrual = await service.CreateSupplierAccrualAsync(
@@ -545,7 +553,7 @@ public sealed class PostgreSqlExpenseWorksheetIntegrationTests
             new ExpenseWorksheetRequest(new DateOnly(2026, 3, 1)), CancellationToken.None);
         Assert.True(marchBeforeCancellation.Succeeded);
         AssertExpenseCarry(FindRow(marchBeforeCancellation.Value!, supplierId, serviceTypeId), 0m, 40m, 0m, 15m);
-        AssertExpenseCarry(FindRow(marchBeforeCancellation.Value!, supplierId, repairTypeId), 20m, 0m, 20m, 0m);
+        AssertExpenseCarry(FindRow(marchBeforeCancellation.Value!, repairSupplierId, repairTypeId), 20m, 0m, 20m, 0m);
 
         var cancellation = await service.CancelOperationAsync(
             februaryAdvancePayment.Value.Id,
@@ -558,7 +566,7 @@ public sealed class PostgreSqlExpenseWorksheetIntegrationTests
         Assert.True(cancellation.Succeeded);
         Assert.True(marchAfterCancellation.Succeeded);
         AssertExpenseCarry(FindRow(marchAfterCancellation.Value!, supplierId, serviceTypeId), 60m, 0m, 85m, 0m);
-        AssertExpenseCarry(FindRow(marchAfterCancellation.Value!, supplierId, repairTypeId), 20m, 0m, 20m, 0m);
+        AssertExpenseCarry(FindRow(marchAfterCancellation.Value!, repairSupplierId, repairTypeId), 20m, 0m, 20m, 0m);
         Assert.Equal(3, await context.SupplierAccruals.CountAsync(accrual => !accrual.IsCanceled));
         Assert.Equal(2, await context.FinancialOperations.CountAsync(operation => !operation.IsCanceled));
         Assert.Equal(3, await context.AuditEvents.CountAsync(audit => audit.Action == "finance.supplier_accrual_created"));

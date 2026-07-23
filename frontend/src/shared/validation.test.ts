@@ -230,7 +230,7 @@ describe('shared validation helpers', () => {
 
     expect(getSupplierAccrualValidationErrors({ supplierId: '', expenseTypeId: '', accountingMonth: 'bad', amount: 0, source: 'manual', documentNumber: '', comment: '' })).toEqual([
       'Выберите поставщика для начисления.',
-      'Выберите вид начисления поставщику.',
+      'Для поставщика должна быть настроена услуга начисления.',
       'Укажите месяц начисления поставщику.',
       'Сумма начисления поставщику должна быть больше 0.',
       'Укажите комментарий начисления поставщику.',

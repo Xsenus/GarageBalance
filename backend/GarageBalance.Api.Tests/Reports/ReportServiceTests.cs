@@ -2454,9 +2454,10 @@ public sealed class ReportServiceTests
             var firstGarage = new Garage { Number = "12", PeopleCount = 1, FloorCount = 1, Owner = firstOwner, InitialWaterMeterValue = 10m, InitialElectricityMeterValue = 100m };
             var secondGarage = new Garage { Number = "21", PeopleCount = 2, FloorCount = 1, Owner = secondOwner, InitialWaterMeterValue = 5m, InitialElectricityMeterValue = 50m };
             var group = new SupplierGroup { Name = "Коммунальные услуги" };
-            var supplier = new Supplier { Name = "Vodokanal", Group = group };
             var incomeType = new IncomeType { Name = "Членский взнос", Code = "membership" };
             var expenseType = new ExpenseType { Name = "Вода", Code = "water" };
+            var chargeService = new ChargeServiceSetting { Name = "Вода", ExpenseType = expenseType };
+            var supplier = new Supplier { Name = "Vodokanal", Group = group, ChargeServiceSetting = chargeService };
             var bankFund = new Fund { Name = "Тестовый банк", NormalizedName = "ТЕСТОВЫЙ БАНК", Balance = SeededBankAmount };
             var bankDeposit = new FundOperation
             {
@@ -2470,7 +2471,7 @@ public sealed class ReportServiceTests
                 CreatedAtUtc = new DateTimeOffset(2000, 1, 1, 0, 0, 0, TimeSpan.Zero)
             };
 
-            Context.AddRange(firstOwner, secondOwner, firstGarage, secondGarage, group, supplier, incomeType, expenseType, bankFund, bankDeposit);
+            Context.AddRange(firstOwner, secondOwner, firstGarage, secondGarage, group, supplier, incomeType, expenseType, chargeService, bankFund, bankDeposit);
             await Context.SaveChangesAsync();
             return new Fixtures(firstGarage, secondGarage, supplier, incomeType, expenseType);
         }

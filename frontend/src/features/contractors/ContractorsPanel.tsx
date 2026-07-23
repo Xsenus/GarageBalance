@@ -777,6 +777,7 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
   const [supplierGroups, setSupplierGroups] = useState<SupplierGroupDto[]>([])
   const [chargeServices, setChargeServices] = useState<ChargeServiceSettingDto[]>([])
   const [serviceIncomeTypes, setServiceIncomeTypes] = useState<AccountingTypeDto[]>([])
+  const [serviceExpenseTypes, setServiceExpenseTypes] = useState<AccountingTypeDto[]>([])
   const [serviceTariffs, setServiceTariffs] = useState<TariffDto[]>([])
   const [serviceSaving, setServiceSaving] = useState(false)
   const [formStateLoaded, setFormStateLoaded] = useState(false)
@@ -952,11 +953,12 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
             }))
           }
         } else {
-          const [groups, supplierContactRows, loadedChargeServices, loadedIncomeTypes, loadedTariffs] = await Promise.all([
+          const [groups, supplierContactRows, loadedChargeServices, loadedIncomeTypes, loadedExpenseTypes, loadedTariffs] = await Promise.all([
             dictionaryClient.getSupplierGroups(auth.accessToken, undefined, contractorsDictionaryListLimit, true),
             dictionaryClient.getSupplierContacts(auth.accessToken, undefined, undefined, contractorsDictionaryListLimit, true),
             dictionaryClient.getChargeServiceSettings(auth.accessToken, undefined, contractorsDictionaryListLimit, true),
             dictionaryClient.getIncomeTypes(auth.accessToken, undefined, contractorsDictionaryListLimit, true),
+            dictionaryClient.getExpenseTypes(auth.accessToken, undefined, contractorsDictionaryListLimit, true),
             dictionaryClient.getTariffs(auth.accessToken, undefined, contractorsDictionaryListLimit, true),
           ])
           if (!cancelled) {
@@ -965,6 +967,7 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
             setSupplierContacts(supplierContactRows)
             setChargeServices(loadedChargeServices)
             setServiceIncomeTypes(loadedIncomeTypes)
+            setServiceExpenseTypes(loadedExpenseTypes)
             setServiceTariffs(loadedTariffs)
             setSuppliers((current) => current.map((supplier) => ({
               ...supplier,
@@ -2412,7 +2415,7 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
 
       {modal?.type === 'garage' ? <GaragePrototypeDialog accessToken={auth.accessToken} integrationClient={integrationClient} item={modal.item} onClose={() => setModal(null)} onSave={saveGarage} onOpenFinancialReport={openGarageFinancialReport} /> : null}
       {modal?.type === 'supplier' ? <SupplierPrototypeDialog accessToken={auth.accessToken} integrationClient={integrationClient} item={modal.item} services={chargeServices} onClose={() => setModal(null)} onOpenFinancialReport={openSupplierFinancialReport} onSave={saveSupplier} /> : null}
-      {modal?.type === 'service' ? <AddServicePrototypeDialog isSaving={serviceSaving} incomeTypes={serviceIncomeTypes.filter((item) => !item.isArchived)} onClose={() => setModal(null)} onCreateWithTariff={saveServiceWithTariff} regularOnly tariffs={serviceTariffs.filter((item) => !item.isArchived)} /> : null}
+      {modal?.type === 'service' ? <AddServicePrototypeDialog expenseTypes={serviceExpenseTypes.filter((item) => !item.isArchived)} isSaving={serviceSaving} incomeTypes={serviceIncomeTypes.filter((item) => !item.isArchived)} onClose={() => setModal(null)} onCreateWithTariff={saveServiceWithTariff} regularOnly tariffs={serviceTariffs.filter((item) => !item.isArchived)} /> : null}
       {modal?.type === 'employee' ? <EmployeePrototypeDialog departments={departments} item={modal.item} onClose={() => setModal(null)} onOpenFinancialReport={openEmployeeFinancialReport} onSave={saveEmployee} /> : null}
       {modal?.type === 'department' ? <DepartmentPrototypeDialog item={modal.item} onClose={() => setModal(null)} onSave={saveDepartment} /> : null}
 
@@ -3207,7 +3210,8 @@ function getDepartmentPrototypeChanges(previous: ContractorDepartmentRow, next: 
 }
 
 function SupplierPrototypeDialog({ accessToken, integrationClient, item, services, onClose, onOpenFinancialReport, onSave }: { accessToken: string; integrationClient: IntegrationClient; item?: ContractorSupplierRow; services: ChargeServiceSettingDto[]; onClose: () => void; onOpenFinancialReport: (item: ContractorSupplierRow) => void; onSave: (item: ContractorSupplierRow) => void }) {
-  const activeServices = services.filter((service) => !service.isArchived || service.id === item?.serviceId)
+  const activeServices = services.filter((service) =>
+    service.id === item?.serviceId || (!service.isArchived && Boolean(service.expenseTypeId)))
   const initialService = activeServices.find((service) => service.id === item?.serviceId) ?? activeServices.find((service) => service.name === item?.service) ?? activeServices[0] ?? null
   const [form, setForm] = useState<ContractorSupplierRow>(item
     ? { ...item, serviceId: initialService?.id ?? item.serviceId, service: initialService?.name ?? item.service }

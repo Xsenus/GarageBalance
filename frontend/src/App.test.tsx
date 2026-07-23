@@ -1457,6 +1457,7 @@ describe('App', () => {
             id: 'service-cleaning-created',
             name: request.service.name,
             incomeTypeId: request.service.incomeTypeId ?? null,
+            expenseTypeId: request.service.expenseTypeId ?? null,
             tariffId: tariff.id,
             isRegular: request.service.isRegular,
           }),
@@ -1469,8 +1470,9 @@ describe('App', () => {
           name: request.name,
           groupId: request.groupId,
           groupName: 'Коммунальные услуги',
-          chargeServiceSettingId: request.chargeServiceSettingId ?? null,
-          chargeServiceSettingName: request.chargeServiceSettingId ? 'Уборка территории' : null,
+            chargeServiceSettingId: request.chargeServiceSettingId ?? null,
+            chargeServiceSettingName: request.chargeServiceSettingId ? 'Уборка территории' : null,
+            chargeServiceExpenseTypeId: request.chargeServiceSettingId ? 'expense-type-1' : null,
           inn: request.inn ?? null,
           legalAddress: request.legalAddress ?? null,
           contactPerson: request.contactPerson ?? null,
@@ -1823,6 +1825,9 @@ describe('App', () => {
     serviceDialog = await screen.findByRole('dialog', { name: 'Добавить услугу' })
     expect(within(serviceDialog).queryByRole('checkbox', { name: 'Регулярные платежи' })).not.toBeInTheDocument()
     await user.type(within(serviceDialog).getByLabelText('Наименование услуги'), 'Уборка территории')
+    const contractorServiceExpenseType = within(serviceDialog).getByRole('combobox', { name: 'Вид начисления поставщику для услуги' })
+    await user.click(contractorServiceExpenseType)
+    await user.click(within(serviceDialog).getByRole('option', { name: 'Электроэнергия' }))
     const contractorServiceCost = within(serviceDialog).getByLabelText('Стоимость регулярной услуги')
     await user.clear(contractorServiceCost)
     await user.type(contractorServiceCost, '1000')
@@ -1833,7 +1838,7 @@ describe('App', () => {
       }
       expect(createdContractorServiceRequest).toMatchObject({
         rate: 1000,
-        service: { name: 'Уборка территории', isRegular: true },
+        service: { name: 'Уборка территории', isRegular: true, expenseTypeId: 'expense-type-1' },
       })
     })
     await waitFor(() => expect(addContractorServiceButton).toHaveFocus())
@@ -3680,6 +3685,7 @@ describe('App', () => {
       hasTieredTariff: false,
       unitName: 'руб.',
       incomeTypeId: serviceIncomeType.id,
+      expenseTypeId: null,
       tariffId: serviceTariff.id,
     })
     expect(within(tariffsPanel).getByRole('button', { name: 'Изменить услугу Охрана территории' })).toBeInTheDocument()
@@ -5266,13 +5272,10 @@ describe('App', () => {
     const selectedAccrualSupplier = within(accrualDialog).getByRole('option', { name: 'Водоканал' })
     expect(selectedAccrualSupplier).toHaveAttribute('aria-selected', 'true')
     await user.click(selectedAccrualSupplier)
-    const accrualType = within(accrualDialog).getByRole('combobox', { name: 'Вид начисления поставщику' })
+    const accrualType = within(accrualDialog).getByRole('combobox', { name: 'Услуга начисления поставщику' })
     expect(accrualType).toHaveClass('select-control__trigger')
     expect(accrualType).toHaveTextContent('Электроэнергия')
-    await user.click(accrualType)
-    const selectedAccrualType = within(accrualDialog).getByRole('option', { name: 'Электроэнергия' })
-    expect(selectedAccrualType).toHaveAttribute('aria-selected', 'true')
-    await user.click(selectedAccrualType)
+    expect(accrualType).toBeDisabled()
     const accrualMonth = within(accrualDialog).getByLabelText('Месяц начисления поставщику')
     expect(accrualMonth).toHaveValue('06.2026')
     expect(accrualMonth.closest('.localized-date-picker')).not.toBeNull()
@@ -12878,15 +12881,43 @@ describe('App', () => {
   it('creates supplier accrual from payments workspace', async () => {
     const user = userEvent.setup()
     const financeClient = createStatefulFinanceClient()
-    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={financeClient} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+    const electricityExpenseType = createAccountingType({ id: 'expense-type-1', name: 'Электроэнергия', code: 'electricity' })
+    const wasteExpenseType = createAccountingType({ id: 'expense-type-waste', name: 'Вывоз мусора', code: 'trash_removal' })
+    const waterSupplier = createSupplier({
+      id: 'supplier-1',
+      name: 'Водоканал',
+      chargeServiceSettingId: 'service-electricity',
+      chargeServiceSettingName: 'Электроэнергия',
+      chargeServiceExpenseTypeId: electricityExpenseType.id,
+    })
+    const wasteSupplier = createSupplier({
+      id: 'supplier-waste',
+      name: 'ЭкоТранс',
+      chargeServiceSettingId: 'service-waste',
+      chargeServiceSettingName: 'Вывоз мусора',
+      chargeServiceExpenseTypeId: wasteExpenseType.id,
+    })
+    const dictionaryClient = createDictionaryClient({
+      getSuppliers: async () => [waterSupplier, wasteSupplier],
+      getExpenseTypes: async () => [electricityExpenseType, wasteExpenseType],
+    })
+    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={financeClient} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
     await user.click(screen.getByRole('button', { name: 'Войти' }))
     await openSection(user, 'Платежи')
     const financePanel = await screen.findByRole('region', { name: 'Платежи' })
 
-    await waitFor(() => expect(within(financePanel).getByLabelText('Поставщик для начисления')).toHaveValue('supplier-1'))
-    await waitFor(() => expect(within(financePanel).getByLabelText('Вид начисления поставщику')).toHaveValue('expense-type-1'))
+    const supplierControl = within(financePanel).getByLabelText('Поставщик для начисления')
+    await waitFor(() => expect(supplierControl).toHaveValue('supplier-1'))
+    const supplierAccrualService = within(financePanel).getByLabelText('Услуга начисления поставщику')
+    await waitFor(() => expect(supplierAccrualService).toHaveValue('expense-type-1'))
+    expect(supplierAccrualService).toBeDisabled()
+    await user.selectOptions(supplierControl, wasteSupplier.id)
+    expect(supplierAccrualService).toHaveValue(wasteExpenseType.id)
+    expect(supplierAccrualService).toHaveTextContent(wasteExpenseType.name)
+    await user.selectOptions(supplierControl, waterSupplier.id)
+    expect(supplierAccrualService).toHaveValue(electricityExpenseType.id)
     await user.clear(within(financePanel).getByLabelText('Сумма начисления поставщику'))
     await user.type(within(financePanel).getByLabelText('Сумма начисления поставщику'), '650')
     await user.type(within(financePanel).getByLabelText('Документ начисления поставщику'), 'INV-1')
@@ -16196,7 +16227,16 @@ function createDictionaryClient(overrides: Partial<DictionaryClient> = {}): Dict
   const owner = createOwner({ id: 'owner-1', lastName: 'Иванов', firstName: 'Иван', phone: '+7 (900) 000-00-00' })
   const garage = createGarage({ id: 'garage-1', number: '12', ownerId: owner.id, ownerName: owner.fullName })
   const group = createGroup({ id: 'group-1', name: 'Коммунальные услуги' })
-  const supplier = createSupplier({ id: 'supplier-1', name: 'Водоканал', groupId: group.id, groupName: group.name, inn: '5401' })
+  const supplier = createSupplier({
+    id: 'supplier-1',
+    name: 'Водоканал',
+    groupId: group.id,
+    groupName: group.name,
+    inn: '5401',
+    chargeServiceSettingId: 'charge-service-water',
+    chargeServiceSettingName: 'Электроэнергия',
+    chargeServiceExpenseTypeId: 'expense-type-1',
+  })
   const supplierContact = createSupplierContact({ id: 'supplier-contact-1', supplierId: supplier.id, supplierName: supplier.name, fullName: 'Иванов П.В.' })
   const staffDepartment = createStaffDepartment({ id: 'staff-department-1', name: 'Бухгалтерия' })
   const staffMember = createStaffMember({ id: 'staff-member-1', fullName: 'Петрова Ольга', departmentId: staffDepartment.id, departmentName: staffDepartment.name, rate: 40000 })
@@ -16475,9 +16515,10 @@ function createDictionaryClient(overrides: Partial<DictionaryClient> = {}): Dict
           accrualStartMonth: request.service.accrualStartMonth ?? null,
           paymentDueDay: request.service.paymentDueDay ?? null,
           paymentDueMonth: request.service.paymentDueMonth ?? null,
-          overdueGraceDays: request.service.overdueGraceDays,
-          incomeTypeId: request.service.incomeTypeId ?? null,
-          tariffId: createdTariff.id,
+           overdueGraceDays: request.service.overdueGraceDays,
+           incomeTypeId: request.service.incomeTypeId ?? null,
+           expenseTypeId: request.service.expenseTypeId ?? null,
+           tariffId: createdTariff.id,
           isMetered: request.service.isMetered,
           hasTieredTariff: request.service.hasTieredTariff,
           unitName: request.service.unitName ?? null,
@@ -16493,9 +16534,10 @@ function createDictionaryClient(overrides: Partial<DictionaryClient> = {}): Dict
       accrualStartMonth: request.accrualStartMonth ?? null,
       paymentDueDay: request.paymentDueDay ?? null,
       paymentDueMonth: request.paymentDueMonth ?? null,
-      overdueGraceDays: request.overdueGraceDays,
-      incomeTypeId: request.incomeTypeId ?? null,
-      tariffId: request.tariffId ?? null,
+       overdueGraceDays: request.overdueGraceDays,
+       incomeTypeId: request.incomeTypeId ?? null,
+       expenseTypeId: request.expenseTypeId ?? null,
+       tariffId: request.tariffId ?? null,
       isMetered: request.isMetered,
       hasTieredTariff: request.hasTieredTariff,
       unitName: request.unitName ?? null,
@@ -16508,9 +16550,10 @@ function createDictionaryClient(overrides: Partial<DictionaryClient> = {}): Dict
       accrualStartMonth: request.accrualStartMonth ?? null,
       paymentDueDay: request.paymentDueDay ?? null,
       paymentDueMonth: request.paymentDueMonth ?? null,
-      overdueGraceDays: request.overdueGraceDays,
-      incomeTypeId: request.incomeTypeId ?? null,
-      tariffId: request.tariffId ?? null,
+       overdueGraceDays: request.overdueGraceDays,
+       incomeTypeId: request.incomeTypeId ?? null,
+       expenseTypeId: request.expenseTypeId ?? null,
+       tariffId: request.tariffId ?? null,
       isMetered: request.isMetered,
       hasTieredTariff: request.hasTieredTariff,
       unitName: request.unitName ?? null,

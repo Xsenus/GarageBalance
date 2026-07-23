@@ -248,7 +248,7 @@ const financeEditorFieldLabels: Record<FinanceEditorFieldLabelKey, string> = {
   regularMonth: 'Месяц начисления',
   regularComment: 'Комментарий',
   supplierAccrualSupplier: 'Поставщик',
-  supplierAccrualType: 'Вид начисления',
+  supplierAccrualType: 'Услуга',
   supplierAccrualMonth: 'Месяц начисления',
   supplierAccrualAmount: 'Сумма начисления',
   supplierAccrualSource: 'Источник',
