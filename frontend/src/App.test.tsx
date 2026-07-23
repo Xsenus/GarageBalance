@@ -33,7 +33,7 @@ import type { AuthClient, AuthResponse } from './services/authApi'
 import { DictionaryApiError } from './services/dictionariesApi'
 import type { AccountingTypeDto, ChargeServiceSettingDto, CreateChargeServiceWithTariffRequest, DictionaryClient, FeeCampaignDto, GarageDto, IrregularPaymentDto, OwnerDto, PagedResult, StaffDepartmentDto, StaffMemberDto, SupplierContactDto, SupplierDto, SupplierGroupDto, TariffDto, UpsertGarageRequest, UpsertIrregularPaymentRequest, UpsertStaffMemberRequest, UpsertSupplierRequest, UpsertTariffRequest } from './services/dictionariesApi'
 import { FinanceApiError } from './services/financeApi'
-import type { AccrualDto, CorrectHistoricalMeterReadingRequest, CreateExpenseOperationRequest, CreateIncomeOperationRequest, CreateIrregularAccrualRequest, CreateMeterReadingRequest, CreateStaffPaymentRequest, CreateSupplierAccrualRequest, ExpenseWorksheetDto, FeeCampaignAccrualGenerationResultDto, FinanceClient, FinancePagedResult, FinancePageParams, FinanceSummaryDto, FinancialOperationDto, GarageBalanceHistoryDto, GarageIncomeWorksheetDto, GenerateFeeCampaignAccrualsRequest, GenerateSupplierGroupSalaryAccrualsRequest, MeterReadingDto, MeterReadingYearPageDto, MissingMeterReadingDto, RegularAccrualGenerationResultDto, RegularCatalogAccrualGenerationResultDto, SupplierAccrualDto, SupplierGroupSalaryAccrualGenerationResultDto } from './services/financeApi'
+import type { AccrualDto, CorrectHistoricalMeterReadingRequest, CreateAccrualRequest, CreateExpenseOperationRequest, CreateIncomeOperationRequest, CreateIrregularAccrualRequest, CreateMeterReadingRequest, CreateStaffPaymentRequest, CreateSupplierAccrualRequest, ExpenseWorksheetDto, FeeCampaignAccrualGenerationResultDto, FinanceClient, FinancePagedResult, FinancePageParams, FinanceSummaryDto, FinancialOperationDto, GarageBalanceHistoryDto, GarageIncomeWorksheetDto, GenerateFeeCampaignAccrualsRequest, GenerateSupplierGroupSalaryAccrualsRequest, MeterReadingDto, MeterReadingYearPageDto, MissingMeterReadingDto, RegularAccrualGenerationResultDto, RegularCatalogAccrualGenerationResultDto, SupplierAccrualDto, SupplierGroupSalaryAccrualGenerationResultDto } from './services/financeApi'
 import type { CreateFundOperationRequest, FundDto, FundOperationDto, FundOperationPageDto, FundsClient } from './services/fundsApi'
 import type { AccessImportCreatedRecordDto, AccessImportQuarantineItemDto, AccessImportReaderStatusDto, AccessImportRunDto, AccessImportRunLogEntryDto, ImportClient } from './services/importApi'
 import type { IntegrationClient, IntegrationSecretSettingDto, OneCFreshIntegrationStatusDto, OneCFreshSyncDto, OneCFreshSyncPreviewDto, OneCFreshSyncRequest, ReceiptPrintingActionDto, ReceiptPrintingActionRequest, ReceiptPrintingIntegrationStatusDto } from './services/integrationsApi'
@@ -4517,7 +4517,8 @@ describe('App', () => {
     const incomeType = createAccountingType({ id: 'income-electricity', name: 'Электроэнергия', code: 'electricity' })
     const waterIncomeType = createAccountingType({ id: 'income-water', name: 'Водоснабжение', code: 'water' })
     const otherPaymentsIncomeType = createAccountingType({ id: 'income-other-payments', name: 'Прочие оплаты', code: 'other_payments' })
-    const incomeTypes = [incomeType, waterIncomeType, otherPaymentsIncomeType]
+    const penaltyIncomeType = createAccountingType({ id: 'income-penalty', name: 'Штраф', code: 'penalty', isSystem: true })
+    const incomeTypes = [incomeType, waterIncomeType, otherPaymentsIncomeType, penaltyIncomeType]
     const irregularPayment = createIrregularPayment({ id: 'irregular-access-card', name: 'Карта доступа', amount: 750 })
     const electricityExpenseType = createAccountingType({ id: 'expense-type-1', name: 'Электроэнергия', code: 'electricity' })
     const advanceExpenseType = createAccountingType({ id: 'expense-advance', name: 'Авансовые выплаты', code: 'advance_payment' })
@@ -4527,6 +4528,8 @@ describe('App', () => {
     let expenseWorksheetRequestCount = 0
     const savedIncomeRequests: CreateIncomeOperationRequest[] = []
     const savedAccrualRequests: CreateIrregularAccrualRequest[] = []
+    const savedPenaltyAccrualRequests: CreateAccrualRequest[] = []
+    let penaltyAccrualAttemptCount = 0
     const generateRegularCatalogAccruals = vi.fn(async () => createRegularCatalogAccrualGenerationResult())
     const savedExpenseRequests: CreateExpenseOperationRequest[] = []
     const savedStaffPaymentRequests: CreateStaffPaymentRequest[] = []
@@ -4580,6 +4583,25 @@ describe('App', () => {
           accountingMonth: request.accountingMonth,
           amount: irregularPayment.amount,
           source: 'manual',
+          comment: request.comment ?? null,
+        })
+      },
+      createAccrual: async (_token, request) => {
+        penaltyAccrualAttemptCount += 1
+        if (penaltyAccrualAttemptCount === 1) {
+          throw new Error('Штраф временно не сохранён')
+        }
+        savedPenaltyAccrualRequests.push(request)
+        return createAccrual({
+          id: `garage-penalty-${savedPenaltyAccrualRequests.length}`,
+          garageId: request.garageId,
+          garageNumber: garage.number,
+          ownerName: garage.ownerName,
+          incomeTypeId: penaltyIncomeType.id,
+          incomeTypeName: penaltyIncomeType.name,
+          accountingMonth: request.accountingMonth,
+          amount: request.amount,
+          source: request.source,
           comment: request.comment ?? null,
         })
       },
@@ -5011,6 +5033,10 @@ describe('App', () => {
     expect(within(garageActions as HTMLElement).queryByRole('button', { name: 'Перенести задолженность' })).not.toBeInTheDocument()
     expect(fullPaymentAction).toHaveClass('payments-prototype-action-button')
     expect(fullPaymentAction.querySelector('.lucide-wallet-cards')).not.toBeNull()
+    const penaltyAccrualButton = within(garageActions as HTMLElement).getByRole('button', { name: 'Начислить штраф' })
+    expect(penaltyAccrualButton).toHaveClass('create-action-button')
+    expect(penaltyAccrualButton).toHaveClass('payments-prototype-action-button')
+    expect(penaltyAccrualButton.querySelector('.lucide-gavel')).not.toBeNull()
     await user.click(addGarageAccrualButton)
     const garageAccrualDialog = await screen.findByRole('dialog', { name: 'Новое начисление' })
     const garageIncomeTypeCombobox = within(garageAccrualDialog).getByRole('combobox', { name: 'Нерегулярный платёж гаража' })
@@ -5037,6 +5063,37 @@ describe('App', () => {
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Новое начисление' })).not.toBeInTheDocument())
     await waitFor(() => expect(addGarageAccrualButton).toHaveFocus())
 
+    await user.click(penaltyAccrualButton)
+    const penaltyAccrualDialog = await screen.findByRole('dialog', { name: 'Начислить штраф' })
+    expect(within(penaltyAccrualDialog).getByText('Сумма может быть произвольной. Причина сохранится в истории изменений.')).toBeInTheDocument()
+    expect(within(penaltyAccrualDialog).getByLabelText('Месяц начисления штрафа')).toHaveValue('06.2026')
+    await user.click(within(penaltyAccrualDialog).getByRole('button', { name: 'Начислить' }))
+    expect(await within(penaltyAccrualDialog).findByRole('alert')).toHaveTextContent('Укажите сумму штрафа больше нуля.')
+    await user.type(within(penaltyAccrualDialog).getByLabelText('Сумма штрафа'), '1250.50')
+    await user.click(within(penaltyAccrualDialog).getByRole('button', { name: 'Начислить' }))
+    expect(await within(penaltyAccrualDialog).findByRole('alert')).toHaveTextContent('Укажите причину начисления штрафа.')
+    await user.type(within(penaltyAccrualDialog).getByLabelText('Причина начисления штрафа'), 'Нарушение правил проезда')
+    await user.click(within(penaltyAccrualDialog).getByRole('button', { name: 'Начислить' }))
+    expect(await within(penaltyAccrualDialog).findByRole('alert')).toHaveTextContent('Штраф временно не сохранён')
+    expect(within(penaltyAccrualDialog).getByLabelText('Сумма штрафа')).toHaveValue('1 250.50')
+    expect(within(penaltyAccrualDialog).getByLabelText('Причина начисления штрафа')).toHaveValue('Нарушение правил проезда')
+    await user.click(within(penaltyAccrualDialog).getByRole('button', { name: 'Начислить' }))
+    await waitFor(() => expect(savedPenaltyAccrualRequests).toEqual([{
+      garageId: garage.id,
+      incomeTypeId: penaltyIncomeType.id,
+      accountingMonth: '2026-06-01',
+      amount: 1250.5,
+      source: 'manual',
+      comment: 'Нарушение правил проезда',
+    }]))
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Начислить штраф' })).not.toBeInTheDocument())
+    await waitFor(() => expect(penaltyAccrualButton).toHaveFocus())
+    expect(within(prototype).getByRole('table', { name: 'Поступления гаража 1' })).toHaveTextContent('Штраф')
+    expect(within(prototype).getByRole('table', { name: 'Поступления гаража 1' })).toHaveTextContent('1 250.50')
+    const updatedIncomeSummary = within(prototype).getByLabelText('Итоги периода поступлений')
+    expect(updatedIncomeSummary).toHaveTextContent('Начислено12 174.50')
+    expect(updatedIncomeSummary).toHaveTextContent('Долг на конец6 500.50')
+
     const fullPaymentButton = within(prototype).getByRole('button', { name: 'Полная оплата' })
     await user.click(fullPaymentButton)
     const fullPaymentDialog = await screen.findByRole('dialog', { name: 'Полная оплата' })
@@ -5048,14 +5105,14 @@ describe('App', () => {
     expect(fullPaymentPeriodOption).toHaveAttribute('aria-selected', 'true')
     await user.click(fullPaymentPeriodOption)
     const fullPaymentAmount = within(fullPaymentDialog).getByLabelText('Сумма полной оплаты')
-    expect(fullPaymentAmount).toHaveValue('5 250.00')
+    expect(fullPaymentAmount).toHaveValue('6 500.50')
     expect(fullPaymentAmount).not.toHaveAttribute('readonly')
     await user.click(fullPaymentAmount)
     await user.clear(fullPaymentAmount)
     await user.type(fullPaymentAmount, '7000')
     await user.click(within(fullPaymentDialog).getByRole('button', { name: 'Провести оплату' }))
     const fullPaymentError = within(fullPaymentDialog).getByRole('alert')
-    expect(fullPaymentError).toHaveTextContent('Сумма оплаты не может превышать долг 5 250.00.')
+    expect(fullPaymentError).toHaveTextContent('Сумма оплаты не может превышать долг 6 500.50.')
     expect(fullPaymentError).toHaveClass('form-error')
     expect(savedIncomeRequests).toHaveLength(1)
     await user.click(fullPaymentAmount)
@@ -5306,6 +5363,37 @@ describe('App', () => {
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Учет суммы на счете в банке' })).not.toBeInTheDocument())
     expect(bankButton).toHaveFocus()
   }, 180000)
+
+  it('does not submit a penalty when the system income type is unavailable', async () => {
+    const user = userEvent.setup()
+    const createAccrual = vi.fn()
+    render(<App
+      authClient={createAuthClient()}
+      dictionaryClient={createDictionaryClient()}
+      financeClient={createFinanceClient({ createAccrual })}
+      importClient={createImportClient()}
+      reportClient={createReportClient()}
+      releaseClient={createReleaseClient()}
+      userClient={createUserClient()}
+    />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Платежи')
+    const prototype = within(await screen.findByRole('region', { name: 'Платежи' })).getByRole('region', { name: 'Форма платежей' })
+    await user.type(within(prototype).getByLabelText('Поиск номера гаража или ФИО владельца'), '12')
+    await user.click(await within(prototype).findByRole('option', { name: /Гараж\s*12\s*Иванов Иван/ }))
+    await user.click(within(prototype).getByRole('button', { name: 'Начислить штраф' }))
+
+    const dialog = await screen.findByRole('dialog', { name: 'Начислить штраф' })
+    await user.type(within(dialog).getByLabelText('Сумма штрафа'), '500')
+    await user.type(within(dialog).getByLabelText('Причина начисления штрафа'), 'Нарушение правил')
+    await user.click(within(dialog).getByRole('button', { name: 'Начислить' }))
+
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent('Системный вид поступления «Штраф» не настроен.')
+    expect(createAccrual).not.toHaveBeenCalled()
+    expect(dialog).toBeInTheDocument()
+  })
 
   it('uses garages from the dictionary in the payments search', async () => {
     const user = userEvent.setup()
@@ -8757,7 +8845,7 @@ describe('App', () => {
     }
     expect(within(financePanel).queryByRole('button', { name: 'Создать месяц' })).not.toBeInTheDocument()
     expect(within(financePanel).getByRole('button', { name: 'Внести' })).toBeDisabled()
-    const incomeRow = within(financePanel).getAllByText('Членский взнос')[0].closest('tr')!
+    const incomeRow = (await within(financePanel).findAllByText('Членский взнос'))[0].closest('tr')!
     fireEvent.contextMenu(incomeRow)
     const financeMenu = await screen.findByRole('menu', { name: 'Операции с платежами' })
     expect(within(financeMenu).getByRole('menuitem', { name: 'Добавить' })).toBeDisabled()
@@ -8770,6 +8858,7 @@ describe('App', () => {
     await user.type(within(paymentPrototype).getByLabelText('Поиск номера гаража или ФИО владельца'), '95')
     await user.click(await within(paymentPrototype).findByRole('option', { name: /Гараж\s*95\s*Наблюдаемый владелец/ }))
     expect(await within(paymentPrototype).findByText('77')).toBeInTheDocument()
+    expect(within(paymentPrototype).getByRole('button', { name: 'Начислить штраф' })).toBeDisabled()
     expect(within(paymentPrototype).queryByRole('textbox', { name: /^Показание Электроэнергия только просмотр/ })).not.toBeInTheDocument()
     expect(within(paymentPrototype).queryByRole('button', { name: /^Сохранить показание Электроэнергия только просмотр/ })).not.toBeInTheDocument()
     expect(screen.queryByText('Создание владельца не должно вызываться без dictionaries.write.')).not.toBeInTheDocument()

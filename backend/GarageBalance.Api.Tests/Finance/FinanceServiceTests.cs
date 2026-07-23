@@ -2521,6 +2521,50 @@ public sealed class FinanceServiceTests
     }
 
     [Fact]
+    public async Task CreateAccrualAsync_CreatesArbitraryPenaltyWithReasonAndAudit()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        var penaltyIncomeType = new IncomeType
+        {
+            Name = "Штраф",
+            Code = "penalty",
+            IsSystem = true
+        };
+        database.Context.IncomeTypes.Add(penaltyIncomeType);
+        await database.Context.SaveChangesAsync();
+        var service = FinanceServiceTestFactory.Create(database.Context);
+        var actorUserId = Guid.NewGuid();
+
+        var result = await service.CreateAccrualAsync(
+            new CreateAccrualRequest(
+                fixtures.Garage.Id,
+                penaltyIncomeType.Id,
+                new DateOnly(2026, 7, 23),
+                1234.56m,
+                "manual",
+                "Нарушение правил проезда"),
+            actorUserId,
+            CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+        Assert.Equal(penaltyIncomeType.Id, result.Value!.IncomeTypeId);
+        Assert.Equal("Штраф", result.Value.IncomeTypeName);
+        Assert.Equal(new DateOnly(2026, 7, 1), result.Value.AccountingMonth);
+        Assert.Equal(1234.56m, result.Value.Amount);
+        Assert.Equal("Нарушение правил проезда", result.Value.Comment);
+        var audit = Assert.Single(database.Context.AuditEvents, item => item.Action == "finance.accrual_created");
+        Assert.Equal(actorUserId, audit.ActorUserId);
+        Assert.Equal(fixtures.Garage.Id.ToString(), audit.RelatedGarageId);
+        Assert.Contains("Создано начисление 1 234.56", audit.Summary, StringComparison.Ordinal);
+        Assert.Contains("вид Штраф", audit.Summary, StringComparison.Ordinal);
+        Assert.Contains("Комментарий: Нарушение правил проезда", audit.Summary, StringComparison.Ordinal);
+        using var metadata = JsonDocument.Parse(audit.MetadataJson!);
+        Assert.Equal("1234.56", metadata.RootElement.GetProperty("amount").GetString());
+        Assert.Equal("Штраф", metadata.RootElement.GetProperty("incomeTypeName").GetString());
+    }
+
+    [Fact]
     public async Task CreateIrregularAccrualAsync_UsesTemplateAmountAndOtherPaymentsDestination()
     {
         await using var database = await TestDatabase.CreateAsync();

@@ -1,6 +1,6 @@
 import { Fragment, useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
 import type { FormEvent, KeyboardEvent, MouseEvent, ReactNode } from 'react'
-import { FileText, History, LoaderCircle, Pencil, RotateCcw, Save, Search, Trash2, WalletCards, X } from 'lucide-react'
+import { FileText, Gavel, History, LoaderCircle, Pencil, RotateCcw, Save, Search, Trash2, WalletCards, X } from 'lucide-react'
 import type { AuthResponse } from '../../services/authApi'
 import type { AccountingTypeDto, DictionaryClient, GarageDto, IrregularPaymentDto, StaffMemberDto, SupplierDto, SupplierGroupDto } from '../../services/dictionariesApi'
 import type { AccrualDto, CreateAccrualRequest, CreateExpenseOperationRequest, CreateIncomeOperationRequest, CreateMeterReadingRequest, CreateSupplierAccrualRequest, ExpenseWorksheetDto, FinanceClient, FinancePagedResult, FinanceSummaryDto, FinancialOperationDto, GarageIncomeWorksheetDto, GarageOverdueDebtDto, GenerateSupplierGroupSalaryAccrualsRequest, MeterReadingDto, MissingMeterReadingDto, SupplierAccrualDto } from '../../services/financeApi'
@@ -216,6 +216,12 @@ type GarageAccrualPrototypeSubmitRequest = {
   irregularPaymentId: string
   accountingMonth: string
   comment: string
+}
+
+type PenaltyAccrualPrototypeSubmitRequest = {
+  accountingMonth: string
+  amount: number
+  reason: string
 }
 
 type ExpensePrototypeDialogPreset = {
@@ -2933,6 +2939,8 @@ function PaymentsPrototypePanel({
   const fullPaymentTriggerRef = useRef<HTMLButtonElement | null>(null)
   const [garageAccrualDialogOpen, setGarageAccrualDialogOpen] = useState(false)
   const garageAccrualTriggerRef = useRef<HTMLButtonElement | null>(null)
+  const [penaltyAccrualDialogOpen, setPenaltyAccrualDialogOpen] = useState(false)
+  const penaltyAccrualTriggerRef = useRef<HTMLButtonElement | null>(null)
   const [supplierAccrualDialogOpen, setSupplierAccrualDialogOpen] = useState(false)
   const supplierAccrualTriggerRef = useRef<HTMLButtonElement | null>(null)
   const [salaryDialogOpen, setSalaryDialogOpen] = useState(false)
@@ -3825,6 +3833,25 @@ function PaymentsPrototypePanel({
     }, 0)
   }
 
+  async function openPenaltyAccrualDialog(event: MouseEvent<HTMLButtonElement>) {
+    penaltyAccrualTriggerRef.current = event.currentTarget
+    setPaymentError(null)
+    if (await onEnsureReferences()) {
+      setPenaltyAccrualDialogOpen(true)
+    }
+  }
+
+  function closePenaltyAccrualDialog() {
+    const trigger = penaltyAccrualTriggerRef.current
+    setPenaltyAccrualDialogOpen(false)
+    window.setTimeout(() => {
+      if (trigger?.isConnected) {
+        trigger.focus()
+      }
+      penaltyAccrualTriggerRef.current = null
+    }, 0)
+  }
+
   function confirmEarlyElectricityPayment(pendingPayment: EarlyElectricityPaymentConfirmationState) {
     const trigger = earlyElectricityPaymentTriggerRef.current
     setEarlyElectricityPaymentConfirmation(null)
@@ -4018,6 +4045,79 @@ function PaymentsPrototypePanel({
         },
       ]
     })
+    setGarageWorksheetSummary((currentSummary) => currentSummary
+      ? {
+          ...currentSummary,
+          accrualTotal: currentSummary.accrualTotal + savedAccrual.amount,
+          closingDebt: currentSummary.closingDebt + savedAccrual.amount,
+        }
+      : currentSummary)
+
+    return null
+  }
+
+  async function commitPenaltyAccrual(request: PenaltyAccrualPrototypeSubmitRequest) {
+    if (!selectedGarage || !realGarageIds.has(selectedGarage.id)) {
+      return 'Выберите гараж из справочника, чтобы начислить штраф.'
+    }
+
+    const penaltyIncomeType = incomeTypes.find((incomeType) => incomeType.code === 'penalty' && incomeType.isSystem && !incomeType.isArchived) ?? null
+    if (!penaltyIncomeType) {
+      return 'Системный вид поступления «Штраф» не настроен. Обратитесь к администратору.'
+    }
+
+    const savedAccrual = await financeClient.createAccrual(auth.accessToken, {
+      garageId: selectedGarage.id,
+      incomeTypeId: penaltyIncomeType.id,
+      accountingMonth: request.accountingMonth,
+      amount: request.amount,
+      source: 'manual',
+      comment: request.reason.trim(),
+    })
+    const month = savedAccrual.accountingMonth.slice(0, 7)
+    const monthLabel = formatPaymentPrototypeMonthLabel(savedAccrual.accountingMonth)
+    const serviceName = savedAccrual.incomeTypeName || penaltyIncomeType.name
+
+    setGarageRows((currentRows) => {
+      const existingRow = currentRows.find((row) => row.month === month && row.service.trim().toLocaleLowerCase('ru-RU') === serviceName.trim().toLocaleLowerCase('ru-RU'))
+      if (existingRow) {
+        return currentRows.map((row) => row.id === existingRow.id
+          ? { ...row, payable: row.payable + savedAccrual.amount, debt: row.debt + savedAccrual.amount }
+          : row)
+      }
+
+      return [
+        ...currentRows,
+        {
+          id: `garage-penalty-${savedAccrual.id}`,
+          month,
+          monthLabel,
+          service: serviceName,
+          incomeTypeId: savedAccrual.incomeTypeId,
+          annualAccrualId: null,
+          meterKind: null,
+          meterReadingId: null,
+          meterReadingVersion: null,
+          meterReadingDate: null,
+          meter: null,
+          meterDraft: '',
+          meterError: null,
+          difference: null,
+          payable: savedAccrual.amount,
+          paymentDraft: '',
+          paid: 0,
+          advance: 0,
+          debt: savedAccrual.amount,
+        },
+      ]
+    })
+    setGarageWorksheetSummary((currentSummary) => currentSummary
+      ? {
+          ...currentSummary,
+          accrualTotal: currentSummary.accrualTotal + savedAccrual.amount,
+          closingDebt: currentSummary.closingDebt + savedAccrual.amount,
+        }
+      : currentSummary)
 
     return null
   }
@@ -4371,6 +4471,10 @@ function PaymentsPrototypePanel({
               <button className="secondary-button create-action-button payments-prototype-action-button" type="button" aria-label="Добавить начисление гаражу" onClick={openGarageAccrualDialog}>
                 <FileText size={16} aria-hidden="true" />
                 <span>Добавить начисление</span>
+              </button>
+              <button className="secondary-button create-action-button payments-prototype-action-button" type="button" onClick={openPenaltyAccrualDialog} disabled={!canWritePayments}>
+                <Gavel size={16} aria-hidden="true" />
+                <span>Начислить штраф</span>
               </button>
               <button className="secondary-button payments-prototype-action-button" type="button" onClick={openFullPaymentDialog} disabled={garageWorksheetLoadingId === selectedGarage.id}>
                 <WalletCards size={16} aria-hidden="true" />
@@ -4883,6 +4987,12 @@ function PaymentsPrototypePanel({
           onChange={(patch) => setReceiptAction((value) => value ? { ...value, ...patch, error: null } : value)}
           onClose={closeReceiptActionDialog}
           onConfirm={confirmReceiptAction}
+        />
+      ) : null}
+      {penaltyAccrualDialogOpen ? (
+        <PenaltyAccrualPrototypeDialog
+          onClose={closePenaltyAccrualDialog}
+          onSubmit={commitPenaltyAccrual}
         />
       ) : null}
       {earlyElectricityPaymentConfirmation ? (
@@ -5861,6 +5971,100 @@ function SalaryAccrualPrototypeDialog({
           {error ? <FormError>{error}</FormError> : null}
           <div className="detail-dialog-actions">
             <button className="secondary-button" type="submit" disabled={saving}>{saving ? 'Сохраняем...' : 'Ок'}</button>
+            <button ref={cancelRef} className="secondary-button" type="button" onClick={onClose} disabled={saving}>Отмена</button>
+          </div>
+        </form>
+      </section>
+    </div>
+  )
+}
+
+function PenaltyAccrualPrototypeDialog({
+  onClose,
+  onSubmit,
+}: {
+  onClose: () => void
+  onSubmit: (request: PenaltyAccrualPrototypeSubmitRequest) => Promise<string | null>
+}) {
+  const dialogRef = useFocusTrap<HTMLElement>(true)
+  const cancelRef = useFocusOnOpen<HTMLButtonElement>(true)
+  const [amount, setAmount] = useState('')
+  const [accountingMonth, setAccountingMonth] = useState(getLocalDateInputValue().slice(0, 7))
+  const [reason, setReason] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  useEscapeKey(true, onClose)
+
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    const parsedAmount = parsePaymentMoney(amount)
+    if (!Number.isFinite(parsedAmount) || parsedAmount <= 0) {
+      setError('Укажите сумму штрафа больше нуля.')
+      return
+    }
+    if (!/^\d{4}-\d{2}$/.test(accountingMonth)) {
+      setError('Укажите месяц начисления штрафа.')
+      return
+    }
+    if (!reason.trim()) {
+      setError('Укажите причину начисления штрафа.')
+      return
+    }
+
+    setSaving(true)
+    setError(null)
+    try {
+      const submitError = await onSubmit({
+        amount: parsedAmount,
+        accountingMonth: `${accountingMonth}-01`,
+        reason: reason.trim(),
+      })
+      if (submitError) {
+        setError(submitError)
+        return
+      }
+      onClose()
+    } catch (submitError) {
+      setError(submitError instanceof Error ? submitError.message : 'Не удалось начислить штраф. Повторите попытку позже.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="modal-backdrop" role="presentation" onMouseDown={onClose}>
+      <section ref={dialogRef} className="detail-dialog payments-prototype-dialog" role="dialog" aria-modal="true" aria-labelledby="penalty-accrual-title" onMouseDown={(event) => event.stopPropagation()}>
+        <div className="detail-dialog-header">
+          <div>
+            <h3 id="penalty-accrual-title">Начислить штраф</h3>
+            <p>Сумма может быть произвольной. Причина сохранится в истории изменений.</p>
+          </div>
+          <button className="icon-button" type="button" aria-label="Закрыть начисление штрафа" onClick={onClose}>
+            <X size={18} aria-hidden="true" />
+          </button>
+        </div>
+        <form className="dictionary-modal-form payments-prototype-modal-form" onSubmit={handleSubmit}>
+          <FormField label="Сумма штрафа">
+            <MoneyTextInput aria-label="Сумма штрафа" value={amount} onValueChange={(nextAmount) => {
+              setAmount(nextAmount)
+              setError(null)
+            }} />
+          </FormField>
+          <FormField label="Месяц">
+            <LocalizedDatePicker ariaLabel="Месяц начисления штрафа" mode="month" value={accountingMonth} onChange={(nextAccountingMonth) => {
+              setAccountingMonth(nextAccountingMonth)
+              setError(null)
+            }} />
+          </FormField>
+          <FormField label="Причина">
+            <textarea aria-label="Причина начисления штрафа" rows={5} value={reason} onChange={(event) => {
+              setReason(event.target.value)
+              setError(null)
+            }} />
+          </FormField>
+          {error ? <FormError>{error}</FormError> : null}
+          <div className="detail-dialog-actions">
+            <button className="secondary-button" type="submit" disabled={saving}>{saving ? 'Начисляем...' : 'Начислить'}</button>
             <button ref={cancelRef} className="secondary-button" type="button" onClick={onClose} disabled={saving}>Отмена</button>
           </div>
         </form>
