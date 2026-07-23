@@ -5147,6 +5147,9 @@ describe('App', () => {
     await waitFor(() => expect(fullPaymentButton).toHaveFocus())
 
     await user.click(within(prototype).getByRole('tab', { name: 'Выплаты' }))
+    expect(within(prototype).queryByLabelText('Поиск номера гаража или ФИО владельца')).not.toBeInTheDocument()
+    expect(within(prototype).queryByLabelText('Выбранные гаражи')).not.toBeInTheDocument()
+    expect(within(prototype).queryByRole('region', { name: 'Карточка выбранного гаража' })).not.toBeInTheDocument()
     const expenseTable = within(prototype).getByRole('table', { name: 'Форма выплат за июнь 2026' })
     expect(expenseTable).toBeInTheDocument()
     expect(within(expenseTable).getByText('257 100.00')).toBeInTheDocument()
@@ -6802,10 +6805,14 @@ describe('App', () => {
     await openSection(user, 'Платежи')
 
     const prototype = within(await screen.findByRole('region', { name: 'Платежи' })).getByRole('region', { name: 'Форма платежей' })
-    await user.type(within(prototype).getByLabelText('Поиск номера гаража или ФИО владельца'), '12')
-    await user.click(await within(prototype).findByRole('option', { name: /Гараж\s*12\s*Иванов Иван/ }))
+    const garageSearch = within(prototype).getByLabelText('Поиск номера гаража или ФИО владельца')
+    await user.type(garageSearch, '12')
+    expect(await within(prototype).findByRole('listbox', { name: 'Найденные гаражи' })).toBeInTheDocument()
     await user.click(within(prototype).getByRole('tab', { name: 'Выплаты' }))
 
+    expect(within(prototype).queryByLabelText('Поиск номера гаража или ФИО владельца')).not.toBeInTheDocument()
+    expect(within(prototype).queryByRole('listbox', { name: 'Найденные гаражи' })).not.toBeInTheDocument()
+    expect(within(prototype).queryByLabelText('Выбранные гаражи')).not.toBeInTheDocument()
     await waitFor(() => expect(getExpenseWorksheet).toHaveBeenCalledWith('token', { accountingMonth: '2027-10-01' }))
     expect(within(prototype).getByRole('table', { name: 'Форма выплат за октябрь 2027' })).toBeInTheDocument()
     const monthInput = within(prototype).getByLabelText('Месяц выплат')
@@ -6817,6 +6824,10 @@ describe('App', () => {
 
     await waitFor(() => expect(getExpenseWorksheet).toHaveBeenCalledWith('token', { accountingMonth: '2029-02-01' }))
     expect(within(prototype).getByRole('table', { name: 'Форма выплат за февраль 2029' })).toBeInTheDocument()
+
+    await user.click(within(prototype).getByRole('tab', { name: 'Поступления' }))
+    expect(within(prototype).getByLabelText('Поиск номера гаража или ФИО владельца')).toHaveValue('12')
+    expect(within(prototype).queryByRole('listbox', { name: 'Найденные гаражи' })).not.toBeInTheDocument()
   })
 
   it('loads expense worksheet from finance backend and allows payment when the service difference is negative', async () => {

@@ -3149,6 +3149,7 @@ function PaymentsPrototypePanel({
       setExpenseWorksheetLoading(true)
     }
 
+    setGarageSearchOpen(false)
     setActiveTab('expense')
   }
 
@@ -4362,7 +4363,7 @@ function PaymentsPrototypePanel({
         </div>
       </div>
       {headingNotices}
-      <div className="payments-prototype-topline">
+      {activeTab === 'income' ? <div className="payments-prototype-topline">
         <div ref={garageSearchWrapRef} className="payments-prototype-search-wrap">
           <label className="payments-prototype-search">
             <Search size={18} aria-hidden="true" />
@@ -4457,10 +4458,10 @@ function PaymentsPrototypePanel({
             </div>
           </div>
         ) : null}
-      </div>
+      </div> : null}
       {paymentError ? <FormError>{paymentError}</FormError> : null}
       {receiptActionStatus ? <p className="form-status" role="status">{receiptActionStatus}</p> : null}
-      {garageWorksheetLoadingId ? <TableLoadingState className="table-loading-state--compact" label="Загружаем поступления выбранного гаража" /> : null}
+      {activeTab === 'income' && garageWorksheetLoadingId ? <TableLoadingState className="table-loading-state--compact" label="Загружаем поступления выбранного гаража" /> : null}
 
       <div className="payments-prototype-toolbar">
         <div className="payments-prototype-tabs" role="tablist" aria-label="Разделы формы платежей">
@@ -4575,11 +4576,11 @@ function PaymentsPrototypePanel({
         </section>
       ) : null}
 
-      {!selectedGarage ? (
+      {activeTab === 'income' ? !selectedGarage ? (
         loading
           ? <TableLoadingState label="Загружаем раздел платежей" />
           : <p className="empty-state" role="status">Выберите гараж через поиск, чтобы увидеть карточку, поступления, историю платежей и задолженность.</p>
-      ) : activeTab === 'income' ? (
+      ) : (
         <>
           {paymentHistoryOpen ? <section id={paymentHistoryId} className="payments-prototype-card payments-prototype-card--history" aria-label="История платежей гаража">
             <table className="payments-prototype-mini-table" aria-label="История платежей гаража">
