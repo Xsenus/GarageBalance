@@ -5829,6 +5829,91 @@ describe('App', () => {
     expect(periodSummary).toHaveTextContent(/Аванс на конец250\.00/)
   })
 
+  it('pays the remaining system water debt without loading the income type directory', async () => {
+    const user = userEvent.setup()
+    const garage = createGarage({ id: 'garage-water-remainder', number: '80', ownerName: 'Петров Николай' })
+    const waterIncomeTypeId = '3e79c525-377d-4168-b8de-f2ff736829df'
+    const getIncomeTypes = vi.fn(async () => {
+      throw new Error('Справочник видов поступлений не должен требоваться для оплаты серверной строки.')
+    })
+    const createIncome = vi.fn(async (_token: string, request: CreateIncomeOperationRequest) => createFinancialOperation({
+      id: 'water-remainder-payment',
+      garageId: request.garageId,
+      garageNumber: garage.number,
+      ownerName: garage.ownerName,
+      incomeTypeId: request.incomeTypeId,
+      incomeTypeName: 'Вода',
+      operationDate: request.operationDate,
+      accountingMonth: request.accountingMonth,
+      amount: request.amount,
+      garageDebtBefore: 600,
+      garageDebtAfter: 0,
+    }))
+    const getGarageIncomeWorksheet = vi.fn(async () => createGarageIncomeWorksheet({
+      garageId: garage.id,
+      garageNumber: garage.number,
+      ownerName: garage.ownerName,
+      accrualTotal: 1000,
+      incomeTotal: 400,
+      advanceTotal: 0,
+      debtTotal: 600,
+      closingDebt: 600,
+      rows: [{
+        accountingMonth: '2026-06-01',
+        incomeTypeId: waterIncomeTypeId,
+        incomeTypeName: 'Вода',
+        meterKind: 'water',
+        meterValue: 25,
+        meterConsumption: 5,
+        accrualAmount: 1000,
+        payableAmount: 1000,
+        incomeAmount: 400,
+        advanceAmount: 0,
+        debt: 600,
+      }],
+    }))
+    render(<App
+      authClient={createAuthClient()}
+      dictionaryClient={createDictionaryClient({
+        getGarages: async () => [garage],
+        getIncomeTypes,
+      })}
+      financeClient={createFinanceClient({ getGarageIncomeWorksheet, createIncome })}
+      importClient={createImportClient()}
+      reportClient={createReportClient()}
+      releaseClient={createReleaseClient()}
+      settingsClient={createSettingsClient({
+        getPaymentDisplaySettings: async () => ({ showAllGarageOperationsByDefault: false }),
+      })}
+      userClient={createUserClient()}
+    />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Платежи')
+    const prototype = within(await screen.findByRole('region', { name: 'Платежи' })).getByRole('region', { name: 'Форма платежей' })
+    await user.type(within(prototype).getByLabelText('Поиск номера гаража или ФИО владельца'), '80')
+    await user.click(await within(prototype).findByRole('option', { name: /Гараж\s*80\s*Петров Николай/ }))
+
+    const incomeTable = within(prototype).getByRole('table', { name: 'Поступления гаража 80' })
+    const paymentInput = await within(incomeTable).findByLabelText('Платеж Вода июн.26')
+    await user.type(paymentInput, '600')
+    await user.keyboard('{Enter}')
+
+    await waitFor(() => expect(createIncome).toHaveBeenCalledWith('token', expect.objectContaining({
+      garageId: garage.id,
+      incomeTypeId: waterIncomeTypeId,
+      accountingMonth: '2026-06-01',
+      amount: 600,
+    })))
+    expect(getIncomeTypes).not.toHaveBeenCalled()
+    expect(within(prototype).queryByText(/Не найден вид поступления для услуги "Вода"/)).not.toBeInTheDocument()
+    const serviceRow = within(incomeTable).getByText('Вода').closest('tr')
+    const cells = serviceRow!.querySelectorAll('td')
+    expect(cells[6]).toHaveTextContent('1 000.00')
+    expect(cells[8]).toHaveTextContent('0.00')
+  })
+
   it('does not duplicate an annual obligation in full payment and hides its future row after payoff', async () => {
     const user = userEvent.setup()
     const currentMonth = getTestCurrentMonthInputValue()

@@ -174,6 +174,11 @@ type EarlyElectricityPaymentConfirmationState = {
   daysSincePreviousPayment: number
 }
 
+type GaragePaymentIncomeType = {
+  id: string
+  code: string | null
+}
+
 const receiptPrintingActionLabels: Record<ReceiptPrintingActionKind, { title: string; button: string; saving: string; description: string }> = {
   print: {
     title: 'Сформировать квитанцию?',
@@ -3889,7 +3894,11 @@ function PaymentsPrototypePanel({
       : row))
   }
 
-  function findIncomeTypeForPayment(serviceName: string, incomeTypeId?: string | null) {
+  function findIncomeTypeForPayment(
+    serviceName: string,
+    incomeTypeId?: string | null,
+    meterKind?: GarageIncomePrototypeRow['meterKind'],
+  ): GaragePaymentIncomeType | null {
     const normalizedService = serviceName.trim().toLocaleLowerCase('ru-RU')
     const activeIncomeTypes = incomeTypes.filter((incomeType) => !incomeType.isArchived)
 
@@ -3899,7 +3908,7 @@ function PaymentsPrototypePanel({
         const normalizedTypeName = incomeType.name.trim().toLocaleLowerCase('ru-RU')
         return normalizedTypeName.length > 0 && (normalizedTypeName.includes(normalizedService) || normalizedService.includes(normalizedTypeName))
       })
-      ?? null
+      ?? (incomeTypeId ? { id: incomeTypeId, code: meterKind ?? null } : null)
   }
 
   async function commitGaragePayment(row: GarageIncomePrototypeRow, warningConfirmed = false) {
@@ -3913,7 +3922,7 @@ function PaymentsPrototypePanel({
       return
     }
 
-    const incomeType = findIncomeTypeForPayment(row.service, row.incomeTypeId)
+    const incomeType = findIncomeTypeForPayment(row.service, row.incomeTypeId, row.meterKind)
     if (!incomeType) {
       setPaymentError(`Не найден вид поступления для услуги "${row.service}". Добавьте его в справочник и повторите сохранение.`)
       return
@@ -4047,13 +4056,13 @@ function PaymentsPrototypePanel({
     let remainingAmount = request.amount
     const openingDebtPaymentAmount = Math.min(openingDebtToPay, remainingAmount)
     remainingAmount -= openingDebtPaymentAmount
-    const paymentPlan: Array<{ row: GarageIncomePrototypeRow; incomeType: AccountingTypeDto; amount: number }> = []
+    const paymentPlan: Array<{ row: GarageIncomePrototypeRow; incomeType: GaragePaymentIncomeType; amount: number }> = []
     for (const row of rowsToPay) {
       if (remainingAmount <= 0) {
         break
       }
 
-      const incomeType = findIncomeTypeForPayment(row.service, row.incomeTypeId)
+      const incomeType = findIncomeTypeForPayment(row.service, row.incomeTypeId, row.meterKind)
       if (!incomeType) {
         return `Не найден вид поступления для услуги "${row.service}". Добавьте его в справочник и повторите сохранение.`
       }
