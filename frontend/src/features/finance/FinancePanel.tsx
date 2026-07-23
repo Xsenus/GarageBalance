@@ -16,7 +16,7 @@ import type { ChangePreview } from '../../shared/changePreview'
 import { appendChangePreview, formatChangeDate, formatChangeMoney, formatChangeText } from '../../shared/changePreview'
 import { FormError, FormValidationSummary } from '../../shared/formFeedback'
 import { FormField } from '../../shared/FormField'
-import { formatAccrualSource, formatDateOnly, formatDebtAmount, formatDebtLabel, formatMissingMeterReadings, formatMoney, formatMonth, formatOperationTime, formatPaymentAllocations, getDebtClassName, getCurrentMonthInputValue, getLocalDateInputValue, getPreviousMonthInputValue } from '../../shared/formatters'
+import { formatAccrualSource, formatCount, formatDateOnly, formatDebtAmount, formatDebtLabel, formatMissingMeterReadings, formatMoney, formatMonth, formatOperationTime, formatPaymentAllocations, getDebtClassName, getCurrentMonthInputValue, getLocalDateInputValue, getPreviousMonthInputValue } from '../../shared/formatters'
 import { useEscapeKey, useFocusOnOpen, useFocusTrap, useRestoreFocusOnClose } from '../../shared/focusHooks'
 import { LocalizedDatePicker } from '../../shared/LocalizedDatePicker'
 import { MoneyInput, MoneyTextInput } from '../../shared/MoneyInput'
@@ -163,6 +163,7 @@ type GaragePaymentHistoryCancelState = {
 
 type GaragePaymentReceiptActionState = {
   row: GaragePaymentHistoryPrototypeRow
+  packageRows: GaragePaymentHistoryPrototypeRow[]
   action: ReceiptPrintingActionKind
   reason: string
   error: string | null
@@ -3422,7 +3423,11 @@ function PaymentsPrototypePanel({
     receiptActionTriggerRef.current = trigger ?? null
     setPaymentError(null)
     setReceiptActionStatus(null)
-    setReceiptAction({ row, action, reason: '', error: null })
+    const receiptBatchId = row.operation.receiptBatchId
+    const packageRows = receiptBatchId
+      ? historyRows.filter((historyRow) => historyRow.operation?.receiptBatchId === receiptBatchId && !historyRow.operation.isCanceled)
+      : [row]
+    setReceiptAction({ row, packageRows, action, reason: '', error: null })
   }
 
   function closeReceiptActionDialog() {
@@ -3523,7 +3528,11 @@ function PaymentsPrototypePanel({
         reason: reason || undefined,
       })
       closeReceiptActionDialog()
-      setReceiptActionStatus(result.isCopy && result.copyMark ? `${result.statusMessage} Отметка: ${result.copyMark}.` : result.statusMessage)
+      const copyStatus = result.isCopy && result.copyMark ? ` Отметка: ${result.copyMark}.` : ''
+      const packageStatus = (result.lineCount ?? 1) > 1
+        ? ` Единая квитанция: ${formatCount(result.lineCount ?? 1, 'позиция', 'позиции', 'позиций')} на сумму ${formatPaymentPrototypeValue(result.totalAmount ?? 0)}.`
+        : ''
+      setReceiptActionStatus(`${result.statusMessage}${copyStatus}${packageStatus}`)
     } catch (error) {
       setReceiptAction((state) => state ? { ...state, error: error instanceof Error ? error.message : 'Не удалось зарегистрировать действие квитанции.' } : state)
     } finally {
@@ -3927,6 +3936,7 @@ function PaymentsPrototypePanel({
       return 'Укажите сумму полной оплаты больше нуля.'
     }
 
+    const receiptBatchId = crypto.randomUUID()
     const historyItems: Array<{ operation: FinancialOperationDto; purposeFallback: string; debtAfterFallback: number }> = []
     if (openingDebtPaymentAmount > 0) {
       const operation = await financeClient.createGarageDebtPayment(auth.accessToken, {
@@ -3935,6 +3945,7 @@ function PaymentsPrototypePanel({
         accountingMonth: incomeWorksheetMonthFrom.length === 7 ? `${incomeWorksheetMonthFrom}-01` : incomeWorksheetMonthFrom,
         amount: openingDebtPaymentAmount,
         comment: request.comment.trim() || undefined,
+        receiptBatchId,
       })
       historyItems.push({
         operation,
@@ -3951,6 +3962,7 @@ function PaymentsPrototypePanel({
         operationDate: getLocalDateInputValue(),
         accountingMonth,
         amount: item.amount,
+        receiptBatchId,
         comment: request.comment.trim()
           ? `Полная оплата ${item.row.service} ${item.row.monthLabel}: ${request.comment.trim()}`
           : `Полная оплата ${item.row.service} ${item.row.monthLabel}`,
@@ -4586,7 +4598,12 @@ function PaymentsPrototypePanel({
                   <tr>
                     <td colSpan={6}><TableLoadingState label="Загружаем историю платежей" /></td>
                   </tr>
-                ) : historyRows.length > 0 ? historyRows.map((row) => (
+                ) : historyRows.length > 0 ? historyRows.map((row, rowIndex) => {
+                  const receiptBatchId = row.operation?.receiptBatchId
+                  const isReceiptBatchLeader = !receiptBatchId || historyRows.findIndex((candidate) =>
+                    candidate.operation?.receiptBatchId === receiptBatchId &&
+                    !candidate.operation.isCanceled) === rowIndex
+                  return (
                   <tr key={row.id}>
                     <td>{row.date}</td>
                     <td>{row.time}</td>
@@ -4602,24 +4619,25 @@ function PaymentsPrototypePanel({
                           <button className="icon-button danger-icon-button" type="button" title="Отменить платеж" aria-label={`Отменить платеж ${row.purpose}`} onClick={(event) => openHistoryCancel(row, event.currentTarget)}>
                             <Trash2 size={16} aria-hidden="true" />
                           </button>
-                          {!row.operation.isCanceled ? (
+                          {!row.operation.isCanceled && isReceiptBatchLeader ? (
                             <>
-                              <button className="icon-button" type="button" title="Сформировать квитанцию" aria-label={`Сформировать квитанцию платежа ${row.purpose}`} onClick={(event) => openReceiptAction(row, 'print', event.currentTarget)}>
+                              <button className="icon-button" type="button" title={receiptBatchId ? 'Сформировать единую квитанцию' : 'Сформировать квитанцию'} aria-label={`${receiptBatchId ? 'Сформировать единую квитанцию пакета' : 'Сформировать квитанцию платежа'} ${row.purpose}`} onClick={(event) => openReceiptAction(row, 'print', event.currentTarget)}>
                                 <FileText size={16} aria-hidden="true" />
                               </button>
-                              <button className="icon-button danger-icon-button" type="button" title="Отменить печать квитанции" aria-label={`Отменить печать квитанции платежа ${row.purpose}`} onClick={(event) => openReceiptAction(row, 'cancel', event.currentTarget)}>
+                              <button className="icon-button danger-icon-button" type="button" title={receiptBatchId ? 'Отменить печать единой квитанции' : 'Отменить печать квитанции'} aria-label={`${receiptBatchId ? 'Отменить печать единой квитанции пакета' : 'Отменить печать квитанции платежа'} ${row.purpose}`} onClick={(event) => openReceiptAction(row, 'cancel', event.currentTarget)}>
                                 <Trash2 size={16} aria-hidden="true" />
                               </button>
-                              <button className="icon-button" type="button" title="Напечатать копию квитанции" aria-label={`Напечатать копию квитанции платежа ${row.purpose}`} onClick={(event) => openReceiptAction(row, 'reprint', event.currentTarget)}>
+                              <button className="icon-button" type="button" title={receiptBatchId ? 'Напечатать копию единой квитанции' : 'Напечатать копию квитанции'} aria-label={`${receiptBatchId ? 'Напечатать копию единой квитанции пакета' : 'Напечатать копию квитанции платежа'} ${row.purpose}`} onClick={(event) => openReceiptAction(row, 'reprint', event.currentTarget)}>
                                 <RotateCcw size={16} aria-hidden="true" />
                               </button>
                             </>
-                          ) : null}
+                          ) : receiptBatchId && !row.operation.isCanceled ? <span className="form-hint">В единой квитанции</span> : null}
                         </div>
                       ) : '—'}
                     </td>
                   </tr>
-                )) : (
+                  )
+                }) : (
                   <tr>
                     <td colSpan={6}>Платежей по выбранному гаражу пока нет.</td>
                   </tr>
@@ -5249,7 +5267,7 @@ function GaragePaymentReceiptActionDialog({
 }: {
   state: GaragePaymentReceiptActionState
   saving: boolean
-  onChange: (patch: Partial<Omit<GaragePaymentReceiptActionState, 'row' | 'action'>>) => void
+  onChange: (patch: Partial<Omit<GaragePaymentReceiptActionState, 'row' | 'packageRows' | 'action'>>) => void
   onClose: () => void
   onConfirm: () => void
 }) {
@@ -5257,6 +5275,8 @@ function GaragePaymentReceiptActionDialog({
   const cancelRef = useFocusOnOpen<HTMLButtonElement>(true)
   const labels = receiptPrintingActionLabels[state.action]
   const needsReason = state.action !== 'print'
+  const packageAmount = state.packageRows.reduce((sum, row) => sum + row.amount, 0)
+  const isUnifiedReceipt = state.packageRows.length > 1
   useEscapeKey(!saving, onClose)
 
   return (
@@ -5270,7 +5290,7 @@ function GaragePaymentReceiptActionDialog({
           <div>
             <p className="eyebrow">Квитанция платежа</p>
             <h3 id="garage-payment-receipt-action-title">{labels.title}</h3>
-            <p>{state.row.purpose} · {formatPaymentPrototypeValue(state.row.amount)}</p>
+            <p>{isUnifiedReceipt ? `Единая квитанция · ${formatCount(state.packageRows.length, 'позиция', 'позиции', 'позиций')} · ${formatPaymentPrototypeValue(packageAmount)}` : `${state.row.purpose} · ${formatPaymentPrototypeValue(state.row.amount)}`}</p>
           </div>
           <button className="icon-button" type="button" aria-label="Закрыть действие квитанции" onClick={onClose} disabled={saving}>
             <X size={18} aria-hidden="true" />
@@ -5278,6 +5298,14 @@ function GaragePaymentReceiptActionDialog({
         </div>
         <div className="dictionary-modal-form payments-prototype-modal-form">
           <p className="confirmation-text">{labels.description}</p>
+          {isUnifiedReceipt ? (
+            <div aria-label="Состав единой квитанции">
+              <p className="form-hint">В одну квитанцию войдут все услуги пакета:</p>
+              <ul>
+                {state.packageRows.map((row) => <li key={row.id}>{row.purpose} — {formatPaymentPrototypeValue(row.amount)}</li>)}
+              </ul>
+            </div>
+          ) : null}
           {state.row.operation?.documentNumber ? <p className="form-hint">Документ: {state.row.operation.documentNumber}</p> : null}
           {needsReason ? (
             <FormField label="Причина">

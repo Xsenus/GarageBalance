@@ -897,6 +897,18 @@ public sealed class FinanceService(
             return FinanceResult<FinancialOperationDto>.Failure("operation_duplicate", "Операция с таким документом и датой уже внесена.");
         }
 
+        if (request.ReceiptBatchId is Guid receiptBatchId &&
+            await financialOperationRepository.ReceiptBatchConflictExistsAsync(
+                receiptBatchId,
+                garage.Id,
+                request.OperationDate,
+                cancellationToken))
+        {
+            return FinanceResult<FinancialOperationDto>.Failure(
+                "receipt_batch_conflict",
+                "Пакет единой квитанции уже связан с другим гаражом или датой платежа.");
+        }
+
         await using var fundAssignmentLock = await incomeFundAssignmentService.AcquireUpdateLockAsync(cancellationToken);
 
         var operation = new FinancialOperation
@@ -905,6 +917,7 @@ public sealed class FinanceService(
             OperationDate = request.OperationDate,
             AccountingMonth = MonthPeriod.Normalize(request.AccountingMonth),
             Amount = MoneyMath.RoundMoney(request.Amount),
+            ReceiptBatchId = request.ReceiptBatchId,
             DocumentNumber = NormalizeOptional(request.DocumentNumber),
             Comment = NormalizeOptional(request.Comment),
             GarageId = garage.Id,
@@ -973,7 +986,8 @@ public sealed class FinanceService(
                 accountingMonth,
                 amount,
                 null,
-                comment is null ? "Оплата входящего долга периода" : $"Оплата входящего долга периода: {comment}"),
+                comment is null ? "Оплата входящего долга периода" : $"Оплата входящего долга периода: {comment}",
+                request.ReceiptBatchId),
             actorUserId,
             cancellationToken);
     }
@@ -4444,7 +4458,8 @@ public sealed class FinanceService(
             operation.CreatedAtUtc,
             operation.StaffMemberId,
             operation.StaffMember?.FullName,
-            operation.StaffMember?.Department?.Name);
+            operation.StaffMember?.Department?.Name,
+            operation.ReceiptBatchId);
     }
 
     private static string? InferMeterKind(string incomeTypeName, string? incomeTypeCode)

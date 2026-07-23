@@ -355,6 +355,7 @@ public sealed class FinanceServiceTests
         var fixtures = await database.SeedAsync();
         var service = FinanceServiceTestFactory.Create(database.Context);
         var actorUserId = Guid.NewGuid();
+        var receiptBatchId = Guid.NewGuid();
 
         var result = await service.CreateIncomeAsync(
             new CreateIncomeOperationRequest(
@@ -364,7 +365,8 @@ public sealed class FinanceServiceTests
                 new DateOnly(2026, 6, 15),
                 1500.50m,
                 "PKO-19",
-                "Авансовый платеж"),
+                "Авансовый платеж",
+                receiptBatchId),
             actorUserId,
             CancellationToken.None);
 
@@ -373,6 +375,8 @@ public sealed class FinanceServiceTests
         Assert.Equal(new DateOnly(2026, 6, 1), result.Value.AccountingMonth);
         Assert.Equal("12", result.Value.GarageNumber);
         Assert.Equal("Членский взнос", result.Value.IncomeTypeName);
+        Assert.Equal(receiptBatchId, result.Value.ReceiptBatchId);
+        Assert.Equal(receiptBatchId, database.Context.FinancialOperations.Single(item => item.Id == result.Value.Id).ReceiptBatchId);
         var audit = Assert.Single(database.Context.AuditEvents, item => item.Action == "finance.income_created");
         Assert.Equal(actorUserId, audit.ActorUserId);
         Assert.Contains("Создано поступление 1 500.50", audit.Summary, StringComparison.Ordinal);
@@ -382,6 +386,60 @@ public sealed class FinanceServiceTests
         Assert.Contains("вид Членский взнос", audit.Summary, StringComparison.Ordinal);
         Assert.Contains("документ PKO-19", audit.Summary, StringComparison.Ordinal);
         Assert.Contains("Комментарий: Авансовый платеж", audit.Summary, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task CreateIncomeAsync_AllowsOneReceiptBatchForSameGarageAndDateButRejectsReuse()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        var service = FinanceServiceTestFactory.Create(database.Context);
+        var receiptBatchId = Guid.NewGuid();
+
+        var first = await service.CreateIncomeAsync(
+            new CreateIncomeOperationRequest(
+                fixtures.Garage.Id,
+                fixtures.IncomeType.Id,
+                new DateOnly(2026, 6, 19),
+                new DateOnly(2026, 5, 1),
+                100m,
+                null,
+                "Первая позиция",
+                receiptBatchId),
+            null,
+            CancellationToken.None);
+        var second = await service.CreateIncomeAsync(
+            new CreateIncomeOperationRequest(
+                fixtures.Garage.Id,
+                fixtures.IncomeType.Id,
+                new DateOnly(2026, 6, 19),
+                new DateOnly(2026, 6, 1),
+                200m,
+                null,
+                "Вторая позиция",
+                receiptBatchId),
+            null,
+            CancellationToken.None);
+        var conflicting = await service.CreateIncomeAsync(
+            new CreateIncomeOperationRequest(
+                fixtures.Garage.Id,
+                fixtures.IncomeType.Id,
+                new DateOnly(2026, 6, 20),
+                new DateOnly(2026, 6, 1),
+                300m,
+                null,
+                "Другой день",
+                receiptBatchId),
+            null,
+            CancellationToken.None);
+
+        Assert.True(first.Succeeded);
+        Assert.True(second.Succeeded);
+        Assert.Equal(receiptBatchId, first.Value!.ReceiptBatchId);
+        Assert.Equal(receiptBatchId, second.Value!.ReceiptBatchId);
+        Assert.False(conflicting.Succeeded);
+        Assert.Equal("receipt_batch_conflict", conflicting.ErrorCode);
+        Assert.Equal(2, database.Context.FinancialOperations.Count(item => item.ReceiptBatchId == receiptBatchId));
     }
 
     [Fact]
@@ -1099,9 +1157,10 @@ public sealed class FinanceServiceTests
         await database.Context.SaveChangesAsync();
         var service = FinanceServiceTestFactory.Create(database.Context);
         var actorUserId = Guid.NewGuid();
+        var receiptBatchId = Guid.NewGuid();
 
         var result = await service.CreateGarageDebtPaymentAsync(
-            new CreateGarageDebtPaymentRequest(fixtures.Garage.Id, new DateOnly(2026, 6, 19), new DateOnly(2026, 6, 1), 500m, "Оплата старого долга"),
+            new CreateGarageDebtPaymentRequest(fixtures.Garage.Id, new DateOnly(2026, 6, 19), new DateOnly(2026, 6, 1), 500m, "Оплата старого долга", receiptBatchId),
             actorUserId,
             CancellationToken.None);
 
@@ -1110,6 +1169,7 @@ public sealed class FinanceServiceTests
         Assert.Equal("Перенос задолженности", result.Value.IncomeTypeName);
         Assert.Equal(900m, result.Value.GarageDebtBefore);
         Assert.Equal(400m, result.Value.GarageDebtAfter);
+        Assert.Equal(receiptBatchId, result.Value.ReceiptBatchId);
         var allocation = Assert.Single(result.Value.PaymentAllocations);
         Assert.Equal("starting_balance", allocation.AllocationKind);
         Assert.Equal(900m, allocation.DebtBefore);

@@ -123,7 +123,7 @@ public sealed class IntegrationsController(
         return result.ErrorCode switch
         {
             "financial_operation_not_found" => NotFound(ApiProblemDetails.Create(result.ErrorCode, result.ErrorMessage, StatusCodes.Status404NotFound)),
-            "receipt_print_income_required" or "receipt_print_operation_canceled" => Conflict(ApiProblemDetails.Create(result.ErrorCode, result.ErrorMessage, StatusCodes.Status409Conflict)),
+            "receipt_print_income_required" or "receipt_print_operation_canceled" or "receipt_print_batch_invalid" or "receipt_print_batch_too_large" => Conflict(ApiProblemDetails.Create(result.ErrorCode, result.ErrorMessage, StatusCodes.Status409Conflict)),
             _ => BadRequest(ApiProblemDetails.Create(result.ErrorCode, result.ErrorMessage, StatusCodes.Status400BadRequest))
         };
     }

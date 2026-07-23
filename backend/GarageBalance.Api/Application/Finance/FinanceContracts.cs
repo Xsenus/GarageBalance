@@ -38,7 +38,8 @@ public sealed record FinancialOperationDto(
     DateTimeOffset CreatedAtUtc,
     Guid? StaffMemberId = null,
     string? StaffMemberName = null,
-    string? StaffDepartmentName = null);
+    string? StaffDepartmentName = null,
+    Guid? ReceiptBatchId = null);
 
 public sealed record CreateIncomeOperationRequest(
     Guid GarageId,
@@ -47,7 +48,8 @@ public sealed record CreateIncomeOperationRequest(
     DateOnly AccountingMonth,
     [Range(0.01, 999999999)] decimal Amount,
     [MaxLength(120)] string? DocumentNumber,
-    [MaxLength(1000)] string? Comment);
+    [MaxLength(1000)] string? Comment,
+    Guid? ReceiptBatchId = null);
 
 public sealed record IncomePaymentWarningRequest(
     Guid GarageId,
@@ -427,7 +429,8 @@ public sealed record CreateGarageDebtPaymentRequest(
     DateOnly OperationDate,
     DateOnly AccountingMonth,
     [Range(0.01, 999999999)] decimal Amount,
-    [MaxLength(1000)] string? Comment);
+    [MaxLength(1000)] string? Comment,
+    Guid? ReceiptBatchId = null);
 
 public sealed record ExpenseWorksheetRequest(
     DateOnly? AccountingMonth);

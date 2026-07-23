@@ -86,6 +86,7 @@ public sealed class EfFinancialOperationRepository(GarageBalanceDbContext dbCont
                 OperationDate = (DateOnly?)operation.OperationDate,
                 AccountingMonth = (DateOnly?)operation.AccountingMonth,
                 Amount = (decimal?)operation.Amount,
+                operation.ReceiptBatchId,
                 operation.DocumentNumber,
                 operation.Comment,
                 operation.GarageId,
@@ -119,6 +120,7 @@ public sealed class EfFinancialOperationRepository(GarageBalanceDbContext dbCont
                 OperationDate = (DateOnly?)null,
                 AccountingMonth = (DateOnly?)null,
                 Amount = (decimal?)null,
+                ReceiptBatchId = (Guid?)null,
                 DocumentNumber = (string?)null,
                 Comment = (string?)null,
                 GarageId = (Guid?)null,
@@ -158,6 +160,7 @@ public sealed class EfFinancialOperationRepository(GarageBalanceDbContext dbCont
                 OperationDate = row.OperationDate!.Value,
                 AccountingMonth = row.AccountingMonth!.Value,
                 Amount = row.Amount!.Value,
+                ReceiptBatchId = row.ReceiptBatchId,
                 DocumentNumber = row.DocumentNumber,
                 Comment = row.Comment,
                 GarageId = row.GarageId,
@@ -228,6 +231,16 @@ public sealed class EfFinancialOperationRepository(GarageBalanceDbContext dbCont
             operation.OperationKind == operationKind &&
             operation.OperationDate == operationDate &&
             operation.DocumentNumber == documentNumber,
+            cancellationToken);
+
+    public Task<bool> ReceiptBatchConflictExistsAsync(
+        Guid receiptBatchId,
+        Guid garageId,
+        DateOnly operationDate,
+        CancellationToken cancellationToken) =>
+        dbContext.FinancialOperations.AsNoTracking().AnyAsync(operation =>
+            operation.ReceiptBatchId == receiptBatchId &&
+            (operation.GarageId != garageId || operation.OperationDate != operationDate),
             cancellationToken);
 
     public async Task<decimal> GetIncomeTotalBeforeMonthAsync(Guid garageId, DateOnly accountingMonth, CancellationToken cancellationToken) =>

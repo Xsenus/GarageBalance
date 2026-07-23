@@ -31,6 +31,7 @@ public sealed class PostgreSqlFinancialOperationPageIntegrationTests
         };
         var expectedCreatedAt = new DateTimeOffset(2048, 3, 4, 8, 15, 0, TimeSpan.Zero);
         var expectedUpdatedAt = expectedCreatedAt.AddMinutes(30);
+        var expectedReceiptBatchId = Guid.NewGuid();
         await using var database = await PostgreSqlTestDatabase.CreateAsync();
         await using (var seedContext = database.CreateContext())
         {
@@ -64,7 +65,8 @@ public sealed class PostgreSqlFinancialOperationPageIntegrationTests
                     new DateOnly(2048, 1, 10),
                     300m,
                     "IN-01",
-                    "Target комментарий 2048"),
+                    "Target комментарий 2048",
+                    receiptBatchId: expectedReceiptBatchId),
                 CreateIncome(
                     garage,
                     incomeType,
@@ -144,6 +146,7 @@ public sealed class PostgreSqlFinancialOperationPageIntegrationTests
         Assert.Equal(owner.FullName, income.Garage.Owner!.FullName);
         Assert.Equal(incomeType.Id, income.IncomeTypeId);
         Assert.Equal("Взнос страницы операций 2048", income.IncomeType!.Name);
+        Assert.Equal(expectedReceiptBatchId, income.ReceiptBatchId);
         Assert.Null(income.SupplierId);
         Assert.Null(income.ExpenseTypeId);
         AssertSingleCombinedCommand(capture);
@@ -215,13 +218,15 @@ public sealed class PostgreSqlFinancialOperationPageIntegrationTests
         decimal amount,
         string documentNumber,
         string comment,
-        bool isCanceled = false) =>
+        bool isCanceled = false,
+        Guid? receiptBatchId = null) =>
         new()
         {
             OperationKind = FinancialOperationKinds.Income,
             OperationDate = operationDate,
             AccountingMonth = new DateOnly(operationDate.Year, operationDate.Month, 1),
             Amount = amount,
+            ReceiptBatchId = receiptBatchId,
             DocumentNumber = documentNumber,
             Comment = comment,
             Garage = garage,

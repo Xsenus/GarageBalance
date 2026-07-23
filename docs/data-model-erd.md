@@ -210,6 +210,7 @@ erDiagram
         date OperationDate
         date AccountingMonth
         decimal Amount
+        uuid ReceiptBatchId
         string DocumentNumber
         bool IsCanceled
     }
@@ -394,7 +395,7 @@ erDiagram
 ## Финансы
 
 - `accruals` - начисления владельцам по гаражу, виду поступления, тарифу и учетному месяцу. Уникальность активных строк: `GarageId + IncomeTypeId + AccountingMonth + Source`; индексы покрывают `AccountingMonth`, `GarageId`, `IncomeTypeId` и `TariffId`.
-- `financial_operations` - фактические поступления и выплаты. `OperationKind` разделяет `income` и `expense`; поступления связаны с `Garage`/`IncomeType`, выплаты - с `Supplier` или `StaffMember` и `ExpenseType`. Индексы покрывают дату операции, учетный месяц, тип операции, документ, гараж, поставщика и сотрудника.
+- `financial_operations` - фактические поступления и выплаты. `OperationKind` разделяет `income` и `expense`; поступления связаны с `Garage`/`IncomeType`, выплаты - с `Supplier` или `StaffMember` и `ExpenseType`. Nullable `ReceiptBatchId` объединяет строки, созданные одной полной оплатой, для единой квитанции; идентификатор может повторяться только в пределах одного гаража и одной даты операции, а отменённые строки не печатаются. Индексы покрывают дату операции, учетный месяц, тип операции, документ, пакет квитанции, гараж, поставщика и сотрудника.
 - `supplier_accruals` - начисления поставщикам по поставщику, виду выплаты и учетному месяцу. Уникальность: `SupplierId + ExpenseTypeId + AccountingMonth + Source + DocumentNumber`.
 - `meter_readings` - показания воды и электричества. Уникальность: `GarageId + MeterKind + AccountingMonth`; `HasGapWarning` фиксирует разрыв истории.
 - `funds` - фонды учета с нормализованным именем, балансом, порядком сортировки и флагами системности/разрешенных операций. `NormalizedName` уникален, `SortOrder` индексируется.

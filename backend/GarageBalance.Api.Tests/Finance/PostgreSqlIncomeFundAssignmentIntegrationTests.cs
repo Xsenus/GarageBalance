@@ -1,6 +1,7 @@
 using GarageBalance.Api.Application.Finance;
 using GarageBalance.Api.Domain.Dictionaries;
 using GarageBalance.Api.Domain.Finance;
+using GarageBalance.Api.Infrastructure.Data;
 using GarageBalance.Api.Tests.Common;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
@@ -135,12 +136,26 @@ public sealed class PostgreSqlIncomeFundAssignmentIntegrationTests
                 PeopleCount = 1,
                 FloorCount = 1
             };
-            var active = CreateLegacyIncome(garage, incomeType, 125m, "MIGRATION-ACTIVE", isCanceled: false);
-            var canceled = CreateLegacyIncome(garage, incomeType, 75m, "MIGRATION-CANCELED", isCanceled: true);
-            legacyContext.AddRange(garage, active, canceled);
+            legacyContext.Garages.Add(garage);
             await legacyContext.SaveChangesAsync();
-            activeOperationId = active.Id;
-            canceledOperationId = canceled.Id;
+            activeOperationId = Guid.NewGuid();
+            canceledOperationId = Guid.NewGuid();
+            await InsertLegacyIncomeAsync(
+                legacyContext,
+                activeOperationId,
+                garage.Id,
+                incomeType.Id,
+                125m,
+                "MIGRATION-ACTIVE",
+                isCanceled: false);
+            await InsertLegacyIncomeAsync(
+                legacyContext,
+                canceledOperationId,
+                garage.Id,
+                incomeType.Id,
+                75m,
+                "MIGRATION-CANCELED",
+                isCanceled: true);
             destinationFundId = incomeType.DestinationFundId!.Value;
             balanceBeforeMigration = incomeType.DestinationFund!.Balance;
         }
@@ -170,23 +185,24 @@ public sealed class PostgreSqlIncomeFundAssignmentIntegrationTests
             (item.RelatedDocumentId == activeOperationId.ToString() || item.RelatedDocumentId == canceledOperationId.ToString())));
     }
 
-    private static FinancialOperation CreateLegacyIncome(
-        Garage garage,
-        IncomeType incomeType,
+    private static Task InsertLegacyIncomeAsync(
+        GarageBalanceDbContext context,
+        Guid operationId,
+        Guid garageId,
+        Guid incomeTypeId,
         decimal amount,
         string documentNumber,
-        bool isCanceled) =>
-        new()
-        {
-            OperationKind = FinancialOperationKinds.Income,
-            OperationDate = new DateOnly(2026, 7, 18),
-            AccountingMonth = new DateOnly(2026, 7, 1),
-            Amount = amount,
-            DocumentNumber = documentNumber,
-            Garage = garage,
-            GarageId = garage.Id,
-            IncomeType = incomeType,
-            IncomeTypeId = incomeType.Id,
-            IsCanceled = isCanceled
-        };
+        bool isCanceled)
+    {
+        var now = DateTimeOffset.UtcNow;
+        return context.Database.ExecuteSqlInterpolatedAsync($"""
+            INSERT INTO financial_operations
+                ("Id", "OperationKind", "OperationDate", "AccountingMonth", "Amount",
+                 "DocumentNumber", "GarageId", "IncomeTypeId", "IsCanceled", "CreatedAtUtc", "UpdatedAtUtc")
+            VALUES
+                ({operationId}, {FinancialOperationKinds.Income}, {new DateOnly(2026, 7, 18)},
+                 {new DateOnly(2026, 7, 1)}, {amount}, {documentNumber}, {garageId}, {incomeTypeId},
+                 {isCanceled}, {now}, {now});
+            """);
+    }
 }

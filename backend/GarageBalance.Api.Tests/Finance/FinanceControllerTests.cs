@@ -775,6 +775,31 @@ public sealed class FinanceControllerTests
     }
 
     [Fact]
+    public async Task CreateIncome_ReturnsConflictForReceiptBatchReuse()
+    {
+        var controller = CreateController(new FakeFinanceService
+        {
+            CreateIncomeResult = FinanceResult<FinancialOperationDto>.Failure("receipt_batch_conflict", "Пакет уже используется.")
+        });
+
+        var result = await controller.CreateIncome(
+            new CreateIncomeOperationRequest(
+                Guid.NewGuid(),
+                Guid.NewGuid(),
+                new DateOnly(2026, 6, 19),
+                new DateOnly(2026, 6, 1),
+                100m,
+                null,
+                null,
+                Guid.NewGuid()),
+            CancellationToken.None);
+
+        var conflict = Assert.IsType<ConflictObjectResult>(result.Result);
+        var problem = Assert.IsType<ProblemDetails>(conflict.Value);
+        Assert.Equal("receipt_batch_conflict", problem.Title);
+    }
+
+    [Fact]
     public async Task CreateIrregularAccrual_PassesActorAndRequestToService()
     {
         var actorUserId = Guid.NewGuid();

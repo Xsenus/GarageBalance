@@ -85,6 +85,9 @@ export type ReceiptPrintingActionDto = {
   isCopy: boolean
   copyMark: string | null
   registeredAtUtc: string
+  receiptBatchId?: string | null
+  totalAmount?: number
+  lineCount?: number
 }
 
 export type IntegrationSecretSettingDto = {

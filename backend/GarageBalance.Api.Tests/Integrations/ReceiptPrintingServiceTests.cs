@@ -11,6 +11,17 @@ namespace GarageBalance.Api.Tests.Integrations;
 
 public sealed class ReceiptPrintingServiceTests
 {
+    [Theory]
+    [InlineData(1, "1 позиция")]
+    [InlineData(2, "2 позиции")]
+    [InlineData(5, "5 позиций")]
+    [InlineData(11, "11 позиций")]
+    [InlineData(21, "21 позиция")]
+    public void FormatReceiptLineCount_UsesRussianPluralForms(int count, string expected)
+    {
+        Assert.Equal(expected, ReceiptPrintingService.FormatReceiptLineCount(count));
+    }
+
     [Fact]
     public async Task RegisterActionAsync_PrintCreatesAuditEventForIncomeOperation()
     {
@@ -46,6 +57,106 @@ public sealed class ReceiptPrintingServiceTests
         Assert.Equal("Иванов Иван", audit.RelatedCounterpartyName);
         Assert.Contains("pending_adapter", audit.MetadataJson, StringComparison.Ordinal);
         Assert.Contains("adapterMessage", audit.MetadataJson, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task RegisterActionAsync_PrintBuildsOneReceiptForPaymentBatchAndItsAllocations()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var batchId = Guid.NewGuid();
+        var firstOperation = await SeedIncomeOperationAsync(database.Context);
+        firstOperation.ReceiptBatchId = batchId;
+        var waterIncomeType = new IncomeType { Name = "Водоснабжение", Code = "water" };
+        var secondOperation = new FinancialOperation
+        {
+            OperationKind = FinancialOperationKinds.Income,
+            OperationDate = firstOperation.OperationDate,
+            AccountingMonth = firstOperation.AccountingMonth,
+            Amount = 500m,
+            ReceiptBatchId = batchId,
+            GarageId = firstOperation.GarageId,
+            Garage = firstOperation.Garage,
+            IncomeType = waterIncomeType
+        };
+        var memberFeeAccrual = new Accrual
+        {
+            GarageId = firstOperation.GarageId!.Value,
+            Garage = firstOperation.Garage!,
+            IncomeTypeId = firstOperation.IncomeTypeId!.Value,
+            IncomeType = firstOperation.IncomeType!,
+            AccountingMonth = firstOperation.AccountingMonth,
+            DueDate = new DateOnly(2026, 8, 10),
+            OverdueFromDate = new DateOnly(2026, 8, 11),
+            Amount = 1500m,
+            Source = "regular"
+        };
+        var waterAccrual = new Accrual
+        {
+            GarageId = firstOperation.GarageId.Value,
+            Garage = firstOperation.Garage!,
+            IncomeType = waterIncomeType,
+            AccountingMonth = secondOperation.AccountingMonth,
+            DueDate = new DateOnly(2026, 8, 10),
+            OverdueFromDate = new DateOnly(2026, 8, 11),
+            Amount = 500m,
+            Source = "meter"
+        };
+        database.Context.AddRange(secondOperation, memberFeeAccrual, waterAccrual);
+        database.Context.AccrualPaymentAllocations.AddRange(
+            new AccrualPaymentAllocation
+            {
+                FinancialOperation = firstOperation,
+                Accrual = memberFeeAccrual,
+                Amount = 1500m
+            },
+            new AccrualPaymentAllocation
+            {
+                FinancialOperation = secondOperation,
+                Accrual = waterAccrual,
+                Amount = 500m
+            });
+        await database.Context.SaveChangesAsync();
+        var adapter = new FakeReceiptPrintingAdapter(ReceiptPrintingAdapterResult.Printed("Единая квитанция отправлена на печать."));
+        var service = CreateService(database.Context, adapter);
+
+        var result = await service.RegisterActionAsync(
+            secondOperation.Id,
+            new ReceiptPrintingActionRequest("print", null),
+            Guid.NewGuid(),
+            CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+        Assert.Equal(batchId, result.Value!.ReceiptBatchId);
+        Assert.Equal(2000m, result.Value.TotalAmount);
+        Assert.Equal(2, result.Value.LineCount);
+        Assert.Equal($"ПАКЕТ-{batchId:N}", result.Value.DocumentNumber);
+        Assert.Equal(batchId, adapter.LastRequest!.ReceiptBatchId);
+        Assert.Equal(2000m, adapter.LastRequest.Amount);
+        Assert.Equal("Несколько услуг", adapter.LastRequest.IncomeTypeName);
+        Assert.Collection(
+            adapter.LastRequest.Lines!.OrderBy(item => item.IncomeTypeName),
+            line =>
+            {
+                Assert.Equal("Водоснабжение", line.IncomeTypeName);
+                Assert.Equal(500m, line.Amount);
+                Assert.Equal(500m, Assert.Single(line.Allocations).Amount);
+            },
+            line =>
+            {
+                Assert.Equal("Членский взнос", line.IncomeTypeName);
+                Assert.Equal(1500m, line.Amount);
+                Assert.Equal(1500m, Assert.Single(line.Allocations).Amount);
+            });
+        var audit = Assert.Single(database.Context.AuditEvents);
+        Assert.Equal(batchId.ToString(), audit.EntityId);
+        Assert.Equal(batchId.ToString(), audit.RelatedDocumentId);
+        Assert.Contains("единая квитанция", audit.Summary, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("2 позиции", audit.Summary, StringComparison.Ordinal);
+        Assert.Contains("2 000.00", audit.Summary, StringComparison.Ordinal);
+        using var metadata = JsonDocument.Parse(audit.MetadataJson!);
+        Assert.Equal(batchId.ToString(), metadata.RootElement.GetProperty("receiptBatchId").GetString());
+        Assert.Equal("2", metadata.RootElement.GetProperty("lineCount").GetString());
+        Assert.Equal("2", metadata.RootElement.GetProperty("allocationCount").GetString());
     }
 
     [Fact]
@@ -184,6 +295,69 @@ public sealed class ReceiptPrintingServiceTests
 
         Assert.False(result.Succeeded);
         Assert.Equal("receipt_print_income_required", result.ErrorCode);
+        Assert.Empty(database.Context.AuditEvents);
+    }
+
+    [Fact]
+    public async Task RegisterActionAsync_RejectsMixedReceiptBatch()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var batchId = Guid.NewGuid();
+        var incomeOperation = await SeedIncomeOperationAsync(database.Context);
+        incomeOperation.ReceiptBatchId = batchId;
+        database.Context.FinancialOperations.Add(new FinancialOperation
+        {
+            OperationKind = FinancialOperationKinds.Expense,
+            OperationDate = incomeOperation.OperationDate,
+            AccountingMonth = incomeOperation.AccountingMonth,
+            Amount = 100m,
+            ReceiptBatchId = batchId
+        });
+        await database.Context.SaveChangesAsync();
+        var service = CreateService(database.Context);
+
+        var result = await service.RegisterActionAsync(
+            incomeOperation.Id,
+            new ReceiptPrintingActionRequest("print", null),
+            null,
+            CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Equal("receipt_print_batch_invalid", result.ErrorCode);
+        Assert.Empty(database.Context.AuditEvents);
+    }
+
+    [Fact]
+    public async Task RegisterActionAsync_RejectsReceiptBatchAboveBoundedLimit()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var batchId = Guid.NewGuid();
+        var anchor = await SeedIncomeOperationAsync(database.Context);
+        anchor.ReceiptBatchId = batchId;
+        database.Context.FinancialOperations.AddRange(Enumerable.Range(0, ReceiptPrintingLimits.MaximumLineCount).Select(index => new FinancialOperation
+        {
+            OperationKind = FinancialOperationKinds.Income,
+            OperationDate = anchor.OperationDate,
+            AccountingMonth = anchor.AccountingMonth,
+            Amount = 1m,
+            ReceiptBatchId = batchId,
+            GarageId = anchor.GarageId,
+            Garage = anchor.Garage,
+            IncomeTypeId = anchor.IncomeTypeId,
+            IncomeType = anchor.IncomeType,
+            Comment = $"Позиция {index + 2}"
+        }));
+        await database.Context.SaveChangesAsync();
+        var service = CreateService(database.Context);
+
+        var result = await service.RegisterActionAsync(
+            anchor.Id,
+            new ReceiptPrintingActionRequest("print", null),
+            null,
+            CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Equal("receipt_print_batch_too_large", result.ErrorCode);
         Assert.Empty(database.Context.AuditEvents);
     }
 

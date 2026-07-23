@@ -4565,6 +4565,7 @@ describe('App', () => {
           operationDate: request.operationDate,
           accountingMonth: request.accountingMonth,
           amount: request.amount,
+          receiptBatchId: request.receiptBatchId ?? null,
           garageDebtBefore: 5674,
           garageDebtAfter: 0,
         })
@@ -5139,6 +5140,9 @@ describe('App', () => {
         comment: 'Полная оплата Карта доступа июн.26: Оплата остатка',
       }),
     ]))
+    const fullPaymentReceiptBatchIds = savedIncomeRequests.slice(1).map((request) => request.receiptBatchId)
+    expect(fullPaymentReceiptBatchIds[0]).toMatch(/^[0-9a-f-]{36}$/)
+    expect(new Set(fullPaymentReceiptBatchIds).size).toBe(1)
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Полная оплата' })).not.toBeInTheDocument())
     await waitFor(() => expect(fullPaymentButton).toHaveFocus())
 
@@ -6375,6 +6379,7 @@ describe('App', () => {
       accountingMonth: expect.stringMatching(/^\d{4}-\d{2}-01$/),
       amount: 700,
       comment: 'Закрываем долг на начало',
+      receiptBatchId: expect.stringMatching(/^[0-9a-f-]{36}$/),
     })))
     expect(createIncome).not.toHaveBeenCalled()
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Полная оплата' })).not.toBeInTheDocument())
@@ -6568,6 +6573,87 @@ describe('App', () => {
     await user.type(within(cancelDialog).getByLabelText('Причина отмены платежа'), 'Ошибочный платеж')
     await user.click(within(cancelDialog).getByRole('button', { name: 'Отменить платеж' }))
     await waitFor(() => expect(cancelOperation).toHaveBeenCalledWith('token', 'operation-garage-77', { reason: 'Ошибочный платеж' }))
+  })
+
+  it('prints one receipt for all services in a full-payment batch', async () => {
+    const user = userEvent.setup()
+    const garage = createGarage({ id: 'garage-receipt-batch', number: '78', ownerName: 'Федорова Ирина' })
+    const receiptBatchId = '4ae8a03b-53a9-4c8f-a591-6c3cdadf43af'
+    const operations = [
+      createFinancialOperation({
+        id: 'batch-operation-electricity',
+        garageId: garage.id,
+        garageNumber: garage.number,
+        ownerName: garage.ownerName,
+        incomeTypeName: 'Электроэнергия',
+        amount: 1200,
+        receiptBatchId,
+        garageDebtAfter: 800,
+      }),
+      createFinancialOperation({
+        id: 'batch-operation-water',
+        garageId: garage.id,
+        garageNumber: garage.number,
+        ownerName: garage.ownerName,
+        incomeTypeName: 'Водоснабжение',
+        amount: 800,
+        receiptBatchId,
+        garageDebtAfter: 0,
+      }),
+    ]
+    const getOperationsPage = vi.fn(async (_token: string, params?: Parameters<FinanceClient['getOperationsPage']>[1]) => ({
+      items: params?.garageId === garage.id ? operations : [],
+      totalCount: params?.garageId === garage.id ? operations.length : 0,
+      offset: 0,
+      limit: params?.limit ?? 25,
+    }))
+    const registerReceiptPrintingAction = vi.fn(async (_token: string, operationId: string, request: ReceiptPrintingActionRequest) => createReceiptPrintingAction({
+      financialOperationId: operationId,
+      action: request.action,
+      statusMessage: 'Пакет квитанции зарегистрирован.',
+      receiptBatchId,
+      totalAmount: 2000,
+      lineCount: 2,
+    }))
+    render(<App
+      authClient={createAuthClient()}
+      dictionaryClient={createDictionaryClient({ getGarages: async () => [garage] })}
+      financeClient={createFinanceClient({ getOperationsPage })}
+      importClient={createImportClient()}
+      integrationClient={createIntegrationClient({ registerReceiptPrintingAction })}
+      reportClient={createReportClient()}
+      releaseClient={createReleaseClient()}
+      userClient={createUserClient()}
+    />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Платежи')
+    const prototype = within(await screen.findByRole('region', { name: 'Платежи' })).getByRole('region', { name: 'Форма платежей' })
+    await user.type(within(prototype).getByLabelText('Поиск номера гаража или ФИО владельца'), garage.number)
+    await user.click(await within(prototype).findByRole('option', { name: /Гараж\s*78\s*Федорова Ирина/ }))
+    await user.click(within(prototype).getByRole('button', { name: 'История платежей' }))
+
+    const historyTable = await within(prototype).findByRole('table', { name: 'История платежей гаража' })
+    expect(within(historyTable).getAllByText('В единой квитанции')).toHaveLength(1)
+    expect(within(historyTable).queryByRole('button', { name: /Сформировать квитанцию платежа/ })).not.toBeInTheDocument()
+    const unifiedReceiptButton = within(historyTable).getByRole('button', { name: 'Сформировать единую квитанцию пакета Электроэнергия' })
+    expect(within(historyTable).getAllByTitle('Сформировать единую квитанцию')).toHaveLength(1)
+    await user.click(unifiedReceiptButton)
+
+    const receiptDialog = await screen.findByRole('dialog', { name: 'Сформировать квитанцию?' })
+    expect(receiptDialog).toHaveTextContent('Единая квитанция · 2 позиции · 2 000.00')
+    const receiptContents = within(receiptDialog).getByLabelText('Состав единой квитанции')
+    expect(receiptContents).toHaveTextContent('Электроэнергия — 1 200.00')
+    expect(receiptContents).toHaveTextContent('Водоснабжение — 800.00')
+    await user.click(within(receiptDialog).getByRole('button', { name: 'Сформировать квитанцию' }))
+
+    await waitFor(() => expect(registerReceiptPrintingAction).toHaveBeenCalledWith(
+      'token',
+      'batch-operation-electricity',
+      { action: 'print', reason: undefined },
+    ))
+    expect(await screen.findByText('Пакет квитанции зарегистрирован. Единая квитанция: 2 позиции на сумму 2 000.00.')).toBeInTheDocument()
   })
 
   it('closes payment history when another garage is selected and ignores the stale response', async () => {

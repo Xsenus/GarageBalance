@@ -294,6 +294,8 @@ public sealed class IntegrationsControllerTests
     [Theory]
     [InlineData("financial_operation_not_found", typeof(NotFoundObjectResult))]
     [InlineData("receipt_print_income_required", typeof(ConflictObjectResult))]
+    [InlineData("receipt_print_batch_invalid", typeof(ConflictObjectResult))]
+    [InlineData("receipt_print_batch_too_large", typeof(ConflictObjectResult))]
     [InlineData("receipt_print_action_invalid", typeof(BadRequestObjectResult))]
     public async Task RegisterReceiptPrintingAction_MapsServiceErrors(string errorCode, Type resultType)
     {

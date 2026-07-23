@@ -17,7 +17,22 @@ public sealed record ReceiptPrintingAdapterRequest(
     string? IncomeTypeName,
     string? Reason,
     bool IsCopy,
-    string? CopyMark);
+    string? CopyMark,
+    Guid? ReceiptBatchId = null,
+    IReadOnlyList<ReceiptPrintingLineItem>? Lines = null);
+
+public sealed record ReceiptPrintingLineItem(
+    Guid FinancialOperationId,
+    string IncomeTypeName,
+    DateOnly AccountingMonth,
+    decimal Amount,
+    IReadOnlyList<ReceiptPrintingAllocationItem> Allocations);
+
+public sealed record ReceiptPrintingAllocationItem(
+    Guid AccrualId,
+    DateOnly AccountingMonth,
+    string IncomeTypeName,
+    decimal Amount);
 
 public sealed record ReceiptPrintingAdapterResult(
     string Status,

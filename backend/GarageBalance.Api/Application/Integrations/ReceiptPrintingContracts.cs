@@ -15,7 +15,10 @@ public sealed record ReceiptPrintingActionDto(
     string? DocumentNumber,
     bool IsCopy,
     string? CopyMark,
-    DateTimeOffset RegisteredAtUtc);
+    DateTimeOffset RegisteredAtUtc,
+    Guid? ReceiptBatchId = null,
+    decimal TotalAmount = 0,
+    int LineCount = 1);
 
 public sealed record ReceiptPrintingResult<T>(bool Succeeded, T? Value, string? ErrorCode, string? ErrorMessage)
 {

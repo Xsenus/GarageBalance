@@ -13,6 +13,7 @@ export type FinancialOperationDto = {
   operationDate: string
   accountingMonth: string
   amount: number
+  receiptBatchId?: string | null
   documentNumber: string | null
   comment: string | null
   garageId: string | null
@@ -309,6 +310,7 @@ export type CreateIncomeOperationRequest = {
   operationDate: string
   accountingMonth: string
   amount: number
+  receiptBatchId?: string
   documentNumber?: string
   comment?: string
 }
@@ -333,6 +335,7 @@ export type CreateGarageDebtPaymentRequest = {
   accountingMonth: string
   amount: number
   comment?: string
+  receiptBatchId?: string
 }
 
 export type CreateExpenseOperationRequest = {
