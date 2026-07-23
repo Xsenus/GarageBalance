@@ -27,6 +27,7 @@ import { chooseRegularTariffId, getAccrualValidationErrors, getCompatibleRegular
 import { formatPaymentMoney, parsePaymentMoney } from './paymentMoneyFormatting'
 import { calculateExpenseWorksheetClosingBalance, isAtomicCashExpenseType } from './expenseWorksheetBalances'
 import { rankGarageSearchResults } from './garageSearchRanking'
+import { getGarageBalancePresentation } from './garageBalancePresentation'
 
 type AccrualBreakdown =
   | { kind: 'garage'; accrual: AccrualDto }
@@ -3149,6 +3150,9 @@ function PaymentsPrototypePanel({
   const selectedGarage = selectedGarages.find((garage) => garage.id === selectedGarageId)
     ?? garageOptions.find((garage) => garage.id === selectedGarageId)
     ?? null
+  const selectedGarageBalance = selectedGarage
+    ? getGarageBalancePresentation(selectedGarage.balance, selectedGarage.overdueDebt)
+    : null
   const selectedGarageOverdueDebt = selectedGarage?.overdueDebt ?? 0
   const selectedGarageIds = selectedGarages.map((garage) => garage.id)
   const normalizedSearch = garageSearch.trim().toLowerCase()
@@ -4591,14 +4595,22 @@ function PaymentsPrototypePanel({
         {selectedGarage ? (
           <section className="payments-prototype-garage-summary" aria-label="Параметры выбранного гаража">
             <div><span>Люди</span><strong className="payments-prototype-garage-summary-value">{selectedGarage.peopleCount}</strong></div>
-            <div><span>Баланс</span><strong className={`payments-prototype-garage-summary-value${selectedGarage.balance < 0 ? ' money-expense' : ''}`}>{formatPaymentPrototypeValue(Math.abs(selectedGarage.balance))}</strong></div>
+            <div><span>{selectedGarageBalance?.label}</span><strong className={`payments-prototype-garage-summary-value${selectedGarageBalance?.moneyClassName ? ` ${selectedGarageBalance.moneyClassName}` : ''}`}>{formatPaymentPrototypeValue(selectedGarageBalance?.amount ?? 0)}</strong></div>
             <div><span>Этажи</span><strong className="payments-prototype-garage-summary-value">{selectedGarage.floorCount}</strong></div>
             <div><span>Просроченная задолженность</span><strong className={`payments-prototype-garage-summary-value${selectedGarage.overdueDebt > 0 ? ' money-expense' : ''}`}>{formatPaymentPrototypeValue(selectedGarage.overdueDebt)}</strong></div>
           </section>
         ) : null}
       </div>
-      {selectedGarage && selectedGarage.overdueDebt > 0 ? (
-        <details className="payments-prototype-overdue-details">
+      {selectedGarage && selectedGarageBalance && selectedGarage.overdueDebt > 0 ? (
+        <>
+          <p className="payments-prototype-balance-explanation" role="note">
+            {selectedGarageBalance.overdueRelation === 'partly-overdue'
+              ? <>Общий долг составляет <strong>{formatPaymentPrototypeValue(selectedGarageBalance.amount)}</strong>: просрочено <strong>{formatPaymentPrototypeValue(selectedGarage.overdueDebt)}</strong>, ещё не просрочено <strong>{formatPaymentPrototypeValue(selectedGarageBalance.notOverdueDebt)}</strong>.</>
+              : selectedGarageBalance.overdueRelation === 'fully-overdue'
+                ? <>Весь общий долг <strong>{formatPaymentPrototypeValue(selectedGarageBalance.amount)}</strong> уже просрочен.</>
+                : <>{selectedGarageBalance.label} <strong>{formatPaymentPrototypeValue(selectedGarageBalance.amount)}</strong> и просрочка <strong>{formatPaymentPrototypeValue(selectedGarage.overdueDebt)}</strong> относятся к разным услугам. Ниже показано, по каким услугам остался просроченный долг.</>}
+          </p>
+          <details className="payments-prototype-overdue-details" open>
           <summary>
             <span>Расшифровка просроченной задолженности</span>
             <strong>{formatPaymentPrototypeValue(overdueDebtDetails?.total ?? selectedGarage.overdueDebt)}</strong>
@@ -4648,7 +4660,8 @@ function PaymentsPrototypePanel({
           ) : (
             <p className="empty-state empty-state--spacious" role="status" aria-live="polite">Просроченных начислений не найдено.</p>
           )}
-        </details>
+          </details>
+        </>
       ) : null}
       {headingNotices}
       <div className="payments-prototype-topline">
@@ -4708,7 +4721,9 @@ function PaymentsPrototypePanel({
               <button className="ghost-button" type="button" onClick={clearGarageSelection}>Очистить</button>
             </div>
             <div className="payments-prototype-selected-list">
-              {selectedGarages.map((garage) => (
+              {selectedGarages.map((garage) => {
+                const balancePresentation = getGarageBalancePresentation(garage.balance, garage.overdueDebt)
+                return (
                 <div className={`payments-prototype-selected-item${garage.id === selectedGarageId ? ' is-active' : ''}`} key={garage.id}>
                   <button
                     className="ghost-button payments-prototype-selected-activate"
@@ -4725,8 +4740,8 @@ function PaymentsPrototypePanel({
                     <span className="payments-prototype-selected-metrics" aria-label={`Параметры гаража ${garage.number}`}>
                       <span><small>Люди</small><b>{garage.peopleCount}</b></span>
                       <span><small>Этажи</small><b>{garage.floorCount}</b></span>
-                      <span><small>Баланс</small><b>{formatPaymentMoney(Math.abs(garage.balance))}</b></span>
-                      <span><small>Долг</small><b>{formatPaymentMoney(garage.overdueDebt)}</b></span>
+                      <span><small>{balancePresentation.label}</small><b className={balancePresentation.moneyClassName}>{formatPaymentMoney(balancePresentation.amount)}</b></span>
+                      <span><small>Просрочка</small><b className={garage.overdueDebt > 0 ? 'money-expense' : undefined}>{formatPaymentMoney(garage.overdueDebt)}</b></span>
                     </span>
                   </button>
                   <button
@@ -4739,7 +4754,8 @@ function PaymentsPrototypePanel({
                     <X size={14} aria-hidden="true" />
                   </button>
                 </div>
-              ))}
+                )
+              })}
             </div>
           </div>
         ) : null}

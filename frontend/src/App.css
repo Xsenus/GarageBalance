@@ -3429,6 +3429,21 @@ h1 {
   padding: 0 14px 14px;
 }
 
+.payments-prototype-balance-explanation {
+  margin: 0;
+  border: 1px solid #b2ddff;
+  border-radius: 10px;
+  background: #f5fbff;
+  padding: 10px 14px;
+  color: #344054;
+  line-height: 1.45;
+}
+
+.payments-prototype-balance-explanation strong {
+  color: #101828;
+  font-variant-numeric: tabular-nums;
+}
+
 .payments-prototype-overdue-details > summary {
   display: flex;
   align-items: center;
