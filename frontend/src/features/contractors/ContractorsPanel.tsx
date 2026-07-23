@@ -2208,13 +2208,11 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
             <div className="contractors-directory-table contractors-directory-table--departments" role="table" aria-label="Отделы персонала">
               <div className="contractors-directory-row contractors-directory-row--header" role="row">
                 <span className="contractors-directory-header-cell" role="columnheader">Отдел</span>
-                <span className="contractors-directory-header-cell" role="columnheader">Статус</span>
                 <span className="contractors-directory-header-cell" role="columnheader">Действия</span>
               </div>
               {departmentPage.items.map((department) => (
                 <div className={department.isDeleted ? 'contractors-directory-row contractors-directory-row--deleted' : 'contractors-directory-row'} role="row" key={department.id} onContextMenu={(event) => openDepartmentContextMenu(event, department)}>
                   <span role="cell">{department.name}</span>
-                  <span role="cell" className="contractors-directory-cell--center">{department.isDeleted ? 'Удален' : 'Активен'}</span>
                   <span role="cell" className="contractors-row-actions">
                     {department.isDeleted ? (
                       <button className="icon-button" type="button" aria-label={`Восстановить отдел ${department.name}`} title="Восстановить" onClick={() => restoreDepartment(department)}>

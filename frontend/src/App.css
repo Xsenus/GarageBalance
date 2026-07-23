@@ -1539,8 +1539,8 @@ h1 {
 }
 
 .contractors-directory-table--departments .contractors-directory-row {
-  grid-template-columns: minmax(190px, 1fr) 110px 104px;
-  min-width: 404px;
+  grid-template-columns: minmax(190px, 1fr) 104px;
+  min-width: 294px;
 }
 
 @media (max-width: 1180px) {
