@@ -585,7 +585,7 @@ export function FundsPrototypePanel({ auth, fundsClient }: { auth: AuthResponse;
 
       {operation ? (
         <div className="modal-backdrop" role="presentation" onMouseDown={closeFundOperation}>
-          <section ref={operationDialogRef} className="detail-dialog dictionary-confirmation-dialog" role="dialog" aria-modal="true" aria-labelledby="fund-operation-title" aria-describedby="fund-operation-description" onMouseDown={(event) => event.stopPropagation()}>
+          <section key={`${operation.kind}:${operation.fundId}`} ref={operationDialogRef} className="detail-dialog dictionary-confirmation-dialog" role="dialog" aria-modal="true" aria-labelledby="fund-operation-title" aria-describedby="fund-operation-description" onMouseDown={(event) => event.stopPropagation()}>
             <div className="detail-dialog-header">
               <div>
                 <p className="eyebrow">Операция фонда</p>

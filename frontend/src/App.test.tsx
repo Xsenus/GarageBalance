@@ -7421,6 +7421,63 @@ describe('App', () => {
     expect(within(fundOperationsTable).getByText('Изъятие')).toBeInTheDocument()
   })
 
+  it('opens and submits a withdrawal for the exact clicked fund', async () => {
+    const user = userEvent.setup()
+    const targetFund = createFund({
+      id: 'fund-target',
+      name: 'Целевые взносы',
+      balance: 0,
+      sortOrder: 60,
+    })
+    const otherFund = createFund({
+      id: 'fund-other',
+      name: 'Прочее',
+      balance: 25000,
+      sortOrder: 70,
+    })
+    const createOperation = vi.fn(async (_token: string, fundId: string, request: CreateFundOperationRequest) => createFundOperation({
+      id: 'fund-operation-other-withdrawal',
+      fundId,
+      fundName: otherFund.name,
+      operationKind: request.operationKind,
+      amount: request.amount,
+      balanceBefore: otherFund.balance,
+      balanceAfter: otherFund.balance - request.amount,
+      reason: request.reason,
+    }))
+    const fundsClient = createFundsClient({
+      getFunds: async () => [targetFund, otherFund],
+      createOperation,
+    })
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} fundsClient={fundsClient} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await user.click(within(await screen.findByRole('group', { name: 'Главные разделы' })).getByRole('button', { name: /Управление\s+фондами/i }))
+
+    const fundsPanel = await screen.findByRole('region', { name: 'Управление фондами' })
+    await user.click(await within(fundsPanel).findByRole('button', { name: 'Изъять из фонда Прочее' }))
+
+    const dialog = await screen.findByRole('dialog', { name: 'Изъять из фонда' })
+    expect(within(dialog).getByText('Прочее')).toBeInTheDocument()
+    expect(within(dialog).queryByText('Целевые взносы')).not.toBeInTheDocument()
+    await user.type(within(dialog).getByLabelText('Сумма операции фонда'), '25000')
+    await user.type(within(dialog).getByLabelText('Причина операции фонда'), 'Перераспределение')
+    await user.click(within(dialog).getByRole('button', { name: 'Подтвердить операцию' }))
+
+    await waitFor(() => expect(createOperation).toHaveBeenCalledWith(
+      expect.any(String),
+      otherFund.id,
+      {
+        operationKind: 'withdraw',
+        amount: 25000,
+        reason: 'Перераспределение',
+      },
+    ))
+    expect(await within(fundsPanel).findByText('Изъятие по фонду "Прочее" сохранено и записано в историю изменений.')).toHaveAttribute('role', 'status')
+    expect(screen.queryByRole('dialog', { name: 'Изъять из фонда' })).not.toBeInTheDocument()
+  })
+
   it('keeps empty backend funds empty instead of showing prototype fund rows', async () => {
     const user = userEvent.setup()
     const getFunds = vi.fn(async () => [])
