@@ -1009,34 +1009,39 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
 
   function renderActiveReport() {
     if (activeReportTab === 'consolidated') {
-      const incomeBreakdown = consolidatedReport?.incomeBreakdown ?? []
-      const expenseBreakdown = consolidatedReport?.expenseBreakdown ?? []
-      const breakdownRowCount = Math.max(incomeBreakdown.length, expenseBreakdown.length, 1)
-      const breakdownRows = Array.from({ length: breakdownRowCount }, (_, index) => {
-        const incomeRow = incomeBreakdown[index]
-        const expenseRow = expenseBreakdown[index]
+      const consolidatedPage = createClientPage(consolidatedReport?.monthlyRows ?? [], consolidatedPageNumber, consolidatedPageSize)
+      const reportRows = consolidatedPage.items.flatMap((month) => {
+        const incomeRows = month.incomeBreakdown ?? []
+        const expenseRows = month.expenseBreakdown ?? []
+        const detailCount = Math.max(incomeRows.length, expenseRows.length)
+        const details = Array.from({ length: detailCount }, (_, index) => {
+          const incomeRow = incomeRows[index]
+          const expenseRow = expenseRows[index]
+          return [
+            index === 0 ? formatMonth(month.accountingMonth) : '',
+            incomeRow?.name ?? '',
+            incomeRow ? formatMoney(incomeRow.amount) : '',
+            expenseRow?.name ?? '',
+            expenseRow ? formatMoney(expenseRow.amount) : '',
+            '',
+            '',
+            '',
+          ]
+        })
         return [
-          incomeRow?.name ?? '',
-          incomeRow ? formatMoney(incomeRow.amount) : '',
-          expenseRow?.name ?? '',
-          expenseRow ? formatMoney(expenseRow.amount) : '',
+          ...details,
+          [
+            detailCount === 0 ? formatMonth(month.accountingMonth) : '',
+            'ИТОГО',
+            formatMoney(month.incomeTotal),
+            'ИТОГО',
+            formatMoney(month.expenseTotal),
+            formatMoney(month.incomeTotal - month.expenseTotal),
+            formatMoney(month.bankBalanceOpening),
+            formatMoney(month.bankBalanceClosing),
+          ],
         ]
       })
-      const monthlyRows = consolidatedReport?.monthlyRows.map((row) => {
-        const difference = row.incomeTotal - row.expenseTotal
-        return [
-          formatMonth(row.accountingMonth),
-          formatMoney(row.incomeTotal),
-          formatMoney(row.expenseTotal),
-          formatMoney(difference),
-          formatMoney(row.accrualTotal),
-          formatMoney(row.balance - difference),
-          formatMoney(row.balance),
-          formatMoney(row.debt),
-          String(row.operationCount),
-        ]
-      }) ?? []
-      const consolidatedPage = createClientPage(monthlyRows, consolidatedPageNumber, consolidatedPageSize)
       return (
         <ReportWorkbookSheet title="Консолидированный отчёт">
           {renderMonthlyFilter('consolidated', {
@@ -1048,9 +1053,9 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
           {consolidatedReportError ? <FormError>{consolidatedReportError}</FormError> : null}
           {renderReportTable(
             'Консолидированный отчет',
-            [{ label: 'Месяц', sortField: 'accountingMonth' }, { label: 'Поступления', sortField: 'incomeTotal' }, { label: 'Выплаты', sortField: 'expenseTotal' }, 'Разница', { label: 'Начисления', sortField: 'accrualTotal' }, 'На начало месяца', { label: 'На конец месяца', sortField: 'balance' }, { label: 'Задолженность', sortField: 'debt' }, { label: 'Операции', sortField: 'operationCount' }],
-            consolidatedReportLoading ? [] : consolidatedPage.items,
-            consolidatedReport ? ['ИТОГО', formatMoney(consolidatedReport.incomeTotal), formatMoney(consolidatedReport.expenseTotal), formatMoney(consolidatedReport.incomeTotal - consolidatedReport.expenseTotal), formatMoney(consolidatedReport.accrualTotal), '', formatMoney(consolidatedReport.balance), formatMoney(consolidatedReport.debt), String(consolidatedReport.operationCount)] : undefined,
+            [{ label: 'Месяц', sortField: 'accountingMonth' }, 'Наименование поступления', 'Поступления', 'Наименование выплаты', 'Выплаты', 'Разница', 'Остаток по счёту — На начало месяца', 'Остаток по счёту — На конец месяца'],
+            consolidatedReportLoading ? [] : reportRows,
+            undefined,
             { tab: 'consolidated', disabled: consolidatedReportLoading },
             consolidatedReportLoading || consolidatedReportError ? undefined : 'Данных за период нет',
           )}
@@ -1067,11 +1072,6 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
               setConsolidatedPageSize(limit)
             }}
           />
-          {renderReportTable(
-            'Расшифровка консолидированного отчета',
-            ['Вид поступления', 'Поступления', 'Статья расхода', 'Выплаты'],
-            breakdownRows,
-          )}
         </ReportWorkbookSheet>
       )
     }

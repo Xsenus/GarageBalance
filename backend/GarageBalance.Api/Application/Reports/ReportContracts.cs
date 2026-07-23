@@ -121,7 +121,11 @@ public sealed record MonthlyReportRowDto(
     decimal Debt,
     int OperationCount,
     int AccrualCount,
-    int MeterReadingCount);
+    int MeterReadingCount,
+    decimal BankBalanceOpening = 0m,
+    decimal BankBalanceClosing = 0m,
+    IReadOnlyList<NamedAmountTotalDto>? IncomeBreakdown = null,
+    IReadOnlyList<NamedAmountTotalDto>? ExpenseBreakdown = null);
 
 public sealed record GarageReportRowDto(
     Guid GarageId,

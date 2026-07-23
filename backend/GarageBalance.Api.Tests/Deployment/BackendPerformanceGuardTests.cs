@@ -767,8 +767,13 @@ public sealed class BackendPerformanceGuardTests
         Assert.Contains(".Concat(accrualMonthlyQuery)", source, StringComparison.Ordinal);
         Assert.Contains(".Concat(readingMonthlyQuery)", source, StringComparison.Ordinal);
         Assert.Contains(".Concat(garageStartingBalanceQuery)", source, StringComparison.Ordinal);
-        Assert.Equal(5, CountOccurrences(source, ".Concat("));
+        Assert.Equal(6, CountOccurrences(source, ".Concat("));
         Assert.True(CountOccurrences(source, ".ToListAsync(cancellationToken)") >= 1);
+        Assert.Contains("transfer.TransferDate < periodEndExclusive", source, StringComparison.Ordinal);
+        Assert.Contains("operation.OperationDate < periodEndExclusive", source, StringComparison.Ordinal);
+        Assert.Contains("operation.ExpensePaymentType != ExpensePaymentTypes.WithoutReceipt", source, StringComparison.Ordinal);
+        Assert.Contains("GroupBy(transfer => transfer.TransferDate)", source, StringComparison.Ordinal);
+        Assert.Contains("GroupBy(operation => operation.OperationDate)", source, StringComparison.Ordinal);
         Assert.Contains("group.Sum(garage => garage.StartingBalance)", source, StringComparison.Ordinal);
         Assert.DoesNotContain("SumAsync(garage => garage.StartingBalance, cancellationToken)", source, StringComparison.Ordinal);
         Assert.DoesNotContain("incomeByMonth.Count == 0 && expenseByMonth.Count == 0", source, StringComparison.Ordinal);
@@ -776,7 +781,7 @@ public sealed class BackendPerformanceGuardTests
         var fallbackStart = source.IndexOf("private static IReadOnlyList<MonthlyReportQueryRow> GetFallbackMonthlyRows", StringComparison.Ordinal);
         var postgresSource = source[postgresStart..fallbackStart];
         Assert.Equal(1, CountOccurrences(postgresSource, "SqlQueryRaw<ConsolidatedReportCombinedQueryRow>"));
-        Assert.Equal(1, CountOccurrences(postgresSource, ".ToListAsync(cancellationToken)"));
+        Assert.Equal(2, CountOccurrences(postgresSource, ".ToListAsync(cancellationToken)"));
         Assert.Equal(4, CountOccurrences(postgresSource, "AS MATERIALIZED"));
         Assert.Equal(1, CountOccurrences(postgresSource, "FROM financial_operations"));
         Assert.Equal(1, CountOccurrences(postgresSource, "FROM accruals"));

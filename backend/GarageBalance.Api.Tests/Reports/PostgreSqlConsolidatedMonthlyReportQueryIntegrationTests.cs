@@ -12,7 +12,7 @@ namespace GarageBalance.Api.Tests.Reports;
 public sealed class PostgreSqlConsolidatedMonthlyReportQueryIntegrationTests
 {
     [PostgreSqlFact]
-    public async Task MonthlyReportBuildsAllSectionsFromOneCommandAndOneBaseScan()
+    public async Task MonthlyReportBuildsSectionsAndBankBalancesFromTwoBoundedCommands()
     {
         var january = new DateOnly(2043, 1, 1);
         var february = january.AddMonths(1);
@@ -64,6 +64,8 @@ public sealed class PostgreSqlConsolidatedMonthlyReportQueryIntegrationTests
             Assert.Equal([new CountByMonth(january, 1), new CountByMonth(february, 2)], result.MeterReadingsByMonth);
             Assert.Equal(80m, Assert.Single(result.IncomeBreakdown).Amount);
             Assert.Equal(30m, Assert.Single(result.ExpenseBreakdown).Amount);
+            Assert.Equal([50m, 30m], result.IncomeBreakdownByMonth.Select(row => row.Amount));
+            Assert.Equal([20m, 10m], result.ExpenseBreakdownByMonth.Select(row => row.Amount));
             var page = Assert.Single(result.MonthlyRows);
             Assert.Equal(january, page.AccountingMonth);
             Assert.Equal(50m, page.IncomeTotal);
@@ -74,14 +76,19 @@ public sealed class PostgreSqlConsolidatedMonthlyReportQueryIntegrationTests
             Assert.Equal(2, page.OperationCount);
             Assert.Equal(2, page.AccrualCount);
             Assert.Equal(1, page.MeterReadingCount);
+            Assert.Equal(0m, page.BankBalanceOpening);
+            Assert.Equal(-20m, page.BankBalanceClosing);
 
-            var command = Assert.Single(capture.Commands);
-            Assert.Equal(1, CountOccurrences(command, "FROM financial_operations"));
-            Assert.Equal(1, CountOccurrences(command, "FROM accruals"));
-            Assert.Equal(1, CountOccurrences(command, "FROM meter_readings"));
-            Assert.Equal(1, CountOccurrences(command, "FROM garages"));
-            Assert.Contains("AS MATERIALIZED", command, StringComparison.Ordinal);
-            Assert.Contains("FROM monthly_page", command, StringComparison.Ordinal);
+            Assert.Equal(2, capture.Commands.Count);
+            var reportCommand = Assert.Single(capture.Commands, command => command.Contains("WITH operations AS MATERIALIZED", StringComparison.Ordinal));
+            var bankCommand = Assert.Single(capture.Commands, command => command.Contains("cash_bank_transfers", StringComparison.Ordinal));
+            Assert.Equal(1, CountOccurrences(reportCommand, "FROM financial_operations"));
+            Assert.Equal(1, CountOccurrences(reportCommand, "FROM accruals"));
+            Assert.Equal(1, CountOccurrences(reportCommand, "FROM meter_readings"));
+            Assert.Equal(1, CountOccurrences(reportCommand, "FROM garages"));
+            Assert.Contains("FROM monthly_page", reportCommand, StringComparison.Ordinal);
+            Assert.Contains("\"OperationDate\"", bankCommand, StringComparison.Ordinal);
+            Assert.Contains("\"TransferDate\"", bankCommand, StringComparison.Ordinal);
         }
     }
 

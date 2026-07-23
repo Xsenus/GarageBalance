@@ -75,9 +75,13 @@ public sealed class PostgreSqlReportControlTotalsIntegrationTests
         Assert.Equal(control.GarageAccruals, consolidated.AccrualByMonth.Sum(row => row.Amount));
         Assert.Equal(control.GarageIncome, consolidated.IncomeByMonth.Sum(row => row.Amount));
         Assert.Equal(control.SupplierExpenses, consolidated.ExpenseByMonth.Sum(row => row.Amount));
+        Assert.Equal(control.GarageIncome, Assert.Single(consolidated.IncomeBreakdownByMonth).Amount);
+        Assert.Equal(control.SupplierExpenses, Assert.Single(consolidated.ExpenseBreakdownByMonth).Amount);
         var consolidatedMonth = Assert.Single(consolidated.MonthlyRows);
         Assert.Equal(control.CashBalance, consolidatedMonth.Balance);
         Assert.Equal(control.GarageDebt, consolidatedMonth.Debt);
+        Assert.Equal(-555m, consolidatedMonth.BankBalanceOpening);
+        Assert.Equal(-605m, consolidatedMonth.BankBalanceClosing);
 
         var garages = await new EfGarageReportQuery(context).GetRowsAsync(
             month, month, null, new HashSet<Guid>(), new HashSet<Guid>(), new HashSet<Guid> { incomeType.Id },

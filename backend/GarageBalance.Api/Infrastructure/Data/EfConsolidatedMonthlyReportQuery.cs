@@ -8,6 +8,24 @@ namespace GarageBalance.Api.Infrastructure.Data;
 
 public sealed class EfConsolidatedMonthlyReportQuery(GarageBalanceDbContext dbContext) : IConsolidatedMonthlyReportQuery
 {
+    private static readonly string[] CashExpenseTypeCodes =
+    [
+        "advance",
+        "advance_payment",
+        "advance_payments",
+        "cash_advance",
+        "no_receipt",
+        "without_receipt",
+        "no_check",
+        "without_check",
+        "cash_no_receipt"
+    ];
+    private static readonly string[] CashExpenseTypeNames =
+    [
+        "Авансовые выплаты",
+        "Выплата без чека"
+    ];
+
     private const int OperationMonthlyCategory = 1;
     private const int AccrualMonthlyCategory = 2;
     private const int MeterReadingMonthlyCategory = 3;
@@ -98,13 +116,14 @@ public sealed class EfConsolidatedMonthlyReportQuery(GarageBalanceDbContext dbCo
             .Where(operation => operation.OperationKind == FinancialOperationKinds.Income)
             .GroupBy(operation => new
             {
+                operation.AccountingMonth,
                 operation.IncomeTypeId,
                 Name = operation.IncomeType == null ? "Без вида поступления" : operation.IncomeType.Name
             })
             .Select(group => new
             {
                 Category = IncomeBreakdownCategory,
-                Month = (DateOnly?)null,
+                Month = (DateOnly?)group.Key.AccountingMonth,
                 Kind = (string?)null,
                 TypeId = group.Key.IncomeTypeId,
                 Name = (string?)group.Key.Name,
@@ -115,13 +134,14 @@ public sealed class EfConsolidatedMonthlyReportQuery(GarageBalanceDbContext dbCo
             .Where(operation => operation.OperationKind == FinancialOperationKinds.Expense)
             .GroupBy(operation => new
             {
+                operation.AccountingMonth,
                 operation.ExpenseTypeId,
                 Name = operation.ExpenseType == null ? "Без вида выплаты" : operation.ExpenseType.Name
             })
             .Select(group => new
             {
                 Category = ExpenseBreakdownCategory,
-                Month = (DateOnly?)null,
+                Month = (DateOnly?)group.Key.AccountingMonth,
                 Kind = (string?)null,
                 TypeId = group.Key.ExpenseTypeId,
                 Name = (string?)group.Key.Name,
@@ -146,15 +166,27 @@ public sealed class EfConsolidatedMonthlyReportQuery(GarageBalanceDbContext dbCo
             .OrderBy(row => row.Month)
             .Select(row => new AmountCountByMonth(row.Month!.Value, row.Amount, row.Count))
             .ToList();
-        var incomeBreakdown = rows
+        var incomeBreakdownByMonth = rows
             .Where(row => row.Category == IncomeBreakdownCategory)
-            .OrderBy(row => row.Name)
-            .Select(row => new NamedAmountTotal(row.TypeId, row.Name!, row.Amount))
+            .OrderBy(row => row.Month)
+            .ThenBy(row => row.Name)
+            .Select(row => new MonthlyNamedAmountTotal(row.Month!.Value, row.TypeId, row.Name!, row.Amount))
             .ToList();
-        var expenseBreakdown = rows
+        var expenseBreakdownByMonth = rows
             .Where(row => row.Category == ExpenseBreakdownCategory)
-            .OrderBy(row => row.Name)
-            .Select(row => new NamedAmountTotal(row.TypeId, row.Name!, row.Amount))
+            .OrderBy(row => row.Month)
+            .ThenBy(row => row.Name)
+            .Select(row => new MonthlyNamedAmountTotal(row.Month!.Value, row.TypeId, row.Name!, row.Amount))
+            .ToList();
+        var incomeBreakdown = incomeBreakdownByMonth
+            .GroupBy(row => new { row.TypeId, row.Name })
+            .OrderBy(group => group.Key.Name)
+            .Select(group => new NamedAmountTotal(group.Key.TypeId, group.Key.Name, group.Sum(row => row.Amount)))
+            .ToList();
+        var expenseBreakdown = expenseBreakdownByMonth
+            .GroupBy(row => new { row.TypeId, row.Name })
+            .OrderBy(group => group.Key.Name)
+            .Select(group => new NamedAmountTotal(group.Key.TypeId, group.Key.Name, group.Sum(row => row.Amount)))
             .ToList();
         var accrualByMonth = rows
             .Where(row => row.Category == AccrualMonthlyCategory)
@@ -169,6 +201,7 @@ public sealed class EfConsolidatedMonthlyReportQuery(GarageBalanceDbContext dbCo
         var garageStartingBalanceTotal = rows
             .Where(row => row.Category == StartingBalanceCategory)
             .Sum(row => row.Amount);
+        var bankBalances = await GetBankBalancesAsync(periodFrom, periodTo, cancellationToken);
         var monthlyRows = GetFallbackMonthlyRows(
             periodFrom,
             periodTo,
@@ -177,6 +210,7 @@ public sealed class EfConsolidatedMonthlyReportQuery(GarageBalanceDbContext dbCo
             accrualByMonth,
             readingsByMonth,
             garageStartingBalanceTotal,
+            bankBalances,
             sort,
             offset,
             limit);
@@ -189,6 +223,8 @@ public sealed class EfConsolidatedMonthlyReportQuery(GarageBalanceDbContext dbCo
             garageStartingBalanceTotal,
             incomeBreakdown,
             expenseBreakdown,
+            incomeBreakdownByMonth,
+            expenseBreakdownByMonth,
             monthlyRows,
             MonthPeriod.Enumerate(periodFrom, periodTo).Count());
     }
@@ -263,21 +299,23 @@ public sealed class EfConsolidatedMonthlyReportQuery(GarageBalanceDbContext dbCo
                 SELECT COALESCE(SUM("StartingBalance"), 0) AS amount
                 FROM garage_source
             ), income_breakdown AS (
-                SELECT operation."IncomeTypeId" AS type_id,
+                SELECT operation."AccountingMonth" AS month,
+                       operation."IncomeTypeId" AS type_id,
                        COALESCE(income_type."Name", 'Без вида поступления') AS name,
                        SUM(operation."Amount") AS amount
                 FROM operations operation
                 LEFT JOIN income_types income_type ON income_type."Id" = operation."IncomeTypeId"
                 WHERE operation."OperationKind" = 'income'
-                GROUP BY operation."IncomeTypeId", income_type."Name"
+                GROUP BY operation."AccountingMonth", operation."IncomeTypeId", income_type."Name"
             ), expense_breakdown AS (
-                SELECT operation."ExpenseTypeId" AS type_id,
+                SELECT operation."AccountingMonth" AS month,
+                       operation."ExpenseTypeId" AS type_id,
                        COALESCE(expense_type."Name", 'Без вида выплаты') AS name,
                        SUM(operation."Amount") AS amount
                 FROM operations operation
                 LEFT JOIN expense_types expense_type ON expense_type."Id" = operation."ExpenseTypeId"
                 WHERE operation."OperationKind" = 'expense'
-                GROUP BY operation."ExpenseTypeId", expense_type."Name"
+                GROUP BY operation."AccountingMonth", operation."ExpenseTypeId", expense_type."Name"
             ), report_rows AS (
                 SELECT months.month AS "AccountingMonth",
                        COALESCE(operation_totals.income_total, 0) AS "IncomeTotal",
@@ -328,11 +366,11 @@ public sealed class EfConsolidatedMonthlyReportQuery(GarageBalanceDbContext dbCo
                    amount, 0, NULL::date, 0::numeric, 0::numeric, 0::numeric, 0::numeric, 0::numeric, 0, 0, 0
             FROM starting_balance
             UNION ALL
-            SELECT {{IncomeBreakdownCategory}}, 0, NULL::date, NULL::text, type_id, name,
+            SELECT {{IncomeBreakdownCategory}}, 0, month, NULL::text, type_id, name,
                    amount, 0, NULL::date, 0::numeric, 0::numeric, 0::numeric, 0::numeric, 0::numeric, 0, 0, 0
             FROM income_breakdown
             UNION ALL
-            SELECT {{ExpenseBreakdownCategory}}, 0, NULL::date, NULL::text, type_id, name,
+            SELECT {{ExpenseBreakdownCategory}}, 0, month, NULL::text, type_id, name,
                    amount, 0, NULL::date, 0::numeric, 0::numeric, 0::numeric, 0::numeric, 0::numeric, 0, 0, 0
             FROM expense_breakdown
             UNION ALL
@@ -377,28 +415,48 @@ public sealed class EfConsolidatedMonthlyReportQuery(GarageBalanceDbContext dbCo
             .Select(row => new CountByMonth(row.Month!.Value, row.Count))
             .ToList();
         var startingBalance = rows.Single(row => row.Category == StartingBalanceCategory).Amount;
-        var incomeBreakdown = rows
+        var incomeBreakdownByMonth = rows
             .Where(row => row.Category == IncomeBreakdownCategory)
-            .OrderBy(row => row.Name)
-            .Select(row => new NamedAmountTotal(row.TypeId, row.Name!, row.Amount))
+            .OrderBy(row => row.Month)
+            .ThenBy(row => row.Name)
+            .Select(row => new MonthlyNamedAmountTotal(row.Month!.Value, row.TypeId, row.Name!, row.Amount))
             .ToList();
-        var expenseBreakdown = rows
+        var expenseBreakdownByMonth = rows
             .Where(row => row.Category == ExpenseBreakdownCategory)
-            .OrderBy(row => row.Name)
-            .Select(row => new NamedAmountTotal(row.TypeId, row.Name!, row.Amount))
+            .OrderBy(row => row.Month)
+            .ThenBy(row => row.Name)
+            .Select(row => new MonthlyNamedAmountTotal(row.Month!.Value, row.TypeId, row.Name!, row.Amount))
             .ToList();
+        var incomeBreakdown = incomeBreakdownByMonth
+            .GroupBy(row => new { row.TypeId, row.Name })
+            .OrderBy(group => group.Key.Name)
+            .Select(group => new NamedAmountTotal(group.Key.TypeId, group.Key.Name, group.Sum(row => row.Amount)))
+            .ToList();
+        var expenseBreakdown = expenseBreakdownByMonth
+            .GroupBy(row => new { row.TypeId, row.Name })
+            .OrderBy(group => group.Key.Name)
+            .Select(group => new NamedAmountTotal(group.Key.TypeId, group.Key.Name, group.Sum(row => row.Amount)))
+            .ToList();
+        var bankBalances = await GetBankBalancesAsync(periodFrom, periodTo, cancellationToken);
         var monthlyRows = rows
             .Where(row => row.Category == MonthlyPageCategory)
-            .Select(row => new MonthlyReportQueryRow(
-                row.AccountingMonth!.Value,
-                row.IncomeTotal,
-                row.ExpenseTotal,
-                row.AccrualTotal,
-                row.Balance,
-                row.Debt,
-                row.OperationCount,
-                row.AccrualCount,
-                row.MeterReadingCount))
+            .Select(row =>
+            {
+                var accountingMonth = row.AccountingMonth!.Value;
+                bankBalances.TryGetValue(accountingMonth, out var bankBalance);
+                return new MonthlyReportQueryRow(
+                    accountingMonth,
+                    row.IncomeTotal,
+                    row.ExpenseTotal,
+                    row.AccrualTotal,
+                    row.Balance,
+                    row.Debt,
+                    row.OperationCount,
+                    row.AccrualCount,
+                    row.MeterReadingCount,
+                    bankBalance.Opening,
+                    bankBalance.Closing);
+            })
             .ToList();
 
         return new ConsolidatedMonthlyReportData(
@@ -409,8 +467,65 @@ public sealed class EfConsolidatedMonthlyReportQuery(GarageBalanceDbContext dbCo
             startingBalance,
             incomeBreakdown,
             expenseBreakdown,
+            incomeBreakdownByMonth,
+            expenseBreakdownByMonth,
             monthlyRows,
             MonthPeriod.Enumerate(periodFrom, periodTo).Count());
+    }
+
+    private async Task<IReadOnlyDictionary<DateOnly, BankBalanceRange>> GetBankBalancesAsync(
+        DateOnly periodFrom,
+        DateOnly periodTo,
+        CancellationToken cancellationToken)
+    {
+        var periodEndExclusive = periodTo.AddMonths(1);
+        var bankDeposits = dbContext.CashBankTransfers.AsNoTracking()
+            .Where(transfer => !transfer.IsCanceled && transfer.TransferDate < periodEndExclusive)
+            .GroupBy(transfer => transfer.TransferDate)
+            .Select(group => new
+            {
+                Date = group.Key,
+                Amount = group.Sum(transfer => transfer.Amount)
+            });
+        var bankExpenses = dbContext.FinancialOperations.AsNoTracking()
+            .Where(operation =>
+                !operation.IsCanceled &&
+                operation.OperationKind == FinancialOperationKinds.Expense &&
+                operation.OperationDate < periodEndExclusive &&
+                operation.ExpensePaymentType != ExpensePaymentTypes.WithoutReceipt &&
+                (operation.ExpensePaymentType != null ||
+                    operation.ExpenseType == null ||
+                    !((operation.ExpenseType.Code != null && CashExpenseTypeCodes.Contains(operation.ExpenseType.Code)) ||
+                        CashExpenseTypeNames.Contains(operation.ExpenseType.Name))))
+            .GroupBy(operation => operation.OperationDate)
+            .Select(group => new
+            {
+                Date = group.Key,
+                Amount = -group.Sum(operation => operation.Amount)
+            });
+        var movementRows = await bankDeposits
+            .Concat(bankExpenses)
+            .ToListAsync(cancellationToken);
+        var movements = movementRows
+            .Select(row => new BankMovementQueryRow(row.Date, row.Amount))
+            .ToList();
+        var runningBalance = movements
+            .Where(row => row.Date < periodFrom)
+            .Sum(row => row.Amount);
+        var movementsByMonth = movements
+            .Where(row => row.Date >= periodFrom)
+            .GroupBy(row => MonthPeriod.Normalize(row.Date))
+            .ToDictionary(group => group.Key, group => group.Sum(row => row.Amount));
+        var result = new Dictionary<DateOnly, BankBalanceRange>();
+        foreach (var month in MonthPeriod.Enumerate(periodFrom, periodTo))
+        {
+            var opening = runningBalance;
+            movementsByMonth.TryGetValue(month, out var movement);
+            runningBalance += movement;
+            result[month] = new BankBalanceRange(opening, runningBalance);
+        }
+
+        return result;
     }
 
     private static IReadOnlyList<MonthlyReportQueryRow> GetFallbackMonthlyRows(
@@ -421,6 +536,7 @@ public sealed class EfConsolidatedMonthlyReportQuery(GarageBalanceDbContext dbCo
         IReadOnlyList<AmountCountByMonth> accrualRows,
         IReadOnlyList<CountByMonth> readingRows,
         decimal startingBalance,
+        IReadOnlyDictionary<DateOnly, BankBalanceRange> bankBalances,
         ReportSort sort,
         int offset,
         int? limit)
@@ -436,6 +552,7 @@ public sealed class EfConsolidatedMonthlyReportQuery(GarageBalanceDbContext dbCo
             accrualByMonth.TryGetValue(month, out var accrual);
             readingsByMonth.TryGetValue(month, out var readings);
             var opening = month == periodFrom ? startingBalance : 0m;
+            bankBalances.TryGetValue(month, out var bankBalance);
             return new MonthlyReportQueryRow(
                 month,
                 income.Amount,
@@ -445,8 +562,10 @@ public sealed class EfConsolidatedMonthlyReportQuery(GarageBalanceDbContext dbCo
                 accrual.Amount + opening - income.Amount,
                 income.Count + expense.Count,
                 accrual.Count + (opening != 0 ? 1 : 0),
-                readings.Count);
-        });
+                readings.Count,
+                bankBalance.Opening,
+                bankBalance.Closing);
+        }).ToList();
         var ordered = ApplySort(rows, sort).ThenByDescending(row => row.AccountingMonth);
         var page = offset > 0 ? ordered.Skip(offset) : ordered;
         return (limit is > 0 ? page.Take(limit.Value) : page).ToList();
@@ -484,4 +603,12 @@ public sealed class EfConsolidatedMonthlyReportQuery(GarageBalanceDbContext dbCo
         int OperationCount,
         int AccrualCount,
         int MeterReadingCount);
+
+    private sealed record BankMovementQueryRow(
+        DateOnly Date,
+        decimal Amount);
+
+    private readonly record struct BankBalanceRange(
+        decimal Opening,
+        decimal Closing);
 }

@@ -46,6 +46,10 @@ public sealed class ReportServiceTests
         Assert.Equal(2, month.OperationCount);
         Assert.Equal(2, month.AccrualCount);
         Assert.Equal(1, month.MeterReadingCount);
+        Assert.Equal(SeededBankAmount, month.BankBalanceOpening);
+        Assert.Equal(SeededBankAmount - 400m, month.BankBalanceClosing);
+        Assert.Equal(1500m, Assert.Single(month.IncomeBreakdown!).Amount);
+        Assert.Equal(400m, Assert.Single(month.ExpenseBreakdown!).Amount);
         Assert.Equal(2, result.Value.GarageRowCount);
         Assert.Equal(2, result.Value.GarageRows.Count);
         Assert.Contains(result.Value.GarageRows, row => row.GarageNumber == "12" && row.Debt == 500m && row.MeterReadingCount == 1);
@@ -58,6 +62,85 @@ public sealed class ReportServiceTests
         Assert.Equal(fixtures.ExpenseType.Id, expenseBreakdown.TypeId);
         Assert.Equal("Вода", expenseBreakdown.Name);
         Assert.Equal(400m, expenseBreakdown.Amount);
+    }
+
+    [Fact]
+    public async Task GetConsolidatedReportAsync_ReturnsMonthlyCategoriesAndActualBankOpeningClosingBalances()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        var june = new DateOnly(2026, 6, 1);
+        var july = june.AddMonths(1);
+        database.Context.CashBankTransfers.AddRange(
+            new CashBankTransfer { TransferDate = new DateOnly(2026, 5, 20), Amount = 100m },
+            new CashBankTransfer { TransferDate = new DateOnly(2026, 6, 15), Amount = 500m },
+            new CashBankTransfer { TransferDate = new DateOnly(2026, 7, 15), Amount = 900m, IsCanceled = true });
+        database.Context.FinancialOperations.AddRange(
+            new FinancialOperation
+            {
+                OperationKind = FinancialOperationKinds.Income,
+                OperationDate = new DateOnly(2026, 6, 10),
+                AccountingMonth = june,
+                Amount = 700m,
+                Garage = fixtures.FirstGarage,
+                IncomeType = fixtures.IncomeType
+            },
+            new FinancialOperation
+            {
+                OperationKind = FinancialOperationKinds.Income,
+                OperationDate = new DateOnly(2026, 7, 10),
+                AccountingMonth = july,
+                Amount = 300m,
+                Garage = fixtures.FirstGarage,
+                IncomeType = fixtures.IncomeType
+            },
+            new FinancialOperation
+            {
+                OperationKind = FinancialOperationKinds.Expense,
+                OperationDate = new DateOnly(2026, 6, 20),
+                AccountingMonth = june,
+                Amount = 120m,
+                Supplier = fixtures.Supplier,
+                ExpenseType = fixtures.ExpenseType,
+                ExpensePaymentType = ExpensePaymentTypes.WithReceipt
+            },
+            new FinancialOperation
+            {
+                OperationKind = FinancialOperationKinds.Expense,
+                OperationDate = new DateOnly(2026, 6, 21),
+                AccountingMonth = june,
+                Amount = 70m,
+                Supplier = fixtures.Supplier,
+                ExpenseType = fixtures.ExpenseType,
+                ExpensePaymentType = ExpensePaymentTypes.WithoutReceipt
+            },
+            new FinancialOperation
+            {
+                OperationKind = FinancialOperationKinds.Expense,
+                OperationDate = new DateOnly(2026, 7, 20),
+                AccountingMonth = july,
+                Amount = 80m,
+                Supplier = fixtures.Supplier,
+                ExpenseType = fixtures.ExpenseType,
+                ExpensePaymentType = ExpensePaymentTypes.WithReceipt
+            });
+        await database.Context.SaveChangesAsync();
+
+        var result = await CreateService(database.Context).GetConsolidatedReportAsync(
+            new ConsolidatedReportRequest(june, july, null),
+            CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+        var juneRow = Assert.Single(result.Value!.MonthlyRows, row => row.AccountingMonth == june);
+        var julyRow = Assert.Single(result.Value.MonthlyRows, row => row.AccountingMonth == july);
+        Assert.Equal(700m, Assert.Single(juneRow.IncomeBreakdown!).Amount);
+        Assert.Equal(190m, Assert.Single(juneRow.ExpenseBreakdown!).Amount);
+        Assert.Equal(300m, Assert.Single(julyRow.IncomeBreakdown!).Amount);
+        Assert.Equal(80m, Assert.Single(julyRow.ExpenseBreakdown!).Amount);
+        Assert.Equal(SeededBankAmount + 100m, juneRow.BankBalanceOpening);
+        Assert.Equal(SeededBankAmount + 480m, juneRow.BankBalanceClosing);
+        Assert.Equal(juneRow.BankBalanceClosing, julyRow.BankBalanceOpening);
+        Assert.Equal(SeededBankAmount + 400m, julyRow.BankBalanceClosing);
     }
 
     [Fact]
@@ -133,12 +216,10 @@ public sealed class ReportServiceTests
         await AssertReportFormatParityAsync(
             service.ExportConsolidatedReportXlsxAsync(consolidatedRequest, CancellationToken.None),
             service.ExportConsolidatedReportPdfAsync(consolidatedRequest, CancellationToken.None),
-            fixtures.FirstGarage.Number,
-            consolidated.Value!.AccrualTotal,
+            "06.2026",
             consolidated.Value.IncomeTotal,
             consolidated.Value.ExpenseTotal,
-            consolidated.Value.Balance,
-            consolidated.Value.Debt);
+            consolidated.Value.IncomeTotal - consolidated.Value.ExpenseTotal);
 
         var garageRequest = new GarageReportRequest(month, month, null, false);
         var garages = await service.GetGarageReportAsync(garageRequest, CancellationToken.None);
@@ -271,7 +352,7 @@ public sealed class ReportServiceTests
     }
 
     [Fact]
-    public async Task ConsolidatedMonthlyQuery_LoadsCompleteAggregatesInOneSelect()
+    public async Task ConsolidatedMonthlyQuery_LoadsCompleteAggregatesAndBankBalancesInTwoSelects()
     {
         var commandCounter = new SelectCommandCounter();
         await using var database = await TestDatabase.CreateAsync(commandCounter);
@@ -292,14 +373,16 @@ public sealed class ReportServiceTests
 
         Assert.Equal(1500m, Assert.Single(result.IncomeBreakdown).Amount);
         Assert.Equal(400m, Assert.Single(result.ExpenseBreakdown).Amount);
+        Assert.Equal(1500m, Assert.Single(result.IncomeBreakdownByMonth).Amount);
+        Assert.Equal(400m, Assert.Single(result.ExpenseBreakdownByMonth).Amount);
         Assert.Equal(1800m, Assert.Single(result.AccrualByMonth).Amount);
         Assert.Equal(1, Assert.Single(result.MeterReadingsByMonth).Count);
         Assert.Equal(125m, result.GarageStartingBalanceTotal);
-        Assert.Equal(1, commandCounter.Count);
+        Assert.Equal(2, commandCounter.Count);
     }
 
     [Fact]
-    public async Task ConsolidatedMonthlyQuery_ReturnsEmptyDataInOneSelect()
+    public async Task ConsolidatedMonthlyQuery_ReturnsEmptyDataInTwoSelects()
     {
         var commandCounter = new SelectCommandCounter();
         await using var database = await TestDatabase.CreateAsync(commandCounter);
@@ -311,7 +394,7 @@ public sealed class ReportServiceTests
             new DateOnly(2026, 6, 1),
             CancellationToken.None);
 
-        Assert.Equal(1, commandCounter.Count);
+        Assert.Equal(2, commandCounter.Count);
         Assert.Empty(result.IncomeByMonth);
         Assert.Empty(result.ExpenseByMonth);
         Assert.Empty(result.AccrualByMonth);
@@ -319,6 +402,8 @@ public sealed class ReportServiceTests
         Assert.Equal(0m, result.GarageStartingBalanceTotal);
         Assert.Empty(result.IncomeBreakdown);
         Assert.Empty(result.ExpenseBreakdown);
+        Assert.Empty(result.IncomeBreakdownByMonth);
+        Assert.Empty(result.ExpenseBreakdownByMonth);
     }
 
     [Fact]
@@ -645,7 +730,7 @@ public sealed class ReportServiceTests
     }
 
     [Fact]
-    public async Task ExportConsolidatedReportXlsxAsync_ReturnsWorkbookWithMonthlyAndGarageRows()
+    public async Task ExportConsolidatedReportXlsxAsync_ReturnsCustomerMonthlyLayout()
     {
         await using var database = await TestDatabase.CreateAsync();
         var fixtures = await database.SeedAsync();
@@ -658,13 +743,17 @@ public sealed class ReportServiceTests
         Assert.True(result.Succeeded);
         Assert.Equal("garagebalance-consolidated-20260601-20260601.xlsx", result.Value!.FileName);
         Assert.Equal("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", result.Value.ContentType);
-        AssertWorkbookContains(result.Value.Content, "Месяцы");
-        AssertWorkbookContains(result.Value.Content, "Гаражи");
-        AssertWorkbookContains(result.Value.Content, "2026-06");
+        AssertWorkbookContains(result.Value.Content, "Консолидированный");
+        AssertWorkbookContains(result.Value.Content, "Наименование");
+        AssertWorkbookContains(result.Value.Content, "На начало месяца");
+        AssertWorkbookContains(result.Value.Content, "На конец месяца");
+        AssertWorkbookContains(result.Value.Content, "06.2026");
+        AssertWorkbookContains(result.Value.Content, "Членский взнос");
+        AssertWorkbookDoesNotContain(result.Value.Content, "Гаражи");
     }
 
     [Fact]
-    public async Task ExportConsolidatedReportPdfAsync_ReturnsDocumentWithMonthlyAndGarageRows()
+    public async Task ExportConsolidatedReportPdfAsync_ReturnsCustomerMonthlyLayout()
     {
         await using var database = await TestDatabase.CreateAsync();
         var fixtures = await database.SeedAsync();
@@ -678,11 +767,13 @@ public sealed class ReportServiceTests
         Assert.Equal("garagebalance-consolidated-20260601-20260601.pdf", result.Value!.FileName);
         Assert.Equal("application/pdf", result.Value.ContentType);
         AssertPdfContains(result.Value.Content, "GarageBalance consolidated report");
-        AssertPdfContains(result.Value.Content, "2026-06");
+        AssertPdfContains(result.Value.Content, "06.2026");
+        AssertPdfContains(result.Value.Content, "Income name | Income | Expense name | Expense");
+        AssertPdfContains(result.Value.Content, "Bank opening");
     }
 
     [Fact]
-    public async Task ExportConsolidatedReportXlsxAsync_AppliesGarageSearchFilter()
+    public async Task ExportConsolidatedReportXlsxAsync_DoesNotIncludeUnrelatedGarageRows()
     {
         await using var database = await TestDatabase.CreateAsync();
         var fixtures = await database.SeedAsync();
@@ -694,12 +785,13 @@ public sealed class ReportServiceTests
         var result = await service.ExportConsolidatedReportXlsxAsync(new ConsolidatedReportRequest(new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 1), "21"), CancellationToken.None);
 
         Assert.True(result.Succeeded);
-        AssertWorkbookContains(result.Value!.Content, "21");
+        AssertWorkbookContains(result.Value!.Content, "Консолидированный");
+        AssertWorkbookDoesNotContain(result.Value.Content, "21");
         AssertWorkbookDoesNotContain(result.Value.Content, "12");
     }
 
     [Fact]
-    public async Task ExportConsolidatedReportPdfAsync_AppliesGarageSearchFilter()
+    public async Task ExportConsolidatedReportPdfAsync_DoesNotIncludeUnrelatedGarageRows()
     {
         await using var database = await TestDatabase.CreateAsync();
         var fixtures = await database.SeedAsync();
@@ -711,7 +803,8 @@ public sealed class ReportServiceTests
         var result = await service.ExportConsolidatedReportPdfAsync(new ConsolidatedReportRequest(new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 1), "21"), CancellationToken.None);
 
         Assert.True(result.Succeeded);
-        AssertPdfContains(result.Value!.Content, "21 |");
+        AssertPdfContains(result.Value!.Content, "GarageBalance consolidated report");
+        AssertPdfDoesNotContain(result.Value.Content, "21 |");
         AssertPdfDoesNotContain(result.Value.Content, "12 |");
     }
 

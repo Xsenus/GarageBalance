@@ -24,8 +24,16 @@ public sealed record ConsolidatedMonthlyReportData(
     decimal GarageStartingBalanceTotal,
     IReadOnlyList<NamedAmountTotal> IncomeBreakdown,
     IReadOnlyList<NamedAmountTotal> ExpenseBreakdown,
+    IReadOnlyList<MonthlyNamedAmountTotal> IncomeBreakdownByMonth,
+    IReadOnlyList<MonthlyNamedAmountTotal> ExpenseBreakdownByMonth,
     IReadOnlyList<MonthlyReportQueryRow> MonthlyRows,
     int MonthlyRowCount);
+
+public sealed record MonthlyNamedAmountTotal(
+    DateOnly AccountingMonth,
+    Guid? TypeId,
+    string Name,
+    decimal Amount);
 
 public sealed record MonthlyReportQueryRow(
     DateOnly AccountingMonth,
@@ -36,7 +44,9 @@ public sealed record MonthlyReportQueryRow(
     decimal Debt,
     int OperationCount,
     int AccrualCount,
-    int MeterReadingCount);
+    int MeterReadingCount,
+    decimal BankBalanceOpening,
+    decimal BankBalanceClosing);
 
 public readonly record struct AmountCountByMonth(DateOnly Month, decimal Amount, int Count);
 

@@ -8,6 +8,10 @@ export type MonthlyReportRowDto = {
   operationCount: number
   accrualCount: number
   meterReadingCount: number
+  bankBalanceOpening: number
+  bankBalanceClosing: number
+  incomeBreakdown: NamedAmountTotalDto[]
+  expenseBreakdown: NamedAmountTotalDto[]
 }
 
 export type GarageReportRowDto = {

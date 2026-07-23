@@ -15045,11 +15045,15 @@ describe('App', () => {
     const consolidatedTable = within(reportsPanel).getByRole('table', { name: 'Консолидированный отчет' })
     expect(consolidatedTable).toBeInTheDocument()
     await waitFor(() => expect(consolidatedTable).toHaveTextContent('06.2026'))
+    expect(consolidatedTable).toHaveTextContent('Наименование поступления')
+    expect(consolidatedTable).toHaveTextContent('Наименование выплаты')
     expect(consolidatedTable).toHaveTextContent('На начало месяца')
     expect(consolidatedTable).toHaveTextContent('На конец месяца')
-    const consolidatedBreakdown = within(reportsPanel).getByRole('table', { name: 'Расшифровка консолидированного отчета' })
-    expect(consolidatedBreakdown).toHaveTextContent('Членский взнос')
-    expect(consolidatedBreakdown).toHaveTextContent('Вода')
+    expect(consolidatedTable).toHaveTextContent('Членский взнос')
+    expect(consolidatedTable).toHaveTextContent('Вода')
+    expect(consolidatedTable).toHaveTextContent('98 000.00')
+    expect(consolidatedTable).toHaveTextContent('32 500.00')
+    expect(within(reportsPanel).queryByRole('table', { name: 'Расшифровка консолидированного отчета' })).not.toBeInTheDocument()
     expect(within(reportsPanel).getByRole('navigation', { name: 'Пагинация консолидированного отчета' })).toBeInTheDocument()
     expect(within(reportsPanel).queryByRole('button', { name: /Скачать сводный/ })).not.toBeInTheDocument()
 
@@ -19057,6 +19061,10 @@ function createConsolidatedReport(overrides: Partial<ConsolidatedReportDto> = {}
         operationCount: 2,
         accrualCount: 1,
         meterReadingCount: 1,
+        bankBalanceOpening: 98000,
+        bankBalanceClosing: 32500,
+        incomeBreakdown: [{ typeId: 'income-type-1', name: 'Членский взнос', amount: 1500 }],
+        expenseBreakdown: [{ typeId: 'expense-type-1', name: 'Вода', amount: 400 }],
       },
     ],
     garageRowCount: 1,

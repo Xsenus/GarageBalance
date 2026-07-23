@@ -53,6 +53,20 @@ public sealed class ReportService(
         var expenseByMonth = monthlyData.ExpenseByMonth.ToDictionary(row => row.Month);
         var accrualByMonth = monthlyData.AccrualByMonth.ToDictionary(row => row.Month);
         var readingsByMonth = monthlyData.MeterReadingsByMonth.ToDictionary(row => row.Month);
+        var incomeBreakdownByMonth = monthlyData.IncomeBreakdownByMonth
+            .GroupBy(row => row.AccountingMonth)
+            .ToDictionary(
+                group => group.Key,
+                group => (IReadOnlyList<NamedAmountTotalDto>)group
+                    .Select(row => new NamedAmountTotalDto(row.TypeId, row.Name, row.Amount))
+                    .ToList());
+        var expenseBreakdownByMonth = monthlyData.ExpenseBreakdownByMonth
+            .GroupBy(row => row.AccountingMonth)
+            .ToDictionary(
+                group => group.Key,
+                group => (IReadOnlyList<NamedAmountTotalDto>)group
+                    .Select(row => new NamedAmountTotalDto(row.TypeId, row.Name, row.Amount))
+                    .ToList());
 
         var months = MonthPeriod.Enumerate(periodFrom, periodTo).ToList();
         var allMonthlyRows = months
@@ -76,16 +90,25 @@ public sealed class ReportService(
             })
             .ToList();
         var monthlyRows = monthlyData.MonthlyRows
-            .Select(row => new MonthlyReportRowDto(
-                row.AccountingMonth,
-                row.IncomeTotal,
-                row.ExpenseTotal,
-                row.AccrualTotal,
-                row.Balance,
-                row.Debt,
-                row.OperationCount,
-                row.AccrualCount,
-                row.MeterReadingCount))
+            .Select(row =>
+            {
+                incomeBreakdownByMonth.TryGetValue(row.AccountingMonth, out var incomeRows);
+                expenseBreakdownByMonth.TryGetValue(row.AccountingMonth, out var expenseRows);
+                return new MonthlyReportRowDto(
+                    row.AccountingMonth,
+                    row.IncomeTotal,
+                    row.ExpenseTotal,
+                    row.AccrualTotal,
+                    row.Balance,
+                    row.Debt,
+                    row.OperationCount,
+                    row.AccrualCount,
+                    row.MeterReadingCount,
+                    row.BankBalanceOpening,
+                    row.BankBalanceClosing,
+                    incomeRows ?? [],
+                    expenseRows ?? []);
+            })
             .ToList();
 
         int? garageRowLimit = request.Limit is > 0 ? NormalizeReportLimit(request.Limit.Value) : null;
@@ -322,52 +345,41 @@ public sealed class ReportService(
         }
 
         var report = reportResult.Value!;
+        var rows = report.MonthlyRows.SelectMany(month =>
+        {
+            var incomeRows = month.IncomeBreakdown ?? [];
+            var expenseRows = month.ExpenseBreakdown ?? [];
+            var detailCount = Math.Max(incomeRows.Count, expenseRows.Count);
+            var detailRows = Enumerable.Range(0, detailCount)
+                .Select(index => (IReadOnlyList<XlsxCell>)
+                [
+                    XlsxCell.Text(index == 0 ? month.AccountingMonth.ToString("MM.yyyy") : string.Empty),
+                    XlsxCell.Text(index < incomeRows.Count ? incomeRows[index].Name : string.Empty),
+                    index < incomeRows.Count ? XlsxCell.Number(incomeRows[index].Amount) : XlsxCell.Text(string.Empty),
+                    XlsxCell.Text(index < expenseRows.Count ? expenseRows[index].Name : string.Empty),
+                    index < expenseRows.Count ? XlsxCell.Number(expenseRows[index].Amount) : XlsxCell.Text(string.Empty),
+                    XlsxCell.Text(string.Empty),
+                    XlsxCell.Text(string.Empty),
+                    XlsxCell.Text(string.Empty)
+                ]);
+            return detailRows.Append((IReadOnlyList<XlsxCell>)
+            [
+                XlsxCell.Text(detailCount == 0 ? month.AccountingMonth.ToString("MM.yyyy") : string.Empty),
+                XlsxCell.Text("ИТОГО"),
+                XlsxCell.Number(month.IncomeTotal),
+                XlsxCell.Text("ИТОГО"),
+                XlsxCell.Number(month.ExpenseTotal),
+                XlsxCell.Number(month.IncomeTotal - month.ExpenseTotal),
+                XlsxCell.Number(month.BankBalanceOpening),
+                XlsxCell.Number(month.BankBalanceClosing)
+            ]);
+        }).ToArray();
         var content = XlsxWorkbookBuilder.Build(
             [
                 new XlsxSheet(
-                    "Месяцы",
-                    ["Месяц", "Начислено", "Поступило", "Выплаты", "Баланс", "Долг", "Операций", "Начислений", "Показаний"],
-                    report.MonthlyRows.Select(row => (IReadOnlyList<XlsxCell>)
-                    [
-                        XlsxCell.Text(row.AccountingMonth.ToString("yyyy-MM")),
-                        XlsxCell.Number(row.AccrualTotal),
-                        XlsxCell.Number(row.IncomeTotal),
-                        XlsxCell.Number(row.ExpenseTotal),
-                        XlsxCell.Number(row.Balance),
-                        XlsxCell.Number(row.Debt),
-                        XlsxCell.Number(row.OperationCount),
-                        XlsxCell.Number(row.AccrualCount),
-                        XlsxCell.Number(row.MeterReadingCount)
-                    ]).ToArray()),
-                new XlsxSheet(
-                    "Гаражи",
-                    ["Гараж", "Владелец", "Начислено", "Поступило", "Долг", "Показаний"],
-                    report.GarageRows.Select(row => (IReadOnlyList<XlsxCell>)
-                    [
-                        XlsxCell.Text(row.GarageNumber),
-                        XlsxCell.Text(row.OwnerName),
-                        XlsxCell.Number(row.AccrualTotal),
-                        XlsxCell.Number(row.IncomeTotal),
-                        XlsxCell.Number(row.Debt),
-                        XlsxCell.Number(row.MeterReadingCount)
-                    ]).ToArray()),
-                new XlsxSheet(
-                    "Итоги",
-                    ["Период с", "Период по", "Начислено", "Поступило", "Выплаты", "Баланс", "Долг", "Операций", "Начислений", "Показаний"],
-                    [
-                        [
-                            XlsxCell.Text(report.PeriodFrom.ToString("yyyy-MM-dd")),
-                            XlsxCell.Text(report.PeriodTo.ToString("yyyy-MM-dd")),
-                            XlsxCell.Number(report.AccrualTotal),
-                            XlsxCell.Number(report.IncomeTotal),
-                            XlsxCell.Number(report.ExpenseTotal),
-                            XlsxCell.Number(report.Balance),
-                            XlsxCell.Number(report.Debt),
-                            XlsxCell.Number(report.OperationCount),
-                            XlsxCell.Number(report.AccrualCount),
-                            XlsxCell.Number(report.MeterReadingCount)
-                        ]
-                    ])
+                    "Консолидированный",
+                    ["Месяц", "Наименование", "Поступления", "Наименование", "Выплаты", "Разница", "Остаток по счёту — На начало месяца", "Остаток по счёту — На конец месяца"],
+                    rows)
             ]);
 
         var file = new ReportExportFileDto(
@@ -390,35 +402,27 @@ public sealed class ReportService(
         var report = reportResult.Value!;
         var lines = new List<string>
         {
-            $"Period: {report.PeriodFrom:yyyy-MM-dd} - {report.PeriodTo:yyyy-MM-dd}",
-            $"Accrued: {FormatAmount(report.AccrualTotal)} | Income: {FormatAmount(report.IncomeTotal)} | Expenses: {FormatAmount(report.ExpenseTotal)} | Balance: {FormatAmount(report.Balance)} | Debt: {FormatAmount(report.Debt)}",
-            $"Operations: {report.OperationCount} | Accruals: {report.AccrualCount} | Meter readings: {report.MeterReadingCount}",
-            string.Empty,
-            "Monthly rows",
-            "Month | Accrued | Income | Expenses | Balance | Debt | Operations | Accruals | Readings"
+            $"Period: {report.PeriodFrom:yyyy-MM-dd} - {report.PeriodTo:yyyy-MM-dd}"
         };
-        lines.AddRange(report.MonthlyRows.Select(row =>
-            string.Join(" | ",
-                row.AccountingMonth.ToString("yyyy-MM"),
-                FormatAmount(row.AccrualTotal),
-                FormatAmount(row.IncomeTotal),
-                FormatAmount(row.ExpenseTotal),
-                FormatAmount(row.Balance),
-                FormatAmount(row.Debt),
-                row.OperationCount,
-                row.AccrualCount,
-                row.MeterReadingCount)));
-        lines.Add(string.Empty);
-        lines.Add("Garage rows");
-        lines.Add("Garage | Owner | Accrued | Income | Debt | Readings");
-        lines.AddRange(report.GarageRows.Select(row =>
-            string.Join(" | ",
-                row.GarageNumber,
-                row.OwnerName ?? string.Empty,
-                FormatAmount(row.AccrualTotal),
-                FormatAmount(row.IncomeTotal),
-                FormatAmount(row.Debt),
-                row.MeterReadingCount)));
+        foreach (var month in report.MonthlyRows)
+        {
+            lines.Add(string.Empty);
+            lines.Add($"Month: {month.AccountingMonth:MM.yyyy}");
+            lines.Add("Income name | Income | Expense name | Expense");
+            var incomeRows = month.IncomeBreakdown ?? [];
+            var expenseRows = month.ExpenseBreakdown ?? [];
+            for (var index = 0; index < Math.Max(incomeRows.Count, expenseRows.Count); index++)
+            {
+                lines.Add(string.Join(" | ",
+                    index < incomeRows.Count ? incomeRows[index].Name : string.Empty,
+                    index < incomeRows.Count ? FormatAmount(incomeRows[index].Amount) : string.Empty,
+                    index < expenseRows.Count ? expenseRows[index].Name : string.Empty,
+                    index < expenseRows.Count ? FormatAmount(expenseRows[index].Amount) : string.Empty));
+            }
+
+            lines.Add($"TOTAL | {FormatAmount(month.IncomeTotal)} | TOTAL | {FormatAmount(month.ExpenseTotal)}");
+            lines.Add($"Difference: {FormatAmount(month.IncomeTotal - month.ExpenseTotal)} | Bank opening: {FormatAmount(month.BankBalanceOpening)} | Bank closing: {FormatAmount(month.BankBalanceClosing)}");
+        }
 
         var content = PdfReportDocumentBuilder.Build("GarageBalance consolidated report", lines);
         var file = new ReportExportFileDto(
