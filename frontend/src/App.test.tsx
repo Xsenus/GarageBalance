@@ -7377,7 +7377,7 @@ describe('App', () => {
     expect(within(emptyDialog).getByText('К фонду пока не привязано ни одной услуги.')).toBeInTheDocument()
   })
 
-  it('blocks fund deletion until services are reassigned and the balance is empty', async () => {
+  it('blocks fund deletion until services are reassigned and explains automatic balance return', async () => {
     const user = userEvent.setup()
     const fundsClient = createFundsClient({
       getFunds: async () => [
@@ -7411,16 +7411,19 @@ describe('App', () => {
 
     await user.click(within(fundsPanel).getByRole('button', { name: 'Открыть карточку фонда Фонд с остатком' }))
     const balanceDialog = await screen.findByRole('dialog', { name: 'Фонд с остатком' })
-    expect(within(balanceDialog).getByText('Перед удалением изымите остаток в общий нераспределенный пул.')).toBeInTheDocument()
-    expect(within(balanceDialog).getByRole('button', { name: 'Удалить фонд' })).toBeDisabled()
+    expect(within(balanceDialog).getByText('При удалении остаток 2 500.00 руб. автоматически вернется в нераспределенную сумму.')).toBeInTheDocument()
+    expect(within(balanceDialog).getByRole('button', { name: 'Удалить фонд' })).toBeEnabled()
+    await user.click(within(balanceDialog).getByRole('button', { name: 'Удалить фонд' }))
+    expect(within(await screen.findByRole('alertdialog', { name: 'Удалить фонд «Фонд с остатком»?' }))
+      .getByText(/Остаток 2 500\.00 руб\. будет возвращен в нераспределенную сумму\./)).toBeInTheDocument()
   })
 
-  it('requires a reason and removes an eligible fund after confirmation', async () => {
+  it('requires a reason, removes a fund with a balance and updates the unallocated amount', async () => {
     const user = userEvent.setup()
     const deleteFund = vi.fn(async () => {})
     const fundsClient = createFundsClient({
       getFunds: async () => [
-        createFund({ id: 'fund-reserve', name: 'Резервный фонд', isSystem: false }),
+        createFund({ id: 'fund-reserve', name: 'Резервный фонд', balance: 2500, isSystem: false }),
       ],
       deleteFund,
     })
@@ -7448,7 +7451,10 @@ describe('App', () => {
       'fund-reserve',
       { reason: 'Услуги переназначены' },
     ))
-    expect(await within(fundsPanel).findByText('Фонд «Резервный фонд» удален.')).toHaveAttribute('role', 'status')
+    expect(await within(fundsPanel).findByText(
+      'Фонд «Резервный фонд» удален. Остаток 2 500.00 руб. возвращен в нераспределенную сумму.',
+    )).toHaveAttribute('role', 'status')
+    expect(within(fundsPanel).getByText('102 500.00 руб.')).toBeInTheDocument()
     expect(within(fundsPanel).queryByText('Резервный фонд')).not.toBeInTheDocument()
     expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
   })

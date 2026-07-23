@@ -35,6 +35,7 @@ type FundEditorDraft = {
 type FundDeleteDraft = {
   fundId: string
   fundName: string
+  balance: number
   reason: string
 }
 
@@ -263,7 +264,12 @@ export function FundsPrototypePanel({ auth, fundsClient }: { auth: AuthResponse;
       return
     }
 
-    setFundDelete({ fundId: fundEditor.fundId, fundName: fundEditor.originalName, reason: '' })
+    setFundDelete({
+      fundId: fundEditor.fundId,
+      fundName: fundEditor.originalName,
+      balance: fundEditor.balance,
+      reason: '',
+    })
     setFundDeleteError(null)
   }
 
@@ -292,7 +298,10 @@ export function FundsPrototypePanel({ auth, fundsClient }: { auth: AuthResponse;
     try {
       await fundsClient.deleteFund(auth.accessToken, fundDelete.fundId, { reason })
       setRows((current) => current.filter((fund) => fund.id !== fundDelete.fundId))
-      setFundMessage(`Фонд «${fundDelete.fundName}» удален.`)
+      setAvailableToDistribute((current) => current === null ? null : current + fundDelete.balance)
+      setFundMessage(fundDelete.balance > 0
+        ? `Фонд «${fundDelete.fundName}» удален. Остаток ${formatMoney(fundDelete.balance)} руб. возвращен в нераспределенную сумму.`
+        : `Фонд «${fundDelete.fundName}» удален.`)
       setFundDelete(null)
       setFundEditor(null)
     } catch (error: unknown) {
@@ -795,7 +804,7 @@ export function FundsPrototypePanel({ auth, fundsClient }: { auth: AuthResponse;
                   {fundEditor.linkedServices.length > 0 ? (
                     <p className="fund-delete-restriction">Чтобы удалить фонд, сначала переназначьте все перечисленные услуги.</p>
                   ) : fundEditor.balance !== 0 ? (
-                    <p className="fund-delete-restriction">Перед удалением изымите остаток в общий нераспределенный пул.</p>
+                    <p className="fund-delete-transfer-note">При удалении остаток {formatMoney(fundEditor.balance)} руб. автоматически вернется в нераспределенную сумму.</p>
                   ) : null}
                 </section>
               ) : null}
@@ -811,7 +820,7 @@ export function FundsPrototypePanel({ auth, fundsClient }: { auth: AuthResponse;
                     className="danger-button"
                     type="button"
                     onClick={openFundDelete}
-                    disabled={savingFund || fundEditor.linkedServices.length > 0 || fundEditor.balance !== 0}
+                    disabled={savingFund || fundEditor.linkedServices.length > 0}
                   >
                     <Trash2 size={16} aria-hidden="true" />
                     <span>Удалить фонд</span>
@@ -835,7 +844,12 @@ export function FundsPrototypePanel({ auth, fundsClient }: { auth: AuthResponse;
                 <X size={18} aria-hidden="true" />
               </button>
             </div>
-            <p id="fund-delete-description">Фонд исчезнет из рабочего списка. История операций сохранится в учете и аудите.</p>
+            <p id="fund-delete-description">
+              Фонд исчезнет из рабочего списка. История операций сохранится в учете и аудите.
+              {fundDelete.balance > 0
+                ? ` Остаток ${formatMoney(fundDelete.balance)} руб. будет возвращен в нераспределенную сумму.`
+                : ''}
+            </p>
             <FormField label="Причина удаления">
               <textarea
                 aria-label="Причина удаления фонда"

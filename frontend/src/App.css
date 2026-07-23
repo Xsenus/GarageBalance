@@ -4260,6 +4260,13 @@ h1 {
   font-weight: 600;
 }
 
+.fund-linked-services .fund-delete-transfer-note {
+  padding-top: 8px;
+  border-top: 1px solid #bfdbfe;
+  color: #1d4ed8;
+  font-weight: 600;
+}
+
 .funds-sheet {
   width: 100%;
   overflow: hidden;

@@ -153,11 +153,22 @@ public sealed class FundService(
                 $"Сначала переназначьте услуги фонда: {string.Join(", ", linkedServices.Select(service => service.ServiceName))}.");
         }
 
-        if (fund.Balance != 0m)
+        var transferredAmount = fund.Balance;
+        if (transferredAmount > 0m)
         {
-            return FundResult<bool>.Failure(
-                "fund_balance_not_zero",
-                "Фонд с ненулевым остатком пока нельзя удалить. Сначала изымите остаток в общий нераспределенный пул.");
+            var transferOperation = new FundOperation
+            {
+                FundId = fund.Id,
+                OperationKind = FundOperationKinds.Withdraw,
+                Amount = transferredAmount,
+                BalanceBefore = transferredAmount,
+                BalanceAfter = 0m,
+                Reason = $"Возврат остатка при удалении фонда: {reason}",
+                ActorUserId = actorUserId
+            };
+            fund.Balance = 0m;
+            repository.AddOperation(transferOperation);
+            AddAudit(fund, transferOperation, actorUserId);
         }
 
         var incomeTypes = await repository.GetIncomeTypesForFundUpdateAsync(fund.Id, cancellationToken);
@@ -170,7 +181,7 @@ public sealed class FundService(
 
         fund.IsArchived = true;
         fund.UpdatedAtUtc = DateTimeOffset.UtcNow;
-        AddFundDeletedAudit(fund, incomeTypes.Count, actorUserId, reason);
+        AddFundDeletedAudit(fund, incomeTypes.Count, transferredAmount, actorUserId, reason);
         await repository.SaveChangesAsync(cancellationToken);
 
         return FundResult<bool>.Success(true);
@@ -656,30 +667,40 @@ public sealed class FundService(
             FieldLabels: FundFieldLabels));
     }
 
-    private void AddFundDeletedAudit(Fund fund, int detachedIncomeTypeCount, Guid? actorUserId, string reason)
+    private void AddFundDeletedAudit(
+        Fund fund,
+        int detachedIncomeTypeCount,
+        decimal transferredAmount,
+        Guid? actorUserId,
+        string reason)
     {
         auditEventWriter.Add(new AuditEventWriteRequest(
             ActorUserId: actorUserId,
             Action: "fund.archived",
             EntityType: "fund",
             EntityId: fund.Id.ToString(),
-            Summary: $"Удален фонд {fund.Name}.",
+            Summary: transferredAmount > 0m
+                ? $"Удален фонд {fund.Name}; остаток {MoneyFormatting.Format(transferredAmount)} руб. возвращен в нераспределенную сумму."
+                : $"Удален фонд {fund.Name}.",
             Section: "funds",
             ActionKind: "archive",
             EntityDisplayName: fund.Name,
             Reason: reason,
             OldValues: new Dictionary<string, object?>
             {
+                ["balance"] = transferredAmount,
                 ["isArchived"] = false
             },
             NewValues: new Dictionary<string, object?>
             {
+                ["balance"] = 0m,
                 ["isArchived"] = true
             },
             FieldLabels: FundFieldLabels,
             Metadata: new Dictionary<string, object?>
             {
-                ["detachedIncomeTypeCount"] = detachedIncomeTypeCount
+                ["detachedIncomeTypeCount"] = detachedIncomeTypeCount,
+                ["returnedToUnallocatedAmount"] = transferredAmount
             }));
     }
 
@@ -850,6 +871,7 @@ public sealed class FundService(
 
     private static readonly IReadOnlyDictionary<string, string> FundFieldLabels = new Dictionary<string, string>
     {
+        ["balance"] = "Собранная сумма",
         ["name"] = "Название фонда",
         ["isArchived"] = "Удален"
     };

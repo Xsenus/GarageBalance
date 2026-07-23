@@ -127,6 +127,64 @@ public sealed class PostgreSqlFundAllocationIntegrationTests
     }
 
     [PostgreSqlFact]
+    public async Task DeleteFund_RollsBackBalanceTransferWhenArchiveFails()
+    {
+        await using var database = await PostgreSqlTestDatabase.CreateAsync();
+        Guid fundId;
+        await using (var setupContext = database.CreateContext())
+        {
+            var service = CreateService(setupContext);
+            var created = await service.CreateFundAsync(
+                new UpsertFundRequest("Фонд для проверки отката"),
+                null,
+                CancellationToken.None);
+            Assert.True(created.Succeeded, created.ErrorMessage);
+            fundId = created.Value!.Id;
+            await SeedIncomeAsync(setupContext, 275m);
+            (await setupContext.Funds.SingleAsync(fund => fund.Id == fundId)).Balance = 275m;
+            await setupContext.SaveChangesAsync();
+            await setupContext.Database.ExecuteSqlRawAsync(
+                """
+                CREATE OR REPLACE FUNCTION reject_fund_archive_for_test()
+                RETURNS trigger
+                LANGUAGE plpgsql
+                AS $$
+                BEGIN
+                    IF NEW."IsArchived" THEN
+                        RAISE EXCEPTION 'archive rejected by test';
+                    END IF;
+                    RETURN NEW;
+                END;
+                $$;
+
+                CREATE TRIGGER reject_fund_archive_for_test
+                BEFORE UPDATE ON funds
+                FOR EACH ROW
+                EXECUTE FUNCTION reject_fund_archive_for_test();
+                """);
+        }
+
+        await using (var deleteContext = database.CreateContext())
+        {
+            var service = CreateService(deleteContext);
+            await Assert.ThrowsAsync<DbUpdateException>(() => service.DeleteFundAsync(
+                fundId,
+                new DeleteFundRequest("Проверка атомарности удаления"),
+                null,
+                CancellationToken.None));
+        }
+
+        await using var verificationContext = database.CreateContext();
+        var storedFund = await verificationContext.Funds.SingleAsync(fund => fund.Id == fundId);
+        Assert.False(storedFund.IsArchived);
+        Assert.Equal(275m, storedFund.Balance);
+        Assert.Empty(verificationContext.FundOperations.Where(operation => operation.FundId == fundId));
+        Assert.DoesNotContain(
+            verificationContext.AuditEvents,
+            audit => audit.Action == "fund.operation_withdrawn" || audit.Action == "fund.archived");
+    }
+
+    [PostgreSqlFact]
     public async Task ConcurrentFundDeletionAndServiceCreation_PreserveActiveFundInvariant()
     {
         await using var database = await PostgreSqlTestDatabase.CreateAsync();

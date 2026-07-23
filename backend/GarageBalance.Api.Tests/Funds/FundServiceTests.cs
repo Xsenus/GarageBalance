@@ -264,25 +264,40 @@ public sealed class FundServiceTests
     }
 
     [Fact]
-    public async Task DeleteFundAsync_RejectsNonZeroBalanceAndMissingFund()
+    public async Task DeleteFundAsync_ReturnsEntireBalanceToUnallocatedAmountAndRejectsMissingFund()
     {
         await using var database = await TestDatabase.CreateAsync();
         var service = CreateService(database.Context);
         var fund = (await service.GetFundsAsync(CancellationToken.None))
             .Single(item => item.Name == "Водоснабжение");
+        await SeedIncomeAsync(database.Context, 10m);
         (await database.Context.Funds.SingleAsync(item => item.Id == fund.Id)).Balance = 10m;
         await database.Context.SaveChangesAsync();
 
         var request = new DeleteFundRequest("Фонд больше не используется");
-        var nonZero = await service.DeleteFundAsync(fund.Id, request, null, CancellationToken.None);
+        var deleted = await service.DeleteFundAsync(fund.Id, request, null, CancellationToken.None);
         var missing = await service.DeleteFundAsync(Guid.NewGuid(), request, null, CancellationToken.None);
 
-        Assert.False(nonZero.Succeeded);
-        Assert.Equal("fund_balance_not_zero", nonZero.ErrorCode);
+        Assert.True(deleted.Succeeded, deleted.ErrorMessage);
         Assert.False(missing.Succeeded);
         Assert.Equal("fund_not_found", missing.ErrorCode);
-        Assert.False((await database.Context.Funds.SingleAsync(item => item.Id == fund.Id)).IsArchived);
-        Assert.Empty(database.Context.AuditEvents);
+
+        var storedFund = await database.Context.Funds.SingleAsync(item => item.Id == fund.Id);
+        Assert.True(storedFund.IsArchived);
+        Assert.Equal(0m, storedFund.Balance);
+        var transfer = Assert.Single(database.Context.FundOperations, item => item.FundId == fund.Id);
+        Assert.Equal(FundOperationKinds.Withdraw, transfer.OperationKind);
+        Assert.Equal(10m, transfer.Amount);
+        Assert.Equal(10m, transfer.BalanceBefore);
+        Assert.Equal(0m, transfer.BalanceAfter);
+        Assert.Equal("Возврат остатка при удалении фонда: Фонд больше не используется", transfer.Reason);
+
+        var visibleFunds = await service.GetFundsAsync(CancellationToken.None);
+        Assert.Equal(10m, visibleFunds[0].AvailableToDistribute);
+        Assert.Contains(database.Context.AuditEvents, item => item.Action == "fund.operation_withdrawn");
+        var archiveAudit = Assert.Single(database.Context.AuditEvents, item => item.Action == "fund.archived");
+        using var metadata = JsonDocument.Parse(archiveAudit.MetadataJson!);
+        Assert.Equal("10", metadata.RootElement.GetProperty("returnedToUnallocatedAmount").GetString());
     }
 
     [Theory]
@@ -372,6 +387,7 @@ public sealed class FundServiceTests
             "Услуги переназначены в резервный фонд",
             metadata.RootElement.GetProperty("reason").GetString());
         Assert.Equal("2", metadata.RootElement.GetProperty("detachedIncomeTypeCount").GetString());
+        Assert.Equal("0", metadata.RootElement.GetProperty("returnedToUnallocatedAmount").GetString());
 
         var replacement = await service.CreateFundAsync(
             new UpsertFundRequest("Вывоз мусора"),
