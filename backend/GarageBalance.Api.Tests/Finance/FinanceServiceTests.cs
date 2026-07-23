@@ -3557,11 +3557,18 @@ public sealed class FinanceServiceTests
     }
 
     [Fact]
-    public async Task RegularAccrualAutomationRunner_CreatesCurrentBusinessMonthWithoutDuplicates()
+    public async Task RegularAccrualAutomationRunner_AppliesAllCurrentTariffsAndFeeCampaignsWithoutDuplicates()
     {
         await using var database = await TestDatabase.CreateAsync();
         var fixtures = await database.SeedAsync();
         fixtures.IncomeType.Code = "membership";
+        var secondGarage = new Garage
+        {
+            Number = "AUTO-FEE-SECOND",
+            PeopleCount = 1,
+            FloorCount = 1
+        };
+        database.Context.Garages.Add(secondGarage);
         var tariff = new Tariff
         {
             Name = "Ежемесячный членский тариф",
@@ -3582,8 +3589,8 @@ public sealed class FinanceServiceTests
             Tariff = tariff,
             UnitName = "руб."
         });
-        AddOtherIncomeDestination(database.Context);
-        var campaign = new FeeCampaign
+        var otherIncome = AddOtherIncomeDestination(database.Context);
+        var allGaragesCampaign = new FeeCampaign
         {
             Name = "Автоматический сбор на ворота",
             IncomeType = fixtures.IncomeType,
@@ -3593,36 +3600,101 @@ public sealed class FinanceServiceTests
             AppliesToAllGarages = true,
             OverdueGraceDays = 30
         };
-        database.Context.FeeCampaigns.Add(campaign);
+        var selectedCampaign = new FeeCampaign
+        {
+            Name = "Автоматический выборочный сбор",
+            IncomeType = fixtures.IncomeType,
+            ContributionAmount = 300m,
+            TargetAmount = 300m,
+            StartsOn = new DateOnly(2026, 8, 1),
+            AppliesToAllGarages = false,
+            OverdueGraceDays = 30
+        };
+        selectedCampaign.ParticipantGarages.Add(new FeeCampaignGarage
+        {
+            FeeCampaign = selectedCampaign,
+            Garage = secondGarage
+        });
+        database.Context.FeeCampaigns.AddRange(allGaragesCampaign, selectedCampaign);
         await database.Context.SaveChangesAsync();
 
+        var financeService = FinanceServiceTestFactory.Create(database.Context);
+        var advance = await financeService.CreateIncomeAsync(
+            new CreateIncomeOperationRequest(
+                fixtures.Garage.Id,
+                otherIncome.Id,
+                new DateOnly(2026, 8, 1),
+                new DateOnly(2026, 8, 1),
+                300m,
+                "AUTO-FEE-ADVANCE",
+                null),
+            null,
+            CancellationToken.None);
+        Assert.True(advance.Succeeded, advance.ErrorMessage);
+        Assert.Empty(database.Context.AccrualPaymentAllocations.Where(item => item.IsActive));
         var runner = new RegularAccrualAutomationRunner(
-            FinanceServiceTestFactory.Create(database.Context),
+            financeService,
             new TestBusinessDateProvider(new DateOnly(2026, 8, 1)),
             NullLogger<RegularAccrualAutomationRunner>.Instance);
 
         var firstRun = await runner.RunCurrentMonthAsync(CancellationToken.None);
         var secondRun = await runner.RunCurrentMonthAsync(CancellationToken.None);
 
-        var regularAccrual = Assert.Single(database.Context.Accruals, item => item.FeeCampaignId == null);
-        Assert.Equal(new DateOnly(2026, 8, 1), regularAccrual.AccountingMonth);
-        Assert.Equal(500m, regularAccrual.Amount);
-        Assert.Contains("Автоматическое ежемесячное формирование", regularAccrual.Comment, StringComparison.Ordinal);
-        var feeCampaignAccrual = Assert.Single(database.Context.Accruals, item => item.FeeCampaignId == campaign.Id);
-        Assert.Equal(700m, feeCampaignAccrual.Amount);
-        Assert.Contains("Автоматическое начисление действующих сборов", feeCampaignAccrual.Comment, StringComparison.Ordinal);
+        var regularAccruals = database.Context.Accruals.Where(item => item.FeeCampaignId == null).ToArray();
+        Assert.Equal(2, regularAccruals.Length);
+        Assert.All(regularAccruals, accrual =>
+        {
+            Assert.Equal(new DateOnly(2026, 8, 1), accrual.AccountingMonth);
+            Assert.Equal(500m, accrual.Amount);
+            Assert.Contains("Автоматическое ежемесячное формирование", accrual.Comment, StringComparison.Ordinal);
+        });
+        var allGaragesAccruals = database.Context.Accruals
+            .Where(item => item.FeeCampaignId == allGaragesCampaign.Id)
+            .ToArray();
+        Assert.Equal(2, allGaragesAccruals.Length);
+        Assert.All(allGaragesAccruals, accrual =>
+        {
+            Assert.Equal(700m, accrual.Amount);
+            Assert.Contains("Автоматическое начисление действующих сборов", accrual.Comment, StringComparison.Ordinal);
+        });
+        var selectedAccrual = Assert.Single(database.Context.Accruals, item => item.FeeCampaignId == selectedCampaign.Id);
+        Assert.Equal(secondGarage.Id, selectedAccrual.GarageId);
+        Assert.Equal(300m, selectedAccrual.Amount);
         Assert.True(firstRun.Succeeded);
-        Assert.Equal(2, firstRun.CreatedCount);
-        Assert.Contains("действующие сборы — создано 1", firstRun.Message, StringComparison.Ordinal);
+        Assert.Equal(5, firstRun.CreatedCount);
+        Assert.Contains("действующие сборы — создано 3", firstRun.Message, StringComparison.Ordinal);
         Assert.True(secondRun.Succeeded);
         Assert.Equal(0, secondRun.CreatedCount);
-        Assert.Equal(2, database.Context.Accruals.Count());
+        Assert.Equal(5, database.Context.Accruals.Count());
+        var advanceAllocation = Assert.Single(
+            database.Context.AccrualPaymentAllocations,
+            item => item.IsActive && item.FinancialOperationId == advance.Value!.Id);
+        Assert.Equal(300m, advanceAllocation.Amount);
+        Assert.Equal(allGaragesCampaign.Id, advanceAllocation.Accrual.FeeCampaignId);
+        var firstWorksheet = await financeService.GetGarageIncomeWorksheetAsync(
+            fixtures.Garage.Id,
+            new GarageIncomeWorksheetRequest(new DateOnly(2026, 8, 1), new DateOnly(2026, 8, 1)),
+            CancellationToken.None);
+        Assert.True(firstWorksheet.Succeeded, firstWorksheet.ErrorMessage);
+        Assert.Equal(500m, Assert.Single(firstWorksheet.Value!.Rows, row => row.IncomeTypeId == fixtures.IncomeType.Id).AccrualAmount);
+        var firstFees = Assert.Single(firstWorksheet.Value.Rows, row => row.IncomeTypeId == otherIncome.Id);
+        Assert.Equal(700m, firstFees.AccrualAmount);
+        Assert.Equal(300m, firstFees.IncomeAmount);
+        Assert.Equal(400m, firstFees.Debt);
+        var secondWorksheet = await financeService.GetGarageIncomeWorksheetAsync(
+            secondGarage.Id,
+            new GarageIncomeWorksheetRequest(new DateOnly(2026, 8, 1), new DateOnly(2026, 8, 1)),
+            CancellationToken.None);
+        Assert.True(secondWorksheet.Succeeded, secondWorksheet.ErrorMessage);
+        Assert.Equal(500m, Assert.Single(secondWorksheet.Value!.Rows, row => row.IncomeTypeId == fixtures.IncomeType.Id).AccrualAmount);
+        Assert.Equal(1000m, Assert.Single(secondWorksheet.Value.Rows, row => row.IncomeTypeId == otherIncome.Id).AccrualAmount);
         Assert.Contains(
             database.Context.AuditEvents,
             item => item.Action == "finance.regular_catalog_accruals_generated" && item.ActorUserId == null);
-        Assert.Contains(
-            database.Context.AuditEvents,
-            item => item.Action == "finance.fee_campaign_accruals_generated" && item.ActorUserId == null);
+        Assert.Equal(
+            2,
+            database.Context.AuditEvents.Count(
+                item => item.Action == "finance.fee_campaign_accruals_generated" && item.ActorUserId == null));
     }
 
     [Fact]
