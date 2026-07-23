@@ -15085,8 +15085,35 @@ describe('App', () => {
     const garageReportTable = within(reportsPanel).getByRole('table', { name: 'Отчет по гаражам' })
     await waitFor(() => expect(garageReportTable).toHaveTextContent('12'))
     expect(garageReportTable).toHaveTextContent('Членский взнос')
-    expect(garageReportTable).toHaveTextContent('Начисления')
-    expect(garageReportTable).toHaveTextContent('Поступления')
+    expect(within(garageReportTable).getAllByRole('columnheader').map((header) => header.querySelector('button > span')?.textContent)).toEqual([
+      'Месяц',
+      'Гараж',
+      'Услуга',
+      'Начисления',
+      'Поступления',
+      'Разница',
+    ])
+    const garageReportDataRow = within(garageReportTable).getByText('Членский взнос').closest('[role="row"]')
+    expect(within(garageReportDataRow!).getAllByRole('cell').map((cell) => cell.textContent)).toEqual([
+      '06.2026',
+      '12',
+      'Членский взнос',
+      '2 000.00',
+      '1 500.00',
+      '500.00',
+    ])
+    const garageReportFooter = within(garageReportTable).getAllByRole('row').at(-1)
+    expect(within(garageReportFooter!).getAllByRole('cell').map((cell) => cell.textContent)).toEqual([
+      'ИТОГО',
+      '',
+      '',
+      '2 000.00',
+      '1 500.00',
+      '500.00',
+    ])
+    expect(within(reportsPanel).getByRole('note')).toHaveTextContent(
+      'Начисления и поступления сопоставлены по месяцу, гаражу и услуге. Разница = начисления − поступления. Группировка объединяет услуги в одну строку по гаражу и месяцу.',
+    )
     const groupGarageAccrualsButton = within(reportsPanel).getByRole('button', { name: 'Сгруппировать начисления' })
     expect(groupGarageAccrualsButton).toHaveAttribute('aria-pressed', 'false')
     const garageFilterActions = groupGarageAccrualsButton.closest('.report-workbook-filter__actions')
@@ -15095,6 +15122,13 @@ describe('App', () => {
     await user.click(groupGarageAccrualsButton)
     expect(within(reportsPanel).getByRole('button', { name: 'Разгруппировать начисления' })).toHaveAttribute('aria-pressed', 'true')
     const groupedGarageReportTable = within(reportsPanel).getByRole('table', { name: 'Отчет по гаражам' })
+    expect(within(groupedGarageReportTable).getAllByRole('columnheader').map((header) => header.querySelector('button > span')?.textContent)).toEqual([
+      'Месяц',
+      'Гараж',
+      'Начисления',
+      'Поступления',
+      'Разница',
+    ])
     expect(groupedGarageReportTable).not.toHaveTextContent('Услуга')
     expect(groupedGarageReportTable).not.toHaveTextContent('Членский взнос')
     await user.click(within(reportsPanel).getByRole('button', { name: 'Разгруппировать начисления' }))

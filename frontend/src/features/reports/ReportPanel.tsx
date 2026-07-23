@@ -1079,7 +1079,7 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
     if (activeReportTab === 'garages') {
       const garageReportColumns: ReportColumn[] = garageAccrualsGrouped
         ? [{ label: 'Месяц', sortField: 'accountingMonth' }, { label: 'Гараж', sortField: 'garageNumber' }, { label: 'Начисления', sortField: 'accrualAmount' }, { label: 'Поступления', sortField: 'incomeAmount' }, { label: 'Разница', sortField: 'difference' }]
-        : [{ label: 'Месяц', sortField: 'accountingMonth' }, { label: 'Гараж', sortField: 'garageNumber' }, { label: 'Начисления', sortField: 'accrualAmount' }, { label: 'Услуга', sortField: 'incomeTypeName' }, { label: 'Поступления', sortField: 'incomeAmount' }, { label: 'Разница', sortField: 'difference' }]
+        : [{ label: 'Месяц', sortField: 'accountingMonth' }, { label: 'Гараж', sortField: 'garageNumber' }, { label: 'Услуга', sortField: 'incomeTypeName' }, { label: 'Начисления', sortField: 'accrualAmount' }, { label: 'Поступления', sortField: 'incomeAmount' }, { label: 'Разница', sortField: 'difference' }]
       const reportRows = garageReport?.rows.map((row) => garageAccrualsGrouped
         ? [
           formatMonth(row.accountingMonth),
@@ -1091,15 +1091,15 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
         : [
           formatMonth(row.accountingMonth),
           row.garageNumber,
-          formatMoney(row.accrualAmount),
           row.incomeTypeName,
+          formatMoney(row.accrualAmount),
           formatMoney(row.incomeAmount),
           formatMoney(row.difference),
         ]) ?? []
       const garageReportFooter = garageReport
         ? garageAccrualsGrouped
           ? ['ИТОГО', '', formatMoney(garageReport.accrualTotal), formatMoney(garageReport.incomeTotal), formatMoney(garageReport.difference)]
-          : ['ИТОГО', '', formatMoney(garageReport.accrualTotal), '', formatMoney(garageReport.incomeTotal), formatMoney(garageReport.difference)]
+          : ['ИТОГО', '', '', formatMoney(garageReport.accrualTotal), formatMoney(garageReport.incomeTotal), formatMoney(garageReport.difference)]
         : undefined
       const garagePage = {
         items: garageReport?.rows ?? [],
@@ -1144,6 +1144,9 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
               />
             ),
           })}
+          <p className="report-workbook-comment" role="note">
+            Начисления и поступления сопоставлены по месяцу, гаражу и услуге. Разница = начисления − поступления. Группировка объединяет услуги в одну строку по гаражу и месяцу.
+          </p>
           {garageReportLoading ? <TableLoadingState label="Загружаем отчет по гаражам..." /> : null}
           {garageReportError ? <FormError>{garageReportError}</FormError> : null}
           <div className="report-workbook-summary-row">

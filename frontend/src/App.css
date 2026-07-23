@@ -7130,6 +7130,16 @@ button.operation-row:focus-visible {
   text-align: center;
 }
 
+.report-workbook-comment {
+  margin: 0 16px;
+  padding: 10px 12px;
+  border-left: 3px solid #98a2b3;
+  background: #f9fafb;
+  color: #475467;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
 .report-workbook-summary-row--single {
   grid-template-columns: minmax(0, 1fr);
   text-align: left;
