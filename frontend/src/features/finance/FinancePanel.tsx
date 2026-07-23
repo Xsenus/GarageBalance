@@ -4349,6 +4349,7 @@ function PaymentsPrototypePanel({
   const expenseClosingAdvanceTotal = expenseRows.reduce((sum, row) => sum + row.closingAdvance, 0)
   const expenseCollectedTotal = expenseRows.reduce((sum, row) => sum + (typeof row.collected === 'number' ? row.collected : 0), 0)
   const expenseDifferenceTotal = expenseRows.reduce((sum, row) => sum + (typeof row.difference === 'number' ? row.difference : 0), 0)
+  const isArchivedExpenseWorksheetMonth = expenseWorksheetMonth < getCurrentMonthInputValue()
   const expenseMonthLabel = new Intl.DateTimeFormat('ru-RU', { month: 'long', year: 'numeric', timeZone: 'UTC' })
     .format(new Date(`${expenseWorksheetMonth}-01T00:00:00Z`))
     .replace(/\s+г\.$/u, '')
@@ -4852,9 +4853,13 @@ function PaymentsPrototypePanel({
                     <th scope="col">Оплачено</th>
                     <th scope="col">Исходящий долг</th>
                     <th scope="col">Исходящий аванс</th>
-                    <th scope="col">Собрано</th>
-                    <th scope="col">Разница</th>
-                    <th scope="col">Действие</th>
+                    {!isArchivedExpenseWorksheetMonth ? (
+                      <>
+                        <th scope="col">Собрано</th>
+                        <th scope="col">Разница</th>
+                        <th scope="col">Действие</th>
+                      </>
+                    ) : null}
                   </tr>
                 </thead>
                 <tbody>
@@ -4874,30 +4879,34 @@ function PaymentsPrototypePanel({
                         <td>{formatPaymentMoney(row.paid)}</td>
                         <td className={row.closingDebt > 0 ? 'money-expense' : undefined}>{formatPaymentMoney(row.closingDebt)}</td>
                         <td className={row.closingAdvance > 0 ? 'money-income' : undefined}>{formatPaymentMoney(row.closingAdvance)}</td>
-                        <td>{formatPaymentMoney(row.collected)}</td>
-                        <td className={typeof row.difference === 'number' ? row.difference >= 0 ? 'money-income' : 'money-expense' : undefined}>
-                          {formatPaymentMoney(row.difference)}
-                        </td>
-                        <td>
-                          {row.action && !isAtomicCashPayout ? (
-                            <button className="link-button" type="button" onClick={(event) => {
-                              if (isStaffPaymentRow) {
-                                openStaffPaymentDialog(event, { staffMemberName: supplier, amount: suggestedAmount, rowIndex: index })
-                                return
-                              }
+                        {!isArchivedExpenseWorksheetMonth ? (
+                          <>
+                            <td>{formatPaymentMoney(row.collected)}</td>
+                            <td className={typeof row.difference === 'number' ? row.difference >= 0 ? 'money-income' : 'money-expense' : undefined}>
+                              {formatPaymentMoney(row.difference)}
+                            </td>
+                            <td>
+                              {row.action && !isAtomicCashPayout ? (
+                                <button className="link-button" type="button" onClick={(event) => {
+                                  if (isStaffPaymentRow) {
+                                    openStaffPaymentDialog(event, { staffMemberName: supplier, amount: suggestedAmount, rowIndex: index })
+                                    return
+                                  }
 
-                              openExpenseDialog(event, { expenseTypeName: row.item, amount: suggestedAmount, rowIndex: index })
-                            }} aria-label={isStaffPaymentRow ? `Оплатить сотрудника ${supplier}` : `Оплатить ${row.item}`}>
-                              Оплатить
-                            </button>
-                          ) : null}
-                        </td>
+                                  openExpenseDialog(event, { expenseTypeName: row.item, amount: suggestedAmount, rowIndex: index })
+                                }} aria-label={isStaffPaymentRow ? `Оплатить сотрудника ${supplier}` : `Оплатить ${row.item}`}>
+                                  Оплатить
+                                </button>
+                              ) : null}
+                            </td>
+                          </>
+                        ) : null}
                       </tr>
                     )
                   })}
                   {expenseRows.length === 0 ? (
                     <tr>
-                      <td colSpan={11}>{expenseWorksheetLoading ? <TableLoadingState label="Загружаем форму выплат" /> : 'Начислений и выплат за выбранный месяц пока нет.'}</td>
+                      <td colSpan={isArchivedExpenseWorksheetMonth ? 8 : 11}>{expenseWorksheetLoading ? <TableLoadingState label="Загружаем форму выплат" /> : 'Начислений и выплат за выбранный месяц пока нет.'}</td>
                     </tr>
                   ) : null}
                   <tr className="payments-prototype-total-row">
@@ -4909,9 +4918,13 @@ function PaymentsPrototypePanel({
                     <td>{formatPaymentMoney(expensePaidTotal)}</td>
                     <td>{formatPaymentMoney(expenseClosingDebtTotal)}</td>
                     <td>{formatPaymentMoney(expenseClosingAdvanceTotal)}</td>
-                    <td>{formatPaymentMoney(expenseCollectedTotal)}</td>
-                    <td className={expenseDifferenceTotal >= 0 ? 'money-income' : 'money-expense'}>{formatPaymentMoney(expenseDifferenceTotal)}</td>
-                    <td />
+                    {!isArchivedExpenseWorksheetMonth ? (
+                      <>
+                        <td>{formatPaymentMoney(expenseCollectedTotal)}</td>
+                        <td className={expenseDifferenceTotal >= 0 ? 'money-income' : 'money-expense'}>{formatPaymentMoney(expenseDifferenceTotal)}</td>
+                        <td />
+                      </>
+                    ) : null}
                   </tr>
                 </tbody>
               </table>

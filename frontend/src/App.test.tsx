@@ -6839,6 +6839,58 @@ describe('App', () => {
     expect(within(prototype).queryByRole('listbox', { name: 'Найденные гаражи' })).not.toBeInTheDocument()
   })
 
+  it('hides operational expense columns and row actions only in archived months', async () => {
+    vi.setSystemTime(new Date('2026-07-15T10:00:00+07:00'))
+    const user = userEvent.setup()
+    const getExpenseWorksheet = vi.fn(async (_token: string, params?: { accountingMonth?: string }) => {
+      const accountingMonth = params?.accountingMonth ?? '2026-07-01'
+      return createExpenseWorksheet({
+        accountingMonth,
+        rows: accountingMonth === '2026-04-01' ? [] : createExpenseWorksheet({}).rows,
+      })
+    })
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient({ getExpenseWorksheet })} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Платежи')
+    const prototype = within(await screen.findByRole('region', { name: 'Платежи' })).getByRole('region', { name: 'Форма платежей' })
+    await user.click(within(prototype).getByRole('tab', { name: 'Выплаты' }))
+
+    const julyTable = await within(prototype).findByRole('table', { name: 'Форма выплат за июль 2026' })
+    expect(within(julyTable).getAllByRole('columnheader')).toHaveLength(11)
+    expect(within(julyTable).getByRole('columnheader', { name: 'Собрано' })).toBeInTheDocument()
+    expect(within(julyTable).getByRole('columnheader', { name: 'Разница' })).toBeInTheDocument()
+    expect(within(julyTable).getByRole('columnheader', { name: 'Действие' })).toBeInTheDocument()
+    expect(await within(julyTable).findByRole('button', { name: 'Оплатить Водоснабжение' })).toBeInTheDocument()
+
+    const monthInput = within(prototype).getByLabelText('Месяц выплат')
+    await user.clear(monthInput)
+    await user.type(monthInput, '06.2026')
+    const juneTable = await within(prototype).findByRole('table', { name: 'Форма выплат за июнь 2026' })
+    expect(await within(juneTable).findByText('Водоканал')).toBeInTheDocument()
+    expect(within(juneTable).getAllByRole('columnheader')).toHaveLength(8)
+    expect(within(juneTable).queryByRole('columnheader', { name: 'Собрано' })).not.toBeInTheDocument()
+    expect(within(juneTable).queryByRole('columnheader', { name: 'Разница' })).not.toBeInTheDocument()
+    expect(within(juneTable).queryByRole('columnheader', { name: 'Действие' })).not.toBeInTheDocument()
+    expect(within(juneTable).queryByRole('button', { name: 'Оплатить Водоснабжение' })).not.toBeInTheDocument()
+    expect(within(juneTable).getByText('Водоканал').closest('tr')?.children).toHaveLength(8)
+    expect(within(juneTable).getByText('ИТОГО').closest('tr')?.children).toHaveLength(8)
+
+    await user.clear(monthInput)
+    await user.type(monthInput, '04.2026')
+    const aprilTable = await within(prototype).findByRole('table', { name: 'Форма выплат за апрель 2026' })
+    const emptyCell = (await within(aprilTable).findByText('Начислений и выплат за выбранный месяц пока нет.')).closest('td')
+    expect(emptyCell).toHaveAttribute('colspan', '8')
+
+    await user.clear(monthInput)
+    await user.type(monthInput, '08.2026')
+    const augustTable = await within(prototype).findByRole('table', { name: 'Форма выплат за август 2026' })
+    expect(await within(augustTable).findByRole('button', { name: 'Оплатить Водоснабжение' })).toBeInTheDocument()
+    expect(within(augustTable).getAllByRole('columnheader')).toHaveLength(11)
+    expect(getExpenseWorksheet).toHaveBeenCalledWith('token', { accountingMonth: '2026-08-01' })
+  })
+
   it('loads expense worksheet from finance backend and allows payment when the service difference is negative', async () => {
     const user = userEvent.setup()
     const getExpenseWorksheet = vi.fn(async (_token: string, params?: { accountingMonth?: string }) => createExpenseWorksheet({
