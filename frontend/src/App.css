@@ -4013,10 +4013,6 @@ h1 {
   width: min(720px, 100%);
 }
 
-.debt-transfer-dialog {
-  width: min(680px, 100%);
-}
-
 .full-payment-dialog {
   width: min(660px, 100%);
 }
@@ -4054,89 +4050,6 @@ h1 {
 
 .payments-prototype-modal-form .detail-dialog-actions {
   grid-column: 1 / -1;
-}
-
-.debt-transfer-form {
-  grid-template-columns: minmax(0, 1fr);
-  gap: 18px;
-}
-
-.payments-prototype-modal-form .debt-transfer-field {
-  display: grid;
-  gap: 6px;
-}
-
-.debt-transfer-periods {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 36px minmax(0, 1fr);
-  align-items: end;
-  gap: 10px;
-  border: 1px solid #d6e4ff;
-  border-radius: 10px;
-  background: #f8faff;
-  padding: 14px;
-}
-
-.debt-transfer-periods__arrow {
-  display: grid;
-  width: 36px;
-  height: 40px;
-  place-items: center;
-  color: #175cd3;
-}
-
-.debt-transfer-details {
-  display: grid;
-  grid-template-columns: minmax(180px, 220px) minmax(0, 1fr);
-  align-items: start;
-  gap: 16px;
-}
-
-.debt-transfer-amount input {
-  text-align: right;
-  font-variant-numeric: tabular-nums;
-}
-
-.debt-transfer-details textarea {
-  min-height: 86px;
-}
-
-.debt-transfer-form > .form-error {
-  grid-column: 1;
-}
-
-.debt-transfer-empty {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  align-items: start;
-  gap: 14px;
-  border: 1px solid #d6e4ff;
-  border-radius: 10px;
-  background: #f8faff;
-  padding: 18px;
-}
-
-.debt-transfer-empty__icon {
-  display: grid;
-  width: 42px;
-  height: 42px;
-  place-items: center;
-  border-radius: 10px;
-  background: #e8f0ff;
-  color: #175cd3;
-}
-
-.debt-transfer-empty strong {
-  display: block;
-  color: #101828;
-  font-size: 15px;
-}
-
-.debt-transfer-empty p {
-  margin: 5px 0 0;
-  color: #475467;
-  font-size: 14px;
-  line-height: 1.5;
 }
 
 .full-payment-form {
@@ -4210,20 +4123,10 @@ h1 {
 }
 
 @media (max-width: 640px) {
-  .debt-transfer-periods,
-  .debt-transfer-details,
   .full-payment-fields {
     grid-template-columns: minmax(0, 1fr);
   }
 
-  .debt-transfer-periods__arrow {
-    width: 40px;
-    height: 24px;
-    justify-self: center;
-    transform: rotate(90deg);
-  }
-
-  .debt-transfer-empty,
   .full-payment-empty {
     grid-template-columns: minmax(0, 1fr);
   }

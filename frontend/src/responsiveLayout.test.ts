@@ -144,12 +144,6 @@ describe('responsive layout styles', () => {
   })
 
   it('keeps the debt transfer dialog aligned and readable on narrow screens', () => {
-    expect(normalizedAppCss).toContain('.debt-transfer-dialog {\n  width: min(680px, 100%);')
-    expect(normalizedAppCss).toContain('.debt-transfer-form {\n  grid-template-columns: minmax(0, 1fr);')
-    expect(normalizedAppCss).toContain('.debt-transfer-periods {\n  display: grid;\n  grid-template-columns: minmax(0, 1fr) 36px minmax(0, 1fr);')
-    expect(normalizedAppCss).toContain('.debt-transfer-details {\n  display: grid;\n  grid-template-columns: minmax(180px, 220px) minmax(0, 1fr);')
-    expect(normalizedAppCss).toContain('.debt-transfer-amount input {\n  text-align: right;\n  font-variant-numeric: tabular-nums;')
-    expect(normalizedAppCss).toContain('.debt-transfer-periods,\n  .debt-transfer-details,\n  .full-payment-fields {\n    grid-template-columns: minmax(0, 1fr);')
   })
 
   it('keeps the full payment form and its error at a comfortable width', () => {

@@ -33,7 +33,7 @@ import type { AuthClient, AuthResponse } from './services/authApi'
 import { DictionaryApiError } from './services/dictionariesApi'
 import type { AccountingTypeDto, ChargeServiceSettingDto, CreateChargeServiceWithTariffRequest, DictionaryClient, FeeCampaignDto, GarageDto, IrregularPaymentDto, OwnerDto, PagedResult, StaffDepartmentDto, StaffMemberDto, SupplierContactDto, SupplierDto, SupplierGroupDto, TariffDto, UpsertGarageRequest, UpsertIrregularPaymentRequest, UpsertStaffMemberRequest, UpsertSupplierRequest, UpsertTariffRequest } from './services/dictionariesApi'
 import { FinanceApiError } from './services/financeApi'
-import type { AccrualDto, CorrectHistoricalMeterReadingRequest, CreateDebtTransferRequest, CreateExpenseOperationRequest, CreateIncomeOperationRequest, CreateIrregularAccrualRequest, CreateMeterReadingRequest, CreateStaffPaymentRequest, CreateSupplierAccrualRequest, ExpenseWorksheetDto, FeeCampaignAccrualGenerationResultDto, FinanceClient, FinancePagedResult, FinancePageParams, FinanceSummaryDto, FinancialOperationDto, GarageBalanceHistoryDto, GarageIncomeWorksheetDto, GenerateFeeCampaignAccrualsRequest, GenerateRegularCatalogAccrualsRequest, GenerateSupplierGroupSalaryAccrualsRequest, MeterReadingDto, MeterReadingYearPageDto, MissingMeterReadingDto, RegularAccrualGenerationResultDto, RegularCatalogAccrualGenerationResultDto, SupplierAccrualDto, SupplierGroupSalaryAccrualGenerationResultDto } from './services/financeApi'
+import type { AccrualDto, CorrectHistoricalMeterReadingRequest, CreateExpenseOperationRequest, CreateIncomeOperationRequest, CreateIrregularAccrualRequest, CreateMeterReadingRequest, CreateStaffPaymentRequest, CreateSupplierAccrualRequest, ExpenseWorksheetDto, FeeCampaignAccrualGenerationResultDto, FinanceClient, FinancePagedResult, FinancePageParams, FinanceSummaryDto, FinancialOperationDto, GarageBalanceHistoryDto, GarageIncomeWorksheetDto, GenerateFeeCampaignAccrualsRequest, GenerateRegularCatalogAccrualsRequest, GenerateSupplierGroupSalaryAccrualsRequest, MeterReadingDto, MeterReadingYearPageDto, MissingMeterReadingDto, RegularAccrualGenerationResultDto, RegularCatalogAccrualGenerationResultDto, SupplierAccrualDto, SupplierGroupSalaryAccrualGenerationResultDto } from './services/financeApi'
 import type { CreateFundOperationRequest, FundDto, FundOperationDto, FundOperationPageDto, FundsClient } from './services/fundsApi'
 import type { AccessImportCreatedRecordDto, AccessImportQuarantineItemDto, AccessImportReaderStatusDto, AccessImportRunDto, AccessImportRunLogEntryDto, ImportClient } from './services/importApi'
 import type { IntegrationClient, IntegrationSecretSettingDto, OneCFreshIntegrationStatusDto, OneCFreshSyncDto, OneCFreshSyncPreviewDto, OneCFreshSyncRequest, ReceiptPrintingActionDto, ReceiptPrintingActionRequest, ReceiptPrintingIntegrationStatusDto } from './services/integrationsApi'
@@ -5034,10 +5034,8 @@ describe('App', () => {
     expect(regularAccrualAction).toHaveClass('create-action-button')
     expect(regularAccrualAction).toHaveClass('payments-prototype-action-button')
     expect(regularAccrualAction.querySelector('.lucide-calendar-days')).not.toBeNull()
-    const debtTransferAction = within(garageActions as HTMLElement).getByRole('button', { name: 'Перенести задолженность' })
     const fullPaymentAction = within(garageActions as HTMLElement).getByRole('button', { name: 'Полная оплата' })
-    expect(debtTransferAction).toHaveClass('payments-prototype-action-button')
-    expect(debtTransferAction.querySelector('.lucide-rotate-ccw')).not.toBeNull()
+    expect(within(garageActions as HTMLElement).queryByRole('button', { name: 'Перенести задолженность' })).not.toBeInTheDocument()
     expect(fullPaymentAction).toHaveClass('payments-prototype-action-button')
     expect(fullPaymentAction.querySelector('.lucide-wallet-cards')).not.toBeNull()
     await user.click(addGarageAccrualButton)
@@ -6748,7 +6746,7 @@ describe('App', () => {
     expect(within(prototype).getByText('Сумма в банке').closest('div')).toHaveTextContent('0')
   })
 
-  it('shows a clear empty state when the selected garage has no debt to transfer', async () => {
+  it('shows a clear empty state when the selected garage has no debt to pay', async () => {
     const user = userEvent.setup()
     const garage = createGarage({ id: 'garage-without-debt', number: '31', ownerName: 'Орлова Мария', startingBalance: 0 })
     render(<App
@@ -6778,18 +6776,6 @@ describe('App', () => {
     const prototype = within(await screen.findByRole('region', { name: 'Платежи' })).getByRole('region', { name: 'Форма платежей' })
     await user.type(within(prototype).getByLabelText('Поиск номера гаража или ФИО владельца'), garage.number)
     await user.click(await within(prototype).findByRole('option', { name: /Гараж\s*31\s*Орлова Мария/ }))
-    await user.click(within(prototype).getByRole('button', { name: 'Перенести задолженность' }))
-
-    const transferDialog = await screen.findByRole('dialog', { name: 'Перенести задолженность' })
-    expect(transferDialog).toHaveClass('debt-transfer-dialog')
-    expect(within(transferDialog).getByRole('status')).toHaveTextContent('Задолженности для переноса нет')
-    expect(within(transferDialog).queryByRole('combobox')).not.toBeInTheDocument()
-    expect(within(transferDialog).queryByLabelText('Сумма переноса задолженности')).not.toBeInTheDocument()
-    const closeButton = within(transferDialog).getByRole('button', { name: 'Закрыть' })
-    await waitFor(() => expect(closeButton).toHaveFocus())
-    await user.click(closeButton)
-    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Перенести задолженность' })).not.toBeInTheDocument())
-
     await user.click(within(prototype).getByRole('button', { name: 'Полная оплата' }))
     const fullPaymentDialog = await screen.findByRole('dialog', { name: 'Полная оплата' })
     expect(fullPaymentDialog).toHaveClass('full-payment-dialog')
@@ -6797,18 +6783,9 @@ describe('App', () => {
     expect(within(fullPaymentDialog).queryByLabelText('Сумма полной оплаты')).not.toBeInTheDocument()
   })
 
-  it('moves garage debt to the next month and saves the transfer in form history', async () => {
+  it('does not expose manual debt transfer in the garage payment form', async () => {
     const user = userEvent.setup()
-    const createDebtTransferMock = vi.fn(async (_token: string, request: CreateDebtTransferRequest) => createAccrual({
-      id: 'debt-transfer-accrual-27',
-      garageId: request.garageId,
-      incomeTypeId: 'income-type-debt-transfer',
-      incomeTypeName: 'Перенос задолженности',
-      accountingMonth: request.targetMonth,
-      amount: request.amount,
-      source: 'debt_transfer',
-      comment: request.comment ?? null,
-    }))
+    const createDebtTransferMock = vi.fn()
     const garage = createGarage({ id: 'garage-27', number: '27', ownerName: 'Сидорова Анна', peopleCount: 2, floorCount: 1, startingBalance: -1700 })
     render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient({ getGarages: async () => [garage] })} financeClient={createFinanceClient({
       createDebtTransfer: createDebtTransferMock,
@@ -6845,56 +6822,10 @@ describe('App', () => {
     await user.type(within(prototype).getByLabelText('Поиск номера гаража или ФИО владельца'), '27')
     await user.click(await within(prototype).findByRole('option', { name: /Гараж\s*27\s*Сидорова Анна/ }))
 
-    const transferButton = within(prototype).getByRole('button', { name: 'Перенести задолженность' })
-    await user.click(transferButton)
-    let transferDialog = await screen.findByRole('dialog', { name: 'Перенести задолженность' })
-    await waitFor(() => expect(within(transferDialog).getByRole('button', { name: 'Отмена' })).toHaveFocus())
-    await user.keyboard('{Escape}')
-    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Перенести задолженность' })).not.toBeInTheDocument())
+    expect(within(prototype).queryByRole('button', { name: 'Перенести задолженность' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('dialog', { name: 'Перенести задолженность' })).not.toBeInTheDocument()
+    expect(within(prototype).getByRole('button', { name: 'Полная оплата' })).toBeInTheDocument()
     expect(createDebtTransferMock).not.toHaveBeenCalled()
-    await waitFor(() => expect(transferButton).toHaveFocus())
-
-    await user.click(transferButton)
-    transferDialog = await screen.findByRole('dialog', { name: 'Перенести задолженность' })
-    const sourceMonth = within(transferDialog).getByRole('combobox', { name: 'Исходный месяц переноса задолженности' })
-    expect(sourceMonth).toHaveClass('select-control__trigger')
-    expect(sourceMonth).toHaveTextContent(/июн\.26.*долг.*1\s700/i)
-    await user.click(sourceMonth)
-    const selectedSourceMonth = within(transferDialog).getByRole('option', { name: /июн\.26.*долг.*1\s700/i })
-    expect(selectedSourceMonth).toHaveAttribute('aria-selected', 'true')
-    await user.click(selectedSourceMonth)
-    const targetMonth = within(transferDialog).getByRole('combobox', { name: 'Целевой месяц переноса задолженности' })
-    expect(targetMonth).toHaveClass('select-control__trigger')
-    expect(targetMonth).toHaveTextContent('июл.26')
-    expect(within(transferDialog).getByRole('group', { name: 'Период переноса задолженности' })).toBeInTheDocument()
-    const transferAmount = within(transferDialog).getByLabelText('Сумма переноса задолженности')
-    expect(transferAmount).toHaveValue('1 700.00')
-    await user.click(transferAmount)
-    await user.clear(transferAmount)
-    await user.type(transferAmount, '0')
-    await user.click(within(transferDialog).getByRole('button', { name: 'Перенести задолженность' }))
-    expect(within(transferDialog).getByRole('alert')).toHaveTextContent('Укажите сумму переноса больше нуля.')
-    expect(createDebtTransferMock).not.toHaveBeenCalled()
-    await user.click(transferAmount)
-    await user.clear(transferAmount)
-    await user.type(transferAmount, '1700')
-    await user.type(within(transferDialog).getByLabelText('Комментарий к переносу задолженности'), 'Проверка переноса')
-    await user.click(within(transferDialog).getByRole('button', { name: 'Перенести задолженность' }))
-
-    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Перенести задолженность' })).not.toBeInTheDocument())
-    expect(createDebtTransferMock).toHaveBeenCalledWith('token', {
-      garageId: 'garage-27',
-      sourceMonth: '2026-06-01',
-      targetMonth: '2026-07-01',
-      amount: 1700,
-      comment: 'Проверка переноса',
-    })
-    expect(transferButton).toHaveFocus()
-    expect(within(prototype).getByText('июл.26')).toBeInTheDocument()
-    expect(within(prototype).getByText('Перенос задолженности: Электроэнергия')).toBeInTheDocument()
-    expect(within(prototype).getByRole('table', { name: 'История платежей гаража' })).toHaveTextContent('Перенос задолженности июн.26 -> июл.26: Проверка переноса')
-
-    expect(vi.mocked(formStatesApi.saveState).mock.calls.some((call) => call[1] === 'payments-prototype')).toBe(false)
   })
 
   it('shows funds management prototype from dashboard tile', async () => {
