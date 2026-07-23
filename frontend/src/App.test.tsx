@@ -6544,6 +6544,76 @@ describe('App', () => {
     await waitFor(() => expect(cancelOperation).toHaveBeenCalledWith('token', 'operation-garage-77', { reason: 'Ошибочный платеж' }))
   })
 
+  it('saves a garage payment comment without a second confirmation', async () => {
+    const user = userEvent.setup()
+    const garage = createGarage({ id: 'garage-comment-edit', number: '43', ownerName: 'Смирнов Алексей' })
+    let operation = createFinancialOperation({
+      id: 'operation-comment-edit',
+      garageId: garage.id,
+      garageNumber: garage.number,
+      ownerName: garage.ownerName,
+      incomeTypeId: 'income-type-electricity',
+      incomeTypeName: 'Электроэнергия',
+      amount: 200,
+      comment: 'Старый комментарий',
+      operationDate: '2026-06-20',
+      accountingMonth: '2026-06-01',
+    })
+    const getOperationsPage = vi.fn(async (_token: string, params?: Parameters<FinanceClient['getOperationsPage']>[1]) => ({
+      items: params?.garageId === garage.id ? [operation] : [],
+      totalCount: params?.garageId === garage.id ? 1 : 0,
+      offset: 0,
+      limit: params?.limit ?? 25,
+    }))
+    const updateIncome = vi.fn(async (_token: string, operationId: string, request: CreateIncomeOperationRequest) => {
+      operation = {
+        ...operation,
+        id: operationId,
+        amount: request.amount,
+        operationDate: request.operationDate,
+        accountingMonth: request.accountingMonth,
+        documentNumber: request.documentNumber ?? null,
+        comment: request.comment ?? null,
+      }
+      return operation
+    })
+    render(<App
+      authClient={createAuthClient()}
+      dictionaryClient={createDictionaryClient({ getGarages: async () => [garage] })}
+      financeClient={createFinanceClient({ getOperationsPage, updateIncome })}
+      importClient={createImportClient()}
+      integrationClient={createIntegrationClient()}
+      reportClient={createReportClient()}
+      releaseClient={createReleaseClient()}
+      userClient={createUserClient()}
+    />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Платежи')
+    const prototype = within(await screen.findByRole('region', { name: 'Платежи' })).getByRole('region', { name: 'Форма платежей' })
+    await user.type(within(prototype).getByLabelText('Поиск номера гаража или ФИО владельца'), '43')
+    await user.click(await within(prototype).findByRole('option', { name: /Гараж\s*43\s*Смирнов Алексей/ }))
+
+    const historyTable = within(prototype).getByRole('table', { name: 'История платежей гаража' })
+    await user.click(await within(historyTable).findByRole('button', { name: 'Изменить платеж Электроэнергия' }))
+    const editDialog = await screen.findByRole('dialog', { name: 'Изменить платеж' })
+    const comment = within(editDialog).getByLabelText('Комментарий к изменяемому платежу')
+    await user.clear(comment)
+    await user.type(comment, 'Комментарий после сверки')
+    await user.click(within(editDialog).getByRole('button', { name: 'Сохранить' }))
+
+    await waitFor(() => expect(updateIncome).toHaveBeenCalledWith('token', operation.id, expect.objectContaining({
+      amount: 200,
+      comment: 'Комментарий после сверки',
+    })))
+    expect(screen.queryByRole('dialog', { name: 'Подтвердить изменение платежа?' })).not.toBeInTheDocument()
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Изменить платеж' })).not.toBeInTheDocument())
+    await user.click(within(historyTable).getByRole('button', { name: 'Изменить платеж Электроэнергия' }))
+    const reopenedDialog = await screen.findByRole('dialog', { name: 'Изменить платеж' })
+    expect(within(reopenedDialog).getByLabelText('Комментарий к изменяемому платежу')).toHaveValue('Комментарий после сверки')
+  })
+
   it('opens the expense worksheet on the current month and accepts any localized month across years', async () => {
     vi.setSystemTime(new Date('2027-10-15T10:00:00+07:00'))
     const user = userEvent.setup()

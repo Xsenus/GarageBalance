@@ -5368,6 +5368,11 @@ function GaragePaymentHistoryEditDialog({
     }
 
     onChange({ error: null })
+    if (changes.length === 1 && changes[0].field === 'Комментарий') {
+      onSubmit()
+      return
+    }
+
     setPendingChanges(changes)
   }
 
