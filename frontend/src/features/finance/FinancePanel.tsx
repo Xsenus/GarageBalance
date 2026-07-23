@@ -5,7 +5,6 @@ import type { AuthResponse } from '../../services/authApi'
 import type { AccountingTypeDto, DictionaryClient, GarageDto, IrregularPaymentDto, StaffMemberDto, SupplierDto, SupplierGroupDto } from '../../services/dictionariesApi'
 import type { AccrualDto, CreateAccrualRequest, CreateExpenseOperationRequest, CreateIncomeOperationRequest, CreateMeterReadingRequest, CreateSupplierAccrualRequest, ExpensePaymentType, ExpenseWorksheetDto, FinanceClient, FinancePagedResult, FinanceSummaryDto, FinancialOperationDto, GarageIncomeWorksheetDto, GarageOverdueDebtDto, GenerateSupplierGroupSalaryAccrualsRequest, MeterReadingDto, MissingMeterReadingDto, StaffSalaryAdjustmentType, SupplierAccrualDto } from '../../services/financeApi'
 import { FinanceApiError } from '../../services/financeApi'
-import type { FundDto, FundsClient } from '../../services/fundsApi'
 import type { IntegrationClient, ReceiptPrintingActionKind } from '../../services/integrationsApi'
 import type { ApplicationSettingsClient } from '../../services/settingsApi'
 import { hasPermission, permissions } from '../../shared/accessControl'
@@ -351,14 +350,12 @@ export function FinancePanel({
   auth,
   dictionaryClient,
   financeClient,
-  fundsClient,
   integrationClient,
   settingsClient,
 }: {
   auth: AuthResponse
   dictionaryClient: DictionaryClient
   financeClient: FinanceClient
-  fundsClient: FundsClient
   integrationClient: IntegrationClient
   settingsClient: ApplicationSettingsClient
 }) {
@@ -2874,7 +2871,7 @@ export function FinancePanel({
           </section>
         </div>
       ) : null}
-      {paymentsPrototypeDialog === 'bank' ? <BankDepositPrototypeDialog auth={auth} fundsClient={fundsClient} onClose={closePaymentsPrototypeDialog} /> : null}
+      {paymentsPrototypeDialog === 'bank' ? <BankDepositPrototypeDialog auth={auth} financeClient={financeClient} onClose={closePaymentsPrototypeDialog} /> : null}
     </section>
   )
 }
@@ -5490,67 +5487,25 @@ function GaragePaymentReceiptActionDialog({
 
 function BankDepositPrototypeDialog({
   auth,
-  fundsClient,
+  financeClient,
   onClose,
 }: {
   auth: AuthResponse
-  fundsClient: FundsClient
+  financeClient: FinanceClient
   onClose: () => void
 }) {
   const dialogRef = useFocusTrap<HTMLElement>(true)
   const cancelRef = useFocusOnOpen<HTMLButtonElement>(true)
-  const [funds, setFunds] = useState<FundDto[]>([])
-  const [fundId, setFundId] = useState('')
   const [operationDate, setOperationDate] = useState(getLocalDateInputValue())
   const [amount, setAmount] = useState('')
   const [comment, setComment] = useState('')
-  const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const selectedFund = funds.find((fund) => fund.id === fundId) ?? null
-  const availableToDistribute = selectedFund?.availableToDistribute ?? null
   useEscapeKey(true, onClose)
-
-  useEffect(() => {
-    let active = true
-
-    async function loadFunds() {
-      setLoading(true)
-      setError(null)
-      try {
-        const loadedFunds = await fundsClient.getFunds(auth.accessToken)
-        if (!active) {
-          return
-        }
-
-        const allowedFunds = loadedFunds.filter((fund) => fund.allowOperations)
-        setFunds(allowedFunds)
-        setFundId((current) => current || allowedFunds[0]?.id || '')
-      } catch (loadError) {
-        if (active) {
-          setError(loadError instanceof Error ? loadError.message : 'Не удалось загрузить фонды.')
-        }
-      } finally {
-        if (active) {
-          setLoading(false)
-        }
-      }
-    }
-
-    void loadFunds()
-
-    return () => {
-      active = false
-    }
-  }, [auth.accessToken, fundsClient])
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     const parsedAmount = parsePaymentMoney(amount)
-    if (!fundId) {
-      setError('Выберите фонд для сдачи кассы в банк.')
-      return
-    }
     if (!operationDate) {
       setError('Укажите дату сдачи кассы.')
       return
@@ -5559,23 +5514,13 @@ function BankDepositPrototypeDialog({
       setError('Укажите сумму сдачи больше нуля.')
       return
     }
-    if (availableToDistribute !== null && parsedAmount > availableToDistribute) {
-      setError(`Сумма сдачи не может превышать доступную к распределению сумму ${formatPaymentMoney(availableToDistribute)} руб.`)
-      return
-    }
-
-    const reason = comment.trim()
-      ? `Сдача кассы в банк ${operationDate}: ${comment.trim()}`
-      : `Сдача кассы в банк ${operationDate}`
-
     setSaving(true)
     setError(null)
     try {
-      await fundsClient.createOperation(auth.accessToken, fundId, {
-        operationKind: 'deposit',
+      await financeClient.createCashBankTransfer(auth.accessToken, {
+        transferDate: operationDate,
         amount: parsedAmount,
-        reason,
-        isCashToBankTransfer: true,
+        comment: comment.trim() || undefined,
       })
       onClose()
     } catch (submitError) {
@@ -5597,24 +5542,10 @@ function BankDepositPrototypeDialog({
           </button>
         </div>
         <form className="dictionary-modal-form payments-prototype-modal-form bank-deposit-form" onSubmit={handleSubmit}>
-          <FormField className="bank-deposit-form__fund" label="Фонд">
-            <SelectControl
-              aria-label="Фонд для сдачи кассы"
-              value={fundId}
-              options={funds.length > 0
-                ? funds.map((fund) => ({ value: fund.id, label: fund.name }))
-                : [{ value: '', label: 'Нет доступных фондов' }]}
-              disabled={loading || saving}
-              onChange={(nextFundId) => {
-                setFundId(nextFundId)
-                setError(null)
-              }}
-            />
-          </FormField>
           <FormField
             className="bank-deposit-form__amount"
             label="Сумма"
-            hint={availableToDistribute !== null ? `Доступно к распределению: ${formatPaymentMoney(availableToDistribute)} руб.` : undefined}
+            hint="Сумма будет списана из кассы и зачислена на банковский счет."
           >
             <MoneyTextInput aria-label="Сумма в банке" value={amount} onValueChange={(nextAmount) => {
               setAmount(nextAmount)
@@ -5630,10 +5561,9 @@ function BankDepositPrototypeDialog({
           <FormField className="bank-deposit-form__comment" label="Комментарий">
             <textarea aria-label="Комментарий к сумме в банке" rows={4} value={comment} onChange={(event) => setComment(event.target.value)} disabled={saving} />
           </FormField>
-          {loading ? <LoadingSkeleton className="loading-skeleton--compact" label="Загружаем фонды для операции" rows={2} columns={2} /> : null}
           {error ? <FormError>{error}</FormError> : null}
           <div className="detail-dialog-actions">
-            <button className="secondary-button" type="submit" disabled={loading || saving}><Save size={17} aria-hidden="true" /><span>{saving ? 'Сохраняем...' : 'Сохранить'}</span></button>
+            <button className="secondary-button" type="submit" disabled={saving}><Save size={17} aria-hidden="true" /><span>{saving ? 'Сохраняем...' : 'Сохранить'}</span></button>
             <button ref={cancelRef} className="ghost-button" type="button" onClick={onClose} disabled={saving}>Отмена</button>
           </div>
         </form>

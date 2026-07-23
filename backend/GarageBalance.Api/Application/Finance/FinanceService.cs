@@ -27,6 +27,7 @@ public sealed class FinanceService(
     IAccrualPaymentAllocationRepository accrualPaymentAllocationRepository,
     ISupplierAccrualRepository supplierAccrualRepository,
     IStaffSalaryAdjustmentRepository staffSalaryAdjustmentRepository,
+    ICashBankTransferRepository cashBankTransferRepository,
     ISupplierGroupRepository supplierGroupRepository,
     ISupplierRepository supplierRepository,
     IExpenseTypeRepository expenseTypeRepository,
@@ -1320,6 +1321,72 @@ public sealed class FinanceService(
             adjustment.Amount,
             adjustment.DocumentNumber,
             adjustment.Reason));
+    }
+
+    public async Task<FinanceResult<CashBankTransferDto>> CreateCashBankTransferAsync(
+        CreateCashBankTransferRequest request,
+        Guid? actorUserId,
+        CancellationToken cancellationToken)
+    {
+        if (request.TransferDate == default)
+        {
+            return FinanceResult<CashBankTransferDto>.Failure(
+                "cash_bank_transfer_date_required",
+                "Укажите дату сдачи кассы в банк.");
+        }
+
+        var amount = MoneyMath.RoundMoney(request.Amount);
+        if (amount <= 0m)
+        {
+            return FinanceResult<CashBankTransferDto>.Failure(
+                "cash_bank_transfer_amount_invalid",
+                "Сумма сдачи кассы в банк должна быть больше нуля.");
+        }
+
+        await using var balanceLock = await financeAvailableBalanceQuery.AcquireUpdateLockAsync(
+            cashExpense: true,
+            cancellationToken);
+        var availableCash = await CalculateAvailableCashAmountAsync(cancellationToken);
+        if (amount > availableCash)
+        {
+            return FinanceResult<CashBankTransferDto>.Failure(
+                "cash_amount_insufficient",
+                $"Сумма сдачи превышает доступный остаток в кассе {MoneyFormatting.Format(availableCash)}.");
+        }
+
+        var transfer = new CashBankTransfer
+        {
+            TransferDate = request.TransferDate,
+            Amount = amount,
+            Comment = NormalizeOptional(request.Comment),
+            ActorUserId = actorUserId,
+            CreatedAtUtc = timeProvider.GetUtcNow()
+        };
+
+        cashBankTransferRepository.Add(transfer);
+        AddAudit(
+            actorUserId,
+            "finance.cash_bank_transfer_created",
+            "cash_bank_transfer",
+            transfer.Id,
+            $"Сдано из кассы в банк {MoneyFormatting.Format(transfer.Amount)} руб. от {transfer.TransferDate:dd.MM.yyyy}.",
+            relatedDocumentId: transfer.Id.ToString(),
+            metadata: new Dictionary<string, object?>
+            {
+                ["transferDate"] = transfer.TransferDate,
+                ["amount"] = transfer.Amount,
+                ["source"] = "cash",
+                ["destination"] = "bank"
+            },
+            reason: transfer.Comment);
+        await unitOfWork.SaveChangesAsync(cancellationToken);
+
+        return FinanceResult<CashBankTransferDto>.Success(new CashBankTransferDto(
+            transfer.Id,
+            transfer.TransferDate,
+            transfer.Amount,
+            transfer.Comment,
+            transfer.CreatedAtUtc));
     }
 
     public async Task<FinanceResult<FinancialOperationDto>> UpdateIncomeAsync(Guid operationId, CreateIncomeOperationRequest request, Guid? actorUserId, CancellationToken cancellationToken)

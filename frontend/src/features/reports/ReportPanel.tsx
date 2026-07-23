@@ -1307,7 +1307,7 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
       const bankRows = bankDepositReport?.rows.map((row) => [
         row.date,
         formatMoney(row.amount),
-        row.comment || row.fundName || '',
+        row.comment || '',
       ]) ?? []
       const bankDepositPage = {
         items: bankDepositReport?.rows ?? [],

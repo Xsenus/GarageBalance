@@ -39,6 +39,7 @@ public sealed class GarageBalanceDbContext(DbContextOptions<GarageBalanceDbConte
     public DbSet<AccrualPaymentAllocation> AccrualPaymentAllocations => Set<AccrualPaymentAllocation>();
     public DbSet<SupplierAccrual> SupplierAccruals => Set<SupplierAccrual>();
     public DbSet<StaffSalaryAdjustment> StaffSalaryAdjustments => Set<StaffSalaryAdjustment>();
+    public DbSet<CashBankTransfer> CashBankTransfers => Set<CashBankTransfer>();
     public DbSet<MeterReading> MeterReadings => Set<MeterReading>();
     public DbSet<Fund> Funds => Set<Fund>();
     public DbSet<FundOperation> FundOperations => Set<FundOperation>();
@@ -638,6 +639,23 @@ public sealed class GarageBalanceDbContext(DbContextOptions<GarageBalanceDbConte
                 .WithMany()
                 .HasForeignKey(adjustment => adjustment.StaffMemberId)
                 .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<CashBankTransfer>(entity =>
+        {
+            entity.ToTable(
+                "cash_bank_transfers",
+                table => table.HasCheckConstraint(
+                    "CK_cash_bank_transfers_Amount",
+                    "\"Amount\" > 0"));
+            entity.HasKey(transfer => transfer.Id);
+            entity.Property(transfer => transfer.Amount).HasPrecision(18, 2);
+            entity.Property(transfer => transfer.Comment).HasMaxLength(1000);
+            entity.Property(transfer => transfer.IsCanceled).HasDefaultValue(false);
+            entity.HasIndex(transfer => transfer.TransferDate);
+            entity.HasIndex(transfer => transfer.CreatedAtUtc);
+            entity.HasIndex(transfer => transfer.ActorUserId);
+            entity.HasIndex(transfer => transfer.IsCanceled);
         });
 
         modelBuilder.Entity<FormState>(entity =>

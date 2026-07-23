@@ -30,7 +30,7 @@ public static class ReportSorting
             [ReportSortKind.CashPayments] = new("date", true,
                 ["date", "amount", "hasReceipt", "purpose", "supplierName", "expenseTypeName", "documentNumber"]),
             [ReportSortKind.BankDeposits] = new("date", true,
-                ["date", "amount", "fundName", "comment"]),
+                ["date", "amount", "comment"]),
             [ReportSortKind.Fees] = new("garageNumber", false,
                 ["garageNumber", "ownerName", "feeName", "accrued", "paid", "lastPaymentDate", "debt"]),
             [ReportSortKind.FundChanges] = new("date", true,

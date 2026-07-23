@@ -616,6 +616,7 @@ public sealed class FinanceServiceTests
         await using var database = await TestDatabase.CreateAsync();
         await database.SeedAsync();
         database.Context.FundOperations.RemoveRange(database.Context.FundOperations);
+        database.Context.CashBankTransfers.RemoveRange(database.Context.CashBankTransfers);
         var department = new StaffDepartment { Name = "Бухгалтерия" };
         var staffMember = new StaffMember { FullName = "Петрова Ольга", Department = department, Rate = 40000m };
         var salaryType = new ExpenseType { Name = "Зарплата", Code = "salary" };
@@ -1798,6 +1799,7 @@ public sealed class FinanceServiceTests
         await using var database = await TestDatabase.CreateAsync();
         var fixtures = await database.SeedAsync();
         database.Context.FundOperations.RemoveRange(database.Context.FundOperations);
+        database.Context.CashBankTransfers.RemoveRange(database.Context.CashBankTransfers);
         database.Context.Funds.RemoveRange(database.Context.Funds);
         await database.Context.SaveChangesAsync();
         var service = FinanceServiceTestFactory.Create(database.Context);
@@ -1805,18 +1807,12 @@ public sealed class FinanceServiceTests
             new CreateIncomeOperationRequest(fixtures.Garage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 6, 19), new DateOnly(2026, 6, 1), 100m, "PKO-reduction", null),
             null,
             CancellationToken.None);
-        var bankFund = new Fund { Name = "Банк уменьшения", NormalizedName = "БАНК УМЕНЬШЕНИЯ", Balance = 80m };
-        database.Context.AddRange(
-            bankFund,
-            new FundOperation
+        database.Context.Add(
+            new CashBankTransfer
             {
-                Fund = bankFund,
-                OperationKind = FundOperationKinds.Deposit,
+                TransferDate = new DateOnly(2026, 6, 19),
                 Amount = 80m,
-                BalanceBefore = 0m,
-                BalanceAfter = 80m,
-                Reason = "Сдача кассы в банк",
-                IsCashToBankTransfer = true
+                Comment = "Сдача кассы в банк"
             });
         await database.Context.SaveChangesAsync();
 
@@ -1968,6 +1964,7 @@ public sealed class FinanceServiceTests
         Assert.True(created.Succeeded);
         await service.CancelOperationAsync(created.Value!.Id, new CancelFinanceEntryRequest("Проверка остатка"), null, CancellationToken.None);
         database.Context.FundOperations.RemoveRange(database.Context.FundOperations);
+        database.Context.CashBankTransfers.RemoveRange(database.Context.CashBankTransfers);
         await database.Context.SaveChangesAsync();
 
         var result = await service.RestoreOperationAsync(created.Value.Id, null, CancellationToken.None);
@@ -2037,6 +2034,7 @@ public sealed class FinanceServiceTests
         await using var database = await TestDatabase.CreateAsync();
         var fixtures = await database.SeedAsync();
         database.Context.FundOperations.RemoveRange(database.Context.FundOperations);
+        database.Context.CashBankTransfers.RemoveRange(database.Context.CashBankTransfers);
         await database.Context.SaveChangesAsync();
         var service = FinanceServiceTestFactory.Create(database.Context);
 
@@ -2191,6 +2189,113 @@ public sealed class FinanceServiceTests
     }
 
     [Fact]
+    public async Task CreateCashBankTransferAsync_MovesCashToBankWithoutChangingFundsAndWritesAudit()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var garage = new Garage { Number = "CASH-BANK-1", PeopleCount = 1, FloorCount = 1 };
+        var incomeType = new IncomeType { Name = "Поступление для сдачи кассы" };
+        var fund = new Fund { Name = "Резерв", NormalizedName = "РЕЗЕРВ", Balance = 125m };
+        database.Context.AddRange(garage, incomeType, fund);
+        await database.Context.SaveChangesAsync();
+        var service = FinanceServiceTestFactory.Create(database.Context);
+        Assert.True((await service.CreateIncomeAsync(
+            new CreateIncomeOperationRequest(
+                garage.Id,
+                incomeType.Id,
+                new DateOnly(2026, 6, 14),
+                new DateOnly(2026, 6, 1),
+                1000m,
+                "PKO-CASH-BANK",
+                null),
+            null,
+            CancellationToken.None)).Succeeded);
+        database.Context.AuditEvents.RemoveRange(database.Context.AuditEvents);
+        await database.Context.SaveChangesAsync();
+        var actorUserId = Guid.NewGuid();
+
+        var result = await service.CreateCashBankTransferAsync(
+            new CreateCashBankTransferRequest(new DateOnly(2026, 6, 15), 400.126m, "Инкассация"),
+            actorUserId,
+            CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+        Assert.Equal(400.13m, result.Value!.Amount);
+        Assert.Equal(new DateOnly(2026, 6, 15), result.Value.TransferDate);
+        Assert.Equal("Инкассация", result.Value.Comment);
+        Assert.Empty(database.Context.FundOperations);
+        Assert.Equal(125m, (await database.Context.Funds.SingleAsync()).Balance);
+        var stored = await database.Context.CashBankTransfers.SingleAsync();
+        Assert.Equal(result.Value.Id, stored.Id);
+        Assert.Equal(actorUserId, stored.ActorUserId);
+        var worksheet = await service.GetExpenseWorksheetAsync(
+            new ExpenseWorksheetRequest(new DateOnly(2026, 6, 1)),
+            CancellationToken.None);
+        Assert.True(worksheet.Succeeded);
+        Assert.Equal(599.87m, worksheet.Value!.CashAmount);
+        Assert.Equal(400.13m, worksheet.Value.BankAmount);
+        var audit = Assert.Single(database.Context.AuditEvents, item => item.Action == "finance.cash_bank_transfer_created");
+        Assert.Equal("cash_bank_transfer", audit.EntityType);
+        Assert.Equal(actorUserId, audit.ActorUserId);
+        using var auditMetadata = JsonDocument.Parse(audit.MetadataJson!);
+        Assert.Equal("Инкассация", auditMetadata.RootElement.GetProperty("reason").GetString());
+        Assert.Contains("\"source\":\"cash\"", audit.MetadataJson, StringComparison.Ordinal);
+        Assert.Contains("\"destination\":\"bank\"", audit.MetadataJson, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData(false, 0, "cash_bank_transfer_date_required")]
+    [InlineData(true, 0, "cash_bank_transfer_amount_invalid")]
+    [InlineData(true, -1, "cash_bank_transfer_amount_invalid")]
+    public async Task CreateCashBankTransferAsync_RejectsInvalidDateOrAmount(
+        bool hasDate,
+        decimal amount,
+        string expectedErrorCode)
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = FinanceServiceTestFactory.Create(database.Context);
+
+        var result = await service.CreateCashBankTransferAsync(
+            new CreateCashBankTransferRequest(hasDate ? new DateOnly(2026, 6, 15) : default, amount, null),
+            null,
+            CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Equal(expectedErrorCode, result.ErrorCode);
+        Assert.Empty(database.Context.CashBankTransfers);
+        Assert.Empty(database.Context.AuditEvents);
+    }
+
+    [Fact]
+    public async Task CreateCashBankTransferAsync_RejectsAmountAboveAvailableCash()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var garage = new Garage { Number = "CASH-BANK-2", PeopleCount = 1, FloorCount = 1 };
+        var incomeType = new IncomeType { Name = "Ограниченное поступление" };
+        database.Context.AddRange(garage, incomeType, new FinancialOperation
+        {
+            OperationKind = FinancialOperationKinds.Income,
+            OperationDate = new DateOnly(2026, 6, 14),
+            AccountingMonth = new DateOnly(2026, 6, 1),
+            Amount = 100m,
+            Garage = garage,
+            IncomeType = incomeType
+        });
+        await database.Context.SaveChangesAsync();
+        var service = FinanceServiceTestFactory.Create(database.Context);
+
+        var result = await service.CreateCashBankTransferAsync(
+            new CreateCashBankTransferRequest(new DateOnly(2026, 6, 15), 100.01m, null),
+            null,
+            CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Equal("cash_amount_insufficient", result.ErrorCode);
+        Assert.Contains("100.00", result.ErrorMessage, StringComparison.Ordinal);
+        Assert.Empty(database.Context.CashBankTransfers);
+        Assert.Empty(database.Context.AuditEvents);
+    }
+
+    [Fact]
     public async Task CreateExpenseAsync_AllowsBankPaymentWhenServiceCollectionsAreInsufficient()
     {
         await using var database = await TestDatabase.CreateAsync();
@@ -2254,6 +2359,7 @@ public sealed class FinanceServiceTests
         await using var database = await TestDatabase.CreateAsync();
         var fixtures = await database.SeedAsync();
         database.Context.FundOperations.RemoveRange(database.Context.FundOperations);
+        database.Context.CashBankTransfers.RemoveRange(database.Context.CashBankTransfers);
         var cashExpenseType = fixtures.ExpenseType;
         database.Context.AddRange(
             new FinancialOperation
@@ -2311,6 +2417,7 @@ public sealed class FinanceServiceTests
         await using var database = await TestDatabase.CreateAsync(interceptor);
         var fixtures = await database.SeedAsync();
         database.Context.FundOperations.RemoveRange(database.Context.FundOperations);
+        database.Context.CashBankTransfers.RemoveRange(database.Context.CashBankTransfers);
         var cashExpenseType = fixtures.ExpenseType;
         database.Context.AddRange(
             new FinancialOperation
@@ -2585,17 +2692,13 @@ public sealed class FinanceServiceTests
         await using var database = await TestDatabase.CreateAsync();
         var fixtures = await database.SeedAsync();
         database.Context.FundOperations.RemoveRange(database.Context.FundOperations);
+        database.Context.CashBankTransfers.RemoveRange(database.Context.CashBankTransfers);
         database.Context.Funds.RemoveRange(database.Context.Funds);
-        var bankFund = new Fund { Name = "Банк для проверки", NormalizedName = "БАНК ДЛЯ ПРОВЕРКИ", Balance = 300m };
-        database.Context.AddRange(bankFund, new FundOperation
+        database.Context.Add(new CashBankTransfer
         {
-            Fund = bankFund,
-            OperationKind = FundOperationKinds.Deposit,
+            TransferDate = new DateOnly(2026, 6, 1),
             Amount = 300m,
-            BalanceBefore = 0m,
-            BalanceAfter = 300m,
-            Reason = "Сумма на банковском счете",
-            IsCashToBankTransfer = true,
+            Comment = "Сумма на банковском счете",
             CreatedAtUtc = new DateTimeOffset(2026, 6, 1, 0, 0, 0, TimeSpan.Zero)
         });
         await database.Context.SaveChangesAsync();
@@ -7342,23 +7445,18 @@ public sealed class FinanceServiceTests
         await using var database = await TestDatabase.CreateAsync();
         var fixtures = await database.SeedAsync();
         database.Context.FundOperations.RemoveRange(database.Context.FundOperations);
+        database.Context.CashBankTransfers.RemoveRange(database.Context.CashBankTransfers);
         database.Context.Funds.RemoveRange(database.Context.Funds);
         var month = new DateOnly(2026, 6, 1);
         var waterIncomeType = new IncomeType { Name = "Вода", Code = "water" };
         var cashExpenseType = fixtures.ExpenseType;
-        var bankFund = new Fund { Name = "Банк", NormalizedName = "БАНК", Balance = 400m };
         database.Context.AddRange(
             waterIncomeType,
-            bankFund,
-            new FundOperation
+            new CashBankTransfer
             {
-                Fund = bankFund,
-                OperationKind = FundOperationKinds.Deposit,
+                TransferDate = new DateOnly(2026, 6, 15),
                 Amount = 400m,
-                BalanceBefore = 0m,
-                BalanceAfter = 400m,
-                Reason = "Сдача кассы в банк",
-                IsCashToBankTransfer = true,
+                Comment = "Сдача кассы в банк",
                 CreatedAtUtc = new DateTimeOffset(2026, 6, 15, 0, 0, 0, TimeSpan.Zero)
             });
         await database.Context.SaveChangesAsync();
@@ -7388,11 +7486,12 @@ public sealed class FinanceServiceTests
     }
 
     [Fact]
-    public async Task CashAndBankInvariant_SurvivesPaymentsCancellationRestorationBankTransferAndFundRedistribution()
+    public async Task CashAndBankInvariant_SurvivesPaymentsCancellationRestorationAndFundRedistribution()
     {
         await using var database = await TestDatabase.CreateAsync();
         var fixtures = await database.SeedAsync();
         database.Context.FundOperations.RemoveRange(database.Context.FundOperations);
+        database.Context.CashBankTransfers.RemoveRange(database.Context.CashBankTransfers);
         database.Context.Funds.RemoveRange(database.Context.Funds);
         var month = new DateOnly(2026, 6, 1);
         var incomeType = new IncomeType { Name = "Инвариант остатков", Code = "balance_invariant" };
@@ -7404,7 +7503,6 @@ public sealed class FinanceServiceTests
         var financeService = FinanceServiceTestFactory.Create(database.Context);
         var fundService = new FundService(
             new EfFundRepository(database.Context),
-            new EfFinanceAvailableBalanceQuery(database.Context),
             new AuditEventWriter(database.Context));
 
         async Task AssertInvariantAsync(decimal expectedCash, decimal expectedBank)
@@ -7430,15 +7528,20 @@ public sealed class FinanceServiceTests
         Assert.True(income.Succeeded);
         await AssertInvariantAsync(1000m, 0m);
 
-        var bankTransfer = await fundService.CreateOperationAsync(
-            bankFund.Id,
-            new CreateFundOperationRequest("deposit", 400m, "Сдача кассы в банк", IsCashToBankTransfer: true),
+        var bankTransfer = await financeService.CreateCashBankTransferAsync(
+            new CreateCashBankTransferRequest(new DateOnly(2026, 6, 15), 400m, "Сдача кассы в банк"),
             null,
             CancellationToken.None);
         Assert.True(bankTransfer.Succeeded);
-        Assert.True(bankTransfer.Value!.IsCashToBankTransfer);
+        Assert.Empty(database.Context.FundOperations);
+        Assert.Equal(0m, (await database.Context.Funds.SingleAsync(fund => fund.Id == bankFund.Id)).Balance);
         await AssertInvariantAsync(600m, 400m);
 
+        var allocation = await fundService.CreateOperationAsync(
+            bankFund.Id,
+            new CreateFundOperationRequest("deposit", 150m, "Первичное распределение"),
+            null,
+            CancellationToken.None);
         var withdrawal = await fundService.CreateOperationAsync(
             bankFund.Id,
             new CreateFundOperationRequest("withdraw", 150m, "Возврат в нераспределенные средства"),
@@ -7449,9 +7552,9 @@ public sealed class FinanceServiceTests
             new CreateFundOperationRequest("deposit", 150m, "Распределение в резерв"),
             null,
             CancellationToken.None);
+        Assert.True(allocation.Succeeded);
         Assert.True(withdrawal.Succeeded);
         Assert.True(redistribution.Succeeded);
-        Assert.False(redistribution.Value!.IsCashToBankTransfer);
         await AssertInvariantAsync(600m, 400m);
 
         var bankExpense = await financeService.CreateExpenseAsync(
@@ -7485,18 +7588,10 @@ public sealed class FinanceServiceTests
         Assert.Equal("cash_amount_insufficient", rejectedIncomeCancellation.ErrorCode);
         await AssertInvariantAsync(400m, 300m);
 
-        Assert.True((await financeService.CancelOperationAsync(cashExpense.Value.Id, new CancelFinanceEntryRequest("Возврат кассовой выплаты"), null, CancellationToken.None)).Succeeded);
-        Assert.True((await financeService.CancelOperationAsync(bankExpense.Value.Id, new CancelFinanceEntryRequest("Возврат банковской выплаты"), null, CancellationToken.None)).Succeeded);
-        Assert.True((await fundService.CancelOperationAsync(redistribution.Value.Id, new CancelFundOperationRequest("Отмена перераспределения"), null, CancellationToken.None)).Succeeded);
+        Assert.True((await financeService.CancelOperationAsync(cashExpense.Value!.Id, new CancelFinanceEntryRequest("Возврат кассовой выплаты"), null, CancellationToken.None)).Succeeded);
+        Assert.True((await financeService.CancelOperationAsync(bankExpense.Value!.Id, new CancelFinanceEntryRequest("Возврат банковской выплаты"), null, CancellationToken.None)).Succeeded);
+        Assert.True((await fundService.CancelOperationAsync(redistribution.Value!.Id, new CancelFundOperationRequest("Отмена перераспределения"), null, CancellationToken.None)).Succeeded);
         Assert.True((await fundService.CancelOperationAsync(withdrawal.Value!.Id, new CancelFundOperationRequest("Отмена изъятия"), null, CancellationToken.None)).Succeeded);
-        Assert.True((await fundService.CancelOperationAsync(bankTransfer.Value.Id, new CancelFundOperationRequest("Отмена сдачи"), null, CancellationToken.None)).Succeeded);
-        await AssertInvariantAsync(1000m, 0m);
-
-        Assert.True((await financeService.CancelOperationAsync(income.Value.Id, new CancelFinanceEntryRequest("Отмена поступления"), null, CancellationToken.None)).Succeeded);
-        await AssertInvariantAsync(0m, 0m);
-        Assert.True((await financeService.RestoreOperationAsync(income.Value.Id, null, CancellationToken.None)).Succeeded);
-        await AssertInvariantAsync(1000m, 0m);
-        Assert.True((await fundService.RestoreOperationAsync(bankTransfer.Value.Id, null, CancellationToken.None)).Succeeded);
         await AssertInvariantAsync(600m, 400m);
     }
 
@@ -7600,6 +7695,7 @@ public sealed class FinanceServiceTests
     private static async Task RemoveSeededBankTransferAsync(GarageBalanceDbContext context)
     {
         context.FundOperations.RemoveRange(context.FundOperations);
+        context.CashBankTransfers.RemoveRange(context.CashBankTransfers);
         await context.SaveChangesAsync();
     }
 
@@ -7627,7 +7723,6 @@ public sealed class FinanceServiceTests
         var service = FinanceServiceTestFactory.Create(database.Context);
         var fundService = new FundService(
             new EfFundRepository(database.Context),
-            new EfFinanceAvailableBalanceQuery(database.Context),
             new AuditEventWriter(database.Context));
         var actorUserId = Guid.NewGuid();
         var request = new CreateIncomeOperationRequest(
@@ -7745,7 +7840,6 @@ public sealed class FinanceServiceTests
         var financeService = FinanceServiceTestFactory.Create(database.Context);
         var fundService = new FundService(
             new EfFundRepository(database.Context),
-            new EfFinanceAvailableBalanceQuery(database.Context),
             new AuditEventWriter(database.Context));
         var created = await financeService.CreateIncomeAsync(
             new CreateIncomeOperationRequest(
@@ -7916,20 +8010,15 @@ public sealed class FinanceServiceTests
                 ChargeServiceSettingId = chargeService.Id,
                 ChargeServiceSetting = chargeService
             };
-            var bankFund = new Fund { Name = "Тестовый банк", NormalizedName = "ТЕСТОВЫЙ БАНК", Balance = SeededBankAmount };
-            var bankDeposit = new FundOperation
+            var bankDeposit = new CashBankTransfer
             {
-                Fund = bankFund,
-                OperationKind = FundOperationKinds.Deposit,
+                TransferDate = new DateOnly(2000, 1, 1),
                 Amount = SeededBankAmount,
-                BalanceBefore = 0m,
-                BalanceAfter = SeededBankAmount,
-                Reason = "Тестовая сумма на банковском счете",
-                IsCashToBankTransfer = true,
+                Comment = "Тестовая сумма на банковском счете",
                 CreatedAtUtc = new DateTimeOffset(2000, 1, 1, 0, 0, 0, TimeSpan.Zero)
             };
 
-            Context.AddRange(owner, garage, group, supplier, incomeType, expenseType, chargeService, bankFund, bankDeposit);
+            Context.AddRange(owner, garage, group, supplier, incomeType, expenseType, chargeService, bankDeposit);
             await Context.SaveChangesAsync();
             return new Fixtures(garage, supplier, incomeType, expenseType);
         }

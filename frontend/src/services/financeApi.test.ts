@@ -156,6 +156,32 @@ describe('financeApi', () => {
     })
   })
 
+  it('posts a cash-to-bank transfer without a fund', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      id: 'transfer-1',
+      transferDate: '2026-06-30',
+      amount: 12300,
+      comment: 'Инкассация',
+    }), { status: 201, headers: { 'Content-Type': 'application/json' } }))
+    vi.stubGlobal('fetch', fetchMock)
+    const request = {
+      transferDate: '2026-06-30',
+      amount: 12300,
+      comment: 'Инкассация',
+    }
+
+    await financeApi.createCashBankTransfer('token', request)
+
+    expect(fetchMock).toHaveBeenCalledWith('/api/finance/cash-bank-transfers', {
+      method: 'POST',
+      body: JSON.stringify(request),
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: 'Bearer token',
+      },
+    })
+  })
+
   it('previews the early electricity payment warning with an optional edited operation', async () => {
     const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({
       isElectricityPayment: true,

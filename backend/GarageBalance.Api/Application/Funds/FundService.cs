@@ -1,34 +1,13 @@
 using GarageBalance.Api.Application.Audit;
 using GarageBalance.Api.Application.Common;
-using GarageBalance.Api.Application.Finance;
 using GarageBalance.Api.Domain.Finance;
 
 namespace GarageBalance.Api.Application.Funds;
 
 public sealed class FundService(
     IFundRepository repository,
-    IFinanceAvailableBalanceQuery financeAvailableBalanceQuery,
     IAuditEventWriter auditEventWriter) : IFundService
 {
-    private static readonly string[] CashExpenseTypeCodes =
-    [
-        "advance",
-        "advance_payment",
-        "advance_payments",
-        "cash_advance",
-        "no_receipt",
-        "without_receipt",
-        "no_check",
-        "without_check",
-        "cash_no_receipt"
-    ];
-
-    private static readonly string[] CashExpenseTypeNames =
-    [
-        "Авансовые выплаты",
-        "Выплата без чека"
-    ];
-
     private static readonly IReadOnlyList<DefaultFundDefinition> DefaultFunds =
     [
         new("Электроэнергия", 10, true),
@@ -91,16 +70,6 @@ public sealed class FundService(
         }
 
         operationKind = FundOperationKinds.Normalize(operationKind);
-        if (request.IsCashToBankTransfer && operationKind != FundOperationKinds.Deposit)
-        {
-            return FundResult<FundOperationDto>.Failure(
-                "cash_to_bank_operation_kind_invalid",
-                "Сдача кассы в банк должна быть пополнением фонда.");
-        }
-
-        await using var cashBalanceLock = request.IsCashToBankTransfer
-            ? await financeAvailableBalanceQuery.AcquireUpdateLockAsync(cashExpense: true, cancellationToken)
-            : null;
         var reason = request.Reason.Trim();
         if (string.IsNullOrWhiteSpace(reason))
         {
@@ -122,16 +91,6 @@ public sealed class FundService(
                     $"Сумма пополнения не может превышать доступную к распределению сумму {MoneyFormatting.Format(availableToDistribute)} руб.");
             }
 
-            if (request.IsCashToBankTransfer)
-            {
-                var availableCash = await CalculateAvailableCashAsync(cancellationToken);
-                if (amount > availableCash)
-                {
-                    return FundResult<FundOperationDto>.Failure(
-                        "cash_amount_insufficient",
-                        $"Сумма сдачи превышает доступный остаток в кассе {MoneyFormatting.Format(availableCash)} руб.");
-                }
-            }
         }
 
         if (balanceAfter < 0)
@@ -147,7 +106,6 @@ public sealed class FundService(
             BalanceBefore = balanceBefore,
             BalanceAfter = balanceAfter,
             Reason = reason,
-            IsCashToBankTransfer = request.IsCashToBankTransfer,
             ActorUserId = actorUserId
         };
 
@@ -194,10 +152,6 @@ public sealed class FundService(
                 "Автоматическая операция фонда управляется связанным поступлением.");
         }
 
-        await using var cashBalanceLock = operation.IsCashToBankTransfer
-            ? await financeAvailableBalanceQuery.AcquireUpdateLockAsync(cashExpense: true, cancellationToken)
-            : null;
-
         var oldValues = ToOperationAuditValues(operation);
         var oldAmount = operation.Amount;
         var oldReason = operation.Reason;
@@ -220,16 +174,6 @@ public sealed class FundService(
                     $"Изменение операции не может увеличить распределенную сумму больше доступной к распределению суммы {MoneyFormatting.Format(availableToDistribute)} руб.");
             }
 
-            if (operation.IsCashToBankTransfer)
-            {
-                var availableCash = await CalculateAvailableCashAsync(cancellationToken);
-                if (additionalAllocatedAmount > availableCash)
-                {
-                    return FundResult<FundOperationDto>.Failure(
-                        "cash_amount_insufficient",
-                        $"Сумма увеличения сдачи превышает доступный остаток в кассе {MoneyFormatting.Format(availableCash)} руб.");
-                }
-            }
         }
 
         if (!await CanUpdateWithoutNegativeBalanceAsync(operation, amount, cancellationToken))
@@ -319,10 +263,6 @@ public sealed class FundService(
                 "Автоматическая операция фонда управляется связанным поступлением.");
         }
 
-        await using var cashBalanceLock = operation.IsCashToBankTransfer
-            ? await financeAvailableBalanceQuery.AcquireUpdateLockAsync(cashExpense: true, cancellationToken)
-            : null;
-
         if (operation.OperationKind == FundOperationKinds.Deposit)
         {
             var availableToDistribute = await CalculateAvailableToDistributeAsync(cancellationToken);
@@ -333,16 +273,6 @@ public sealed class FundService(
                     $"Сумма восстановления не может превышать доступную к распределению сумму {MoneyFormatting.Format(availableToDistribute)} руб.");
             }
 
-            if (operation.IsCashToBankTransfer)
-            {
-                var availableCash = await CalculateAvailableCashAsync(cancellationToken);
-                if (operation.Amount > availableCash)
-                {
-                    return FundResult<FundOperationDto>.Failure(
-                        "cash_amount_insufficient",
-                        $"Сумма восстановления сдачи превышает доступный остаток в кассе {MoneyFormatting.Format(availableCash)} руб.");
-                }
-            }
         }
 
         if (!await CanRestoreWithoutNegativeBalanceAsync(operation, cancellationToken))
@@ -395,17 +325,6 @@ public sealed class FundService(
         var totals = await repository.GetTotalsAsync(cancellationToken);
 
         return MoneyMath.RoundMoney(Math.Max(totals.IncomeTotal - totals.ExpenseTotal - totals.AllocatedFundTotal, 0m));
-    }
-
-    private async Task<decimal> CalculateAvailableCashAsync(CancellationToken cancellationToken)
-    {
-        var balance = await financeAvailableBalanceQuery.GetAsync(
-            CashExpenseTypeCodes,
-            CashExpenseTypeNames,
-            cancellationToken);
-        return MoneyMath.RoundMoney(Math.Max(
-            balance.IncomeTotal - balance.BankDepositTotal - balance.CashExpenseTotal,
-            0m));
     }
 
     private async Task RecalculateFundBalancesAsync(Fund fund, CancellationToken cancellationToken)
@@ -542,8 +461,7 @@ public sealed class FundService(
                 ["fundId"] = fund.Id,
                 ["fundName"] = fund.Name,
                 ["operationKind"] = operation.OperationKind,
-                ["amount"] = operation.Amount,
-                ["isCashToBankTransfer"] = operation.IsCashToBankTransfer
+                ["amount"] = operation.Amount
             }));
     }
 
@@ -591,8 +509,7 @@ public sealed class FundService(
                 ["fundId"] = fund.Id,
                 ["fundName"] = fund.Name,
                 ["operationKind"] = operation.OperationKind,
-                ["amount"] = operation.Amount,
-                ["isCashToBankTransfer"] = operation.IsCashToBankTransfer
+                ["amount"] = operation.Amount
             }));
     }
 
@@ -614,8 +531,7 @@ public sealed class FundService(
                 ["fundName"] = fund.Name,
                 ["operationKind"] = operation.OperationKind,
                 ["amount"] = operation.Amount,
-                ["isCanceled"] = operation.IsCanceled,
-                ["isCashToBankTransfer"] = operation.IsCashToBankTransfer
+                ["isCanceled"] = operation.IsCanceled
             }));
     }
 
@@ -637,7 +553,6 @@ public sealed class FundService(
             operation.Reason,
             operation.CreatedAtUtc,
             operation.IsCanceled,
-            operation.IsCashToBankTransfer,
             operation.SourceFinancialOperationId.HasValue);
     }
 
@@ -648,8 +563,7 @@ public sealed class FundService(
             ["amount"] = operation.Amount,
             ["reason"] = operation.Reason,
             ["balanceBefore"] = operation.BalanceBefore,
-            ["balanceAfter"] = operation.BalanceAfter,
-            ["isCashToBankTransfer"] = operation.IsCashToBankTransfer
+            ["balanceAfter"] = operation.BalanceAfter
         };
     }
 
@@ -687,7 +601,6 @@ public sealed class FundService(
         ["amount"] = "Сумма",
         ["reason"] = "Основание",
         ["balanceBefore"] = "Собранная сумма до",
-        ["balanceAfter"] = "Собранная сумма после",
-        ["isCashToBankTransfer"] = "Сдача кассы в банк"
+        ["balanceAfter"] = "Собранная сумма после"
     };
 }

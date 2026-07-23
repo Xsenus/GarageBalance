@@ -33,8 +33,8 @@ import type { AuthClient, AuthResponse } from './services/authApi'
 import { DictionaryApiError } from './services/dictionariesApi'
 import type { AccountingTypeDto, ChargeServiceSettingDto, CreateChargeServiceWithTariffRequest, DictionaryClient, FeeCampaignDto, GarageDto, IrregularPaymentDto, OwnerDto, PagedResult, StaffDepartmentDto, StaffMemberDto, SupplierContactDto, SupplierDto, SupplierGroupDto, TariffDto, UpsertGarageRequest, UpsertIrregularPaymentRequest, UpsertStaffMemberRequest, UpsertSupplierRequest, UpsertTariffRequest } from './services/dictionariesApi'
 import { FinanceApiError } from './services/financeApi'
-import type { AccrualDto, CorrectHistoricalMeterReadingRequest, CreateAccrualRequest, CreateExpenseOperationRequest, CreateIncomeOperationRequest, CreateIrregularAccrualRequest, CreateMeterReadingRequest, CreateStaffPaymentRequest, CreateStaffSalaryAdjustmentRequest, CreateSupplierAccrualRequest, ExpenseWorksheetDto, FeeCampaignAccrualGenerationResultDto, FinanceClient, FinancePagedResult, FinancePageParams, FinanceSummaryDto, FinancialOperationDto, GarageBalanceHistoryDto, GarageIncomeWorksheetDto, GenerateFeeCampaignAccrualsRequest, GenerateSupplierGroupSalaryAccrualsRequest, MeterReadingDto, MeterReadingYearPageDto, MissingMeterReadingDto, RegularAccrualGenerationResultDto, RegularCatalogAccrualGenerationResultDto, SupplierAccrualDto, SupplierGroupSalaryAccrualGenerationResultDto } from './services/financeApi'
-import type { CreateFundOperationRequest, FundDto, FundOperationDto, FundOperationPageDto, FundsClient } from './services/fundsApi'
+import type { AccrualDto, CorrectHistoricalMeterReadingRequest, CreateAccrualRequest, CreateCashBankTransferRequest, CreateExpenseOperationRequest, CreateIncomeOperationRequest, CreateIrregularAccrualRequest, CreateMeterReadingRequest, CreateStaffPaymentRequest, CreateStaffSalaryAdjustmentRequest, CreateSupplierAccrualRequest, ExpenseWorksheetDto, FeeCampaignAccrualGenerationResultDto, FinanceClient, FinancePagedResult, FinancePageParams, FinanceSummaryDto, FinancialOperationDto, GarageBalanceHistoryDto, GarageIncomeWorksheetDto, GenerateFeeCampaignAccrualsRequest, GenerateSupplierGroupSalaryAccrualsRequest, MeterReadingDto, MeterReadingYearPageDto, MissingMeterReadingDto, RegularAccrualGenerationResultDto, RegularCatalogAccrualGenerationResultDto, SupplierAccrualDto, SupplierGroupSalaryAccrualGenerationResultDto } from './services/financeApi'
+import type { FundDto, FundOperationDto, FundOperationPageDto, FundsClient } from './services/fundsApi'
 import type { AccessImportCreatedRecordDto, AccessImportQuarantineItemDto, AccessImportReaderStatusDto, AccessImportRunDto, AccessImportRunLogEntryDto, ImportClient } from './services/importApi'
 import type { IntegrationClient, IntegrationSecretSettingDto, OneCFreshIntegrationStatusDto, OneCFreshSyncDto, OneCFreshSyncPreviewDto, OneCFreshSyncRequest, ReceiptPrintingActionDto, ReceiptPrintingActionRequest, ReceiptPrintingIntegrationStatusDto } from './services/integrationsApi'
 import type { BankDepositReportDto, CashPaymentReportDto, ConsolidatedReportDto, ExpenseReportDto, FeeReportDto, FundChangeReportDto, GarageDetailReportDto, IncomeReportDto, ReportClient } from './services/reportsApi'
@@ -4542,7 +4542,7 @@ describe('App', () => {
     let staffSalaryAdjustmentAttemptCount = 0
     const savedSupplierAccrualRequests: CreateSupplierAccrualRequest[] = []
     const savedSalaryAccrualRequests: GenerateSupplierGroupSalaryAccrualsRequest[] = []
-    const savedFundOperationRequests: Array<{ fundId: string; request: CreateFundOperationRequest }> = []
+    const savedCashBankTransferRequests: CreateCashBankTransferRequest[] = []
     const searchGaragesPage = vi.fn(async () => ({ items: [garage, secondGarage], totalCount: 2, offset: 0, limit: 20 }))
     const getIncomePaymentWarning = vi.fn(async () => ({
       isElectricityPayment: true,
@@ -4665,6 +4665,15 @@ describe('App', () => {
           amount: request.amount,
           documentNumber: request.documentNumber ?? null,
           reason: request.reason,
+        }
+      },
+      createCashBankTransfer: async (_token, request) => {
+        savedCashBankTransferRequests.push(request)
+        return {
+          id: `cash-bank-transfer-${savedCashBankTransferRequests.length}`,
+          transferDate: request.transferDate,
+          amount: request.amount,
+          comment: request.comment ?? null,
         }
       },
       createSupplierAccrual: async (_token, request) => {
@@ -4919,19 +4928,7 @@ describe('App', () => {
         })
       },
     })
-    const fundsClient = createFundsClient({
-      createOperation: async (_token, fundId, request) => {
-        savedFundOperationRequests.push({ fundId, request })
-        return createFundOperation({
-          fundId,
-          fundName: 'Электроэнергия',
-          operationKind: request.operationKind,
-          amount: request.amount,
-          reason: request.reason,
-        })
-      },
-    })
-    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={financeClient} fundsClient={fundsClient} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={financeClient} fundsClient={createFundsClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
     await user.click(screen.getByRole('button', { name: 'Войти' }))
@@ -5413,16 +5410,13 @@ describe('App', () => {
     await waitFor(() => expect(within(bankDialog).getByRole('button', { name: 'Отмена' })).toHaveFocus())
     await user.keyboard('{Escape}')
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Учет суммы на счете в банке' })).not.toBeInTheDocument())
-    expect(savedFundOperationRequests).toHaveLength(0)
+    expect(savedCashBankTransferRequests).toHaveLength(0)
     await waitFor(() => expect(bankButton).toHaveFocus())
 
     await user.click(bankButton)
     bankDialog = await screen.findByRole('dialog', { name: 'Учет суммы на счете в банке' })
     expect(bankDialog).toHaveClass('bank-deposit-dialog')
-    const bankFundCombobox = await within(bankDialog).findByRole('combobox', { name: 'Фонд для сдачи кассы' })
-    await waitFor(() => expect(bankFundCombobox).toHaveTextContent('Электроэнергия'))
-    expect(bankFundCombobox).toHaveClass('select-control__trigger')
-    expect(bankFundCombobox.closest('.bank-deposit-form__fund')).not.toBeNull()
+    expect(within(bankDialog).queryByRole('combobox')).not.toBeInTheDocument()
     const bankDateInput = within(bankDialog).getByLabelText('Дата учета суммы в банке')
     expect(bankDateInput).toHaveValue('30.06.2026')
     expect(bankDateInput.closest('.localized-date-picker')).not.toBeNull()
@@ -5433,15 +5427,11 @@ describe('App', () => {
     await user.type(within(bankDialog).getByLabelText('Комментарий к сумме в банке'), 'Инкассация из формы')
     expect(within(bankDialog).getByLabelText('Комментарий к сумме в банке').closest('.bank-deposit-form__comment')).not.toBeNull()
     await user.click(within(bankDialog).getByRole('button', { name: 'Сохранить' }))
-    await waitFor(() => expect(savedFundOperationRequests).toHaveLength(1))
-    expect(savedFundOperationRequests[0]).toMatchObject({
-      fundId: 'fund-electricity',
-      request: {
-        operationKind: 'deposit',
-        amount: 12300,
-        reason: 'Сдача кассы в банк 2026-06-30: Инкассация из формы',
-        isCashToBankTransfer: true,
-      },
+    await waitFor(() => expect(savedCashBankTransferRequests).toHaveLength(1))
+    expect(savedCashBankTransferRequests[0]).toMatchObject({
+      transferDate: '2026-06-30',
+      amount: 12300,
+      comment: 'Инкассация из формы',
     })
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Учет суммы на счете в банке' })).not.toBeInTheDocument())
     expect(bankButton).toHaveFocus()
@@ -16916,6 +16906,12 @@ function createFinanceClient(overrides: Partial<FinanceClient> = {}): FinanceCli
       amount: request.amount,
       documentNumber: request.documentNumber ?? null,
       reason: request.reason,
+    }),
+    createCashBankTransfer: async (_token, request) => ({
+      id: 'cash-bank-transfer-1',
+      transferDate: request.transferDate,
+      amount: request.amount,
+      comment: request.comment ?? null,
     }),
     updateExpense: async (_token, operationId) => createFinancialOperation({ id: operationId, operationKind: 'expense', amount: 500, supplierName: 'Водоканал', expenseTypeName: 'Вода' }),
     cancelOperation: async (_token, operationId, request) => {

@@ -511,6 +511,20 @@ export type StaffSalaryAdjustmentDto = {
   reason: string
 }
 
+export type CreateCashBankTransferRequest = {
+  transferDate: string
+  amount: number
+  comment?: string
+}
+
+export type CashBankTransferDto = {
+  id: string
+  transferDate: string
+  amount: number
+  comment: string | null
+  createdAtUtc: string
+}
+
 export type SavePaymentFormMeterReadingRequest = CreateMeterReadingRequest & {
   meterReadingId?: string
 }
@@ -549,6 +563,7 @@ export type FinanceClient = {
   createExpense(accessToken: string, request: CreateExpenseOperationRequest): Promise<FinancialOperationDto>
   createStaffPayment(accessToken: string, request: CreateStaffPaymentRequest): Promise<FinancialOperationDto>
   createStaffSalaryAdjustment(accessToken: string, request: CreateStaffSalaryAdjustmentRequest): Promise<StaffSalaryAdjustmentDto>
+  createCashBankTransfer(accessToken: string, request: CreateCashBankTransferRequest): Promise<CashBankTransferDto>
   updateExpense(accessToken: string, operationId: string, request: CreateExpenseOperationRequest): Promise<FinancialOperationDto>
   cancelOperation(accessToken: string, operationId: string, request: CancelFinanceEntryRequest): Promise<FinancialOperationDto>
   restoreOperation(accessToken: string, operationId: string): Promise<FinancialOperationDto>
@@ -759,6 +774,9 @@ export const financeApi: FinanceClient = {
   },
   createStaffSalaryAdjustment(accessToken, request) {
     return requestJson(accessToken, '/api/finance/staff-salary-adjustments', { method: 'POST', body: JSON.stringify(request) })
+  },
+  createCashBankTransfer(accessToken, request) {
+    return requestJson(accessToken, '/api/finance/cash-bank-transfers', { method: 'POST', body: JSON.stringify(request) })
   },
   updateExpense(accessToken, operationId, request) {
     return requestJson(accessToken, `/api/finance/operations/${operationId}/expense`, { method: 'PUT', body: JSON.stringify(request) })

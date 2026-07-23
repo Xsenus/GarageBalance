@@ -856,10 +856,9 @@ public sealed class ReportService(
         var rows = data.Operations
             .Select(operation => new BankDepositReportRowDto(
                 operation.Id,
-                DateOnly.FromDateTime(operation.CreatedAtUtc.UtcDateTime),
+                operation.TransferDate,
                 operation.Amount,
-                operation.FundName,
-                operation.Reason))
+                operation.Comment))
             .ToList();
         var report = new BankDepositReportDto(dateFrom, dateTo, data.Total, data.RowCount, offset, limit ?? data.RowCount, rows);
 
@@ -902,12 +901,11 @@ public sealed class ReportService(
             [
                 new XlsxSheet(
                     "Сдача кассы в банк",
-                    ["Дата", "Сумма", "Фонд", "Комментарий"],
+                    ["Дата", "Сумма", "Комментарий"],
                     report.Rows.Select(row => (IReadOnlyList<XlsxCell>)
                     [
                         XlsxCell.Text(row.Date.ToString("yyyy-MM-dd")),
                         XlsxCell.Number(row.Amount),
-                        XlsxCell.Text(row.FundName),
                         XlsxCell.Text(row.Comment)
                     ]).ToArray()),
                 new XlsxSheet(
@@ -952,7 +950,6 @@ public sealed class ReportService(
             string.Join(" | ",
                 row.Date.ToString("yyyy-MM-dd"),
                 FormatAmount(row.Amount),
-                row.FundName ?? string.Empty,
                 row.Comment ?? string.Empty)));
 
         var content = PdfReportDocumentBuilder.Build("GarageBalance bank deposits report", lines);

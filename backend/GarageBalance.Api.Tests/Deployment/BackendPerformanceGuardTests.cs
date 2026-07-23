@@ -67,7 +67,7 @@ public sealed class BackendPerformanceGuardTests
         Assert.Contains("operation.OperationKind == FinancialOperationKinds.Income", source, StringComparison.Ordinal);
         Assert.Contains("CashExpenseTotal = group.Sum", source, StringComparison.Ordinal);
         Assert.Contains("BankExpenseTotal = group.Sum", source, StringComparison.Ordinal);
-        Assert.Contains("operation.OperationKind == FundOperationKinds.Deposit", source, StringComparison.Ordinal);
+        Assert.Contains("dbContext.CashBankTransfers", source, StringComparison.Ordinal);
         Assert.Equal(1, CountOccurrences(source, ".Concat("));
         Assert.True(CountOccurrences(source, ".ToListAsync(cancellationToken)") >= 1);
         Assert.Contains("var availableAmounts = CalculateAvailableAmounts(worksheetData.AvailableBalance);", serviceSource, StringComparison.Ordinal);
@@ -715,13 +715,12 @@ public sealed class BackendPerformanceGuardTests
 
         Assert.Equal(1, CountOccurrences(method, "SqlQueryRaw<BankDepositCombinedQueryRow>"));
         Assert.Equal(1, CountOccurrences(method, ".ToListAsync(cancellationToken)"));
-        Assert.Equal(1, CountOccurrences(method, "FROM fund_operations"));
+        Assert.Equal(1, CountOccurrences(method, "FROM cash_bank_transfers"));
         Assert.Contains("FROM page_rows", method, StringComparison.Ordinal);
         Assert.Contains("COUNT(*)::int", method, StringComparison.Ordinal);
         Assert.Contains("OFFSET @offset", method, StringComparison.Ordinal);
         Assert.Contains("LIMIT @limit", method, StringComparison.Ordinal);
-        Assert.Contains("LOWER(fund.\"Name\")", method, StringComparison.Ordinal);
-        Assert.Contains("LOWER(operation.\"Reason\")", method, StringComparison.Ordinal);
+        Assert.Contains("LOWER(COALESCE(transfer.\"Comment\", ''))", method, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -1029,14 +1028,13 @@ public sealed class BackendPerformanceGuardTests
     }
 
     [Fact]
-    public void FundDepositTotal_IsFilteredAndAggregatedByAvailableBalanceQuery()
+    public void BankDepositTotal_IsFilteredAndAggregatedByAvailableBalanceQuery()
     {
         var source = ReadApiSource("Infrastructure/Data/EfFinanceAvailableBalanceQuery.cs");
 
-        Assert.Contains("!operation.IsCanceled", source, StringComparison.Ordinal);
-        Assert.Contains("operation.OperationKind == FundOperationKinds.Deposit", source, StringComparison.Ordinal);
-        Assert.Contains("operation.IsCashToBankTransfer", source, StringComparison.Ordinal);
-        Assert.Contains("BankDepositTotal = group.Sum(operation => operation.Amount)", source, StringComparison.Ordinal);
+        Assert.Contains("dbContext.CashBankTransfers", source, StringComparison.Ordinal);
+        Assert.Contains("!transfer.IsCanceled", source, StringComparison.Ordinal);
+        Assert.Contains("BankDepositTotal = group.Sum(transfer => transfer.Amount)", source, StringComparison.Ordinal);
         Assert.Equal(1, CountOccurrences(source, ".ToListAsync(cancellationToken)"));
     }
 

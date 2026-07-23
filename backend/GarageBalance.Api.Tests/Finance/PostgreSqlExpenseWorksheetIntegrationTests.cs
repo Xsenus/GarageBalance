@@ -93,6 +93,7 @@ public sealed class PostgreSqlExpenseWorksheetIntegrationTests
             await ClearIncomeDestinationLinksAsync(seedContext);
             seedContext.FinancialOperations.RemoveRange(seedContext.FinancialOperations);
             seedContext.FundOperations.RemoveRange(seedContext.FundOperations);
+            seedContext.CashBankTransfers.RemoveRange(seedContext.CashBankTransfers);
             seedContext.Funds.RemoveRange(seedContext.Funds);
             var owner = new Owner { LastName = "Проверка", FirstName = "Банка" };
             var garage = new Garage { Number = "PG-BANK-RULE", PeopleCount = 1, FloorCount = 1, Owner = owner };
@@ -106,7 +107,6 @@ public sealed class PostgreSqlExpenseWorksheetIntegrationTests
                 Group = supplierGroup,
                 ChargeServiceSetting = chargeService
             };
-            var bankFund = new Fund { Name = "Банк правила PG", NormalizedName = "БАНК ПРАВИЛА PG", Balance = 300m };
             supplierId = supplier.Id;
             expenseTypeId = expenseType.Id;
             seedContext.AddRange(
@@ -117,16 +117,11 @@ public sealed class PostgreSqlExpenseWorksheetIntegrationTests
                 supplier,
                 expenseType,
                 chargeService,
-                bankFund,
-                new FundOperation
+                new CashBankTransfer
                 {
-                    Fund = bankFund,
-                    OperationKind = FundOperationKinds.Deposit,
+                    TransferDate = new DateOnly(2026, 6, 1),
                     Amount = 300m,
-                    BalanceBefore = 0m,
-                    BalanceAfter = 300m,
-                    Reason = "Остаток банка для проверки",
-                    IsCashToBankTransfer = true,
+                    Comment = "Остаток банка для проверки",
                     CreatedAtUtc = new DateTimeOffset(2026, 6, 1, 0, 0, 0, TimeSpan.Zero)
                 },
                 new FinancialOperation
@@ -193,6 +188,7 @@ public sealed class PostgreSqlExpenseWorksheetIntegrationTests
         await ClearIncomeDestinationLinksAsync(context);
         context.FinancialOperations.RemoveRange(context.FinancialOperations);
         context.FundOperations.RemoveRange(context.FundOperations);
+        context.CashBankTransfers.RemoveRange(context.CashBankTransfers);
         context.Funds.RemoveRange(context.Funds);
         var month = new DateOnly(2026, 6, 1);
         var garage = new Garage { Number = "PG-INVARIANT", PeopleCount = 1, FloorCount = 1 };
@@ -204,7 +200,6 @@ public sealed class PostgreSqlExpenseWorksheetIntegrationTests
         var financeService = FinanceServiceTestFactory.Create(context);
         var fundService = new FundService(
             new EfFundRepository(context),
-            new EfFinanceAvailableBalanceQuery(context),
             new AuditEventWriter(context));
 
         async Task AssertInvariantAsync(decimal expectedCash, decimal expectedBank)
@@ -227,15 +222,20 @@ public sealed class PostgreSqlExpenseWorksheetIntegrationTests
             new CreateIncomeOperationRequest(garage.Id, incomeType.Id, new DateOnly(2026, 6, 10), month, 1000m, "PG-INV-INCOME", null),
             null,
             CancellationToken.None);
-        var transfer = await fundService.CreateOperationAsync(
-            bankFund.Id,
-            new CreateFundOperationRequest("deposit", 400m, "Сдача кассы в банк PG", IsCashToBankTransfer: true),
+        var transfer = await financeService.CreateCashBankTransferAsync(
+            new CreateCashBankTransferRequest(new DateOnly(2026, 6, 15), 400m, "Сдача кассы в банк PG"),
             null,
             CancellationToken.None);
         Assert.True(income.Succeeded);
         Assert.True(transfer.Succeeded);
         await AssertInvariantAsync(600m, 400m);
+        Assert.Empty(await context.FundOperations.ToListAsync());
 
+        var allocation = await fundService.CreateOperationAsync(
+            bankFund.Id,
+            new CreateFundOperationRequest("deposit", 200m, "Первичное распределение PG"),
+            null,
+            CancellationToken.None);
         var withdrawal = await fundService.CreateOperationAsync(
             bankFund.Id,
             new CreateFundOperationRequest("withdraw", 200m, "Возврат для перераспределения PG"),
@@ -246,16 +246,16 @@ public sealed class PostgreSqlExpenseWorksheetIntegrationTests
             new CreateFundOperationRequest("deposit", 200m, "Перераспределение PG"),
             null,
             CancellationToken.None);
+        Assert.True(allocation.Succeeded);
         Assert.True(withdrawal.Succeeded);
         Assert.True(redistribution.Succeeded);
         await AssertInvariantAsync(600m, 400m);
 
         Assert.True((await fundService.CancelOperationAsync(redistribution.Value!.Id, new CancelFundOperationRequest("Отмена перераспределения PG"), null, CancellationToken.None)).Succeeded);
         Assert.True((await fundService.CancelOperationAsync(withdrawal.Value!.Id, new CancelFundOperationRequest("Отмена изъятия PG"), null, CancellationToken.None)).Succeeded);
-        Assert.True((await fundService.CancelOperationAsync(transfer.Value!.Id, new CancelFundOperationRequest("Отмена сдачи PG"), null, CancellationToken.None)).Succeeded);
-        await AssertInvariantAsync(1000m, 0m);
-        Assert.True((await fundService.RestoreOperationAsync(transfer.Value.Id, null, CancellationToken.None)).Succeeded);
         await AssertInvariantAsync(600m, 400m);
+        Assert.Equal(200m, (await context.Funds.SingleAsync(fund => fund.Id == bankFund.Id)).Balance);
+        Assert.Equal(0m, (await context.Funds.SingleAsync(fund => fund.Id == reserveFund.Id)).Balance);
     }
 
     [PostgreSqlFact]
@@ -269,6 +269,7 @@ public sealed class PostgreSqlExpenseWorksheetIntegrationTests
             await ClearIncomeDestinationLinksAsync(seedContext);
             seedContext.FinancialOperations.RemoveRange(seedContext.FinancialOperations);
             seedContext.FundOperations.RemoveRange(seedContext.FundOperations);
+            seedContext.CashBankTransfers.RemoveRange(seedContext.CashBankTransfers);
             seedContext.Funds.RemoveRange(seedContext.Funds);
             var owner = new Owner { LastName = "Проверка", FirstName = "Атомарности" };
             var garage = new Garage { Number = "PG-ATOMIC", PeopleCount = 1, FloorCount = 1, Owner = owner };
@@ -538,6 +539,7 @@ public sealed class PostgreSqlExpenseWorksheetIntegrationTests
             await ClearIncomeDestinationLinksAsync(seedContext);
             seedContext.FinancialOperations.RemoveRange(seedContext.FinancialOperations);
             seedContext.FundOperations.RemoveRange(seedContext.FundOperations);
+            seedContext.CashBankTransfers.RemoveRange(seedContext.CashBankTransfers);
             seedContext.Funds.RemoveRange(seedContext.Funds);
             var supplierGroup = new SupplierGroup { Name = "Трёхмесячный сценарий поставщика PG" };
             var serviceType = new ExpenseType { Name = "Основная услуга сценария PG", Code = "pg_supplier_three_month_service" };
@@ -546,13 +548,6 @@ public sealed class PostgreSqlExpenseWorksheetIntegrationTests
             var repairService = new ChargeServiceSetting { Name = "Ремонт сценария PG", ExpenseType = repairType };
             var supplier = new Supplier { Name = "Поставщик трёхмесячного сценария PG", Group = supplierGroup, ChargeServiceSetting = supplierService };
             var repairSupplier = new Supplier { Name = "Ремонтная организация сценария PG", Group = supplierGroup, ChargeServiceSetting = repairService };
-            var bankFund = new Fund
-            {
-                Name = "Банк трёхмесячного сценария PG",
-                NormalizedName = "БАНК ТРЁХМЕСЯЧНОГО СЦЕНАРИЯ PG",
-                Balance = 1000m,
-                AllowOperations = true
-            };
             supplierId = supplier.Id;
             repairSupplierId = repairSupplier.Id;
             serviceTypeId = serviceType.Id;
@@ -565,16 +560,11 @@ public sealed class PostgreSqlExpenseWorksheetIntegrationTests
                 repairType,
                 supplierService,
                 repairService,
-                bankFund,
-                new FundOperation
+                new CashBankTransfer
                 {
-                    Fund = bankFund,
-                    OperationKind = FundOperationKinds.Deposit,
+                    TransferDate = new DateOnly(2026, 1, 1),
                     Amount = 1000m,
-                    BalanceBefore = 0m,
-                    BalanceAfter = 1000m,
-                    Reason = "Банковский остаток для трёхмесячного сценария PG",
-                    IsCashToBankTransfer = true,
+                    Comment = "Банковский остаток для трёхмесячного сценария PG",
                     CreatedAtUtc = new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero)
                 });
             await seedContext.SaveChangesAsync();

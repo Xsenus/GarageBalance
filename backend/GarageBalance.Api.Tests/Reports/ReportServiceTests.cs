@@ -114,18 +114,14 @@ public sealed class ReportServiceTests
                 BalanceAfter = 450m,
                 Reason = "PARITY-FUND-WITHDRAWAL",
                 CreatedAtUtc = new DateTimeOffset(2026, 6, 16, 9, 0, 0, TimeSpan.Zero)
-            },
-            new FundOperation
-            {
-                Fund = fund,
-                OperationKind = FundOperationKinds.Deposit,
-                Amount = 700m,
-                BalanceBefore = 450m,
-                BalanceAfter = 1150m,
-                Reason = "PARITY-BANK-DEPOSIT",
-                IsCashToBankTransfer = true,
-                CreatedAtUtc = new DateTimeOffset(2026, 6, 17, 9, 0, 0, TimeSpan.Zero)
             });
+        database.Context.CashBankTransfers.Add(new CashBankTransfer
+        {
+            TransferDate = new DateOnly(2026, 6, 17),
+            Amount = 700m,
+            Comment = "PARITY-BANK-DEPOSIT",
+            CreatedAtUtc = new DateTimeOffset(2026, 6, 17, 9, 0, 0, TimeSpan.Zero)
+        });
         await database.Context.SaveChangesAsync();
 
         var consolidatedRequest = new ConsolidatedReportRequest(month, month, null);
@@ -186,7 +182,7 @@ public sealed class ReportServiceTests
         var fundRequest = new FundChangeReportRequest(dateFrom, dateTo, null);
         var fundChanges = await service.GetFundChangeReportAsync(fundRequest, CancellationToken.None);
         Assert.True(fundChanges.Succeeded);
-        Assert.Equal((1300m, 150m), (fundChanges.Value!.DepositTotal, fundChanges.Value.WithdrawalTotal));
+        Assert.Equal((600m, 150m), (fundChanges.Value!.DepositTotal, fundChanges.Value.WithdrawalTotal));
         Assert.Contains(fundChanges.Value.Rows, row => row.Reason == "PARITY-FUND-DEPOSIT");
         await AssertReportFormatParityAsync(
             service.ExportFundChangeReportXlsxAsync(fundRequest, CancellationToken.None),
@@ -1722,32 +1718,25 @@ public sealed class ReportServiceTests
         var actorUserId = Guid.NewGuid();
         var fund = new Fund { Name = "Прочее", NormalizedName = "ПРОЧЕЕ", SortOrder = 10 };
         database.Context.Funds.Add(fund);
-        database.Context.FundOperations.AddRange(
-            new FundOperation
+        database.Context.CashBankTransfers.AddRange(
+            new CashBankTransfer
             {
-                Fund = fund,
-                OperationKind = FundOperationKinds.Deposit,
+                TransferDate = new DateOnly(2026, 6, 15),
                 Amount = 3000m,
-                BalanceBefore = 0m,
-                BalanceAfter = 3000m,
-                Reason = "Сдача наличных в банк",
-                IsCashToBankTransfer = true,
+                Comment = "Сдача наличных в банк",
                 ActorUserId = actorUserId,
                 CreatedAtUtc = new DateTimeOffset(2026, 6, 15, 9, 0, 0, TimeSpan.Zero)
             },
-            new FundOperation
+            new CashBankTransfer
             {
-                Fund = fund,
-                OperationKind = FundOperationKinds.Deposit,
+                TransferDate = new DateOnly(2026, 6, 15),
                 Amount = 900m,
-                BalanceBefore = 3000m,
-                BalanceAfter = 3900m,
-                Reason = "Canceled bank deposit",
-                IsCashToBankTransfer = true,
+                Comment = "Canceled bank deposit",
                 ActorUserId = actorUserId,
                 IsCanceled = true,
                 CreatedAtUtc = new DateTimeOffset(2026, 6, 15, 10, 0, 0, TimeSpan.Zero)
-            },
+            });
+        database.Context.FundOperations.AddRange(
             new FundOperation
             {
                 Fund = fund,
@@ -1797,38 +1786,26 @@ public sealed class ReportServiceTests
         var service = CreateService(database.Context);
         var fund = new Fund { Name = "Банк", NormalizedName = "БАНК", SortOrder = 10 };
         database.Context.Funds.Add(fund);
-        database.Context.FundOperations.AddRange(
-            new FundOperation
+        database.Context.CashBankTransfers.AddRange(
+            new CashBankTransfer
             {
-                Fund = fund,
-                OperationKind = FundOperationKinds.Deposit,
+                TransferDate = new DateOnly(2026, 6, 10),
                 Amount = 100m,
-                BalanceBefore = 0m,
-                BalanceAfter = 100m,
-                Reason = "Сдача 1",
-                IsCashToBankTransfer = true,
+                Comment = "Сдача 1",
                 CreatedAtUtc = new DateTimeOffset(2026, 6, 10, 9, 0, 0, TimeSpan.Zero)
             },
-            new FundOperation
+            new CashBankTransfer
             {
-                Fund = fund,
-                OperationKind = FundOperationKinds.Deposit,
+                TransferDate = new DateOnly(2026, 6, 11),
                 Amount = 200m,
-                BalanceBefore = 100m,
-                BalanceAfter = 300m,
-                Reason = "Сдача 2",
-                IsCashToBankTransfer = true,
+                Comment = "Сдача 2",
                 CreatedAtUtc = new DateTimeOffset(2026, 6, 11, 9, 0, 0, TimeSpan.Zero)
             },
-            new FundOperation
+            new CashBankTransfer
             {
-                Fund = fund,
-                OperationKind = FundOperationKinds.Deposit,
+                TransferDate = new DateOnly(2026, 6, 12),
                 Amount = 300m,
-                BalanceBefore = 300m,
-                BalanceAfter = 600m,
-                Reason = "Сдача 3",
-                IsCashToBankTransfer = true,
+                Comment = "Сдача 3",
                 CreatedAtUtc = new DateTimeOffset(2026, 6, 12, 9, 0, 0, TimeSpan.Zero)
             });
         await database.Context.SaveChangesAsync();
@@ -2241,28 +2218,20 @@ public sealed class ReportServiceTests
         var actorUserId = Guid.NewGuid();
         var fund = new Fund { Name = "Прочее", NormalizedName = "ПРОЧЕЕ", SortOrder = 10 };
         database.Context.Funds.Add(fund);
-        database.Context.FundOperations.AddRange(
-            new FundOperation
+        database.Context.CashBankTransfers.AddRange(
+            new CashBankTransfer
             {
-                Fund = fund,
-                OperationKind = FundOperationKinds.Deposit,
+                TransferDate = new DateOnly(2026, 6, 15),
                 Amount = 3000m,
-                BalanceBefore = 0m,
-                BalanceAfter = 3000m,
-                Reason = "Сдача наличных в банк",
-                IsCashToBankTransfer = true,
+                Comment = "Сдача наличных в банк",
                 ActorUserId = actorUserId,
                 CreatedAtUtc = new DateTimeOffset(2026, 6, 15, 9, 0, 0, TimeSpan.Zero)
             },
-            new FundOperation
+            new CashBankTransfer
             {
-                Fund = fund,
-                OperationKind = FundOperationKinds.Deposit,
+                TransferDate = new DateOnly(2026, 7, 1),
                 Amount = 500m,
-                BalanceBefore = 3000m,
-                BalanceAfter = 3500m,
-                Reason = "Вне периода",
-                IsCashToBankTransfer = true,
+                Comment = "Вне периода",
                 ActorUserId = actorUserId,
                 CreatedAtUtc = new DateTimeOffset(2026, 7, 1, 9, 0, 0, TimeSpan.Zero)
             });
@@ -2293,15 +2262,11 @@ public sealed class ReportServiceTests
         var actorUserId = Guid.NewGuid();
         var fund = new Fund { Name = "Прочее", NormalizedName = "ПРОЧЕЕ", SortOrder = 10 };
         database.Context.Funds.Add(fund);
-        database.Context.FundOperations.Add(new FundOperation
+        database.Context.CashBankTransfers.Add(new CashBankTransfer
         {
-            Fund = fund,
-            OperationKind = FundOperationKinds.Deposit,
+            TransferDate = new DateOnly(2026, 6, 15),
             Amount = 3000m,
-            BalanceBefore = 0m,
-            BalanceAfter = 3000m,
-            Reason = "Сдача наличных в банк",
-            IsCashToBankTransfer = true,
+            Comment = "Сдача наличных в банк",
             ActorUserId = actorUserId,
             CreatedAtUtc = new DateTimeOffset(2026, 6, 15, 9, 0, 0, TimeSpan.Zero)
         });
@@ -2478,20 +2443,15 @@ public sealed class ReportServiceTests
             var expenseType = new ExpenseType { Name = "Вода", Code = "water" };
             var chargeService = new ChargeServiceSetting { Name = "Вода", ExpenseType = expenseType };
             var supplier = new Supplier { Name = "Vodokanal", Group = group, ChargeServiceSetting = chargeService };
-            var bankFund = new Fund { Name = "Тестовый банк", NormalizedName = "ТЕСТОВЫЙ БАНК", Balance = SeededBankAmount };
-            var bankDeposit = new FundOperation
+            var bankDeposit = new CashBankTransfer
             {
-                Fund = bankFund,
-                OperationKind = FundOperationKinds.Deposit,
+                TransferDate = new DateOnly(2000, 1, 1),
                 Amount = SeededBankAmount,
-                BalanceBefore = 0m,
-                BalanceAfter = SeededBankAmount,
-                Reason = "Тестовая сумма на банковском счете",
-                IsCashToBankTransfer = true,
+                Comment = "Тестовая сумма на банковском счете",
                 CreatedAtUtc = new DateTimeOffset(2000, 1, 1, 0, 0, 0, TimeSpan.Zero)
             };
 
-            Context.AddRange(firstOwner, secondOwner, firstGarage, secondGarage, group, supplier, incomeType, expenseType, chargeService, bankFund, bankDeposit);
+            Context.AddRange(firstOwner, secondOwner, firstGarage, secondGarage, group, supplier, incomeType, expenseType, chargeService, bankDeposit);
             await Context.SaveChangesAsync();
             return new Fixtures(firstGarage, secondGarage, supplier, incomeType, expenseType);
         }

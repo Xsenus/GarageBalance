@@ -21,7 +21,7 @@ public sealed class PostgreSqlReportControlTotalsIntegrationTests
             HistoricalGarageIncome: 333m,
             SupplierAccruals: 900m,
             SupplierExpenses: 450m,
-            FundDeposits: 1000m + 400m,
+            FundDeposits: 1000m,
             FundWithdrawals: 250m,
             BankDeposits: 400m);
 
@@ -58,9 +58,15 @@ public sealed class PostgreSqlReportControlTotalsIntegrationTests
         context.FundOperations.AddRange(
             CreateFundOperation(fund, month.AddDays(4), FundOperationKinds.Deposit, 1000m, 0m, 1000m, $"{marker}-DEPOSIT"),
             CreateFundOperation(fund, month.AddDays(5), FundOperationKinds.Withdraw, 250m, 1000m, 750m, $"{marker}-WITHDRAW"),
-            CreateFundOperation(fund, month.AddDays(6), FundOperationKinds.Deposit, 400m, 750m, 1150m, $"{marker}-BANK", isCashToBankTransfer: true),
             CreateFundOperation(fund, month.AddDays(7), FundOperationKinds.Deposit, 600m, 1150m, 1750m, $"{marker}-CANCELED", isCanceled: true),
             CreateFundOperation(fund, month.AddMonths(-1), FundOperationKinds.Deposit, 888m, 0m, 888m, $"{marker}-OLD"));
+        context.CashBankTransfers.Add(new CashBankTransfer
+        {
+            TransferDate = month.AddDays(6),
+            Amount = 400m,
+            Comment = $"{marker}-BANK",
+            CreatedAtUtc = new DateTimeOffset(month.AddDays(6).ToDateTime(new TimeOnly(12, 0)), TimeSpan.Zero)
+        });
         await context.SaveChangesAsync();
         context.ChangeTracker.Clear();
 
@@ -175,7 +181,6 @@ public sealed class PostgreSqlReportControlTotalsIntegrationTests
         decimal balanceBefore,
         decimal balanceAfter,
         string reason,
-        bool isCashToBankTransfer = false,
         bool isCanceled = false) =>
         new()
         {
@@ -185,7 +190,6 @@ public sealed class PostgreSqlReportControlTotalsIntegrationTests
             BalanceBefore = balanceBefore,
             BalanceAfter = balanceAfter,
             Reason = reason,
-            IsCashToBankTransfer = isCashToBankTransfer,
             IsCanceled = isCanceled,
             CreatedAtUtc = new DateTimeOffset(date.ToDateTime(new TimeOnly(12, 0)), TimeSpan.Zero)
         };

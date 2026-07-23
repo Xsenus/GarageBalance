@@ -180,8 +180,7 @@ export type BankDepositReportRowDto = {
   operationId: string
   date: string
   amount: number
-  fundName: string | null
-  comment: string
+  comment: string | null
 }
 
 export type BankDepositReportDto = {

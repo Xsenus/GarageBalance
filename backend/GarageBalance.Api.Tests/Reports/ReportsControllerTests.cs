@@ -911,7 +911,7 @@ public sealed class ReportsControllerTests
             0,
             25,
             [
-                new BankDepositReportRowDto(Guid.NewGuid(), new DateOnly(2026, 6, 15), 3000m, "Прочее", "Сдача наличных")
+                new BankDepositReportRowDto(Guid.NewGuid(), new DateOnly(2026, 6, 15), 3000m, "Сдача наличных")
             ]);
     }
 

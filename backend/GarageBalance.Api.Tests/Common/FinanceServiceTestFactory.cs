@@ -27,6 +27,7 @@ internal static class FinanceServiceTestFactory
             new EfAccrualPaymentAllocationRepository(dbContext),
             new EfSupplierAccrualRepository(dbContext),
             new EfStaffSalaryAdjustmentRepository(dbContext),
+            new EfCashBankTransferRepository(dbContext),
             new EfSupplierGroupRepository(dbContext),
             new EfSupplierRepository(dbContext),
             new EfExpenseTypeRepository(dbContext),

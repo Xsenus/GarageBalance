@@ -210,7 +210,6 @@ public sealed class FundsControllerTests
             "Решение правления",
             DateTimeOffset.UtcNow,
             isCanceled,
-            false,
             false);
     }
 

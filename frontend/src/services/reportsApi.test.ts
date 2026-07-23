@@ -82,8 +82,8 @@ describe('reportsApi', () => {
     await reportsApi.exportExpenseReportXlsx('token', { sortBy: 'expenseAmount', sortDirection: 'desc' })
     await reportsApi.getCashPaymentReport('token', { sortBy: 'hasReceipt', sortDirection: 'asc' })
     await reportsApi.exportCashPaymentReportXlsx('token', { sortBy: 'hasReceipt', sortDirection: 'asc' })
-    await reportsApi.getBankDepositReport('token', { sortBy: 'fundName', sortDirection: 'desc' })
-    await reportsApi.exportBankDepositReportXlsx('token', { sortBy: 'fundName', sortDirection: 'desc' })
+    await reportsApi.getBankDepositReport('token', { sortBy: 'comment', sortDirection: 'desc' })
+    await reportsApi.exportBankDepositReportXlsx('token', { sortBy: 'comment', sortDirection: 'desc' })
     await reportsApi.getFeeReport('token', { sortBy: 'debt', sortDirection: 'asc' })
     await reportsApi.exportFeeReportXlsx('token', { sortBy: 'debt', sortDirection: 'asc' })
     await reportsApi.getFundChangeReport('token', { sortBy: 'actorDisplayName', sortDirection: 'desc' })
@@ -100,8 +100,8 @@ describe('reportsApi', () => {
       '/api/reports/expense/export/xlsx?sortBy=expenseAmount&sortDirection=desc',
       '/api/reports/cash-payments?sortBy=hasReceipt&sortDirection=asc',
       '/api/reports/cash-payments/export/xlsx?sortBy=hasReceipt&sortDirection=asc',
-      '/api/reports/bank-deposits?sortBy=fundName&sortDirection=desc',
-      '/api/reports/bank-deposits/export/xlsx?sortBy=fundName&sortDirection=desc',
+      '/api/reports/bank-deposits?sortBy=comment&sortDirection=desc',
+      '/api/reports/bank-deposits/export/xlsx?sortBy=comment&sortDirection=desc',
       '/api/reports/fees?sortBy=debt&sortDirection=asc',
       '/api/reports/fees/export/xlsx?sortBy=debt&sortDirection=asc',
       '/api/reports/fund-changes?sortBy=actorDisplayName&sortDirection=desc',

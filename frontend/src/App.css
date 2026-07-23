@@ -4168,9 +4168,7 @@ h1 {
   gap: 6px;
 }
 
-.bank-deposit-form__fund,
 .bank-deposit-form__comment,
-.bank-deposit-form > .loading-skeleton,
 .bank-deposit-form > .form-error {
   grid-column: 1 / -1;
 }
@@ -8085,9 +8083,7 @@ button.operation-row:focus-visible {
     grid-template-columns: 1fr;
   }
 
-  .bank-deposit-form__fund,
   .bank-deposit-form__comment,
-  .bank-deposit-form > .loading-skeleton,
   .bank-deposit-form > .form-error {
     grid-column: 1;
   }

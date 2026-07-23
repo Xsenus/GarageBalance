@@ -182,7 +182,7 @@ export function Workspace({
         )
       case 'payments':
         return canReadPayments && canReadDictionaries ? (
-          <FinancePanel auth={auth} dictionaryClient={dictionaryClient} financeClient={financeClient} fundsClient={fundsClient} integrationClient={integrationClient} settingsClient={settingsClient} />
+          <FinancePanel auth={auth} dictionaryClient={dictionaryClient} financeClient={financeClient} integrationClient={integrationClient} settingsClient={settingsClient} />
         ) : (
           <AccessNotice label="Платежи недоступны" title="Платежи" permission={permissions.paymentsRead} description="Для платежей нужны права на просмотр финансовых операций и справочников." />
         )

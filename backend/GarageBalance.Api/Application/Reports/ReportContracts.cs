@@ -267,8 +267,7 @@ public sealed record BankDepositReportRowDto(
     Guid OperationId,
     DateOnly Date,
     decimal Amount,
-    string? FundName,
-    string Comment);
+    string? Comment);
 
 public sealed record FeeReportDto(
     string Variation,

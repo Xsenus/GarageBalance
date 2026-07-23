@@ -572,6 +572,21 @@ public sealed class FinanceController(IFinanceService financeService) : Controll
     }
 
     [Authorize(Policy = SystemPermissions.PaymentsWrite)]
+    [HttpPost("cash-bank-transfers")]
+    [ProducesResponseType<CashBankTransferDto>(StatusCodes.Status201Created)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
+    public async Task<ActionResult<CashBankTransferDto>> CreateCashBankTransfer(
+        CreateCashBankTransferRequest request,
+        CancellationToken cancellationToken)
+    {
+        var result = await financeService.CreateCashBankTransferAsync(request, GetActorUserId(), cancellationToken);
+        return result.Succeeded
+            ? StatusCode(StatusCodes.Status201Created, result.Value)
+            : ToError(result);
+    }
+
+    [Authorize(Policy = SystemPermissions.PaymentsWrite)]
     [HttpPost("staff-salary-adjustments")]
     [ProducesResponseType<StaffSalaryAdjustmentDto>(StatusCodes.Status201Created)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]

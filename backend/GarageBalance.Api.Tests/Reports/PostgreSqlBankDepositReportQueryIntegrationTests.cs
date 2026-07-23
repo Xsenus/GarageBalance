@@ -15,30 +15,14 @@ public sealed class PostgreSqlBankDepositReportQueryIntegrationTests
     {
         var month = new DateOnly(2042, 8, 1);
         var suffix = Guid.NewGuid().ToString("N");
-        var firstFundName = $"Резервный фонд {suffix}";
         await using var database = await PostgreSqlTestDatabase.CreateAsync();
         await using (var seedContext = database.CreateContext())
         {
-            var firstFund = new Fund
-            {
-                Name = firstFundName,
-                NormalizedName = $"РЕЗЕРВНЫЙ ФОНД {suffix.ToUpperInvariant()}",
-                SortOrder = 901
-            };
-            var secondFund = new Fund
-            {
-                Name = $"Текущий фонд {suffix}",
-                NormalizedName = $"ТЕКУЩИЙ ФОНД {suffix.ToUpperInvariant()}",
-                SortOrder = 902
-            };
-            seedContext.AddRange(firstFund, secondFund);
-            seedContext.FundOperations.AddRange(
-                CreateOperation(firstFund, month.AddDays(4), 100m, "Сдача резерва", true),
-                CreateOperation(secondFund, month.AddDays(8), 50m, "Сдача текущих средств", true),
-                CreateOperation(firstFund, month.AddDays(10), 999m, "Отменено", true, isCanceled: true),
-                CreateOperation(firstFund, month.AddDays(12), 300m, "Не банковская операция", false),
-                CreateOperation(firstFund, month.AddMonths(-1), 200m, "Другой месяц", true),
-                CreateOperation(firstFund, month.AddDays(14), 400m, "Списание", true, FundOperationKinds.Withdraw));
+            seedContext.CashBankTransfers.AddRange(
+                CreateTransfer(month.AddDays(4), 100m, $"Сдача резерва {suffix}"),
+                CreateTransfer(month.AddDays(8), 50m, "Сдача текущих средств"),
+                CreateTransfer(month.AddDays(10), 999m, "Отменено", isCanceled: true),
+                CreateTransfer(month.AddMonths(-1), 200m, "Другой месяц"));
             await seedContext.SaveChangesAsync();
         }
 
@@ -63,11 +47,10 @@ public sealed class PostgreSqlBankDepositReportQueryIntegrationTests
         Assert.Equal(150m, page.Total);
         var operation = Assert.Single(page.Operations);
         Assert.Equal(100m, operation.Amount);
-        Assert.Equal(firstFundName, operation.FundName);
-        Assert.Equal("Сдача резерва", operation.Reason);
-        Assert.Equal(month.AddDays(4), DateOnly.FromDateTime(operation.CreatedAtUtc.UtcDateTime));
+        Assert.Equal($"Сдача резерва {suffix}", operation.Comment);
+        Assert.Equal(month.AddDays(4), operation.TransferDate);
         var pageCommand = Assert.Single(capture.Commands);
-        Assert.Equal(1, CountOccurrences(pageCommand, "FROM fund_operations"));
+        Assert.Equal(1, CountOccurrences(pageCommand, "FROM cash_bank_transfers"));
         Assert.Contains("FROM page_rows", pageCommand, StringComparison.Ordinal);
         Assert.Contains("COUNT(*)::int", pageCommand, StringComparison.Ordinal);
         Assert.Contains("OFFSET @offset", pageCommand, StringComparison.Ordinal);
@@ -77,7 +60,7 @@ public sealed class PostgreSqlBankDepositReportQueryIntegrationTests
         var searchResult = await query.GetBankDepositsAsync(
             month,
             month.AddMonths(1).AddDays(-1),
-            "РЕЗЕРВНЫЙ",
+            suffix.ToUpperInvariant(),
             0,
             25,
             new ReportSort("date", false),
@@ -85,30 +68,22 @@ public sealed class PostgreSqlBankDepositReportQueryIntegrationTests
 
         Assert.Equal(1, searchResult.RowCount);
         Assert.Equal(100m, searchResult.Total);
-        Assert.Equal(firstFundName, Assert.Single(searchResult.Operations).FundName);
+        Assert.Equal($"Сдача резерва {suffix}", Assert.Single(searchResult.Operations).Comment);
         var searchCommand = Assert.Single(capture.Commands);
-        Assert.Equal(1, CountOccurrences(searchCommand, "FROM fund_operations"));
-        Assert.Contains("LOWER(fund.\"Name\")", searchCommand, StringComparison.Ordinal);
-        Assert.Contains("LOWER(operation.\"Reason\")", searchCommand, StringComparison.Ordinal);
+        Assert.Equal(1, CountOccurrences(searchCommand, "FROM cash_bank_transfers"));
+        Assert.Contains("LOWER(COALESCE(transfer.\"Comment\", ''))", searchCommand, StringComparison.Ordinal);
     }
 
-    private static FundOperation CreateOperation(
-        Fund fund,
+    private static CashBankTransfer CreateTransfer(
         DateOnly date,
         decimal amount,
-        string reason,
-        bool isCashToBankTransfer,
-        string operationKind = FundOperationKinds.Deposit,
+        string comment,
         bool isCanceled = false) =>
         new()
         {
-            Fund = fund,
-            OperationKind = operationKind,
+            TransferDate = date,
             Amount = amount,
-            BalanceBefore = 0m,
-            BalanceAfter = amount,
-            Reason = reason,
-            IsCashToBankTransfer = isCashToBankTransfer,
+            Comment = comment,
             IsCanceled = isCanceled,
             CreatedAtUtc = new DateTimeOffset(date.ToDateTime(new TimeOnly(10, 0)), TimeSpan.Zero)
         };

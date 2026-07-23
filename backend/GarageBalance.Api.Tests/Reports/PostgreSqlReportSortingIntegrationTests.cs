@@ -168,6 +168,9 @@ public sealed class PostgreSqlReportSortingIntegrationTests
         context.FundOperations.AddRange(
             CreateFundOperation(fund, january, 80m, "Первое пополнение"),
             CreateFundOperation(fund, february, 180m, "Второе пополнение"));
+        context.CashBankTransfers.AddRange(
+            CreateCashBankTransfer(january, 80m, "Первая сдача"),
+            CreateCashBankTransfer(february, 180m, "Вторая сдача"));
         await context.SaveChangesAsync();
 
         var income = await new EfIncomeReportQuery(context).GetRowsAsync(
@@ -403,7 +406,7 @@ public sealed class PostgreSqlReportSortingIntegrationTests
                 Assert.Single(page.Operations);
             }
 
-            foreach (var field in new[] { "date", "amount", "fundName", "comment" })
+            foreach (var field in new[] { "date", "amount", "comment" })
             {
                 var page = await new EfCashMovementReportQuery(context).GetBankDepositsAsync(january, february.AddMonths(1).AddDays(-1), null, 0, 1, new ReportSort(field, descending), CancellationToken.None);
                 Assert.Single(page.Operations);
@@ -647,7 +650,15 @@ public sealed class PostgreSqlReportSortingIntegrationTests
             BalanceBefore = 0m,
             BalanceAfter = amount,
             Reason = reason,
-            IsCashToBankTransfer = true,
+            CreatedAtUtc = new DateTimeOffset(month.AddDays(12).ToDateTime(new TimeOnly(12, 0)), TimeSpan.Zero)
+        };
+
+    private static CashBankTransfer CreateCashBankTransfer(DateOnly month, decimal amount, string comment) =>
+        new()
+        {
+            TransferDate = month.AddDays(12),
+            Amount = amount,
+            Comment = comment,
             CreatedAtUtc = new DateTimeOffset(month.AddDays(12).ToDateTime(new TimeOnly(12, 0)), TimeSpan.Zero)
         };
 }

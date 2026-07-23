@@ -421,11 +421,8 @@ public sealed class EfExpenseWorksheetQuery(GarageBalanceDbContext dbContext) : 
                 StaffCreatedAtUtc = (DateTimeOffset?)null
             });
 
-        var bankDeposits = dbContext.FundOperations.AsNoTracking()
-            .Where(operation =>
-                !operation.IsCanceled &&
-                operation.OperationKind == FundOperationKinds.Deposit &&
-                operation.IsCashToBankTransfer)
+        var bankDeposits = dbContext.CashBankTransfers.AsNoTracking()
+            .Where(transfer => !transfer.IsCanceled)
             .GroupBy(_ => 1)
             .Select(group => new
             {
@@ -438,7 +435,7 @@ public sealed class EfExpenseWorksheetQuery(GarageBalanceDbContext dbContext) : 
                 TypeCode = (string?)null,
                 Amount = 0m,
                 IncomeTotal = 0m,
-                BankDepositTotal = group.Sum(operation => operation.Amount),
+                BankDepositTotal = group.Sum(transfer => transfer.Amount),
                 CashExpenseTotal = 0m,
                 BankExpenseTotal = 0m,
                 HistoryStartMonth = (DateOnly?)null,

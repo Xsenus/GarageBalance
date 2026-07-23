@@ -71,7 +71,6 @@ public sealed class PostgreSqlFundAllocationIntegrationTests
     private static FundService CreateService(GarageBalanceDbContext context) =>
         new(
             new EfFundRepository(context),
-            new EfFinanceAvailableBalanceQuery(context),
             new AuditEventWriter(context));
 
     private static async Task SeedIncomeAsync(GarageBalanceDbContext context, decimal amount)

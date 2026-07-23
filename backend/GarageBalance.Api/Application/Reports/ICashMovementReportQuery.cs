@@ -43,7 +43,6 @@ public sealed record BankDepositReportData(
 
 public sealed record BankDepositQueryRow(
     Guid Id,
-    DateTimeOffset CreatedAtUtc,
+    DateOnly TransferDate,
     decimal Amount,
-    string FundName,
-    string Reason);
+    string? Comment);

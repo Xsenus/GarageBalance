@@ -103,7 +103,7 @@ describe('core API clients', () => {
     await fundsApi.getFunds('token')
     await fundsApi.getOperations('token', { limit: 10, includeCanceled: true })
     await fundsApi.getOperationsPage?.('token', { offset: 25, limit: 25, includeCanceled: true })
-    await fundsApi.createOperation('token', 'fund/1', { operationKind: 'deposit', amount: 1000, reason: 'Пополнение', isCashToBankTransfer: true })
+    await fundsApi.createOperation('token', 'fund/1', { operationKind: 'deposit', amount: 1000, reason: 'Пополнение' })
     await fundsApi.updateOperation('token', 'operation/1', { amount: 900, reason: 'Исправление' })
     await fundsApi.cancelOperation('token', 'operation/1', { reason: 'Ошибка' })
     await fundsApi.restoreOperation('token', 'operation/1')
@@ -117,7 +117,7 @@ describe('core API clients', () => {
       '/api/funds/operations/operation/1/cancel',
       '/api/funds/operations/operation/1/restore',
     ])
-    expect(fetchMock.mock.calls[3][1]).toEqual(expect.objectContaining({ method: 'POST', body: JSON.stringify({ operationKind: 'deposit', amount: 1000, reason: 'Пополнение', isCashToBankTransfer: true }) }))
+    expect(fetchMock.mock.calls[3][1]).toEqual(expect.objectContaining({ method: 'POST', body: JSON.stringify({ operationKind: 'deposit', amount: 1000, reason: 'Пополнение' }) }))
     expect(fetchMock.mock.calls[4][1]).toEqual(expect.objectContaining({ method: 'PUT', body: JSON.stringify({ amount: 900, reason: 'Исправление' }) }))
     expect(fetchMock.mock.calls[5][1]).toEqual(expect.objectContaining({ method: 'POST', body: JSON.stringify({ reason: 'Ошибка' }) }))
     expect(fetchMock.mock.calls[6][1]).toEqual(expect.objectContaining({ method: 'POST' }))

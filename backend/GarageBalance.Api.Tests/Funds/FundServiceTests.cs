@@ -98,57 +98,6 @@ public sealed class FundServiceTests
     }
 
     [Fact]
-    public async Task CreateOperationAsync_RejectsCashToBankFlagForWithdrawal()
-    {
-        await using var database = await TestDatabase.CreateAsync();
-        var service = CreateService(database.Context);
-        var targetFund = (await service.GetFundsAsync(CancellationToken.None)).First(fund => fund.AllowOperations);
-
-        var result = await service.CreateOperationAsync(
-            targetFund.Id,
-            new CreateFundOperationRequest("withdraw", 1m, "Некорректная сдача", IsCashToBankTransfer: true),
-            null,
-            CancellationToken.None);
-
-        Assert.False(result.Succeeded);
-        Assert.Equal("cash_to_bank_operation_kind_invalid", result.ErrorCode);
-        Assert.Empty(database.Context.FundOperations);
-    }
-
-    [Fact]
-    public async Task CreateOperationAsync_RejectsRepeatedCashToBankTransferAboveActualCash()
-    {
-        await using var database = await TestDatabase.CreateAsync();
-        var service = CreateService(database.Context);
-        var funds = await service.GetFundsAsync(CancellationToken.None);
-        var firstFund = funds.First(fund => fund.AllowOperations);
-        var secondFund = funds.Last(fund => fund.AllowOperations && fund.Id != firstFund.Id);
-        await SeedIncomeAsync(database.Context, 100m);
-        var firstTransfer = await service.CreateOperationAsync(
-            firstFund.Id,
-            new CreateFundOperationRequest("deposit", 80m, "Сдача кассы в банк", IsCashToBankTransfer: true),
-            null,
-            CancellationToken.None);
-        var withdrawal = await service.CreateOperationAsync(
-            firstFund.Id,
-            new CreateFundOperationRequest("withdraw", 80m, "Возврат в нераспределенные средства"),
-            null,
-            CancellationToken.None);
-
-        var result = await service.CreateOperationAsync(
-            secondFund.Id,
-            new CreateFundOperationRequest("deposit", 30m, "Повторная сдача", IsCashToBankTransfer: true),
-            null,
-            CancellationToken.None);
-
-        Assert.True(firstTransfer.Succeeded);
-        Assert.True(withdrawal.Succeeded);
-        Assert.False(result.Succeeded);
-        Assert.Equal("cash_amount_insufficient", result.ErrorCode);
-        Assert.Equal(2, await database.Context.FundOperations.CountAsync());
-    }
-
-    [Fact]
     public async Task CreateOperationAsync_WithdrawReturnsMoneyToAvailableDistributionAmount()
     {
         await using var database = await TestDatabase.CreateAsync();
@@ -374,35 +323,6 @@ public sealed class FundServiceTests
     }
 
     [Fact]
-    public async Task UpdateOperationAsync_RejectsCashToBankIncreaseAboveActualCash()
-    {
-        await using var database = await TestDatabase.CreateAsync();
-        var service = CreateService(database.Context);
-        var targetFund = (await service.GetFundsAsync(CancellationToken.None)).First(fund => fund.AllowOperations);
-        await SeedIncomeAsync(database.Context, 100m);
-        var transfer = await service.CreateOperationAsync(
-            targetFund.Id,
-            new CreateFundOperationRequest("deposit", 80m, "Сдача кассы", IsCashToBankTransfer: true),
-            null,
-            CancellationToken.None);
-        Assert.True((await service.CreateOperationAsync(
-            targetFund.Id,
-            new CreateFundOperationRequest("withdraw", 80m, "Освободили назначение"),
-            null,
-            CancellationToken.None)).Succeeded);
-
-        var result = await service.UpdateOperationAsync(
-            transfer.Value!.Id,
-            new UpdateFundOperationRequest(110m, "Увеличенная сдача"),
-            null,
-            CancellationToken.None);
-
-        Assert.False(result.Succeeded);
-        Assert.Equal("cash_amount_insufficient", result.ErrorCode);
-        Assert.Equal(80m, (await database.Context.FundOperations.SingleAsync(operation => operation.Id == transfer.Value.Id)).Amount);
-    }
-
-    [Fact]
     public async Task UpdateOperationAsync_RejectsAmountWhenActiveSequenceWouldBecomeNegative()
     {
         await using var database = await TestDatabase.CreateAsync();
@@ -615,51 +535,10 @@ public sealed class FundServiceTests
         Assert.DoesNotContain(database.Context.AuditEvents, item => item.Action == "fund.operation_restored");
     }
 
-    [Fact]
-    public async Task RestoreOperationAsync_RejectsCashToBankTransferAboveActualCash()
-    {
-        await using var database = await TestDatabase.CreateAsync();
-        var service = CreateService(database.Context);
-        var funds = await service.GetFundsAsync(CancellationToken.None);
-        var firstFund = funds.First(fund => fund.AllowOperations);
-        var secondFund = funds.Last(fund => fund.AllowOperations && fund.Id != firstFund.Id);
-        await SeedIncomeAsync(database.Context, 100m);
-        var firstTransfer = await service.CreateOperationAsync(
-            firstFund.Id,
-            new CreateFundOperationRequest("deposit", 80m, "Первая сдача", IsCashToBankTransfer: true),
-            null,
-            CancellationToken.None);
-        var firstWithdrawal = await service.CreateOperationAsync(
-            firstFund.Id,
-            new CreateFundOperationRequest("withdraw", 80m, "Отмена назначения"),
-            null,
-            CancellationToken.None);
-        Assert.True((await service.CancelOperationAsync(firstWithdrawal.Value!.Id, new CancelFundOperationRequest("Отменяем изъятие"), null, CancellationToken.None)).Succeeded);
-        Assert.True((await service.CancelOperationAsync(firstTransfer.Value!.Id, new CancelFundOperationRequest("Отменяем сдачу"), null, CancellationToken.None)).Succeeded);
-        var secondTransfer = await service.CreateOperationAsync(
-            secondFund.Id,
-            new CreateFundOperationRequest("deposit", 60m, "Вторая сдача", IsCashToBankTransfer: true),
-            null,
-            CancellationToken.None);
-        Assert.True((await service.CreateOperationAsync(
-            secondFund.Id,
-            new CreateFundOperationRequest("withdraw", 60m, "Освободили назначение"),
-            null,
-            CancellationToken.None)).Succeeded);
-
-        var result = await service.RestoreOperationAsync(firstTransfer.Value.Id, null, CancellationToken.None);
-
-        Assert.True(secondTransfer.Succeeded);
-        Assert.False(result.Succeeded);
-        Assert.Equal("cash_amount_insufficient", result.ErrorCode);
-        Assert.True(await database.Context.FundOperations.AnyAsync(operation => operation.Id == firstTransfer.Value.Id && operation.IsCanceled));
-    }
-
     private static FundService CreateService(GarageBalanceDbContext context)
     {
         return new FundService(
             new EfFundRepository(context),
-            new EfFinanceAvailableBalanceQuery(context),
             new AuditEventWriter(context));
     }
 

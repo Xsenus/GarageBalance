@@ -78,17 +78,14 @@ public sealed class EfFinanceAvailableBalanceQuery(GarageBalanceDbContext dbCont
                         ? operation.Amount
                         : 0m)
             });
-        var bankDepositQuery = dbContext.FundOperations.AsNoTracking()
-            .Where(operation =>
-                !operation.IsCanceled &&
-                operation.OperationKind == FundOperationKinds.Deposit &&
-                operation.IsCashToBankTransfer)
+        var bankDepositQuery = dbContext.CashBankTransfers.AsNoTracking()
+            .Where(transfer => !transfer.IsCanceled)
             .GroupBy(_ => 1)
             .Select(group => new
             {
                 Category = BankDepositCategory,
                 IncomeTotal = 0m,
-                BankDepositTotal = group.Sum(operation => operation.Amount),
+                BankDepositTotal = group.Sum(transfer => transfer.Amount),
                 CashExpenseTotal = 0m,
                 BankExpenseTotal = 0m
             });

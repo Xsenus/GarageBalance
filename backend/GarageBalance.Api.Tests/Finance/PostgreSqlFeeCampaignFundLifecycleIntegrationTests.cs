@@ -267,6 +267,5 @@ public sealed class PostgreSqlFeeCampaignFundLifecycleIntegrationTests
     private static FundService CreateFundService(GarageBalanceDbContext context) =>
         new(
             new EfFundRepository(context),
-            new EfFinanceAvailableBalanceQuery(context),
             new AuditEventWriter(context));
 }

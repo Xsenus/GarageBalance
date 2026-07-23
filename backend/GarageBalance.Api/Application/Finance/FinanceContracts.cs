@@ -101,6 +101,18 @@ public sealed record StaffSalaryAdjustmentDto(
     string? DocumentNumber,
     string Reason);
 
+public sealed record CreateCashBankTransferRequest(
+    DateOnly TransferDate,
+    [Range(0.01, 999999999)] decimal Amount,
+    [MaxLength(1000)] string? Comment);
+
+public sealed record CashBankTransferDto(
+    Guid Id,
+    DateOnly TransferDate,
+    decimal Amount,
+    string? Comment,
+    DateTimeOffset CreatedAtUtc);
+
 public sealed record CancelFinanceEntryRequest(
     [Required, MaxLength(1000)] string Reason);
 
