@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { describe, expect, it } from 'vitest'
-import { calculateExpenseWorksheetClosingBalance, getExpenseWorksheetCollectedClassName, isAtomicCashExpenseType, splitExpenseWorksheetBalance, toSignedExpenseWorksheetBalance } from './expenseWorksheetBalances'
+import { calculateExpenseWorksheetClosingBalance, getExpenseWorksheetCollectedClassName, splitExpenseWorksheetBalance, toSignedExpenseWorksheetBalance } from './expenseWorksheetBalances'
 
 describe('expense worksheet balances', () => {
   it('separates debt, advance and zero without ambiguous negative values', () => {
@@ -33,10 +33,4 @@ describe('expense worksheet balances', () => {
     expect(getExpenseWorksheetCollectedClassName(100, '')).toBeUndefined()
   })
 
-  it('recognizes atomic cash payouts by stable code with a legacy-name fallback', () => {
-    expect(isAtomicCashExpenseType('advance_payment', 'Переименованный аванс')).toBe(true)
-    expect(isAtomicCashExpenseType('no-receipt', 'Переименованная выплата')).toBe(true)
-    expect(isAtomicCashExpenseType(null, 'Авансовые выплаты')).toBe(true)
-    expect(isAtomicCashExpenseType('water', 'Водоснабжение')).toBe(false)
-  })
 })

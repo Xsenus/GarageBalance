@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using GarageBalance.Api.Domain.Finance;
 
 namespace GarageBalance.Api.Application.Finance;
 
@@ -39,7 +40,8 @@ public sealed record FinancialOperationDto(
     Guid? StaffMemberId = null,
     string? StaffMemberName = null,
     string? StaffDepartmentName = null,
-    Guid? ReceiptBatchId = null);
+    Guid? ReceiptBatchId = null,
+    string? ExpensePaymentType = null);
 
 public sealed record CreateIncomeOperationRequest(
     Guid GarageId,
@@ -70,7 +72,8 @@ public sealed record CreateExpenseOperationRequest(
     DateOnly AccountingMonth,
     [Range(0.01, 999999999)] decimal Amount,
     [MaxLength(120)] string? DocumentNumber,
-    [MaxLength(1000)] string? Comment);
+    [MaxLength(1000)] string? Comment,
+    string ExpensePaymentType = ExpensePaymentTypes.WithReceipt);
 
 public sealed record CreateStaffPaymentRequest(
     Guid StaffMemberId,

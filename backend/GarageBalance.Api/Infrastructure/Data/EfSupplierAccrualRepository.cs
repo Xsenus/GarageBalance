@@ -195,6 +195,12 @@ public sealed class EfSupplierAccrualRepository(GarageBalanceDbContext dbContext
             .Include(accrual => accrual.ExpenseType)
             .SingleOrDefaultAsync(accrual => accrual.Id == id, cancellationToken);
 
+    public Task<SupplierAccrual?> FindBySourceFinancialOperationForUpdateAsync(Guid operationId, CancellationToken cancellationToken) =>
+        dbContext.SupplierAccruals
+            .Include(accrual => accrual.Supplier)
+            .Include(accrual => accrual.ExpenseType)
+            .SingleOrDefaultAsync(accrual => accrual.SourceFinancialOperationId == operationId, cancellationToken);
+
     public async Task<decimal> GetTotalThroughMonthAsync(Guid supplierId, Guid expenseTypeId, DateOnly accountingMonth, CancellationToken cancellationToken) =>
         await dbContext.SupplierAccruals.AsNoTracking()
             .Where(accrual =>

@@ -207,6 +207,7 @@ erDiagram
         uuid SupplierId FK
         uuid StaffMemberId FK
         uuid ExpenseTypeId FK
+        string ExpensePaymentType
         date OperationDate
         date AccountingMonth
         decimal Amount
@@ -219,6 +220,7 @@ erDiagram
         uuid Id PK
         uuid SupplierId FK
         uuid ExpenseTypeId FK
+        uuid SourceFinancialOperationId FK
         date AccountingMonth
         decimal Amount
         string Source
@@ -385,7 +387,7 @@ erDiagram
 - `supplier_contacts` - контактные лица поставщика: ФИО, должность, телефон, почта, рабочий статус, комментарий и архивность. Связь `SupplierContact.SupplierId -> suppliers.Id` удаляется каскадно вместе с поставщиком; индексы покрывают `SupplierId`, `FullName`, `Phone`, `Email` и `Status`.
 - `staff_departments` - отделы персонала. Активное название уникально через filtered unique index по `Name` при `IsArchived = false`.
 - `staff_members` - сотрудники с отделом и ставкой. Связь `StaffMember.DepartmentId -> staff_departments.Id` использует `DeleteBehavior.Restrict`, чтобы отдел с сотрудниками не исчезал физически; индексы покрывают `FullName` и `DepartmentId`.
-- `income_types` и `expense_types` - виды поступлений и выплат. `Name` уникален, `Code` индексируется, системные значения seeded через migration `DefaultAccountingTypes`.
+- `income_types` и `expense_types` - виды поступлений и статьи расходов. `Name` уникален, `Code` индексируется, системные значения seeded через migration `DefaultAccountingTypes`.
 - `tariffs` - тарифы с базой расчета `fixed`, `people`, `meter_water`, `meter_electricity`, ставкой и датой действия. Упорядоченный `ElectricityTiersJson` атомарно хранит от 2 до 20 ступеней электроэнергии: стабильный идентификатор, название, возрастающую верхнюю границу (у последней ступени границы нет), ставку и признак пользовательского порога. Старые три пары полей сохраняются для обратной совместимости существующих данных. Уникальность: `Name + EffectiveFrom`; индексы покрывают `CalculationBase` и `EffectiveFrom`.
 - `charge_service_settings` - настройки услуг раздела "Тарифы и сборы": регулярность, режим начисления (`PeriodicityMonths = 1` для ежемесячного и `12` для ежегодного), месяц ежегодного начисления, день оплаты, необязательный месяц оплаты для ежегодного режима, перенос долга, единица измерения, признаки счетчика и пороговой тарификации, а также ссылки на `IncomeTypeId` и `TariffId` для генерации начислений владельцам. Nullable-ссылка `ExpenseTypeId -> expense_types.Id` с `DeleteBehavior.Restrict` задаёт единственный допустимый вид начисления поставщику для этой услуги; поставщик ссылается на услугу через `Supplier.ChargeServiceSettingId`, и backend отклоняет начисление по другой паре. Для ежемесячного режима срок рассчитывается в следующем месяце после начисления; для ежегодного — по выбранной календарной дате. Активное имя уникально через filtered unique index по `Name` при `IsArchived = false`; индексы покрывают `IsRegular`, `IsMetered`, `HasTieredTariff`, `IncomeTypeId`, `ExpenseTypeId` и `TariffId`.
 - `irregular_payments` - нерегулярные платежи с суммой, активностью и архивностью. Активное имя уникально через filtered unique index по `Name` при `IsArchived = false`; индекс `IsActive` используется для рабочих списков.
@@ -395,8 +397,8 @@ erDiagram
 ## Финансы
 
 - `accruals` - начисления владельцам по гаражу, виду поступления, тарифу и учетному месяцу. Уникальность активных строк: `GarageId + IncomeTypeId + AccountingMonth + Source`; индексы покрывают `AccountingMonth`, `GarageId`, `IncomeTypeId` и `TariffId`.
-- `financial_operations` - фактические поступления и выплаты. `OperationKind` разделяет `income` и `expense`; поступления связаны с `Garage`/`IncomeType`, выплаты - с `Supplier` или `StaffMember` и `ExpenseType`. Nullable `ReceiptBatchId` объединяет строки, созданные одной полной оплатой, для единой квитанции; идентификатор может повторяться только в пределах одного гаража и одной даты операции, а отменённые строки не печатаются. Индексы покрывают дату операции, учетный месяц, тип операции, документ, пакет квитанции, гараж, поставщика и сотрудника.
-- `supplier_accruals` - начисления поставщикам по поставщику, виду выплаты и учетному месяцу. При создании и изменении `ExpenseTypeId` обязан совпадать с `Supplier.ChargeServiceSetting.ExpenseTypeId`; эта проверка выполняется в бизнес-сервисе независимо от интерфейса. Уникальность: `SupplierId + ExpenseTypeId + AccountingMonth + Source + DocumentNumber`.
+- `financial_operations` - фактические поступления и выплаты. `OperationKind` разделяет `income` и `expense`; поступления связаны с `Garage`/`IncomeType`, выплаты - с `Supplier` или `StaffMember` и статьёй расхода `ExpenseType`. Для выплаты поставщику отдельное обязательное значение `ExpensePaymentType` принимает `with_receipt` или `without_receipt`; статья расхода при этом обязана совпадать с услугой поставщика. Выплата с чеком расходует банк, без чека — кассу. Nullable `ReceiptBatchId` объединяет строки, созданные одной полной оплатой, для единой квитанции; идентификатор может повторяться только в пределах одного гаража и одной даты операции, а отменённые строки не печатаются. Индексы покрывают дату операции, учетный месяц, тип операции, документ, пакет квитанции, гараж, поставщика, сотрудника и тип выплаты.
+- `supplier_accruals` - начисления поставщикам по поставщику, статье расхода и учетному месяцу. При создании и изменении `ExpenseTypeId` обязан совпадать с `Supplier.ChargeServiceSetting.ExpenseTypeId`; эта проверка выполняется в бизнес-сервисе независимо от интерфейса. Выплата без чека атомарно создаёт начисление стоимости с уникальной nullable-ссылкой `SourceFinancialOperationId`; изменение, отмена и восстановление выплаты синхронно изменяют связанную строку. Уникальность: `SupplierId + ExpenseTypeId + AccountingMonth + Source + DocumentNumber`.
 - `meter_readings` - показания воды и электричества. Уникальность: `GarageId + MeterKind + AccountingMonth`; `HasGapWarning` фиксирует разрыв истории.
 - `funds` - фонды учета с нормализованным именем, балансом, порядком сортировки и флагами системности/разрешенных операций. `NormalizedName` уникален, `SortOrder` индексируется.
 - `fund_operations` - операции пополнения, изъятия, сдачи кассы в банк и распределения фонда. Nullable-ссылка `SourceFinancialOperationId` связывает автоматическое назначение с единственным исходным поступлением; частичный уникальный индекс запрещает второе назначение того же поступления. Таблица хранит сумму, баланс до/после, обязательную причину, признак отмены и пользователя-инициатора; индексы покрывают `FundId`, `SourceFinancialOperationId`, `CreatedAtUtc`, `OperationKind` и `IsCanceled`.

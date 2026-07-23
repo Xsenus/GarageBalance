@@ -48,7 +48,7 @@ function getDictionaryRestoreErrorMessage(section: DictionarySectionKey, caught:
     }
 
     if (caught.code === 'expense_type_duplicate') {
-      return 'Вид выплаты нельзя восстановить: активный вид с таким названием уже есть.'
+      return 'Статью расхода нельзя восстановить: активная статья с таким названием уже есть.'
     }
 
     if (caught.code === 'tariff_duplicate') {
@@ -2170,10 +2170,10 @@ export function DictionaryPanel({ auth, dictionaryClient }: { auth: AuthResponse
         </form>
 
         <form className="dictionary-form" onSubmit={saveExpenseType}>
-          <h3>Виды выплат</h3>
+          <h3>Статьи расходов</h3>
           <input aria-label="Название вида выплаты" placeholder="Электроэнергия" value={expenseTypeForm.name} onChange={(event) => setExpenseTypeForm({ ...expenseTypeForm, name: event.target.value })} required />
           <input aria-label="Код вида выплаты" placeholder="Код" value={expenseTypeForm.code} onChange={(event) => setExpenseTypeForm({ ...expenseTypeForm, code: event.target.value })} />
-          <FormValidationSummary title="Проверьте вид выплаты" items={expenseTypeValidationErrors} />
+          <FormValidationSummary title="Проверьте статью расхода" items={expenseTypeValidationErrors} />
           <button className="secondary-button create-action-button" type="submit" disabled={!canWriteDictionaries || saving === 'expense-type'}>
             <FileText size={16} aria-hidden="true" />
             <span>Добавить</span>
@@ -2183,7 +2183,7 @@ export function DictionaryPanel({ auth, dictionaryClient }: { auth: AuthResponse
               id: item.id,
               title: item.name,
               meta: item.code ?? 'код не указан',
-              archiveLabel: canWriteDictionaries ? `Архивировать вид выплаты ${item.name}` : undefined,
+              archiveLabel: canWriteDictionaries ? `Архивировать статью расхода ${item.name}` : undefined,
               onArchive: canWriteDictionaries ? (reason) => archiveDictionaryItem('expense-type', reason, async (archiveReason) => {
                 await dictionaryClient.archiveExpenseType(auth.accessToken, item.id, archiveReason)
                 setExpenseTypes((items) => items.filter((expenseType) => expenseType.id !== item.id))

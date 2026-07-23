@@ -4530,7 +4530,6 @@ describe('App', () => {
     const advanceExpenseType = createAccountingType({ id: 'expense-advance', name: 'Авансовые выплаты', code: 'advance_payment' })
     const noReceiptExpenseType = createAccountingType({ id: 'expense-no-receipt', name: 'Выплата без чека', code: 'no_receipt' })
     const expenseTypes = [electricityExpenseType, advanceExpenseType, noReceiptExpenseType]
-    let atomicAdvanceAmount = 16500
     let expenseWorksheetRequestCount = 0
     const savedIncomeRequests: CreateIncomeOperationRequest[] = []
     const savedAccrualRequests: CreateIrregularAccrualRequest[] = []
@@ -4616,9 +4615,6 @@ describe('App', () => {
       createExpense: async (_token, request) => {
         savedExpenseRequests.push(request)
         const requestExpenseType = expenseTypes.find((item) => item.id === request.expenseTypeId) ?? electricityExpenseType
-        if (requestExpenseType.id === advanceExpenseType.id) {
-          atomicAdvanceAmount += request.amount
-        }
         return createFinancialOperation({
           id: `expense-payment-${savedExpenseRequests.length}`,
           operationKind: 'expense',
@@ -4629,6 +4625,7 @@ describe('App', () => {
           operationDate: request.operationDate,
           accountingMonth: request.accountingMonth,
           amount: request.amount,
+          expensePaymentType: request.expensePaymentType,
           documentNumber: request.documentNumber ?? null,
           comment: request.comment ?? null,
           supplierDebtBefore: 39000,
@@ -4871,8 +4868,8 @@ describe('App', () => {
             counterpartyName: '',
             expenseTypeId: advanceExpenseType.id,
             expenseTypeName: 'Авансовые выплаты',
-            accrualAmount: atomicAdvanceAmount,
-            expenseAmount: atomicAdvanceAmount,
+            accrualAmount: 16500,
+            expenseAmount: 16500,
             balance: 0,
             collectedAmount: null,
             difference: null,
@@ -5170,13 +5167,13 @@ describe('App', () => {
     const selectedExpenseSupplier = within(expenseDialog).getByRole('option', { name: 'Водоканал' })
     expect(selectedExpenseSupplier).toHaveAttribute('aria-selected', 'true')
     await user.click(selectedExpenseSupplier)
-    const expenseType = within(expenseDialog).getByRole('combobox', { name: 'Вид выплаты' })
+    const expenseType = within(expenseDialog).getByRole('combobox', { name: 'Услуга или статья расхода выплаты' })
     expect(expenseType).toHaveClass('select-control__trigger')
     expect(expenseType).toHaveTextContent('Электроэнергия')
-    await user.click(expenseType)
-    const selectedExpenseType = within(expenseDialog).getByRole('option', { name: 'Электроэнергия' })
-    expect(selectedExpenseType).toHaveAttribute('aria-selected', 'true')
-    await user.click(selectedExpenseType)
+    expect(expenseType).toBeDisabled()
+    const expensePaymentType = within(expenseDialog).getByRole('combobox', { name: 'Тип выплаты' })
+    expect(expensePaymentType).toHaveClass('select-control__trigger')
+    expect(expensePaymentType).toHaveTextContent('С чеком')
     const expenseDate = within(expenseDialog).getByLabelText('Дата выплаты')
     expect(expenseDate).toHaveValue('30.06.2026')
     expect(expenseDate.closest('.localized-date-picker')).not.toBeNull()
@@ -5211,21 +5208,18 @@ describe('App', () => {
     const worksheetRequestsBeforeAtomicPayout = expenseWorksheetRequestCount
     await user.click(addExpenseButton)
     const atomicExpenseDialog = await screen.findByRole('dialog', { name: 'Новая выплата' })
-    const atomicExpenseType = within(atomicExpenseDialog).getByRole('combobox', { name: 'Вид выплаты' })
-    await user.click(atomicExpenseType)
-    await user.click(within(atomicExpenseDialog).getByRole('option', { name: 'Авансовые выплаты' }))
+    expect(within(atomicExpenseDialog).getByRole('combobox', { name: 'Услуга или статья расхода выплаты' })).toHaveTextContent('Электроэнергия')
+    const atomicExpensePaymentType = within(atomicExpenseDialog).getByRole('combobox', { name: 'Тип выплаты' })
+    await user.click(atomicExpensePaymentType)
+    await user.click(within(atomicExpenseDialog).getByRole('option', { name: 'Без чека' }))
     await user.type(within(atomicExpenseDialog).getByLabelText('Сумма выплаты'), '500')
     await user.type(within(atomicExpenseDialog).getByLabelText('Документ выплаты'), 'ADVANCE-ATOMIC')
     await user.click(within(atomicExpenseDialog).getByRole('button', { name: 'Провести' }))
     await waitFor(() => expect(savedExpenseRequests).toHaveLength(2))
     await waitFor(() => expect(expenseWorksheetRequestCount).toBe(worksheetRequestsBeforeAtomicPayout + 1))
-    const reloadedAdvanceRow = within(expenseTable).getByText('Авансовые выплаты').closest('tr')
-    expect(reloadedAdvanceRow).not.toBeNull()
-    expect(within(reloadedAdvanceRow as HTMLTableRowElement).getAllByRole('cell')[3]).toHaveTextContent('17 000.00')
-    expect(within(reloadedAdvanceRow as HTMLTableRowElement).getAllByRole('cell')[4]).toHaveTextContent('17 000.00')
-    expect(within(reloadedAdvanceRow as HTMLTableRowElement).queryByRole('button', { name: /Оплатить/ })).not.toBeInTheDocument()
     expect(savedExpenseRequests[1]).toMatchObject({
-      expenseTypeId: advanceExpenseType.id,
+      expenseTypeId: electricityExpenseType.id,
+      expensePaymentType: 'without_receipt',
       amount: 500,
       documentNumber: 'ADVANCE-ATOMIC',
     })
@@ -10024,12 +10018,12 @@ describe('App', () => {
     expect(await within(dictionaryPanel).findByText('Членский сбор')).toBeInTheDocument()
     expect(within(dictionaryPanel).getByText('membership_fee')).toBeInTheDocument()
 
-    await openDictionarySubgroup(user, dictionaryPanel, 'Виды выплат')
+    await openDictionarySubgroup(user, dictionaryPanel, 'Статьи расходов')
     await createDictionaryRecord(async (dialog) => {
       await user.type(within(dialog).getByLabelText('Название вида операции'), 'Электроэнергия')
       await user.type(within(dialog).getByLabelText('Код вида операции'), 'electricity')
     })
-    editDialog = await openRowEditor(/Таблица: Виды выплат/, 'Электроэнергия')
+    editDialog = await openRowEditor(/Таблица: Статьи расходов/, 'Электроэнергия')
     await waitFor(() => expect(within(editDialog).getByRole('button', { name: 'Закрыть окно справочника' })).toHaveFocus())
     await user.keyboard('{Escape}')
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
@@ -10037,7 +10031,7 @@ describe('App', () => {
     expect(await within(dictionaryPanel).findByText('Электроэнергия')).toBeInTheDocument()
     expect(within(dictionaryPanel).getByText('electricity')).toBeInTheDocument()
 
-    editDialog = await openRowEditor(/Таблица: Виды выплат/, 'Электроэнергия')
+    editDialog = await openRowEditor(/Таблица: Статьи расходов/, 'Электроэнергия')
     await user.clear(within(editDialog).getByLabelText('Название вида операции'))
     await user.type(within(editDialog).getByLabelText('Название вида операции'), 'Электроэнергия поставщику')
     await user.clear(within(editDialog).getByLabelText('Код вида операции'))
@@ -10234,7 +10228,7 @@ describe('App', () => {
     await openDictionarySubgroup(user, dictionaryPanel, 'Группы поставщиков')
     await openDictionarySubgroup(user, dictionaryPanel, 'Поставщики')
     await openDictionarySubgroup(user, dictionaryPanel, 'Виды поступлений')
-    await openDictionarySubgroup(user, dictionaryPanel, 'Виды выплат')
+    await openDictionarySubgroup(user, dictionaryPanel, 'Статьи расходов')
     await openDictionarySubgroup(user, dictionaryPanel, 'Тарифы')
 
     await waitFor(() => expect(requestedLimits).toMatchObject({
@@ -10493,8 +10487,8 @@ describe('App', () => {
     expect(await within(dictionaryPanel).findByText('Целевой сбор')).toBeInTheDocument()
     expect(within(dictionaryPanel).queryByText('Членский взнос')).not.toBeInTheDocument()
 
-    await openDictionarySubgroup(user, dictionaryPanel, 'Виды выплат')
-    const expenseSearchInput = within(dictionaryPanel).getByLabelText('Поиск: Виды выплат')
+    await openDictionarySubgroup(user, dictionaryPanel, 'Статьи расходов')
+    const expenseSearchInput = within(dictionaryPanel).getByLabelText('Поиск: Статьи расходов')
     await user.clear(expenseSearchInput)
     await user.type(expenseSearchInput, 'электро')
     await waitFor(() => expect(expenseSearch).toBe('электро'))
@@ -10730,10 +10724,10 @@ describe('App', () => {
     },
     {
       name: 'expense type duplicate',
-      subgroup: 'Виды выплат',
+      subgroup: 'Статьи расходов',
       rowText: 'Электроэнергия',
       archivedId: 'expense-type-archived',
-      expectedMessage: 'Вид выплаты нельзя восстановить: активный вид с таким названием уже есть.',
+      expectedMessage: 'Статью расхода нельзя восстановить: активная статья с таким названием уже есть.',
       client: () => {
         const activeType = createAccountingType({ id: 'expense-type-active', name: 'Электроэнергия', code: 'electricity' })
         const archivedType = createAccountingType({ id: 'expense-type-archived', name: 'Электроэнергия', code: 'electricity_old', isArchived: true })
@@ -10987,12 +10981,12 @@ describe('App', () => {
     expect(await within(dictionaryPanel).findByText('Целевой взнос')).toBeInTheDocument()
     await waitFor(() => expect(addIncomeTypeButton).toHaveFocus())
 
-    await openDictionarySubgroup(user, dictionaryPanel, 'Виды выплат')
+    await openDictionarySubgroup(user, dictionaryPanel, 'Статьи расходов')
     const addExpenseTypeButton = within(dictionaryPanel).getByRole('button', { name: 'Добавить' })
     typeDialog = await openDictionaryCreateDialog(user, dictionaryPanel)
     await waitFor(() => expect(within(typeDialog).getByRole('button', { name: 'Закрыть окно справочника' })).toHaveFocus())
     await user.keyboard('{Escape}')
-    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Виды выплат' })).not.toBeInTheDocument())
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Статьи расходов' })).not.toBeInTheDocument())
     await waitFor(() => expect(addExpenseTypeButton).toHaveFocus())
     expect(within(dictionaryPanel).queryByText('Вывоз мусора')).not.toBeInTheDocument()
 
@@ -11130,7 +11124,7 @@ describe('App', () => {
     await waitFor(() => expect(addIncomeTypeButton).toHaveFocus())
     expect(within(dictionaryPanel).queryByText('членский')).not.toBeInTheDocument()
 
-    await openDictionarySubgroup(user, dictionaryPanel, 'Виды выплат')
+    await openDictionarySubgroup(user, dictionaryPanel, 'Статьи расходов')
     const addExpenseTypeButton = within(dictionaryPanel).getByRole('button', { name: 'Добавить' })
     validationDialog = await openDictionaryCreateDialog(user, dictionaryPanel)
     await user.type(within(validationDialog).getByLabelText('Название вида операции'), '   ')
@@ -11140,7 +11134,7 @@ describe('App', () => {
     expect(within(validationDialog).getByText('Укажите название вида выплаты.')).toBeInTheDocument()
     expect(createExpenseTypeCalled).toBe(false)
     await user.keyboard('{Escape}')
-    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Виды выплат' })).not.toBeInTheDocument())
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Статьи расходов' })).not.toBeInTheDocument())
     await waitFor(() => expect(addExpenseTypeButton).toHaveFocus())
     expect(within(dictionaryPanel).queryByText('Вывоз мусора')).not.toBeInTheDocument()
 
@@ -11192,7 +11186,7 @@ describe('App', () => {
     await user.type(within(dictionaryPanel).getByLabelText('Код вида выплаты'), 'вода')
     await user.click(within(dictionaryPanel).getAllByRole('button', { name: 'Добавить' })[4])
 
-    expect(await within(dictionaryPanel).findByText('Проверьте вид выплаты')).toBeInTheDocument()
+    expect(await within(dictionaryPanel).findByText('Проверьте статью расхода')).toBeInTheDocument()
     expect(within(dictionaryPanel).getByText('Укажите название вида выплаты.')).toBeInTheDocument()
     expect(createExpenseTypeCalled).toBe(false)
 
@@ -11282,6 +11276,7 @@ describe('App', () => {
     await financeClient.createSupplierAccrual('persisted-session', {
       supplierId: 'supplier-1',
       expenseTypeId: 'expense-type-1',
+      expensePaymentType: 'with_receipt',
       accountingMonth: '2026-06-01',
       amount: 650,
       source: 'manual',
@@ -11290,6 +11285,7 @@ describe('App', () => {
     await financeClient.createExpense('persisted-session', {
       supplierId: 'supplier-1',
       expenseTypeId: 'expense-type-1',
+      expensePaymentType: 'with_receipt',
       operationDate: '2026-06-30',
       accountingMonth: '2026-06-01',
       amount: 250,

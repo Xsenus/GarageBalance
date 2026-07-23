@@ -719,7 +719,7 @@ public sealed class ReportService(
                 operation.Id,
                 operation.OperationDate,
                 operation.Amount,
-                !string.IsNullOrWhiteSpace(operation.DocumentNumber),
+                operation.HasReceipt,
                 BuildCashPaymentPurpose(operation.ExpenseTypeName, operation.SupplierName, operation.Comment),
                 operation.SupplierName,
                 operation.ExpenseTypeName,
@@ -1314,7 +1314,7 @@ public sealed class ReportService(
             [
                 new XlsxSheet(
                     "Выплаты",
-                    ["Тип", "Дата", "Месяц учета", "Поставщик или сотрудник", "Вид выплаты", "Начислено", "Выплачено", "Разница", "Документ", "Комментарий"],
+                    ["Тип", "Дата", "Месяц учета", "Поставщик или сотрудник", "Услуга / статья расхода", "Начислено", "Выплачено", "Разница", "Документ", "Комментарий"],
                     report.Rows.Select(row => (IReadOnlyList<XlsxCell>)
                     [
                         XlsxCell.Text(FormatExpenseRowType(row.RowType)),

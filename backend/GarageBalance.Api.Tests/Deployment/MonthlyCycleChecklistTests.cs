@@ -39,7 +39,7 @@ public sealed class MonthlyCycleChecklistTests
         Assert.Contains("частичная оплата не закрывает обязательство", document, StringComparison.Ordinal);
         Assert.Contains("`Прочие оплаты` (`other_payments`)", document, StringComparison.Ordinal);
         Assert.Contains("`Прочие доходы` (`other_income`)", document, StringComparison.Ordinal);
-        Assert.Contains("той же пары `поставщик + вид выплаты`", document, StringComparison.Ordinal);
+        Assert.Contains("той же пары `поставщик + статья расхода`", document, StringComparison.Ordinal);
         Assert.Contains("восемь вкладок", document, StringComparison.Ordinal);
         Assert.Contains("`Изменение фондов`", document, StringComparison.Ordinal);
 

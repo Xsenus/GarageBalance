@@ -93,7 +93,10 @@ public sealed class EfCashMovementReportQuery(GarageBalanceDbContext dbContext) 
                        expense_type."Name" AS expense_type_name,
                        operation."DocumentNumber" AS document_number,
                        operation."Comment" AS comment,
-                       operation."DocumentNumber" IS NOT NULL AND operation."DocumentNumber" <> '' AS has_receipt,
+                       COALESCE(
+                           operation."ExpensePaymentType" = 'with_receipt',
+                           operation."DocumentNumber" IS NOT NULL AND operation."DocumentNumber" <> ''
+                       ) AS has_receipt,
                        COALESCE(expense_type."Name", '') || ': ' || COALESCE(supplier."Name", '') AS purpose
                 FROM financial_operations operation
                 LEFT JOIN suppliers supplier ON supplier."Id" = operation."SupplierId"
@@ -113,11 +116,11 @@ public sealed class EfCashMovementReportQuery(GarageBalanceDbContext dbContext) 
             )
             SELECT {{PageCategory}} AS "Category", row_order AS "RowOrder", id AS "Id",
                    operation_date AS "OperationDate", amount AS "Amount", supplier_name AS "SupplierName",
-                   expense_type_name AS "ExpenseTypeName", document_number AS "DocumentNumber", comment AS "Comment",
+                   expense_type_name AS "ExpenseTypeName", has_receipt AS "HasReceipt", document_number AS "DocumentNumber", comment AS "Comment",
                    0::numeric AS "Total", 0 AS "RowCount"
             FROM page_rows
             UNION ALL
-            SELECT {{TotalsCategory}}, 0, NULL::uuid, NULL::date, 0::numeric, NULL::text, NULL::text, NULL::text, NULL::text,
+            SELECT {{TotalsCategory}}, 0, NULL::uuid, NULL::date, 0::numeric, NULL::text, NULL::text, FALSE, NULL::text, NULL::text,
                    COALESCE(SUM(amount), 0), COUNT(*)::int
             FROM filtered_rows
             ORDER BY "Category", "RowOrder"
@@ -149,6 +152,7 @@ public sealed class EfCashMovementReportQuery(GarageBalanceDbContext dbContext) 
                 row.Amount,
                 row.SupplierName,
                 row.ExpenseTypeName,
+                row.HasReceipt,
                 row.DocumentNumber,
                 row.Comment))
             .ToList();
@@ -303,8 +307,12 @@ public sealed class EfCashMovementReportQuery(GarageBalanceDbContext dbContext) 
         {
             "amount" => sort.Descending ? query.OrderByDescending(operation => operation.Amount) : query.OrderBy(operation => operation.Amount),
             "hasReceipt" => sort.Descending
-                ? query.OrderByDescending(operation => operation.DocumentNumber != null && operation.DocumentNumber != string.Empty)
-                : query.OrderBy(operation => operation.DocumentNumber != null && operation.DocumentNumber != string.Empty),
+                ? query.OrderByDescending(operation =>
+                    operation.ExpensePaymentType == ExpensePaymentTypes.WithReceipt ||
+                    (operation.ExpensePaymentType == null && operation.DocumentNumber != null && operation.DocumentNumber != string.Empty))
+                : query.OrderBy(operation =>
+                    operation.ExpensePaymentType == ExpensePaymentTypes.WithReceipt ||
+                    (operation.ExpensePaymentType == null && operation.DocumentNumber != null && operation.DocumentNumber != string.Empty)),
             "purpose" => sort.Descending
                 ? query.OrderByDescending(operation => (operation.ExpenseType == null ? string.Empty : operation.ExpenseType.Name) + ": " + (operation.Supplier == null ? string.Empty : operation.Supplier.Name))
                 : query.OrderBy(operation => (operation.ExpenseType == null ? string.Empty : operation.ExpenseType.Name) + ": " + (operation.Supplier == null ? string.Empty : operation.Supplier.Name)),
@@ -322,7 +330,7 @@ public sealed class EfCashMovementReportQuery(GarageBalanceDbContext dbContext) 
         sort.Field switch
         {
             "amount" => sort.Descending ? operations.OrderByDescending(operation => operation.Amount) : operations.OrderBy(operation => operation.Amount),
-            "hasReceipt" => sort.Descending ? operations.OrderByDescending(operation => !string.IsNullOrWhiteSpace(operation.DocumentNumber)) : operations.OrderBy(operation => !string.IsNullOrWhiteSpace(operation.DocumentNumber)),
+            "hasReceipt" => sort.Descending ? operations.OrderByDescending(HasReceipt) : operations.OrderBy(HasReceipt),
             "purpose" => sort.Descending ? operations.OrderByDescending(BuildCashPaymentPurpose, StringComparer.Ordinal) : operations.OrderBy(BuildCashPaymentPurpose, StringComparer.Ordinal),
             "supplierName" => sort.Descending ? operations.OrderByDescending(operation => operation.Supplier?.Name, StringComparer.Ordinal) : operations.OrderBy(operation => operation.Supplier?.Name, StringComparer.Ordinal),
             "expenseTypeName" => sort.Descending ? operations.OrderByDescending(operation => operation.ExpenseType?.Name, StringComparer.Ordinal) : operations.OrderBy(operation => operation.ExpenseType?.Name, StringComparer.Ordinal),
@@ -354,8 +362,13 @@ public sealed class EfCashMovementReportQuery(GarageBalanceDbContext dbContext) 
             operation.Amount,
             operation.Supplier?.Name,
             operation.ExpenseType?.Name,
+            HasReceipt(operation),
             operation.DocumentNumber,
             operation.Comment);
+
+    private static bool HasReceipt(FinancialOperation operation) =>
+        operation.ExpensePaymentType == ExpensePaymentTypes.WithReceipt ||
+        (operation.ExpensePaymentType is null && !string.IsNullOrWhiteSpace(operation.DocumentNumber));
 
     private static BankDepositQueryRow ToBankDepositQueryRow(FundOperation operation) =>
         new(operation.Id, operation.CreatedAtUtc, operation.Amount, operation.Fund.Name, operation.Reason);
@@ -383,6 +396,7 @@ public sealed class EfCashMovementReportQuery(GarageBalanceDbContext dbContext) 
         decimal Amount,
         string? SupplierName,
         string? ExpenseTypeName,
+        bool HasReceipt,
         string? DocumentNumber,
         string? Comment,
         decimal Total,

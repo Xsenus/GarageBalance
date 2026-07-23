@@ -212,9 +212,10 @@ describe('shared validation helpers', () => {
       'Сумма поступления должна быть больше 0.',
     ])
 
-    expect(getExpenseValidationErrors({ supplierId: '', expenseTypeId: '', operationDate: 'bad', accountingMonth: 'bad', amount: -1, documentNumber: '', comment: '' })).toEqual([
+    expect(getExpenseValidationErrors({ supplierId: '', expenseTypeId: '', expensePaymentType: 'invalid' as never, operationDate: 'bad', accountingMonth: 'bad', amount: -1, documentNumber: '', comment: '' })).toEqual([
       'Выберите поставщика для выплаты.',
-      'Выберите вид выплаты.',
+      'Для поставщика должна быть настроена услуга или статья расхода.',
+      'Выберите тип выплаты.',
       'Укажите дату выплаты.',
       'Укажите месяц выплаты.',
       'Сумма выплаты должна быть больше 0.',

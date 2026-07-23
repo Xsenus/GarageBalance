@@ -60,6 +60,7 @@ const editorFieldLabelKeys: FinanceEditorFieldLabelKey[] = [
   'incomeComment',
   'expenseSupplier',
   'expenseType',
+  'expensePaymentType',
   'expenseDate',
   'expenseMonth',
   'expenseAmount',
@@ -159,6 +160,8 @@ describe('finance workbench metadata', () => {
       incomeMonth: 'Месяц учета',
       incomeDocument: 'Документ',
       expenseSupplier: 'Поставщик',
+      expenseType: 'Услуга / статья расхода',
+      expensePaymentType: 'Тип выплаты',
       accrualSource: 'Источник',
       supplierAccrualDocument: 'Документ',
       meterCurrentValue: 'Текущее показание',
@@ -197,9 +200,9 @@ describe('finance workbench metadata', () => {
   it('returns table headers for every payment section', () => {
     expect(Object.fromEntries(sectionKeys.map((section) => [section, getFinanceTableHeaders(section)]))).toEqual({
       income: ['Дата', 'Месяц', 'Гараж', 'Владелец', 'Вид оплаты', 'Документ', 'Оплачено', 'Долг после', 'Комментарий'],
-      expense: ['Дата', 'Месяц', 'Поставщик', 'Вид выплаты', 'Документ', 'Выплачено', 'Обязательство после', 'Комментарий'],
+      expense: ['Дата', 'Месяц', 'Поставщик', 'Услуга / статья расхода', 'Тип выплаты', 'Документ', 'Выплачено', 'Обязательство после', 'Комментарий'],
       accruals: ['Месяц', 'Учетный год', 'Гараж', 'Владелец', 'Вид оплаты', 'Источник', 'Начислено', 'Комментарий'],
-      supplierAccruals: ['Месяц', 'Поставщик', 'Вид выплаты', 'Источник', 'Документ', 'Начислено', 'Комментарий'],
+      supplierAccruals: ['Месяц', 'Поставщик', 'Услуга / статья расхода', 'Источник', 'Документ', 'Начислено', 'Комментарий'],
       meterReadings: ['Месяц', 'Дата', 'Гараж', 'Счетчик', 'Пред. знач.', 'Нов. знач.', 'Разница', 'Комментарий'],
     })
   })

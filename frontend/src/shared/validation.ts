@@ -387,7 +387,11 @@ export function getExpenseValidationErrors(form: CreateExpenseOperationRequest) 
   }
 
   if (!form.expenseTypeId) {
-    errors.push('Выберите вид выплаты.')
+    errors.push('Для поставщика должна быть настроена услуга или статья расхода.')
+  }
+
+  if (form.expensePaymentType !== 'with_receipt' && form.expensePaymentType !== 'without_receipt') {
+    errors.push('Выберите тип выплаты.')
   }
 
   if (!isDateInputValue(form.operationDate)) {

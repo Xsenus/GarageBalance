@@ -3,7 +3,7 @@ import type { FormEvent, KeyboardEvent, MouseEvent, ReactNode } from 'react'
 import { FileText, Gavel, History, LoaderCircle, Pencil, RotateCcw, Save, Search, Trash2, WalletCards, X } from 'lucide-react'
 import type { AuthResponse } from '../../services/authApi'
 import type { AccountingTypeDto, DictionaryClient, GarageDto, IrregularPaymentDto, StaffMemberDto, SupplierDto, SupplierGroupDto } from '../../services/dictionariesApi'
-import type { AccrualDto, CreateAccrualRequest, CreateExpenseOperationRequest, CreateIncomeOperationRequest, CreateMeterReadingRequest, CreateSupplierAccrualRequest, ExpenseWorksheetDto, FinanceClient, FinancePagedResult, FinanceSummaryDto, FinancialOperationDto, GarageIncomeWorksheetDto, GarageOverdueDebtDto, GenerateSupplierGroupSalaryAccrualsRequest, MeterReadingDto, MissingMeterReadingDto, SupplierAccrualDto } from '../../services/financeApi'
+import type { AccrualDto, CreateAccrualRequest, CreateExpenseOperationRequest, CreateIncomeOperationRequest, CreateMeterReadingRequest, CreateSupplierAccrualRequest, ExpensePaymentType, ExpenseWorksheetDto, FinanceClient, FinancePagedResult, FinanceSummaryDto, FinancialOperationDto, GarageIncomeWorksheetDto, GarageOverdueDebtDto, GenerateSupplierGroupSalaryAccrualsRequest, MeterReadingDto, MissingMeterReadingDto, SupplierAccrualDto } from '../../services/financeApi'
 import { FinanceApiError } from '../../services/financeApi'
 import type { FundDto, FundsClient } from '../../services/fundsApi'
 import type { IntegrationClient, ReceiptPrintingActionKind } from '../../services/integrationsApi'
@@ -25,7 +25,8 @@ import { SelectControl } from '../../shared/SelectControl'
 import { TablePagination } from '../../shared/TablePagination'
 import { getAccrualValidationErrors, getExpenseValidationErrors, getIncomeValidationErrors, getMeterReadingValidationErrors, getSupplierAccrualValidationErrors, getSupplierGroupSalaryValidationErrors } from '../../shared/validation'
 import { formatPaymentMoney, parsePaymentMoney } from './paymentMoneyFormatting'
-import { calculateExpenseWorksheetClosingBalance, getExpenseWorksheetCollectedClassName, isAtomicCashExpenseType, toSignedExpenseWorksheetBalance } from './expenseWorksheetBalances'
+import { calculateExpenseWorksheetClosingBalance, getExpenseWorksheetCollectedClassName, toSignedExpenseWorksheetBalance } from './expenseWorksheetBalances'
+import { expensePaymentTypeOptions, formatExpensePaymentType } from './expensePaymentTypes'
 import { rankGarageSearchResults } from './garageSearchRanking'
 import { getGarageBalancePresentation } from './garageBalancePresentation'
 import { getFirstLinkedSupplier, getSupplierAccrualExpenseType } from './supplierAccrualLink'
@@ -38,7 +39,6 @@ const financeScreenRequestLimit = 50
 const financePreviewRequestLimit = 8
 const dictionaryScreenRequestLimit = 100
 const garageSearchTimeoutMs = 10_000
-
 type FinanceRecord = FinancialOperationDto | AccrualDto | SupplierAccrualDto | MeterReadingDto
 type FinancePreviewStatuses = {
   operations: boolean
@@ -241,6 +241,7 @@ type StaffPaymentPrototypeDialogPreset = {
 type ExpensePrototypeSubmitRequest = {
   supplierId: string
   expenseTypeId: string
+  expensePaymentType: ExpensePaymentType
   operationDate: string
   accountingMonth: string
   amount: number
@@ -358,7 +359,7 @@ export function FinancePanel({
   const [missingMeterReadings, setMissingMeterReadings] = useState<MissingMeterReadingDto[]>([])
   const [summary, setSummary] = useState<FinanceSummaryDto>({ incomeTotal: 0, expenseTotal: 0, accrualTotal: 0, balance: 0, debt: 0, operationCount: 0, accrualCount: 0, meterReadingCount: 0 })
   const [incomeForm, setIncomeForm] = useState({ garageId: '', incomeTypeId: '', operationDate: today, accountingMonth: month, amount: 0, documentNumber: '', comment: '' })
-  const [expenseForm, setExpenseForm] = useState({ supplierId: '', expenseTypeId: '', operationDate: today, accountingMonth: month, amount: 0, documentNumber: '', comment: '' })
+  const [expenseForm, setExpenseForm] = useState({ supplierId: '', expenseTypeId: '', expensePaymentType: 'with_receipt' as ExpensePaymentType, operationDate: today, accountingMonth: month, amount: 0, documentNumber: '', comment: '' })
   const [accrualForm, setAccrualForm] = useState({ garageId: '', incomeTypeId: '', accountingMonth: month, amount: 0, source: 'manual' as 'manual' | 'regular', comment: '' })
   const [supplierAccrualForm, setSupplierAccrualForm] = useState({ supplierId: '', expenseTypeId: '', accountingMonth: month, amount: 0, source: 'manual' as 'manual' | 'regular', documentNumber: '', comment: '' })
   const [salaryForm, setSalaryForm] = useState({ supplierGroupId: '', accountingMonth: month, amount: 0, documentNumber: '', comment: '' })
@@ -576,7 +577,17 @@ export function FinancePanel({
         setExpenseTypes(loadedExpenseTypes)
         setIrregularPayments(loadedIrregularPayments)
         setIncomeForm((value) => ({ ...value, incomeTypeId: value.incomeTypeId || loadedIncomeTypes[0]?.id || '' }))
-        setExpenseForm((value) => ({ ...value, supplierId: value.supplierId || loadedSuppliers[0]?.id || '', expenseTypeId: value.expenseTypeId || loadedExpenseTypes[0]?.id || '' }))
+        setExpenseForm((value) => {
+          const requestedSupplier = loadedSuppliers.find((supplier) => supplier.id === value.supplierId)
+          const linkedSupplier = requestedSupplier && getSupplierAccrualExpenseType(requestedSupplier, loadedExpenseTypes)
+            ? requestedSupplier
+            : getFirstLinkedSupplier(loadedSuppliers, loadedExpenseTypes)
+          return {
+            ...value,
+            supplierId: linkedSupplier?.id ?? requestedSupplier?.id ?? loadedSuppliers[0]?.id ?? '',
+            expenseTypeId: getSupplierAccrualExpenseType(linkedSupplier ?? requestedSupplier ?? loadedSuppliers[0], loadedExpenseTypes)?.id ?? '',
+          }
+        })
         setAccrualForm((value) => ({ ...value, incomeTypeId: value.incomeTypeId || loadedIncomeTypes[0]?.id || '' }))
         setSupplierAccrualForm((value) => {
           const requestedSupplier = loadedSuppliers.find((supplier) => supplier.id === value.supplierId)
@@ -922,7 +933,8 @@ export function FinancePanel({
     }
 
     appendChangePreview(changes, 'Поставщик', formatSupplier(record.supplierId, record.supplierName), formatSupplier(request.supplierId, request.supplierId === record.supplierId ? record.supplierName : null))
-    appendChangePreview(changes, 'Вид выплаты', formatExpenseType(record.expenseTypeId, record.expenseTypeName), formatExpenseType(request.expenseTypeId, request.expenseTypeId === record.expenseTypeId ? record.expenseTypeName : null))
+    appendChangePreview(changes, 'Услуга / статья расхода', formatExpenseType(record.expenseTypeId, record.expenseTypeName), formatExpenseType(request.expenseTypeId, request.expenseTypeId === record.expenseTypeId ? record.expenseTypeName : null))
+    appendChangePreview(changes, 'Тип выплаты', formatExpensePaymentType(record.expensePaymentType), formatExpensePaymentType(request.expensePaymentType))
     appendChangePreview(changes, 'Дата выплаты', formatChangeDate(record.operationDate), formatChangeDate(request.operationDate))
     appendChangePreview(changes, 'Месяц выплаты', formatMonth(record.accountingMonth), formatMonth(request.accountingMonth))
     appendChangePreview(changes, 'Сумма', formatChangeMoney(record.amount), formatChangeMoney(request.amount))
@@ -1093,6 +1105,7 @@ export function FinancePanel({
     const request: CreateExpenseOperationRequest = {
       supplierId: expenseForm.supplierId,
       expenseTypeId: expenseForm.expenseTypeId,
+      expensePaymentType: expenseForm.expensePaymentType,
       operationDate: expenseForm.operationDate,
       accountingMonth: expenseForm.accountingMonth,
       amount: expenseForm.amount,
@@ -1552,6 +1565,7 @@ export function FinancePanel({
       const nextForm = {
         supplierId: record.supplierId ?? '',
         expenseTypeId: record.expenseTypeId ?? '',
+        expensePaymentType: record.expensePaymentType ?? 'with_receipt',
         operationDate: record.operationDate,
         accountingMonth: record.accountingMonth,
         amount: record.amount,
@@ -1789,6 +1803,7 @@ export function FinancePanel({
                 <td>{formatMonth(operation.accountingMonth)}</td>
                 <td>{getFinanceOptionalText(operation.supplierName)}</td>
                 <td>{operation.expenseTypeName}</td>
+                <td>{formatExpensePaymentType(operation.expensePaymentType)}</td>
                 <td>{getFinanceOptionalText(operation.documentNumber)}</td>
                 <td className="money-expense">{formatMoney(operation.amount)}</td>
                 <td>{operation.supplierDebtAfter !== null ? formatMoney(operation.supplierDebtAfter) : getFinanceFallbackLabel('noData')}</td>
@@ -1965,28 +1980,35 @@ export function FinancePanel({
       return (
         <>
           {financeField('expenseSupplier', (
-            <select aria-label="Поставщик для выплаты" value={expenseForm.supplierId} onChange={(event) => setExpenseForm({ ...expenseForm, supplierId: event.target.value })} required>
-              <option value="" disabled>
-                Выберите поставщика
-              </option>
-              {suppliers.map((supplier) => (
-                <option value={supplier.id} key={supplier.id}>
-                  {supplier.name}
-                </option>
-              ))}
-            </select>
+            <SelectControl
+              aria-label="Поставщик для выплаты"
+              value={expenseForm.supplierId}
+              options={suppliers.map((supplier) => ({ value: supplier.id, label: supplier.name }))}
+              onChange={(supplierId) => {
+                const supplier = suppliers.find((item) => item.id === supplierId)
+                setExpenseForm({
+                  ...expenseForm,
+                  supplierId,
+                  expenseTypeId: getSupplierAccrualExpenseType(supplier, expenseTypes)?.id ?? '',
+                })
+              }} />
           ))}
           {financeField('expenseType', (
-            <select aria-label="Вид выплаты" value={expenseForm.expenseTypeId} onChange={(event) => setExpenseForm({ ...expenseForm, expenseTypeId: event.target.value })} required>
-              <option value="" disabled>
-                Выберите вид
-              </option>
-              {expenseTypes.map((item) => (
-                <option value={item.id} key={item.id}>
-                  {item.name}
-                </option>
-              ))}
-            </select>
+            <SelectControl
+              aria-label="Услуга или статья расхода"
+              value={expenseForm.expenseTypeId}
+              options={expenseForm.expenseTypeId
+                ? [{ value: expenseForm.expenseTypeId, label: expenseTypes.find((item) => item.id === expenseForm.expenseTypeId)?.name ?? 'Настроенная услуга' }]
+                : [{ value: '', label: 'Услуга не настроена' }]}
+              onChange={() => undefined}
+              disabled />
+          ))}
+          {financeField('expensePaymentType', (
+            <SelectControl
+              aria-label="Тип выплаты"
+              value={expenseForm.expensePaymentType}
+              options={expensePaymentTypeOptions}
+              onChange={(expensePaymentType) => setExpenseForm({ ...expenseForm, expensePaymentType: expensePaymentType as ExpensePaymentType })} />
           ))}
           <div className="inline-fields">
             {financeField('expenseDate', <LocalizedDatePicker ariaLabel="Дата выплаты" mode="date" value={expenseForm.operationDate} onChange={(operationDate) => setExpenseForm({ ...expenseForm, operationDate })} required />)}
@@ -2314,26 +2336,31 @@ export function FinancePanel({
 
         <form className="dictionary-form" onSubmit={saveExpense}>
           <h3>Новая выплата</h3>
-          <select aria-label="Поставщик для выплаты" value={expenseForm.supplierId} onChange={(event) => setExpenseForm({ ...expenseForm, supplierId: event.target.value })} required>
-            <option value="" disabled>
-              Выберите поставщика
-            </option>
-            {suppliers.map((supplier) => (
-              <option value={supplier.id} key={supplier.id}>
-                {supplier.name}
-              </option>
-            ))}
-          </select>
-          <select aria-label="Вид выплаты для платежа" value={expenseForm.expenseTypeId} onChange={(event) => setExpenseForm({ ...expenseForm, expenseTypeId: event.target.value })} required>
-            <option value="" disabled>
-              Выберите вид
-            </option>
-            {expenseTypes.map((item) => (
-              <option value={item.id} key={item.id}>
-                {item.name}
-              </option>
-            ))}
-          </select>
+          <SelectControl
+            aria-label="Поставщик для выплаты"
+            value={expenseForm.supplierId}
+            options={suppliers.map((supplier) => ({ value: supplier.id, label: supplier.name }))}
+            onChange={(supplierId) => {
+              const supplier = suppliers.find((item) => item.id === supplierId)
+              setExpenseForm({
+                ...expenseForm,
+                supplierId,
+                expenseTypeId: getSupplierAccrualExpenseType(supplier, expenseTypes)?.id ?? '',
+              })
+            }} />
+          <SelectControl
+            aria-label="Услуга или статья расхода"
+            value={expenseForm.expenseTypeId}
+            options={expenseForm.expenseTypeId
+              ? [{ value: expenseForm.expenseTypeId, label: expenseTypes.find((item) => item.id === expenseForm.expenseTypeId)?.name ?? 'Настроенная услуга' }]
+              : [{ value: '', label: 'Услуга не настроена' }]}
+            onChange={() => undefined}
+            disabled />
+          <SelectControl
+            aria-label="Тип выплаты"
+            value={expenseForm.expensePaymentType}
+            options={expensePaymentTypeOptions}
+            onChange={(expensePaymentType) => setExpenseForm({ ...expenseForm, expensePaymentType: expensePaymentType as ExpensePaymentType })} />
           <div className="inline-fields">
             <LocalizedDatePicker ariaLabel="Дата выплаты" mode="date" value={expenseForm.operationDate} onChange={(operationDate) => setExpenseForm({ ...expenseForm, operationDate })} required />
             <LocalizedDatePicker ariaLabel="Месяц выплаты" mode="month" value={expenseForm.accountingMonth.slice(0, 7)} onChange={(accountingMonth) => setExpenseForm({ ...expenseForm, accountingMonth: `${accountingMonth}-01` })} required />
@@ -2803,7 +2830,7 @@ export function FinancePanel({
                   <dd>{accrualBreakdown.accrual.supplierName}</dd>
                 </div>
                 <div>
-                  <dt>Вид выплаты</dt>
+                  <dt>Услуга / статья расхода</dt>
                   <dd>{accrualBreakdown.accrual.expenseTypeName}</dd>
                 </div>
                 <div>
@@ -4164,12 +4191,16 @@ function PaymentsPrototypePanel({
 
     const expenseType = expenseTypes.find((item) => item.id === request.expenseTypeId && !item.isArchived) ?? null
     if (!expenseType) {
-      return 'Выберите вид выплаты из справочника.'
+      return 'Для поставщика должна быть настроена услуга или статья расхода.'
+    }
+    if (supplier.chargeServiceExpenseTypeId !== expenseType.id) {
+      return `Поставщику «${supplier.name}» можно провести выплату только по настроенной услуге.`
     }
 
     await financeClient.createExpense(auth.accessToken, {
       supplierId: supplier.id,
       expenseTypeId: expenseType.id,
+      expensePaymentType: request.expensePaymentType,
       operationDate: request.operationDate,
       accountingMonth: request.accountingMonth,
       amount: request.amount,
@@ -4889,8 +4920,6 @@ function PaymentsPrototypePanel({
                     const supplier = row.counterparty ?? ''
                     const isStaffPaymentRow = row.rowKind === 'staff'
                     const suggestedAmount = row.closingDebt > 0 ? row.closingDebt : typeof row.cost === 'number' ? row.cost : undefined
-                    const rowExpenseType = expenseTypes.find((expenseType) => expenseType.id === row.expenseTypeId)
-                    const isAtomicCashPayout = isAtomicCashExpenseType(rowExpenseType?.code, row.item)
                     const openingBalance = toSignedExpenseWorksheetBalance(row.openingDebt, row.openingAdvance)
                     const closingBalance = toSignedExpenseWorksheetBalance(row.closingDebt, row.closingAdvance)
                     const collectedClassName = getExpenseWorksheetCollectedClassName(row.collected, row.cost)
@@ -4907,7 +4936,7 @@ function PaymentsPrototypePanel({
                             <td className={collectedClassName}>{formatPaymentMoney(row.collected)}</td>
                             <td>{formatPaymentMoney(row.difference)}</td>
                             <td>
-                              {row.action && !isAtomicCashPayout ? (
+                              {row.action ? (
                                 <button className="link-button" type="button" onClick={(event) => {
                                   if (isStaffPaymentRow) {
                                     openStaffPaymentDialog(event, { staffMemberName: supplier, amount: suggestedAmount, rowIndex: index })
@@ -5533,8 +5562,12 @@ function NewExpensePrototypeDialog({
   const presetExpenseType = preset.expenseTypeName
     ? expenseTypes.find((expenseType) => expenseType.name.trim().toLocaleLowerCase('ru-RU') === preset.expenseTypeName?.trim().toLocaleLowerCase('ru-RU'))
     : null
-  const [supplierId, setSupplierId] = useState(suppliers[0]?.id ?? '')
-  const [expenseTypeId, setExpenseTypeId] = useState(presetExpenseType?.id ?? expenseTypes[0]?.id ?? '')
+  const initialSupplier = suppliers.find((supplier) => supplier.chargeServiceExpenseTypeId === presetExpenseType?.id)
+    ?? getFirstLinkedSupplier(suppliers, expenseTypes)
+    ?? suppliers[0]
+  const [supplierId, setSupplierId] = useState(initialSupplier?.id ?? '')
+  const [expenseTypeId, setExpenseTypeId] = useState(getSupplierAccrualExpenseType(initialSupplier, expenseTypes)?.id ?? '')
+  const [expensePaymentType, setExpensePaymentType] = useState<ExpensePaymentType>('with_receipt')
   const [operationDate, setOperationDate] = useState(getLocalDateInputValue())
   const [accountingMonth, setAccountingMonth] = useState(getLocalDateInputValue().slice(0, 7))
   const [amount, setAmount] = useState(preset.amount ? String(preset.amount) : '')
@@ -5552,7 +5585,7 @@ function NewExpensePrototypeDialog({
       return
     }
     if (!expenseTypeId) {
-      setError('Выберите вид выплаты из справочника.')
+      setError('Для поставщика должна быть настроена услуга или статья расхода.')
       return
     }
     if (!operationDate) {
@@ -5574,6 +5607,7 @@ function NewExpensePrototypeDialog({
       const submitError = await onSubmit({
         supplierId,
         expenseTypeId,
+        expensePaymentType,
         operationDate,
         accountingMonth: `${accountingMonth}-01`,
         amount: parsedAmount,
@@ -5615,19 +5649,31 @@ function NewExpensePrototypeDialog({
               disabled={saving}
               onChange={(nextSupplierId) => {
                 setSupplierId(nextSupplierId)
+                setExpenseTypeId(getSupplierAccrualExpenseType(
+                  suppliers.find((supplier) => supplier.id === nextSupplierId),
+                  expenseTypes,
+                )?.id ?? '')
                 setError(null)
               }} />
           </FormField>
-          <FormField label="Вид выплаты">
+          <FormField label="Услуга / статья расхода">
             <SelectControl
-              aria-label="Вид выплаты"
+              aria-label="Услуга или статья расхода выплаты"
               value={expenseTypeId}
-              options={expenseTypes.length > 0
-                ? expenseTypes.map((expenseType) => ({ value: expenseType.id, label: expenseType.name }))
-                : [{ value: '', label: 'Нет видов выплат' }]}
+              options={expenseTypeId
+                ? [{ value: expenseTypeId, label: expenseTypes.find((expenseType) => expenseType.id === expenseTypeId)?.name ?? 'Настроенная услуга' }]
+                : [{ value: '', label: 'Услуга не настроена' }]}
+              onChange={() => undefined}
+              disabled />
+          </FormField>
+          <FormField label="Тип выплаты">
+            <SelectControl
+              aria-label="Тип выплаты"
+              value={expensePaymentType}
+              options={expensePaymentTypeOptions}
               disabled={saving}
-              onChange={(nextExpenseTypeId) => {
-                setExpenseTypeId(nextExpenseTypeId)
+              onChange={(nextExpensePaymentType) => {
+                setExpensePaymentType(nextExpensePaymentType as ExpensePaymentType)
                 setError(null)
               }} />
           </FormField>

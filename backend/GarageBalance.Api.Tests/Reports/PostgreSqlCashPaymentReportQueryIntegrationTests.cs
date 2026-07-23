@@ -28,8 +28,8 @@ public sealed class PostgreSqlCashPaymentReportQueryIntegrationTests
             var repair = new ExpenseType { Name = $"Ремонт {suffix}" };
             seedContext.AddRange(group, firstSupplier, secondSupplier, electricity, repair);
             seedContext.FinancialOperations.AddRange(
-                CreateExpense(firstSupplier, electricity, month.AddDays(4), 100m, "КО-100", "Оплата июля"),
-                CreateExpense(secondSupplier, repair, month.AddDays(8), 50m, "КО-050", "Текущий ремонт"),
+                CreateExpense(firstSupplier, electricity, month.AddDays(4), 100m, "КО-100", "Оплата июля", expensePaymentType: ExpensePaymentTypes.WithoutReceipt),
+                CreateExpense(secondSupplier, repair, month.AddDays(8), 50m, null, "Текущий ремонт"),
                 CreateExpense(firstSupplier, electricity, month.AddDays(10), 999m, "CANCELED", "Отменено", true),
                 CreateExpense(firstSupplier, electricity, month.AddMonths(-1), 200m, "OUTSIDE", "Другой месяц"),
                 new FinancialOperation
@@ -67,6 +67,7 @@ public sealed class PostgreSqlCashPaymentReportQueryIntegrationTests
         Assert.Equal(100m, operation.Amount);
         Assert.Equal(firstSupplierName, operation.SupplierName);
         Assert.Equal(electricityName, operation.ExpenseTypeName);
+        Assert.False(operation.HasReceipt);
         Assert.Equal("КО-100", operation.DocumentNumber);
         Assert.Equal("Оплата июля", operation.Comment);
         var pageCommand = Assert.Single(capture.Commands);
@@ -99,15 +100,17 @@ public sealed class PostgreSqlCashPaymentReportQueryIntegrationTests
         ExpenseType expenseType,
         DateOnly operationDate,
         decimal amount,
-        string documentNumber,
+        string? documentNumber,
         string comment,
-        bool isCanceled = false) =>
+        bool isCanceled = false,
+        string expensePaymentType = ExpensePaymentTypes.WithReceipt) =>
         new()
         {
             OperationKind = FinancialOperationKinds.Expense,
             OperationDate = operationDate,
             AccountingMonth = new DateOnly(operationDate.Year, operationDate.Month, 1),
             Amount = amount,
+            ExpensePaymentType = expensePaymentType,
             Supplier = supplier,
             ExpenseType = expenseType,
             DocumentNumber = documentNumber,

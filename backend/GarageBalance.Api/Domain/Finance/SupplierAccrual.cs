@@ -9,6 +9,8 @@ public sealed class SupplierAccrual
     public Supplier Supplier { get; set; } = null!;
     public Guid ExpenseTypeId { get; set; }
     public ExpenseType ExpenseType { get; set; } = null!;
+    public Guid? SourceFinancialOperationId { get; set; }
+    public FinancialOperation? SourceFinancialOperation { get; set; }
     public DateOnly AccountingMonth { get; set; }
     public decimal Amount { get; set; }
     public required string Source { get; set; }

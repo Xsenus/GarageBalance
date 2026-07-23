@@ -1270,7 +1270,7 @@ public sealed class DictionaryService(
         var name = request.Name.Trim();
         if (await expenseTypeRepository.ActiveDuplicateExistsAsync(null, name, cancellationToken))
         {
-            return DictionaryResult<AccountingTypeDto>.Failure("expense_type_duplicate", "Вид выплаты с таким названием уже существует.");
+            return DictionaryResult<AccountingTypeDto>.Failure("expense_type_duplicate", "Статья расхода с таким названием уже существует.");
         }
 
         var expenseType = new ExpenseType
@@ -1280,7 +1280,7 @@ public sealed class DictionaryService(
         };
 
         expenseTypeRepository.Add(expenseType);
-        AddAudit(actorUserId, "dictionary.expense_type_created", "expense_type", expenseType.Id, $"Создан вид выплаты {expenseType.Name}.");
+        AddAudit(actorUserId, "dictionary.expense_type_created", "expense_type", expenseType.Id, $"Создана статья расхода {expenseType.Name}.");
         await unitOfWork.SaveChangesAsync(cancellationToken);
         return DictionaryResult<AccountingTypeDto>.Success(new AccountingTypeDto(expenseType.Id, expenseType.Name, expenseType.Code, expenseType.IsSystem, expenseType.IsArchived));
     }
@@ -1290,18 +1290,18 @@ public sealed class DictionaryService(
         var expenseType = await expenseTypeRepository.FindActiveAsync(id, cancellationToken);
         if (expenseType is null)
         {
-            return DictionaryResult<AccountingTypeDto>.Failure("expense_type_not_found", "Вид выплаты не найден.");
+            return DictionaryResult<AccountingTypeDto>.Failure("expense_type_not_found", "Статья расхода не найдена.");
         }
 
         if (expenseType.IsSystem)
         {
-            return DictionaryResult<AccountingTypeDto>.Failure("expense_type_system", "Системный вид выплаты нельзя изменять.");
+            return DictionaryResult<AccountingTypeDto>.Failure("expense_type_system", "Системную статью расхода нельзя изменять.");
         }
 
         var name = request.Name.Trim();
         if (await expenseTypeRepository.ActiveDuplicateExistsAsync(id, name, cancellationToken))
         {
-            return DictionaryResult<AccountingTypeDto>.Failure("expense_type_duplicate", "Вид выплаты с таким названием уже существует.");
+            return DictionaryResult<AccountingTypeDto>.Failure("expense_type_duplicate", "Статья расхода с таким названием уже существует.");
         }
 
         var code = NormalizeOptional(request.Code);
@@ -1325,7 +1325,7 @@ public sealed class DictionaryService(
         expenseType.Code = code;
         expenseType.UpdatedAtUtc = DateTimeOffset.UtcNow;
 
-        AddAudit(actorUserId, "dictionary.expense_type_updated", "expense_type", expenseType.Id, $"Обновлен вид выплаты {expenseType.Name}.", oldValues: oldValues, newValues: newValues);
+        AddAudit(actorUserId, "dictionary.expense_type_updated", "expense_type", expenseType.Id, $"Обновлена статья расхода {expenseType.Name}.", oldValues: oldValues, newValues: newValues);
         await unitOfWork.SaveChangesAsync(cancellationToken);
         return DictionaryResult<AccountingTypeDto>.Success(new AccountingTypeDto(expenseType.Id, expenseType.Name, expenseType.Code, expenseType.IsSystem, expenseType.IsArchived));
     }
@@ -1340,18 +1340,18 @@ public sealed class DictionaryService(
         var expenseType = await expenseTypeRepository.FindActiveAsync(id, cancellationToken);
         if (expenseType is null)
         {
-            return DictionaryResult<AccountingTypeDto>.Failure("expense_type_not_found", "Вид выплаты не найден.");
+            return DictionaryResult<AccountingTypeDto>.Failure("expense_type_not_found", "Статья расхода не найдена.");
         }
 
         if (expenseType.IsSystem)
         {
-            return DictionaryResult<AccountingTypeDto>.Failure("expense_type_system", "Системный вид выплаты нельзя архивировать.");
+            return DictionaryResult<AccountingTypeDto>.Failure("expense_type_system", "Системную статью расхода нельзя архивировать.");
         }
 
         expenseType.IsArchived = true;
         expenseType.UpdatedAtUtc = DateTimeOffset.UtcNow;
 
-        AddAudit(actorUserId, "dictionary.expense_type_archived", "expense_type", expenseType.Id, $"Архивирован вид выплаты {expenseType.Name}.", archiveReason);
+        AddAudit(actorUserId, "dictionary.expense_type_archived", "expense_type", expenseType.Id, $"Архивирована статья расхода {expenseType.Name}.", archiveReason);
         await unitOfWork.SaveChangesAsync(cancellationToken);
         return DictionaryResult<AccountingTypeDto>.Success(new AccountingTypeDto(expenseType.Id, expenseType.Name, expenseType.Code, expenseType.IsSystem, expenseType.IsArchived));
     }
@@ -1361,18 +1361,18 @@ public sealed class DictionaryService(
         var expenseType = await expenseTypeRepository.FindArchivedAsync(id, cancellationToken);
         if (expenseType is null)
         {
-            return DictionaryResult<AccountingTypeDto>.Failure("expense_type_not_found", "Вид выплаты не найден в архиве.");
+            return DictionaryResult<AccountingTypeDto>.Failure("expense_type_not_found", "Статья расхода не найдена в архиве.");
         }
 
         if (await expenseTypeRepository.ActiveDuplicateExistsAsync(id, expenseType.Name, cancellationToken))
         {
-            return DictionaryResult<AccountingTypeDto>.Failure("expense_type_duplicate", "Активный вид выплаты с таким названием уже существует.");
+            return DictionaryResult<AccountingTypeDto>.Failure("expense_type_duplicate", "Активная статья расхода с таким названием уже существует.");
         }
 
         expenseType.IsArchived = false;
         expenseType.UpdatedAtUtc = DateTimeOffset.UtcNow;
 
-        AddAudit(actorUserId, "dictionary.expense_type_restored", "expense_type", expenseType.Id, $"Восстановлен вид выплаты {expenseType.Name}.");
+        AddAudit(actorUserId, "dictionary.expense_type_restored", "expense_type", expenseType.Id, $"Восстановлена статья расхода {expenseType.Name}.");
         await unitOfWork.SaveChangesAsync(cancellationToken);
         return DictionaryResult<AccountingTypeDto>.Success(new AccountingTypeDto(expenseType.Id, expenseType.Name, expenseType.Code, expenseType.IsSystem, expenseType.IsArchived));
     }

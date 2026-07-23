@@ -1069,7 +1069,7 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
           />
           {renderReportTable(
             'Расшифровка консолидированного отчета',
-            ['Вид поступления', 'Поступления', 'Вид выплаты', 'Выплаты'],
+            ['Вид поступления', 'Поступления', 'Статья расхода', 'Выплаты'],
             breakdownRows,
           )}
         </ReportWorkbookSheet>

@@ -10,6 +10,7 @@ public sealed class FinancialOperation
     public DateOnly AccountingMonth { get; set; }
     public decimal Amount { get; set; }
     public Guid? ReceiptBatchId { get; set; }
+    public string? ExpensePaymentType { get; set; }
     public string? DocumentNumber { get; set; }
     public string? Comment { get; set; }
     public Guid? GarageId { get; set; }

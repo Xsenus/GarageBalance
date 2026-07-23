@@ -32,6 +32,7 @@ public sealed record CashPaymentQueryRow(
     decimal Amount,
     string? SupplierName,
     string? ExpenseTypeName,
+    bool HasReceipt,
     string? DocumentNumber,
     string? Comment);
 

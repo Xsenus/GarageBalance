@@ -981,10 +981,10 @@ public sealed class ReportServiceTests
     {
         await using var database = await TestDatabase.CreateAsync();
         var fixtures = await database.SeedAsync();
-        var secondSupplier = new Supplier { Name = "Siberia Online", GroupId = fixtures.Supplier.GroupId };
         var secondExpenseType = new ExpenseType { Name = "Связь", Code = "internet" };
-        database.Context.Suppliers.Add(secondSupplier);
-        database.Context.ExpenseTypes.Add(secondExpenseType);
+        var secondService = new ChargeServiceSetting { Name = "Связь", ExpenseType = secondExpenseType };
+        var secondSupplier = new Supplier { Name = "Siberia Online", GroupId = fixtures.Supplier.GroupId, ChargeServiceSetting = secondService };
+        database.Context.AddRange(secondExpenseType, secondService, secondSupplier);
         await database.Context.SaveChangesAsync();
         var finance = FinanceServiceTestFactory.Create(database.Context);
         var service = CreateService(database.Context);

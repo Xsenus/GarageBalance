@@ -27,8 +27,14 @@ public sealed class PostgreSqlExpenseWorksheetIntegrationTests
             var garage = new Garage { Number = "PG-BANK-RULE", PeopleCount = 1, FloorCount = 1, Owner = owner };
             var incomeType = new IncomeType { Name = "Банковское правило PG", Code = "pg_bank_rule" };
             var supplierGroup = new SupplierGroup { Name = "Банковское правило PG" };
-            var supplier = new Supplier { Name = "Поставщик банковского правила PG", Group = supplierGroup };
             var expenseType = new ExpenseType { Name = incomeType.Name, Code = incomeType.Code };
+            var chargeService = new ChargeServiceSetting { Name = "Услуга банковского правила PG", ExpenseType = expenseType };
+            var supplier = new Supplier
+            {
+                Name = "Поставщик банковского правила PG",
+                Group = supplierGroup,
+                ChargeServiceSetting = chargeService
+            };
             var bankFund = new Fund { Name = "Банк правила PG", NormalizedName = "БАНК ПРАВИЛА PG", Balance = 300m };
             supplierId = supplier.Id;
             expenseTypeId = expenseType.Id;
@@ -39,6 +45,7 @@ public sealed class PostgreSqlExpenseWorksheetIntegrationTests
                 supplierGroup,
                 supplier,
                 expenseType,
+                chargeService,
                 bankFund,
                 new FundOperation
                 {
@@ -196,8 +203,14 @@ public sealed class PostgreSqlExpenseWorksheetIntegrationTests
             var garage = new Garage { Number = "PG-ATOMIC", PeopleCount = 1, FloorCount = 1, Owner = owner };
             var incomeType = new IncomeType { Name = "Поступление для атомарной проверки PG", Code = "pg_atomic_income" };
             var supplierGroup = new SupplierGroup { Name = "Атомарные выплаты PG" };
-            var supplier = new Supplier { Name = "Получатель атомарной выплаты PG", Group = supplierGroup };
             var expenseType = new ExpenseType { Name = "Авансовые выплаты PG", Code = "advance_payment" };
+            var chargeService = new ChargeServiceSetting { Name = "Услуга атомарной выплаты PG", ExpenseType = expenseType };
+            var supplier = new Supplier
+            {
+                Name = "Получатель атомарной выплаты PG",
+                Group = supplierGroup,
+                ChargeServiceSetting = chargeService
+            };
             supplierId = supplier.Id;
             expenseTypeId = expenseType.Id;
             seedContext.AddRange(
@@ -207,6 +220,7 @@ public sealed class PostgreSqlExpenseWorksheetIntegrationTests
                 supplierGroup,
                 supplier,
                 expenseType,
+                chargeService,
                 new FinancialOperation
                 {
                     OperationKind = FinancialOperationKinds.Income,
@@ -224,7 +238,14 @@ public sealed class PostgreSqlExpenseWorksheetIntegrationTests
         var firstService = FinanceServiceTestFactory.Create(firstContext);
         var secondService = FinanceServiceTestFactory.Create(secondContext);
         var firstRequest = new CreateExpenseOperationRequest(
-            supplierId, expenseTypeId, new DateOnly(2026, 6, 20), new DateOnly(2026, 6, 1), 70m, "PG-ATOMIC-1", null);
+            supplierId,
+            expenseTypeId,
+            new DateOnly(2026, 6, 20),
+            new DateOnly(2026, 6, 1),
+            70m,
+            "PG-ATOMIC-1",
+            null,
+            ExpensePaymentTypes.WithoutReceipt);
         var secondRequest = firstRequest with { DocumentNumber = "PG-ATOMIC-2" };
 
         var results = await Task.WhenAll(

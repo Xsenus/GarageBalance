@@ -400,6 +400,7 @@ public sealed class GarageBalanceDbContext(DbContextOptions<GarageBalanceDbConte
             entity.ToTable("financial_operations");
             entity.HasKey(operation => operation.Id);
             entity.Property(operation => operation.OperationKind).HasMaxLength(20).IsRequired();
+            entity.Property(operation => operation.ExpensePaymentType).HasMaxLength(30);
             entity.Property(operation => operation.Amount).HasPrecision(18, 2);
             entity.Property(operation => operation.DocumentNumber).HasMaxLength(120);
             entity.Property(operation => operation.Comment).HasMaxLength(1000);
@@ -407,6 +408,10 @@ public sealed class GarageBalanceDbContext(DbContextOptions<GarageBalanceDbConte
             entity.HasIndex(operation => operation.AccountingMonth);
             entity.HasIndex(operation => operation.OperationKind);
             entity.HasIndex(operation => operation.ReceiptBatchId);
+            entity.HasIndex(operation => operation.ExpensePaymentType);
+            entity.ToTable(table => table.HasCheckConstraint(
+                "CK_financial_operations_ExpensePaymentType",
+                "\"ExpensePaymentType\" IS NULL OR \"ExpensePaymentType\" IN ('with_receipt', 'without_receipt')"));
             entity.HasIndex(operation => new { operation.IsCanceled, operation.OperationKind });
             entity.HasIndex(operation => new { operation.OperationKind, operation.OperationDate, operation.DocumentNumber })
                 .IsUnique()
@@ -521,6 +526,7 @@ public sealed class GarageBalanceDbContext(DbContextOptions<GarageBalanceDbConte
             entity.HasIndex(accrual => accrual.AccountingMonth);
             entity.HasIndex(accrual => accrual.SupplierId);
             entity.HasIndex(accrual => accrual.ExpenseTypeId);
+            entity.HasIndex(accrual => accrual.SourceFinancialOperationId).IsUnique();
             entity.HasIndex(accrual => new { accrual.SupplierId, accrual.ExpenseTypeId, accrual.AccountingMonth, accrual.Source, accrual.DocumentNumber })
                 .IsUnique()
                 .HasFilter("\"IsCanceled\" = false");
@@ -531,6 +537,10 @@ public sealed class GarageBalanceDbContext(DbContextOptions<GarageBalanceDbConte
             entity.HasOne(accrual => accrual.ExpenseType)
                 .WithMany()
                 .HasForeignKey(accrual => accrual.ExpenseTypeId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(accrual => accrual.SourceFinancialOperation)
+                .WithMany()
+                .HasForeignKey(accrual => accrual.SourceFinancialOperationId)
                 .OnDelete(DeleteBehavior.Restrict);
         });
 

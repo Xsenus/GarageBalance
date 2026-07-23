@@ -308,14 +308,18 @@ public sealed class EfExpenseWorksheetQuery(GarageBalanceDbContext dbContext) : 
                 BankDepositTotal = 0m,
                 CashExpenseTotal = group.Sum(operation =>
                     operation.OperationKind == FinancialOperationKinds.Expense &&
-                    operation.ExpenseType != null &&
-                    ((operation.ExpenseType.Code != null && cashExpenseTypeCodes.Contains(operation.ExpenseType.Code)) ||
-                        cashExpenseTypeNames.Contains(operation.ExpenseType.Name))
+                    (operation.ExpensePaymentType == ExpensePaymentTypes.WithoutReceipt ||
+                        (operation.ExpensePaymentType == null &&
+                            operation.ExpenseType != null &&
+                            ((operation.ExpenseType.Code != null && cashExpenseTypeCodes.Contains(operation.ExpenseType.Code)) ||
+                                cashExpenseTypeNames.Contains(operation.ExpenseType.Name))))
                         ? operation.Amount
                         : 0m),
                 BankExpenseTotal = group.Sum(operation =>
                     operation.OperationKind == FinancialOperationKinds.Expense &&
-                    (operation.ExpenseType == null ||
+                    operation.ExpensePaymentType != ExpensePaymentTypes.WithoutReceipt &&
+                    (operation.ExpensePaymentType != null ||
+                        operation.ExpenseType == null ||
                         !((operation.ExpenseType.Code != null && cashExpenseTypeCodes.Contains(operation.ExpenseType.Code)) ||
                             cashExpenseTypeNames.Contains(operation.ExpenseType.Name)))
                         ? operation.Amount

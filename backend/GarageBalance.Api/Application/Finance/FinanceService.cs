@@ -87,7 +87,8 @@ public sealed class FinanceService(
         ["supplier"] = "Поставщик",
         ["staffMember"] = "Сотрудник",
         ["incomeType"] = "Вид поступления",
-        ["expenseType"] = "Вид выплаты",
+        ["expenseType"] = "Услуга / статья расхода",
+        ["expensePaymentType"] = "Тип выплаты",
         ["source"] = "Источник",
         ["meterKind"] = "Тип счетчика",
         ["readingDate"] = "Дата показания",
@@ -1049,10 +1050,24 @@ public sealed class FinanceService(
         var expenseType = await expenseTypeRepository.FindActiveAsync(request.ExpenseTypeId, cancellationToken);
         if (expenseType is null)
         {
-            return FinanceResult<FinancialOperationDto>.Failure("expense_type_not_found", "Вид выплаты не найден.");
+            return FinanceResult<FinancialOperationDto>.Failure("expense_type_not_found", "Услуга или статья расхода не найдена.");
         }
 
-        var isCashExpense = IsCashExpenseType(expenseType);
+        var supplierExpenseTypeValidation = ValidateSupplierExpenseTypeLinkForPayment(supplier, expenseType);
+        if (supplierExpenseTypeValidation is not null)
+        {
+            return supplierExpenseTypeValidation;
+        }
+
+        var expensePaymentType = NormalizeExpensePaymentType(request.ExpensePaymentType);
+        if (expensePaymentType is null)
+        {
+            return FinanceResult<FinancialOperationDto>.Failure(
+                "expense_payment_type_invalid",
+                "Тип выплаты должен быть «С чеком» или «Без чека».");
+        }
+
+        var isCashExpense = expensePaymentType == ExpensePaymentTypes.WithoutReceipt;
         await using var balanceLock = await financeAvailableBalanceQuery.AcquireUpdateLockAsync(isCashExpense, cancellationToken);
 
         var duplicate = await HasDocumentDuplicateAsync(FinancialOperationKinds.Expense, request.DocumentNumber, request.OperationDate, cancellationToken);
@@ -1089,6 +1104,7 @@ public sealed class FinanceService(
             OperationDate = request.OperationDate,
             AccountingMonth = MonthPeriod.Normalize(request.AccountingMonth),
             Amount = amount,
+            ExpensePaymentType = expensePaymentType,
             DocumentNumber = NormalizeOptional(request.DocumentNumber),
             Comment = NormalizeOptional(request.Comment),
             SupplierId = supplier.Id,
@@ -1106,6 +1122,8 @@ public sealed class FinanceService(
                 Supplier = supplier,
                 ExpenseTypeId = expenseType.Id,
                 ExpenseType = expenseType,
+                SourceFinancialOperationId = operation.Id,
+                SourceFinancialOperation = operation,
                 AccountingMonth = operation.AccountingMonth,
                 Amount = amount,
                 Source = AccrualSources.Manual,
@@ -1138,7 +1156,7 @@ public sealed class FinanceService(
         var salaryExpenseType = await expenseTypeRepository.FindActiveByCodeAsync("salary", cancellationToken);
         if (salaryExpenseType is null)
         {
-            return FinanceResult<FinancialOperationDto>.Failure("salary_expense_type_not_found", "Системный вид выплаты Зарплата не найден.");
+            return FinanceResult<FinancialOperationDto>.Failure("salary_expense_type_not_found", "Системная статья расхода «Зарплата» не найдена.");
         }
 
         var duplicate = await HasDocumentDuplicateAsync(FinancialOperationKinds.Expense, request.DocumentNumber, request.OperationDate, cancellationToken);
@@ -1333,7 +1351,21 @@ public sealed class FinanceService(
         var expenseType = await expenseTypeRepository.FindActiveAsync(request.ExpenseTypeId, cancellationToken);
         if (expenseType is null)
         {
-            return FinanceResult<FinancialOperationDto>.Failure("expense_type_not_found", "Вид выплаты не найден.");
+            return FinanceResult<FinancialOperationDto>.Failure("expense_type_not_found", "Услуга или статья расхода не найдена.");
+        }
+
+        var supplierExpenseTypeValidation = ValidateSupplierExpenseTypeLinkForPayment(supplier, expenseType);
+        if (supplierExpenseTypeValidation is not null)
+        {
+            return supplierExpenseTypeValidation;
+        }
+
+        var expensePaymentType = NormalizeExpensePaymentType(request.ExpensePaymentType);
+        if (expensePaymentType is null)
+        {
+            return FinanceResult<FinancialOperationDto>.Failure(
+                "expense_payment_type_invalid",
+                "Тип выплаты должен быть «С чеком» или «Без чека».");
         }
 
         if (await HasDocumentDuplicateAsync(FinancialOperationKinds.Expense, request.DocumentNumber, request.OperationDate, operation.Id, cancellationToken))
@@ -1345,13 +1377,23 @@ public sealed class FinanceService(
         var amount = MoneyMath.RoundMoney(request.Amount);
         var documentNumber = NormalizeOptional(request.DocumentNumber);
         var comment = NormalizeOptional(request.Comment);
-        if (ExpenseOperationMatches(operation, request.OperationDate, accountingMonth, amount, documentNumber, comment, supplier.Id, expenseType.Id))
+        if (ExpenseOperationMatches(operation, request.OperationDate, accountingMonth, amount, documentNumber, comment, supplier.Id, expenseType.Id, expensePaymentType))
         {
             return FinanceResult<FinancialOperationDto>.Success(await ToDtoAsync(operation, cancellationToken));
         }
 
-        var wasCashExpense = IsCashExpenseType(operation.ExpenseType);
-        var isCashExpense = IsCashExpenseType(expenseType);
+        var wasCashExpense = IsCashExpense(operation);
+        var isCashExpense = expensePaymentType == ExpensePaymentTypes.WithoutReceipt;
+        var linkedAtomicAccrual = wasCashExpense
+            ? await supplierAccrualRepository.FindBySourceFinancialOperationForUpdateAsync(operation.Id, cancellationToken)
+            : null;
+        if (wasCashExpense && linkedAtomicAccrual is null)
+        {
+            return FinanceResult<FinancialOperationDto>.Failure(
+                "atomic_expense_accrual_not_found",
+                "Связанное начисление выплаты без чека не найдено. Отмените операцию и создайте ее заново.");
+        }
+
         if (isCashExpense)
         {
             var availableCashAmount = MoneyMath.RoundMoney(await CalculateAvailableCashAmountAsync(cancellationToken) + (wasCashExpense ? operation.Amount : 0m));
@@ -1382,7 +1424,8 @@ public sealed class FinanceService(
             ["documentNumber"] = operation.DocumentNumber,
             ["comment"] = operation.Comment,
             ["supplier"] = operation.Supplier?.Name,
-            ["expenseType"] = operation.ExpenseType?.Name
+            ["expenseType"] = operation.ExpenseType?.Name,
+            ["expensePaymentType"] = operation.ExpensePaymentType
         };
         var newValues = new Dictionary<string, object?>
         {
@@ -1392,11 +1435,13 @@ public sealed class FinanceService(
             ["documentNumber"] = documentNumber,
             ["comment"] = comment,
             ["supplier"] = supplier.Name,
-            ["expenseType"] = expenseType.Name
+            ["expenseType"] = expenseType.Name,
+            ["expensePaymentType"] = expensePaymentType
         };
         operation.OperationDate = request.OperationDate;
         operation.AccountingMonth = accountingMonth;
         operation.Amount = amount;
+        operation.ExpensePaymentType = expensePaymentType;
         operation.DocumentNumber = documentNumber;
         operation.Comment = comment;
         operation.SupplierId = supplier.Id;
@@ -1404,6 +1449,46 @@ public sealed class FinanceService(
         operation.ExpenseTypeId = expenseType.Id;
         operation.ExpenseType = expenseType;
         operation.UpdatedAtUtc = DateTimeOffset.UtcNow;
+        if (isCashExpense)
+        {
+            if (linkedAtomicAccrual is null)
+            {
+                linkedAtomicAccrual = new SupplierAccrual
+                {
+                    SupplierId = supplier.Id,
+                    Supplier = supplier,
+                    ExpenseTypeId = expenseType.Id,
+                    ExpenseType = expenseType,
+                    SourceFinancialOperationId = operation.Id,
+                    SourceFinancialOperation = operation,
+                    AccountingMonth = accountingMonth,
+                    Amount = amount,
+                    Source = AccrualSources.Manual,
+                    DocumentNumber = documentNumber,
+                    Comment = comment
+                };
+                supplierAccrualRepository.Add(linkedAtomicAccrual);
+            }
+            else
+            {
+                linkedAtomicAccrual.SupplierId = supplier.Id;
+                linkedAtomicAccrual.Supplier = supplier;
+                linkedAtomicAccrual.ExpenseTypeId = expenseType.Id;
+                linkedAtomicAccrual.ExpenseType = expenseType;
+                linkedAtomicAccrual.AccountingMonth = accountingMonth;
+                linkedAtomicAccrual.Amount = amount;
+                linkedAtomicAccrual.DocumentNumber = documentNumber;
+                linkedAtomicAccrual.Comment = comment;
+                linkedAtomicAccrual.IsCanceled = false;
+                linkedAtomicAccrual.UpdatedAtUtc = DateTimeOffset.UtcNow;
+            }
+        }
+        else if (linkedAtomicAccrual is not null)
+        {
+            linkedAtomicAccrual.IsCanceled = true;
+            linkedAtomicAccrual.UpdatedAtUtc = DateTimeOffset.UtcNow;
+        }
+
         AddAudit(actorUserId, "finance.expense_updated", operation, FormatExpenseUpdatedAuditSummary(previousSnapshot, operation), oldValues, newValues);
         await unitOfWork.SaveChangesAsync(cancellationToken);
         return FinanceResult<FinancialOperationDto>.Success(await ToDtoAsync(operation, cancellationToken));
@@ -1460,9 +1545,27 @@ public sealed class FinanceService(
             }
         }
 
+        SupplierAccrual? linkedAtomicAccrualToCancel = null;
+        if (operation.OperationKind == FinancialOperationKinds.Expense && operation.SupplierId is not null && IsCashExpense(operation))
+        {
+            linkedAtomicAccrualToCancel = await supplierAccrualRepository.FindBySourceFinancialOperationForUpdateAsync(operation.Id, cancellationToken);
+            if (linkedAtomicAccrualToCancel is null)
+            {
+                return FinanceResult<FinancialOperationDto>.Failure(
+                    "atomic_expense_accrual_not_found",
+                    "Связанное начисление выплаты без чека не найдено. Операция не отменена.");
+            }
+        }
+
         operation.IsCanceled = true;
         operation.UpdatedAtUtc = DateTimeOffset.UtcNow;
         operation.Comment = AppendCancelReason(operation.Comment, reason);
+        if (linkedAtomicAccrualToCancel is not null)
+        {
+            linkedAtomicAccrualToCancel.IsCanceled = true;
+            linkedAtomicAccrualToCancel.UpdatedAtUtc = DateTimeOffset.UtcNow;
+        }
+
         if (operation.OperationKind == FinancialOperationKinds.Income)
         {
             await RebuildPaymentAllocationsAsync(
@@ -1499,6 +1602,7 @@ public sealed class FinanceService(
             ? await incomeFundAssignmentService.AcquireUpdateLockAsync(cancellationToken)
             : null;
 
+        SupplierAccrual? linkedAtomicAccrualToRestore = null;
         if (operation.OperationKind == FinancialOperationKinds.Expense)
         {
             if (operation.StaffMemberId is not null)
@@ -1514,8 +1618,19 @@ public sealed class FinanceService(
                 }
             }
 
-            if (IsCashExpenseType(operation.ExpenseType))
+            if (IsCashExpense(operation))
             {
+                if (operation.SupplierId is not null)
+                {
+                    linkedAtomicAccrualToRestore = await supplierAccrualRepository.FindBySourceFinancialOperationForUpdateAsync(operation.Id, cancellationToken);
+                    if (linkedAtomicAccrualToRestore is null)
+                    {
+                        return FinanceResult<FinancialOperationDto>.Failure(
+                            "atomic_expense_accrual_not_found",
+                            "Связанное начисление выплаты без чека не найдено. Операция не восстановлена.");
+                    }
+                }
+
                 var availableCashAmount = await CalculateAvailableCashAmountAsync(cancellationToken);
                 if (operation.Amount > availableCashAmount)
                 {
@@ -1552,6 +1667,12 @@ public sealed class FinanceService(
 
         operation.IsCanceled = false;
         operation.UpdatedAtUtc = DateTimeOffset.UtcNow;
+        if (linkedAtomicAccrualToRestore is not null)
+        {
+            linkedAtomicAccrualToRestore.IsCanceled = false;
+            linkedAtomicAccrualToRestore.UpdatedAtUtc = DateTimeOffset.UtcNow;
+        }
+
         if (operation.OperationKind == FinancialOperationKinds.Income)
         {
             await RebuildPaymentAllocationsAsync(
@@ -2722,7 +2843,7 @@ public sealed class FinanceService(
         var salaryExpenseType = await expenseTypeRepository.FindActiveByCodeAsync("salary", cancellationToken);
         if (salaryExpenseType is null)
         {
-            return FinanceResult<SupplierGroupSalaryAccrualGenerationResultDto>.Failure("salary_expense_type_not_found", "Системный вид выплаты Зарплата не найден.");
+            return FinanceResult<SupplierGroupSalaryAccrualGenerationResultDto>.Failure("salary_expense_type_not_found", "Системная статья расхода «Зарплата» не найдена.");
         }
 
         var suppliers = await supplierRepository.GetActiveByGroupAsync(group.Id, cancellationToken);
@@ -3519,7 +3640,7 @@ public sealed class FinanceService(
             return FormatStaffPaymentSnapshot(operation);
         }
 
-        return $"{amount} поставщику {operation.Supplier?.Name} от {operation.OperationDate:dd.MM.yyyy} за {operation.AccountingMonth:MM.yyyy}; вид {operation.ExpenseType?.Name}; документ {document}";
+        return $"{amount} поставщику {operation.Supplier?.Name} от {operation.OperationDate:dd.MM.yyyy} за {operation.AccountingMonth:MM.yyyy}; услуга/статья {operation.ExpenseType?.Name}; тип {FormatExpensePaymentType(operation.ExpensePaymentType)}; документ {document}";
     }
 
     private static string FormatStaffPaymentSnapshot(FinancialOperation operation)
@@ -3540,7 +3661,7 @@ public sealed class FinanceService(
 
         return operation.StaffMember is not null
             ? $"Отменена выплата {amount} сотруднику {operation.StaffMember.FullName} от {operation.OperationDate:dd.MM.yyyy} за {operation.AccountingMonth:MM.yyyy}; вид {operation.ExpenseType?.Name}; документ {document}. Причина: {reason}"
-            : $"Отменена выплата {amount} поставщику {operation.Supplier?.Name} от {operation.OperationDate:dd.MM.yyyy} за {operation.AccountingMonth:MM.yyyy}; вид {operation.ExpenseType?.Name}; документ {document}. Причина: {reason}";
+            : $"Отменена выплата {amount} поставщику {operation.Supplier?.Name} от {operation.OperationDate:dd.MM.yyyy} за {operation.AccountingMonth:MM.yyyy}; услуга/статья {operation.ExpenseType?.Name}; тип {FormatExpensePaymentType(operation.ExpensePaymentType)}; документ {document}. Причина: {reason}";
     }
 
     private static string FormatOperationRestoredAuditSummary(FinancialOperation operation)
@@ -3554,7 +3675,7 @@ public sealed class FinanceService(
 
         return operation.StaffMember is not null
             ? $"Восстановлена выплата {amount} сотруднику {operation.StaffMember.FullName} от {operation.OperationDate:dd.MM.yyyy} за {operation.AccountingMonth:MM.yyyy}; вид {operation.ExpenseType?.Name}; документ {document}."
-            : $"Восстановлена выплата {amount} поставщику {operation.Supplier?.Name} от {operation.OperationDate:dd.MM.yyyy} за {operation.AccountingMonth:MM.yyyy}; вид {operation.ExpenseType?.Name}; документ {document}.";
+            : $"Восстановлена выплата {amount} поставщику {operation.Supplier?.Name} от {operation.OperationDate:dd.MM.yyyy} за {operation.AccountingMonth:MM.yyyy}; услуга/статья {operation.ExpenseType?.Name}; тип {FormatExpensePaymentType(operation.ExpensePaymentType)}; документ {document}.";
     }
 
     private static string FormatAccrualCreatedAuditSummary(Accrual accrual)
@@ -3938,6 +4059,9 @@ public sealed class FinanceService(
         return comment is null ? summary : $"{summary} Комментарий: {comment}";
     }
 
+    private static string FormatExpensePaymentType(string? expensePaymentType) =>
+        expensePaymentType == ExpensePaymentTypes.WithoutReceipt ? "без чека" : "с чеком";
+
     private static string FormatHistoricalMeterReadingCorrectedAuditSummary(MeterReading reading)
     {
         return $"Исторически скорректировано показание {reading.MeterKind} по гаражу {reading.Garage.Number} за {reading.AccountingMonth:MM.yyyy}; дата {reading.ReadingDate:dd.MM.yyyy}; предыдущее {reading.PreviousValue.ToString("0.###", RussianCulture)}, текущее {reading.CurrentValue.ToString("0.###", RussianCulture)}, расход {reading.Consumption.ToString("0.###", RussianCulture)}.";
@@ -4156,7 +4280,16 @@ public sealed class FinanceService(
             operation.IncomeTypeId == incomeTypeId;
     }
 
-    private static bool ExpenseOperationMatches(FinancialOperation operation, DateOnly operationDate, DateOnly accountingMonth, decimal amount, string? documentNumber, string? comment, Guid supplierId, Guid expenseTypeId)
+    private static bool ExpenseOperationMatches(
+        FinancialOperation operation,
+        DateOnly operationDate,
+        DateOnly accountingMonth,
+        decimal amount,
+        string? documentNumber,
+        string? comment,
+        Guid supplierId,
+        Guid expenseTypeId,
+        string expensePaymentType)
     {
         return operation.OperationDate == operationDate &&
             operation.AccountingMonth == accountingMonth &&
@@ -4164,7 +4297,8 @@ public sealed class FinanceService(
             StringEquals(operation.DocumentNumber, documentNumber) &&
             StringEquals(operation.Comment, comment) &&
             operation.SupplierId == supplierId &&
-            operation.ExpenseTypeId == expenseTypeId;
+            operation.ExpenseTypeId == expenseTypeId &&
+            operation.ExpensePaymentType == expensePaymentType;
     }
 
     private static bool AccrualMatches(Accrual accrual, Guid garageId, Guid incomeTypeId, DateOnly accountingMonth, int? accountingYear, decimal amount, string source, string? comment)
@@ -4477,7 +4611,8 @@ public sealed class FinanceService(
             operation.StaffMemberId,
             operation.StaffMember?.FullName,
             operation.StaffMember?.Department?.Name,
-            operation.ReceiptBatchId);
+            operation.ReceiptBatchId,
+            operation.ExpensePaymentType);
     }
 
     private static string? InferMeterKind(string incomeTypeName, string? incomeTypeCode)
@@ -4530,6 +4665,48 @@ public sealed class FinanceService(
         }
 
         return null;
+    }
+
+    private static FinanceResult<FinancialOperationDto>? ValidateSupplierExpenseTypeLinkForPayment(Supplier supplier, ExpenseType expenseType)
+    {
+        if (supplier.ChargeServiceSetting is null || supplier.ChargeServiceSetting.IsArchived)
+        {
+            return FinanceResult<FinancialOperationDto>.Failure(
+                "supplier_service_not_configured",
+                $"Для поставщика «{supplier.Name}» не настроена действующая услуга.");
+        }
+
+        if (!supplier.ChargeServiceSetting.ExpenseTypeId.HasValue)
+        {
+            return FinanceResult<FinancialOperationDto>.Failure(
+                "supplier_service_expense_type_not_configured",
+                $"Для услуги «{supplier.ChargeServiceSetting.Name}» не настроена статья расхода.");
+        }
+
+        if (supplier.ChargeServiceSetting.ExpenseTypeId.Value != expenseType.Id)
+        {
+            return FinanceResult<FinancialOperationDto>.Failure(
+                "supplier_expense_type_mismatch",
+                $"Поставщику «{supplier.Name}» можно провести выплату только по услуге «{supplier.ChargeServiceSetting.Name}».");
+        }
+
+        return null;
+    }
+
+    private static string? NormalizeExpensePaymentType(string? value)
+    {
+        var normalized = value?.Trim().ToLowerInvariant();
+        return ExpensePaymentTypes.IsSupported(normalized) ? normalized : null;
+    }
+
+    private static bool IsCashExpense(FinancialOperation operation)
+    {
+        if (operation.ExpensePaymentType is not null)
+        {
+            return operation.ExpensePaymentType == ExpensePaymentTypes.WithoutReceipt;
+        }
+
+        return IsCashExpenseType(operation.ExpenseType);
     }
 
     private static bool IsCashExpenseType(ExpenseType? expenseType)

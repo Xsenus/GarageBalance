@@ -71,6 +71,7 @@ export type FinanceEditorFieldLabelKey =
   | 'incomeComment'
   | 'expenseSupplier'
   | 'expenseType'
+  | 'expensePaymentType'
   | 'expenseDate'
   | 'expenseMonth'
   | 'expenseAmount'
@@ -149,9 +150,9 @@ const financeContextMenuLabels: Record<FinanceContextMenuAction, string> = {
 
 const financeTableHeaders: Record<FinanceSectionKey, string[]> = {
   income: ['Дата', 'Месяц', 'Гараж', 'Владелец', 'Вид оплаты', 'Документ', 'Оплачено', 'Долг после', 'Комментарий'],
-  expense: ['Дата', 'Месяц', 'Поставщик', 'Вид выплаты', 'Документ', 'Выплачено', 'Обязательство после', 'Комментарий'],
+  expense: ['Дата', 'Месяц', 'Поставщик', 'Услуга / статья расхода', 'Тип выплаты', 'Документ', 'Выплачено', 'Обязательство после', 'Комментарий'],
   accruals: ['Месяц', 'Учетный год', 'Гараж', 'Владелец', 'Вид оплаты', 'Источник', 'Начислено', 'Комментарий'],
-  supplierAccruals: ['Месяц', 'Поставщик', 'Вид выплаты', 'Источник', 'Документ', 'Начислено', 'Комментарий'],
+  supplierAccruals: ['Месяц', 'Поставщик', 'Услуга / статья расхода', 'Источник', 'Документ', 'Начислено', 'Комментарий'],
   meterReadings: ['Месяц', 'Дата', 'Гараж', 'Счетчик', 'Пред. знач.', 'Нов. знач.', 'Разница', 'Комментарий'],
 }
 
@@ -231,7 +232,8 @@ const financeEditorFieldLabels: Record<FinanceEditorFieldLabelKey, string> = {
   incomeDocument: 'Документ',
   incomeComment: 'Комментарий поступления',
   expenseSupplier: 'Поставщик',
-  expenseType: 'Вид выплаты',
+  expenseType: 'Услуга / статья расхода',
+  expensePaymentType: 'Тип выплаты',
   expenseDate: 'Дата выплаты',
   expenseMonth: 'Месяц учета',
   expenseAmount: 'Сумма выплаты',
