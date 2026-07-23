@@ -3042,7 +3042,7 @@ public sealed class FinanceServiceTests
         Assert.Equal(parkingCard.Id, stored.IrregularPaymentId);
         var audit = Assert.Single(database.Context.AuditEvents, item => item.Action == "finance.irregular_accrual_created" && item.EntityId == first.Value.Id.ToString());
         Assert.Contains("Карта доступа", audit.Summary, StringComparison.Ordinal);
-        Assert.Contains(destinationFund.Id.ToString(), audit.Summary, StringComparison.Ordinal);
+        Assert.Contains(AuditTextMasker.Mask(destinationFund.Id.ToString())!, audit.Summary, StringComparison.Ordinal);
     }
 
     [Theory]
@@ -7744,7 +7744,10 @@ public sealed class FinanceServiceTests
         Assert.Equal(firstIncomeType.DestinationFundId, assignment.FundId);
         Assert.Equal(400m, assignment.Amount);
         Assert.False(assignment.IsCanceled);
-        Assert.Equal(400m, assignment.Fund.Balance);
+        Assert.Equal(0m, assignment.Fund.Balance);
+        Assert.All(
+            await fundService.GetFundsAsync(CancellationToken.None),
+            fund => Assert.Equal(400m, fund.AvailableToDistribute));
         Assert.Contains(database.Context.AuditEvents, item => item.Action == "fund.income_assignment_created");
         var automaticDto = Assert.Single(
             await fundService.GetOperationsAsync(100, includeCanceled: true, CancellationToken.None),
@@ -7771,7 +7774,10 @@ public sealed class FinanceServiceTests
 
         Assert.True(reduced.Succeeded, reduced.ErrorMessage);
         Assert.Equal(250m, assignment.Amount);
-        Assert.Equal(250m, assignment.Fund.Balance);
+        Assert.Equal(0m, assignment.Fund.Balance);
+        Assert.All(
+            await fundService.GetFundsAsync(CancellationToken.None),
+            fund => Assert.Equal(250m, fund.AvailableToDistribute));
         Assert.Contains(database.Context.AuditEvents, item => item.Action == "fund.income_assignment_updated");
 
         var moved = await service.UpdateIncomeAsync(
@@ -7784,7 +7790,7 @@ public sealed class FinanceServiceTests
         Assert.Equal(secondFund.Id, assignment.FundId);
         Assert.Equal(300m, assignment.Amount);
         Assert.Equal(0m, firstIncomeType.DestinationFund!.Balance);
-        Assert.Equal(300m, secondFund.Balance);
+        Assert.Equal(0m, secondFund.Balance);
 
         var removedDestination = await service.UpdateIncomeAsync(
             createdOperationId,
@@ -7805,7 +7811,7 @@ public sealed class FinanceServiceTests
         Assert.True(restoredDestination.Succeeded, restoredDestination.ErrorMessage);
         Assert.False(assignment.IsCanceled);
         Assert.Equal(firstIncomeType.DestinationFundId, assignment.FundId);
-        Assert.Equal(275m, firstIncomeType.DestinationFund!.Balance);
+        Assert.Equal(0m, firstIncomeType.DestinationFund!.Balance);
 
         var canceled = await service.CancelOperationAsync(
             createdOperationId,
@@ -7816,6 +7822,9 @@ public sealed class FinanceServiceTests
         Assert.True(canceled.Succeeded, canceled.ErrorMessage);
         Assert.True(assignment.IsCanceled);
         Assert.Equal(0m, firstIncomeType.DestinationFund.Balance);
+        Assert.All(
+            await fundService.GetFundsAsync(CancellationToken.None),
+            fund => Assert.Equal(0m, fund.AvailableToDistribute));
         Assert.Contains(database.Context.AuditEvents, item => item.Action == "fund.income_assignment_canceled");
         var manualRestore = await fundService.RestoreOperationAsync(assignment.Id, actorUserId, CancellationToken.None);
         Assert.Equal("fund_operation_managed_by_income", manualRestore.ErrorCode);
@@ -7824,12 +7833,15 @@ public sealed class FinanceServiceTests
 
         Assert.True(restored.Succeeded, restored.ErrorMessage);
         Assert.False(assignment.IsCanceled);
-        Assert.Equal(275m, firstIncomeType.DestinationFund.Balance);
+        Assert.Equal(0m, firstIncomeType.DestinationFund.Balance);
+        Assert.All(
+            await fundService.GetFundsAsync(CancellationToken.None),
+            fund => Assert.Equal(275m, fund.AvailableToDistribute));
         Assert.Contains(database.Context.AuditEvents, item => item.Action == "fund.income_assignment_restored");
     }
 
     [Fact]
-    public async Task CancelIncomeAsync_RejectsWhenAutomaticFundAssignmentWasSpent()
+    public async Task CancelIncomeAsync_RejectsWhenCommonPoolWasAllocatedToFund()
     {
         await using var database = await TestDatabase.CreateAsync();
         var fixtures = await database.SeedAsync();
@@ -7855,7 +7867,7 @@ public sealed class FinanceServiceTests
         Assert.True(created.Succeeded, created.ErrorMessage);
         Assert.True((await fundService.CreateOperationAsync(
             incomeType.DestinationFund.Id,
-            new CreateFundOperationRequest(FundOperationKinds.Withdraw, 300m, "Использование назначения"),
+            new CreateFundOperationRequest(FundOperationKinds.Deposit, 300m, "Распределение общей суммы"),
             null,
             CancellationToken.None)).Succeeded);
 
@@ -7869,7 +7881,7 @@ public sealed class FinanceServiceTests
         Assert.Equal("fund_balance_insufficient", result.ErrorCode);
         Assert.False((await database.Context.FinancialOperations.SingleAsync(item => item.Id == created.Value.Id)).IsCanceled);
         Assert.False((await database.Context.FundOperations.SingleAsync(item => item.SourceFinancialOperationId == created.Value.Id)).IsCanceled);
-        Assert.Equal(100m, incomeType.DestinationFund.Balance);
+        Assert.Equal(300m, incomeType.DestinationFund.Balance);
         Assert.DoesNotContain(database.Context.AuditEvents, item => item.Action == "fund.income_assignment_canceled");
     }
 
@@ -7905,7 +7917,7 @@ public sealed class FinanceServiceTests
         Assert.False(assignment.IsCanceled);
         Assert.Equal(180m, assignment.Amount);
         Assert.Equal(incomeType.DestinationFundId, assignment.FundId);
-        Assert.Equal(180m, incomeType.DestinationFund!.Balance);
+        Assert.Equal(0m, incomeType.DestinationFund!.Balance);
     }
 
     [Fact]

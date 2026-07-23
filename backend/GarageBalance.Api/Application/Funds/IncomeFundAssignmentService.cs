@@ -64,13 +64,11 @@ public sealed class IncomeFundAssignmentService(
             OperationKind = FundOperationKinds.Deposit,
             Amount = MoneyMath.RoundMoney(amount),
             BalanceBefore = fund.Balance,
-            BalanceAfter = MoneyMath.RoundMoney(fund.Balance + amount),
+            BalanceAfter = fund.Balance,
             Reason = BuildReason(incomeTypeName),
             ActorUserId = actorUserId,
             CreatedAtUtc = sourceOperation.CreatedAtUtc
         };
-        fund.Balance = assignment.BalanceAfter;
-        fund.UpdatedAtUtc = DateTimeOffset.UtcNow;
         repository.AddOperation(assignment);
         AddAudit("fund.income_assignment_created", "create", assignment, actorUserId, null);
         return IncomeFundAssignmentResult.Success();
@@ -101,20 +99,18 @@ public sealed class IncomeFundAssignmentService(
                 cancellationToken);
         }
 
-        var oldFund = assignment.Fund;
-        var oldFundOperations = (await repository.GetOperationsOrderedAsync(oldFund.Id, trackChanges: true, cancellationToken)).ToList();
-        var remainsInOldFund = destinationFundId == oldFund.Id;
-        if (!CanKeepBalancesNonNegative(
-                oldFundOperations,
-                assignment.Id,
-                remainsInOldFund ? amount : 0m,
-                remainsInOldFund && destinationFundId.HasValue))
+        var normalizedAmount = MoneyMath.RoundMoney(amount);
+        var releasedAmount = MoneyMath.RoundMoney(assignment.Amount - normalizedAmount);
+        if (releasedAmount > 0m &&
+            releasedAmount > await GetAvailableToDistributeAsync(cancellationToken))
         {
             return IncomeFundAssignmentResult.Failure(
                 "fund_balance_insufficient",
-                "Поступление нельзя изменить: связанная сумма фонда уже использована.");
+                "Поступление нельзя уменьшить: часть общей нераспределенной суммы уже направлена в фонды.");
         }
 
+        var oldFund = assignment.Fund;
+        var oldFundOperations = (await repository.GetOperationsOrderedAsync(oldFund.Id, trackChanges: true, cancellationToken)).ToList();
         Fund? destinationFund = null;
         List<FundOperation>? destinationOperations = null;
         if (destinationFundId.HasValue)
@@ -137,7 +133,7 @@ public sealed class IncomeFundAssignmentService(
         var oldValues = Snapshot(assignment);
         assignment.FundId = destinationFund?.Id ?? oldFund.Id;
         assignment.Fund = destinationFund ?? oldFund;
-        assignment.Amount = MoneyMath.RoundMoney(amount);
+        assignment.Amount = normalizedAmount;
         assignment.Reason = BuildReason(incomeTypeName);
         assignment.IsCanceled = !destinationFundId.HasValue;
         assignment.UpdatedAtUtc = DateTimeOffset.UtcNow;
@@ -173,14 +169,14 @@ public sealed class IncomeFundAssignmentService(
             return IncomeFundAssignmentResult.Success();
         }
 
-        var operations = (await repository.GetOperationsOrderedAsync(assignment.FundId, trackChanges: true, cancellationToken)).ToList();
-        if (!CanKeepBalancesNonNegative(operations, assignment.Id, 0m, active: false))
+        if (assignment.Amount > await GetAvailableToDistributeAsync(cancellationToken))
         {
             return IncomeFundAssignmentResult.Failure(
                 "fund_balance_insufficient",
-                "Поступление нельзя отменить: связанная сумма фонда уже использована.");
+                "Поступление нельзя отменить: часть общей нераспределенной суммы уже направлена в фонды.");
         }
 
+        var operations = (await repository.GetOperationsOrderedAsync(assignment.FundId, trackChanges: true, cancellationToken)).ToList();
         assignment.IsCanceled = true;
         assignment.UpdatedAtUtc = DateTimeOffset.UtcNow;
         Recalculate(assignment.Fund, operations);
@@ -212,30 +208,12 @@ public sealed class IncomeFundAssignmentService(
         return IncomeFundAssignmentResult.Success();
     }
 
-    private static bool CanKeepBalancesNonNegative(
-        IReadOnlyList<FundOperation> operations,
-        Guid assignmentId,
-        decimal assignmentAmount,
-        bool active)
+    private async Task<decimal> GetAvailableToDistributeAsync(CancellationToken cancellationToken)
     {
-        var balance = 0m;
-        foreach (var operation in operations.OrderBy(item => item.CreatedAtUtc).ThenBy(item => item.Id))
-        {
-            var isCanceled = operation.Id == assignmentId ? !active : operation.IsCanceled;
-            if (isCanceled)
-            {
-                continue;
-            }
-
-            var amount = operation.Id == assignmentId ? assignmentAmount : operation.Amount;
-            balance += operation.OperationKind == FundOperationKinds.Deposit ? amount : -amount;
-            if (balance < 0m)
-            {
-                return false;
-            }
-        }
-
-        return true;
+        var totals = await repository.GetTotalsAsync(cancellationToken);
+        return MoneyMath.RoundMoney(Math.Max(
+            totals.IncomeTotal - totals.ExpenseTotal - totals.AllocatedFundTotal,
+            0m));
     }
 
     private static void Recalculate(Fund fund, IEnumerable<FundOperation> source)
@@ -243,12 +221,13 @@ public sealed class IncomeFundAssignmentService(
         var balance = 0m;
         foreach (var operation in source.OrderBy(item => item.CreatedAtUtc).ThenBy(item => item.Id))
         {
-            if (operation.IsCanceled)
+            operation.BalanceBefore = balance;
+            if (operation.IsCanceled || operation.SourceFinancialOperationId.HasValue)
             {
+                operation.BalanceAfter = balance;
                 continue;
             }
 
-            operation.BalanceBefore = balance;
             balance += operation.OperationKind == FundOperationKinds.Deposit ? operation.Amount : -operation.Amount;
             operation.BalanceAfter = MoneyMath.RoundMoney(balance);
         }

@@ -455,7 +455,7 @@ export function FundsPrototypePanel({ auth, fundsClient }: { auth: AuthResponse;
           <thead>
             <tr>
               <th scope="col">Фонд</th>
-              <th scope="col">Собранная сумма</th>
+              <th scope="col">Распределено</th>
               <th className="funds-table-action-column" scope="col">Изъятие</th>
               <th className="funds-table-action-column" scope="col">Пополнение</th>
             </tr>
@@ -490,13 +490,16 @@ export function FundsPrototypePanel({ auth, fundsClient }: { auth: AuthResponse;
         )}
           </div>
 
-          <div className="funds-distribution" aria-label="Сумма к распределению">
+          <div className="funds-distribution" aria-label="Общий нераспределенный пул">
         {fundsLoading ? (
-          <LoadingSkeleton className="loading-skeleton--compact funds-distribution-skeleton" label="Загружаем сумму к распределению" rows={1} columns={2} />
+          <LoadingSkeleton className="loading-skeleton--compact funds-distribution-skeleton" label="Загружаем общий нераспределенный пул" rows={2} columns={2} />
         ) : (
           <>
-            <span>Сумма к распределению</span>
-            <strong>{availableToDistribute === null || availableToDistribute === 0 ? '—' : `${formatMoney(availableToDistribute)} руб.`}</strong>
+            <div className="funds-distribution-copy">
+              <span>Общий нераспределенный пул</span>
+              <small>Членские и целевые взносы, а также поступления «Прочее» объединяются здесь до ручного распределения.</small>
+            </div>
+            <strong>{availableToDistribute === null ? '—' : `${formatMoney(availableToDistribute)} руб.`}</strong>
           </>
         )}
           </div>

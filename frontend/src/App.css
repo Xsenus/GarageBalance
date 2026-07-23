@@ -4402,30 +4402,55 @@ h1 {
 }
 
 .funds-distribution {
-  display: inline-grid;
-  width: min(360px, 100%);
+  display: grid;
+  width: min(620px, 100%);
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
-  gap: 16px;
-  border: 1px solid #d0d5dd;
-  border-radius: 8px;
-  background: #ffffff;
-  padding: 14px 16px;
+  gap: 20px;
+  border: 1px solid #b9d3ff;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #f5f9ff 0%, #ffffff 72%);
+  padding: 16px 18px;
   box-shadow: 0 10px 24px rgba(15, 23, 42, 0.06);
 }
 
-.funds-distribution span {
+.funds-distribution-copy {
+  display: grid;
+  gap: 4px;
+}
+
+.funds-distribution-copy span {
+  color: #175cd3;
+  font-weight: 800;
+}
+
+.funds-distribution-copy small {
+  max-width: 440px;
   color: #475467;
-  font-weight: 750;
+  font-size: 0.8rem;
+  line-height: 1.4;
 }
 
 .funds-distribution strong {
   color: #101828;
+  font-size: 1.1rem;
+  white-space: nowrap;
 }
 
 .funds-distribution-skeleton {
   width: 100%;
   grid-column: 1 / -1;
+}
+
+@media (max-width: 640px) {
+  .funds-distribution {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 12px;
+  }
+
+  .funds-distribution strong {
+    justify-self: start;
+  }
 }
 
 .fund-operation-preview {

@@ -203,10 +203,10 @@ public sealed class PostgreSqlFeeCampaignFundLifecycleIntegrationTests
 
         context.ChangeTracker.Clear();
         var finalFunds = await funds.GetFundsAsync(CancellationToken.None);
-        Assert.Equal(150m, Assert.Single(finalFunds, item => item.Id == campaignFundId).Balance);
+        Assert.Equal(0m, Assert.Single(finalFunds, item => item.Id == campaignFundId).Balance);
         var finalOperationalFund = Assert.Single(finalFunds, item => item.Id == operationalFund.Id);
         Assert.Equal(150m, finalOperationalFund.Balance);
-        Assert.Equal(150m, finalOperationalFund.AvailableToDistribute);
+        Assert.Equal(300m, finalOperationalFund.AvailableToDistribute);
         Assert.Equal(5, await context.Accruals.CountAsync(item =>
             item.FeeCampaignId == allCampaignId || item.FeeCampaignId == selectedCampaignId));
         Assert.Equal(2, await context.AccrualPaymentAllocations.CountAsync(item =>

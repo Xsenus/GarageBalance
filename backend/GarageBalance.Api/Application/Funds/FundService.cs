@@ -14,9 +14,9 @@ public sealed class FundService(
         new("Водоснабжение", 20, true),
         new("Вывоз мусора", 30, true),
         new("Наружное освещение", 40, true),
-        new("Членские взносы", 50, false),
+        new("Членские взносы", 50, true),
         new("Целевые взносы", 60, true),
-        new("Прочее", 70, false)
+        new("Прочее", 70, true)
     ];
 
     public async Task<IReadOnlyList<FundDto>> GetFundsAsync(CancellationToken cancellationToken)
@@ -334,12 +334,13 @@ public sealed class FundService(
         var balance = 0m;
         foreach (var operation in operations)
         {
-            if (operation.IsCanceled)
+            operation.BalanceBefore = balance;
+            if (operation.IsCanceled || operation.SourceFinancialOperationId.HasValue)
             {
+                operation.BalanceAfter = balance;
                 continue;
             }
 
-            operation.BalanceBefore = balance;
             balance = operation.OperationKind == FundOperationKinds.Deposit
                 ? balance + operation.Amount
                 : balance - operation.Amount;

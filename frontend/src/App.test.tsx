@@ -7327,7 +7327,7 @@ describe('App', () => {
 
     expect(await within(fundsPanel).findByText(/Пополнение по фонду "Целевые взносы" сохранено и записано в историю изменений\./)).toHaveAttribute('role', 'status')
     expect(within(fundsPanel).getAllByText(/1 500\.00 руб\./).length).toBeGreaterThanOrEqual(1)
-    expect(within(fundsPanel).getByLabelText('Сумма к распределению')).toHaveTextContent('98 500.00 руб.')
+    expect(within(fundsPanel).getByLabelText('Общий нераспределенный пул')).toHaveTextContent('98 500.00 руб.')
 
     const fundOperationsTable = within(fundsPanel).getByRole('table', { name: 'Операции фондов' })
     const fundOperationsPagination = within(fundsPanel).getByRole('navigation', { name: 'Пагинация операций фондов' })
@@ -7478,6 +7478,82 @@ describe('App', () => {
     expect(screen.queryByRole('dialog', { name: 'Изъять из фонда' })).not.toBeInTheDocument()
   })
 
+  it('combines membership target and other receipts in one clearly labeled pool', async () => {
+    const user = userEvent.setup()
+    let distributed = false
+    const membershipFund = createFund({
+      id: 'fund-membership',
+      name: 'Членские взносы',
+      balance: 0,
+      availableToDistribute: 25000,
+      sortOrder: 50,
+    })
+    const targetFund = createFund({
+      id: 'fund-target',
+      name: 'Целевые взносы',
+      balance: 0,
+      availableToDistribute: 25000,
+      sortOrder: 60,
+    })
+    const otherFund = createFund({
+      id: 'fund-other',
+      name: 'Прочее',
+      balance: 0,
+      availableToDistribute: 25000,
+      sortOrder: 70,
+    })
+    const getFunds = vi.fn(async () => [membershipFund, targetFund, otherFund].map((fund) => ({
+      ...fund,
+      availableToDistribute: distributed ? 0 : 25000,
+      balance: distributed && fund.id === targetFund.id ? 25000 : 0,
+    })))
+    const createOperation = vi.fn(async (_token: string, fundId: string, request: CreateFundOperationRequest) => {
+      distributed = true
+      return createFundOperation({
+        id: 'fund-operation-unified-pool',
+        fundId,
+        fundName: targetFund.name,
+        operationKind: request.operationKind,
+        amount: request.amount,
+        balanceBefore: 0,
+        balanceAfter: request.amount,
+        reason: request.reason,
+      })
+    })
+    const fundsClient = createFundsClient({ getFunds, createOperation })
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} fundsClient={fundsClient} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await user.click(within(await screen.findByRole('group', { name: 'Главные разделы' })).getByRole('button', { name: /Управление\s+фондами/i }))
+
+    const fundsPanel = await screen.findByRole('region', { name: 'Управление фондами' })
+    const pool = await within(fundsPanel).findByLabelText('Общий нераспределенный пул')
+    expect(pool).toHaveTextContent('Членские и целевые взносы, а также поступления «Прочее»')
+    expect(pool).toHaveTextContent('25 000.00 руб.')
+    expect(within(fundsPanel).getByRole('columnheader', { name: 'Распределено' })).toBeInTheDocument()
+    expect(within(fundsPanel).getByRole('button', { name: 'Пополнить фонд Членские взносы' })).toBeInTheDocument()
+    expect(within(fundsPanel).getByRole('button', { name: 'Пополнить фонд Прочее' })).toBeInTheDocument()
+
+    await user.click(within(fundsPanel).getByRole('button', { name: 'Пополнить фонд Целевые взносы' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Пополнить фонд' })
+    await user.type(within(dialog).getByLabelText('Сумма операции фонда'), '25000')
+    await user.type(within(dialog).getByLabelText('Причина операции фонда'), 'Распределение собранной суммы')
+    await user.click(within(dialog).getByRole('button', { name: 'Подтвердить операцию' }))
+
+    await waitFor(() => expect(createOperation).toHaveBeenCalledWith(
+      expect.any(String),
+      targetFund.id,
+      {
+        operationKind: 'deposit',
+        amount: 25000,
+        reason: 'Распределение собранной суммы',
+      },
+    ))
+    expect(await within(fundsPanel).findByText('Пополнение по фонду "Целевые взносы" сохранено и записано в историю изменений.')).toHaveAttribute('role', 'status')
+    expect(within(fundsPanel).getByLabelText('Общий нераспределенный пул')).toHaveTextContent('0.00 руб.')
+  })
+
   it('keeps empty backend funds empty instead of showing prototype fund rows', async () => {
     const user = userEvent.setup()
     const getFunds = vi.fn(async () => [])
@@ -7496,7 +7572,7 @@ describe('App', () => {
     expect(await within(fundsPanel).findByText('Фонды пока не настроены.')).toBeInTheDocument()
     expect(within(fundsPanel).queryByText('Электроэнергия')).not.toBeInTheDocument()
     expect(within(fundsPanel).queryByRole('button', { name: 'Пополнить фонд Электроэнергия' })).not.toBeInTheDocument()
-    expect(within(fundsPanel).getByLabelText('Сумма к распределению')).toHaveTextContent('—')
+    expect(within(fundsPanel).getByLabelText('Общий нераспределенный пул')).toHaveTextContent('—')
   })
 
   it('marks automatic income assignments as managed and hides manual fund actions', async () => {
@@ -7545,7 +7621,7 @@ describe('App', () => {
 
     const fundsPanel = await screen.findByRole('region', { name: 'Управление фондами' })
     expect(within(fundsPanel).getByRole('status', { name: 'Загружаем фонды' })).toBeInTheDocument()
-    expect(within(fundsPanel).getByRole('status', { name: 'Загружаем сумму к распределению' })).toBeInTheDocument()
+    expect(within(fundsPanel).getByRole('status', { name: 'Загружаем общий нераспределенный пул' })).toBeInTheDocument()
     expect(within(fundsPanel).getByRole('status', { name: 'Загружаем операции фондов' })).toBeInTheDocument()
     expect(within(fundsPanel).queryByText('Загружаем фонды...')).not.toBeInTheDocument()
 
@@ -16780,9 +16856,9 @@ function createFundsClient(overrides: Partial<FundsClient> = {}): FundsClient {
     createFund({ id: 'fund-water', name: 'Водоснабжение', sortOrder: 20 }),
     createFund({ id: 'fund-trash', name: 'Вывоз мусора', sortOrder: 30 }),
     createFund({ id: 'fund-lighting', name: 'Наружное освещение', sortOrder: 40 }),
-    createFund({ id: 'fund-membership', name: 'Членские взносы', sortOrder: 50, allowOperations: false }),
+    createFund({ id: 'fund-membership', name: 'Членские взносы', sortOrder: 50 }),
     createFund({ id: 'fund-target', name: 'Целевые взносы', sortOrder: 60 }),
-    createFund({ id: 'fund-other', name: 'Прочее', sortOrder: 70, allowOperations: false }),
+    createFund({ id: 'fund-other', name: 'Прочее', sortOrder: 70 }),
   ]
   let operationSequence = 1
   let operations: FundOperationDto[] = []

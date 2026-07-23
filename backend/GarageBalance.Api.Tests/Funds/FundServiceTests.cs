@@ -23,7 +23,9 @@ public sealed class FundServiceTests
         Assert.Equal("Электроэнергия", funds[0].Name);
         Assert.Equal("Прочее", funds[^1].Name);
         Assert.All(funds, fund => Assert.Equal(0m, fund.AvailableToDistribute));
-        Assert.False(funds.Single(fund => fund.Name == "Членские взносы").AllowOperations);
+        Assert.All(
+            funds.Where(fund => fund.Name is "Членские взносы" or "Целевые взносы" or "Прочее"),
+            fund => Assert.True(fund.AllowOperations));
         Assert.Equal(7, await database.Context.Funds.CountAsync());
         Assert.Empty(database.Context.AuditEvents);
     }
