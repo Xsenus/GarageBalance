@@ -6979,6 +6979,68 @@ button.operation-row:focus-visible {
   font-size: 12px;
 }
 
+.report-garage-picker {
+  display: grid;
+  gap: 6px;
+}
+
+.report-garage-picker > label {
+  display: block;
+}
+
+.report-garage-picker .payments-prototype-search {
+  width: min(680px, 100%);
+}
+
+.report-workbook-filter .report-garage-picker .payments-prototype-search input {
+  min-height: 0;
+  border: 0;
+  padding: 0;
+  box-shadow: none;
+}
+
+.report-workbook-filter .report-garage-picker .payments-prototype-search-option input {
+  width: 18px;
+  min-height: 18px;
+  padding: 0;
+}
+
+.report-garage-picker-selected {
+  margin-top: 2px;
+}
+
+.report-garage-picker-selected-item {
+  display: grid;
+  min-width: 210px;
+  max-width: 320px;
+  flex: 1 1 240px;
+  grid-template-columns: minmax(0, 1fr) 30px;
+  align-items: start;
+  overflow: hidden;
+  border: 1px solid #d0d5dd;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.report-garage-picker-selected-item > span {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+  padding: 8px 10px;
+}
+
+.report-garage-picker-selected-item strong,
+.report-garage-picker-selected-item small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.report-garage-picker-selected-item small {
+  color: #667085;
+  font-size: 0.78rem;
+}
+
 .report-period-button {
   min-height: 38px;
   align-self: end;

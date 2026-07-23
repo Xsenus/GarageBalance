@@ -1,6 +1,6 @@
 import { useEffect, useId, useRef, useState } from 'react'
 import type { CSSProperties, ReactNode } from 'react'
-import { FileSpreadsheet, FileText, LoaderCircle } from 'lucide-react'
+import { FileSpreadsheet, FileText, LoaderCircle, Search, X } from 'lucide-react'
 import type { AuthResponse } from '../../services/authApi'
 import type { AccountingTypeDto, DictionaryClient, GarageDto, StaffMemberDto, SupplierDto } from '../../services/dictionariesApi'
 import type { BankDepositReportDto, CashPaymentReportDto, ConsolidatedReportDto, ExpenseReportDto, FeeReportDto, FundChangeReportDto, GarageDetailReportDto, IncomeReportDto, ReportClient } from '../../services/reportsApi'
@@ -86,6 +86,148 @@ function ReportMultiSelect({
       <span className="report-workbook-multi-select-status" id={statusId} role="status" aria-live="polite">
         {isAllSelected ? allLabel : `Выбрано: ${selectedValues.length}`}
       </span>
+    </div>
+  )
+}
+
+function ReportGarageMultiSelect({
+  label,
+  allLabel,
+  options,
+  selectedValues,
+  onChange,
+}: {
+  label: string
+  allLabel: string
+  options: ReportFilterOption[]
+  selectedValues: string[]
+  onChange: (values: string[]) => void
+}) {
+  const searchId = useId()
+  const listId = useId()
+  const statusId = useId()
+  const wrapRef = useRef<HTMLDivElement | null>(null)
+  const [search, setSearch] = useState('')
+  const [searchOpen, setSearchOpen] = useState(false)
+  const normalizedSearch = search.trim().toLocaleLowerCase('ru-RU')
+  const filteredOptions = normalizedSearch
+    ? options.filter((option) => option.label.toLocaleLowerCase('ru-RU').includes(normalizedSearch)).slice(0, 20)
+    : []
+  const selectedOptions = selectedValues
+    .map((value) => options.find((option) => option.value === value))
+    .filter((option): option is ReportFilterOption => Boolean(option))
+  const shouldShowResults = searchOpen && normalizedSearch.length > 0
+
+  useEffect(() => {
+    function handlePointerDown(event: PointerEvent) {
+      if (wrapRef.current && !wrapRef.current.contains(event.target as Node)) {
+        setSearchOpen(false)
+      }
+    }
+
+    document.addEventListener('pointerdown', handlePointerDown)
+    return () => document.removeEventListener('pointerdown', handlePointerDown)
+  }, [])
+
+  function toggleSelection(value: string) {
+    onChange(selectedValues.includes(value)
+      ? selectedValues.filter((selectedValue) => selectedValue !== value)
+      : [...selectedValues, value])
+  }
+
+  function selectFirstResult() {
+    const firstOption = filteredOptions[0]
+    if (firstOption) {
+      toggleSelection(firstOption.value)
+    }
+  }
+
+  return (
+    <div className="report-workbook-filter-wide report-garage-picker">
+      <label htmlFor={searchId}>{label}</label>
+      <div ref={wrapRef} className="payments-prototype-search-wrap">
+        <label className="payments-prototype-search">
+          <Search size={18} aria-hidden="true" />
+          <input
+            id={searchId}
+            role="combobox"
+            aria-label={label}
+            aria-expanded={shouldShowResults}
+            aria-controls={listId}
+            aria-describedby={statusId}
+            placeholder="Введите номер гаража или ФИО владельца"
+            value={search}
+            onFocus={() => setSearchOpen(search.trim().length > 0)}
+            onChange={(event) => {
+              setSearch(event.target.value)
+              setSearchOpen(event.target.value.trim().length > 0)
+            }}
+            onKeyDown={(event) => {
+              if (event.key === 'Escape') {
+                event.preventDefault()
+                setSearchOpen(false)
+              } else if (event.key === 'Enter') {
+                event.preventDefault()
+                selectFirstResult()
+              }
+            }}
+          />
+        </label>
+        {shouldShowResults ? (
+          <div className="payments-prototype-search-results" id={listId} role="listbox" aria-label="Найденные гаражи отчёта">
+            {filteredOptions.length > 0 ? filteredOptions.map((option) => {
+              const [title, description] = option.label.split(' · ', 2)
+              return (
+                <label className="payments-prototype-search-option" key={option.value} role="option" aria-selected={selectedValues.includes(option.value)}>
+                  <input
+                    type="checkbox"
+                    aria-label={`Выбрать ${title.toLocaleLowerCase('ru-RU')}, ${description}`}
+                    checked={selectedValues.includes(option.value)}
+                    onChange={() => toggleSelection(option.value)}
+                  />
+                  <span>
+                    <strong>{title}</strong>
+                    <small>{description}</small>
+                  </span>
+                </label>
+              )
+            }) : <span className="payments-prototype-search-empty">Ничего не найдено</span>}
+          </div>
+        ) : null}
+      </div>
+      {selectedValues.length === 0 ? (
+        <span className="report-workbook-multi-select-status" id={statusId} role="status" aria-live="polite">{allLabel}</span>
+      ) : null}
+      {selectedOptions.length > 0 ? (
+        <div className="payments-prototype-selected-garages report-garage-picker-selected" aria-label="Выбранные гаражи отчёта">
+          <div className="payments-prototype-selected-heading">
+            <span id={statusId} role="status" aria-live="polite">Выбрано: {selectedOptions.length}</span>
+            <button className="ghost-button" type="button" onClick={() => onChange([])}>Очистить</button>
+          </div>
+          <div className="payments-prototype-selected-list">
+            {selectedOptions.map((option) => {
+              const [title, description] = option.label.split(' · ', 2)
+              return (
+                <div className="report-garage-picker-selected-item" key={option.value}>
+                  <span>
+                    <strong>{title}</strong>
+                    <small>{description}</small>
+                  </span>
+                  <button
+                    className="icon-button payments-prototype-selected-remove"
+                    type="button"
+                    aria-label={`Убрать ${title.toLocaleLowerCase('ru-RU')} из выбранных`}
+                    title="Убрать из выбранных"
+                    onClick={() => toggleSelection(option.value)}
+                  >
+                    <X size={14} aria-hidden="true" />
+                  </button>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      ) : null}
     </div>
   )
 }
@@ -1131,9 +1273,8 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
               </>
             ),
             extra: (
-              <ReportMultiSelect
+              <ReportGarageMultiSelect
                 label="Гаражи"
-                ariaLabel="Гаражи"
                 allLabel="Все гаражи"
                 options={garages.map((garage) => ({ value: garage.id, label: `Гараж ${garage.number} · ${garage.ownerName ?? 'без владельца'}` }))}
                 selectedValues={selectedGarageIds}
