@@ -4166,13 +4166,20 @@ describe('App', () => {
     const readingsPanel = await screen.findByRole('region', { name: 'Показания' })
     expect(readingsPanel.closest('.workspace')).toHaveClass('workspace--meter-readings')
     expect(within(readingsPanel).getByRole('group', { name: 'Параметры показаний' })).toBeInTheDocument()
+    expect(within(readingsPanel).getByText('Показания будущих месяцев доступны только для просмотра и недоступны для ввода.')).toBeInTheDocument()
     expect(within(readingsPanel).getByRole('status', { name: 'Загружаем гаражи и показания' })).toBeInTheDocument()
     await act(async () => resolveMeterReadingYearPage({
       garages: [
         { id: 'garage-12', number: '12' },
         { id: 'garage-27', number: '27' },
       ],
-      readings: [],
+      readings: [{
+        id: 'future-meter-reading',
+        garageId: 'garage-12',
+        accountingMonth: '2026-12-01',
+        currentValue: 5000,
+        version: 'future-meter-reading-version',
+      }],
       totalCount: 2,
       offset: 0,
       limit: 25,
@@ -4190,6 +4197,11 @@ describe('App', () => {
     expect(within(readingsPanel).getByRole('navigation', { name: 'Пагинация показаний' })).toHaveTextContent('Показано 1-2 из 2')
     expect(within(readingsPanel).getByLabelText('Гараж 27, Декабрь, показание')).toBeInTheDocument()
     expect(within(readingsPanel).queryByLabelText('Гараж 35, Декабрь, показание')).not.toBeInTheDocument()
+    expect(within(readingsPanel).getByLabelText('Гараж 12, Июнь, показание')).toBeEnabled()
+    const futureDecemberInput = within(readingsPanel).getByLabelText('Гараж 12, Декабрь, показание')
+    expect(futureDecemberInput).toBeDisabled()
+    expect(futureDecemberInput).toHaveAttribute('title', 'Показания будущего месяца недоступны')
+    expect(futureDecemberInput).toHaveValue('5000')
 
     const yearInput = within(readingsPanel).getByLabelText('Год показаний')
     await user.clear(yearInput)
@@ -4251,13 +4263,9 @@ describe('App', () => {
     expect(correctedMeterReadingRequest).toMatchObject({ reason: 'Сверка с бумажным журналом', expectedVersion: expect.any(String) })
     await waitFor(() => expect(januaryInput).toHaveValue('4660'))
 
-    const decemberInput = within(readingsPanel).getByLabelText('Гараж 12, Декабрь, показание')
-    await user.type(decemberInput, '5000{Enter}')
-    await waitFor(() => expect(decemberInput).toHaveValue('5000'))
-    await user.clear(decemberInput)
-    await user.type(decemberInput, '5001{Enter}')
-    expect(await within(readingsPanel).findByRole('alert')).toHaveTextContent('Изменять показание будущего учетного месяца нельзя.')
-    expect(decemberInput).toHaveValue('5000')
+    await user.type(futureDecemberInput, '5001{Enter}')
+    expect(futureDecemberInput).toHaveValue('5000')
+    expect(createdMeterReadingRequest?.accountingMonth).toBe('2026-01-01')
 
     expect(within(readingsPanel).queryByRole('tab', { name: 'История изменений' })).not.toBeInTheDocument()
     expect(within(readingsPanel).queryByRole('table', { name: 'История изменений показаний', hidden: true })).not.toBeInTheDocument()

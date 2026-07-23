@@ -683,7 +683,9 @@ public sealed class FinanceServiceTests
     {
         await using var database = await TestDatabase.CreateAsync();
         var fixtures = await database.SeedAsync();
-        var service = FinanceServiceTestFactory.Create(database.Context);
+        var service = FinanceServiceTestFactory.Create(
+            database.Context,
+            new FixedTimeProvider(new DateTimeOffset(2026, 9, 1, 12, 0, 0, TimeSpan.Zero)));
 
         for (var index = 0; index < 3; index++)
         {
@@ -723,7 +725,9 @@ public sealed class FinanceServiceTests
     {
         await using var database = await TestDatabase.CreateAsync();
         var fixtures = await database.SeedAsync();
-        var service = FinanceServiceTestFactory.Create(database.Context);
+        var service = FinanceServiceTestFactory.Create(
+            database.Context,
+            new FixedTimeProvider(new DateTimeOffset(2026, 9, 1, 12, 0, 0, TimeSpan.Zero)));
 
         for (var index = 0; index < 3; index++)
         {
@@ -4493,6 +4497,33 @@ public sealed class FinanceServiceTests
     }
 
     [Fact]
+    public async Task MeterReadingCreationCommands_RejectFutureAccountingMonthWithoutPersistenceOrAudit()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        var service = FinanceServiceTestFactory.Create(
+            database.Context,
+            new FixedTimeProvider(new DateTimeOffset(2026, 7, 17, 12, 0, 0, TimeSpan.Zero)));
+
+        var result = await service.CreateMeterReadingAsync(
+            new CreateMeterReadingRequest(fixtures.Garage.Id, "water", new DateOnly(2026, 8, 1), new DateOnly(2026, 8, 20), 15.5m, null),
+            Guid.NewGuid(),
+            CancellationToken.None);
+        var paymentFormResult = await service.SavePaymentFormMeterReadingAsync(
+            new SavePaymentFormMeterReadingRequest(fixtures.Garage.Id, "water", new DateOnly(2026, 8, 1), new DateOnly(2026, 8, 20), 15.5m, null),
+            Guid.NewGuid(),
+            CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Equal("meter_reading_future_month_not_allowed", result.ErrorCode);
+        Assert.Equal("Показание будущего учетного месяца вводить нельзя.", result.ErrorMessage);
+        Assert.False(paymentFormResult.Succeeded);
+        Assert.Equal("meter_reading_future_month_not_allowed", paymentFormResult.ErrorCode);
+        Assert.Empty(database.Context.MeterReadings);
+        Assert.DoesNotContain(database.Context.AuditEvents, item => item.Action == "finance.meter_reading_created");
+    }
+
+    [Fact]
     public async Task CreateMeterReadingAsync_UsesInitialMeterValueAndWritesAudit()
     {
         await using var database = await TestDatabase.CreateAsync();
@@ -4729,7 +4760,9 @@ public sealed class FinanceServiceTests
             new CreateMeterReadingRequest(fixtures.Garage.Id, "water", new DateOnly(2026, 7, 1), new DateOnly(2026, 7, 17), 20m, null),
             null,
             CancellationToken.None);
-        var future = await service.CreateMeterReadingAsync(
+        var future = await FinanceServiceTestFactory.Create(
+            database.Context,
+            new FixedTimeProvider(new DateTimeOffset(2026, 9, 17, 12, 0, 0, TimeSpan.Zero))).CreateMeterReadingAsync(
             new CreateMeterReadingRequest(fixtures.Garage.Id, "water", new DateOnly(2026, 8, 1), new DateOnly(2026, 8, 20), 25m, null),
             null,
             CancellationToken.None);
@@ -4816,7 +4849,9 @@ public sealed class FinanceServiceTests
             new CreateMeterReadingRequest(fixtures.Garage.Id, "electricity", new DateOnly(2026, 7, 1), new DateOnly(2026, 7, 17), 110m, null),
             null,
             CancellationToken.None);
-        var future = await service.CreateMeterReadingAsync(
+        var future = await FinanceServiceTestFactory.Create(
+            database.Context,
+            new FixedTimeProvider(new DateTimeOffset(2026, 9, 17, 12, 0, 0, TimeSpan.Zero))).CreateMeterReadingAsync(
             new CreateMeterReadingRequest(fixtures.Garage.Id, "electricity", new DateOnly(2026, 8, 1), new DateOnly(2026, 8, 17), 120m, null),
             null,
             CancellationToken.None);

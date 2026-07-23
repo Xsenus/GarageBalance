@@ -107,7 +107,9 @@ public sealed class PostgreSqlMeterReadingConcurrencyIntegrationTests
             new CreateMeterReadingRequest(garageId, MeterKinds.Water, new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 20), 15m, null),
             null,
             CancellationToken.None);
-        var future = await service.CreateMeterReadingAsync(
+        var future = await FinanceServiceTestFactory.Create(
+            context,
+            new FixedTimeProvider(new DateTimeOffset(2026, 9, 17, 12, 0, 0, TimeSpan.Zero))).CreateMeterReadingAsync(
             new CreateMeterReadingRequest(garageId, MeterKinds.Water, new DateOnly(2026, 8, 1), new DateOnly(2026, 8, 20), 25m, null),
             null,
             CancellationToken.None);

@@ -9,6 +9,7 @@ import type {
   GenerateRegularAccrualsRequest,
   GenerateSupplierGroupSalaryAccrualsRequest,
 } from '../services/financeApi'
+import { getCurrentMonthInputValue } from './formatters'
 import { isCompleteRussianPhone } from './phoneNumber'
 
 export type OwnerGarageLinkForm = {
@@ -533,7 +534,7 @@ export function chooseRegularTariffId(incomeTypeId: string, currentTariffId: str
   return compatibleTariffs.some((tariff) => tariff.id === currentTariffId) ? currentTariffId : compatibleTariffs[0]?.id ?? ''
 }
 
-export function getMeterReadingValidationErrors(form: CreateMeterReadingRequest) {
+export function getMeterReadingValidationErrors(form: CreateMeterReadingRequest, currentMonth = getCurrentMonthInputValue()) {
   const errors: string[] = []
 
   if (!form.garageId) {
@@ -546,6 +547,8 @@ export function getMeterReadingValidationErrors(form: CreateMeterReadingRequest)
 
   if (!isAccountingMonthValue(form.accountingMonth)) {
     errors.push('Укажите месяц показания.')
+  } else if (form.accountingMonth.slice(0, 7) > currentMonth) {
+    errors.push('Показание будущего учетного месяца вводить нельзя.')
   }
 
   if (!isDateInputValue(form.readingDate)) {

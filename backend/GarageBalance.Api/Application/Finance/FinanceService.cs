@@ -2802,13 +2802,18 @@ public sealed class FinanceService(
             return ManualMeterReadingValueRequired();
         }
 
+        var month = MonthPeriod.Normalize(request.AccountingMonth);
+        if (month > GetCurrentAccountingMonth())
+        {
+            return FutureMeterReadingMonthNotAllowed();
+        }
+
         var garage = await garageRepository.FindActiveWithOwnerAsync(request.GarageId, cancellationToken);
         if (garage is null)
         {
             return FinanceResult<MeterReadingDto>.Failure("garage_not_found", "Гараж для показания счетчика не найден.");
         }
 
-        var month = MonthPeriod.Normalize(request.AccountingMonth);
         if (await meterReadingRepository.ActiveDuplicateExistsAsync(null, garage.Id, meterKind, month, cancellationToken))
         {
             return FinanceResult<MeterReadingDto>.Failure("meter_reading_duplicate", "Показание этого счетчика за месяц уже внесено.");
@@ -3178,6 +3183,11 @@ public sealed class FinanceService(
         FinanceResult<MeterReadingDto>.Failure(
             "meter_reading_historical_month_required",
             "Историческая корректировка разрешена только для учетного месяца раньше текущего.");
+
+    private static FinanceResult<MeterReadingDto> FutureMeterReadingMonthNotAllowed() =>
+        FinanceResult<MeterReadingDto>.Failure(
+            "meter_reading_future_month_not_allowed",
+            "Показание будущего учетного месяца вводить нельзя.");
 
     private static FinanceResult<MeterReadingDto> MeterReadingConflict() =>
         FinanceResult<MeterReadingDto>.Failure(

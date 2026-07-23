@@ -11,6 +11,7 @@ import { getLocalDateInputValue } from '../../shared/formatters'
 import { useEscapeKey, useFocusOnOpen, useFocusTrap, useRestoreFocusOnClose } from '../../shared/focusHooks'
 import { formatPrototypeChangeValue, handleEditableInputKeyDown } from '../../shared/prototypeEditing'
 import { hasPermission, permissions } from '../../shared/accessControl'
+import { isFutureMeterReadingMonth } from './meterReadingPeriod'
 const meterReadingMonths = [
   { key: '01', label: 'Январь' },
   { key: '02', label: 'Февраль' },
@@ -79,6 +80,7 @@ type MeterReadingMonth = typeof meterReadingMonths[number]
 
 type MeterReadingsTableProps = {
   appliedYear: string
+  currentMonth: string
   draftReadings: Record<string, string>
   garages: MeterReadingYearGarageDto[]
   loading: boolean
@@ -93,6 +95,7 @@ type MeterReadingsTableProps = {
 
 const MeterReadingsTable = memo(function MeterReadingsTable({
   appliedYear,
+  currentMonth,
   draftReadings,
   garages,
   loading,
@@ -131,11 +134,13 @@ const MeterReadingsTable = memo(function MeterReadingsTable({
             <span role="rowheader">Гараж {garage.number}</span>
             {meterReadingMonths.map((month) => {
               const cellKey = createMeterReadingCellKey(appliedYear, meterType, garage.id, month.key)
+              const futureMonth = isFutureMeterReadingMonth(appliedYear, month.key, currentMonth)
               return (
                 <span role="cell" key={cellKey}>
                   <MeterReadingInput
                     aria-label={`Гараж ${garage.number}, ${month.label}, показание`}
-                    disabled={!yearIsValid || savingReadingKey === cellKey}
+                    disabled={!yearIsValid || futureMonth || savingReadingKey === cellKey}
+                    title={futureMonth ? 'Показания будущего месяца недоступны' : undefined}
                     value={draftReadings[cellKey] ?? savedReadings[cellKey] ?? ''}
                     onBlur={() => onCommitReading(garage, month)}
                     onChange={(event) => onDraftReadingChange(cellKey, event.target.value)}
@@ -176,6 +181,7 @@ export function MeterReadingsPrototypePanel({ auth, financeClient }: { auth: Aut
   const meterType: MeterReadingTypeId = 'electricity'
   const selectedMeterType = meterReadingTypes[0]
   const yearIsValid = isValidMeterReadingYear(yearDraft)
+  const currentMonth = getLocalDateInputValue().slice(0, 7)
 
   function cancelPendingReadingChange() {
     if (pendingReadingChange) {
@@ -359,19 +365,18 @@ export function MeterReadingsPrototypePanel({ auth, financeClient }: { auth: Aut
       return
     }
 
+    if (isFutureMeterReadingMonth(appliedYear, month.key, currentMonth)) {
+      setDraftReadings((currentDrafts) => ({ ...currentDrafts, [cellKey]: previousValue }))
+      setError('Вводить и изменять показания будущего учетного месяца нельзя.')
+      return
+    }
+
     if (previousValue.trim() === '') {
       void saveReadingValue(cellKey, undefined, undefined, nextValue)
       return
     }
 
     const accountingMonth = `${appliedYear}-${month.key}`
-    const currentMonth = getLocalDateInputValue().slice(0, 7)
-    if (accountingMonth > currentMonth) {
-      setDraftReadings((currentDrafts) => ({ ...currentDrafts, [cellKey]: previousValue }))
-      setError('Изменять показание будущего учетного месяца нельзя.')
-      return
-    }
-
     const isHistorical = accountingMonth < currentMonth
     if (isHistorical && !hasPermission(auth, permissions.historicalMeterReadingsCorrect)) {
       setDraftReadings((currentDrafts) => ({ ...currentDrafts, [cellKey]: previousValue }))
@@ -399,7 +404,7 @@ export function MeterReadingsPrototypePanel({ auth, financeClient }: { auth: Aut
     })
     setHistoricalCorrectionReason('')
     setHistoricalCorrectionReasonError(null)
-  }, [appliedYear, auth, draftReadings, financeClient.correctHistoricalMeterReading, meterType, savedReadingIds, savedReadingVersions, savedReadings, saveReadingValue, savingReadingKey, selectedMeterType.label, selectedMeterType.unit, yearIsValid])
+  }, [appliedYear, auth, currentMonth, draftReadings, financeClient.correctHistoricalMeterReading, meterType, savedReadingIds, savedReadingVersions, savedReadings, saveReadingValue, savingReadingKey, selectedMeterType.label, selectedMeterType.unit, yearIsValid])
 
   return (
     <section className="meter-readings-page" aria-label="Показания">
@@ -433,9 +438,11 @@ export function MeterReadingsPrototypePanel({ auth, financeClient }: { auth: Aut
 
       {!yearIsValid ? <div className="form-error" role="alert">Введите год четырьмя цифрами от 1900 до 9999.</div> : null}
       {error ? <div className="form-error" role="alert">{error}</div> : null}
+      <p className="form-hint">Показания будущих месяцев доступны только для просмотра и недоступны для ввода.</p>
 
       <MeterReadingsTable
         appliedYear={appliedYear}
+        currentMonth={currentMonth}
         draftReadings={draftReadings}
         garages={garages}
         loading={loading}

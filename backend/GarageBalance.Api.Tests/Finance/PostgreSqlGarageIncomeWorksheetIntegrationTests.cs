@@ -26,7 +26,9 @@ public sealed class PostgreSqlGarageIncomeWorksheetIntegrationTests
         };
         context.Garages.Add(garage);
         await context.SaveChangesAsync();
-        var service = FinanceServiceTestFactory.Create(context);
+        var service = FinanceServiceTestFactory.Create(
+            context,
+            new FixedTimeProvider(new DateTimeOffset(2027, 3, 1, 12, 0, 0, TimeSpan.Zero)));
         var waterAccrualIds = new List<Guid>();
 
         for (var monthOffset = 0; monthOffset < 14; monthOffset++)

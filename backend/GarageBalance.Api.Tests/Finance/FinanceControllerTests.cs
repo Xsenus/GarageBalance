@@ -1177,6 +1177,25 @@ public sealed class FinanceControllerTests
     }
 
     [Fact]
+    public async Task CreateMeterReading_ReturnsBadRequestForFutureMonth()
+    {
+        var controller = CreateController(new FakeFinanceService
+        {
+            CreateMeterReadingResult = FinanceResult<MeterReadingDto>.Failure(
+                "meter_reading_future_month_not_allowed",
+                "Показание будущего учетного месяца вводить нельзя.")
+        });
+
+        var result = await controller.CreateMeterReading(
+            new CreateMeterReadingRequest(Guid.NewGuid(), "water", new DateOnly(2026, 8, 1), new DateOnly(2026, 8, 20), 10m, null),
+            CancellationToken.None);
+
+        var badRequest = Assert.IsType<BadRequestObjectResult>(result.Result);
+        var problem = Assert.IsType<ProblemDetails>(badRequest.Value);
+        Assert.Equal("meter_reading_future_month_not_allowed", problem.Title);
+    }
+
+    [Fact]
     public async Task CreateMeterReading_PassesActorUserIdToService()
     {
         var actorUserId = Guid.NewGuid();
