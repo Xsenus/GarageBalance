@@ -3,6 +3,8 @@ export type ExpenseWorksheetBalanceSplit = {
   advance: number
 }
 
+export type ExpenseWorksheetCollectedClassName = 'money-income' | 'money-expense'
+
 const atomicCashExpenseTypeCodes = new Set([
   'advance',
   'advance_payment',
@@ -33,6 +35,17 @@ export function splitExpenseWorksheetBalance(balance: number): ExpenseWorksheetB
 
 export function toSignedExpenseWorksheetBalance(debt: number, advance: number): number {
   return Math.round((advance - debt) * 100) / 100
+}
+
+export function getExpenseWorksheetCollectedClassName(
+  collected: number | string | null | undefined,
+  cost: number | string | null | undefined,
+): ExpenseWorksheetCollectedClassName | undefined {
+  if (typeof collected !== 'number' || typeof cost !== 'number') {
+    return undefined
+  }
+
+  return collected < cost ? 'money-expense' : 'money-income'
 }
 
 export function calculateExpenseWorksheetClosingBalance(

@@ -25,7 +25,7 @@ import { SelectControl } from '../../shared/SelectControl'
 import { TablePagination } from '../../shared/TablePagination'
 import { getAccrualValidationErrors, getExpenseValidationErrors, getIncomeValidationErrors, getMeterReadingValidationErrors, getSupplierAccrualValidationErrors, getSupplierGroupSalaryValidationErrors } from '../../shared/validation'
 import { formatPaymentMoney, parsePaymentMoney } from './paymentMoneyFormatting'
-import { calculateExpenseWorksheetClosingBalance, isAtomicCashExpenseType, toSignedExpenseWorksheetBalance } from './expenseWorksheetBalances'
+import { calculateExpenseWorksheetClosingBalance, getExpenseWorksheetCollectedClassName, isAtomicCashExpenseType, toSignedExpenseWorksheetBalance } from './expenseWorksheetBalances'
 import { rankGarageSearchResults } from './garageSearchRanking'
 import { getGarageBalancePresentation } from './garageBalancePresentation'
 
@@ -4871,20 +4871,19 @@ function PaymentsPrototypePanel({
                     const isAtomicCashPayout = isAtomicCashExpenseType(rowExpenseType?.code, row.item)
                     const openingBalance = toSignedExpenseWorksheetBalance(row.openingDebt, row.openingAdvance)
                     const closingBalance = toSignedExpenseWorksheetBalance(row.closingDebt, row.closingAdvance)
+                    const collectedClassName = getExpenseWorksheetCollectedClassName(row.collected, row.cost)
                     return (
                       <tr key={`${row.item}-${index}`}>
                         <td>{supplier}</td>
                         <td>{row.item}</td>
-                        <td className={openingBalance < 0 ? 'money-expense' : openingBalance > 0 ? 'money-income' : undefined}>{formatPaymentMoney(openingBalance)}</td>
-                        <td className={row.cost ? 'money-income' : undefined}>{formatPaymentMoney(row.cost)}</td>
+                        <td>{formatPaymentMoney(openingBalance)}</td>
+                        <td>{formatPaymentMoney(row.cost)}</td>
                         <td>{formatPaymentMoney(row.paid)}</td>
-                        <td className={closingBalance < 0 ? 'money-expense' : closingBalance > 0 ? 'money-income' : undefined}>{formatPaymentMoney(closingBalance)}</td>
+                        <td>{formatPaymentMoney(closingBalance)}</td>
                         {!isArchivedExpenseWorksheetMonth ? (
                           <>
-                            <td>{formatPaymentMoney(row.collected)}</td>
-                            <td className={typeof row.difference === 'number' ? row.difference >= 0 ? 'money-income' : 'money-expense' : undefined}>
-                              {formatPaymentMoney(row.difference)}
-                            </td>
+                            <td className={collectedClassName}>{formatPaymentMoney(row.collected)}</td>
+                            <td>{formatPaymentMoney(row.difference)}</td>
                             <td>
                               {row.action && !isAtomicCashPayout ? (
                                 <button className="link-button" type="button" onClick={(event) => {
@@ -4912,14 +4911,14 @@ function PaymentsPrototypePanel({
                   <tr className="payments-prototype-total-row">
                     <td>ИТОГО</td>
                     <td />
-                    <td className={expenseOpeningBalanceTotal < 0 ? 'money-expense' : expenseOpeningBalanceTotal > 0 ? 'money-income' : undefined}>{formatPaymentMoney(expenseOpeningBalanceTotal)}</td>
+                    <td>{formatPaymentMoney(expenseOpeningBalanceTotal)}</td>
                     <td>{formatPaymentMoney(expenseAccrualTotal)}</td>
                     <td>{formatPaymentMoney(expensePaidTotal)}</td>
-                    <td className={expenseClosingBalanceTotal < 0 ? 'money-expense' : expenseClosingBalanceTotal > 0 ? 'money-income' : undefined}>{formatPaymentMoney(expenseClosingBalanceTotal)}</td>
+                    <td>{formatPaymentMoney(expenseClosingBalanceTotal)}</td>
                     {!isArchivedExpenseWorksheetMonth ? (
                       <>
-                        <td>{formatPaymentMoney(expenseCollectedTotal)}</td>
-                        <td className={expenseDifferenceTotal >= 0 ? 'money-income' : 'money-expense'}>{formatPaymentMoney(expenseDifferenceTotal)}</td>
+                        <td className={getExpenseWorksheetCollectedClassName(expenseCollectedTotal, expenseAccrualTotal)}>{formatPaymentMoney(expenseCollectedTotal)}</td>
+                        <td>{formatPaymentMoney(expenseDifferenceTotal)}</td>
                         <td />
                       </>
                     ) : null}
@@ -4940,7 +4939,7 @@ function PaymentsPrototypePanel({
             </div>
             <div>
               <span>ИТОГО</span>
-              <strong className={expenseCollectedTotal >= 0 ? 'money-income' : 'money-expense'}>{formatPaymentPrototypeValue(expenseCollectedTotal)}</strong>
+              <strong>{formatPaymentPrototypeValue(expenseCollectedTotal)}</strong>
             </div>
             <button className="secondary-button" type="button" onClick={(event) => openDialogFromButton(event, 'bank')}>
               Сдать кассу в банк

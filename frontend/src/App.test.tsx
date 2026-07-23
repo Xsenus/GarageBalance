@@ -6896,7 +6896,9 @@ describe('App', () => {
     const getExpenseWorksheet = vi.fn(async (_token: string, params?: { accountingMonth?: string }) => createExpenseWorksheet({
       accountingMonth: params?.accountingMonth ?? '2026-06-01',
       bankAmount: 12000,
-      collectedTotal: 7000,
+      accrualTotal: 77000,
+      expenseTotal: 30000,
+      collectedTotal: 12000,
       differenceTotal: -3000,
       rows: [
         {
@@ -6935,6 +6937,24 @@ describe('App', () => {
           collectedAmount: null,
           difference: null,
         },
+        {
+          rowKind: 'supplier',
+          supplierId: 'supplier-electricity',
+          staffMemberId: null,
+          counterpartyName: 'Городские электросети',
+          expenseTypeId: 'expense-electricity',
+          expenseTypeName: 'Электроэнергия',
+          openingBalance: 0,
+          openingDebt: 0,
+          openingAdvance: 0,
+          closingDebt: 0,
+          closingAdvance: 0,
+          accrualAmount: 5000,
+          expenseAmount: 5000,
+          balance: 0,
+          collectedAmount: 5000,
+          difference: 0,
+        },
       ],
     }))
     render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient({ getExpenseWorksheet })} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
@@ -6958,22 +6978,31 @@ describe('App', () => {
     expect(within(expenseTable).queryByRole('columnheader', { name: /долг|аванс/i })).not.toBeInTheDocument()
     const supplierExpenseRow = within(expenseTable).getByText('Серверный водоканал').closest('tr')
     const staffExpenseRow = within(expenseTable).getByText('Петрова Ольга').closest('tr')
+    const coveredSupplierExpenseRow = within(expenseTable).getByText('Городские электросети').closest('tr')
     expect(supplierExpenseRow).not.toBeNull()
     expect(staffExpenseRow).not.toBeNull()
-    expect(within(supplierExpenseRow!).getByText('-7 500.00')).toHaveClass('money-expense')
-    expect(within(supplierExpenseRow!).getByText('-29 500.00')).toHaveClass('money-expense')
-    expect(within(supplierExpenseRow!).getByText('-3 000.00')).toHaveClass('money-expense')
-    expect(within(staffExpenseRow!).getByText('2 500.00')).toHaveClass('money-income')
-    expect(within(staffExpenseRow!).getByText('-22 500.00')).toHaveClass('money-expense')
+    expect(coveredSupplierExpenseRow).not.toBeNull()
+    expect(within(supplierExpenseRow!).getByText('-7 500.00')).not.toHaveClass('money-expense', 'money-income')
+    expect(within(supplierExpenseRow!).getByText('-29 500.00')).not.toHaveClass('money-expense', 'money-income')
+    expect(within(supplierExpenseRow!).getByText('-3 000.00')).not.toHaveClass('money-expense', 'money-income')
+    expect(within(supplierExpenseRow!).getByText('7 000.00')).toHaveClass('money-expense')
+    expect(within(staffExpenseRow!).getByText('2 500.00')).not.toHaveClass('money-expense', 'money-income')
+    expect(within(staffExpenseRow!).getByText('-22 500.00')).not.toHaveClass('money-expense', 'money-income')
+    const coveredSupplierAmounts = within(coveredSupplierExpenseRow!).getAllByText('5 000.00')
+    expect(coveredSupplierAmounts).toHaveLength(3)
+    expect(coveredSupplierAmounts[0]).not.toHaveClass('money-expense', 'money-income')
+    expect(coveredSupplierAmounts[1]).not.toHaveClass('money-expense', 'money-income')
+    expect(coveredSupplierAmounts[2]).toHaveClass('money-income')
     expect(within(expenseTable).getAllByText('32 000.00').length).toBeGreaterThan(0)
     const expenseTotalRow = within(expenseTable).getByText('ИТОГО').closest('tr')
     expect(expenseTotalRow).not.toBeNull()
-    expect(within(expenseTotalRow!).getByText('-5 000.00')).toHaveClass('money-expense')
-    expect(within(expenseTotalRow!).getByText('-52 000.00')).toHaveClass('money-expense')
+    expect(within(expenseTotalRow!).getByText('-5 000.00')).not.toHaveClass('money-expense', 'money-income')
+    expect(within(expenseTotalRow!).getByText('-52 000.00')).not.toHaveClass('money-expense', 'money-income')
+    expect(within(expenseTotalRow!).getByText('12 000.00')).toHaveClass('money-expense')
     await user.click(within(supplierExpenseRow!).getByRole('button', { name: 'Оплатить Водоснабжение' }))
     const expenseDialog = await screen.findByRole('dialog', { name: 'Новая выплата' })
     expect(within(expenseDialog).getByLabelText('Сумма выплаты')).toHaveValue('29 500.00')
-    expect(within(prototype).getByText('12 000.00')).toBeInTheDocument()
+    expect(within(prototype).getAllByText('12 000.00').length).toBeGreaterThan(0)
     expect(within(prototype).getByText('4 000.00')).toBeInTheDocument()
   })
 

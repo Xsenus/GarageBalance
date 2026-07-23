@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { describe, expect, it } from 'vitest'
-import { calculateExpenseWorksheetClosingBalance, isAtomicCashExpenseType, splitExpenseWorksheetBalance, toSignedExpenseWorksheetBalance } from './expenseWorksheetBalances'
+import { calculateExpenseWorksheetClosingBalance, getExpenseWorksheetCollectedClassName, isAtomicCashExpenseType, splitExpenseWorksheetBalance, toSignedExpenseWorksheetBalance } from './expenseWorksheetBalances'
 
 describe('expense worksheet balances', () => {
   it('separates debt, advance and zero without ambiguous negative values', () => {
@@ -20,6 +20,17 @@ describe('expense worksheet balances', () => {
     expect(toSignedExpenseWorksheetBalance(0, 40.25)).toBe(40.25)
     expect(toSignedExpenseWorksheetBalance(25.111, 10.555)).toBe(-14.56)
     expect(toSignedExpenseWorksheetBalance(0, 0)).toBe(0)
+  })
+
+  it('colors only available collections against the monthly service cost', () => {
+    expect(getExpenseWorksheetCollectedClassName(99.99, 100)).toBe('money-expense')
+    expect(getExpenseWorksheetCollectedClassName(100, 100)).toBe('money-income')
+    expect(getExpenseWorksheetCollectedClassName(125, 100)).toBe('money-income')
+    expect(getExpenseWorksheetCollectedClassName(0, 0)).toBe('money-income')
+    expect(getExpenseWorksheetCollectedClassName(null, 100)).toBeUndefined()
+    expect(getExpenseWorksheetCollectedClassName(100, null)).toBeUndefined()
+    expect(getExpenseWorksheetCollectedClassName('', 100)).toBeUndefined()
+    expect(getExpenseWorksheetCollectedClassName(100, '')).toBeUndefined()
   })
 
   it('recognizes atomic cash payouts by stable code with a legacy-name fallback', () => {
