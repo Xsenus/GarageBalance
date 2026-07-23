@@ -4949,7 +4949,15 @@ describe('App', () => {
     expect(within(overdueDebtTable).getByText('10.06.2026')).toBeInTheDocument()
     expect(within(overdueDebtTable).getAllByText('500.00')).toHaveLength(2)
     expect(within(prototype).getByLabelText('Выбранный гараж')).toHaveTextContent('Иванов Иван')
-    expect(within(prototype).getByRole('table', { name: 'История платежей гаража' })).toBeInTheDocument()
+    expect(within(prototype).queryByRole('table', { name: 'История платежей гаража' })).not.toBeInTheDocument()
+    const paymentHistoryButton = within(workspaceHeader).getByRole('button', { name: 'История платежей' })
+    expect(paymentHistoryButton).toHaveAttribute('aria-expanded', 'false')
+    expect(paymentHistoryButton.querySelector('.lucide-history')).not.toBeNull()
+    await user.click(paymentHistoryButton)
+    expect(paymentHistoryButton).toHaveAttribute('aria-expanded', 'true')
+    expect(await within(prototype).findByRole('table', { name: 'История платежей гаража' })).toBeInTheDocument()
+    await user.click(within(workspaceHeader).getByRole('button', { name: 'Скрыть историю' }))
+    expect(within(prototype).queryByRole('table', { name: 'История платежей гаража' })).not.toBeInTheDocument()
     const incomeTable = within(prototype).getByRole('table', { name: 'Поступления гаража 1' })
     await within(incomeTable).findByText('Электроэнергия')
     expect(within(prototype).getByText('май.26')).toBeInTheDocument()
@@ -6360,12 +6368,18 @@ describe('App', () => {
     await user.type(within(prototype).getByLabelText('Поиск номера гаража или ФИО владельца'), '77')
     await user.click(await within(prototype).findByRole('option', { name: /Гараж\s*77\s*Кузнецова Мария/ }))
 
+    expect(within(prototype).queryByRole('table', { name: 'История платежей гаража' })).not.toBeInTheDocument()
+    expect(getOperationsPage.mock.calls.some(([, params]) => params?.garageId === 'garage-77')).toBe(false)
+    const paymentHistoryButton = within(prototype).getByRole('button', { name: 'История платежей' })
+    expect(paymentHistoryButton).toHaveAttribute('aria-expanded', 'false')
+    await user.click(paymentHistoryButton)
     await waitFor(() => expect(getOperationsPage).toHaveBeenCalledWith('token', expect.objectContaining({
       operationKind: 'income',
       garageId: 'garage-77',
       limit: 100,
     })))
-    const historyTable = within(prototype).getByRole('table', { name: 'История платежей гаража' })
+    expect(paymentHistoryButton).toHaveAttribute('aria-expanded', 'true')
+    const historyTable = await within(prototype).findByRole('table', { name: 'История платежей гаража' })
     expect(await within(historyTable).findByText('Серверная оплата')).toBeInTheDocument()
     expect(within(historyTable).getByText('10:24')).toBeInTheDocument()
     expect(within(historyTable).getByText('1 234.00')).toBeInTheDocument()
@@ -6468,6 +6482,67 @@ describe('App', () => {
     await waitFor(() => expect(cancelOperation).toHaveBeenCalledWith('token', 'operation-garage-77', { reason: 'Ошибочный платеж' }))
   })
 
+  it('closes payment history when another garage is selected and ignores the stale response', async () => {
+    const user = userEvent.setup()
+    const firstGarage = createGarage({ id: 'garage-history-first', number: '81', ownerName: 'Иванова Анна' })
+    const secondGarage = createGarage({ id: 'garage-history-second', number: '82', ownerName: 'Петров Петр' })
+    const staleOperation = createFinancialOperation({
+      id: 'stale-history-operation',
+      garageId: firstGarage.id,
+      garageNumber: firstGarage.number,
+      ownerName: firstGarage.ownerName,
+      incomeTypeName: 'Устаревший платеж',
+    })
+    let resolveFirstHistory!: (value: FinancePagedResult<FinancialOperationDto>) => void
+    const firstHistoryRequest = new Promise<FinancePagedResult<FinancialOperationDto>>((resolve) => {
+      resolveFirstHistory = resolve
+    })
+    const getOperationsPage = vi.fn(async (_token: string, params?: Parameters<FinanceClient['getOperationsPage']>[1]) => {
+      if (params?.garageId === firstGarage.id) {
+        return firstHistoryRequest
+      }
+
+      throw new Error('История временно недоступна')
+    })
+    render(<App
+      authClient={createAuthClient()}
+      dictionaryClient={createDictionaryClient({ getGarages: async () => [firstGarage, secondGarage] })}
+      financeClient={createFinanceClient({ getOperationsPage })}
+      importClient={createImportClient()}
+      integrationClient={createIntegrationClient()}
+      reportClient={createReportClient()}
+      releaseClient={createReleaseClient()}
+      userClient={createUserClient()}
+    />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Платежи')
+    const prototype = within(await screen.findByRole('region', { name: 'Платежи' })).getByRole('region', { name: 'Форма платежей' })
+    const search = within(prototype).getByLabelText('Поиск номера гаража или ФИО владельца')
+
+    await user.type(search, '81')
+    await user.click(await within(prototype).findByRole('option', { name: /Гараж\s*81\s*Иванова Анна/ }))
+    await user.click(within(prototype).getByRole('button', { name: 'История платежей' }))
+    expect(await within(prototype).findByText('Загружаем историю платежей')).toBeInTheDocument()
+
+    await user.clear(search)
+    await user.type(search, '82')
+    await user.click(await within(prototype).findByRole('option', { name: /Гараж\s*82\s*Петров Петр/ }))
+    expect(within(prototype).queryByRole('table', { name: 'История платежей гаража' })).not.toBeInTheDocument()
+    expect(within(prototype).getByRole('button', { name: 'История платежей' })).toHaveAttribute('aria-expanded', 'false')
+
+    resolveFirstHistory({ items: [staleOperation], totalCount: 1, offset: 0, limit: 100 })
+    await act(async () => {
+      await firstHistoryRequest
+    })
+    expect(within(prototype).queryByText('Устаревший платеж')).not.toBeInTheDocument()
+
+    await user.click(within(prototype).getByRole('button', { name: 'История платежей' }))
+    await waitFor(() => expect(within(prototype).getAllByRole('alert').some((alert) => alert.textContent?.includes('История временно недоступна'))).toBe(true))
+    expect(within(prototype).queryByText('Устаревший платеж')).not.toBeInTheDocument()
+  })
+
   it('saves a garage payment comment without a second confirmation', async () => {
     const user = userEvent.setup()
     const garage = createGarage({ id: 'garage-comment-edit', number: '43', ownerName: 'Смирнов Алексей' })
@@ -6519,7 +6594,8 @@ describe('App', () => {
     await user.type(within(prototype).getByLabelText('Поиск номера гаража или ФИО владельца'), '43')
     await user.click(await within(prototype).findByRole('option', { name: /Гараж\s*43\s*Смирнов Алексей/ }))
 
-    const historyTable = within(prototype).getByRole('table', { name: 'История платежей гаража' })
+    await user.click(within(prototype).getByRole('button', { name: 'История платежей' }))
+    const historyTable = await within(prototype).findByRole('table', { name: 'История платежей гаража' })
     await user.click(await within(historyTable).findByRole('button', { name: 'Изменить платеж Электроэнергия' }))
     const editDialog = await screen.findByRole('dialog', { name: 'Изменить платеж' })
     const comment = within(editDialog).getByLabelText('Комментарий к изменяемому платежу')

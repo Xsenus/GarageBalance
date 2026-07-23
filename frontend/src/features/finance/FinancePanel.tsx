@@ -1,6 +1,6 @@
 import { Fragment, useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
 import type { FormEvent, KeyboardEvent, MouseEvent, ReactNode } from 'react'
-import { FileText, LoaderCircle, Pencil, RotateCcw, Save, Search, Trash2, WalletCards, X } from 'lucide-react'
+import { FileText, History, LoaderCircle, Pencil, RotateCcw, Save, Search, Trash2, WalletCards, X } from 'lucide-react'
 import type { AuthResponse } from '../../services/authApi'
 import type { AccountingTypeDto, DictionaryClient, GarageDto, IrregularPaymentDto, StaffMemberDto, SupplierDto, SupplierGroupDto } from '../../services/dictionariesApi'
 import type { AccrualDto, CreateAccrualRequest, CreateExpenseOperationRequest, CreateIncomeOperationRequest, CreateMeterReadingRequest, CreateSupplierAccrualRequest, ExpenseWorksheetDto, FinanceClient, FinancePagedResult, FinanceSummaryDto, FinancialOperationDto, GarageIncomeWorksheetDto, GarageOverdueDebtDto, GenerateSupplierGroupSalaryAccrualsRequest, MeterReadingDto, MissingMeterReadingDto, SupplierAccrualDto } from '../../services/financeApi'
@@ -2920,6 +2920,9 @@ function PaymentsPrototypePanel({
   const [expenseWorksheetMonth, setExpenseWorksheetMonth] = useState(() => getCurrentMonthInputValue())
   const [expenseBankAmount, setExpenseBankAmount] = useState(0)
   const [historyRows, setHistoryRows] = useState<GaragePaymentHistoryPrototypeRow[]>([])
+  const [paymentHistoryOpen, setPaymentHistoryOpen] = useState(false)
+  const [paymentHistoryRequests] = useState(() => new LatestRequestSequence())
+  const paymentHistoryId = useId()
   const [paymentError, setPaymentError] = useState<string | null>(null)
   const [garageWorksheetLoadingId, setGarageWorksheetLoadingId] = useState<string | null>(null)
   const [garagePaymentHistoryLoadingId, setGaragePaymentHistoryLoadingId] = useState<string | null>(null)
@@ -3313,6 +3316,7 @@ function PaymentsPrototypePanel({
   }
 
   async function loadGaragePaymentHistory(garage: PaymentsPrototypeGarage) {
+    const requestId = paymentHistoryRequests.begin()
     setGaragePaymentHistoryLoadingId(garage.id)
     try {
       const page = await financeClient.getOperationsPage(auth.accessToken, {
@@ -3320,12 +3324,36 @@ function PaymentsPrototypePanel({
         garageId: garage.id,
         limit: 100,
       })
-      setHistoryRows(createGaragePaymentHistoryRowsFromOperations(page.items))
+      if (paymentHistoryRequests.isLatest(requestId) && selectedGarageIdRef.current === garage.id) {
+        setHistoryRows(createGaragePaymentHistoryRowsFromOperations(page.items))
+      }
     } catch (error) {
-      setPaymentError(error instanceof Error ? error.message : 'Не удалось загрузить историю платежей выбранного гаража.')
+      if (paymentHistoryRequests.isLatest(requestId) && selectedGarageIdRef.current === garage.id) {
+        setPaymentError(error instanceof Error ? error.message : 'Не удалось загрузить историю платежей выбранного гаража.')
+      }
     } finally {
-      setGaragePaymentHistoryLoadingId((currentId) => (currentId === garage.id ? null : currentId))
+      if (paymentHistoryRequests.isLatest(requestId) && selectedGarageIdRef.current === garage.id) {
+        setGaragePaymentHistoryLoadingId((currentId) => (currentId === garage.id ? null : currentId))
+      }
     }
+  }
+
+  function togglePaymentHistory() {
+    if (!selectedGarage) {
+      return
+    }
+
+    if (paymentHistoryOpen) {
+      paymentHistoryRequests.invalidate()
+      setPaymentHistoryOpen(false)
+      setGaragePaymentHistoryLoadingId(null)
+      return
+    }
+
+    setPaymentError(null)
+    setHistoryRows([])
+    setPaymentHistoryOpen(true)
+    void loadGaragePaymentHistory(selectedGarage)
   }
 
   function openHistoryEdit(row: GaragePaymentHistoryPrototypeRow, trigger?: HTMLButtonElement | null) {
@@ -3497,14 +3525,16 @@ function PaymentsPrototypePanel({
 
   function activateGarage(garage: PaymentsPrototypeGarage) {
     selectedGarageIdRef.current = garage.id
+    paymentHistoryRequests.invalidate()
     setSelectedGarageId(garage.id)
     setGarageRows([])
     setGarageWorksheetSummary(null)
     setHistoryRows([])
+    setPaymentHistoryOpen(false)
+    setGaragePaymentHistoryLoadingId(null)
     setPaymentError(null)
     setReceiptActionStatus(null)
     void loadGarageIncomeWorksheet(garage)
-    void loadGaragePaymentHistory(garage)
   }
 
   function removeGarageSelection(garage: PaymentsPrototypeGarage) {
@@ -3517,10 +3547,13 @@ function PaymentsPrototypePanel({
       } else {
         selectedGarageIdRef.current = null
         incomeWorksheetRequests.invalidate()
+        paymentHistoryRequests.invalidate()
         setSelectedGarageId(null)
         setGarageRows([])
         setGarageWorksheetSummary(null)
         setHistoryRows([])
+        setPaymentHistoryOpen(false)
+        setGaragePaymentHistoryLoadingId(null)
       }
     }
   }
@@ -3538,11 +3571,14 @@ function PaymentsPrototypePanel({
   function clearGarageSelection() {
     selectedGarageIdRef.current = null
     incomeWorksheetRequests.invalidate()
+    paymentHistoryRequests.invalidate()
     setSelectedGarages([])
     setSelectedGarageId(null)
     setGarageRows([])
     setGarageWorksheetSummary(null)
     setHistoryRows([])
+    setPaymentHistoryOpen(false)
+    setGaragePaymentHistoryLoadingId(null)
     setPaymentError(null)
   }
 
@@ -3769,7 +3805,7 @@ function PaymentsPrototypePanel({
       ])
       await Promise.all([
         row.annualAccrualId ? loadGarageIncomeWorksheet(selectedGarage) : Promise.resolve(),
-        loadGaragePaymentHistory(selectedGarage),
+        paymentHistoryOpen ? loadGaragePaymentHistory(selectedGarage) : Promise.resolve(),
       ])
     } catch (error) {
       setPaymentError(error instanceof Error ? error.message : 'Не удалось сохранить платеж. Повторите попытку позже.')
@@ -3923,7 +3959,7 @@ function PaymentsPrototypePanel({
 
     await Promise.all([
       loadGarageIncomeWorksheet(selectedGarage),
-      loadGaragePaymentHistory(selectedGarage),
+      paymentHistoryOpen ? loadGaragePaymentHistory(selectedGarage) : Promise.resolve(),
     ])
 
     return null
@@ -4340,6 +4376,16 @@ function PaymentsPrototypePanel({
                 <WalletCards size={16} aria-hidden="true" />
                 <span>Полная оплата</span>
               </button>
+              <button
+                className="secondary-button payments-prototype-action-button"
+                type="button"
+                aria-controls={paymentHistoryId}
+                aria-expanded={paymentHistoryOpen}
+                onClick={togglePaymentHistory}
+              >
+                <History size={16} aria-hidden="true" />
+                <span>{paymentHistoryOpen ? 'Скрыть историю' : 'История платежей'}</span>
+              </button>
             </div>
           </div>
           <section className="payments-prototype-garage-summary" aria-label="Параметры выбранного гаража">
@@ -4419,7 +4465,7 @@ function PaymentsPrototypePanel({
           : <p className="empty-state" role="status">Выберите гараж через поиск, чтобы увидеть карточку, поступления, историю платежей и задолженность.</p>
       ) : activeTab === 'income' ? (
         <>
-          <section className="payments-prototype-card payments-prototype-card--history" aria-label="История платежей гаража">
+          {paymentHistoryOpen ? <section id={paymentHistoryId} className="payments-prototype-card payments-prototype-card--history" aria-label="История платежей гаража">
             <table className="payments-prototype-mini-table" aria-label="История платежей гаража">
               <thead>
                 <tr>
@@ -4476,7 +4522,7 @@ function PaymentsPrototypePanel({
                 )}
               </tbody>
             </table>
-          </section>
+          </section> : null}
 
           <div className="payments-prototype-sheet">
             <div className="payments-prototype-period-row">
