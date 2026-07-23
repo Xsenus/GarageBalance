@@ -80,6 +80,19 @@ public sealed class PostgreSqlFundAllocationIntegrationTests
             var service = CreateService(writeContext);
             var funds = await service.GetFundsAsync(CancellationToken.None);
             renamedFundId = funds.Single(item => item.Name == "Электроэнергия").Id;
+            var incomeType = new IncomeType
+            {
+                Name = "Поступления за электроэнергию",
+                DestinationFundId = renamedFundId
+            };
+            writeContext.AddRange(
+                incomeType,
+                new ChargeServiceSetting
+                {
+                    Name = "Электроэнергия по счётчику",
+                    IncomeType = incomeType
+                });
+            await writeContext.SaveChangesAsync();
 
             var created = await service.CreateFundAsync(
                 new UpsertFundRequest("Резервный фонд"),
@@ -102,7 +115,11 @@ public sealed class PostgreSqlFundAllocationIntegrationTests
 
         Assert.Equal(8, reloaded.Count);
         Assert.Contains(reloaded, item => item.Id == createdFundId && item.Name == "Резервный фонд" && !item.IsSystem);
-        Assert.Contains(reloaded, item => item.Id == renamedFundId && item.Name == "Энергоснабжение" && item.IsSystem);
+        var renamedFund = Assert.Single(reloaded, item => item.Id == renamedFundId && item.Name == "Энергоснабжение" && item.IsSystem);
+        Assert.Collection(
+            renamedFund.LinkedServices,
+            linkedService => Assert.Equal("Электроэнергия по счётчику", linkedService.Name));
+        Assert.Empty(reloaded.Single(item => item.Id == createdFundId).LinkedServices);
         Assert.DoesNotContain(reloaded, item => item.Name == "Электроэнергия");
         Assert.Single(verificationContext.AuditEvents, item => item.Action == "fund.created" && item.ActorUserId == actorUserId);
         Assert.Single(verificationContext.AuditEvents, item => item.Action == "fund.updated" && item.ActorUserId == actorUserId);

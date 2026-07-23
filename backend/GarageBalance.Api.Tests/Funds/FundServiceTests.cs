@@ -12,6 +12,17 @@ namespace GarageBalance.Api.Tests.Funds;
 public sealed class FundServiceTests
 {
     [Fact]
+    public async Task GetLinkedServicesAsync_ReturnsEmptyResultForEmptyFundSet()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var repository = new EfFundRepository(database.Context);
+
+        var linkedServices = await repository.GetLinkedServicesAsync([], CancellationToken.None);
+
+        Assert.Empty(linkedServices);
+    }
+
+    [Fact]
     public async Task GetFundsAsync_SeedsDefaultFunds()
     {
         await using var database = await TestDatabase.CreateAsync();
@@ -26,8 +37,95 @@ public sealed class FundServiceTests
         Assert.All(
             funds.Where(fund => fund.Name is "Членские взносы" or "Целевые взносы" or "Прочее"),
             fund => Assert.True(fund.AllowOperations));
+        Assert.All(funds, fund => Assert.Empty(fund.LinkedServices));
         Assert.Equal(7, await database.Context.Funds.CountAsync());
         Assert.Empty(database.Context.AuditEvents);
+    }
+
+    [Fact]
+    public async Task GetFundsAsync_ReturnsOnlyActiveServicesLinkedThroughActiveIncomeTypes()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = CreateService(database.Context);
+        var funds = await service.GetFundsAsync(CancellationToken.None);
+        var electricityFund = funds.Single(fund => fund.Name == "Электроэнергия");
+        var waterFund = funds.Single(fund => fund.Name == "Водоснабжение");
+        var electricityIncome = new IncomeType
+        {
+            Name = "Поступления за электроэнергию",
+            DestinationFundId = electricityFund.Id
+        };
+        var waterIncome = new IncomeType
+        {
+            Name = "Поступления за воду",
+            DestinationFundId = waterFund.Id
+        };
+        var archivedIncome = new IncomeType
+        {
+            Name = "Архивные поступления",
+            DestinationFundId = electricityFund.Id,
+            IsArchived = true
+        };
+        var electricityService = new ChargeServiceSetting
+        {
+            Name = "2. Электроэнергия по счётчику",
+            IncomeType = electricityIncome
+        };
+        var lightingService = new ChargeServiceSetting
+        {
+            Name = "1. Освещение территории",
+            IncomeType = electricityIncome
+        };
+        database.Context.AddRange(
+            electricityIncome,
+            waterIncome,
+            archivedIncome,
+            electricityService,
+            lightingService,
+            new ChargeServiceSetting
+            {
+                Name = "Архивная услуга",
+                IncomeType = electricityIncome,
+                IsArchived = true
+            },
+            new ChargeServiceSetting
+            {
+                Name = "Услуга архивного вида",
+                IncomeType = archivedIncome
+            },
+            new ChargeServiceSetting
+            {
+                Name = "Водоснабжение",
+                IncomeType = waterIncome
+            },
+            new ChargeServiceSetting
+            {
+                Name = "Услуга без фонда",
+                IncomeType = new IncomeType { Name = "Поступления без фонда" }
+            });
+        await database.Context.SaveChangesAsync();
+
+        var reloaded = await service.GetFundsAsync(CancellationToken.None);
+
+        var electricity = reloaded.Single(fund => fund.Id == electricityFund.Id);
+        Assert.Collection(
+            electricity.LinkedServices,
+            linkedService =>
+            {
+                Assert.Equal(lightingService.Id, linkedService.Id);
+                Assert.Equal("1. Освещение территории", linkedService.Name);
+            },
+            linkedService =>
+            {
+                Assert.Equal(electricityService.Id, linkedService.Id);
+                Assert.Equal("2. Электроэнергия по счётчику", linkedService.Name);
+            });
+        Assert.Collection(
+            reloaded.Single(fund => fund.Id == waterFund.Id).LinkedServices,
+            linkedService => Assert.Equal("Водоснабжение", linkedService.Name));
+        Assert.DoesNotContain(
+            reloaded.SelectMany(fund => fund.LinkedServices),
+            linkedService => linkedService.Name.Contains("Архив", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -70,6 +168,18 @@ public sealed class FundServiceTests
         var service = CreateService(database.Context);
         var originalFunds = await service.GetFundsAsync(CancellationToken.None);
         var fund = originalFunds.Single(item => item.Name == "Электроэнергия");
+        var incomeType = new IncomeType
+        {
+            Name = "Поступления за электроэнергию",
+            DestinationFundId = fund.Id
+        };
+        var linkedService = new ChargeServiceSetting
+        {
+            Name = "Электроэнергия по счётчику",
+            IncomeType = incomeType
+        };
+        database.Context.AddRange(incomeType, linkedService);
+        await database.Context.SaveChangesAsync();
         var actorUserId = Guid.NewGuid();
 
         var result = await service.UpdateFundAsync(
@@ -81,6 +191,9 @@ public sealed class FundServiceTests
         Assert.True(result.Succeeded, result.ErrorMessage);
         Assert.Equal("Энергоснабжение", result.Value!.Name);
         Assert.True(result.Value.IsSystem);
+        Assert.Collection(
+            result.Value.LinkedServices,
+            serviceItem => Assert.Equal(linkedService.Id, serviceItem.Id));
         Assert.Equal("ЭНЕРГОСНАБЖЕНИЕ", (await database.Context.Funds.SingleAsync(item => item.Id == fund.Id)).NormalizedName);
         var reloaded = await service.GetFundsAsync(CancellationToken.None);
         Assert.Equal(7, reloaded.Count);
@@ -95,6 +208,9 @@ public sealed class FundServiceTests
             actorUserId,
             CancellationToken.None);
         Assert.True(unchanged.Succeeded);
+        Assert.Collection(
+            unchanged.Value!.LinkedServices,
+            serviceItem => Assert.Equal("Электроэнергия по счётчику", serviceItem.Name));
         Assert.Single(database.Context.AuditEvents, item => item.Action == "fund.updated");
 
         var duplicate = await service.UpdateFundAsync(

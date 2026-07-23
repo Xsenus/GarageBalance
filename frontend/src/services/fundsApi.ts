@@ -6,6 +6,12 @@ export type FundDto = {
   sortOrder: number
   allowOperations: boolean
   isSystem: boolean
+  linkedServices: FundLinkedServiceDto[]
+}
+
+export type FundLinkedServiceDto = {
+  id: string
+  name: string
 }
 
 export type FundOperationDto = {

@@ -9,7 +9,12 @@ public sealed record FundDto(
     decimal AvailableToDistribute,
     int SortOrder,
     bool AllowOperations,
-    bool IsSystem);
+    bool IsSystem,
+    IReadOnlyList<FundLinkedServiceDto> LinkedServices);
+
+public sealed record FundLinkedServiceDto(
+    Guid Id,
+    string Name);
 
 public sealed record UpsertFundRequest(
     [Required, MaxLength(200)] string Name);

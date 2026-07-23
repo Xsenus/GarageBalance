@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import type { FormEvent } from 'react'
 import { Landmark, Minus, Pencil, Plus, RefreshCw, RotateCcw, Save, Trash2, X } from 'lucide-react'
 import type { AuthResponse } from '../../services/authApi'
-import type { FundDto, FundOperationDto, FundsClient } from '../../services/fundsApi'
+import type { FundDto, FundLinkedServiceDto, FundOperationDto, FundsClient } from '../../services/fundsApi'
 import type { ChangePreview } from '../../shared/changePreview'
 import { appendChangePreview, formatChangeMoney, formatChangeText } from '../../shared/changePreview'
 import { LoadingSkeleton, TableLoadingState } from '../../shared/AsyncState'
@@ -19,6 +19,7 @@ type FundPrototypeRow = {
   name: string
   amount: number | null
   sortOrder: number
+  linkedServices: FundLinkedServiceDto[]
   actions?: false
 }
 
@@ -27,6 +28,7 @@ type FundEditorDraft = {
   fundId?: string
   originalName?: string
   name: string
+  linkedServices: FundLinkedServiceDto[]
 }
 
 type FundOperationKind = 'withdraw' | 'deposit'
@@ -69,6 +71,7 @@ function mapFundDtoToPrototypeRow(fund: FundDto): FundPrototypeRow {
     name: fund.name,
     amount: fund.balance,
     sortOrder: fund.sortOrder,
+    linkedServices: fund.linkedServices,
     actions: fund.allowOperations ? undefined : false,
   }
 }
@@ -223,7 +226,7 @@ export function FundsPrototypePanel({ auth, fundsClient }: { auth: AuthResponse;
   }
 
   function openFundCreate() {
-    setFundEditor({ mode: 'create', name: '' })
+    setFundEditor({ mode: 'create', name: '', linkedServices: [] })
     setFundEditorError(null)
     setFundMessage(null)
   }
@@ -234,6 +237,7 @@ export function FundsPrototypePanel({ auth, fundsClient }: { auth: AuthResponse;
       fundId: fund.id,
       originalName: fund.name,
       name: fund.name,
+      linkedServices: fund.linkedServices,
     })
     setFundEditorError(null)
     setFundMessage(null)
@@ -715,6 +719,22 @@ export function FundsPrototypePanel({ auth, fundsClient }: { auth: AuthResponse;
                   }}
                 />
               </FormField>
+              {fundEditor.mode === 'edit' ? (
+                <section className="fund-linked-services" aria-labelledby="fund-linked-services-title">
+                  <div className="fund-linked-services-heading">
+                    <h4 id="fund-linked-services-title">Услуги, оплачиваемые из фонда</h4>
+                    <span>{fundEditor.linkedServices.length}</span>
+                  </div>
+                  <p>Список приведён справочно. Привязка изменяется в карточке услуги.</p>
+                  {fundEditor.linkedServices.length > 0 ? (
+                    <ul>
+                      {fundEditor.linkedServices.map((service) => <li key={service.id}>{service.name}</li>)}
+                    </ul>
+                  ) : (
+                    <p className="fund-linked-services-empty">К фонду пока не привязано ни одной услуги.</p>
+                  )}
+                </section>
+              ) : null}
               {fundEditorError ? <p className="form-error" role="alert">{fundEditorError}</p> : null}
               <div className="detail-dialog-actions">
                 <button className="secondary-button create-action-button" type="submit" disabled={savingFund}>

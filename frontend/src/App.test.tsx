@@ -7332,6 +7332,51 @@ describe('App', () => {
     expect(await within(fundsPanel).findByText('Фонд «Резервный фонд» создан.')).toHaveAttribute('role', 'status')
   })
 
+  it('shows linked services as read-only information in a fund card', async () => {
+    const user = userEvent.setup()
+    const fundsClient = createFundsClient({
+      getFunds: async () => [
+        createFund({
+          id: 'fund-electricity',
+          name: 'Электроэнергия',
+          linkedServices: [
+            { id: 'service-lighting', name: 'Освещение территории' },
+            { id: 'service-metered-electricity', name: 'Электроэнергия по счётчику' },
+          ],
+        }),
+        createFund({
+          id: 'fund-reserve',
+          name: 'Резервный фонд',
+          sortOrder: 80,
+          isSystem: false,
+          linkedServices: [],
+        }),
+      ],
+    })
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} fundsClient={fundsClient} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    const dashboardTiles = await screen.findByRole('group', { name: 'Главные разделы' })
+    await user.click(within(dashboardTiles).getByRole('button', { name: /Управление\s+фондами/i }))
+    const fundsPanel = await screen.findByRole('region', { name: 'Управление фондами' })
+
+    await user.click(await within(fundsPanel).findByRole('button', { name: 'Открыть карточку фонда Электроэнергия' }))
+    const linkedDialog = await screen.findByRole('dialog', { name: 'Электроэнергия' })
+    const linkedServices = within(linkedDialog).getByRole('region', { name: 'Услуги, оплачиваемые из фонда' })
+    expect(within(linkedServices).getByText('Освещение территории')).toBeInTheDocument()
+    expect(within(linkedServices).getByText('Электроэнергия по счётчику')).toBeInTheDocument()
+    expect(within(linkedServices).getByText('Список приведён справочно. Привязка изменяется в карточке услуги.')).toBeInTheDocument()
+    expect(within(linkedServices).queryByRole('textbox')).not.toBeInTheDocument()
+    expect(within(linkedServices).queryByRole('button')).not.toBeInTheDocument()
+    expect(within(linkedServices).queryByRole('combobox')).not.toBeInTheDocument()
+    await user.click(within(linkedDialog).getByRole('button', { name: 'Закрыть карточку фонда' }))
+
+    await user.click(within(fundsPanel).getByRole('button', { name: 'Открыть карточку фонда Резервный фонд' }))
+    const emptyDialog = await screen.findByRole('dialog', { name: 'Резервный фонд' })
+    expect(within(emptyDialog).getByText('К фонду пока не привязано ни одной услуги.')).toBeInTheDocument()
+  })
+
   it('shows funds management prototype from dashboard tile', async () => {
     const user = userEvent.setup()
     const fundsClient = createFundsClient()
@@ -16920,6 +16965,7 @@ function createFund(overrides: Partial<FundDto> = {}): FundDto {
     sortOrder: 10,
     allowOperations: true,
     isSystem: true,
+    linkedServices: [],
     ...overrides,
   }
 }

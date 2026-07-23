@@ -24,11 +24,14 @@ public sealed class FundService(
         var funds = (await repository.GetFundsAsync(cancellationToken)).ToList();
         await EnsureDefaultFundsAsync(funds, cancellationToken);
         var availableToDistribute = await CalculateAvailableToDistributeAsync(cancellationToken);
+        var linkedServicesByFundId = (await repository.GetLinkedServicesAsync(
+            funds.Select(fund => fund.Id).ToArray(),
+            cancellationToken)).ToLookup(service => service.FundId);
 
         return funds
             .OrderBy(fund => fund.SortOrder)
             .ThenBy(fund => fund.Name)
-            .Select(fund => ToDto(fund, availableToDistribute))
+            .Select(fund => ToDto(fund, availableToDistribute, linkedServicesByFundId[fund.Id]))
             .ToList();
     }
 
@@ -66,7 +69,7 @@ public sealed class FundService(
         await repository.SaveChangesAsync(cancellationToken);
 
         var availableToDistribute = await CalculateAvailableToDistributeAsync(cancellationToken);
-        return FundResult<FundDto>.Success(ToDto(fund, availableToDistribute));
+        return FundResult<FundDto>.Success(ToDto(fund, availableToDistribute, []));
     }
 
     public async Task<FundResult<FundDto>> UpdateFundAsync(
@@ -98,7 +101,8 @@ public sealed class FundService(
         if (string.Equals(fund.Name, name, StringComparison.Ordinal))
         {
             var currentAvailableToDistribute = await CalculateAvailableToDistributeAsync(cancellationToken);
-            return FundResult<FundDto>.Success(ToDto(fund, currentAvailableToDistribute));
+            var currentLinkedServices = await repository.GetLinkedServicesAsync([fund.Id], cancellationToken);
+            return FundResult<FundDto>.Success(ToDto(fund, currentAvailableToDistribute, currentLinkedServices));
         }
 
         var oldName = fund.Name;
@@ -109,7 +113,8 @@ public sealed class FundService(
         await repository.SaveChangesAsync(cancellationToken);
 
         var availableToDistribute = await CalculateAvailableToDistributeAsync(cancellationToken);
-        return FundResult<FundDto>.Success(ToDto(fund, availableToDistribute));
+        var linkedServices = await repository.GetLinkedServicesAsync([fund.Id], cancellationToken);
+        return FundResult<FundDto>.Success(ToDto(fund, availableToDistribute, linkedServices));
     }
 
     public async Task<IReadOnlyList<FundOperationDto>> GetOperationsAsync(int limit, bool includeCanceled, CancellationToken cancellationToken)
@@ -657,9 +662,22 @@ public sealed class FundService(
             }));
     }
 
-    private static FundDto ToDto(Fund fund, decimal availableToDistribute)
+    private static FundDto ToDto(
+        Fund fund,
+        decimal availableToDistribute,
+        IEnumerable<FundLinkedServiceData> linkedServices)
     {
-        return new FundDto(fund.Id, fund.Name, fund.Balance, availableToDistribute, fund.SortOrder, fund.AllowOperations, fund.IsSystem);
+        return new FundDto(
+            fund.Id,
+            fund.Name,
+            fund.Balance,
+            availableToDistribute,
+            fund.SortOrder,
+            fund.AllowOperations,
+            fund.IsSystem,
+            linkedServices
+                .Select(service => new FundLinkedServiceDto(service.ServiceId, service.ServiceName))
+                .ToList());
     }
 
     private static FundOperationDto ToDto(FundOperation operation)

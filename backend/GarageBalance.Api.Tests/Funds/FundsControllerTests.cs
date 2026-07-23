@@ -9,6 +9,29 @@ namespace GarageBalance.Api.Tests.Funds;
 public sealed class FundsControllerTests
 {
     [Fact]
+    public async Task GetFunds_ReturnsLinkedServicesFromService()
+    {
+        var fund = new FundDto(
+            Guid.NewGuid(),
+            "Электроэнергия",
+            0m,
+            0m,
+            10,
+            true,
+            true,
+            [new FundLinkedServiceDto(Guid.NewGuid(), "Электроэнергия по счётчику")]);
+        var service = new FakeFundService { Funds = [fund] };
+        var controller = CreateController(service);
+
+        var result = await controller.GetFunds(CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var returned = Assert.IsAssignableFrom<IReadOnlyList<FundDto>>(ok.Value);
+        Assert.Same(fund, Assert.Single(returned));
+        Assert.Equal("Электроэнергия по счётчику", Assert.Single(returned[0].LinkedServices).Name);
+    }
+
+    [Fact]
     public async Task CreateFund_PassesActorAndReturnsCreatedFund()
     {
         var actorUserId = Guid.NewGuid();
@@ -279,7 +302,7 @@ public sealed class FundsControllerTests
 
     private static FundDto CreateFund(string name)
     {
-        return new FundDto(Guid.NewGuid(), name, 0m, 0m, 80, true, false);
+        return new FundDto(Guid.NewGuid(), name, 0m, 0m, 80, true, false, []);
     }
 
     private sealed class FakeFundService : IFundService
@@ -298,6 +321,7 @@ public sealed class FundsControllerTests
         public UpsertFundRequest? LastFundRequest { get; private set; }
         public CancelFundOperationRequest? LastCancelRequest { get; private set; }
         public IReadOnlyList<FundOperationDto> Operations { get; init; } = [];
+        public IReadOnlyList<FundDto> Funds { get; init; } = [];
         public FundOperationPageDto OperationsPage { get; init; } = new([], 0, 0, 25);
         public FundResult<FundDto> CreateFundResult { get; init; } = FundResult<FundDto>.Failure("not_configured", "Not configured.");
         public FundResult<FundDto> UpdateFundResult { get; init; } = FundResult<FundDto>.Failure("not_configured", "Not configured.");
@@ -307,7 +331,7 @@ public sealed class FundsControllerTests
 
         public Task<IReadOnlyList<FundDto>> GetFundsAsync(CancellationToken cancellationToken)
         {
-            return Task.FromResult<IReadOnlyList<FundDto>>([]);
+            return Task.FromResult(Funds);
         }
 
         public Task<FundResult<FundDto>> CreateFundAsync(UpsertFundRequest request, Guid? actorUserId, CancellationToken cancellationToken)
