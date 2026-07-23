@@ -4592,77 +4592,7 @@ function PaymentsPrototypePanel({
           </div>
           {headingStatus ? <span>{headingStatus}</span> : null}
         </div>
-        {selectedGarage ? (
-          <section className="payments-prototype-garage-summary" aria-label="Параметры выбранного гаража">
-            <div><span>Люди</span><strong className="payments-prototype-garage-summary-value">{selectedGarage.peopleCount}</strong></div>
-            <div><span>{selectedGarageBalance?.label}</span><strong className={`payments-prototype-garage-summary-value${selectedGarageBalance?.moneyClassName ? ` ${selectedGarageBalance.moneyClassName}` : ''}`}>{formatPaymentPrototypeValue(selectedGarageBalance?.amount ?? 0)}</strong></div>
-            <div><span>Этажи</span><strong className="payments-prototype-garage-summary-value">{selectedGarage.floorCount}</strong></div>
-            <div><span>Просроченная задолженность</span><strong className={`payments-prototype-garage-summary-value${selectedGarage.overdueDebt > 0 ? ' money-expense' : ''}`}>{formatPaymentPrototypeValue(selectedGarage.overdueDebt)}</strong></div>
-          </section>
-        ) : null}
       </div>
-      {selectedGarage && selectedGarageBalance && selectedGarage.overdueDebt > 0 ? (
-        <>
-          <p className="payments-prototype-balance-explanation" role="note">
-            {selectedGarageBalance.overdueRelation === 'partly-overdue'
-              ? <>Общий долг составляет <strong>{formatPaymentPrototypeValue(selectedGarageBalance.amount)}</strong>: просрочено <strong>{formatPaymentPrototypeValue(selectedGarage.overdueDebt)}</strong>, ещё не просрочено <strong>{formatPaymentPrototypeValue(selectedGarageBalance.notOverdueDebt)}</strong>.</>
-              : selectedGarageBalance.overdueRelation === 'fully-overdue'
-                ? <>Весь общий долг <strong>{formatPaymentPrototypeValue(selectedGarageBalance.amount)}</strong> уже просрочен.</>
-                : <>{selectedGarageBalance.label} <strong>{formatPaymentPrototypeValue(selectedGarageBalance.amount)}</strong> и просрочка <strong>{formatPaymentPrototypeValue(selectedGarage.overdueDebt)}</strong> относятся к разным услугам. Ниже показано, по каким услугам остался просроченный долг.</>}
-          </p>
-          <details className="payments-prototype-overdue-details" open>
-          <summary>
-            <span>Расшифровка просроченной задолженности</span>
-            <strong>{formatPaymentPrototypeValue(overdueDebtDetails?.total ?? selectedGarage.overdueDebt)}</strong>
-          </summary>
-          {overdueDebtLoading ? (
-            <LoadingSkeleton label="Загрузка расшифровки просроченной задолженности" rows={3} columns={4} />
-          ) : overdueDebtError ? (
-            <div className="form-error payments-prototype-overdue-error" role="alert">
-              <span>{overdueDebtError}</span>
-              <button className="secondary-button" type="button" onClick={() => setOverdueDebtRefresh((value) => value + 1)}>Повторить</button>
-            </div>
-          ) : overdueDebtDetails && overdueDebtDetails.rows.length > 0 ? (
-            <div className="table-scroll">
-              <table aria-label="Расшифровка просроченной задолженности">
-                <thead>
-                  <tr>
-                    <th>Услуга</th>
-                    <th>Месяц начисления</th>
-                    <th>Срок оплаты</th>
-                    <th>Просрочено с</th>
-                    <th>Начислено</th>
-                    <th>Оплачено</th>
-                    <th>Остаток</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {overdueDebtDetails.rows.map((row, index) => (
-                    <tr key={`${row.rowKind}-${row.incomeTypeId ?? 'opening'}-${row.accountingMonth ?? index}`}>
-                      <td>{row.incomeTypeName}</td>
-                      <td>{row.accountingMonth ? formatMonth(row.accountingMonth) : '—'}</td>
-                      <td>{row.dueDate ? formatDateOnly(row.dueDate) : '—'}</td>
-                      <td>{row.overdueFromDate ? formatDateOnly(row.overdueFromDate) : '—'}</td>
-                      <td>{formatPaymentPrototypeValue(row.originalAmount)}</td>
-                      <td>{formatPaymentPrototypeValue(row.paidAmount)}</td>
-                      <td className="money-expense">{formatPaymentPrototypeValue(row.outstandingAmount)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-                <tfoot>
-                  <tr>
-                    <th colSpan={6}>Итого на {formatDateOnly(overdueDebtDetails.asOfDate)}</th>
-                    <th>{formatPaymentPrototypeValue(overdueDebtDetails.total)}</th>
-                  </tr>
-                </tfoot>
-              </table>
-            </div>
-          ) : (
-            <p className="empty-state empty-state--spacious" role="status" aria-live="polite">Просроченных начислений не найдено.</p>
-          )}
-          </details>
-        </>
-      ) : null}
       {headingNotices}
       <div className="payments-prototype-topline">
         <div ref={garageSearchWrapRef} className="payments-prototype-search-wrap">
@@ -4776,12 +4706,8 @@ function PaymentsPrototypePanel({
         </div>
       </div>
 
-      {!selectedGarage ? (
-        loading
-          ? <TableLoadingState label="Загружаем раздел платежей" />
-          : <p className="empty-state" role="status">Выберите гараж через поиск, чтобы увидеть карточку, поступления, историю платежей и задолженность.</p>
-      ) : activeTab === 'income' ? (
-        <>
+      {selectedGarage && activeTab === 'income' ? (
+        <section className="payments-prototype-workspace-header" aria-label="Карточка выбранного гаража">
           <div className="payments-prototype-owner-row" aria-label="Выбранный гараж">
             <div><span>Гараж</span><strong>{selectedGarage.number}</strong></div>
             <div><span>Владелец</span><strong>{selectedGarage.ownerName}</strong></div>
@@ -4805,7 +4731,83 @@ function PaymentsPrototypePanel({
               </button>
             </div>
           </div>
+          <section className="payments-prototype-garage-summary" aria-label="Параметры выбранного гаража">
+            <div><span>Люди</span><strong className="payments-prototype-garage-summary-value">{selectedGarage.peopleCount}</strong></div>
+            <div><span>{selectedGarageBalance?.label}</span><strong className={`payments-prototype-garage-summary-value${selectedGarageBalance?.moneyClassName ? ` ${selectedGarageBalance.moneyClassName}` : ''}`}>{formatPaymentPrototypeValue(selectedGarageBalance?.amount ?? 0)}</strong></div>
+            <div><span>Этажи</span><strong className="payments-prototype-garage-summary-value">{selectedGarage.floorCount}</strong></div>
+            <div><span>Просроченная задолженность</span><strong className={`payments-prototype-garage-summary-value${selectedGarage.overdueDebt > 0 ? ' money-expense' : ''}`}>{formatPaymentPrototypeValue(selectedGarage.overdueDebt)}</strong></div>
+          </section>
+          {selectedGarageBalance && selectedGarage.overdueDebt > 0 ? (
+            <>
+              <p className="payments-prototype-balance-explanation" role="note">
+                {selectedGarageBalance.overdueRelation === 'partly-overdue'
+                  ? <>Общий долг составляет <strong>{formatPaymentPrototypeValue(selectedGarageBalance.amount)}</strong>: просрочено <strong>{formatPaymentPrototypeValue(selectedGarage.overdueDebt)}</strong>, ещё не просрочено <strong>{formatPaymentPrototypeValue(selectedGarageBalance.notOverdueDebt)}</strong>.</>
+                  : selectedGarageBalance.overdueRelation === 'fully-overdue'
+                    ? <>Весь общий долг <strong>{formatPaymentPrototypeValue(selectedGarageBalance.amount)}</strong> уже просрочен.</>
+                    : <>{selectedGarageBalance.label} <strong>{formatPaymentPrototypeValue(selectedGarageBalance.amount)}</strong> и просрочка <strong>{formatPaymentPrototypeValue(selectedGarage.overdueDebt)}</strong> относятся к разным услугам. Ниже показано, по каким услугам остался просроченный долг.</>}
+              </p>
+              <details className="payments-prototype-overdue-details" open>
+                <summary>
+                  <span>Расшифровка просроченной задолженности</span>
+                  <strong>{formatPaymentPrototypeValue(overdueDebtDetails?.total ?? selectedGarage.overdueDebt)}</strong>
+                </summary>
+                {overdueDebtLoading ? (
+                  <LoadingSkeleton label="Загрузка расшифровки просроченной задолженности" rows={3} columns={4} />
+                ) : overdueDebtError ? (
+                  <div className="form-error payments-prototype-overdue-error" role="alert">
+                    <span>{overdueDebtError}</span>
+                    <button className="secondary-button" type="button" onClick={() => setOverdueDebtRefresh((value) => value + 1)}>Повторить</button>
+                  </div>
+                ) : overdueDebtDetails && overdueDebtDetails.rows.length > 0 ? (
+                  <div className="table-scroll">
+                    <table aria-label="Расшифровка просроченной задолженности">
+                      <thead>
+                        <tr>
+                          <th>Услуга</th>
+                          <th>Месяц начисления</th>
+                          <th>Срок оплаты</th>
+                          <th>Просрочено с</th>
+                          <th>Начислено</th>
+                          <th>Оплачено</th>
+                          <th>Остаток</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {overdueDebtDetails.rows.map((row, index) => (
+                          <tr key={`${row.rowKind}-${row.incomeTypeId ?? 'opening'}-${row.accountingMonth ?? index}`}>
+                            <td>{row.incomeTypeName}</td>
+                            <td>{row.accountingMonth ? formatMonth(row.accountingMonth) : '—'}</td>
+                            <td>{row.dueDate ? formatDateOnly(row.dueDate) : '—'}</td>
+                            <td>{row.overdueFromDate ? formatDateOnly(row.overdueFromDate) : '—'}</td>
+                            <td>{formatPaymentPrototypeValue(row.originalAmount)}</td>
+                            <td>{formatPaymentPrototypeValue(row.paidAmount)}</td>
+                            <td className="money-expense">{formatPaymentPrototypeValue(row.outstandingAmount)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                      <tfoot>
+                        <tr>
+                          <th colSpan={6}>Итого на {formatDateOnly(overdueDebtDetails.asOfDate)}</th>
+                          <th>{formatPaymentPrototypeValue(overdueDebtDetails.total)}</th>
+                        </tr>
+                      </tfoot>
+                    </table>
+                  </div>
+                ) : (
+                  <p className="empty-state empty-state--spacious" role="status" aria-live="polite">Просроченных начислений не найдено.</p>
+                )}
+              </details>
+            </>
+          ) : null}
+        </section>
+      ) : null}
 
+      {!selectedGarage ? (
+        loading
+          ? <TableLoadingState label="Загружаем раздел платежей" />
+          : <p className="empty-state" role="status">Выберите гараж через поиск, чтобы увидеть карточку, поступления, историю платежей и задолженность.</p>
+      ) : activeTab === 'income' ? (
+        <>
           <section className="payments-prototype-card payments-prototype-card--history" aria-label="История платежей гаража">
             <table className="payments-prototype-mini-table" aria-label="История платежей гаража">
               <thead>

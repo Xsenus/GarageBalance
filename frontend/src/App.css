@@ -3145,11 +3145,7 @@ h1 {
 }
 
 .payments-prototype-heading {
-  display: grid;
-  grid-template-columns: minmax(320px, 1fr) auto;
-  gap: 16px;
-  align-items: start;
-  margin-bottom: 14px;
+  margin-bottom: 2px;
 }
 
 .payments-prototype-section-heading {
@@ -3384,10 +3380,9 @@ h1 {
 
 .payments-prototype-garage-summary {
   display: grid;
-  grid-template-columns: repeat(4, minmax(112px, 142px));
+  grid-template-columns: repeat(4, minmax(112px, 1fr));
   gap: 8px;
-  justify-self: end;
-  width: auto;
+  width: 100%;
 }
 
 .payments-prototype-garage-summary div,
@@ -3478,14 +3473,8 @@ h1 {
 }
 
 @media (max-width: 1180px) {
-  .payments-prototype-heading {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
   .payments-prototype-garage-summary {
     grid-template-columns: repeat(2, minmax(130px, 1fr));
-    justify-self: stretch;
-    width: 100%;
   }
 }
 
@@ -3562,6 +3551,15 @@ h1 {
   grid-template-columns: minmax(90px, 0.35fr) minmax(220px, 0.8fr) minmax(180px, 0.7fr) minmax(420px, 1.8fr);
   gap: 10px;
   align-items: stretch;
+}
+
+.payments-prototype-workspace-header {
+  display: grid;
+  gap: 10px;
+  border: 1px solid #dfe4ec;
+  border-radius: 10px;
+  background: #f8fafc;
+  padding: 12px;
 }
 
 .payments-prototype-owner-row .payments-prototype-actions {

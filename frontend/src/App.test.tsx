@@ -4924,6 +4924,7 @@ describe('App', () => {
     expect(screen.queryByPlaceholderText('Поиск по гаражу, владельцу или поставщику')).not.toBeInTheDocument()
     const garageSearchInput = within(prototype).getByLabelText('Поиск номера гаража или ФИО владельца')
     expect(garageSearchInput).toBeInTheDocument()
+    expect(within(prototype).queryByRole('region', { name: 'Карточка выбранного гаража' })).not.toBeInTheDocument()
     expect(within(prototype).queryByRole('table', { name: /Поступления гаража/ })).not.toBeInTheDocument()
     await waitFor(() => expect(within(prototype).getByRole('status')).toHaveTextContent('Выберите гараж через поиск'))
 
@@ -4962,8 +4963,12 @@ describe('App', () => {
     expect(selectedGarageList).toHaveTextContent('Выбрано: 1')
     expect(selectedGarageList).not.toHaveTextContent('Гараж 2')
 
-    const selectedGarageSummary = within(prototype).getByRole('region', { name: 'Параметры выбранного гаража' })
-    expect(selectedGarageSummary.closest('.payments-prototype-heading')).toContainElement(within(financePanel).getByRole('heading', { name: 'Поступления владельцев и выплаты поставщикам' }))
+    const workspaceHeader = within(prototype).getByRole('region', { name: 'Карточка выбранного гаража' })
+    const selectedGarageSummary = within(workspaceHeader).getByRole('region', { name: 'Параметры выбранного гаража' })
+    const garageSearchWrap = garageSearchInput.closest('.payments-prototype-search-wrap')
+    expect(selectedGarageSummary.closest('.payments-prototype-heading')).toBeNull()
+    expect(garageSearchWrap?.compareDocumentPosition(workspaceHeader) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(within(workspaceHeader).getByLabelText('Выбранный гараж')).toHaveTextContent('Иванов Иван')
     expect(selectedGarageSummary).toHaveTextContent('Просроченная задолженность')
     expect(selectedGarageSummary).toHaveTextContent('Общий долг1 500.00')
     expect(within(prototype).getByRole('note')).toHaveTextContent('Общий долг составляет 1 500.00: просрочено 500.00, ещё не просрочено 1 000.00.')
