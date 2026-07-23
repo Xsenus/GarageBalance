@@ -7,7 +7,7 @@ import { describe, expect, it } from 'vitest'
 const createActionFeatures = [
   ['contractors/ContractorsPanel.tsx', 6],
   ['dictionaries/DictionaryPanel.tsx', 7],
-  ['finance/FinancePanel.tsx', 5],
+  ['finance/FinancePanel.tsx', 4],
   ['funds/FundsPanel.tsx', 1],
   ['releases/ReleasePanel.tsx', 2],
   ['tariffs/TariffsAndFeesPanel.tsx', 4],

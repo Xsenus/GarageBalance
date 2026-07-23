@@ -1,5 +1,5 @@
 export type FinanceSectionKey = 'income' | 'expense' | 'accruals' | 'supplierAccruals' | 'meterReadings'
-export type FinanceEditorKey = FinanceSectionKey | 'regularAccruals' | 'supplierGroupSalaryAccruals'
+export type FinanceEditorKey = FinanceSectionKey | 'supplierGroupSalaryAccruals'
 export type FinanceVisibleListStatusKind = 'operations' | 'accruals' | 'supplierAccruals' | 'meterReadings'
 
 export type FinanceSectionOption = {
@@ -31,7 +31,6 @@ export type FinanceToolbarLabelKey =
   | 'incomeGarageSearch'
   | 'incomeGarageSearchPlaceholder'
   | 'incomeGarageSearchSubmit'
-  | 'regularAccruals'
   | 'supplierGroupSalaryAccruals'
   | 'tableArea'
   | 'emptyState'
@@ -118,7 +117,6 @@ const financeEditorTitles: Record<FinanceEditorKey, string> = {
   income: 'Новое поступление',
   expense: 'Новая выплата',
   accruals: 'Ручное начисление',
-  regularAccruals: 'Регулярные начисления',
   supplierGroupSalaryAccruals: 'Зарплата группы',
   supplierAccruals: 'Начисление поставщику',
   meterReadings: 'Показание счетчика',
@@ -128,7 +126,6 @@ const financeEditorSubmitLabels: Record<FinanceEditorKey, string> = {
   income: 'Провести',
   expense: 'Провести',
   accruals: 'Начислить',
-  regularAccruals: 'Создать месяц',
   supplierGroupSalaryAccruals: 'Начислить зарплату',
   supplierAccruals: 'Начислить',
   meterReadings: 'Внести',
@@ -138,7 +135,6 @@ const financeEditorSavingScopes: Record<FinanceEditorKey, FinanceEditorSavingSco
   income: 'income',
   expense: 'expense',
   accruals: 'accrual',
-  regularAccruals: 'regular-accruals',
   supplierGroupSalaryAccruals: 'salary-accruals',
   supplierAccruals: 'supplier-accrual',
   meterReadings: 'meter-reading',
@@ -176,7 +172,6 @@ const financeToolbarLabels: Record<FinanceToolbarLabelKey, string> = {
   incomeGarageSearch: 'Поиск гаража для поступления',
   incomeGarageSearchPlaceholder: 'Гараж или владелец',
   incomeGarageSearchSubmit: 'Найти гараж для поступления',
-  regularAccruals: 'Регулярные',
   supplierGroupSalaryAccruals: 'Зарплата группы',
   tableArea: 'Рабочая область платежной таблицы',
   emptyState: 'По выбранным условиям записей нет',
@@ -192,16 +187,12 @@ const financeEditorValidationTitles: Record<FinanceEditorKey, string> = {
   income: 'Проверьте поступление',
   expense: 'Проверьте выплату',
   accruals: 'Проверьте начисление',
-  regularAccruals: 'Проверьте регулярное начисление',
   supplierGroupSalaryAccruals: 'Проверьте начисление зарплаты',
   supplierAccruals: 'Проверьте начисление поставщику',
   meterReadings: 'Проверьте показание',
 }
 
 const financeEditorValidationTitleVariants: Partial<Record<FinanceEditorKey, Partial<Record<FinanceEditorValidationTitleVariant, string>>>> = {
-  regularAccruals: {
-    batch: 'Проверьте регулярные начисления',
-  },
   meterReadings: {
     detailed: 'Проверьте показание счетчика',
   },

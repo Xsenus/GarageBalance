@@ -136,11 +136,6 @@ describe('responsive layout styles', () => {
   })
 
   it('keeps the regular accrual dialog aligned and stacks its fields on narrow screens', () => {
-    expect(normalizedAppCss).toContain('.regular-accrual-form {\n  grid-template-columns: minmax(0, 1fr);')
-    expect(normalizedAppCss).toContain('.regular-accrual-fields {\n  display: grid;\n  grid-template-columns: minmax(200px, 220px) minmax(0, 1fr);')
-    expect(normalizedAppCss).toContain('.payments-prototype-modal-form .regular-accrual-field {\n  display: grid;\n  gap: 6px;')
-    expect(normalizedAppCss).toContain('.regular-accrual-form > .form-error {\n  grid-column: 1;')
-    expect(normalizedAppCss).toContain('.regular-accrual-fields {\n    grid-template-columns: minmax(0, 1fr);')
   })
 
   it('keeps the debt transfer dialog aligned and readable on narrow screens', () => {

@@ -4132,83 +4132,6 @@ h1 {
   }
 }
 
-.regular-accrual-dialog {
-  width: min(680px, 100%);
-}
-
-.regular-accrual-form {
-  grid-template-columns: minmax(0, 1fr);
-  gap: 18px;
-}
-
-.regular-accrual-intro {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  align-items: start;
-  gap: 12px;
-  border: 1px solid #d6e4ff;
-  border-radius: 8px;
-  background: #f5f8ff;
-  padding: 14px;
-}
-
-.regular-accrual-intro__icon {
-  display: grid;
-  width: 36px;
-  height: 36px;
-  place-items: center;
-  border-radius: 8px;
-  background: #e8f0ff;
-  color: #155eef;
-}
-
-.regular-accrual-intro strong {
-  display: block;
-  color: #101828;
-  font-size: 14px;
-}
-
-.regular-accrual-intro p {
-  margin: 4px 0 0;
-  color: #475467;
-  font-size: 13px;
-  line-height: 1.45;
-}
-
-.regular-accrual-fields {
-  display: grid;
-  grid-template-columns: minmax(200px, 220px) minmax(0, 1fr);
-  align-items: start;
-  gap: 16px;
-}
-
-.payments-prototype-modal-form .regular-accrual-field {
-  display: grid;
-  gap: 6px;
-  min-width: 0;
-}
-
-.payments-prototype-modal-form .regular-accrual-field > span {
-  align-self: start;
-}
-
-.regular-accrual-field .localized-date-picker {
-  width: 100%;
-}
-
-.regular-accrual-field--comment textarea {
-  min-height: 112px;
-}
-
-.regular-accrual-form > .form-error {
-  grid-column: 1;
-  margin: 0;
-}
-
-.regular-accrual-form .detail-dialog-actions {
-  margin-top: 0;
-}
-
 .bank-deposit-dialog {
   width: min(760px, 100%);
 }
@@ -8135,10 +8058,6 @@ button.operation-row:focus-visible {
   .field-help:focus .field-help__tooltip,
   .field-help:focus-within .field-help__tooltip {
     transform: translateY(0);
-  }
-
-  .regular-accrual-fields {
-    grid-template-columns: minmax(0, 1fr);
   }
 
   .bank-deposit-form {

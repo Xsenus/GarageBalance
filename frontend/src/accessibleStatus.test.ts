@@ -173,7 +173,6 @@ describe('accessible dynamic messages', () => {
     expect(dictionaryPanelSource.match(/<LocalizedDatePicker\b/g)?.length).toBeGreaterThanOrEqual(2)
     expect(financePanelSource).toContain('aria-label="Гараж для поступления"')
     expect(financePanelSource).toContain('aria-label="Вид выплаты"')
-    expect(financePanelSource).toContain('aria-label="Тариф для регулярного начисления"')
     expect(financePanelSource).toContain("pageSizeLabel={getFinanceToolbarLabel('pageSize')}")
     expect(financePanelSource).toContain('<SelectControl aria-label="Месяц поступлений с"')
     expect(financePanelSource).toContain('<SelectControl aria-label="Месяц поступлений по"')

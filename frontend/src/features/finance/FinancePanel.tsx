@@ -1,9 +1,9 @@
 import { Fragment, useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
 import type { FormEvent, KeyboardEvent, MouseEvent, ReactNode } from 'react'
-import { CalendarDays, FileText, LoaderCircle, Pencil, RotateCcw, Save, Search, Trash2, WalletCards, X } from 'lucide-react'
+import { FileText, LoaderCircle, Pencil, RotateCcw, Save, Search, Trash2, WalletCards, X } from 'lucide-react'
 import type { AuthResponse } from '../../services/authApi'
-import type { AccountingTypeDto, DictionaryClient, GarageDto, IrregularPaymentDto, StaffMemberDto, SupplierDto, SupplierGroupDto, TariffDto } from '../../services/dictionariesApi'
-import type { AccrualDto, CreateAccrualRequest, CreateExpenseOperationRequest, CreateIncomeOperationRequest, CreateMeterReadingRequest, CreateSupplierAccrualRequest, ExpenseWorksheetDto, FinanceClient, FinancePagedResult, FinanceSummaryDto, FinancialOperationDto, GarageIncomeWorksheetDto, GarageOverdueDebtDto, GenerateRegularAccrualsRequest, GenerateSupplierGroupSalaryAccrualsRequest, MeterReadingDto, MissingMeterReadingDto, SupplierAccrualDto } from '../../services/financeApi'
+import type { AccountingTypeDto, DictionaryClient, GarageDto, IrregularPaymentDto, StaffMemberDto, SupplierDto, SupplierGroupDto } from '../../services/dictionariesApi'
+import type { AccrualDto, CreateAccrualRequest, CreateExpenseOperationRequest, CreateIncomeOperationRequest, CreateMeterReadingRequest, CreateSupplierAccrualRequest, ExpenseWorksheetDto, FinanceClient, FinancePagedResult, FinanceSummaryDto, FinancialOperationDto, GarageIncomeWorksheetDto, GarageOverdueDebtDto, GenerateSupplierGroupSalaryAccrualsRequest, MeterReadingDto, MissingMeterReadingDto, SupplierAccrualDto } from '../../services/financeApi'
 import { FinanceApiError } from '../../services/financeApi'
 import type { FundDto, FundsClient } from '../../services/fundsApi'
 import type { IntegrationClient, ReceiptPrintingActionKind } from '../../services/integrationsApi'
@@ -23,7 +23,7 @@ import { MoneyInput, MoneyTextInput } from '../../shared/MoneyInput'
 import { MeterReadingInput } from '../../shared/MeterReadingInput'
 import { SelectControl } from '../../shared/SelectControl'
 import { TablePagination } from '../../shared/TablePagination'
-import { chooseRegularTariffId, getAccrualValidationErrors, getCompatibleRegularTariffs, getExpenseValidationErrors, getIncomeValidationErrors, getMeterReadingValidationErrors, getRegularAccrualValidationErrorsForCatalog, getSupplierAccrualValidationErrors, getSupplierGroupSalaryValidationErrors } from '../../shared/validation'
+import { getAccrualValidationErrors, getExpenseValidationErrors, getIncomeValidationErrors, getMeterReadingValidationErrors, getSupplierAccrualValidationErrors, getSupplierGroupSalaryValidationErrors } from '../../shared/validation'
 import { formatPaymentMoney, parsePaymentMoney } from './paymentMoneyFormatting'
 import { calculateExpenseWorksheetClosingBalance, isAtomicCashExpenseType } from './expenseWorksheetBalances'
 import { rankGarageSearchResults } from './garageSearchRanking'
@@ -268,11 +268,6 @@ type SalaryAccrualPrototypeSubmitRequest = {
   comment: string
 }
 
-type RegularAccrualPrototypeSubmitRequest = {
-  accountingMonth: string
-  comment: string
-}
-
 function createGarageIncomeRowsFromWorksheet(worksheet: GarageIncomeWorksheetDto): GarageIncomePrototypeRow[] {
   return worksheet.rows.map((row) => {
     const month = row.accountingMonth.slice(0, 7)
@@ -348,7 +343,6 @@ export function FinancePanel({
   const [incomeTypes, setIncomeTypes] = useState<AccountingTypeDto[]>([])
   const [irregularPayments, setIrregularPayments] = useState<IrregularPaymentDto[]>([])
   const [expenseTypes, setExpenseTypes] = useState<AccountingTypeDto[]>([])
-  const [tariffs, setTariffs] = useState<TariffDto[]>([])
   const [operations, setOperations] = useState<FinancialOperationDto[]>([])
   const [accruals, setAccruals] = useState<AccrualDto[]>([])
   const [supplierAccruals, setSupplierAccruals] = useState<SupplierAccrualDto[]>([])
@@ -359,8 +353,6 @@ export function FinancePanel({
   const [expenseForm, setExpenseForm] = useState({ supplierId: '', expenseTypeId: '', operationDate: today, accountingMonth: month, amount: 0, documentNumber: '', comment: '' })
   const [accrualForm, setAccrualForm] = useState({ garageId: '', incomeTypeId: '', accountingMonth: month, amount: 0, source: 'manual' as 'manual' | 'regular', comment: '' })
   const [supplierAccrualForm, setSupplierAccrualForm] = useState({ supplierId: '', expenseTypeId: '', accountingMonth: month, amount: 0, source: 'manual' as 'manual' | 'regular', documentNumber: '', comment: '' })
-  const [regularForm, setRegularForm] = useState({ incomeTypeId: '', tariffId: '', accountingMonth: month, comment: '' })
-  const [regularStatus, setRegularStatus] = useState<string | null>(null)
   const [salaryForm, setSalaryForm] = useState({ supplierGroupId: '', accountingMonth: month, amount: 0, documentNumber: '', comment: '' })
   const [salaryStatus, setSalaryStatus] = useState<string | null>(null)
   const [meterForm, setMeterForm] = useState({ garageId: '', meterKind: 'water' as 'water' | 'electricity', accountingMonth: month, readingDate: today, currentValue: 0, comment: '' })
@@ -400,7 +392,6 @@ export function FinancePanel({
   const [expenseValidationErrors, setExpenseValidationErrors] = useState<string[]>([])
   const [accrualValidationErrors, setAccrualValidationErrors] = useState<string[]>([])
   const [supplierAccrualValidationErrors, setSupplierAccrualValidationErrors] = useState<string[]>([])
-  const [regularValidationErrors, setRegularValidationErrors] = useState<string[]>([])
   const [salaryValidationErrors, setSalaryValidationErrors] = useState<string[]>([])
   const [meterValidationErrors, setMeterValidationErrors] = useState<string[]>([])
   const [accrualBreakdown, setAccrualBreakdown] = useState<AccrualBreakdown | null>(null)
@@ -426,7 +417,7 @@ export function FinancePanel({
       }
       cancelFinanceTriggerRef.current = null
     }, 0)
-  }, [])
+  }, [setCancelFinanceReasonError, setCancelFinanceTarget])
   const closeRestoreFinanceDialog = useCallback(() => {
     const trigger = restoreFinanceTriggerRef.current
     setRestoreFinanceTarget(null)
@@ -467,9 +458,6 @@ export function FinancePanel({
     }
     if (section === 'accruals') {
       return JSON.stringify(accrualForm)
-    }
-    if (section === 'regularAccruals') {
-      return JSON.stringify(regularForm)
     }
     if (section === 'supplierGroupSalaryAccruals') {
       return JSON.stringify(salaryForm)
@@ -551,7 +539,6 @@ export function FinancePanel({
     meterReadings: showAllGarageOperations && financePreviewLoading.meterReadings,
   }
   const financePreviewsError = Object.values(financePreviewFailures).some(Boolean)
-  const compatibleRegularTariffs = getCompatibleRegularTariffs(regularForm.incomeTypeId, incomeTypes, tariffs)
 
   const ensureFinanceReferenceBundle = useCallback(async () => {
     if (financeReferenceBundleLoadedRef.current) {
@@ -568,9 +555,8 @@ export function FinancePanel({
         dictionaryClient.getStaffMembers(auth.accessToken, undefined, undefined, dictionaryScreenRequestLimit),
         dictionaryClient.getIncomeTypes(auth.accessToken, undefined, dictionaryScreenRequestLimit),
         dictionaryClient.getExpenseTypes(auth.accessToken, undefined, dictionaryScreenRequestLimit),
-        dictionaryClient.getTariffs(auth.accessToken, undefined, dictionaryScreenRequestLimit),
         dictionaryClient.getIrregularPayments(auth.accessToken, undefined, dictionaryScreenRequestLimit),
-      ]).then(([loadedSupplierGroups, loadedSuppliers, loadedStaffMembers, loadedIncomeTypes, loadedExpenseTypes, loadedTariffs, loadedIrregularPayments]) => {
+      ]).then(([loadedSupplierGroups, loadedSuppliers, loadedStaffMembers, loadedIncomeTypes, loadedExpenseTypes, loadedIrregularPayments]) => {
         if (generation !== financeReferenceBundleGenerationRef.current) {
           return
         }
@@ -580,21 +566,12 @@ export function FinancePanel({
         setStaffMembers(loadedStaffMembers)
         setIncomeTypes(loadedIncomeTypes)
         setExpenseTypes(loadedExpenseTypes)
-        setTariffs(loadedTariffs)
         setIrregularPayments(loadedIrregularPayments)
         setIncomeForm((value) => ({ ...value, incomeTypeId: value.incomeTypeId || loadedIncomeTypes[0]?.id || '' }))
         setExpenseForm((value) => ({ ...value, supplierId: value.supplierId || loadedSuppliers[0]?.id || '', expenseTypeId: value.expenseTypeId || loadedExpenseTypes[0]?.id || '' }))
         setAccrualForm((value) => ({ ...value, incomeTypeId: value.incomeTypeId || loadedIncomeTypes[0]?.id || '' }))
         setSupplierAccrualForm((value) => ({ ...value, supplierId: value.supplierId || loadedSuppliers[0]?.id || '', expenseTypeId: value.expenseTypeId || loadedExpenseTypes[0]?.id || '' }))
         setSalaryForm((value) => ({ ...value, supplierGroupId: value.supplierGroupId || loadedSupplierGroups[0]?.id || '' }))
-        setRegularForm((value) => {
-          const incomeTypeId = value.incomeTypeId || loadedIncomeTypes[0]?.id || ''
-          return {
-            ...value,
-            incomeTypeId,
-            tariffId: chooseRegularTariffId(incomeTypeId, value.tariffId, loadedIncomeTypes, loadedTariffs),
-          }
-        })
         financeReferenceBundleLoadedRef.current = true
       })
     }
@@ -1189,46 +1166,6 @@ export function FinancePanel({
     }
   }
 
-  async function saveRegularAccruals(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    if (!canWritePayments) {
-      setError('Для записи платежей нужно право payments.write.')
-      return
-    }
-
-    const request: GenerateRegularAccrualsRequest = {
-      incomeTypeId: regularForm.incomeTypeId,
-      tariffId: regularForm.tariffId,
-      accountingMonth: regularForm.accountingMonth,
-      comment: regularForm.comment,
-    }
-    const errors = getRegularAccrualValidationErrorsForCatalog(request, incomeTypes, tariffs)
-    if (errors.length > 0) {
-      setError(null)
-      setRegularValidationErrors(errors)
-      return
-    }
-
-    setRegularValidationErrors([])
-    const saved = await runSaving('regular-accruals', async () => {
-      const result = await financeClient.generateRegularAccruals(auth.accessToken, request)
-      setAccruals((items) => [...result.createdAccruals, ...items])
-      setSummary((value) => ({
-        ...value,
-        accrualTotal: value.accrualTotal + result.totalAmount,
-        debt: value.debt + result.totalAmount,
-        accrualCount: value.accrualCount + result.createdCount,
-      }))
-      setRegularStatus(`Создано ${result.createdCount}, пропущено ${result.skippedCount}`)
-      setRegularForm((value) => ({ ...value, comment: '' }))
-      await loadFinanceWorkbench('accruals', 0, financePage.limit, true)
-    })
-    if (saved) {
-      closeFinanceEditor({ skipConfirmation: true })
-      setActiveFinanceSection('accruals')
-    }
-  }
-
   async function saveSupplierAccrual(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (!canWritePayments) {
@@ -1538,13 +1475,11 @@ export function FinancePanel({
 
     financeEditorTriggerRef.current = trigger ?? null
     setError(null)
-    setRegularStatus(null)
     setSalaryStatus(null)
     setIncomeValidationErrors([])
     setExpenseValidationErrors([])
     setAccrualValidationErrors([])
     setSupplierAccrualValidationErrors([])
-    setRegularValidationErrors([])
     setSalaryValidationErrors([])
     setMeterValidationErrors([])
     let initialSnapshot = ''
@@ -1617,8 +1552,6 @@ export function FinancePanel({
       const nextForm = { ...accrualForm, source: 'manual' as const, amount: 0, comment: '' }
       setAccrualForm(nextForm)
       initialSnapshot = JSON.stringify(nextForm)
-    } else if (!record && section === 'regularAccruals') {
-      initialSnapshot = JSON.stringify(regularForm)
     } else if (record && section === 'supplierAccruals' && 'supplierId' in record && !('operationKind' in record)) {
       const nextForm = {
         supplierId: record.supplierId,
@@ -1927,10 +1860,6 @@ export function FinancePanel({
       void saveAccrual(event)
       return
     }
-    if (financeEditor.section === 'regularAccruals') {
-      void saveRegularAccruals(event)
-      return
-    }
     if (financeEditor.section === 'supplierGroupSalaryAccruals') {
       void saveSupplierGroupSalaryAccruals(event)
       return
@@ -2075,49 +2004,6 @@ export function FinancePanel({
           {financeField('accrualSource', <input aria-label="Источник начисления" value={formatAccrualSource(accrualForm.source)} readOnly />)}
           {financeField('accrualComment', <input aria-label="Комментарий к начислению" placeholder="Комментарий" value={accrualForm.comment} onChange={(event) => setAccrualForm({ ...accrualForm, comment: event.target.value })} />)}
           <FormValidationSummary title={getFinanceEditorValidationTitle('accruals')} items={accrualValidationErrors} />
-        </>
-      )
-    }
-
-    if (section === 'regularAccruals') {
-      return (
-        <>
-          {financeField('regularIncomeType', (
-            <select
-              aria-label="Вид регулярного начисления"
-              value={regularForm.incomeTypeId}
-              onChange={(event) => {
-                const incomeTypeId = event.target.value
-                setRegularForm({ ...regularForm, incomeTypeId, tariffId: chooseRegularTariffId(incomeTypeId, regularForm.tariffId, incomeTypes, tariffs) })
-              }}
-              required
-            >
-              <option value="" disabled>
-                Выберите вид
-              </option>
-              {incomeTypes.map((item) => (
-                <option value={item.id} key={item.id}>
-                  {item.name}
-                </option>
-              ))}
-            </select>
-          ))}
-          {financeField('regularTariff', (
-            <select aria-label="Тариф для регулярного начисления" value={regularForm.tariffId} onChange={(event) => setRegularForm({ ...regularForm, tariffId: event.target.value })} required>
-              <option value="" disabled>
-                Выберите тариф
-              </option>
-              {compatibleRegularTariffs.map((tariff) => (
-                <option value={tariff.id} key={tariff.id}>
-                  {tariff.name}
-                </option>
-              ))}
-            </select>
-          ))}
-          {financeField('regularMonth', <LocalizedDatePicker ariaLabel="Месяц регулярного начисления" mode="month" value={regularForm.accountingMonth.slice(0, 7)} onChange={(accountingMonth) => setRegularForm({ ...regularForm, accountingMonth: `${accountingMonth}-01` })} required />)}
-          {financeField('regularComment', <input aria-label="Комментарий к регулярному начислению" placeholder="Комментарий" value={regularForm.comment} onChange={(event) => setRegularForm({ ...regularForm, comment: event.target.value })} />)}
-          <FormValidationSummary title={getFinanceEditorValidationTitle('regularAccruals')} items={regularValidationErrors} />
-          {regularStatus ? <p className="form-hint">{regularStatus}</p> : null}
         </>
       )
     }
@@ -2314,11 +2200,6 @@ export function FinancePanel({
             <input aria-label={getFinanceToolbarLabel('search')} placeholder={getFinanceToolbarLabel('searchPlaceholder')} value={financeSearchInput} onChange={(event) => setFinanceSearchInput(event.target.value)} />
           </label>
           <div className="finance-toolbar-actions">
-            {activeFinanceSection === 'accruals' ? (
-              <button className="ghost-button" type="button" disabled={!canWritePayments} onClick={() => void openFinanceEditor('regularAccruals')}>
-                <span>{getFinanceToolbarLabel('regularAccruals')}</span>
-              </button>
-            ) : null}
             {activeFinanceSection === 'supplierAccruals' ? (
               <button className="ghost-button" type="button" disabled={!canWritePayments} onClick={() => void openFinanceEditor('supplierGroupSalaryAccruals')}>
                 <span>{getFinanceToolbarLabel('supplierGroupSalaryAccruals')}</span>
@@ -2506,45 +2387,6 @@ export function FinancePanel({
           <button className="secondary-button" type="submit" disabled={!canWritePayments || saving === 'supplier-accrual' || !supplierAccrualForm.supplierId || !supplierAccrualForm.expenseTypeId}>
             <span>Начислить</span>
           </button>
-        </form>
-
-        <form className="dictionary-form" onSubmit={saveRegularAccruals}>
-          <h3>Регулярные начисления</h3>
-          <select
-            aria-label="Вид регулярного начисления"
-            value={regularForm.incomeTypeId}
-            onChange={(event) => {
-              const incomeTypeId = event.target.value
-              setRegularForm({ ...regularForm, incomeTypeId, tariffId: chooseRegularTariffId(incomeTypeId, regularForm.tariffId, incomeTypes, tariffs) })
-            }}
-            required
-          >
-            <option value="" disabled>
-              Выберите вид
-            </option>
-            {incomeTypes.map((item) => (
-              <option value={item.id} key={item.id}>
-                {item.name}
-              </option>
-            ))}
-          </select>
-          <select aria-label="Тариф регулярного начисления" value={regularForm.tariffId} onChange={(event) => setRegularForm({ ...regularForm, tariffId: event.target.value })} required>
-            <option value="" disabled>
-              Выберите тариф
-            </option>
-            {compatibleRegularTariffs.map((tariff) => (
-              <option value={tariff.id} key={tariff.id}>
-                {tariff.name} · {formatMoney(tariff.rate)}
-              </option>
-            ))}
-          </select>
-          <LocalizedDatePicker ariaLabel="Месяц регулярных начислений" mode="month" value={regularForm.accountingMonth.slice(0, 7)} onChange={(accountingMonth) => setRegularForm({ ...regularForm, accountingMonth: `${accountingMonth}-01` })} required />
-          <input aria-label="Комментарий регулярных начислений" placeholder="Комментарий" value={regularForm.comment} onChange={(event) => setRegularForm({ ...regularForm, comment: event.target.value })} />
-          <FormValidationSummary title={getFinanceEditorValidationTitle('regularAccruals', 'batch')} items={regularValidationErrors} />
-          <button className="secondary-button" type="submit" disabled={!canWritePayments || saving === 'regular-accruals' || !regularForm.incomeTypeId || !regularForm.tariffId}>
-            <span>{getFinanceEditorSubmitLabel('regularAccruals')}</span>
-          </button>
-          {regularStatus ? <p className="empty-state" role="status" aria-live="polite">{regularStatus}</p> : null}
         </form>
 
         <form className="dictionary-form" onSubmit={saveMeterReading}>
@@ -3079,7 +2921,6 @@ function PaymentsPrototypePanel({
   const [expenseBankAmount, setExpenseBankAmount] = useState(0)
   const [historyRows, setHistoryRows] = useState<GaragePaymentHistoryPrototypeRow[]>([])
   const [paymentError, setPaymentError] = useState<string | null>(null)
-  const [regularAccrualStatus, setRegularAccrualStatus] = useState<string | null>(null)
   const [garageWorksheetLoadingId, setGarageWorksheetLoadingId] = useState<string | null>(null)
   const [garagePaymentHistoryLoadingId, setGaragePaymentHistoryLoadingId] = useState<string | null>(null)
   const [expenseWorksheetLoading, setExpenseWorksheetLoading] = useState(false)
@@ -3089,8 +2930,6 @@ function PaymentsPrototypePanel({
   const fullPaymentTriggerRef = useRef<HTMLButtonElement | null>(null)
   const [garageAccrualDialogOpen, setGarageAccrualDialogOpen] = useState(false)
   const garageAccrualTriggerRef = useRef<HTMLButtonElement | null>(null)
-  const [regularAccrualDialogOpen, setRegularAccrualDialogOpen] = useState(false)
-  const regularAccrualTriggerRef = useRef<HTMLButtonElement | null>(null)
   const [supplierAccrualDialogOpen, setSupplierAccrualDialogOpen] = useState(false)
   const supplierAccrualTriggerRef = useRef<HTMLButtonElement | null>(null)
   const [salaryDialogOpen, setSalaryDialogOpen] = useState(false)
@@ -3350,24 +3189,6 @@ function PaymentsPrototypePanel({
         trigger.focus()
       }
       garageAccrualTriggerRef.current = null
-    }, 0)
-  }
-
-  function openRegularAccrualDialog(event: MouseEvent<HTMLButtonElement>) {
-    regularAccrualTriggerRef.current = event.currentTarget
-    setPaymentError(null)
-    setRegularAccrualStatus(null)
-    setRegularAccrualDialogOpen(true)
-  }
-
-  function closeRegularAccrualDialog() {
-    const trigger = regularAccrualTriggerRef.current
-    setRegularAccrualDialogOpen(false)
-    window.setTimeout(() => {
-      if (trigger?.isConnected) {
-        trigger.focus()
-      }
-      regularAccrualTriggerRef.current = null
     }, 0)
   }
 
@@ -4165,82 +3986,6 @@ function PaymentsPrototypePanel({
     return null
   }
 
-  async function commitRegularAccruals(request: RegularAccrualPrototypeSubmitRequest) {
-    const result = await financeClient.generateRegularCatalogAccruals(auth.accessToken, {
-      accountingMonth: request.accountingMonth,
-      comment: request.comment.trim() || undefined,
-    })
-    const createdAccruals = result.serviceResults.flatMap((serviceResult) => serviceResult.createdAccruals)
-
-    const selectedGarageAccruals = selectedGarage
-      ? createdAccruals.filter((accrual) => accrual.garageId === selectedGarage.id)
-      : createdAccruals
-
-    const selectedGarageTotal = selectedGarageAccruals.reduce((total, accrual) => total + accrual.amount, 0)
-    if (selectedGarageTotal > 0) {
-      setGarageWorksheetSummary((currentSummary) => currentSummary
-        ? {
-            ...currentSummary,
-            accrualTotal: currentSummary.accrualTotal + selectedGarageTotal,
-            closingDebt: currentSummary.closingDebt + selectedGarageTotal,
-          }
-        : currentSummary)
-    }
-
-    setRegularAccrualStatus(
-      `Начисления сформированы: создано ${result.createdCount}, пропущено ${result.skippedCount}, сумма ${formatPaymentPrototypeValue(result.totalAmount)}.`,
-    )
-
-    setGarageRows((currentRows) => {
-      let nextRows = currentRows
-      selectedGarageAccruals.forEach((accrual) => {
-        const month = accrual.accountingMonth.slice(0, 7)
-        const existingRowId = `garage-${accrual.garageId}-${month}-${accrual.incomeTypeId}`
-        let updated = false
-        nextRows = nextRows.map((row) => {
-          const matchesRow = row.id === existingRowId || (row.month === month && row.service.trim().toLocaleLowerCase('ru-RU') === accrual.incomeTypeName.trim().toLocaleLowerCase('ru-RU'))
-          if (!matchesRow) {
-            return row
-          }
-
-          updated = true
-          return { ...row, payable: row.payable + accrual.amount, debt: row.debt + accrual.amount }
-        })
-
-        if (!updated) {
-          nextRows = [
-            ...nextRows,
-            {
-              id: existingRowId,
-              month,
-              monthLabel: formatPaymentPrototypeMonthLabel(accrual.accountingMonth),
-              service: accrual.incomeTypeName,
-              incomeTypeId: accrual.incomeTypeId,
-              annualAccrualId: accrual.accountingYear ? accrual.id : null,
-              meterKind: null,
-              meterReadingId: null,
-              meterReadingVersion: null,
-              meterReadingDate: null,
-              meter: null,
-              meterDraft: '',
-              meterError: null,
-              difference: null,
-              payable: accrual.amount,
-              paymentDraft: '',
-              paid: 0,
-              advance: 0,
-              debt: accrual.amount,
-            },
-          ]
-        }
-      })
-
-      return nextRows
-    })
-
-    return null
-  }
-
   async function commitExpensePayment(request: ExpensePrototypeSubmitRequest) {
     const supplier = suppliers.find((item) => item.id === request.supplierId && !item.isArchived) ?? null
     if (!supplier) {
@@ -4566,7 +4311,6 @@ function PaymentsPrototypePanel({
         ) : null}
       </div>
       {paymentError ? <FormError>{paymentError}</FormError> : null}
-      {regularAccrualStatus ? <p className="form-status" role="status">{regularAccrualStatus}</p> : null}
       {receiptActionStatus ? <p className="form-status" role="status">{receiptActionStatus}</p> : null}
       {garageWorksheetLoadingId ? <TableLoadingState className="table-loading-state--compact" label="Загружаем поступления выбранного гаража" /> : null}
 
@@ -4591,10 +4335,6 @@ function PaymentsPrototypePanel({
               <button className="secondary-button create-action-button payments-prototype-action-button" type="button" aria-label="Добавить начисление гаражу" onClick={openGarageAccrualDialog}>
                 <FileText size={16} aria-hidden="true" />
                 <span>Добавить начисление</span>
-              </button>
-              <button className="secondary-button create-action-button payments-prototype-action-button" type="button" onClick={openRegularAccrualDialog}>
-                <CalendarDays size={16} aria-hidden="true" />
-                <span>Сформировать начисления</span>
               </button>
               <button className="secondary-button payments-prototype-action-button" type="button" onClick={openFullPaymentDialog} disabled={garageWorksheetLoadingId === selectedGarage.id}>
                 <WalletCards size={16} aria-hidden="true" />
@@ -5038,12 +4778,6 @@ function PaymentsPrototypePanel({
           irregularPayments={irregularPayments.filter((payment) => payment.isActive && !payment.isArchived)}
           onClose={closeGarageAccrualDialog}
           onSubmit={commitGarageAccrual}
-        />
-      ) : null}
-      {regularAccrualDialogOpen ? (
-        <RegularAccrualPrototypeDialog
-          onClose={closeRegularAccrualDialog}
-          onSubmit={commitRegularAccruals}
         />
       ) : null}
       {expenseDialogPreset ? (
@@ -6082,93 +5816,6 @@ function SalaryAccrualPrototypeDialog({
           <div className="detail-dialog-actions">
             <button className="secondary-button" type="submit" disabled={saving}>{saving ? 'Сохраняем...' : 'Ок'}</button>
             <button ref={cancelRef} className="secondary-button" type="button" onClick={onClose} disabled={saving}>Отмена</button>
-          </div>
-        </form>
-      </section>
-    </div>
-  )
-}
-
-function RegularAccrualPrototypeDialog({
-  onClose,
-  onSubmit,
-}: {
-  onClose: () => void
-  onSubmit: (request: RegularAccrualPrototypeSubmitRequest) => Promise<string | null>
-}) {
-  const dialogRef = useFocusTrap<HTMLElement>(true)
-  const cancelRef = useFocusOnOpen<HTMLButtonElement>(true)
-  const [accountingMonth, setAccountingMonth] = useState(getLocalDateInputValue().slice(0, 7))
-  const [comment, setComment] = useState('')
-  const [saving, setSaving] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  useEscapeKey(true, onClose)
-
-  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    if (!/^\d{4}-\d{2}$/.test(accountingMonth)) {
-      setError('Укажите месяц начисления.')
-      return
-    }
-
-    setSaving(true)
-    setError(null)
-    try {
-      const submitError = await onSubmit({
-        accountingMonth: `${accountingMonth}-01`,
-        comment,
-      })
-      if (submitError) {
-        setError(submitError)
-        return
-      }
-      onClose()
-    } catch (submitError) {
-      setError(submitError instanceof Error ? submitError.message : 'Не удалось сформировать начисления. Повторите попытку позже.')
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  return (
-    <div className="modal-backdrop" role="presentation" onMouseDown={onClose}>
-      <section ref={dialogRef} className="detail-dialog payments-prototype-dialog regular-accrual-dialog" role="dialog" aria-modal="true" aria-labelledby="regular-accrual-title" onMouseDown={(event) => event.stopPropagation()}>
-        <div className="detail-dialog-header">
-          <div>
-            <h3 id="regular-accrual-title">Сформировать начисления</h3>
-          </div>
-          <button className="icon-button" type="button" aria-label="Закрыть формирование начислений" onClick={onClose}>
-            <X size={18} />
-          </button>
-        </div>
-        <form className="dictionary-modal-form payments-prototype-modal-form regular-accrual-form" onSubmit={handleSubmit}>
-          <div className="regular-accrual-intro">
-            <span className="regular-accrual-intro__icon" aria-hidden="true">
-              <CalendarDays size={20} />
-            </span>
-            <div>
-              <strong>Начисления по регулярным услугам</strong>
-              <p>Будут обработаны все активные регулярные услуги из раздела «Тарифы и сборы».</p>
-            </div>
-          </div>
-          <div className="regular-accrual-fields">
-            <FormField className="regular-accrual-field regular-accrual-field--month" label="Месяц начисления">
-              <LocalizedDatePicker ariaLabel="Месяц регулярного начисления" mode="month" value={accountingMonth} onChange={(nextAccountingMonth) => {
-                setAccountingMonth(nextAccountingMonth)
-                setError(null)
-              }} />
-            </FormField>
-            <FormField className="regular-accrual-field regular-accrual-field--comment" label="Комментарий">
-              <textarea aria-label="Комментарий регулярного начисления" rows={4} placeholder="Необязательно" value={comment} onChange={(event) => setComment(event.target.value)} />
-            </FormField>
-          </div>
-          {error ? <FormError>{error}</FormError> : null}
-          <div className="detail-dialog-actions">
-            <button className="secondary-button" type="submit" disabled={saving}>
-              <CalendarDays size={16} aria-hidden="true" />
-              {saving ? 'Формируем...' : 'Сформировать'}
-            </button>
-            <button ref={cancelRef} className="ghost-button" type="button" onClick={onClose} disabled={saving}>Отмена</button>
           </div>
         </form>
       </section>

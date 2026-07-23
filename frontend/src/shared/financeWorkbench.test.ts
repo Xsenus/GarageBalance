@@ -7,7 +7,6 @@ const editorKeys: FinanceEditorKey[] = [
   'income',
   'expense',
   'accruals',
-  'regularAccruals',
   'supplierGroupSalaryAccruals',
   'supplierAccruals',
   'meterReadings',
@@ -27,7 +26,6 @@ const toolbarLabelKeys: FinanceToolbarLabelKey[] = [
   'incomeGarageSearch',
   'incomeGarageSearchPlaceholder',
   'incomeGarageSearchSubmit',
-  'regularAccruals',
   'supplierGroupSalaryAccruals',
   'tableArea',
   'emptyState',
@@ -113,7 +111,6 @@ describe('finance workbench metadata', () => {
       income: 'Новое поступление',
       expense: 'Новая выплата',
       accruals: 'Ручное начисление',
-      regularAccruals: 'Регулярные начисления',
       supplierGroupSalaryAccruals: 'Зарплата группы',
       supplierAccruals: 'Начисление поставщику',
       meterReadings: 'Показание счетчика',
@@ -125,7 +122,6 @@ describe('finance workbench metadata', () => {
       income: 'Провести',
       expense: 'Провести',
       accruals: 'Начислить',
-      regularAccruals: 'Создать месяц',
       supplierGroupSalaryAccruals: 'Начислить зарплату',
       supplierAccruals: 'Начислить',
       meterReadings: 'Внести',
@@ -137,12 +133,10 @@ describe('finance workbench metadata', () => {
       income: 'Проверьте поступление',
       expense: 'Проверьте выплату',
       accruals: 'Проверьте начисление',
-      regularAccruals: 'Проверьте регулярное начисление',
       supplierGroupSalaryAccruals: 'Проверьте начисление зарплаты',
       supplierAccruals: 'Проверьте начисление поставщику',
       meterReadings: 'Проверьте показание',
     })
-    expect(getFinanceEditorValidationTitle('regularAccruals', 'batch')).toBe('Проверьте регулярные начисления')
     expect(getFinanceEditorValidationTitle('meterReadings', 'detailed')).toBe('Проверьте показание счетчика')
   })
 
@@ -176,7 +170,6 @@ describe('finance workbench metadata', () => {
       income: 'income',
       expense: 'expense',
       accruals: 'accrual',
-      regularAccruals: 'regular-accruals',
       supplierGroupSalaryAccruals: 'salary-accruals',
       supplierAccruals: 'supplier-accrual',
       meterReadings: 'meter-reading',
@@ -241,7 +234,6 @@ describe('finance workbench metadata', () => {
       incomeGarageSearch: 'Поиск гаража для поступления',
       incomeGarageSearchPlaceholder: 'Гараж или владелец',
       incomeGarageSearchSubmit: 'Найти гараж для поступления',
-      regularAccruals: 'Регулярные',
       supplierGroupSalaryAccruals: 'Зарплата группы',
       tableArea: 'Рабочая область платежной таблицы',
       emptyState: 'По выбранным условиям записей нет',
