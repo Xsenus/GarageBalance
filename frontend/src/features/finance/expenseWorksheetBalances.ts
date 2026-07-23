@@ -31,6 +31,10 @@ export function splitExpenseWorksheetBalance(balance: number): ExpenseWorksheetB
   }
 }
 
+export function toSignedExpenseWorksheetBalance(debt: number, advance: number): number {
+  return Math.round((advance - debt) * 100) / 100
+}
+
 export function calculateExpenseWorksheetClosingBalance(
   openingDebt: number,
   openingAdvance: number,

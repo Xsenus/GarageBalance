@@ -25,7 +25,7 @@ import { SelectControl } from '../../shared/SelectControl'
 import { TablePagination } from '../../shared/TablePagination'
 import { getAccrualValidationErrors, getExpenseValidationErrors, getIncomeValidationErrors, getMeterReadingValidationErrors, getSupplierAccrualValidationErrors, getSupplierGroupSalaryValidationErrors } from '../../shared/validation'
 import { formatPaymentMoney, parsePaymentMoney } from './paymentMoneyFormatting'
-import { calculateExpenseWorksheetClosingBalance, isAtomicCashExpenseType } from './expenseWorksheetBalances'
+import { calculateExpenseWorksheetClosingBalance, isAtomicCashExpenseType, toSignedExpenseWorksheetBalance } from './expenseWorksheetBalances'
 import { rankGarageSearchResults } from './garageSearchRanking'
 import { getGarageBalancePresentation } from './garageBalancePresentation'
 
@@ -4347,6 +4347,8 @@ function PaymentsPrototypePanel({
   const expensePaidTotal = expenseRows.reduce((sum, row) => sum + (typeof row.paid === 'number' ? row.paid : 0), 0)
   const expenseClosingDebtTotal = expenseRows.reduce((sum, row) => sum + row.closingDebt, 0)
   const expenseClosingAdvanceTotal = expenseRows.reduce((sum, row) => sum + row.closingAdvance, 0)
+  const expenseOpeningBalanceTotal = toSignedExpenseWorksheetBalance(expenseOpeningDebtTotal, expenseOpeningAdvanceTotal)
+  const expenseClosingBalanceTotal = toSignedExpenseWorksheetBalance(expenseClosingDebtTotal, expenseClosingAdvanceTotal)
   const expenseCollectedTotal = expenseRows.reduce((sum, row) => sum + (typeof row.collected === 'number' ? row.collected : 0), 0)
   const expenseDifferenceTotal = expenseRows.reduce((sum, row) => sum + (typeof row.difference === 'number' ? row.difference : 0), 0)
   const isArchivedExpenseWorksheetMonth = expenseWorksheetMonth < getCurrentMonthInputValue()
@@ -4847,12 +4849,10 @@ function PaymentsPrototypePanel({
                   <tr>
                     <th scope="col">Поставщик</th>
                     <th scope="col">Услуга</th>
-                    <th scope="col">Входящий долг</th>
-                    <th scope="col">Входящий аванс</th>
+                    <th scope="col">Входящий баланс</th>
                     <th scope="col">Стоимость</th>
                     <th scope="col">Оплачено</th>
-                    <th scope="col">Исходящий долг</th>
-                    <th scope="col">Исходящий аванс</th>
+                    <th scope="col">Исходящий баланс</th>
                     {!isArchivedExpenseWorksheetMonth ? (
                       <>
                         <th scope="col">Собрано</th>
@@ -4869,16 +4869,16 @@ function PaymentsPrototypePanel({
                     const suggestedAmount = row.closingDebt > 0 ? row.closingDebt : typeof row.cost === 'number' ? row.cost : undefined
                     const rowExpenseType = expenseTypes.find((expenseType) => expenseType.id === row.expenseTypeId)
                     const isAtomicCashPayout = isAtomicCashExpenseType(rowExpenseType?.code, row.item)
+                    const openingBalance = toSignedExpenseWorksheetBalance(row.openingDebt, row.openingAdvance)
+                    const closingBalance = toSignedExpenseWorksheetBalance(row.closingDebt, row.closingAdvance)
                     return (
                       <tr key={`${row.item}-${index}`}>
                         <td>{supplier}</td>
                         <td>{row.item}</td>
-                        <td className={row.openingDebt > 0 ? 'money-expense' : undefined}>{formatPaymentMoney(row.openingDebt)}</td>
-                        <td className={row.openingAdvance > 0 ? 'money-income' : undefined}>{formatPaymentMoney(row.openingAdvance)}</td>
+                        <td className={openingBalance < 0 ? 'money-expense' : openingBalance > 0 ? 'money-income' : undefined}>{formatPaymentMoney(openingBalance)}</td>
                         <td className={row.cost ? 'money-income' : undefined}>{formatPaymentMoney(row.cost)}</td>
                         <td>{formatPaymentMoney(row.paid)}</td>
-                        <td className={row.closingDebt > 0 ? 'money-expense' : undefined}>{formatPaymentMoney(row.closingDebt)}</td>
-                        <td className={row.closingAdvance > 0 ? 'money-income' : undefined}>{formatPaymentMoney(row.closingAdvance)}</td>
+                        <td className={closingBalance < 0 ? 'money-expense' : closingBalance > 0 ? 'money-income' : undefined}>{formatPaymentMoney(closingBalance)}</td>
                         {!isArchivedExpenseWorksheetMonth ? (
                           <>
                             <td>{formatPaymentMoney(row.collected)}</td>
@@ -4906,18 +4906,16 @@ function PaymentsPrototypePanel({
                   })}
                   {expenseRows.length === 0 ? (
                     <tr>
-                      <td colSpan={isArchivedExpenseWorksheetMonth ? 8 : 11}>{expenseWorksheetLoading ? <TableLoadingState label="Загружаем форму выплат" /> : 'Начислений и выплат за выбранный месяц пока нет.'}</td>
+                      <td colSpan={isArchivedExpenseWorksheetMonth ? 6 : 9}>{expenseWorksheetLoading ? <TableLoadingState label="Загружаем форму выплат" /> : 'Начислений и выплат за выбранный месяц пока нет.'}</td>
                     </tr>
                   ) : null}
                   <tr className="payments-prototype-total-row">
                     <td>ИТОГО</td>
                     <td />
-                    <td>{formatPaymentMoney(expenseOpeningDebtTotal)}</td>
-                    <td>{formatPaymentMoney(expenseOpeningAdvanceTotal)}</td>
+                    <td className={expenseOpeningBalanceTotal < 0 ? 'money-expense' : expenseOpeningBalanceTotal > 0 ? 'money-income' : undefined}>{formatPaymentMoney(expenseOpeningBalanceTotal)}</td>
                     <td>{formatPaymentMoney(expenseAccrualTotal)}</td>
                     <td>{formatPaymentMoney(expensePaidTotal)}</td>
-                    <td>{formatPaymentMoney(expenseClosingDebtTotal)}</td>
-                    <td>{formatPaymentMoney(expenseClosingAdvanceTotal)}</td>
+                    <td className={expenseClosingBalanceTotal < 0 ? 'money-expense' : expenseClosingBalanceTotal > 0 ? 'money-income' : undefined}>{formatPaymentMoney(expenseClosingBalanceTotal)}</td>
                     {!isArchivedExpenseWorksheetMonth ? (
                       <>
                         <td>{formatPaymentMoney(expenseCollectedTotal)}</td>
