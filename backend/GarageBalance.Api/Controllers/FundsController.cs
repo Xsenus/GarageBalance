@@ -18,6 +18,34 @@ public sealed class FundsController(IFundService fundService) : ControllerBase
         return Ok(await fundService.GetFundsAsync(cancellationToken));
     }
 
+    [Authorize(Policy = SystemPermissions.PaymentsWrite)]
+    [HttpPost]
+    [ProducesResponseType<FundDto>(StatusCodes.Status201Created)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
+    public async Task<ActionResult<FundDto>> CreateFund(UpsertFundRequest request, CancellationToken cancellationToken)
+    {
+        var result = await fundService.CreateFundAsync(request, GetActorUserId(), cancellationToken);
+        return result.Succeeded
+            ? CreatedAtAction(nameof(GetFunds), new { fundId = result.Value!.Id }, result.Value)
+            : ToError(result);
+    }
+
+    [Authorize(Policy = SystemPermissions.PaymentsWrite)]
+    [HttpPut("{fundId:guid}")]
+    [ProducesResponseType<FundDto>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
+    public async Task<ActionResult<FundDto>> UpdateFund(
+        Guid fundId,
+        UpsertFundRequest request,
+        CancellationToken cancellationToken)
+    {
+        var result = await fundService.UpdateFundAsync(fundId, request, GetActorUserId(), cancellationToken);
+        return result.Succeeded ? Ok(result.Value) : ToError(result);
+    }
+
     [HttpGet("operations")]
     [ProducesResponseType<IReadOnlyList<FundOperationDto>>(StatusCodes.Status200OK)]
     public async Task<ActionResult<IReadOnlyList<FundOperationDto>>> GetOperations([FromQuery] int limit = 25, [FromQuery] bool includeCanceled = false, CancellationToken cancellationToken = default)
@@ -96,7 +124,7 @@ public sealed class FundsController(IFundService fundService) : ControllerBase
         return result.ErrorCode switch
         {
             "fund_not_found" or "fund_operation_not_found" => NotFound(ApiProblemDetails.Create(result.ErrorCode, result.ErrorMessage, StatusCodes.Status404NotFound)),
-            "fund_operation_not_allowed" or "fund_balance_insufficient" or "fund_distribution_amount_exceeded" or "fund_operation_already_canceled" or "fund_operation_not_canceled" or "fund_operation_canceled" => Conflict(ApiProblemDetails.Create(result.ErrorCode, result.ErrorMessage, StatusCodes.Status409Conflict)),
+            "fund_duplicate" or "fund_operation_not_allowed" or "fund_balance_insufficient" or "fund_distribution_amount_exceeded" or "fund_operation_already_canceled" or "fund_operation_not_canceled" or "fund_operation_canceled" => Conflict(ApiProblemDetails.Create(result.ErrorCode, result.ErrorMessage, StatusCodes.Status409Conflict)),
             _ => BadRequest(ApiProblemDetails.Create(result.ErrorCode, result.ErrorMessage, StatusCodes.Status400BadRequest))
         };
     }

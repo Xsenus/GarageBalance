@@ -6,6 +6,7 @@ public interface IFundRepository
 {
     Task<IAsyncDisposable> AcquireAllocationLockAsync(CancellationToken cancellationToken);
     Task<IReadOnlyList<Fund>> GetFundsAsync(CancellationToken cancellationToken);
+    Task<bool> FundNameExistsAsync(Guid? excludedFundId, string normalizedName, CancellationToken cancellationToken);
     Task<IReadOnlyList<FundOperation>> GetRecentOperationsAsync(int limit, bool includeCanceled, CancellationToken cancellationToken);
     Task<FundOperationPageData> GetOperationsPageAsync(int offset, int limit, bool includeCanceled, CancellationToken cancellationToken);
     Task<Fund?> FindFundForUpdateAsync(Guid fundId, CancellationToken cancellationToken);

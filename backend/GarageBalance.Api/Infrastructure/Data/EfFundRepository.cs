@@ -51,6 +51,17 @@ public sealed class EfFundRepository(GarageBalanceDbContext dbContext) : IFundRe
             .ToListAsync(cancellationToken);
     }
 
+    public Task<bool> FundNameExistsAsync(
+        Guid? excludedFundId,
+        string normalizedName,
+        CancellationToken cancellationToken)
+    {
+        return dbContext.Funds.AnyAsync(
+            fund => fund.NormalizedName == normalizedName &&
+                (!excludedFundId.HasValue || fund.Id != excludedFundId.Value),
+            cancellationToken);
+    }
+
     public async Task<IReadOnlyList<FundOperation>> GetRecentOperationsAsync(
         int limit,
         bool includeCanceled,

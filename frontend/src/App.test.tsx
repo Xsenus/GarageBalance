@@ -7243,6 +7243,95 @@ describe('App', () => {
     expect(createDebtTransferMock).not.toHaveBeenCalled()
   })
 
+  it('creates and renames funds through accessible fund cards', async () => {
+    const user = userEvent.setup()
+    const createFundMock = vi.fn(async () => createFund({
+      id: 'fund-reserve',
+      name: 'Резервный фонд',
+      sortOrder: 80,
+      isSystem: false,
+    }))
+    const updateFundMock = vi.fn(async () => createFund({
+      id: 'fund-reserve',
+      name: 'Резерв правления',
+      sortOrder: 80,
+      isSystem: false,
+    }))
+    const fundsClient = createFundsClient({
+      createFund: createFundMock,
+      updateFund: updateFundMock,
+    })
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} fundsClient={fundsClient} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    const dashboardTiles = await screen.findByRole('group', { name: 'Главные разделы' })
+    await user.click(within(dashboardTiles).getByRole('button', { name: /Управление\s+фондами/i }))
+
+    const fundsPanel = await screen.findByRole('region', { name: 'Управление фондами' })
+    const createButton = within(fundsPanel).getByRole('button', { name: 'Создать фонд' })
+    expect(createButton).toHaveClass('create-action-button')
+    await user.click(createButton)
+    const createDialog = await screen.findByRole('dialog', { name: 'Новый фонд' })
+    const createName = within(createDialog).getByRole('textbox', { name: 'Название фонда' })
+    expect(createName).toBeRequired()
+    expect(createName).toHaveFocus()
+    await user.type(createName, '  Резервный фонд  ')
+    await user.click(within(createDialog).getByRole('button', { name: 'Создать фонд' }))
+
+    await waitFor(() => expect(createFundMock).toHaveBeenCalledWith(expect.any(String), { name: 'Резервный фонд' }))
+    expect(await within(fundsPanel).findByText('Фонд «Резервный фонд» создан.')).toHaveAttribute('role', 'status')
+    const openCardButton = within(fundsPanel).getByRole('button', { name: 'Открыть карточку фонда Резервный фонд' })
+    await user.click(openCardButton)
+
+    const editDialog = await screen.findByRole('dialog', { name: 'Резервный фонд' })
+    const editName = within(editDialog).getByRole('textbox', { name: 'Название фонда' })
+    expect(editName).toHaveValue('Резервный фонд')
+    await user.clear(editName)
+    await user.type(editName, 'Резерв правления')
+    await user.click(within(editDialog).getByRole('button', { name: 'Сохранить название' }))
+
+    await waitFor(() => expect(updateFundMock).toHaveBeenCalledWith(expect.any(String), 'fund-reserve', { name: 'Резерв правления' }))
+    expect(await within(fundsPanel).findByText('Фонд «Резервный фонд» переименован в «Резерв правления».')).toHaveAttribute('role', 'status')
+    expect(within(fundsPanel).getByRole('button', { name: 'Открыть карточку фонда Резерв правления' })).toBeInTheDocument()
+    expect(within(fundsPanel).queryByRole('button', { name: 'Открыть карточку фонда Резервный фонд' })).not.toBeInTheDocument()
+  })
+
+  it('keeps a fund name after a save error and allows retry', async () => {
+    const user = userEvent.setup()
+    const createFundMock = vi.fn()
+      .mockRejectedValueOnce(new Error('Фонд с таким названием уже существует.'))
+      .mockResolvedValueOnce(createFund({
+        id: 'fund-reserve',
+        name: 'Резервный фонд',
+        sortOrder: 80,
+        isSystem: false,
+      }))
+    const fundsClient = createFundsClient({ createFund: createFundMock })
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} fundsClient={fundsClient} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    const dashboardTiles = await screen.findByRole('group', { name: 'Главные разделы' })
+    await user.click(within(dashboardTiles).getByRole('button', { name: /Управление\s+фондами/i }))
+    const fundsPanel = await screen.findByRole('region', { name: 'Управление фондами' })
+    await user.click(within(fundsPanel).getByRole('button', { name: 'Создать фонд' }))
+
+    const dialog = await screen.findByRole('dialog', { name: 'Новый фонд' })
+    const nameInput = within(dialog).getByRole('textbox', { name: 'Название фонда' })
+    await user.type(nameInput, 'Резервный фонд')
+    await user.click(within(dialog).getByRole('button', { name: 'Создать фонд' }))
+
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent('Фонд с таким названием уже существует.')
+    expect(nameInput).toHaveValue('Резервный фонд')
+    const retryButton = within(dialog).getByRole('button', { name: 'Создать фонд' })
+    expect(retryButton).toBeEnabled()
+    await user.click(retryButton)
+
+    await waitFor(() => expect(createFundMock).toHaveBeenCalledTimes(2))
+    expect(await within(fundsPanel).findByText('Фонд «Резервный фонд» создан.')).toHaveAttribute('role', 'status')
+  })
+
   it('shows funds management prototype from dashboard tile', async () => {
     const user = userEvent.setup()
     const fundsClient = createFundsClient()
@@ -16867,6 +16956,30 @@ function createFundsClient(overrides: Partial<FundsClient> = {}): FundsClient {
 
   return {
     getFunds: async () => funds,
+    createFund: async (_token, request) => {
+      if (funds.some((item) => item.name.toLocaleUpperCase('ru') === request.name.trim().toLocaleUpperCase('ru'))) {
+        throw new Error('Фонд с таким названием уже существует.')
+      }
+      const fund = createFund({
+        id: `fund-${funds.length + 1}`,
+        name: request.name.trim(),
+        sortOrder: Math.max(0, ...funds.map((item) => item.sortOrder)) + 10,
+        isSystem: false,
+        availableToDistribute: funds[0]?.availableToDistribute ?? 0,
+      })
+      funds = [...funds, fund]
+      return fund
+    },
+    updateFund: async (_token, fundId, request) => {
+      const current = funds.find((item) => item.id === fundId)
+      if (!current) {
+        throw new Error('Фонд не найден.')
+      }
+      const updated = { ...current, name: request.name.trim() }
+      funds = funds.map((item) => item.id === fundId ? updated : item)
+      operations = operations.map((item) => item.fundId === fundId ? { ...item, fundName: updated.name } : item)
+      return updated
+    },
     getOperations: async (_token, query) => {
       const includeCanceled = query?.includeCanceled ?? false
       const limit = query?.limit ?? 25

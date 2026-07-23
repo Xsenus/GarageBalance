@@ -4185,6 +4185,13 @@ h1 {
   gap: 18px;
 }
 
+.funds-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
 .funds-heading h1 {
   margin: 0;
 }

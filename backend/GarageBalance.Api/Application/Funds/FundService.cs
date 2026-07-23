@@ -32,6 +32,86 @@ public sealed class FundService(
             .ToList();
     }
 
+    public async Task<FundResult<FundDto>> CreateFundAsync(
+        UpsertFundRequest request,
+        Guid? actorUserId,
+        CancellationToken cancellationToken)
+    {
+        var nameValidation = ValidateFundName(request.Name);
+        if (nameValidation.ErrorCode is not null)
+        {
+            return FundResult<FundDto>.Failure(nameValidation.ErrorCode, nameValidation.ErrorMessage!);
+        }
+
+        await using var allocationLock = await repository.AcquireAllocationLockAsync(cancellationToken);
+        var name = nameValidation.Name!;
+        var normalizedName = NormalizeName(name);
+        if (await repository.FundNameExistsAsync(null, normalizedName, cancellationToken))
+        {
+            return FundResult<FundDto>.Failure("fund_duplicate", "Фонд с таким названием уже существует.");
+        }
+
+        var funds = await repository.GetFundsAsync(cancellationToken);
+        var fund = new Fund
+        {
+            Name = name,
+            NormalizedName = normalizedName,
+            SortOrder = funds.Count == 0 ? 10 : funds.Max(item => item.SortOrder) + 10,
+            AllowOperations = true,
+            IsSystem = false
+        };
+
+        repository.AddFund(fund);
+        AddFundCreatedAudit(fund, actorUserId);
+        await repository.SaveChangesAsync(cancellationToken);
+
+        var availableToDistribute = await CalculateAvailableToDistributeAsync(cancellationToken);
+        return FundResult<FundDto>.Success(ToDto(fund, availableToDistribute));
+    }
+
+    public async Task<FundResult<FundDto>> UpdateFundAsync(
+        Guid fundId,
+        UpsertFundRequest request,
+        Guid? actorUserId,
+        CancellationToken cancellationToken)
+    {
+        var nameValidation = ValidateFundName(request.Name);
+        if (nameValidation.ErrorCode is not null)
+        {
+            return FundResult<FundDto>.Failure(nameValidation.ErrorCode, nameValidation.ErrorMessage!);
+        }
+
+        await using var allocationLock = await repository.AcquireAllocationLockAsync(cancellationToken);
+        var fund = await repository.FindFundForUpdateAsync(fundId, cancellationToken);
+        if (fund is null)
+        {
+            return FundResult<FundDto>.Failure("fund_not_found", "Фонд не найден.");
+        }
+
+        var name = nameValidation.Name!;
+        var normalizedName = NormalizeName(name);
+        if (await repository.FundNameExistsAsync(fundId, normalizedName, cancellationToken))
+        {
+            return FundResult<FundDto>.Failure("fund_duplicate", "Фонд с таким названием уже существует.");
+        }
+
+        if (string.Equals(fund.Name, name, StringComparison.Ordinal))
+        {
+            var currentAvailableToDistribute = await CalculateAvailableToDistributeAsync(cancellationToken);
+            return FundResult<FundDto>.Success(ToDto(fund, currentAvailableToDistribute));
+        }
+
+        var oldName = fund.Name;
+        fund.Name = name;
+        fund.NormalizedName = normalizedName;
+        fund.UpdatedAtUtc = DateTimeOffset.UtcNow;
+        AddFundUpdatedAudit(fund, oldName, actorUserId);
+        await repository.SaveChangesAsync(cancellationToken);
+
+        var availableToDistribute = await CalculateAvailableToDistributeAsync(cancellationToken);
+        return FundResult<FundDto>.Success(ToDto(fund, availableToDistribute));
+    }
+
     public async Task<IReadOnlyList<FundOperationDto>> GetOperationsAsync(int limit, bool includeCanceled, CancellationToken cancellationToken)
     {
         var boundedLimit = Math.Clamp(limit, 1, 100);
@@ -290,13 +370,14 @@ public sealed class FundService(
 
     private async Task EnsureDefaultFundsAsync(List<Fund> funds, CancellationToken cancellationToken)
     {
-        var existing = funds.Select(fund => fund.NormalizedName).ToHashSet(StringComparer.Ordinal);
         var added = false;
 
         foreach (var definition in DefaultFunds)
         {
             var normalizedName = NormalizeName(definition.Name);
-            if (existing.Contains(normalizedName))
+            if (funds.Any(fund =>
+                (fund.IsSystem && fund.SortOrder == definition.SortOrder) ||
+                fund.NormalizedName == normalizedName))
             {
                 continue;
             }
@@ -466,6 +547,46 @@ public sealed class FundService(
             }));
     }
 
+    private void AddFundCreatedAudit(Fund fund, Guid? actorUserId)
+    {
+        auditEventWriter.Add(new AuditEventWriteRequest(
+            ActorUserId: actorUserId,
+            Action: "fund.created",
+            EntityType: "fund",
+            EntityId: fund.Id.ToString(),
+            Summary: $"Создан фонд {fund.Name}.",
+            Section: "funds",
+            ActionKind: "create",
+            EntityDisplayName: fund.Name,
+            NewValues: new Dictionary<string, object?>
+            {
+                ["name"] = fund.Name
+            },
+            FieldLabels: FundFieldLabels));
+    }
+
+    private void AddFundUpdatedAudit(Fund fund, string oldName, Guid? actorUserId)
+    {
+        auditEventWriter.Add(new AuditEventWriteRequest(
+            ActorUserId: actorUserId,
+            Action: "fund.updated",
+            EntityType: "fund",
+            EntityId: fund.Id.ToString(),
+            Summary: $"Переименован фонд {oldName} в {fund.Name}.",
+            Section: "funds",
+            ActionKind: "update",
+            EntityDisplayName: fund.Name,
+            OldValues: new Dictionary<string, object?>
+            {
+                ["name"] = oldName
+            },
+            NewValues: new Dictionary<string, object?>
+            {
+                ["name"] = fund.Name
+            },
+            FieldLabels: FundFieldLabels));
+    }
+
     private void AddCancelAudit(Fund fund, FundOperation operation, Guid? actorUserId, string reason)
     {
         AddOperationStatusAudit(
@@ -573,6 +694,19 @@ public sealed class FundService(
         return name.Trim().ToUpperInvariant();
     }
 
+    private static (string? Name, string? ErrorCode, string? ErrorMessage) ValidateFundName(string? value)
+    {
+        var name = value?.Trim();
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            return (null, "fund_name_required", "Укажите название фонда.");
+        }
+
+        return name.Length > 200
+            ? (null, "fund_name_too_long", "Название фонда не должно превышать 200 символов.")
+            : (name, null, null);
+    }
+
     private static string AppendCancelReason(string reason, string cancelReason)
     {
         var cancelComment = $"Отменено: {cancelReason}";
@@ -603,5 +737,10 @@ public sealed class FundService(
         ["reason"] = "Основание",
         ["balanceBefore"] = "Собранная сумма до",
         ["balanceAfter"] = "Собранная сумма после"
+    };
+
+    private static readonly IReadOnlyDictionary<string, string> FundFieldLabels = new Dictionary<string, string>
+    {
+        ["name"] = "Название фонда"
     };
 }

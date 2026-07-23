@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import type { FormEvent } from 'react'
-import { Minus, Pencil, Plus, RefreshCw, RotateCcw, Save, Trash2, X } from 'lucide-react'
+import { Landmark, Minus, Pencil, Plus, RefreshCw, RotateCcw, Save, Trash2, X } from 'lucide-react'
 import type { AuthResponse } from '../../services/authApi'
 import type { FundDto, FundOperationDto, FundsClient } from '../../services/fundsApi'
 import type { ChangePreview } from '../../shared/changePreview'
@@ -18,7 +18,15 @@ type FundPrototypeRow = {
   id: string
   name: string
   amount: number | null
+  sortOrder: number
   actions?: false
+}
+
+type FundEditorDraft = {
+  mode: 'create' | 'edit'
+  fundId?: string
+  originalName?: string
+  name: string
 }
 
 type FundOperationKind = 'withdraw' | 'deposit'
@@ -60,6 +68,7 @@ function mapFundDtoToPrototypeRow(fund: FundDto): FundPrototypeRow {
     id: fund.id,
     name: fund.name,
     amount: fund.balance,
+    sortOrder: fund.sortOrder,
     actions: fund.allowOperations ? undefined : false,
   }
 }
@@ -68,6 +77,9 @@ export function FundsPrototypePanel({ auth, fundsClient }: { auth: AuthResponse;
   const [rows, setRows] = useState<FundPrototypeRow[]>([])
   const [operationPage, setOperationPage] = useState(() => createEmptyPage<FundOperationDto>(25))
   const [availableToDistribute, setAvailableToDistribute] = useState<number | null>(null)
+  const [fundEditor, setFundEditor] = useState<FundEditorDraft | null>(null)
+  const [fundEditorError, setFundEditorError] = useState<string | null>(null)
+  const [fundMessage, setFundMessage] = useState<string | null>(null)
   const [operation, setOperation] = useState<FundOperationDraft | null>(null)
   const [operationEdit, setOperationEdit] = useState<FundOperationEditDraft | null>(null)
   const [operationEditConfirmation, setOperationEditConfirmation] = useState<FundOperationEditConfirmation | null>(null)
@@ -79,14 +91,18 @@ export function FundsPrototypePanel({ auth, fundsClient }: { auth: AuthResponse;
   const [operationsLoading, setOperationsLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [reloadToken, setReloadToken] = useState(0)
+  const [savingFund, setSavingFund] = useState(false)
   const [savingOperation, setSavingOperation] = useState(false)
   const [savingStatusAction, setSavingStatusAction] = useState(false)
+  useRestoreFocusOnClose(Boolean(fundEditor))
   useRestoreFocusOnClose(Boolean(operation))
   useRestoreFocusOnClose(Boolean(operationEdit))
   useRestoreFocusOnClose(Boolean(operationEditConfirmation))
   useRestoreFocusOnClose(Boolean(operationReverse))
   useRestoreFocusOnClose(Boolean(statusAction))
   const operationCancelRef = useFocusOnOpen<HTMLButtonElement>(Boolean(operation))
+  const fundNameRef = useFocusOnOpen<HTMLInputElement>(Boolean(fundEditor))
+  const fundEditorDialogRef = useFocusTrap<HTMLElement>(Boolean(fundEditor))
   const operationDialogRef = useFocusTrap<HTMLElement>(Boolean(operation))
   const operationEditCancelRef = useFocusOnOpen<HTMLButtonElement>(Boolean(operationEdit) && !operationEditConfirmation)
   const operationEditDialogRef = useFocusTrap<HTMLElement>(Boolean(operationEdit) && !operationEditConfirmation)
@@ -98,6 +114,7 @@ export function FundsPrototypePanel({ auth, fundsClient }: { auth: AuthResponse;
   const statusCancelRef = useFocusOnOpen<HTMLButtonElement>(statusAction?.action === 'restore')
   const statusDialogRef = useFocusTrap<HTMLElement>(Boolean(statusAction))
 
+  useEscapeKey(Boolean(fundEditor) && !savingFund, () => closeFundEditor())
   useEscapeKey(Boolean(operation), () => closeFundOperation())
   useEscapeKey(Boolean(operationEdit) && !operationEditConfirmation && !savingOperation, () => closeFundOperationEdit())
   useEscapeKey(Boolean(operationEditConfirmation) && !savingOperation, () => setOperationEditConfirmation(null))
@@ -203,6 +220,73 @@ export function FundsPrototypePanel({ auth, fundsClient }: { auth: AuthResponse;
     setRows(funds.map(mapFundDtoToPrototypeRow))
     setOperationPage(operations)
     setAvailableToDistribute(funds.length > 0 ? funds[0].availableToDistribute : null)
+  }
+
+  function openFundCreate() {
+    setFundEditor({ mode: 'create', name: '' })
+    setFundEditorError(null)
+    setFundMessage(null)
+  }
+
+  function openFundEdit(fund: FundPrototypeRow) {
+    setFundEditor({
+      mode: 'edit',
+      fundId: fund.id,
+      originalName: fund.name,
+      name: fund.name,
+    })
+    setFundEditorError(null)
+    setFundMessage(null)
+  }
+
+  function closeFundEditor() {
+    if (savingFund) {
+      return
+    }
+
+    setFundEditor(null)
+    setFundEditorError(null)
+  }
+
+  async function saveFund(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (!fundEditor) {
+      return
+    }
+
+    const name = fundEditor.name.trim()
+    if (!name) {
+      setFundEditorError('Укажите название фонда.')
+      return
+    }
+    if (name.length > 200) {
+      setFundEditorError('Название фонда не должно превышать 200 символов.')
+      return
+    }
+
+    setSavingFund(true)
+    setFundEditorError(null)
+    try {
+      const saved = fundEditor.mode === 'create'
+        ? await fundsClient.createFund(auth.accessToken, { name })
+        : await fundsClient.updateFund(auth.accessToken, fundEditor.fundId!, { name })
+      const savedRow = mapFundDtoToPrototypeRow(saved)
+      setRows((current) => {
+        const next = fundEditor.mode === 'create'
+          ? [...current, savedRow]
+          : current.map((item) => item.id === savedRow.id ? savedRow : item)
+        return next.sort((left, right) => left.sortOrder - right.sortOrder || left.name.localeCompare(right.name, 'ru'))
+      })
+      setAvailableToDistribute(saved.availableToDistribute)
+      setFundMessage(fundEditor.mode === 'create'
+        ? `Фонд «${saved.name}» создан.`
+        : `Фонд «${fundEditor.originalName}» переименован в «${saved.name}».`)
+      setFundEditor(null)
+    } catch (error: unknown) {
+      setFundEditorError(error instanceof Error ? error.message : 'Не удалось сохранить фонд.')
+    } finally {
+      setSavingFund(false)
+    }
   }
 
   function openFundOperation(kind: FundOperationKind, fund: FundPrototypeRow) {
@@ -433,7 +517,13 @@ export function FundsPrototypePanel({ auth, fundsClient }: { auth: AuthResponse;
     <section className="funds-page" aria-label="Управление фондами">
       <div className="funds-heading">
         <h1>Управление фондами</h1>
+        <button className="secondary-button create-action-button" type="button" onClick={openFundCreate} disabled={fundsLoading}>
+          <Landmark size={17} aria-hidden="true" />
+          <span>Создать фонд</span>
+        </button>
       </div>
+
+      {fundMessage ? <p className="form-success" role="status">{fundMessage}</p> : null}
 
       {loadError ? (
         <div className="funds-load-error">
@@ -456,6 +546,7 @@ export function FundsPrototypePanel({ auth, fundsClient }: { auth: AuthResponse;
             <tr>
               <th scope="col">Фонд</th>
               <th scope="col">Распределено</th>
+              <th className="funds-table-action-column" scope="col">Карточка</th>
               <th className="funds-table-action-column" scope="col">Изъятие</th>
               <th className="funds-table-action-column" scope="col">Пополнение</th>
             </tr>
@@ -465,6 +556,11 @@ export function FundsPrototypePanel({ auth, fundsClient }: { auth: AuthResponse;
               <tr key={row.id}>
                 <td>{row.name}</td>
                 <td>{row.amount === null ? '—' : `${formatMoney(row.amount)} руб.`}</td>
+                <td className="funds-table-action-column">
+                  <button className="funds-action-button" type="button" aria-label={`Открыть карточку фонда ${row.name}`} title={`Открыть карточку фонда ${row.name}`} data-tooltip="Карточка" onClick={() => openFundEdit(row)}>
+                    <Pencil size={16} aria-hidden="true" />
+                  </button>
+                </td>
                 <td className="funds-table-action-column">
                   {row.actions === false ? null : (
                     <button className="funds-action-button funds-action-button--withdraw" type="button" aria-label={`Изъять из фонда ${row.name}`} title={`Изъять из фонда ${row.name}`} data-tooltip="Изъять" onClick={() => openFundOperation('withdraw', row)}>
@@ -482,7 +578,7 @@ export function FundsPrototypePanel({ auth, fundsClient }: { auth: AuthResponse;
               </tr>
             )) : (
               <tr>
-                <td colSpan={4}>Фонды пока не настроены.</td>
+                <td colSpan={5}>Фонды пока не настроены.</td>
               </tr>
             )}
           </tbody>
@@ -589,6 +685,48 @@ export function FundsPrototypePanel({ auth, fundsClient }: { auth: AuthResponse;
         )}
         </div>
       </div>
+
+      {fundEditor ? (
+        <div className="modal-backdrop" role="presentation" onMouseDown={closeFundEditor}>
+          <section ref={fundEditorDialogRef} className="detail-dialog dictionary-editor-dialog" role="dialog" aria-modal="true" aria-labelledby="fund-editor-title" onMouseDown={(event) => event.stopPropagation()}>
+            <div className="detail-dialog-header">
+              <div>
+                <p className="eyebrow">{fundEditor.mode === 'create' ? 'Создание фонда' : 'Карточка фонда'}</p>
+                <h3 id="fund-editor-title">{fundEditor.mode === 'create' ? 'Новый фонд' : fundEditor.originalName}</h3>
+              </div>
+              <button className="icon-button" type="button" onClick={closeFundEditor} aria-label="Закрыть карточку фонда" disabled={savingFund}>
+                <X size={18} aria-hidden="true" />
+              </button>
+            </div>
+            <form className="dictionary-modal-form" onSubmit={saveFund}>
+              <FormField label="Название фонда">
+                <input
+                  ref={fundNameRef}
+                  aria-label="Название фонда"
+                  value={fundEditor.name}
+                  maxLength={200}
+                  required
+                  aria-invalid={Boolean(fundEditorError)}
+                  onChange={(event) => {
+                    setFundEditor({ ...fundEditor, name: event.target.value })
+                    if (fundEditorError) {
+                      setFundEditorError(null)
+                    }
+                  }}
+                />
+              </FormField>
+              {fundEditorError ? <p className="form-error" role="alert">{fundEditorError}</p> : null}
+              <div className="detail-dialog-actions">
+                <button className="secondary-button create-action-button" type="submit" disabled={savingFund}>
+                  <Save size={16} aria-hidden="true" />
+                  <span>{savingFund ? 'Сохраняем...' : fundEditor.mode === 'create' ? 'Создать фонд' : 'Сохранить название'}</span>
+                </button>
+                <button className="ghost-button" type="button" onClick={closeFundEditor} disabled={savingFund}>Отмена</button>
+              </div>
+            </form>
+          </section>
+        </div>
+      ) : null}
 
       {operation ? (
         <div className="modal-backdrop" role="presentation" onMouseDown={closeFundOperation}>

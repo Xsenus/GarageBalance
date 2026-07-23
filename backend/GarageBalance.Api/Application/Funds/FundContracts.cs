@@ -11,6 +11,9 @@ public sealed record FundDto(
     bool AllowOperations,
     bool IsSystem);
 
+public sealed record UpsertFundRequest(
+    [Required, MaxLength(200)] string Name);
+
 public sealed record FundOperationDto(
     Guid Id,
     Guid FundId,

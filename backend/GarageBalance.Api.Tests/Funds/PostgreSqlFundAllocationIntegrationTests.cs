@@ -68,6 +68,46 @@ public sealed class PostgreSqlFundAllocationIntegrationTests
         Assert.Single(verificationContext.AuditEvents, item => item.Action == "fund.operation_deposited");
     }
 
+    [PostgreSqlFact]
+    public async Task CreatedAndRenamedFundsPersistWithoutRecreatingSystemFund()
+    {
+        await using var database = await PostgreSqlTestDatabase.CreateAsync();
+        Guid renamedFundId;
+        Guid createdFundId;
+        var actorUserId = Guid.NewGuid();
+        await using (var writeContext = database.CreateContext())
+        {
+            var service = CreateService(writeContext);
+            var funds = await service.GetFundsAsync(CancellationToken.None);
+            renamedFundId = funds.Single(item => item.Name == "Электроэнергия").Id;
+
+            var created = await service.CreateFundAsync(
+                new UpsertFundRequest("Резервный фонд"),
+                actorUserId,
+                CancellationToken.None);
+            var renamed = await service.UpdateFundAsync(
+                renamedFundId,
+                new UpsertFundRequest("Энергоснабжение"),
+                actorUserId,
+                CancellationToken.None);
+
+            Assert.True(created.Succeeded, created.ErrorMessage);
+            Assert.True(renamed.Succeeded, renamed.ErrorMessage);
+            createdFundId = created.Value!.Id;
+        }
+
+        await using var verificationContext = database.CreateContext();
+        var verificationService = CreateService(verificationContext);
+        var reloaded = await verificationService.GetFundsAsync(CancellationToken.None);
+
+        Assert.Equal(8, reloaded.Count);
+        Assert.Contains(reloaded, item => item.Id == createdFundId && item.Name == "Резервный фонд" && !item.IsSystem);
+        Assert.Contains(reloaded, item => item.Id == renamedFundId && item.Name == "Энергоснабжение" && item.IsSystem);
+        Assert.DoesNotContain(reloaded, item => item.Name == "Электроэнергия");
+        Assert.Single(verificationContext.AuditEvents, item => item.Action == "fund.created" && item.ActorUserId == actorUserId);
+        Assert.Single(verificationContext.AuditEvents, item => item.Action == "fund.updated" && item.ActorUserId == actorUserId);
+    }
+
     private static FundService CreateService(GarageBalanceDbContext context) =>
         new(
             new EfFundRepository(context),

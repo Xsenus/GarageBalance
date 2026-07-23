@@ -31,6 +31,114 @@ public sealed class FundServiceTests
     }
 
     [Fact]
+    public async Task CreateFundAsync_CreatesCustomFundAndWritesAudit()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = CreateService(database.Context);
+        await service.GetFundsAsync(CancellationToken.None);
+        var actorUserId = Guid.NewGuid();
+
+        var result = await service.CreateFundAsync(
+            new UpsertFundRequest("  Резервный фонд  "),
+            actorUserId,
+            CancellationToken.None);
+
+        Assert.True(result.Succeeded, result.ErrorMessage);
+        Assert.Equal("Резервный фонд", result.Value!.Name);
+        Assert.Equal(80, result.Value.SortOrder);
+        Assert.True(result.Value.AllowOperations);
+        Assert.False(result.Value.IsSystem);
+        var saved = await database.Context.Funds.SingleAsync(item => item.Id == result.Value.Id);
+        Assert.Equal("РЕЗЕРВНЫЙ ФОНД", saved.NormalizedName);
+        var audit = Assert.Single(database.Context.AuditEvents, item => item.Action == "fund.created");
+        Assert.Equal(actorUserId, audit.ActorUserId);
+        Assert.Equal(result.Value.Id.ToString(), audit.EntityId);
+
+        var duplicate = await service.CreateFundAsync(
+            new UpsertFundRequest("резервный фонд"),
+            actorUserId,
+            CancellationToken.None);
+        Assert.False(duplicate.Succeeded);
+        Assert.Equal("fund_duplicate", duplicate.ErrorCode);
+        Assert.Equal(8, await database.Context.Funds.CountAsync());
+    }
+
+    [Fact]
+    public async Task UpdateFundAsync_RenamesSystemFundWithoutRecreatingDefault()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = CreateService(database.Context);
+        var originalFunds = await service.GetFundsAsync(CancellationToken.None);
+        var fund = originalFunds.Single(item => item.Name == "Электроэнергия");
+        var actorUserId = Guid.NewGuid();
+
+        var result = await service.UpdateFundAsync(
+            fund.Id,
+            new UpsertFundRequest("  Энергоснабжение  "),
+            actorUserId,
+            CancellationToken.None);
+
+        Assert.True(result.Succeeded, result.ErrorMessage);
+        Assert.Equal("Энергоснабжение", result.Value!.Name);
+        Assert.True(result.Value.IsSystem);
+        Assert.Equal("ЭНЕРГОСНАБЖЕНИЕ", (await database.Context.Funds.SingleAsync(item => item.Id == fund.Id)).NormalizedName);
+        var reloaded = await service.GetFundsAsync(CancellationToken.None);
+        Assert.Equal(7, reloaded.Count);
+        Assert.Contains(reloaded, item => item.Id == fund.Id && item.Name == "Энергоснабжение");
+        Assert.DoesNotContain(reloaded, item => item.Name == "Электроэнергия");
+        var audit = Assert.Single(database.Context.AuditEvents, item => item.Action == "fund.updated");
+        Assert.Equal(actorUserId, audit.ActorUserId);
+
+        var unchanged = await service.UpdateFundAsync(
+            fund.Id,
+            new UpsertFundRequest("Энергоснабжение"),
+            actorUserId,
+            CancellationToken.None);
+        Assert.True(unchanged.Succeeded);
+        Assert.Single(database.Context.AuditEvents, item => item.Action == "fund.updated");
+
+        var duplicate = await service.UpdateFundAsync(
+            fund.Id,
+            new UpsertFundRequest("Прочее"),
+            actorUserId,
+            CancellationToken.None);
+        Assert.False(duplicate.Succeeded);
+        Assert.Equal("fund_duplicate", duplicate.ErrorCode);
+
+        var missing = await service.UpdateFundAsync(
+            Guid.NewGuid(),
+            new UpsertFundRequest("Новый фонд"),
+            actorUserId,
+            CancellationToken.None);
+        Assert.False(missing.Succeeded);
+        Assert.Equal("fund_not_found", missing.ErrorCode);
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    public async Task CreateAndUpdateFundAsync_RejectInvalidNames(string name)
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = CreateService(database.Context);
+        var fund = Assert.Single(
+            await service.GetFundsAsync(CancellationToken.None),
+            item => item.Name == "Электроэнергия");
+
+        var created = await service.CreateFundAsync(new UpsertFundRequest(name), null, CancellationToken.None);
+        var updated = await service.UpdateFundAsync(fund.Id, new UpsertFundRequest(name), null, CancellationToken.None);
+        var tooLong = await service.CreateFundAsync(
+            new UpsertFundRequest(new string('Ф', 201)),
+            null,
+            CancellationToken.None);
+
+        Assert.Equal("fund_name_required", created.ErrorCode);
+        Assert.Equal("fund_name_required", updated.ErrorCode);
+        Assert.Equal("fund_name_too_long", tooLong.ErrorCode);
+        Assert.Empty(database.Context.AuditEvents);
+    }
+
+    [Fact]
     public async Task CreateOperationAsync_DepositsMoneyAndWritesAudit()
     {
         await using var database = await TestDatabase.CreateAsync();
