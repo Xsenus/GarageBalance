@@ -3800,6 +3800,13 @@ h1 {
   font: inherit;
 }
 
+.payments-prototype-period-row .localized-date-picker__popover {
+  right: auto;
+  left: 0;
+  width: min(292px, calc(100vw - 44px));
+  box-sizing: border-box;
+}
+
 .payments-prototype-period-summary {
   display: grid;
   grid-template-columns: repeat(5, minmax(112px, 1fr));

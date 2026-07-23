@@ -128,6 +128,11 @@ describe('responsive layout styles', () => {
     expect(normalizedAppCss).toContain('.payments-prototype-period-summary {\n    grid-template-columns: 1fr;')
   })
 
+  it('keeps the expense month calendar within the worksheet and narrow viewport', () => {
+    expect(normalizedAppCss).toContain('.payments-prototype-sheet {\n  overflow: hidden;')
+    expect(normalizedAppCss).toContain('.payments-prototype-period-row .localized-date-picker__popover {\n  right: auto;\n  left: 0;\n  width: min(292px, calc(100vw - 44px));\n  box-sizing: border-box;')
+  })
+
   it('keeps payment history actions compact and horizontal', () => {
     expect(normalizedAppCss).toContain('.payments-prototype-card--history {\n  padding: 0;\n  overflow-x: auto;')
     expect(normalizedAppCss).toContain('.payments-prototype-mini-table {\n  width: 100%;\n  min-width: 820px;')
