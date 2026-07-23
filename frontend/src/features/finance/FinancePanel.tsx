@@ -3069,7 +3069,7 @@ function PaymentsPrototypePanel({
   const [selectedGarageId, setSelectedGarageId] = useState<string | null>(null)
   const selectedGarageIdRef = useRef<string | null>(null)
   const [incomeWorksheetRequests] = useState(() => new LatestRequestSequence())
-  const [selectedGarageIds, setSelectedGarageIds] = useState<string[]>([])
+  const [selectedGarages, setSelectedGarages] = useState<PaymentsPrototypeGarage[]>([])
   const [overdueDebtDetails, setOverdueDebtDetails] = useState<GarageOverdueDebtDto | null>(null)
   const [overdueDebtLoading, setOverdueDebtLoading] = useState(false)
   const [overdueDebtError, setOverdueDebtError] = useState<string | null>(null)
@@ -3123,7 +3123,13 @@ function PaymentsPrototypePanel({
     }
     return Array.from(uniqueGarages.values())
   }, [garageSearchGarages, garages])
-  const realGarageIds = useMemo(() => new Set(availableGarages.filter((garage) => !garage.isArchived).map((garage) => garage.id)), [availableGarages])
+  const realGarageIds = useMemo(
+    () => new Set([
+      ...availableGarages.filter((garage) => !garage.isArchived).map((garage) => garage.id),
+      ...selectedGarages.map((garage) => garage.id),
+    ]),
+    [availableGarages, selectedGarages],
+  )
   const garageOptions = useMemo<PaymentsPrototypeGarage[]>(
     () => availableGarages
       .filter((garage) => !garage.isArchived)
@@ -3139,11 +3145,11 @@ function PaymentsPrototypePanel({
       })),
     [availableGarages],
   )
-  const selectedGarage = garageOptions.find((garage) => garage.id === selectedGarageId) ?? null
+  const selectedGarage = selectedGarages.find((garage) => garage.id === selectedGarageId)
+    ?? garageOptions.find((garage) => garage.id === selectedGarageId)
+    ?? null
   const selectedGarageOverdueDebt = selectedGarage?.overdueDebt ?? 0
-  const selectedGarages = selectedGarageIds
-    .map((garageId) => garageOptions.find((garage) => garage.id === garageId))
-    .filter((garage): garage is PaymentsPrototypeGarage => garage !== undefined)
+  const selectedGarageIds = selectedGarages.map((garage) => garage.id)
   const normalizedSearch = garageSearch.trim().toLowerCase()
   const garageSearchResults = garageOptions
     .filter((garage) => !normalizedSearch || garage.number.toLowerCase().includes(normalizedSearch) || garage.ownerName.toLowerCase().includes(normalizedSearch))
@@ -3701,10 +3707,10 @@ function PaymentsPrototypePanel({
   }
 
   function removeGarageSelection(garage: PaymentsPrototypeGarage) {
-    const remainingGarageIds = selectedGarageIds.filter((garageId) => garageId !== garage.id)
-    setSelectedGarageIds(remainingGarageIds)
+    const remainingGarages = selectedGarages.filter((selectedGarageOption) => selectedGarageOption.id !== garage.id)
+    setSelectedGarages(remainingGarages)
     if (selectedGarageId === garage.id) {
-      const nextGarage = garageOptions.find((option) => option.id === remainingGarageIds.at(-1)) ?? null
+      const nextGarage = remainingGarages.at(-1) ?? null
       if (nextGarage) {
         activateGarage(nextGarage)
       } else {
@@ -3724,14 +3730,14 @@ function PaymentsPrototypePanel({
       return
     }
 
-    setSelectedGarageIds((garageIds) => [...garageIds, garage.id])
+    setSelectedGarages((garageOptionsState) => [...garageOptionsState, garage])
     activateGarage(garage)
   }
 
   function clearGarageSelection() {
     selectedGarageIdRef.current = null
     incomeWorksheetRequests.invalidate()
-    setSelectedGarageIds([])
+    setSelectedGarages([])
     setSelectedGarageId(null)
     setGarageRows([])
     setGarageWorksheetSummary(null)

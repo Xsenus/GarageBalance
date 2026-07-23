@@ -4420,6 +4420,58 @@ describe('App', () => {
     expect(within(prototype).getByText('Новый результат')).toBeInTheDocument()
   })
 
+  it('keeps several garages selected across consecutive server searches', async () => {
+    const user = userEvent.setup()
+    const firstGarage = createGarage({ id: 'garage-search-101', number: '101', ownerName: 'Иванов Иван' })
+    const secondGarage = createGarage({ id: 'garage-search-202', number: '202', ownerName: 'Петров Петр' })
+    const getGaragesPage = vi.fn(async (_token: string, search?: string) => ({
+      items: search === '101' ? [firstGarage] : search === '202' ? [secondGarage] : [],
+      totalCount: 1,
+      offset: 0,
+      limit: 20,
+    }))
+
+    render(<App
+      authClient={createAuthClient()}
+      dictionaryClient={createDictionaryClient({ getGarages: async () => [], getGaragesPage })}
+      financeClient={createFinanceClient({
+        getGarageIncomeWorksheet: async (_token, garageId) => createGarageIncomeWorksheet({
+          garageId,
+          garageNumber: garageId === firstGarage.id ? firstGarage.number : secondGarage.number,
+          ownerName: garageId === firstGarage.id ? firstGarage.ownerName : secondGarage.ownerName,
+        }),
+      })}
+      importClient={createImportClient()}
+      reportClient={createReportClient()}
+      releaseClient={createReleaseClient()}
+      userClient={createUserClient()}
+    />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Платежи')
+    const prototype = within(await screen.findByRole('region', { name: 'Платежи' })).getByRole('region', { name: 'Форма платежей' })
+    const search = within(prototype).getByLabelText('Поиск номера гаража или ФИО владельца')
+
+    await user.type(search, '101')
+    await user.click(await within(prototype).findByRole('option', { name: /Гараж\s*101\s*Иванов Иван/ }))
+    expect(within(prototype).getByLabelText('Выбранные гаражи')).toHaveTextContent('Выбрано: 1')
+
+    await user.clear(search)
+    await user.type(search, '202')
+    await waitFor(() => expect(getGaragesPage).toHaveBeenCalledWith('token', '202', 0, 20))
+    const selectedGarageList = within(prototype).getByLabelText('Выбранные гаражи')
+    expect(selectedGarageList).toHaveTextContent('Гараж 101Иванов Иван')
+    await user.click(await within(prototype).findByRole('option', { name: /Гараж\s*202\s*Петров Петр/ }))
+
+    expect(selectedGarageList).toHaveTextContent('Выбрано: 2')
+    expect(selectedGarageList).toHaveTextContent('Гараж 101Иванов Иван')
+    expect(selectedGarageList).toHaveTextContent('Гараж 202Петров Петр')
+    await user.click(within(selectedGarageList).getByRole('button', { name: 'Гараж 101' }))
+    expect(within(selectedGarageList).getByRole('button', { name: 'Гараж 101' })).toHaveAttribute('aria-pressed', 'true')
+    expect(within(selectedGarageList).getByRole('button', { name: 'Гараж 202' })).toHaveAttribute('aria-pressed', 'false')
+  })
+
   it('shows payments prototype and opens payment form modals', async () => {
     const user = userEvent.setup()
     const garage = createGarage({ id: 'garage-1', number: '1', ownerName: 'Иванов Иван', peopleCount: 3, floorCount: 1, startingBalance: -5300, balance: 999999, overdueDebt: 999999 })
