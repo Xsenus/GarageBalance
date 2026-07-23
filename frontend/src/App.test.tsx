@@ -7575,16 +7575,16 @@ describe('App', () => {
     expect(within(fundsPanel).getByLabelText('Общий нераспределенный пул')).toHaveTextContent('—')
   })
 
-  it('marks automatic income assignments as managed and hides manual fund actions', async () => {
+  it('labels the working history as manual redistributions and shows its manual operations', async () => {
     const user = userEvent.setup()
-    const automaticOperation = createFundOperation({
-      fundId: 'fund-other',
-      fundName: 'Прочее',
-      reason: 'Автоматическое назначение поступления «Прочие доходы»',
-      isAutomaticIncomeAssignment: true,
+    const manualOperation = createFundOperation({
+      fundId: 'fund-electricity',
+      fundName: 'Электроэнергия',
+      reason: 'Ручное распределение',
+      isAutomaticIncomeAssignment: false,
     })
     const fundsClient = createFundsClient({
-      getOperations: async () => [automaticOperation],
+      getOperations: async () => [manualOperation],
     })
     render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} fundsClient={fundsClient} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
 
@@ -7595,10 +7595,12 @@ describe('App', () => {
 
     const fundsPanel = await screen.findByRole('region', { name: 'Управление фондами' })
     const operationsTable = await within(fundsPanel).findByRole('table', { name: 'Операции фондов' })
-    expect(within(operationsTable).getByText('Управляется поступлением')).toBeInTheDocument()
-    expect(within(operationsTable).queryByRole('button', { name: 'Изменить операцию фонда Прочее' })).not.toBeInTheDocument()
-    expect(within(operationsTable).queryByRole('button', { name: 'Отменить операцию фонда Прочее' })).not.toBeInTheDocument()
-    expect(within(operationsTable).queryByRole('button', { name: 'Создать обратную операцию фонда Прочее' })).not.toBeInTheDocument()
+    expect(within(fundsPanel).getByRole('heading', { name: 'Ручные перераспределения' })).toBeInTheDocument()
+    expect(within(fundsPanel).getByText('Автоматические поступления остаются в общем аудите и отчетах.')).toBeInTheDocument()
+    expect(within(operationsTable).getByText('Электроэнергия')).toBeInTheDocument()
+    expect(within(operationsTable).getByRole('button', { name: 'Изменить операцию фонда Электроэнергия' })).toBeInTheDocument()
+    expect(within(operationsTable).getByRole('button', { name: 'Отменить операцию фонда Электроэнергия' })).toBeInTheDocument()
+    expect(within(operationsTable).getByRole('button', { name: 'Создать обратную операцию фонда Электроэнергия' })).toBeInTheDocument()
   })
 
   it('shows shared fund skeletons and reveals each data region independently', async () => {
@@ -7637,7 +7639,7 @@ describe('App', () => {
       resolveOperations({ items: [], totalCount: 0, offset: 0, limit: 25 })
     })
 
-    expect(await within(fundsPanel).findByRole('table', { name: 'Операции фондов' })).toHaveTextContent('Операций фондов пока нет.')
+    expect(await within(fundsPanel).findByRole('table', { name: 'Операции фондов' })).toHaveTextContent('Ручных перераспределений пока нет.')
     expect(within(fundsPanel).queryByRole('status', { name: 'Загружаем операции фондов' })).not.toBeInTheDocument()
   })
 
@@ -7666,7 +7668,7 @@ describe('App', () => {
     await user.click(retryButton)
 
     expect(await within(fundsPanel).findByRole('table', { name: 'Фонды и собранные суммы' })).toHaveTextContent('Электроэнергия')
-    expect(await within(fundsPanel).findByRole('table', { name: 'Операции фондов' })).toHaveTextContent('Операций фондов пока нет.')
+    expect(await within(fundsPanel).findByRole('table', { name: 'Операции фондов' })).toHaveTextContent('Ручных перераспределений пока нет.')
     expect(within(fundsPanel).queryByRole('alert')).not.toBeInTheDocument()
     expect(getFunds).toHaveBeenCalledTimes(2)
     expect(getOperationsPage).toHaveBeenCalledTimes(2)

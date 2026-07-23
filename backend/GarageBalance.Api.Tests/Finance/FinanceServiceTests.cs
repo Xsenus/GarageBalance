@@ -7749,10 +7749,16 @@ public sealed class FinanceServiceTests
             await fundService.GetFundsAsync(CancellationToken.None),
             fund => Assert.Equal(400m, fund.AvailableToDistribute));
         Assert.Contains(database.Context.AuditEvents, item => item.Action == "fund.income_assignment_created");
-        var automaticDto = Assert.Single(
+        Assert.DoesNotContain(
             await fundService.GetOperationsAsync(100, includeCanceled: true, CancellationToken.None),
             item => item.Id == assignment.Id);
-        Assert.True(automaticDto.IsAutomaticIncomeAssignment);
+        var workingHistoryPage = await fundService.GetOperationsPageAsync(
+            offset: 0,
+            limit: 25,
+            includeCanceled: true,
+            CancellationToken.None);
+        Assert.Equal(0, workingHistoryPage.TotalCount);
+        Assert.Empty(workingHistoryPage.Items);
         var manualUpdate = await fundService.UpdateOperationAsync(
             assignment.Id,
             new UpdateFundOperationRequest(350m, "Ручное изменение"),

@@ -58,7 +58,9 @@ public sealed class EfFundRepository(GarageBalanceDbContext dbContext) : IFundRe
     {
         var query = dbContext.FundOperations.AsNoTracking()
             .Include(operation => operation.Fund)
-            .Where(operation => includeCanceled || !operation.IsCanceled);
+            .Where(operation =>
+                operation.SourceFinancialOperationId == null &&
+                (includeCanceled || !operation.IsCanceled));
         if (IsSqliteProvider())
         {
             return (await query.ToListAsync(cancellationToken))
@@ -83,7 +85,9 @@ public sealed class EfFundRepository(GarageBalanceDbContext dbContext) : IFundRe
     {
         var query = dbContext.FundOperations.AsNoTracking()
             .Include(operation => operation.Fund)
-            .Where(operation => includeCanceled || !operation.IsCanceled);
+            .Where(operation =>
+                operation.SourceFinancialOperationId == null &&
+                (includeCanceled || !operation.IsCanceled));
 
         if (IsSqliteProvider())
         {

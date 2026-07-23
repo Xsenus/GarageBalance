@@ -508,6 +508,10 @@ export function FundsPrototypePanel({ auth, fundsClient }: { auth: AuthResponse;
         </div>
 
         <div className="funds-sheet funds-operations-sheet">
+        <header className="funds-operations-heading">
+          <h2>Ручные перераспределения</h2>
+          <p>Автоматические поступления остаются в общем аудите и отчетах.</p>
+        </header>
         {operationsLoading ? (
           <TableLoadingState label="Загружаем операции фондов" />
         ) : (
@@ -564,7 +568,7 @@ export function FundsPrototypePanel({ auth, fundsClient }: { auth: AuthResponse;
               </tr>
             )) : (
               <tr>
-                <td colSpan={7}>Операций фондов пока нет.</td>
+                <td colSpan={7}>Ручных перераспределений пока нет.</td>
               </tr>
             )}
           </tbody>

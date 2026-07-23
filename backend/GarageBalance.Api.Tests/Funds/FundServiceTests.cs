@@ -158,6 +158,7 @@ public sealed class FundServiceTests
         Assert.True(second.Succeeded);
         Assert.True(third.Succeeded);
         Assert.True((await service.CancelOperationAsync(second.Value!.Id, new CancelFundOperationRequest("Ошибочное изъятие"), null, CancellationToken.None)).Succeeded);
+        var automatic = await SeedAutomaticAssignmentAsync(database.Context, targetFund.Id, 250m);
 
         var activeOperations = await service.GetOperationsAsync(limit: 2, includeCanceled: false, CancellationToken.None);
         var allOperations = await service.GetOperationsAsync(limit: 10, includeCanceled: true, CancellationToken.None);
@@ -165,6 +166,7 @@ public sealed class FundServiceTests
         Assert.Equal([third.Value!.Id, first.Value!.Id], activeOperations.Select(operation => operation.Id));
         Assert.Equal(3, allOperations.Count);
         Assert.Contains(allOperations, operation => operation.Id == second.Value.Id && operation.IsCanceled);
+        Assert.DoesNotContain(allOperations, operation => operation.Id == automatic.Id);
         Assert.All(allOperations, operation => Assert.Equal("Электроэнергия", operation.FundName));
     }
 
@@ -183,11 +185,13 @@ public sealed class FundServiceTests
                 null,
                 CancellationToken.None)).Succeeded);
         }
+        var automatic = await SeedAutomaticAssignmentAsync(database.Context, targetFund.Id, 250m);
 
         var page = await service.GetOperationsPageAsync(offset: 1, limit: 1, includeCanceled: true, CancellationToken.None);
 
         Assert.Equal(3, page.TotalCount);
         Assert.Single(page.Items);
+        Assert.DoesNotContain(page.Items, operation => operation.Id == automatic.Id);
         Assert.Equal(1, page.Offset);
         Assert.Equal(1, page.Limit);
     }
@@ -560,6 +564,40 @@ public sealed class FundServiceTests
         });
 
         await context.SaveChangesAsync();
+    }
+
+    private static async Task<FundOperation> SeedAutomaticAssignmentAsync(
+        GarageBalanceDbContext context,
+        Guid fundId,
+        decimal amount)
+    {
+        var garage = new Garage { Number = $"AUTO-{Guid.NewGuid():N}", PeopleCount = 1, FloorCount = 1 };
+        var incomeType = new IncomeType { Name = $"Автоматическое поступление {Guid.NewGuid():N}" };
+        var source = new FinancialOperation
+        {
+            OperationKind = FinancialOperationKinds.Income,
+            Garage = garage,
+            IncomeType = incomeType,
+            OperationDate = new DateOnly(2026, 6, 19),
+            AccountingMonth = new DateOnly(2026, 6, 1),
+            Amount = amount,
+            CreatedAtUtc = DateTimeOffset.UtcNow.AddMinutes(1)
+        };
+        var assignment = new FundOperation
+        {
+            FundId = fundId,
+            SourceFinancialOperation = source,
+            SourceFinancialOperationId = source.Id,
+            OperationKind = FundOperationKinds.Deposit,
+            Amount = amount,
+            BalanceBefore = 0m,
+            BalanceAfter = 0m,
+            Reason = "Автоматическое назначение поступления",
+            CreatedAtUtc = source.CreatedAtUtc
+        };
+        context.AddRange(garage, incomeType, source, assignment);
+        await context.SaveChangesAsync();
+        return assignment;
     }
 
     private sealed class TestDatabase : IAsyncDisposable

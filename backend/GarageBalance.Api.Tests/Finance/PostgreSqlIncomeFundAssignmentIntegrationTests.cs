@@ -1,4 +1,5 @@
 using GarageBalance.Api.Application.Finance;
+using GarageBalance.Api.Application.Funds;
 using GarageBalance.Api.Domain.Dictionaries;
 using GarageBalance.Api.Domain.Finance;
 using GarageBalance.Api.Infrastructure.Data;
@@ -54,6 +55,21 @@ public sealed class PostgreSqlIncomeFundAssignmentIntegrationTests
                 CancellationToken.None);
             Assert.True(created.Succeeded, created.ErrorMessage);
             operationId = created.Value!.Id;
+
+            var fundService = new FundService(
+                new EfFundRepository(createContext),
+                new GarageBalance.Api.Application.Audit.AuditEventWriter(createContext));
+            Assert.Empty(await fundService.GetOperationsAsync(
+                limit: 100,
+                includeCanceled: true,
+                CancellationToken.None));
+            Assert.Equal(
+                0,
+                (await fundService.GetOperationsPageAsync(
+                    offset: 0,
+                    limit: 25,
+                    includeCanceled: true,
+                    CancellationToken.None)).TotalCount);
         }
 
         await using (var cancelContext = database.CreateContext())
