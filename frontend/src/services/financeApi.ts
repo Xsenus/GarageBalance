@@ -284,6 +284,9 @@ export type ExpenseWorksheetRowDto = {
   closingDebt?: number
   closingAdvance?: number
   accrualAmount: number
+  baseAccrualAmount?: number
+  bonusAmount?: number
+  penaltyAmount?: number
   expenseAmount: number
   balance: number
   collectedAmount: number | null
@@ -486,6 +489,28 @@ export type CreateIrregularAccrualRequest = {
   comment?: string
 }
 
+export type StaffSalaryAdjustmentType = 'bonus' | 'penalty'
+
+export type CreateStaffSalaryAdjustmentRequest = {
+  staffMemberId: string
+  accountingMonth: string
+  adjustmentType: StaffSalaryAdjustmentType
+  amount: number
+  documentNumber?: string
+  reason: string
+}
+
+export type StaffSalaryAdjustmentDto = {
+  id: string
+  staffMemberId: string
+  staffMemberName: string
+  accountingMonth: string
+  adjustmentType: StaffSalaryAdjustmentType
+  amount: number
+  documentNumber: string | null
+  reason: string
+}
+
 export type SavePaymentFormMeterReadingRequest = CreateMeterReadingRequest & {
   meterReadingId?: string
 }
@@ -523,6 +548,7 @@ export type FinanceClient = {
   updateIncome(accessToken: string, operationId: string, request: CreateIncomeOperationRequest): Promise<FinancialOperationDto>
   createExpense(accessToken: string, request: CreateExpenseOperationRequest): Promise<FinancialOperationDto>
   createStaffPayment(accessToken: string, request: CreateStaffPaymentRequest): Promise<FinancialOperationDto>
+  createStaffSalaryAdjustment(accessToken: string, request: CreateStaffSalaryAdjustmentRequest): Promise<StaffSalaryAdjustmentDto>
   updateExpense(accessToken: string, operationId: string, request: CreateExpenseOperationRequest): Promise<FinancialOperationDto>
   cancelOperation(accessToken: string, operationId: string, request: CancelFinanceEntryRequest): Promise<FinancialOperationDto>
   restoreOperation(accessToken: string, operationId: string): Promise<FinancialOperationDto>
@@ -730,6 +756,9 @@ export const financeApi: FinanceClient = {
   },
   createStaffPayment(accessToken, request) {
     return requestJson(accessToken, '/api/finance/staff-payments', { method: 'POST', body: JSON.stringify(request) })
+  },
+  createStaffSalaryAdjustment(accessToken, request) {
+    return requestJson(accessToken, '/api/finance/staff-salary-adjustments', { method: 'POST', body: JSON.stringify(request) })
   },
   updateExpense(accessToken, operationId, request) {
     return requestJson(accessToken, `/api/finance/operations/${operationId}/expense`, { method: 'PUT', body: JSON.stringify(request) })

@@ -41,6 +41,23 @@ public sealed class PostgreSqlExpenseReportAccrualQueryIntegrationTests
                 CreateAccrual(supplier, serviceExpenseType, month, 500m),
                 CreateAccrual(supplier, serviceExpenseType, month, 999m, true),
                 CreateAccrual(supplier, serviceExpenseType, month.AddMonths(-1), 300m));
+            seedContext.StaffSalaryAdjustments.AddRange(
+                new StaffSalaryAdjustment
+                {
+                    StaffMember = staff,
+                    AccountingMonth = month,
+                    AdjustmentType = StaffSalaryAdjustmentTypes.Bonus,
+                    Amount = 70m,
+                    Reason = "Премия"
+                },
+                new StaffSalaryAdjustment
+                {
+                    StaffMember = staff,
+                    AccountingMonth = month,
+                    AdjustmentType = StaffSalaryAdjustmentTypes.Penalty,
+                    Amount = 20m,
+                    Reason = "Штраф"
+                });
             await seedContext.SaveChangesAsync();
             serviceExpenseTypeId = serviceExpenseType.Id;
             staffId = staff.Id;
@@ -68,7 +85,7 @@ public sealed class PostgreSqlExpenseReportAccrualQueryIntegrationTests
             CancellationToken.None);
 
         Assert.Equal(3, page.RowCount);
-        Assert.Equal(800m, page.AccrualTotal);
+        Assert.Equal(850m, page.AccrualTotal);
         Assert.Equal(0m, page.ExpenseTotal);
         var supplierAccrual = Assert.Single(page.Rows);
         Assert.Equal("accruals", supplierAccrual.RowType);
@@ -99,7 +116,7 @@ public sealed class PostgreSqlExpenseReportAccrualQueryIntegrationTests
                     CancellationToken.None);
 
                 Assert.Equal(3, sortedPage.RowCount);
-                Assert.Equal(800m, sortedPage.AccrualTotal);
+                Assert.Equal(850m, sortedPage.AccrualTotal);
                 Assert.Single(sortedPage.Rows);
                 Assert.Single(capture.Commands);
             }
@@ -120,9 +137,11 @@ public sealed class PostgreSqlExpenseReportAccrualQueryIntegrationTests
             CancellationToken.None);
 
         Assert.Equal(1, staffOnly.RowCount);
-        Assert.Equal(200m, staffOnly.AccrualTotal);
+        Assert.Equal(250m, staffOnly.AccrualTotal);
         var staffRow = Assert.Single(staffOnly.Rows);
         Assert.Equal(staffName, staffRow.SupplierName);
+        Assert.Equal(250m, staffRow.AccrualAmount);
+        Assert.Equal("Оклад с учетом премий и штрафов", staffRow.Comment);
         Assert.Equal("staff", staffRow.CounterpartyKind);
         Assert.Equal(staffId, staffRow.StaffMemberId);
         Assert.Single(capture.Commands);

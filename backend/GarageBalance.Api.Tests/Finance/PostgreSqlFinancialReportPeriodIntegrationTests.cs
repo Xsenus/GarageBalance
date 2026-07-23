@@ -39,6 +39,55 @@ public sealed class PostgreSqlFinancialReportPeriodIntegrationTests
         Assert.Equal(new DateOnly(2027, 3, 1), result.Value.MonthTo);
     }
 
+    [PostgreSqlFact]
+    public async Task StaffPeriod_IncludesSalaryAdjustmentMonthsOnPostgreSql()
+    {
+        await using var database = await PostgreSqlTestDatabase.CreateAsync();
+        Guid staffMemberId;
+        await using (var seedContext = database.CreateContext())
+        {
+            var department = new StaffDepartment { Name = $"Отдел периода {Guid.NewGuid():N}" };
+            var staffMember = new StaffMember
+            {
+                FullName = $"Сотрудник периода {Guid.NewGuid():N}",
+                Department = department,
+                Rate = 100m,
+                CreatedAtUtc = new DateTimeOffset(2024, 1, 10, 0, 0, 0, TimeSpan.Zero),
+                UpdatedAtUtc = new DateTimeOffset(2024, 1, 10, 0, 0, 0, TimeSpan.Zero)
+            };
+            staffMemberId = staffMember.Id;
+            seedContext.AddRange(
+                department,
+                staffMember,
+                new StaffSalaryAdjustment
+                {
+                    StaffMember = staffMember,
+                    AccountingMonth = new DateOnly(2023, 11, 1),
+                    AdjustmentType = StaffSalaryAdjustmentTypes.Bonus,
+                    Amount = 10m,
+                    Reason = "Ретроспективная премия"
+                },
+                new StaffSalaryAdjustment
+                {
+                    StaffMember = staffMember,
+                    AccountingMonth = new DateOnly(2027, 4, 1),
+                    AdjustmentType = StaffSalaryAdjustmentTypes.Penalty,
+                    Amount = 5m,
+                    Reason = "Штраф"
+                });
+            await seedContext.SaveChangesAsync();
+        }
+
+        await using var context = database.CreateContext();
+        var result = await FinanceServiceTestFactory.Create(context).GetFinancialReportPeriodAsync(
+            new FinancialReportPeriodRequest(null, null, staffMemberId),
+            CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+        Assert.Equal(new DateOnly(2023, 11, 1), result.Value!.MonthFrom);
+        Assert.Equal(new DateOnly(2027, 4, 1), result.Value.MonthTo);
+    }
+
     private static SupplierAccrual CreateAccrual(
         Supplier supplier,
         ExpenseType expenseType,

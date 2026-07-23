@@ -123,6 +123,39 @@ describe('financeApi', () => {
     })
   })
 
+  it('posts a staff salary adjustment with its required reason', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      id: 'adjustment-1',
+      staffMemberId: 'staff-1',
+      staffMemberName: 'Петрова Ольга',
+      accountingMonth: '2026-06-01',
+      adjustmentType: 'bonus',
+      amount: 5000,
+      documentNumber: 'PR-1',
+      reason: 'За качественную работу',
+    }), { status: 201, headers: { 'Content-Type': 'application/json' } }))
+    vi.stubGlobal('fetch', fetchMock)
+    const request = {
+      staffMemberId: 'staff-1',
+      accountingMonth: '2026-06-01',
+      adjustmentType: 'bonus' as const,
+      amount: 5000,
+      documentNumber: 'PR-1',
+      reason: 'За качественную работу',
+    }
+
+    await financeApi.createStaffSalaryAdjustment('token', request)
+
+    expect(fetchMock).toHaveBeenCalledWith('/api/finance/staff-salary-adjustments', {
+      method: 'POST',
+      body: JSON.stringify(request),
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: 'Bearer token',
+      },
+    })
+  })
+
   it('previews the early electricity payment warning with an optional edited operation', async () => {
     const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({
       isElectricityPayment: true,

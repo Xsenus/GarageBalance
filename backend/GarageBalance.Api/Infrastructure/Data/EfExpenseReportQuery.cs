@@ -257,11 +257,32 @@ public sealed class EfExpenseReportQuery(GarageBalanceDbContext dbContext) : IEx
 
         if (includeStaff && rowMode is AllRows or AccrualRows)
         {
-            var staffAccrualSources = await (
+            var normalizedMonthFrom = NormalizeMonth(dateFrom);
+            var normalizedMonthTo = NormalizeMonth(dateTo);
+            var adjustmentTotalsQuery =
+                from adjustment in dbContext.StaffSalaryAdjustments.AsNoTracking()
+                where adjustment.AccountingMonth >= normalizedMonthFrom &&
+                      adjustment.AccountingMonth <= normalizedMonthTo &&
+                      (staffMemberIds.Count == 0 || staffMemberIds.Contains(adjustment.StaffMemberId))
+                group adjustment by new { adjustment.StaffMemberId, adjustment.AccountingMonth }
+                into adjustmentGroup
+                select new
+                {
+                    adjustmentGroup.Key.StaffMemberId,
+                    adjustmentGroup.Key.AccountingMonth,
+                    Amount = adjustmentGroup.Sum(adjustment =>
+                        adjustment.AdjustmentType == StaffSalaryAdjustmentTypes.Bonus
+                            ? adjustment.Amount
+                            : -adjustment.Amount)
+                };
+            var staffAccrualSourceRows = await (
                     from member in dbContext.StaffMembers.AsNoTracking()
                     where !member.IsArchived && (staffMemberIds.Count == 0 || staffMemberIds.Contains(member.Id))
                     from expenseType in dbContext.ExpenseTypes.AsNoTracking()
                     where !expenseType.IsArchived && expenseType.Code == "salary" && (expenseTypeIds.Count == 0 || expenseTypeIds.Contains(expenseType.Id))
+                    join adjustmentTotal in adjustmentTotalsQuery
+                        on member.Id equals adjustmentTotal.StaffMemberId into adjustmentTotals
+                    from adjustmentTotal in adjustmentTotals.DefaultIfEmpty()
                     select new
                     {
                         member.Id,
@@ -269,14 +290,35 @@ public sealed class EfExpenseReportQuery(GarageBalanceDbContext dbContext) : IEx
                         member.Rate,
                         member.CreatedAtUtc,
                         ExpenseTypeId = expenseType.Id,
-                        ExpenseTypeName = expenseType.Name
+                        ExpenseTypeName = expenseType.Name,
+                        AdjustmentMonth = (DateOnly?)adjustmentTotal.AccountingMonth,
+                        AdjustmentAmount = (decimal?)adjustmentTotal.Amount
                     })
                 .ToListAsync(cancellationToken);
+            var staffAccrualSources = staffAccrualSourceRows
+                .GroupBy(source => new
+                {
+                    source.Id,
+                    source.FullName,
+                    source.Rate,
+                    source.CreatedAtUtc,
+                    source.ExpenseTypeId,
+                    source.ExpenseTypeName
+                })
+                .Select(group => group.Key)
+                .ToList();
             var months = EnumerateMonths(dateFrom, dateTo).ToArray();
+            var staffAdjustmentTotals = staffAccrualSourceRows
+                .Where(source => source.AdjustmentMonth.HasValue)
+                .ToDictionary(
+                    source => (source.Id, source.AdjustmentMonth!.Value),
+                    source => source.AdjustmentAmount ?? 0m);
             staffRows.AddRange(
                 from source in staffAccrualSources
                 from month in months
                 where month >= NormalizeMonth(DateOnly.FromDateTime(source.CreatedAtUtc.UtcDateTime))
+                let adjustmentAmount = staffAdjustmentTotals.GetValueOrDefault((source.Id, month))
+                let accrualAmount = source.Rate + adjustmentAmount
                 select new ExpenseReportRowDto(
                     AccrualRows,
                     month,
@@ -285,11 +327,11 @@ public sealed class EfExpenseReportQuery(GarageBalanceDbContext dbContext) : IEx
                     source.FullName,
                     source.ExpenseTypeId,
                     source.ExpenseTypeName,
-                    source.Rate,
+                    accrualAmount,
                     0m,
-                    source.Rate,
+                    accrualAmount,
                     null,
-                    "Расчетная ставка сотрудника",
+                    adjustmentAmount == 0m ? "Расчетная ставка сотрудника" : "Оклад с учетом премий и штрафов",
                     source.Id,
                     "staff"));
         }
@@ -616,11 +658,14 @@ public sealed class EfExpenseReportQuery(GarageBalanceDbContext dbContext) : IEx
                     member."FullName" AS "SupplierName",
                     expense_type."Id" AS "ExpenseTypeId",
                     expense_type."Name" AS "ExpenseTypeName",
-                    member."Rate" AS "AccrualAmount",
+                    member."Rate" + COALESCE(adjustment_totals.amount, 0) AS "AccrualAmount",
                     0::numeric AS "ExpenseAmount",
-                    member."Rate" AS "Difference",
+                    member."Rate" + COALESCE(adjustment_totals.amount, 0) AS "Difference",
                     NULL::text AS "DocumentNumber",
-                    'Расчетная ставка сотрудника'::text AS "Comment",
+                    CASE WHEN COALESCE(adjustment_totals.amount, 0) = 0
+                         THEN 'Расчетная ставка сотрудника'
+                         ELSE 'Оклад с учетом премий и штрафов'
+                    END::text AS "Comment",
                     member."CreatedAtUtc" AS "CreatedAtUtc",
                     md5(member."Id"::text || ':' || expense_type."Id"::text || ':' || month_value::date::text)::uuid AS "RowId",
                     member."Id" AS "StaffMemberId",
@@ -628,6 +673,15 @@ public sealed class EfExpenseReportQuery(GarageBalanceDbContext dbContext) : IEx
                 FROM staff_members member
                 CROSS JOIN expense_types expense_type
                 CROSS JOIN generate_series(@month_from::date, @month_to::date, interval '1 month') month_value
+                LEFT JOIN LATERAL (
+                    SELECT SUM(CASE
+                        WHEN salary_adjustment."AdjustmentType" = 'bonus' THEN salary_adjustment."Amount"
+                        ELSE -salary_adjustment."Amount"
+                    END) AS amount
+                    FROM staff_salary_adjustments salary_adjustment
+                    WHERE salary_adjustment."StaffMemberId" = member."Id"
+                      AND salary_adjustment."AccountingMonth" = month_value::date
+                ) adjustment_totals ON TRUE
                 WHERE member."IsArchived" = FALSE
                   AND expense_type."IsArchived" = FALSE
                   AND expense_type."Code" = 'salary'
@@ -911,11 +965,24 @@ public sealed class EfExpenseReportQuery(GarageBalanceDbContext dbContext) : IEx
                 SELECT md5(member."Id"::text || ':' || expense_type."Id"::text || ':' || month_value::date::text)::uuid,
                        'accruals'::text, month_value::date, month_value::date,
                        member."Id", member."FullName", expense_type."Id", expense_type."Name",
-                       member."Rate", 0::numeric, member."Rate", NULL::text,
-                       'Расчетная ставка сотрудника'::text, member."CreatedAtUtc", member."Id", 'staff'::text
+                       member."Rate" + COALESCE(adjustment_totals.amount, 0), 0::numeric,
+                       member."Rate" + COALESCE(adjustment_totals.amount, 0), NULL::text,
+                       CASE WHEN COALESCE(adjustment_totals.amount, 0) = 0
+                            THEN 'Расчетная ставка сотрудника'
+                            ELSE 'Оклад с учетом премий и штрафов'
+                       END::text, member."CreatedAtUtc", member."Id", 'staff'::text
                 FROM staff_members member
                 CROSS JOIN expense_types expense_type
                 CROSS JOIN generate_series(@month_from::date, @month_to::date, interval '1 month') month_value
+                LEFT JOIN LATERAL (
+                    SELECT SUM(CASE
+                        WHEN salary_adjustment."AdjustmentType" = 'bonus' THEN salary_adjustment."Amount"
+                        ELSE -salary_adjustment."Amount"
+                    END) AS amount
+                    FROM staff_salary_adjustments salary_adjustment
+                    WHERE salary_adjustment."StaffMemberId" = member."Id"
+                      AND salary_adjustment."AccountingMonth" = month_value::date
+                ) adjustment_totals ON TRUE
                 WHERE @include_staff = TRUE
                   AND member."IsArchived" = FALSE
                   AND expense_type."IsArchived" = FALSE
@@ -1119,11 +1186,24 @@ public sealed class EfExpenseReportQuery(GarageBalanceDbContext dbContext) : IEx
                 SELECT md5(member."Id"::text || ':' || expense_type."Id"::text || ':' || month_value::date::text)::uuid,
                        'accruals'::text, month_value::date, month_value::date,
                        member."Id", member."FullName", expense_type."Id", expense_type."Name",
-                       member."Rate", 0::numeric, member."Rate", NULL::text,
-                       'Расчетная ставка сотрудника'::text, member."CreatedAtUtc", member."Id", 'staff'::text
+                       member."Rate" + COALESCE(adjustment_totals.amount, 0), 0::numeric,
+                       member."Rate" + COALESCE(adjustment_totals.amount, 0), NULL::text,
+                       CASE WHEN COALESCE(adjustment_totals.amount, 0) = 0
+                            THEN 'Расчетная ставка сотрудника'
+                            ELSE 'Оклад с учетом премий и штрафов'
+                       END::text, member."CreatedAtUtc", member."Id", 'staff'::text
                 FROM staff_members member
                 CROSS JOIN expense_types expense_type
                 CROSS JOIN generate_series(@month_from::date, @month_to::date, interval '1 month') month_value
+                LEFT JOIN LATERAL (
+                    SELECT SUM(CASE
+                        WHEN salary_adjustment."AdjustmentType" = 'bonus' THEN salary_adjustment."Amount"
+                        ELSE -salary_adjustment."Amount"
+                    END) AS amount
+                    FROM staff_salary_adjustments salary_adjustment
+                    WHERE salary_adjustment."StaffMemberId" = member."Id"
+                      AND salary_adjustment."AccountingMonth" = month_value::date
+                ) adjustment_totals ON TRUE
                 WHERE @include_staff = TRUE
                   AND member."IsArchived" = FALSE
                   AND expense_type."IsArchived" = FALSE

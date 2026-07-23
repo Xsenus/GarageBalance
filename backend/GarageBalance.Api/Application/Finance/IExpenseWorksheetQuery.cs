@@ -24,6 +24,14 @@ public sealed record ExpenseWorksheetData(
     public IReadOnlyList<ExpenseWorksheetStaffExpenseData> StaffOpeningExpenses { get; init; } = [];
 
     public IReadOnlyList<ExpenseWorksheetIncomeData> OpeningIncomes { get; init; } = [];
+
+    public IReadOnlyList<ExpenseWorksheetStaffAdjustmentData> StaffBonuses { get; init; } = [];
+
+    public IReadOnlyList<ExpenseWorksheetStaffAdjustmentData> StaffPenalties { get; init; } = [];
+
+    public IReadOnlyList<ExpenseWorksheetStaffAdjustmentData> StaffOpeningBonuses { get; init; } = [];
+
+    public IReadOnlyList<ExpenseWorksheetStaffAdjustmentData> StaffOpeningPenalties { get; init; } = [];
 }
 
 public sealed record ExpenseWorksheetSupplierData(
@@ -53,5 +61,7 @@ public sealed record ExpenseWorksheetStaffExpenseData(Guid StaffMemberId, decima
 
     public DateOnly? FirstAccountingMonth { get; init; }
 }
+
+public sealed record ExpenseWorksheetStaffAdjustmentData(Guid StaffMemberId, decimal Amount);
 
 public sealed record ExpenseWorksheetIncomeData(string IncomeTypeName, string? IncomeTypeCode, decimal Amount);

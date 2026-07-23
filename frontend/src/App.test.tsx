@@ -33,7 +33,7 @@ import type { AuthClient, AuthResponse } from './services/authApi'
 import { DictionaryApiError } from './services/dictionariesApi'
 import type { AccountingTypeDto, ChargeServiceSettingDto, CreateChargeServiceWithTariffRequest, DictionaryClient, FeeCampaignDto, GarageDto, IrregularPaymentDto, OwnerDto, PagedResult, StaffDepartmentDto, StaffMemberDto, SupplierContactDto, SupplierDto, SupplierGroupDto, TariffDto, UpsertGarageRequest, UpsertIrregularPaymentRequest, UpsertStaffMemberRequest, UpsertSupplierRequest, UpsertTariffRequest } from './services/dictionariesApi'
 import { FinanceApiError } from './services/financeApi'
-import type { AccrualDto, CorrectHistoricalMeterReadingRequest, CreateAccrualRequest, CreateExpenseOperationRequest, CreateIncomeOperationRequest, CreateIrregularAccrualRequest, CreateMeterReadingRequest, CreateStaffPaymentRequest, CreateSupplierAccrualRequest, ExpenseWorksheetDto, FeeCampaignAccrualGenerationResultDto, FinanceClient, FinancePagedResult, FinancePageParams, FinanceSummaryDto, FinancialOperationDto, GarageBalanceHistoryDto, GarageIncomeWorksheetDto, GenerateFeeCampaignAccrualsRequest, GenerateSupplierGroupSalaryAccrualsRequest, MeterReadingDto, MeterReadingYearPageDto, MissingMeterReadingDto, RegularAccrualGenerationResultDto, RegularCatalogAccrualGenerationResultDto, SupplierAccrualDto, SupplierGroupSalaryAccrualGenerationResultDto } from './services/financeApi'
+import type { AccrualDto, CorrectHistoricalMeterReadingRequest, CreateAccrualRequest, CreateExpenseOperationRequest, CreateIncomeOperationRequest, CreateIrregularAccrualRequest, CreateMeterReadingRequest, CreateStaffPaymentRequest, CreateStaffSalaryAdjustmentRequest, CreateSupplierAccrualRequest, ExpenseWorksheetDto, FeeCampaignAccrualGenerationResultDto, FinanceClient, FinancePagedResult, FinancePageParams, FinanceSummaryDto, FinancialOperationDto, GarageBalanceHistoryDto, GarageIncomeWorksheetDto, GenerateFeeCampaignAccrualsRequest, GenerateSupplierGroupSalaryAccrualsRequest, MeterReadingDto, MeterReadingYearPageDto, MissingMeterReadingDto, RegularAccrualGenerationResultDto, RegularCatalogAccrualGenerationResultDto, SupplierAccrualDto, SupplierGroupSalaryAccrualGenerationResultDto } from './services/financeApi'
 import type { CreateFundOperationRequest, FundDto, FundOperationDto, FundOperationPageDto, FundsClient } from './services/fundsApi'
 import type { AccessImportCreatedRecordDto, AccessImportQuarantineItemDto, AccessImportReaderStatusDto, AccessImportRunDto, AccessImportRunLogEntryDto, ImportClient } from './services/importApi'
 import type { IntegrationClient, IntegrationSecretSettingDto, OneCFreshIntegrationStatusDto, OneCFreshSyncDto, OneCFreshSyncPreviewDto, OneCFreshSyncRequest, ReceiptPrintingActionDto, ReceiptPrintingActionRequest, ReceiptPrintingIntegrationStatusDto } from './services/integrationsApi'
@@ -4538,6 +4538,8 @@ describe('App', () => {
     const generateRegularCatalogAccruals = vi.fn(async () => createRegularCatalogAccrualGenerationResult())
     const savedExpenseRequests: CreateExpenseOperationRequest[] = []
     const savedStaffPaymentRequests: CreateStaffPaymentRequest[] = []
+    const savedStaffSalaryAdjustmentRequests: CreateStaffSalaryAdjustmentRequest[] = []
+    let staffSalaryAdjustmentAttemptCount = 0
     const savedSupplierAccrualRequests: CreateSupplierAccrualRequest[] = []
     const savedSalaryAccrualRequests: GenerateSupplierGroupSalaryAccrualsRequest[] = []
     const savedFundOperationRequests: Array<{ fundId: string; request: CreateFundOperationRequest }> = []
@@ -4648,6 +4650,23 @@ describe('App', () => {
           expenseTypeName: 'Зарплата',
         })
       },
+      createStaffSalaryAdjustment: async (_token, request) => {
+        staffSalaryAdjustmentAttemptCount += 1
+        if (staffSalaryAdjustmentAttemptCount === 1) {
+          throw new Error('Премия временно не сохранена')
+        }
+        savedStaffSalaryAdjustmentRequests.push(request)
+        return {
+          id: `staff-adjustment-${savedStaffSalaryAdjustmentRequests.length}`,
+          staffMemberId: request.staffMemberId,
+          staffMemberName: 'Петрова Ольга',
+          accountingMonth: request.accountingMonth,
+          adjustmentType: request.adjustmentType,
+          amount: request.amount,
+          documentNumber: request.documentNumber ?? null,
+          reason: request.reason,
+        }
+      },
       createSupplierAccrual: async (_token, request) => {
         savedSupplierAccrualRequests.push(request)
         return createSupplierAccrual({
@@ -4734,6 +4753,12 @@ describe('App', () => {
       }),
       getExpenseWorksheet: async (_token, params) => {
         expenseWorksheetRequestCount += 1
+        const bonusAmount = savedStaffSalaryAdjustmentRequests
+          .filter((request) => request.adjustmentType === 'bonus')
+          .reduce((total, request) => total + request.amount, 0)
+        const penaltyAmount = savedStaffSalaryAdjustmentRequests
+          .filter((request) => request.adjustmentType === 'penalty')
+          .reduce((total, request) => total + request.amount, 0)
         return createExpenseWorksheet({
         accountingMonth: params?.accountingMonth ?? '2026-06-01',
         accrualTotal: 235000,
@@ -4829,7 +4854,10 @@ describe('App', () => {
             counterpartyName: 'Петрова',
             expenseTypeId: null,
             expenseTypeName: 'Бухгалтерия',
-            accrualAmount: 40000,
+            accrualAmount: 40000 + bonusAmount - penaltyAmount,
+            baseAccrualAmount: 40000,
+            bonusAmount,
+            penaltyAmount,
             expenseAmount: 0,
             balance: 0,
             collectedAmount: null,
@@ -5255,6 +5283,57 @@ describe('App', () => {
     })
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Выплата сотруднику' })).not.toBeInTheDocument())
     await waitFor(() => expect(staffPaymentButton).toHaveFocus())
+
+    const bonusButton = within(prototype).getByRole('button', { name: 'Начислить премию' })
+    await user.click(bonusButton)
+    const bonusDialog = await screen.findByRole('dialog', { name: 'Начислить премию сотруднику' })
+    expect(within(bonusDialog).getByText('Месячный оклад: 40 000.00')).toBeInTheDocument()
+    expect(within(bonusDialog).getByRole('combobox', { name: 'Сотрудник для премии' })).toHaveTextContent('Петрова Ольга · Бухгалтерия')
+    expect(within(bonusDialog).getByLabelText('Месяц премии')).toHaveValue('06.2026')
+    await user.type(within(bonusDialog).getByLabelText('Сумма премии'), '5000')
+    await user.click(within(bonusDialog).getByRole('button', { name: 'Начислить премию сотруднику' }))
+    expect(within(bonusDialog).getByText('Укажите основание для премии.')).toBeInTheDocument()
+    expect(staffSalaryAdjustmentAttemptCount).toBe(0)
+    await user.type(within(bonusDialog).getByLabelText('Документ премии'), 'PR-1')
+    await user.type(within(bonusDialog).getByLabelText('Основание премии'), 'За качественную работу')
+    await user.click(within(bonusDialog).getByRole('button', { name: 'Начислить премию сотруднику' }))
+    expect(await within(bonusDialog).findByText('Премия временно не сохранена')).toBeInTheDocument()
+    expect(within(bonusDialog).getByLabelText('Сумма премии')).toHaveValue('5 000.00')
+    expect(within(bonusDialog).getByLabelText('Основание премии')).toHaveValue('За качественную работу')
+    await user.click(within(bonusDialog).getByRole('button', { name: 'Начислить премию сотруднику' }))
+    await waitFor(() => expect(savedStaffSalaryAdjustmentRequests).toHaveLength(1))
+    expect(savedStaffSalaryAdjustmentRequests[0]).toEqual({
+      staffMemberId: 'staff-member-1',
+      accountingMonth: '2026-06-01',
+      adjustmentType: 'bonus',
+      amount: 5000,
+      documentNumber: 'PR-1',
+      reason: 'За качественную работу',
+    })
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Начислить премию сотруднику' })).not.toBeInTheDocument())
+    await waitFor(() => expect(bonusButton).toHaveFocus())
+    const petrovaRowAfterBonus = within(expenseTable).getByText('Петрова').closest('tr')
+    expect(petrovaRowAfterBonus).not.toBeNull()
+    expect(within(petrovaRowAfterBonus!).getByText('Оклад 40 000.00 · премия 5 000.00')).toBeInTheDocument()
+
+    const penaltyButton = within(prototype).getByRole('button', { name: 'Начислить штраф' })
+    await user.click(penaltyButton)
+    const penaltyDialog = await screen.findByRole('dialog', { name: 'Начислить штраф сотруднику' })
+    await user.type(within(penaltyDialog).getByLabelText('Сумма штрафа'), '1000')
+    await user.type(within(penaltyDialog).getByLabelText('Основание штрафа'), 'Нарушение срока')
+    await user.click(within(penaltyDialog).getByRole('button', { name: 'Начислить штраф сотруднику' }))
+    await waitFor(() => expect(savedStaffSalaryAdjustmentRequests).toHaveLength(2))
+    expect(savedStaffSalaryAdjustmentRequests[1]).toMatchObject({
+      staffMemberId: 'staff-member-1',
+      accountingMonth: '2026-06-01',
+      adjustmentType: 'penalty',
+      amount: 1000,
+      reason: 'Нарушение срока',
+    })
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Начислить штраф сотруднику' })).not.toBeInTheDocument())
+    await waitFor(() => expect(penaltyButton).toHaveFocus())
+    const petrovaRowAfterPenalty = within(expenseTable).getByText('Петрова').closest('tr')
+    expect(within(petrovaRowAfterPenalty!).getByText('Оклад 40 000.00 · премия 5 000.00 · штраф 1 000.00')).toBeInTheDocument()
 
     const addAccrualButton = within(prototype).getByRole('button', { name: 'Добавить начисление' })
     await user.click(addAccrualButton)
@@ -9117,6 +9196,9 @@ describe('App', () => {
     expect(within(paymentPrototype).getByRole('button', { name: 'Начислить штраф' })).toBeDisabled()
     expect(within(paymentPrototype).queryByRole('textbox', { name: /^Показание Электроэнергия только просмотр/ })).not.toBeInTheDocument()
     expect(within(paymentPrototype).queryByRole('button', { name: /^Сохранить показание Электроэнергия только просмотр/ })).not.toBeInTheDocument()
+    await user.click(within(paymentPrototype).getByRole('tab', { name: 'Выплаты' }))
+    expect(within(paymentPrototype).getByRole('button', { name: 'Начислить премию' })).toBeDisabled()
+    expect(within(paymentPrototype).getByRole('button', { name: 'Начислить штраф' })).toBeDisabled()
     expect(screen.queryByText('Создание владельца не должно вызываться без dictionaries.write.')).not.toBeInTheDocument()
     expect(screen.queryByText('Поступление не должно вызываться без payments.write.')).not.toBeInTheDocument()
   })
@@ -16825,6 +16907,16 @@ function createFinanceClient(overrides: Partial<FinanceClient> = {}): FinanceCli
     updateIncome: async (_token, operationId) => ({ ...operation, id: operationId }),
     createExpense: async () => createFinancialOperation({ id: 'operation-2', operationKind: 'expense', amount: 500, supplierName: 'Водоканал', expenseTypeName: 'Вода' }),
     createStaffPayment: async () => createFinancialOperation({ id: 'operation-staff', operationKind: 'expense', amount: 500, staffMemberId: 'staff-1', staffMemberName: 'Петрова Ольга', staffDepartmentName: 'Бухгалтерия', expenseTypeName: 'Зарплата' }),
+    createStaffSalaryAdjustment: async (_token, request) => ({
+      id: 'staff-adjustment-1',
+      staffMemberId: request.staffMemberId,
+      staffMemberName: 'Петрова Ольга',
+      accountingMonth: request.accountingMonth,
+      adjustmentType: request.adjustmentType,
+      amount: request.amount,
+      documentNumber: request.documentNumber ?? null,
+      reason: request.reason,
+    }),
     updateExpense: async (_token, operationId) => createFinancialOperation({ id: operationId, operationKind: 'expense', amount: 500, supplierName: 'Водоканал', expenseTypeName: 'Вода' }),
     cancelOperation: async (_token, operationId, request) => {
       const target = operation.id === operationId ? operation : createFinancialOperation({ id: operationId })

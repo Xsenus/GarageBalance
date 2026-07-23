@@ -10,6 +10,7 @@ erDiagram
     supplier_groups ||--o{ suppliers : groups
     suppliers ||--o{ supplier_contacts : has_contacts
     staff_departments ||--o{ staff_members : employs
+    staff_members ||--o{ staff_salary_adjustments : adjusts_salary
 
     garages ||--o{ accruals : charged
     income_types ||--o{ accruals : classifies
@@ -108,6 +109,16 @@ erDiagram
         string FullName
         decimal Rate
         bool IsArchived
+    }
+
+    staff_salary_adjustments {
+        uuid Id PK
+        uuid StaffMemberId FK
+        date AccountingMonth
+        string AdjustmentType
+        decimal Amount
+        string DocumentNumber
+        string Reason
     }
 
     income_types {
@@ -398,6 +409,7 @@ erDiagram
 
 - `accruals` - начисления владельцам по гаражу, виду поступления, тарифу и учетному месяцу. Уникальность активных строк: `GarageId + IncomeTypeId + AccountingMonth + Source`; индексы покрывают `AccountingMonth`, `GarageId`, `IncomeTypeId` и `TariffId`.
 - `financial_operations` - фактические поступления и выплаты. `OperationKind` разделяет `income` и `expense`; поступления связаны с `Garage`/`IncomeType`, выплаты - с `Supplier` или `StaffMember` и статьёй расхода `ExpenseType`. Для выплаты поставщику отдельное обязательное значение `ExpensePaymentType` принимает `with_receipt` или `without_receipt`; статья расхода при этом обязана совпадать с услугой поставщика. Выплата с чеком расходует банк, без чека — кассу. Nullable `ReceiptBatchId` объединяет строки, созданные одной полной оплатой, для единой квитанции; идентификатор может повторяться только в пределах одного гаража и одной даты операции, а отменённые строки не печатаются. Индексы покрывают дату операции, учетный месяц, тип операции, документ, пакет квитанции, гараж, поставщика, сотрудника и тип выплаты.
+- `staff_salary_adjustments` - отдельные премии и штрафы сотрудников поверх автоматического месячного оклада. `AdjustmentType` ограничен значениями `bonus` и `penalty`, сумма положительна на уровне бизнес-правил, а основание обязательно. Штраф не может уменьшить начисление ниже уже выплаченной суммы. Связь со `staff_members` защищена `DeleteBehavior.Restrict`; индексы покрывают месяц, сотрудника и сочетание `StaffMemberId + AccountingMonth + AdjustmentType`.
 - `supplier_accruals` - начисления поставщикам по поставщику, статье расхода и учетному месяцу. При создании и изменении `ExpenseTypeId` обязан совпадать с `Supplier.ChargeServiceSetting.ExpenseTypeId`; эта проверка выполняется в бизнес-сервисе независимо от интерфейса. Выплата без чека атомарно создаёт начисление стоимости с уникальной nullable-ссылкой `SourceFinancialOperationId`; изменение, отмена и восстановление выплаты синхронно изменяют связанную строку. Уникальность: `SupplierId + ExpenseTypeId + AccountingMonth + Source + DocumentNumber`.
 - `meter_readings` - показания воды и электричества. Уникальность: `GarageId + MeterKind + AccountingMonth`; `HasGapWarning` фиксирует разрыв истории.
 - `funds` - фонды учета с нормализованным именем, балансом, порядком сортировки и флагами системности/разрешенных операций. `NormalizedName` уникален, `SortOrder` индексируется.

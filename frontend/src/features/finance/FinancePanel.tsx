@@ -1,9 +1,9 @@
 import { Fragment, useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
 import type { FormEvent, KeyboardEvent, MouseEvent, ReactNode } from 'react'
-import { FileText, Gavel, History, LoaderCircle, Pencil, RotateCcw, Save, Search, Trash2, WalletCards, X } from 'lucide-react'
+import { Award, FileText, Gavel, History, LoaderCircle, Pencil, RotateCcw, Save, Search, Trash2, WalletCards, X } from 'lucide-react'
 import type { AuthResponse } from '../../services/authApi'
 import type { AccountingTypeDto, DictionaryClient, GarageDto, IrregularPaymentDto, StaffMemberDto, SupplierDto, SupplierGroupDto } from '../../services/dictionariesApi'
-import type { AccrualDto, CreateAccrualRequest, CreateExpenseOperationRequest, CreateIncomeOperationRequest, CreateMeterReadingRequest, CreateSupplierAccrualRequest, ExpensePaymentType, ExpenseWorksheetDto, FinanceClient, FinancePagedResult, FinanceSummaryDto, FinancialOperationDto, GarageIncomeWorksheetDto, GarageOverdueDebtDto, GenerateSupplierGroupSalaryAccrualsRequest, MeterReadingDto, MissingMeterReadingDto, SupplierAccrualDto } from '../../services/financeApi'
+import type { AccrualDto, CreateAccrualRequest, CreateExpenseOperationRequest, CreateIncomeOperationRequest, CreateMeterReadingRequest, CreateSupplierAccrualRequest, ExpensePaymentType, ExpenseWorksheetDto, FinanceClient, FinancePagedResult, FinanceSummaryDto, FinancialOperationDto, GarageIncomeWorksheetDto, GarageOverdueDebtDto, GenerateSupplierGroupSalaryAccrualsRequest, MeterReadingDto, MissingMeterReadingDto, StaffSalaryAdjustmentType, SupplierAccrualDto } from '../../services/financeApi'
 import { FinanceApiError } from '../../services/financeApi'
 import type { FundDto, FundsClient } from '../../services/fundsApi'
 import type { IntegrationClient, ReceiptPrintingActionKind } from '../../services/integrationsApi'
@@ -86,6 +86,9 @@ type PaymentPrototypeRow = {
   closingDebt: number
   closingAdvance: number
   cost: number | string
+  baseAccrual?: number
+  bonus?: number
+  penalty?: number
   paid: number | string
   balance: number | string
   collected: number | string
@@ -238,6 +241,11 @@ type StaffPaymentPrototypeDialogPreset = {
   rowIndex?: number
 }
 
+type StaffSalaryAdjustmentPrototypeDialogPreset = {
+  adjustmentType: StaffSalaryAdjustmentType
+  accountingMonth: string
+}
+
 type ExpensePrototypeSubmitRequest = {
   supplierId: string
   expenseTypeId: string
@@ -258,6 +266,15 @@ type StaffPaymentPrototypeSubmitRequest = {
   documentNumber: string
   comment: string
   rowIndex?: number
+}
+
+type StaffSalaryAdjustmentPrototypeSubmitRequest = {
+  staffMemberId: string
+  accountingMonth: string
+  adjustmentType: StaffSalaryAdjustmentType
+  amount: number
+  documentNumber: string
+  reason: string
 }
 
 type SupplierAccrualPrototypeSubmitRequest = {
@@ -319,6 +336,9 @@ function createExpenseRowsFromWorksheet(worksheet: ExpenseWorksheetDto): Payment
     closingDebt: row.closingDebt ?? Math.max((row.openingBalance ?? 0) + row.accrualAmount - row.expenseAmount, 0),
     closingAdvance: row.closingAdvance ?? Math.max(-((row.openingBalance ?? 0) + row.accrualAmount - row.expenseAmount), 0),
     cost: row.accrualAmount,
+    baseAccrual: row.baseAccrualAmount ?? row.accrualAmount,
+    bonus: row.bonusAmount ?? 0,
+    penalty: row.penaltyAmount ?? 0,
     paid: row.expenseAmount,
     balance: row.closingDebt ?? row.balance,
     collected: row.collectedAmount ?? '',
@@ -2997,6 +3017,8 @@ function PaymentsPrototypePanel({
   const expenseTriggerRef = useRef<HTMLButtonElement | null>(null)
   const [staffPaymentDialogPreset, setStaffPaymentDialogPreset] = useState<StaffPaymentPrototypeDialogPreset | null>(null)
   const staffPaymentTriggerRef = useRef<HTMLButtonElement | null>(null)
+  const [staffSalaryAdjustmentDialogPreset, setStaffSalaryAdjustmentDialogPreset] = useState<StaffSalaryAdjustmentPrototypeDialogPreset | null>(null)
+  const staffSalaryAdjustmentTriggerRef = useRef<HTMLButtonElement | null>(null)
   const [historyEdit, setHistoryEdit] = useState<GaragePaymentHistoryEditState | null>(null)
   const historyEditTriggerRef = useRef<HTMLButtonElement | null>(null)
   const [historyCancel, setHistoryCancel] = useState<GaragePaymentHistoryCancelState | null>(null)
@@ -3371,6 +3393,25 @@ function PaymentsPrototypePanel({
         setGarageWorksheetLoadingId((currentId) => (currentId === garage.id ? null : currentId))
       }
     }
+  }
+
+  async function openStaffSalaryAdjustmentDialog(event: MouseEvent<HTMLButtonElement>, adjustmentType: StaffSalaryAdjustmentType) {
+    staffSalaryAdjustmentTriggerRef.current = event.currentTarget
+    setPaymentError(null)
+    if (await onEnsureReferences()) {
+      setStaffSalaryAdjustmentDialogPreset({ adjustmentType, accountingMonth: expenseWorksheetMonth })
+    }
+  }
+
+  function closeStaffSalaryAdjustmentDialog() {
+    const trigger = staffSalaryAdjustmentTriggerRef.current
+    setStaffSalaryAdjustmentDialogPreset(null)
+    window.setTimeout(() => {
+      if (trigger?.isConnected) {
+        trigger.focus()
+      }
+      staffSalaryAdjustmentTriggerRef.current = null
+    }, 0)
   }
 
   async function loadGaragePaymentHistory(garage: PaymentsPrototypeGarage) {
@@ -4251,6 +4292,38 @@ function PaymentsPrototypePanel({
     return null
   }
 
+  async function commitStaffSalaryAdjustment(request: StaffSalaryAdjustmentPrototypeSubmitRequest) {
+    const staffMember = staffMembers.find((item) => item.id === request.staffMemberId && !item.isArchived) ?? null
+    if (!staffMember) {
+      return 'Выберите сотрудника из справочника персонала.'
+    }
+
+    await financeClient.createStaffSalaryAdjustment(auth.accessToken, {
+      staffMemberId: staffMember.id,
+      accountingMonth: request.accountingMonth,
+      adjustmentType: request.adjustmentType,
+      amount: request.amount,
+      documentNumber: request.documentNumber.trim() || undefined,
+      reason: request.reason.trim(),
+    })
+
+    const requestedMonth = request.accountingMonth.slice(0, 7)
+    if (requestedMonth !== expenseWorksheetMonth) {
+      setExpenseWorksheetLoading(true)
+      setExpenseWorksheetMonth(requestedMonth)
+      return null
+    }
+
+    const worksheet = await financeClient.getExpenseWorksheet(auth.accessToken, {
+      accountingMonth: request.accountingMonth,
+    })
+    setExpenseRows(createExpenseRowsFromWorksheet(worksheet))
+    setExpenseBankAmount(worksheet.bankAmount)
+    setExpenseCashAmount(worksheet.cashAmount)
+
+    return null
+  }
+
   async function commitSupplierAccrual(request: SupplierAccrualPrototypeSubmitRequest) {
     const supplier = suppliers.find((item) => item.id === request.supplierId && !item.isArchived) ?? null
     if (!supplier) {
@@ -4882,6 +4955,14 @@ function PaymentsPrototypePanel({
               <WalletCards size={16} aria-hidden="true" />
               <span>Начислить зарплату</span>
             </button>
+            <button className="secondary-button create-action-button" type="button" disabled={!canWritePayments} onClick={(event) => openStaffSalaryAdjustmentDialog(event, 'bonus')}>
+              <Award size={16} aria-hidden="true" />
+              <span>Начислить премию</span>
+            </button>
+            <button className="secondary-button create-action-button" type="button" disabled={!canWritePayments} onClick={(event) => openStaffSalaryAdjustmentDialog(event, 'penalty')}>
+              <Gavel size={16} aria-hidden="true" />
+              <span>Начислить штраф</span>
+            </button>
           </div>
 
           <div className="payments-prototype-sheet">
@@ -4926,7 +5007,16 @@ function PaymentsPrototypePanel({
                     return (
                       <tr key={`${row.item}-${index}`}>
                         <td>{supplier}</td>
-                        <td>{row.item}</td>
+                        <td>
+                          <span>{row.item}</span>
+                          {isStaffPaymentRow && ((row.bonus ?? 0) > 0 || (row.penalty ?? 0) > 0) ? (
+                            <small className="payments-prototype-cell-note">
+                              Оклад {formatPaymentMoney(row.baseAccrual ?? row.cost)}
+                              {(row.bonus ?? 0) > 0 ? ` · премия ${formatPaymentMoney(row.bonus ?? 0)}` : ''}
+                              {(row.penalty ?? 0) > 0 ? ` · штраф ${formatPaymentMoney(row.penalty ?? 0)}` : ''}
+                            </small>
+                          ) : null}
+                        </td>
                         <td>{formatPaymentMoney(openingBalance)}</td>
                         <td>{formatPaymentMoney(row.cost)}</td>
                         <td>{formatPaymentMoney(row.paid)}</td>
@@ -5069,6 +5159,14 @@ function PaymentsPrototypePanel({
           onChange={(patch) => setReceiptAction((value) => value ? { ...value, ...patch, error: null } : value)}
           onClose={closeReceiptActionDialog}
           onConfirm={confirmReceiptAction}
+        />
+      ) : null}
+      {staffSalaryAdjustmentDialogPreset ? (
+        <StaffSalaryAdjustmentPrototypeDialog
+          preset={staffSalaryAdjustmentDialogPreset}
+          staffMembers={staffMembers.filter((staffMember) => !staffMember.isArchived)}
+          onClose={closeStaffSalaryAdjustmentDialog}
+          onSubmit={commitStaffSalaryAdjustment}
         />
       ) : null}
       {penaltyAccrualDialogOpen ? (
@@ -5835,6 +5933,133 @@ function StaffPaymentPrototypeDialog({
           {error ? <FormError>{error}</FormError> : null}
           <div className="detail-dialog-actions">
             <button className="secondary-button" type="submit" disabled={saving}>{saving ? 'Сохраняем...' : 'Провести'}</button>
+            <button ref={cancelRef} className="secondary-button" type="button" onClick={onClose} disabled={saving}>Отмена</button>
+          </div>
+        </form>
+      </section>
+    </div>
+  )
+}
+
+function StaffSalaryAdjustmentPrototypeDialog({
+  preset,
+  staffMembers,
+  onClose,
+  onSubmit,
+}: {
+  preset: StaffSalaryAdjustmentPrototypeDialogPreset
+  staffMembers: StaffMemberDto[]
+  onClose: () => void
+  onSubmit: (request: StaffSalaryAdjustmentPrototypeSubmitRequest) => Promise<string | null>
+}) {
+  const dialogRef = useFocusTrap<HTMLElement>(true)
+  const cancelRef = useFocusOnOpen<HTMLButtonElement>(true)
+  const [staffMemberId, setStaffMemberId] = useState(staffMembers[0]?.id ?? '')
+  const [accountingMonth, setAccountingMonth] = useState(preset.accountingMonth)
+  const [amount, setAmount] = useState('')
+  const [documentNumber, setDocumentNumber] = useState('')
+  const [reason, setReason] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const isBonus = preset.adjustmentType === 'bonus'
+  const actionName = isBonus ? 'премию' : 'штраф'
+  const selectedStaffMember = staffMembers.find((member) => member.id === staffMemberId)
+  useEscapeKey(true, onClose)
+
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    const parsedAmount = parsePaymentMoney(amount)
+    if (!staffMemberId) {
+      setError('Выберите сотрудника из справочника персонала.')
+      return
+    }
+    if (!/^\d{4}-\d{2}$/.test(accountingMonth)) {
+      setError(`Укажите месяц, за который начисляется ${actionName}.`)
+      return
+    }
+    if (!Number.isFinite(parsedAmount) || parsedAmount <= 0) {
+      setError(`Укажите сумму ${isBonus ? 'премии' : 'штрафа'} больше нуля.`)
+      return
+    }
+    if (!reason.trim()) {
+      setError(`Укажите основание для ${isBonus ? 'премии' : 'штрафа'}.`)
+      return
+    }
+
+    setSaving(true)
+    setError(null)
+    try {
+      const submitError = await onSubmit({
+        staffMemberId,
+        accountingMonth: `${accountingMonth}-01`,
+        adjustmentType: preset.adjustmentType,
+        amount: parsedAmount,
+        documentNumber,
+        reason,
+      })
+      if (submitError) {
+        setError(submitError)
+        return
+      }
+      onClose()
+    } catch (submitError) {
+      setError(submitError instanceof Error ? submitError.message : `Не удалось начислить ${actionName}. Повторите попытку позже.`)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const title = isBonus ? 'Начислить премию сотруднику' : 'Начислить штраф сотруднику'
+  return (
+    <div className="modal-backdrop" role="presentation" onMouseDown={onClose}>
+      <section ref={dialogRef} className="detail-dialog payments-prototype-dialog" role="dialog" aria-modal="true" aria-labelledby="staff-salary-adjustment-title" onMouseDown={(event) => event.stopPropagation()}>
+        <div className="detail-dialog-header">
+          <div>
+            <h3 id="staff-salary-adjustment-title">{title}</h3>
+          </div>
+          <button className="icon-button" type="button" aria-label={`Закрыть: ${title.toLocaleLowerCase('ru-RU')}`} onClick={onClose}>
+            <X size={18} />
+          </button>
+        </div>
+        <form className="dictionary-modal-form payments-prototype-modal-form" onSubmit={handleSubmit}>
+          <FormField label="Сотрудник">
+            <SelectControl
+              aria-label={`Сотрудник для ${isBonus ? 'премии' : 'штрафа'}`}
+              value={staffMemberId}
+              options={staffMembers.length > 0
+                ? staffMembers.map((member) => ({ value: member.id, label: `${member.fullName} · ${member.departmentName}` }))
+                : [{ value: '', label: 'Нет сотрудников' }]}
+              disabled={saving}
+              onChange={(nextStaffMemberId) => {
+                setStaffMemberId(nextStaffMemberId)
+                setError(null)
+              }} />
+          </FormField>
+          {selectedStaffMember ? <p className="payments-prototype-form-hint">Месячный оклад: {formatPaymentMoney(selectedStaffMember.rate)}</p> : null}
+          <FormField label="Месяц">
+            <LocalizedDatePicker ariaLabel={`Месяц ${isBonus ? 'премии' : 'штрафа'}`} mode="month" value={accountingMonth} disabled={saving} onChange={(nextAccountingMonth) => {
+              setAccountingMonth(nextAccountingMonth)
+              setError(null)
+            }} />
+          </FormField>
+          <FormField label="Сумма">
+            <MoneyTextInput aria-label={`Сумма ${isBonus ? 'премии' : 'штрафа'}`} value={amount} onValueChange={(nextAmount) => {
+              setAmount(nextAmount)
+              setError(null)
+            }} />
+          </FormField>
+          <FormField label="Документ">
+            <input aria-label={`Документ ${isBonus ? 'премии' : 'штрафа'}`} value={documentNumber} disabled={saving} onChange={(event) => setDocumentNumber(event.target.value)} />
+          </FormField>
+          <FormField label="Основание">
+            <textarea aria-label={`Основание ${isBonus ? 'премии' : 'штрафа'}`} rows={4} value={reason} disabled={saving} onChange={(event) => {
+              setReason(event.target.value)
+              setError(null)
+            }} />
+          </FormField>
+          {error ? <FormError>{error}</FormError> : null}
+          <div className="detail-dialog-actions">
+            <button className="secondary-button" type="submit" disabled={saving}>{saving ? 'Сохраняем...' : title}</button>
             <button ref={cancelRef} className="secondary-button" type="button" onClick={onClose} disabled={saving}>Отмена</button>
           </div>
         </form>

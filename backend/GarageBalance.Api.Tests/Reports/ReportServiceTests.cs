@@ -1336,6 +1336,23 @@ public sealed class ReportServiceTests
             Supplier = fixtures.Supplier,
             ExpenseType = fixtures.ExpenseType
         });
+        database.Context.StaffSalaryAdjustments.AddRange(
+            new StaffSalaryAdjustment
+            {
+                StaffMember = staff,
+                AccountingMonth = new DateOnly(2026, 6, 1),
+                AdjustmentType = StaffSalaryAdjustmentTypes.Bonus,
+                Amount = 70m,
+                Reason = "Премия"
+            },
+            new StaffSalaryAdjustment
+            {
+                StaffMember = staff,
+                AccountingMonth = new DateOnly(2026, 6, 1),
+                AdjustmentType = StaffSalaryAdjustmentTypes.Penalty,
+                Amount = 20m,
+                Reason = "Штраф"
+            });
         await database.Context.SaveChangesAsync();
 
         var result = await new EfExpenseReportQuery(database.Context).GetRowsAsync(
@@ -1352,8 +1369,11 @@ public sealed class ReportServiceTests
             CancellationToken.None);
 
         Assert.Equal(2, result.RowCount);
-        Assert.Equal(300m, result.AccrualTotal);
+        Assert.Equal(350m, result.AccrualTotal);
         Assert.Equal(125m, result.ExpenseTotal);
+        var accrualRow = Assert.Single(result.Rows, row => row.RowType == "accruals");
+        Assert.Equal(350m, accrualRow.AccrualAmount);
+        Assert.Equal("Оклад с учетом премий и штрафов", accrualRow.Comment);
         Assert.All(result.Rows, row =>
         {
             Assert.Equal("staff", row.CounterpartyKind);

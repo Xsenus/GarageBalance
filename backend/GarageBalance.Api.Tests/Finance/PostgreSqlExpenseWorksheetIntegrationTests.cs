@@ -12,6 +12,77 @@ namespace GarageBalance.Api.Tests.Finance;
 public sealed class PostgreSqlExpenseWorksheetIntegrationTests
 {
     [PostgreSqlFact]
+    public async Task StaffSalaryAdjustments_AffectCurrentAccrualAndOpeningBalanceOnPostgreSql()
+    {
+        await using var database = await PostgreSqlTestDatabase.CreateAsync();
+        var month = new DateOnly(2044, 2, 1);
+        Guid staffMemberId;
+        await using (var seedContext = database.CreateContext())
+        {
+            var department = new StaffDepartment { Name = $"Отдел {Guid.NewGuid():N}" };
+            var staffMember = new StaffMember
+            {
+                FullName = $"Сотрудник {Guid.NewGuid():N}",
+                Department = department,
+                Rate = 200m,
+                CreatedAtUtc = new DateTimeOffset(2044, 1, 10, 0, 0, 0, TimeSpan.Zero),
+                UpdatedAtUtc = new DateTimeOffset(2044, 1, 10, 0, 0, 0, TimeSpan.Zero)
+            };
+            staffMemberId = staffMember.Id;
+            seedContext.AddRange(
+                department,
+                staffMember,
+                new StaffSalaryAdjustment
+                {
+                    StaffMember = staffMember,
+                    AccountingMonth = month.AddMonths(-1),
+                    AdjustmentType = StaffSalaryAdjustmentTypes.Bonus,
+                    Amount = 30m,
+                    Reason = "Премия прошлого месяца"
+                },
+                new StaffSalaryAdjustment
+                {
+                    StaffMember = staffMember,
+                    AccountingMonth = month.AddMonths(-1),
+                    AdjustmentType = StaffSalaryAdjustmentTypes.Penalty,
+                    Amount = 5m,
+                    Reason = "Штраф прошлого месяца"
+                },
+                new StaffSalaryAdjustment
+                {
+                    StaffMember = staffMember,
+                    AccountingMonth = month,
+                    AdjustmentType = StaffSalaryAdjustmentTypes.Bonus,
+                    Amount = 50m,
+                    Reason = "Премия текущего месяца"
+                },
+                new StaffSalaryAdjustment
+                {
+                    StaffMember = staffMember,
+                    AccountingMonth = month,
+                    AdjustmentType = StaffSalaryAdjustmentTypes.Penalty,
+                    Amount = 10m,
+                    Reason = "Штраф текущего месяца"
+                });
+            await seedContext.SaveChangesAsync();
+        }
+
+        await using var context = database.CreateContext();
+        var service = FinanceServiceTestFactory.Create(context);
+
+        var result = await service.GetExpenseWorksheetAsync(new ExpenseWorksheetRequest(month), CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+        var row = Assert.Single(result.Value!.Rows, item => item.StaffMemberId == staffMemberId);
+        Assert.Equal(200m, row.BaseAccrualAmount);
+        Assert.Equal(50m, row.BonusAmount);
+        Assert.Equal(10m, row.PenaltyAmount);
+        Assert.Equal(240m, row.AccrualAmount);
+        Assert.Equal(225m, row.OpeningBalance);
+        Assert.Equal(465m, row.ClosingDebt);
+    }
+
+    [PostgreSqlFact]
     public async Task BankExpense_AllowsNegativeServiceDifferenceButRejectsInsufficientBankBalance()
     {
         await using var database = await PostgreSqlTestDatabase.CreateAsync();

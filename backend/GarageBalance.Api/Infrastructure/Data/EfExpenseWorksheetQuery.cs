@@ -17,6 +17,10 @@ public sealed class EfExpenseWorksheetQuery(GarageBalanceDbContext dbContext) : 
     private const int SupplierOpeningExpenseCategory = 9;
     private const int StaffOpeningExpenseCategory = 10;
     private const int OpeningIncomeCategory = 11;
+    private const int StaffBonusCategory = 12;
+    private const int StaffPenaltyCategory = 13;
+    private const int StaffOpeningBonusCategory = 14;
+    private const int StaffOpeningPenaltyCategory = 15;
 
     public async Task<ExpenseWorksheetData> GetAsync(
         DateOnly accountingMonth,
@@ -291,6 +295,95 @@ public sealed class EfExpenseWorksheetQuery(GarageBalanceDbContext dbContext) : 
                 StaffCreatedAtUtc = (DateTimeOffset?)null
             });
 
+        var staffBonuses = dbContext.StaffSalaryAdjustments.AsNoTracking()
+            .Where(adjustment =>
+                adjustment.AdjustmentType == StaffSalaryAdjustmentTypes.Bonus &&
+                adjustment.AccountingMonth == accountingMonth)
+            .GroupBy(adjustment => adjustment.StaffMemberId)
+            .Select(group => new
+            {
+                Category = StaffBonusCategory,
+                SupplierId = (Guid?)null,
+                StaffMemberId = (Guid?)group.Key,
+                CounterpartyName = (string?)null,
+                TypeId = (Guid?)null,
+                TypeName = (string?)null,
+                TypeCode = (string?)null,
+                Amount = group.Sum(adjustment => adjustment.Amount),
+                IncomeTotal = 0m,
+                BankDepositTotal = 0m,
+                CashExpenseTotal = 0m,
+                BankExpenseTotal = 0m,
+                HistoryStartMonth = (DateOnly?)null,
+                StaffCreatedAtUtc = (DateTimeOffset?)null
+            });
+        var staffPenalties = dbContext.StaffSalaryAdjustments.AsNoTracking()
+            .Where(adjustment =>
+                adjustment.AdjustmentType == StaffSalaryAdjustmentTypes.Penalty &&
+                adjustment.AccountingMonth == accountingMonth)
+            .GroupBy(adjustment => adjustment.StaffMemberId)
+            .Select(group => new
+            {
+                Category = StaffPenaltyCategory,
+                SupplierId = (Guid?)null,
+                StaffMemberId = (Guid?)group.Key,
+                CounterpartyName = (string?)null,
+                TypeId = (Guid?)null,
+                TypeName = (string?)null,
+                TypeCode = (string?)null,
+                Amount = group.Sum(adjustment => adjustment.Amount),
+                IncomeTotal = 0m,
+                BankDepositTotal = 0m,
+                CashExpenseTotal = 0m,
+                BankExpenseTotal = 0m,
+                HistoryStartMonth = (DateOnly?)null,
+                StaffCreatedAtUtc = (DateTimeOffset?)null
+            });
+        var staffOpeningBonuses = dbContext.StaffSalaryAdjustments.AsNoTracking()
+            .Where(adjustment =>
+                adjustment.AdjustmentType == StaffSalaryAdjustmentTypes.Bonus &&
+                adjustment.AccountingMonth < accountingMonth)
+            .GroupBy(adjustment => adjustment.StaffMemberId)
+            .Select(group => new
+            {
+                Category = StaffOpeningBonusCategory,
+                SupplierId = (Guid?)null,
+                StaffMemberId = (Guid?)group.Key,
+                CounterpartyName = (string?)null,
+                TypeId = (Guid?)null,
+                TypeName = (string?)null,
+                TypeCode = (string?)null,
+                Amount = group.Sum(adjustment => adjustment.Amount),
+                IncomeTotal = 0m,
+                BankDepositTotal = 0m,
+                CashExpenseTotal = 0m,
+                BankExpenseTotal = 0m,
+                HistoryStartMonth = (DateOnly?)null,
+                StaffCreatedAtUtc = (DateTimeOffset?)null
+            });
+        var staffOpeningPenalties = dbContext.StaffSalaryAdjustments.AsNoTracking()
+            .Where(adjustment =>
+                adjustment.AdjustmentType == StaffSalaryAdjustmentTypes.Penalty &&
+                adjustment.AccountingMonth < accountingMonth)
+            .GroupBy(adjustment => adjustment.StaffMemberId)
+            .Select(group => new
+            {
+                Category = StaffOpeningPenaltyCategory,
+                SupplierId = (Guid?)null,
+                StaffMemberId = (Guid?)group.Key,
+                CounterpartyName = (string?)null,
+                TypeId = (Guid?)null,
+                TypeName = (string?)null,
+                TypeCode = (string?)null,
+                Amount = group.Sum(adjustment => adjustment.Amount),
+                IncomeTotal = 0m,
+                BankDepositTotal = 0m,
+                CashExpenseTotal = 0m,
+                BankExpenseTotal = 0m,
+                HistoryStartMonth = (DateOnly?)null,
+                StaffCreatedAtUtc = (DateTimeOffset?)null
+            });
+
         var availableBalance = dbContext.FinancialOperations.AsNoTracking()
             .Where(operation => !operation.IsCanceled)
             .GroupBy(_ => 1)
@@ -361,6 +454,10 @@ public sealed class EfExpenseWorksheetQuery(GarageBalanceDbContext dbContext) : 
             .Concat(supplierOpeningAccruals)
             .Concat(supplierOpeningExpenses)
             .Concat(staffOpeningExpenses)
+            .Concat(staffBonuses)
+            .Concat(staffPenalties)
+            .Concat(staffOpeningBonuses)
+            .Concat(staffOpeningPenalties)
             .Concat(availableBalance)
             .Concat(bankDeposits)
             .ToListAsync(cancellationToken);
@@ -438,7 +535,20 @@ public sealed class EfExpenseWorksheetQuery(GarageBalanceDbContext dbContext) : 
                 .ToList(),
             OpeningIncomes = rows.Where(row => row.Category == OpeningIncomeCategory)
                 .Select(row => new ExpenseWorksheetIncomeData(row.TypeName!, row.TypeCode, row.Amount))
+                .ToList(),
+            StaffBonuses = rows.Where(row => row.Category == StaffBonusCategory)
+                .Select(row => new ExpenseWorksheetStaffAdjustmentData(row.StaffMemberId!.Value, row.Amount))
+                .ToList(),
+            StaffPenalties = rows.Where(row => row.Category == StaffPenaltyCategory)
+                .Select(row => new ExpenseWorksheetStaffAdjustmentData(row.StaffMemberId!.Value, row.Amount))
+                .ToList(),
+            StaffOpeningBonuses = rows.Where(row => row.Category == StaffOpeningBonusCategory)
+                .Select(row => new ExpenseWorksheetStaffAdjustmentData(row.StaffMemberId!.Value, row.Amount))
+                .ToList(),
+            StaffOpeningPenalties = rows.Where(row => row.Category == StaffOpeningPenaltyCategory)
+                .Select(row => new ExpenseWorksheetStaffAdjustmentData(row.StaffMemberId!.Value, row.Amount))
                 .ToList()
         };
     }
+
 }

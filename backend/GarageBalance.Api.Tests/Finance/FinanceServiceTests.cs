@@ -2059,6 +2059,138 @@ public sealed class FinanceServiceTests
     }
 
     [Fact]
+    public async Task CreateStaffSalaryAdjustmentAsync_AddsBonusAndPenaltyToMonthlySalaryAndAudit()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        await database.SeedAsync();
+        var department = new StaffDepartment { Name = "Бухгалтерия" };
+        var staffMember = new StaffMember
+        {
+            FullName = "Петрова Ольга",
+            Department = department,
+            Rate = 40000m,
+            CreatedAtUtc = new DateTimeOffset(2026, 1, 10, 0, 0, 0, TimeSpan.Zero)
+        };
+        database.Context.AddRange(department, staffMember, new ExpenseType { Name = "Зарплата", Code = "salary" });
+        await database.Context.SaveChangesAsync();
+        var service = FinanceServiceTestFactory.Create(database.Context);
+        var actorUserId = Guid.NewGuid();
+        var month = new DateOnly(2026, 6, 1);
+
+        var bonus = await service.CreateStaffSalaryAdjustmentAsync(
+            new CreateStaffSalaryAdjustmentRequest(staffMember.Id, month, " BONUS ", 5000.005m, "PR-1", "За качественную работу"),
+            actorUserId,
+            CancellationToken.None);
+        var penalty = await service.CreateStaffSalaryAdjustmentAsync(
+            new CreateStaffSalaryAdjustmentRequest(staffMember.Id, month, "penalty", 2000m, null, "Нарушение срока"),
+            actorUserId,
+            CancellationToken.None);
+        var payment = await service.CreateStaffPaymentAsync(
+            new CreateStaffPaymentRequest(staffMember.Id, new DateOnly(2026, 6, 25), month, 43000.02m, "PAY-1", null),
+            actorUserId,
+            CancellationToken.None);
+        var fullPayment = await service.CreateStaffPaymentAsync(
+            new CreateStaffPaymentRequest(staffMember.Id, new DateOnly(2026, 6, 25), month, 43000.01m, "PAY-2", null),
+            actorUserId,
+            CancellationToken.None);
+
+        Assert.True(bonus.Succeeded);
+        Assert.Equal(5000.01m, bonus.Value!.Amount);
+        Assert.Equal(StaffSalaryAdjustmentTypes.Bonus, bonus.Value.AdjustmentType);
+        Assert.True(penalty.Succeeded);
+        Assert.False(payment.Succeeded);
+        Assert.Equal("staff_payment_amount_exceeds_available", payment.ErrorCode);
+        Assert.True(fullPayment.Succeeded);
+        Assert.Equal(2, database.Context.StaffSalaryAdjustments.Count());
+        var audits = database.Context.AuditEvents
+            .Where(item => item.Action == "finance.staff_salary_adjustment_created")
+            .AsEnumerable()
+            .OrderBy(item => item.CreatedAtUtc)
+            .ToList();
+        Assert.Equal(2, audits.Count);
+        Assert.All(audits, audit => Assert.Equal(actorUserId, audit.ActorUserId));
+        Assert.Contains("За качественную работу", audits[0].Summary, StringComparison.Ordinal);
+        using var metadata = JsonDocument.Parse(audits[0].MetadataJson!);
+        Assert.Equal("bonus", metadata.RootElement.GetProperty("adjustmentType").GetString());
+        Assert.Equal("45000.01", metadata.RootElement.GetProperty("salaryAccrualAfterAdjustment").GetString());
+    }
+
+    [Theory]
+    [InlineData("", 100, "Основание", "staff_salary_adjustment_type_invalid")]
+    [InlineData("gift", 100, "Основание", "staff_salary_adjustment_type_invalid")]
+    [InlineData("bonus", 0, "Основание", "staff_salary_adjustment_amount_invalid")]
+    [InlineData("bonus", 100, "   ", "staff_salary_adjustment_reason_required")]
+    public async Task CreateStaffSalaryAdjustmentAsync_RejectsInvalidRequest(
+        string adjustmentType,
+        decimal amount,
+        string reason,
+        string expectedError)
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var department = new StaffDepartment { Name = "Бухгалтерия" };
+        var staffMember = new StaffMember
+        {
+            FullName = "Петрова Ольга",
+            Department = department,
+            Rate = 40000m,
+            CreatedAtUtc = new DateTimeOffset(2026, 6, 10, 0, 0, 0, TimeSpan.Zero)
+        };
+        database.Context.AddRange(department, staffMember);
+        await database.Context.SaveChangesAsync();
+        var service = FinanceServiceTestFactory.Create(database.Context);
+
+        var result = await service.CreateStaffSalaryAdjustmentAsync(
+            new CreateStaffSalaryAdjustmentRequest(staffMember.Id, new DateOnly(2026, 6, 1), adjustmentType, amount, null, reason),
+            Guid.NewGuid(),
+            CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Equal(expectedError, result.ErrorCode);
+        Assert.Empty(database.Context.StaffSalaryAdjustments);
+        Assert.Empty(database.Context.AuditEvents);
+    }
+
+    [Fact]
+    public async Task CreateStaffSalaryAdjustmentAsync_RejectsMonthBeforeEmploymentAndPenaltyBelowPaidAmount()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        await database.SeedAsync();
+        var department = new StaffDepartment { Name = "Бухгалтерия" };
+        var staffMember = new StaffMember
+        {
+            FullName = "Петрова Ольга",
+            Department = department,
+            Rate = 40000m,
+            CreatedAtUtc = new DateTimeOffset(2026, 5, 10, 0, 0, 0, TimeSpan.Zero)
+        };
+        database.Context.AddRange(department, staffMember, new ExpenseType { Name = "Зарплата", Code = "salary" });
+        await database.Context.SaveChangesAsync();
+        var service = FinanceServiceTestFactory.Create(database.Context);
+        Assert.True((await service.CreateStaffPaymentAsync(
+            new CreateStaffPaymentRequest(staffMember.Id, new DateOnly(2026, 6, 20), new DateOnly(2026, 6, 1), 35000m, null, null),
+            null,
+            CancellationToken.None)).Succeeded);
+
+        var missingStaff = await service.CreateStaffSalaryAdjustmentAsync(
+            new CreateStaffSalaryAdjustmentRequest(Guid.NewGuid(), new DateOnly(2026, 6, 1), "bonus", 100m, null, "Нет сотрудника"),
+            null,
+            CancellationToken.None);
+        var earlyMonth = await service.CreateStaffSalaryAdjustmentAsync(
+            new CreateStaffSalaryAdjustmentRequest(staffMember.Id, new DateOnly(2026, 4, 1), "bonus", 100m, null, "До приема"),
+            null,
+            CancellationToken.None);
+        var excessivePenalty = await service.CreateStaffSalaryAdjustmentAsync(
+            new CreateStaffSalaryAdjustmentRequest(staffMember.Id, new DateOnly(2026, 6, 1), "penalty", 5000.01m, null, "Штраф"),
+            null,
+            CancellationToken.None);
+
+        Assert.Equal("staff_member_not_found", missingStaff.ErrorCode);
+        Assert.Equal("staff_salary_adjustment_month_invalid", earlyMonth.ErrorCode);
+        Assert.Equal("staff_penalty_exceeds_available", excessivePenalty.ErrorCode);
+        Assert.Empty(database.Context.StaffSalaryAdjustments);
+    }
+
+    [Fact]
     public async Task CreateExpenseAsync_AllowsBankPaymentWhenServiceCollectionsAreInsufficient()
     {
         await using var database = await TestDatabase.CreateAsync();
@@ -6696,7 +6828,13 @@ public sealed class FinanceServiceTests
         var securityService = new ChargeServiceSetting { Name = "Охрана", ExpenseType = accrualOnlyType };
         var securitySupplier = new Supplier { Name = "Охранная организация", GroupId = fixtures.Supplier.GroupId, ChargeServiceSetting = securityService };
         var staffDepartment = new StaffDepartment { Name = "Бухгалтерия" };
-        var staffMember = new StaffMember { FullName = "Петрова Ольга", Department = staffDepartment, Rate = 40000m };
+        var staffMember = new StaffMember
+        {
+            FullName = "Петрова Ольга",
+            Department = staffDepartment,
+            Rate = 40000m,
+            CreatedAtUtc = new DateTimeOffset(2026, 6, 10, 0, 0, 0, TimeSpan.Zero)
+        };
         database.Context.AddRange(waterIncomeType, unmatchedIncomeType, salaryExpenseType, expenseOnlyType, repairService, repairSupplier, accrualOnlyType, securityService, securitySupplier, staffDepartment, staffMember);
         await database.Context.SaveChangesAsync();
 
@@ -6710,6 +6848,14 @@ public sealed class FinanceServiceTests
             CancellationToken.None)).Succeeded);
         Assert.True((await service.CreateExpenseAsync(
             new CreateExpenseOperationRequest(fixtures.Supplier.Id, fixtures.ExpenseType.Id, new DateOnly(2026, 6, 20), month, 10000m, "RKO-water", "Частичная оплата воды"),
+            null,
+            CancellationToken.None)).Succeeded);
+        Assert.True((await service.CreateStaffSalaryAdjustmentAsync(
+            new CreateStaffSalaryAdjustmentRequest(staffMember.Id, month, "bonus", 5000m, "PR-bonus", "Премия"),
+            null,
+            CancellationToken.None)).Succeeded);
+        Assert.True((await service.CreateStaffSalaryAdjustmentAsync(
+            new CreateStaffSalaryAdjustmentRequest(staffMember.Id, month, "penalty", 1000m, "PR-penalty", "Штраф"),
             null,
             CancellationToken.None)).Succeeded);
         Assert.True((await service.CreateStaffPaymentAsync(
@@ -6735,12 +6881,12 @@ public sealed class FinanceServiceTests
         Assert.True(result.Succeeded);
         Assert.Equal(1, commandCounter.Count);
         Assert.Equal(month, result.Value!.AccountingMonth);
-        Assert.Equal(72075m, result.Value.AccrualTotal);
+        Assert.Equal(76075m, result.Value.AccrualTotal);
         Assert.Equal(25100m, result.Value.ExpenseTotal);
-        Assert.Equal(47075m, result.Value.BalanceTotal);
+        Assert.Equal(51075m, result.Value.BalanceTotal);
         Assert.Equal(0m, result.Value.OpeningDebtTotal);
         Assert.Equal(0m, result.Value.OpeningAdvanceTotal);
-        Assert.Equal(47075m, result.Value.ClosingDebtTotal);
+        Assert.Equal(51075m, result.Value.ClosingDebtTotal);
         Assert.Equal(100m, result.Value.ClosingAdvanceTotal);
         Assert.Equal(29000m, result.Value.CollectedTotal);
         Assert.Equal(19000m, result.Value.DifferenceTotal);
@@ -6779,9 +6925,12 @@ public sealed class FinanceServiceTests
         Assert.Equal("Петрова Ольга", staffRow.CounterpartyName);
         Assert.Equal(salaryExpenseType.Id, staffRow.ExpenseTypeId);
         Assert.Equal("Зарплата", staffRow.ExpenseTypeName);
-        Assert.Equal(40000m, staffRow.AccrualAmount);
+        Assert.Equal(44000m, staffRow.AccrualAmount);
+        Assert.Equal(40000m, staffRow.BaseAccrualAmount);
+        Assert.Equal(5000m, staffRow.BonusAmount);
+        Assert.Equal(1000m, staffRow.PenaltyAmount);
         Assert.Equal(15000m, staffRow.ExpenseAmount);
-        Assert.Equal(25000m, staffRow.Balance);
+        Assert.Equal(29000m, staffRow.Balance);
         Assert.Null(staffRow.CollectedAmount);
         Assert.Null(staffRow.Difference);
     }
@@ -6870,6 +7019,22 @@ public sealed class FinanceServiceTests
             CreateHistoricalExpense(firstSupplier, null, waterType, new DateOnly(2026, 4, 1), 555m),
             CreateHistoricalExpense(null, staffMember, salaryType, new DateOnly(2026, 1, 1), 60m),
             CreateHistoricalExpense(null, staffMember, salaryType, new DateOnly(2026, 2, 1), 100m),
+            new StaffSalaryAdjustment
+            {
+                StaffMember = staffMember,
+                AccountingMonth = new DateOnly(2026, 1, 1),
+                AdjustmentType = StaffSalaryAdjustmentTypes.Bonus,
+                Amount = 20m,
+                Reason = "Премия"
+            },
+            new StaffSalaryAdjustment
+            {
+                StaffMember = staffMember,
+                AccountingMonth = new DateOnly(2026, 2, 1),
+                AdjustmentType = StaffSalaryAdjustmentTypes.Penalty,
+                Amount = 5m,
+                Reason = "Штраф"
+            },
             new FinancialOperation
             {
                 OperationKind = FinancialOperationKinds.Expense,
@@ -6889,10 +7054,10 @@ public sealed class FinanceServiceTests
 
         Assert.True(result.Succeeded);
         Assert.Equal(1, commandCounter.Count);
-        Assert.Equal(360m, result.Value!.OpeningBalanceTotal);
-        Assert.Equal(370m, result.Value.OpeningDebtTotal);
+        Assert.Equal(375m, result.Value!.OpeningBalanceTotal);
+        Assert.Equal(385m, result.Value.OpeningDebtTotal);
         Assert.Equal(10m, result.Value.OpeningAdvanceTotal);
-        Assert.Equal(490m, result.Value.ClosingDebtTotal);
+        Assert.Equal(505m, result.Value.ClosingDebtTotal);
         Assert.Equal(10m, result.Value.ClosingAdvanceTotal);
         var firstSupplierWaterRow = Assert.Single(result.Value.Rows, row =>
             row.SupplierId == firstSupplier.Id && row.ExpenseTypeId == waterType.Id);
@@ -6914,10 +7079,10 @@ public sealed class FinanceServiceTests
             row.SupplierId == secondSupplier.Id && row.ExpenseTypeId == waterType.Id).OpeningBalance);
         var staffRow = Assert.Single(result.Value.Rows, row => row.StaffMemberId == staffMember.Id);
         Assert.Equal(salaryType.Id, staffRow.ExpenseTypeId);
-        Assert.Equal(40m, staffRow.OpeningBalance);
-        Assert.Equal(40m, staffRow.OpeningDebt);
+        Assert.Equal(55m, staffRow.OpeningBalance);
+        Assert.Equal(55m, staffRow.OpeningDebt);
         Assert.Equal(0m, staffRow.OpeningAdvance);
-        Assert.Equal(140m, staffRow.ClosingDebt);
+        Assert.Equal(155m, staffRow.ClosingDebt);
         Assert.Equal(0m, staffRow.ClosingAdvance);
     }
 

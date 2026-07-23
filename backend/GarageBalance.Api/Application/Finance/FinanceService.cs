@@ -26,6 +26,7 @@ public sealed class FinanceService(
     IAccrualRepository accrualRepository,
     IAccrualPaymentAllocationRepository accrualPaymentAllocationRepository,
     ISupplierAccrualRepository supplierAccrualRepository,
+    IStaffSalaryAdjustmentRepository staffSalaryAdjustmentRepository,
     ISupplierGroupRepository supplierGroupRepository,
     ISupplierRepository supplierRepository,
     IExpenseTypeRepository expenseTypeRepository,
@@ -662,12 +663,24 @@ public sealed class FinanceService(
             .ToDictionary(item => (item.StaffMemberId, item.ExpenseTypeId), item => item.Amount);
         var staffOpeningExpenses = worksheetData.StaffOpeningExpenses
             .ToDictionary(item => (item.StaffMemberId, item.ExpenseTypeId));
+        var staffBonuses = worksheetData.StaffBonuses
+            .ToDictionary(item => item.StaffMemberId, item => item.Amount);
+        var staffPenalties = worksheetData.StaffPenalties
+            .ToDictionary(item => item.StaffMemberId, item => item.Amount);
+        var staffOpeningBonuses = worksheetData.StaffOpeningBonuses
+            .ToDictionary(item => item.StaffMemberId, item => item.Amount);
+        var staffOpeningPenalties = worksheetData.StaffOpeningPenalties
+            .ToDictionary(item => item.StaffMemberId, item => item.Amount);
         foreach (var staffMember in worksheetData.StaffMembers)
         {
             var key = (staffMember.StaffMemberId, staffMember.ExpenseTypeId);
             staffExpenses.TryGetValue(key, out var staffExpenseAmount);
             staffOpeningExpenses.TryGetValue(key, out var staffOpeningExpense);
-            var accrualAmount = MoneyMath.RoundMoney(staffMember.Rate);
+            staffBonuses.TryGetValue(staffMember.StaffMemberId, out var bonusAmount);
+            staffPenalties.TryGetValue(staffMember.StaffMemberId, out var penaltyAmount);
+            staffOpeningBonuses.TryGetValue(staffMember.StaffMemberId, out var openingBonusAmount);
+            staffOpeningPenalties.TryGetValue(staffMember.StaffMemberId, out var openingPenaltyAmount);
+            var accrualAmount = MoneyMath.RoundMoney(staffMember.Rate + bonusAmount - penaltyAmount);
             var expenseAmount = MoneyMath.RoundMoney(staffExpenseAmount);
             var staffCreatedMonth = new DateOnly(
                 staffMember.CreatedAtUtc.UtcDateTime.Year,
@@ -680,7 +693,10 @@ public sealed class FinanceService(
                 0,
                 ((accountingMonth.Year - historyStartMonth.Year) * 12) + accountingMonth.Month - historyStartMonth.Month);
             var openingBalance = MoneyMath.RoundMoney(
-                (staffMember.Rate * historyMonthCount) - (staffOpeningExpense?.Amount ?? 0m));
+                (staffMember.Rate * historyMonthCount) +
+                openingBonusAmount -
+                openingPenaltyAmount -
+                (staffOpeningExpense?.Amount ?? 0m));
             var closingBalance = MoneyMath.RoundMoney(openingBalance + accrualAmount - expenseAmount);
             rows.Add(new ExpenseWorksheetRowDto(
                 "staff",
@@ -695,6 +711,9 @@ public sealed class FinanceService(
                 null,
                 null)
             {
+                BaseAccrualAmount = MoneyMath.RoundMoney(staffMember.Rate),
+                BonusAmount = MoneyMath.RoundMoney(bonusAmount),
+                PenaltyAmount = MoneyMath.RoundMoney(penaltyAmount),
                 OpeningBalance = openingBalance,
                 OpeningDebt = MoneyMath.RoundMoney(Math.Max(openingBalance, 0m)),
                 OpeningAdvance = MoneyMath.RoundMoney(Math.Max(-openingBalance, 0m)),
@@ -1167,8 +1186,10 @@ public sealed class FinanceService(
 
         var accountingMonth = MonthPeriod.Normalize(request.AccountingMonth);
         var amount = MoneyMath.RoundMoney(request.Amount);
+        var adjustmentTotals = await staffSalaryAdjustmentRepository.GetTotalsAsync(staffMember.Id, accountingMonth, cancellationToken);
         var paidThisMonth = await financialOperationRepository.GetStaffExpenseTotalAsync(staffMember.Id, accountingMonth, cancellationToken);
-        var availableAmount = MoneyMath.RoundMoney(staffMember.Rate - paidThisMonth);
+        var availableAmount = MoneyMath.RoundMoney(
+            staffMember.Rate + adjustmentTotals.BonusAmount - adjustmentTotals.PenaltyAmount - paidThisMonth);
         if (amount > availableAmount)
         {
             return FinanceResult<FinancialOperationDto>.Failure("staff_payment_amount_exceeds_available", $"Сумма выплаты превышает доступный остаток по сотруднику {MoneyFormatting.Format(availableAmount)}.");
@@ -1200,6 +1221,105 @@ public sealed class FinanceService(
         AddAudit(actorUserId, "finance.staff_payment_created", operation, FormatStaffPaymentCreatedAuditSummary(operation, availableAmount));
         await unitOfWork.SaveChangesAsync(cancellationToken);
         return FinanceResult<FinancialOperationDto>.Success(await ToDtoAsync(operation, cancellationToken));
+    }
+
+    public async Task<FinanceResult<StaffSalaryAdjustmentDto>> CreateStaffSalaryAdjustmentAsync(
+        CreateStaffSalaryAdjustmentRequest request,
+        Guid? actorUserId,
+        CancellationToken cancellationToken)
+    {
+        var staffMember = await staffMemberRepository.FindActiveAsync(request.StaffMemberId, cancellationToken);
+        if (staffMember is null)
+        {
+            return FinanceResult<StaffSalaryAdjustmentDto>.Failure("staff_member_not_found", "Сотрудник для премии или штрафа не найден.");
+        }
+
+        var adjustmentType = NormalizeOptional(request.AdjustmentType)?.ToLowerInvariant();
+        if (!StaffSalaryAdjustmentTypes.IsSupported(adjustmentType))
+        {
+            return FinanceResult<StaffSalaryAdjustmentDto>.Failure("staff_salary_adjustment_type_invalid", "Выберите тип корректировки «Премия» или «Штраф».");
+        }
+
+        var amount = MoneyMath.RoundMoney(request.Amount);
+        if (amount <= 0m)
+        {
+            return FinanceResult<StaffSalaryAdjustmentDto>.Failure("staff_salary_adjustment_amount_invalid", "Сумма премии или штрафа должна быть больше нуля.");
+        }
+
+        var reason = NormalizeOptional(request.Reason);
+        if (reason is null)
+        {
+            return FinanceResult<StaffSalaryAdjustmentDto>.Failure("staff_salary_adjustment_reason_required", "Укажите основание премии или штрафа.");
+        }
+
+        var accountingMonth = MonthPeriod.Normalize(request.AccountingMonth);
+        var staffCreatedMonth = new DateOnly(
+            staffMember.CreatedAtUtc.UtcDateTime.Year,
+            staffMember.CreatedAtUtc.UtcDateTime.Month,
+            1);
+        if (accountingMonth < staffCreatedMonth)
+        {
+            return FinanceResult<StaffSalaryAdjustmentDto>.Failure("staff_salary_adjustment_month_invalid", "Нельзя выписать премию или штраф за месяц до начала работы сотрудника.");
+        }
+
+        var totals = await staffSalaryAdjustmentRepository.GetTotalsAsync(staffMember.Id, accountingMonth, cancellationToken);
+        var paidThisMonth = await financialOperationRepository.GetStaffExpenseTotalAsync(staffMember.Id, accountingMonth, cancellationToken);
+        var adjustedAccrual = MoneyMath.RoundMoney(
+            staffMember.Rate +
+            totals.BonusAmount -
+            totals.PenaltyAmount +
+            (adjustmentType == StaffSalaryAdjustmentTypes.Bonus ? amount : -amount));
+        if (adjustedAccrual < paidThisMonth)
+        {
+            return FinanceResult<StaffSalaryAdjustmentDto>.Failure(
+                "staff_penalty_exceeds_available",
+                $"После штрафа начисление не может быть меньше уже выплаченной суммы {MoneyFormatting.Format(paidThisMonth)}.");
+        }
+
+        var adjustment = new StaffSalaryAdjustment
+        {
+            StaffMemberId = staffMember.Id,
+            StaffMember = staffMember,
+            AccountingMonth = accountingMonth,
+            AdjustmentType = adjustmentType!,
+            Amount = amount,
+            DocumentNumber = NormalizeOptional(request.DocumentNumber),
+            Reason = reason
+        };
+        staffSalaryAdjustmentRepository.Add(adjustment);
+        var typeName = adjustmentType == StaffSalaryAdjustmentTypes.Bonus ? "Премия" : "Штраф";
+        AddAudit(
+            actorUserId,
+            "finance.staff_salary_adjustment_created",
+            "staff_salary_adjustment",
+            adjustment.Id,
+            $"{typeName} сотруднику {staffMember.FullName} за {accountingMonth:MM.yyyy}: {MoneyFormatting.Format(amount)}; основание: {reason}.",
+            relatedAccountingMonth: accountingMonth,
+            relatedDocumentId: adjustment.Id.ToString(),
+            relatedDocumentNumber: adjustment.DocumentNumber,
+            relatedCounterpartyId: staffMember.Id.ToString(),
+            relatedCounterpartyName: staffMember.FullName,
+            metadata: new Dictionary<string, object?>
+            {
+                ["financeEntityType"] = "staff_salary_adjustment",
+                ["staffMemberId"] = staffMember.Id,
+                ["staffMemberName"] = staffMember.FullName,
+                ["staffDepartmentName"] = staffMember.Department?.Name,
+                ["adjustmentType"] = adjustment.AdjustmentType,
+                ["amount"] = adjustment.Amount,
+                ["salaryAccrualAfterAdjustment"] = adjustedAccrual
+            });
+        await unitOfWork.SaveChangesAsync(cancellationToken);
+
+        return FinanceResult<StaffSalaryAdjustmentDto>.Success(new StaffSalaryAdjustmentDto(
+            adjustment.Id,
+            staffMember.Id,
+            staffMember.FullName,
+            accountingMonth,
+            adjustment.AdjustmentType,
+            adjustment.Amount,
+            adjustment.DocumentNumber,
+            adjustment.Reason));
     }
 
     public async Task<FinanceResult<FinancialOperationDto>> UpdateIncomeAsync(Guid operationId, CreateIncomeOperationRequest request, Guid? actorUserId, CancellationToken cancellationToken)

@@ -83,6 +83,24 @@ public sealed record CreateStaffPaymentRequest(
     [MaxLength(120)] string? DocumentNumber,
     [MaxLength(1000)] string? Comment);
 
+public sealed record CreateStaffSalaryAdjustmentRequest(
+    Guid StaffMemberId,
+    DateOnly AccountingMonth,
+    [Required, MaxLength(20)] string AdjustmentType,
+    [Range(0.01, 999999999)] decimal Amount,
+    [MaxLength(120)] string? DocumentNumber,
+    [Required, MaxLength(1000)] string Reason);
+
+public sealed record StaffSalaryAdjustmentDto(
+    Guid Id,
+    Guid StaffMemberId,
+    string StaffMemberName,
+    DateOnly AccountingMonth,
+    string AdjustmentType,
+    decimal Amount,
+    string? DocumentNumber,
+    string Reason);
+
 public sealed record CancelFinanceEntryRequest(
     [Required, MaxLength(1000)] string Reason);
 
@@ -471,6 +489,12 @@ public sealed record ExpenseWorksheetRowDto(
     decimal? CollectedAmount,
     decimal? Difference)
 {
+    public decimal BaseAccrualAmount { get; init; }
+
+    public decimal BonusAmount { get; init; }
+
+    public decimal PenaltyAmount { get; init; }
+
     public decimal OpeningBalance { get; init; }
 
     public decimal OpeningDebt { get; init; }

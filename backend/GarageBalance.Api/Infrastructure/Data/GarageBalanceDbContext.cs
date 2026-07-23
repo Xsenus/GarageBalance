@@ -38,6 +38,7 @@ public sealed class GarageBalanceDbContext(DbContextOptions<GarageBalanceDbConte
     public DbSet<Accrual> Accruals => Set<Accrual>();
     public DbSet<AccrualPaymentAllocation> AccrualPaymentAllocations => Set<AccrualPaymentAllocation>();
     public DbSet<SupplierAccrual> SupplierAccruals => Set<SupplierAccrual>();
+    public DbSet<StaffSalaryAdjustment> StaffSalaryAdjustments => Set<StaffSalaryAdjustment>();
     public DbSet<MeterReading> MeterReadings => Set<MeterReading>();
     public DbSet<Fund> Funds => Set<Fund>();
     public DbSet<FundOperation> FundOperations => Set<FundOperation>();
@@ -604,6 +605,38 @@ public sealed class GarageBalanceDbContext(DbContextOptions<GarageBalanceDbConte
             entity.HasOne(operation => operation.SourceFinancialOperation)
                 .WithMany()
                 .HasForeignKey(operation => operation.SourceFinancialOperationId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<StaffSalaryAdjustment>(entity =>
+        {
+            entity.ToTable(
+                "staff_salary_adjustments",
+                table =>
+                {
+                    table.HasCheckConstraint(
+                        "CK_staff_salary_adjustments_AdjustmentType",
+                        "\"AdjustmentType\" IN ('bonus', 'penalty')");
+                    table.HasCheckConstraint(
+                        "CK_staff_salary_adjustments_Amount",
+                        "\"Amount\" > 0");
+                });
+            entity.HasKey(adjustment => adjustment.Id);
+            entity.Property(adjustment => adjustment.AdjustmentType).HasMaxLength(20).IsRequired();
+            entity.Property(adjustment => adjustment.Amount).HasPrecision(18, 2);
+            entity.Property(adjustment => adjustment.DocumentNumber).HasMaxLength(120);
+            entity.Property(adjustment => adjustment.Reason).HasMaxLength(1000).IsRequired();
+            entity.HasIndex(adjustment => adjustment.AccountingMonth);
+            entity.HasIndex(adjustment => adjustment.StaffMemberId);
+            entity.HasIndex(adjustment => new
+            {
+                adjustment.StaffMemberId,
+                adjustment.AccountingMonth,
+                adjustment.AdjustmentType
+            });
+            entity.HasOne(adjustment => adjustment.StaffMember)
+                .WithMany()
+                .HasForeignKey(adjustment => adjustment.StaffMemberId)
                 .OnDelete(DeleteBehavior.Restrict);
         });
 

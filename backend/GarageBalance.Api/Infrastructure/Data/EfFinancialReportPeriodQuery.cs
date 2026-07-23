@@ -56,11 +56,15 @@ public sealed class EfFinancialReportPeriodQuery(GarageBalanceDbContext dbContex
         return dbContext.StaffMembers.AsNoTracking()
             .Where(staffMember => staffMember.Id == staffId)
             .Select(_ => new FinancialReportPeriodData(
-                null,
+                dbContext.StaffSalaryAdjustments
+                    .Where(adjustment => adjustment.StaffMemberId == staffId)
+                    .Min(adjustment => (DateOnly?)adjustment.AccountingMonth),
                 dbContext.FinancialOperations
                     .Where(operation => operation.StaffMemberId == staffId && !operation.IsCanceled && operation.OperationKind == FinancialOperationKinds.Expense)
                     .Min(operation => (DateOnly?)operation.AccountingMonth),
-                null,
+                dbContext.StaffSalaryAdjustments
+                    .Where(adjustment => adjustment.StaffMemberId == staffId)
+                    .Max(adjustment => (DateOnly?)adjustment.AccountingMonth),
                 dbContext.FinancialOperations
                     .Where(operation => operation.StaffMemberId == staffId && !operation.IsCanceled && operation.OperationKind == FinancialOperationKinds.Expense)
                     .Max(operation => (DateOnly?)operation.AccountingMonth)))
