@@ -26,6 +26,7 @@ import { TablePagination } from '../../shared/TablePagination'
 import { chooseRegularTariffId, getAccrualValidationErrors, getCompatibleRegularTariffs, getExpenseValidationErrors, getIncomeValidationErrors, getMeterReadingValidationErrors, getRegularAccrualValidationErrorsForCatalog, getSupplierAccrualValidationErrors, getSupplierGroupSalaryValidationErrors } from '../../shared/validation'
 import { formatPaymentMoney, parsePaymentMoney } from './paymentMoneyFormatting'
 import { calculateExpenseWorksheetClosingBalance, isAtomicCashExpenseType } from './expenseWorksheetBalances'
+import { rankGarageSearchResults } from './garageSearchRanking'
 
 type AccrualBreakdown =
   | { kind: 'garage'; accrual: AccrualDto }
@@ -3151,8 +3152,7 @@ function PaymentsPrototypePanel({
   const selectedGarageOverdueDebt = selectedGarage?.overdueDebt ?? 0
   const selectedGarageIds = selectedGarages.map((garage) => garage.id)
   const normalizedSearch = garageSearch.trim().toLowerCase()
-  const garageSearchResults = garageOptions
-    .filter((garage) => !normalizedSearch || garage.number.toLowerCase().includes(normalizedSearch) || garage.ownerName.toLowerCase().includes(normalizedSearch))
+  const garageSearchResults = rankGarageSearchResults(garageOptions, normalizedSearch)
     .slice(0, 20)
   const shouldShowGarageResults = garageSearchOpen && garageSearch.trim().length > 0
   const garageSearchListId = useId()

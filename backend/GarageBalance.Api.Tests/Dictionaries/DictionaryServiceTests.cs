@@ -642,6 +642,27 @@ public sealed class DictionaryServiceTests
     }
 
     [Fact]
+    public async Task GarageSearch_RanksExactNumberThenPrefixesThenContainedMatches()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = DictionaryServiceTestFactory.Create(database.Context);
+        foreach (var number in new[] { "107", "117", "7", "710", "70", "71" })
+        {
+            await service.CreateGarageAsync(
+                new UpsertGarageRequest(number, 1, 1, null, 0, null, null, null),
+                null,
+                CancellationToken.None);
+        }
+
+        var list = await service.GetGaragesAsync("7", CancellationToken.None, 20);
+        var page = await service.GetGaragesPageAsync("7", 0, 20, null, null, CancellationToken.None);
+
+        var expected = new[] { "7", "70", "71", "710", "107", "117" };
+        Assert.Equal(expected, list.Select(garage => garage.Number));
+        Assert.Equal(expected, page.Items.Select(garage => garage.Number));
+    }
+
+    [Fact]
     public async Task GarageRepository_ReturnsCompleteActiveBatchAndHistoricalStartingBalance()
     {
         await using var database = await TestDatabase.CreateAsync();

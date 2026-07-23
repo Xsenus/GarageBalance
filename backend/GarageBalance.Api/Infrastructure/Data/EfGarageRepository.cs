@@ -22,12 +22,17 @@ public sealed class EfGarageRepository(GarageBalanceDbContext dbContext, IBusine
         var query = ApplyArchiveFilter(includeArchived);
         if (normalizedSearch is { } searchValue && IsSqliteProvider())
         {
-            var garages = await ProjectListItems(query.OrderBy(garage => garage.Number)).ToListAsync(cancellationToken);
-            return garages.Where(garage => GarageMatchesSearch(garage, searchValue)).Take(limit).ToList();
+            var garages = await ProjectListItems(query).ToListAsync(cancellationToken);
+            return ApplySearchRanking(garages.Where(garage => GarageMatchesSearch(garage, searchValue)), searchValue)
+                .Take(limit)
+                .ToList();
         }
 
-        return await ProjectListItems(ApplySearch(query, normalizedSearch)
-                .OrderBy(garage => garage.Number))
+        var filteredQuery = ApplySearch(query, normalizedSearch);
+        var orderedQuery = normalizedSearch is { } search
+            ? ApplySearchRanking(filteredQuery, search)
+            : filteredQuery.OrderBy(garage => garage.Number);
+        return await ProjectListItems(orderedQuery)
             .Take(limit)
             .ToListAsync(cancellationToken);
     }
@@ -60,10 +65,9 @@ public sealed class EfGarageRepository(GarageBalanceDbContext dbContext, IBusine
                     .Where(garage => !garage.IsArchived && CalculateOverdueDebt(garage, totals) > 0m)
                     .ToList();
             }
-            var pageItems = ApplySqlitePageSorting(filtered, totals, sortBy, sortDescending)
-                .Skip(offset)
-                .Take(limit)
-                .ToList();
+            var pageItems = normalizedSearch is { } search && sortBy == "number" && !sortDescending
+                ? ApplySearchRanking(filtered, search).Skip(offset).Take(limit).ToList()
+                : ApplySqlitePageSorting(filtered, totals, sortBy, sortDescending).Skip(offset).Take(limit).ToList();
             return new GaragePageData(pageItems, filtered.Count);
         }
 
@@ -73,7 +77,10 @@ public sealed class EfGarageRepository(GarageBalanceDbContext dbContext, IBusine
             query = ApplyDebtorsFilter(query);
         }
         var totalCount = await query.CountAsync(cancellationToken);
-        var items = await ProjectListItems(ApplyPageSorting(query, sortBy, sortDescending)
+        var orderedPageQuery = normalizedSearch is { } rankingSearch && sortBy == "number" && !sortDescending
+            ? ApplySearchRanking(query, rankingSearch)
+            : ApplyPageSorting(query, sortBy, sortDescending);
+        var items = await ProjectListItems(orderedPageQuery
                 .ThenBy(garage => garage.Id)
                 .Skip(offset)
                 .Take(limit))
@@ -259,6 +266,33 @@ public sealed class EfGarageRepository(GarageBalanceDbContext dbContext, IBusine
                 (garage.Owner.MiddleName != null && garage.Owner.MiddleName.ToLower().Contains(normalizedSearch)) ||
                 (garage.Owner.LastName + " " + garage.Owner.FirstName + " " + (garage.Owner.MiddleName ?? string.Empty)).ToLower().Contains(normalizedSearch))));
     }
+
+    private static IOrderedQueryable<Garage> ApplySearchRanking(IQueryable<Garage> query, string normalizedSearch) =>
+        query
+            .OrderBy(garage => garage.Number.ToLower() == normalizedSearch
+                ? 0
+                : garage.Number.ToLower().StartsWith(normalizedSearch)
+                    ? 1
+                    : garage.Number.ToLower().Contains(normalizedSearch)
+                        ? 2
+                        : 3)
+            .ThenBy(garage => garage.Number.Length)
+            .ThenBy(garage => garage.Number.ToLower());
+
+    private static IOrderedEnumerable<GarageListItemData> ApplySearchRanking(
+        IEnumerable<GarageListItemData> garages,
+        string normalizedSearch) =>
+        garages
+            .OrderBy(garage => garage.Number.Equals(normalizedSearch, StringComparison.OrdinalIgnoreCase)
+                ? 0
+                : garage.Number.StartsWith(normalizedSearch, StringComparison.OrdinalIgnoreCase)
+                    ? 1
+                    : garage.Number.Contains(normalizedSearch, StringComparison.OrdinalIgnoreCase)
+                        ? 2
+                        : 3)
+            .ThenBy(garage => garage.Number.Length)
+            .ThenBy(garage => garage.Number, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(garage => garage.Id);
 
     private bool IsSqliteProvider() =>
         dbContext.Database.ProviderName?.Contains("Sqlite", StringComparison.OrdinalIgnoreCase) == true;

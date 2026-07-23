@@ -4472,6 +4472,44 @@ describe('App', () => {
     expect(within(selectedGarageList).getByRole('button', { name: 'Гараж 202' })).toHaveAttribute('aria-pressed', 'false')
   })
 
+  it('ranks an exact garage number before prefixes and contained matches', async () => {
+    const user = userEvent.setup()
+    const garages = [
+      createGarage({ id: 'garage-107', number: '107', ownerName: 'Иванов' }),
+      createGarage({ id: 'garage-117', number: '117', ownerName: 'Петров' }),
+      createGarage({ id: 'garage-71', number: '71', ownerName: 'Сидоров' }),
+      createGarage({ id: 'garage-7', number: '7', ownerName: 'Орлов' }),
+      createGarage({ id: 'garage-70', number: '70', ownerName: 'Смирнов' }),
+    ]
+    const getGaragesPage = vi.fn(async () => ({ items: garages, totalCount: garages.length, offset: 0, limit: 20 }))
+
+    render(<App
+      authClient={createAuthClient()}
+      dictionaryClient={createDictionaryClient({ getGarages: async () => garages, getGaragesPage })}
+      financeClient={createFinanceClient()}
+      importClient={createImportClient()}
+      reportClient={createReportClient()}
+      releaseClient={createReleaseClient()}
+      userClient={createUserClient()}
+    />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Платежи')
+    const prototype = within(await screen.findByRole('region', { name: 'Платежи' })).getByRole('region', { name: 'Форма платежей' })
+    await user.type(within(prototype).getByLabelText('Поиск номера гаража или ФИО владельца'), '7')
+    await waitFor(() => expect(getGaragesPage).toHaveBeenCalledWith('token', '7', 0, 20))
+
+    const options = within(prototype).getAllByRole('option').map((option) => option.textContent)
+    expect(options).toEqual([
+      'Гараж 7Орлов',
+      'Гараж 70Смирнов',
+      'Гараж 71Сидоров',
+      'Гараж 107Иванов',
+      'Гараж 117Петров',
+    ])
+  })
+
   it('shows payments prototype and opens payment form modals', async () => {
     const user = userEvent.setup()
     const garage = createGarage({ id: 'garage-1', number: '1', ownerName: 'Иванов Иван', peopleCount: 3, floorCount: 1, startingBalance: -5300, balance: 999999, overdueDebt: 999999 })
