@@ -6,7 +6,6 @@ import type { AccountingTypeDto, DictionaryClient, GarageDto, IrregularPaymentDt
 import type { AccrualDto, CreateAccrualRequest, CreateExpenseOperationRequest, CreateIncomeOperationRequest, CreateMeterReadingRequest, CreateSupplierAccrualRequest, ExpenseWorksheetDto, FinanceClient, FinancePagedResult, FinanceSummaryDto, FinancialOperationDto, GarageIncomeWorksheetDto, GarageOverdueDebtDto, GenerateRegularAccrualsRequest, GenerateSupplierGroupSalaryAccrualsRequest, MeterReadingDto, MissingMeterReadingDto, SupplierAccrualDto } from '../../services/financeApi'
 import { FinanceApiError } from '../../services/financeApi'
 import type { FundDto, FundsClient } from '../../services/fundsApi'
-import type { FormStateClient } from '../../services/formStatesApi'
 import type { IntegrationClient, ReceiptPrintingActionKind } from '../../services/integrationsApi'
 import type { ApplicationSettingsClient } from '../../services/settingsApi'
 import { hasPermission, permissions } from '../../shared/accessControl'
@@ -35,7 +34,6 @@ type AccrualBreakdown =
 const financeScreenRequestLimit = 50
 const financePreviewRequestLimit = 8
 const dictionaryScreenRequestLimit = 100
-const paymentsFormStateScope = 'payments-prototype'
 const garageSearchTimeoutMs = 10_000
 
 type FinanceRecord = FinancialOperationDto | AccrualDto | SupplierAccrualDto | MeterReadingDto
@@ -280,16 +278,6 @@ type RegularAccrualPrototypeSubmitRequest = {
   comment: string
 }
 
-type PaymentsPrototypeSavedState = {
-  selectedGarageId: string | null
-  selectedGarageIds?: string[]
-  garageSearch: string
-  incomeWorksheetMonthFrom?: string
-  incomeWorksheetMonthTo?: string
-  garageRows: GarageIncomePrototypeRow[]
-  historyRows: GaragePaymentHistoryPrototypeRow[]
-}
-
 function createGarageIncomeRowsFromWorksheet(worksheet: GarageIncomeWorksheetDto): GarageIncomePrototypeRow[] {
   return worksheet.rows.map((row) => {
     const month = row.accountingMonth.slice(0, 7)
@@ -344,7 +332,6 @@ export function FinancePanel({
   dictionaryClient,
   financeClient,
   fundsClient,
-  formStateClient,
   integrationClient,
   settingsClient,
 }: {
@@ -352,7 +339,6 @@ export function FinancePanel({
   dictionaryClient: DictionaryClient
   financeClient: FinanceClient
   fundsClient: FundsClient
-  formStateClient: FormStateClient
   integrationClient: IntegrationClient
   settingsClient: ApplicationSettingsClient
 }) {
@@ -2258,7 +2244,6 @@ export function FinancePanel({
         dictionaryClient={dictionaryClient}
         expenseTypes={expenseTypes}
         financeClient={financeClient}
-        formStateClient={formStateClient}
         garages={garages}
         incomeTypes={incomeTypes}
         irregularPayments={irregularPayments}
@@ -3042,7 +3027,6 @@ function PaymentsPrototypePanel({
   dictionaryClient,
   expenseTypes,
   financeClient,
-  formStateClient,
   garages,
   incomeTypes,
   irregularPayments,
@@ -3061,7 +3045,6 @@ function PaymentsPrototypePanel({
   dictionaryClient: DictionaryClient
   expenseTypes: AccountingTypeDto[]
   financeClient: FinanceClient
-  formStateClient: FormStateClient
   garages: GarageDto[]
   incomeTypes: AccountingTypeDto[]
   irregularPayments: IrregularPaymentDto[]
@@ -3099,8 +3082,6 @@ function PaymentsPrototypePanel({
   const [expenseWorksheetMonth, setExpenseWorksheetMonth] = useState(() => getCurrentMonthInputValue())
   const [expenseBankAmount, setExpenseBankAmount] = useState(0)
   const [historyRows, setHistoryRows] = useState<GaragePaymentHistoryPrototypeRow[]>([])
-  const [formStateLoaded, setFormStateLoaded] = useState(false)
-  const [formStateError, setFormStateError] = useState<string | null>(null)
   const [paymentError, setPaymentError] = useState<string | null>(null)
   const [regularAccrualStatus, setRegularAccrualStatus] = useState<string | null>(null)
   const [garageWorksheetLoadingId, setGarageWorksheetLoadingId] = useState<string | null>(null)
@@ -3274,134 +3255,6 @@ function PaymentsPrototypePanel({
     document.addEventListener('pointerdown', closeGarageSearchOnOutsidePointer, true)
     return () => document.removeEventListener('pointerdown', closeGarageSearchOnOutsidePointer, true)
   }, [garageSearchOpen])
-
-  useEffect(() => {
-    if (formStateLoaded || garageOptions.length === 0) {
-      return
-    }
-
-    let cancelled = false
-    formStateClient
-      .getState<PaymentsPrototypeSavedState>(auth.accessToken, paymentsFormStateScope)
-      .then(async (state) => {
-        if (cancelled) {
-          return
-        }
-
-        if (state?.payload) {
-          const restoredGarageIds = (state.payload.selectedGarageIds?.length
-            ? state.payload.selectedGarageIds
-            : state.payload.selectedGarageId ? [state.payload.selectedGarageId] : [])
-            .filter((garageId) => realGarageIds.has(garageId))
-          const restoredGarageId = restoredGarageIds.includes(state.payload.selectedGarageId ?? '')
-            ? state.payload.selectedGarageId
-            : restoredGarageIds.at(-1) ?? null
-          const restoredMonthFrom = state.payload.incomeWorksheetMonthFrom ?? getPreviousMonthInputValue(getCurrentMonthInputValue())
-          const restoredMonthTo = state.payload.incomeWorksheetMonthTo ?? getCurrentMonthInputValue()
-          const restoredGarageSearch = state.payload.garageSearch ?? ''
-          const isRestoredRealGarage = restoredGarageId !== null && realGarageIds.has(restoredGarageId)
-          const restoredRealGarage = isRestoredRealGarage ? garageOptions.find((garage) => garage.id === restoredGarageId) ?? null : null
-          selectedGarageIdRef.current = isRestoredRealGarage ? restoredGarageId : null
-          setSelectedGarageId(isRestoredRealGarage ? restoredGarageId : null)
-          setSelectedGarageIds(restoredGarageIds)
-          setIncomeWorksheetMonthFrom(restoredMonthFrom)
-          setIncomeWorksheetMonthTo(restoredMonthTo)
-          setGarageRows([])
-          setHistoryRows([])
-          const restoreRequests: Promise<void>[] = []
-          if (restoredRealGarage) {
-            setGarageWorksheetLoadingId(restoredRealGarage.id)
-            restoreRequests.push(financeClient
-              .getGarageIncomeWorksheet(auth.accessToken, restoredRealGarage.id, {
-                monthFrom: `${restoredMonthFrom}-01`,
-                monthTo: `${restoredMonthTo}-01`,
-              })
-              .then((worksheet) => {
-                if (cancelled) {
-                  return
-                }
-
-                setGarageRows(createGarageIncomeRowsFromWorksheet(worksheet))
-                setGarageWorksheetSummary({
-                  openingDebt: worksheet.openingDebt,
-                  unrepresentedOpeningDebt: worksheet.unrepresentedOpeningDebt ?? 0,
-                  accrualTotal: worksheet.accrualTotal,
-                  incomeTotal: worksheet.incomeTotal,
-                  closingDebt: worksheet.closingDebt,
-                })
-              })
-              .catch((error: unknown) => {
-                if (!cancelled) {
-                  setPaymentError(error instanceof Error ? error.message : 'Не удалось загрузить форму поступлений гаража.')
-                }
-              })
-              .finally(() => {
-                if (!cancelled) {
-                  setGarageWorksheetLoadingId((currentId) => (currentId === restoredRealGarage.id ? null : currentId))
-                }
-              }))
-            setGaragePaymentHistoryLoadingId(restoredRealGarage.id)
-            restoreRequests.push(financeClient
-              .getOperationsPage(auth.accessToken, {
-                operationKind: 'income',
-                garageId: restoredRealGarage.id,
-                limit: 100,
-              })
-              .then((page) => {
-                if (!cancelled) {
-                  setHistoryRows(createGaragePaymentHistoryRowsFromOperations(page.items))
-                }
-              })
-              .catch((error: unknown) => {
-                if (!cancelled) {
-                  setPaymentError(error instanceof Error ? error.message : 'Не удалось загрузить историю платежей выбранного гаража.')
-                }
-              })
-              .finally(() => {
-                if (!cancelled) {
-                  setGaragePaymentHistoryLoadingId((currentId) => (currentId === restoredRealGarage.id ? null : currentId))
-                }
-              }))
-          }
-
-          await Promise.all(restoreRequests)
-          if (!cancelled) {
-            setGarageSearch(restoredGarageSearch)
-          }
-        }
-      })
-      .catch((error: unknown) => {
-        if (!cancelled) {
-          setFormStateError(error instanceof Error ? error.message : 'Не удалось загрузить сохраненное состояние платежей.')
-        }
-      })
-      .finally(() => {
-        if (!cancelled) {
-          setFormStateLoaded(true)
-        }
-      })
-
-    return () => {
-      cancelled = true
-    }
-  }, [auth.accessToken, financeClient, formStateClient, formStateLoaded, garageOptions, realGarageIds])
-
-  useEffect(() => {
-    if (!formStateLoaded) {
-      return
-    }
-
-    const handle = window.setTimeout(() => {
-      void formStateClient
-        .saveState<PaymentsPrototypeSavedState>(auth.accessToken, paymentsFormStateScope, {
-          payload: { selectedGarageId, selectedGarageIds, garageSearch, incomeWorksheetMonthFrom, incomeWorksheetMonthTo, garageRows, historyRows },
-          summary: 'Сохранены выбранные гаражи и период формы платежей.'
-        })
-        .catch((error: unknown) => setFormStateError(error instanceof Error ? error.message : 'Не удалось сохранить состояние платежей.'))
-    }, 400)
-
-    return () => window.clearTimeout(handle)
-  }, [auth.accessToken, formStateClient, formStateLoaded, garageRows, garageSearch, historyRows, incomeWorksheetMonthFrom, incomeWorksheetMonthTo, selectedGarageId, selectedGarageIds])
 
   useEffect(() => {
     if (activeTab !== 'expense') {
@@ -4885,7 +4738,6 @@ function PaymentsPrototypePanel({
           </div>
         ) : null}
       </div>
-      {formStateError ? <FormError>{formStateError}</FormError> : null}
       {paymentError ? <FormError>{paymentError}</FormError> : null}
       {regularAccrualStatus ? <p className="form-status" role="status">{regularAccrualStatus}</p> : null}
       {receiptActionStatus ? <p className="form-status" role="status">{receiptActionStatus}</p> : null}
