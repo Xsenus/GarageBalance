@@ -133,6 +133,64 @@ public sealed class PostgreSqlIncomeReportPaymentQueryIntegrationTests
         Assert.Equal("PKO-STANDALONE", result.Rows[1].DocumentNumber);
     }
 
+    [PostgreSqlFact]
+    public async Task GroupedPaymentControlTotalIsCalculatedOnceFromSourceOperationsOnEveryPage()
+    {
+        var month = new DateOnly(2043, 3, 1);
+        var suffix = Guid.NewGuid().ToString("N");
+        var receiptBatchId = Guid.NewGuid();
+        await using var database = await PostgreSqlTestDatabase.CreateAsync();
+        await using (var seedContext = database.CreateContext())
+        {
+            var garage = new Garage { Number = $"CONTROL-TOTAL-{suffix}" };
+            var membership = new IncomeType { Name = $"Control membership {suffix}" };
+            var electricity = new IncomeType { Name = $"Control electricity {suffix}" };
+            seedContext.AddRange(garage, membership, electricity);
+            seedContext.FinancialOperations.AddRange(
+                CreatePayment(garage, membership, month.AddDays(4), 100000m, "PKO-CONTROL-1", receiptBatchId, 10),
+                CreatePayment(garage, electricity, month.AddDays(4), 107436m, "PKO-CONTROL-2", receiptBatchId, 11));
+            await seedContext.SaveChangesAsync();
+        }
+
+        await using var context = database.CreateContext();
+        var query = new EfIncomeReportQuery(context);
+        var firstPage = await query.GetRowsAsync(
+            month,
+            month.AddMonths(1).AddDays(-1),
+            "payments",
+            new HashSet<Guid>(),
+            new HashSet<Guid>(),
+            new HashSet<Guid>(),
+            null,
+            1,
+            0,
+            new ReportSort("date", false),
+            true,
+            CancellationToken.None);
+        var emptySecondPage = await query.GetRowsAsync(
+            month,
+            month.AddMonths(1).AddDays(-1),
+            "payments",
+            new HashSet<Guid>(),
+            new HashSet<Guid>(),
+            new HashSet<Guid>(),
+            null,
+            1,
+            1,
+            new ReportSort("date", false),
+            true,
+            CancellationToken.None);
+
+        Assert.Equal(1, firstPage.RowCount);
+        Assert.Single(firstPage.Rows);
+        Assert.Equal(207436m, firstPage.Rows[0].IncomeAmount);
+        Assert.Equal(207436m, firstPage.IncomeTotal);
+        Assert.NotEqual(414872m, firstPage.IncomeTotal);
+        Assert.Equal(1, emptySecondPage.RowCount);
+        Assert.Empty(emptySecondPage.Rows);
+        Assert.Equal(firstPage.IncomeTotal, emptySecondPage.IncomeTotal);
+    }
+
     private static FinancialOperation CreatePayment(
         Garage garage,
         IncomeType incomeType,

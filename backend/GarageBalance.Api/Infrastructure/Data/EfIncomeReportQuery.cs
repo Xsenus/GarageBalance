@@ -1041,8 +1041,9 @@ public sealed class EfIncomeReportQuery(GarageBalanceDbContext dbContext) : IInc
             UNION ALL
             SELECT {{TotalsCategory}}, 0, NULL::uuid, NULL::date, NULL::date, NULL::uuid, NULL::text,
                    NULL::uuid, NULL::text, NULL::uuid, NULL::text, 0::numeric, 0::numeric, 0::numeric,
-                   NULL::text, NULL::text, NULL::timestamptz, COALESCE(SUM(income_amount), 0), COUNT(*)::int
-            FROM report_rows
+                   NULL::text, NULL::text, NULL::timestamptz,
+                   (SELECT COALESCE(SUM(income_amount), 0) FROM filtered_rows),
+                   (SELECT COUNT(*)::int FROM report_rows)
             ORDER BY "Category", "RowOrder"
             """;
         var parameters = new List<object>
