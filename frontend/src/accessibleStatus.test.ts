@@ -95,6 +95,19 @@ describe('accessible dynamic messages', () => {
     expect(appCss).toContain('.report-workbook-filter')
     expect(appCss).toContain('.report-period-button')
   })
+
+  it('keeps every report multi-selection on the shared searchable checkbox pattern', () => {
+    expect(reportPanelSource).toContain('function ReportCheckboxMultiSelect({')
+    expect(reportPanelSource.match(/<ReportCheckboxMultiSelect\b/g)).toHaveLength(3)
+    expect(reportPanelSource).toContain('type="checkbox"')
+    expect(reportPanelSource).toContain('role="listbox"')
+    expect(reportPanelSource).toContain('aria-selected={selectedValues.includes(option.value)}')
+    expect(reportPanelSource).not.toContain('<select')
+    expect(reportPanelSource).not.toContain('multiple')
+    expect(appCss).toContain('.report-checkbox-picker')
+    expect(appCss).not.toContain('.report-workbook-multi-select select')
+  })
+
   it('keeps date month and year controls styled and validated', () => {
     const calendarStyleContainers = [
       ".dictionary-form input[type='date']",

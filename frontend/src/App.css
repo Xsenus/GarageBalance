@@ -6935,81 +6935,42 @@ button.operation-row:focus-visible {
   min-width: 220px;
 }
 
-.report-workbook-multi-select {
-  display: grid;
-  gap: 5px;
-}
-
-.report-workbook-filter .report-workbook-multi-select-heading {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-}
-
-.report-workbook-filter .report-workbook-multi-select-heading label {
-  display: block;
-}
-
-.report-workbook-multi-select-heading .link-button {
-  min-height: 24px;
-  padding: 1px 4px;
-  font-size: 12px;
-}
-
-.report-workbook-filter .report-workbook-multi-select select {
-  width: 100%;
-  min-height: 74px;
-  border: 1px solid #d0d5dd;
-  border-radius: 7px;
-  background: #ffffff;
-  color: #101828;
-  padding: 7px 9px;
-  font: inherit;
-}
-
-.report-workbook-filter .report-workbook-multi-select select:focus {
-  border-color: #111827;
-  outline: 0;
-  box-shadow: 0 0 0 3px rgba(17, 24, 39, 0.08);
-}
-
 .report-workbook-multi-select-status {
   color: #667085;
   font-size: 12px;
 }
 
-.report-garage-picker {
+.report-checkbox-picker {
   display: grid;
   gap: 6px;
 }
 
-.report-garage-picker > label {
+.report-checkbox-picker > label {
   display: block;
 }
 
-.report-garage-picker .payments-prototype-search {
+.report-checkbox-picker .payments-prototype-search {
   width: min(680px, 100%);
 }
 
-.report-workbook-filter .report-garage-picker .payments-prototype-search input {
+.report-workbook-filter .report-checkbox-picker .payments-prototype-search input {
   min-height: 0;
   border: 0;
   padding: 0;
   box-shadow: none;
 }
 
-.report-workbook-filter .report-garage-picker .payments-prototype-search-option input {
+.report-workbook-filter .report-checkbox-picker .payments-prototype-search-option input {
   width: 18px;
   min-height: 18px;
   padding: 0;
 }
 
-.report-garage-picker-selected {
+.report-checkbox-picker-selected {
   margin-top: 2px;
 }
 
-.report-garage-picker-selected-item {
+.report-checkbox-picker-selected-item {
   display: grid;
   min-width: 210px;
   max-width: 320px;
@@ -7022,21 +6983,21 @@ button.operation-row:focus-visible {
   background: #ffffff;
 }
 
-.report-garage-picker-selected-item > span {
+.report-checkbox-picker-selected-item > span {
   display: grid;
   min-width: 0;
   gap: 2px;
   padding: 8px 10px;
 }
 
-.report-garage-picker-selected-item strong,
-.report-garage-picker-selected-item small {
+.report-checkbox-picker-selected-item strong,
+.report-checkbox-picker-selected-item small {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.report-garage-picker-selected-item small {
+.report-checkbox-picker-selected-item small {
   color: #667085;
   font-size: 0.78rem;
 }
