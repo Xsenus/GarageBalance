@@ -2333,6 +2333,43 @@ public sealed class ReportServiceTests
     }
 
     [Fact]
+    public async Task GetFeeReportAsync_IncludesNewActiveCampaignBeforeAccrualsExist()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        var campaign = new FeeCampaign
+        {
+            Name = "Сбор на камеры",
+            IncomeTypeId = fixtures.IncomeType.Id,
+            IncomeType = fixtures.IncomeType,
+            Goal = "Установка камер",
+            ContributionAmount = 500m,
+            TargetAmount = 0m,
+            StartsOn = new DateOnly(2026, 7, 1),
+            AppliesToAllGarages = true,
+            OverdueGraceDays = 30
+        };
+        database.Context.Add(campaign);
+        await database.Context.SaveChangesAsync();
+
+        var result = await CreateService(database.Context).GetFeeReportAsync(
+            new FeeReportRequest(null, 10),
+            CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+        Assert.Equal("Все сборы", result.Value!.Variation);
+        Assert.Equal(1, result.Value.RowCount);
+        var summary = Assert.Single(result.Value.SummaryRows);
+        Assert.Equal(campaign.Id, summary.IncomeTypeId);
+        Assert.Equal("Сбор на камеры", summary.Name);
+        Assert.Equal("Установка камер", summary.Goal);
+        Assert.Equal(0m, summary.FeeAmount);
+        Assert.Equal(0m, summary.Collected);
+        Assert.Empty(result.Value.GarageRows);
+        Assert.Empty(result.Value.DebtorRows);
+    }
+
+    [Fact]
     public async Task GetFeeReportAsync_SeparatesCampaignsSharingOtherIncomeDestination()
     {
         await using var database = await TestDatabase.CreateAsync();

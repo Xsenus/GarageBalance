@@ -227,8 +227,8 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
   const [selectedGarageIds, setSelectedGarageIds] = useState<string[]>([])
   const [selectedCounterpartyKeys, setSelectedCounterpartyKeys] = useState<string[]>([])
   const [selectedIncomeGarageIds, setSelectedIncomeGarageIds] = useState<string[]>([])
-  const [feeVariationFilter, setFeeVariationFilter] = useState('Сбор на ворота')
-  const [appliedFeeVariationFilter, setAppliedFeeVariationFilter] = useState('Сбор на ворота')
+  const [feeVariationFilter, setFeeVariationFilter] = useState('')
+  const [appliedFeeVariationFilter, setAppliedFeeVariationFilter] = useState('')
   const [garages, setGarages] = useState<GarageDto[]>([])
   const [suppliers, setSuppliers] = useState<SupplierDto[]>([])
   const [staffMembers, setStaffMembers] = useState<StaffMemberDto[]>([])
@@ -720,7 +720,13 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
     ...staffMembers.map((member) => ({ value: `staff:${member.id}`, label: member.fullName, description: 'Сотрудник' })),
   ]
   const feeVariationLabel = feeVariationFilter.trim() || 'Все сборы'
-  const feeOptions = Array.from(new Set(['Сбор на ворота', 'Вступительный взнос', 'Целевой взнос', ...incomeTypes.map((item) => item.name)]))
+  const feeOptions = Array.from(new Set([
+    'Сбор на ворота',
+    'Вступительный взнос',
+    'Целевой взнос',
+    ...incomeTypes.map((item) => item.name),
+    ...(feeReport?.summaryRows.map((row) => row.name) ?? []),
+  ]))
 
   function updateMonthlyFilter(key: ReportMonthlyFilterKey, field: keyof ReportMonthRange, value: string) {
     if (key === 'garages') {

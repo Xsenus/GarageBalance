@@ -15548,6 +15548,47 @@ describe('App', () => {
     await waitFor(() => expect(exportFundChangeReportXlsx).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ dateFrom: todayIso, dateTo: todayIso })))
   })
 
+  it('shows every newly added fee campaign when the fee report is opened', async () => {
+    const user = userEvent.setup()
+    const getFeeReport = vi.fn(async (_token: string, params?: Parameters<ReportClient['getFeeReport']>[1]) => {
+      if (params?.variation) {
+        return createFeeReport({ variation: params.variation })
+      }
+
+      return createFeeReport({
+        variation: 'Все сборы',
+        accruedTotal: 500,
+        collectedTotal: 200,
+        debtTotal: 300,
+        rowCount: 2,
+        summaryRows: [
+          ...createFeeReport().summaryRows,
+          {
+            incomeTypeId: 'fee-campaign-cameras',
+            name: 'Сбор на камеры',
+            goal: 'Установка камер',
+            feeAmount: 0,
+            collected: 0,
+          },
+        ],
+      })
+    })
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient({ getFeeReport })} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Отчеты')
+    const reportsPanel = await screen.findByRole('region', { name: 'Отчеты' })
+    await openReportTab(user, reportsPanel, 'Сборы')
+
+    await waitFor(() => expect(getFeeReport).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ variation: undefined })))
+    expect(within(reportsPanel).getByLabelText('Вариация сбора')).toHaveValue('')
+    const feeSummaryTable = within(reportsPanel).getByRole('table', { name: 'Отчет по сборам' })
+    expect(await within(feeSummaryTable).findByText('Сбор на камеры')).toBeInTheDocument()
+    expect(feeSummaryTable).toHaveTextContent('Установка камер')
+    expect(reportsPanel.querySelector('datalist option[value="Сбор на камеры"]')).not.toBeNull()
+  })
+
   it('paginates and groups garage report rows on the server', async () => {
     const user = userEvent.setup()
     const garageRequests: Array<{ offset?: number; limit?: number; groupAccruals?: boolean }> = []

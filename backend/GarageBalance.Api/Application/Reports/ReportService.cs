@@ -1056,7 +1056,11 @@ public sealed class ReportService(
                 feeData.CollectedTotals.TryGetValue(entry.Id, out var collected);
                 return new FeeReportSummaryRowDto(entry.Id, entry.Name, entry.Goal, entry.TargetAmount ?? accrued, collected);
             })
-            .Where(row => row.FeeAmount != 0 || row.Collected != 0 || !string.IsNullOrWhiteSpace(variation))
+            .Where(row =>
+                hasFeeCampaigns ||
+                row.FeeAmount != 0 ||
+                row.Collected != 0 ||
+                !string.IsNullOrWhiteSpace(variation))
             .ToList();
 
         var feeGarageRows = feeData.GarageRows
