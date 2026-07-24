@@ -82,6 +82,10 @@ public sealed class EfExpenseReportQuery(GarageBalanceDbContext dbContext) : IEx
         var fetchLimit = useClientSearch || rowMode == AllRows ? null : GetFetchLimit(offset, limit);
         var includeSuppliers = supplierIds.Count > 0 || staffMemberIds.Count == 0;
         var includeStaff = staffMemberIds.Count > 0 || supplierIds.Count == 0;
+        var supplierStartUtc = new DateTimeOffset(dateFrom.Year, dateFrom.Month, 1, 0, 0, 0, TimeSpan.Zero);
+        var supplierStartUtcExclusive = new DateTimeOffset(dateTo.Year, dateTo.Month, 1, 0, 0, 0, TimeSpan.Zero).AddMonths(1);
+        var startingBalanceTotal = 0m;
+        var startingBalanceCount = 0;
         var staffRows = new List<ExpenseReportRowDto>();
         var aggregateQuery = dbContext.SupplierAccruals.AsNoTracking()
             .Where(_ => false)
@@ -93,7 +97,10 @@ public sealed class EfExpenseReportQuery(GarageBalanceDbContext dbContext) : IEx
             if (expenseTypeIds.Count == 0)
             {
                 var startingBalanceQuery = dbContext.Suppliers.AsNoTracking()
-                    .Where(supplier => includeSuppliers && !supplier.IsArchived && supplier.StartingBalance != 0);
+                    .Where(supplier =>
+                        includeSuppliers &&
+                        !supplier.IsArchived &&
+                        supplier.StartingBalance != 0);
                 if (supplierIds.Count > 0)
                 {
                     startingBalanceQuery = startingBalanceQuery.Where(supplier => supplierIds.Contains(supplier.Id));
@@ -104,26 +111,25 @@ public sealed class EfExpenseReportQuery(GarageBalanceDbContext dbContext) : IEx
                     startingBalanceQuery = startingBalanceQuery.Where(supplier => supplier.Name.ToLower().Contains(normalizedSearch!));
                 }
 
-                if (!useClientSearch)
-                {
-                    var startingBalanceAggregate = startingBalanceQuery
-                        .GroupBy(_ => 1)
-                        .Select(group => new
-                        {
-                            Category = StartingBalanceTotalCategory,
-                            Total = group.Sum(supplier => supplier.StartingBalance),
-                            Count = group.Count()
-                        });
-                    aggregateQuery = aggregateQuery.Concat(startingBalanceAggregate);
-                    hasAggregateQueries = true;
-                }
-
-                var startingBalances = await ApplyLimit(startingBalanceQuery.OrderBy(supplier => supplier.Name).ThenBy(supplier => supplier.Id), fetchLimit)
-                    .ToListAsync(cancellationToken);
+                // This branch is reserved for the isolated SQLite test provider.
+                // SQLite cannot translate DateTimeOffset range comparisons, so the
+                // small test-only supplier set is filtered after materialization.
+                var startingBalances = (await ApplyLimit(
+                            startingBalanceQuery
+                                .OrderBy(supplier => supplier.Name)
+                                .ThenBy(supplier => supplier.Id),
+                            fetchLimit)
+                        .ToListAsync(cancellationToken))
+                    .Where(supplier =>
+                        supplier.CreatedAtUtc >= supplierStartUtc &&
+                        supplier.CreatedAtUtc < supplierStartUtcExclusive)
+                    .ToList();
+                startingBalanceTotal = startingBalances.Sum(supplier => supplier.StartingBalance);
+                startingBalanceCount = startingBalances.Count;
                 rows.AddRange(startingBalances.Select(supplier => new ExpenseReportRowDto(
                     StartingBalanceRows,
-                    dateFrom,
-                    dateFrom,
+                    NormalizeMonth(DateOnly.FromDateTime(supplier.CreatedAtUtc.UtcDateTime)),
+                    NormalizeMonth(DateOnly.FromDateTime(supplier.CreatedAtUtc.UtcDateTime)),
                     supplier.Id,
                     supplier.Name,
                     Guid.Empty,
@@ -410,6 +416,8 @@ public sealed class EfExpenseReportQuery(GarageBalanceDbContext dbContext) : IEx
 
         if (!useClientSearch)
         {
+            accrualTotal += startingBalanceTotal;
+            rowCount += startingBalanceCount;
             accrualTotal += staffRows.Sum(row => row.AccrualAmount);
             expenseTotal += staffRows.Sum(row => row.ExpenseAmount);
             rowCount += staffRows.Count;
@@ -919,8 +927,8 @@ public sealed class EfExpenseReportQuery(GarageBalanceDbContext dbContext) : IEx
             WITH source_rows AS (
                 SELECT supplier."Id" AS id,
                        'starting_balance'::text AS row_type,
-                       @date_from::date AS row_date,
-                       @date_from::date AS accounting_month,
+                       date_trunc('month', supplier."CreatedAtUtc" AT TIME ZONE 'UTC')::date AS row_date,
+                       date_trunc('month', supplier."CreatedAtUtc" AT TIME ZONE 'UTC')::date AS accounting_month,
                        supplier."Id" AS counterparty_id,
                        supplier."Name" AS counterparty_name,
                        '00000000-0000-0000-0000-000000000000'::uuid AS expense_type_id,
@@ -937,6 +945,8 @@ public sealed class EfExpenseReportQuery(GarageBalanceDbContext dbContext) : IEx
                 WHERE @include_starting_balances = TRUE
                   AND supplier."IsArchived" = FALSE
                   AND supplier."StartingBalance" <> 0
+                  AND date_trunc('month', supplier."CreatedAtUtc" AT TIME ZONE 'UTC')::date
+                      BETWEEN @month_from::date AND @month_to::date
                   {{supplierClause}}
                   {{startingSearchClause}}
                 UNION ALL
@@ -1187,8 +1197,8 @@ public sealed class EfExpenseReportQuery(GarageBalanceDbContext dbContext) : IEx
             WITH filtered_rows AS (
                 SELECT supplier."Id" AS id,
                        'starting_balance'::text AS row_type,
-                       @date_from::date AS row_date,
-                       @date_from::date AS accounting_month,
+                       date_trunc('month', supplier."CreatedAtUtc" AT TIME ZONE 'UTC')::date AS row_date,
+                       date_trunc('month', supplier."CreatedAtUtc" AT TIME ZONE 'UTC')::date AS accounting_month,
                        supplier."Id" AS counterparty_id,
                        supplier."Name" AS counterparty_name,
                        '00000000-0000-0000-0000-000000000000'::uuid AS expense_type_id,
@@ -1205,6 +1215,8 @@ public sealed class EfExpenseReportQuery(GarageBalanceDbContext dbContext) : IEx
                 WHERE @include_starting_balances = TRUE
                   AND supplier."IsArchived" = FALSE
                   AND supplier."StartingBalance" <> 0
+                  AND date_trunc('month', supplier."CreatedAtUtc" AT TIME ZONE 'UTC')::date
+                      BETWEEN @month_from::date AND @month_to::date
                   {{supplierClause}}
                   {{startingSearchClause}}
                 UNION ALL

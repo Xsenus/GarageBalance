@@ -24,7 +24,14 @@ public sealed class PostgreSqlExpenseReportAccrualQueryIntegrationTests
         await using (var seedContext = database.CreateContext())
         {
             var group = new SupplierGroup { Name = $"Expense accrual {suffix}" };
-            var supplier = new Supplier { Name = supplierName, StartingBalance = 100m, Group = group };
+            var supplier = new Supplier
+            {
+                Name = supplierName,
+                StartingBalance = 100m,
+                Group = group,
+                CreatedAtUtc = new DateTimeOffset(2043, 1, 20, 0, 0, 0, TimeSpan.Zero),
+                UpdatedAtUtc = new DateTimeOffset(2043, 1, 20, 0, 0, 0, TimeSpan.Zero)
+            };
             var department = new StaffDepartment { Name = $"Department {suffix}" };
             var staff = new StaffMember
             {
@@ -181,7 +188,28 @@ public sealed class PostgreSqlExpenseReportAccrualQueryIntegrationTests
 
         Assert.Equal(1, startingBalanceSearch.RowCount);
         Assert.Equal(100m, startingBalanceSearch.AccrualTotal);
-        Assert.Equal("starting_balance", Assert.Single(startingBalanceSearch.Rows).RowType);
+        var startingBalanceRow = Assert.Single(startingBalanceSearch.Rows);
+        Assert.Equal("starting_balance", startingBalanceRow.RowType);
+        Assert.Equal(month, startingBalanceRow.AccountingMonth);
+        Assert.Single(capture.Commands);
+
+        capture.Commands.Clear();
+        var laterPeriod = await query.GetRowsAsync(
+            month.AddMonths(1),
+            month.AddMonths(2).AddDays(-1),
+            "accruals",
+            new HashSet<Guid>(),
+            new HashSet<Guid>(),
+            new HashSet<Guid>(),
+            "СТАРТОВЫЙ",
+            25,
+            0,
+            new ReportSort("date", false),
+            CancellationToken.None);
+
+        Assert.Equal(0, laterPeriod.RowCount);
+        Assert.Equal(0m, laterPeriod.AccrualTotal);
+        Assert.Empty(laterPeriod.Rows);
         Assert.Single(capture.Commands);
     }
 

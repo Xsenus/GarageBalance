@@ -25,7 +25,14 @@ public sealed class PostgreSqlExpenseReportAllQueryIntegrationTests
         await using (var seedContext = database.CreateContext())
         {
             var group = new SupplierGroup { Name = $"All report {suffix}" };
-            var supplier = new Supplier { Name = supplierName, StartingBalance = 100m, Group = group };
+            var supplier = new Supplier
+            {
+                Name = supplierName,
+                StartingBalance = 100m,
+                Group = group,
+                CreatedAtUtc = new DateTimeOffset(2043, 2, 18, 0, 0, 0, TimeSpan.Zero),
+                UpdatedAtUtc = new DateTimeOffset(2043, 2, 18, 0, 0, 0, TimeSpan.Zero)
+            };
             var department = new StaffDepartment { Name = $"All department {suffix}" };
             var staff = new StaffMember
             {
@@ -188,6 +195,25 @@ public sealed class PostgreSqlExpenseReportAllQueryIntegrationTests
         Assert.Equal(500m, typeFiltered.AccrualTotal);
         Assert.Equal(120m, typeFiltered.ExpenseTotal);
         Assert.DoesNotContain(typeFiltered.Rows, row => row.RowType == "starting_balance");
+        Assert.Single(capture.Commands);
+
+        capture.Commands.Clear();
+        var laterPeriod = await query.GetRowsAsync(
+            month.AddMonths(1),
+            month.AddMonths(2).AddDays(-1),
+            "all",
+            new HashSet<Guid> { supplierId },
+            new HashSet<Guid>(),
+            new HashSet<Guid>(),
+            null,
+            25,
+            0,
+            new ReportSort("date", false),
+            CancellationToken.None);
+
+        Assert.Equal(0, laterPeriod.RowCount);
+        Assert.Equal(0m, laterPeriod.AccrualTotal);
+        Assert.Empty(laterPeriod.Rows);
         Assert.Single(capture.Commands);
     }
 

@@ -1191,6 +1191,7 @@ public sealed class ReportServiceTests
         await using var database = await TestDatabase.CreateAsync();
         var fixtures = await database.SeedAsync();
         fixtures.Supplier.StartingBalance = 1200m;
+        fixtures.Supplier.CreatedAtUtc = new DateTimeOffset(2026, 6, 18, 0, 0, 0, TimeSpan.Zero);
         await database.Context.SaveChangesAsync();
         var service = CreateService(database.Context);
 
@@ -1205,6 +1206,16 @@ public sealed class ReportServiceTests
         Assert.Equal("starting_balance", row.RowType);
         Assert.Equal("Стартовый баланс", row.ExpenseTypeName);
         Assert.Equal(1200m, row.AccrualAmount);
+        Assert.Equal(new DateOnly(2026, 6, 1), row.AccountingMonth);
+
+        var laterPeriod = await service.GetExpenseReportAsync(
+            new ExpenseReportRequest(new DateOnly(2026, 7, 1), new DateOnly(2026, 7, 31), null, [], [], "accruals"),
+            CancellationToken.None);
+
+        Assert.True(laterPeriod.Succeeded);
+        Assert.Equal(0m, laterPeriod.Value!.AccrualTotal);
+        Assert.Equal(0, laterPeriod.Value.RowCount);
+        Assert.Empty(laterPeriod.Value.Rows);
     }
 
     [Fact]
@@ -1489,6 +1500,7 @@ public sealed class ReportServiceTests
         await using var database = await TestDatabase.CreateAsync(commandCounter);
         var fixtures = await database.SeedAsync();
         fixtures.Supplier.StartingBalance = 100m;
+        fixtures.Supplier.CreatedAtUtc = new DateTimeOffset(2026, 6, 1, 0, 0, 0, TimeSpan.Zero);
         for (var index = 0; index < 200; index++)
         {
             database.Context.SupplierAccruals.Add(new SupplierAccrual
