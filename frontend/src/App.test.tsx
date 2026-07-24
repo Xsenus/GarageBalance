@@ -15279,13 +15279,13 @@ describe('App', () => {
   it('shows daily, fee and fund report filters with quick period buttons', async () => {
     const user = userEvent.setup()
     const baseReportClient = createReportClient()
-    const incomePageRequests: Array<{ offset?: number; limit?: number }> = []
+    const incomePageRequests: Array<{ offset?: number; limit?: number; groupPayments?: boolean }> = []
     const getIncomeReport = vi.fn(async (token: string, params?: Parameters<ReportClient['getIncomeReport']>[1]) => {
       if (params?.offset === undefined) {
         return baseReportClient.getIncomeReport(token, params)
       }
 
-      incomePageRequests.push({ offset: params.offset, limit: params.limit })
+      incomePageRequests.push({ offset: params.offset, limit: params.limit, groupPayments: params.groupPayments })
       const offset = params.offset ?? 0
       const limit = params.limit ?? 25
       const paymentRow = createIncomeReport().rows.find((row) => row.rowType === 'payments')!
@@ -15433,14 +15433,21 @@ describe('App', () => {
     expect(incomeReportTable).toHaveTextContent('Остаток долга после платежа')
     expect(incomeReportTable).toHaveTextContent('500.00')
     expect(incomeReportTable).not.toHaveTextContent('Начисление за июнь')
+    const incomeGroupingButton = within(reportsPanel).getByRole('button', { name: 'Показать отдельные платежи' })
+    expect(incomeGroupingButton).toHaveAttribute('aria-pressed', 'true')
+    expect(within(reportsPanel).getByRole('note')).toHaveTextContent('По умолчанию части одной квитанции или полной оплаты объединены')
     const incomePagination = within(reportsPanel).getByRole('navigation', { name: 'Пагинация отчета по поступлениям' })
     expect(within(incomePagination).getByText('Показано 1-1 из 30')).toHaveAttribute('role', 'status')
     await user.click(within(incomePagination).getByRole('button', { name: 'Следующая страница' }))
-    await waitFor(() => expect(incomePageRequests).toContainEqual({ offset: 25, limit: 25 }))
+    await waitFor(() => expect(incomePageRequests).toContainEqual({ offset: 25, limit: 25, groupPayments: true }))
     expect(await within(incomeReportTable).findByText('2026-06-26')).toBeInTheDocument()
     expect(incomeReportTable).toHaveTextContent('2 600.00')
     expect(within(incomePagination).getByText('Показано 26-26 из 30')).toBeInTheDocument()
     expect(within(incomePagination).getByRole('button', { name: 'Следующая страница' })).toBeDisabled()
+    await user.click(incomeGroupingButton)
+    await waitFor(() => expect(incomePageRequests).toContainEqual({ offset: 0, limit: 25, groupPayments: false }))
+    expect(within(reportsPanel).getByRole('button', { name: 'Сгруппировать платежи' })).toHaveAttribute('aria-pressed', 'false')
+    expect(await within(incomeReportTable).findByText('2026-06-10')).toBeInTheDocument()
 
     await openReportTab(user, reportsPanel, 'Оплаты из кассы')
     expect(within(reportsPanel).getByText('Отчёт по оплатам из кассы')).toBeInTheDocument()
@@ -15789,6 +15796,7 @@ describe('App', () => {
     const exportGarageReportXlsx = vi.fn(async () => new Blob(['garages']))
     const exportExpenseReportXlsx = vi.fn(async () => new Blob(['expense']))
     const exportIncomeReportXlsx = vi.fn(async () => new Blob(['income']))
+    const exportIncomeReportPdf = vi.fn(async () => new Blob(['income-pdf'], { type: 'application/pdf' }))
     const exportCashPaymentReportXlsx = vi.fn(async () => new Blob(['cash']))
     const exportBankDepositReportXlsx = vi.fn(async () => new Blob(['bank']))
     const exportFeeReportXlsx = vi.fn(async () => new Blob(['fees']))
@@ -15800,6 +15808,7 @@ describe('App', () => {
       exportGarageReportXlsx,
       exportExpenseReportXlsx,
       exportIncomeReportXlsx,
+      exportIncomeReportPdf,
       exportCashPaymentReportXlsx,
       exportBankDepositReportXlsx,
       exportFeeReportXlsx,
@@ -15845,8 +15854,11 @@ describe('App', () => {
     const incomeGarageResults = await within(reportsPanel).findByRole('listbox', { name: 'Найденные гаражи отчёта по поступлениям' })
     await user.click(within(incomeGarageResults).getByRole('checkbox', { name: /Выбрать гараж 12,/ }))
     await user.click(within(reportsPanel).getByRole('button', { name: /Сортировать Сумма платежа/ }))
+    await user.click(within(reportsPanel).getByRole('button', { name: 'Показать отдельные платежи' }))
     await exportXlsx()
-    await waitFor(() => expect(exportIncomeReportXlsx).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ garageIds: ['garage-1'], rowMode: 'payments', groupPayments: true, sortBy: 'incomeAmount', sortDirection: 'asc' })))
+    await waitFor(() => expect(exportIncomeReportXlsx).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ garageIds: ['garage-1'], rowMode: 'payments', groupPayments: false, sortBy: 'incomeAmount', sortDirection: 'asc' })))
+    await user.click(within(reportsPanel).getByRole('button', { name: 'Скачать PDF' }))
+    await waitFor(() => expect(exportIncomeReportPdf).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ garageIds: ['garage-1'], rowMode: 'payments', groupPayments: false, sortBy: 'incomeAmount', sortDirection: 'asc' })))
 
     await openReportTab(user, reportsPanel, 'Оплаты из кассы')
     await user.click(within(reportsPanel).getByRole('button', { name: /Сортировать Наличие чека/ }))
@@ -15953,6 +15965,8 @@ describe('App', () => {
     await openReportTab(user, reportsPanel, 'Поступления')
 
     expect(await within(reportsPanel).findByRole('status', { name: 'Загружаем поступления...' })).toBeInTheDocument()
+    const incomeGroupingButton = within(reportsPanel).getByRole('button', { name: 'Показать отдельные платежи' })
+    expect(incomeGroupingButton).toBeDisabled()
     expect(within(within(reportsPanel).getByRole('group', { name: 'Количество строк отчета по поступлениям' })).getByRole('button', { name: '25' })).toBeDisabled()
 
     await act(async () => {
@@ -15962,6 +15976,7 @@ describe('App', () => {
 
     expect(await within(reportsPanel).findByText('Отчет по поступлениям временно недоступен')).toHaveAttribute('role', 'alert')
     expect(within(reportsPanel).queryByText('Загружаем поступления...')).not.toBeInTheDocument()
+    expect(incomeGroupingButton).toBeEnabled()
   })
 
   it('shows loading and error states for the paged cash payment report', async () => {

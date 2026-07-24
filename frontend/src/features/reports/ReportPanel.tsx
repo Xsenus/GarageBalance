@@ -271,6 +271,7 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
   const [feeDebtorsVisible, setFeeDebtorsVisible] = useState(false)
   const [feeDetailMode, setFeeDetailMode] = useState<'debtors' | 'all'>('debtors')
   const [garageAccrualsGrouped, setGarageAccrualsGrouped] = useState(false)
+  const [incomePaymentsGrouped, setIncomePaymentsGrouped] = useState(true)
   const [reportDataError, setReportDataError] = useState<string | null>(null)
   const [reportExporting, setReportExporting] = useState<string | null>(null)
   const [reportExportMessage, setReportExportMessage] = useState<string | null>(null)
@@ -556,7 +557,7 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
           dateTo: filter.dateTo,
           garageIds: selectedIncomeGarageIds,
           rowMode: 'payments',
-          groupPayments: true,
+          groupPayments: incomePaymentsGrouped,
           offset: incomePageRequest.offset,
           limit: incomePageRequest.limit,
           sortBy: sort?.field,
@@ -582,7 +583,7 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
     return () => {
       ignore = true
     }
-  }, [activeReportTab, auth.accessToken, dateFilters.income, incomePageRequest.limit, incomePageRequest.offset, reportClient, reportSorts.income, selectedIncomeGarageIds])
+  }, [activeReportTab, auth.accessToken, dateFilters.income, incomePageRequest.limit, incomePageRequest.offset, incomePaymentsGrouped, reportClient, reportSorts.income, selectedIncomeGarageIds])
 
   useEffect(() => {
     if (activeReportTab !== 'cashPayments') {
@@ -870,7 +871,7 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
       ...filter,
       garageIds: selectedIncomeGarageIds,
       rowMode: 'payments',
-      groupPayments: true,
+      groupPayments: incomePaymentsGrouped,
       sortBy: reportSorts.income?.field,
       sortDirection: reportSorts.income?.direction,
     }
@@ -1348,7 +1349,24 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
           {renderDateFilter('income', {
             from: 'С',
             to: 'По',
-            actions: <>{renderReportExportButton('xlsx', 'income-xlsx', () => void downloadIncomeReport('xlsx'))}{renderReportExportButton('pdf', 'income-pdf', () => void downloadIncomeReport('pdf'))}</>,
+            actions: (
+              <>
+                <button
+                  className="secondary-button report-group-button"
+                  type="button"
+                  aria-pressed={incomePaymentsGrouped}
+                  disabled={incomeReportLoading}
+                  onClick={() => {
+                    setIncomePageRequest((current) => ({ ...current, offset: 0 }))
+                    setIncomePaymentsGrouped((current) => !current)
+                  }}
+                >
+                  {incomePaymentsGrouped ? 'Показать отдельные платежи' : 'Сгруппировать платежи'}
+                </button>
+                {renderReportExportButton('xlsx', 'income-xlsx', () => void downloadIncomeReport('xlsx'))}
+                {renderReportExportButton('pdf', 'income-pdf', () => void downloadIncomeReport('pdf'))}
+              </>
+            ),
             extra: (
               <ReportCheckboxMultiSelect
                 key="income-report-filter"
@@ -1367,6 +1385,9 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
               />
             ),
           })}
+          <p className="report-workbook-comment" role="note">
+            По умолчанию части одной квитанции или полной оплаты объединены. В режиме отдельных платежей каждая операция показана собственной строкой.
+          </p>
           {incomeReportLoading ? <TableLoadingState label="Загружаем поступления..." /> : null}
           {incomeReportError ? <FormError>{incomeReportError}</FormError> : null}
           <div className="report-workbook-summary-row report-workbook-summary-row--single"><strong>ИТОГО</strong></div>
