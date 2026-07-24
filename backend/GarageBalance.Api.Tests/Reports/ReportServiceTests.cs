@@ -14,6 +14,8 @@ using System.Data.Common;
 using System.Globalization;
 using System.IO.Compression;
 using System.Text;
+using UglyToad.PdfPig;
+using UglyToad.PdfPig.DocumentLayoutAnalysis.TextExtractor;
 
 namespace GarageBalance.Api.Tests.Reports;
 
@@ -720,13 +722,104 @@ public sealed class ReportServiceTests
 
         Assert.True(xlsx.Succeeded);
         Assert.Equal("garagebalance-garages-20260601-20260601.xlsx", xlsx.Value!.FileName);
-        AssertWorkbookContains(xlsx.Value.Content, "Гаражи");
-        AssertWorkbookContains(xlsx.Value.Content, fixtures.FirstGarage.Number);
-        AssertWorkbookContains(xlsx.Value.Content, fixtures.SecondGarage.Number);
+        AssertWorkbookHasSingleSheet(xlsx.Value.Content, "Гаражи");
+        var workbookRows = ReadFirstWorksheetRows(xlsx.Value.Content);
+        Assert.Equal(["Месяц", "Гараж", "Начисления", "Поступления", "Разница"], workbookRows[0]);
+        Assert.Equal("06.2026", workbookRows[1][0]);
+        Assert.Equal(fixtures.SecondGarage.Number, workbookRows[1][1]);
+        Assert.Equal("06.2026", workbookRows[2][0]);
+        Assert.Equal(fixtures.FirstGarage.Number, workbookRows[2][1]);
+        Assert.Equal(["ИТОГО", "", "2000.0", "0.0", "2000.0"], workbookRows[3]);
+        Assert.Empty(workbookRows[4]);
+        Assert.StartsWith("Начисления и поступления сопоставлены", workbookRows[5][0]);
+        AssertWorkbookDoesNotContain(xlsx.Value.Content, "Владелец");
+        AssertWorkbookDoesNotContain(xlsx.Value.Content, "Итоги");
         Assert.True(pdf.Succeeded);
         Assert.Equal("garagebalance-garages-20260601-20260601.pdf", pdf.Value!.FileName);
-        Assert.StartsWith("%PDF-1.4", System.Text.Encoding.ASCII.GetString(pdf.Value.Content));
+        var pdfText = ReadPdfText(pdf.Value.Content);
+        Assert.Contains("Отчёт по гаражам", pdfText);
+        Assert.Contains("Месяц", pdfText);
+        Assert.Contains("Гараж", pdfText);
+        Assert.Contains("Начисления", pdfText);
+        Assert.Contains("Поступления", pdfText);
+        Assert.Contains("Разница", pdfText);
+        Assert.Contains(fixtures.SecondGarage.Number, pdfText);
+        Assert.Contains("2 000.00", pdfText);
+        Assert.DoesNotContain("Владелец", pdfText);
+        Assert.DoesNotContain("Услуга", pdfText);
+        AssertPdfIsLandscape(pdf.Value.Content);
         Assert.Contains(database.Context.AuditEvents, auditEvent => auditEvent.Action == "reports.garages_exported" && auditEvent.EntityType == "report");
+    }
+
+    [Fact]
+    public async Task ExportGarageReports_DetailedLayoutMatchesScreenColumnsRowsAndTotals()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        var finance = FinanceServiceTestFactory.Create(database.Context);
+        var service = CreateService(database.Context);
+        await finance.CreateAccrualAsync(new CreateAccrualRequest(fixtures.FirstGarage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 6, 1), 1200m, "regular", null), null, CancellationToken.None);
+        await finance.CreateIncomeAsync(new CreateIncomeOperationRequest(fixtures.FirstGarage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 6, 12), new DateOnly(2026, 6, 1), 500m, "GARAGE-EXPORT", null), null, CancellationToken.None);
+        var request = new GarageReportRequest(
+            new DateOnly(2026, 6, 1),
+            new DateOnly(2026, 6, 1),
+            null,
+            false,
+            GarageIds: [fixtures.FirstGarage.Id]);
+
+        var xlsx = await service.ExportGarageReportXlsxAsync(request, CancellationToken.None);
+        var pdf = await service.ExportGarageReportPdfAsync(request, CancellationToken.None);
+
+        Assert.True(xlsx.Succeeded, xlsx.ErrorMessage);
+        var workbookRows = ReadFirstWorksheetRows(xlsx.Value!.Content);
+        Assert.Equal(["Месяц", "Гараж", "Услуга", "Начисления", "Поступления", "Разница"], workbookRows[0]);
+        Assert.Equal(["06.2026", fixtures.FirstGarage.Number, fixtures.IncomeType.Name, "1200.0", "500.0", "700.0"], workbookRows[1]);
+        Assert.Equal(["ИТОГО", "", "", "1200.0", "500.0", "700.0"], workbookRows[2]);
+        AssertWorkbookDoesNotContain(xlsx.Value.Content, "Владелец");
+        AssertWorkbookDoesNotContain(xlsx.Value.Content, "Вид поступления");
+        Assert.True(pdf.Succeeded, pdf.ErrorMessage);
+        var pdfText = ReadPdfText(pdf.Value!.Content);
+        Assert.Contains("Месяц", pdfText);
+        Assert.Contains("Гараж", pdfText);
+        Assert.Contains("Услуга", pdfText);
+        Assert.Contains("Начисления", pdfText);
+        Assert.Contains("Поступления", pdfText);
+        Assert.Contains("Разница", pdfText);
+        Assert.Contains(fixtures.FirstGarage.Number, pdfText);
+        Assert.Contains(fixtures.IncomeType.Name, pdfText);
+        Assert.Contains("1 200.00", pdfText);
+        Assert.DoesNotContain("Владелец", pdfText);
+    }
+
+    [Fact]
+    public async Task ExportGarageReports_EmptyPeriodKeepsScreenHeadersZeroTotalsAndExplanation()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        await database.SeedAsync();
+        var service = CreateService(database.Context);
+        var request = new GarageReportRequest(
+            new DateOnly(2027, 1, 1),
+            new DateOnly(2027, 1, 1),
+            null,
+            false);
+
+        var xlsx = await service.ExportGarageReportXlsxAsync(request, CancellationToken.None);
+        var pdf = await service.ExportGarageReportPdfAsync(request, CancellationToken.None);
+
+        Assert.True(xlsx.Succeeded, xlsx.ErrorMessage);
+        var workbookRows = ReadFirstWorksheetRows(xlsx.Value!.Content);
+        Assert.Equal(["Месяц", "Гараж", "Услуга", "Начисления", "Поступления", "Разница"], workbookRows[0]);
+        Assert.Equal(["ИТОГО", "", "", "0", "0", "0"], workbookRows[1]);
+        Assert.Empty(workbookRows[2]);
+        Assert.StartsWith("Начисления и поступления сопоставлены", workbookRows[3][0]);
+        Assert.True(pdf.Succeeded, pdf.ErrorMessage);
+        var pdfText = ReadPdfText(pdf.Value!.Content);
+        Assert.Contains("Период: 01.2027 - 01.2027", pdfText);
+        Assert.Contains("Услуга", pdfText);
+        Assert.Contains("ИТОГО начислений", pdfText);
+        Assert.Contains("0.00", pdfText);
+        Assert.Contains("Группировка объединяет услуги", pdfText);
+        AssertPdfIsLandscape(pdf.Value.Content);
     }
 
     [Fact]
@@ -2590,12 +2683,13 @@ public sealed class ReportServiceTests
         Assert.True(xlsx.Succeeded, xlsx.ErrorMessage);
         Assert.True(pdf.Succeeded, pdf.ErrorMessage);
         AssertWorkbookContains(xlsx.Value!.Content, rowMarker);
-        AssertPdfContains(pdf.Value!.Content, rowMarker);
+        var pdfText = ReadPdfText(pdf.Value!.Content);
+        Assert.Contains(rowMarker, pdfText);
 
         foreach (var total in totals.Distinct())
         {
             AssertWorkbookContainsNumber(xlsx.Value.Content, total);
-            AssertPdfContains(pdf.Value.Content, MoneyFormatting.Format(total));
+            Assert.Contains(MoneyFormatting.Format(total), pdfText);
         }
     }
 
@@ -2612,6 +2706,43 @@ public sealed class ReportServiceTests
                 .Where(element => element.Name.LocalName == "v")
                 .Select(element => element.Value));
         Assert.Contains(expectedText, values);
+    }
+
+    private static void AssertWorkbookHasSingleSheet(byte[] content, string expectedSheetName)
+    {
+        using var stream = new MemoryStream(content);
+        using var archive = new ZipArchive(stream, ZipArchiveMode.Read);
+        var workbook = System.Xml.Linq.XDocument.Parse(ReadEntry(archive.GetEntry("xl/workbook.xml")!));
+        var sheet = Assert.Single(workbook.Descendants(), element => element.Name.LocalName == "sheet");
+        Assert.Equal(expectedSheetName, sheet.Attribute("name")?.Value);
+    }
+
+    private static string ReadPdfText(byte[] content)
+    {
+        using var document = PdfDocument.Open(content);
+        return string.Join(
+            Environment.NewLine,
+            document.GetPages().Select(page => ContentOrderTextExtractor.GetText(page)));
+    }
+
+    private static void AssertPdfIsLandscape(byte[] content)
+    {
+        using var document = PdfDocument.Open(content);
+        Assert.All(document.GetPages(), page => Assert.True(page.Width > page.Height));
+    }
+
+    private static IReadOnlyList<IReadOnlyList<string>> ReadFirstWorksheetRows(byte[] content)
+    {
+        using var stream = new MemoryStream(content);
+        using var archive = new ZipArchive(stream, ZipArchiveMode.Read);
+        var worksheet = System.Xml.Linq.XDocument.Parse(ReadEntry(archive.GetEntry("xl/worksheets/sheet1.xml")!));
+        return worksheet.Descendants()
+            .Where(element => element.Name.LocalName == "row")
+            .Select(row => (IReadOnlyList<string>)row.Elements()
+                .Where(element => element.Name.LocalName == "c")
+                .Select(cell => cell.Descendants().FirstOrDefault(element => element.Name.LocalName is "t" or "v")?.Value ?? string.Empty)
+                .ToArray())
+            .ToArray();
     }
 
     private static void AssertWorkbookContains(byte[] content, string expected)

@@ -258,43 +258,18 @@ public sealed class ReportService(
         }
 
         var report = reportResult.Value!;
-        var headers = request.GroupAccruals
-            ? new[] { "Месяц", "Гараж", "Владелец", "Начислено", "Поступило", "Разница" }
-            : new[] { "Месяц", "Гараж", "Владелец", "Вид поступления", "Начислено", "Поступило", "Разница" };
-        var rows = report.Rows.Select(row => request.GroupAccruals
-            ? (IReadOnlyList<XlsxCell>)
+        var layout = BuildGarageReportExportLayout(report, request.GroupAccruals);
+        var rows = layout.Rows
+            .Concat([layout.Footer])
+            .Concat(
             [
-                XlsxCell.Text(row.AccountingMonth.ToString("yyyy-MM")),
-                XlsxCell.Text(row.GarageNumber),
-                XlsxCell.Text(row.OwnerName),
-                XlsxCell.Number(row.AccrualAmount),
-                XlsxCell.Number(row.IncomeAmount),
-                XlsxCell.Number(row.Difference)
-            ]
-            :
-            [
-                XlsxCell.Text(row.AccountingMonth.ToString("yyyy-MM")),
-                XlsxCell.Text(row.GarageNumber),
-                XlsxCell.Text(row.OwnerName),
-                XlsxCell.Text(row.IncomeTypeName),
-                XlsxCell.Number(row.AccrualAmount),
-                XlsxCell.Number(row.IncomeAmount),
-                XlsxCell.Number(row.Difference)
-            ]).ToArray();
+                Array.Empty<XlsxCell>(),
+                [XlsxCell.Text(GarageReportComment)]
+            ])
+            .ToArray();
         var content = XlsxWorkbookBuilder.Build(
             [
-                new XlsxSheet("Гаражи", headers, rows),
-                new XlsxSheet(
-                    "Итоги",
-                    ["Период с", "Период по", "Начислено", "Поступило", "Разница", "Строк"],
-                    [[
-                        XlsxCell.Text(report.PeriodFrom.ToString("yyyy-MM-dd")),
-                        XlsxCell.Text(report.PeriodTo.ToString("yyyy-MM-dd")),
-                        XlsxCell.Number(report.AccrualTotal),
-                        XlsxCell.Number(report.IncomeTotal),
-                        XlsxCell.Number(report.Difference),
-                        XlsxCell.Number(report.RowCount)
-                    ]])
+                new XlsxSheet("Гаражи", layout.Headers, rows)
             ]);
         var file = new ReportExportFileDto(
             BuildExportFileName("garages", report.PeriodFrom, report.PeriodTo, "xlsx"),
@@ -314,19 +289,8 @@ public sealed class ReportService(
         }
 
         var report = reportResult.Value!;
-        var lines = new List<string>
-        {
-            $"Period: {report.PeriodFrom:yyyy-MM-dd} - {report.PeriodTo:yyyy-MM-dd}",
-            $"Accrued: {FormatAmount(report.AccrualTotal)} | Income: {FormatAmount(report.IncomeTotal)} | Difference: {FormatAmount(report.Difference)} | Rows: {report.RowCount}",
-            string.Empty,
-            request.GroupAccruals
-                ? "Month | Garage | Owner | Accrued | Income | Difference"
-                : "Month | Garage | Owner | Income type | Accrued | Income | Difference"
-        };
-        lines.AddRange(report.Rows.Select(row => request.GroupAccruals
-            ? string.Join(" | ", row.AccountingMonth.ToString("yyyy-MM"), row.GarageNumber, row.OwnerName ?? string.Empty, FormatAmount(row.AccrualAmount), FormatAmount(row.IncomeAmount), FormatAmount(row.Difference))
-            : string.Join(" | ", row.AccountingMonth.ToString("yyyy-MM"), row.GarageNumber, row.OwnerName ?? string.Empty, row.IncomeTypeName, FormatAmount(row.AccrualAmount), FormatAmount(row.IncomeAmount), FormatAmount(row.Difference))));
-        var content = PdfReportDocumentBuilder.Build("GarageBalance garage report", lines);
+        var layout = BuildGarageReportExportLayout(report, request.GroupAccruals);
+        var content = GarageReportPdfDocumentBuilder.Build(report, layout, GarageReportComment);
         var file = new ReportExportFileDto(
             BuildExportFileName("garages", report.PeriodFrom, report.PeriodTo, "pdf"),
             "application/pdf",
@@ -334,6 +298,54 @@ public sealed class ReportService(
         await AddReportExportAuditAsync(request.ActorUserId, "Отчет по гаражам", "pdf", file.FileName, report.PeriodFrom, report.PeriodTo, report.RowCount, request.Search, cancellationToken);
 
         return ReportResult<ReportExportFileDto>.Success(file);
+    }
+
+    private const string GarageReportComment =
+        "Начисления и поступления сопоставлены по месяцу, гаражу и услуге. Разница = начисления - поступления. Группировка объединяет услуги в одну строку по гаражу и месяцу.";
+
+    private static GarageReportExportLayout BuildGarageReportExportLayout(GarageDetailReportDto report, bool groupAccruals)
+    {
+        var headers = groupAccruals
+            ? new[] { "Месяц", "Гараж", "Начисления", "Поступления", "Разница" }
+            : new[] { "Месяц", "Гараж", "Услуга", "Начисления", "Поступления", "Разница" };
+        var rows = report.Rows.Select(row => groupAccruals
+            ? (IReadOnlyList<XlsxCell>)
+            [
+                XlsxCell.Text(row.AccountingMonth.ToString("MM.yyyy")),
+                XlsxCell.Text(row.GarageNumber),
+                XlsxCell.Number(row.AccrualAmount),
+                XlsxCell.Number(row.IncomeAmount),
+                XlsxCell.Number(row.Difference)
+            ]
+            :
+            [
+                XlsxCell.Text(row.AccountingMonth.ToString("MM.yyyy")),
+                XlsxCell.Text(row.GarageNumber),
+                XlsxCell.Text(row.IncomeTypeName),
+                XlsxCell.Number(row.AccrualAmount),
+                XlsxCell.Number(row.IncomeAmount),
+                XlsxCell.Number(row.Difference)
+            ]).ToArray();
+        IReadOnlyList<XlsxCell> footer = groupAccruals
+            ?
+            [
+                XlsxCell.Text("ИТОГО"),
+                XlsxCell.Text(string.Empty),
+                XlsxCell.Number(report.AccrualTotal),
+                XlsxCell.Number(report.IncomeTotal),
+                XlsxCell.Number(report.Difference)
+            ]
+            :
+            [
+                XlsxCell.Text("ИТОГО"),
+                XlsxCell.Text(string.Empty),
+                XlsxCell.Text(string.Empty),
+                XlsxCell.Number(report.AccrualTotal),
+                XlsxCell.Number(report.IncomeTotal),
+                XlsxCell.Number(report.Difference)
+            ];
+
+        return new GarageReportExportLayout(headers, rows, footer);
     }
 
     public async Task<ReportResult<ReportExportFileDto>> ExportConsolidatedReportXlsxAsync(ConsolidatedReportRequest request, CancellationToken cancellationToken)
@@ -1702,3 +1714,8 @@ public sealed class ReportService(
     }
 
 }
+
+internal sealed record GarageReportExportLayout(
+    IReadOnlyList<string> Headers,
+    IReadOnlyList<IReadOnlyList<XlsxCell>> Rows,
+    IReadOnlyList<XlsxCell> Footer);
