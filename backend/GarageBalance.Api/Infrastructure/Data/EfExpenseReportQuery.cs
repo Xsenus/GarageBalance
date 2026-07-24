@@ -76,7 +76,10 @@ public sealed class EfExpenseReportQuery(GarageBalanceDbContext dbContext) : IEx
         var hasSearch = !string.IsNullOrWhiteSpace(search);
         var normalizedSearch = search?.Trim().ToLowerInvariant();
         var useClientSearch = hasSearch && !(dbContext.Database.ProviderName?.Contains("Npgsql", StringComparison.OrdinalIgnoreCase) ?? false);
-        var fetchLimit = useClientSearch ? null : GetFetchLimit(offset, limit);
+        // The non-PostgreSQL branch is used by the isolated test provider. In the
+        // combined mode all source rows must be available before monthly grouping
+        // so pagination cannot split an accrual from its payment.
+        var fetchLimit = useClientSearch || rowMode == AllRows ? null : GetFetchLimit(offset, limit);
         var includeSuppliers = supplierIds.Count > 0 || staffMemberIds.Count == 0;
         var includeStaff = staffMemberIds.Count > 0 || supplierIds.Count == 0;
         var staffRows = new List<ExpenseReportRowDto>();
@@ -410,6 +413,14 @@ public sealed class EfExpenseReportQuery(GarageBalanceDbContext dbContext) : IEx
             accrualTotal += staffRows.Sum(row => row.AccrualAmount);
             expenseTotal += staffRows.Sum(row => row.ExpenseAmount);
             rowCount += staffRows.Count;
+        }
+
+        if (rowMode == AllRows)
+        {
+            rows = MergeMonthlyRows(rows);
+            accrualTotal = rows.Sum(row => row.AccrualAmount);
+            expenseTotal = rows.Sum(row => row.ExpenseAmount);
+            rowCount = rows.Count;
         }
 
         var visibleRows = ApplyPage(
@@ -905,7 +916,7 @@ public sealed class EfExpenseReportQuery(GarageBalanceDbContext dbContext) : IEx
             : string.Empty;
         var limitClause = limit is > 0 ? "LIMIT @limit" : string.Empty;
         var sql = $$"""
-            WITH filtered_rows AS (
+            WITH source_rows AS (
                 SELECT supplier."Id" AS id,
                        'starting_balance'::text AS row_type,
                        @date_from::date AS row_date,
@@ -1009,6 +1020,35 @@ public sealed class EfExpenseReportQuery(GarageBalanceDbContext dbContext) : IEx
                   {{staffClause}}
                   {{expenseTypeClause}}
                   {{staffPaymentSearchClause}}
+            ), filtered_rows AS (
+                SELECT md5(
+                           counterparty_kind || ':' ||
+                           counterparty_id::text || ':' ||
+                           expense_type_id::text || ':' ||
+                           accounting_month::text
+                       )::uuid AS id,
+                       CASE
+                           WHEN MIN(row_type) = MAX(row_type) THEN MIN(row_type)
+                           ELSE 'all'
+                       END AS row_type,
+                       accounting_month AS row_date,
+                       accounting_month,
+                       counterparty_id,
+                       MIN(counterparty_name) AS counterparty_name,
+                       expense_type_id,
+                       MIN(expense_type_name) AS expense_type_name,
+                       SUM(accrual_amount) AS accrual_amount,
+                       SUM(expense_amount) AS expense_amount,
+                       SUM(accrual_amount) - SUM(expense_amount) AS difference,
+                       STRING_AGG(DISTINCT document_number, '; ' ORDER BY document_number)
+                           FILTER (WHERE document_number IS NOT NULL) AS document_number,
+                       STRING_AGG(DISTINCT comment, '; ' ORDER BY comment)
+                           FILTER (WHERE comment IS NOT NULL) AS comment,
+                       MIN(created_at_utc) AS created_at_utc,
+                       MIN(staff_member_id::text)::uuid AS staff_member_id,
+                       counterparty_kind
+                FROM source_rows
+                GROUP BY accounting_month, counterparty_id, expense_type_id, counterparty_kind
             ), page_rows AS (
                 SELECT filtered_rows.*,
                        ROW_NUMBER() OVER (
@@ -1502,6 +1542,48 @@ public sealed class EfExpenseReportQuery(GarageBalanceDbContext dbContext) : IEx
     }
 
     private static DateOnly NormalizeMonth(DateOnly date) => new(date.Year, date.Month, 1);
+
+    private static List<ExpenseReportRowDto> MergeMonthlyRows(IEnumerable<ExpenseReportRowDto> rows) =>
+        rows.GroupBy(row => new
+        {
+            row.AccountingMonth,
+            row.SupplierId,
+            row.ExpenseTypeId,
+            row.CounterpartyKind
+        })
+            .Select(group =>
+            {
+                var rowTypes = group.Select(row => row.RowType).Distinct(StringComparer.Ordinal).ToArray();
+                var documentNumbers = group
+                    .Select(row => row.DocumentNumber)
+                    .Where(value => value is not null)
+                    .Distinct(StringComparer.Ordinal)
+                    .ToArray();
+                var comments = group
+                    .Select(row => row.Comment)
+                    .Where(value => value is not null)
+                    .Distinct(StringComparer.Ordinal)
+                    .ToArray();
+                var first = group.First();
+                var accrualAmount = group.Sum(row => row.AccrualAmount);
+                var expenseAmount = group.Sum(row => row.ExpenseAmount);
+                return new ExpenseReportRowDto(
+                    rowTypes.Length == 1 ? rowTypes[0] : AllRows,
+                    group.Key.AccountingMonth,
+                    group.Key.AccountingMonth,
+                    group.Key.SupplierId,
+                    first.SupplierName,
+                    group.Key.ExpenseTypeId,
+                    first.ExpenseTypeName,
+                    accrualAmount,
+                    expenseAmount,
+                    accrualAmount - expenseAmount,
+                    documentNumbers.Length > 0 ? string.Join("; ", documentNumbers.Order(StringComparer.Ordinal)) : null,
+                    comments.Length > 0 ? string.Join("; ", comments.Order(StringComparer.Ordinal)) : null,
+                    first.StaffMemberId,
+                    group.Key.CounterpartyKind);
+            })
+            .ToList();
 
     private bool IsNpgsql() =>
         dbContext.Database.ProviderName?.Contains("Npgsql", StringComparison.OrdinalIgnoreCase) == true;

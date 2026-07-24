@@ -253,7 +253,7 @@ public sealed class ReportServiceTests
         var expenses = await service.GetExpenseReportAsync(expenseRequest, CancellationToken.None);
         Assert.True(expenses.Succeeded);
         Assert.Equal((900m, 400m, 500m), (expenses.Value!.AccrualTotal, expenses.Value.ExpenseTotal, expenses.Value.Difference));
-        Assert.Contains(expenses.Value.Rows, row => row.DocumentNumber == "PARITY-RKO");
+        Assert.Contains(expenses.Value.Rows, row => row.DocumentNumber?.Contains("PARITY-RKO", StringComparison.Ordinal) == true);
         await AssertReportFormatParityAsync(
             service.ExportExpenseReportXlsxAsync(expenseRequest, CancellationToken.None),
             service.ExportExpenseReportPdfAsync(expenseRequest, CancellationToken.None),
@@ -1092,6 +1092,55 @@ public sealed class ReportServiceTests
     }
 
     [Fact]
+    public async Task GetExpenseReportAsync_CombinesAccrualAndPaymentForSameMonth()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        var finance = FinanceServiceTestFactory.Create(database.Context);
+        var service = CreateService(database.Context);
+        await finance.CreateSupplierAccrualAsync(
+            new CreateSupplierAccrualRequest(
+                fixtures.Supplier.Id,
+                fixtures.ExpenseType.Id,
+                new DateOnly(2026, 6, 1),
+                650m,
+                "manual",
+                "INV-1",
+                "Счет поставщика"),
+            null,
+            CancellationToken.None);
+        await finance.CreateExpenseAsync(
+            new CreateExpenseOperationRequest(
+                fixtures.Supplier.Id,
+                fixtures.ExpenseType.Id,
+                new DateOnly(2026, 6, 12),
+                new DateOnly(2026, 6, 1),
+                400m,
+                "RKO-1",
+                "Оплата воды"),
+            null,
+            CancellationToken.None);
+
+        var result = await service.GetExpenseReportAsync(
+            new ExpenseReportRequest(new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 30), null, [], [], "all"),
+            CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+        Assert.Equal(1, result.Value!.RowCount);
+        var row = Assert.Single(result.Value.Rows);
+        Assert.Equal("all", row.RowType);
+        Assert.Equal(new DateOnly(2026, 6, 1), row.AccountingMonth);
+        Assert.Equal(650m, row.AccrualAmount);
+        Assert.Equal(400m, row.ExpenseAmount);
+        Assert.Equal(250m, row.Difference);
+        Assert.Equal("INV-1; RKO-1", row.DocumentNumber);
+        Assert.Equal("Оплата воды; Счет поставщика", row.Comment);
+        Assert.Equal(650m, result.Value.AccrualTotal);
+        Assert.Equal(400m, result.Value.ExpenseTotal);
+        Assert.Equal(250m, result.Value.Difference);
+    }
+
+    [Fact]
     public async Task GetExpenseReportAsync_AppliesPageWithoutChangingTotals()
     {
         await using var database = await TestDatabase.CreateAsync();
@@ -1480,8 +1529,8 @@ public sealed class ReportServiceTests
         Assert.Equal(6, commandCounter.Count);
         Assert.Equal(10100m, result.AccrualTotal);
         Assert.Equal(4000m, result.ExpenseTotal);
-        Assert.Equal(401, result.RowCount);
-        Assert.Equal(25, result.Rows.Count);
+        Assert.Equal(2, result.RowCount);
+        Assert.Equal(2, result.Rows.Count);
         Assert.All(result.Rows, row => Assert.Equal(fixtures.Supplier.Id, row.SupplierId));
     }
 
@@ -1550,12 +1599,15 @@ public sealed class ReportServiceTests
             new ReportSort("date", false),
             CancellationToken.None);
 
-        Assert.Equal(2, result.RowCount);
+        Assert.Equal(1, result.RowCount);
         Assert.Equal(350m, result.AccrualTotal);
         Assert.Equal(125m, result.ExpenseTotal);
-        var accrualRow = Assert.Single(result.Rows, row => row.RowType == "accruals");
-        Assert.Equal(350m, accrualRow.AccrualAmount);
-        Assert.Equal("Оклад с учетом премий и штрафов", accrualRow.Comment);
+        var combinedRow = Assert.Single(result.Rows);
+        Assert.Equal("all", combinedRow.RowType);
+        Assert.Equal(350m, combinedRow.AccrualAmount);
+        Assert.Equal(125m, combinedRow.ExpenseAmount);
+        Assert.Equal(225m, combinedRow.Difference);
+        Assert.Equal("Оклад с учетом премий и штрафов", combinedRow.Comment);
         Assert.All(result.Rows, row =>
         {
             Assert.Equal("staff", row.CounterpartyKind);

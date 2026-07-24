@@ -578,7 +578,8 @@ public sealed class BackendPerformanceGuardTests
         Assert.Contains("ExpenseTotalCategory", expenseSource, StringComparison.Ordinal);
         var expenseAllMethod = expenseSource[
             expenseSource.IndexOf("private async Task<ExpenseReportQueryData> GetPostgresAllRowsAsync", StringComparison.Ordinal)..expenseSource.IndexOf("private async Task<ExpenseReportQueryData> GetPostgresAccrualRowsAsync", StringComparison.Ordinal)];
-        Assert.Contains("WITH filtered_rows AS", expenseAllMethod, StringComparison.Ordinal);
+        Assert.Contains("WITH source_rows AS", expenseAllMethod, StringComparison.Ordinal);
+        Assert.Contains("GROUP BY accounting_month, counterparty_id, expense_type_id, counterparty_kind", expenseAllMethod, StringComparison.Ordinal);
         Assert.Contains("COALESCE(SUM(accrual_amount), 0)", expenseAllMethod, StringComparison.Ordinal);
         Assert.Contains("COALESCE(SUM(expense_amount), 0)", expenseAllMethod, StringComparison.Ordinal);
         Assert.Contains("SqlQueryRaw<ExpenseAllCombinedQueryRow>", expenseAllMethod, StringComparison.Ordinal);

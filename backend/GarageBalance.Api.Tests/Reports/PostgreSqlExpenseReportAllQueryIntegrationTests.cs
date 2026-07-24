@@ -74,7 +74,7 @@ public sealed class PostgreSqlExpenseReportAllQueryIntegrationTests
             new ReportSort("difference", true),
             CancellationToken.None);
 
-        Assert.Equal(5, page.RowCount);
+        Assert.Equal(3, page.RowCount);
         Assert.Equal(800m, page.AccrualTotal);
         Assert.Equal(200m, page.ExpenseTotal);
         Assert.Equal(2, page.Rows.Count);
@@ -82,18 +82,23 @@ public sealed class PostgreSqlExpenseReportAllQueryIntegrationTests
             page.Rows,
             row =>
             {
-                Assert.Equal("accruals", row.RowType);
+                Assert.Equal("all", row.RowType);
                 Assert.Equal(500m, row.AccrualAmount);
+                Assert.Equal(120m, row.ExpenseAmount);
+                Assert.Equal(380m, row.Difference);
                 Assert.Equal(supplierName, row.SupplierName);
             },
             row =>
             {
-                Assert.Equal("accruals", row.RowType);
+                Assert.Equal("all", row.RowType);
                 Assert.Equal(200m, row.AccrualAmount);
+                Assert.Equal(80m, row.ExpenseAmount);
+                Assert.Equal(120m, row.Difference);
                 Assert.Equal(staffName, row.SupplierName);
             });
         var pageCommand = Assert.Single(capture.Commands);
-        Assert.Contains("WITH filtered_rows AS", pageCommand, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("WITH source_rows AS", pageCommand, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("GROUP BY accounting_month, counterparty_id, expense_type_id, counterparty_kind", pageCommand, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("COALESCE(SUM(accrual_amount), 0)", pageCommand, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("COALESCE(SUM(expense_amount), 0)", pageCommand, StringComparison.OrdinalIgnoreCase);
         Assert.Equal(1, CountOccurrences(pageCommand, "FROM supplier_accruals"));
@@ -117,7 +122,7 @@ public sealed class PostgreSqlExpenseReportAllQueryIntegrationTests
                     new ReportSort(field, descending),
                     CancellationToken.None);
 
-                Assert.Equal(5, sortedPage.RowCount);
+                Assert.Equal(3, sortedPage.RowCount);
                 Assert.Equal(800m, sortedPage.AccrualTotal);
                 Assert.Equal(200m, sortedPage.ExpenseTotal);
                 Assert.Single(sortedPage.Rows);
@@ -139,7 +144,7 @@ public sealed class PostgreSqlExpenseReportAllQueryIntegrationTests
             new ReportSort("date", false),
             CancellationToken.None);
 
-        Assert.Equal(3, supplierOnly.RowCount);
+        Assert.Equal(2, supplierOnly.RowCount);
         Assert.Equal(600m, supplierOnly.AccrualTotal);
         Assert.Equal(120m, supplierOnly.ExpenseTotal);
         Assert.All(supplierOnly.Rows, row => Assert.Equal("supplier", row.CounterpartyKind));
@@ -159,7 +164,7 @@ public sealed class PostgreSqlExpenseReportAllQueryIntegrationTests
             new ReportSort("date", false),
             CancellationToken.None);
 
-        Assert.Equal(2, staffOnly.RowCount);
+        Assert.Equal(1, staffOnly.RowCount);
         Assert.Equal(200m, staffOnly.AccrualTotal);
         Assert.Equal(80m, staffOnly.ExpenseTotal);
         Assert.All(staffOnly.Rows, row => Assert.Equal("staff", row.CounterpartyKind));
@@ -179,7 +184,7 @@ public sealed class PostgreSqlExpenseReportAllQueryIntegrationTests
             new ReportSort("date", false),
             CancellationToken.None);
 
-        Assert.Equal(2, typeFiltered.RowCount);
+        Assert.Equal(1, typeFiltered.RowCount);
         Assert.Equal(500m, typeFiltered.AccrualTotal);
         Assert.Equal(120m, typeFiltered.ExpenseTotal);
         Assert.DoesNotContain(typeFiltered.Rows, row => row.RowType == "starting_balance");
