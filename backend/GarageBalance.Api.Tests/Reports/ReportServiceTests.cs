@@ -1915,6 +1915,7 @@ public sealed class ReportServiceTests
         Assert.Equal("garagebalance-fund-changes-20260601-20260630.xlsx", result.Value!.FileName);
         Assert.Equal("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", result.Value.ContentType);
         AssertWorkbookContains(result.Value.Content, "Изменение фондов");
+        AssertWorkbookContains(result.Value.Content, "Изменение, руб.");
         AssertWorkbookContains(result.Value.Content, "Пополнение");
         AssertWorkbookContains(result.Value.Content, "Изъятие");
         AssertWorkbookContains(result.Value.Content, "Распределение средств");
@@ -1955,6 +1956,7 @@ public sealed class ReportServiceTests
         Assert.Equal("garagebalance-fund-changes-20260601-20260630.pdf", result.Value!.FileName);
         Assert.Equal("application/pdf", result.Value.ContentType);
         AssertPdfContains(result.Value.Content, "GarageBalance fund changes report");
+        AssertPdfContains(result.Value.Content, "Izmenenie, rub.");
         AssertPdfContains(result.Value.Content, "2026-06-10");
         AssertPdfContains(result.Value.Content, "1 500.00");
         Assert.Contains(database.Context.AuditEvents, auditEvent =>

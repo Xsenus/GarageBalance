@@ -642,7 +642,7 @@ public sealed class ReportService(
             [
                 new XlsxSheet(
                     "Изменение фондов",
-                    ["Фонд", "Дата", "Операция", "Сумма", "Сумма до", "Сумма после", "Пользователь", "Комментарий"],
+                    ["Фонд", "Дата", "Операция", "Изменение, руб.", "Сумма до", "Сумма после", "Пользователь", "Комментарий"],
                     report.Rows.Select(row => (IReadOnlyList<XlsxCell>)
                     [
                         XlsxCell.Text(row.FundName),
@@ -691,7 +691,7 @@ public sealed class ReportService(
             $"Period: {report.DateFrom:yyyy-MM-dd} - {report.DateTo:yyyy-MM-dd}",
             $"Deposits: {FormatAmount(report.DepositTotal)} | Withdrawals: {FormatAmount(report.WithdrawalTotal)} | Rows: {report.RowCount}",
             string.Empty,
-            "Fund | Date | Operation | Amount | Before | After | User | Comment"
+            "Фонд | Дата | Операция | Изменение, руб. | Сумма до | Сумма после | Пользователь | Комментарий"
         };
         lines.AddRange(report.Rows.Select(row =>
             string.Join(" | ",

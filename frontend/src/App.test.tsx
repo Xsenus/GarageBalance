@@ -15527,6 +15527,8 @@ describe('App', () => {
     expect(await within(reportsPanel).findByText(/Пополнено:\s*1 500\.00/)).toBeInTheDocument()
     expect(within(reportsPanel).getByText(/Изъято:\s*300\.00/)).toBeInTheDocument()
     const fundChangesTable = within(reportsPanel).getByRole('table', { name: 'Отчет по изменению фондов' })
+    expect(within(fundChangesTable).getByRole('columnheader', { name: 'Изменение, руб.' })).toBeInTheDocument()
+    expect(within(fundChangesTable).queryByRole('columnheader', { name: 'Сумма' })).not.toBeInTheDocument()
     expect(fundChangesTable).toHaveTextContent('Электроэнергия')
     expect(fundChangesTable).toHaveTextContent('Пополнение')
     expect(fundChangesTable).toHaveTextContent('Изъятие')
