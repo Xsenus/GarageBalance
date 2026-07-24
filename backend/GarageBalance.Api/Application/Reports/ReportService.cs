@@ -480,6 +480,7 @@ public sealed class ReportService(
             limit,
             offset,
             sort,
+            request.GroupPayments,
             cancellationToken);
         var report = new IncomeReportDto(
             dateFrom,
@@ -1479,6 +1480,7 @@ public sealed class ReportService(
         {
             ["reportType"] = "income",
             ["rowMode"] = rowMode,
+            ["groupPayments"] = request.GroupPayments,
             ["visibleRowCount"] = visibleRowCount,
             ["garageFilterCount"] = request.GarageIds.Count,
             ["ownerFilterCount"] = request.OwnerIds.Count,

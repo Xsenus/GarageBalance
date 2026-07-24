@@ -36,7 +36,8 @@ public sealed record IncomeReportRequest(
     int? Offset = null,
     Guid? ActorUserId = null,
     string? SortBy = null,
-    string? SortDirection = null);
+    string? SortDirection = null,
+    bool GroupPayments = false);
 
 public sealed record ExpenseReportRequest(
     DateOnly? DateFrom,

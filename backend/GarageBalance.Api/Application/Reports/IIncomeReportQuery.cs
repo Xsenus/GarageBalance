@@ -13,6 +13,7 @@ public interface IIncomeReportQuery
         int? limit,
         int offset,
         ReportSort sort,
+        bool groupPayments,
         CancellationToken cancellationToken);
 }
 

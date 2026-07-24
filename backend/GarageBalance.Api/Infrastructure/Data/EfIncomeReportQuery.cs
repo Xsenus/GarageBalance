@@ -30,7 +30,21 @@ public sealed class EfIncomeReportQuery(GarageBalanceDbContext dbContext) : IInc
         int? limit,
         int offset,
         CancellationToken cancellationToken) =>
-        GetRowsAsync(dateFrom, dateTo, rowMode, garageIds, ownerIds, incomeTypeIds, search, limit, offset, new ReportSort("date", false), cancellationToken);
+        GetRowsAsync(dateFrom, dateTo, rowMode, garageIds, ownerIds, incomeTypeIds, search, limit, offset, new ReportSort("date", false), false, cancellationToken);
+
+    public Task<IncomeReportQueryData> GetRowsAsync(
+        DateOnly dateFrom,
+        DateOnly dateTo,
+        string rowMode,
+        IReadOnlySet<Guid> garageIds,
+        IReadOnlySet<Guid> ownerIds,
+        IReadOnlySet<Guid> incomeTypeIds,
+        string? search,
+        int? limit,
+        int offset,
+        ReportSort sort,
+        CancellationToken cancellationToken) =>
+        GetRowsAsync(dateFrom, dateTo, rowMode, garageIds, ownerIds, incomeTypeIds, search, limit, offset, sort, false, cancellationToken);
 
     public async Task<IncomeReportQueryData> GetRowsAsync(
         DateOnly dateFrom,
@@ -43,6 +57,7 @@ public sealed class EfIncomeReportQuery(GarageBalanceDbContext dbContext) : IInc
         int? limit,
         int offset,
         ReportSort sort,
+        bool groupPayments,
         CancellationToken cancellationToken)
     {
         if (IsNpgsql())
@@ -51,6 +66,22 @@ public sealed class EfIncomeReportQuery(GarageBalanceDbContext dbContext) : IInc
                 dateFrom,
                 dateTo,
                 rowMode,
+                garageIds,
+                ownerIds,
+                incomeTypeIds,
+                search,
+                limit,
+                offset,
+                sort,
+                groupPayments,
+                cancellationToken);
+        }
+
+        if (groupPayments && rowMode == PaymentRows)
+        {
+            return await GetGroupedPaymentRowsFallbackAsync(
+                dateFrom,
+                dateTo,
                 garageIds,
                 ownerIds,
                 incomeTypeIds,
@@ -323,6 +354,109 @@ public sealed class EfIncomeReportQuery(GarageBalanceDbContext dbContext) : IInc
         return new IncomeReportQueryData(accrualTotal, incomeTotal, rowCount, visibleRows);
     }
 
+    private async Task<IncomeReportQueryData> GetGroupedPaymentRowsFallbackAsync(
+        DateOnly dateFrom,
+        DateOnly dateTo,
+        IReadOnlySet<Guid> garageIds,
+        IReadOnlySet<Guid> ownerIds,
+        IReadOnlySet<Guid> incomeTypeIds,
+        string? search,
+        int? limit,
+        int offset,
+        ReportSort sort,
+        CancellationToken cancellationToken)
+    {
+        var query = dbContext.FinancialOperations.AsNoTracking()
+            .Include(operation => operation.Garage)
+            .ThenInclude(garage => garage!.Owner)
+            .Include(operation => operation.IncomeType)
+            .Where(operation =>
+                !operation.IsCanceled &&
+                operation.OperationKind == FinancialOperationKinds.Income &&
+                operation.GarageId != null &&
+                operation.IncomeTypeId != null &&
+                operation.OperationDate >= dateFrom &&
+                operation.OperationDate <= dateTo);
+        if (garageIds.Count > 0)
+        {
+            query = query.Where(operation => garageIds.Contains(operation.GarageId!.Value));
+        }
+
+        if (ownerIds.Count > 0)
+        {
+            query = query.Where(operation => operation.Garage!.OwnerId != null && ownerIds.Contains(operation.Garage.OwnerId.Value));
+        }
+
+        if (incomeTypeIds.Count > 0)
+        {
+            query = query.Where(operation => incomeTypeIds.Contains(operation.IncomeTypeId!.Value));
+        }
+
+        var payments = await query.ToListAsync(cancellationToken);
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var normalizedSearch = search.Trim();
+            payments = payments.Where(operation =>
+                    operation.Garage!.Number.Contains(normalizedSearch, StringComparison.OrdinalIgnoreCase) ||
+                    (operation.Garage.Owner?.FullName.Contains(normalizedSearch, StringComparison.OrdinalIgnoreCase) ?? false) ||
+                    operation.IncomeType!.Name.Contains(normalizedSearch, StringComparison.OrdinalIgnoreCase) ||
+                    (operation.DocumentNumber?.Contains(normalizedSearch, StringComparison.OrdinalIgnoreCase) ?? false))
+                .ToList();
+        }
+
+        var groupedPayments = payments
+            .GroupBy(operation => operation.ReceiptBatchId ?? operation.Id)
+            .Select(group =>
+            {
+                var representative = group
+                    .OrderByDescending(operation => operation.OperationDate)
+                    .ThenByDescending(operation => operation.CreatedAtUtc)
+                    .ThenByDescending(operation => operation.Id)
+                    .First();
+                return new GroupedIncomePayment(
+                    representative,
+                    group.Sum(operation => operation.Amount),
+                    string.Join(", ", group.Select(operation => operation.IncomeType!.Name).Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal)),
+                    string.Join(", ", group.Select(operation => operation.DocumentNumber).Where(value => value is not null).Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal)),
+                    string.Join("; ", group.Select(operation => operation.Comment).Where(value => value is not null).Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal)));
+            })
+            .ToList();
+        var debtAfterPayments = await CalculateDebtAfterPaymentsAsync(
+            groupedPayments.Select(payment => new IncomeDebtTarget(
+                payment.Representative.Id,
+                payment.Representative.GarageId!.Value,
+                payment.Representative.AccountingMonth,
+                payment.Representative.OperationDate)).ToList(),
+            cancellationToken);
+        var rows = groupedPayments.Select(payment => new IncomeReportRowDto(
+            PaymentRows,
+            payment.Representative.OperationDate,
+            payment.Representative.AccountingMonth,
+            payment.Representative.GarageId!.Value,
+            payment.Representative.Garage!.Number,
+            payment.Representative.Garage.OwnerId,
+            payment.Representative.Garage.Owner?.FullName,
+            payment.Representative.IncomeTypeId!.Value,
+            payment.IncomeTypeName,
+            0m,
+            payment.Amount,
+            -payment.Amount,
+            string.IsNullOrEmpty(payment.DocumentNumber) ? null : payment.DocumentNumber,
+            string.IsNullOrEmpty(payment.Comment) ? null : payment.Comment,
+            payment.Representative.CreatedAtUtc,
+            debtAfterPayments.GetValueOrDefault(payment.Representative.Id)))
+            .ToList();
+        var visibleRows = ApplyPage(
+                ApplySort(rows, sort)
+                    .ThenByDescending(row => row.CreatedAtUtc)
+                    .ThenBy(row => row.GarageNumber, StringComparer.Ordinal)
+                    .ThenBy(row => row.GarageId),
+                offset,
+                limit)
+            .ToList();
+        return new IncomeReportQueryData(0m, payments.Sum(operation => operation.Amount), rows.Count, visibleRows);
+    }
+
     private async Task<IncomeReportQueryData> GetPostgresRowsAsync(
         DateOnly dateFrom,
         DateOnly dateTo,
@@ -334,6 +468,7 @@ public sealed class EfIncomeReportQuery(GarageBalanceDbContext dbContext) : IInc
         int? limit,
         int offset,
         ReportSort sort,
+        bool groupPayments,
         CancellationToken cancellationToken)
     {
         if (rowMode == PaymentRows)
@@ -348,6 +483,7 @@ public sealed class EfIncomeReportQuery(GarageBalanceDbContext dbContext) : IInc
                 limit,
                 offset,
                 sort,
+                groupPayments,
                 cancellationToken);
         }
         if (rowMode == AccrualRows)
@@ -787,6 +923,7 @@ public sealed class EfIncomeReportQuery(GarageBalanceDbContext dbContext) : IInc
         int? limit,
         int offset,
         ReportSort sort,
+        bool groupPayments,
         CancellationToken cancellationToken)
     {
         const int PageCategory = 1;
@@ -819,9 +956,42 @@ public sealed class EfIncomeReportQuery(GarageBalanceDbContext dbContext) : IInc
                    OR STRPOS(LOWER(operation."DocumentNumber"), @search) > 0)
               """;
         var limitClause = limit is > 0 ? "LIMIT @limit" : string.Empty;
+        var reportRowsCte = groupPayments
+            ? """
+              report_rows AS (
+                  SELECT (ARRAY_AGG(id ORDER BY operation_date DESC, created_at_utc DESC, id DESC))[1] AS id,
+                         (ARRAY_AGG(operation_date ORDER BY operation_date DESC, created_at_utc DESC, id DESC))[1] AS operation_date,
+                         (ARRAY_AGG(accounting_month ORDER BY operation_date DESC, created_at_utc DESC, id DESC))[1] AS accounting_month,
+                         garage_id,
+                         garage_number,
+                         owner_id,
+                         owner_name,
+                         (ARRAY_AGG(income_type_id ORDER BY income_type_name, id))[1] AS income_type_id,
+                         STRING_AGG(DISTINCT income_type_name, ', ' ORDER BY income_type_name) AS income_type_name,
+                         0::numeric AS accrual_amount,
+                         SUM(income_amount) AS income_amount,
+                         -SUM(income_amount) AS debt,
+                         STRING_AGG(DISTINCT document_number, ', ' ORDER BY document_number)
+                             FILTER (WHERE document_number IS NOT NULL) AS document_number,
+                         STRING_AGG(DISTINCT comment, '; ' ORDER BY comment)
+                             FILTER (WHERE comment IS NOT NULL) AS comment,
+                         MAX(created_at_utc) AS created_at_utc
+                  FROM filtered_rows
+                  GROUP BY COALESCE(receipt_batch_id, id), garage_id, garage_number, owner_id, owner_name
+              )
+              """
+            : """
+              report_rows AS (
+                  SELECT id, operation_date, accounting_month, garage_id, garage_number, owner_id, owner_name,
+                         income_type_id, income_type_name, accrual_amount, income_amount, debt,
+                         document_number, comment, created_at_utc
+                  FROM filtered_rows
+              )
+              """;
         var sql = $$"""
             WITH filtered_rows AS (
                 SELECT operation."Id" AS id,
+                       operation."ReceiptBatchId" AS receipt_batch_id,
                        operation."OperationDate" AS operation_date,
                        operation."AccountingMonth" AS accounting_month,
                        operation."GarageId" AS garage_id,
@@ -851,11 +1021,11 @@ public sealed class EfIncomeReportQuery(GarageBalanceDbContext dbContext) : IInc
                   {{ownerClause}}
                   {{incomeTypeClause}}
                   {{searchClause}}
-            ), page_rows AS (
+            ), {{reportRowsCte}}, page_rows AS (
                 SELECT filtered_rows.*,
                        ROW_NUMBER() OVER (
                            ORDER BY {{sortColumn}} {{direction}}, created_at_utc DESC, garage_number, id)::int AS row_order
-                FROM filtered_rows
+                FROM report_rows filtered_rows
                 ORDER BY {{sortColumn}} {{direction}}, created_at_utc DESC, garage_number, id
                 OFFSET @offset
                 {{limitClause}}
@@ -872,7 +1042,7 @@ public sealed class EfIncomeReportQuery(GarageBalanceDbContext dbContext) : IInc
             SELECT {{TotalsCategory}}, 0, NULL::uuid, NULL::date, NULL::date, NULL::uuid, NULL::text,
                    NULL::uuid, NULL::text, NULL::uuid, NULL::text, 0::numeric, 0::numeric, 0::numeric,
                    NULL::text, NULL::text, NULL::timestamptz, COALESCE(SUM(income_amount), 0), COUNT(*)::int
-            FROM filtered_rows
+            FROM report_rows
             ORDER BY "Category", "RowOrder"
             """;
         var parameters = new List<object>
@@ -1147,6 +1317,13 @@ public sealed class EfIncomeReportQuery(GarageBalanceDbContext dbContext) : IInc
         DateTimeOffset? CreatedAtUtc,
         decimal IncomeTotal,
         int RowCount);
+
+    private sealed record GroupedIncomePayment(
+        FinancialOperation Representative,
+        decimal Amount,
+        string IncomeTypeName,
+        string DocumentNumber,
+        string Comment);
 
     private sealed class IncomeReportProjection : IncomeReportSortableProjection
     {

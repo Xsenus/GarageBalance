@@ -265,6 +265,7 @@ export type ReportClient = {
       ownerIds?: string[]
       incomeTypeIds?: string[]
       rowMode?: string
+      groupPayments?: boolean
       limit?: number
       offset?: number
       sortBy?: string
@@ -281,6 +282,7 @@ export type ReportClient = {
       ownerIds?: string[]
       incomeTypeIds?: string[]
       rowMode?: string
+      groupPayments?: boolean
       sortBy?: string
       sortDirection?: string
     },
@@ -295,6 +297,7 @@ export type ReportClient = {
       ownerIds?: string[]
       incomeTypeIds?: string[]
       rowMode?: string
+      groupPayments?: boolean
       sortBy?: string
       sortDirection?: string
     },
@@ -523,6 +526,9 @@ function buildIncomeReportQuery(params: Parameters<ReportClient['getIncomeReport
   }
   if (params.rowMode) {
     searchParams.set('rowMode', params.rowMode)
+  }
+  if (params.groupPayments !== undefined) {
+    searchParams.set('groupPayments', String(params.groupPayments))
   }
   if (params.limit) {
     searchParams.set('limit', String(params.limit))

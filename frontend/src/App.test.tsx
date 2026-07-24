@@ -15595,7 +15595,7 @@ describe('App', () => {
     const baseReportClient = createReportClient()
     const garageRequests: Array<{ garageIds?: string[]; offset?: number }> = []
     const payoutRequests: Array<{ supplierIds?: string[]; staffMemberIds?: string[] }> = []
-    const incomeRequests: Array<{ garageIds?: string[] }> = []
+    const incomeRequests: Array<{ garageIds?: string[]; rowMode?: string; groupPayments?: boolean }> = []
     const getGarageReport = vi.fn(async (_token: string, params?: Parameters<ReportClient['getGarageReport']>[1]) => {
       garageRequests.push({ garageIds: params?.garageIds, offset: params?.offset })
       return createGarageDetailReport({
@@ -15612,7 +15612,7 @@ describe('App', () => {
     })
     const getIncomeReport = vi.fn(async (token: string, params?: Parameters<ReportClient['getIncomeReport']>[1]) => {
       if (params?.offset !== undefined) {
-        incomeRequests.push({ garageIds: params.garageIds })
+        incomeRequests.push({ garageIds: params.garageIds, rowMode: params.rowMode, groupPayments: params.groupPayments })
       }
       return baseReportClient.getIncomeReport(token, params)
     })
@@ -15683,7 +15683,7 @@ describe('App', () => {
     await user.type(incomeGarageFilter, '205')
     const incomeGarageResults = await within(reportsPanel).findByRole('listbox', { name: 'Найденные гаражи отчёта по поступлениям' })
     await user.click(within(incomeGarageResults).getByRole('checkbox', { name: /Выбрать гараж 205,/ }))
-    await waitFor(() => expect(incomeRequests).toContainEqual({ garageIds: ['garage-2'] }))
+    await waitFor(() => expect(incomeRequests).toContainEqual({ garageIds: ['garage-2'], rowMode: 'payments', groupPayments: true }))
     expect(within(reportsPanel).getByLabelText('Выбранные гаражи отчёта по поступлениям')).toHaveTextContent('Гараж 205')
   })
 
@@ -15846,7 +15846,7 @@ describe('App', () => {
     await user.click(within(incomeGarageResults).getByRole('checkbox', { name: /Выбрать гараж 12,/ }))
     await user.click(within(reportsPanel).getByRole('button', { name: /Сортировать Сумма платежа/ }))
     await exportXlsx()
-    await waitFor(() => expect(exportIncomeReportXlsx).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ garageIds: ['garage-1'], sortBy: 'incomeAmount', sortDirection: 'asc' })))
+    await waitFor(() => expect(exportIncomeReportXlsx).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ garageIds: ['garage-1'], rowMode: 'payments', groupPayments: true, sortBy: 'incomeAmount', sortDirection: 'asc' })))
 
     await openReportTab(user, reportsPanel, 'Оплаты из кассы')
     await user.click(within(reportsPanel).getByRole('button', { name: /Сортировать Наличие чека/ }))

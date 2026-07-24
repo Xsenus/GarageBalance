@@ -556,6 +556,7 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
           dateTo: filter.dateTo,
           garageIds: selectedIncomeGarageIds,
           rowMode: 'payments',
+          groupPayments: true,
           offset: incomePageRequest.offset,
           limit: incomePageRequest.limit,
           sortBy: sort?.field,
@@ -868,6 +869,8 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
     const params = {
       ...filter,
       garageIds: selectedIncomeGarageIds,
+      rowMode: 'payments',
+      groupPayments: true,
       sortBy: reportSorts.income?.field,
       sortDirection: reportSorts.income?.direction,
     }

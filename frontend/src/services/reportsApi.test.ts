@@ -14,8 +14,8 @@ describe('reportsApi', () => {
 
     await reportsApi.exportConsolidatedReportXlsx('token', { monthFrom: '2026-06-01', monthTo: '2026-06-01', search: '12' })
     await reportsApi.exportConsolidatedReportPdf('token', { monthFrom: '2026-06-01', monthTo: '2026-06-01', search: '12' })
-    await reportsApi.exportIncomeReportXlsx('token', { dateFrom: '2026-06-01', dateTo: '2026-06-30', garageIds: ['garage-1'], ownerIds: ['owner-1'], incomeTypeIds: ['income-1'], rowMode: 'all' })
-    await reportsApi.exportIncomeReportPdf('token', { dateFrom: '2026-06-01', dateTo: '2026-06-30', garageIds: ['garage-1'], ownerIds: ['owner-1'], incomeTypeIds: ['income-1'], rowMode: 'all' })
+    await reportsApi.exportIncomeReportXlsx('token', { dateFrom: '2026-06-01', dateTo: '2026-06-30', garageIds: ['garage-1'], ownerIds: ['owner-1'], incomeTypeIds: ['income-1'], rowMode: 'all', groupPayments: true })
+    await reportsApi.exportIncomeReportPdf('token', { dateFrom: '2026-06-01', dateTo: '2026-06-30', garageIds: ['garage-1'], ownerIds: ['owner-1'], incomeTypeIds: ['income-1'], rowMode: 'all', groupPayments: true })
     await reportsApi.exportExpenseReportXlsx('token', { dateFrom: '2026-06-01', dateTo: '2026-06-30', supplierIds: ['supplier-1'], expenseTypeIds: ['expense-1'], rowMode: 'all' })
     await reportsApi.exportExpenseReportPdf('token', { dateFrom: '2026-06-01', dateTo: '2026-06-30', supplierIds: ['supplier-1'], staffMemberIds: ['staff-1'], expenseTypeIds: ['expense-1'], rowMode: 'all' })
     await reportsApi.exportCashPaymentReportXlsx('token', { dateFrom: '2026-06-01', dateTo: '2026-06-30', search: 'чек' })
@@ -31,8 +31,8 @@ describe('reportsApi', () => {
 
     expect(fetchMock).toHaveBeenNthCalledWith(1, '/api/reports/consolidated/export/xlsx?monthFrom=2026-06-01&monthTo=2026-06-01&search=12', postRequest())
     expect(fetchMock).toHaveBeenNthCalledWith(2, '/api/reports/consolidated/export/pdf?monthFrom=2026-06-01&monthTo=2026-06-01&search=12', postRequest())
-    expect(fetchMock).toHaveBeenNthCalledWith(3, '/api/reports/income/export/xlsx?dateFrom=2026-06-01&dateTo=2026-06-30&rowMode=all&garageIds=garage-1&ownerIds=owner-1&incomeTypeIds=income-1', postRequest())
-    expect(fetchMock).toHaveBeenNthCalledWith(4, '/api/reports/income/export/pdf?dateFrom=2026-06-01&dateTo=2026-06-30&rowMode=all&garageIds=garage-1&ownerIds=owner-1&incomeTypeIds=income-1', postRequest())
+    expect(fetchMock).toHaveBeenNthCalledWith(3, '/api/reports/income/export/xlsx?dateFrom=2026-06-01&dateTo=2026-06-30&rowMode=all&groupPayments=true&garageIds=garage-1&ownerIds=owner-1&incomeTypeIds=income-1', postRequest())
+    expect(fetchMock).toHaveBeenNthCalledWith(4, '/api/reports/income/export/pdf?dateFrom=2026-06-01&dateTo=2026-06-30&rowMode=all&groupPayments=true&garageIds=garage-1&ownerIds=owner-1&incomeTypeIds=income-1', postRequest())
     expect(fetchMock).toHaveBeenNthCalledWith(5, '/api/reports/expense/export/xlsx?dateFrom=2026-06-01&dateTo=2026-06-30&rowMode=all&supplierIds=supplier-1&expenseTypeIds=expense-1', postRequest())
     expect(fetchMock).toHaveBeenNthCalledWith(6, '/api/reports/expense/export/pdf?dateFrom=2026-06-01&dateTo=2026-06-30&rowMode=all&supplierIds=supplier-1&staffMemberIds=staff-1&expenseTypeIds=expense-1', postRequest())
     expect(fetchMock).toHaveBeenNthCalledWith(7, '/api/reports/cash-payments/export/xlsx?dateFrom=2026-06-01&dateTo=2026-06-30&search=%D1%87%D0%B5%D0%BA', postRequest())
@@ -51,7 +51,7 @@ describe('reportsApi', () => {
     const fetchMock = vi.fn().mockImplementation(() => Promise.resolve(new Response('{}', { status: 200, headers: { 'Content-Type': 'application/json' } })))
     vi.stubGlobal('fetch', fetchMock)
 
-    await reportsApi.getIncomeReport('token', { dateFrom: '2026-06-01', dateTo: '2026-06-30', search: '12', rowMode: 'payments', offset: 20, limit: 20 })
+    await reportsApi.getIncomeReport('token', { dateFrom: '2026-06-01', dateTo: '2026-06-30', search: '12', rowMode: 'payments', groupPayments: true, offset: 20, limit: 20 })
     await reportsApi.getExpenseReport('token', { dateFrom: '2026-06-01', dateTo: '2026-06-30', search: 'Водоканал', supplierIds: ['supplier-1', 'supplier-2'], staffMemberIds: ['staff-1', 'staff-2'], expenseTypeIds: ['expense-1'], rowMode: 'payments', offset: 20, limit: 20 })
     await reportsApi.getCashPaymentReport('token', { dateFrom: '2026-06-01', dateTo: '2026-06-30', search: 'чек', offset: 20, limit: 20 })
     await reportsApi.getBankDepositReport('token', { dateFrom: '2026-06-01', dateTo: '2026-06-30', search: 'банк', offset: 20, limit: 20 })
@@ -59,7 +59,7 @@ describe('reportsApi', () => {
     await reportsApi.getFundChangeReport('token', { dateFrom: '2026-06-01', dateTo: '2026-06-30', offset: 20, limit: 20 })
     await reportsApi.getGarageReport('token', { monthFrom: '2026-06-01', monthTo: '2026-07-01', search: '12', garageIds: ['garage-1', 'garage-2'], ownerIds: ['owner-1'], incomeTypeIds: ['income-1'], groupAccruals: true, offset: 20, limit: 20 })
 
-    expect(fetchMock).toHaveBeenNthCalledWith(1, '/api/reports/income?dateFrom=2026-06-01&dateTo=2026-06-30&search=12&rowMode=payments&limit=20&offset=20', getRequest())
+    expect(fetchMock).toHaveBeenNthCalledWith(1, '/api/reports/income?dateFrom=2026-06-01&dateTo=2026-06-30&search=12&rowMode=payments&groupPayments=true&limit=20&offset=20', getRequest())
     expect(fetchMock).toHaveBeenNthCalledWith(2, '/api/reports/expense?dateFrom=2026-06-01&dateTo=2026-06-30&search=%D0%92%D0%BE%D0%B4%D0%BE%D0%BA%D0%B0%D0%BD%D0%B0%D0%BB&rowMode=payments&limit=20&offset=20&supplierIds=supplier-1&supplierIds=supplier-2&staffMemberIds=staff-1&staffMemberIds=staff-2&expenseTypeIds=expense-1', getRequest())
     expect(fetchMock).toHaveBeenNthCalledWith(3, '/api/reports/cash-payments?dateFrom=2026-06-01&dateTo=2026-06-30&search=%D1%87%D0%B5%D0%BA&offset=20&limit=20', getRequest())
     expect(fetchMock).toHaveBeenNthCalledWith(4, '/api/reports/bank-deposits?dateFrom=2026-06-01&dateTo=2026-06-30&search=%D0%B1%D0%B0%D0%BD%D0%BA&offset=20&limit=20', getRequest())

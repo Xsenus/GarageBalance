@@ -75,12 +75,72 @@ public sealed class PostgreSqlIncomeReportPaymentQueryIntegrationTests
             command.Contains("WHERE \"f\".\"Id\" = ANY", StringComparison.OrdinalIgnoreCase));
     }
 
+    [PostgreSqlFact]
+    public async Task GroupedPaymentPageCombinesReceiptBatchAndKeepsStandalonePayment()
+    {
+        var month = new DateOnly(2043, 2, 1);
+        var suffix = Guid.NewGuid().ToString("N");
+        var receiptBatchId = Guid.NewGuid();
+        await using var database = await PostgreSqlTestDatabase.CreateAsync();
+        await using (var seedContext = database.CreateContext())
+        {
+            var garage = new Garage { Number = $"GROUPED-{suffix}", StartingBalance = 100m };
+            var membership = new IncomeType { Name = $"Membership {suffix}" };
+            var electricity = new IncomeType { Name = $"Electricity {suffix}" };
+            seedContext.AddRange(garage, membership, electricity);
+            seedContext.Accruals.Add(new Accrual
+            {
+                Garage = garage,
+                IncomeType = membership,
+                AccountingMonth = month,
+                DueDate = month.AddMonths(1).AddDays(-1),
+                OverdueFromDate = month.AddMonths(1),
+                Amount = 500m,
+                Source = "grouped_income_payment_query_integration"
+            });
+            seedContext.FinancialOperations.AddRange(
+                CreatePayment(garage, membership, month.AddDays(4), 100m, "PKO-BATCH-1", receiptBatchId, 10),
+                CreatePayment(garage, electricity, month.AddDays(4), 200m, "PKO-BATCH-2", receiptBatchId, 11),
+                CreatePayment(garage, membership, month.AddDays(8), 50m, "PKO-STANDALONE"));
+            await seedContext.SaveChangesAsync();
+        }
+
+        await using var context = database.CreateContext();
+        var result = await new EfIncomeReportQuery(context).GetRowsAsync(
+            month,
+            month.AddMonths(1).AddDays(-1),
+            "payments",
+            new HashSet<Guid>(),
+            new HashSet<Guid>(),
+            new HashSet<Guid>(),
+            null,
+            25,
+            0,
+            new ReportSort("date", false),
+            true,
+            CancellationToken.None);
+
+        Assert.Equal(2, result.RowCount);
+        Assert.Equal(350m, result.IncomeTotal);
+        Assert.Equal(2, result.Rows.Count);
+        Assert.Equal(300m, result.Rows[0].IncomeAmount);
+        Assert.Equal(300m, result.Rows[0].DebtAfterPayment);
+        Assert.Contains($"Membership {suffix}", result.Rows[0].IncomeTypeName, StringComparison.Ordinal);
+        Assert.Contains($"Electricity {suffix}", result.Rows[0].IncomeTypeName, StringComparison.Ordinal);
+        Assert.Equal("PKO-BATCH-1, PKO-BATCH-2", result.Rows[0].DocumentNumber);
+        Assert.Equal(50m, result.Rows[1].IncomeAmount);
+        Assert.Equal(250m, result.Rows[1].DebtAfterPayment);
+        Assert.Equal("PKO-STANDALONE", result.Rows[1].DocumentNumber);
+    }
+
     private static FinancialOperation CreatePayment(
         Garage garage,
         IncomeType incomeType,
         DateOnly operationDate,
         decimal amount,
-        string documentNumber) =>
+        string documentNumber,
+        Guid? receiptBatchId = null,
+        int hour = 10) =>
         new()
         {
             OperationKind = FinancialOperationKinds.Income,
@@ -89,8 +149,9 @@ public sealed class PostgreSqlIncomeReportPaymentQueryIntegrationTests
             Amount = amount,
             Garage = garage,
             IncomeType = incomeType,
+            ReceiptBatchId = receiptBatchId,
             DocumentNumber = documentNumber,
-            CreatedAtUtc = new DateTimeOffset(operationDate.ToDateTime(new TimeOnly(10, 0)), TimeSpan.Zero)
+            CreatedAtUtc = new DateTimeOffset(operationDate.ToDateTime(new TimeOnly(hour, 0)), TimeSpan.Zero)
         };
 
     private sealed class ReaderCommandCapture : DbCommandInterceptor

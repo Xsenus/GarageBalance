@@ -247,12 +247,14 @@ public sealed class ReportsControllerTests
             "all",
             16,
             8,
-            CancellationToken.None);
+            CancellationToken.None,
+            groupPayments: true);
 
         var ok = Assert.IsType<OkObjectResult>(result.Result);
         Assert.Same(report, ok.Value);
         Assert.Equal(16, service.IncomeRequest?.Limit);
         Assert.Equal(8, service.IncomeRequest?.Offset);
+        Assert.True(service.IncomeRequest?.GroupPayments);
     }
 
     [Fact]
@@ -600,10 +602,11 @@ public sealed class ReportsControllerTests
             "garagebalance-income-20260601-20260630.xlsx",
             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             content);
-        var controller = new ReportsController(new FakeReportService
+        var service = new FakeReportService
         {
             IncomeExportResult = ReportResult<ReportExportFileDto>.Success(export)
-        });
+        };
+        var controller = new ReportsController(service);
 
         var result = await controller.ExportIncomeReportXlsx(
             new DateOnly(2026, 6, 1),
@@ -613,12 +616,14 @@ public sealed class ReportsControllerTests
             [],
             [],
             "payments",
-            CancellationToken.None);
+            CancellationToken.None,
+            groupPayments: true);
 
         var file = Assert.IsType<FileContentResult>(result);
         Assert.Equal(export.FileName, file.FileDownloadName);
         Assert.Equal(export.ContentType, file.ContentType);
         Assert.Same(content, file.FileContents);
+        Assert.True(service.IncomeRequest?.GroupPayments);
     }
 
     [Fact]
@@ -641,10 +646,11 @@ public sealed class ReportsControllerTests
     {
         var content = new byte[] { 7, 8, 9 };
         var export = new ReportExportFileDto("garagebalance-income-20260601-20260630.pdf", "application/pdf", content);
-        var controller = new ReportsController(new FakeReportService
+        var service = new FakeReportService
         {
             IncomePdfExportResult = ReportResult<ReportExportFileDto>.Success(export)
-        });
+        };
+        var controller = new ReportsController(service);
 
         var result = await controller.ExportIncomeReportPdf(
             new DateOnly(2026, 6, 1),
@@ -654,12 +660,14 @@ public sealed class ReportsControllerTests
             [],
             [],
             "payments",
-            CancellationToken.None);
+            CancellationToken.None,
+            groupPayments: true);
 
         var file = Assert.IsType<FileContentResult>(result);
         Assert.Equal(export.FileName, file.FileDownloadName);
         Assert.Equal(export.ContentType, file.ContentType);
         Assert.Same(content, file.FileContents);
+        Assert.True(service.IncomeRequest?.GroupPayments);
     }
 
     [Fact]
@@ -1108,6 +1116,7 @@ public sealed class ReportsControllerTests
 
         public Task<ReportResult<ReportExportFileDto>> ExportIncomeReportXlsxAsync(IncomeReportRequest request, CancellationToken cancellationToken)
         {
+            IncomeRequest = request;
             return Task.FromResult(IncomeExportResult);
         }
 
@@ -1118,6 +1127,7 @@ public sealed class ReportsControllerTests
 
         public Task<ReportResult<ReportExportFileDto>> ExportIncomeReportPdfAsync(IncomeReportRequest request, CancellationToken cancellationToken)
         {
+            IncomeRequest = request;
             return Task.FromResult(IncomePdfExportResult);
         }
 

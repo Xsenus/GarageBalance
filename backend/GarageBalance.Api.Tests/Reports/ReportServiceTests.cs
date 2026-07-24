@@ -1407,6 +1407,91 @@ public sealed class ReportServiceTests
     }
 
     [Fact]
+    public async Task IncomePaymentQuery_GroupsReceiptBatchInFallbackProvider()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        var month = new DateOnly(2026, 6, 1);
+        var receiptBatchId = Guid.NewGuid();
+        database.Context.Accruals.Add(new Accrual
+        {
+            GarageId = fixtures.FirstGarage.Id,
+            IncomeTypeId = fixtures.IncomeType.Id,
+            AccountingMonth = month,
+            Amount = 500m,
+            Source = "grouped-fallback"
+        });
+        database.Context.FinancialOperations.AddRange(
+            new FinancialOperation
+            {
+                OperationKind = FinancialOperationKinds.Income,
+                OperationDate = month.AddDays(4),
+                AccountingMonth = month,
+                Amount = 100m,
+                ReceiptBatchId = receiptBatchId,
+                DocumentNumber = "PKO-BATCH-1",
+                GarageId = fixtures.FirstGarage.Id,
+                IncomeTypeId = fixtures.IncomeType.Id,
+                CreatedAtUtc = new DateTimeOffset(2026, 6, 5, 10, 0, 0, TimeSpan.Zero)
+            },
+            new FinancialOperation
+            {
+                OperationKind = FinancialOperationKinds.Income,
+                OperationDate = month.AddDays(4),
+                AccountingMonth = month,
+                Amount = 200m,
+                ReceiptBatchId = receiptBatchId,
+                DocumentNumber = "PKO-BATCH-2",
+                GarageId = fixtures.FirstGarage.Id,
+                IncomeTypeId = fixtures.IncomeType.Id,
+                CreatedAtUtc = new DateTimeOffset(2026, 6, 5, 11, 0, 0, TimeSpan.Zero)
+            },
+            new FinancialOperation
+            {
+                OperationKind = FinancialOperationKinds.Income,
+                OperationDate = month.AddDays(8),
+                AccountingMonth = month,
+                Amount = 50m,
+                DocumentNumber = "PKO-STANDALONE",
+                GarageId = fixtures.FirstGarage.Id,
+                IncomeTypeId = fixtures.IncomeType.Id,
+                CreatedAtUtc = new DateTimeOffset(2026, 6, 9, 10, 0, 0, TimeSpan.Zero)
+            });
+        await database.Context.SaveChangesAsync();
+
+        var result = await new EfIncomeReportQuery(database.Context).GetRowsAsync(
+            month,
+            month.AddMonths(1).AddDays(-1),
+            "payments",
+            new HashSet<Guid>(),
+            new HashSet<Guid>(),
+            new HashSet<Guid>(),
+            null,
+            25,
+            0,
+            new ReportSort("date", false),
+            true,
+            CancellationToken.None);
+
+        Assert.Equal(2, result.RowCount);
+        Assert.Equal(350m, result.IncomeTotal);
+        Assert.Collection(
+            result.Rows,
+            grouped =>
+            {
+                Assert.Equal(300m, grouped.IncomeAmount);
+                Assert.Equal(200m, grouped.DebtAfterPayment);
+                Assert.Equal("PKO-BATCH-1, PKO-BATCH-2", grouped.DocumentNumber);
+            },
+            standalone =>
+            {
+                Assert.Equal(50m, standalone.IncomeAmount);
+                Assert.Equal(150m, standalone.DebtAfterPayment);
+                Assert.Equal("PKO-STANDALONE", standalone.DocumentNumber);
+            });
+    }
+
+    [Fact]
     public async Task IncomeAllRowsQuery_LoadsThreeSectionsDebtAndCombinedTotalsInFiveSelects()
     {
         var commandCounter = new SelectCommandCounter();
@@ -2350,6 +2435,80 @@ public sealed class ReportServiceTests
         Assert.Equal("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", result.Value.ContentType);
         AssertWorkbookContains(result.Value.Content, "PKO-1");
         AssertWorkbookContains(result.Value.Content, "Поступления");
+    }
+
+    [Fact]
+    public async Task ExportIncomeReports_UseGroupedReceiptRows()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        var service = CreateService(database.Context);
+        var month = new DateOnly(2026, 6, 1);
+        var receiptBatchId = Guid.NewGuid();
+        database.Context.FinancialOperations.AddRange(
+            new FinancialOperation
+            {
+                OperationKind = FinancialOperationKinds.Income,
+                OperationDate = month.AddDays(9),
+                AccountingMonth = month,
+                Amount = 400m,
+                ReceiptBatchId = receiptBatchId,
+                DocumentNumber = "PKO-GROUP-1",
+                GarageId = fixtures.FirstGarage.Id,
+                IncomeTypeId = fixtures.IncomeType.Id,
+                CreatedAtUtc = new DateTimeOffset(2026, 6, 10, 10, 0, 0, TimeSpan.Zero)
+            },
+            new FinancialOperation
+            {
+                OperationKind = FinancialOperationKinds.Income,
+                OperationDate = month.AddDays(9),
+                AccountingMonth = month,
+                Amount = 600m,
+                ReceiptBatchId = receiptBatchId,
+                DocumentNumber = "PKO-GROUP-2",
+                GarageId = fixtures.FirstGarage.Id,
+                IncomeTypeId = fixtures.IncomeType.Id,
+                CreatedAtUtc = new DateTimeOffset(2026, 6, 10, 11, 0, 0, TimeSpan.Zero)
+            },
+            new FinancialOperation
+            {
+                OperationKind = FinancialOperationKinds.Income,
+                OperationDate = month.AddDays(11),
+                AccountingMonth = month,
+                Amount = 200m,
+                DocumentNumber = "PKO-SINGLE",
+                GarageId = fixtures.FirstGarage.Id,
+                IncomeTypeId = fixtures.IncomeType.Id,
+                CreatedAtUtc = new DateTimeOffset(2026, 6, 12, 10, 0, 0, TimeSpan.Zero)
+            });
+        await database.Context.SaveChangesAsync();
+        var request = new IncomeReportRequest(
+            month,
+            month.AddMonths(1).AddDays(-1),
+            null,
+            [],
+            [],
+            [],
+            "payments",
+            SortBy: "date",
+            SortDirection: "asc",
+            GroupPayments: true);
+
+        var xlsx = await service.ExportIncomeReportXlsxAsync(request, CancellationToken.None);
+        var pdf = await service.ExportIncomeReportPdfAsync(request, CancellationToken.None);
+
+        Assert.True(xlsx.Succeeded, xlsx.ErrorMessage);
+        var workbookRows = ReadFirstWorksheetRows(xlsx.Value!.Content);
+        Assert.Equal(3, workbookRows.Count);
+        Assert.Equal("1000.0", workbookRows[1][7]);
+        Assert.Equal("PKO-GROUP-1, PKO-GROUP-2", workbookRows[1][10]);
+        Assert.Equal("200.0", workbookRows[2][7]);
+        Assert.Equal("PKO-SINGLE", workbookRows[2][10]);
+        Assert.True(pdf.Succeeded, pdf.ErrorMessage);
+        var pdfText = ReadPdfText(pdf.Value!.Content);
+        Assert.Contains("Rows: 2", pdfText);
+        Assert.Contains("PKO-GROUP-1, PKO-GROUP-2", pdfText);
+        Assert.Contains("1 000.00", pdfText);
     }
 
     [Fact]

@@ -150,7 +150,8 @@ public sealed class ReportsController(IReportService reportService) : Controller
         [FromQuery] int? offset,
         CancellationToken cancellationToken,
         [FromQuery] string? sortBy = null,
-        [FromQuery] string? sortDirection = null)
+        [FromQuery] string? sortDirection = null,
+        [FromQuery] bool groupPayments = false)
     {
         var result = await reportService.GetIncomeReportAsync(
             new IncomeReportRequest(
@@ -165,7 +166,8 @@ public sealed class ReportsController(IReportService reportService) : Controller
                 offset,
                 GetActorUserId(),
                 sortBy,
-                sortDirection),
+                sortDirection,
+                groupPayments),
             cancellationToken);
 
         return result.Succeeded
@@ -186,7 +188,8 @@ public sealed class ReportsController(IReportService reportService) : Controller
         [FromQuery] string? rowMode,
         CancellationToken cancellationToken,
         [FromQuery] string? sortBy = null,
-        [FromQuery] string? sortDirection = null)
+        [FromQuery] string? sortDirection = null,
+        [FromQuery] bool groupPayments = false)
     {
         var result = await reportService.ExportIncomeReportXlsxAsync(
             new IncomeReportRequest(
@@ -199,7 +202,8 @@ public sealed class ReportsController(IReportService reportService) : Controller
                 rowMode,
                 ActorUserId: GetActorUserId(),
                 SortBy: sortBy,
-                SortDirection: sortDirection),
+                SortDirection: sortDirection,
+                GroupPayments: groupPayments),
             cancellationToken);
 
         return result.Succeeded
@@ -220,7 +224,8 @@ public sealed class ReportsController(IReportService reportService) : Controller
         [FromQuery] string? rowMode,
         CancellationToken cancellationToken,
         [FromQuery] string? sortBy = null,
-        [FromQuery] string? sortDirection = null)
+        [FromQuery] string? sortDirection = null,
+        [FromQuery] bool groupPayments = false)
     {
         var result = await reportService.ExportIncomeReportPdfAsync(
             new IncomeReportRequest(
@@ -233,7 +238,8 @@ public sealed class ReportsController(IReportService reportService) : Controller
                 rowMode,
                 ActorUserId: GetActorUserId(),
                 SortBy: sortBy,
-                SortDirection: sortDirection),
+                SortDirection: sortDirection,
+                GroupPayments: groupPayments),
             cancellationToken);
 
         return result.Succeeded
