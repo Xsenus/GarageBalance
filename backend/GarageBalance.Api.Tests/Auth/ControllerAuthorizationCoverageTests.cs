@@ -71,6 +71,7 @@ public sealed class ControllerAuthorizationCoverageTests
     [InlineData(nameof(DictionariesController.RestoreIrregularPayment))]
     [InlineData(nameof(DictionariesController.CreateFeeCampaign))]
     [InlineData(nameof(DictionariesController.UpdateFeeCampaign))]
+    [InlineData(nameof(DictionariesController.CloseFeeCampaign))]
     [InlineData(nameof(DictionariesController.ArchiveFeeCampaign))]
     [InlineData(nameof(DictionariesController.RestoreFeeCampaign))]
     public void TariffWriteActionsRequireTariffManagementPermission(string actionName)

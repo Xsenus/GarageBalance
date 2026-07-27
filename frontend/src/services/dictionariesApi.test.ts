@@ -92,6 +92,33 @@ describe('dictionariesApi response cache', () => {
     )
   })
 
+  it('closes a fee campaign with an optional closure comment', async () => {
+    const response = {
+      id: 'fee-campaign-1',
+      closedAtUtc: '2026-07-27T13:00:00Z',
+      isClosedEarly: true,
+      closureComment: 'Решение правления',
+    }
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify(response), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await expect(dictionariesApi.closeFeeCampaign('token', 'fee-campaign-1', {
+      comment: 'Решение правления',
+    })).resolves.toEqual(response)
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/dictionaries/fee-campaigns/fee-campaign-1/close',
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({ comment: 'Решение правления' }),
+        headers: expect.objectContaining({ Authorization: 'Bearer token' }),
+      }),
+    )
+  })
+
   it('removes a failed response so the next read can retry', async () => {
     const fetchMock = vi.fn()
       .mockResolvedValueOnce(new Response(JSON.stringify({ detail: 'Ошибка' }), { status: 500 }))

@@ -2007,6 +2007,11 @@ public sealed class DictionaryService(
             return DictionaryResult<FeeCampaignDto>.Failure("fee_campaign_not_found", "Сбор не найден.");
         }
 
+        if (campaign.ClosedAtUtc.HasValue)
+        {
+            return DictionaryResult<FeeCampaignDto>.Failure("fee_campaign_closed", "Закрытый сбор нельзя изменять.");
+        }
+
         var name = request.Name.Trim();
         if (await feeCampaignRepository.ActiveDuplicateExistsAsync(id, name, cancellationToken))
         {
@@ -2050,6 +2055,61 @@ public sealed class DictionaryService(
         var newValues = ToFeeCampaignAuditValues(campaign);
 
         AddAudit(actorUserId, "dictionary.fee_campaign_updated", "fee_campaign", campaign.Id, $"Изменен сбор {campaign.Name}.", oldValues: oldValues, newValues: newValues);
+        await unitOfWork.SaveChangesAsync(cancellationToken);
+        return DictionaryResult<FeeCampaignDto>.Success(ToFeeCampaignDto(campaign));
+    }
+
+    public async Task<DictionaryResult<FeeCampaignDto>> CloseFeeCampaignAsync(
+        Guid id,
+        CloseFeeCampaignRequest request,
+        Guid? actorUserId,
+        CancellationToken cancellationToken)
+    {
+        var campaign = await feeCampaignRepository.FindActiveWithDetailsAsync(id, cancellationToken);
+        if (campaign is null)
+        {
+            return DictionaryResult<FeeCampaignDto>.Failure("fee_campaign_not_found", "Сбор не найден.");
+        }
+
+        if (campaign.ClosedAtUtc.HasValue)
+        {
+            return DictionaryResult<FeeCampaignDto>.Failure("fee_campaign_already_closed", "Сбор уже закрыт.");
+        }
+
+        var comment = NormalizeOptional(request.Comment);
+        if (comment?.Length > 1000)
+        {
+            return DictionaryResult<FeeCampaignDto>.Failure("fee_campaign_closure_comment_too_long", "Комментарий не должен превышать 1000 символов.");
+        }
+
+        var collectedAmount = decimal.Round(
+            await feeCampaignRepository.GetCollectedAmountAsync(id, cancellationToken),
+            2,
+            MidpointRounding.AwayFromZero);
+        var isClosedEarly = collectedAmount < campaign.TargetAmount;
+        if (isClosedEarly && comment is null)
+        {
+            return DictionaryResult<FeeCampaignDto>.Failure(
+                "fee_campaign_closure_comment_required",
+                "Для досрочного закрытия сбора укажите обязательный комментарий.");
+        }
+
+        campaign.ClosedAtUtc = DateTimeOffset.UtcNow;
+        campaign.ClosedByUserId = actorUserId;
+        campaign.IsClosedEarly = isClosedEarly;
+        campaign.ClosureComment = comment;
+        campaign.UpdatedAtUtc = campaign.ClosedAtUtc.Value;
+
+        AddAudit(
+            actorUserId,
+            "dictionary.fee_campaign_closed",
+            "fee_campaign",
+            campaign.Id,
+            isClosedEarly
+                ? $"Досрочно закрыт сбор {campaign.Name}. Собрано {collectedAmount:F2} из {campaign.TargetAmount:F2}."
+                : $"Закрыт сбор {campaign.Name}. План {campaign.TargetAmount:F2} выполнен.",
+            comment,
+            newValues: ToFeeCampaignAuditValues(campaign));
         await unitOfWork.SaveChangesAsync(cancellationToken);
         return DictionaryResult<FeeCampaignDto>.Success(ToFeeCampaignDto(campaign));
     }
@@ -2756,7 +2816,11 @@ public sealed class DictionaryService(
                 .Select(participant => participant.Garage?.Number)
                 .Where(number => !string.IsNullOrWhiteSpace(number))
                 .Order(StringComparer.Ordinal)),
-            ["overdueGraceDays"] = campaign.OverdueGraceDays
+            ["overdueGraceDays"] = campaign.OverdueGraceDays,
+            ["closedAtUtc"] = campaign.ClosedAtUtc,
+            ["closedByUserId"] = campaign.ClosedByUserId,
+            ["isClosedEarly"] = campaign.IsClosedEarly,
+            ["closureComment"] = campaign.ClosureComment
         };
     }
 
@@ -3072,7 +3136,10 @@ public sealed class DictionaryService(
                 .Select(participant => participant.GarageId)
                 .ToArray(),
             campaign.OverdueGraceDays,
-            campaign.IsArchived);
+            campaign.IsArchived,
+            campaign.ClosedAtUtc,
+            campaign.IsClosedEarly,
+            campaign.ClosureComment);
     }
 
     private static TariffDto ToTariffDto(Tariff tariff)

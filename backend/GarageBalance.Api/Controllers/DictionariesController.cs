@@ -859,6 +859,21 @@ public sealed class DictionariesController(IDictionaryService dictionaryService)
     }
 
     [Authorize(Policy = SystemPermissions.TariffsManage)]
+    [HttpPost("fee-campaigns/{id:guid}/close")]
+    [ProducesResponseType<FeeCampaignDto>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
+    public async Task<ActionResult<FeeCampaignDto>> CloseFeeCampaign(
+        Guid id,
+        CloseFeeCampaignRequest request,
+        CancellationToken cancellationToken)
+    {
+        var result = await dictionaryService.CloseFeeCampaignAsync(id, request, GetActorUserId(), cancellationToken);
+        return result.Succeeded ? Ok(result.Value) : ToError(result);
+    }
+
+    [Authorize(Policy = SystemPermissions.TariffsManage)]
     [HttpDelete("fee-campaigns/{id:guid}")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
@@ -905,7 +920,7 @@ public sealed class DictionariesController(IDictionaryService dictionaryService)
         return result.ErrorCode switch
         {
             "owner_not_found" or "garage_not_found" or "supplier_group_not_found" or "supplier_not_found" or "supplier_contact_not_found" or "staff_department_not_found" or "staff_member_not_found" or "income_type_not_found" or "expense_type_not_found" or "tariff_not_found" or "charge_service_not_found" or "irregular_payment_not_found" or "fee_campaign_not_found" => NotFound(ApiProblemDetails.Create(result.ErrorCode, result.ErrorMessage, StatusCodes.Status404NotFound)),
-            "garage_number_duplicate" or "supplier_group_duplicate" or "supplier_duplicate" or "supplier_group_system" or "staff_department_duplicate" or "staff_department_used" or "income_type_duplicate" or "income_type_system" or "expense_type_duplicate" or "expense_type_system" or "tariff_duplicate" or "tariff_effective_from_after_accrual" or "charge_service_duplicate" or "irregular_payment_duplicate" or "irregular_payment_used" or "fee_campaign_duplicate" or "fee_campaign_participants_locked" => Conflict(ApiProblemDetails.Create(result.ErrorCode, result.ErrorMessage, StatusCodes.Status409Conflict)),
+            "garage_number_duplicate" or "supplier_group_duplicate" or "supplier_duplicate" or "supplier_group_system" or "staff_department_duplicate" or "staff_department_used" or "income_type_duplicate" or "income_type_system" or "expense_type_duplicate" or "expense_type_system" or "tariff_duplicate" or "tariff_effective_from_after_accrual" or "charge_service_duplicate" or "irregular_payment_duplicate" or "irregular_payment_used" or "fee_campaign_duplicate" or "fee_campaign_participants_locked" or "fee_campaign_closed" or "fee_campaign_already_closed" => Conflict(ApiProblemDetails.Create(result.ErrorCode, result.ErrorMessage, StatusCodes.Status409Conflict)),
             _ => BadRequest(ApiProblemDetails.Create(result.ErrorCode, result.ErrorMessage, StatusCodes.Status400BadRequest))
         };
     }

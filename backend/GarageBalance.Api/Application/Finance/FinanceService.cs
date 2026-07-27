@@ -2831,6 +2831,11 @@ public sealed class FinanceService(
             return FinanceResult<FeeCampaignAccrualGenerationResultDto>.Failure("fee_campaign_not_found", "Сбор не найден.");
         }
 
+        if (campaign.ClosedAtUtc.HasValue)
+        {
+            return FinanceResult<FeeCampaignAccrualGenerationResultDto>.Failure("fee_campaign_closed", "Сбор закрыт: новые начисления создавать нельзя.");
+        }
+
         var incomeType = await incomeTypeRepository.FindFirstActiveByCodeAsync(OtherIncomeIncomeTypeCode, cancellationToken);
         if (incomeType is null || !incomeType.IsSystem || !incomeType.DestinationFundId.HasValue)
         {

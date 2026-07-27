@@ -4509,6 +4509,38 @@ public sealed class FinanceServiceTests
     }
 
     [Fact]
+    public async Task GenerateFeeCampaignAccrualsAsync_RejectsClosedCampaign()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        AddOtherIncomeDestination(database.Context);
+        var campaign = new FeeCampaign
+        {
+            Name = "Закрытый сбор",
+            IncomeTypeId = fixtures.IncomeType.Id,
+            IncomeType = fixtures.IncomeType,
+            ContributionAmount = 500m,
+            TargetAmount = 500m,
+            StartsOn = new DateOnly(2026, 5, 1),
+            AppliesToAllGarages = true,
+            OverdueGraceDays = 30,
+            ClosedAtUtc = DateTimeOffset.UtcNow
+        };
+        database.Context.FeeCampaigns.Add(campaign);
+        await database.Context.SaveChangesAsync();
+        var service = FinanceServiceTestFactory.Create(database.Context);
+
+        var result = await service.GenerateFeeCampaignAccrualsAsync(
+            new GenerateFeeCampaignAccrualsRequest(campaign.Id, new DateOnly(2026, 6, 1), null),
+            null,
+            CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Equal("fee_campaign_closed", result.ErrorCode);
+        Assert.Empty(database.Context.Accruals.Where(item => item.FeeCampaignId == campaign.Id));
+    }
+
+    [Fact]
     public async Task GenerateFeeCampaignAccrualsAsync_AllowsDifferentCampaignsInSameMonth()
     {
         await using var database = await TestDatabase.CreateAsync();

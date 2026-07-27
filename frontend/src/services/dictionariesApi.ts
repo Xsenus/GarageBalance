@@ -158,6 +158,9 @@ export type FeeCampaignDto = {
   participantGarageIds: string[]
   overdueGraceDays: number
   isArchived: boolean
+  closedAtUtc?: string | null
+  isClosedEarly?: boolean
+  closureComment?: string | null
 }
 
 export type PagedResult<TItem> = {
@@ -374,6 +377,7 @@ export type DictionaryClient = {
   getFeeCampaigns(accessToken: string, search?: string, limit?: number, includeArchived?: boolean): Promise<FeeCampaignDto[]>
   createFeeCampaign(accessToken: string, request: UpsertFeeCampaignRequest): Promise<FeeCampaignDto>
   updateFeeCampaign(accessToken: string, id: string, request: UpsertFeeCampaignRequest): Promise<FeeCampaignDto>
+  closeFeeCampaign(accessToken: string, id: string, request: { comment?: string | null }): Promise<FeeCampaignDto>
   archiveFeeCampaign(accessToken: string, id: string, reason: string): Promise<void>
   restoreFeeCampaign(accessToken: string, id: string): Promise<FeeCampaignDto>
   getIrregularPayments(accessToken: string, search?: string, limit?: number, includeArchived?: boolean): Promise<IrregularPaymentDto[]>
@@ -675,6 +679,9 @@ export const dictionariesApi: DictionaryClient = {
   },
   updateFeeCampaign(accessToken, id, request) {
     return requestJson(accessToken, `/api/dictionaries/fee-campaigns/${id}`, { method: 'PUT', body: JSON.stringify(request) })
+  },
+  closeFeeCampaign(accessToken, id, request) {
+    return requestJson(accessToken, `/api/dictionaries/fee-campaigns/${id}/close`, { method: 'POST', body: JSON.stringify(request) })
   },
   archiveFeeCampaign(accessToken, id, reason) {
     return requestJson(accessToken, `/api/dictionaries/fee-campaigns/${id}`, { method: 'DELETE', body: JSON.stringify({ reason }) })

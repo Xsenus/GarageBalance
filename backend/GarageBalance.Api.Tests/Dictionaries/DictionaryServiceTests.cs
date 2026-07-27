@@ -3018,6 +3018,112 @@ public sealed class DictionaryServiceTests
     }
 
     [Fact]
+    public async Task CloseFeeCampaignAsync_RequiresCommentForEarlyClosureAndAllowsClosureAfterFullPayment()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        await AddOtherIncomeDestinationAsync(database.Context);
+        var service = DictionaryServiceTestFactory.Create(database.Context);
+        var actorUserId = Guid.NewGuid();
+        var garage = new Garage { Number = "CLOSE-1", PeopleCount = 1, FloorCount = 1 };
+        database.Context.Garages.Add(garage);
+        await database.Context.SaveChangesAsync();
+
+        var campaignResult = await service.CreateFeeCampaignAsync(
+            new UpsertFeeCampaignRequest("Закрываемый сбор", Guid.Empty, null, 500m, 0m, new DateOnly(2026, 7, 1), null, true, 30),
+            actorUserId,
+            CancellationToken.None);
+        var campaign = await database.Context.FeeCampaigns.SingleAsync(item => item.Id == campaignResult.Value!.Id);
+        var accrual = new Accrual
+        {
+            Garage = garage,
+            IncomeTypeId = campaign.IncomeTypeId,
+            FeeCampaign = campaign,
+            AccountingMonth = new DateOnly(2026, 7, 1),
+            DueDate = new DateOnly(2026, 7, 31),
+            OverdueFromDate = new DateOnly(2026, 8, 31),
+            Amount = 500m,
+            Source = AccrualSources.FeeCampaign
+        };
+        var payment = new FinancialOperation
+        {
+            OperationKind = FinancialOperationKinds.Income,
+            OperationDate = new DateOnly(2026, 7, 20),
+            AccountingMonth = new DateOnly(2026, 7, 1),
+            Amount = 500m,
+            Garage = garage,
+            IncomeTypeId = campaign.IncomeTypeId
+        };
+        database.Context.AddRange(accrual, payment);
+        database.Context.AccrualPaymentAllocations.Add(new AccrualPaymentAllocation
+        {
+            Accrual = accrual,
+            FinancialOperation = payment,
+            Amount = 500m
+        });
+        await database.Context.SaveChangesAsync();
+
+        var closed = await service.CloseFeeCampaignAsync(
+            campaign.Id,
+            new CloseFeeCampaignRequest(null),
+            actorUserId,
+            CancellationToken.None);
+        var repeated = await service.CloseFeeCampaignAsync(
+            campaign.Id,
+            new CloseFeeCampaignRequest("Повтор"),
+            actorUserId,
+            CancellationToken.None);
+        var update = await service.UpdateFeeCampaignAsync(
+            campaign.Id,
+            new UpsertFeeCampaignRequest("Изменённый сбор", Guid.Empty, null, 500m, 0m, new DateOnly(2026, 7, 1), null, true, 30),
+            actorUserId,
+            CancellationToken.None);
+
+        Assert.True(closed.Succeeded, closed.ErrorMessage);
+        Assert.NotNull(closed.Value!.ClosedAtUtc);
+        Assert.False(closed.Value.IsClosedEarly);
+        Assert.Null(closed.Value.ClosureComment);
+        Assert.False(repeated.Succeeded);
+        Assert.Equal("fee_campaign_already_closed", repeated.ErrorCode);
+        Assert.False(update.Succeeded);
+        Assert.Equal("fee_campaign_closed", update.ErrorCode);
+        Assert.Contains(database.Context.AuditEvents, item =>
+            item.Action == "dictionary.fee_campaign_closed" &&
+            item.ActorUserId == actorUserId &&
+            item.EntityId == campaign.Id.ToString());
+    }
+
+    [Fact]
+    public async Task CloseFeeCampaignAsync_StoresRequiredEarlyClosureComment()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        await AddOtherIncomeDestinationAsync(database.Context);
+        var service = DictionaryServiceTestFactory.Create(database.Context);
+        database.Context.Garages.Add(new Garage { Number = "EARLY-1", PeopleCount = 1, FloorCount = 1 });
+        await database.Context.SaveChangesAsync();
+        var campaign = await service.CreateFeeCampaignAsync(
+            new UpsertFeeCampaignRequest("Досрочный сбор", Guid.Empty, null, 500m, 0m, new DateOnly(2026, 7, 1), null, true, 30),
+            null,
+            CancellationToken.None);
+
+        var withoutComment = await service.CloseFeeCampaignAsync(
+            campaign.Value!.Id,
+            new CloseFeeCampaignRequest(" "),
+            null,
+            CancellationToken.None);
+        var closed = await service.CloseFeeCampaignAsync(
+            campaign.Value.Id,
+            new CloseFeeCampaignRequest("Решение правления"),
+            null,
+            CancellationToken.None);
+
+        Assert.False(withoutComment.Succeeded);
+        Assert.Equal("fee_campaign_closure_comment_required", withoutComment.ErrorCode);
+        Assert.True(closed.Succeeded, closed.ErrorMessage);
+        Assert.True(closed.Value!.IsClosedEarly);
+        Assert.Equal("Решение правления", closed.Value.ClosureComment);
+    }
+
+    [Fact]
     public async Task FeeCampaignAsync_RejectsInvalidInputAndDuplicateRestore()
     {
         await using var database = await TestDatabase.CreateAsync();

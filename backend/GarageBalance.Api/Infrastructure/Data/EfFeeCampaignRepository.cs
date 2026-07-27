@@ -43,6 +43,7 @@ public sealed class EfFeeCampaignRepository(GarageBalanceDbContext dbContext) : 
             .AsNoTracking()
             .Where(item =>
                 !item.IsArchived &&
+                item.ClosedAtUtc == null &&
                 item.StartsOn <= monthEnd &&
                 (!item.EndsOn.HasValue || item.EndsOn.Value >= accountingMonth))
             .OrderBy(item => item.StartsOn)
@@ -70,6 +71,16 @@ public sealed class EfFeeCampaignRepository(GarageBalanceDbContext dbContext) : 
 
     public Task<bool> HasAccrualsAsync(Guid id, CancellationToken cancellationToken) =>
         dbContext.Accruals.AsNoTracking().AnyAsync(item => item.FeeCampaignId == id, cancellationToken);
+
+    public Task<decimal> GetCollectedAmountAsync(Guid id, CancellationToken cancellationToken) =>
+        dbContext.AccrualPaymentAllocations
+            .AsNoTracking()
+            .Where(item =>
+                item.IsActive &&
+                !item.Accrual.IsCanceled &&
+                item.Accrual.FeeCampaignId == id &&
+                !item.FinancialOperation.IsCanceled)
+            .SumAsync(item => item.Amount, cancellationToken);
 
     public void Add(FeeCampaign campaign) => dbContext.FeeCampaigns.Add(campaign);
 

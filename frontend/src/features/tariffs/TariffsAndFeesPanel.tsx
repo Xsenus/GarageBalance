@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useRef, useState } from 'react'
 import type { FormEvent, MouseEvent } from 'react'
-import { FileSpreadsheet, FileText, Pencil, PowerOff, RotateCcw, Save, Trash2, X } from 'lucide-react'
+import { CircleCheck, FileSpreadsheet, FileText, Pencil, PowerOff, RotateCcw, Save, Trash2, X } from 'lucide-react'
 import type { AuthResponse } from '../../services/authApi'
 import { DictionaryApiError } from '../../services/dictionariesApi'
 import type { AccountingTypeDto, ChargeServiceSettingDto, CreateChargeServiceWithTariffRequest, DictionaryClient, FeeCampaignDto, GarageDto, IrregularPaymentDto, TariffDto, UpsertChargeServiceSettingRequest, UpsertFeeCampaignRequest, UpsertIrregularPaymentRequest, UpsertTariffRequest } from '../../services/dictionariesApi'
@@ -702,6 +702,8 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
   const [feeCampaignEditTarget, setFeeCampaignEditTarget] = useState<FeeCampaignDto | null>(null)
   const [feeCampaignArchiveTarget, setFeeCampaignArchiveTarget] = useState<FeeCampaignDto | null>(null)
   const [feeCampaignArchiveReason, setFeeCampaignArchiveReason] = useState('')
+  const [feeCampaignCloseTarget, setFeeCampaignCloseTarget] = useState<FeeCampaignDto | null>(null)
+  const [feeCampaignClosureComment, setFeeCampaignClosureComment] = useState('')
   const [feeCampaignRestoreTarget, setFeeCampaignRestoreTarget] = useState<FeeCampaignDto | null>(null)
   const [feeCampaignGenerateTarget, setFeeCampaignGenerateTarget] = useState<FeeCampaignDto | null>(null)
   const [feeCampaignGenerateMonth, setFeeCampaignGenerateMonth] = useState(getCurrentMonthInputValue())
@@ -899,6 +901,11 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
 
   function closeFeeCampaignEditDialog() {
     setFeeCampaignEditTarget(null)
+  }
+
+  function closeFeeCampaignCloseDialog() {
+    setFeeCampaignCloseTarget(null)
+    setFeeCampaignClosureComment('')
   }
 
   function ensureFeeCampaignGarageOptions() {
@@ -1125,6 +1132,9 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
   useRestoreFocusOnClose(Boolean(feeCampaignArchiveTarget))
   const feeCampaignArchiveDialogRef = useFocusTrap<HTMLElement>(Boolean(feeCampaignArchiveTarget))
   const feeCampaignArchiveCancelRef = useFocusOnOpen<HTMLButtonElement>(Boolean(feeCampaignArchiveTarget))
+  useRestoreFocusOnClose(Boolean(feeCampaignCloseTarget))
+  const feeCampaignCloseDialogRef = useFocusTrap<HTMLElement>(Boolean(feeCampaignCloseTarget))
+  const feeCampaignCloseCancelRef = useFocusOnOpen<HTMLButtonElement>(Boolean(feeCampaignCloseTarget))
   useRestoreFocusOnClose(Boolean(feeCampaignRestoreTarget))
   const feeCampaignRestoreDialogRef = useFocusTrap<HTMLElement>(Boolean(feeCampaignRestoreTarget))
   const feeCampaignRestoreCancelRef = useFocusOnOpen<HTMLButtonElement>(Boolean(feeCampaignRestoreTarget))
@@ -1147,6 +1157,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
   useEscapeKey(Boolean(oneTimeDeleteTarget), () => closeOneTimeDeleteDialog())
   useEscapeKey(Boolean(oneTimeRestoreTarget), () => closeOneTimeRestoreDialog())
   useEscapeKey(Boolean(feeCampaignArchiveTarget), () => closeFeeCampaignArchiveDialog())
+  useEscapeKey(Boolean(feeCampaignCloseTarget), () => closeFeeCampaignCloseDialog())
   useEscapeKey(Boolean(feeCampaignRestoreTarget), () => closeFeeCampaignRestoreDialog())
   useEscapeKey(Boolean(chargeServiceArchiveTarget), () => closeChargeServiceArchiveDialog())
   useEscapeKey(Boolean(chargeServiceRestoreTarget), () => closeChargeServiceRestoreDialog())
@@ -1962,6 +1973,32 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
     setThresholdCreateOpen(true)
   }
 
+  async function closeFeeCampaign() {
+    if (!feeCampaignCloseTarget) {
+      return
+    }
+
+    setFeeCampaignSavingId(feeCampaignCloseTarget.id)
+    setFeeCampaignActionMessage(null)
+    try {
+      const closedCampaign = await dictionaryClient.closeFeeCampaign(auth.accessToken, feeCampaignCloseTarget.id, {
+        comment: feeCampaignClosureComment.trim() || null,
+      })
+      feeCampaignMutationVersionRef.current += 1
+      setFeeCampaigns((currentCampaigns) => currentCampaigns.map((campaign) => (
+        campaign.id === closedCampaign.id ? closedCampaign : campaign
+      )))
+      setFeeCampaignActionMessage(closedCampaign.isClosedEarly
+        ? `Сбор «${closedCampaign.name}» закрыт досрочно.`
+        : `Сбор «${closedCampaign.name}» закрыт после выполнения плана.`)
+      closeFeeCampaignCloseDialog()
+    } catch (caught) {
+      setFeeCampaignActionMessage(caught instanceof Error ? caught.message : 'Не удалось закрыть сбор.')
+    } finally {
+      setFeeCampaignSavingId(null)
+    }
+  }
+
   async function confirmThresholdCreate(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     const electricityThresholdRows = tariffRows.filter((row) => row.category === 'Электроэнергия' && row.threshold)
@@ -2476,6 +2513,12 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
                   <span>
                     <strong>{campaign.name}</strong>
                     <small>{campaign.incomeTypeName}{campaign.goal ? ` · ${campaign.goal}` : ''}</small>
+                    {campaign.closedAtUtc ? (
+                      <small>
+                        {campaign.isClosedEarly ? 'Закрыт досрочно' : 'Закрыт после выполнения плана'}
+                        {campaign.closureComment ? ` · ${campaign.closureComment}` : ''}
+                      </small>
+                    ) : null}
                   </span>
                   <span className="contractors-fee-money-cell">{formatTariffDecimal(campaign.contributionAmount)}</span>
                   <span className="contractors-fee-money-cell">{formatTariffDecimal(campaign.targetAmount)}</span>
@@ -2486,6 +2529,13 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
                       <button className="ghost-button" type="button" disabled={!canManageTariffs || feeCampaignSavingId === campaign.id} onClick={() => setFeeCampaignRestoreTarget(campaign)}>
                         <RotateCcw size={16} />
                         <span>Вернуть</span>
+                      </button>
+                    ) : campaign.closedAtUtc ? (
+                      <button className="icon-button" type="button" aria-label={`Архивировать закрытый сбор ${campaign.name}`} disabled={!canManageTariffs || feeCampaignSavingId === campaign.id} onClick={() => {
+                        setFeeCampaignArchiveTarget(campaign)
+                        setFeeCampaignArchiveReason('')
+                      }}>
+                        <Trash2 size={16} />
                       </button>
                     ) : (
                       <>
@@ -2499,6 +2549,12 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
                         </button>
                         <button className="icon-button" type="button" aria-label={`Изменить сбор ${campaign.name}`} disabled={!canManageTariffs || feeCampaignSavingId === campaign.id || feeCampaignGarageOptionsLoading} onClick={() => void openFeeCampaignEditDialog(campaign)}>
                           <Pencil size={16} />
+                        </button>
+                        <button className="icon-button" type="button" aria-label={`Закрыть сбор ${campaign.name}`} disabled={!canManageTariffs || feeCampaignSavingId === campaign.id} onClick={() => {
+                          setFeeCampaignCloseTarget(campaign)
+                          setFeeCampaignClosureComment('')
+                        }}>
+                          <CircleCheck size={16} />
                         </button>
                         <button className="icon-button" type="button" aria-label={`Архивировать сбор ${campaign.name}`} disabled={!canManageTariffs || feeCampaignSavingId === campaign.id} onClick={() => {
                           setFeeCampaignArchiveTarget(campaign)
@@ -2824,6 +2880,41 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
         </div>
       ) : null}
 
+      {feeCampaignCloseTarget ? (
+        <div className="modal-backdrop" role="presentation" onMouseDown={closeFeeCampaignCloseDialog}>
+          <section ref={feeCampaignCloseDialogRef} className="detail-dialog contractors-dialog" role="dialog" aria-modal="true" aria-labelledby="fee-campaign-close-title" aria-describedby="fee-campaign-close-description" onMouseDown={(event) => event.stopPropagation()}>
+            <div className="detail-dialog-header">
+              <div>
+                <p className="eyebrow">Завершение сбора</p>
+                <h3 id="fee-campaign-close-title">Закрыть сбор?</h3>
+                <p>{feeCampaignCloseTarget.name}</p>
+              </div>
+              <button className="icon-button" type="button" aria-label="Закрыть подтверждение завершения сбора" onClick={closeFeeCampaignCloseDialog} disabled={feeCampaignSavingId === feeCampaignCloseTarget.id}>
+                <X size={18} />
+              </button>
+            </div>
+            <p className="confirmation-text" id="fee-campaign-close-description">После закрытия новые начисления по сбору не создаются. Уже созданные начисления, оплаты и отчёты сохраняются. Если план ещё не оплачен полностью, комментарий обязателен и закрытие будет отмечено как досрочное.</p>
+            <FormField label="Комментарий к закрытию" hint="Необязательно при полном выполнении плана; обязательно для досрочного закрытия.">
+              <textarea
+                aria-label="Комментарий к закрытию сбора"
+                maxLength={1000}
+                value={feeCampaignClosureComment}
+                onChange={(event) => setFeeCampaignClosureComment(event.target.value)}
+                placeholder="Например: сбор прекращён по решению правления"
+                disabled={feeCampaignSavingId === feeCampaignCloseTarget.id}
+              />
+            </FormField>
+            <div className="detail-dialog-actions contractors-dialog-actions">
+              <button ref={feeCampaignCloseCancelRef} className="ghost-button" type="button" onClick={closeFeeCampaignCloseDialog} disabled={feeCampaignSavingId === feeCampaignCloseTarget.id}>Отмена</button>
+              <button className="secondary-button" type="button" onClick={closeFeeCampaign} disabled={feeCampaignSavingId === feeCampaignCloseTarget.id}>
+                <CircleCheck size={16} />
+                <span>Закрыть сбор</span>
+              </button>
+            </div>
+          </section>
+        </div>
+      ) : null}
+
       {feeCampaignRestoreTarget ? (
         <div className="modal-backdrop" role="presentation" onMouseDown={closeFeeCampaignRestoreDialog}>
           <section ref={feeCampaignRestoreDialogRef} className="detail-dialog contractors-dialog" role="dialog" aria-modal="true" aria-labelledby="fee-campaign-restore-title" aria-describedby="fee-campaign-restore-description" onMouseDown={(event) => event.stopPropagation()}>
@@ -2837,7 +2928,9 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
                 <X size={18} />
               </button>
             </div>
-            <p className="confirmation-text" id="fee-campaign-restore-description">Сбор снова появится как активный и будет доступен для начислений. Действие будет записано в историю изменений.</p>
+            <p className="confirmation-text" id="fee-campaign-restore-description">{feeCampaignRestoreTarget.closedAtUtc
+              ? 'Закрытый сбор снова появится в рабочем списке, но новые начисления по нему останутся запрещены. Действие будет записано в историю изменений.'
+              : 'Сбор снова появится как активный и будет доступен для начислений. Действие будет записано в историю изменений.'}</p>
             <div className="detail-dialog-actions contractors-dialog-actions">
               <button ref={feeCampaignRestoreCancelRef} className="ghost-button" type="button" onClick={closeFeeCampaignRestoreDialog} disabled={feeCampaignSavingId === feeCampaignRestoreTarget.id}>Отмена</button>
               <button className="secondary-button" type="button" onClick={restoreFeeCampaign} disabled={feeCampaignSavingId === feeCampaignRestoreTarget.id}>

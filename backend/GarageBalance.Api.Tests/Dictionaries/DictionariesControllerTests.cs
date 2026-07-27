@@ -422,6 +422,55 @@ public sealed class DictionariesControllerTests
     }
 
     [Fact]
+    public async Task CloseFeeCampaign_ReturnsClosedCampaignAndPassesCommentAndActor()
+    {
+        var actorUserId = Guid.NewGuid();
+        var campaignId = Guid.NewGuid();
+        var incomeTypeId = Guid.NewGuid();
+        var closedAtUtc = DateTimeOffset.UtcNow;
+        var service = new FakeDictionaryService
+        {
+            CloseFeeCampaignResult = DictionaryResult<FeeCampaignDto>.Success(
+                new FeeCampaignDto(campaignId, "Gate campaign", incomeTypeId, "Gate fee", null, 500m, 33500m, new DateOnly(2026, 5, 4), null, true, [], 30, false, closedAtUtc, true, "Board decision"))
+        };
+        var controller = CreateController(service, actorUserId);
+
+        var result = await controller.CloseFeeCampaign(
+            campaignId,
+            new CloseFeeCampaignRequest("Board decision"),
+            CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var campaign = Assert.IsType<FeeCampaignDto>(ok.Value);
+        Assert.Equal(closedAtUtc, campaign.ClosedAtUtc);
+        Assert.True(campaign.IsClosedEarly);
+        Assert.Equal(campaignId, service.LastFeeCampaignId);
+        Assert.Equal("Board decision", service.LastFeeCampaignClosureComment);
+        Assert.Equal(actorUserId, service.LastActorUserId);
+    }
+
+    [Fact]
+    public async Task CloseFeeCampaign_ReturnsBadRequestWhenEarlyClosureCommentIsMissing()
+    {
+        var service = new FakeDictionaryService
+        {
+            CloseFeeCampaignResult = DictionaryResult<FeeCampaignDto>.Failure(
+                "fee_campaign_closure_comment_required",
+                "Comment required.")
+        };
+        var controller = CreateController(service, Guid.NewGuid());
+
+        var result = await controller.CloseFeeCampaign(
+            Guid.NewGuid(),
+            new CloseFeeCampaignRequest(null),
+            CancellationToken.None);
+
+        var badRequest = Assert.IsType<BadRequestObjectResult>(result.Result);
+        var problem = Assert.IsType<ProblemDetails>(badRequest.Value);
+        Assert.Equal("fee_campaign_closure_comment_required", problem.Title);
+    }
+
+    [Fact]
     public async Task ArchiveFeeCampaign_ReturnsNoContentAndPassesActorUserId()
     {
         var actorUserId = Guid.NewGuid();
@@ -1657,6 +1706,7 @@ public sealed class DictionariesControllerTests
         public (string? Search, int? Limit, bool IncludeArchived) LastIrregularPaymentListRequest { get; private set; }
         public (string? Search, int? Limit, bool IncludeArchived) LastFeeCampaignListRequest { get; private set; }
         public string? LastArchiveReason { get; private set; }
+        public string? LastFeeCampaignClosureComment { get; private set; }
         public Guid? LastGarageId { get; private set; }
         public Guid? LastSupplierId { get; private set; }
         public Guid? LastChargeServiceSettingId { get; private set; }
@@ -1712,6 +1762,7 @@ public sealed class DictionariesControllerTests
         public DictionaryResult<IrregularPaymentDto> RestoreIrregularPaymentResult { get; init; } = DictionaryResult<IrregularPaymentDto>.Failure("not_configured", "Not configured.");
         public DictionaryResult<FeeCampaignDto> CreateFeeCampaignResult { get; init; } = DictionaryResult<FeeCampaignDto>.Failure("not_configured", "Not configured.");
         public DictionaryResult<FeeCampaignDto> UpdateFeeCampaignResult { get; init; } = DictionaryResult<FeeCampaignDto>.Failure("not_configured", "Not configured.");
+        public DictionaryResult<FeeCampaignDto> CloseFeeCampaignResult { get; init; } = DictionaryResult<FeeCampaignDto>.Failure("not_configured", "Not configured.");
         public DictionaryResult<FeeCampaignDto> ArchiveFeeCampaignResult { get; init; } = DictionaryResult<FeeCampaignDto>.Failure("not_configured", "Not configured.");
         public DictionaryResult<FeeCampaignDto> RestoreFeeCampaignResult { get; init; } = DictionaryResult<FeeCampaignDto>.Failure("not_configured", "Not configured.");
 
@@ -2185,6 +2236,14 @@ public sealed class DictionariesControllerTests
             LastFeeCampaignId = id;
             LastActorUserId = actorUserId;
             return Task.FromResult(UpdateFeeCampaignResult);
+        }
+
+        public Task<DictionaryResult<FeeCampaignDto>> CloseFeeCampaignAsync(Guid id, CloseFeeCampaignRequest request, Guid? actorUserId, CancellationToken cancellationToken)
+        {
+            LastFeeCampaignId = id;
+            LastActorUserId = actorUserId;
+            LastFeeCampaignClosureComment = request.Comment;
+            return Task.FromResult(CloseFeeCampaignResult);
         }
 
         public Task<DictionaryResult<FeeCampaignDto>> ArchiveFeeCampaignAsync(Guid id, string reason, Guid? actorUserId, CancellationToken cancellationToken)

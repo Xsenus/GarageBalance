@@ -14,6 +14,10 @@ public sealed class FeeCampaign
     public bool AppliesToAllGarages { get; set; } = true;
     public ICollection<FeeCampaignGarage> ParticipantGarages { get; set; } = [];
     public int OverdueGraceDays { get; set; }
+    public DateTimeOffset? ClosedAtUtc { get; set; }
+    public Guid? ClosedByUserId { get; set; }
+    public bool IsClosedEarly { get; set; }
+    public string? ClosureComment { get; set; }
     public bool IsArchived { get; set; }
     public DateTimeOffset CreatedAtUtc { get; set; } = DateTimeOffset.UtcNow;
     public DateTimeOffset UpdatedAtUtc { get; set; } = DateTimeOffset.UtcNow;

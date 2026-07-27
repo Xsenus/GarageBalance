@@ -616,6 +616,7 @@ describe('App', () => {
     const updatedRequests: Array<{ id: string; request: unknown }> = []
     const archiveRequests: Array<{ id: string; reason: string }> = []
     const restoredRequests: string[] = []
+    const closeRequests: Array<{ id: string; comment?: string | null }> = []
     const generateRequests: GenerateFeeCampaignAccrualsRequest[] = []
     const dictionaryClient = createDictionaryClient({
       getGarages: async () => [participantGarage, otherGarage],
@@ -659,6 +660,18 @@ describe('App', () => {
         updatedRequests.push({ id, request })
         campaigns = campaigns.map((item) => (item.id === id ? campaign : item))
         return campaign
+      },
+      closeFeeCampaign: async (_token, id, request) => {
+        closeRequests.push({ id, comment: request.comment })
+        const currentCampaign = campaigns.find((campaign) => campaign.id === id) ?? createFeeCampaign({ id })
+        const closedCampaign = {
+          ...currentCampaign,
+          closedAtUtc: '2026-07-27T10:00:00Z',
+          isClosedEarly: true,
+          closureComment: request.comment ?? null,
+        }
+        campaigns = campaigns.map((campaign) => (campaign.id === id ? closedCampaign : campaign))
+        return closedCampaign
       },
       archiveFeeCampaign: async (_token, id, reason) => {
         archiveRequests.push({ id, reason })
@@ -781,6 +794,16 @@ describe('App', () => {
       },
     })
     expect(within(feeCampaignsSection).getByText('12, 27')).toBeInTheDocument()
+
+    await user.click(within(feeCampaignsSection).getByRole('button', { name: 'Закрыть сбор Сбор на камеры' }))
+    const closeDialog = await screen.findByRole('dialog', { name: 'Закрыть сбор?' })
+    expect(within(closeDialog).getByText(/новые начисления по сбору не создаются/i)).toBeInTheDocument()
+    await user.type(within(closeDialog).getByLabelText('Комментарий к закрытию сбора'), 'Решение правления')
+    await user.click(within(closeDialog).getByRole('button', { name: 'Закрыть сбор' }))
+    await waitFor(() => expect(closeRequests).toEqual([{ id: 'fee-campaign-new', comment: 'Решение правления' }]))
+    expect(await within(feeCampaignsSection).findByText(/Закрыт досрочно · Решение правления/)).toBeInTheDocument()
+    expect(within(feeCampaignsSection).queryByRole('button', { name: 'Доначислить сбор Сбор на камеры' })).not.toBeInTheDocument()
+    expect(within(feeCampaignsSection).queryByRole('button', { name: 'Изменить сбор Сбор на камеры' })).not.toBeInTheDocument()
   })
 
   it('keeps a newly created fee campaign when the initial list finishes later', async () => {
@@ -17720,6 +17743,17 @@ function createDictionaryClient(overrides: Partial<DictionaryClient> = {}): Dict
       })
       feeCampaigns = feeCampaigns.map((item) => (item.id === id ? campaign : item))
       return campaign
+    },
+    closeFeeCampaign: async (_token, id, request) => {
+      const campaign = feeCampaigns.find((item) => item.id === id) ?? createFeeCampaign({ id })
+      const closedCampaign = {
+        ...campaign,
+        closedAtUtc: '2026-07-27T10:00:00Z',
+        isClosedEarly: Boolean(request.comment),
+        closureComment: request.comment ?? null,
+      }
+      feeCampaigns = feeCampaigns.map((item) => (item.id === id ? closedCampaign : item))
+      return closedCampaign
     },
     archiveFeeCampaign: async (_token, id) => {
       feeCampaigns = feeCampaigns.map((item) => (item.id === id ? { ...item, isArchived: true } : item))

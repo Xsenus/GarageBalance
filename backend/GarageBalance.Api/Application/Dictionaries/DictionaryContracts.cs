@@ -252,7 +252,13 @@ public sealed record FeeCampaignDto(
     bool AppliesToAllGarages,
     IReadOnlyList<Guid> ParticipantGarageIds,
     int OverdueGraceDays,
-    bool IsArchived);
+    bool IsArchived,
+    DateTimeOffset? ClosedAtUtc = null,
+    bool IsClosedEarly = false,
+    string? ClosureComment = null);
+
+public sealed record CloseFeeCampaignRequest(
+    [MaxLength(1000)] string? Comment);
 
 public sealed record UpsertFeeCampaignRequest(
     [Required, MaxLength(200)] string Name,
