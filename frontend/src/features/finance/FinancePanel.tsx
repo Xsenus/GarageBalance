@@ -4606,41 +4606,62 @@ function PaymentsPrototypePanel({
 
       {selectedGarage && activeTab === 'income' ? (
         <section className="payments-prototype-workspace-header" aria-label="Карточка выбранного гаража">
-          <div className="payments-prototype-owner-row" aria-label="Выбранный гараж">
-            <div><span>Гараж</span><strong>{selectedGarage.number}</strong></div>
-            <div><span>Владелец</span><strong>{selectedGarage.ownerName}</strong></div>
-            <div><span>Телефон</span><strong>{selectedGarage.phone}</strong></div>
-            <div className="payments-prototype-actions">
-              <button className="secondary-button create-action-button payments-prototype-action-button" type="button" aria-label="Добавить начисление гаражу" onClick={openGarageAccrualDialog}>
-                <FileText size={16} aria-hidden="true" />
-                <span>Добавить начисление</span>
-              </button>
-              <button className="secondary-button create-action-button payments-prototype-action-button" type="button" onClick={openPenaltyAccrualDialog} disabled={!canWritePayments}>
-                <Gavel size={16} aria-hidden="true" />
-                <span>Начислить штраф</span>
-              </button>
-              <button className="secondary-button payments-prototype-action-button" type="button" onClick={openFullPaymentDialog} disabled={garageWorksheetLoadingId === selectedGarage.id}>
-                <WalletCards size={16} aria-hidden="true" />
-                <span>Полная оплата</span>
-              </button>
-              <button
-                className="secondary-button payments-prototype-action-button"
-                type="button"
-                aria-controls={paymentHistoryId}
-                aria-expanded={paymentHistoryOpen}
-                onClick={togglePaymentHistory}
-              >
-                <History size={16} aria-hidden="true" />
-                <span>{paymentHistoryOpen ? 'Скрыть историю' : 'История платежей'}</span>
-              </button>
-            </div>
+          <div className="payments-prototype-garage-overview" aria-label="Выбранный гараж">
+            <section className="payments-prototype-garage-summary" aria-label="Параметры выбранного гаража">
+              <section className="payments-prototype-summary-group" aria-label="Гараж">
+                <h3>Гараж</h3>
+                <dl>
+                  <div><dt>Номер</dt><dd>{selectedGarage.number}</dd></div>
+                  <div><dt>Люди</dt><dd>{selectedGarage.peopleCount}</dd></div>
+                  <div><dt>Этажи</dt><dd>{selectedGarage.floorCount}</dd></div>
+                </dl>
+              </section>
+              <section className="payments-prototype-summary-group" aria-label="Владелец">
+                <h3>Владелец</h3>
+                <dl>
+                  <div><dt>ФИО</dt><dd>{selectedGarage.ownerName}</dd></div>
+                  <div><dt>Телефон</dt><dd>{selectedGarage.phone}</dd></div>
+                </dl>
+              </section>
+              <section className="payments-prototype-summary-group payments-prototype-summary-group--finances" aria-label="Финансы">
+                <h3>Финансы</h3>
+                <dl>
+                  <div>
+                    <dt>{selectedGarageBalance?.label}</dt>
+                    <dd className={selectedGarageBalance?.moneyClassName}>{formatPaymentPrototypeValue(selectedGarageBalance?.amount ?? 0)}</dd>
+                  </div>
+                  <div>
+                    <dt>Просроченная задолженность</dt>
+                    <dd className={selectedGarage.overdueDebt > 0 ? 'money-expense' : undefined}>{formatPaymentPrototypeValue(selectedGarage.overdueDebt)}</dd>
+                  </div>
+                </dl>
+              </section>
+            </section>
           </div>
-          <section className="payments-prototype-garage-summary" aria-label="Параметры выбранного гаража">
-            <div><span>Люди</span><strong className="payments-prototype-garage-summary-value">{selectedGarage.peopleCount}</strong></div>
-            <div><span>{selectedGarageBalance?.label}</span><strong className={`payments-prototype-garage-summary-value${selectedGarageBalance?.moneyClassName ? ` ${selectedGarageBalance.moneyClassName}` : ''}`}>{formatPaymentPrototypeValue(selectedGarageBalance?.amount ?? 0)}</strong></div>
-            <div><span>Этажи</span><strong className="payments-prototype-garage-summary-value">{selectedGarage.floorCount}</strong></div>
-            <div><span>Просроченная задолженность</span><strong className={`payments-prototype-garage-summary-value${selectedGarage.overdueDebt > 0 ? ' money-expense' : ''}`}>{formatPaymentPrototypeValue(selectedGarage.overdueDebt)}</strong></div>
-          </section>
+          <div className="payments-prototype-actions" aria-label="Действия с гаражом">
+            <button className="secondary-button create-action-button payments-prototype-action-button" type="button" aria-label="Добавить начисление гаражу" onClick={openGarageAccrualDialog}>
+              <FileText size={16} aria-hidden="true" />
+              <span>Добавить начисление</span>
+            </button>
+            <button className="secondary-button create-action-button payments-prototype-action-button" type="button" onClick={openPenaltyAccrualDialog} disabled={!canWritePayments}>
+              <Gavel size={16} aria-hidden="true" />
+              <span>Начислить штраф</span>
+            </button>
+            <button className="secondary-button payments-prototype-action-button" type="button" onClick={openFullPaymentDialog} disabled={garageWorksheetLoadingId === selectedGarage.id}>
+              <WalletCards size={16} aria-hidden="true" />
+              <span>Полная оплата</span>
+            </button>
+            <button
+              className="secondary-button payments-prototype-action-button"
+              type="button"
+              aria-controls={paymentHistoryId}
+              aria-expanded={paymentHistoryOpen}
+              onClick={togglePaymentHistory}
+            >
+              <History size={16} aria-hidden="true" />
+              <span>{paymentHistoryOpen ? 'Скрыть историю' : 'История платежей'}</span>
+            </button>
+          </div>
           {selectedGarageBalance && selectedGarage.overdueDebt > 0 ? (
             <>
               <p className="payments-prototype-balance-explanation" role="note">
