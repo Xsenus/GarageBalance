@@ -8,7 +8,6 @@ export type GarageBalancePresentation = {
   amount: number
   moneyClassName?: 'money-expense' | 'money-income'
   overdueRelation: GarageBalanceRelation
-  notOverdueDebt: number
 }
 
 function roundMoney(value: number) {
@@ -20,9 +19,6 @@ export function getGarageBalancePresentation(balance: number, overdueDebt: numbe
   const roundedOverdueDebt = Math.max(roundMoney(overdueDebt), 0)
   const kind: GarageBalanceKind = roundedBalance > 0 ? 'debt' : roundedBalance < 0 ? 'advance' : 'settled'
   const amount = Math.abs(roundedBalance)
-  const notOverdueDebt = kind === 'debt'
-    ? Math.max(roundMoney(roundedBalance - roundedOverdueDebt), 0)
-    : 0
 
   let overdueRelation: GarageBalanceRelation = 'no-overdue'
   if (roundedOverdueDebt > 0) {
@@ -39,6 +35,5 @@ export function getGarageBalancePresentation(balance: number, overdueDebt: numbe
     amount,
     moneyClassName: kind === 'debt' ? 'money-expense' : kind === 'advance' ? 'money-income' : undefined,
     overdueRelation,
-    notOverdueDebt,
   }
 }

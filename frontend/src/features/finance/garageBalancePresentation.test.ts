@@ -2,14 +2,13 @@ import { describe, expect, it } from 'vitest'
 import { getGarageBalancePresentation } from './garageBalancePresentation'
 
 describe('getGarageBalancePresentation', () => {
-  it('separates overdue and not-yet-overdue portions of a positive total debt', () => {
+  it('classifies a positive total debt with a smaller overdue part without calculating a separate hint', () => {
     expect(getGarageBalancePresentation(1500, 500)).toEqual({
       kind: 'debt',
       label: 'Общий долг',
       amount: 1500,
       moneyClassName: 'money-expense',
       overdueRelation: 'partly-overdue',
-      notOverdueDebt: 1000,
     })
   })
 
@@ -17,7 +16,6 @@ describe('getGarageBalancePresentation', () => {
     expect(getGarageBalancePresentation(500, 500)).toMatchObject({
       kind: 'debt',
       overdueRelation: 'fully-overdue',
-      notOverdueDebt: 0,
     })
   })
 
@@ -28,7 +26,6 @@ describe('getGarageBalancePresentation', () => {
       amount: 750,
       moneyClassName: 'money-income',
       overdueRelation: 'service-specific-overdue',
-      notOverdueDebt: 0,
     })
   })
 
@@ -39,7 +36,6 @@ describe('getGarageBalancePresentation', () => {
       amount: 0,
       moneyClassName: undefined,
       overdueRelation: 'no-overdue',
-      notOverdueDebt: 0,
     })
   })
 })

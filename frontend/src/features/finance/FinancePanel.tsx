@@ -4645,7 +4645,7 @@ function PaymentsPrototypePanel({
             <>
               <p className="payments-prototype-balance-explanation" role="note">
                 {selectedGarageBalance.overdueRelation === 'partly-overdue'
-                  ? <>Общий долг составляет <strong>{formatPaymentPrototypeValue(selectedGarageBalance.amount)}</strong>: просрочено <strong>{formatPaymentPrototypeValue(selectedGarage.overdueDebt)}</strong>, ещё не просрочено <strong>{formatPaymentPrototypeValue(selectedGarageBalance.notOverdueDebt)}</strong>.</>
+                  ? <>Общий долг составляет <strong>{formatPaymentPrototypeValue(selectedGarageBalance.amount)}</strong>, из него просрочено <strong>{formatPaymentPrototypeValue(selectedGarage.overdueDebt)}</strong>.</>
                   : selectedGarageBalance.overdueRelation === 'fully-overdue'
                     ? <>Весь общий долг <strong>{formatPaymentPrototypeValue(selectedGarageBalance.amount)}</strong> уже просрочен.</>
                     : <>{selectedGarageBalance.label} <strong>{formatPaymentPrototypeValue(selectedGarageBalance.amount)}</strong> и просрочка <strong>{formatPaymentPrototypeValue(selectedGarage.overdueDebt)}</strong> относятся к разным услугам. Ниже показано, по каким услугам остался просроченный долг.</>}
