@@ -1839,6 +1839,8 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
       setBackendChargeServices(nextSettings)
       setTariffRows(nextRows)
       setTariffDrafts(createEditableDrafts(nextRows))
+      setChargeServiceView('active')
+      setTariffPageNumber(1)
       closeChargeServiceRestoreDialog()
     } catch (caught) {
       setTariffPersistenceError(caught instanceof Error ? caught.message : 'Не удалось восстановить услугу.')
@@ -2176,6 +2178,22 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
                           }}
                         >
                           <PowerOff size={16} aria-hidden="true" />
+                        </button>
+                      </span>
+                    ) : null}
+                    {row.serviceSettingKind === 'main' && serviceSetting && row.isDeleted ? (
+                      <span className="contractors-sheet-row-actions">
+                        <button
+                          className="icon-button"
+                          type="button"
+                          aria-label={`Вернуть услугу ${serviceSetting.name}`}
+                          disabled={!canManageTariffs || isServiceSaving}
+                          onClick={() => {
+                            setTariffPersistenceError(null)
+                            setChargeServiceRestoreTarget(serviceSetting)
+                          }}
+                        >
+                          <RotateCcw size={16} aria-hidden="true" />
                         </button>
                       </span>
                     ) : null}

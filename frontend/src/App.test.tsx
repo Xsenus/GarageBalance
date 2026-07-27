@@ -1079,7 +1079,7 @@ describe('App', () => {
     expect(deletedServicesTab).toHaveAttribute('aria-selected', 'true')
     expect(within(tariffsPanel).getByRole('table', { name: 'Удалённые услуги' })).toBeInTheDocument()
     expect(within(tariffsPanel).getByLabelText('Охрана: Тариф охраны: значение')).toBeDisabled()
-    expect(within(tariffsPanel).queryByRole('button', { name: 'Вернуть услугу Охрана' })).not.toBeInTheDocument()
+    expect(within(tariffsPanel).getByRole('button', { name: 'Вернуть услугу Охрана' })).toBeEnabled()
   })
 
   it('separates archived charge services into a read-only deleted services mode', async () => {
@@ -1119,7 +1119,7 @@ describe('App', () => {
 
     expect(await within(tariffsPanel).findByRole('tab', { name: 'Действующие услуги' })).toHaveAttribute('aria-selected', 'true')
     expect(includeArchivedRequests).toEqual([true])
-    expect(within(tariffsPanel).getByText('Действующая охрана')).toBeInTheDocument()
+    expect(await within(tariffsPanel).findByText('Действующая охрана')).toBeInTheDocument()
     expect(within(tariffsPanel).queryByText('Старая охрана')).not.toBeInTheDocument()
 
     await user.click(within(tariffsPanel).getByRole('tab', { name: 'Удалённые услуги (1)' }))
@@ -1132,10 +1132,77 @@ describe('App', () => {
     expect(within(tariffsPanel).getByRole('group', { name: 'Количество строк удалённых услуг' })).toBeInTheDocument()
     expect(within(tariffsPanel).queryByRole('button', { name: 'Изменить услугу Старая охрана' })).not.toBeInTheDocument()
     expect(within(tariffsPanel).queryByRole('button', { name: 'Деактивировать услугу Старая охрана' })).not.toBeInTheDocument()
+    expect(within(tariffsPanel).getByRole('button', { name: 'Вернуть услугу Старая охрана' })).toBeEnabled()
 
     await user.click(within(tariffsPanel).getByRole('tab', { name: 'Действующие услуги' }))
     expect(within(tariffsPanel).getByText('Действующая охрана')).toBeInTheDocument()
     expect(within(tariffsPanel).queryByText('Старая охрана')).not.toBeInTheDocument()
+  })
+
+  it('restores a charge service into the editable active list and keeps the dialog open after an API error', async () => {
+    const user = userEvent.setup()
+    const incomeType = createAccountingType({ id: 'income-service-restore', name: 'Охрана', code: 'other_income' })
+    const tariff = createTariff({ id: 'tariff-service-restore', name: 'Тариф охраны', calculationBase: 'fixed', rate: 1200 })
+    const archivedService = createChargeServiceSetting({
+      id: 'service-restore',
+      name: 'Охрана территории',
+      isRegular: true,
+      incomeTypeId: incomeType.id,
+      tariffId: tariff.id,
+      isArchived: true,
+    })
+    let restoreAttempts = 0
+    const dictionaryClient = createDictionaryClient({
+      getIncomeTypes: async () => [incomeType],
+      getTariffs: async () => [tariff],
+      getChargeServiceSettings: async () => [archivedService],
+      restoreChargeServiceSetting: async (_token, id) => {
+        restoreAttempts += 1
+        if (restoreAttempts === 1) {
+          throw new Error('Не удалось временно восстановить услугу.')
+        }
+
+        return { ...archivedService, id, isArchived: false }
+      },
+    })
+
+    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Тарифы и сборы')
+    const tariffsPanel = await screen.findByRole('region', { name: 'Тарифы и сборы' })
+    await user.click(await within(tariffsPanel).findByRole('tab', { name: 'Удалённые услуги (1)' }))
+    const restoreButton = within(tariffsPanel).getByRole('button', { name: 'Вернуть услугу Охрана территории' })
+
+    await user.click(restoreButton)
+    let restoreDialog = await screen.findByRole('dialog', { name: 'Вернуть услугу?' })
+    expect(within(restoreDialog).getByText(/снова станет доступной для редактирования и будущих начислений/)).toBeInTheDocument()
+    expect(within(restoreDialog).getByText(/прошлые периоды автоматически не пересчитаются/)).toBeInTheDocument()
+    const cancelButton = within(restoreDialog).getByRole('button', { name: 'Отмена' })
+    await waitFor(() => expect(cancelButton).toHaveFocus())
+    await user.keyboard('{Escape}')
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Вернуть услугу?' })).not.toBeInTheDocument())
+    expect(restoreButton).toHaveFocus()
+    expect(restoreAttempts).toBe(0)
+
+    await user.click(restoreButton)
+    restoreDialog = await screen.findByRole('dialog', { name: 'Вернуть услугу?' })
+    await user.click(within(restoreDialog).getByRole('button', { name: 'Вернуть' }))
+    expect(await screen.findByText('Не удалось временно восстановить услугу.')).toBeInTheDocument()
+    expect(screen.getByRole('dialog', { name: 'Вернуть услугу?' })).toBeInTheDocument()
+    expect(within(tariffsPanel).getByLabelText('Охрана территории: Тариф охраны: значение')).toBeDisabled()
+
+    await user.click(within(restoreDialog).getByRole('button', { name: 'Вернуть' }))
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Вернуть услугу?' })).not.toBeInTheDocument())
+
+    expect(restoreAttempts).toBe(2)
+    expect(within(tariffsPanel).getByRole('tab', { name: 'Действующие услуги' })).toHaveAttribute('aria-selected', 'true')
+    expect(within(tariffsPanel).getByRole('tab', { name: 'Удалённые услуги (0)' })).toBeInTheDocument()
+    const restoredRate = within(tariffsPanel).getByLabelText('Охрана территории: Тариф охраны: значение')
+    expect(restoredRate).toBeEnabled()
+    expect(restoredRate.closest('[role="row"]')).not.toHaveClass('contractors-sheet-row--deleted')
+    expect(within(tariffsPanel).getByRole('button', { name: 'Изменить услугу Охрана территории' })).toBeEnabled()
+    expect(within(tariffsPanel).getByRole('button', { name: 'Деактивировать услугу Охрана территории' })).toBeEnabled()
   })
 
   it('does not allow charge service deactivation without tariffs.manage', async () => {
@@ -1149,7 +1216,16 @@ describe('App', () => {
       incomeTypeId: incomeType.id,
       tariffId: tariff.id,
     })
+    const archivedService = createChargeServiceSetting({
+      id: 'service-security-read-only-archived',
+      name: 'Старая охрана',
+      isRegular: true,
+      incomeTypeId: incomeType.id,
+      tariffId: tariff.id,
+      isArchived: true,
+    })
     let archiveCalls = 0
+    let restoreCalls = 0
     const authClient = createAuthClient({
       login: async () => createAuthResponse({
         user: {
@@ -1161,9 +1237,13 @@ describe('App', () => {
     const dictionaryClient = createDictionaryClient({
       getIncomeTypes: async () => [incomeType],
       getTariffs: async () => [tariff],
-      getChargeServiceSettings: async () => [service],
+      getChargeServiceSettings: async () => [service, archivedService],
       archiveChargeServiceSetting: async () => {
         archiveCalls += 1
+      },
+      restoreChargeServiceSetting: async () => {
+        restoreCalls += 1
+        return { ...archivedService, isArchived: false }
       },
     })
 
@@ -1178,6 +1258,12 @@ describe('App', () => {
     await user.click(deactivateButton)
     expect(screen.queryByRole('dialog', { name: 'Деактивировать услугу?' })).not.toBeInTheDocument()
     expect(archiveCalls).toBe(0)
+    await user.click(within(tariffsPanel).getByRole('tab', { name: 'Удалённые услуги (1)' }))
+    const restoreButton = within(tariffsPanel).getByRole('button', { name: 'Вернуть услугу Старая охрана' })
+    expect(restoreButton).toBeDisabled()
+    await user.click(restoreButton)
+    expect(screen.queryByRole('dialog', { name: 'Вернуть услугу?' })).not.toBeInTheDocument()
+    expect(restoreCalls).toBe(0)
   })
 
   it('edits tariffs and one-time payments without local history access', async () => {
