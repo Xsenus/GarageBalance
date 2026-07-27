@@ -2063,8 +2063,8 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
         <div className="contractors-sheet" role="table" aria-label="Тарифы и сборы">
             <div className="contractors-sheet-header" role="row">
               <span role="columnheader">Основание</span>
-              <span role="columnheader">Значение</span>
-              <span role="columnheader">Ед.</span>
+              <span role="columnheader" aria-label="Единица измерения">Ед.</span>
+              <span role="columnheader">Значение / ставка</span>
               <span role="columnheader">Пороговая тарификация</span>
               <span role="columnheader">По счетчику</span>
             </div>
@@ -2141,6 +2141,18 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
                       </span>
                     ) : null}
                   </span>
+                  <span role="cell">
+                    {row.dateDay === undefined && row.serviceSettingKind !== 'periodicity' ? (
+                      <input
+                        aria-label={`${row.category}: ${row.title}: единица`}
+                        className="contractors-editable-input contractors-editable-input--unit"
+                        disabled={!canManageTariffs || isRowDisabled || Boolean(row.calculationBase || row.serviceSettingKind === 'main')}
+                        value={tariffDrafts[row.id]?.unit ?? ''}
+                        onChange={(event) => setTariffDrafts((drafts) => ({ ...drafts, [row.id]: { ...drafts[row.id], unit: event.target.value } }))}
+                        onKeyDown={(event) => handleEditableInputKeyDown(event, () => commitTariffTextChange(row, 'unit'))}
+                      />
+                    ) : null}
+                  </span>
                   <span role="cell" className="contractors-value-cell">
                     {row.serviceSettingKind === 'periodicity' ? (
                       <SelectControl
@@ -2214,18 +2226,6 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
                         onKeyDown={(event) => handleEditableInputKeyDown(event, () => commitTariffTextChange(row, 'amount'))}
                       />
                     )}
-                  </span>
-                  <span role="cell">
-                    {row.dateDay === undefined && row.serviceSettingKind !== 'periodicity' ? (
-                      <input
-                        aria-label={`${row.category}: ${row.title}: единица`}
-                        className="contractors-editable-input contractors-editable-input--unit"
-                        disabled={!canManageTariffs || isRowDisabled || Boolean(row.calculationBase || row.serviceSettingKind === 'main')}
-                        value={tariffDrafts[row.id]?.unit ?? ''}
-                        onChange={(event) => setTariffDrafts((drafts) => ({ ...drafts, [row.id]: { ...drafts[row.id], unit: event.target.value } }))}
-                        onKeyDown={(event) => handleEditableInputKeyDown(event, () => commitTariffTextChange(row, 'unit'))}
-                      />
-                    ) : null}
                   </span>
                   <span role="cell">
                     {showsServiceCalculationFlags ? (

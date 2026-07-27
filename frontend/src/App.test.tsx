@@ -438,8 +438,19 @@ describe('App', () => {
     const tariffsPanel = await screen.findByRole('region', { name: 'Тарифы и сборы' })
 
     expect(await within(tariffsPanel).findByText('Быстрый тариф воды')).toBeInTheDocument()
-    expect(within(tariffsPanel).getByLabelText('Вода: Быстрый тариф воды: единица')).toHaveValue('м³')
-    expect(within(tariffsPanel).getByLabelText('Вода: Быстрый тариф воды: единица')).toBeDisabled()
+    const tariffTable = within(tariffsPanel).getByRole('table', { name: 'Тарифы и сборы' })
+    expect(within(tariffTable).getAllByRole('columnheader').map((header) => header.getAttribute('aria-label') ?? header.textContent)).toEqual([
+      'Основание',
+      'Единица измерения',
+      'Значение / ставка',
+      'Пороговая тарификация',
+      'По счетчику',
+    ])
+    const unitInput = within(tariffsPanel).getByLabelText('Вода: Быстрый тариф воды: единица')
+    const valueInput = within(tariffsPanel).getByLabelText('Вода: Быстрый тариф воды: значение')
+    expect(unitInput).toHaveValue('м³')
+    expect(unitInput).toBeDisabled()
+    expect(Boolean(unitInput.closest('[role="cell"]')?.compareDocumentPosition(valueInput.closest('[role="cell"]') as Node) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true)
     expect(within(tariffsPanel).queryByText('Загружаем тарифы и услуги')).not.toBeInTheDocument()
     expect(within(tariffsPanel).getByText('Загружаем нерегулярные платежи')).toBeInTheDocument()
     expect(within(tariffsPanel).getByText('Загружаем объявленные сборы')).toBeInTheDocument()

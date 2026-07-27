@@ -757,7 +757,7 @@ h1 {
 .contractors-sheet-header,
 .contractors-sheet-row {
   display: grid;
-  grid-template-columns: minmax(240px, 1.7fr) minmax(120px, 0.7fr) minmax(70px, 0.4fr) minmax(160px, 0.8fr) minmax(120px, 0.7fr);
+  grid-template-columns: minmax(240px, 1.7fr) minmax(70px, 0.4fr) minmax(120px, 0.7fr) minmax(160px, 0.8fr) minmax(120px, 0.7fr);
   min-width: 760px;
 }
 
