@@ -13523,7 +13523,7 @@ describe('App', () => {
     fireEvent.submit(within(financePanel).getByLabelText('Сумма начисления поставщику').closest('form')!)
     expect(await within(financePanel).findByText('Проверьте начисление поставщику')).toBeInTheDocument()
     expect(within(financePanel).getByText('Сумма начисления поставщику должна быть больше 0.')).toBeInTheDocument()
-    expect(within(financePanel).getByText('Укажите комментарий начисления поставщику.')).toBeInTheDocument()
+    expect(within(financePanel).queryByText('Укажите комментарий начисления поставщику.')).not.toBeInTheDocument()
     expect(financeCalls.supplierAccrual).toBe(false)
 
     fireEvent.change(within(financePanel).getByLabelText('Новое показание'), { target: { value: '-1' } })

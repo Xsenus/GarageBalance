@@ -2436,11 +2436,6 @@ public sealed class FinanceService(
     public async Task<FinanceResult<SupplierAccrualDto>> CreateSupplierAccrualAsync(CreateSupplierAccrualRequest request, Guid? actorUserId, CancellationToken cancellationToken)
     {
         var source = request.Source.Trim();
-        if (source == AccrualSources.Manual && string.IsNullOrWhiteSpace(request.Comment))
-        {
-            return FinanceResult<SupplierAccrualDto>.Failure("supplier_accrual_comment_required", "Для ручного начисления поставщику нужен комментарий.");
-        }
-
         if (source is not AccrualSources.Manual and not AccrualSources.Regular)
         {
             return FinanceResult<SupplierAccrualDto>.Failure("supplier_accrual_source_invalid", "Источник начисления поставщику должен быть manual или regular.");
@@ -2494,11 +2489,6 @@ public sealed class FinanceService(
     public async Task<FinanceResult<SupplierAccrualDto>> UpdateSupplierAccrualAsync(Guid supplierAccrualId, CreateSupplierAccrualRequest request, Guid? actorUserId, CancellationToken cancellationToken)
     {
         var source = request.Source.Trim();
-        if (source == AccrualSources.Manual && string.IsNullOrWhiteSpace(request.Comment))
-        {
-            return FinanceResult<SupplierAccrualDto>.Failure("supplier_accrual_comment_required", "Для ручного начисления поставщику нужен комментарий.");
-        }
-
         if (source == AccrualSources.Regular && string.IsNullOrWhiteSpace(request.Comment))
         {
             return FinanceResult<SupplierAccrualDto>.Failure("supplier_accrual_regular_edit_comment_required", "Для изменения автоматического начисления поставщику нужен комментарий.");

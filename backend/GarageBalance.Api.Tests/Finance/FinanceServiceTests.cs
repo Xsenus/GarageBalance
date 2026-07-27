@@ -3638,7 +3638,7 @@ public sealed class FinanceServiceTests
     }
 
     [Fact]
-    public async Task CreateSupplierAccrualAsync_RequiresCommentForManualAccrual()
+    public async Task CreateSupplierAccrualAsync_AllowsManualAccrualWithoutComment()
     {
         await using var database = await TestDatabase.CreateAsync();
         var fixtures = await database.SeedAsync();
@@ -3649,10 +3649,10 @@ public sealed class FinanceServiceTests
             null,
             CancellationToken.None);
 
-        Assert.False(result.Succeeded);
-        Assert.Equal("supplier_accrual_comment_required", result.ErrorCode);
-        Assert.Empty(database.Context.SupplierAccruals);
-        Assert.Empty(database.Context.AuditEvents);
+        Assert.True(result.Succeeded, result.ErrorMessage);
+        Assert.Null(result.Value!.Comment);
+        Assert.Single(database.Context.SupplierAccruals);
+        Assert.Single(database.Context.AuditEvents, item => item.Action == "finance.supplier_accrual_created");
     }
 
     [Fact]

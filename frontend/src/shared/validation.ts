@@ -448,10 +448,6 @@ export function getSupplierAccrualValidationErrors(form: CreateSupplierAccrualRe
 
   addPositiveAmountValidation(errors, form.amount, 'Сумма начисления поставщику')
 
-  if (!form.comment?.trim()) {
-    errors.push('Укажите комментарий начисления поставщику.')
-  }
-
   return errors
 }
 
