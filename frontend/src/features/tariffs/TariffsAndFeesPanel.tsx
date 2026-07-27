@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useRef, useState } from 'react'
 import type { FormEvent, MouseEvent } from 'react'
-import { FileSpreadsheet, FileText, Pencil, RotateCcw, Save, Trash2, X } from 'lucide-react'
+import { FileSpreadsheet, FileText, Pencil, PowerOff, RotateCcw, Save, Trash2, X } from 'lucide-react'
 import type { AuthResponse } from '../../services/authApi'
 import { DictionaryApiError } from '../../services/dictionariesApi'
 import type { AccountingTypeDto, ChargeServiceSettingDto, CreateChargeServiceWithTariffRequest, DictionaryClient, FeeCampaignDto, GarageDto, IrregularPaymentDto, TariffDto, UpsertChargeServiceSettingRequest, UpsertFeeCampaignRequest, UpsertIrregularPaymentRequest, UpsertTariffRequest } from '../../services/dictionariesApi'
@@ -2127,6 +2127,19 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
                         >
                           <Pencil size={16} aria-hidden="true" />
                         </button>
+                        <button
+                          className="icon-button danger-button"
+                          type="button"
+                          aria-label={`Деактивировать услугу ${serviceSetting.name}`}
+                          disabled={!canManageTariffs || isRowDisabled}
+                          onClick={() => {
+                            setTariffPersistenceError(null)
+                            setChargeServiceArchiveReason('')
+                            setChargeServiceArchiveTarget(serviceSetting)
+                          }}
+                        >
+                          <PowerOff size={16} aria-hidden="true" />
+                        </button>
                       </span>
                     ) : null}
                     {row.calculationBase === 'meter_electricity' ? (
@@ -2660,19 +2673,23 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
           <section ref={chargeServiceArchiveDialogRef} className="detail-dialog contractors-dialog" role="dialog" aria-modal="true" aria-labelledby="charge-service-archive-title" aria-describedby="charge-service-archive-description" onMouseDown={(event) => event.stopPropagation()}>
             <div className="detail-dialog-header">
               <div>
-                <p className="eyebrow">Архив</p>
-                <h3 id="charge-service-archive-title">Архивировать услугу?</h3>
+                <p className="eyebrow">Деактивация</p>
+                <h3 id="charge-service-archive-title">Деактивировать услугу?</h3>
                 <p>{chargeServiceArchiveTarget.name}</p>
               </div>
-              <button className="icon-button" type="button" aria-label="Закрыть подтверждение архивации услуги" onClick={closeChargeServiceArchiveDialog} disabled={tariffSavingRowId === `charge-service-${chargeServiceArchiveTarget.id}`}>
+              <button className="icon-button" type="button" aria-label="Закрыть подтверждение деактивации услуги" onClick={closeChargeServiceArchiveDialog} disabled={tariffSavingRowId === `charge-service-${chargeServiceArchiveTarget.id}`}>
                 <X size={18} />
               </button>
             </div>
-            <p className="confirmation-text" id="charge-service-archive-description">Услуга останется в справочнике как архивная и будет заблокирована для редактирования. Укажите причину для истории изменений.</p>
-            <label className="field-label" htmlFor="charge-service-archive-reason">Причина архивации</label>
+            <div className="confirmation-text" id="charge-service-archive-description">
+              <p>Новые регулярные начисления по услуге больше не будут создаваться.</p>
+              <p>Уже созданные начисления и связанные платежи не удалятся: задолженность можно будет погашать, а операции останутся в отчётах и истории.</p>
+              <p>Причина и само действие попадут в историю изменений. После восстановления услуга снова будет участвовать только в будущих начислениях — прошлые периоды автоматически не пересчитаются.</p>
+            </div>
+            <label className="field-label" htmlFor="charge-service-archive-reason">Причина деактивации</label>
             <textarea
               id="charge-service-archive-reason"
-              aria-label="Причина архивации услуги"
+              aria-label="Причина деактивации услуги"
               maxLength={1000}
               value={chargeServiceArchiveReason}
               onChange={(event) => setChargeServiceArchiveReason(event.target.value)}
@@ -2682,8 +2699,8 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
             <div className="detail-dialog-actions contractors-dialog-actions">
               <button ref={chargeServiceArchiveCancelRef} className="ghost-button" type="button" onClick={closeChargeServiceArchiveDialog} disabled={tariffSavingRowId === `charge-service-${chargeServiceArchiveTarget.id}`}>Отмена</button>
               <button className="secondary-button danger-button" type="button" onClick={archiveChargeServiceSetting} disabled={!chargeServiceArchiveReason.trim() || tariffSavingRowId === `charge-service-${chargeServiceArchiveTarget.id}`}>
-                <Trash2 size={16} />
-                <span>Архивировать</span>
+                <PowerOff size={16} aria-hidden="true" />
+                <span>Деактивировать</span>
               </button>
             </div>
           </section>
@@ -2703,7 +2720,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
                 <X size={18} />
               </button>
             </div>
-            <p className="confirmation-text" id="charge-service-restore-description">Услуга снова станет активной и доступной для редактирования в тарифах. Действие будет записано в историю изменений.</p>
+            <p className="confirmation-text" id="charge-service-restore-description">Услуга снова станет доступной для редактирования и будущих начислений. Уже проведённые начисления и платежи не изменятся, прошлые периоды автоматически не пересчитаются. Действие будет записано в историю изменений.</p>
             <div className="detail-dialog-actions contractors-dialog-actions">
               <button ref={chargeServiceRestoreCancelRef} className="ghost-button" type="button" onClick={closeChargeServiceRestoreDialog} disabled={tariffSavingRowId === `charge-service-${chargeServiceRestoreTarget.id}`}>Отмена</button>
               <button className="secondary-button" type="button" onClick={restoreChargeServiceSetting} disabled={tariffSavingRowId === `charge-service-${chargeServiceRestoreTarget.id}`}>

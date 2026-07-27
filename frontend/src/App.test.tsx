@@ -1017,6 +1017,107 @@ describe('App', () => {
     await waitFor(() => expect(restoredRequests).toContain('fee-campaign-archived'))
   })
 
+  it('explains charge service deactivation consequences and keeps the reason after a failed attempt', async () => {
+    const user = userEvent.setup()
+    const incomeType = createAccountingType({ id: 'income-security', name: 'Охрана', code: 'other_income' })
+    const tariff = createTariff({ id: 'tariff-security', name: 'Тариф охраны', calculationBase: 'fixed', rate: 1200 })
+    const service = createChargeServiceSetting({
+      id: 'service-security',
+      name: 'Охрана',
+      isRegular: true,
+      incomeTypeId: incomeType.id,
+      tariffId: tariff.id,
+    })
+    const archiveRequests: Array<{ id: string; reason: string }> = []
+    let attemptsRemaining = 1
+    const dictionaryClient = createDictionaryClient({
+      getIncomeTypes: async () => [incomeType],
+      getTariffs: async () => [tariff],
+      getChargeServiceSettings: async () => [service],
+      archiveChargeServiceSetting: async (_token, id, reason) => {
+        archiveRequests.push({ id, reason })
+        if (attemptsRemaining > 0) {
+          attemptsRemaining -= 1
+          throw new Error('Не удалось временно деактивировать услугу.')
+        }
+      },
+    })
+
+    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Тарифы и сборы')
+    const tariffsPanel = await screen.findByRole('region', { name: 'Тарифы и сборы' })
+    const deactivateButton = await within(tariffsPanel).findByRole('button', { name: 'Деактивировать услугу Охрана' })
+
+    await user.click(deactivateButton)
+    const dialog = await screen.findByRole('dialog', { name: 'Деактивировать услугу?' })
+    expect(within(dialog).getByText('Новые регулярные начисления по услуге больше не будут создаваться.')).toBeInTheDocument()
+    expect(within(dialog).getByText(/Уже созданные начисления и связанные платежи не удалятся/)).toHaveTextContent('задолженность можно будет погашать')
+    expect(within(dialog).getByText(/После восстановления услуга снова будет участвовать только в будущих начислениях/)).toHaveTextContent('прошлые периоды автоматически не пересчитаются')
+    const cancelButton = within(dialog).getByRole('button', { name: 'Отмена' })
+    const confirmButton = within(dialog).getByRole('button', { name: 'Деактивировать' })
+    expect(confirmButton).toBeDisabled()
+    await waitFor(() => expect(cancelButton).toHaveFocus())
+    await user.type(within(dialog).getByLabelText('Причина деактивации услуги'), 'Услуга больше не используется')
+    await user.click(confirmButton)
+
+    expect(await screen.findByText('Не удалось временно деактивировать услугу.')).toBeInTheDocument()
+    expect(screen.getByRole('dialog', { name: 'Деактивировать услугу?' })).toBeInTheDocument()
+    expect(within(dialog).getByLabelText('Причина деактивации услуги')).toHaveValue('Услуга больше не используется')
+    await user.click(confirmButton)
+
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Деактивировать услугу?' })).not.toBeInTheDocument())
+    expect(archiveRequests).toEqual([
+      { id: service.id, reason: 'Услуга больше не используется' },
+      { id: service.id, reason: 'Услуга больше не используется' },
+    ])
+    expect(within(tariffsPanel).queryByRole('button', { name: 'Деактивировать услугу Охрана' })).not.toBeInTheDocument()
+    expect(within(tariffsPanel).getByLabelText('Охрана: Тариф охраны: значение')).toBeDisabled()
+  })
+
+  it('does not allow charge service deactivation without tariffs.manage', async () => {
+    const user = userEvent.setup()
+    const incomeType = createAccountingType({ id: 'income-security-read-only', name: 'Охрана', code: 'other_income' })
+    const tariff = createTariff({ id: 'tariff-security-read-only', name: 'Тариф охраны', calculationBase: 'fixed', rate: 1200 })
+    const service = createChargeServiceSetting({
+      id: 'service-security-read-only',
+      name: 'Охрана',
+      isRegular: true,
+      incomeTypeId: incomeType.id,
+      tariffId: tariff.id,
+    })
+    let archiveCalls = 0
+    const authClient = createAuthClient({
+      login: async () => createAuthResponse({
+        user: {
+          roles: ['reports_viewer'],
+          permissions: ['dictionaries.read'],
+        },
+      }),
+    })
+    const dictionaryClient = createDictionaryClient({
+      getIncomeTypes: async () => [incomeType],
+      getTariffs: async () => [tariff],
+      getChargeServiceSettings: async () => [service],
+      archiveChargeServiceSetting: async () => {
+        archiveCalls += 1
+      },
+    })
+
+    render(<App authClient={authClient} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Тарифы и сборы')
+    const tariffsPanel = await screen.findByRole('region', { name: 'Тарифы и сборы' })
+    const deactivateButton = await within(tariffsPanel).findByRole('button', { name: 'Деактивировать услугу Охрана' })
+
+    expect(deactivateButton).toBeDisabled()
+    await user.click(deactivateButton)
+    expect(screen.queryByRole('dialog', { name: 'Деактивировать услугу?' })).not.toBeInTheDocument()
+    expect(archiveCalls).toBe(0)
+  })
+
   it('edits tariffs and one-time payments without local history access', async () => {
     const user = userEvent.setup()
     const irregularPaymentListRequests: Array<{ includeArchived?: boolean }> = []
@@ -3382,7 +3483,7 @@ describe('App', () => {
     expect(within(tariffsPanel).queryByLabelText('Вывоз снега: Пороговая тарификация')).not.toBeInTheDocument()
   })
 
-  it('creates a charge service setting, renders saved rows and keeps archive actions hidden', async () => {
+  it('creates a charge service setting, renders saved rows and exposes deactivation only for the active service', async () => {
     const user = userEvent.setup()
     let createdServiceRequest: unknown = null
     let updatedServiceRequest: unknown = null
@@ -3607,7 +3708,7 @@ describe('App', () => {
     expect(within(monthlyDueDateValue as HTMLElement).queryByRole('combobox', { name: 'Охрана: Оплата до: месяц' })).not.toBeInTheDocument()
     expect(within(monthlyDueDateValue as HTMLElement).getByText('числа следующего месяца')).toBeInTheDocument()
 
-    expect(within(tariffsPanel).queryByRole('button', { name: 'Архивировать услугу Охрана' })).not.toBeInTheDocument()
+    expect(within(tariffsPanel).getByRole('button', { name: 'Деактивировать услугу Охрана' })).toBeEnabled()
     expect(within(tariffsPanel).queryByRole('button', { name: 'Вернуть услугу Охрана' })).not.toBeInTheDocument()
   })
 
