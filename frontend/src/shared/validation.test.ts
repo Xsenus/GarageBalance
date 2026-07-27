@@ -4,6 +4,7 @@ import type { TariffDto, UpsertTariffRequest } from '../services/dictionariesApi
 import type { AccountingTypeDto } from '../services/dictionariesApi'
 import {
   chooseRegularTariffId,
+  chooseRegularTariffIdForMeterMode,
   createTariffFormFromDto,
   getAccrualValidationErrors,
   getAccountingTypeValidationErrors,
@@ -264,6 +265,9 @@ describe('shared validation helpers', () => {
     expect(getCompatibleRegularTariffs('water-type', incomeTypes, tariffs).map((tariff) => tariff.id)).toEqual(['water-tariff'])
     expect(chooseRegularTariffId('water-type', 'fixed-tariff', incomeTypes, tariffs)).toBe('water-tariff')
     expect(chooseRegularTariffId('membership-type', 'fixed-tariff', incomeTypes, tariffs)).toBe('fixed-tariff')
+    expect(chooseRegularTariffIdForMeterMode('', 'fixed-tariff', true, [], tariffs)).toBe('water-tariff')
+    expect(chooseRegularTariffIdForMeterMode('', 'water-tariff', false, [], tariffs)).toBe('fixed-tariff')
+    expect(chooseRegularTariffIdForMeterMode('membership-type', 'fixed-tariff', true, incomeTypes, tariffs)).toBe('')
     expect(getMeterReadingValidationErrors({ garageId: '', meterKind: 'bad' as 'water', accountingMonth: 'bad', readingDate: 'bad', currentValue: -1, comment: '' })).toEqual([
       'Выберите гараж для счетчика.',
       'Выберите тип счетчика.',

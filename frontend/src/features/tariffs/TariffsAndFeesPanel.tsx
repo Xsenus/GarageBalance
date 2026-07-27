@@ -22,7 +22,7 @@ import { formatPrototypeChangeValue, handleEditableInputKeyDown } from '../../sh
 import { createClientPage } from '../../shared/pagination'
 import { SelectControl } from '../../shared/SelectControl'
 import { TablePagination } from '../../shared/TablePagination'
-import { chooseRegularTariffId, getCompatibleRegularTariffs } from '../../shared/validation'
+import { chooseRegularTariffId, chooseRegularTariffIdForMeterMode, getCompatibleRegularTariffs, isMeterTariff } from '../../shared/validation'
 import { formatTariffDecimal } from './tariffFormatting'
 
 const tariffsFormStateScope = 'tariffs-and-fees-prototype'
@@ -993,12 +993,54 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
       }
     } else if (pendingChange.kind === 'tariff-boolean') {
       const sourceRow = tariffRows.find((currentRow) => currentRow.id === pendingChange.rowId)
-      const nextRows = tariffRows.map((currentRow) => (
-        currentRow.id === pendingChange.rowId ? { ...currentRow, [pendingChange.field]: pendingChange.nextValue === 'Да' } : currentRow
+      const nextBooleanValue = pendingChange.nextValue === 'Да'
+      let nextRows = tariffRows.map((currentRow) => (
+        currentRow.id === pendingChange.rowId ? { ...currentRow, [pendingChange.field]: nextBooleanValue } : currentRow
       ))
-      setTariffRows(nextRows)
+
+      if (sourceRow?.backendServiceSettingId && pendingChange.field === 'byMeter') {
+        const serviceSetting = backendChargeServices.find((setting) => setting.id === sourceRow.backendServiceSettingId)
+        const nextTariffId = serviceSetting
+          ? chooseRegularTariffIdForMeterMode(
+            serviceSetting.incomeTypeId ?? '',
+            sourceRow.backendTariffId ?? serviceSetting.tariffId ?? '',
+            nextBooleanValue,
+            backendIncomeTypes,
+            backendTariffs,
+          )
+          : ''
+        const nextTariff = backendTariffs.find((tariff) => tariff.id === nextTariffId)
+        if (!serviceSetting || !nextTariff) {
+          setTariffPersistenceError(nextBooleanValue
+            ? 'Для выбранного вида поступления нет совместимого тарифа по счётчику.'
+            : 'Для выбранного вида поступления нет совместимого тарифа без счётчика.')
+          setPendingChange(null)
+          return
+        }
+
+        nextRows = nextRows.map((currentRow) => (
+          currentRow.id === pendingChange.rowId
+            ? {
+              ...currentRow,
+              backendTariffId: nextTariff.id,
+              calculationBase: nextTariff.calculationBase,
+              amount: formatPrototypeAmount(nextTariff.rate),
+              unit: getTariffCalculationUnitName(nextTariff.calculationBase),
+              tiered: nextBooleanValue && currentRow.tiered,
+            }
+            : currentRow
+        ))
+      }
+
       if (sourceRow) {
-        await persistTariffRow(sourceRow, nextRows)
+        if (sourceRow.backendServiceSettingId) {
+          await persistServiceSettingRow(sourceRow, nextRows)
+        } else {
+          setTariffRows(nextRows)
+          await persistTariffRow(sourceRow, nextRows)
+        }
+      } else {
+        setTariffRows(nextRows)
       }
     } else if (pendingChange.kind === 'tariff-date') {
       const sourceRow = tariffRows.find((currentRow) => currentRow.id === pendingChange.rowId)
@@ -1093,7 +1135,8 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
     const overdueGraceDays = parsePrototypeAmount(overdueRow?.amount ?? '') ?? setting.overdueGraceDays
     const isMetered = mainRow?.byMeter ?? setting.isMetered
     const hasTieredTariff = isMetered ? (mainRow?.tiered ?? setting.hasTieredTariff) : false
-    const linkedTariff = setting.tariffId ? backendTariffs.find((tariff) => tariff.id === setting.tariffId) : null
+    const linkedTariffId = mainRow?.backendTariffId ?? setting.tariffId
+    const linkedTariff = linkedTariffId ? backendTariffs.find((tariff) => tariff.id === linkedTariffId) : null
     const unitName = linkedTariff ? getTariffCalculationUnitName(linkedTariff.calculationBase) : setting.unitName
 
     return {
@@ -1108,18 +1151,18 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
       hasTieredTariff,
       unitName: unitName?.trim() || null,
       incomeTypeId: isRegular ? setting.incomeTypeId ?? null : null,
-      tariffId: isRegular ? setting.tariffId ?? null : null,
+      tariffId: isRegular ? linkedTariffId ?? null : null,
     }
   }
 
   async function persistServiceSettingRow(row: ContractorTariffRow, nextRows: ContractorTariffRow[]) {
     if (!canManageTariffs || row.isDeleted || !row.backendServiceSettingId) {
-      return
+      return false
     }
 
     const serviceSetting = backendChargeServices.find((setting) => setting.id === row.backendServiceSettingId)
     if (!serviceSetting) {
-      return
+      return false
     }
 
     setTariffSavingRowId(row.id)
@@ -1132,8 +1175,10 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
       setBackendChargeServices(nextSettings)
       setTariffRows(mergedRows)
       setTariffDrafts(createEditableDrafts(mergedRows))
+      return true
     } catch (caught) {
       setTariffPersistenceError(caught instanceof Error ? caught.message : 'Не удалось сохранить настройку услуги.')
+      return false
     } finally {
       setTariffSavingRowId(null)
     }
@@ -2785,8 +2830,14 @@ export function AddServicePrototypeDialog({
   const [incomeTypeId, setIncomeTypeId] = useState(initialIncomeTypeId)
   const [expenseTypeId, setExpenseTypeId] = useState(initialSetting?.expenseTypeId ?? '')
   const [tariffId, setTariffId] = useState(() => initialSetting?.tariffId ?? chooseRegularTariffId(initialIncomeTypeId, '', incomeTypes, tariffs))
-  const [isByMeter, setIsByMeter] = useState(initialSetting?.isMetered ?? true)
-  const [isTiered, setIsTiered] = useState(initialSetting?.hasTieredTariff ?? true)
+  const [isByMeter, setIsByMeter] = useState(() => {
+    if (initialSetting) {
+      return initialSetting.isMetered
+    }
+    const initialTariffId = chooseRegularTariffId(initialIncomeTypeId, '', incomeTypes, tariffs)
+    return isMeterTariff(tariffs.find((tariff) => tariff.id === initialTariffId))
+  })
+  const [isTiered, setIsTiered] = useState(initialSetting?.hasTieredTariff ?? false)
   const [periodicityMonths, setPeriodicityMonths] = useState(() => normalizeRegularServicePeriodicity(initialSetting?.periodicityMonths ?? 1))
   const [accrualStartMonth, setAccrualStartMonth] = useState(() => getContractorTariffMonthValue(initialSetting?.accrualStartMonth ?? 1))
   const [paymentDueDay, setPaymentDueDay] = useState(String(initialSetting?.paymentDueDay ?? 30))
@@ -2811,6 +2862,36 @@ export function AddServicePrototypeDialog({
   useRestoreFocusOnClose(true)
   const dialogRef = useFocusTrap<HTMLElement>(true)
   useEscapeKey(true, onClose)
+
+  function applyTariffSelection(nextTariffId: string) {
+    const nextTariff = tariffs.find((tariff) => tariff.id === nextTariffId)
+    const nextIsMetered = isMeterTariff(nextTariff)
+    setTariffId(nextTariffId)
+    setRegularRate(nextTariff ? formatTariffDecimal(nextTariff.rate) : '')
+    setIsByMeter(nextIsMetered)
+    if (!nextIsMetered) {
+      setIsTiered(false)
+    }
+    setError(null)
+  }
+
+  function changeMeterMode(nextIsMetered: boolean) {
+    const nextTariffId = chooseRegularTariffIdForMeterMode(
+      incomeTypeId,
+      tariffId,
+      nextIsMetered,
+      incomeTypes,
+      tariffs,
+    )
+    if (!nextTariffId) {
+      setError(nextIsMetered
+        ? 'Для выбранного вида поступления нет совместимого тарифа по счётчику.'
+        : 'Для выбранного вида поступления нет совместимого тарифа без счётчика.')
+      return
+    }
+
+    applyTariffSelection(nextTariffId)
+  }
 
   async function submitService(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -2965,10 +3046,7 @@ export function AddServicePrototypeDialog({
                     onChange={(nextIncomeTypeId) => {
                       const nextTariffId = chooseRegularTariffId(nextIncomeTypeId, tariffId, incomeTypes, tariffs)
                       setIncomeTypeId(nextIncomeTypeId)
-                      setTariffId(nextTariffId)
-                      const nextTariff = tariffs.find((tariff) => tariff.id === nextTariffId)
-                      setRegularRate(nextTariff ? formatTariffDecimal(nextTariff.rate) : '')
-                      setError(null)
+                      applyTariffSelection(nextTariffId)
                     }}
                   />
                 </FormField>
@@ -3005,13 +3083,19 @@ export function AddServicePrototypeDialog({
                       ? compatibleTariffs.map((tariff) => ({ value: tariff.id, label: `${tariff.name} — ${formatTariffRateSummary(tariff)} руб.` }))
                       : [{ value: '', label: 'Нет совместимых тарифов' }]}
                     onChange={(nextTariffId) => {
-                      setTariffId(nextTariffId)
-                      const nextTariff = tariffs.find((tariff) => tariff.id === nextTariffId)
-                      setRegularRate(nextTariff ? formatTariffDecimal(nextTariff.rate) : '')
-                      setError(null)
+                      applyTariffSelection(nextTariffId)
                     }}
                   />
                 </FormField>
+                {isByMeter && selectedTariff ? (
+                  <FormField label="Ставка по счётчику" hint="Показывает действующую ставку автоматически выбранного счётчикового тарифа.">
+                    <input
+                      aria-label="Ставка счётчикового тарифа"
+                      value={`${formatTariffRateSummary(selectedTariff)} руб. / ${unitName}`}
+                      readOnly
+                    />
+                  </FormField>
+                ) : null}
                 {!initialSetting ? (
                   <FormField label="Стоимость" hint="Сохранится вместе с услугой как её действующая ставка.">
                     <div className="contractors-inline-field">
@@ -3054,12 +3138,7 @@ export function AddServicePrototypeDialog({
                     type="checkbox"
                     aria-label="По счетчику"
                     checked={isByMeter}
-                    onChange={(event) => {
-                      setIsByMeter(event.target.checked)
-                      if (!event.target.checked) {
-                        setIsTiered(false)
-                      }
-                    }}
+                    onChange={(event) => changeMeterMode(event.target.checked)}
                   />
                   <span>По счетчику</span>
                 </label>

@@ -3143,6 +3143,44 @@ public sealed class DictionaryServiceTests
     }
 
     [Fact]
+    public async Task CreateChargeServiceSettingAsync_RejectsTariffThatDoesNotMatchMeterMode()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fund = CreateFund("Фонд услуг", 10);
+        var incomeType = new IncomeType { Name = "Прочие услуги", Code = "other_income", DestinationFundId = fund.Id };
+        var fixedTariff = new Tariff { Name = "Фиксированный", CalculationBase = "fixed", Rate = 300m, EffectiveFrom = new DateOnly(2026, 1, 1) };
+        var meterTariff = new Tariff { Name = "По воде", CalculationBase = "meter_water", Rate = 50m, EffectiveFrom = new DateOnly(2026, 1, 1) };
+        database.Context.AddRange(fund, incomeType, fixedTariff, meterTariff);
+        await database.Context.SaveChangesAsync();
+        var service = DictionaryServiceTestFactory.Create(database.Context);
+
+        var fixedWithMeter = await service.CreateChargeServiceSettingAsync(
+            new UpsertChargeServiceSettingRequest("Неверный фиксированный", true, 1, 1, 30, null, 30, true, false, "руб.", incomeType.Id, fixedTariff.Id),
+            null,
+            CancellationToken.None);
+        var meterWithoutFlag = await service.CreateChargeServiceSettingAsync(
+            new UpsertChargeServiceSettingRequest("Неверный счётчиковый", true, 1, 1, 30, null, 30, false, false, "м³", incomeType.Id, meterTariff.Id),
+            null,
+            CancellationToken.None);
+        var validMeter = await service.CreateChargeServiceSettingAsync(
+            new UpsertChargeServiceSettingRequest("Вода", true, 1, 1, 30, null, 30, true, false, "м³", incomeType.Id, meterTariff.Id),
+            null,
+            CancellationToken.None);
+
+        Assert.False(fixedWithMeter.Succeeded);
+        Assert.Equal("charge_service_meter_mode_mismatch", fixedWithMeter.ErrorCode);
+        Assert.Equal("Для расчета по счетчику выберите тариф воды или электроэнергии.", fixedWithMeter.ErrorMessage);
+        Assert.False(meterWithoutFlag.Succeeded);
+        Assert.Equal("charge_service_meter_mode_mismatch", meterWithoutFlag.ErrorCode);
+        Assert.Equal("Для тарифа воды или электроэнергии включите расчет по счетчику.", meterWithoutFlag.ErrorMessage);
+        Assert.True(validMeter.Succeeded);
+        Assert.Equal(meterTariff.Id, validMeter.Value!.TariffId);
+        Assert.True(validMeter.Value.IsMetered);
+        Assert.Single(database.Context.ChargeServiceSettings);
+        Assert.Single(database.Context.AuditEvents);
+    }
+
+    [Fact]
     public async Task CreateAndRestoreChargeServiceSettingAsync_RejectMissingOrDeletedDestinationFund()
     {
         await using var database = await TestDatabase.CreateAsync();

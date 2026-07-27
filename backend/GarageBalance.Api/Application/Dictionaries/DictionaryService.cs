@@ -2476,6 +2476,16 @@ public sealed class DictionaryService(
             return DictionaryResult<object>.Failure("charge_service_tariff_mismatch", "Выбранный тариф не подходит для вида поступления услуги.");
         }
 
+        var isMeterTariff = tariff.CalculationBase is TariffCalculationBases.MeterWater or TariffCalculationBases.MeterElectricity;
+        if (request.IsMetered != isMeterTariff)
+        {
+            return DictionaryResult<object>.Failure(
+                "charge_service_meter_mode_mismatch",
+                request.IsMetered
+                    ? "Для расчета по счетчику выберите тариф воды или электроэнергии."
+                    : "Для тарифа воды или электроэнергии включите расчет по счетчику.");
+        }
+
         var expectedUnitName = TariffCalculationBases.GetUnitName(tariff.CalculationBase);
         if (!StringEquals(NormalizeOptional(request.UnitName), expectedUnitName))
         {

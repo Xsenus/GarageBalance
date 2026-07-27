@@ -533,8 +533,24 @@ export function getCompatibleRegularTariffs(incomeTypeId: string, incomeTypes: A
   return incomeType ? tariffs.filter((tariff) => isTariffCompatibleWithRegularIncomeType(incomeType, tariff)) : tariffs
 }
 
+export function isMeterTariff(tariff?: TariffDto | null) {
+  return tariff?.calculationBase === 'meter_water' || tariff?.calculationBase === 'meter_electricity'
+}
+
 export function chooseRegularTariffId(incomeTypeId: string, currentTariffId: string, incomeTypes: AccountingTypeDto[], tariffs: TariffDto[]) {
   const compatibleTariffs = getCompatibleRegularTariffs(incomeTypeId, incomeTypes, tariffs)
+  return compatibleTariffs.some((tariff) => tariff.id === currentTariffId) ? currentTariffId : compatibleTariffs[0]?.id ?? ''
+}
+
+export function chooseRegularTariffIdForMeterMode(
+  incomeTypeId: string,
+  currentTariffId: string,
+  isMetered: boolean,
+  incomeTypes: AccountingTypeDto[],
+  tariffs: TariffDto[],
+) {
+  const compatibleTariffs = getCompatibleRegularTariffs(incomeTypeId, incomeTypes, tariffs)
+    .filter((tariff) => isMeterTariff(tariff) === isMetered)
   return compatibleTariffs.some((tariff) => tariff.id === currentTariffId) ? currentTariffId : compatibleTariffs[0]?.id ?? ''
 }
 

@@ -521,9 +521,10 @@ describe('App', () => {
     expect(accrualStartMonthControl).toHaveTextContent('Декабрь')
     expect(within(serviceDialog).getByLabelText('Перенос долга в просроченный')).toHaveValue('30')
     expect(within(serviceDialog).getByLabelText('Перенос долга в просроченный').closest('.contractors-service-secondary-grid')).toContainElement(within(serviceDialog).getByLabelText('Единица измерения'))
-    expect(within(serviceDialog).getByLabelText('По счетчику')).toBeChecked()
-    expect(within(serviceDialog).getByLabelText('Пороговая тарификация')).toBeChecked()
-    expect(within(serviceDialog).getByRole('status')).toHaveTextContent('У выбранного тарифа пороги пока не настроены.')
+    expect(within(serviceDialog).getByLabelText('По счетчику')).not.toBeChecked()
+    expect(within(serviceDialog).getByLabelText('Пороговая тарификация')).not.toBeChecked()
+    expect(within(serviceDialog).getByLabelText('Пороговая тарификация')).toBeDisabled()
+    expect(within(serviceDialog).queryByRole('status')).not.toBeInTheDocument()
     expect(within(serviceDialog).getByLabelText('Единица измерения')).toHaveValue('')
     expect(within(serviceDialog).getByLabelText('Единица измерения')).toHaveAttribute('readonly')
     expect(within(serviceDialog).getByText('Определяется способом расчёта выбранного тарифа.')).toBeInTheDocument()
@@ -3474,12 +3475,16 @@ describe('App', () => {
     expect(tariffControl).toHaveTextContent('Тариф воды — 48.50 руб.')
     expect(regularCostInput).toHaveValue('48.50')
     expect(calculationBaseControl).toHaveTextContent('По счетчику воды')
+    expect(within(serviceDialog).getByLabelText('По счетчику')).toBeChecked()
+    expect(within(serviceDialog).getByLabelText('Ставка счётчикового тарифа')).toHaveValue('48.50 руб. / м³')
     expect(within(serviceDialog).getByLabelText('Единица измерения')).toHaveValue('м³')
     await user.click(incomeTypeControl)
     await user.click(within(serviceDialog).getByRole('option', { name: serviceIncomeType.name }))
     expect(tariffControl).toHaveTextContent('Тариф охраны — 1 200.00 руб.')
     expect(regularCostInput).toHaveValue('1 200.00')
     expect(calculationBaseControl).toHaveTextContent('Фиксированно')
+    expect(within(serviceDialog).getByLabelText('По счетчику')).not.toBeChecked()
+    expect(within(serviceDialog).queryByLabelText('Ставка счётчикового тарифа')).not.toBeInTheDocument()
     expect(within(serviceDialog).getByLabelText('Единица измерения')).toHaveValue('руб.')
     await user.clear(regularCostInput)
     await user.type(regularCostInput, '0')
@@ -3512,8 +3517,8 @@ describe('App', () => {
         overdueGraceDays: 30,
         incomeTypeId: serviceIncomeType.id,
         tariffId: serviceTariff.id,
-        isMetered: true,
-        hasTieredTariff: true,
+        isMetered: false,
+        hasTieredTariff: false,
         unitName: 'руб.',
       },
       rate: 1750,
@@ -3566,8 +3571,8 @@ describe('App', () => {
       overdueGraceDays: 30,
       incomeTypeId: serviceIncomeType.id,
       tariffId: 'tariff-security-created',
-      isMetered: true,
-      hasTieredTariff: true,
+      isMetered: false,
+      hasTieredTariff: false,
       unitName: 'руб.',
     }))
     expect(within(tariffsPanel).getByRole('combobox', { name: 'Охрана: Периодичность: значение' })).toHaveTextContent('Ежемесячно')
@@ -3582,8 +3587,9 @@ describe('App', () => {
 
   it('edits a charge service in one form and keeps the draft after a failed save', async () => {
     const user = userEvent.setup()
-    const serviceIncomeType = createAccountingType({ id: 'income-security', name: 'Охрана', code: 'membership' })
+    const serviceIncomeType = createAccountingType({ id: 'income-security', name: 'Охрана', code: 'other_income' })
     const serviceTariff = createTariff({ id: 'tariff-security', name: 'Тариф охраны', calculationBase: 'fixed', rate: 1200 })
+    const meterTariff = createTariff({ id: 'tariff-security-meter', name: 'Тариф охраны по счётчику', calculationBase: 'meter_water', rate: 52.75 })
     let serviceSetting = createChargeServiceSetting({
       id: 'service-security',
       name: 'Охрана',
@@ -3595,19 +3601,24 @@ describe('App', () => {
       overdueGraceDays: 20,
       incomeTypeId: serviceIncomeType.id,
       tariffId: serviceTariff.id,
-      isMetered: true,
-      hasTieredTariff: true,
+      isMetered: false,
+      hasTieredTariff: false,
       unitName: 'руб.',
     })
     const updateRequests: unknown[] = []
+    let meterSaveFailuresRemaining = 1
     const dictionaryClient = createDictionaryClient({
       getIncomeTypes: async () => [serviceIncomeType],
-      getTariffs: async () => [serviceTariff],
+      getTariffs: async () => [serviceTariff, meterTariff],
       getChargeServiceSettings: async () => [serviceSetting],
       updateChargeServiceSetting: async (_token, id, request) => {
         updateRequests.push(request)
         if (updateRequests.length === 1) {
           throw new Error('Услугу временно не удалось сохранить.')
+        }
+        if (request.isMetered && meterSaveFailuresRemaining > 0) {
+          meterSaveFailuresRemaining -= 1
+          throw new Error('Счётчиковый тариф временно не удалось сохранить.')
         }
 
         serviceSetting = createChargeServiceSetting({
@@ -3650,8 +3661,9 @@ describe('App', () => {
     expect(within(editDialog).getByLabelText('Перенос долга в просроченный')).toHaveValue('20')
     expect(within(editDialog).getByLabelText('Единица измерения')).toHaveValue('руб.')
     expect(within(editDialog).getByLabelText('Единица измерения')).toHaveAttribute('readonly')
-    expect(within(editDialog).getByLabelText('По счетчику')).toBeChecked()
-    expect(within(editDialog).getByLabelText('Пороговая тарификация')).toBeChecked()
+    expect(within(editDialog).getByLabelText('По счетчику')).not.toBeChecked()
+    expect(within(editDialog).getByLabelText('Пороговая тарификация')).not.toBeChecked()
+    expect(within(editDialog).getByLabelText('Пороговая тарификация')).toBeDisabled()
 
     await user.clear(within(editDialog).getByLabelText('Наименование услуги'))
     await user.type(within(editDialog).getByLabelText('Наименование услуги'), 'Охрана территории')
@@ -3661,10 +3673,6 @@ describe('App', () => {
     await user.type(within(editDialog).getByLabelText('День оплаты'), '15')
     await user.clear(within(editDialog).getByLabelText('Перенос долга в просроченный'))
     await user.type(within(editDialog).getByLabelText('Перенос долга в просроченный'), '10')
-    await user.click(within(editDialog).getByLabelText('По счетчику'))
-    expect(within(editDialog).getByLabelText('Пороговая тарификация')).not.toBeChecked()
-    expect(within(editDialog).getByLabelText('Пороговая тарификация')).toBeDisabled()
-
     await user.click(within(editDialog).getByRole('button', { name: 'Сохранить изменения' }))
     expect(await within(editDialog).findByText('Услугу временно не удалось сохранить.')).toBeInTheDocument()
     expect(within(editDialog).getByLabelText('Наименование услуги')).toHaveValue('Охрана территории')
@@ -3697,6 +3705,30 @@ describe('App', () => {
     expect(within(tariffsPanel).getByRole('combobox', { name: 'Охрана территории: Охрана территории: пороговая тарификация' })).toHaveValue('Нет')
     expect(within(tariffsPanel).queryByRole('combobox', { name: 'Охрана территории: Периодичность: по счетчику' })).not.toBeInTheDocument()
     expect(within(tariffsPanel).queryByRole('combobox', { name: 'Охрана территории: Оплата до: пороговая тарификация' })).not.toBeInTheDocument()
+
+    const meterModeControl = within(tariffsPanel).getByRole('combobox', { name: 'Охрана территории: Охрана территории: по счетчику' })
+    await user.selectOptions(meterModeControl, 'Да')
+    const meterModeConfirmDialog = await screen.findByRole('dialog', { name: 'Подтвердить изменение?' })
+    expect(within(meterModeConfirmDialog).getByText('По счетчику')).toBeInTheDocument()
+    await user.click(within(meterModeConfirmDialog).getByRole('button', { name: 'Сохранить' }))
+
+    await waitFor(() => expect(updateRequests).toHaveLength(3))
+    expect(await within(tariffsPanel).findByRole('alert')).toHaveTextContent('Счётчиковый тариф временно не удалось сохранить.')
+    expect(meterModeControl).toHaveValue('Нет')
+    expect(within(tariffsPanel).getByLabelText('Охрана территории: Охрана территории: значение')).toHaveValue('1 200.00')
+
+    await user.selectOptions(meterModeControl, 'Да')
+    const retryMeterModeDialog = await screen.findByRole('dialog', { name: 'Подтвердить изменение?' })
+    await user.click(within(retryMeterModeDialog).getByRole('button', { name: 'Сохранить' }))
+
+    await waitFor(() => expect(updateRequests).toHaveLength(4))
+    expect(updateRequests[3]).toMatchObject({
+      isMetered: true,
+      tariffId: meterTariff.id,
+      unitName: 'м³',
+    })
+    expect(within(tariffsPanel).getByLabelText('Охрана территории: Охрана территории: значение')).toHaveValue('52.75')
+    expect(meterModeControl).toHaveValue('Да')
   })
 
   it('shows configured thresholds immediately when tiered billing is enabled', async () => {
