@@ -484,7 +484,9 @@ public sealed record FinancialReportPeriodRequest(
 
 public sealed record FinancialReportPeriodDto(
     DateOnly MonthFrom,
-    DateOnly MonthTo);
+    DateOnly MonthTo,
+    DateOnly? DefaultMonthFrom = null,
+    DateOnly? DefaultMonthTo = null);
 
 public sealed record SupplierOpeningBalanceDto(
     Guid SupplierId,

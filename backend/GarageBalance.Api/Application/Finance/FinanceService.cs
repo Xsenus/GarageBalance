@@ -859,9 +859,18 @@ public sealed class FinanceService(
             data.OperationMonthTo,
             currentMonth
         };
+        var monthFrom = months.Where(month => month.HasValue).Min()!.Value;
+        var monthTo = months.Where(month => month.HasValue).Max()!.Value;
+        var defaultMonthFrom = request.GarageId.HasValue
+            ? data.FirstUnpaidAccrualMonth is { } firstUnpaidMonth && firstUnpaidMonth <= currentMonth
+                ? firstUnpaidMonth
+                : currentMonth
+            : (DateOnly?)null;
         return FinanceResult<FinancialReportPeriodDto>.Success(new FinancialReportPeriodDto(
-            months.Where(month => month.HasValue).Min()!.Value,
-            months.Where(month => month.HasValue).Max()!.Value));
+            monthFrom,
+            monthTo,
+            defaultMonthFrom,
+            request.GarageId.HasValue ? currentMonth : null));
     }
 
     public async Task<FinanceResult<IncomePaymentWarningDto>> GetIncomePaymentWarningAsync(

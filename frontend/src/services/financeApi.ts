@@ -179,6 +179,8 @@ export type SupplierOpeningBalanceDto = {
 export type FinancialReportPeriodDto = {
   monthFrom: string
   monthTo: string
+  defaultMonthFrom?: string | null
+  defaultMonthTo?: string | null
 }
 
 export type MeterReadingYearPageDto = {

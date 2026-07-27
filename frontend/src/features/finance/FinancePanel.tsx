@@ -3386,14 +3386,18 @@ function PaymentsPrototypePanel({
     try {
       let resolvedMonthFrom = monthFrom
       let resolvedMonthTo = monthTo
+      let resolvedAvailableMonthFrom = incomeWorksheetAvailableMonthFrom
+      let resolvedAvailableMonthTo = incomeWorksheetAvailableMonthTo
       if (resolveAvailablePeriod) {
         const period = await financeClient.getFinancialReportPeriod(auth.accessToken, { garageId: garage.id })
         if (!incomeWorksheetRequests.isLatest(requestId) || selectedGarageIdRef.current !== garage.id) {
           return
         }
 
-        resolvedMonthFrom = period.monthFrom.slice(0, 7)
-        resolvedMonthTo = period.monthTo.slice(0, 7)
+        resolvedAvailableMonthFrom = period.monthFrom.slice(0, 7)
+        resolvedAvailableMonthTo = period.monthTo.slice(0, 7)
+        resolvedMonthFrom = period.defaultMonthFrom?.slice(0, 7) ?? resolvedAvailableMonthFrom
+        resolvedMonthTo = period.defaultMonthTo?.slice(0, 7) ?? resolvedAvailableMonthTo
       }
 
       const worksheet = await financeClient.getGarageIncomeWorksheet(auth.accessToken, garage.id, {
@@ -3405,8 +3409,8 @@ function PaymentsPrototypePanel({
       }
 
       if (resolveAvailablePeriod) {
-        setIncomeWorksheetAvailableMonthFrom(resolvedMonthFrom)
-        setIncomeWorksheetAvailableMonthTo(resolvedMonthTo)
+        setIncomeWorksheetAvailableMonthFrom(resolvedAvailableMonthFrom)
+        setIncomeWorksheetAvailableMonthTo(resolvedAvailableMonthTo)
         setIncomeWorksheetMonthFrom(resolvedMonthFrom)
         setIncomeWorksheetMonthTo(resolvedMonthTo)
       }

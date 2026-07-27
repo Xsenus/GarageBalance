@@ -6229,7 +6229,12 @@ describe('App', () => {
   it('loads selected garage income worksheet from finance backend', async () => {
     const user = userEvent.setup()
     const garageFromDictionary = createGarage({ id: 'garage-77', number: '77', ownerName: 'Кузнецова Мария', ownerPhone: '+7 900 111-22-33', peopleCount: 4, floorCount: 2, startingBalance: -7200 })
-    const getFinancialReportPeriod = vi.fn(async () => ({ monthFrom: '2024-02-01', monthTo: `${getTestCurrentMonthInputValue()}-01` }))
+    const getFinancialReportPeriod = vi.fn(async () => ({
+      monthFrom: '2024-02-01',
+      monthTo: `${getTestCurrentMonthInputValue()}-01`,
+      defaultMonthFrom: '2024-05-01',
+      defaultMonthTo: `${getTestCurrentMonthInputValue()}-01`,
+    }))
     const getGarageIncomeWorksheet = vi.fn(async (_token: string, garageId: string) => createGarageIncomeWorksheet({
       garageId,
       garageNumber: '77',
@@ -6273,11 +6278,11 @@ describe('App', () => {
     const twoMonthsAgo = addTestMonths(currentMonth, -2)
     await waitFor(() => expect(getFinancialReportPeriod).toHaveBeenCalledWith('token', { garageId: 'garage-77' }))
     await waitFor(() => expect(getGarageIncomeWorksheet).toHaveBeenCalledWith('token', 'garage-77', {
-      monthFrom: '2024-02-01',
+      monthFrom: '2024-05-01',
       monthTo: `${currentMonth}-01`,
     }))
     const monthFromControl = within(prototype).getByRole('combobox', { name: 'Месяц поступлений с' })
-    expect(monthFromControl).toHaveTextContent('02.2024')
+    expect(monthFromControl).toHaveTextContent('05.2024')
     await user.click(monthFromControl)
     expect(within(prototype).getByRole('option', { name: '02.2024' })).toBeInTheDocument()
     expect(within(prototype).getByRole('option', { name: '03.2024' })).toBeInTheDocument()
@@ -6340,12 +6345,12 @@ describe('App', () => {
     const user = userEvent.setup()
     const firstGarage = createGarage({ id: 'garage-period-first', number: '74', ownerName: 'Первый владелец' })
     const secondGarage = createGarage({ id: 'garage-period-second', number: '75', ownerName: 'Второй владелец' })
-    let resolveFirstPeriod!: (value: { monthFrom: string; monthTo: string }) => void
-    const firstPeriodRequest = new Promise<{ monthFrom: string; monthTo: string }>((resolve) => { resolveFirstPeriod = resolve })
+    let resolveFirstPeriod!: (value: { monthFrom: string; monthTo: string; defaultMonthFrom?: string; defaultMonthTo?: string }) => void
+    const firstPeriodRequest = new Promise<{ monthFrom: string; monthTo: string; defaultMonthFrom?: string; defaultMonthTo?: string }>((resolve) => { resolveFirstPeriod = resolve })
     const getFinancialReportPeriod = vi.fn(async (_token: string, params: Parameters<FinanceClient['getFinancialReportPeriod']>[1]) => (
       params.garageId === firstGarage.id
         ? firstPeriodRequest
-        : { monthFrom: '2025-03-01', monthTo: '2026-07-01' }
+        : { monthFrom: '2025-03-01', monthTo: '2026-07-01', defaultMonthFrom: '2025-06-01', defaultMonthTo: '2026-07-01' }
     ))
     const getGarageIncomeWorksheet = vi.fn(async (_token: string, garageId: string) => createGarageIncomeWorksheet({
       garageId,
@@ -6375,16 +6380,16 @@ describe('App', () => {
     await user.click(await within(prototype).findByRole('option', { name: /Гараж\s*75\s*Второй владелец/ }))
 
     await waitFor(() => expect(getGarageIncomeWorksheet).toHaveBeenCalledWith('token', secondGarage.id, {
-      monthFrom: '2025-03-01',
+      monthFrom: '2025-06-01',
       monthTo: '2026-07-01',
     }))
-    expect(within(prototype).getByRole('combobox', { name: 'Месяц поступлений с' })).toHaveTextContent('03.2025')
+    expect(within(prototype).getByRole('combobox', { name: 'Месяц поступлений с' })).toHaveTextContent('06.2025')
 
-    resolveFirstPeriod({ monthFrom: '2020-01-01', monthTo: '2026-07-01' })
+    resolveFirstPeriod({ monthFrom: '2020-01-01', monthTo: '2026-07-01', defaultMonthFrom: '2021-02-01', defaultMonthTo: '2026-07-01' })
     await act(async () => { await firstPeriodRequest })
 
     expect(getGarageIncomeWorksheet).not.toHaveBeenCalledWith('token', firstGarage.id, expect.anything())
-    expect(within(prototype).getByRole('combobox', { name: 'Месяц поступлений с' })).toHaveTextContent('03.2025')
+    expect(within(prototype).getByRole('combobox', { name: 'Месяц поступлений с' })).toHaveTextContent('06.2025')
     expect(within(prototype).getByLabelText('Выбранный гараж')).toHaveTextContent('Второй владелец')
   })
 

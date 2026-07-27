@@ -28,7 +28,19 @@ public sealed class EfFinancialReportPeriodQuery(GarageBalanceDbContext dbContex
                         .Max(accrual => (DateOnly?)accrual.AccountingMonth),
                     dbContext.FinancialOperations
                         .Where(operation => operation.GarageId == garageId.Value && !operation.IsCanceled && operation.OperationKind == FinancialOperationKinds.Income)
-                        .Max(operation => (DateOnly?)operation.AccountingMonth)))
+                        .Max(operation => (DateOnly?)operation.AccountingMonth),
+                    dbContext.Accruals
+                        .Where(accrual =>
+                            accrual.GarageId == garageId.Value &&
+                            !accrual.IsCanceled &&
+                            accrual.Amount > (
+                                dbContext.AccrualPaymentAllocations
+                                    .Where(allocation =>
+                                        allocation.IsActive &&
+                                        allocation.AccrualId == accrual.Id &&
+                                        !allocation.FinancialOperation.IsCanceled)
+                                    .Sum(allocation => (decimal?)allocation.Amount) ?? 0m))
+                        .Min(accrual => (DateOnly?)accrual.AccountingMonth)))
                 .SingleOrDefaultAsync(cancellationToken);
         }
 

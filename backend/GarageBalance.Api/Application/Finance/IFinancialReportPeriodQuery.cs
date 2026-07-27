@@ -13,4 +13,5 @@ public sealed record FinancialReportPeriodData(
     DateOnly? AccrualMonthFrom,
     DateOnly? OperationMonthFrom,
     DateOnly? AccrualMonthTo,
-    DateOnly? OperationMonthTo);
+    DateOnly? OperationMonthTo,
+    DateOnly? FirstUnpaidAccrualMonth = null);

@@ -28,26 +28,63 @@ public sealed class FinanceServiceTests
         var fixtures = await database.SeedAsync();
         var department = new StaffDepartment { Name = "Бухгалтерия периода" };
         var staffMember = new StaffMember { FullName = "Сотрудник периода", Department = department, Rate = 100m };
+        var paidGarageAccrual = new Accrual
+        {
+            Garage = fixtures.Garage,
+            IncomeType = fixtures.IncomeType,
+            AccountingMonth = new DateOnly(2023, 2, 1),
+            Amount = 100m,
+            Source = AccrualSources.Manual,
+            Comment = "Начало обслуживания гаража"
+        };
+        var garagePayment = new FinancialOperation
+        {
+            OperationKind = FinancialOperationKinds.Income,
+            Garage = fixtures.Garage,
+            IncomeType = fixtures.IncomeType,
+            OperationDate = new DateOnly(2027, 3, 1),
+            AccountingMonth = new DateOnly(2027, 3, 1),
+            Amount = 100m
+        };
         database.Context.AddRange(
             department,
             staffMember,
+            paidGarageAccrual,
             new Accrual
             {
                 Garage = fixtures.Garage,
                 IncomeType = fixtures.IncomeType,
-                AccountingMonth = new DateOnly(2023, 2, 1),
+                AccountingMonth = new DateOnly(2024, 5, 1),
+                Amount = 250m,
+                Source = AccrualSources.Manual,
+                Comment = "Первое непогашенное начисление"
+            },
+            new Accrual
+            {
+                Garage = fixtures.Garage,
+                IncomeType = fixtures.IncomeType,
+                AccountingMonth = new DateOnly(2022, 1, 1),
                 Amount = 100m,
                 Source = AccrualSources.Manual,
-                Comment = "Начало обслуживания гаража"
+                Comment = "Отменённое начисление гаража",
+                IsCanceled = true
+            },
+            garagePayment,
+            new AccrualPaymentAllocation
+            {
+                Accrual = paidGarageAccrual,
+                FinancialOperation = garagePayment,
+                Amount = 100m
             },
             new FinancialOperation
             {
                 OperationKind = FinancialOperationKinds.Income,
                 Garage = fixtures.Garage,
                 IncomeType = fixtures.IncomeType,
-                OperationDate = new DateOnly(2027, 3, 1),
-                AccountingMonth = new DateOnly(2027, 3, 1),
-                Amount = 100m
+                OperationDate = new DateOnly(2021, 3, 1),
+                AccountingMonth = new DateOnly(2021, 3, 1),
+                Amount = 100m,
+                IsCanceled = true
             },
             new SupplierAccrual
             {
@@ -95,7 +132,11 @@ public sealed class FinanceServiceTests
         var supplier = await service.GetFinancialReportPeriodAsync(new FinancialReportPeriodRequest(null, fixtures.Supplier.Id, null), CancellationToken.None);
         var staff = await service.GetFinancialReportPeriodAsync(new FinancialReportPeriodRequest(null, null, staffMember.Id), CancellationToken.None);
 
-        Assert.Equal(new FinancialReportPeriodDto(new DateOnly(2023, 2, 1), new DateOnly(2027, 3, 1)), garage.Value);
+        Assert.Equal(new FinancialReportPeriodDto(
+            new DateOnly(2023, 2, 1),
+            new DateOnly(2027, 3, 1),
+            new DateOnly(2024, 5, 1),
+            new DateOnly(2026, 7, 1)), garage.Value);
         Assert.Equal(new FinancialReportPeriodDto(new DateOnly(2024, 4, 1), new DateOnly(2026, 7, 1)), supplier.Value);
         Assert.Equal(new FinancialReportPeriodDto(new DateOnly(2025, 6, 1), new DateOnly(2026, 7, 1)), staff.Value);
     }
@@ -110,12 +151,47 @@ public sealed class FinanceServiceTests
             new FixedTimeProvider(new DateTimeOffset(2026, 7, 23, 0, 0, 0, TimeSpan.Zero)));
 
         var empty = await service.GetFinancialReportPeriodAsync(new FinancialReportPeriodRequest(null, fixtures.Supplier.Id, null), CancellationToken.None);
+        var emptyGarage = await service.GetFinancialReportPeriodAsync(new FinancialReportPeriodRequest(fixtures.Garage.Id, null, null), CancellationToken.None);
         var invalid = await service.GetFinancialReportPeriodAsync(new FinancialReportPeriodRequest(fixtures.Garage.Id, fixtures.Supplier.Id, null), CancellationToken.None);
         var missing = await service.GetFinancialReportPeriodAsync(new FinancialReportPeriodRequest(null, Guid.NewGuid(), null), CancellationToken.None);
 
         Assert.Equal(new FinancialReportPeriodDto(new DateOnly(2026, 7, 1), new DateOnly(2026, 7, 1)), empty.Value);
+        Assert.Equal(new FinancialReportPeriodDto(
+            new DateOnly(2026, 7, 1),
+            new DateOnly(2026, 7, 1),
+            new DateOnly(2026, 7, 1),
+            new DateOnly(2026, 7, 1)), emptyGarage.Value);
         Assert.Equal("financial_report_target_invalid", invalid.ErrorCode);
         Assert.Equal("financial_report_target_not_found", missing.ErrorCode);
+    }
+
+    [Fact]
+    public async Task GetFinancialReportPeriodAsync_DoesNotOpenGarageAtFutureUnpaidAccrual()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        database.Context.Add(new Accrual
+        {
+            Garage = fixtures.Garage,
+            IncomeType = fixtures.IncomeType,
+            AccountingMonth = new DateOnly(2027, 2, 1),
+            Amount = 100m,
+            Source = AccrualSources.Manual,
+            Comment = "Будущее непогашенное начисление"
+        });
+        await database.Context.SaveChangesAsync();
+        var service = FinanceServiceTestFactory.Create(
+            database.Context,
+            new FixedTimeProvider(new DateTimeOffset(2026, 7, 23, 0, 0, 0, TimeSpan.Zero)));
+
+        var result = await service.GetFinancialReportPeriodAsync(
+            new FinancialReportPeriodRequest(fixtures.Garage.Id, null, null),
+            CancellationToken.None);
+
+        Assert.Equal(new DateOnly(2026, 7, 1), result.Value!.MonthFrom);
+        Assert.Equal(new DateOnly(2027, 2, 1), result.Value.MonthTo);
+        Assert.Equal(new DateOnly(2026, 7, 1), result.Value.DefaultMonthFrom);
+        Assert.Equal(new DateOnly(2026, 7, 1), result.Value.DefaultMonthTo);
     }
 
     [Fact]

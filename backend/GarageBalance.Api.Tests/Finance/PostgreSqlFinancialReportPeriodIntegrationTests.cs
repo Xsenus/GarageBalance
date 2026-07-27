@@ -8,6 +8,57 @@ namespace GarageBalance.Api.Tests.Finance;
 public sealed class PostgreSqlFinancialReportPeriodIntegrationTests
 {
     [PostgreSqlFact]
+    public async Task GaragePeriod_ReturnsFirstUnpaidAccrualMonthOnPostgreSql()
+    {
+        await using var database = await PostgreSqlTestDatabase.CreateAsync();
+        Guid garageId;
+        await using (var seedContext = database.CreateContext())
+        {
+            var garage = new Garage { Number = $"PG-{Guid.NewGuid():N}" };
+            var incomeType = new IncomeType { Name = $"Взнос {Guid.NewGuid():N}", Code = $"pg_fee_{Guid.NewGuid():N}" };
+            var paidAccrual = CreateGarageAccrual(garage, incomeType, new DateOnly(2023, 2, 1), 100m);
+            var unpaidAccrual = CreateGarageAccrual(garage, incomeType, new DateOnly(2024, 5, 1), 250m);
+            var payment = new FinancialOperation
+            {
+                OperationKind = FinancialOperationKinds.Income,
+                Garage = garage,
+                IncomeType = incomeType,
+                OperationDate = new DateOnly(2025, 1, 10),
+                AccountingMonth = new DateOnly(2025, 1, 1),
+                Amount = 100m
+            };
+            garageId = garage.Id;
+            seedContext.AddRange(
+                garage,
+                incomeType,
+                paidAccrual,
+                unpaidAccrual,
+                payment,
+                new AccrualPaymentAllocation
+                {
+                    Accrual = paidAccrual,
+                    FinancialOperation = payment,
+                    Amount = 100m
+                });
+            await seedContext.SaveChangesAsync();
+        }
+
+        await using var context = database.CreateContext();
+        var result = await FinanceServiceTestFactory.Create(
+            context,
+            new FixedTimeProvider(new DateTimeOffset(2026, 7, 23, 0, 0, 0, TimeSpan.Zero)))
+            .GetFinancialReportPeriodAsync(
+                new FinancialReportPeriodRequest(garageId, null, null),
+                CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+        Assert.Equal(new DateOnly(2023, 2, 1), result.Value!.MonthFrom);
+        Assert.Equal(new DateOnly(2026, 7, 1), result.Value.MonthTo);
+        Assert.Equal(new DateOnly(2024, 5, 1), result.Value.DefaultMonthFrom);
+        Assert.Equal(new DateOnly(2026, 7, 1), result.Value.DefaultMonthTo);
+    }
+
+    [PostgreSqlFact]
     public async Task SupplierPeriod_UsesFirstAndLastActiveMonthsOnPostgreSql()
     {
         await using var database = await PostgreSqlTestDatabase.CreateAsync();
@@ -103,6 +154,22 @@ public sealed class PostgreSqlFinancialReportPeriodIntegrationTests
             IsCanceled = isCanceled
         };
 
+    private static Accrual CreateGarageAccrual(
+        Garage garage,
+        IncomeType incomeType,
+        DateOnly month,
+        decimal amount) => new()
+        {
+            Garage = garage,
+            IncomeType = incomeType,
+            AccountingMonth = month,
+            DueDate = month,
+            OverdueFromDate = month,
+            Amount = amount,
+            Source = AccrualSources.Manual,
+            Comment = "Проверка первого непогашенного начисления"
+        };
+
     private static FinancialOperation CreateExpense(
         Supplier supplier,
         ExpenseType expenseType,
@@ -117,4 +184,9 @@ public sealed class PostgreSqlFinancialReportPeriodIntegrationTests
             ExpenseType = expenseType,
             IsCanceled = isCanceled
         };
+
+    private sealed class FixedTimeProvider(DateTimeOffset utcNow) : TimeProvider
+    {
+        public override DateTimeOffset GetUtcNow() => utcNow;
+    }
 }
