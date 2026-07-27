@@ -1617,7 +1617,7 @@ h1 {
 }
 
 .contractors-directory-table--suppliers .contractors-directory-row {
-  grid-template-columns: var(--supplier-col-name, 180px) var(--supplier-col-service, 190px) var(--supplier-col-contactPerson, 190px) var(--supplier-col-phone, 160px) var(--supplier-col-email, 180px) var(--supplier-col-debt, 150px) var(--supplier-col-actions, 132px);
+  grid-template-columns: var(--supplier-col-name, 220px) var(--supplier-col-service, 180px) var(--supplier-col-contactPerson, 210px) var(--supplier-col-phone, 180px) var(--supplier-col-email, 210px) var(--supplier-col-debt, 160px) var(--supplier-col-actions, 132px);
   min-width: max-content;
 }
 
@@ -1675,6 +1675,11 @@ h1 {
 .contractors-directory-header-cell > span {
   min-width: 0;
   overflow-wrap: anywhere;
+}
+
+.contractors-directory-table--suppliers .contractors-directory-header-cell--debt .contractors-sort-button > span:first-child {
+  overflow-wrap: normal;
+  white-space: nowrap;
 }
 
 .contractors-sort-button {
@@ -1775,6 +1780,23 @@ h1 {
   min-width: 0;
   border-bottom: 1px solid #eaecf0;
   padding: 11px 12px;
+}
+
+.contractors-supplier-cell {
+  align-self: stretch;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+  word-break: normal;
+}
+
+.contractors-supplier-cell--phone {
+  overflow-wrap: normal;
+  white-space: nowrap;
+}
+
+.contractors-supplier-cell--debt {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
 .contractors-directory-empty-cell {

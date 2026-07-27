@@ -6,6 +6,7 @@ import { describe, expect, it } from 'vitest'
 
 describe('responsive layout styles', () => {
   const appCss = readFileSync(resolve(process.cwd(), 'src', 'App.css'), 'utf8')
+  const contractorsPanel = readFileSync(resolve(process.cwd(), 'src', 'features', 'contractors', 'ContractorsPanel.tsx'), 'utf8')
   const normalizedAppCss = appCss.replace(/\r\n/g, '\n')
 
   it('collapses the main shell and data rows on tablet width', () => {
@@ -269,6 +270,16 @@ describe('responsive layout styles', () => {
     expect(normalizedAppCss).toContain('.contractors-contacts-row--editable > span {\n  padding: 4px 5px;')
     expect(normalizedAppCss).toContain('.contractors-supplier-primary-grid,\n  .contractors-supplier-contact-summary-grid,\n  .contractors-supplier-lookup-grid,\n  .contractors-supplier-footer-grid,\n  .contractors-staff-fields {\n    grid-template-columns: 1fr;')
     expect(normalizedAppCss).toContain('@media (min-width: 721px) and (max-width: 980px) {\n  .contractors-supplier-contact-summary-grid,\n  .contractors-supplier-lookup-grid,\n  .contractors-supplier-footer-grid {\n    grid-template-columns: repeat(2, minmax(0, 1fr));')
+  })
+
+  it('keeps long supplier values inside readable table columns', () => {
+    expect(contractorsPanel).toContain("{ key: 'name', label: 'Поставщик', defaultWidth: 220, minWidth: 170 }")
+    expect(contractorsPanel).toContain("{ key: 'phone', label: 'Телефон', defaultWidth: 180, minWidth: 168 }")
+    expect(contractorsPanel).toContain("{ key: 'debt', label: 'Задолженность', defaultWidth: 160, minWidth: 150 }")
+    expect(normalizedAppCss).toContain('.contractors-directory-table--suppliers .contractors-directory-row {\n  grid-template-columns: var(--supplier-col-name, 220px) var(--supplier-col-service, 180px) var(--supplier-col-contactPerson, 210px) var(--supplier-col-phone, 180px) var(--supplier-col-email, 210px) var(--supplier-col-debt, 160px) var(--supplier-col-actions, 132px);')
+    expect(normalizedAppCss).toContain('.contractors-supplier-cell {\n  align-self: stretch;\n  line-height: 1.35;\n  overflow-wrap: anywhere;\n  word-break: normal;')
+    expect(normalizedAppCss).toContain('.contractors-supplier-cell--phone {\n  overflow-wrap: normal;\n  white-space: nowrap;')
+    expect(normalizedAppCss).toContain('.contractors-directory-table--suppliers .contractors-directory-header-cell--debt .contractors-sort-button > span:first-child {\n  overflow-wrap: normal;\n  white-space: nowrap;')
   })
 
   it('keeps staff rate in the right column and submit actions at the right edge', () => {

@@ -243,12 +243,12 @@ const contractorGarageColumnDefinitions: Array<ContractorColumnDefinition<Contra
 ]
 
 const contractorSupplierColumnDefinitions: Array<ContractorColumnDefinition<ContractorSupplierColumnKey>> = [
-  { key: 'name', label: 'Поставщик', defaultWidth: 180, minWidth: 140 },
-  { key: 'service', label: 'Услуга', defaultWidth: 190, minWidth: 140 },
-  { key: 'contactPerson', label: 'Контактное лицо', defaultWidth: 190, minWidth: 150 },
-  { key: 'phone', label: 'Телефон', defaultWidth: 160, minWidth: 130 },
-  { key: 'email', label: 'Почта', defaultWidth: 180, minWidth: 140 },
-  { key: 'debt', label: 'Задолженность', defaultWidth: 150, minWidth: 130 },
+  { key: 'name', label: 'Поставщик', defaultWidth: 220, minWidth: 170 },
+  { key: 'service', label: 'Услуга', defaultWidth: 180, minWidth: 150 },
+  { key: 'contactPerson', label: 'Контактное лицо', defaultWidth: 210, minWidth: 170 },
+  { key: 'phone', label: 'Телефон', defaultWidth: 180, minWidth: 168 },
+  { key: 'email', label: 'Почта', defaultWidth: 210, minWidth: 160 },
+  { key: 'debt', label: 'Задолженность', defaultWidth: 160, minWidth: 150 },
   { key: 'actions', label: 'Действия', defaultWidth: 132, minWidth: 112 },
 ]
 
@@ -2144,7 +2144,7 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
           <div className="contractors-directory-table contractors-directory-table--suppliers" role="table" aria-label="Поставщики" style={supplierTableStyle}>
             <div className="contractors-directory-row contractors-directory-row--header" role="row">
               {contractorSupplierColumnDefinitions.map((column) => (
-                <span className="contractors-directory-header-cell" role="columnheader" key={column.key}>
+                <span className={`contractors-directory-header-cell contractors-directory-header-cell--${column.key}`} role="columnheader" key={column.key}>
                   {column.key === 'actions' ? <span>{column.label}</span> : renderContractorSortHeader('suppliers', column.key, column.label)}
                   {column.key !== 'actions' ? (
                     <button
@@ -2161,12 +2161,12 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
               const primaryContact = getSupplierPrimaryContact(row)
               return (
                 <div className={row.isDeleted ? 'contractors-directory-row contractors-directory-row--deleted' : 'contractors-directory-row'} role="row" key={row.id} onContextMenu={(event) => openSupplierContextMenu(event, row)}>
-                  <span role="cell">{row.name}</span>
-                  <span role="cell">{row.service}</span>
-                  <span role="cell">{primaryContact?.fullName ?? row.contactPerson}</span>
-                  <span role="cell">{primaryContact?.phone ?? row.phone}</span>
-                  <span role="cell">{primaryContact?.email ?? row.email}</span>
-                  <span role="cell" className={row.debt ? 'contractors-directory-cell--center money-expense' : 'contractors-directory-cell--center'}>
+                  <span role="cell" className="contractors-supplier-cell contractors-supplier-cell--name">{row.name}</span>
+                  <span role="cell" className="contractors-supplier-cell contractors-supplier-cell--service">{row.service}</span>
+                  <span role="cell" className="contractors-supplier-cell contractors-supplier-cell--contact">{primaryContact?.fullName ?? row.contactPerson}</span>
+                  <span role="cell" className="contractors-supplier-cell contractors-supplier-cell--phone">{primaryContact?.phone ?? row.phone}</span>
+                  <span role="cell" className="contractors-supplier-cell contractors-supplier-cell--email">{primaryContact?.email ?? row.email}</span>
+                  <span role="cell" className={row.debt ? 'contractors-supplier-cell contractors-supplier-cell--debt contractors-directory-cell--center money-expense' : 'contractors-supplier-cell contractors-supplier-cell--debt contractors-directory-cell--center'}>
                     {row.isDeleted ? 'Удален' : row.debt || 'Нет'}
                   </span>
                   <span role="cell" className="contractors-row-actions">

@@ -2117,9 +2117,15 @@ describe('App', () => {
     await waitFor(() => expect(JSON.parse(window.localStorage.getItem('garagebalance.contractors.garageColumnWidths') ?? '{}').number).toBe(136))
 
     await user.click(within(contractorsPanel).getByRole('tab', { name: 'Поставщики' }))
-    expect(within(contractorsPanel).getByRole('table', { name: 'Поставщики' })).toBeInTheDocument()
-    expect(within(contractorsPanel).getByText('Водоканал')).toBeInTheDocument()
-    expect(within(contractorsPanel).getByRole('columnheader', { name: 'Задолженность' })).toBeInTheDocument()
+    const supplierLayoutTable = within(contractorsPanel).getByRole('table', { name: 'Поставщики' })
+    expect(supplierLayoutTable).toBeInTheDocument()
+    const supplierLayoutRow = within(supplierLayoutTable).getByText('Водоканал').closest('[role="row"]')
+    expect(supplierLayoutRow).not.toBeNull()
+    expect(supplierLayoutRow?.children[0]).toHaveClass('contractors-supplier-cell--name')
+    expect(supplierLayoutRow?.children[3]).toHaveClass('contractors-supplier-cell--phone')
+    expect(supplierLayoutRow?.children[4]).toHaveClass('contractors-supplier-cell--email')
+    expect(supplierLayoutRow?.children[5]).toHaveClass('contractors-supplier-cell--debt')
+    expect(within(supplierLayoutTable).getByRole('columnheader', { name: 'Задолженность' })).toHaveClass('contractors-directory-header-cell--debt')
 
     const addContractorServiceButton = within(contractorsPanel).getByRole('button', { name: 'Добавить услугу' })
     await user.click(addContractorServiceButton)
@@ -2238,7 +2244,7 @@ describe('App', () => {
     fireEvent.mouseDown(supplierResizeHandle, { clientX: 100 })
     fireEvent.mouseMove(document, { clientX: 135 })
     fireEvent.mouseUp(document)
-    await waitFor(() => expect(JSON.parse(window.localStorage.getItem('garagebalance.contractors.supplierColumnWidths') ?? '{}').name).toBe(215))
+    await waitFor(() => expect(JSON.parse(window.localStorage.getItem('garagebalance.contractors.supplierColumnWidths') ?? '{}').name).toBe(255))
 
     let supplierRow = within(suppliersTable).getByText('Новый подрядчик').closest('[role="row"]')!
     expect(within(supplierRow as HTMLElement).getByText('Смирнов С.С.')).toBeInTheDocument()
