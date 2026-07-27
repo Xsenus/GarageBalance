@@ -7646,6 +7646,53 @@ public sealed class FinanceServiceTests
     }
 
     [Fact]
+    public async Task GetExpenseWorksheetAsync_IncludesOpeningAndAdjustmentOperationsInOneSelect()
+    {
+        var commandCounter = new SelectCommandCounter();
+        await using var database = await TestDatabase.CreateAsync(commandCounter);
+        database.Context.CashBankBalanceOperations.AddRange(
+            new CashBankBalanceOperation
+            {
+                Account = CashBankAccounts.Cash,
+                OperationKind = CashBankBalanceOperationKinds.OpeningBalance,
+                Direction = CashBankBalanceDirections.Increase,
+                OperationDate = new DateOnly(2026, 7, 1),
+                Amount = 1000m,
+                Reason = "Старт кассы"
+            },
+            new CashBankBalanceOperation
+            {
+                Account = CashBankAccounts.Bank,
+                OperationKind = CashBankBalanceOperationKinds.OpeningBalance,
+                Direction = CashBankBalanceDirections.Increase,
+                OperationDate = new DateOnly(2026, 7, 1),
+                Amount = 5000m,
+                Reason = "Старт счёта"
+            },
+            new CashBankBalanceOperation
+            {
+                Account = CashBankAccounts.Cash,
+                OperationKind = CashBankBalanceOperationKinds.Adjustment,
+                Direction = CashBankBalanceDirections.Decrease,
+                OperationDate = new DateOnly(2026, 7, 2),
+                Amount = 125m,
+                Reason = "Списание кассы"
+            });
+        await database.Context.SaveChangesAsync();
+        var service = FinanceServiceTestFactory.Create(database.Context);
+        commandCounter.Reset();
+
+        var result = await service.GetExpenseWorksheetAsync(
+            new ExpenseWorksheetRequest(new DateOnly(2026, 7, 1)),
+            CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+        Assert.Equal(1, commandCounter.Count);
+        Assert.Equal(875m, result.Value!.CashAmount);
+        Assert.Equal(5000m, result.Value.BankAmount);
+    }
+
+    [Fact]
     public async Task ExpenseWorksheetQuery_PropagatesCancellation()
     {
         await using var database = await TestDatabase.CreateAsync();
@@ -7676,6 +7723,52 @@ public sealed class FinanceServiceTests
         Assert.Equal(0m, result.BankDepositTotal);
         Assert.Equal(0m, result.CashExpenseTotal);
         Assert.Equal(0m, result.BankExpenseTotal);
+        Assert.Equal(0m, result.CashAdjustmentTotal);
+        Assert.Equal(0m, result.BankAdjustmentTotal);
+    }
+
+    [Fact]
+    public async Task FinanceAvailableBalanceQuery_AggregatesCashAndBankAdjustmentsInOneSelect()
+    {
+        var commandCounter = new SelectCommandCounter();
+        await using var database = await TestDatabase.CreateAsync(commandCounter);
+        database.Context.CashBankBalanceOperations.AddRange(
+            new CashBankBalanceOperation
+            {
+                Account = CashBankAccounts.Cash,
+                OperationKind = CashBankBalanceOperationKinds.OpeningBalance,
+                Direction = CashBankBalanceDirections.Increase,
+                OperationDate = new DateOnly(2026, 7, 1),
+                Amount = 1000m,
+                Reason = "Старт кассы"
+            },
+            new CashBankBalanceOperation
+            {
+                Account = CashBankAccounts.Cash,
+                OperationKind = CashBankBalanceOperationKinds.Adjustment,
+                Direction = CashBankBalanceDirections.Decrease,
+                OperationDate = new DateOnly(2026, 7, 2),
+                Amount = 125m,
+                Reason = "Списание кассы"
+            },
+            new CashBankBalanceOperation
+            {
+                Account = CashBankAccounts.Bank,
+                OperationKind = CashBankBalanceOperationKinds.OpeningBalance,
+                Direction = CashBankBalanceDirections.Increase,
+                OperationDate = new DateOnly(2026, 7, 1),
+                Amount = 5000m,
+                Reason = "Старт счёта"
+            });
+        await database.Context.SaveChangesAsync();
+        var query = new EfFinanceAvailableBalanceQuery(database.Context);
+        commandCounter.Reset();
+
+        var result = await query.GetAsync(["no_receipt"], ["Без чека"], CancellationToken.None);
+
+        Assert.Equal(1, commandCounter.Count);
+        Assert.Equal(875m, result.CashAdjustmentTotal);
+        Assert.Equal(5000m, result.BankAdjustmentTotal);
     }
 
     [Fact]

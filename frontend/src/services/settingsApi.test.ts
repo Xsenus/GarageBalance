@@ -117,6 +117,46 @@ describe('settingsApi', () => {
     }))
   })
 
+  it('loads balances, updates opening values, and creates an adjustment', async () => {
+    const balances = {
+      cashOpeningBalance: 1000,
+      bankOpeningBalance: 5000,
+      cashCurrentBalance: 1200,
+      bankCurrentBalance: 4800,
+      recentOperations: [],
+    }
+    const openingRequest = {
+      cashOpeningBalance: 1500,
+      bankOpeningBalance: 7000,
+      reason: 'Остатки на дату запуска',
+    }
+    const adjustmentRequest = {
+      account: 'cash' as const,
+      direction: 'increase' as const,
+      operationDate: '2026-07-27',
+      amount: 250,
+      reason: 'Размен кассы',
+    }
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify(balances), { status: 200, headers: { 'Content-Type': 'application/json' } }))
+      .mockResolvedValueOnce(new Response(JSON.stringify(balances), { status: 200, headers: { 'Content-Type': 'application/json' } }))
+      .mockResolvedValueOnce(new Response(JSON.stringify(balances), { status: 201, headers: { 'Content-Type': 'application/json' } }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await expect(settingsApi.getCashBankBalances('token')).resolves.toEqual(balances)
+    await expect(settingsApi.updateCashBankOpeningBalances('token', openingRequest)).resolves.toEqual(balances)
+    await expect(settingsApi.createCashBankBalanceAdjustment('token', adjustmentRequest)).resolves.toEqual(balances)
+
+    expect(fetchMock).toHaveBeenNthCalledWith(2, '/api/settings/cash-bank-balances/opening', expect.objectContaining({
+      method: 'PUT',
+      body: JSON.stringify(openingRequest),
+    }))
+    expect(fetchMock).toHaveBeenNthCalledWith(3, '/api/settings/cash-bank-balances/adjustments', expect.objectContaining({
+      method: 'POST',
+      body: JSON.stringify(adjustmentRequest),
+    }))
+  })
+
   it('loads diagnostic status and downloads the protected package', async () => {
     const status = {
       enabled: true,

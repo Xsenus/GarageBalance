@@ -1,6 +1,7 @@
 using System.Reflection;
 using System.Security.Claims;
 using GarageBalance.Api.Application.Backups;
+using GarageBalance.Api.Application.Finance;
 using GarageBalance.Api.Application.Settings;
 using GarageBalance.Api.Contracts.Settings;
 using GarageBalance.Api.Controllers;
@@ -22,6 +23,9 @@ public sealed class SettingsControllerTests
         var backupCreateAction = typeof(SettingsController).GetMethod(nameof(SettingsController.CreateDatabaseBackup));
         var getBusinessDateAction = typeof(SettingsController).GetMethod(nameof(SettingsController.GetBusinessDateSettings));
         var updateBusinessDateAction = typeof(SettingsController).GetMethod(nameof(SettingsController.UpdateBusinessDateSettings));
+        var getCashBankBalancesAction = typeof(SettingsController).GetMethod(nameof(SettingsController.GetCashBankBalances));
+        var updateOpeningBalancesAction = typeof(SettingsController).GetMethod(nameof(SettingsController.UpdateCashBankOpeningBalances));
+        var createAdjustmentAction = typeof(SettingsController).GetMethod(nameof(SettingsController.CreateCashBankBalanceAdjustment));
 
         Assert.Equal(SystemPermissions.PaymentsRead, Assert.Single(getAction!.GetCustomAttributes<AuthorizeAttribute>()).Policy);
         Assert.Equal(SystemPermissions.UsersManage, Assert.Single(updateAction!.GetCustomAttributes<AuthorizeAttribute>()).Policy);
@@ -29,13 +33,16 @@ public sealed class SettingsControllerTests
         Assert.Equal(SystemPermissions.UsersManage, Assert.Single(backupCreateAction!.GetCustomAttributes<AuthorizeAttribute>()).Policy);
         Assert.Equal(SystemRoles.Administrator, Assert.Single(getBusinessDateAction!.GetCustomAttributes<AuthorizeAttribute>()).Roles);
         Assert.Equal(SystemRoles.Administrator, Assert.Single(updateBusinessDateAction!.GetCustomAttributes<AuthorizeAttribute>()).Roles);
+        Assert.Equal(SystemRoles.Administrator, Assert.Single(getCashBankBalancesAction!.GetCustomAttributes<AuthorizeAttribute>()).Roles);
+        Assert.Equal(SystemRoles.Administrator, Assert.Single(updateOpeningBalancesAction!.GetCustomAttributes<AuthorizeAttribute>()).Roles);
+        Assert.Equal(SystemRoles.Administrator, Assert.Single(createAdjustmentAction!.GetCustomAttributes<AuthorizeAttribute>()).Roles);
     }
 
     [Fact]
     public async Task GetPaymentDisplaySettings_ReturnsServiceValue()
     {
         var service = new FakeService { Current = new PaymentDisplaySettingsDto(false) };
-        var controller = new SettingsController(service, new FakeBackupService());
+        var controller = CreateController(service);
 
         var result = await controller.GetPaymentDisplaySettings(CancellationToken.None);
 
@@ -48,14 +55,12 @@ public sealed class SettingsControllerTests
     {
         var actorUserId = Guid.NewGuid();
         var service = new FakeService();
-        var controller = new SettingsController(service, new FakeBackupService())
+        var controller = CreateController(service);
+        controller.ControllerContext = new ControllerContext
         {
-            ControllerContext = new ControllerContext
+            HttpContext = new DefaultHttpContext
             {
-                HttpContext = new DefaultHttpContext
-                {
-                    User = new ClaimsPrincipal(new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, actorUserId.ToString())], "Test"))
-                }
+                User = new ClaimsPrincipal(new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, actorUserId.ToString())], "Test"))
             }
         };
         var request = new UpdatePaymentDisplaySettingsRequest(true);
@@ -73,7 +78,7 @@ public sealed class SettingsControllerTests
     public async Task GetDatabaseBackups_ReturnsBoundedStatusFromService()
     {
         var backupService = new FakeBackupService();
-        var controller = new SettingsController(new FakeService(), backupService);
+        var controller = CreateController(backupService: backupService);
 
         var result = await controller.GetDatabaseBackups(CancellationToken.None);
 
@@ -86,14 +91,12 @@ public sealed class SettingsControllerTests
     {
         var actorUserId = Guid.NewGuid();
         var service = new FakeService();
-        var controller = new SettingsController(service, new FakeBackupService())
+        var controller = CreateController(service);
+        controller.ControllerContext = new ControllerContext
         {
-            ControllerContext = new ControllerContext
+            HttpContext = new DefaultHttpContext
             {
-                HttpContext = new DefaultHttpContext
-                {
-                    User = new ClaimsPrincipal(new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, actorUserId.ToString())], "Test"))
-                }
+                User = new ClaimsPrincipal(new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, actorUserId.ToString())], "Test"))
             }
         };
         var request = new UpdateBusinessDateRequest(new DateOnly(2026, 8, 5));
@@ -112,14 +115,12 @@ public sealed class SettingsControllerTests
     {
         var actorUserId = Guid.NewGuid();
         var backupService = new FakeBackupService();
-        var controller = new SettingsController(new FakeService(), backupService)
+        var controller = CreateController(backupService: backupService);
+        controller.ControllerContext = new ControllerContext
         {
-            ControllerContext = new ControllerContext
+            HttpContext = new DefaultHttpContext
             {
-                HttpContext = new DefaultHttpContext
-                {
-                    User = new ClaimsPrincipal(new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, actorUserId.ToString())], "Test"))
-                }
+                User = new ClaimsPrincipal(new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, actorUserId.ToString())], "Test"))
             }
         };
 
@@ -144,7 +145,7 @@ public sealed class SettingsControllerTests
         {
             CreateResult = DatabaseBackupResult<DatabaseBackupFileDto>.Failure(errorCode, "Безопасное сообщение.")
         };
-        var controller = new SettingsController(new FakeService(), backupService);
+        var controller = CreateController(backupService: backupService);
 
         var result = await controller.CreateDatabaseBackup(new CreateDatabaseBackupRequest("Причина"), CancellationToken.None);
 
@@ -154,6 +155,75 @@ public sealed class SettingsControllerTests
         Assert.Equal(errorCode, details.Title);
         Assert.Equal("Безопасное сообщение.", details.Detail);
     }
+
+    [Fact]
+    public async Task CreateCashBankBalanceAdjustment_PassesActorAndReturnsCreatedValue()
+    {
+        var actorUserId = Guid.NewGuid();
+        var balanceService = new FakeCashBankBalanceService();
+        var controller = CreateController(balanceService: balanceService);
+        controller.ControllerContext = new ControllerContext
+        {
+            HttpContext = new DefaultHttpContext
+            {
+                User = new ClaimsPrincipal(new ClaimsIdentity(
+                    [new Claim(ClaimTypes.NameIdentifier, actorUserId.ToString())],
+                    "Test"))
+            }
+        };
+        var request = new CreateCashBankBalanceAdjustmentRequest(
+            "cash",
+            "increase",
+            new DateOnly(2026, 7, 27),
+            500m,
+            "Размен кассы");
+
+        var result = await controller.CreateCashBankBalanceAdjustment(request, CancellationToken.None);
+
+        var created = Assert.IsType<ObjectResult>(result.Result);
+        Assert.Equal(StatusCodes.Status201Created, created.StatusCode);
+        Assert.Same(balanceService.Current, created.Value);
+        Assert.Same(request, balanceService.ReceivedAdjustment);
+        Assert.Equal(actorUserId, balanceService.ReceivedActorUserId);
+    }
+
+    [Theory]
+    [InlineData("amount_invalid", StatusCodes.Status400BadRequest)]
+    [InlineData("insufficient_balance", StatusCodes.Status409Conflict)]
+    public async Task CashBankBalanceActions_MapFailuresToProblemDetails(
+        string errorCode,
+        int expectedStatus)
+    {
+        var balanceService = new FakeCashBankBalanceService
+        {
+            AdjustmentResult = FinanceResult<CashBankBalanceSettingsDto>.Failure(
+                errorCode,
+                "Проверяемая ошибка.")
+        };
+        var controller = CreateController(balanceService: balanceService);
+
+        var result = await controller.CreateCashBankBalanceAdjustment(
+            new CreateCashBankBalanceAdjustmentRequest(
+                "cash",
+                "decrease",
+                new DateOnly(2026, 7, 27),
+                10m,
+                "Причина"),
+            CancellationToken.None);
+
+        var problem = Assert.IsType<ObjectResult>(result.Result);
+        Assert.Equal(expectedStatus, problem.StatusCode);
+        Assert.Equal(errorCode, Assert.IsType<ProblemDetails>(problem.Value).Title);
+    }
+
+    private static SettingsController CreateController(
+        FakeService? service = null,
+        FakeCashBankBalanceService? balanceService = null,
+        FakeBackupService? backupService = null) =>
+        new(
+            service ?? new FakeService(),
+            balanceService ?? new FakeCashBankBalanceService(),
+            backupService ?? new FakeBackupService());
 
     private sealed class FakeService : IApplicationSettingsService
     {
@@ -207,6 +277,34 @@ public sealed class SettingsControllerTests
             ReceivedReason = reason;
             ReceivedActorUserId = actorUserId;
             return Task.FromResult(CreateResult ?? DatabaseBackupResult<DatabaseBackupFileDto>.Success(CreatedFile));
+        }
+    }
+
+    private sealed class FakeCashBankBalanceService : ICashBankBalanceSettingsService
+    {
+        public CashBankBalanceSettingsDto Current { get; } = new(100m, 200m, 150m, 250m, []);
+        public CreateCashBankBalanceAdjustmentRequest? ReceivedAdjustment { get; private set; }
+        public Guid? ReceivedActorUserId { get; private set; }
+        public FinanceResult<CashBankBalanceSettingsDto>? AdjustmentResult { get; set; }
+
+        public Task<CashBankBalanceSettingsDto> GetAsync(CancellationToken cancellationToken) =>
+            Task.FromResult(Current);
+
+        public Task<FinanceResult<CashBankBalanceSettingsDto>> UpdateOpeningBalancesAsync(
+            UpdateCashBankOpeningBalancesRequest request,
+            Guid? actorUserId,
+            CancellationToken cancellationToken) =>
+            Task.FromResult(FinanceResult<CashBankBalanceSettingsDto>.Success(Current));
+
+        public Task<FinanceResult<CashBankBalanceSettingsDto>> CreateAdjustmentAsync(
+            CreateCashBankBalanceAdjustmentRequest request,
+            Guid? actorUserId,
+            CancellationToken cancellationToken)
+        {
+            ReceivedAdjustment = request;
+            ReceivedActorUserId = actorUserId;
+            return Task.FromResult(
+                AdjustmentResult ?? FinanceResult<CashBankBalanceSettingsDto>.Success(Current));
         }
     }
 }

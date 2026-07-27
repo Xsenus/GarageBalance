@@ -1,16 +1,18 @@
 import { useEffect, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
-import { CalendarClock, DatabaseBackup, Download, Eye, FileWarning, KeyRound, PlugZap, RefreshCw, ShieldCheck, SlidersHorizontal, X } from 'lucide-react'
+import { ArrowDownCircle, ArrowUpCircle, Banknote, CalendarClock, DatabaseBackup, Download, Eye, FileWarning, KeyRound, Landmark, PlugZap, RefreshCw, ShieldCheck, SlidersHorizontal, X } from 'lucide-react'
 import type { AuthClient, AuthResponse, CurrentUserDto } from '../../services/authApi'
 import type { IntegrationClient, OneCFreshIntegrationStatusDto, OneCFreshSyncDto, OneCFreshSyncPreviewDto, ReceiptPrintingIntegrationStatusDto } from '../../services/integrationsApi'
-import type { ApplicationSettingsClient, BusinessDateSettingsDto, DatabaseBackupStatusDto, DiagnosticLogStatusDto } from '../../services/settingsApi'
+import type { ApplicationSettingsClient, BusinessDateSettingsDto, CashBankBalanceSettingsDto, DatabaseBackupStatusDto, DiagnosticLogStatusDto } from '../../services/settingsApi'
 import { hasPermission, isAdministrator, permissions } from '../../shared/accessControl'
 import { LoadingSkeleton } from '../../shared/AsyncState'
 import { LocalizedDatePicker } from '../../shared/LocalizedDatePicker'
+import { MoneyTextInput } from '../../shared/MoneyInput'
+import { parseMoneyInput } from '../../shared/moneyInputFormatting'
 import { formatSensitiveChange } from '../../shared/changePreview'
 import { FormField } from '../../shared/FormField'
 import { FormError, FormValidationSummary } from '../../shared/formFeedback'
-import { formatDateTime } from '../../shared/formatters'
+import { formatDateOnly, formatDateTime, formatMoney, getLocalDateInputValue } from '../../shared/formatters'
 import { downloadBlob } from '../../shared/fileExports'
 import { useEscapeKey, useFocusOnOpen, useFocusTrap, useRestoreFocusOnClose } from '../../shared/focusHooks'
 import { getPasswordChangeValidationErrors } from '../../shared/validation'
@@ -19,7 +21,7 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
   const integrationSettingsVisible = import.meta.env.VITE_SHOW_INTEGRATION_SETTINGS === 'true'
   const dadataSettingsVisible = hasPermission(auth, permissions.usersManage)
   const integrationTabVisible = integrationSettingsVisible || dadataSettingsVisible
-  const [activeSettingsTab, setActiveSettingsTab] = useState<'security' | 'business-date' | 'display' | 'backups' | 'diagnostics' | 'integrations'>(() => (
+  const [activeSettingsTab, setActiveSettingsTab] = useState<'security' | 'business-date' | 'cash-bank' | 'display' | 'backups' | 'diagnostics' | 'integrations'>(() => (
     integrationSettingsVisible && (hasPermission(auth, permissions.importRun) || hasPermission(auth, permissions.paymentsWrite))
       ? 'integrations'
       : 'security'
@@ -75,6 +77,19 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
   const [businessDateError, setBusinessDateError] = useState<string | null>(null)
   const [businessDateMessage, setBusinessDateMessage] = useState<string | null>(null)
   const [businessDateConfirmation, setBusinessDateConfirmation] = useState<{ overrideDate: string | null } | null>(null)
+  const [cashBankSettings, setCashBankSettings] = useState<CashBankBalanceSettingsDto | null>(null)
+  const [cashBankLoading, setCashBankLoading] = useState(false)
+  const [cashBankSaving, setCashBankSaving] = useState(false)
+  const [cashBankError, setCashBankError] = useState<string | null>(null)
+  const [cashBankMessage, setCashBankMessage] = useState<string | null>(null)
+  const [openingBalanceDraft, setOpeningBalanceDraft] = useState({ cash: '', bank: '', reason: '' })
+  const [balanceAdjustmentDraft, setBalanceAdjustmentDraft] = useState<{
+    account: 'cash' | 'bank'
+    direction: 'increase' | 'decrease'
+    operationDate: string
+    amount: string
+    reason: string
+  } | null>(null)
   const canViewIntegrationStatus = integrationSettingsVisible && hasPermission(auth, permissions.importRun)
   const canViewReceiptPrintingStatus = integrationSettingsVisible && hasPermission(auth, permissions.paymentsWrite)
   const canManageIntegrationSettings = integrationSettingsVisible && hasPermission(auth, permissions.usersManage)
@@ -110,6 +125,30 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
       })
       .finally(() => {
         if (!ignore) setBusinessDateLoading(false)
+      })
+    return () => { ignore = true }
+  }, [activeSettingsTab, auth.accessToken, canManageBusinessDate, settingsClient])
+
+  useEffect(() => {
+    if (!canManageBusinessDate || activeSettingsTab !== 'cash-bank') return
+    let ignore = false
+    setCashBankLoading(true)
+    setCashBankError(null)
+    settingsClient.getCashBankBalances(auth.accessToken)
+      .then((settings) => {
+        if (ignore) return
+        setCashBankSettings(settings)
+        setOpeningBalanceDraft({
+          cash: String(settings.cashOpeningBalance),
+          bank: String(settings.bankOpeningBalance),
+          reason: '',
+        })
+      })
+      .catch((caught: unknown) => {
+        if (!ignore) setCashBankError(caught instanceof Error ? caught.message : 'Не удалось загрузить остатки кассы и банковского счёта.')
+      })
+      .finally(() => {
+        if (!ignore) setCashBankLoading(false)
       })
     return () => { ignore = true }
   }, [activeSettingsTab, auth.accessToken, canManageBusinessDate, settingsClient])
@@ -290,6 +329,95 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
     } finally {
       setBusinessDateSaving(false)
     }
+  }
+
+  async function saveOpeningBalances(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    const cashOpeningBalance = parseMoneyDraft(openingBalanceDraft.cash)
+    const bankOpeningBalance = parseMoneyDraft(openingBalanceDraft.bank)
+    const reason = openingBalanceDraft.reason.trim()
+    if (cashOpeningBalance === null || bankOpeningBalance === null || cashOpeningBalance < 0 || bankOpeningBalance < 0) {
+      setCashBankError('Стартовые остатки должны быть неотрицательными числами.')
+      return
+    }
+    if (reason.length < 3) {
+      setCashBankError('Укажите причину изменения длиной не менее 3 символов.')
+      return
+    }
+
+    setCashBankSaving(true)
+    setCashBankError(null)
+    setCashBankMessage(null)
+    try {
+      const settings = await settingsClient.updateCashBankOpeningBalances(auth.accessToken, {
+        cashOpeningBalance,
+        bankOpeningBalance,
+        reason,
+      })
+      setCashBankSettings(settings)
+      setOpeningBalanceDraft({
+        cash: String(settings.cashOpeningBalance),
+        bank: String(settings.bankOpeningBalance),
+        reason: '',
+      })
+      setCashBankMessage('Стартовые остатки сохранены, изменение записано в историю.')
+    } catch (caught) {
+      setCashBankError(caught instanceof Error ? caught.message : 'Не удалось сохранить стартовые остатки.')
+    } finally {
+      setCashBankSaving(false)
+    }
+  }
+
+  async function saveBalanceAdjustment(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (!balanceAdjustmentDraft) return
+    const amount = parseMoneyDraft(balanceAdjustmentDraft.amount)
+    const reason = balanceAdjustmentDraft.reason.trim()
+    if (amount === null || amount <= 0) {
+      setCashBankError('Сумма операции должна быть больше нуля.')
+      return
+    }
+    if (!balanceAdjustmentDraft.operationDate) {
+      setCashBankError('Укажите дату операции.')
+      return
+    }
+    if (reason.length < 3) {
+      setCashBankError('Укажите причину операции длиной не менее 3 символов.')
+      return
+    }
+
+    setCashBankSaving(true)
+    setCashBankError(null)
+    setCashBankMessage(null)
+    try {
+      const settings = await settingsClient.createCashBankBalanceAdjustment(auth.accessToken, {
+        ...balanceAdjustmentDraft,
+        amount,
+        reason,
+      })
+      setCashBankSettings(settings)
+      setBalanceAdjustmentDraft(null)
+      setCashBankMessage('Операция проведена и записана в историю изменений.')
+    } catch (caught) {
+      setCashBankError(caught instanceof Error ? caught.message : 'Не удалось провести операцию.')
+    } finally {
+      setCashBankSaving(false)
+    }
+  }
+
+  function openBalanceAdjustment(
+    account: 'cash' | 'bank',
+    direction: 'increase' | 'decrease',
+  ) {
+    setCashBankError(null)
+    setCashBankMessage(null)
+    setBalanceAdjustmentDraft({
+      account,
+      direction,
+      operationDate: getLocalDateInputValue(),
+      amount: '',
+      reason: '',
+    })
   }
 
   useEffect(() => {
@@ -548,6 +676,20 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
                 <span>Рабочая дата</span>
               </button>
             ) : null}
+            {canManageBusinessDate ? (
+              <button
+                id="settings-cash-bank-tab"
+                className={activeSettingsTab === 'cash-bank' ? 'settings-tab is-active' : 'settings-tab'}
+                type="button"
+                role="tab"
+                aria-controls="settings-cash-bank-panel"
+                aria-selected={activeSettingsTab === 'cash-bank'}
+                onClick={() => setActiveSettingsTab('cash-bank')}
+              >
+                <Landmark size={17} aria-hidden="true" />
+                <span>Касса и счёт</span>
+              </button>
+            ) : null}
             {canManageApplicationSettings ? (
               <button
                 id="settings-display-tab"
@@ -679,6 +821,177 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
           ) : null}
           {businessDateError ? <FormError>{businessDateError}</FormError> : null}
           {businessDateMessage ? <div className="form-success" role="status" aria-live="polite">{businessDateMessage}</div> : null}
+        </div>
+      </section>
+      ) : null}
+      {canManageBusinessDate && activeSettingsTab === 'cash-bank' ? (
+      <section className="password-panel settings-card settings-card--cash-bank" aria-label="Остатки кассы и банковского счёта">
+        <div className="settings-card-intro">
+          <p className="eyebrow">Финансовые настройки</p>
+          <h2>Касса и банковский счёт</h2>
+          <p>Стартовые остатки входят в доступные суммы. Пополнения и списания проводятся отдельными операциями с датой и причиной; прежние записи не перезаписываются.</p>
+        </div>
+        <div className="dictionary-form settings-card-form cash-bank-settings">
+          {cashBankLoading ? <LoadingSkeleton className="loading-skeleton--compact" label="Загружаем остатки кассы и банковского счёта" rows={3} columns={4} /> : null}
+          {cashBankSettings && !cashBankLoading ? (
+            <>
+              <div className="summary-strip cash-bank-summary" aria-label="Текущие остатки">
+                <div>
+                  <span>Касса сейчас</span>
+                  <strong>{formatMoney(cashBankSettings.cashCurrentBalance)} ₽</strong>
+                </div>
+                <div>
+                  <span>Счёт сейчас</span>
+                  <strong>{formatMoney(cashBankSettings.bankCurrentBalance)} ₽</strong>
+                </div>
+                <div>
+                  <span>Старт кассы</span>
+                  <strong>{formatMoney(cashBankSettings.cashOpeningBalance)} ₽</strong>
+                </div>
+                <div>
+                  <span>Старт счёта</span>
+                  <strong>{formatMoney(cashBankSettings.bankOpeningBalance)} ₽</strong>
+                </div>
+              </div>
+
+              <form className="cash-bank-opening-form" onSubmit={(event) => void saveOpeningBalances(event)}>
+                <div className="dictionary-form-grid cash-bank-opening-grid">
+                  <FormField label="Стартовый остаток кассы, ₽">
+                    <MoneyTextInput
+                      aria-label="Стартовый остаток кассы"
+                      value={openingBalanceDraft.cash}
+                      disabled={cashBankSaving}
+                      onValueChange={(cash) => setOpeningBalanceDraft({ ...openingBalanceDraft, cash })}
+                      required
+                    />
+                  </FormField>
+                  <FormField label="Стартовый остаток банковского счёта, ₽">
+                    <MoneyTextInput
+                      aria-label="Стартовый остаток банковского счёта"
+                      value={openingBalanceDraft.bank}
+                      disabled={cashBankSaving}
+                      onValueChange={(bank) => setOpeningBalanceDraft({ ...openingBalanceDraft, bank })}
+                      required
+                    />
+                  </FormField>
+                  <FormField label="Причина изменения">
+                    <input
+                      aria-label="Причина изменения стартовых остатков"
+                      value={openingBalanceDraft.reason}
+                      disabled={cashBankSaving}
+                      maxLength={1000}
+                      onChange={(event) => setOpeningBalanceDraft({ ...openingBalanceDraft, reason: event.target.value })}
+                      required
+                    />
+                  </FormField>
+                </div>
+                <button className="secondary-button" type="submit" disabled={cashBankSaving}>
+                  <ShieldCheck size={16} aria-hidden="true" />
+                  <span>{cashBankSaving ? 'Сохраняем...' : 'Сохранить стартовые остатки'}</span>
+                </button>
+              </form>
+
+              <div className="cash-bank-action-groups" aria-label="Операции с остатками">
+                {(['cash', 'bank'] as const).map((account) => (
+                  <div className="cash-bank-action-card" key={account}>
+                    <div>
+                      {account === 'cash' ? <Banknote size={20} aria-hidden="true" /> : <Landmark size={20} aria-hidden="true" />}
+                      <strong>{account === 'cash' ? 'Касса' : 'Банковский счёт'}</strong>
+                    </div>
+                    <div className="dialog-actions dialog-actions--start">
+                      <button className="secondary-button create-action-button" type="button" disabled={cashBankSaving} onClick={() => openBalanceAdjustment(account, 'increase')}>
+                        <ArrowUpCircle size={17} aria-hidden="true" />
+                        <span>Пополнить</span>
+                      </button>
+                      <button className="ghost-button create-action-button" type="button" disabled={cashBankSaving} onClick={() => openBalanceAdjustment(account, 'decrease')}>
+                        <ArrowDownCircle size={17} aria-hidden="true" />
+                        <span>Списать</span>
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {balanceAdjustmentDraft ? (
+                <form className="cash-bank-adjustment-form" aria-label={balanceAdjustmentDraft.direction === 'increase' ? 'Пополнение остатка' : 'Списание остатка'} onSubmit={(event) => void saveBalanceAdjustment(event)}>
+                  <div className="settings-card-intro settings-card-intro--compact">
+                    <p className="eyebrow">{balanceAdjustmentDraft.account === 'cash' ? 'Касса' : 'Банковский счёт'}</p>
+                    <h3>{balanceAdjustmentDraft.direction === 'increase' ? 'Пополнение' : 'Списание'}</h3>
+                  </div>
+                  <div className="dictionary-form-grid cash-bank-adjustment-grid">
+                    <FormField label="Дата операции">
+                      <LocalizedDatePicker
+                        ariaLabel="Дата операции"
+                        mode="date"
+                        value={balanceAdjustmentDraft.operationDate}
+                        disabled={cashBankSaving}
+                        onChange={(value) => setBalanceAdjustmentDraft({ ...balanceAdjustmentDraft, operationDate: value })}
+                        required
+                      />
+                    </FormField>
+                    <FormField label="Сумма, ₽">
+                      <MoneyTextInput
+                        aria-label="Сумма операции"
+                        value={balanceAdjustmentDraft.amount}
+                        disabled={cashBankSaving}
+                        onValueChange={(amount) => setBalanceAdjustmentDraft({ ...balanceAdjustmentDraft, amount })}
+                        required
+                      />
+                    </FormField>
+                    <FormField label="Причина">
+                      <textarea
+                        aria-label="Причина операции"
+                        value={balanceAdjustmentDraft.reason}
+                        disabled={cashBankSaving}
+                        maxLength={1000}
+                        onChange={(event) => setBalanceAdjustmentDraft({ ...balanceAdjustmentDraft, reason: event.target.value })}
+                        required
+                      />
+                    </FormField>
+                  </div>
+                  <div className="dialog-actions dialog-actions--start">
+                    <button className="secondary-button" type="submit" disabled={cashBankSaving}>
+                      {balanceAdjustmentDraft.direction === 'increase' ? <ArrowUpCircle size={17} aria-hidden="true" /> : <ArrowDownCircle size={17} aria-hidden="true" />}
+                      <span>{cashBankSaving ? 'Проводим...' : 'Провести операцию'}</span>
+                    </button>
+                    <button className="ghost-button" type="button" disabled={cashBankSaving} onClick={() => setBalanceAdjustmentDraft(null)}>Отмена</button>
+                  </div>
+                </form>
+              ) : null}
+
+              <div className="table-shell cash-bank-history-shell">
+                <table aria-label="Последние операции с кассой и банковским счётом">
+                  <thead>
+                    <tr>
+                      <th>Дата</th>
+                      <th>Счёт</th>
+                      <th>Операция</th>
+                      <th>Сумма</th>
+                      <th>Причина</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {cashBankSettings.recentOperations.map((operation) => (
+                      <tr key={operation.id}>
+                        <td>{formatDateOnly(operation.operationDate)}</td>
+                        <td>{operation.account === 'cash' ? 'Касса' : 'Банковский счёт'}</td>
+                        <td>{formatCashBankOperation(operation.operationKind, operation.direction)}</td>
+                        <td className={operation.direction === 'increase' ? 'money-overpayment' : 'money-accrual'}>
+                          {operation.direction === 'increase' ? '+' : '−'}{formatMoney(operation.amount)} ₽
+                        </td>
+                        <td>{operation.reason}</td>
+                      </tr>
+                    ))}
+                    {cashBankSettings.recentOperations.length === 0 ? (
+                      <tr><td colSpan={5}><p className="empty-state" role="status">Операций пока нет.</p></td></tr>
+                    ) : null}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          ) : null}
+          {cashBankError ? <FormError>{cashBankError}</FormError> : null}
+          {cashBankMessage ? <div className="form-success" role="status" aria-live="polite">{cashBankMessage}</div> : null}
         </div>
       </section>
       ) : null}
@@ -1192,6 +1505,21 @@ function formatBackupKind(kind: string) {
 function formatBusinessDate(value: string) {
   const [year, month, day] = value.split('-')
   return year && month && day ? `${day}.${month}.${year}` : value
+}
+
+function parseMoneyDraft(value: string): number | null {
+  const parsed = parseMoneyInput(value)
+  return Number.isFinite(parsed) ? parsed : null
+}
+
+function formatCashBankOperation(
+  operationKind: 'opening_balance' | 'adjustment',
+  direction: 'increase' | 'decrease',
+) {
+  if (operationKind === 'opening_balance') {
+    return direction === 'increase' ? 'Стартовый остаток' : 'Исправление старта'
+  }
+  return direction === 'increase' ? 'Пополнение' : 'Списание'
 }
 
 function formatFileSize(sizeBytes: number) {

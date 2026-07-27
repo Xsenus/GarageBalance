@@ -10,6 +10,7 @@ public sealed class EfFinanceAvailableBalanceQuery(GarageBalanceDbContext dbCont
 {
     private const int FinancialOperationCategory = 1;
     private const int BankDepositCategory = 2;
+    private const int BalanceAdjustmentCategory = 3;
     private const long CashBalanceLockKey = 0x474243415348;
     private const long BankBalanceLockKey = 0x474242414E4B;
 
@@ -76,7 +77,9 @@ public sealed class EfFinanceAvailableBalanceQuery(GarageBalanceDbContext dbCont
                         !((operation.ExpenseType.Code != null && cashExpenseTypeCodes.Contains(operation.ExpenseType.Code)) ||
                             cashExpenseTypeNames.Contains(operation.ExpenseType.Name)))
                         ? operation.Amount
-                        : 0m)
+                        : 0m),
+                CashAdjustmentTotal = 0m,
+                BankAdjustmentTotal = 0m
             });
         var bankDepositQuery = dbContext.CashBankTransfers.AsNoTracking()
             .Where(transfer => !transfer.IsCanceled)
@@ -87,18 +90,47 @@ public sealed class EfFinanceAvailableBalanceQuery(GarageBalanceDbContext dbCont
                 IncomeTotal = 0m,
                 BankDepositTotal = group.Sum(transfer => transfer.Amount),
                 CashExpenseTotal = 0m,
-                BankExpenseTotal = 0m
+                BankExpenseTotal = 0m,
+                CashAdjustmentTotal = 0m,
+                BankAdjustmentTotal = 0m
+            });
+        var balanceAdjustmentQuery = dbContext.CashBankBalanceOperations.AsNoTracking()
+            .GroupBy(_ => 1)
+            .Select(group => new
+            {
+                Category = BalanceAdjustmentCategory,
+                IncomeTotal = 0m,
+                BankDepositTotal = 0m,
+                CashExpenseTotal = 0m,
+                BankExpenseTotal = 0m,
+                CashAdjustmentTotal = group.Sum(operation =>
+                    operation.Account == CashBankAccounts.Cash
+                        ? operation.Direction == CashBankBalanceDirections.Increase
+                            ? operation.Amount
+                            : -operation.Amount
+                        : 0m),
+                BankAdjustmentTotal = group.Sum(operation =>
+                    operation.Account == CashBankAccounts.Bank
+                        ? operation.Direction == CashBankBalanceDirections.Increase
+                            ? operation.Amount
+                            : -operation.Amount
+                        : 0m)
             });
 
         var rows = await financialOperationQuery
             .Concat(bankDepositQuery)
+            .Concat(balanceAdjustmentQuery)
             .ToListAsync(cancellationToken);
 
         return new FinanceAvailableBalanceData(
             rows.Sum(row => row.IncomeTotal),
             rows.Sum(row => row.BankDepositTotal),
             rows.Sum(row => row.CashExpenseTotal),
-            rows.Sum(row => row.BankExpenseTotal));
+            rows.Sum(row => row.BankExpenseTotal))
+        {
+            CashAdjustmentTotal = rows.Sum(row => row.CashAdjustmentTotal),
+            BankAdjustmentTotal = rows.Sum(row => row.BankAdjustmentTotal)
+        };
     }
 
     private static async Task ExecuteAdvisoryLockCommandAsync(

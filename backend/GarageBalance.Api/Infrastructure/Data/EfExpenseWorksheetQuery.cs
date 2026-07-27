@@ -21,6 +21,7 @@ public sealed class EfExpenseWorksheetQuery(GarageBalanceDbContext dbContext) : 
     private const int StaffPenaltyCategory = 13;
     private const int StaffOpeningBonusCategory = 14;
     private const int StaffOpeningPenaltyCategory = 15;
+    private const int BalanceAdjustmentCategory = 16;
 
     public async Task<ExpenseWorksheetData> GetAsync(
         DateOnly accountingMonth,
@@ -442,6 +443,34 @@ public sealed class EfExpenseWorksheetQuery(GarageBalanceDbContext dbContext) : 
                 StaffCreatedAtUtc = (DateTimeOffset?)null
             });
 
+        var balanceAdjustments = dbContext.CashBankBalanceOperations.AsNoTracking()
+            .GroupBy(_ => 1)
+            .Select(group => new
+            {
+                Category = BalanceAdjustmentCategory,
+                SupplierId = (Guid?)null,
+                StaffMemberId = (Guid?)null,
+                CounterpartyName = (string?)null,
+                TypeId = (Guid?)null,
+                TypeName = (string?)null,
+                TypeCode = (string?)null,
+                Amount = 0m,
+                IncomeTotal = group.Sum(operation =>
+                    operation.Direction == CashBankBalanceDirections.Increase
+                        ? operation.Amount
+                        : -operation.Amount),
+                BankDepositTotal = group.Sum(operation =>
+                    operation.Account == CashBankAccounts.Bank
+                        ? operation.Direction == CashBankBalanceDirections.Increase
+                            ? operation.Amount
+                            : -operation.Amount
+                        : 0m),
+                CashExpenseTotal = 0m,
+                BankExpenseTotal = 0m,
+                HistoryStartMonth = (DateOnly?)null,
+                StaffCreatedAtUtc = (DateTimeOffset?)null
+            });
+
         var rows = await supplierAccruals
             .Concat(supplierExpenses)
             .Concat(staffMembers)
@@ -457,6 +486,7 @@ public sealed class EfExpenseWorksheetQuery(GarageBalanceDbContext dbContext) : 
             .Concat(staffOpeningPenalties)
             .Concat(availableBalance)
             .Concat(bankDeposits)
+            .Concat(balanceAdjustments)
             .ToListAsync(cancellationToken);
 
         return new ExpenseWorksheetData(

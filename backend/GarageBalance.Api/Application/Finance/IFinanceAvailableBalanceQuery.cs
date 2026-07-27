@@ -16,4 +16,8 @@ public sealed record FinanceAvailableBalanceData(
     decimal IncomeTotal,
     decimal BankDepositTotal,
     decimal CashExpenseTotal,
-    decimal BankExpenseTotal);
+    decimal BankExpenseTotal)
+{
+    public decimal CashAdjustmentTotal { get; init; }
+    public decimal BankAdjustmentTotal { get; init; }
+}

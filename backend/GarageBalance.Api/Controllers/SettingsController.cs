@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using GarageBalance.Api.Application.Backups;
+using GarageBalance.Api.Application.Finance;
 using GarageBalance.Api.Application.Settings;
 using GarageBalance.Api.Contracts.Settings;
 using GarageBalance.Api.Domain.Security;
@@ -12,6 +13,7 @@ namespace GarageBalance.Api.Controllers;
 [Route("api/settings")]
 public sealed class SettingsController(
     IApplicationSettingsService applicationSettingsService,
+    ICashBankBalanceSettingsService cashBankBalanceSettingsService,
     IDatabaseBackupService databaseBackupService) : ControllerBase
 {
     [HttpGet("payments/display")]
@@ -61,6 +63,50 @@ public sealed class SettingsController(
         }
     }
 
+    [HttpGet("cash-bank-balances")]
+    [Authorize(Roles = SystemRoles.Administrator)]
+    [ProducesResponseType<CashBankBalanceSettingsDto>(StatusCodes.Status200OK)]
+    public async Task<ActionResult<CashBankBalanceSettingsDto>> GetCashBankBalances(
+        CancellationToken cancellationToken)
+    {
+        return Ok(await cashBankBalanceSettingsService.GetAsync(cancellationToken));
+    }
+
+    [HttpPut("cash-bank-balances/opening")]
+    [Authorize(Roles = SystemRoles.Administrator)]
+    [ProducesResponseType<CashBankBalanceSettingsDto>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
+    public async Task<ActionResult<CashBankBalanceSettingsDto>> UpdateCashBankOpeningBalances(
+        UpdateCashBankOpeningBalancesRequest request,
+        CancellationToken cancellationToken)
+    {
+        var result = await cashBankBalanceSettingsService.UpdateOpeningBalancesAsync(
+            request,
+            GetActorUserId(),
+            cancellationToken);
+        return ToCashBankBalanceActionResult(result);
+    }
+
+    [HttpPost("cash-bank-balances/adjustments")]
+    [Authorize(Roles = SystemRoles.Administrator)]
+    [ProducesResponseType<CashBankBalanceSettingsDto>(StatusCodes.Status201Created)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
+    public async Task<ActionResult<CashBankBalanceSettingsDto>> CreateCashBankBalanceAdjustment(
+        CreateCashBankBalanceAdjustmentRequest request,
+        CancellationToken cancellationToken)
+    {
+        var result = await cashBankBalanceSettingsService.CreateAdjustmentAsync(
+            request,
+            GetActorUserId(),
+            cancellationToken);
+        var response = ToCashBankBalanceActionResult(result);
+        return result.Succeeded
+            ? StatusCode(StatusCodes.Status201Created, result.Value)
+            : response;
+    }
+
     [HttpGet("backups")]
     [Authorize(Policy = SystemPermissions.UsersManage)]
     [ProducesResponseType<DatabaseBackupStatusDto>(StatusCodes.Status200OK)]
@@ -102,5 +148,24 @@ public sealed class SettingsController(
     {
         var principal = ControllerContext.HttpContext?.User;
         return principal is not null && Guid.TryParse(principal.FindFirstValue(ClaimTypes.NameIdentifier), out var userId) ? userId : null;
+    }
+
+    private ActionResult<CashBankBalanceSettingsDto> ToCashBankBalanceActionResult(
+        FinanceResult<CashBankBalanceSettingsDto> result)
+    {
+        if (result.Succeeded)
+        {
+            return Ok(result.Value);
+        }
+
+        var statusCode = result.ErrorCode is
+            "insufficient_balance" or
+            "opening_balance_below_committed_amount"
+            ? StatusCodes.Status409Conflict
+            : StatusCodes.Status400BadRequest;
+        return Problem(
+            statusCode: statusCode,
+            title: result.ErrorCode,
+            detail: result.ErrorMessage);
     }
 }

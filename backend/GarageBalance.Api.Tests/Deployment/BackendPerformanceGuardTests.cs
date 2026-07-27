@@ -68,7 +68,7 @@ public sealed class BackendPerformanceGuardTests
         Assert.Contains("CashExpenseTotal = group.Sum", source, StringComparison.Ordinal);
         Assert.Contains("BankExpenseTotal = group.Sum", source, StringComparison.Ordinal);
         Assert.Contains("dbContext.CashBankTransfers", source, StringComparison.Ordinal);
-        Assert.Equal(1, CountOccurrences(source, ".Concat("));
+        Assert.Equal(2, CountOccurrences(source, ".Concat("));
         Assert.True(CountOccurrences(source, ".ToListAsync(cancellationToken)") >= 1);
         Assert.Contains("var availableAmounts = CalculateAvailableAmounts(worksheetData.AvailableBalance);", serviceSource, StringComparison.Ordinal);
         Assert.Contains("var balance = await financeAvailableBalanceQuery.GetAsync", serviceSource, StringComparison.Ordinal);

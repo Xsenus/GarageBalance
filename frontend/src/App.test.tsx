@@ -8328,6 +8328,97 @@ describe('App', () => {
     expect(await within(displayPanel).findByText('Настройка отображения платежей сохранена.')).toHaveAttribute('role', 'status')
   })
 
+  it('lets an administrator set opening balances and record a cash replenishment', async () => {
+    const user = userEvent.setup()
+    const updateCashBankOpeningBalances = vi.fn(async (_accessToken: string, request: { cashOpeningBalance: number; bankOpeningBalance: number; reason: string }) => ({
+      cashOpeningBalance: request.cashOpeningBalance,
+      bankOpeningBalance: request.bankOpeningBalance,
+      cashCurrentBalance: request.cashOpeningBalance,
+      bankCurrentBalance: request.bankOpeningBalance,
+      recentOperations: [],
+    }))
+    const createCashBankBalanceAdjustment = vi.fn(async (_accessToken: string, request: { account: 'cash' | 'bank'; direction: 'increase' | 'decrease'; operationDate: string; amount: number; reason: string }) => ({
+      cashOpeningBalance: 1500,
+      bankOpeningBalance: 7000,
+      cashCurrentBalance: 1750,
+      bankCurrentBalance: 7000,
+      recentOperations: [{
+        id: 'cash-adjustment',
+        account: request.account,
+        operationKind: 'adjustment' as const,
+        direction: request.direction,
+        operationDate: request.operationDate,
+        amount: request.amount,
+        reason: request.reason,
+        createdAtUtc: '2026-07-27T08:00:00Z',
+      }],
+    }))
+    const settingsClient = createSettingsClient({
+      updateCashBankOpeningBalances,
+      createCashBankBalanceAdjustment,
+    })
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} integrationClient={createIntegrationClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} settingsClient={settingsClient} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Настройки')
+    const settings = await screen.findByRole('region', { name: 'Настройки' })
+    await user.click(within(settings).getByRole('tab', { name: 'Касса и счёт' }))
+    const panel = await within(settings).findByRole('region', { name: 'Остатки кассы и банковского счёта' })
+    expect(await within(panel).findByLabelText('Текущие остатки')).toHaveTextContent('1 200.00 ₽')
+
+    const cashOpeningInput = within(panel).getByLabelText('Стартовый остаток кассы')
+    const bankOpeningInput = within(panel).getByLabelText('Стартовый остаток банковского счёта')
+    await user.clear(cashOpeningInput)
+    await user.type(cashOpeningInput, '1500')
+    await user.clear(bankOpeningInput)
+    await user.type(bankOpeningInput, '7000')
+    await user.type(within(panel).getByLabelText('Причина изменения стартовых остатков'), 'Остатки на дату запуска')
+    await user.click(within(panel).getByRole('button', { name: 'Сохранить стартовые остатки' }))
+    await waitFor(() => expect(updateCashBankOpeningBalances).toHaveBeenCalledWith('token', {
+      cashOpeningBalance: 1500,
+      bankOpeningBalance: 7000,
+      reason: 'Остатки на дату запуска',
+    }))
+
+    await user.click(within(panel).getAllByRole('button', { name: 'Пополнить' })[0])
+    const adjustmentForm = within(panel).getByRole('form', { name: 'Пополнение остатка' })
+    await user.type(within(adjustmentForm).getByLabelText('Сумма операции'), '250')
+    await user.type(within(adjustmentForm).getByLabelText('Причина операции'), 'Размен кассы')
+    await user.click(within(adjustmentForm).getByRole('button', { name: 'Провести операцию' }))
+
+    await waitFor(() => expect(createCashBankBalanceAdjustment).toHaveBeenCalledWith('token', expect.objectContaining({
+      account: 'cash',
+      direction: 'increase',
+      amount: 250,
+      reason: 'Размен кассы',
+    })))
+    expect(await within(panel).findByText('Операция проведена и записана в историю изменений.')).toHaveAttribute('role', 'status')
+    expect(within(panel).getByRole('table', { name: 'Последние операции с кассой и банковским счётом' })).toHaveTextContent('Размен кассы')
+  })
+
+  it('validates a cash write-off before sending it to the API', async () => {
+    const user = userEvent.setup()
+    const createCashBankBalanceAdjustment = vi.fn()
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} integrationClient={createIntegrationClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} settingsClient={createSettingsClient({ createCashBankBalanceAdjustment })} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Настройки')
+    const settings = await screen.findByRole('region', { name: 'Настройки' })
+    await user.click(within(settings).getByRole('tab', { name: 'Касса и счёт' }))
+    const panel = await within(settings).findByRole('region', { name: 'Остатки кассы и банковского счёта' })
+    await within(panel).findByLabelText('Текущие остатки')
+    await user.click(within(panel).getAllByRole('button', { name: 'Списать' })[0])
+    const adjustmentForm = within(panel).getByRole('form', { name: 'Списание остатка' })
+    await user.type(within(adjustmentForm).getByLabelText('Сумма операции'), '0')
+    await user.type(within(adjustmentForm).getByLabelText('Причина операции'), 'Проверка списания')
+    await user.click(within(adjustmentForm).getByRole('button', { name: 'Провести операцию' }))
+
+    expect(await within(panel).findByRole('alert')).toHaveTextContent('Сумма операции должна быть больше нуля.')
+    expect(createCashBankBalanceAdjustment).not.toHaveBeenCalled()
+  })
+
   it('lets only the administrator confirm a business date and starts automatic accruals', async () => {
     const user = userEvent.setup()
     const updateBusinessDateSettings = vi.fn(async (_accessToken: string, request: { overrideDate: string | null }) => ({
@@ -8510,10 +8601,11 @@ describe('App', () => {
   })
 
   it.each([
-    ['администратора', createAuthResponse()],
-    ['пользователя без административных прав', createAuthResponse({ user: { permissions: ['dictionaries.read'] } })],
-  ])('shows settings tabs and limits integrations for %s', async (_roleLabel, auth) => {
+    ['администратора', () => createAuthResponse()],
+    ['пользователя без административных прав', () => createAuthResponse({ user: { permissions: ['dictionaries.read'] } })],
+  ])('shows settings tabs and limits integrations for %s', async (_roleLabel, createAuth) => {
     const user = userEvent.setup()
+    const auth = createAuth()
     const getOneCFreshStatus = vi.fn(async () => createOneCFreshStatus())
     const getReceiptPrintingStatus = vi.fn(async () => createReceiptPrintingStatus())
     const integrationClient = createIntegrationClient({ getOneCFreshStatus, getReceiptPrintingStatus })
@@ -8529,8 +8621,10 @@ describe('App', () => {
     expect(within(settings).getByRole('region', { name: 'Безопасность аккаунта' })).toBeInTheDocument()
     if (auth.user.roles.includes('administrator')) {
       expect(within(tabList).getByRole('tab', { name: 'Рабочая дата' })).toBeInTheDocument()
+      expect(within(tabList).getByRole('tab', { name: 'Касса и счёт' })).toBeInTheDocument()
     } else {
       expect(within(tabList).queryByRole('tab', { name: 'Рабочая дата' })).not.toBeInTheDocument()
+      expect(within(tabList).queryByRole('tab', { name: 'Касса и счёт' })).not.toBeInTheDocument()
     }
     if (auth.user.permissions.includes('users.manage')) {
       expect(within(tabList).getByRole('tab', { name: 'Отображение' })).toBeInTheDocument()
@@ -16671,6 +16765,36 @@ function createSettingsClient(overrides: Partial<ApplicationSettingsClient> = {}
       isOverrideActive: request.overrideDate !== null,
       updatedAtUtc: '2026-07-21T09:00:00Z',
       automation: { succeeded: true, createdCount: 2, skippedCount: 3, message: 'Начисления сформированы.' },
+    }),
+    getCashBankBalances: async () => ({
+      cashOpeningBalance: 1000,
+      bankOpeningBalance: 5000,
+      cashCurrentBalance: 1200,
+      bankCurrentBalance: 4800,
+      recentOperations: [],
+    }),
+    updateCashBankOpeningBalances: async (_accessToken, request) => ({
+      cashOpeningBalance: request.cashOpeningBalance,
+      bankOpeningBalance: request.bankOpeningBalance,
+      cashCurrentBalance: request.cashOpeningBalance,
+      bankCurrentBalance: request.bankOpeningBalance,
+      recentOperations: [],
+    }),
+    createCashBankBalanceAdjustment: async (_accessToken, request) => ({
+      cashOpeningBalance: 1000,
+      bankOpeningBalance: 5000,
+      cashCurrentBalance: request.account === 'cash' && request.direction === 'increase' ? 1000 + request.amount : 1000,
+      bankCurrentBalance: 5000,
+      recentOperations: [{
+        id: 'balance-operation',
+        account: request.account,
+        operationKind: 'adjustment',
+        direction: request.direction,
+        operationDate: request.operationDate,
+        amount: request.amount,
+        reason: request.reason,
+        createdAtUtc: '2026-07-27T08:00:00Z',
+      }],
     }),
     getDatabaseBackups: async () => ({
       enabled: true,

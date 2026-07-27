@@ -928,6 +928,82 @@ h1 {
   grid-template-columns: repeat(3, minmax(120px, 1fr));
 }
 
+.settings-card--cash-bank {
+  width: 100%;
+  grid-template-columns: minmax(280px, 0.55fr) minmax(0, 1fr);
+}
+
+.cash-bank-settings {
+  min-width: 0;
+  gap: 16px;
+}
+
+.cash-bank-summary {
+  grid-template-columns: repeat(2, minmax(140px, 1fr));
+}
+
+.cash-bank-opening-form,
+.cash-bank-adjustment-form {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid #dce3ee;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.cash-bank-opening-grid,
+.cash-bank-adjustment-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.cash-bank-opening-grid > :last-child,
+.cash-bank-adjustment-grid > :last-child {
+  grid-column: 1 / -1;
+}
+
+.cash-bank-action-groups {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.cash-bank-action-card {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid #dce3ee;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.cash-bank-action-card > div:first-child {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #344054;
+}
+
+.settings-card-intro--compact {
+  align-self: start;
+}
+
+.settings-card-intro--compact h3 {
+  margin-top: 2px;
+}
+
+.cash-bank-history-shell {
+  min-width: 0;
+}
+
+.cash-bank-history-shell td:last-child {
+  min-width: 180px;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
 .form-warning {
   padding: 11px 13px;
   border: 1px solid #f5c97b;
@@ -8084,6 +8160,13 @@ button.operation-row:focus-visible {
 
   .settings-card--backups .summary-strip,
   .settings-card--diagnostics .summary-strip {
+    grid-template-columns: 1fr;
+  }
+
+  .cash-bank-summary,
+  .cash-bank-opening-grid,
+  .cash-bank-adjustment-grid,
+  .cash-bank-action-groups {
     grid-template-columns: 1fr;
   }
 

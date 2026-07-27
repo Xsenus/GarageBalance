@@ -52,6 +52,8 @@ builder.Services.AddDbContext<GarageBalanceDbContext>(options =>
 builder.Services.AddScoped<IApplicationUnitOfWork, EfApplicationUnitOfWork>();
 builder.Services.AddScoped<IApplicationSettingRepository, EfApplicationSettingRepository>();
 builder.Services.AddScoped<IApplicationSettingsService, ApplicationSettingsService>();
+builder.Services.AddScoped<ICashBankBalanceOperationRepository, EfCashBankBalanceOperationRepository>();
+builder.Services.AddScoped<ICashBankBalanceSettingsService, CashBankBalanceSettingsService>();
 builder.Services.AddScoped<IUserRepository, EfUserRepository>();
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IDictionaryService, DictionaryService>();

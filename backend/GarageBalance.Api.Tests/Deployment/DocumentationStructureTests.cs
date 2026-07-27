@@ -22,6 +22,7 @@ public sealed partial class DocumentationStructureTests
         "postgres-backup-restore.md",
         "reports-guide.md",
         "roadmaps/customer-comments-2026-07-22-roadmap.md",
+        "roadmaps/customer-comments-2026-07-27-roadmap.md",
         "roadmaps/docker-user-distribution-roadmap.md",
         "security-data-protection.md",
         "testing-guide.md",

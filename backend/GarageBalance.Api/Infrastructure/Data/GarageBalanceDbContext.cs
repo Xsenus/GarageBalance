@@ -40,6 +40,7 @@ public sealed class GarageBalanceDbContext(DbContextOptions<GarageBalanceDbConte
     public DbSet<SupplierAccrual> SupplierAccruals => Set<SupplierAccrual>();
     public DbSet<StaffSalaryAdjustment> StaffSalaryAdjustments => Set<StaffSalaryAdjustment>();
     public DbSet<CashBankTransfer> CashBankTransfers => Set<CashBankTransfer>();
+    public DbSet<CashBankBalanceOperation> CashBankBalanceOperations => Set<CashBankBalanceOperation>();
     public DbSet<MeterReading> MeterReadings => Set<MeterReading>();
     public DbSet<Fund> Funds => Set<Fund>();
     public DbSet<FundOperation> FundOperations => Set<FundOperation>();
@@ -658,6 +659,37 @@ public sealed class GarageBalanceDbContext(DbContextOptions<GarageBalanceDbConte
             entity.HasIndex(transfer => transfer.CreatedAtUtc);
             entity.HasIndex(transfer => transfer.ActorUserId);
             entity.HasIndex(transfer => transfer.IsCanceled);
+        });
+
+        modelBuilder.Entity<CashBankBalanceOperation>(entity =>
+        {
+            entity.ToTable(
+                "cash_bank_balance_operations",
+                table =>
+                {
+                    table.HasCheckConstraint(
+                        "CK_cash_bank_balance_operations_Account",
+                        "\"Account\" IN ('cash', 'bank')");
+                    table.HasCheckConstraint(
+                        "CK_cash_bank_balance_operations_OperationKind",
+                        "\"OperationKind\" IN ('opening_balance', 'adjustment')");
+                    table.HasCheckConstraint(
+                        "CK_cash_bank_balance_operations_Direction",
+                        "\"Direction\" IN ('increase', 'decrease')");
+                    table.HasCheckConstraint(
+                        "CK_cash_bank_balance_operations_Amount",
+                        "\"Amount\" > 0");
+                });
+            entity.HasKey(operation => operation.Id);
+            entity.Property(operation => operation.Account).HasMaxLength(20).IsRequired();
+            entity.Property(operation => operation.OperationKind).HasMaxLength(30).IsRequired();
+            entity.Property(operation => operation.Direction).HasMaxLength(20).IsRequired();
+            entity.Property(operation => operation.Amount).HasPrecision(18, 2);
+            entity.Property(operation => operation.Reason).HasMaxLength(1000).IsRequired();
+            entity.HasIndex(operation => operation.OperationDate);
+            entity.HasIndex(operation => operation.CreatedAtUtc);
+            entity.HasIndex(operation => operation.ActorUserId);
+            entity.HasIndex(operation => new { operation.Account, operation.OperationKind });
         });
 
         modelBuilder.Entity<FormState>(entity =>

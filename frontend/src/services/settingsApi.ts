@@ -16,6 +16,25 @@ export type BusinessDateSettingsDto = {
   } | null
 }
 
+export type CashBankBalanceOperationDto = {
+  id: string
+  account: 'cash' | 'bank'
+  operationKind: 'opening_balance' | 'adjustment'
+  direction: 'increase' | 'decrease'
+  operationDate: string
+  amount: number
+  reason: string
+  createdAtUtc: string
+}
+
+export type CashBankBalanceSettingsDto = {
+  cashOpeningBalance: number
+  bankOpeningBalance: number
+  cashCurrentBalance: number
+  bankCurrentBalance: number
+  recentOperations: CashBankBalanceOperationDto[]
+}
+
 export type DatabaseBackupFileDto = {
   fileName: string
   sizeBytes: number
@@ -51,6 +70,9 @@ export type ApplicationSettingsClient = {
   updatePaymentDisplaySettings(accessToken: string, request: PaymentDisplaySettingsDto): Promise<PaymentDisplaySettingsDto>
   getBusinessDateSettings(accessToken: string): Promise<BusinessDateSettingsDto>
   updateBusinessDateSettings(accessToken: string, request: { overrideDate: string | null }): Promise<BusinessDateSettingsDto>
+  getCashBankBalances(accessToken: string): Promise<CashBankBalanceSettingsDto>
+  updateCashBankOpeningBalances(accessToken: string, request: { cashOpeningBalance: number; bankOpeningBalance: number; reason: string }): Promise<CashBankBalanceSettingsDto>
+  createCashBankBalanceAdjustment(accessToken: string, request: { account: 'cash' | 'bank'; direction: 'increase' | 'decrease'; operationDate: string; amount: number; reason: string }): Promise<CashBankBalanceSettingsDto>
   getDatabaseBackups(accessToken: string): Promise<DatabaseBackupStatusDto>
   createDatabaseBackup(accessToken: string, request: { reason: string }): Promise<DatabaseBackupFileDto>
   getDiagnosticLogStatus(accessToken: string): Promise<DiagnosticLogStatusDto>
@@ -101,6 +123,15 @@ export const settingsApi: ApplicationSettingsClient = {
   },
   updateBusinessDateSettings(accessToken, request) {
     return requestJson(accessToken, '/api/settings/business-date', { method: 'PUT', body: JSON.stringify(request) })
+  },
+  getCashBankBalances(accessToken) {
+    return requestJson(accessToken, '/api/settings/cash-bank-balances')
+  },
+  updateCashBankOpeningBalances(accessToken, request) {
+    return requestJson(accessToken, '/api/settings/cash-bank-balances/opening', { method: 'PUT', body: JSON.stringify(request) })
+  },
+  createCashBankBalanceAdjustment(accessToken, request) {
+    return requestJson(accessToken, '/api/settings/cash-bank-balances/adjustments', { method: 'POST', body: JSON.stringify(request) })
   },
   getDatabaseBackups(accessToken) {
     return requestJson(accessToken, '/api/settings/backups')

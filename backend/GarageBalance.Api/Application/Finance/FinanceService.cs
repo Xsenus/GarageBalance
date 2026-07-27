@@ -52,27 +52,11 @@ public sealed class FinanceService(
     private const string OtherPaymentsIncomeTypeCode = "other_payments";
     private const string OtherIncomeIncomeTypeCode = "other_income";
     private const string DebtTransferIncomeTypeName = "Перенос задолженности";
-    private const string AdvancePaymentExpenseTypeName = "Авансовые выплаты";
-    private const string NoReceiptPaymentExpenseTypeName = "Выплата без чека";
+    private const string AdvancePaymentExpenseTypeName = CashExpenseClassification.AdvancePaymentExpenseTypeName;
+    private const string NoReceiptPaymentExpenseTypeName = CashExpenseClassification.NoReceiptPaymentExpenseTypeName;
     private static readonly CultureInfo RussianCulture = CultureInfo.GetCultureInfo("ru-RU");
-    private static readonly string[] CashExpenseTypeCodes =
-    [
-        "advance",
-        "advance_payment",
-        "advance_payments",
-        "cash_advance",
-        "no_receipt",
-        "without_receipt",
-        "no_check",
-        "without_check",
-        "cash_no_receipt"
-    ];
-
-    private static readonly string[] CashExpenseTypeNames =
-    [
-        AdvancePaymentExpenseTypeName,
-        NoReceiptPaymentExpenseTypeName
-    ];
+    private static readonly string[] CashExpenseTypeCodes = CashExpenseClassification.TypeCodes;
+    private static readonly string[] CashExpenseTypeNames = CashExpenseClassification.TypeNames;
 
     private static readonly HashSet<string> CashExpenseTypeKeys = CashExpenseTypeCodes
         .Select(NormalizeFinanceLookupKey)
@@ -1053,8 +1037,12 @@ public sealed class FinanceService(
 
     private static AvailableAmounts CalculateAvailableAmounts(FinanceAvailableBalanceData balance)
     {
-        var bankAmount = MoneyMath.RoundMoney(Math.Max(balance.BankDepositTotal - balance.BankExpenseTotal, 0m));
-        var cashAmount = MoneyMath.RoundMoney(Math.Max(balance.IncomeTotal - balance.BankDepositTotal - balance.CashExpenseTotal, 0m));
+        var bankAmount = MoneyMath.RoundMoney(Math.Max(
+            balance.BankAdjustmentTotal + balance.BankDepositTotal - balance.BankExpenseTotal,
+            0m));
+        var cashAmount = MoneyMath.RoundMoney(Math.Max(
+            balance.CashAdjustmentTotal + balance.IncomeTotal - balance.BankDepositTotal - balance.CashExpenseTotal,
+            0m));
 
         return new AvailableAmounts(bankAmount, cashAmount);
     }
