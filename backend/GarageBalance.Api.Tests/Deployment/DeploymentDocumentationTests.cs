@@ -13,6 +13,9 @@ public sealed class DeploymentDocumentationTests
         Assert.Contains("ConnectionStrings__DefaultConnection", document, StringComparison.Ordinal);
         Assert.DoesNotContain("ConnectionStrings__Postgres", document, StringComparison.Ordinal);
         Assert.Contains("DataProtection__KeysPath=/var/lib/garagebalance-staging/data-protection-keys", document, StringComparison.Ordinal);
+        Assert.Contains("Microsoft.EntityFrameworkCore.Database.Command", document, StringComparison.Ordinal);
+        Assert.Contains("proxy_http_version 1.1", document, StringComparison.Ordinal);
+        Assert.Contains("proxy_set_header Connection \"\"", document, StringComparison.Ordinal);
         Assert.Contains("garagebalance-staging.service", document, StringComparison.Ordinal);
         Assert.Contains("certbot --nginx -d sgk.blagodaty.ru", document, StringComparison.Ordinal);
         Assert.Contains("nginx -t", document, StringComparison.Ordinal);

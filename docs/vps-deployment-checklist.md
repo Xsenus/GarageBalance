@@ -134,6 +134,8 @@ server {
 
     location /api/ {
         proxy_pass http://127.0.0.1:3101/api/;
+        proxy_http_version 1.1;
+        proxy_set_header Connection "";
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -164,6 +166,7 @@ server {
 - [ ] Повторно проверить `nginx -t`.
 - [ ] Перезагрузить nginx: `systemctl reload nginx`.
 - [ ] Проверить HTTPS health: `curl -fsS https://sgk.blagodaty.ru/health`.
+- [ ] Проверить, что опубликованный `appsettings.json` задает уровень `Warning` для категории `Microsoft.EntityFrameworkCore.Database.Command` и рабочее окружение не пишет каждый успешно выполненный SQL-запрос.
 - [ ] Проверить главную страницу с телефона и desktop-браузера.
 - [ ] Проверить, что `index.html` и SPA fallback отдаются с `Cache-Control: no-store`.
 
