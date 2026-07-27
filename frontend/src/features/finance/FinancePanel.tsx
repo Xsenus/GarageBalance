@@ -2922,9 +2922,24 @@ function addPaymentPrototypeMonths(value: string, offset: number) {
   return `${year}-${month}`
 }
 
-function createPaymentPrototypeMonthOptions(currentMonth = getCurrentMonthInputValue(), extraMonths: string[] = []) {
+function createPaymentPrototypeMonthOptions(
+  currentMonth = getCurrentMonthInputValue(),
+  availableMonthFrom = addPaymentPrototypeMonths(currentMonth, -3),
+  availableMonthTo = currentMonth,
+  extraMonths: string[] = [],
+) {
+  const rangeMonthCount = Math.max(
+    1,
+    Math.min(
+      600,
+      ((Number(availableMonthTo.slice(0, 4)) - Number(availableMonthFrom.slice(0, 4))) * 12)
+        + Number(availableMonthTo.slice(5, 7))
+        - Number(availableMonthFrom.slice(5, 7))
+        + 1,
+    ),
+  )
   const values = [
-    ...Array.from({ length: 4 }, (_, index) => addPaymentPrototypeMonths(currentMonth, -index)),
+    ...Array.from({ length: rangeMonthCount }, (_, index) => addPaymentPrototypeMonths(availableMonthTo, -index)),
     ...extraMonths,
   ].filter((value, index, source) => value && source.indexOf(value) === index)
 
@@ -2988,6 +3003,8 @@ function PaymentsPrototypePanel({
   const [overdueDebtRefresh, setOverdueDebtRefresh] = useState(0)
   const [incomeWorksheetMonthFrom, setIncomeWorksheetMonthFrom] = useState(() => getPreviousMonthInputValue(getCurrentMonthInputValue()))
   const [incomeWorksheetMonthTo, setIncomeWorksheetMonthTo] = useState(() => getCurrentMonthInputValue())
+  const [incomeWorksheetAvailableMonthFrom, setIncomeWorksheetAvailableMonthFrom] = useState(() => getPreviousMonthInputValue(getCurrentMonthInputValue()))
+  const [incomeWorksheetAvailableMonthTo, setIncomeWorksheetAvailableMonthTo] = useState(() => getCurrentMonthInputValue())
   const [garageRows, setGarageRows] = useState<GarageIncomePrototypeRow[]>([])
   const [garageWorksheetSummary, setGarageWorksheetSummary] = useState<GarageIncomeWorksheetPeriodSummary | null>(null)
   const [expenseRows, setExpenseRows] = useState<PaymentPrototypeRow[]>([])
@@ -3074,8 +3091,13 @@ function PaymentsPrototypePanel({
   const shouldShowGarageResults = garageSearchOpen && garageSearch.trim().length > 0
   const garageSearchListId = useId()
   const incomeWorksheetMonthOptions = useMemo(
-    () => createPaymentPrototypeMonthOptions(getCurrentMonthInputValue(), [incomeWorksheetMonthFrom, incomeWorksheetMonthTo]),
-    [incomeWorksheetMonthFrom, incomeWorksheetMonthTo],
+    () => createPaymentPrototypeMonthOptions(
+      getCurrentMonthInputValue(),
+      incomeWorksheetAvailableMonthFrom,
+      incomeWorksheetAvailableMonthTo,
+      [incomeWorksheetMonthFrom, incomeWorksheetMonthTo],
+    ),
+    [incomeWorksheetAvailableMonthFrom, incomeWorksheetAvailableMonthTo, incomeWorksheetMonthFrom, incomeWorksheetMonthTo],
   )
 
   useEffect(() => {
@@ -3357,18 +3379,37 @@ function PaymentsPrototypePanel({
     monthFrom = incomeWorksheetMonthFrom,
     monthTo = incomeWorksheetMonthTo,
     preservedMeter?: Pick<GarageIncomePrototypeRow, 'meterKind' | 'month' | 'meterDraft' | 'meterError'>,
+    resolveAvailablePeriod = false,
   ) {
     const requestId = incomeWorksheetRequests.begin()
     setGarageWorksheetLoadingId(garage.id)
     try {
+      let resolvedMonthFrom = monthFrom
+      let resolvedMonthTo = monthTo
+      if (resolveAvailablePeriod) {
+        const period = await financeClient.getFinancialReportPeriod(auth.accessToken, { garageId: garage.id })
+        if (!incomeWorksheetRequests.isLatest(requestId) || selectedGarageIdRef.current !== garage.id) {
+          return
+        }
+
+        resolvedMonthFrom = period.monthFrom.slice(0, 7)
+        resolvedMonthTo = period.monthTo.slice(0, 7)
+      }
+
       const worksheet = await financeClient.getGarageIncomeWorksheet(auth.accessToken, garage.id, {
-        monthFrom: `${monthFrom}-01`,
-        monthTo: `${monthTo}-01`,
+        monthFrom: `${resolvedMonthFrom}-01`,
+        monthTo: `${resolvedMonthTo}-01`,
       })
       if (!incomeWorksheetRequests.isLatest(requestId) || selectedGarageIdRef.current !== garage.id) {
         return
       }
 
+      if (resolveAvailablePeriod) {
+        setIncomeWorksheetAvailableMonthFrom(resolvedMonthFrom)
+        setIncomeWorksheetAvailableMonthTo(resolvedMonthTo)
+        setIncomeWorksheetMonthFrom(resolvedMonthFrom)
+        setIncomeWorksheetMonthTo(resolvedMonthTo)
+      }
       const rows = createGarageIncomeRowsFromWorksheet(worksheet).map((worksheetRow) => (
         preservedMeter
         && worksheetRow.meterKind === preservedMeter.meterKind
@@ -3634,6 +3675,8 @@ function PaymentsPrototypePanel({
   }
 
   function activateGarage(garage: PaymentsPrototypeGarage) {
+    const currentMonth = getCurrentMonthInputValue()
+    const previousMonth = getPreviousMonthInputValue(currentMonth)
     selectedGarageIdRef.current = garage.id
     paymentHistoryRequests.invalidate()
     setSelectedGarageId(garage.id)
@@ -3644,7 +3687,11 @@ function PaymentsPrototypePanel({
     setGaragePaymentHistoryLoadingId(null)
     setPaymentError(null)
     setReceiptActionStatus(null)
-    void loadGarageIncomeWorksheet(garage)
+    setIncomeWorksheetAvailableMonthFrom(previousMonth)
+    setIncomeWorksheetAvailableMonthTo(currentMonth)
+    setIncomeWorksheetMonthFrom(previousMonth)
+    setIncomeWorksheetMonthTo(currentMonth)
+    void loadGarageIncomeWorksheet(garage, previousMonth, currentMonth, undefined, true)
   }
 
   function removeGarageSelection(garage: PaymentsPrototypeGarage) {

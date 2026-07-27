@@ -6229,6 +6229,7 @@ describe('App', () => {
   it('loads selected garage income worksheet from finance backend', async () => {
     const user = userEvent.setup()
     const garageFromDictionary = createGarage({ id: 'garage-77', number: '77', ownerName: 'Кузнецова Мария', ownerPhone: '+7 900 111-22-33', peopleCount: 4, floorCount: 2, startingBalance: -7200 })
+    const getFinancialReportPeriod = vi.fn(async () => ({ monthFrom: '2024-02-01', monthTo: `${getTestCurrentMonthInputValue()}-01` }))
     const getGarageIncomeWorksheet = vi.fn(async (_token: string, garageId: string) => createGarageIncomeWorksheet({
       garageId,
       garageNumber: '77',
@@ -6254,7 +6255,7 @@ describe('App', () => {
         },
       ],
     }))
-    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient({ getGarages: async () => [garageFromDictionary] })} financeClient={createFinanceClient({ getGarageIncomeWorksheet })} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient({ getGarages: async () => [garageFromDictionary] })} financeClient={createFinanceClient({ getFinancialReportPeriod, getGarageIncomeWorksheet })} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
     await user.click(screen.getByRole('button', { name: 'Войти' }))
@@ -6269,13 +6270,17 @@ describe('App', () => {
     expect(within(prototype).getByLabelText('Выбранный гараж')).toHaveTextContent('+7 900 111-22-33')
 
     const currentMonth = getTestCurrentMonthInputValue()
-    const previousMonth = addTestMonths(currentMonth, -1)
     const twoMonthsAgo = addTestMonths(currentMonth, -2)
+    await waitFor(() => expect(getFinancialReportPeriod).toHaveBeenCalledWith('token', { garageId: 'garage-77' }))
     await waitFor(() => expect(getGarageIncomeWorksheet).toHaveBeenCalledWith('token', 'garage-77', {
-      monthFrom: `${previousMonth}-01`,
+      monthFrom: '2024-02-01',
       monthTo: `${currentMonth}-01`,
     }))
-    await user.click(within(prototype).getByRole('combobox', { name: 'Месяц поступлений с' }))
+    const monthFromControl = within(prototype).getByRole('combobox', { name: 'Месяц поступлений с' })
+    expect(monthFromControl).toHaveTextContent('02.2024')
+    await user.click(monthFromControl)
+    expect(within(prototype).getByRole('option', { name: '02.2024' })).toBeInTheDocument()
+    expect(within(prototype).getByRole('option', { name: '03.2024' })).toBeInTheDocument()
     await user.click(within(prototype).getAllByRole('option')[2])
     await waitFor(() => expect(getGarageIncomeWorksheet).toHaveBeenLastCalledWith('token', 'garage-77', {
       monthFrom: `${twoMonthsAgo}-01`,
@@ -6300,6 +6305,87 @@ describe('App', () => {
     expect(within(incomeTable).getByRole('columnheader', { name: 'Баланс' })).toBeInTheDocument()
     expect(within(incomeTable).queryByRole('columnheader', { name: 'Аванс' })).not.toBeInTheDocument()
     expect(within(incomeTable).queryByRole('columnheader', { name: 'Задолженность' })).not.toBeInTheDocument()
+  })
+
+  it('shows an error when the garage financial period is unavailable without requesting a partial worksheet', async () => {
+    const user = userEvent.setup()
+    const garage = createGarage({ id: 'garage-period-error', number: '76', ownerName: 'Орлова Ирина' })
+    const getFinancialReportPeriod = vi.fn(async () => {
+      throw new Error('Не удалось определить финансовую историю гаража')
+    })
+    const getGarageIncomeWorksheet = vi.fn()
+    render(<App
+      authClient={createAuthClient()}
+      dictionaryClient={createDictionaryClient({ getGarages: async () => [garage] })}
+      financeClient={createFinanceClient({ getFinancialReportPeriod, getGarageIncomeWorksheet })}
+      importClient={createImportClient()}
+      reportClient={createReportClient()}
+      releaseClient={createReleaseClient()}
+      userClient={createUserClient()}
+    />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Платежи')
+    const prototype = within(await screen.findByRole('region', { name: 'Платежи' })).getByRole('region', { name: 'Форма платежей' })
+    await user.type(within(prototype).getByLabelText('Поиск номера гаража или ФИО владельца'), '76')
+    await user.click(await within(prototype).findByRole('option', { name: /Гараж\s*76\s*Орлова Ирина/ }))
+
+    expect(await within(prototype).findByRole('alert')).toHaveTextContent('Не удалось определить финансовую историю гаража')
+    expect(getGarageIncomeWorksheet).not.toHaveBeenCalled()
+    expect(within(prototype).getByRole('table', { name: 'Поступления гаража 76' })).toHaveTextContent('Начислений и поступлений за выбранный период пока нет.')
+  })
+
+  it('ignores a stale financial period when another garage is selected', async () => {
+    const user = userEvent.setup()
+    const firstGarage = createGarage({ id: 'garage-period-first', number: '74', ownerName: 'Первый владелец' })
+    const secondGarage = createGarage({ id: 'garage-period-second', number: '75', ownerName: 'Второй владелец' })
+    let resolveFirstPeriod!: (value: { monthFrom: string; monthTo: string }) => void
+    const firstPeriodRequest = new Promise<{ monthFrom: string; monthTo: string }>((resolve) => { resolveFirstPeriod = resolve })
+    const getFinancialReportPeriod = vi.fn(async (_token: string, params: Parameters<FinanceClient['getFinancialReportPeriod']>[1]) => (
+      params.garageId === firstGarage.id
+        ? firstPeriodRequest
+        : { monthFrom: '2025-03-01', monthTo: '2026-07-01' }
+    ))
+    const getGarageIncomeWorksheet = vi.fn(async (_token: string, garageId: string) => createGarageIncomeWorksheet({
+      garageId,
+      garageNumber: garageId === secondGarage.id ? secondGarage.number : firstGarage.number,
+      ownerName: garageId === secondGarage.id ? secondGarage.ownerName : firstGarage.ownerName,
+      rows: [],
+    }))
+    render(<App
+      authClient={createAuthClient()}
+      dictionaryClient={createDictionaryClient({ getGarages: async () => [firstGarage, secondGarage] })}
+      financeClient={createFinanceClient({ getFinancialReportPeriod, getGarageIncomeWorksheet })}
+      importClient={createImportClient()}
+      reportClient={createReportClient()}
+      releaseClient={createReleaseClient()}
+      userClient={createUserClient()}
+    />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Платежи')
+    const prototype = within(await screen.findByRole('region', { name: 'Платежи' })).getByRole('region', { name: 'Форма платежей' })
+    const search = within(prototype).getByLabelText('Поиск номера гаража или ФИО владельца')
+    await user.type(search, '74')
+    await user.click(await within(prototype).findByRole('option', { name: /Гараж\s*74\s*Первый владелец/ }))
+    await user.clear(search)
+    await user.type(search, '75')
+    await user.click(await within(prototype).findByRole('option', { name: /Гараж\s*75\s*Второй владелец/ }))
+
+    await waitFor(() => expect(getGarageIncomeWorksheet).toHaveBeenCalledWith('token', secondGarage.id, {
+      monthFrom: '2025-03-01',
+      monthTo: '2026-07-01',
+    }))
+    expect(within(prototype).getByRole('combobox', { name: 'Месяц поступлений с' })).toHaveTextContent('03.2025')
+
+    resolveFirstPeriod({ monthFrom: '2020-01-01', monthTo: '2026-07-01' })
+    await act(async () => { await firstPeriodRequest })
+
+    expect(getGarageIncomeWorksheet).not.toHaveBeenCalledWith('token', firstGarage.id, expect.anything())
+    expect(within(prototype).getByRole('combobox', { name: 'Месяц поступлений с' })).toHaveTextContent('03.2025')
+    expect(within(prototype).getByLabelText('Выбранный гараж')).toHaveTextContent('Второй владелец')
   })
 
   it('caps a garage row payment and shows the excess as advance', async () => {
