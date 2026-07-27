@@ -220,7 +220,8 @@ type FullPaymentPrototypeSubmitRequest = {
 }
 
 type GarageAccrualPrototypeSubmitRequest = {
-  irregularPaymentId: string
+  basis: string
+  amount: number
   accountingMonth: string
   comment: string
 }
@@ -1437,7 +1438,7 @@ export function FinancePanel({
     if ('supplierName' in record) {
       return `${record.expenseTypeName} · ${record.supplierName} · ${formatMoney(record.amount)}`
     }
-    return `${record.incomeTypeName} · ${formatFinanceGarageLabel(record.garageNumber)} · ${formatMoney(record.amount)}`
+    return `${record.basis ?? record.incomeTypeName} · ${formatFinanceGarageLabel(record.garageNumber)} · ${formatMoney(record.amount)}`
   }
 
   async function confirmRestoreFinanceRecord() {
@@ -1839,7 +1840,7 @@ export function FinancePanel({
                 <td>{accrual.accountingYear ?? '—'}</td>
                 <td>{formatFinanceGarageLabel(accrual.garageNumber)}</td>
                 <td>{getFinanceOptionalText(accrual.ownerName)}</td>
-                <td>{accrual.incomeTypeName}</td>
+                <td>{accrual.basis ?? accrual.incomeTypeName}</td>
                 <td>{formatAccrualSource(accrual.source)}</td>
                 <td className="money-accrual">{formatMoney(accrual.amount)}</td>
                 <td>{getFinanceOptionalText(accrual.comment, 'noComment')}</td>
@@ -2528,14 +2529,14 @@ export function FinancePanel({
               className="operation-row operation-row--interactive"
               role="row"
               tabIndex={0}
-              aria-label={`Разбивка начисления ${accrual.incomeTypeName} гараж ${accrual.garageNumber}`}
+              aria-label={`Разбивка начисления ${accrual.basis ?? accrual.incomeTypeName} гараж ${accrual.garageNumber}`}
               key={accrual.id}
               onDoubleClick={() => openAccrualBreakdown({ kind: 'garage', accrual })}
               onKeyDown={(event) => handleAccrualBreakdownKeyDown(event, { kind: 'garage', accrual })}
             >
               <span role="cell">{formatMonth(accrual.accountingMonth)}</span>
               <span role="cell">
-                <strong>{accrual.incomeTypeName}</strong>
+                <strong>{accrual.basis ?? accrual.incomeTypeName}</strong>
                 <small>Гараж {accrual.garageNumber}</small>
                 {accrual.accountingYear ? <small>Учетный год: {accrual.accountingYear}</small> : null}
                 <small>{formatAccrualSource(accrual.source)}</small>
@@ -2822,6 +2823,12 @@ export function FinancePanel({
                   <dt>Вид начисления</dt>
                   <dd>{accrualBreakdown.accrual.incomeTypeName}</dd>
                 </div>
+                {accrualBreakdown.accrual.basis ? (
+                  <div>
+                    <dt>Основание</dt>
+                    <dd>{accrualBreakdown.accrual.basis}</dd>
+                  </div>
+                ) : null}
                 <div>
                   <dt>Источник</dt>
                   <dd>{formatAccrualSource(accrualBreakdown.accrual.source)}</dd>
@@ -4148,14 +4155,14 @@ function PaymentsPrototypePanel({
       return 'Выберите гараж из справочника, чтобы сохранить начисление в истории операций.'
     }
 
-    const irregularPayment = irregularPayments.find((item) => item.id === request.irregularPaymentId && item.isActive && !item.isArchived) ?? null
-    if (!irregularPayment) {
-      return 'Выберите активный нерегулярный платёж из справочника.'
-    }
+    const normalizedBasis = request.basis.trim().toLocaleLowerCase('ru-RU')
+    const irregularPayment = irregularPayments.find((item) => item.isActive && !item.isArchived && item.name.trim().toLocaleLowerCase('ru-RU') === normalizedBasis) ?? null
 
     const savedAccrual = await financeClient.createIrregularAccrual(auth.accessToken, {
       garageId: selectedGarage.id,
-      irregularPaymentId: irregularPayment.id,
+      irregularPaymentId: irregularPayment?.id,
+      basis: request.basis.trim(),
+      amount: request.amount,
       accountingMonth: request.accountingMonth,
       comment: request.comment.trim() || undefined,
     })
@@ -4163,7 +4170,7 @@ function PaymentsPrototypePanel({
     const monthLabel = formatPaymentPrototypeMonthLabel(savedAccrual.accountingMonth)
 
     setGarageRows((currentRows) => {
-      const serviceName = savedAccrual.irregularPaymentName ?? irregularPayment.name
+      const serviceName = savedAccrual.basis ?? savedAccrual.irregularPaymentName ?? request.basis.trim()
       const existingRow = currentRows.find((row) => row.month === month && row.service.trim().toLocaleLowerCase('ru-RU') === serviceName.trim().toLocaleLowerCase('ru-RU'))
       if (existingRow) {
         return currentRows.map((row) => row.id === existingRow.id
@@ -6291,7 +6298,9 @@ function GarageAccrualPrototypeDialog({
 }) {
   const dialogRef = useFocusTrap<HTMLElement>(true)
   const cancelRef = useFocusOnOpen<HTMLButtonElement>(true)
-  const [irregularPaymentId, setIrregularPaymentId] = useState(irregularPayments[0]?.id ?? '')
+  const basisOptionsId = useId()
+  const [basis, setBasis] = useState(irregularPayments[0]?.name ?? '')
+  const [amount, setAmount] = useState(irregularPayments[0] ? String(irregularPayments[0].amount) : '')
   const [accountingMonth, setAccountingMonth] = useState(getLocalDateInputValue().slice(0, 7))
   const [comment, setComment] = useState('')
   const [saving, setSaving] = useState(false)
@@ -6300,8 +6309,13 @@ function GarageAccrualPrototypeDialog({
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    if (!irregularPaymentId) {
-      setError('Выберите активный нерегулярный платёж из справочника.')
+    if (!basis.trim()) {
+      setError('Укажите основание начисления.')
+      return
+    }
+    const parsedAmount = parsePaymentMoney(amount)
+    if (!Number.isFinite(parsedAmount) || parsedAmount <= 0) {
+      setError('Укажите сумму начисления больше нуля.')
       return
     }
     if (!/^\d{4}-\d{2}$/.test(accountingMonth)) {
@@ -6312,7 +6326,8 @@ function GarageAccrualPrototypeDialog({
     setError(null)
     try {
       const submitError = await onSubmit({
-        irregularPaymentId,
+        basis: basis.trim(),
+        amount: parsedAmount,
         accountingMonth: `${accountingMonth}-01`,
         comment,
       })
@@ -6340,26 +6355,35 @@ function GarageAccrualPrototypeDialog({
           </button>
         </div>
         <form className="dictionary-modal-form payments-prototype-modal-form" onSubmit={handleSubmit}>
-          <FormField label="Нерегулярный платёж">
-            <SelectControl
-              aria-label="Нерегулярный платёж гаража"
-              value={irregularPaymentId}
-              options={irregularPayments.length > 0
-                ? irregularPayments.map((payment) => ({ value: payment.id, label: `${payment.name} — ${formatPaymentPrototypeValue(payment.amount)}` }))
-                : [{ value: '', label: 'Нет активных нерегулярных платежей' }]}
-              onChange={(nextIrregularPaymentId) => {
-                setIrregularPaymentId(nextIrregularPaymentId)
+          <FormField label="Основание">
+            <input
+              aria-label="Основание начисления гаража"
+              list={basisOptionsId}
+              maxLength={200}
+              value={basis}
+              placeholder="Выберите готовое основание или введите своё"
+              onChange={(event) => {
+                const nextBasis = event.target.value
+                const matchedPayment = irregularPayments.find((payment) => payment.name.trim().toLocaleLowerCase('ru-RU') === nextBasis.trim().toLocaleLowerCase('ru-RU'))
+                setBasis(nextBasis)
+                if (matchedPayment) {
+                  setAmount(String(matchedPayment.amount))
+                }
                 setError(null)
               }}
             />
+            <datalist id={basisOptionsId}>
+              {irregularPayments.map((payment) => <option key={payment.id} value={payment.name}>{formatPaymentPrototypeValue(payment.amount)}</option>)}
+            </datalist>
           </FormField>
           <FormField label="Сумма">
-            <input
+            <MoneyTextInput
               aria-label="Сумма нерегулярного начисления гаража"
-              value={irregularPayments.find((payment) => payment.id === irregularPaymentId)
-                ? formatPaymentPrototypeValue(irregularPayments.find((payment) => payment.id === irregularPaymentId)!.amount)
-                : ''}
-              readOnly
+              value={amount}
+              onValueChange={(nextAmount) => {
+                setAmount(nextAmount)
+                setError(null)
+              }}
             />
           </FormField>
           <FormField label="Месяц">

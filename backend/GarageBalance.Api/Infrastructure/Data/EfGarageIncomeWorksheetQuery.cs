@@ -118,7 +118,8 @@ public sealed class EfGarageIncomeWorksheetQuery(GarageBalanceDbContext dbContex
                 accrual.AccountingMonth,
                 accrual.IncomeTypeId,
                 accrual.IncomeType.Name,
-                accrual.IncomeType.Code
+                accrual.IncomeType.Code,
+                accrual.Basis
             })
             .Select(group => new
             {
@@ -130,7 +131,7 @@ public sealed class EfGarageIncomeWorksheetQuery(GarageBalanceDbContext dbContex
                 OwnerMiddleName = (string?)null,
                 AccountingMonth = (DateOnly?)group.Key.AccountingMonth,
                 IncomeTypeId = (Guid?)group.Key.IncomeTypeId,
-                IncomeTypeName = (string?)group.Key.Name,
+                IncomeTypeName = (string?)(group.Key.Basis ?? group.Key.Name),
                 IncomeTypeCode = group.Key.Code,
                 AccrualId = (Guid?)null,
                 AccountingYear = (int?)null,
@@ -300,7 +301,7 @@ public sealed class EfGarageIncomeWorksheetQuery(GarageBalanceDbContext dbContex
                 OwnerMiddleName = (string?)null,
                 AccountingMonth = (DateOnly?)allocation.Accrual.AccountingMonth,
                 IncomeTypeId = (Guid?)allocation.Accrual.IncomeTypeId,
-                IncomeTypeName = (string?)null,
+                IncomeTypeName = (string?)(allocation.Accrual.Basis ?? allocation.Accrual.IncomeType.Name),
                 IncomeTypeCode = allocation.Accrual.IncomeType.Code,
                 AccrualId = (Guid?)allocation.AccrualId,
                 AccountingYear = allocation.Accrual.AccountingYear,
@@ -439,6 +440,7 @@ public sealed class EfGarageIncomeWorksheetQuery(GarageBalanceDbContext dbContex
                     row.AccrualId!.Value,
                     row.AccountingMonth!.Value,
                     row.IncomeTypeId!.Value,
+                    row.IncomeTypeName!,
                     row.PaymentAccountingMonth!.Value,
                     row.Amount))
                 .ToList(),

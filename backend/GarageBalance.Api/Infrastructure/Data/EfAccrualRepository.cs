@@ -84,6 +84,7 @@ public sealed class EfAccrualRepository(GarageBalanceDbContext dbContext) : IAcc
                 IncomeTypeName = (string?)accrual.IncomeType.Name,
                 accrual.IrregularPaymentId,
                 IrregularPaymentName = accrual.IrregularPayment == null ? null : accrual.IrregularPayment.Name,
+                accrual.Basis,
                 accrual.FeeCampaignId,
                 FeeCampaignName = accrual.FeeCampaign == null ? null : accrual.FeeCampaign.Name,
                 accrual.TariffId,
@@ -117,6 +118,7 @@ public sealed class EfAccrualRepository(GarageBalanceDbContext dbContext) : IAcc
                 IncomeTypeName = (string?)null,
                 IrregularPaymentId = (Guid?)null,
                 IrregularPaymentName = (string?)null,
+                Basis = (string?)null,
                 FeeCampaignId = (Guid?)null,
                 FeeCampaignName = (string?)null,
                 TariffId = (Guid?)null,
@@ -168,6 +170,7 @@ public sealed class EfAccrualRepository(GarageBalanceDbContext dbContext) : IAcc
                 IrregularPayment = row.IrregularPaymentId is null
                     ? null
                     : new IrregularPayment { Id = row.IrregularPaymentId.Value, Name = row.IrregularPaymentName! },
+                Basis = row.Basis,
                 FeeCampaignId = row.FeeCampaignId,
                 FeeCampaign = row.FeeCampaignId is null
                     ? null
@@ -537,6 +540,7 @@ public sealed class EfAccrualRepository(GarageBalanceDbContext dbContext) : IAcc
             accrual.Garage.Number.ToLower().Contains(normalizedSearch) ||
             accrual.IncomeType.Name.ToLower().Contains(normalizedSearch) ||
             (accrual.IrregularPayment != null && accrual.IrregularPayment.Name.ToLower().Contains(normalizedSearch)) ||
+            (accrual.Basis != null && accrual.Basis.ToLower().Contains(normalizedSearch)) ||
             (accrual.FeeCampaign != null && accrual.FeeCampaign.Name.ToLower().Contains(normalizedSearch)) ||
             (accrual.Comment != null && accrual.Comment.ToLower().Contains(normalizedSearch)));
     }
@@ -549,6 +553,7 @@ public sealed class EfAccrualRepository(GarageBalanceDbContext dbContext) : IAcc
         accrual.Garage.Number.Contains(normalizedSearch, StringComparison.OrdinalIgnoreCase) ||
         accrual.IncomeType.Name.Contains(normalizedSearch, StringComparison.OrdinalIgnoreCase) ||
         (accrual.IrregularPayment?.Name.Contains(normalizedSearch, StringComparison.OrdinalIgnoreCase) ?? false) ||
+        (accrual.Basis?.Contains(normalizedSearch, StringComparison.OrdinalIgnoreCase) ?? false) ||
         (accrual.FeeCampaign?.Name.Contains(normalizedSearch, StringComparison.OrdinalIgnoreCase) ?? false) ||
         (accrual.Comment?.Contains(normalizedSearch, StringComparison.OrdinalIgnoreCase) ?? false);
 

@@ -4101,7 +4101,7 @@ describe('App', () => {
     await openSection(user, 'Тарифы и сборы')
     const tariffsPanel = await screen.findByRole('region', { name: 'Тарифы и сборы' })
 
-    expect(within(tariffsPanel).getByLabelText('Освещение территории: Наружное освещение: значение')).toHaveValue('300.00')
+    expect(await within(tariffsPanel).findByLabelText('Освещение территории: Наружное освещение: значение')).toHaveValue('300.00')
     expect(within(tariffsPanel).getByLabelText('Освещение территории: Наружное освещение: единица')).toHaveValue('руб.')
     expect(within(tariffsPanel).getByRole('button', { name: 'Изменить услугу Освещение территории' })).toBeInTheDocument()
     expect(within(tariffsPanel).queryByLabelText('Наружное освещение: Наружное освещение: значение')).not.toBeInTheDocument()
@@ -5032,10 +5032,11 @@ describe('App', () => {
           ownerName: garage.ownerName,
           incomeTypeId: 'income-other-payments',
           incomeTypeName: 'Прочие оплаты',
-          irregularPaymentId: irregularPayment.id,
-          irregularPaymentName: irregularPayment.name,
+          irregularPaymentId: request.irregularPaymentId ?? null,
+          irregularPaymentName: request.irregularPaymentId ? irregularPayment.name : null,
+          basis: request.basis,
           accountingMonth: request.accountingMonth,
-          amount: irregularPayment.amount,
+          amount: request.irregularPaymentId ? irregularPayment.amount : request.amount,
           source: 'manual',
           comment: request.comment ?? null,
         })
@@ -5542,11 +5543,10 @@ describe('App', () => {
     expect(penaltyAccrualButton.querySelector('.lucide-gavel')).not.toBeNull()
     await user.click(addGarageAccrualButton)
     const garageAccrualDialog = await screen.findByRole('dialog', { name: 'Новое начисление' })
-    const garageIncomeTypeCombobox = within(garageAccrualDialog).getByRole('combobox', { name: 'Нерегулярный платёж гаража' })
-    expect(garageIncomeTypeCombobox).toHaveClass('select-control__trigger')
-    expect(garageIncomeTypeCombobox).toHaveTextContent(irregularPayment.name)
+    const garageIncomeTypeCombobox = within(garageAccrualDialog).getByRole('combobox', { name: 'Основание начисления гаража' })
+    expect(garageIncomeTypeCombobox).toHaveValue(irregularPayment.name)
     expect(within(garageAccrualDialog).getByLabelText('Сумма нерегулярного начисления гаража')).toHaveValue('750.00')
-    expect(within(garageAccrualDialog).getByLabelText('Сумма нерегулярного начисления гаража')).toHaveAttribute('readonly')
+    expect(within(garageAccrualDialog).getByLabelText('Сумма нерегулярного начисления гаража')).not.toHaveAttribute('readonly')
     const garageAccrualMonth = within(garageAccrualDialog).getByLabelText('Месяц начисления гаража')
     expect(garageAccrualMonth).toHaveValue('06.2026')
     expect(garageAccrualMonth.closest('.localized-date-picker')).not.toBeNull()
@@ -5560,11 +5560,33 @@ describe('App', () => {
     expect(savedAccrualRequests[0]).toMatchObject({
       garageId: garage.id,
       irregularPaymentId: irregularPayment.id,
+      basis: irregularPayment.name,
+      amount: irregularPayment.amount,
       accountingMonth: '2026-06-01',
       comment: 'Доначисление воды',
     })
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Новое начисление' })).not.toBeInTheDocument())
     await waitFor(() => expect(addGarageAccrualButton).toHaveFocus())
+
+    await user.click(addGarageAccrualButton)
+    const customAccrualDialog = await screen.findByRole('dialog', { name: 'Новое начисление' })
+    const customBasisInput = within(customAccrualDialog).getByRole('combobox', { name: 'Основание начисления гаража' })
+    await user.clear(customBasisInput)
+    await user.type(customBasisInput, 'Замена пульта ворот')
+    const customAmountInput = within(customAccrualDialog).getByLabelText('Сумма нерегулярного начисления гаража')
+    await user.clear(customAmountInput)
+    await user.type(customAmountInput, '915.25')
+    await user.click(within(customAccrualDialog).getByRole('button', { name: 'Ок' }))
+    await waitFor(() => expect(savedAccrualRequests).toHaveLength(2))
+    expect(savedAccrualRequests[1]).toEqual({
+      garageId: garage.id,
+      basis: 'Замена пульта ворот',
+      amount: 915.25,
+      accountingMonth: '2026-06-01',
+      comment: undefined,
+      irregularPaymentId: undefined,
+    })
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Новое начисление' })).not.toBeInTheDocument())
 
     await user.click(penaltyAccrualButton)
     const penaltyAccrualDialog = await screen.findByRole('dialog', { name: 'Начислить штраф' })
@@ -5594,8 +5616,8 @@ describe('App', () => {
     expect(within(prototype).getByRole('table', { name: 'Поступления гаража 1' })).toHaveTextContent('Штраф')
     expect(within(prototype).getByRole('table', { name: 'Поступления гаража 1' })).toHaveTextContent('1 250.50')
     const updatedIncomeSummary = within(prototype).getByLabelText('Итоги периода поступлений')
-    expect(updatedIncomeSummary).toHaveTextContent('Начислено12 174.50')
-    expect(updatedIncomeSummary).toHaveTextContent('Баланс на конец-6 500.50')
+    expect(updatedIncomeSummary).toHaveTextContent('Начислено13 089.75')
+    expect(updatedIncomeSummary).toHaveTextContent('Баланс на конец-7 415.75')
 
     const fullPaymentButton = within(prototype).getByRole('button', { name: 'Полная оплата' })
     await user.click(fullPaymentButton)
@@ -5608,14 +5630,14 @@ describe('App', () => {
     expect(fullPaymentPeriodOption).toHaveAttribute('aria-selected', 'true')
     await user.click(fullPaymentPeriodOption)
     const fullPaymentAmount = within(fullPaymentDialog).getByLabelText('Сумма полной оплаты')
-    expect(fullPaymentAmount).toHaveValue('6 500.50')
+    expect(fullPaymentAmount).toHaveValue('7 415.75')
     expect(fullPaymentAmount).not.toHaveAttribute('readonly')
     await user.click(fullPaymentAmount)
     await user.clear(fullPaymentAmount)
-    await user.type(fullPaymentAmount, '7000')
+    await user.type(fullPaymentAmount, '8000')
     await user.click(within(fullPaymentDialog).getByRole('button', { name: 'Провести оплату' }))
     const fullPaymentError = within(fullPaymentDialog).getByRole('alert')
-    expect(fullPaymentError).toHaveTextContent('Сумма оплаты не может превышать долг 6 500.50.')
+    expect(fullPaymentError).toHaveTextContent('Сумма оплаты не может превышать долг 7 415.75.')
     expect(fullPaymentError).toHaveClass('form-error')
     expect(savedIncomeRequests).toHaveLength(1)
     await user.click(fullPaymentAmount)
@@ -19830,6 +19852,7 @@ function createAccrual(overrides: Partial<AccrualDto>): AccrualDto {
     overdueFromDate: '2026-08-31',
     irregularPaymentId: null,
     irregularPaymentName: null,
+    basis: null,
     ...overrides,
   }
 }

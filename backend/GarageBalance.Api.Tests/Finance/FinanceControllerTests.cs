@@ -901,7 +901,7 @@ public sealed class FinanceControllerTests
     public async Task CreateIrregularAccrual_PassesActorAndRequestToService()
     {
         var actorUserId = Guid.NewGuid();
-        var request = new CreateIrregularAccrualRequest(Guid.NewGuid(), Guid.NewGuid(), new DateOnly(2026, 8, 1), "Новая карта");
+        var request = new CreateIrregularAccrualRequest(Guid.NewGuid(), Guid.NewGuid(), "Новая карта", 750m, new DateOnly(2026, 8, 1), "Новая карта");
         var service = new FakeFinanceService
         {
             CreateIrregularAccrualResult = FinanceResult<AccrualDto>.Success(CreateAccrual())
@@ -924,7 +924,7 @@ public sealed class FinanceControllerTests
         });
 
         var result = await controller.CreateIrregularAccrual(
-            new CreateIrregularAccrualRequest(Guid.NewGuid(), Guid.NewGuid(), new DateOnly(2026, 8, 1), null),
+            new CreateIrregularAccrualRequest(Guid.NewGuid(), Guid.NewGuid(), "Новая карта", 750m, new DateOnly(2026, 8, 1), null),
             CancellationToken.None);
 
         var notFound = Assert.IsType<NotFoundObjectResult>(result.Result);

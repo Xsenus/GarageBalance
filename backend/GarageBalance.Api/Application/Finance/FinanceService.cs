@@ -434,13 +434,17 @@ public sealed class FinanceService(
                     .ThenByDescending(reading => reading.UpdatedAtUtc)
                     .First());
 
-        var accrualLookup = worksheetData.AccrualBuckets.ToDictionary(bucket => (bucket.AccountingMonth, bucket.IncomeTypeId));
+        var accrualLookup = worksheetData.AccrualBuckets.ToDictionary(
+            bucket => (bucket.AccountingMonth, bucket.IncomeTypeId, bucket.IncomeTypeName));
         var appliedIncomeLookup = worksheetData.Allocations
             .Where(allocation =>
                 !annualAccrualIds.Contains(allocation.AccrualId) &&
                 allocation.AccrualAccountingMonth >= monthFrom &&
                 allocation.AccrualAccountingMonth <= monthTo)
-            .GroupBy(allocation => (allocation.AccrualAccountingMonth, allocation.IncomeTypeId))
+            .GroupBy(allocation => (
+                allocation.AccrualAccountingMonth,
+                allocation.IncomeTypeId,
+                allocation.IncomeTypeName))
             .ToDictionary(group => group.Key, group => MoneyMath.RoundMoney(group.Sum(allocation => allocation.Amount)));
         var appliedPaymentLookup = worksheetData.Allocations
             .Where(allocation =>
@@ -464,11 +468,17 @@ public sealed class FinanceService(
                 incomeType.IncomeTypeCode,
                 0m))
             : [];
+        var incomeBucketsWithAdvance = worksheetData.IncomeBuckets
+            .Where(bucket => advanceLookup.GetValueOrDefault((bucket.AccountingMonth, bucket.IncomeTypeId)) > 0m)
+            .ToList();
+        var advanceDisplayKeys = incomeBucketsWithAdvance
+            .Select(bucket => (bucket.AccountingMonth, bucket.IncomeTypeId, bucket.IncomeTypeName))
+            .ToHashSet();
         var keys = worksheetData.AccrualBuckets
-            .Concat(worksheetData.IncomeBuckets)
+            .Concat(incomeBucketsWithAdvance)
             .Concat(requiredMeterBuckets)
             .Where(bucket => !annualObligationKeys.Contains((bucket.AccountingMonth.Year, bucket.IncomeTypeId)))
-            .GroupBy(bucket => (bucket.AccountingMonth, bucket.IncomeTypeId))
+            .GroupBy(bucket => (bucket.AccountingMonth, bucket.IncomeTypeId, bucket.IncomeTypeName))
             .Select(group => group.First())
             .OrderByDescending(bucket => bucket.AccountingMonth)
             .ThenBy(bucket => bucket.IncomeTypeName, StringComparer.OrdinalIgnoreCase)
@@ -476,9 +486,13 @@ public sealed class FinanceService(
 
         var rows = keys.Select(key =>
         {
-            var accrualAmount = MoneyMath.RoundMoney(accrualLookup.GetValueOrDefault((key.AccountingMonth, key.IncomeTypeId))?.Amount ?? 0m);
-            var incomeAmount = appliedIncomeLookup.GetValueOrDefault((key.AccountingMonth, key.IncomeTypeId));
-            var advanceAmount = advanceLookup.GetValueOrDefault((key.AccountingMonth, key.IncomeTypeId));
+            var accrualAmount = MoneyMath.RoundMoney(accrualLookup
+                .GetValueOrDefault((key.AccountingMonth, key.IncomeTypeId, key.IncomeTypeName))?.Amount ?? 0m);
+            var incomeAmount = appliedIncomeLookup
+                .GetValueOrDefault((key.AccountingMonth, key.IncomeTypeId, key.IncomeTypeName));
+            var advanceAmount = advanceDisplayKeys.Contains((key.AccountingMonth, key.IncomeTypeId, key.IncomeTypeName))
+                ? advanceLookup.GetValueOrDefault((key.AccountingMonth, key.IncomeTypeId))
+                : 0m;
             var debt = MoneyMath.RoundMoney(Math.Max(accrualAmount - incomeAmount, 0m));
             var meterKind = InferMeterKind(key.IncomeTypeName, key.IncomeTypeCode);
             meterReadingByMonthKind.TryGetValue((key.AccountingMonth, meterKind ?? string.Empty), out var reading);
@@ -2015,6 +2029,8 @@ public sealed class FinanceService(
                 accrual.IrregularPaymentId.Value,
                 accrual.AccountingMonth,
                 cancellationToken)
+            : accrual.Basis is not null
+                ? false
             : accrual.FeeCampaignId.HasValue
                 ? await accrualRepository.ActiveFeeCampaignDuplicateExistsAsync(
                     accrual.Id,
@@ -2062,10 +2078,22 @@ public sealed class FinanceService(
             return FinanceResult<AccrualDto>.Failure("garage_not_found", "Гараж для начисления не найден.");
         }
 
-        var irregularPayment = await irregularPaymentRepository.FindActiveAsync(request.IrregularPaymentId, cancellationToken);
-        if (irregularPayment is null || !irregularPayment.IsActive)
+        var basis = NormalizeOptional(request.Basis);
+        if (basis is null)
         {
-            return FinanceResult<AccrualDto>.Failure("irregular_payment_not_found", "Активный нерегулярный платёж не найден.");
+            return FinanceResult<AccrualDto>.Failure("irregular_accrual_basis_required", "Укажите основание начисления.");
+        }
+
+        IrregularPayment? irregularPayment = null;
+        if (request.IrregularPaymentId.HasValue)
+        {
+            irregularPayment = await irregularPaymentRepository.FindActiveAsync(request.IrregularPaymentId.Value, cancellationToken);
+            if (irregularPayment is null || !irregularPayment.IsActive)
+            {
+                return FinanceResult<AccrualDto>.Failure("irregular_payment_not_found", "Активное основание из справочника не найдено.");
+            }
+
+            basis = irregularPayment.Name;
         }
 
         var incomeType = await incomeTypeRepository.FindFirstActiveByCodeAsync(OtherPaymentsIncomeTypeCode, cancellationToken);
@@ -2077,19 +2105,20 @@ public sealed class FinanceService(
         }
 
         var month = MonthPeriod.Normalize(request.AccountingMonth);
-        if (await accrualRepository.ActiveIrregularDuplicateExistsAsync(
-            null,
-            garage.Id,
-            irregularPayment.Id,
-            month,
-            cancellationToken))
+        if (irregularPayment is not null &&
+            await accrualRepository.ActiveIrregularDuplicateExistsAsync(
+                null,
+                garage.Id,
+                irregularPayment.Id,
+                month,
+                cancellationToken))
         {
             return FinanceResult<AccrualDto>.Failure(
                 "accrual_duplicate",
                 "Этот нерегулярный платёж за выбранный месяц уже начислен гаражу.");
         }
 
-        var amount = MoneyMath.RoundMoney(irregularPayment.Amount);
+        var amount = MoneyMath.RoundMoney(irregularPayment?.Amount ?? request.Amount);
         if (amount <= 0)
         {
             return FinanceResult<AccrualDto>.Failure(
@@ -2104,8 +2133,9 @@ public sealed class FinanceService(
             Garage = garage,
             IncomeTypeId = incomeType.Id,
             IncomeType = incomeType,
-            IrregularPaymentId = irregularPayment.Id,
+            IrregularPaymentId = irregularPayment?.Id,
             IrregularPayment = irregularPayment,
+            Basis = basis,
             AccountingMonth = month,
             DueDate = dueDates.DueDate,
             OverdueFromDate = dueDates.OverdueFromDate,
@@ -2125,7 +2155,7 @@ public sealed class FinanceService(
             actorUserId,
             "finance.irregular_accrual_created",
             accrual,
-            $"Создано нерегулярное начисление «{irregularPayment.Name}» {MoneyFormatting.Format(accrual.Amount)} по гаражу {garage.Number} за {month:MM.yyyy}; назначение «{incomeType.Name}», фонд {incomeType.DestinationFundId}.");
+            $"Создано разовое начисление с основанием «{basis}» {MoneyFormatting.Format(accrual.Amount)} по гаражу {garage.Number} за {month:MM.yyyy}; назначение «{incomeType.Name}», фонд {incomeType.DestinationFundId}.");
         await unitOfWork.SaveChangesAsync(cancellationToken);
         return FinanceResult<AccrualDto>.Success(ToDto(accrual));
     }
@@ -2319,11 +2349,11 @@ public sealed class FinanceService(
             return FinanceResult<AccrualDto>.Failure("accrual_not_found", "Начисление не найдено.");
         }
 
-        if (accrual.IrregularPaymentId.HasValue)
+        if (accrual.IrregularPaymentId.HasValue || accrual.Basis is not null)
         {
             return FinanceResult<AccrualDto>.Failure(
                 "irregular_accrual_edit_not_supported",
-                "Нерегулярное начисление нельзя переназначить как обычное. Отмените его и создайте заново из справочника.");
+                "Разовое начисление нельзя переназначить как обычное. Отмените его и создайте заново.");
         }
 
         if (accrual.FeeCampaignId.HasValue)
@@ -5088,6 +5118,7 @@ public sealed class FinanceService(
             accrual.OverdueFromDate,
             accrual.IrregularPaymentId,
             accrual.IrregularPayment?.Name,
+            accrual.Basis ?? accrual.IrregularPayment?.Name,
             accrual.FeeCampaignId,
             accrual.FeeCampaign?.Name);
     }

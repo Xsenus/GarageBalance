@@ -469,6 +469,7 @@ public sealed class GarageBalanceDbContext(DbContextOptions<GarageBalanceDbConte
                 "\"AccountingYear\" IS NULL OR (\"AccountingYear\" >= 1900 AND \"AccountingYear\" <= 9999)"));
             entity.Property(accrual => accrual.DueDateReviewReason).HasMaxLength(80);
             entity.Property(accrual => accrual.Source).HasMaxLength(40).IsRequired();
+            entity.Property(accrual => accrual.Basis).HasMaxLength(200);
             entity.Property(accrual => accrual.Comment).HasMaxLength(1000);
             entity.HasIndex(accrual => accrual.AccountingMonth);
             entity.HasIndex(accrual => accrual.DueDate);
@@ -483,7 +484,7 @@ public sealed class GarageBalanceDbContext(DbContextOptions<GarageBalanceDbConte
             entity.HasIndex(accrual => new { accrual.GarageId, accrual.IncomeTypeId, accrual.AccountingYear, accrual.IsCanceled });
             entity.HasIndex(accrual => new { accrual.GarageId, accrual.IncomeTypeId, accrual.AccountingMonth, accrual.Source })
                 .IsUnique()
-                .HasFilter("\"IsCanceled\" = false AND \"IrregularPaymentId\" IS NULL AND \"FeeCampaignId\" IS NULL");
+                .HasFilter("\"IsCanceled\" = false AND \"IrregularPaymentId\" IS NULL AND \"FeeCampaignId\" IS NULL AND \"Basis\" IS NULL");
             entity.HasIndex(accrual => new { accrual.GarageId, accrual.IrregularPaymentId, accrual.AccountingMonth })
                 .IsUnique()
                 .HasFilter("\"IsCanceled\" = false AND \"IrregularPaymentId\" IS NOT NULL");

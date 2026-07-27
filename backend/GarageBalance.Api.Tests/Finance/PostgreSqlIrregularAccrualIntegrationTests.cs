@@ -26,12 +26,13 @@ public sealed class PostgreSqlIrregularAccrualIntegrationTests
         }
 
         Guid createdAccrualId;
+        Guid customAccrualId;
         Guid destinationIncomeTypeId;
         await using (var createContext = database.CreateContext())
         {
             var service = FinanceServiceTestFactory.Create(createContext);
             var result = await service.CreateIrregularAccrualAsync(
-                new CreateIrregularAccrualRequest(garage.Id, payment.Id, new DateOnly(2026, 9, 18), null),
+                new CreateIrregularAccrualRequest(garage.Id, payment.Id, payment.Name, payment.Amount, new DateOnly(2026, 9, 18), null),
                 null,
                 CancellationToken.None);
 
@@ -41,6 +42,24 @@ public sealed class PostgreSqlIrregularAccrualIntegrationTests
             Assert.Equal(payment.Id, result.Value.IrregularPaymentId);
             createdAccrualId = result.Value.Id;
             destinationIncomeTypeId = result.Value.IncomeTypeId;
+
+            var customResult = await service.CreateIrregularAccrualAsync(
+                new CreateIrregularAccrualRequest(garage.Id, null, "Замена пульта ворот", 915.255m, new DateOnly(2026, 9, 18), null),
+                null,
+                CancellationToken.None);
+            Assert.True(customResult.Succeeded);
+            Assert.Equal("Замена пульта ворот", customResult.Value!.Basis);
+            Assert.Equal(915.26m, customResult.Value.Amount);
+            customAccrualId = customResult.Value.Id;
+
+            var worksheet = await service.GetGarageIncomeWorksheetAsync(
+                garage.Id,
+                new GarageIncomeWorksheetRequest(new DateOnly(2026, 9, 1), new DateOnly(2026, 9, 1)),
+                CancellationToken.None);
+            Assert.True(worksheet.Succeeded);
+            Assert.Contains(
+                worksheet.Value!.Rows,
+                row => row.IncomeTypeName == customResult.Value.Basis && row.AccrualAmount == customResult.Value.Amount);
         }
 
         await using (var verificationContext = database.CreateContext())
@@ -53,6 +72,10 @@ public sealed class PostgreSqlIrregularAccrualIntegrationTests
             Assert.Equal("other_payments", stored.IncomeType.Code);
             Assert.NotNull(stored.IncomeType.DestinationFundId);
             Assert.Equal("Карта доступа", stored.IrregularPayment!.Name);
+            Assert.Equal("Карта доступа", stored.Basis);
+            var customStored = await verificationContext.Accruals.AsNoTracking().SingleAsync(item => item.Id == customAccrualId);
+            Assert.Equal("Замена пульта ворот", customStored.Basis);
+            Assert.Null(customStored.IrregularPaymentId);
 
             verificationContext.Accruals.Add(new Accrual
             {

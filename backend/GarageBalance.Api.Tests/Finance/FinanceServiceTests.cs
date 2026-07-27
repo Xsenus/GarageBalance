@@ -3147,15 +3147,15 @@ public sealed class FinanceServiceTests
         var service = FinanceServiceTestFactory.Create(database.Context);
 
         var first = await service.CreateIrregularAccrualAsync(
-            new CreateIrregularAccrualRequest(fixtures.Garage.Id, parkingCard.Id, new DateOnly(2026, 8, 17), "Выдана новая карта"),
+            new CreateIrregularAccrualRequest(fixtures.Garage.Id, parkingCard.Id, "Подменённое основание", 1m, new DateOnly(2026, 8, 17), "Выдана новая карта"),
             Guid.NewGuid(),
             CancellationToken.None);
         var second = await service.CreateIrregularAccrualAsync(
-            new CreateIrregularAccrualRequest(fixtures.Garage.Id, lockRepair.Id, new DateOnly(2026, 8, 1), null),
+            new CreateIrregularAccrualRequest(fixtures.Garage.Id, lockRepair.Id, lockRepair.Name, lockRepair.Amount, new DateOnly(2026, 8, 1), null),
             null,
             CancellationToken.None);
         var duplicate = await service.CreateIrregularAccrualAsync(
-            new CreateIrregularAccrualRequest(fixtures.Garage.Id, parkingCard.Id, new DateOnly(2026, 8, 1), null),
+            new CreateIrregularAccrualRequest(fixtures.Garage.Id, parkingCard.Id, parkingCard.Name, parkingCard.Amount, new DateOnly(2026, 8, 1), null),
             null,
             CancellationToken.None);
 
@@ -3166,15 +3166,124 @@ public sealed class FinanceServiceTests
         Assert.Equal("Переименованное назначение", first.Value.IncomeTypeName);
         Assert.Equal(parkingCard.Id, first.Value.IrregularPaymentId);
         Assert.Equal("Карта доступа", first.Value.IrregularPaymentName);
+        Assert.Equal("Карта доступа", first.Value.Basis);
         Assert.Equal(new DateOnly(2026, 8, 1), first.Value.AccountingMonth);
         Assert.False(duplicate.Succeeded);
         Assert.Equal("accrual_duplicate", duplicate.ErrorCode);
         var stored = await database.Context.Accruals.SingleAsync(item => item.Id == first.Value.Id);
         Assert.Equal(otherPayments.Id, stored.IncomeTypeId);
         Assert.Equal(parkingCard.Id, stored.IrregularPaymentId);
+        Assert.Equal("Карта доступа", stored.Basis);
         var audit = Assert.Single(database.Context.AuditEvents, item => item.Action == "finance.irregular_accrual_created" && item.EntityId == first.Value.Id.ToString());
         Assert.Contains("Карта доступа", audit.Summary, StringComparison.Ordinal);
         Assert.Contains(AuditTextMasker.Mask(destinationFund.Id.ToString())!, audit.Summary, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task CreateIrregularAccrualAsync_AcceptsCustomBasisAndAmount()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        var destinationFund = new Fund { Name = "Прочее", NormalizedName = "ПРОЧЕЕ" };
+        var otherPayments = new IncomeType
+        {
+            Name = "Прочие оплаты",
+            Code = "other_payments",
+            IsSystem = true,
+            DestinationFund = destinationFund
+        };
+        database.Context.AddRange(destinationFund, otherPayments);
+        await database.Context.SaveChangesAsync();
+        var service = FinanceServiceTestFactory.Create(database.Context);
+        var actorUserId = Guid.NewGuid();
+
+        var result = await service.CreateIrregularAccrualAsync(
+            new CreateIrregularAccrualRequest(
+                fixtures.Garage.Id,
+                null,
+                "  Замена пульта ворот  ",
+                915.255m,
+                new DateOnly(2026, 8, 17),
+                "Выдан новый пульт"),
+            actorUserId,
+            CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+        Assert.Null(result.Value!.IrregularPaymentId);
+        Assert.Null(result.Value.IrregularPaymentName);
+        Assert.Equal("Замена пульта ворот", result.Value.Basis);
+        Assert.Equal(915.26m, result.Value.Amount);
+        var stored = await database.Context.Accruals.SingleAsync(item => item.Id == result.Value.Id);
+        Assert.Equal("Замена пульта ворот", stored.Basis);
+        Assert.Null(stored.IrregularPaymentId);
+        var foundByBasis = await service.GetAccrualsAsync(
+            new AccrualListRequest(null, null, "пульта", 10, null),
+            CancellationToken.None);
+        Assert.Equal(result.Value.Id, Assert.Single(foundByBasis).Id);
+        var worksheet = await service.GetGarageIncomeWorksheetAsync(
+            fixtures.Garage.Id,
+            new GarageIncomeWorksheetRequest(new DateOnly(2026, 8, 1), new DateOnly(2026, 8, 1)),
+            CancellationToken.None);
+        Assert.True(worksheet.Succeeded);
+        Assert.Equal(result.Value.Basis, Assert.Single(worksheet.Value!.Rows).IncomeTypeName);
+        var income = await service.CreateIncomeAsync(
+            new CreateIncomeOperationRequest(
+                fixtures.Garage.Id,
+                otherPayments.Id,
+                new DateOnly(2026, 8, 18),
+                new DateOnly(2026, 8, 1),
+                1_000m,
+                null,
+                null),
+            actorUserId,
+            CancellationToken.None);
+        Assert.True(income.Succeeded);
+        var paidWorksheet = await service.GetGarageIncomeWorksheetAsync(
+            fixtures.Garage.Id,
+            new GarageIncomeWorksheetRequest(new DateOnly(2026, 8, 1), new DateOnly(2026, 8, 1)),
+            CancellationToken.None);
+        Assert.True(paidWorksheet.Succeeded);
+        var customRow = Assert.Single(paidWorksheet.Value!.Rows, row => row.IncomeTypeName == result.Value.Basis);
+        Assert.Equal((915.26m, 0m), (customRow.IncomeAmount, customRow.AdvanceAmount));
+        var advanceRow = Assert.Single(paidWorksheet.Value.Rows, row => row.IncomeTypeName == otherPayments.Name);
+        Assert.Equal((0m, 84.74m), (advanceRow.IncomeAmount, advanceRow.AdvanceAmount));
+        Assert.Equal(84.74m, paidWorksheet.Value.AdvanceTotal);
+        var audit = Assert.Single(database.Context.AuditEvents, item => item.Action == "finance.irregular_accrual_created");
+        Assert.Equal(actorUserId, audit.ActorUserId);
+        Assert.Contains("Замена пульта ворот", audit.Summary, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("", 100, "irregular_accrual_basis_required")]
+    [InlineData("Основание", 0, "irregular_payment_amount_invalid")]
+    public async Task CreateIrregularAccrualAsync_RejectsInvalidCustomValues(
+        string basis,
+        decimal amount,
+        string expectedErrorCode)
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        var destinationFund = new Fund { Name = "Прочее", NormalizedName = "ПРОЧЕЕ" };
+        database.Context.AddRange(
+            destinationFund,
+            new IncomeType
+            {
+                Name = "Прочие оплаты",
+                Code = "other_payments",
+                IsSystem = true,
+                DestinationFund = destinationFund
+            });
+        await database.Context.SaveChangesAsync();
+        var service = FinanceServiceTestFactory.Create(database.Context);
+
+        var result = await service.CreateIrregularAccrualAsync(
+            new CreateIrregularAccrualRequest(fixtures.Garage.Id, null, basis, amount, new DateOnly(2026, 8, 1), null),
+            null,
+            CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Equal(expectedErrorCode, result.ErrorCode);
+        Assert.Empty(database.Context.Accruals.Where(item => item.Basis != null));
     }
 
     [Theory]
@@ -3202,7 +3311,7 @@ public sealed class FinanceServiceTests
         var service = FinanceServiceTestFactory.Create(database.Context);
 
         var result = await service.CreateIrregularAccrualAsync(
-            new CreateIrregularAccrualRequest(fixtures.Garage.Id, payment.Id, new DateOnly(2026, 8, 1), null),
+            new CreateIrregularAccrualRequest(fixtures.Garage.Id, payment.Id, payment.Name, payment.Amount, new DateOnly(2026, 8, 1), null),
             null,
             CancellationToken.None);
 

@@ -59,6 +59,7 @@ public sealed record GarageIncomeWorksheetAllocationData(
     Guid AccrualId,
     DateOnly AccrualAccountingMonth,
     Guid IncomeTypeId,
+    string IncomeTypeName,
     DateOnly PaymentAccountingMonth,
     decimal Amount);
 

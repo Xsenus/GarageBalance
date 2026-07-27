@@ -146,6 +146,7 @@ public sealed record AccrualDto(
     DateOnly OverdueFromDate,
     Guid? IrregularPaymentId = null,
     string? IrregularPaymentName = null,
+    string? Basis = null,
     Guid? FeeCampaignId = null,
     string? FeeCampaignName = null);
 
@@ -185,7 +186,9 @@ public sealed record CreateAccrualRequest(
 
 public sealed record CreateIrregularAccrualRequest(
     Guid GarageId,
-    Guid IrregularPaymentId,
+    Guid? IrregularPaymentId,
+    [Required, MaxLength(200)] string Basis,
+    [Range(0.01, 999999999)] decimal Amount,
     DateOnly AccountingMonth,
     [MaxLength(1000)] string? Comment);
 

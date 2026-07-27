@@ -107,6 +107,7 @@ export type AccrualDto = {
   overdueFromDate: string
   irregularPaymentId: string | null
   irregularPaymentName: string | null
+  basis: string | null
   feeCampaignId: string | null
   feeCampaignName: string | null
 }
@@ -492,7 +493,9 @@ export type CreateMeterReadingRequest = {
 
 export type CreateIrregularAccrualRequest = {
   garageId: string
-  irregularPaymentId: string
+  irregularPaymentId?: string
+  basis: string
+  amount: number
   accountingMonth: string
   comment?: string
 }
