@@ -1490,6 +1490,18 @@ h1 {
   margin-top: 16px;
 }
 
+.contractors-directory-loading-note {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 .contractors-column-filters {
   display: grid;
   grid-template-columns: minmax(180px, 1.35fr) repeat(4, minmax(116px, 0.75fr)) auto auto;
@@ -2123,10 +2135,22 @@ h1 {
 }
 
 .contractors-supplier-primary-grid,
+.contractors-supplier-contact-summary-grid,
 .contractors-supplier-footer-grid {
   display: grid;
   grid-template-columns: minmax(0, 1.35fr) minmax(0, 0.65fr);
   gap: 12px;
+}
+
+.contractors-supplier-contact-summary-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.contractors-supplier-contact-hint {
+  margin: -4px 0 0;
+  color: #667085;
+  font-size: 12px;
+  line-height: 1.45;
 }
 
 .contractors-supplier-lookup-grid {
@@ -2309,6 +2333,7 @@ h1 {
   }
 
   .contractors-supplier-primary-grid,
+  .contractors-supplier-contact-summary-grid,
   .contractors-supplier-lookup-grid,
   .contractors-supplier-footer-grid,
   .contractors-staff-fields {
@@ -2325,6 +2350,7 @@ h1 {
 }
 
 @media (min-width: 721px) and (max-width: 980px) {
+  .contractors-supplier-contact-summary-grid,
   .contractors-supplier-lookup-grid,
   .contractors-supplier-footer-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));

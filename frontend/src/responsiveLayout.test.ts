@@ -267,7 +267,8 @@ describe('responsive layout styles', () => {
     expect(normalizedAppCss).toContain('.contractors-contacts-row > span {\n  min-width: 0;')
     expect(normalizedAppCss).not.toContain('.contractors-contacts-row span {')
     expect(normalizedAppCss).toContain('.contractors-contacts-row--editable > span {\n  padding: 4px 5px;')
-    expect(normalizedAppCss).toContain('.contractors-supplier-primary-grid,\n  .contractors-supplier-lookup-grid,\n  .contractors-supplier-footer-grid,\n  .contractors-staff-fields {\n    grid-template-columns: 1fr;')
+    expect(normalizedAppCss).toContain('.contractors-supplier-primary-grid,\n  .contractors-supplier-contact-summary-grid,\n  .contractors-supplier-lookup-grid,\n  .contractors-supplier-footer-grid,\n  .contractors-staff-fields {\n    grid-template-columns: 1fr;')
+    expect(normalizedAppCss).toContain('@media (min-width: 721px) and (max-width: 980px) {\n  .contractors-supplier-contact-summary-grid,\n  .contractors-supplier-lookup-grid,\n  .contractors-supplier-footer-grid {\n    grid-template-columns: repeat(2, minmax(0, 1fr));')
   })
 
   it('keeps staff rate in the right column and submit actions at the right edge', () => {

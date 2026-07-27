@@ -1684,6 +1684,9 @@ describe('App', () => {
     let savedSupplierRequest: UpsertSupplierRequest | null = null
     const updatedSupplierRequests: UpsertSupplierRequest[] = []
     const updatedSupplierContactRequests: Array<{ phone?: string | null; email?: string | null }> = []
+    let contractorSupplierContacts: SupplierContactDto[] = []
+    const getContractorSupplierContacts = vi.fn(async (_token: string, supplierId?: string) =>
+      contractorSupplierContacts.filter((contact) => !supplierId || contact.supplierId === supplierId))
     let createdContractorServiceRequest: CreateChargeServiceWithTariffRequest | null = null
     const contractorServiceIncomeType = createAccountingType({ id: 'income-cleaning', name: 'Содержание территории', code: 'membership' })
     const contractorServiceTariff = createTariff({ id: 'tariff-cleaning', name: 'Тариф содержания территории', calculationBase: 'fixed', rate: 800 })
@@ -1797,20 +1800,25 @@ describe('App', () => {
           comment: request.comment ?? null,
         })
       },
-      createSupplierContact: async (_token, request) => createSupplierContact({
-        id: '33333333-3333-4333-8333-333333333333',
-        supplierId: request.supplierId,
-        supplierName: 'Новый подрядчик',
-        fullName: request.fullName,
-        position: request.position ?? null,
-        phone: request.phone ?? null,
-        email: request.email ?? null,
-        status: request.status,
-        comment: request.comment ?? null,
-      }),
+      getSupplierContacts: getContractorSupplierContacts,
+      createSupplierContact: async (_token, request) => {
+        const contact = createSupplierContact({
+          id: '33333333-3333-4333-8333-333333333333',
+          supplierId: request.supplierId,
+          supplierName: 'Новый подрядчик',
+          fullName: request.fullName,
+          position: request.position ?? null,
+          phone: request.phone ?? null,
+          email: request.email ?? null,
+          status: request.status,
+          comment: request.comment ?? null,
+        })
+        contractorSupplierContacts = [...contractorSupplierContacts, contact]
+        return contact
+      },
       updateSupplierContact: async (_token, id, request) => {
         updatedSupplierContactRequests.push(request)
-        return createSupplierContact({
+        const contact = createSupplierContact({
           id,
           supplierId: request.supplierId,
           supplierName: 'Новый подрядчик',
@@ -1821,6 +1829,8 @@ describe('App', () => {
           status: request.status,
           comment: request.comment ?? null,
         })
+        contractorSupplierContacts = contractorSupplierContacts.map((item) => (item.id === id ? contact : item))
+        return contact
       },
       restoreSupplier: async (_token, id) => {
         restoredSupplierIds.push(id)
@@ -1837,6 +1847,7 @@ describe('App', () => {
       },
       archiveSupplierContact: async (_token, _id, reason) => {
         deletedSupplierContactReason = reason
+        contractorSupplierContacts = contractorSupplierContacts.map((contact) => (contact.id === _id ? { ...contact, isArchived: true, status: 'Не работает' } : contact))
       },
       getStaffDepartments: async () => staffDepartments,
       archiveStaffDepartment: async (_token, id, reason) => {
@@ -2188,10 +2199,14 @@ describe('App', () => {
     expect(supplierServiceControl).toHaveClass('select-control__trigger')
     await user.click(supplierServiceControl)
     await user.click(within(within(supplierDialog).getByRole('listbox', { name: 'Услуга поставщика: варианты' })).getByRole('option', { name: 'Уборка территории' }))
-    expect(within(supplierDialog).queryByLabelText('Телефон поставщика')).not.toBeInTheDocument()
-    expect(within(supplierDialog).queryByLabelText('Почта поставщика')).not.toBeInTheDocument()
+    expect(within(supplierDialog).getByLabelText('Телефон поставщика')).toHaveValue('')
+    expect(within(supplierDialog).getByLabelText('Почта поставщика')).toHaveValue('')
+    expect(within(supplierDialog).getByText('Телефон и почта берутся из первого действующего контакта. Изменение здесь сразу обновляет ту же строку в таблице контактов.')).toBeInTheDocument()
     expect(within(supplierDialog).getByLabelText('Задолженность поставщика')).toHaveAttribute('readonly')
-    await user.click(within(supplierDialog).getByRole('button', { name: 'Добавить контакт' }))
+    await user.type(within(supplierDialog).getByLabelText('Телефон поставщика'), '+7 900 111-22-33')
+    await user.type(within(supplierDialog).getByLabelText('Почта поставщика'), 'guard@example.test')
+    expect(within(supplierDialog).getByLabelText('Контакт 1: телефон')).toHaveValue('+7 (900) 111-22-33')
+    expect(within(supplierDialog).getByLabelText('Контакт 1: почта')).toHaveValue('guard@example.test')
     const contactStatusControl = within(supplierDialog).getByRole('combobox', { name: 'Контакт 1: статус' })
     expect(contactStatusControl).toHaveClass('select-control__trigger')
     await user.click(contactStatusControl)
@@ -2201,11 +2216,12 @@ describe('App', () => {
     expect(contactStatusControl).toHaveTextContent('Не работает')
     await user.click(contactStatusControl)
     await user.click(within(supplierDialog).getByRole('option', { name: 'Работает' }))
+    await user.clear(within(supplierDialog).getByLabelText('Контакт 1: ФИО'))
     await user.type(within(supplierDialog).getByLabelText('Контакт 1: ФИО'), 'Смирнов С.С.')
     await user.type(within(supplierDialog).getByLabelText('Контакт 1: должность'), 'Менеджер')
-    await user.type(within(supplierDialog).getByLabelText('Контакт 1: телефон'), '+7 900 111-22-33')
     expect(within(supplierDialog).getByLabelText('Контакт 1: телефон')).toHaveValue('+7 (900) 111-22-33')
-    await user.type(within(supplierDialog).getByLabelText('Контакт 1: почта'), 'guard@example.test')
+    expect(within(supplierDialog).getByLabelText('Телефон поставщика')).toHaveValue('+7 (900) 111-22-33')
+    expect(within(supplierDialog).getByLabelText('Почта поставщика')).toHaveValue('guard@example.test')
     await user.type(within(supplierDialog).getByLabelText('Контакт 1: комментарий'), 'Основной контакт')
     await user.click(within(supplierDialog).getByRole('button', { name: /Сохранить/i }))
     await waitFor(() => expect(within(within(contractorsPanel).getByRole('table', { name: 'Поставщики' })).getByText('Новый подрядчик')).toBeInTheDocument())
@@ -2227,8 +2243,13 @@ describe('App', () => {
     let supplierRow = within(suppliersTable).getByText('Новый подрядчик').closest('[role="row"]')!
     expect(within(supplierRow as HTMLElement).getByText('Смирнов С.С.')).toBeInTheDocument()
     expect(within(supplierRow as HTMLElement).getByRole('button', { name: 'Изменить поставщика Новый подрядчик' })).toBeInTheDocument()
+    getContractorSupplierContacts.mockRejectedValueOnce(new Error('Не удалось получить контакты выбранного поставщика.'))
+    await user.click(within(supplierRow as HTMLElement).getByRole('button', { name: 'Изменить поставщика Новый подрядчик' }))
+    expect(await screen.findByText('Не удалось получить контакты выбранного поставщика.')).toBeInTheDocument()
+    expect(screen.queryByRole('dialog', { name: 'Новый подрядчик' })).not.toBeInTheDocument()
     await user.click(within(supplierRow as HTMLElement).getByRole('button', { name: 'Изменить поставщика Новый подрядчик' }))
     const editSupplierDialog = await screen.findByRole('dialog', { name: 'Новый подрядчик' })
+    expect(getContractorSupplierContacts).toHaveBeenLastCalledWith('token', '22222222-2222-4222-8222-222222222222', undefined, 500, true)
     expect(within(editSupplierDialog).getByLabelText('Услуга поставщика').tagName).toBe('BUTTON')
     expect(within(editSupplierDialog).getByLabelText('Наименование поставщика').closest('.contractors-supplier-primary-grid')).not.toBeNull()
     expect(within(editSupplierDialog).getByLabelText('Юридический адрес поставщика').closest('.contractors-supplier-lookup-grid')).not.toBeNull()
@@ -2274,10 +2295,12 @@ describe('App', () => {
     const reopenedRestoreContactDialog = await screen.findByRole('dialog', { name: 'Восстановить контакт?' })
     await user.click(within(reopenedRestoreContactDialog).getByRole('button', { name: 'Восстановить' }))
     expect(within(editSupplierDialog).getByLabelText('Контакт 1: телефон')).toBeEnabled()
-    await user.clear(within(editSupplierDialog).getByLabelText('Контакт 1: телефон'))
-    await user.type(within(editSupplierDialog).getByLabelText('Контакт 1: телефон'), '+7 900 111-22-44')
-    await user.clear(within(editSupplierDialog).getByLabelText('Контакт 1: почта'))
-    await user.type(within(editSupplierDialog).getByLabelText('Контакт 1: почта'), 'updated@example.test')
+    await user.clear(within(editSupplierDialog).getByLabelText('Телефон поставщика'))
+    await user.type(within(editSupplierDialog).getByLabelText('Телефон поставщика'), '+7 900 111-22-44')
+    await user.clear(within(editSupplierDialog).getByLabelText('Почта поставщика'))
+    await user.type(within(editSupplierDialog).getByLabelText('Почта поставщика'), 'updated@example.test')
+    expect(within(editSupplierDialog).getByLabelText('Контакт 1: телефон')).toHaveValue('+7 (900) 111-22-44')
+    expect(within(editSupplierDialog).getByLabelText('Контакт 1: почта')).toHaveValue('updated@example.test')
     await user.click(within(editSupplierDialog).getByRole('button', { name: /Сохранить/i }))
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Новый подрядчик' })).not.toBeInTheDocument())
     expect(screen.queryByRole('dialog', { name: 'Подтвердить изменения поставщика' })).not.toBeInTheDocument()
@@ -2291,8 +2314,8 @@ describe('App', () => {
     const reopenSupplierDialog = await screen.findByRole('dialog', { name: 'Новый подрядчик' })
     expect(within(reopenSupplierDialog).getByLabelText('Контакт 1: телефон')).toHaveValue('+7 (900) 111-22-44')
     expect(within(reopenSupplierDialog).getByLabelText('Контакт 1: почта')).toHaveValue('updated@example.test')
-    expect(within(reopenSupplierDialog).queryByLabelText('Телефон поставщика')).not.toBeInTheDocument()
-    expect(within(reopenSupplierDialog).queryByLabelText('Почта поставщика')).not.toBeInTheDocument()
+    expect(within(reopenSupplierDialog).getByLabelText('Телефон поставщика')).toHaveValue('+7 (900) 111-22-44')
+    expect(within(reopenSupplierDialog).getByLabelText('Почта поставщика')).toHaveValue('updated@example.test')
     const reopenedSupplierContactRow = within(reopenSupplierDialog).getByLabelText('Контакт 1: ФИО').closest('[role="row"]')!
     await user.pointer({ keys: '[MouseRight]', target: reopenedSupplierContactRow as HTMLElement })
     const reopenedContactContextMenu = await screen.findByRole('menu', { name: 'Действия контакта Смирнов С.С.' })
@@ -2304,7 +2327,7 @@ describe('App', () => {
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Новый подрядчик' })).not.toBeInTheDocument())
     expect(screen.queryByRole('dialog', { name: 'Подтвердить изменения поставщика' })).not.toBeInTheDocument()
     expect(deletedSupplierContactReason).toBe('Контакт больше не работает')
-    expect(updatedSupplierRequests.at(-1)).toMatchObject({ contactPerson: '', phone: '', email: '' })
+    expect(updatedSupplierRequests.at(-1)).toMatchObject({ contactPerson: '', phone: '', email: null })
 
     supplierRow = within(suppliersTable).getByText('Новый подрядчик').closest('[role="row"]')!
     expect(within(supplierRow as HTMLElement).queryByText('+7 (900) 111-22-44')).not.toBeInTheDocument()

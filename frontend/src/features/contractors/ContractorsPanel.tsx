@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { CSSProperties, FormEvent, MouseEvent, RefObject } from 'react'
 import { FileText, Gauge, LoaderCircle, Pencil, RotateCcw, Save, Search, Trash2, UserPlus, UsersRound, X } from 'lucide-react'
 import type { AuthResponse } from '../../services/authApi'
@@ -280,6 +280,27 @@ function normalizeSupplierPrototype(supplier: ContractorSupplierRow): Contractor
     phone: primaryContact?.phone ?? (hasManagedContacts ? '' : supplier.phone),
     email: primaryContact?.email ?? (hasManagedContacts ? '' : supplier.email),
   }
+}
+
+function updateSupplierPrimaryContact(
+  supplier: ContractorSupplierRow,
+  patch: Partial<Pick<ContractorSupplierContact, 'phone' | 'email'>>,
+) {
+  const primaryContact = getSupplierPrimaryContact(supplier)
+  const contacts = primaryContact
+    ? supplier.contacts.map((contact) => (contact.id === primaryContact.id ? { ...contact, ...patch } : contact))
+    : [
+        ...supplier.contacts,
+        {
+          ...createEmptySupplierContact(),
+          fullName: supplier.contactPerson.trim() || 'Основной контакт',
+          phone: supplier.phone,
+          email: supplier.email,
+          ...patch,
+        },
+      ]
+
+  return normalizeSupplierPrototype({ ...supplier, contacts })
 }
 
 function isBackendDictionaryId(id: string) {
@@ -619,7 +640,7 @@ function createSupplierRequestFromRow(row: ContractorSupplierRow, groupId: strin
     legalAddress: normalized.legalAddress.trim(),
     contactPerson: normalized.contactPerson.trim(),
     phone: normalized.phone.trim(),
-    email: normalized.email.trim(),
+    email: normalized.email.trim() || null,
     startingBalance: parsePrototypeMoney(normalized.startingBalance),
     comment: normalized.comment.trim(),
     chargeServiceSettingId: normalized.serviceId,
@@ -632,7 +653,7 @@ function createSupplierContactRequestFromRow(supplierId: string, contact: Contra
     fullName: contact.fullName.trim(),
     position: contact.position.trim(),
     phone: contact.phone.trim(),
-    email: contact.email.trim(),
+    email: contact.email.trim() || null,
     status: contact.status,
     comment: contact.comment.trim(),
   }
@@ -816,6 +837,8 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
   const loadedContractorReferencesRef = useRef<Record<'garages' | 'suppliers', boolean>>({ garages: false, suppliers: false })
   const ownersRef = useRef<OwnerDto[]>([])
   const supplierContactsRef = useRef<SupplierContactDto[]>([])
+  const supplierEditorRequestSequenceRef = useRef(0)
+  const [supplierEditorLoadingId, setSupplierEditorLoadingId] = useState<string | null>(null)
   const garagePageRequestSequenceRef = useRef(0)
   useRestoreFocusOnClose(Boolean(restoreTarget))
   useRestoreFocusOnClose(Boolean(garageDeleteTarget))
@@ -849,6 +872,49 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
   useEscapeKey(Boolean(employeeDeleteTarget), () => closeEmployeeDeleteDialog())
   useEscapeKey(Boolean(departmentContextMenu), () => setDepartmentContextMenu(null))
   useEscapeKey(Boolean(departmentDeleteTarget), () => closeDepartmentDeleteDialog())
+
+  const openSupplierEditor = useCallback(async (row: ContractorSupplierRow) => {
+    setSupplierContextMenu(null)
+    setFormStateError(null)
+    if (!isBackendDictionaryId(row.id)) {
+      setModal({ type: 'supplier', item: row })
+      return
+    }
+
+    const requestSequence = ++supplierEditorRequestSequenceRef.current
+    setSupplierEditorLoadingId(row.id)
+    try {
+      const contacts = await dictionaryClient.getSupplierContacts(
+        auth.accessToken,
+        row.id,
+        undefined,
+        contractorsDictionaryListLimit,
+        true,
+      )
+      if (requestSequence !== supplierEditorRequestSequenceRef.current) {
+        return
+      }
+
+      const contactRows = contacts.map(createSupplierContactFromDto)
+      const nextRow = normalizeSupplierPrototype({ ...row, contacts: contactRows })
+      const nextSupplierContacts = [
+        ...supplierContactsRef.current.filter((contact) => contact.supplierId !== row.id),
+        ...contacts,
+      ]
+      supplierContactsRef.current = nextSupplierContacts
+      setSupplierContacts(nextSupplierContacts)
+      setSuppliers((currentSuppliers) => currentSuppliers.map((supplier) => (supplier.id === row.id ? nextRow : supplier)))
+      setModal({ type: 'supplier', item: nextRow })
+    } catch (error) {
+      if (requestSequence === supplierEditorRequestSequenceRef.current) {
+        setFormStateError(error instanceof Error ? error.message : 'Не удалось загрузить контакты поставщика.')
+      }
+    } finally {
+      if (requestSequence === supplierEditorRequestSequenceRef.current) {
+        setSupplierEditorLoadingId(null)
+      }
+    }
+  }, [auth.accessToken, dictionaryClient])
 
   useEffect(() => {
     let cancelled = false
@@ -1046,11 +1112,15 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
     const handle = window.setTimeout(() => {
       setActiveSection(nextSection)
       closeContextMenu()
-      setModal(nextModal)
+      if (nextModal.type === 'supplier' && nextModal.item) {
+        void openSupplierEditor(nextModal.item)
+      } else {
+        setModal(nextModal)
+      }
     }, 0)
 
     return () => window.clearTimeout(handle)
-  }, [garages, initialTarget, staff, suppliers])
+  }, [garages, initialTarget, openSupplierEditor, staff, suppliers])
 
   useEffect(() => {
     if (!formStateLoaded) {
@@ -1517,6 +1587,12 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
       }
 
       const nextSupplier = createSupplierRowFromDto(savedSupplier, savedContacts)
+      const nextSupplierContacts = [
+        ...supplierContactsRef.current.filter((contact) => contact.supplierId !== savedSupplier.id),
+        ...savedContacts,
+      ]
+      supplierContactsRef.current = nextSupplierContacts
+      setSupplierContacts(nextSupplierContacts)
       setSupplierGroups(groups)
       setSuppliers((currentSuppliers) => {
         if (currentSupplier) {
@@ -1557,11 +1633,6 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
   function openSupplierContextMenu(event: MouseEvent<HTMLDivElement>, row: ContractorSupplierRow) {
     event.preventDefault()
     setSupplierContextMenu({ row, x: event.clientX, y: event.clientY })
-  }
-
-  function openSupplierEditor(row: ContractorSupplierRow) {
-    setSupplierContextMenu(null)
-    setModal({ type: 'supplier', item: row })
   }
 
   function openSupplierDeleteDialog(row: ContractorSupplierRow) {
@@ -2069,6 +2140,7 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
 
       {activeSection === 'suppliers' ? (
         <section className="contractors-directory-card" aria-label="Поставщики">
+          {supplierEditorLoadingId ? <span className="contractors-directory-loading-note" role="status" aria-live="polite">Загружаем контакты поставщика…</span> : null}
           <div className="contractors-directory-table contractors-directory-table--suppliers" role="table" aria-label="Поставщики" style={supplierTableStyle}>
             <div className="contractors-directory-row contractors-directory-row--header" role="row">
               {contractorSupplierColumnDefinitions.map((column) => (
@@ -2104,8 +2176,8 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
                       </button>
                     ) : (
                       <>
-                        <button className="icon-button" type="button" aria-label={`Изменить поставщика ${row.name}`} title="Изменить" onClick={() => openSupplierEditor(row)}>
-                          <Pencil size={16} />
+                        <button className="icon-button" type="button" aria-label={`Изменить поставщика ${row.name}`} title="Изменить" aria-busy={supplierEditorLoadingId === row.id} disabled={supplierEditorLoadingId === row.id} onClick={() => void openSupplierEditor(row)}>
+                          {supplierEditorLoadingId === row.id ? <LoaderCircle className="financial-report-button__spinner" size={16} aria-hidden="true" /> : <Pencil size={16} />}
                         </button>
                         <button className="icon-button" type="button" aria-label={`Открыть финансовый отчет поставщика ${row.name}`} title="Финансовый отчет" onClick={() => openSupplierFinancialReport(row)}>
                           <FileText size={16} />
@@ -2322,8 +2394,8 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
             ) : (
               <>
                 <div className="context-menu-group" role="group">
-                  <button type="button" role="menuitem" onClick={() => openSupplierEditor(supplierContextMenu.row)}>
-                    <Pencil size={16} />
+                  <button type="button" role="menuitem" aria-busy={supplierEditorLoadingId === supplierContextMenu.row.id} disabled={supplierEditorLoadingId === supplierContextMenu.row.id} onClick={() => void openSupplierEditor(supplierContextMenu.row)}>
+                    {supplierEditorLoadingId === supplierContextMenu.row.id ? <LoaderCircle className="financial-report-button__spinner" size={16} aria-hidden="true" /> : <Pencil size={16} />}
                     <span>Изменить</span>
                   </button>
                   <button className="context-menu-danger" type="button" role="menuitem" onClick={() => openSupplierDeleteDialog(supplierContextMenu.row)}>
@@ -3288,7 +3360,7 @@ function SupplierPrototypeDialog({ accessToken, integrationClient, item, service
   }
 
   function updateContact(contactId: string, patch: Partial<ContractorSupplierContact>) {
-    setForm((currentForm) => ({
+    setForm((currentForm) => normalizeSupplierPrototype({
       ...currentForm,
       contacts: currentForm.contacts.map((contact) => (contact.id === contactId ? { ...contact, ...patch } : contact)),
     }))
@@ -3333,7 +3405,7 @@ function SupplierPrototypeDialog({ accessToken, integrationClient, item, service
       return
     }
 
-    setForm((currentForm) => ({
+    setForm((currentForm) => normalizeSupplierPrototype({
       ...currentForm,
       isDeleted: false,
       contacts: currentForm.contacts.map((itemContact) => (itemContact.id === contactRestoreTarget.id ? { ...itemContact, isDeleted: false, status: 'Работает', deleteReason: undefined } : itemContact)),
@@ -3425,6 +3497,26 @@ function SupplierPrototypeDialog({ accessToken, integrationClient, item, service
               <FormField label="Задолженность"><input aria-label="Задолженность поставщика" value={form.debt && form.debt !== 'Нет' ? formatStaffRate(form.debt) : 'Нет'} readOnly /></FormField>
               <DadataAddressField accessToken={accessToken} inputLabel="Юридический адрес поставщика" integrationClient={integrationClient} label="Юр. адрес" listboxLabel="Адреса DaData" suggestionsId="supplier-address-suggestions" value={form.legalAddress} onChange={(legalAddress) => setForm((currentForm) => ({ ...currentForm, legalAddress }))} />
             </div>
+            <div className="contractors-supplier-contact-summary-grid" aria-describedby="supplier-primary-contact-hint">
+              <FormField label="Телефон">
+                <PhoneInput
+                  aria-label="Телефон поставщика"
+                  value={form.phone}
+                  onValueChange={(phone) => setForm((currentForm) => updateSupplierPrimaryContact(currentForm, { phone }))}
+                />
+              </FormField>
+              <FormField label="Почта">
+                <input
+                  aria-label="Почта поставщика"
+                  type="email"
+                  value={form.email}
+                  onChange={(event) => setForm((currentForm) => updateSupplierPrimaryContact(currentForm, { email: event.target.value }))}
+                />
+              </FormField>
+            </div>
+            <p className="contractors-supplier-contact-hint" id="supplier-primary-contact-hint">
+              Телефон и почта берутся из первого действующего контакта. Изменение здесь сразу обновляет ту же строку в таблице контактов.
+            </p>
             <div className="contractors-contacts-toolbar">
               <span>Контакты</span>
               <button className="secondary-button create-action-button" type="button" onClick={addContact}>

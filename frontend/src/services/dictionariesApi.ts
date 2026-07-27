@@ -205,7 +205,7 @@ export type UpsertSupplierRequest = {
   legalAddress?: string
   contactPerson?: string
   phone?: string
-  email?: string
+  email?: string | null
   startingBalance: number
   comment?: string
   chargeServiceSettingId?: string | null
@@ -224,7 +224,7 @@ export type UpsertSupplierContactRequest = {
   fullName: string
   position?: string
   phone?: string
-  email?: string
+  email?: string | null
   status: string
   comment?: string
 }
