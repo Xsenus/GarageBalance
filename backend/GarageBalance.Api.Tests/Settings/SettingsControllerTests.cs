@@ -23,6 +23,8 @@ public sealed class SettingsControllerTests
         var backupCreateAction = typeof(SettingsController).GetMethod(nameof(SettingsController.CreateDatabaseBackup));
         var getBusinessDateAction = typeof(SettingsController).GetMethod(nameof(SettingsController.GetBusinessDateSettings));
         var updateBusinessDateAction = typeof(SettingsController).GetMethod(nameof(SettingsController.UpdateBusinessDateSettings));
+        var getSalaryAccrualAction = typeof(SettingsController).GetMethod(nameof(SettingsController.GetSalaryAccrualSettings));
+        var updateSalaryAccrualAction = typeof(SettingsController).GetMethod(nameof(SettingsController.UpdateSalaryAccrualSettings));
         var getCashBankBalancesAction = typeof(SettingsController).GetMethod(nameof(SettingsController.GetCashBankBalances));
         var updateOpeningBalancesAction = typeof(SettingsController).GetMethod(nameof(SettingsController.UpdateCashBankOpeningBalances));
         var createAdjustmentAction = typeof(SettingsController).GetMethod(nameof(SettingsController.CreateCashBankBalanceAdjustment));
@@ -33,6 +35,8 @@ public sealed class SettingsControllerTests
         Assert.Equal(SystemPermissions.UsersManage, Assert.Single(backupCreateAction!.GetCustomAttributes<AuthorizeAttribute>()).Policy);
         Assert.Equal(SystemRoles.Administrator, Assert.Single(getBusinessDateAction!.GetCustomAttributes<AuthorizeAttribute>()).Roles);
         Assert.Equal(SystemRoles.Administrator, Assert.Single(updateBusinessDateAction!.GetCustomAttributes<AuthorizeAttribute>()).Roles);
+        Assert.Equal(SystemPermissions.PaymentsRead, Assert.Single(getSalaryAccrualAction!.GetCustomAttributes<AuthorizeAttribute>()).Policy);
+        Assert.Equal(SystemPermissions.UsersManage, Assert.Single(updateSalaryAccrualAction!.GetCustomAttributes<AuthorizeAttribute>()).Policy);
         Assert.Equal(SystemRoles.Administrator, Assert.Single(getCashBankBalancesAction!.GetCustomAttributes<AuthorizeAttribute>()).Roles);
         Assert.Equal(SystemRoles.Administrator, Assert.Single(updateOpeningBalancesAction!.GetCustomAttributes<AuthorizeAttribute>()).Roles);
         Assert.Equal(SystemRoles.Administrator, Assert.Single(createAdjustmentAction!.GetCustomAttributes<AuthorizeAttribute>()).Roles);
@@ -48,6 +52,18 @@ public sealed class SettingsControllerTests
 
         var ok = Assert.IsType<OkObjectResult>(result.Result);
         Assert.Same(service.Current, ok.Value);
+    }
+
+    [Fact]
+    public async Task GetSalaryAccrualSettings_ReturnsServiceValue()
+    {
+        var service = new FakeService();
+        var controller = CreateController(service);
+
+        var result = await controller.GetSalaryAccrualSettings(CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        Assert.Equal(10, Assert.IsType<SalaryAccrualSettingsDto>(ok.Value).AccrualDay);
     }
 
     [Fact]
@@ -108,6 +124,45 @@ public sealed class SettingsControllerTests
         Assert.Equal(new DateOnly(2026, 8, 5), dto.EffectiveDate);
         Assert.Same(request, service.ReceivedBusinessDateRequest);
         Assert.Equal(actorUserId, service.ReceivedActorUserId);
+    }
+
+    [Fact]
+    public async Task UpdateSalaryAccrualSettings_PassesActorAndReturnsUpdatedValue()
+    {
+        var actorUserId = Guid.NewGuid();
+        var service = new FakeService();
+        var controller = CreateController(service);
+        controller.ControllerContext = new ControllerContext
+        {
+            HttpContext = new DefaultHttpContext
+            {
+                User = new ClaimsPrincipal(new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, actorUserId.ToString())], "Test"))
+            }
+        };
+        var request = new UpdateSalaryAccrualSettingsRequest(15);
+
+        var result = await controller.UpdateSalaryAccrualSettings(request, CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        Assert.Equal(15, Assert.IsType<SalaryAccrualSettingsDto>(ok.Value).AccrualDay);
+        Assert.Same(request, service.ReceivedSalaryAccrualRequest);
+        Assert.Equal(actorUserId, service.ReceivedActorUserId);
+    }
+
+    [Fact]
+    public async Task UpdateSalaryAccrualSettings_MapsInvalidDayToBadRequest()
+    {
+        var service = new FakeService { RejectSalaryAccrualUpdate = true };
+        var controller = CreateController(service);
+
+        var result = await controller.UpdateSalaryAccrualSettings(
+            new UpdateSalaryAccrualSettingsRequest(29),
+            CancellationToken.None);
+
+        var badRequest = Assert.IsType<ObjectResult>(result.Result);
+        Assert.Equal(StatusCodes.Status400BadRequest, badRequest.StatusCode);
+        var problem = Assert.IsType<ProblemDetails>(badRequest.Value);
+        Assert.Equal("salary_accrual_day_invalid", problem.Title);
     }
 
     [Fact]
@@ -231,6 +286,8 @@ public sealed class SettingsControllerTests
         public UpdatePaymentDisplaySettingsRequest? ReceivedRequest { get; private set; }
         public Guid? ReceivedActorUserId { get; private set; }
         public UpdateBusinessDateRequest? ReceivedBusinessDateRequest { get; private set; }
+        public UpdateSalaryAccrualSettingsRequest? ReceivedSalaryAccrualRequest { get; private set; }
+        public bool RejectSalaryAccrualUpdate { get; set; }
 
         public Task<PaymentDisplaySettingsDto> GetPaymentDisplaySettingsAsync(CancellationToken cancellationToken) => Task.FromResult(Current);
 
@@ -240,6 +297,21 @@ public sealed class SettingsControllerTests
             ReceivedActorUserId = actorUserId;
             Current = new PaymentDisplaySettingsDto(request.ShowAllGarageOperationsByDefault);
             return Task.FromResult(Current);
+        }
+
+        public Task<SalaryAccrualSettingsDto> GetSalaryAccrualSettingsAsync(CancellationToken cancellationToken) =>
+            Task.FromResult(new SalaryAccrualSettingsDto(10));
+
+        public Task<SalaryAccrualSettingsDto> UpdateSalaryAccrualSettingsAsync(UpdateSalaryAccrualSettingsRequest request, Guid? actorUserId, CancellationToken cancellationToken)
+        {
+            if (RejectSalaryAccrualUpdate)
+            {
+                throw new SalaryAccrualSettingsValidationException("День начисления зарплаты должен быть от 1 до 28.");
+            }
+
+            ReceivedSalaryAccrualRequest = request;
+            ReceivedActorUserId = actorUserId;
+            return Task.FromResult(new SalaryAccrualSettingsDto(request.AccrualDay));
         }
 
         public Task<BusinessDateSettingsDto> GetBusinessDateSettingsAsync(CancellationToken cancellationToken) =>

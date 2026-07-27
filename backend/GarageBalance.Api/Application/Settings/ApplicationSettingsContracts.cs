@@ -4,6 +4,10 @@ public sealed record PaymentDisplaySettingsDto(bool ShowAllGarageOperationsByDef
 
 public sealed record UpdatePaymentDisplaySettingsRequest(bool ShowAllGarageOperationsByDefault);
 
+public sealed record SalaryAccrualSettingsDto(int AccrualDay);
+
+public sealed record UpdateSalaryAccrualSettingsRequest(int AccrualDay);
+
 public sealed record BusinessDateSettingsDto(
     DateOnly SystemDate,
     DateOnly EffectiveDate,

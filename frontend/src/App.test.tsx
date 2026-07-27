@@ -19,6 +19,8 @@ vi.mock('./services/settingsApi', () => ({
   settingsApi: {
     getPaymentDisplaySettings: vi.fn(async () => ({ showAllGarageOperationsByDefault: true })),
     updatePaymentDisplaySettings: vi.fn(async (_accessToken: string, request: { showAllGarageOperationsByDefault: boolean }) => request),
+    getSalaryAccrualSettings: vi.fn(async () => ({ accrualDay: 10 })),
+    updateSalaryAccrualSettings: vi.fn(async (_accessToken: string, request: { accrualDay: number }) => request),
     getBusinessDateSettings: vi.fn(async () => ({ systemDate: '2026-07-21', effectiveDate: '2026-07-21', overrideDate: null, isOverrideActive: false, updatedAtUtc: null, automation: null })),
     updateBusinessDateSettings: vi.fn(async (_accessToken: string, request: { overrideDate: string | null }) => ({ systemDate: '2026-07-21', effectiveDate: request.overrideDate ?? '2026-07-21', overrideDate: request.overrideDate, isOverrideActive: request.overrideDate !== null, updatedAtUtc: '2026-07-21T09:00:00Z', automation: null })),
   },
@@ -5850,38 +5852,7 @@ describe('App', () => {
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Новое начисление' })).not.toBeInTheDocument())
     await waitFor(() => expect(addAccrualButton).toHaveFocus())
 
-    const salaryButton = within(prototype).getByRole('button', { name: 'Начислить зарплату' })
-    await user.click(salaryButton)
-    const salaryDialog = await screen.findByRole('dialog', { name: 'Начислить зарплату' })
-    const salaryGroup = within(salaryDialog).getByRole('combobox', { name: 'Группа для начисления зарплаты' })
-    expect(salaryGroup).toHaveClass('select-control__trigger')
-    expect(salaryGroup).toHaveTextContent('Коммунальные услуги')
-    await user.click(salaryGroup)
-    const selectedSalaryGroup = within(salaryDialog).getByRole('option', { name: 'Коммунальные услуги' })
-    expect(selectedSalaryGroup).toHaveAttribute('aria-selected', 'true')
-    await user.click(selectedSalaryGroup)
-    const salaryMonth = within(salaryDialog).getByLabelText('Месяц начисления зарплаты')
-    expect(salaryMonth).toHaveValue('06.2026')
-    expect(salaryMonth.closest('.localized-date-picker')).not.toBeNull()
-    await user.click(within(salaryDialog).getByRole('button', { name: 'Открыть календарь: Месяц начисления зарплаты' }))
-    const salaryMonthCalendar = within(salaryDialog).getByRole('dialog', { name: 'Месяц начисления зарплаты: календарь' })
-    const selectedSalaryMonth = within(salaryMonthCalendar).getByRole('button', { name: 'Июн' })
-    expect(selectedSalaryMonth).toHaveClass('is-selected')
-    await user.click(selectedSalaryMonth)
-    await user.type(within(salaryDialog).getByLabelText('Сумма начисления зарплаты'), '20000')
-    await user.type(within(salaryDialog).getByLabelText('Документ начисления зарплаты'), 'PAYROLL-prototype')
-    await user.type(within(salaryDialog).getByLabelText('Комментарий начисления зарплаты'), 'Зарплата из формы выплат')
-    await user.click(within(salaryDialog).getByRole('button', { name: 'Ок' }))
-    await waitFor(() => expect(savedSalaryAccrualRequests).toHaveLength(1))
-    expect(savedSalaryAccrualRequests[0]).toMatchObject({
-      supplierGroupId: 'group-1',
-      accountingMonth: '2026-06-01',
-      amount: 20000,
-      documentNumber: 'PAYROLL-prototype',
-      comment: 'Зарплата из формы выплат',
-    })
-    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Начислить зарплату' })).not.toBeInTheDocument())
-    await waitFor(() => expect(salaryButton).toHaveFocus())
+    expect(within(prototype).queryByRole('button', { name: 'Начислить зарплату' })).not.toBeInTheDocument()
 
     const bankButton = within(prototype).getByRole('button', { name: 'Сдать кассу в банк' })
     await user.click(bankButton)
@@ -9221,6 +9192,27 @@ describe('App', () => {
 
     await waitFor(() => expect(updateBusinessDateSettings).toHaveBeenCalledWith('token', { overrideDate: '2026-08-05' }))
     expect(await within(panel).findByText('Начисления за 08.2026: создано 2, пропущено 3.')).toHaveAttribute('role', 'status')
+  })
+
+  it('lets an administrator configure the automatic salary accrual day', async () => {
+    const user = userEvent.setup()
+    const updateSalaryAccrualSettings = vi.fn(async (_accessToken: string, request: { accrualDay: number }) => request)
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} integrationClient={createIntegrationClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} settingsClient={createSettingsClient({ updateSalaryAccrualSettings })} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Настройки')
+    const settings = await screen.findByRole('region', { name: 'Настройки' })
+    await user.click(within(settings).getByRole('tab', { name: 'Рабочая дата' }))
+    const form = await within(settings).findByRole('form', { name: 'Настройка автоматического начисления зарплаты' })
+    const dayInput = within(form).getByLabelText('День начисления зарплаты')
+    await waitFor(() => expect(dayInput).toHaveValue(10))
+    await user.clear(dayInput)
+    await user.type(dayInput, '15')
+    await user.click(within(form).getByRole('button', { name: 'Сохранить день начисления' }))
+
+    await waitFor(() => expect(updateSalaryAccrualSettings).toHaveBeenCalledWith('token', { accrualDay: 15 }))
+    expect(await within(form).findByRole('status')).toHaveTextContent('15-го числа каждого месяца')
   })
 
   it('shows portable backup status and creates a verified manual copy from settings', async () => {
@@ -17530,6 +17522,8 @@ function createSettingsClient(overrides: Partial<ApplicationSettingsClient> = {}
   return {
     getPaymentDisplaySettings: async () => ({ showAllGarageOperationsByDefault: false }),
     updatePaymentDisplaySettings: async (_accessToken, request) => request,
+    getSalaryAccrualSettings: async () => ({ accrualDay: 10 }),
+    updateSalaryAccrualSettings: async (_accessToken, request) => request,
     getBusinessDateSettings: async () => ({
       systemDate: '2026-07-21',
       effectiveDate: '2026-07-21',

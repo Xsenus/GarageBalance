@@ -13,6 +13,8 @@ public sealed class ApplicationSettingsService(
     ILogger<ApplicationSettingsService> logger) : IApplicationSettingsService
 {
     public const string ShowAllGarageOperationsKey = "payments.show_all_garage_operations_by_default";
+    public const string SalaryAccrualDayKey = "finance.salary_accrual_day";
+    public const int DefaultSalaryAccrualDay = 1;
     public const string BusinessDateOverrideKey = "system.business_date_override";
 
     public async Task<PaymentDisplaySettingsDto> GetPaymentDisplaySettingsAsync(CancellationToken cancellationToken)
@@ -65,6 +67,59 @@ public sealed class ApplicationSettingsService(
 
         await repository.SaveChangesAsync(cancellationToken);
         return new PaymentDisplaySettingsDto(setting.BooleanValue);
+    }
+
+    public async Task<SalaryAccrualSettingsDto> GetSalaryAccrualSettingsAsync(CancellationToken cancellationToken)
+    {
+        var setting = await repository.FindAsync(SalaryAccrualDayKey, cancellationToken);
+        return new SalaryAccrualSettingsDto(NormalizeSalaryAccrualDay(setting?.IntegerValue));
+    }
+
+    public async Task<SalaryAccrualSettingsDto> UpdateSalaryAccrualSettingsAsync(
+        UpdateSalaryAccrualSettingsRequest request,
+        Guid? actorUserId,
+        CancellationToken cancellationToken)
+    {
+        if (request.AccrualDay is < 1 or > 28)
+        {
+            throw new SalaryAccrualSettingsValidationException("День начисления зарплаты должен быть от 1 до 28.");
+        }
+
+        var setting = await repository.FindForUpdateAsync(SalaryAccrualDayKey, cancellationToken);
+        var previousValue = NormalizeSalaryAccrualDay(setting?.IntegerValue);
+        if (setting is null && request.AccrualDay == DefaultSalaryAccrualDay)
+        {
+            return new SalaryAccrualSettingsDto(DefaultSalaryAccrualDay);
+        }
+
+        if (setting is null)
+        {
+            setting = new ApplicationSetting { Key = SalaryAccrualDayKey };
+            repository.Add(setting);
+        }
+        else if (setting.IntegerValue == request.AccrualDay)
+        {
+            return new SalaryAccrualSettingsDto(request.AccrualDay);
+        }
+
+        setting.IntegerValue = request.AccrualDay;
+        setting.UpdatedAtUtc = timeProvider.GetUtcNow();
+        setting.UpdatedByUserId = actorUserId;
+        auditEventWriter.Add(new AuditEventWriteRequest(
+            actorUserId,
+            "application_setting.salary_accrual_day_updated",
+            "application_setting",
+            SalaryAccrualDayKey,
+            Summary: $"День автоматического начисления зарплаты изменён с {previousValue} на {request.AccrualDay}.",
+            Section: "settings",
+            ActionKind: "update",
+            EntityDisplayName: "Автоматическое начисление зарплаты",
+            OldValues: new Dictionary<string, object?> { ["accrualDay"] = previousValue },
+            NewValues: new Dictionary<string, object?> { ["accrualDay"] = request.AccrualDay },
+            FieldLabels: new Dictionary<string, string> { ["accrualDay"] = "День начисления" }));
+
+        await repository.SaveChangesAsync(cancellationToken);
+        return new SalaryAccrualSettingsDto(request.AccrualDay);
     }
 
     public async Task<BusinessDateSettingsDto> GetBusinessDateSettingsAsync(CancellationToken cancellationToken)
@@ -167,6 +222,11 @@ public sealed class ApplicationSettingsService(
                 $"Рабочая дата должна быть в диапазоне от {systemDate.AddYears(-10):dd.MM.yyyy} до {systemDate.AddYears(10):dd.MM.yyyy}.");
         }
     }
+
+    private static int NormalizeSalaryAccrualDay(int? value) =>
+        value is >= 1 and <= 28 ? value.Value : DefaultSalaryAccrualDay;
 }
 
 public sealed class BusinessDateValidationException(string message) : Exception(message);
+
+public sealed class SalaryAccrualSettingsValidationException(string message) : Exception(message);

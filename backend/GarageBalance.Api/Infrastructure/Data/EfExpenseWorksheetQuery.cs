@@ -1,10 +1,13 @@
 using GarageBalance.Api.Application.Finance;
+using GarageBalance.Api.Application.Settings;
 using GarageBalance.Api.Domain.Finance;
 using Microsoft.EntityFrameworkCore;
 
 namespace GarageBalance.Api.Infrastructure.Data;
 
-public sealed class EfExpenseWorksheetQuery(GarageBalanceDbContext dbContext) : IExpenseWorksheetQuery
+public sealed class EfExpenseWorksheetQuery(
+    GarageBalanceDbContext dbContext,
+    IBusinessDateProvider? businessDateProvider = null) : IExpenseWorksheetQuery
 {
     private const int SupplierAccrualCategory = 1;
     private const int SupplierExpenseCategory = 2;
@@ -30,6 +33,15 @@ public sealed class EfExpenseWorksheetQuery(GarageBalanceDbContext dbContext) : 
         string[] cashExpenseTypeNames,
         CancellationToken cancellationToken)
     {
+        var configuredSalaryAccrualDay = dbContext.ApplicationSettings
+            .AsNoTracking()
+            .Where(setting => setting.Key == ApplicationSettingsService.SalaryAccrualDayKey)
+            .Select(setting => setting.IntegerValue);
+        var businessDate = businessDateProvider?.Today;
+        var businessMonth = businessDate is null
+            ? (DateOnly?)null
+            : new DateOnly(businessDate.Value.Year, businessDate.Value.Month, 1);
+
         var supplierAccruals = dbContext.SupplierAccruals.AsNoTracking()
             .Where(accrual => !accrual.IsCanceled && accrual.AccountingMonth == accountingMonth)
             .GroupBy(accrual => new
@@ -105,7 +117,12 @@ public sealed class EfExpenseWorksheetQuery(GarageBalanceDbContext dbContext) : 
                     TypeId = (Guid?)expenseType.Id,
                     TypeName = (string?)expenseType.Name,
                     TypeCode = expenseType.Code,
-                    Amount = member.Rate,
+                    Amount = businessDate == null ||
+                        accountingMonth < businessMonth!.Value ||
+                        (accountingMonth == businessMonth.Value &&
+                            businessDate.Value.Day >= (configuredSalaryAccrualDay.FirstOrDefault() ?? ApplicationSettingsService.DefaultSalaryAccrualDay))
+                            ? member.Rate
+                            : 0m,
                     IncomeTotal = 0m,
                     BankDepositTotal = 0m,
                     CashExpenseTotal = 0m,

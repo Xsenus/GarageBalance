@@ -70,6 +70,51 @@ public sealed class ApplicationSettingsServiceTests
     }
 
     [Fact]
+    public async Task GetSalaryAccrualSettings_ReturnsFirstDayWhenSettingIsMissing()
+    {
+        var service = CreateService(new FakeRepository(), new CaptureAuditWriter());
+
+        var result = await service.GetSalaryAccrualSettingsAsync(CancellationToken.None);
+
+        Assert.Equal(1, result.AccrualDay);
+    }
+
+    [Fact]
+    public async Task UpdateSalaryAccrualSettings_PersistsDayAndWritesAuditEvent()
+    {
+        var actorUserId = Guid.NewGuid();
+        var repository = new FakeRepository();
+        var auditWriter = new CaptureAuditWriter();
+        var service = CreateService(repository, auditWriter);
+
+        var result = await service.UpdateSalaryAccrualSettingsAsync(
+            new UpdateSalaryAccrualSettingsRequest(15),
+            actorUserId,
+            CancellationToken.None);
+
+        Assert.Equal(15, result.AccrualDay);
+        Assert.Equal(15, repository.Setting!.IntegerValue);
+        Assert.Equal(ApplicationSettingsService.SalaryAccrualDayKey, repository.Setting.Key);
+        Assert.Equal(actorUserId, repository.Setting.UpdatedByUserId);
+        Assert.Equal("application_setting.salary_accrual_day_updated", Assert.Single(auditWriter.Requests).Action);
+        Assert.Equal(1, repository.SaveChangesCount);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(29)]
+    public async Task UpdateSalaryAccrualSettings_RejectsDayOutsideEveryMonth(int accrualDay)
+    {
+        var service = CreateService(new FakeRepository(), new CaptureAuditWriter());
+
+        await Assert.ThrowsAsync<SalaryAccrualSettingsValidationException>(() =>
+            service.UpdateSalaryAccrualSettingsAsync(
+                new UpdateSalaryAccrualSettingsRequest(accrualDay),
+                Guid.NewGuid(),
+                CancellationToken.None));
+    }
+
+    [Fact]
     public async Task UpdateBusinessDate_PersistsOverrideAndRunsAutomationForSelectedMonth()
     {
         var actorUserId = Guid.NewGuid();

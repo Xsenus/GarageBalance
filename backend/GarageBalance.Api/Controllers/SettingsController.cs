@@ -34,6 +34,38 @@ public sealed class SettingsController(
         return Ok(await applicationSettingsService.UpdatePaymentDisplaySettingsAsync(request, GetActorUserId(), cancellationToken));
     }
 
+    [HttpGet("salary-accrual")]
+    [Authorize(Policy = SystemPermissions.PaymentsRead)]
+    [ProducesResponseType<SalaryAccrualSettingsDto>(StatusCodes.Status200OK)]
+    public async Task<ActionResult<SalaryAccrualSettingsDto>> GetSalaryAccrualSettings(CancellationToken cancellationToken)
+    {
+        return Ok(await applicationSettingsService.GetSalaryAccrualSettingsAsync(cancellationToken));
+    }
+
+    [HttpPut("salary-accrual")]
+    [Authorize(Policy = SystemPermissions.UsersManage)]
+    [ProducesResponseType<SalaryAccrualSettingsDto>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    public async Task<ActionResult<SalaryAccrualSettingsDto>> UpdateSalaryAccrualSettings(
+        UpdateSalaryAccrualSettingsRequest request,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            return Ok(await applicationSettingsService.UpdateSalaryAccrualSettingsAsync(
+                request,
+                GetActorUserId(),
+                cancellationToken));
+        }
+        catch (SalaryAccrualSettingsValidationException exception)
+        {
+            return Problem(
+                statusCode: StatusCodes.Status400BadRequest,
+                title: "salary_accrual_day_invalid",
+                detail: exception.Message);
+        }
+    }
+
     [HttpGet("business-date")]
     [Authorize(Roles = SystemRoles.Administrator)]
     [ProducesResponseType<BusinessDateSettingsDto>(StatusCodes.Status200OK)]

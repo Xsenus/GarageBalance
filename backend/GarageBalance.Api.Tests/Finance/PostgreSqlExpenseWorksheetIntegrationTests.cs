@@ -1,8 +1,10 @@
 using GarageBalance.Api.Application.Audit;
 using GarageBalance.Api.Application.Finance;
 using GarageBalance.Api.Application.Funds;
+using GarageBalance.Api.Application.Settings;
 using GarageBalance.Api.Domain.Dictionaries;
 using GarageBalance.Api.Domain.Finance;
+using GarageBalance.Api.Domain.Settings;
 using GarageBalance.Api.Tests.Common;
 using GarageBalance.Api.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
@@ -11,6 +13,48 @@ namespace GarageBalance.Api.Tests.Finance;
 
 public sealed class PostgreSqlExpenseWorksheetIntegrationTests
 {
+    [PostgreSqlFact]
+    public async Task AutomaticStaffSalary_UsesConfiguredDayInPostgreSqlWorksheet()
+    {
+        await using var database = await PostgreSqlTestDatabase.CreateAsync();
+        var month = new DateOnly(2044, 2, 1);
+        Guid staffMemberId;
+        await using (var seedContext = database.CreateContext())
+        {
+            var department = new StaffDepartment { Name = $"Отдел {Guid.NewGuid():N}" };
+            var staffMember = new StaffMember
+            {
+                FullName = $"Сотрудник {Guid.NewGuid():N}",
+                Department = department,
+                Rate = 40000m,
+                CreatedAtUtc = new DateTimeOffset(2044, 1, 10, 0, 0, 0, TimeSpan.Zero)
+            };
+            staffMemberId = staffMember.Id;
+            seedContext.AddRange(
+                department,
+                staffMember,
+                new ApplicationSetting
+                {
+                    Key = ApplicationSettingsService.SalaryAccrualDayKey,
+                    IntegerValue = 15
+                });
+            await seedContext.SaveChangesAsync();
+        }
+
+        await using var context = database.CreateContext();
+        var beforeDay = await new EfExpenseWorksheetQuery(
+                context,
+                new TestBusinessDateProvider(new DateOnly(2044, 2, 14)))
+            .GetAsync(month, ["no_receipt"], ["Выплата без чека"], CancellationToken.None);
+        var fromDay = await new EfExpenseWorksheetQuery(
+                context,
+                new TestBusinessDateProvider(new DateOnly(2044, 2, 15)))
+            .GetAsync(month, ["no_receipt"], ["Выплата без чека"], CancellationToken.None);
+
+        Assert.Equal(0m, Assert.Single(beforeDay.StaffMembers, row => row.StaffMemberId == staffMemberId).Rate);
+        Assert.Equal(40000m, Assert.Single(fromDay.StaffMembers, row => row.StaffMemberId == staffMemberId).Rate);
+    }
+
     [PostgreSqlFact]
     public async Task StaffSalaryAdjustments_AffectCurrentAccrualAndOpeningBalanceOnPostgreSql()
     {

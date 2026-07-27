@@ -3,7 +3,7 @@ import type { FormEvent } from 'react'
 import { ArrowDownCircle, ArrowUpCircle, Banknote, CalendarClock, DatabaseBackup, Download, Eye, FileWarning, KeyRound, Landmark, PlugZap, RefreshCw, ShieldCheck, SlidersHorizontal, X } from 'lucide-react'
 import type { AuthClient, AuthResponse, CurrentUserDto } from '../../services/authApi'
 import type { IntegrationClient, OneCFreshIntegrationStatusDto, OneCFreshSyncDto, OneCFreshSyncPreviewDto, ReceiptPrintingIntegrationStatusDto } from '../../services/integrationsApi'
-import type { ApplicationSettingsClient, BusinessDateSettingsDto, CashBankBalanceSettingsDto, DatabaseBackupStatusDto, DiagnosticLogStatusDto } from '../../services/settingsApi'
+import type { ApplicationSettingsClient, BusinessDateSettingsDto, CashBankBalanceSettingsDto, DatabaseBackupStatusDto, DiagnosticLogStatusDto, SalaryAccrualSettingsDto } from '../../services/settingsApi'
 import { hasPermission, isAdministrator, permissions } from '../../shared/accessControl'
 import { LoadingSkeleton } from '../../shared/AsyncState'
 import { LocalizedDatePicker } from '../../shared/LocalizedDatePicker'
@@ -77,6 +77,10 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
   const [businessDateError, setBusinessDateError] = useState<string | null>(null)
   const [businessDateMessage, setBusinessDateMessage] = useState<string | null>(null)
   const [businessDateConfirmation, setBusinessDateConfirmation] = useState<{ overrideDate: string | null } | null>(null)
+  const [salaryAccrualSettings, setSalaryAccrualSettings] = useState<SalaryAccrualSettingsDto | null>(null)
+  const [salaryAccrualDayDraft, setSalaryAccrualDayDraft] = useState('1')
+  const [salaryAccrualSaving, setSalaryAccrualSaving] = useState(false)
+  const [salaryAccrualMessage, setSalaryAccrualMessage] = useState<string | null>(null)
   const [cashBankSettings, setCashBankSettings] = useState<CashBankBalanceSettingsDto | null>(null)
   const [cashBankLoading, setCashBankLoading] = useState(false)
   const [cashBankSaving, setCashBankSaving] = useState(false)
@@ -114,11 +118,16 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
     let ignore = false
     setBusinessDateLoading(true)
     setBusinessDateError(null)
-    settingsClient.getBusinessDateSettings(auth.accessToken)
-      .then((settings) => {
+    Promise.all([
+      settingsClient.getBusinessDateSettings(auth.accessToken),
+      settingsClient.getSalaryAccrualSettings(auth.accessToken),
+    ])
+      .then(([settings, salarySettings]) => {
         if (ignore) return
         setBusinessDateSettings(settings)
         setBusinessDateDraft(settings.overrideDate ?? settings.systemDate)
+        setSalaryAccrualSettings(salarySettings)
+        setSalaryAccrualDayDraft(String(salarySettings.accrualDay))
       })
       .catch((caught: unknown) => {
         if (!ignore) setBusinessDateError(caught instanceof Error ? caught.message : 'Не удалось загрузить рабочую дату.')
@@ -328,6 +337,29 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
       setBusinessDateError(caught instanceof Error ? caught.message : 'Не удалось изменить рабочую дату.')
     } finally {
       setBusinessDateSaving(false)
+    }
+  }
+
+  async function saveSalaryAccrualSettings(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    const accrualDay = Number(salaryAccrualDayDraft)
+    if (!Number.isInteger(accrualDay) || accrualDay < 1 || accrualDay > 28) {
+      setBusinessDateError('День начисления зарплаты должен быть от 1 до 28.')
+      return
+    }
+
+    setSalaryAccrualSaving(true)
+    setBusinessDateError(null)
+    setSalaryAccrualMessage(null)
+    try {
+      const settings = await settingsClient.updateSalaryAccrualSettings(auth.accessToken, { accrualDay })
+      setSalaryAccrualSettings(settings)
+      setSalaryAccrualDayDraft(String(settings.accrualDay))
+      setSalaryAccrualMessage(`Зарплата активным сотрудникам будет начисляться автоматически ${settings.accrualDay}-го числа каждого месяца.`)
+    } catch (caught) {
+      setBusinessDateError(caught instanceof Error ? caught.message : 'Не удалось сохранить день начисления зарплаты.')
+    } finally {
+      setSalaryAccrualSaving(false)
     }
   }
 
@@ -817,6 +849,32 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
                 </button>
                 <button className="ghost-button" type="button" disabled={!businessDateSettings.isOverrideActive || businessDateSaving} onClick={() => setBusinessDateConfirmation({ overrideDate: null })}>Вернуть системную дату</button>
               </div>
+              <form className="dictionary-form settings-card-form" aria-label="Настройка автоматического начисления зарплаты" onSubmit={(event) => void saveSalaryAccrualSettings(event)}>
+                <FormField label="День начисления зарплаты">
+                  <input
+                    aria-label="День начисления зарплаты"
+                    type="number"
+                    min="1"
+                    max="28"
+                    step="1"
+                    value={salaryAccrualDayDraft}
+                    disabled={salaryAccrualSaving}
+                    onChange={(event) => {
+                      setSalaryAccrualDayDraft(event.target.value)
+                      setSalaryAccrualMessage(null)
+                    }}
+                    required
+                  />
+                </FormField>
+                <p className="form-hint">В выбранный день оклад автоматически попадает в ведомость всем активным сотрудникам. Дни 1–28 работают одинаково во всех месяцах.</p>
+                <div className="dialog-actions dialog-actions--start">
+                  <button className="secondary-button" type="submit" disabled={salaryAccrualSaving || salaryAccrualSettings?.accrualDay === Number(salaryAccrualDayDraft)}>
+                    <CalendarClock size={16} aria-hidden="true" />
+                    <span>{salaryAccrualSaving ? 'Сохраняем...' : 'Сохранить день начисления'}</span>
+                  </button>
+                </div>
+                {salaryAccrualMessage ? <div className="form-success" role="status" aria-live="polite">{salaryAccrualMessage}</div> : null}
+              </form>
             </>
           ) : null}
           {businessDateError ? <FormError>{businessDateError}</FormError> : null}

@@ -2,6 +2,10 @@ export type PaymentDisplaySettingsDto = {
   showAllGarageOperationsByDefault: boolean
 }
 
+export type SalaryAccrualSettingsDto = {
+  accrualDay: number
+}
+
 export type BusinessDateSettingsDto = {
   systemDate: string
   effectiveDate: string
@@ -68,6 +72,8 @@ export type DiagnosticLogStatusDto = {
 export type ApplicationSettingsClient = {
   getPaymentDisplaySettings(accessToken: string): Promise<PaymentDisplaySettingsDto>
   updatePaymentDisplaySettings(accessToken: string, request: PaymentDisplaySettingsDto): Promise<PaymentDisplaySettingsDto>
+  getSalaryAccrualSettings(accessToken: string): Promise<SalaryAccrualSettingsDto>
+  updateSalaryAccrualSettings(accessToken: string, request: SalaryAccrualSettingsDto): Promise<SalaryAccrualSettingsDto>
   getBusinessDateSettings(accessToken: string): Promise<BusinessDateSettingsDto>
   updateBusinessDateSettings(accessToken: string, request: { overrideDate: string | null }): Promise<BusinessDateSettingsDto>
   getCashBankBalances(accessToken: string): Promise<CashBankBalanceSettingsDto>
@@ -117,6 +123,12 @@ export const settingsApi: ApplicationSettingsClient = {
   },
   updatePaymentDisplaySettings(accessToken, request) {
     return requestJson(accessToken, '/api/settings/payments/display', { method: 'PUT', body: JSON.stringify(request) })
+  },
+  getSalaryAccrualSettings(accessToken) {
+    return requestJson(accessToken, '/api/settings/salary-accrual')
+  },
+  updateSalaryAccrualSettings(accessToken, request) {
+    return requestJson(accessToken, '/api/settings/salary-accrual', { method: 'PUT', body: JSON.stringify(request) })
   },
   getBusinessDateSettings(accessToken) {
     return requestJson(accessToken, '/api/settings/business-date')

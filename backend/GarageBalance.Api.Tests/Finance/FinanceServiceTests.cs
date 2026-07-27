@@ -5,9 +5,11 @@ using GarageBalance.Api.Application.Common;
 using GarageBalance.Api.Application.Dictionaries;
 using GarageBalance.Api.Application.Finance;
 using GarageBalance.Api.Application.Funds;
+using GarageBalance.Api.Application.Settings;
 using GarageBalance.Api.Tests.Common;
 using GarageBalance.Api.Domain.Dictionaries;
 using GarageBalance.Api.Domain.Finance;
+using GarageBalance.Api.Domain.Settings;
 using GarageBalance.Api.Infrastructure.Data;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
@@ -7974,6 +7976,40 @@ public sealed class FinanceServiceTests
         Assert.Equal(0m, result.AvailableBalance.BankDepositTotal);
         Assert.Equal(0m, result.AvailableBalance.CashExpenseTotal);
         Assert.Equal(0m, result.AvailableBalance.BankExpenseTotal);
+    }
+
+    [Fact]
+    public async Task ExpenseWorksheetQuery_AutomaticallyIncludesActiveStaffSalaryFromConfiguredDay()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var department = new StaffDepartment { Name = "Бухгалтерия" };
+        var staffMember = new StaffMember
+        {
+            FullName = "Петрова Ольга",
+            Department = department,
+            Rate = 40000m,
+            CreatedAtUtc = new DateTimeOffset(2026, 6, 1, 0, 0, 0, TimeSpan.Zero)
+        };
+        database.Context.StaffMembers.Add(staffMember);
+        database.Context.ExpenseTypes.Add(new ExpenseType { Name = "Зарплата", Code = "salary", IsSystem = true });
+        database.Context.ApplicationSettings.Add(new ApplicationSetting
+        {
+            Key = ApplicationSettingsService.SalaryAccrualDayKey,
+            IntegerValue = 15
+        });
+        await database.Context.SaveChangesAsync();
+
+        var beforeDay = await new EfExpenseWorksheetQuery(
+                database.Context,
+                new TestBusinessDateProvider(new DateOnly(2026, 7, 14)))
+            .GetAsync(new DateOnly(2026, 7, 1), ["no_receipt"], ["Выплата без чека"], CancellationToken.None);
+        var fromDay = await new EfExpenseWorksheetQuery(
+                database.Context,
+                new TestBusinessDateProvider(new DateOnly(2026, 7, 15)))
+            .GetAsync(new DateOnly(2026, 7, 1), ["no_receipt"], ["Выплата без чека"], CancellationToken.None);
+
+        Assert.Equal(0m, Assert.Single(beforeDay.StaffMembers).Rate);
+        Assert.Equal(40000m, Assert.Single(fromDay.StaffMembers).Rate);
     }
 
     [Fact]

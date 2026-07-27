@@ -52,6 +52,23 @@ describe('settingsApi', () => {
     await expect(settingsApi.getPaymentDisplaySettings('token')).rejects.toThrow('Настройка недоступна.')
   })
 
+  it('loads and updates the automatic salary accrual day', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ accrualDay: 10 }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ accrualDay: 15 }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await expect(settingsApi.getSalaryAccrualSettings('token')).resolves.toEqual({ accrualDay: 10 })
+    await expect(settingsApi.updateSalaryAccrualSettings('token', { accrualDay: 15 })).resolves.toEqual({ accrualDay: 15 })
+    expect(fetchMock).toHaveBeenNthCalledWith(1, '/api/settings/salary-accrual', expect.objectContaining({
+      headers: expect.objectContaining({ Authorization: 'Bearer token' }),
+    }))
+    expect(fetchMock).toHaveBeenNthCalledWith(2, '/api/settings/salary-accrual', expect.objectContaining({
+      method: 'PUT',
+      body: JSON.stringify({ accrualDay: 15 }),
+    }))
+  })
+
   it('loads and updates the administrator business date', async () => {
     const current = {
       systemDate: '2026-07-21', effectiveDate: '2026-07-21', overrideDate: null,

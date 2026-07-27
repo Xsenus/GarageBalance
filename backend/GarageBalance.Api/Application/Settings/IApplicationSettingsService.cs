@@ -7,6 +7,11 @@ public interface IApplicationSettingsService
         UpdatePaymentDisplaySettingsRequest request,
         Guid? actorUserId,
         CancellationToken cancellationToken);
+    Task<SalaryAccrualSettingsDto> GetSalaryAccrualSettingsAsync(CancellationToken cancellationToken);
+    Task<SalaryAccrualSettingsDto> UpdateSalaryAccrualSettingsAsync(
+        UpdateSalaryAccrualSettingsRequest request,
+        Guid? actorUserId,
+        CancellationToken cancellationToken);
     Task<BusinessDateSettingsDto> GetBusinessDateSettingsAsync(CancellationToken cancellationToken);
     Task<BusinessDateSettingsDto> UpdateBusinessDateSettingsAsync(
         UpdateBusinessDateRequest request,

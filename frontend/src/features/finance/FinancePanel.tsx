@@ -288,14 +288,6 @@ type SupplierAccrualPrototypeSubmitRequest = {
   comment: string
 }
 
-type SalaryAccrualPrototypeSubmitRequest = {
-  supplierGroupId: string
-  accountingMonth: string
-  amount: number
-  documentNumber: string
-  comment: string
-}
-
 function createGarageIncomeRowsFromWorksheet(worksheet: GarageIncomeWorksheetDto): GarageIncomePrototypeRow[] {
   return worksheet.rows.map((row) => {
     const month = row.accountingMonth.slice(0, 7)
@@ -2203,7 +2195,6 @@ export function FinancePanel({
         irregularPayments={irregularPayments}
         integrationClient={integrationClient}
         loading={paymentsPrototypeLoading}
-        supplierGroups={supplierGroups}
         suppliers={suppliers}
         staffMembers={staffMembers}
         headingStatus={paymentsHeadingStatus}
@@ -2959,7 +2950,6 @@ function PaymentsPrototypePanel({
   irregularPayments,
   integrationClient,
   loading,
-  supplierGroups,
   suppliers,
   staffMembers,
   headingStatus,
@@ -2977,7 +2967,6 @@ function PaymentsPrototypePanel({
   irregularPayments: IrregularPaymentDto[]
   integrationClient: IntegrationClient
   loading: boolean
-  supplierGroups: SupplierGroupDto[]
   suppliers: SupplierDto[]
   staffMembers: StaffMemberDto[]
   headingStatus: string | null
@@ -3029,8 +3018,6 @@ function PaymentsPrototypePanel({
   const penaltyAccrualTriggerRef = useRef<HTMLButtonElement | null>(null)
   const [supplierAccrualDialogOpen, setSupplierAccrualDialogOpen] = useState(false)
   const supplierAccrualTriggerRef = useRef<HTMLButtonElement | null>(null)
-  const [salaryDialogOpen, setSalaryDialogOpen] = useState(false)
-  const salaryTriggerRef = useRef<HTMLButtonElement | null>(null)
   const [expenseDialogPreset, setExpenseDialogPreset] = useState<ExpensePrototypeDialogPreset | null>(null)
   const expenseTriggerRef = useRef<HTMLButtonElement | null>(null)
   const [staffPaymentDialogPreset, setStaffPaymentDialogPreset] = useState<StaffPaymentPrototypeDialogPreset | null>(null)
@@ -3314,25 +3301,6 @@ function PaymentsPrototypePanel({
         trigger.focus()
       }
       supplierAccrualTriggerRef.current = null
-    }, 0)
-  }
-
-  async function openSalaryDialog(event: MouseEvent<HTMLButtonElement>) {
-    salaryTriggerRef.current = event.currentTarget
-    setPaymentError(null)
-    if (await onEnsureReferences()) {
-      setSalaryDialogOpen(true)
-    }
-  }
-
-  function closeSalaryDialog() {
-    const trigger = salaryTriggerRef.current
-    setSalaryDialogOpen(false)
-    window.setTimeout(() => {
-      if (trigger?.isConnected) {
-        trigger.focus()
-      }
-      salaryTriggerRef.current = null
     }, 0)
   }
 
@@ -4470,67 +4438,6 @@ function PaymentsPrototypePanel({
     return null
   }
 
-  async function commitSalaryAccruals(request: SalaryAccrualPrototypeSubmitRequest) {
-    const supplierGroup = supplierGroups.find((item) => item.id === request.supplierGroupId && !item.isArchived) ?? null
-    if (!supplierGroup) {
-      return 'Выберите группу сотрудников или поставщиков.'
-    }
-
-    const result = await financeClient.generateSupplierGroupSalaryAccruals(auth.accessToken, {
-      supplierGroupId: supplierGroup.id,
-      accountingMonth: request.accountingMonth,
-      amount: request.amount,
-      documentNumber: request.documentNumber.trim() || undefined,
-      comment: request.comment.trim() || undefined,
-    })
-
-    setExpenseRows((currentRows) => {
-      let nextRows = currentRows
-      result.createdAccruals.forEach((accrual) => {
-        let updated = false
-        nextRows = nextRows.map((row) => {
-          const normalizedCounterparty = row.counterparty?.trim().toLocaleLowerCase('ru-RU') ?? ''
-          const normalizedSupplier = accrual.supplierName.trim().toLocaleLowerCase('ru-RU')
-          const matchesCounterparty = normalizedCounterparty.length > 0 && normalizedSupplier.includes(normalizedCounterparty)
-          const matchesService = row.item.trim().toLocaleLowerCase('ru-RU') === accrual.expenseTypeName.trim().toLocaleLowerCase('ru-RU')
-          if (!matchesCounterparty && !matchesService) {
-            return row
-          }
-
-          updated = true
-          const cost = (typeof row.cost === 'number' ? row.cost : 0) + accrual.amount
-          const paid = typeof row.paid === 'number' ? row.paid : 0
-          const closing = calculateExpenseWorksheetClosingBalance(row.openingDebt, row.openingAdvance, cost, paid)
-          return { ...row, cost, balance: closing.debt, closingDebt: closing.debt, closingAdvance: closing.advance }
-        })
-
-        if (!updated) {
-          nextRows = [
-            ...nextRows,
-            {
-              item: accrual.expenseTypeName,
-              counterparty: accrual.supplierName,
-              openingDebt: 0,
-              openingAdvance: 0,
-              closingDebt: accrual.amount,
-              closingAdvance: 0,
-              cost: accrual.amount,
-              paid: 0,
-              balance: accrual.amount,
-              collected: '',
-              difference: '',
-              action: true,
-            },
-          ]
-        }
-      })
-
-      return nextRows
-    })
-
-    return null
-  }
-
   const groupedGarageRows = garageRows.reduce<Array<{ month: string; monthLabel: string; rows: GarageIncomePrototypeRow[] }>>((groups, row) => {
     const existingGroup = groups.find((group) => group.month === row.month)
     if (existingGroup) {
@@ -5073,10 +4980,6 @@ function PaymentsPrototypePanel({
               <WalletCards size={16} aria-hidden="true" />
               <span>Добавить выплату</span>
             </button>
-            <button className="secondary-button create-action-button" type="button" onClick={(event) => openSalaryDialog(event)}>
-              <WalletCards size={16} aria-hidden="true" />
-              <span>Начислить зарплату</span>
-            </button>
             <button className="secondary-button create-action-button" type="button" disabled={!canWritePayments} onClick={(event) => openStaffSalaryAdjustmentDialog(event, 'bonus')}>
               <Award size={16} aria-hidden="true" />
               <span>Начислить премию</span>
@@ -5250,13 +5153,6 @@ function PaymentsPrototypePanel({
           suppliers={suppliers.filter((supplier) => !supplier.isArchived)}
           onClose={closeSupplierAccrualDialog}
           onSubmit={commitSupplierAccrual}
-        />
-      ) : null}
-      {salaryDialogOpen ? (
-        <SalaryAccrualPrototypeDialog
-          supplierGroups={supplierGroups.filter((group) => !group.isArchived)}
-          onClose={closeSalaryDialog}
-          onSubmit={commitSalaryAccruals}
         />
       ) : null}
       {historyEdit ? (
@@ -6278,118 +6174,6 @@ function NewAccrualPrototypeDialog({
           </FormField>
           <FormField label="Комментарий">
             <textarea aria-label="Комментарий начисления поставщику" rows={5} value={comment} onChange={(event) => setComment(event.target.value)} />
-          </FormField>
-          {error ? <FormError>{error}</FormError> : null}
-          <div className="detail-dialog-actions">
-            <button className="secondary-button" type="submit" disabled={saving}>{saving ? 'Сохраняем...' : 'Ок'}</button>
-            <button ref={cancelRef} className="secondary-button" type="button" onClick={onClose} disabled={saving}>Отмена</button>
-          </div>
-        </form>
-      </section>
-    </div>
-  )
-}
-
-function SalaryAccrualPrototypeDialog({
-  supplierGroups,
-  onClose,
-  onSubmit,
-}: {
-  supplierGroups: SupplierGroupDto[]
-  onClose: () => void
-  onSubmit: (request: SalaryAccrualPrototypeSubmitRequest) => Promise<string | null>
-}) {
-  const dialogRef = useFocusTrap<HTMLElement>(true)
-  const cancelRef = useFocusOnOpen<HTMLButtonElement>(true)
-  const [supplierGroupId, setSupplierGroupId] = useState(supplierGroups[0]?.id ?? '')
-  const [accountingMonth, setAccountingMonth] = useState(getLocalDateInputValue().slice(0, 7))
-  const [amount, setAmount] = useState('')
-  const [documentNumber, setDocumentNumber] = useState('')
-  const [comment, setComment] = useState('')
-  const [saving, setSaving] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  useEscapeKey(true, onClose)
-
-  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    const parsedAmount = parsePaymentMoney(amount)
-    if (!supplierGroupId) {
-      setError('Выберите группу сотрудников или поставщиков.')
-      return
-    }
-    if (!/^\d{4}-\d{2}$/.test(accountingMonth)) {
-      setError('Укажите месяц зарплаты.')
-      return
-    }
-    if (!Number.isFinite(parsedAmount) || parsedAmount <= 0) {
-      setError('Укажите сумму зарплаты больше нуля.')
-      return
-    }
-
-    setSaving(true)
-    setError(null)
-    try {
-      const submitError = await onSubmit({
-        supplierGroupId,
-        accountingMonth: `${accountingMonth}-01`,
-        amount: parsedAmount,
-        documentNumber,
-        comment,
-      })
-      if (submitError) {
-        setError(submitError)
-        return
-      }
-      onClose()
-    } catch (submitError) {
-      setError(submitError instanceof Error ? submitError.message : 'Не удалось начислить зарплату. Повторите попытку позже.')
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  return (
-    <div className="modal-backdrop" role="presentation" onMouseDown={onClose}>
-      <section ref={dialogRef} className="detail-dialog payments-prototype-dialog payments-prototype-dialog--wide" role="dialog" aria-modal="true" aria-labelledby="salary-accrual-title" onMouseDown={(event) => event.stopPropagation()}>
-        <div className="detail-dialog-header">
-          <div>
-            <h3 id="salary-accrual-title">Начислить зарплату</h3>
-          </div>
-          <button className="icon-button" type="button" aria-label="Закрыть начисление зарплаты" onClick={onClose}>
-            <X size={18} />
-          </button>
-        </div>
-        <form className="dictionary-modal-form payments-prototype-modal-form" onSubmit={handleSubmit}>
-          <FormField label="Группа">
-            <SelectControl
-              aria-label="Группа для начисления зарплаты"
-              value={supplierGroupId}
-              options={supplierGroups.length > 0
-                ? supplierGroups.map((group) => ({ value: group.id, label: group.name }))
-                : [{ value: '', label: 'Нет групп' }]}
-              disabled={saving}
-              onChange={(nextSupplierGroupId) => {
-                setSupplierGroupId(nextSupplierGroupId)
-                setError(null)
-              }} />
-          </FormField>
-          <FormField label="Месяц">
-            <LocalizedDatePicker ariaLabel="Месяц начисления зарплаты" mode="month" value={accountingMonth} disabled={saving} onChange={(nextAccountingMonth) => {
-              setAccountingMonth(nextAccountingMonth)
-              setError(null)
-            }} />
-          </FormField>
-          <FormField label="Сумма">
-            <MoneyTextInput aria-label="Сумма начисления зарплаты" value={amount} onValueChange={(nextAmount) => {
-              setAmount(nextAmount)
-              setError(null)
-            }} />
-          </FormField>
-          <FormField label="Документ">
-            <input aria-label="Документ начисления зарплаты" value={documentNumber} onChange={(event) => setDocumentNumber(event.target.value)} />
-          </FormField>
-          <FormField label="Комментарий">
-            <textarea aria-label="Комментарий начисления зарплаты" rows={5} value={comment} onChange={(event) => setComment(event.target.value)} />
           </FormField>
           {error ? <FormError>{error}</FormError> : null}
           <div className="detail-dialog-actions">
