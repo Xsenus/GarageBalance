@@ -443,6 +443,7 @@ describe('App', () => {
       'Основание',
       'Единица измерения',
       'Значение / ставка',
+      'Перенос долга в просроченный, дней',
       'Пороговая тарификация',
       'По счетчику',
     ])
@@ -451,6 +452,18 @@ describe('App', () => {
     expect(unitInput).toHaveValue('м³')
     expect(unitInput).toBeDisabled()
     expect(Boolean(unitInput.closest('[role="cell"]')?.compareDocumentPosition(valueInput.closest('[role="cell"]') as Node) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true)
+    const waterRow = within(tariffTable).getByText('Быстрый тариф воды').closest('[role="row"]')
+    const overdueInput = within(tariffTable).getByLabelText('Вода: Перенос долга в просроченный: значение')
+    expect(waterRow).toContainElement(overdueInput)
+    expect(overdueInput).toHaveValue('30')
+    expect(within(tariffTable).queryByRole('row', { name: /^Перенос долга в просроченный/ })).not.toBeInTheDocument()
+    await user.clear(overdueInput)
+    await user.type(overdueInput, '35')
+    await user.tab()
+    const overdueConfirmation = await screen.findByRole('dialog', { name: 'Подтвердить изменение?' })
+    expect(within(overdueConfirmation).getByText(/Перенос долга в просроченный/)).toBeInTheDocument()
+    await user.click(within(overdueConfirmation).getByRole('button', { name: 'Сохранить' }))
+    await waitFor(() => expect(overdueInput).toHaveValue('35'))
     expect(within(tariffsPanel).queryByText('Загружаем тарифы и услуги')).not.toBeInTheDocument()
     expect(within(tariffsPanel).getByText('Загружаем нерегулярные платежи')).toBeInTheDocument()
     expect(within(tariffsPanel).getByText('Загружаем объявленные сборы')).toBeInTheDocument()
@@ -3785,6 +3798,40 @@ describe('App', () => {
     expect(within(tariffsPanel).getByRole('button', { name: 'Изменить услугу Освещение территории' })).toBeInTheDocument()
     expect(within(tariffsPanel).queryByLabelText('Наружное освещение: Наружное освещение: значение')).not.toBeInTheDocument()
     expect(within(tariffsPanel).queryByRole('button', { name: 'Изменить услугу Наружное освещение' })).not.toBeInTheDocument()
+  })
+
+  it('shows the overdue grace period only in the main row of a matched service group', async () => {
+    const user = userEvent.setup()
+    const lightingTariff = createTariff({ id: 'tariff-lighting-overdue', name: 'Наружное освещение', calculationBase: 'fixed', rate: 300 })
+    const lightingService = createChargeServiceSetting({
+      id: 'service-lighting-overdue',
+      name: 'Наружное освещение',
+      isRegular: true,
+      periodicityMonths: 12,
+      accrualStartMonth: 1,
+      paymentDueDay: 31,
+      paymentDueMonth: 12,
+      overdueGraceDays: 14,
+      tariffId: lightingTariff.id,
+      unitName: 'руб.',
+    })
+    const dictionaryClient = createDictionaryClient({
+      getTariffs: async () => [lightingTariff],
+      getChargeServiceSettings: async () => [lightingService],
+    })
+
+    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Тарифы и сборы')
+    const tariffsPanel = await screen.findByRole('region', { name: 'Тарифы и сборы' })
+    const overdueInputs = await within(tariffsPanel).findAllByLabelText('Наружное освещение: Перенос долга в просроченный: значение')
+
+    expect(overdueInputs).toHaveLength(1)
+    expect(overdueInputs[0]).toHaveValue('14')
+    expect(overdueInputs[0].closest('[role="row"]')).toContainElement(within(tariffsPanel).getByRole('button', { name: 'Изменить услугу Наружное освещение' }))
+    expect(within(tariffsPanel).queryByRole('row', { name: /^Перенос долга в просроченный/ })).not.toBeInTheDocument()
   })
 
   it('shows configured thresholds immediately when tiered billing is enabled', async () => {

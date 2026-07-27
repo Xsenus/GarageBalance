@@ -2017,7 +2017,8 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
   const lastElectricityThresholdRowId = [...tariffRows]
     .reverse()
     .find((row) => row.category === 'Электроэнергия' && row.threshold)?.id
-  const tariffPage = createClientPage(tariffRows, tariffPageNumber, tariffPageSize)
+  const visibleTariffRows = tariffRows.filter((row) => row.serviceSettingKind !== 'overdue-days' && row.title !== 'Перенос долга в просроченный')
+  const tariffPage = createClientPage(visibleTariffRows, tariffPageNumber, tariffPageSize)
   const oneTimePage = createClientPage(oneTimeRows, oneTimePageNumber, oneTimePageSize)
   const feeCampaignPage = createClientPage(feeCampaigns, feeCampaignPageNumber, feeCampaignPageSize)
 
@@ -2065,6 +2066,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
               <span role="columnheader">Основание</span>
               <span role="columnheader" aria-label="Единица измерения">Ед.</span>
               <span role="columnheader">Значение / ставка</span>
+              <span role="columnheader" aria-label="Перенос долга в просроченный, дней">Просрочка, дн.</span>
               <span role="columnheader">Пороговая тарификация</span>
               <span role="columnheader">По счетчику</span>
             </div>
@@ -2077,6 +2079,16 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
               const isRowDisabled = row.isDeleted || tariffSavingRowId === row.id || isServiceSaving
               const isCustomThreshold = Boolean(row.threshold && row.isCustomThreshold)
               const showsServiceCalculationFlags = row.serviceSettingKind === 'main' || Boolean(row.group)
+              const showsOverdueGracePeriod = row.serviceSettingKind === 'main' || Boolean(row.group && row.calculationBase)
+              const overdueRow = showsOverdueGracePeriod
+                ? tariffRows.find((candidate) => (
+                    candidate.serviceSettingKind === 'overdue-days'
+                    && candidate.backendServiceSettingId === row.backendServiceSettingId
+                  ) || (
+                    candidate.title === 'Перенос долга в просроченный'
+                    && candidate.category === row.category
+                  )) ?? null
+                : null
 
               return (
                 <Fragment key={row.id}>
@@ -2228,6 +2240,20 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
                     )}
                   </span>
                   <span role="cell">
+                    {overdueRow ? (
+                      <input
+                        aria-label={`${overdueRow.category}: ${overdueRow.title}: значение`}
+                        className="contractors-editable-input contractors-editable-input--overdue-days"
+                        disabled={!canManageTariffs || isRowDisabled || tariffSavingRowId === overdueRow.id}
+                        inputMode="numeric"
+                        value={tariffDrafts[overdueRow.id]?.amount ?? ''}
+                        onChange={(event) => setTariffDrafts((drafts) => ({ ...drafts, [overdueRow.id]: { ...drafts[overdueRow.id], amount: event.target.value } }))}
+                        onBlur={() => void commitTariffTextChange(overdueRow, 'amount')}
+                        onKeyDown={(event) => handleEditableInputKeyDown(event, () => commitTariffTextChange(overdueRow, 'amount'))}
+                      />
+                    ) : null}
+                  </span>
+                  <span role="cell">
                     {showsServiceCalculationFlags ? (
                       <select
                         aria-label={`${row.category}: ${row.title}: пороговая тарификация`}
@@ -2268,12 +2294,13 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
                     <span role="cell" />
                     <span role="cell" />
                     <span role="cell" />
+                    <span role="cell" />
                   </div>
                 ) : null}
               </Fragment>
               )
             }) : null}
-            {tariffRows.length === 0 && !tariffsLoading ? (
+            {visibleTariffRows.length === 0 && !tariffsLoading ? (
               <div className="contractors-sheet-row contractors-sheet-action-row" role="row">
                 <span className="contractors-table-empty" role="cell">Тарифы и услуги пока не настроены.</span>
               </div>
