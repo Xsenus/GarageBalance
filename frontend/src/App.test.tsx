@@ -1073,7 +1073,69 @@ describe('App', () => {
       { id: service.id, reason: 'Услуга больше не используется' },
     ])
     expect(within(tariffsPanel).queryByRole('button', { name: 'Деактивировать услугу Охрана' })).not.toBeInTheDocument()
+    expect(within(tariffsPanel).queryByLabelText('Охрана: Тариф охраны: значение')).not.toBeInTheDocument()
+    const deletedServicesTab = within(tariffsPanel).getByRole('tab', { name: 'Удалённые услуги (1)' })
+    await user.click(deletedServicesTab)
+    expect(deletedServicesTab).toHaveAttribute('aria-selected', 'true')
+    expect(within(tariffsPanel).getByRole('table', { name: 'Удалённые услуги' })).toBeInTheDocument()
     expect(within(tariffsPanel).getByLabelText('Охрана: Тариф охраны: значение')).toBeDisabled()
+    expect(within(tariffsPanel).queryByRole('button', { name: 'Вернуть услугу Охрана' })).not.toBeInTheDocument()
+  })
+
+  it('separates archived charge services into a read-only deleted services mode', async () => {
+    const user = userEvent.setup()
+    const incomeType = createAccountingType({ id: 'income-services-list', name: 'Услуги', code: 'other_income' })
+    const tariff = createTariff({ id: 'tariff-services-list', name: 'Тариф услуги', calculationBase: 'fixed', rate: 1200 })
+    const activeService = createChargeServiceSetting({
+      id: 'service-active-list',
+      name: 'Действующая охрана',
+      isRegular: true,
+      incomeTypeId: incomeType.id,
+      tariffId: tariff.id,
+    })
+    const archivedService = createChargeServiceSetting({
+      id: 'service-archived-list',
+      name: 'Старая охрана',
+      isRegular: true,
+      incomeTypeId: incomeType.id,
+      tariffId: tariff.id,
+      isArchived: true,
+    })
+    const includeArchivedRequests: boolean[] = []
+    const dictionaryClient = createDictionaryClient({
+      getIncomeTypes: async () => [incomeType],
+      getTariffs: async () => [tariff],
+      getChargeServiceSettings: async (_token, _search, _limit, includeArchived = false) => {
+        includeArchivedRequests.push(includeArchived)
+        return [activeService, archivedService].filter((setting) => includeArchived || !setting.isArchived)
+      },
+    })
+
+    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Тарифы и сборы')
+    const tariffsPanel = await screen.findByRole('region', { name: 'Тарифы и сборы' })
+
+    expect(await within(tariffsPanel).findByRole('tab', { name: 'Действующие услуги' })).toHaveAttribute('aria-selected', 'true')
+    expect(includeArchivedRequests).toEqual([true])
+    expect(within(tariffsPanel).getByText('Действующая охрана')).toBeInTheDocument()
+    expect(within(tariffsPanel).queryByText('Старая охрана')).not.toBeInTheDocument()
+
+    await user.click(within(tariffsPanel).getByRole('tab', { name: 'Удалённые услуги (1)' }))
+
+    expect(within(tariffsPanel).getByRole('tab', { name: 'Удалённые услуги (1)' })).toHaveAttribute('aria-selected', 'true')
+    expect(within(tariffsPanel).queryByText('Действующая охрана')).not.toBeInTheDocument()
+    expect(within(tariffsPanel).getByText('Старая охрана')).toBeInTheDocument()
+    expect(within(tariffsPanel).getByLabelText('Старая охрана: Тариф услуги: значение')).toBeDisabled()
+    expect(within(tariffsPanel).getByRole('navigation', { name: 'Пагинация удалённых услуг' })).toBeInTheDocument()
+    expect(within(tariffsPanel).getByRole('group', { name: 'Количество строк удалённых услуг' })).toBeInTheDocument()
+    expect(within(tariffsPanel).queryByRole('button', { name: 'Изменить услугу Старая охрана' })).not.toBeInTheDocument()
+    expect(within(tariffsPanel).queryByRole('button', { name: 'Деактивировать услугу Старая охрана' })).not.toBeInTheDocument()
+
+    await user.click(within(tariffsPanel).getByRole('tab', { name: 'Действующие услуги' }))
+    expect(within(tariffsPanel).getByText('Действующая охрана')).toBeInTheDocument()
+    expect(within(tariffsPanel).queryByText('Старая охрана')).not.toBeInTheDocument()
   })
 
   it('does not allow charge service deactivation without tariffs.manage', async () => {
@@ -4162,6 +4224,9 @@ describe('App', () => {
 
     await act(async () => resolveTariffs([]))
     expect(await within(tariffsPanel).findByText('Тарифы и услуги пока не настроены.')).toBeInTheDocument()
+    await user.click(within(tariffsPanel).getByRole('tab', { name: 'Удалённые услуги (0)' }))
+    expect(await within(tariffsPanel).findByText('Удалённых услуг нет.')).toBeInTheDocument()
+    await user.click(within(tariffsPanel).getByRole('tab', { name: 'Действующие услуги' }))
     expect(within(tariffsPanel).getByRole('status', { name: 'Загружаем нерегулярные платежи' })).toBeInTheDocument()
     expect(within(tariffsPanel).getByRole('status', { name: 'Загружаем объявленные сборы' })).toBeInTheDocument()
 

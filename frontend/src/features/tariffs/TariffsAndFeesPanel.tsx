@@ -685,6 +685,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
   const [tariffRows, setTariffRows] = useState<ContractorTariffRow[]>([])
   const [tariffPageNumber, setTariffPageNumber] = useState(1)
   const [tariffPageSize, setTariffPageSize] = useState(25)
+  const [chargeServiceView, setChargeServiceView] = useState<'active' | 'deleted'>('active')
   const [backendTariffs, setBackendTariffs] = useState<TariffDto[]>([])
   const [backendIncomeTypes, setBackendIncomeTypes] = useState<AccountingTypeDto[]>([])
   const [backendExpenseTypes, setBackendExpenseTypes] = useState<AccountingTypeDto[]>([])
@@ -2017,7 +2018,17 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
   const lastElectricityThresholdRowId = [...tariffRows]
     .reverse()
     .find((row) => row.category === 'Электроэнергия' && row.threshold)?.id
-  const visibleTariffRows = tariffRows.filter((row) => row.serviceSettingKind !== 'overdue-days' && row.title !== 'Перенос долга в просроченный')
+  const archivedServiceCount = backendChargeServices.filter((setting) => setting.isArchived).length
+  const visibleTariffRows = tariffRows.filter((row) => (
+    row.serviceSettingKind !== 'overdue-days'
+    && row.title !== 'Перенос долга в просроченный'
+    && (chargeServiceView === 'deleted'
+      ? Boolean(row.backendServiceSettingId && row.isDeleted)
+      : !row.isDeleted)
+  ))
+  const tariffTableLabel = chargeServiceView === 'deleted' ? 'Удалённые услуги' : 'Тарифы и сборы'
+  const tariffPaginationLabel = chargeServiceView === 'deleted' ? 'Пагинация удалённых услуг' : 'Пагинация тарифов и услуг'
+  const tariffPageSizeLabel = chargeServiceView === 'deleted' ? 'Количество строк удалённых услуг' : 'Количество строк тарифов и услуг'
   const tariffPage = createClientPage(visibleTariffRows, tariffPageNumber, tariffPageSize)
   const oneTimePage = createClientPage(oneTimeRows, oneTimePageNumber, oneTimePageSize)
   const feeCampaignPage = createClientPage(feeCampaigns, feeCampaignPageNumber, feeCampaignPageSize)
@@ -2061,7 +2072,33 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
       </div>
 
       <>
-        <div className="contractors-sheet" role="table" aria-label="Тарифы и сборы">
+        <div className="contractors-prototype-tabs" role="tablist" aria-label="Режимы списка услуг">
+          <button
+            className={chargeServiceView === 'active' ? 'is-active' : ''}
+            type="button"
+            role="tab"
+            aria-selected={chargeServiceView === 'active'}
+            onClick={() => {
+              setChargeServiceView('active')
+              setTariffPageNumber(1)
+            }}
+          >
+            Действующие услуги
+          </button>
+          <button
+            className={chargeServiceView === 'deleted' ? 'is-active' : ''}
+            type="button"
+            role="tab"
+            aria-selected={chargeServiceView === 'deleted'}
+            onClick={() => {
+              setChargeServiceView('deleted')
+              setTariffPageNumber(1)
+            }}
+          >
+            Удалённые услуги ({archivedServiceCount})
+          </button>
+        </div>
+        <div className="contractors-sheet" role="table" aria-label={tariffTableLabel}>
             <div className="contractors-sheet-header" role="row">
               <span role="columnheader">Основание</span>
               <span role="columnheader" aria-label="Единица измерения">Ед.</span>
@@ -2315,18 +2352,20 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
             }) : null}
             {visibleTariffRows.length === 0 && !tariffsLoading ? (
               <div className="contractors-sheet-row contractors-sheet-action-row" role="row">
-                <span className="contractors-table-empty" role="cell">Тарифы и услуги пока не настроены.</span>
+                <span className="contractors-table-empty" role="cell">
+                  {chargeServiceView === 'deleted' ? 'Удалённых услуг нет.' : 'Тарифы и услуги пока не настроены.'}
+                </span>
               </div>
             ) : null}
           </div>
           <TablePagination
-            ariaLabel="Пагинация тарифов и услуг"
+            ariaLabel={tariffPaginationLabel}
             totalCount={tariffPage.totalCount}
             offset={tariffPage.offset}
             limit={tariffPage.limit}
             visibleCount={tariffPage.items.length}
             disabled={tariffsLoading}
-            pageSizeLabel="Количество строк тарифов и услуг"
+            pageSizeLabel={tariffPageSizeLabel}
             onPageChange={setTariffPageNumber}
             onPageSizeChange={(limit) => {
               setTariffPageNumber(1)
