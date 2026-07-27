@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import { getGarageBalancePresentation } from './garageBalancePresentation'
+import { getGarageBalancePresentation, toSignedGarageNetBalance, toSignedGarageSplitBalance } from './garageBalancePresentation'
 
 describe('getGarageBalancePresentation', () => {
   it('classifies a positive total debt with a smaller overdue part without calculating a separate hint', () => {
     expect(getGarageBalancePresentation(1500, 500)).toEqual({
       kind: 'debt',
-      label: 'Общий долг',
-      amount: 1500,
+      label: 'Баланс',
+      amount: -1500,
       moneyClassName: 'money-expense',
       overdueRelation: 'partly-overdue',
     })
@@ -19,10 +19,10 @@ describe('getGarageBalancePresentation', () => {
     })
   })
 
-  it('shows an advance as a positive green amount without hiding service-specific overdue debt', () => {
+  it('shows an advance as a positive green balance without hiding service-specific overdue debt', () => {
     expect(getGarageBalancePresentation(-750, 200)).toEqual({
       kind: 'advance',
-      label: 'Аванс',
+      label: 'Баланс',
       amount: 750,
       moneyClassName: 'money-income',
       overdueRelation: 'service-specific-overdue',
@@ -37,5 +37,18 @@ describe('getGarageBalancePresentation', () => {
       moneyClassName: undefined,
       overdueRelation: 'no-overdue',
     })
+  })
+})
+
+describe('signed garage balances', () => {
+  it('converts the API debt convention to a negative UI balance and rounds money', () => {
+    expect(toSignedGarageNetBalance(125.555)).toBe(-125.56)
+    expect(toSignedGarageNetBalance(-80)).toBe(80)
+  })
+
+  it('combines row debt and advance into one signed balance', () => {
+    expect(toSignedGarageSplitBalance(125.55, 0)).toBe(-125.55)
+    expect(toSignedGarageSplitBalance(0, 80)).toBe(80)
+    expect(toSignedGarageSplitBalance(100, 25)).toBe(-75)
   })
 })

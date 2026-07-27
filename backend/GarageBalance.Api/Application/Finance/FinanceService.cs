@@ -562,12 +562,14 @@ public sealed class FinanceService(
             worksheetData.OwnerName,
             monthFrom,
             monthTo,
+            openingBalance,
             openingDebt,
             unrepresentedOpeningDebt,
             accrualTotal,
             incomeTotal,
             advanceTotal,
             debtTotal,
+            closingBalance,
             closingDebt,
             rows));
     }

@@ -27,7 +27,7 @@ import { formatPaymentMoney, parsePaymentMoney } from './paymentMoneyFormatting'
 import { calculateExpenseWorksheetClosingBalance, getExpenseWorksheetCollectedClassName, toSignedExpenseWorksheetBalance } from './expenseWorksheetBalances'
 import { expensePaymentTypeOptions, formatExpensePaymentType } from './expensePaymentTypes'
 import { rankGarageSearchResults } from './garageSearchRanking'
-import { getGarageBalancePresentation } from './garageBalancePresentation'
+import { getGarageBalancePresentation, toSignedGarageNetBalance, toSignedGarageSplitBalance } from './garageBalancePresentation'
 import { getFirstLinkedSupplier, getSupplierAccrualExpenseType } from './supplierAccrualLink'
 
 type AccrualBreakdown =
@@ -131,11 +131,13 @@ type GarageIncomePrototypeRow = {
 }
 
 type GarageIncomeWorksheetPeriodSummary = {
+  openingBalance: number
   openingDebt: number
   unrepresentedOpeningDebt: number
   accrualTotal: number
   incomeTotal: number
   advanceTotal: number
+  closingBalance: number
   closingDebt: number
 }
 
@@ -3376,11 +3378,13 @@ function PaymentsPrototypePanel({
       ))
       setGarageRows(rows)
       setGarageWorksheetSummary({
+        openingBalance: worksheet.openingBalance,
         openingDebt: worksheet.openingDebt,
         unrepresentedOpeningDebt: worksheet.unrepresentedOpeningDebt ?? 0,
         accrualTotal: worksheet.accrualTotal,
         incomeTotal: worksheet.incomeTotal,
         advanceTotal: worksheet.advanceTotal ?? 0,
+        closingBalance: worksheet.closingBalance,
         closingDebt: worksheet.closingDebt,
       })
     } catch (error) {
@@ -3902,6 +3906,7 @@ function PaymentsPrototypePanel({
             ...currentSummary,
             incomeTotal: currentSummary.incomeTotal + amount,
             advanceTotal: currentSummary.advanceTotal + Math.max(amount - appliedAmount, 0),
+            closingBalance: currentSummary.closingBalance - amount,
             closingDebt: Math.max(currentSummary.closingDebt - appliedAmount, 0),
           }
         : currentSummary)
@@ -4150,6 +4155,7 @@ function PaymentsPrototypePanel({
       ? {
           ...currentSummary,
           accrualTotal: currentSummary.accrualTotal + savedAccrual.amount,
+          closingBalance: currentSummary.closingBalance + savedAccrual.amount,
           closingDebt: currentSummary.closingDebt + savedAccrual.amount,
         }
       : currentSummary)
@@ -4216,6 +4222,7 @@ function PaymentsPrototypePanel({
       ? {
           ...currentSummary,
           accrualTotal: currentSummary.accrualTotal + savedAccrual.amount,
+          closingBalance: currentSummary.closingBalance + savedAccrual.amount,
           closingDebt: currentSummary.closingDebt + savedAccrual.amount,
         }
       : currentSummary)
@@ -4459,8 +4466,13 @@ function PaymentsPrototypePanel({
 
   const paymentTotal = garageWorksheetSummary?.accrualTotal ?? garageRows.reduce((sum, row) => sum + row.payable, 0)
   const paidTotal = garageRows.reduce((sum, row) => sum + row.paid, 0)
-  const advanceTotal = garageWorksheetSummary?.advanceTotal ?? garageRows.reduce((sum, row) => sum + row.advance, 0)
-  const debtTotal = garageWorksheetSummary?.closingDebt ?? garageRows.reduce((sum, row) => sum + row.debt, 0)
+  const openingBalanceTotal = toSignedGarageNetBalance(garageWorksheetSummary?.openingBalance ?? 0)
+  const closingBalanceTotal = garageWorksheetSummary
+    ? toSignedGarageNetBalance(garageWorksheetSummary.closingBalance)
+    : toSignedGarageSplitBalance(
+        garageRows.reduce((sum, row) => sum + row.debt, 0),
+        garageRows.reduce((sum, row) => sum + row.advance, 0),
+      )
   const fullPaymentRowsDebt = getRowsForFullPayment('full').reduce((sum, row) => sum + row.debt, 0)
   const fullPaymentPeriodOptions = [
     { value: 'full', label: 'Полный расчет', debt: fullPaymentRowsDebt + getOpeningDebtForFullPayment('full') },
@@ -4666,9 +4678,9 @@ function PaymentsPrototypePanel({
             <>
               <p className="payments-prototype-balance-explanation" role="note">
                 {selectedGarageBalance.overdueRelation === 'partly-overdue'
-                  ? <>Общий долг составляет <strong>{formatPaymentPrototypeValue(selectedGarageBalance.amount)}</strong>, из него просрочено <strong>{formatPaymentPrototypeValue(selectedGarage.overdueDebt)}</strong>.</>
+                  ? <>Общий долг составляет <strong>{formatPaymentPrototypeValue(Math.abs(selectedGarageBalance.amount))}</strong>, из него просрочено <strong>{formatPaymentPrototypeValue(selectedGarage.overdueDebt)}</strong>.</>
                   : selectedGarageBalance.overdueRelation === 'fully-overdue'
-                    ? <>Весь общий долг <strong>{formatPaymentPrototypeValue(selectedGarageBalance.amount)}</strong> уже просрочен.</>
+                    ? <>Весь общий долг <strong>{formatPaymentPrototypeValue(Math.abs(selectedGarageBalance.amount))}</strong> уже просрочен.</>
                     : <>{selectedGarageBalance.label} <strong>{formatPaymentPrototypeValue(selectedGarageBalance.amount)}</strong> и просрочка <strong>{formatPaymentPrototypeValue(selectedGarage.overdueDebt)}</strong> относятся к разным услугам. Ниже показано, по каким услугам остался просроченный долг.</>}
               </p>
               <details className="payments-prototype-overdue-details" open>
@@ -4813,8 +4825,8 @@ function PaymentsPrototypePanel({
             {garageWorksheetSummary ? (
               <div className="payments-prototype-period-summary" aria-label="Итоги периода поступлений">
                 <div>
-                  <span>Долг на начало</span>
-                  <strong className={garageWorksheetSummary.openingDebt > 0 ? 'money-expense' : undefined}>{formatPaymentPrototypeValue(garageWorksheetSummary.openingDebt)}</strong>
+                  <span>Баланс на начало</span>
+                  <strong className={openingBalanceTotal < 0 ? 'money-expense' : openingBalanceTotal > 0 ? 'money-income' : undefined}>{formatPaymentPrototypeValue(openingBalanceTotal)}</strong>
                 </div>
                 <div>
                   <span>Начислено</span>
@@ -4825,12 +4837,8 @@ function PaymentsPrototypePanel({
                   <strong>{formatPaymentPrototypeValue(garageWorksheetSummary.incomeTotal)}</strong>
                 </div>
                 <div>
-                  <span>Аванс на конец</span>
-                  <strong className={garageWorksheetSummary.advanceTotal > 0 ? 'money-income' : undefined}>{formatPaymentPrototypeValue(garageWorksheetSummary.advanceTotal)}</strong>
-                </div>
-                <div>
-                  <span>Долг на конец</span>
-                  <strong className={garageWorksheetSummary.closingDebt > 0 ? 'money-expense' : undefined}>{formatPaymentPrototypeValue(garageWorksheetSummary.closingDebt)}</strong>
+                  <span>Баланс на конец</span>
+                  <strong className={closingBalanceTotal < 0 ? 'money-expense' : closingBalanceTotal > 0 ? 'money-income' : undefined}>{formatPaymentPrototypeValue(closingBalanceTotal)}</strong>
                 </div>
               </div>
             ) : null}
@@ -4845,8 +4853,7 @@ function PaymentsPrototypePanel({
                     <th scope="col">К оплате</th>
                     <th scope="col">Платёж</th>
                     <th scope="col">Оплачено</th>
-                    <th scope="col">Аванс</th>
-                    <th scope="col">Задолженность</th>
+                    <th scope="col">Баланс</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -4855,6 +4862,7 @@ function PaymentsPrototypePanel({
                     const groupPaid = group.rows.reduce((sum, row) => sum + row.paid, 0)
                     const groupAdvance = group.rows.reduce((sum, row) => sum + row.advance, 0)
                     const groupDebt = group.rows.reduce((sum, row) => sum + row.debt, 0)
+                    const groupBalance = toSignedGarageSplitBalance(groupDebt, groupAdvance)
                     return (
                       <Fragment key={group.month}>
                         <tr className="payments-prototype-month-total">
@@ -4865,8 +4873,7 @@ function PaymentsPrototypePanel({
                           <td>{formatPaymentMoney(groupPayable)}</td>
                           <td />
                           <td>{formatPaymentMoney(groupPaid)}</td>
-                          <td className={groupAdvance > 0 ? 'money-income' : undefined}>{formatPaymentMoney(groupAdvance)}</td>
-                          <td className={groupDebt > 0 ? 'money-expense' : undefined}>{formatPaymentMoney(groupDebt)}</td>
+                          <td className={groupBalance < 0 ? 'money-expense' : groupBalance > 0 ? 'money-income' : undefined}>{formatPaymentMoney(groupBalance)}</td>
                         </tr>
                         {group.rows.map((row) => (
                           <tr key={row.id}>
@@ -4932,8 +4939,10 @@ function PaymentsPrototypePanel({
                               />
                             </td>
                             <td>{formatPaymentMoney(row.paid)}</td>
-                            <td className={row.advance > 0 ? 'money-income' : undefined}>{formatPaymentMoney(row.advance)}</td>
-                            <td className={row.debt > 0 ? 'money-expense' : undefined}>{formatPaymentMoney(row.debt)}</td>
+                            {(() => {
+                              const balance = toSignedGarageSplitBalance(row.debt, row.advance)
+                              return <td className={balance < 0 ? 'money-expense' : balance > 0 ? 'money-income' : undefined}>{formatPaymentMoney(balance)}</td>
+                            })()}
                           </tr>
                         ))}
                       </Fragment>
@@ -4941,7 +4950,7 @@ function PaymentsPrototypePanel({
                   })}
                   {groupedGarageRows.length === 0 ? (
                     <tr>
-                      <td colSpan={9}>{garageWorksheetLoadingId === selectedGarage.id ? <TableLoadingState label="Загружаем начисления и поступления" /> : 'Начислений и поступлений за выбранный период пока нет.'}</td>
+                      <td colSpan={8}>{garageWorksheetLoadingId === selectedGarage.id ? <TableLoadingState label="Загружаем начисления и поступления" /> : 'Начислений и поступлений за выбранный период пока нет.'}</td>
                     </tr>
                   ) : null}
                   <tr className="payments-prototype-total-row">
@@ -4952,8 +4961,7 @@ function PaymentsPrototypePanel({
                     <td>{formatPaymentMoney(paymentTotal)}</td>
                     <td />
                     <td>{formatPaymentMoney(paidTotal)}</td>
-                    <td className={advanceTotal > 0 ? 'money-income' : undefined}>{formatPaymentMoney(advanceTotal)}</td>
-                    <td className={debtTotal > 0 ? 'money-expense' : undefined}>{formatPaymentMoney(debtTotal)}</td>
+                    <td className={closingBalanceTotal < 0 ? 'money-expense' : closingBalanceTotal > 0 ? 'money-income' : undefined}>{formatPaymentMoney(closingBalanceTotal)}</td>
                   </tr>
                 </tbody>
               </table>

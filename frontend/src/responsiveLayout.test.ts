@@ -132,9 +132,9 @@ describe('responsive layout styles', () => {
     expect(normalizedAppCss).toContain('.payments-prototype-search-results {\n    grid-template-columns: minmax(0, 1fr);\n    width: calc(100vw - 32px);')
   })
 
-  it('keeps the garage worksheet advance column and five period totals readable', () => {
-    expect(normalizedAppCss).toContain('.payments-prototype-table--garage {\n  min-width: 940px;')
-    expect(normalizedAppCss).toContain('.payments-prototype-period-summary {\n  display: grid;\n  grid-template-columns: repeat(5, minmax(112px, 1fr));')
+  it('keeps the signed garage balance column and four period totals readable', () => {
+    expect(normalizedAppCss).toContain('.payments-prototype-table--garage {\n  min-width: 860px;')
+    expect(normalizedAppCss).toContain('.payments-prototype-period-summary {\n  display: grid;\n  grid-template-columns: repeat(4, minmax(112px, 1fr));')
     expect(normalizedAppCss).toContain('.payments-prototype-period-summary {\n    grid-template-columns: repeat(2, minmax(0, 1fr));')
     expect(normalizedAppCss).toContain('.payments-prototype-period-summary {\n    grid-template-columns: 1fr;')
   })

@@ -5404,8 +5404,7 @@ describe('App', () => {
     expect(selectedGarageList).toHaveTextContent('Гараж 2Иванов Петр')
     expect(selectedGarageList.querySelector('.payments-prototype-selected-list')).not.toBeNull()
     expect(within(selectedGarageList).getByLabelText('Параметры гаража 1')).toHaveTextContent('Люди')
-    expect(within(selectedGarageList).getByLabelText('Параметры гаража 1')).toHaveTextContent('Общий долг')
-    expect(within(selectedGarageList).getByLabelText('Параметры гаража 1')).toHaveTextContent('Общий долг1 500.00')
+    expect(within(selectedGarageList).getByLabelText('Параметры гаража 1')).toHaveTextContent('Баланс-1 500.00')
     expect(within(selectedGarageList).getByLabelText('Параметры гаража 1')).toHaveTextContent('Просрочка500.00')
     expect(within(selectedGarageList).getByLabelText('Параметры гаража 2')).toHaveTextContent('Этажи')
     expect(within(selectedGarageList).getByLabelText('Параметры гаража 2')).toHaveTextContent('Просрочка')
@@ -5439,7 +5438,7 @@ describe('App', () => {
     expect(garageGroup).toHaveTextContent('Этажи1')
     expect(ownerGroup).toHaveTextContent('ФИОИванов Иван')
     expect(ownerGroup).toHaveTextContent('ТелефонНе указан')
-    expect(financesGroup).toHaveTextContent('Общий долг1 500.00')
+    expect(financesGroup).toHaveTextContent('Баланс-1 500.00')
     expect(financesGroup).toHaveTextContent('Просроченная задолженность500.00')
     expect(garageGroup.compareDocumentPosition(ownerGroup) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     expect(ownerGroup.compareDocumentPosition(financesGroup) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
@@ -5578,7 +5577,7 @@ describe('App', () => {
     expect(within(prototype).getByRole('table', { name: 'Поступления гаража 1' })).toHaveTextContent('1 250.50')
     const updatedIncomeSummary = within(prototype).getByLabelText('Итоги периода поступлений')
     expect(updatedIncomeSummary).toHaveTextContent('Начислено12 174.50')
-    expect(updatedIncomeSummary).toHaveTextContent('Долг на конец6 500.50')
+    expect(updatedIncomeSummary).toHaveTextContent('Баланс на конец-6 500.50')
 
     const fullPaymentButton = within(prototype).getByRole('button', { name: 'Полная оплата' })
     await user.click(fullPaymentButton)
@@ -6234,10 +6233,12 @@ describe('App', () => {
       garageId,
       garageNumber: '77',
       ownerName: 'Кузнецова Мария',
+      openingBalance: 900,
       openingDebt: 900,
       accrualTotal: 5674,
       incomeTotal: 1000,
       debtTotal: 5574,
+      closingBalance: 5574,
       closingDebt: 5574,
       rows: [
         {
@@ -6286,18 +6287,19 @@ describe('App', () => {
     expect(within(incomeTable).getByLabelText('Платеж Серверная электроэнергия июн.26')).toHaveValue('')
     expect(within(incomeTable).getByText('86')).toBeInTheDocument()
     expect(within(incomeTable).getByText('18.00')).toBeInTheDocument()
-    expect(within(incomeTable).getAllByText('4 674.00').length).toBeGreaterThan(0)
+    expect(within(incomeTable).getAllByText('-4 674.00').length).toBeGreaterThan(0)
     const periodSummary = within(prototype).getByLabelText('Итоги периода поступлений')
-    expect(periodSummary).toHaveTextContent('Долг на начало')
-    expect(periodSummary).toHaveTextContent('900')
+    expect(periodSummary).toHaveTextContent('Баланс на начало')
+    expect(periodSummary).toHaveTextContent('-900')
     expect(periodSummary).toHaveTextContent('Начислено')
     expect(periodSummary).toHaveTextContent('5 674')
     expect(periodSummary).toHaveTextContent('Внесено')
     expect(periodSummary).toHaveTextContent('1 000')
-    expect(periodSummary).toHaveTextContent('Аванс на конец')
-    expect(periodSummary).toHaveTextContent('0.00')
-    expect(periodSummary).toHaveTextContent('Долг на конец')
-    expect(periodSummary).toHaveTextContent('5 574')
+    expect(periodSummary).toHaveTextContent('Баланс на конец')
+    expect(periodSummary).toHaveTextContent('-5 574')
+    expect(within(incomeTable).getByRole('columnheader', { name: 'Баланс' })).toBeInTheDocument()
+    expect(within(incomeTable).queryByRole('columnheader', { name: 'Аванс' })).not.toBeInTheDocument()
+    expect(within(incomeTable).queryByRole('columnheader', { name: 'Задолженность' })).not.toBeInTheDocument()
   })
 
   it('caps a garage row payment and shows the excess as advance', async () => {
@@ -6375,11 +6377,11 @@ describe('App', () => {
     const cells = serviceRow!.querySelectorAll('td')
     expect(cells[6]).toHaveTextContent('1 000.00')
     expect(cells[7]).toHaveTextContent('250.00')
-    expect(cells[8]).toHaveTextContent('0.00')
+    expect(cells).toHaveLength(8)
     expect(cells[6]).not.toHaveTextContent('1 250.00')
     const periodSummary = within(prototype).getByLabelText('Итоги периода поступлений')
     expect(periodSummary).toHaveTextContent(/Внесено1 250\.00/)
-    expect(periodSummary).toHaveTextContent(/Аванс на конец250\.00/)
+    expect(periodSummary).toHaveTextContent(/Баланс на конец250\.00/)
   })
 
   it('pays the remaining system water debt without loading the income type directory', async () => {
@@ -6464,7 +6466,8 @@ describe('App', () => {
     const serviceRow = within(incomeTable).getByText('Вода').closest('tr')
     const cells = serviceRow!.querySelectorAll('td')
     expect(cells[6]).toHaveTextContent('1 000.00')
-    expect(cells[8]).toHaveTextContent('0.00')
+    expect(cells[7]).toHaveTextContent('0.00')
+    expect(cells).toHaveLength(8)
   })
 
   it('does not duplicate an annual obligation in full payment and hides its future row after payoff', async () => {
@@ -19412,17 +19415,19 @@ function createGarageBalanceHistory(overrides: Partial<GarageBalanceHistoryDto>)
 }
 
 function createGarageIncomeWorksheet(overrides: Partial<GarageIncomeWorksheetDto>): GarageIncomeWorksheetDto {
-  return {
+  const worksheet: GarageIncomeWorksheetDto = {
     garageId: 'garage-1',
     garageNumber: '12',
     ownerName: 'Иванов Иван',
     monthFrom: '2026-06-01',
     monthTo: '2026-06-01',
+    openingBalance: 0,
     openingDebt: 0,
     accrualTotal: 5674,
     incomeTotal: 1000,
     advanceTotal: 0,
     debtTotal: 4674,
+    closingBalance: 4674,
     closingDebt: 4674,
     rows: [
       {
@@ -19439,6 +19444,10 @@ function createGarageIncomeWorksheet(overrides: Partial<GarageIncomeWorksheetDto
     ],
     ...overrides,
   }
+  worksheet.openingBalance = overrides.openingBalance ?? overrides.openingDebt ?? worksheet.openingBalance
+  worksheet.closingBalance = overrides.closingBalance
+    ?? (overrides.closingDebt ?? worksheet.closingDebt) - (overrides.advanceTotal ?? worksheet.advanceTotal ?? 0)
+  return worksheet
 }
 
 function createExpenseWorksheet(overrides: Partial<ExpenseWorksheetDto>): ExpenseWorksheetDto {

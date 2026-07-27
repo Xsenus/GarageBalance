@@ -452,12 +452,14 @@ public sealed record GarageIncomeWorksheetDto(
     string? OwnerName,
     DateOnly MonthFrom,
     DateOnly MonthTo,
+    decimal OpeningBalance,
     decimal OpeningDebt,
     decimal UnrepresentedOpeningDebt,
     decimal AccrualTotal,
     decimal IncomeTotal,
     decimal AdvanceTotal,
     decimal DebtTotal,
+    decimal ClosingBalance,
     decimal ClosingDebt,
     IReadOnlyList<GarageIncomeWorksheetRowDto> Rows);
 

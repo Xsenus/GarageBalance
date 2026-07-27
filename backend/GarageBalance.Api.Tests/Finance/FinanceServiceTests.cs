@@ -6729,6 +6729,7 @@ public sealed class FinanceServiceTests
         Assert.Equal((100m, 0m, 0m), (january.IncomeAmount, january.AdvanceAmount, january.Debt));
         Assert.Equal((100m, 50m, 0m), (february.IncomeAmount, february.AdvanceAmount, february.Debt));
         Assert.Equal(50m, overpaidWorksheet.Value.AdvanceTotal);
+        Assert.Equal(-50m, overpaidWorksheet.Value.ClosingBalance);
         Assert.All(overpaidWorksheet.Value.Rows, row => Assert.True(row.IncomeAmount <= row.PayableAmount));
 
         Assert.True((await service.CreateAccrualAsync(
@@ -6755,7 +6756,9 @@ public sealed class FinanceServiceTests
             CancellationToken.None);
 
         Assert.True(marchOnlyWorksheet.Succeeded, marchOnlyWorksheet.ErrorMessage);
+        Assert.Equal(-50m, marchOnlyWorksheet.Value!.OpeningBalance);
         Assert.Equal(0m, marchOnlyWorksheet.Value!.OpeningDebt);
+        Assert.Equal(-10m, marchOnlyWorksheet.Value.ClosingBalance);
         Assert.Equal(0m, marchOnlyWorksheet.Value.ClosingDebt);
         Assert.Equal(10m, marchOnlyWorksheet.Value.AdvanceTotal);
         var marchOnly = Assert.Single(marchOnlyWorksheet.Value.Rows, row => row.IncomeTypeId == serviceType.Id);
@@ -7174,10 +7177,12 @@ public sealed class FinanceServiceTests
             CancellationToken.None);
 
         Assert.True(result.Succeeded);
+        Assert.Equal(900m, result.Value!.OpeningBalance);
         Assert.Equal(900m, result.Value!.OpeningDebt);
         Assert.Equal(500m, result.Value.AccrualTotal);
         Assert.Equal(100m, result.Value.IncomeTotal);
         Assert.Equal(1300m, result.Value.DebtTotal);
+        Assert.Equal(1300m, result.Value.ClosingBalance);
         Assert.Equal(1300m, result.Value.ClosingDebt);
     }
 
