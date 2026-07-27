@@ -215,6 +215,85 @@ public sealed class PostgreSqlFeeCampaignRoutingIntegrationTests
         Assert.Contains("Автоматический запуск PostgreSQL", accrual.Comment, StringComparison.Ordinal);
     }
 
+    [PostgreSqlFact]
+    public async Task CampaignNextMonth_UsesPostgreSqlAllocationsToExcludeOnlyFullyPaidParticipant()
+    {
+        await using var database = await PostgreSqlTestDatabase.CreateAsync();
+        var owner = new Owner { LastName = "Проверка", FirstName = "Сбора" };
+        var paidGarage = new Garage { Number = "FEE-PAID-PG", PeopleCount = 1, FloorCount = 1, Owner = owner };
+        var partialGarage = new Garage { Number = "FEE-PARTIAL-PG", PeopleCount = 1, FloorCount = 1, Owner = owner };
+        Guid campaignId;
+        Guid destinationId;
+
+        await using (var setupContext = database.CreateContext())
+        {
+            var destination = await setupContext.IncomeTypes.SingleAsync(item => item.Code == "other_income");
+            var campaign = CreateCampaign("Повторный сбор PostgreSQL", destination, 650m);
+            campaign.AppliesToAllGarages = false;
+            campaign.ParticipantGarages.Add(new FeeCampaignGarage { FeeCampaign = campaign, Garage = paidGarage });
+            campaign.ParticipantGarages.Add(new FeeCampaignGarage { FeeCampaign = campaign, Garage = partialGarage });
+            setupContext.AddRange(owner, paidGarage, partialGarage, campaign);
+            await setupContext.SaveChangesAsync();
+            campaignId = campaign.Id;
+            destinationId = destination.Id;
+        }
+
+        await using (var generationContext = database.CreateContext())
+        {
+            var service = FinanceServiceTestFactory.Create(generationContext);
+            var june = await service.GenerateFeeCampaignAccrualsAsync(
+                new GenerateFeeCampaignAccrualsRequest(campaignId, new DateOnly(2026, 6, 1), null),
+                null,
+                CancellationToken.None);
+            Assert.True(june.Succeeded, june.ErrorMessage);
+            Assert.Equal(2, june.Value!.CreatedCount);
+
+            var fullPayment = await service.CreateIncomeAsync(
+                new CreateIncomeOperationRequest(
+                    paidGarage.Id,
+                    destinationId,
+                    new DateOnly(2026, 6, 15),
+                    new DateOnly(2026, 6, 1),
+                    650m,
+                    "FEE-PAID-PG",
+                    null),
+                null,
+                CancellationToken.None);
+            var partialPayment = await service.CreateIncomeAsync(
+                new CreateIncomeOperationRequest(
+                    partialGarage.Id,
+                    destinationId,
+                    new DateOnly(2026, 6, 15),
+                    new DateOnly(2026, 6, 1),
+                    300m,
+                    "FEE-PARTIAL-PG",
+                    null),
+                null,
+                CancellationToken.None);
+            Assert.True(fullPayment.Succeeded, fullPayment.ErrorMessage);
+            Assert.True(partialPayment.Succeeded, partialPayment.ErrorMessage);
+
+            var july = await service.GenerateFeeCampaignAccrualsAsync(
+                new GenerateFeeCampaignAccrualsRequest(campaignId, new DateOnly(2026, 7, 1), null),
+                null,
+                CancellationToken.None);
+            Assert.True(july.Succeeded, july.ErrorMessage);
+            Assert.Equal(1, july.Value!.CreatedCount);
+            Assert.Equal(1, july.Value.SkippedCount);
+            Assert.Equal(partialGarage.Id, Assert.Single(july.Value.CreatedAccruals).GarageId);
+        }
+
+        await using var verificationContext = database.CreateContext();
+        Assert.Equal(
+            1,
+            await verificationContext.Accruals.CountAsync(item =>
+                item.FeeCampaignId == campaignId &&
+                item.AccountingMonth == new DateOnly(2026, 7, 1)));
+        Assert.DoesNotContain(
+            await verificationContext.Accruals.AsNoTracking().Where(item => item.AccountingMonth == new DateOnly(2026, 7, 1)).ToListAsync(),
+            item => item.GarageId == paidGarage.Id);
+    }
+
     private static FeeCampaign CreateCampaign(string name, IncomeType incomeType, decimal contributionAmount) =>
         new()
         {

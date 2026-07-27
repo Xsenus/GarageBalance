@@ -939,8 +939,9 @@ describe('App', () => {
     await user.click(within(feeCampaignsSection).getByRole('button', { name: 'Доначислить сбор Сбор на ворота' }))
     const generateDialog = await screen.findByRole('dialog', { name: 'Доначислить сбор' })
     expect(within(generateDialog).getByText(/Действующие сборы начисляются автоматически за рабочий месяц/)).toBeInTheDocument()
-    expect(within(generateDialog).getByText(/начисления появятся только у участников, которым выбранный сбор за этот месяц еще не начислялся/)).toBeInTheDocument()
-    expect(within(generateDialog).getByText(/Повторные начисления не создаются/)).toBeInTheDocument()
+    expect(within(generateDialog).getByText(/в следующие месяцы — только те, кто ещё не полностью оплатил предыдущие начисления/)).toBeInTheDocument()
+    expect(within(generateDialog).getByText(/Участник с частичной оплатой остаётся в начислении до полной оплаты или закрытия сбора/)).toBeInTheDocument()
+    expect(within(generateDialog).getByText(/дубликаты не создаются/)).toBeInTheDocument()
     expect(within(generateDialog).getByText('Необязательно. Укажите причину, если начисления дозаполняются вручную.')).toBeInTheDocument()
     const feeCampaignMonth = within(generateDialog).getByLabelText('Месяц начисления сбора')
     expect(feeCampaignMonth).toHaveValue('06.2026')
@@ -964,7 +965,7 @@ describe('App', () => {
       comment: 'Решение правления',
     })
     expect(await within(feeCampaignsSection).findByText(/Доначислено: 3/)).toBeInTheDocument()
-    expect(within(feeCampaignsSection).getByText(/уже было начислено: 1/)).toBeInTheDocument()
+    expect(within(feeCampaignsSection).getByText(/пропущено: 1/)).toBeInTheDocument()
   })
 
   it('archives and restores announced fee campaigns from tariffs page', async () => {

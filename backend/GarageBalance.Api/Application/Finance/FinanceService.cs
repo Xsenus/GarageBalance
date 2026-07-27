@@ -2968,6 +2968,10 @@ public sealed class FinanceService(
         }
 
         var existingGarageIds = await accrualRepository.GetActiveFeeCampaignGarageIdsAsync(campaign.Id, month, cancellationToken);
+        var fullyPaidGarageIds = await accrualRepository.GetFullyPaidFeeCampaignGarageIdsBeforeMonthAsync(
+            campaign.Id,
+            month,
+            cancellationToken);
         var created = new List<AccrualDto>();
         var skipped = new List<string>();
         foreach (var garage in garages)
@@ -2975,6 +2979,12 @@ public sealed class FinanceService(
             if (existingGarageIds.Contains(garage.Id))
             {
                 skipped.Add($"Гараж {garage.Number}: начисление сбора уже есть.");
+                continue;
+            }
+
+            if (fullyPaidGarageIds.Contains(garage.Id))
+            {
+                skipped.Add($"Гараж {garage.Number}: предыдущие начисления по сбору полностью оплачены.");
                 continue;
             }
 
@@ -3000,7 +3010,9 @@ public sealed class FinanceService(
 
         if (created.Count == 0)
         {
-            return FinanceResult<FeeCampaignAccrualGenerationResultDto>.Failure("fee_campaign_accruals_empty", "По сбору не создано ни одного начисления.");
+            return FinanceResult<FeeCampaignAccrualGenerationResultDto>.Failure(
+                "fee_campaign_accruals_empty",
+                "Новые начисления по сбору не требуются: выбранный месяц уже обработан или участники полностью оплатили предыдущие начисления.");
         }
 
         AddAudit(
@@ -3078,7 +3090,7 @@ public sealed class FinanceService(
             }
             else if (result.ErrorCode == "fee_campaign_accruals_empty")
             {
-                skippedCampaigns.Add($"{candidate.Name}: начисления за {month:MM.yyyy} уже созданы.");
+                skippedCampaigns.Add($"{candidate.Name}: новые начисления за {month:MM.yyyy} не требуются — месяц уже обработан или участники полностью оплатили сбор.");
             }
             else
             {

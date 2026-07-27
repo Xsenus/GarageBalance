@@ -356,6 +356,48 @@ public sealed class EfAccrualRepository(GarageBalanceDbContext dbContext) : IAcc
             .Select(accrual => accrual.GarageId)
             .ToHashSetAsync(cancellationToken);
 
+    public async Task<IReadOnlySet<Guid>> GetFullyPaidFeeCampaignGarageIdsBeforeMonthAsync(
+        Guid feeCampaignId,
+        DateOnly accountingMonth,
+        CancellationToken cancellationToken)
+    {
+        var accruedByGarage = await dbContext.Accruals.AsNoTracking()
+            .Where(accrual =>
+                !accrual.IsCanceled &&
+                accrual.FeeCampaignId == feeCampaignId &&
+                accrual.AccountingMonth < accountingMonth)
+            .GroupBy(accrual => accrual.GarageId)
+            .Select(group => new
+            {
+                GarageId = group.Key,
+                Amount = group.Sum(accrual => accrual.Amount)
+            })
+            .ToDictionaryAsync(item => item.GarageId, item => item.Amount, cancellationToken);
+        if (accruedByGarage.Count == 0)
+        {
+            return new HashSet<Guid>();
+        }
+
+        var paidByGarage = await dbContext.AccrualPaymentAllocations.AsNoTracking()
+            .Where(allocation =>
+                allocation.IsActive &&
+                !allocation.Accrual.IsCanceled &&
+                allocation.Accrual.FeeCampaignId == feeCampaignId &&
+                allocation.Accrual.AccountingMonth < accountingMonth)
+            .GroupBy(allocation => allocation.Accrual.GarageId)
+            .Select(group => new
+            {
+                GarageId = group.Key,
+                Amount = group.Sum(allocation => allocation.Amount)
+            })
+            .ToDictionaryAsync(item => item.GarageId, item => item.Amount, cancellationToken);
+
+        return accruedByGarage
+            .Where(item => paidByGarage.GetValueOrDefault(item.Key) >= item.Value)
+            .Select(item => item.Key)
+            .ToHashSet();
+    }
+
     public Task<int> CountActiveForGenerationAsync(
         Guid incomeTypeId,
         DateOnly accountingMonth,

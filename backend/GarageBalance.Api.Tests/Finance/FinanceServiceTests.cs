@@ -4720,10 +4720,10 @@ public sealed class FinanceServiceTests
         Assert.True(firstRun.Succeeded, firstRun.ErrorMessage);
         Assert.Equal(200, firstRun.Value!.CreatedCount);
         Assert.Equal(100000m, firstRun.Value.TotalAmount);
-        Assert.InRange(firstRunSelectCount, 1, 5);
+        Assert.InRange(firstRunSelectCount, 1, 6);
         Assert.False(secondRun.Succeeded);
         Assert.Equal("fee_campaign_accruals_empty", secondRun.ErrorCode);
-        Assert.InRange(secondRunSelectCount, 1, 4);
+        Assert.InRange(secondRunSelectCount, 1, 5);
         Assert.Equal(200, database.Context.Accruals.Count());
     }
 
@@ -4756,6 +4756,184 @@ public sealed class FinanceServiceTests
         Assert.False(second.Succeeded);
         Assert.Equal("fee_campaign_accruals_empty", second.ErrorCode);
         Assert.Single(database.Context.Accruals);
+    }
+
+    [Fact]
+    public async Task GenerateFeeCampaignAccrualsAsync_NextMonthSkipsFullyPaidParticipantsButKeepsPartialAndUnpaid()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        var otherIncome = AddOtherIncomeDestination(database.Context);
+        var owner = new Owner { LastName = "Участник", FirstName = "Сбора" };
+        var partiallyPaidGarage = new Garage { Number = "FEE-PARTIAL", PeopleCount = 1, FloorCount = 1, Owner = owner };
+        var unpaidGarage = new Garage { Number = "FEE-UNPAID", PeopleCount = 1, FloorCount = 1, Owner = owner };
+        var campaign = new FeeCampaign
+        {
+            Name = "Сбор с повтором для неплательщиков",
+            IncomeTypeId = fixtures.IncomeType.Id,
+            IncomeType = fixtures.IncomeType,
+            ContributionAmount = 500m,
+            TargetAmount = 1500m,
+            StartsOn = new DateOnly(2026, 6, 1),
+            AppliesToAllGarages = false,
+            OverdueGraceDays = 30
+        };
+        campaign.ParticipantGarages.Add(new FeeCampaignGarage { FeeCampaign = campaign, Garage = fixtures.Garage });
+        campaign.ParticipantGarages.Add(new FeeCampaignGarage { FeeCampaign = campaign, Garage = partiallyPaidGarage });
+        campaign.ParticipantGarages.Add(new FeeCampaignGarage { FeeCampaign = campaign, Garage = unpaidGarage });
+        database.Context.AddRange(owner, partiallyPaidGarage, unpaidGarage, campaign);
+        await database.Context.SaveChangesAsync();
+        var service = FinanceServiceTestFactory.Create(database.Context);
+
+        var firstMonth = await service.GenerateFeeCampaignAccrualsAsync(
+            new GenerateFeeCampaignAccrualsRequest(campaign.Id, new DateOnly(2026, 6, 1), null),
+            null,
+            CancellationToken.None);
+        Assert.True(firstMonth.Succeeded, firstMonth.ErrorMessage);
+        Assert.Equal(3, firstMonth.Value!.CreatedCount);
+
+        var fullPayment = await service.CreateIncomeAsync(
+            new CreateIncomeOperationRequest(
+                fixtures.Garage.Id,
+                otherIncome.Id,
+                new DateOnly(2026, 6, 15),
+                new DateOnly(2026, 6, 1),
+                500m,
+                "FEE-FULL",
+                null),
+            null,
+            CancellationToken.None);
+        var partialPayment = await service.CreateIncomeAsync(
+            new CreateIncomeOperationRequest(
+                partiallyPaidGarage.Id,
+                otherIncome.Id,
+                new DateOnly(2026, 6, 15),
+                new DateOnly(2026, 6, 1),
+                200m,
+                "FEE-PARTIAL",
+                null),
+            null,
+            CancellationToken.None);
+        Assert.True(fullPayment.Succeeded, fullPayment.ErrorMessage);
+        Assert.True(partialPayment.Succeeded, partialPayment.ErrorMessage);
+
+        var secondMonth = await service.GenerateFeeCampaignAccrualsAsync(
+            new GenerateFeeCampaignAccrualsRequest(campaign.Id, new DateOnly(2026, 7, 1), null),
+            null,
+            CancellationToken.None);
+
+        Assert.True(secondMonth.Succeeded, secondMonth.ErrorMessage);
+        Assert.Equal(2, secondMonth.Value!.CreatedCount);
+        Assert.Equal(1, secondMonth.Value.SkippedCount);
+        Assert.Contains(secondMonth.Value.SkippedGarages, item =>
+            item.Contains(fixtures.Garage.Number, StringComparison.Ordinal) &&
+            item.Contains("полностью оплачены", StringComparison.Ordinal));
+        Assert.Equal(
+            new[] { partiallyPaidGarage.Id, unpaidGarage.Id }.Order().ToArray(),
+            secondMonth.Value.CreatedAccruals.Select(item => item.GarageId).Order().ToArray());
+        Assert.DoesNotContain(
+            database.Context.Accruals,
+            item =>
+                item.FeeCampaignId == campaign.Id &&
+                item.GarageId == fixtures.Garage.Id &&
+                item.AccountingMonth == new DateOnly(2026, 7, 1));
+
+        var settlePartial = await service.CreateIncomeAsync(
+            new CreateIncomeOperationRequest(
+                partiallyPaidGarage.Id,
+                otherIncome.Id,
+                new DateOnly(2026, 7, 15),
+                new DateOnly(2026, 7, 1),
+                800m,
+                "FEE-PARTIAL-SETTLED",
+                null),
+            null,
+            CancellationToken.None);
+        var settleUnpaid = await service.CreateIncomeAsync(
+            new CreateIncomeOperationRequest(
+                unpaidGarage.Id,
+                otherIncome.Id,
+                new DateOnly(2026, 7, 15),
+                new DateOnly(2026, 7, 1),
+                1000m,
+                "FEE-UNPAID-SETTLED",
+                null),
+            null,
+            CancellationToken.None);
+        Assert.True(settlePartial.Succeeded, settlePartial.ErrorMessage);
+        Assert.True(settleUnpaid.Succeeded, settleUnpaid.ErrorMessage);
+
+        var thirdMonth = await service.GenerateActiveFeeCampaignAccrualsAsync(
+            new GenerateActiveFeeCampaignAccrualsRequest(new DateOnly(2026, 8, 1), null),
+            null,
+            CancellationToken.None);
+
+        Assert.True(thirdMonth.Succeeded, thirdMonth.ErrorMessage);
+        Assert.Equal(0, thirdMonth.Value!.CreatedCount);
+        Assert.Equal(1, thirdMonth.Value.SkippedCount);
+        Assert.Contains(thirdMonth.Value.SkippedCampaigns, item =>
+            item.Contains("полностью оплатили сбор", StringComparison.Ordinal));
+        Assert.DoesNotContain(
+            database.Context.Accruals,
+            item =>
+                item.FeeCampaignId == campaign.Id &&
+                item.AccountingMonth == new DateOnly(2026, 8, 1));
+    }
+
+    [Fact]
+    public async Task GenerateFeeCampaignAccrualsAsync_NextMonthIncludesParticipantWithInactiveFullPaymentAllocation()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        var otherIncome = AddOtherIncomeDestination(database.Context);
+        var campaign = new FeeCampaign
+        {
+            Name = "Сбор после отмены распределения оплаты",
+            IncomeTypeId = fixtures.IncomeType.Id,
+            IncomeType = fixtures.IncomeType,
+            ContributionAmount = 500m,
+            TargetAmount = 500m,
+            StartsOn = new DateOnly(2026, 6, 1),
+            AppliesToAllGarages = false,
+            OverdueGraceDays = 30
+        };
+        campaign.ParticipantGarages.Add(new FeeCampaignGarage { FeeCampaign = campaign, Garage = fixtures.Garage });
+        database.Context.FeeCampaigns.Add(campaign);
+        await database.Context.SaveChangesAsync();
+        var service = FinanceServiceTestFactory.Create(database.Context);
+
+        var june = await service.GenerateFeeCampaignAccrualsAsync(
+            new GenerateFeeCampaignAccrualsRequest(campaign.Id, new DateOnly(2026, 6, 1), null),
+            null,
+            CancellationToken.None);
+        Assert.True(june.Succeeded, june.ErrorMessage);
+        var payment = await service.CreateIncomeAsync(
+            new CreateIncomeOperationRequest(
+                fixtures.Garage.Id,
+                otherIncome.Id,
+                new DateOnly(2026, 6, 15),
+                new DateOnly(2026, 6, 1),
+                500m,
+                "FEE-CANCELED",
+                null),
+            null,
+            CancellationToken.None);
+        Assert.True(payment.Succeeded, payment.ErrorMessage);
+
+        var inactiveAllocation = Assert.Single(
+            database.Context.AccrualPaymentAllocations,
+            item => item.IsActive && item.FinancialOperationId == payment.Value!.Id);
+        inactiveAllocation.IsActive = false;
+        await database.Context.SaveChangesAsync();
+        Assert.Empty(database.Context.AccrualPaymentAllocations.Where(item => item.IsActive));
+
+        var july = await service.GenerateFeeCampaignAccrualsAsync(
+            new GenerateFeeCampaignAccrualsRequest(campaign.Id, new DateOnly(2026, 7, 1), null),
+            null,
+            CancellationToken.None);
+
+        Assert.True(july.Succeeded, july.ErrorMessage);
+        Assert.Equal(fixtures.Garage.Id, Assert.Single(july.Value!.CreatedAccruals).GarageId);
     }
 
     [Fact]

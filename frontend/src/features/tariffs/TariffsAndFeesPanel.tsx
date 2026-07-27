@@ -1954,7 +1954,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
         accountingMonth: `${feeCampaignGenerateMonth}-01`,
         comment: feeCampaignGenerateComment.trim() || undefined,
       })
-      setFeeCampaignActionMessage(`Доначислено: ${result.createdCount}; сумма: ${formatMoney(result.totalAmount)} руб.; уже было начислено: ${result.skippedCount}.`)
+      setFeeCampaignActionMessage(`Доначислено: ${result.createdCount}; сумма: ${formatMoney(result.totalAmount)} руб.; пропущено: ${result.skippedCount}.`)
       closeFeeCampaignGenerateDialog()
     } catch (caught) {
       setFeeCampaignActionMessage(caught instanceof Error ? caught.message : 'Не удалось начислить сбор.')
@@ -2959,7 +2959,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
                 <X size={18} />
               </button>
             </div>
-            <p className="confirmation-text" id="fee-campaign-generate-description">Действующие сборы начисляются автоматически за рабочий месяц. Эта форма нужна для ручного дозаполнения: начисления появятся только у участников, которым выбранный сбор за этот месяц еще не начислялся. Повторные начисления не создаются, действие записывается в историю изменений.</p>
+            <p className="confirmation-text" id="fee-campaign-generate-description">Действующие сборы начисляются автоматически за рабочий месяц. В первый месяц начисление получают выбранные участники, а в следующие месяцы — только те, кто ещё не полностью оплатил предыдущие начисления. Участник с частичной оплатой остаётся в начислении до полной оплаты или закрытия сбора. Эта форма нужна для ручного дозаполнения выбранного месяца; дубликаты не создаются, действие записывается в историю изменений.</p>
             <FormField label="Месяц начисления">
               <LocalizedDatePicker
                 ariaLabel="Месяц начисления сбора"
