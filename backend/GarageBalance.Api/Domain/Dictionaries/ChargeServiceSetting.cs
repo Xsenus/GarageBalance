@@ -1,3 +1,5 @@
+using GarageBalance.Api.Domain.Finance;
+
 namespace GarageBalance.Api.Domain.Dictionaries;
 
 public sealed class ChargeServiceSetting
@@ -14,6 +16,8 @@ public sealed class ChargeServiceSetting
     public IncomeType? IncomeType { get; set; }
     public Guid? ExpenseTypeId { get; set; }
     public ExpenseType? ExpenseType { get; set; }
+    public Guid? ExpenseFundId { get; set; }
+    public Fund? ExpenseFund { get; set; }
     public Guid? TariffId { get; set; }
     public Tariff? Tariff { get; set; }
     public bool IsMetered { get; set; }

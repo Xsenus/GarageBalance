@@ -26,6 +26,8 @@ export type FinancialOperationDto = {
   supplierName: string | null
   expenseTypeId: string | null
   expenseTypeName: string | null
+  expenseFundId?: string | null
+  expenseFundName?: string | null
   garageDebtBefore: number | null
   garageDebtAfter: number | null
   supplierDebtBefore: number | null
@@ -278,6 +280,8 @@ export type ExpenseWorksheetRowDto = {
   counterpartyName: string | null
   expenseTypeId: string | null
   expenseTypeName: string
+  expenseFundId?: string | null
+  expenseFundName?: string | null
   openingBalance: number
   openingDebt?: number
   openingAdvance?: number

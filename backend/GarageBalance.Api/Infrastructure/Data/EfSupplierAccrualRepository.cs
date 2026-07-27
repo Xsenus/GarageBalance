@@ -80,6 +80,8 @@ public sealed class EfSupplierAccrualRepository(GarageBalanceDbContext dbContext
                 SupplierName = (string?)accrual.Supplier.Name,
                 ExpenseTypeId = (Guid?)accrual.ExpenseTypeId,
                 ExpenseTypeName = (string?)accrual.ExpenseType.Name,
+                ExpenseFundId = accrual.ExpenseFundId,
+                ExpenseFundName = accrual.ExpenseFund != null ? accrual.ExpenseFund.Name : null,
                 AccountingMonth = (DateOnly?)accrual.AccountingMonth,
                 Amount = (decimal?)accrual.Amount,
                 Source = (string?)accrual.Source,
@@ -100,6 +102,8 @@ public sealed class EfSupplierAccrualRepository(GarageBalanceDbContext dbContext
                 SupplierName = (string?)null,
                 ExpenseTypeId = (Guid?)null,
                 ExpenseTypeName = (string?)null,
+                ExpenseFundId = (Guid?)null,
+                ExpenseFundName = (string?)null,
                 AccountingMonth = (DateOnly?)null,
                 Amount = (decimal?)null,
                 Source = (string?)null,
@@ -126,6 +130,10 @@ public sealed class EfSupplierAccrualRepository(GarageBalanceDbContext dbContext
                 Supplier = new Supplier { Id = row.SupplierId.Value, Name = row.SupplierName! },
                 ExpenseTypeId = row.ExpenseTypeId!.Value,
                 ExpenseType = new ExpenseType { Id = row.ExpenseTypeId.Value, Name = row.ExpenseTypeName! },
+                ExpenseFundId = row.ExpenseFundId,
+                ExpenseFund = row.ExpenseFundId.HasValue
+                    ? new Fund { Id = row.ExpenseFundId.Value, Name = row.ExpenseFundName!, NormalizedName = row.ExpenseFundName! }
+                    : null,
                 AccountingMonth = row.AccountingMonth!.Value,
                 Amount = row.Amount!.Value,
                 Source = row.Source!,
@@ -193,12 +201,14 @@ public sealed class EfSupplierAccrualRepository(GarageBalanceDbContext dbContext
         dbContext.SupplierAccruals
             .Include(accrual => accrual.Supplier)
             .Include(accrual => accrual.ExpenseType)
+            .Include(accrual => accrual.ExpenseFund)
             .SingleOrDefaultAsync(accrual => accrual.Id == id, cancellationToken);
 
     public Task<SupplierAccrual?> FindBySourceFinancialOperationForUpdateAsync(Guid operationId, CancellationToken cancellationToken) =>
         dbContext.SupplierAccruals
             .Include(accrual => accrual.Supplier)
             .Include(accrual => accrual.ExpenseType)
+            .Include(accrual => accrual.ExpenseFund)
             .SingleOrDefaultAsync(accrual => accrual.SourceFinancialOperationId == operationId, cancellationToken);
 
     public async Task<decimal> GetTotalThroughMonthAsync(Guid supplierId, Guid expenseTypeId, DateOnly accountingMonth, CancellationToken cancellationToken) =>
@@ -235,6 +245,7 @@ public sealed class EfSupplierAccrualRepository(GarageBalanceDbContext dbContext
         dbContext.SupplierAccruals.AsNoTracking()
             .Include(accrual => accrual.Supplier)
             .Include(accrual => accrual.ExpenseType)
+            .Include(accrual => accrual.ExpenseFund)
             .Where(accrual => !accrual.IsCanceled);
 
     private static IQueryable<SupplierAccrual> ApplyFilters(

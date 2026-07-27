@@ -331,6 +331,9 @@ public sealed class GarageBalanceDbContext(DbContextOptions<GarageBalanceDbConte
         modelBuilder.Entity<ChargeServiceSetting>(entity =>
         {
             entity.ToTable("charge_service_settings");
+            entity.ToTable(table => table.HasCheckConstraint(
+                "CK_charge_service_settings_ExpenseFundLink",
+                "\"ExpenseFundId\" IS NULL OR \"ExpenseTypeId\" IS NOT NULL"));
             entity.HasKey(item => item.Id);
             entity.Property(item => item.Name).HasMaxLength(200).IsRequired();
             entity.Property(item => item.UnitName).HasMaxLength(40);
@@ -340,6 +343,7 @@ public sealed class GarageBalanceDbContext(DbContextOptions<GarageBalanceDbConte
             entity.HasIndex(item => item.HasTieredTariff);
             entity.HasIndex(item => item.IncomeTypeId);
             entity.HasIndex(item => item.ExpenseTypeId);
+            entity.HasIndex(item => item.ExpenseFundId);
             entity.HasIndex(item => item.TariffId);
             entity.HasOne(item => item.IncomeType)
                 .WithMany()
@@ -348,6 +352,10 @@ public sealed class GarageBalanceDbContext(DbContextOptions<GarageBalanceDbConte
             entity.HasOne(item => item.ExpenseType)
                 .WithMany()
                 .HasForeignKey(item => item.ExpenseTypeId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(item => item.ExpenseFund)
+                .WithMany()
+                .HasForeignKey(item => item.ExpenseFundId)
                 .OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(item => item.Tariff)
                 .WithMany()
@@ -424,6 +432,7 @@ public sealed class GarageBalanceDbContext(DbContextOptions<GarageBalanceDbConte
             entity.HasIndex(operation => operation.GarageId);
             entity.HasIndex(operation => operation.SupplierId);
             entity.HasIndex(operation => operation.StaffMemberId);
+            entity.HasIndex(operation => operation.ExpenseFundId);
             entity.HasOne(operation => operation.Garage)
                 .WithMany()
                 .HasForeignKey(operation => operation.GarageId)
@@ -443,6 +452,10 @@ public sealed class GarageBalanceDbContext(DbContextOptions<GarageBalanceDbConte
             entity.HasOne(operation => operation.ExpenseType)
                 .WithMany()
                 .HasForeignKey(operation => operation.ExpenseTypeId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(operation => operation.ExpenseFund)
+                .WithMany()
+                .HasForeignKey(operation => operation.ExpenseFundId)
                 .OnDelete(DeleteBehavior.Restrict);
         });
 
@@ -531,6 +544,7 @@ public sealed class GarageBalanceDbContext(DbContextOptions<GarageBalanceDbConte
             entity.HasIndex(accrual => accrual.AccountingMonth);
             entity.HasIndex(accrual => accrual.SupplierId);
             entity.HasIndex(accrual => accrual.ExpenseTypeId);
+            entity.HasIndex(accrual => accrual.ExpenseFundId);
             entity.HasIndex(accrual => accrual.SourceFinancialOperationId).IsUnique();
             entity.HasIndex(accrual => new { accrual.SupplierId, accrual.ExpenseTypeId, accrual.AccountingMonth, accrual.Source, accrual.DocumentNumber })
                 .IsUnique()
@@ -542,6 +556,10 @@ public sealed class GarageBalanceDbContext(DbContextOptions<GarageBalanceDbConte
             entity.HasOne(accrual => accrual.ExpenseType)
                 .WithMany()
                 .HasForeignKey(accrual => accrual.ExpenseTypeId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(accrual => accrual.ExpenseFund)
+                .WithMany()
+                .HasForeignKey(accrual => accrual.ExpenseFundId)
                 .OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(accrual => accrual.SourceFinancialOperation)
                 .WithMany()

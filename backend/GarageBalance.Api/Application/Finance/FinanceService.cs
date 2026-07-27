@@ -37,6 +37,7 @@ public sealed class FinanceService(
     IFeeCampaignRepository feeCampaignRepository,
     IChargeServiceSettingRepository chargeServiceSettingRepository,
     IIncomeFundAssignmentService incomeFundAssignmentService,
+    IExpenseFundDisbursementService expenseFundDisbursementService,
     IApplicationUnitOfWork unitOfWork,
     IAuditEventWriter auditEventWriter,
     TimeProvider timeProvider,
@@ -581,13 +582,6 @@ public sealed class FinanceService(
             CashExpenseTypeNames,
             cancellationToken);
 
-        var collectedByIncomeKey = worksheetData.Incomes
-            .GroupBy(income => NormalizeFinanceLookupKey(income.IncomeTypeCode ?? income.IncomeTypeName))
-            .ToDictionary(group => group.Key, group => MoneyMath.RoundMoney(group.Sum(income => income.Amount)), StringComparer.Ordinal);
-        var openingCollectedByIncomeKey = worksheetData.OpeningIncomes
-            .GroupBy(income => NormalizeFinanceLookupKey(income.IncomeTypeCode ?? income.IncomeTypeName))
-            .ToDictionary(group => group.Key, group => MoneyMath.RoundMoney(group.Sum(income => income.Amount)), StringComparer.Ordinal);
-
         var rows = new List<ExpenseWorksheetRowDto>();
         var supplierAccruals = worksheetData.SupplierAccruals
             .ToDictionary(item => (item.SupplierId, item.ExpenseTypeId));
@@ -596,6 +590,8 @@ public sealed class FinanceService(
         var supplierOpeningAccruals = worksheetData.SupplierOpeningAccruals
             .ToDictionary(item => (item.SupplierId, item.ExpenseTypeId));
         var supplierOpeningExpenses = worksheetData.SupplierOpeningExpenses
+            .ToDictionary(item => (item.SupplierId, item.ExpenseTypeId));
+        var supplierFunds = worksheetData.SupplierFunds
             .ToDictionary(item => (item.SupplierId, item.ExpenseTypeId));
         var supplierKeys = supplierAccruals.Keys
             .Concat(supplierExpenses.Keys)
@@ -610,19 +606,19 @@ public sealed class FinanceService(
             supplierExpenses.TryGetValue(key, out var expense);
             supplierOpeningAccruals.TryGetValue(key, out var openingAccrual);
             supplierOpeningExpenses.TryGetValue(key, out var openingExpense);
+            supplierFunds.TryGetValue(key, out var expenseFund);
             var sample = accrual ?? expense ?? openingAccrual ?? openingExpense!;
             var accrualAmount = MoneyMath.RoundMoney(accrual?.Amount ?? 0m);
             var expenseAmount = MoneyMath.RoundMoney(expense?.Amount ?? 0m);
             var balance = MoneyMath.RoundMoney(Math.Max(accrualAmount - expenseAmount, 0m));
             var openingBalance = MoneyMath.RoundMoney((openingAccrual?.Amount ?? 0m) - (openingExpense?.Amount ?? 0m));
             var closingBalance = MoneyMath.RoundMoney(openingBalance + accrualAmount - expenseAmount);
-            var currentCollected = TryGetCollectedAmount(collectedByIncomeKey, sample.ExpenseTypeName, sample.ExpenseTypeCode);
-            var openingCollected = TryGetCollectedAmount(openingCollectedByIncomeKey, sample.ExpenseTypeName, sample.ExpenseTypeCode);
-            var hasCollectedFunds = currentCollected.HasValue || openingCollected.HasValue;
-            decimal? collected = hasCollectedFunds
-                ? MoneyMath.RoundMoney((openingCollected ?? 0m) - (openingExpense?.Amount ?? 0m) + (currentCollected ?? 0m))
-                : null;
-            decimal? difference = collected.HasValue ? MoneyMath.RoundMoney(collected.Value - expenseAmount) : null;
+            decimal? collected = expenseFund is null
+                ? null
+                : MoneyMath.RoundMoney(expenseFund.AvailableBalance + expenseAmount);
+            decimal? difference = expenseFund is null
+                ? null
+                : MoneyMath.RoundMoney(expenseFund.AvailableBalance);
             rows.Add(new ExpenseWorksheetRowDto(
                 "supplier",
                 sample.SupplierId,
@@ -640,7 +636,9 @@ public sealed class FinanceService(
                 OpeningDebt = MoneyMath.RoundMoney(Math.Max(openingBalance, 0m)),
                 OpeningAdvance = MoneyMath.RoundMoney(Math.Max(-openingBalance, 0m)),
                 ClosingDebt = MoneyMath.RoundMoney(Math.Max(closingBalance, 0m)),
-                ClosingAdvance = MoneyMath.RoundMoney(Math.Max(-closingBalance, 0m))
+                ClosingAdvance = MoneyMath.RoundMoney(Math.Max(-closingBalance, 0m)),
+                ExpenseFundId = expenseFund?.ExpenseFundId,
+                ExpenseFundName = expenseFund?.ExpenseFundName
             });
         }
 
@@ -721,8 +719,22 @@ public sealed class FinanceService(
         var openingAdvanceTotal = MoneyMath.RoundMoney(rows.Sum(row => row.OpeningAdvance));
         var closingDebtTotal = MoneyMath.RoundMoney(rows.Sum(row => row.ClosingDebt));
         var closingAdvanceTotal = MoneyMath.RoundMoney(rows.Sum(row => row.ClosingAdvance));
-        var collectedTotal = MoneyMath.RoundMoney(rows.Sum(row => row.CollectedAmount ?? 0m));
-        var differenceTotal = MoneyMath.RoundMoney(rows.Sum(row => row.Difference ?? 0m));
+        var supplierFundTotals = rows
+            .Where(row => row.ExpenseFundId.HasValue)
+            .GroupBy(row => row.ExpenseFundId!.Value)
+            .Select(group => new
+            {
+                Collected = MoneyMath.RoundMoney(
+                    group.First().Difference!.Value + group.Sum(row => row.ExpenseAmount)),
+                Difference = group.First().Difference!.Value
+            })
+            .ToList();
+        var collectedTotal = MoneyMath.RoundMoney(
+            supplierFundTotals.Sum(item => item.Collected) +
+            rows.Where(row => !row.ExpenseFundId.HasValue).Sum(row => row.CollectedAmount ?? 0m));
+        var differenceTotal = MoneyMath.RoundMoney(
+            supplierFundTotals.Sum(item => item.Difference) +
+            rows.Where(row => !row.ExpenseFundId.HasValue).Sum(row => row.Difference ?? 0m));
         var availableAmounts = CalculateAvailableAmounts(worksheetData.AvailableBalance);
 
         return FinanceResult<ExpenseWorksheetDto>.Success(new ExpenseWorksheetDto(
@@ -1076,6 +1088,7 @@ public sealed class FinanceService(
         }
 
         var isCashExpense = expensePaymentType == ExpensePaymentTypes.WithoutReceipt;
+        await using var fundDisbursementLock = await expenseFundDisbursementService.AcquireUpdateLockAsync(cancellationToken);
         await using var balanceLock = await financeAvailableBalanceQuery.AcquireUpdateLockAsync(isCashExpense, cancellationToken);
 
         var duplicate = await HasDocumentDuplicateAsync(FinancialOperationKinds.Expense, request.DocumentNumber, request.OperationDate, cancellationToken);
@@ -1118,7 +1131,9 @@ public sealed class FinanceService(
             SupplierId = supplier.Id,
             Supplier = supplier,
             ExpenseTypeId = expenseType.Id,
-            ExpenseType = expenseType
+            ExpenseType = expenseType,
+            ExpenseFundId = supplier.ChargeServiceSetting!.ExpenseFundId,
+            ExpenseFund = supplier.ChargeServiceSetting.ExpenseFund
         };
 
         financialOperationRepository.Add(operation);
@@ -1130,6 +1145,8 @@ public sealed class FinanceService(
                 Supplier = supplier,
                 ExpenseTypeId = expenseType.Id,
                 ExpenseType = expenseType,
+                ExpenseFundId = operation.ExpenseFundId,
+                ExpenseFund = operation.ExpenseFund,
                 SourceFinancialOperationId = operation.Id,
                 SourceFinancialOperation = operation,
                 AccountingMonth = operation.AccountingMonth,
@@ -1147,6 +1164,18 @@ public sealed class FinanceService(
         else
         {
             AddAudit(actorUserId, "finance.expense_created", operation, FormatExpenseCreatedAuditSummary(operation));
+        }
+
+        var fundDisbursementResult = await expenseFundDisbursementService.CreateAsync(
+            operation,
+            supplier.Name,
+            actorUserId,
+            cancellationToken);
+        if (!fundDisbursementResult.Succeeded)
+        {
+            return FinanceResult<FinancialOperationDto>.Failure(
+                fundDisbursementResult.ErrorCode!,
+                fundDisbursementResult.ErrorMessage!);
         }
 
         await unitOfWork.SaveChangesAsync(cancellationToken);
@@ -1559,6 +1588,8 @@ public sealed class FinanceService(
 
         var wasCashExpense = IsCashExpense(operation);
         var isCashExpense = expensePaymentType == ExpensePaymentTypes.WithoutReceipt;
+        await using var fundDisbursementLock = await expenseFundDisbursementService.AcquireUpdateLockAsync(cancellationToken);
+        await using var balanceLock = await financeAvailableBalanceQuery.AcquireUpdateLockAsync(isCashExpense, cancellationToken);
         var linkedAtomicAccrual = wasCashExpense
             ? await supplierAccrualRepository.FindBySourceFinancialOperationForUpdateAsync(operation.Id, cancellationToken)
             : null;
@@ -1600,6 +1631,7 @@ public sealed class FinanceService(
             ["comment"] = operation.Comment,
             ["supplier"] = operation.Supplier?.Name,
             ["expenseType"] = operation.ExpenseType?.Name,
+            ["expenseFund"] = operation.ExpenseFund?.Name,
             ["expensePaymentType"] = operation.ExpensePaymentType
         };
         var newValues = new Dictionary<string, object?>
@@ -1611,6 +1643,7 @@ public sealed class FinanceService(
             ["comment"] = comment,
             ["supplier"] = supplier.Name,
             ["expenseType"] = expenseType.Name,
+            ["expenseFund"] = supplier.ChargeServiceSetting!.ExpenseFund?.Name,
             ["expensePaymentType"] = expensePaymentType
         };
         operation.OperationDate = request.OperationDate;
@@ -1623,6 +1656,8 @@ public sealed class FinanceService(
         operation.Supplier = supplier;
         operation.ExpenseTypeId = expenseType.Id;
         operation.ExpenseType = expenseType;
+        operation.ExpenseFundId = supplier.ChargeServiceSetting!.ExpenseFundId;
+        operation.ExpenseFund = supplier.ChargeServiceSetting.ExpenseFund;
         operation.UpdatedAtUtc = DateTimeOffset.UtcNow;
         if (isCashExpense)
         {
@@ -1634,6 +1669,8 @@ public sealed class FinanceService(
                     Supplier = supplier,
                     ExpenseTypeId = expenseType.Id,
                     ExpenseType = expenseType,
+                    ExpenseFundId = operation.ExpenseFundId,
+                    ExpenseFund = operation.ExpenseFund,
                     SourceFinancialOperationId = operation.Id,
                     SourceFinancialOperation = operation,
                     AccountingMonth = accountingMonth,
@@ -1650,6 +1687,8 @@ public sealed class FinanceService(
                 linkedAtomicAccrual.Supplier = supplier;
                 linkedAtomicAccrual.ExpenseTypeId = expenseType.Id;
                 linkedAtomicAccrual.ExpenseType = expenseType;
+                linkedAtomicAccrual.ExpenseFundId = operation.ExpenseFundId;
+                linkedAtomicAccrual.ExpenseFund = operation.ExpenseFund;
                 linkedAtomicAccrual.AccountingMonth = accountingMonth;
                 linkedAtomicAccrual.Amount = amount;
                 linkedAtomicAccrual.DocumentNumber = documentNumber;
@@ -1662,6 +1701,20 @@ public sealed class FinanceService(
         {
             linkedAtomicAccrual.IsCanceled = true;
             linkedAtomicAccrual.UpdatedAtUtc = DateTimeOffset.UtcNow;
+        }
+
+        var fundDisbursementResult = await expenseFundDisbursementService.UpdateAsync(
+            operation,
+            operation.ExpenseFundId!.Value,
+            supplier.Name,
+            amount,
+            actorUserId,
+            cancellationToken);
+        if (!fundDisbursementResult.Succeeded)
+        {
+            return FinanceResult<FinancialOperationDto>.Failure(
+                fundDisbursementResult.ErrorCode!,
+                fundDisbursementResult.ErrorMessage!);
         }
 
         AddAudit(actorUserId, "finance.expense_updated", operation, FormatExpenseUpdatedAuditSummary(previousSnapshot, operation), oldValues, newValues);
@@ -1688,8 +1741,13 @@ public sealed class FinanceService(
             return FinanceResult<FinancialOperationDto>.Failure("operation_already_canceled", "Финансовая операция уже отменена.");
         }
 
+        var hasSupplierExpenseFund = operation.OperationKind == FinancialOperationKinds.Expense &&
+            operation.SupplierId.HasValue &&
+            operation.ExpenseFundId.HasValue;
         await using var fundAssignmentLock = operation.OperationKind == FinancialOperationKinds.Income
             ? await incomeFundAssignmentService.AcquireUpdateLockAsync(cancellationToken)
+            : hasSupplierExpenseFund
+                ? await expenseFundDisbursementService.AcquireUpdateLockAsync(cancellationToken)
             : null;
         await using var cashBalanceLock = operation.OperationKind == FinancialOperationKinds.Income
             ? await financeAvailableBalanceQuery.AcquireUpdateLockAsync(cashExpense: true, cancellationToken)
@@ -1717,6 +1775,20 @@ public sealed class FinanceService(
                 return FinanceResult<FinancialOperationDto>.Failure(
                     assignmentResult.ErrorCode!,
                     assignmentResult.ErrorMessage!);
+            }
+        }
+        else if (hasSupplierExpenseFund)
+        {
+            var disbursementResult = await expenseFundDisbursementService.CancelAsync(
+                operation,
+                reason,
+                actorUserId,
+                cancellationToken);
+            if (!disbursementResult.Succeeded)
+            {
+                return FinanceResult<FinancialOperationDto>.Failure(
+                    disbursementResult.ErrorCode!,
+                    disbursementResult.ErrorMessage!);
             }
         }
 
@@ -1773,8 +1845,13 @@ public sealed class FinanceService(
             return FinanceResult<FinancialOperationDto>.Failure("operation_duplicate", "Операция с таким документом и датой уже внесена.");
         }
 
+        var hasSupplierExpenseFund = operation.OperationKind == FinancialOperationKinds.Expense &&
+            operation.SupplierId.HasValue &&
+            operation.ExpenseFundId.HasValue;
         await using var fundAssignmentLock = operation.OperationKind == FinancialOperationKinds.Income
             ? await incomeFundAssignmentService.AcquireUpdateLockAsync(cancellationToken)
+            : hasSupplierExpenseFund
+                ? await expenseFundDisbursementService.AcquireUpdateLockAsync(cancellationToken)
             : null;
 
         SupplierAccrual? linkedAtomicAccrualToRestore = null;
@@ -1837,6 +1914,19 @@ public sealed class FinanceService(
                 return FinanceResult<FinancialOperationDto>.Failure(
                     assignmentResult.ErrorCode!,
                     assignmentResult.ErrorMessage!);
+            }
+        }
+        else if (hasSupplierExpenseFund)
+        {
+            var disbursementResult = await expenseFundDisbursementService.RestoreAsync(
+                operation,
+                actorUserId,
+                cancellationToken);
+            if (!disbursementResult.Succeeded)
+            {
+                return FinanceResult<FinancialOperationDto>.Failure(
+                    disbursementResult.ErrorCode!,
+                    disbursementResult.ErrorMessage!);
             }
         }
 
@@ -2375,6 +2465,8 @@ public sealed class FinanceService(
             Supplier = supplier,
             ExpenseTypeId = expenseType.Id,
             ExpenseType = expenseType,
+            ExpenseFundId = supplier.ChargeServiceSetting!.ExpenseFundId,
+            ExpenseFund = supplier.ChargeServiceSetting.ExpenseFund,
             AccountingMonth = month,
             Amount = MoneyMath.RoundMoney(request.Amount),
             Source = source,
@@ -2474,6 +2566,8 @@ public sealed class FinanceService(
         accrual.Supplier = supplier;
         accrual.ExpenseTypeId = expenseType.Id;
         accrual.ExpenseType = expenseType;
+        accrual.ExpenseFundId = supplier.ChargeServiceSetting!.ExpenseFundId;
+        accrual.ExpenseFund = supplier.ChargeServiceSetting.ExpenseFund;
         accrual.AccountingMonth = month;
         accrual.Amount = amount;
         accrual.Source = source;
@@ -2830,7 +2924,6 @@ public sealed class FinanceService(
         {
             return FinanceResult<FeeCampaignAccrualGenerationResultDto>.Failure("fee_campaign_not_found", "Сбор не найден.");
         }
-
         if (campaign.ClosedAtUtc.HasValue)
         {
             return FinanceResult<FeeCampaignAccrualGenerationResultDto>.Failure("fee_campaign_closed", "Сбор закрыт: новые начисления создавать нельзя.");
@@ -4792,7 +4885,9 @@ public sealed class FinanceService(
             operation.StaffMember?.FullName,
             operation.StaffMember?.Department?.Name,
             operation.ReceiptBatchId,
-            operation.ExpensePaymentType);
+            operation.ExpensePaymentType,
+            operation.ExpenseFundId,
+            operation.ExpenseFund?.Name);
     }
 
     private static string? InferMeterKind(string incomeTypeName, string? incomeTypeCode)
@@ -4809,16 +4904,6 @@ public sealed class FinanceService(
         }
 
         return null;
-    }
-
-    private static decimal? TryGetCollectedAmount(IReadOnlyDictionary<string, decimal> collectedByIncomeKey, string expenseTypeName, string? expenseTypeCode)
-    {
-        if (!string.IsNullOrWhiteSpace(expenseTypeCode) && collectedByIncomeKey.TryGetValue(NormalizeFinanceLookupKey(expenseTypeCode), out var byCode))
-        {
-            return byCode;
-        }
-
-        return collectedByIncomeKey.TryGetValue(NormalizeFinanceLookupKey(expenseTypeName), out var byName) ? byName : null;
     }
 
     private static FinanceResult<SupplierAccrualDto>? ValidateSupplierExpenseTypeLink(Supplier supplier, ExpenseType expenseType)
@@ -4842,6 +4927,15 @@ public sealed class FinanceService(
             return FinanceResult<SupplierAccrualDto>.Failure(
                 "supplier_expense_type_mismatch",
                 $"Поставщику «{supplier.Name}» можно начислять только услугу «{supplier.ChargeServiceSetting.Name}».");
+        }
+
+        if (!supplier.ChargeServiceSetting.ExpenseFundId.HasValue ||
+            supplier.ChargeServiceSetting.ExpenseFund is null ||
+            supplier.ChargeServiceSetting.ExpenseFund.IsArchived)
+        {
+            return FinanceResult<SupplierAccrualDto>.Failure(
+                "supplier_service_expense_fund_not_configured",
+                $"Для услуги «{supplier.ChargeServiceSetting.Name}» не настроен действующий фонд расходования.");
         }
 
         return null;
@@ -4868,6 +4962,15 @@ public sealed class FinanceService(
             return FinanceResult<FinancialOperationDto>.Failure(
                 "supplier_expense_type_mismatch",
                 $"Поставщику «{supplier.Name}» можно провести выплату только по услуге «{supplier.ChargeServiceSetting.Name}».");
+        }
+
+        if (!supplier.ChargeServiceSetting.ExpenseFundId.HasValue ||
+            supplier.ChargeServiceSetting.ExpenseFund is null ||
+            supplier.ChargeServiceSetting.ExpenseFund.IsArchived)
+        {
+            return FinanceResult<FinancialOperationDto>.Failure(
+                "supplier_service_expense_fund_not_configured",
+                $"Для услуги «{supplier.ChargeServiceSetting.Name}» не настроен действующий фонд расходования.");
         }
 
         return null;
@@ -4989,7 +5092,9 @@ public sealed class FinanceService(
             accrual.Source,
             accrual.DocumentNumber,
             accrual.Comment,
-            accrual.IsCanceled);
+            accrual.IsCanceled,
+            accrual.ExpenseFundId,
+            accrual.ExpenseFund?.Name);
     }
 
     private static MeterReadingDto ToDto(MeterReading reading)

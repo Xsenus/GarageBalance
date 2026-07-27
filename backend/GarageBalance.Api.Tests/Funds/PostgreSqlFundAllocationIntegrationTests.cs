@@ -86,12 +86,16 @@ public sealed class PostgreSqlFundAllocationIntegrationTests
                 Name = "Поступления за электроэнергию",
                 DestinationFundId = renamedFundId
             };
+            var expenseType = await writeContext.ExpenseTypes
+                .SingleAsync(item => item.Name == "Электроэнергия");
             writeContext.AddRange(
                 incomeType,
                 new ChargeServiceSetting
                 {
                     Name = "Электроэнергия по счётчику",
-                    IncomeType = incomeType
+                    IncomeType = incomeType,
+                    ExpenseType = expenseType,
+                    ExpenseFundId = renamedFundId
                 });
             await writeContext.SaveChangesAsync();
 
@@ -190,6 +194,7 @@ public sealed class PostgreSqlFundAllocationIntegrationTests
         await using var database = await PostgreSqlTestDatabase.CreateAsync();
         Guid fundId;
         Guid incomeTypeId;
+        Guid expenseTypeId;
         Guid tariffId;
         await using (var setupContext = database.CreateContext())
         {
@@ -214,9 +219,11 @@ public sealed class PostgreSqlFundAllocationIntegrationTests
                 Rate = 100m,
                 EffectiveFrom = new DateOnly(2026, 7, 1)
             };
-            setupContext.AddRange(incomeType, tariff);
+            var expenseType = new ExpenseType { Name = "Охрана территории" };
+            setupContext.AddRange(incomeType, expenseType, tariff);
             await setupContext.SaveChangesAsync();
             incomeTypeId = incomeType.Id;
+            expenseTypeId = expenseType.Id;
             tariffId = tariff.Id;
         }
 
@@ -244,7 +251,9 @@ public sealed class PostgreSqlFundAllocationIntegrationTests
                 false,
                 "руб.",
                 incomeTypeId,
-                tariffId),
+                tariffId,
+                expenseTypeId,
+                fundId),
             null,
             CancellationToken.None);
 

@@ -87,6 +87,7 @@ builder.Services.AddScoped<IStaffSalaryAdjustmentRepository, EfStaffSalaryAdjust
 builder.Services.AddScoped<ICashBankTransferRepository, EfCashBankTransferRepository>();
 builder.Services.AddScoped<IFundRepository, EfFundRepository>();
 builder.Services.AddScoped<IIncomeFundAssignmentService, IncomeFundAssignmentService>();
+builder.Services.AddScoped<IExpenseFundDisbursementService, ExpenseFundDisbursementService>();
 builder.Services.AddScoped<IFinanceService>(services => new FinanceService(
     services.GetRequiredService<IStaffMemberRepository>(),
     services.GetRequiredService<IGarageRepository>(),
@@ -114,6 +115,7 @@ builder.Services.AddScoped<IFinanceService>(services => new FinanceService(
     services.GetRequiredService<IFeeCampaignRepository>(),
     services.GetRequiredService<IChargeServiceSettingRepository>(),
     services.GetRequiredService<IIncomeFundAssignmentService>(),
+    services.GetRequiredService<IExpenseFundDisbursementService>(),
     services.GetRequiredService<IApplicationUnitOfWork>(),
     services.GetRequiredService<IAuditEventWriter>(),
     services.GetRequiredService<TimeProvider>(),

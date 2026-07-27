@@ -58,6 +58,9 @@ export type SupplierDto = {
   chargeServiceSettingId?: string | null
   chargeServiceSettingName?: string | null
   chargeServiceExpenseTypeId?: string | null
+  chargeServiceExpenseFundId?: string | null
+  chargeServiceExpenseFundName?: string | null
+  chargeServiceExpenseFundBalance?: number | null
   comment: string | null
   isArchived: boolean
 }
@@ -137,6 +140,7 @@ export type ChargeServiceSettingDto = {
   overdueGraceDays: number
   incomeTypeId: string | null
   expenseTypeId?: string | null
+  expenseFundId?: string | null
   tariffId: string | null
   isMetered: boolean
   hasTieredTariff: boolean
@@ -279,6 +283,7 @@ export type UpsertChargeServiceSettingRequest = {
   overdueGraceDays: number
   incomeTypeId?: string | null
   expenseTypeId?: string | null
+  expenseFundId?: string | null
   tariffId?: string | null
   isMetered: boolean
   hasTieredTariff: boolean

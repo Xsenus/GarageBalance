@@ -43,7 +43,7 @@ public sealed class FundServiceTests
     }
 
     [Fact]
-    public async Task GetFundsAsync_ReturnsOnlyActiveServicesLinkedThroughActiveIncomeTypes()
+    public async Task GetFundsAsync_ReturnsOnlyActiveServicesLinkedThroughExpenseFunds()
     {
         await using var database = await TestDatabase.CreateAsync();
         var service = CreateService(database.Context);
@@ -66,37 +66,48 @@ public sealed class FundServiceTests
             DestinationFundId = electricityFund.Id,
             IsArchived = true
         };
+        var expenseType = new ExpenseType { Name = "Коммунальные расходы" };
         var electricityService = new ChargeServiceSetting
         {
             Name = "2. Электроэнергия по счётчику",
-            IncomeType = electricityIncome
+            IncomeType = electricityIncome,
+            ExpenseType = expenseType,
+            ExpenseFundId = electricityFund.Id
         };
         var lightingService = new ChargeServiceSetting
         {
             Name = "1. Освещение территории",
-            IncomeType = electricityIncome
+            IncomeType = electricityIncome,
+            ExpenseType = expenseType,
+            ExpenseFundId = electricityFund.Id
         };
         database.Context.AddRange(
             electricityIncome,
             waterIncome,
             archivedIncome,
+            expenseType,
             electricityService,
             lightingService,
             new ChargeServiceSetting
             {
                 Name = "Архивная услуга",
                 IncomeType = electricityIncome,
+                ExpenseType = expenseType,
+                ExpenseFundId = electricityFund.Id,
                 IsArchived = true
             },
             new ChargeServiceSetting
             {
                 Name = "Услуга архивного вида",
-                IncomeType = archivedIncome
+                IncomeType = archivedIncome,
+                IsArchived = true
             },
             new ChargeServiceSetting
             {
                 Name = "Водоснабжение",
-                IncomeType = waterIncome
+                IncomeType = waterIncome,
+                ExpenseType = expenseType,
+                ExpenseFundId = waterFund.Id
             },
             new ChargeServiceSetting
             {
@@ -173,12 +184,15 @@ public sealed class FundServiceTests
             Name = "Поступления за электроэнергию",
             DestinationFundId = fund.Id
         };
+        var expenseType = new ExpenseType { Name = "Электроэнергия" };
         var linkedService = new ChargeServiceSetting
         {
             Name = "Электроэнергия по счётчику",
-            IncomeType = incomeType
+            IncomeType = incomeType,
+            ExpenseType = expenseType,
+            ExpenseFundId = fund.Id
         };
-        database.Context.AddRange(incomeType, linkedService);
+        database.Context.AddRange(incomeType, expenseType, linkedService);
         await database.Context.SaveChangesAsync();
         var actorUserId = Guid.NewGuid();
 
@@ -242,10 +256,12 @@ public sealed class FundServiceTests
             Name = "Поступления за электроэнергию",
             DestinationFundId = fund.Id
         };
+        var expenseType = new ExpenseType { Name = "Электроэнергия" };
         database.Context.AddRange(
             incomeType,
-            new ChargeServiceSetting { Name = "Освещение территории", IncomeType = incomeType },
-            new ChargeServiceSetting { Name = "Электроэнергия по счётчику", IncomeType = incomeType });
+            expenseType,
+            new ChargeServiceSetting { Name = "Освещение территории", IncomeType = incomeType, ExpenseType = expenseType, ExpenseFundId = fund.Id },
+            new ChargeServiceSetting { Name = "Электроэнергия по счётчику", IncomeType = incomeType, ExpenseType = expenseType, ExpenseFundId = fund.Id });
         await database.Context.SaveChangesAsync();
 
         var result = await service.DeleteFundAsync(

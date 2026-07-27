@@ -5,6 +5,7 @@ import type { AuthResponse } from '../../services/authApi'
 import { DictionaryApiError } from '../../services/dictionariesApi'
 import type { AccountingTypeDto, ChargeServiceSettingDto, CreateChargeServiceWithTariffRequest, DictionaryClient, FeeCampaignDto, GarageDto, IrregularPaymentDto, TariffDto, UpsertChargeServiceSettingRequest, UpsertFeeCampaignRequest, UpsertIrregularPaymentRequest, UpsertTariffRequest } from '../../services/dictionariesApi'
 import type { FinanceClient } from '../../services/financeApi'
+import type { FundDto, FundsClient } from '../../services/fundsApi'
 import type { FormStateClient } from '../../services/formStatesApi'
 import { hasPermission, permissions } from '../../shared/accessControl'
 import { EmptyState, TableLoadingState } from '../../shared/AsyncState'
@@ -680,7 +681,7 @@ type TariffsPrototypeSavedState = {
   oneTimeRows: ContractorOneTimeRow[]
 }
 
-export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeClient, formStateClient }: { auth: AuthResponse; dictionaryClient: DictionaryClient; financeClient: FinanceClient; formStateClient: FormStateClient }) {
+export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeClient, fundsClient, formStateClient }: { auth: AuthResponse; dictionaryClient: DictionaryClient; financeClient: FinanceClient; fundsClient: FundsClient; formStateClient: FormStateClient }) {
   const [modal, setModal] = useState<'service' | 'fee' | null>(null)
   const [tariffRows, setTariffRows] = useState<ContractorTariffRow[]>([])
   const [tariffPageNumber, setTariffPageNumber] = useState(1)
@@ -689,6 +690,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
   const [backendTariffs, setBackendTariffs] = useState<TariffDto[]>([])
   const [backendIncomeTypes, setBackendIncomeTypes] = useState<AccountingTypeDto[]>([])
   const [backendExpenseTypes, setBackendExpenseTypes] = useState<AccountingTypeDto[]>([])
+  const [backendFunds, setBackendFunds] = useState<FundDto[]>([])
   const [backendChargeServices, setBackendChargeServices] = useState<ChargeServiceSettingDto[]>([])
   const [feeCampaignGarageOptions, setFeeCampaignGarageOptions] = useState<GarageDto[]>([])
   const [feeCampaignActiveGarageCount, setFeeCampaignActiveGarageCount] = useState(0)
@@ -822,13 +824,15 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
     async function loadTariffReferences() {
       setTariffReferencesLoading(true)
       try {
-        const [loadedIncomeTypes, loadedExpenseTypes] = await Promise.all([
+        const [loadedIncomeTypes, loadedExpenseTypes, loadedFunds] = await Promise.all([
           dictionaryClient.getIncomeTypes(auth.accessToken, undefined, dictionaryScreenRequestLimit),
           dictionaryClient.getExpenseTypes(auth.accessToken, undefined, dictionaryScreenRequestLimit),
+          fundsClient.getFunds(auth.accessToken).catch(() => []),
         ])
         if (!ignore) {
           setBackendIncomeTypes(loadedIncomeTypes)
           setBackendExpenseTypes(loadedExpenseTypes)
+          setBackendFunds(loadedFunds)
         }
       } catch (caught: unknown) {
         if (!ignore) {
@@ -846,7 +850,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
     return () => {
       ignore = true
     }
-  }, [auth.accessToken, dictionaryClient])
+  }, [auth.accessToken, dictionaryClient, fundsClient])
 
   useEffect(() => {
     let ignore = false
@@ -2982,6 +2986,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
         <AddServicePrototypeDialog
           isSaving={tariffSavingRowId === 'new-service'}
           expenseTypes={backendExpenseTypes.filter((expenseType) => !expenseType.isArchived)}
+          funds={backendFunds.filter((fund) => fund.allowOperations)}
           incomeTypes={backendIncomeTypes.filter((incomeType) => !incomeType.isArchived)}
           onClose={() => setModal(null)}
           onCreateWithTariff={createServiceWithTariff}
@@ -2994,6 +2999,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
           initialSetting={chargeServiceEditTarget}
           isSaving={tariffSavingRowId === `charge-service-${chargeServiceEditTarget.id}`}
           expenseTypes={backendExpenseTypes.filter((expenseType) => !expenseType.isArchived)}
+          funds={backendFunds.filter((fund) => fund.allowOperations)}
           incomeTypes={backendIncomeTypes.filter((incomeType) => !incomeType.isArchived)}
           onClose={() => setChargeServiceEditTarget(null)}
           onSave={updateServiceSetting}
@@ -3031,6 +3037,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
 
 export function AddServicePrototypeDialog({
   expenseTypes,
+  funds,
   initialSetting,
   isSaving,
   incomeTypes,
@@ -3046,6 +3053,7 @@ export function AddServicePrototypeDialog({
   initialSetting?: ChargeServiceSettingDto
   isSaving: boolean
   expenseTypes: AccountingTypeDto[]
+  funds: FundDto[]
   incomeTypes: AccountingTypeDto[]
   onClose: () => void
   onCreateWithTariff?: (request: CreateChargeServiceWithTariffRequest) => Promise<void>
@@ -3061,6 +3069,7 @@ export function AddServicePrototypeDialog({
   const [isRegular, setIsRegular] = useState(initialSetting?.isRegular ?? regularOnly)
   const [incomeTypeId, setIncomeTypeId] = useState(initialIncomeTypeId)
   const [expenseTypeId, setExpenseTypeId] = useState(initialSetting?.expenseTypeId ?? '')
+  const [expenseFundId, setExpenseFundId] = useState(initialSetting?.expenseFundId ?? '')
   const [tariffId, setTariffId] = useState(() => initialSetting?.tariffId ?? chooseRegularTariffId(initialIncomeTypeId, '', incomeTypes, tariffs))
   const [isByMeter, setIsByMeter] = useState(() => {
     if (initialSetting) {
@@ -3150,6 +3159,10 @@ export function AddServicePrototypeDialog({
         setError('Выберите вид начисления поставщику для регулярной услуги.')
         return
       }
+      if (expenseTypeId && !expenseFundId) {
+        setError('Выберите фонд расходования для услуги поставщика.')
+        return
+      }
 
       if (!tariffId) {
         setError('Выберите тариф для регулярной услуги.')
@@ -3213,6 +3226,7 @@ export function AddServicePrototypeDialog({
         unitName: unitName.trim() || null,
         incomeTypeId: isRegular ? incomeTypeId : null,
         expenseTypeId: expenseTypeId || null,
+        expenseFundId: expenseTypeId ? expenseFundId || null : null,
         tariffId: isRegular ? tariffId : null,
       }
       if (isRegular && !initialSetting && onCreateWithTariff) {
@@ -3292,6 +3306,26 @@ export function AddServicePrototypeDialog({
                     ]}
                     onChange={(nextExpenseTypeId) => {
                       setExpenseTypeId(nextExpenseTypeId)
+                      if (!nextExpenseTypeId) {
+                        setExpenseFundId('')
+                      } else if (!expenseFundId) {
+                        setExpenseFundId(funds[0]?.id ?? '')
+                      }
+                      setError(null)
+                    }}
+                  />
+                </FormField>
+                <FormField label="Фонд расходования" hint="Начисления и выплаты по услуге сохраняют этот фонд; выплата уменьшает его доступный остаток.">
+                  <SelectControl
+                    aria-label="Фонд расходования услуги поставщика"
+                    value={expenseFundId}
+                    options={[
+                      { value: '', label: expenseTypeId ? 'Выберите фонд' : 'Сначала выберите начисление поставщику' },
+                      ...funds.map((fund) => ({ value: fund.id, label: `${fund.name} — ${formatMoney(fund.balance)}` })),
+                    ]}
+                    disabled={!expenseTypeId}
+                    onChange={(nextExpenseFundId) => {
+                      setExpenseFundId(nextExpenseFundId)
                       setError(null)
                     }}
                   />

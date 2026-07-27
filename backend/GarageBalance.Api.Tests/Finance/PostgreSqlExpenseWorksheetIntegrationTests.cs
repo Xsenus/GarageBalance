@@ -100,7 +100,17 @@ public sealed class PostgreSqlExpenseWorksheetIntegrationTests
             var incomeType = new IncomeType { Name = "Банковское правило PG", Code = "pg_bank_rule" };
             var supplierGroup = new SupplierGroup { Name = "Банковское правило PG" };
             var expenseType = new ExpenseType { Name = incomeType.Name, Code = incomeType.Code };
-            var chargeService = new ChargeServiceSetting { Name = "Услуга банковского правила PG", ExpenseType = expenseType };
+            var expenseFund = new Fund { Name = "Фонд банковского правила PG", NormalizedName = "ФОНД БАНКОВСКОГО ПРАВИЛА PG", Balance = 1000m, AllowOperations = true };
+            var openingFundOperation = new FundOperation
+            {
+                Fund = expenseFund,
+                OperationKind = FundOperationKinds.Deposit,
+                Amount = 1000m,
+                BalanceAfter = 1000m,
+                Reason = "Остаток фонда для проверки",
+                CreatedAtUtc = new DateTimeOffset(2026, 6, 1, 0, 0, 0, TimeSpan.Zero)
+            };
+            var chargeService = new ChargeServiceSetting { Name = "Услуга банковского правила PG", ExpenseType = expenseType, ExpenseFund = expenseFund };
             var supplier = new Supplier
             {
                 Name = "Поставщик банковского правила PG",
@@ -116,6 +126,8 @@ public sealed class PostgreSqlExpenseWorksheetIntegrationTests
                 supplierGroup,
                 supplier,
                 expenseType,
+                expenseFund,
+                openingFundOperation,
                 chargeService,
                 new CashBankTransfer
                 {
@@ -169,8 +181,8 @@ public sealed class PostgreSqlExpenseWorksheetIntegrationTests
         Assert.False(rejected.Succeeded);
         Assert.Equal("bank_amount_insufficient", rejected.ErrorCode);
         var row = Assert.Single(worksheet.Value!.Rows, item => item.SupplierId == supplierId && item.ExpenseTypeId == expenseTypeId);
-        Assert.Equal(100m, row.CollectedAmount);
-        Assert.Equal(-150m, row.Difference);
+        Assert.Equal(1000m, row.CollectedAmount);
+        Assert.Equal(750m, row.Difference);
         Assert.Equal(250m, row.ExpenseAmount);
         Assert.Equal(50m, worksheet.Value.BankAmount);
         Assert.Equal(1, await context.FinancialOperations.CountAsync(operation =>
@@ -276,7 +288,17 @@ public sealed class PostgreSqlExpenseWorksheetIntegrationTests
             var incomeType = new IncomeType { Name = "Поступление для атомарной проверки PG", Code = "pg_atomic_income" };
             var supplierGroup = new SupplierGroup { Name = "Атомарные выплаты PG" };
             var expenseType = new ExpenseType { Name = "Авансовые выплаты PG", Code = "advance_payment" };
-            var chargeService = new ChargeServiceSetting { Name = "Услуга атомарной выплаты PG", ExpenseType = expenseType };
+            var expenseFund = new Fund { Name = "Фонд атомарной выплаты PG", NormalizedName = "ФОНД АТОМАРНОЙ ВЫПЛАТЫ PG", Balance = 1000m, AllowOperations = true };
+            var openingFundOperation = new FundOperation
+            {
+                Fund = expenseFund,
+                OperationKind = FundOperationKinds.Deposit,
+                Amount = 1000m,
+                BalanceAfter = 1000m,
+                Reason = "Остаток фонда для проверки",
+                CreatedAtUtc = new DateTimeOffset(2026, 6, 1, 0, 0, 0, TimeSpan.Zero)
+            };
+            var chargeService = new ChargeServiceSetting { Name = "Услуга атомарной выплаты PG", ExpenseType = expenseType, ExpenseFund = expenseFund };
             var supplier = new Supplier
             {
                 Name = "Получатель атомарной выплаты PG",
@@ -292,6 +314,8 @@ public sealed class PostgreSqlExpenseWorksheetIntegrationTests
                 supplierGroup,
                 supplier,
                 expenseType,
+                expenseFund,
+                openingFundOperation,
                 chargeService,
                 new FinancialOperation
                 {
@@ -343,7 +367,7 @@ public sealed class PostgreSqlExpenseWorksheetIntegrationTests
     }
 
     [PostgreSqlFact]
-    public async Task ExpenseWorksheet_CarriesUnusedCollectionsAcrossMonthsOnPostgreSql()
+    public async Task ExpenseWorksheet_DoesNotInferFundsFromMatchingIncomeNamesOnPostgreSql()
     {
         await using var database = await PostgreSqlTestDatabase.CreateAsync();
         Guid supplierId;
@@ -404,13 +428,13 @@ public sealed class PostgreSqlExpenseWorksheetIntegrationTests
         Assert.True(augustWorksheet.Succeeded);
         var julyValue = julyWorksheet.Value!;
         var julyRow = FindRow(julyValue, supplierId, expenseTypeId);
-        Assert.Equal(10243.81m, julyRow.CollectedAmount);
-        Assert.Equal(6243.81m, julyRow.Difference);
-        Assert.Equal(10243.81m, julyValue.CollectedTotal);
-        Assert.Equal(6243.81m, julyValue.DifferenceTotal);
+        Assert.Null(julyRow.CollectedAmount);
+        Assert.Null(julyRow.Difference);
+        Assert.Equal(0m, julyValue.CollectedTotal);
+        Assert.Equal(0m, julyValue.DifferenceTotal);
         var augustRow = FindRow(augustWorksheet.Value!, supplierId, expenseTypeId);
-        Assert.Equal(6243.81m, augustRow.CollectedAmount);
-        Assert.Equal(6243.81m, augustRow.Difference);
+        Assert.Null(augustRow.CollectedAmount);
+        Assert.Null(augustRow.Difference);
         Assert.Equal(3, await assertionContext.FinancialOperations.CountAsync());
     }
 
@@ -544,8 +568,18 @@ public sealed class PostgreSqlExpenseWorksheetIntegrationTests
             var supplierGroup = new SupplierGroup { Name = "Трёхмесячный сценарий поставщика PG" };
             var serviceType = new ExpenseType { Name = "Основная услуга сценария PG", Code = "pg_supplier_three_month_service" };
             var repairType = new ExpenseType { Name = "Ремонт сценария PG", Code = "pg_supplier_three_month_repair" };
-            var supplierService = new ChargeServiceSetting { Name = "Основная услуга сценария PG", ExpenseType = serviceType };
-            var repairService = new ChargeServiceSetting { Name = "Ремонт сценария PG", ExpenseType = repairType };
+            var expenseFund = new Fund { Name = "Фонд трёхмесячного сценария PG", NormalizedName = "ФОНД ТРЁХМЕСЯЧНОГО СЦЕНАРИЯ PG", Balance = 1000m, AllowOperations = true };
+            var openingFundOperation = new FundOperation
+            {
+                Fund = expenseFund,
+                OperationKind = FundOperationKinds.Deposit,
+                Amount = 1000m,
+                BalanceAfter = 1000m,
+                Reason = "Остаток фонда для проверки",
+                CreatedAtUtc = new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero)
+            };
+            var supplierService = new ChargeServiceSetting { Name = "Основная услуга сценария PG", ExpenseType = serviceType, ExpenseFund = expenseFund };
+            var repairService = new ChargeServiceSetting { Name = "Ремонт сценария PG", ExpenseType = repairType, ExpenseFund = expenseFund };
             var supplier = new Supplier { Name = "Поставщик трёхмесячного сценария PG", Group = supplierGroup, ChargeServiceSetting = supplierService };
             var repairSupplier = new Supplier { Name = "Ремонтная организация сценария PG", Group = supplierGroup, ChargeServiceSetting = repairService };
             supplierId = supplier.Id;
@@ -558,6 +592,8 @@ public sealed class PostgreSqlExpenseWorksheetIntegrationTests
                 repairSupplier,
                 serviceType,
                 repairType,
+                expenseFund,
+                openingFundOperation,
                 supplierService,
                 repairService,
                 new CashBankTransfer

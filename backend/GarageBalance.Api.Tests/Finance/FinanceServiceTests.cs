@@ -1800,6 +1800,10 @@ public sealed class FinanceServiceTests
         var fixtures = await database.SeedAsync();
         database.Context.FundOperations.RemoveRange(database.Context.FundOperations);
         database.Context.CashBankTransfers.RemoveRange(database.Context.CashBankTransfers);
+        fixtures.Supplier.ChargeServiceSetting!.ExpenseTypeId = null;
+        fixtures.Supplier.ChargeServiceSetting.ExpenseType = null;
+        fixtures.Supplier.ChargeServiceSetting.ExpenseFundId = null;
+        fixtures.Supplier.ChargeServiceSetting.ExpenseFund = null;
         database.Context.Funds.RemoveRange(database.Context.Funds);
         await database.Context.SaveChangesAsync();
         var service = FinanceServiceTestFactory.Create(database.Context);
@@ -2347,8 +2351,8 @@ public sealed class FinanceServiceTests
             new ExpenseWorksheetRequest(new DateOnly(2026, 6, 1)),
             CancellationToken.None);
         var row = Assert.Single(worksheet.Value!.Rows, item => item.ExpenseTypeId == fixtures.ExpenseType.Id);
-        Assert.Equal(100m, row.CollectedAmount);
-        Assert.Equal(-200m, row.Difference);
+        Assert.Equal(1_000_000m, row.CollectedAmount);
+        Assert.Equal(999_700m, row.Difference);
         Assert.Equal(300m, row.ExpenseAmount);
         Assert.Single(database.Context.AuditEvents, item => item.Action == "finance.expense_created");
     }
@@ -2396,7 +2400,7 @@ public sealed class FinanceServiceTests
         Assert.Equal(result.Value.Id, accrual.SourceFinancialOperationId);
         Assert.Equal(result.Value.AccountingMonth, accrual.AccountingMonth);
         Assert.Equal("CASH-ADVANCE", accrual.DocumentNumber);
-        var audit = Assert.Single(database.Context.AuditEvents);
+        var audit = Assert.Single(database.Context.AuditEvents, item => item.Action == "finance.atomic_cash_expense_created");
         Assert.Equal("finance.atomic_cash_expense_created", audit.Action);
         Assert.Contains("Атомарно созданы стоимость и оплата выплаты", audit.Summary, StringComparison.Ordinal);
         var worksheet = await service.GetExpenseWorksheetAsync(new ExpenseWorksheetRequest(new DateOnly(2026, 6, 1)), CancellationToken.None);
@@ -2555,6 +2559,13 @@ public sealed class FinanceServiceTests
             Guid.NewGuid(),
             CancellationToken.None);
         Assert.True(created.Succeeded);
+        Assert.Equal(fixtures.ExpenseFund.Id, created.Value!.ExpenseFundId);
+        Assert.Equal(fixtures.ExpenseFund.Name, created.Value.ExpenseFundName);
+        Assert.Equal(SeededBankAmount - 100m, fixtures.ExpenseFund.Balance);
+        var linkedFundOperation = await database.Context.FundOperations
+            .SingleAsync(operation => operation.SourceFinancialOperationId == created.Value.Id);
+        Assert.Equal("withdraw", linkedFundOperation.OperationKind);
+        Assert.Equal(100m, linkedFundOperation.Amount);
 
         var updated = await service.UpdateExpenseAsync(
             created.Value!.Id,
@@ -2570,6 +2581,8 @@ public sealed class FinanceServiceTests
             Guid.NewGuid(),
             CancellationToken.None);
         Assert.True(updated.Succeeded);
+        Assert.Equal(SeededBankAmount - 125m, fixtures.ExpenseFund.Balance);
+        Assert.Equal(125m, linkedFundOperation.Amount);
         var linkedAccrual = await database.Context.SupplierAccruals.SingleAsync(accrual => accrual.SourceFinancialOperationId == created.Value.Id);
         Assert.Equal(new DateOnly(2026, 7, 1), linkedAccrual.AccountingMonth);
         Assert.Equal(125m, linkedAccrual.Amount);
@@ -2583,10 +2596,14 @@ public sealed class FinanceServiceTests
             CancellationToken.None);
         Assert.True(canceled.Succeeded);
         Assert.True(linkedAccrual.IsCanceled);
+        Assert.True(linkedFundOperation.IsCanceled);
+        Assert.Equal(SeededBankAmount, fixtures.ExpenseFund.Balance);
 
         var restored = await service.RestoreOperationAsync(created.Value.Id, Guid.NewGuid(), CancellationToken.None);
         Assert.True(restored.Succeeded);
         Assert.False(linkedAccrual.IsCanceled);
+        Assert.False(linkedFundOperation.IsCanceled);
+        Assert.Equal(SeededBankAmount - 125m, fixtures.ExpenseFund.Balance);
 
         var converted = await service.UpdateExpenseAsync(
             created.Value.Id,
@@ -2604,6 +2621,44 @@ public sealed class FinanceServiceTests
         Assert.True(converted.Succeeded);
         Assert.Equal(ExpensePaymentTypes.WithReceipt, converted.Value!.ExpensePaymentType);
         Assert.True(linkedAccrual.IsCanceled);
+        Assert.Equal(SeededBankAmount - 125m, fixtures.ExpenseFund.Balance);
+    }
+
+    [Fact]
+    public async Task CreateExpenseAsync_RejectsPaymentAboveConfiguredExpenseFundBalance()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        var openingFundOperation = await database.Context.FundOperations
+            .SingleAsync(operation => operation.FundId == fixtures.ExpenseFund.Id);
+        fixtures.ExpenseFund.Balance = 50m;
+        openingFundOperation.Amount = 50m;
+        openingFundOperation.BalanceAfter = 50m;
+        await database.Context.SaveChangesAsync();
+        var service = FinanceServiceTestFactory.Create(database.Context);
+
+        var result = await service.CreateExpenseAsync(
+            new CreateExpenseOperationRequest(
+                fixtures.Supplier.Id,
+                fixtures.ExpenseType.Id,
+                new DateOnly(2026, 6, 20),
+                new DateOnly(2026, 6, 1),
+                100m,
+                "FUND-LIMIT",
+                null),
+            Guid.NewGuid(),
+            CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Equal("fund_balance_insufficient", result.ErrorCode);
+        Assert.Equal(50m, fixtures.ExpenseFund.Balance);
+        Assert.DoesNotContain(
+            database.Context.FinancialOperations,
+            operation => operation.OperationKind == FinancialOperationKinds.Expense);
+        Assert.DoesNotContain(
+            database.Context.FundOperations,
+            operation => operation.SourceFinancialOperationId.HasValue);
+        Assert.Empty(database.Context.AuditEvents);
     }
 
     [Fact]
@@ -2693,7 +2748,6 @@ public sealed class FinanceServiceTests
         var fixtures = await database.SeedAsync();
         database.Context.FundOperations.RemoveRange(database.Context.FundOperations);
         database.Context.CashBankTransfers.RemoveRange(database.Context.CashBankTransfers);
-        database.Context.Funds.RemoveRange(database.Context.Funds);
         database.Context.Add(new CashBankTransfer
         {
             TransferDate = new DateOnly(2026, 6, 1),
@@ -3430,6 +3484,8 @@ public sealed class FinanceServiceTests
         var fixtures = await database.SeedAsync();
         fixtures.Supplier.ChargeServiceSetting!.ExpenseTypeId = null;
         fixtures.Supplier.ChargeServiceSetting.ExpenseType = null;
+        fixtures.Supplier.ChargeServiceSetting.ExpenseFundId = null;
+        fixtures.Supplier.ChargeServiceSetting.ExpenseFund = null;
         await database.Context.SaveChangesAsync();
         var service = FinanceServiceTestFactory.Create(database.Context);
 
@@ -3739,7 +3795,9 @@ public sealed class FinanceServiceTests
         {
             Name = "Теплоснабжение",
             ExpenseTypeId = fixtures.ExpenseType.Id,
-            ExpenseType = fixtures.ExpenseType
+            ExpenseType = fixtures.ExpenseType,
+            ExpenseFundId = fixtures.ExpenseFund.Id,
+            ExpenseFund = fixtures.ExpenseFund
         };
         var secondSupplier = new Supplier { Name = "Teploset", GroupId = fixtures.Supplier.GroupId, ChargeServiceSetting = secondService };
         database.Context.AddRange(secondService, secondSupplier);
@@ -6957,10 +7015,10 @@ public sealed class FinanceServiceTests
         var unmatchedIncomeType = new IncomeType { Name = "Пожертвование" };
         var salaryExpenseType = new ExpenseType { Name = "Зарплата", Code = "salary" };
         var expenseOnlyType = new ExpenseType { Name = "Ремонт", Code = "repair" };
-        var repairService = new ChargeServiceSetting { Name = "Ремонт", ExpenseType = expenseOnlyType };
+        var repairService = new ChargeServiceSetting { Name = "Ремонт", ExpenseType = expenseOnlyType, ExpenseFund = fixtures.ExpenseFund };
         var repairSupplier = new Supplier { Name = "Ремонтная организация", GroupId = fixtures.Supplier.GroupId, ChargeServiceSetting = repairService };
         var accrualOnlyType = new ExpenseType { Name = "Охрана", Code = "security" };
-        var securityService = new ChargeServiceSetting { Name = "Охрана", ExpenseType = accrualOnlyType };
+        var securityService = new ChargeServiceSetting { Name = "Охрана", ExpenseType = accrualOnlyType, ExpenseFund = fixtures.ExpenseFund };
         var securitySupplier = new Supplier { Name = "Охранная организация", GroupId = fixtures.Supplier.GroupId, ChargeServiceSetting = securityService };
         var staffDepartment = new StaffDepartment { Name = "Бухгалтерия" };
         var staffMember = new StaffMember
@@ -7023,8 +7081,8 @@ public sealed class FinanceServiceTests
         Assert.Equal(0m, result.Value.OpeningAdvanceTotal);
         Assert.Equal(51075m, result.Value.ClosingDebtTotal);
         Assert.Equal(100m, result.Value.ClosingAdvanceTotal);
-        Assert.Equal(29000m, result.Value.CollectedTotal);
-        Assert.Equal(19000m, result.Value.DifferenceTotal);
+        Assert.Equal(SeededBankAmount, result.Value.CollectedTotal);
+        Assert.Equal(SeededBankAmount - 10100m, result.Value.DifferenceTotal);
         Assert.Equal(0m, result.Value.CashAmount);
         Assert.Equal(SeededBankAmount - 25100m, result.Value.BankAmount);
 
@@ -7039,8 +7097,10 @@ public sealed class FinanceServiceTests
         Assert.Equal(0m, supplierRow.OpeningAdvance);
         Assert.Equal(22000m, supplierRow.ClosingDebt);
         Assert.Equal(0m, supplierRow.ClosingAdvance);
-        Assert.Equal(29000m, supplierRow.CollectedAmount);
-        Assert.Equal(19000m, supplierRow.Difference);
+        Assert.Equal(SeededBankAmount - 100m, supplierRow.CollectedAmount);
+        Assert.Equal(SeededBankAmount - 10100m, supplierRow.Difference);
+        Assert.Equal(fixtures.ExpenseFund.Id, supplierRow.ExpenseFundId);
+        Assert.Equal(fixtures.ExpenseFund.Name, supplierRow.ExpenseFundName);
 
         var expenseOnlyRow = Assert.Single(result.Value.Rows, row => row.ExpenseTypeId == expenseOnlyType.Id);
         Assert.Equal(0m, expenseOnlyRow.AccrualAmount);
@@ -7048,7 +7108,8 @@ public sealed class FinanceServiceTests
         Assert.Equal(0m, expenseOnlyRow.Balance);
         Assert.Equal(0m, expenseOnlyRow.ClosingDebt);
         Assert.Equal(100m, expenseOnlyRow.ClosingAdvance);
-        Assert.Null(expenseOnlyRow.CollectedAmount);
+        Assert.Equal(SeededBankAmount - 10000m, expenseOnlyRow.CollectedAmount);
+        Assert.Equal(SeededBankAmount - 10100m, expenseOnlyRow.Difference);
 
         var accrualOnlyRow = Assert.Single(result.Value.Rows, row => row.ExpenseTypeId == accrualOnlyType.Id);
         Assert.Equal(75m, accrualOnlyRow.AccrualAmount);
@@ -7285,7 +7346,7 @@ public sealed class FinanceServiceTests
     }
 
     [Fact]
-    public async Task GetExpenseWorksheetAsync_CarriesUnusedCollectionsAndConsumesThemWithLaterPayments()
+    public async Task GetExpenseWorksheetAsync_DoesNotInferFundsFromMatchingIncomeNamesWithoutConfiguredFund()
     {
         var commandCounter = new SelectCommandCounter();
         await using var database = await TestDatabase.CreateAsync(commandCounter);
@@ -7368,16 +7429,16 @@ public sealed class FinanceServiceTests
 
         Assert.Equal(3, commandCounter.Count);
         var juneRow = Assert.Single(juneWorksheet.Value!.Rows);
-        Assert.Equal(9243.81m, juneRow.CollectedAmount);
-        Assert.Equal(9243.81m, juneRow.Difference);
+        Assert.Null(juneRow.CollectedAmount);
+        Assert.Null(juneRow.Difference);
         var julyRow = Assert.Single(julyWorksheet.Value!.Rows);
-        Assert.Equal(10243.81m, julyRow.CollectedAmount);
-        Assert.Equal(6243.81m, julyRow.Difference);
-        Assert.Equal(10243.81m, julyWorksheet.Value.CollectedTotal);
-        Assert.Equal(6243.81m, julyWorksheet.Value.DifferenceTotal);
+        Assert.Null(julyRow.CollectedAmount);
+        Assert.Null(julyRow.Difference);
+        Assert.Equal(0m, julyWorksheet.Value.CollectedTotal);
+        Assert.Equal(0m, julyWorksheet.Value.DifferenceTotal);
         var augustRow = Assert.Single(augustWorksheet.Value!.Rows);
-        Assert.Equal(6243.81m, augustRow.CollectedAmount);
-        Assert.Equal(6243.81m, augustRow.Difference);
+        Assert.Null(augustRow.CollectedAmount);
+        Assert.Null(augustRow.Difference);
         Assert.Equal(6, await database.Context.FinancialOperations.CountAsync());
         Assert.Empty(database.Context.AuditEvents);
     }
@@ -7478,7 +7539,6 @@ public sealed class FinanceServiceTests
         var fixtures = await database.SeedAsync();
         database.Context.FundOperations.RemoveRange(database.Context.FundOperations);
         database.Context.CashBankTransfers.RemoveRange(database.Context.CashBankTransfers);
-        database.Context.Funds.RemoveRange(database.Context.Funds);
         var month = new DateOnly(2026, 6, 1);
         var waterIncomeType = new IncomeType { Name = "Вода", Code = "water" };
         var cashExpenseType = fixtures.ExpenseType;
@@ -7530,6 +7590,7 @@ public sealed class FinanceServiceTests
         var cashExpenseType = fixtures.ExpenseType;
         var bankFund = new Fund { Name = "Банк инварианта", NormalizedName = "БАНК ИНВАРИАНТА", AllowOperations = true };
         var reserveFund = new Fund { Name = "Резерв инварианта", NormalizedName = "РЕЗЕРВ ИНВАРИАНТА", AllowOperations = true };
+        fixtures.Supplier.ChargeServiceSetting!.ExpenseFund = reserveFund;
         database.Context.AddRange(incomeType, bankFund, reserveFund);
         await database.Context.SaveChangesAsync();
         var financeService = FinanceServiceTestFactory.Create(database.Context);
@@ -7581,7 +7642,7 @@ public sealed class FinanceServiceTests
             CancellationToken.None);
         var redistribution = await fundService.CreateOperationAsync(
             reserveFund.Id,
-            new CreateFundOperationRequest("deposit", 150m, "Распределение в резерв"),
+            new CreateFundOperationRequest("deposit", 300m, "Распределение в резерв"),
             null,
             CancellationToken.None);
         Assert.True(allocation.Succeeded);
@@ -7829,6 +7890,11 @@ public sealed class FinanceServiceTests
     {
         await using var database = await TestDatabase.CreateAsync();
         var fixtures = await database.SeedAsync();
+        fixtures.Supplier.ChargeServiceSetting!.ExpenseFundId = null;
+        fixtures.Supplier.ChargeServiceSetting.ExpenseFund = null;
+        database.Context.FundOperations.RemoveRange(
+            database.Context.FundOperations.Where(operation => operation.FundId == fixtures.ExpenseFund.Id));
+        database.Context.Funds.Remove(fixtures.ExpenseFund);
         await RemoveSeededBankTransferAsync(database.Context);
         var firstIncomeType = AddOtherIncomeDestination(database.Context);
         var secondFund = new Fund
@@ -7976,6 +8042,11 @@ public sealed class FinanceServiceTests
     {
         await using var database = await TestDatabase.CreateAsync();
         var fixtures = await database.SeedAsync();
+        fixtures.Supplier.ChargeServiceSetting!.ExpenseFundId = null;
+        fixtures.Supplier.ChargeServiceSetting.ExpenseFund = null;
+        database.Context.FundOperations.RemoveRange(
+            database.Context.FundOperations.Where(operation => operation.FundId == fixtures.ExpenseFund.Id));
+        database.Context.Funds.Remove(fixtures.ExpenseFund);
         await RemoveSeededBankTransferAsync(database.Context);
         var incomeType = AddOtherIncomeDestination(database.Context);
         incomeType.DestinationFund!.AllowOperations = true;
@@ -8139,12 +8210,31 @@ public sealed class FinanceServiceTests
             var group = new SupplierGroup { Name = "Коммунальные услуги" };
             var incomeType = new IncomeType { Name = "Членский взнос", Code = "membership" };
             var expenseType = new ExpenseType { Name = "Вода", Code = "water" };
+            var expenseFund = new Fund
+            {
+                Name = "Коммунальные расходы",
+                NormalizedName = "КОММУНАЛЬНЫЕ РАСХОДЫ",
+                Balance = SeededBankAmount
+            };
+            var expenseFundOpening = new FundOperation
+            {
+                Fund = expenseFund,
+                FundId = expenseFund.Id,
+                OperationKind = FundOperationKinds.Deposit,
+                Amount = SeededBankAmount,
+                BalanceBefore = 0m,
+                BalanceAfter = SeededBankAmount,
+                Reason = "Тестовое наполнение фонда",
+                CreatedAtUtc = new DateTimeOffset(1999, 1, 1, 0, 0, 0, TimeSpan.Zero)
+            };
             var chargeService = new ChargeServiceSetting
             {
                 Name = "Вода",
                 IsRegular = false,
                 ExpenseTypeId = expenseType.Id,
-                ExpenseType = expenseType
+                ExpenseType = expenseType,
+                ExpenseFundId = expenseFund.Id,
+                ExpenseFund = expenseFund
             };
             var supplier = new Supplier
             {
@@ -8161,9 +8251,9 @@ public sealed class FinanceServiceTests
                 CreatedAtUtc = new DateTimeOffset(2000, 1, 1, 0, 0, 0, TimeSpan.Zero)
             };
 
-            Context.AddRange(owner, garage, group, supplier, incomeType, expenseType, chargeService, bankDeposit);
+            Context.AddRange(owner, garage, group, supplier, incomeType, expenseType, expenseFund, expenseFundOpening, chargeService, bankDeposit);
             await Context.SaveChangesAsync();
-            return new Fixtures(garage, supplier, incomeType, expenseType);
+            return new Fixtures(garage, supplier, incomeType, expenseType, expenseFund);
         }
 
         public async ValueTask DisposeAsync()
@@ -8173,7 +8263,7 @@ public sealed class FinanceServiceTests
         }
     }
 
-    private sealed record Fixtures(Garage Garage, Supplier Supplier, IncomeType IncomeType, ExpenseType ExpenseType);
+    private sealed record Fixtures(Garage Garage, Supplier Supplier, IncomeType IncomeType, ExpenseType ExpenseType, Fund ExpenseFund);
 
     private sealed class FixedTimeProvider(DateTimeOffset utcNow) : TimeProvider
     {

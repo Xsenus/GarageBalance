@@ -22,6 +22,7 @@ public sealed class EfExpenseWorksheetQuery(GarageBalanceDbContext dbContext) : 
     private const int StaffOpeningBonusCategory = 14;
     private const int StaffOpeningPenaltyCategory = 15;
     private const int BalanceAdjustmentCategory = 16;
+    private const int SupplierFundCategory = 17;
 
     public async Task<ExpenseWorksheetData> GetAsync(
         DateOnly accountingMonth,
@@ -471,6 +472,33 @@ public sealed class EfExpenseWorksheetQuery(GarageBalanceDbContext dbContext) : 
                 StaffCreatedAtUtc = (DateTimeOffset?)null
             });
 
+        var supplierFunds = dbContext.Suppliers
+            .AsNoTracking()
+            .Where(supplier =>
+                !supplier.IsArchived &&
+                supplier.ChargeServiceSetting != null &&
+                !supplier.ChargeServiceSetting.IsArchived &&
+                supplier.ChargeServiceSetting.ExpenseTypeId != null &&
+                supplier.ChargeServiceSetting.ExpenseFundId != null &&
+                !supplier.ChargeServiceSetting.ExpenseFund!.IsArchived)
+            .Select(supplier => new
+            {
+                Category = SupplierFundCategory,
+                SupplierId = (Guid?)supplier.Id,
+                StaffMemberId = supplier.ChargeServiceSetting!.ExpenseFundId,
+                CounterpartyName = (string?)supplier.ChargeServiceSetting.ExpenseFund!.Name,
+                TypeId = supplier.ChargeServiceSetting.ExpenseTypeId,
+                TypeName = (string?)null,
+                TypeCode = (string?)null,
+                Amount = supplier.ChargeServiceSetting.ExpenseFund.Balance,
+                IncomeTotal = 0m,
+                BankDepositTotal = 0m,
+                CashExpenseTotal = 0m,
+                BankExpenseTotal = 0m,
+                HistoryStartMonth = (DateOnly?)null,
+                StaffCreatedAtUtc = (DateTimeOffset?)null
+            });
+
         var rows = await supplierAccruals
             .Concat(supplierExpenses)
             .Concat(staffMembers)
@@ -487,6 +515,7 @@ public sealed class EfExpenseWorksheetQuery(GarageBalanceDbContext dbContext) : 
             .Concat(availableBalance)
             .Concat(bankDeposits)
             .Concat(balanceAdjustments)
+            .Concat(supplierFunds)
             .ToListAsync(cancellationToken);
 
         return new ExpenseWorksheetData(
@@ -528,6 +557,14 @@ public sealed class EfExpenseWorksheetQuery(GarageBalanceDbContext dbContext) : 
                 .ToList(),
             rows.Where(row => row.Category == IncomeCategory)
                 .Select(row => new ExpenseWorksheetIncomeData(row.TypeName!, row.TypeCode, row.Amount))
+                .ToList(),
+            rows.Where(row => row.Category == SupplierFundCategory)
+                .Select(row => new ExpenseWorksheetSupplierFundData(
+                    row.SupplierId!.Value,
+                    row.TypeId!.Value,
+                    row.StaffMemberId!.Value,
+                    row.CounterpartyName!,
+                    row.Amount))
                 .ToList(),
             new FinanceAvailableBalanceData(
                 rows.Sum(row => row.IncomeTotal),

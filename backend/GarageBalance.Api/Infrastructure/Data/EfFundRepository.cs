@@ -89,14 +89,12 @@ public sealed class EfFundRepository(GarageBalanceDbContext dbContext) : IFundRe
         return await dbContext.ChargeServiceSettings.AsNoTracking()
             .Where(service =>
                 !service.IsArchived &&
-                service.IncomeType != null &&
-                !service.IncomeType.IsArchived &&
-                service.IncomeType.DestinationFundId.HasValue &&
-                fundIds.Contains(service.IncomeType.DestinationFundId.Value))
+                service.ExpenseFundId.HasValue &&
+                fundIds.Contains(service.ExpenseFundId.Value))
             .OrderBy(service => service.Name)
             .ThenBy(service => service.Id)
             .Select(service => new FundLinkedServiceData(
-                service.IncomeType!.DestinationFundId!.Value,
+                service.ExpenseFundId!.Value,
                 service.Id,
                 service.Name))
             .ToListAsync(cancellationToken);

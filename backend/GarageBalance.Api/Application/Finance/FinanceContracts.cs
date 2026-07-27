@@ -41,7 +41,9 @@ public sealed record FinancialOperationDto(
     string? StaffMemberName = null,
     string? StaffDepartmentName = null,
     Guid? ReceiptBatchId = null,
-    string? ExpensePaymentType = null);
+    string? ExpensePaymentType = null,
+    Guid? ExpenseFundId = null,
+    string? ExpenseFundName = null);
 
 public sealed record CreateIncomeOperationRequest(
     Guid GarageId,
@@ -169,7 +171,9 @@ public sealed record SupplierAccrualDto(
     string Source,
     string? DocumentNumber,
     string? Comment,
-    bool IsCanceled);
+    bool IsCanceled,
+    Guid? ExpenseFundId = null,
+    string? ExpenseFundName = null);
 
 public sealed record CreateAccrualRequest(
     Guid GarageId,
@@ -516,6 +520,10 @@ public sealed record ExpenseWorksheetRowDto(
     public decimal ClosingDebt { get; init; }
 
     public decimal ClosingAdvance { get; init; }
+
+    public Guid? ExpenseFundId { get; init; }
+
+    public string? ExpenseFundName { get; init; }
 }
 
 public sealed record ExpenseWorksheetDto(

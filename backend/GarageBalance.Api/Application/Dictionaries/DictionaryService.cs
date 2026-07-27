@@ -1796,6 +1796,16 @@ public sealed class DictionaryService(
         {
             return DictionaryResult<ChargeServiceSettingDto>.Failure(fundValidation.ErrorCode!, fundValidation.ErrorMessage!);
         }
+        var expenseFundValidation = await ValidateChargeServiceExpenseFundAsync(
+            setting.ExpenseTypeId,
+            setting.ExpenseFundId,
+            cancellationToken);
+        if (!expenseFundValidation.Succeeded)
+        {
+            return DictionaryResult<ChargeServiceSettingDto>.Failure(
+                expenseFundValidation.ErrorCode!,
+                expenseFundValidation.ErrorMessage!);
+        }
 
         setting.IsArchived = false;
         setting.UpdatedAtUtc = DateTimeOffset.UtcNow;
@@ -2498,6 +2508,15 @@ public sealed class DictionaryService(
                 "Вид начисления поставщику для услуги не найден.");
         }
 
+        var expenseFundValidation = await ValidateChargeServiceExpenseFundAsync(
+            request.ExpenseTypeId,
+            request.ExpenseFundId,
+            cancellationToken);
+        if (!expenseFundValidation.Succeeded)
+        {
+            return expenseFundValidation;
+        }
+
         if (!request.IsRegular)
         {
             return DictionaryResult<object>.Success(new object());
@@ -2584,6 +2603,33 @@ public sealed class DictionaryService(
         return DictionaryResult<object>.Success(new object());
     }
 
+    private async Task<DictionaryResult<object>> ValidateChargeServiceExpenseFundAsync(
+        Guid? expenseTypeId,
+        Guid? expenseFundId,
+        CancellationToken cancellationToken)
+    {
+        if (expenseTypeId.HasValue != expenseFundId.HasValue)
+        {
+            return DictionaryResult<object>.Failure(
+                "charge_service_expense_fund_required",
+                "Для услуги поставщика выберите и вид начисления, и фонд расходования.");
+        }
+
+        if (!expenseFundId.HasValue)
+        {
+            return DictionaryResult<object>.Success(new object());
+        }
+
+        if (!await fundRepository.ActiveFundExistsAsync(expenseFundId.Value, cancellationToken))
+        {
+            return DictionaryResult<object>.Failure(
+                "charge_service_expense_fund_not_found",
+                "Фонд расходования услуги удалён. Выберите действующий фонд.");
+        }
+
+        return DictionaryResult<object>.Success(new object());
+    }
+
     private static void ApplyChargeServiceSetting(ChargeServiceSetting setting, UpsertChargeServiceSettingRequest request)
     {
         setting.Name = request.Name.Trim();
@@ -2595,6 +2641,7 @@ public sealed class DictionaryService(
         setting.OverdueGraceDays = request.OverdueGraceDays;
         setting.IncomeTypeId = request.IsRegular ? request.IncomeTypeId : null;
         setting.ExpenseTypeId = request.ExpenseTypeId;
+        setting.ExpenseFundId = request.ExpenseFundId;
         setting.TariffId = request.IsRegular ? request.TariffId : null;
         setting.IsMetered = request.IsRegular && request.IsMetered;
         setting.HasTieredTariff = request.IsRegular && request.IsMetered && request.HasTieredTariff;
@@ -2612,6 +2659,7 @@ public sealed class DictionaryService(
             setting.OverdueGraceDays == request.OverdueGraceDays &&
             setting.IncomeTypeId == (request.IsRegular ? request.IncomeTypeId : null) &&
             setting.ExpenseTypeId == request.ExpenseTypeId &&
+            setting.ExpenseFundId == request.ExpenseFundId &&
             setting.TariffId == (request.IsRegular ? request.TariffId : null) &&
             setting.IsMetered == (request.IsRegular && request.IsMetered) &&
             setting.HasTieredTariff == (request.IsRegular && request.IsMetered && request.HasTieredTariff) &&
@@ -2653,6 +2701,7 @@ public sealed class DictionaryService(
             ["overdueGraceDays"] = setting.OverdueGraceDays,
             ["incomeTypeId"] = setting.IncomeTypeId,
             ["expenseTypeId"] = setting.ExpenseTypeId,
+            ["expenseFundId"] = setting.ExpenseFundId,
             ["tariffId"] = setting.TariffId,
             ["isMetered"] = setting.IsMetered,
             ["hasTieredTariff"] = setting.HasTieredTariff,
@@ -3025,7 +3074,10 @@ public sealed class DictionaryService(
             debt ?? supplier.StartingBalance,
             supplier.ChargeServiceSettingId,
             supplier.ChargeServiceSetting?.Name,
-            supplier.ChargeServiceSetting?.ExpenseTypeId);
+            supplier.ChargeServiceSetting?.ExpenseTypeId,
+            supplier.ChargeServiceSetting?.ExpenseFundId,
+            supplier.ChargeServiceSetting?.ExpenseFund?.Name,
+            supplier.ChargeServiceSetting?.ExpenseFund?.Balance);
     }
 
     private async Task<SupplierDto> ToSupplierDtoWithDebtAsync(Supplier supplier, CancellationToken cancellationToken)
@@ -3087,7 +3139,8 @@ public sealed class DictionaryService(
             setting.HasTieredTariff,
             setting.UnitName,
             setting.IsArchived,
-            setting.ExpenseTypeId);
+            setting.ExpenseTypeId,
+            setting.ExpenseFundId);
     }
 
     private async Task<IReadOnlyList<IrregularPaymentDto>> ToIrregularPaymentDtosAsync(IReadOnlyList<IrregularPayment> payments, CancellationToken cancellationToken)

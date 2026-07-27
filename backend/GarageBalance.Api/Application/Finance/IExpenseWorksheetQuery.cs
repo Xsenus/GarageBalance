@@ -15,6 +15,7 @@ public sealed record ExpenseWorksheetData(
     IReadOnlyList<ExpenseWorksheetStaffData> StaffMembers,
     IReadOnlyList<ExpenseWorksheetStaffExpenseData> StaffExpenses,
     IReadOnlyList<ExpenseWorksheetIncomeData> Incomes,
+    IReadOnlyList<ExpenseWorksheetSupplierFundData> SupplierFunds,
     FinanceAvailableBalanceData AvailableBalance)
 {
     public IReadOnlyList<ExpenseWorksheetSupplierData> SupplierOpeningAccruals { get; init; } = [];
@@ -65,3 +66,10 @@ public sealed record ExpenseWorksheetStaffExpenseData(Guid StaffMemberId, decima
 public sealed record ExpenseWorksheetStaffAdjustmentData(Guid StaffMemberId, decimal Amount);
 
 public sealed record ExpenseWorksheetIncomeData(string IncomeTypeName, string? IncomeTypeCode, decimal Amount);
+
+public sealed record ExpenseWorksheetSupplierFundData(
+    Guid SupplierId,
+    Guid ExpenseTypeId,
+    Guid ExpenseFundId,
+    string ExpenseFundName,
+    decimal AvailableBalance);

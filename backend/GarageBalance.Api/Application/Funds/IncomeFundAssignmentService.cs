@@ -222,7 +222,8 @@ public sealed class IncomeFundAssignmentService(
         foreach (var operation in source.OrderBy(item => item.CreatedAtUtc).ThenBy(item => item.Id))
         {
             operation.BalanceBefore = balance;
-            if (operation.IsCanceled || operation.SourceFinancialOperationId.HasValue)
+            if (operation.IsCanceled ||
+                (operation.SourceFinancialOperationId.HasValue && operation.OperationKind == FundOperationKinds.Deposit))
             {
                 operation.BalanceAfter = balance;
                 continue;

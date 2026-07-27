@@ -78,6 +78,7 @@ type PaymentPrototypeRow = {
   supplierId?: string | null
   staffMemberId?: string | null
   expenseTypeId?: string | null
+  expenseFundName?: string | null
   item: string
   counterparty?: string
   openingDebt: number
@@ -328,6 +329,7 @@ function createExpenseRowsFromWorksheet(worksheet: ExpenseWorksheetDto): Payment
     supplierId: row.supplierId,
     staffMemberId: row.staffMemberId,
     expenseTypeId: row.expenseTypeId,
+    expenseFundName: row.expenseFundName,
     counterparty: row.counterpartyName ?? '',
     item: row.expenseTypeName,
     openingDebt: row.openingDebt ?? Math.max(row.openingBalance ?? 0, 0),
@@ -5006,6 +5008,9 @@ function PaymentsPrototypePanel({
                         <td>{supplier}</td>
                         <td>
                           <span>{row.item}</span>
+                          {row.rowKind === 'supplier' && row.expenseFundName ? (
+                            <small className="payments-prototype-cell-note">Фонд: {row.expenseFundName}</small>
+                          ) : null}
                           {isStaffPaymentRow && ((row.bonus ?? 0) > 0 || (row.penalty ?? 0) > 0) ? (
                             <small className="payments-prototype-cell-note">
                               Оклад {formatPaymentMoney(row.baseAccrual ?? row.cost)}
@@ -5603,6 +5608,7 @@ function NewExpensePrototypeDialog({
   const [comment, setComment] = useState('')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const selectedSupplier = suppliers.find((supplier) => supplier.id === supplierId)
   useEscapeKey(true, onClose)
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -5616,6 +5622,10 @@ function NewExpensePrototypeDialog({
       setError('Для поставщика должна быть настроена услуга или статья расхода.')
       return
     }
+    if (!selectedSupplier?.chargeServiceExpenseFundId) {
+      setError('Для услуги поставщика должен быть настроен фонд расходования.')
+      return
+    }
     if (!operationDate) {
       setError('Укажите дату выплаты.')
       return
@@ -5626,6 +5636,10 @@ function NewExpensePrototypeDialog({
     }
     if (!Number.isFinite(parsedAmount) || parsedAmount <= 0) {
       setError('Укажите сумму выплаты больше нуля.')
+      return
+    }
+    if (parsedAmount > (selectedSupplier.chargeServiceExpenseFundBalance ?? 0)) {
+      setError('В фонде расходования недостаточно средств для этой выплаты.')
       return
     }
 
@@ -5694,6 +5708,12 @@ function NewExpensePrototypeDialog({
               onChange={() => undefined}
               disabled />
           </FormField>
+          <p className="form-hint">
+            Фонд расходования: {selectedSupplier?.chargeServiceExpenseFundName ?? 'не настроен'}
+            {selectedSupplier?.chargeServiceExpenseFundId
+              ? ` · доступно ${formatMoney(selectedSupplier.chargeServiceExpenseFundBalance ?? 0)}`
+              : ''}
+          </p>
           <FormField label="Тип выплаты">
             <SelectControl
               aria-label="Тип выплаты"
@@ -6020,6 +6040,7 @@ function NewAccrualPrototypeDialog({
   const [comment, setComment] = useState('')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const selectedSupplier = suppliers.find((supplier) => supplier.id === supplierId)
   useEscapeKey(true, onClose)
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -6031,6 +6052,10 @@ function NewAccrualPrototypeDialog({
     }
     if (!expenseTypeId) {
       setError('Для выбранного поставщика не настроена услуга начисления.')
+      return
+    }
+    if (!selectedSupplier?.chargeServiceExpenseFundId) {
+      setError('Для услуги поставщика должен быть настроен фонд расходования.')
       return
     }
     if (!/^\d{4}-\d{2}$/.test(accountingMonth)) {
@@ -6110,6 +6135,9 @@ function NewAccrualPrototypeDialog({
               onChange={() => undefined}
               disabled />
           </FormField>
+          <p className="form-hint">
+            Фонд расходования: {selectedSupplier?.chargeServiceExpenseFundName ?? 'не настроен'}
+          </p>
           <FormField label="Месяц">
             <LocalizedDatePicker ariaLabel="Месяц начисления поставщику" mode="month" value={accountingMonth} disabled={saving} onChange={(nextAccountingMonth) => {
               setAccountingMonth(nextAccountingMonth)

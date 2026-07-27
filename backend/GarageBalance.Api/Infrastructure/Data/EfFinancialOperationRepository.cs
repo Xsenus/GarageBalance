@@ -106,6 +106,8 @@ public sealed class EfFinancialOperationRepository(GarageBalanceDbContext dbCont
                 StaffDepartmentName = operation.StaffMember == null ? null : operation.StaffMember.Department.Name,
                 operation.ExpenseTypeId,
                 ExpenseTypeName = operation.ExpenseType == null ? null : operation.ExpenseType.Name,
+                operation.ExpenseFundId,
+                ExpenseFundName = operation.ExpenseFund == null ? null : operation.ExpenseFund.Name,
                 IsCanceled = (bool?)operation.IsCanceled,
                 CreatedAtUtc = (DateTimeOffset?)operation.CreatedAtUtc,
                 UpdatedAtUtc = (DateTimeOffset?)operation.UpdatedAtUtc,
@@ -141,6 +143,8 @@ public sealed class EfFinancialOperationRepository(GarageBalanceDbContext dbCont
                 StaffDepartmentName = (string?)null,
                 ExpenseTypeId = (Guid?)null,
                 ExpenseTypeName = (string?)null,
+                ExpenseFundId = (Guid?)null,
+                ExpenseFundName = (string?)null,
                 IsCanceled = (bool?)null,
                 CreatedAtUtc = (DateTimeOffset?)null,
                 UpdatedAtUtc = (DateTimeOffset?)null,
@@ -210,6 +214,15 @@ public sealed class EfFinancialOperationRepository(GarageBalanceDbContext dbCont
                 ExpenseType = row.ExpenseTypeId is null
                     ? null
                     : new ExpenseType { Id = row.ExpenseTypeId.Value, Name = row.ExpenseTypeName! },
+                ExpenseFundId = row.ExpenseFundId,
+                ExpenseFund = row.ExpenseFundId is null
+                    ? null
+                    : new Fund
+                    {
+                        Id = row.ExpenseFundId.Value,
+                        Name = row.ExpenseFundName!,
+                        NormalizedName = row.ExpenseFundName!
+                    },
                 IsCanceled = row.IsCanceled!.Value,
                 CreatedAtUtc = row.CreatedAtUtc!.Value,
                 UpdatedAtUtc = row.UpdatedAtUtc!.Value
@@ -339,7 +352,8 @@ public sealed class EfFinancialOperationRepository(GarageBalanceDbContext dbCont
             .Include(operation => operation.Supplier)
             .Include(operation => operation.StaffMember)
             .ThenInclude(staffMember => staffMember!.Department)
-            .Include(operation => operation.ExpenseType);
+            .Include(operation => operation.ExpenseType)
+            .Include(operation => operation.ExpenseFund);
 
     private static IQueryable<FinancialOperation> ApplyFilters(
         IQueryable<FinancialOperation> query,

@@ -23,6 +23,8 @@ public sealed class FinancialOperation
     public StaffMember? StaffMember { get; set; }
     public Guid? ExpenseTypeId { get; set; }
     public ExpenseType? ExpenseType { get; set; }
+    public Guid? ExpenseFundId { get; set; }
+    public Fund? ExpenseFund { get; set; }
     public bool IsCanceled { get; set; }
     public DateTimeOffset CreatedAtUtc { get; set; } = DateTimeOffset.UtcNow;
     public DateTimeOffset UpdatedAtUtc { get; set; } = DateTimeOffset.UtcNow;

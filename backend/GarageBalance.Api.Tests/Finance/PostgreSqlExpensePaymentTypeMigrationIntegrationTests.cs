@@ -19,6 +19,10 @@ public sealed class PostgreSqlExpensePaymentTypeMigrationIntegrationTests
         await using (var downgradeContext = database.CreateContext())
         {
             await downgradeContext.GetService<IMigrator>().MigrateAsync(PreviousMigration);
+            await downgradeContext.Database.ExecuteSqlRawAsync(
+                """
+                ALTER TABLE charge_service_settings ADD COLUMN "ExpenseFundId" uuid NULL
+                """);
         }
 
         var atomicOperationId = Guid.NewGuid();
@@ -69,6 +73,10 @@ public sealed class PostgreSqlExpensePaymentTypeMigrationIntegrationTests
 
         await using (var migrateContext = database.CreateContext())
         {
+            await migrateContext.Database.ExecuteSqlRawAsync(
+                """
+                ALTER TABLE charge_service_settings DROP COLUMN "ExpenseFundId"
+                """);
             await migrateContext.Database.MigrateAsync();
         }
 

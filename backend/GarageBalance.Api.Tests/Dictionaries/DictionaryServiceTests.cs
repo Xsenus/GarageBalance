@@ -1034,14 +1034,17 @@ public sealed class DictionaryServiceTests
         await using var database = await TestDatabase.CreateAsync();
         var service = DictionaryServiceTestFactory.Create(database.Context);
         var group = await service.CreateSupplierGroupAsync(new UpsertSupplierGroupRequest("Коммунальные услуги"), null, CancellationToken.None);
+        var expenseFund = new Fund { Name = "Коммунальные расходы", NormalizedName = "КОММУНАЛЬНЫЕ РАСХОДЫ" };
+        database.Context.Add(expenseFund);
+        await database.Context.SaveChangesAsync();
         var waterExpense = await service.CreateExpenseTypeAsync(new UpsertAccountingTypeRequest("Водоснабжение", "water_supply"), null, CancellationToken.None);
         var electricityExpense = await service.CreateExpenseTypeAsync(new UpsertAccountingTypeRequest("Электроэнергия", "electricity"), null, CancellationToken.None);
         var water = await service.CreateChargeServiceSettingAsync(
-            new UpsertChargeServiceSettingRequest("Вода", false, null, null, null, null, 0, false, false, "руб.", ExpenseTypeId: waterExpense.Value!.Id),
+            new UpsertChargeServiceSettingRequest("Вода", false, null, null, null, null, 0, false, false, "руб.", ExpenseTypeId: waterExpense.Value!.Id, ExpenseFundId: expenseFund.Id),
             null,
             CancellationToken.None);
         var electricity = await service.CreateChargeServiceSettingAsync(
-            new UpsertChargeServiceSettingRequest("Электроэнергия", false, null, null, null, null, 0, false, false, "руб.", ExpenseTypeId: electricityExpense.Value!.Id),
+            new UpsertChargeServiceSettingRequest("Электроэнергия", false, null, null, null, null, 0, false, false, "руб.", ExpenseTypeId: electricityExpense.Value!.Id, ExpenseFundId: expenseFund.Id),
             null,
             CancellationToken.None);
 
@@ -1067,10 +1070,12 @@ public sealed class DictionaryServiceTests
         Assert.Equal(water.Value.Id, created.Value.ChargeServiceSettingId);
         Assert.Equal("Вода", created.Value.ChargeServiceSettingName);
         Assert.Equal(waterExpense.Value.Id, created.Value.ChargeServiceExpenseTypeId);
+        Assert.Equal(expenseFund.Id, created.Value.ChargeServiceExpenseFundId);
         Assert.True(updated.Succeeded);
         Assert.Equal(electricity.Value.Id, updated.Value!.ChargeServiceSettingId);
         Assert.Equal("Электроэнергия", updated.Value.ChargeServiceSettingName);
         Assert.Equal(electricityExpense.Value.Id, updated.Value.ChargeServiceExpenseTypeId);
+        Assert.Equal(expenseFund.Id, updated.Value.ChargeServiceExpenseFundId);
         var listedSupplier = Assert.Single(serviceSortedPage.Items);
         Assert.Equal(created.Value.Id, listedSupplier.Id);
         Assert.Equal(electricity.Value.Id, listedSupplier.ChargeServiceSettingId);
@@ -1122,9 +1127,12 @@ public sealed class DictionaryServiceTests
         await using var database = await TestDatabase.CreateAsync();
         var service = DictionaryServiceTestFactory.Create(database.Context);
         var group = await service.CreateSupplierGroupAsync(new UpsertSupplierGroupRequest("Коммунальные услуги"), null, CancellationToken.None);
+        var expenseFund = new Fund { Name = "Архивный фонд", NormalizedName = "АРХИВНЫЙ ФОНД" };
+        database.Context.Add(expenseFund);
+        await database.Context.SaveChangesAsync();
         var expenseType = await service.CreateExpenseTypeAsync(new UpsertAccountingTypeRequest("Архивная услуга", "archived_service"), null, CancellationToken.None);
         var archived = await service.CreateChargeServiceSettingAsync(
-            new UpsertChargeServiceSettingRequest("Архивная услуга", false, null, null, null, null, 0, false, false, null, ExpenseTypeId: expenseType.Value!.Id),
+            new UpsertChargeServiceSettingRequest("Архивная услуга", false, null, null, null, null, 0, false, false, null, ExpenseTypeId: expenseType.Value!.Id, ExpenseFundId: expenseFund.Id),
             null,
             CancellationToken.None);
         var existingSupplier = await service.CreateSupplierAsync(

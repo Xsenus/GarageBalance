@@ -1224,7 +1224,7 @@ public sealed class ReportServiceTests
         await using var database = await TestDatabase.CreateAsync();
         var fixtures = await database.SeedAsync();
         var secondExpenseType = new ExpenseType { Name = "Связь", Code = "internet" };
-        var secondService = new ChargeServiceSetting { Name = "Связь", ExpenseType = secondExpenseType };
+        var secondService = new ChargeServiceSetting { Name = "Связь", ExpenseType = secondExpenseType, ExpenseFund = fixtures.ExpenseFund };
         var secondSupplier = new Supplier { Name = "Siberia Online", GroupId = fixtures.Supplier.GroupId, ChargeServiceSetting = secondService };
         database.Context.AddRange(secondExpenseType, secondService, secondSupplier);
         await database.Context.SaveChangesAsync();
@@ -2889,7 +2889,24 @@ public sealed class ReportServiceTests
             var group = new SupplierGroup { Name = "Коммунальные услуги" };
             var incomeType = new IncomeType { Name = "Членский взнос", Code = "membership" };
             var expenseType = new ExpenseType { Name = "Вода", Code = "water" };
-            var chargeService = new ChargeServiceSetting { Name = "Вода", ExpenseType = expenseType };
+            var expenseFund = new Fund
+            {
+                Name = "Расходы по услугам",
+                NormalizedName = "РАСХОДЫ ПО УСЛУГАМ",
+                Balance = SeededBankAmount,
+                AllowOperations = true
+            };
+            var openingFundOperation = new FundOperation
+            {
+                Fund = expenseFund,
+                OperationKind = FundOperationKinds.Deposit,
+                Amount = SeededBankAmount,
+                BalanceBefore = 0m,
+                BalanceAfter = SeededBankAmount,
+                Reason = "Тестовый остаток фонда",
+                CreatedAtUtc = new DateTimeOffset(2000, 1, 1, 0, 0, 0, TimeSpan.Zero)
+            };
+            var chargeService = new ChargeServiceSetting { Name = "Вода", ExpenseType = expenseType, ExpenseFund = expenseFund };
             var supplier = new Supplier { Name = "Vodokanal", Group = group, ChargeServiceSetting = chargeService };
             var bankDeposit = new CashBankTransfer
             {
@@ -2899,9 +2916,9 @@ public sealed class ReportServiceTests
                 CreatedAtUtc = new DateTimeOffset(2000, 1, 1, 0, 0, 0, TimeSpan.Zero)
             };
 
-            Context.AddRange(firstOwner, secondOwner, firstGarage, secondGarage, group, supplier, incomeType, expenseType, chargeService, bankDeposit);
+            Context.AddRange(firstOwner, secondOwner, firstGarage, secondGarage, group, supplier, incomeType, expenseType, expenseFund, openingFundOperation, chargeService, bankDeposit);
             await Context.SaveChangesAsync();
-            return new Fixtures(firstGarage, secondGarage, supplier, incomeType, expenseType);
+            return new Fixtures(firstGarage, secondGarage, supplier, incomeType, expenseType, expenseFund);
         }
 
         public async ValueTask DisposeAsync()
@@ -2911,7 +2928,7 @@ public sealed class ReportServiceTests
         }
     }
 
-    private sealed record Fixtures(Garage FirstGarage, Garage SecondGarage, Supplier Supplier, IncomeType IncomeType, ExpenseType ExpenseType);
+    private sealed record Fixtures(Garage FirstGarage, Garage SecondGarage, Supplier Supplier, IncomeType IncomeType, ExpenseType ExpenseType, Fund ExpenseFund);
 
     private sealed class SelectCommandCounter : DbCommandInterceptor
     {

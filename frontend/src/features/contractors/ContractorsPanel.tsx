@@ -4,6 +4,7 @@ import { FileText, Gauge, LoaderCircle, Pencil, RotateCcw, Save, Search, Trash2,
 import type { AuthResponse } from '../../services/authApi'
 import type { AccountingTypeDto, ChargeServiceSettingDto, CreateChargeServiceWithTariffRequest, DictionaryClient, GarageColumnFilters, GarageDto, OwnerDto, StaffDepartmentDto, StaffMemberDto, SupplierContactDto, SupplierDto, SupplierGroupDto, TariffDto, UpsertGarageRequest, UpsertOwnerRequest, UpsertStaffMemberRequest, UpsertSupplierContactRequest, UpsertSupplierRequest } from '../../services/dictionariesApi'
 import type { FinanceClient, GarageBalanceHistoryDto } from '../../services/financeApi'
+import type { FundDto, FundsClient } from '../../services/fundsApi'
 import type { FormStateClient } from '../../services/formStatesApi'
 import type { DadataAddressSuggestionDto, DadataPartySuggestionDto, IntegrationClient } from '../../services/integrationsApi'
 import { hasPermission, isAdministrator, permissions } from '../../shared/accessControl'
@@ -755,7 +756,7 @@ type ContractorsPrototypeSavedState = {
   departments: ContractorDepartmentRow[]
 }
 
-export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClient, formStateClient, integrationClient, initialTarget = null, onOpenAudit }: { auth: AuthResponse; dictionaryClient: DictionaryClient; financeClient: FinanceClient; formStateClient: FormStateClient; integrationClient: IntegrationClient; initialTarget?: ContractorOpenTarget | null; onOpenAudit: (preset: AuditPanelPreset) => void }) {
+export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClient, fundsClient, formStateClient, integrationClient, initialTarget = null, onOpenAudit }: { auth: AuthResponse; dictionaryClient: DictionaryClient; financeClient: FinanceClient; fundsClient: FundsClient; formStateClient: FormStateClient; integrationClient: IntegrationClient; initialTarget?: ContractorOpenTarget | null; onOpenAudit: (preset: AuditPanelPreset) => void }) {
   const [activeSection, setActiveSection] = useState<ContractorSection>(initialTarget?.section ?? 'garages')
   const [showGarageDebtorsOnly, setShowGarageDebtorsOnly] = useState(false)
   const [garageColumnFilterForm, setGarageColumnFilterForm] = useState<GarageColumnFilterForm>(emptyGarageColumnFilterForm)
@@ -778,6 +779,7 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
   const [chargeServices, setChargeServices] = useState<ChargeServiceSettingDto[]>([])
   const [serviceIncomeTypes, setServiceIncomeTypes] = useState<AccountingTypeDto[]>([])
   const [serviceExpenseTypes, setServiceExpenseTypes] = useState<AccountingTypeDto[]>([])
+  const [serviceFunds, setServiceFunds] = useState<FundDto[]>([])
   const [serviceTariffs, setServiceTariffs] = useState<TariffDto[]>([])
   const [serviceSaving, setServiceSaving] = useState(false)
   const [formStateLoaded, setFormStateLoaded] = useState(false)
@@ -953,13 +955,14 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
             }))
           }
         } else {
-          const [groups, supplierContactRows, loadedChargeServices, loadedIncomeTypes, loadedExpenseTypes, loadedTariffs] = await Promise.all([
+          const [groups, supplierContactRows, loadedChargeServices, loadedIncomeTypes, loadedExpenseTypes, loadedTariffs, loadedFunds] = await Promise.all([
             dictionaryClient.getSupplierGroups(auth.accessToken, undefined, contractorsDictionaryListLimit, true),
             dictionaryClient.getSupplierContacts(auth.accessToken, undefined, undefined, contractorsDictionaryListLimit, true),
             dictionaryClient.getChargeServiceSettings(auth.accessToken, undefined, contractorsDictionaryListLimit, true),
             dictionaryClient.getIncomeTypes(auth.accessToken, undefined, contractorsDictionaryListLimit, true),
             dictionaryClient.getExpenseTypes(auth.accessToken, undefined, contractorsDictionaryListLimit, true),
             dictionaryClient.getTariffs(auth.accessToken, undefined, contractorsDictionaryListLimit, true),
+            fundsClient.getFunds(auth.accessToken).catch(() => []),
           ])
           if (!cancelled) {
             supplierContactsRef.current = supplierContactRows
@@ -969,6 +972,7 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
             setServiceIncomeTypes(loadedIncomeTypes)
             setServiceExpenseTypes(loadedExpenseTypes)
             setServiceTariffs(loadedTariffs)
+            setServiceFunds(loadedFunds)
             setSuppliers((current) => current.map((supplier) => ({
               ...supplier,
               contacts: supplierContactRows
@@ -992,7 +996,7 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
     return () => {
       cancelled = true
     }
-  }, [activeContractorPageLoading, activeSection, auth.accessToken, dictionaryClient])
+  }, [activeContractorPageLoading, activeSection, auth.accessToken, dictionaryClient, fundsClient])
 
   useEffect(() => {
     if (!initialTarget) {
@@ -2415,7 +2419,7 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
 
       {modal?.type === 'garage' ? <GaragePrototypeDialog accessToken={auth.accessToken} integrationClient={integrationClient} item={modal.item} onClose={() => setModal(null)} onSave={saveGarage} onOpenFinancialReport={openGarageFinancialReport} /> : null}
       {modal?.type === 'supplier' ? <SupplierPrototypeDialog accessToken={auth.accessToken} integrationClient={integrationClient} item={modal.item} services={chargeServices} onClose={() => setModal(null)} onOpenFinancialReport={openSupplierFinancialReport} onSave={saveSupplier} /> : null}
-      {modal?.type === 'service' ? <AddServicePrototypeDialog expenseTypes={serviceExpenseTypes.filter((item) => !item.isArchived)} isSaving={serviceSaving} incomeTypes={serviceIncomeTypes.filter((item) => !item.isArchived)} onClose={() => setModal(null)} onCreateWithTariff={saveServiceWithTariff} regularOnly tariffs={serviceTariffs.filter((item) => !item.isArchived)} /> : null}
+      {modal?.type === 'service' ? <AddServicePrototypeDialog expenseTypes={serviceExpenseTypes.filter((item) => !item.isArchived)} funds={serviceFunds.filter((fund) => fund.allowOperations)} isSaving={serviceSaving} incomeTypes={serviceIncomeTypes.filter((item) => !item.isArchived)} onClose={() => setModal(null)} onCreateWithTariff={saveServiceWithTariff} regularOnly tariffs={serviceTariffs.filter((item) => !item.isArchived)} /> : null}
       {modal?.type === 'employee' ? <EmployeePrototypeDialog departments={departments} item={modal.item} onClose={() => setModal(null)} onOpenFinancialReport={openEmployeeFinancialReport} onSave={saveEmployee} /> : null}
       {modal?.type === 'department' ? <DepartmentPrototypeDialog item={modal.item} onClose={() => setModal(null)} onSave={saveDepartment} /> : null}
 

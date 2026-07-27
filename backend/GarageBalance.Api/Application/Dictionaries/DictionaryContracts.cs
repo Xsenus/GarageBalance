@@ -75,7 +75,10 @@ public sealed record SupplierDto(
     decimal Debt = 0,
     Guid? ChargeServiceSettingId = null,
     string? ChargeServiceSettingName = null,
-    Guid? ChargeServiceExpenseTypeId = null);
+    Guid? ChargeServiceExpenseTypeId = null,
+    Guid? ChargeServiceExpenseFundId = null,
+    string? ChargeServiceExpenseFundName = null,
+    decimal? ChargeServiceExpenseFundBalance = null);
 
 public sealed record UpsertSupplierRequest(
     [Required, MaxLength(240)] string Name,
@@ -196,7 +199,8 @@ public sealed record ChargeServiceSettingDto(
     bool HasTieredTariff,
     string? UnitName,
     bool IsArchived,
-    Guid? ExpenseTypeId = null);
+    Guid? ExpenseTypeId = null,
+    Guid? ExpenseFundId = null);
 
 public sealed record UpsertChargeServiceSettingRequest(
     [Required, MaxLength(200)] string Name,
@@ -211,7 +215,8 @@ public sealed record UpsertChargeServiceSettingRequest(
     [MaxLength(40)] string? UnitName,
     Guid? IncomeTypeId = null,
     Guid? TariffId = null,
-    Guid? ExpenseTypeId = null);
+    Guid? ExpenseTypeId = null,
+    Guid? ExpenseFundId = null);
 
 public sealed record CreateChargeServiceWithTariffRequest(
     [Required] UpsertChargeServiceSettingRequest Service,

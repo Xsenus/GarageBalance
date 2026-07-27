@@ -1926,7 +1926,7 @@ describe('App', () => {
       postalCode: '630000',
     }])
     const integrationClient = createIntegrationClient({ suggestParties, suggestAddresses })
-    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={financeClient} importClient={createImportClient()} integrationClient={integrationClient} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={financeClient} fundsClient={createFundsClient()} importClient={createImportClient()} integrationClient={integrationClient} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
     await user.click(screen.getByRole('button', { name: 'Войти' }))
@@ -2125,6 +2125,9 @@ describe('App', () => {
     const contractorServiceExpenseType = within(serviceDialog).getByRole('combobox', { name: 'Вид начисления поставщику для услуги' })
     await user.click(contractorServiceExpenseType)
     await user.click(within(serviceDialog).getByRole('option', { name: 'Электроэнергия' }))
+    const contractorServiceExpenseFund = within(serviceDialog).getByRole('combobox', { name: 'Фонд расходования услуги поставщика' })
+    expect(contractorServiceExpenseFund).toBeEnabled()
+    expect(contractorServiceExpenseFund).toHaveTextContent('Электроэнергия')
     const contractorServiceCost = within(serviceDialog).getByLabelText('Стоимость регулярной услуги')
     await user.clear(contractorServiceCost)
     await user.type(contractorServiceCost, '1000')
@@ -2135,7 +2138,7 @@ describe('App', () => {
       }
       expect(createdContractorServiceRequest).toMatchObject({
         rate: 1000,
-        service: { name: 'Уборка территории', isRegular: true, expenseTypeId: 'expense-type-1' },
+        service: { name: 'Уборка территории', isRegular: true, expenseTypeId: 'expense-type-1', expenseFundId: 'fund-electricity' },
       })
     })
     await waitFor(() => expect(addContractorServiceButton).toHaveFocus())
@@ -3992,6 +3995,7 @@ describe('App', () => {
       unitName: 'руб.',
       incomeTypeId: serviceIncomeType.id,
       expenseTypeId: null,
+      expenseFundId: null,
       tariffId: serviceTariff.id,
     })
     expect(within(tariffsPanel).getByRole('button', { name: 'Изменить услугу Охрана территории' })).toBeInTheDocument()
@@ -5606,6 +5610,7 @@ describe('App', () => {
     expect(expenseType).toHaveClass('select-control__trigger')
     expect(expenseType).toHaveTextContent('Электроэнергия')
     expect(expenseType).toBeDisabled()
+    expect(within(expenseDialog).getByText('Фонд расходования: Водоснабжение · доступно 100 000.00')).toBeInTheDocument()
     const expensePaymentType = within(expenseDialog).getByRole('combobox', { name: 'Тип выплаты' })
     expect(expensePaymentType).toHaveClass('select-control__trigger')
     expect(expensePaymentType).toHaveTextContent('С чеком')
@@ -13858,6 +13863,9 @@ describe('App', () => {
       chargeServiceSettingId: 'service-electricity',
       chargeServiceSettingName: 'Электроэнергия',
       chargeServiceExpenseTypeId: electricityExpenseType.id,
+      chargeServiceExpenseFundId: 'fund-electricity',
+      chargeServiceExpenseFundName: 'Электроэнергия',
+      chargeServiceExpenseFundBalance: 100000,
     })
     const wasteSupplier = createSupplier({
       id: 'supplier-waste',
@@ -13865,6 +13873,9 @@ describe('App', () => {
       chargeServiceSettingId: 'service-waste',
       chargeServiceSettingName: 'Вывоз мусора',
       chargeServiceExpenseTypeId: wasteExpenseType.id,
+      chargeServiceExpenseFundId: 'fund-trash',
+      chargeServiceExpenseFundName: 'Вывоз мусора',
+      chargeServiceExpenseFundBalance: 100000,
     })
     const dictionaryClient = createDictionaryClient({
       getSuppliers: async () => [waterSupplier, wasteSupplier],
@@ -17381,6 +17392,9 @@ function createDictionaryClient(overrides: Partial<DictionaryClient> = {}): Dict
     chargeServiceSettingId: 'charge-service-water',
     chargeServiceSettingName: 'Электроэнергия',
     chargeServiceExpenseTypeId: 'expense-type-1',
+    chargeServiceExpenseFundId: 'fund-water',
+    chargeServiceExpenseFundName: 'Водоснабжение',
+    chargeServiceExpenseFundBalance: 100000,
   })
   const supplierContact = createSupplierContact({ id: 'supplier-contact-1', supplierId: supplier.id, supplierName: supplier.name, fullName: 'Иванов П.В.' })
   const staffDepartment = createStaffDepartment({ id: 'staff-department-1', name: 'Бухгалтерия' })
