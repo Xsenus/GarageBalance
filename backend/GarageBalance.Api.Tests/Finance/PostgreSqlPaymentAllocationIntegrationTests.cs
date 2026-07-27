@@ -11,6 +11,50 @@ namespace GarageBalance.Api.Tests.Finance;
 public sealed class PostgreSqlPaymentAllocationIntegrationTests
 {
     [PostgreSqlFact]
+    public async Task AprilTrashPayment_PersistsAndRemovesGarage101OverdueDebtAfterReload()
+    {
+        await using var database = await PostgreSqlTestDatabase.CreateAsync();
+        var ledger = await SeedLedgerAsync(
+            database,
+            "101",
+            [360m],
+            new DateOnly(2026, 4, 1),
+            "Мусор");
+
+        await using (var paymentContext = database.CreateContext())
+        {
+            var payment = await FinanceServiceTestFactory.Create(paymentContext).CreateIncomeAsync(
+                new CreateIncomeOperationRequest(
+                    ledger.GarageId,
+                    ledger.IncomeTypeId,
+                    new DateOnly(2026, 7, 28),
+                    new DateOnly(2026, 4, 1),
+                    360m,
+                    "GARAGE-101-TRASH-APRIL",
+                    "Синтетическая проверка платежа за вывоз мусора"),
+                null,
+                CancellationToken.None);
+
+            Assert.True(payment.Succeeded, payment.ErrorMessage);
+            Assert.Equal(0m, payment.Value!.GarageDebtAfter);
+        }
+
+        await using var reloadedContext = database.CreateContext();
+        var persistedPayment = await reloadedContext.FinancialOperations
+            .SingleAsync(item => item.DocumentNumber == "GARAGE-101-TRASH-APRIL");
+        var allocation = await reloadedContext.AccrualPaymentAllocations
+            .SingleAsync(item => item.IsActive && item.FinancialOperationId == persistedPayment.Id);
+        var overdue = await FinanceServiceTestFactory.Create(reloadedContext)
+            .GetGarageOverdueDebtAsync(ledger.GarageId, CancellationToken.None);
+
+        Assert.Equal(360m, persistedPayment.Amount);
+        Assert.Equal(360m, allocation.Amount);
+        Assert.True(overdue.Succeeded, overdue.ErrorMessage);
+        Assert.Equal(0m, overdue.Value!.Total);
+        Assert.Empty(overdue.Value.Rows);
+    }
+
+    [PostgreSqlFact]
     public async Task IncomeWorksheet_CapsEveryAccrualAndShowsUnallocatedRemainderAsAdvance()
     {
         await using var database = await PostgreSqlTestDatabase.CreateAsync();
@@ -169,18 +213,24 @@ public sealed class PostgreSqlPaymentAllocationIntegrationTests
     private static async Task<SeededLedger> SeedLedgerAsync(
         PostgreSqlTestDatabase database,
         string suffix,
-        IReadOnlyList<decimal> amounts)
+        IReadOnlyList<decimal> amounts,
+        DateOnly? firstAccountingMonth = null,
+        string? incomeTypeName = null)
     {
         await using var context = database.CreateContext();
         var garage = new Garage { Number = suffix, PeopleCount = 1, FloorCount = 1 };
-        var incomeType = new IncomeType { Name = suffix };
+        var resolvedIncomeTypeName = incomeTypeName ?? suffix;
+        var incomeType = await context.IncomeTypes
+            .SingleOrDefaultAsync(item => item.Name == resolvedIncomeTypeName)
+            ?? new IncomeType { Name = resolvedIncomeTypeName };
+        var firstMonth = firstAccountingMonth ?? new DateOnly(2026, 1, 1);
         var accruals = amounts.Select((amount, index) => new Accrual
         {
             Garage = garage,
             IncomeType = incomeType,
-            AccountingMonth = new DateOnly(2026, index + 1, 1),
-            DueDate = new DateOnly(2026, index + 1, 28),
-            OverdueFromDate = new DateOnly(2026, index + 2, 1),
+            AccountingMonth = firstMonth.AddMonths(index),
+            DueDate = firstMonth.AddMonths(index).AddMonths(1).AddDays(-1),
+            OverdueFromDate = firstMonth.AddMonths(index + 1),
             Amount = amount,
             Source = AccrualSources.Manual
         }).ToArray();

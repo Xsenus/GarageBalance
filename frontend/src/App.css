@@ -3981,8 +3981,15 @@ h1 {
   font-size: 15px;
 }
 
+.payments-prototype-payment-editor {
+  display: grid;
+  grid-template-columns: minmax(82px, 130px) 30px;
+  gap: 5px;
+  align-items: center;
+}
+
 .payments-prototype-payment-input {
-  width: min(130px, 100%);
+  width: 100%;
   min-height: 32px;
   border: 1px solid #d0d5dd;
   border-radius: 7px;
@@ -3996,6 +4003,37 @@ h1 {
 .payments-prototype-payment-input:focus {
   border-color: #2e90fa;
   outline: 3px solid rgba(46, 144, 250, 0.16);
+}
+
+.payments-prototype-payment-save {
+  display: inline-grid;
+  width: 30px;
+  min-height: 30px;
+  place-items: center;
+  border: 1px solid #b2ccff;
+  border-radius: 7px;
+  background: #eff4ff;
+  color: #175cd3;
+  cursor: pointer;
+}
+
+.payments-prototype-payment-save:hover:not(:disabled),
+.payments-prototype-payment-save:focus-visible {
+  border-color: #84adff;
+  background: #dbe8ff;
+}
+
+.payments-prototype-payment-save:disabled,
+.payments-prototype-payment-input:disabled {
+  cursor: not-allowed;
+  opacity: 0.65;
+}
+
+.payments-prototype-payment-status {
+  grid-column: 1 / -1;
+  color: #475467;
+  font-size: 11px;
+  line-height: 1.3;
 }
 
 .payments-prototype-meter-editor {

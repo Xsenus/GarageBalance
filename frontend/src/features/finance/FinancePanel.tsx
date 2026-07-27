@@ -3950,6 +3950,7 @@ function PaymentsPrototypePanel({
       })
       const paymentTime = new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })
       const historyDebtAfter = operation.garageDebtAfter ?? nextDebt
+      const optimisticGarageDebtAfter = operation.garageDebtAfter ?? selectedGarage.balance - amount
 
       setGarageRows((currentRows) => currentRows.map((currentRow) => currentRow.id === row.id ? { ...currentRow, paymentDraft: '', paid: nextPaid, advance: nextAdvance, debt: nextDebt } : currentRow))
       setGarageWorksheetSummary((currentSummary) => currentSummary
@@ -3965,10 +3966,35 @@ function PaymentsPrototypePanel({
         { id: operation.id, date: formatDateOnly(operation.operationDate), time: formatOperationTime(operation.createdAtUtc) || paymentTime, amount: operation.amount, purpose: operation.incomeTypeName ?? row.service, debtAfter: historyDebtAfter },
         ...currentRows,
       ])
+      setSelectedGarages((currentGarages) => currentGarages.map((garage) => garage.id === selectedGarage.id
+        ? { ...garage, balance: optimisticGarageDebtAfter }
+        : garage))
+
+      let overdueRefreshFailed = false
+      const overdueRefresh = financeClient.getGarageOverdueDebt(auth.accessToken, selectedGarage.id)
+        .then((details) => {
+          if (selectedGarageIdRef.current !== selectedGarage.id) {
+            return
+          }
+
+          setSelectedGarages((currentGarages) => currentGarages.map((garage) => garage.id === selectedGarage.id
+            ? { ...garage, balance: optimisticGarageDebtAfter, overdueDebt: details.total }
+            : garage))
+          setOverdueDebtDetails(details.total > 0 ? details : null)
+          setOverdueDebtError(null)
+        })
+        .catch(() => {
+          overdueRefreshFailed = true
+        })
+
       await Promise.all([
-        row.annualAccrualId ? loadGarageIncomeWorksheet(selectedGarage) : Promise.resolve(),
+        overdueRefresh,
+        loadGarageIncomeWorksheet(selectedGarage),
         paymentHistoryOpen ? loadGaragePaymentHistory(selectedGarage) : Promise.resolve(),
       ])
+      if (overdueRefreshFailed && selectedGarageIdRef.current === selectedGarage.id) {
+        setPaymentError('Платеж сохранён, но не удалось обновить просроченную задолженность. Обновите страницу.')
+      }
     } catch (error) {
       setPaymentError(error instanceof Error ? error.message : 'Не удалось сохранить платеж. Повторите попытку позже.')
     } finally {
@@ -4974,20 +5000,37 @@ function PaymentsPrototypePanel({
                             <td>{formatPaymentMoney(row.difference ?? '')}</td>
                             <td>{formatPaymentMoney(row.payable)}</td>
                             <td>
-                              <MoneyTextInput
-                                className="payments-prototype-payment-input"
-                                aria-label={`Платеж ${row.service} ${row.monthLabel}`}
-                                disabled={savingPaymentRowId === row.id}
-                                value={row.paymentDraft}
-                                onValueChange={(paymentDraft) => handlePaymentDraftChange(row.id, paymentDraft)}
-                                onBlur={() => formatPaymentDraft(row.id)}
-                                onKeyDown={(event) => {
-                                  if (event.key === 'Enter') {
-                                    event.preventDefault()
-                                    void commitGaragePayment(row)
-                                  }
-                                }}
-                              />
+                              <div className="payments-prototype-payment-editor">
+                                <MoneyTextInput
+                                  className="payments-prototype-payment-input"
+                                  aria-label={`Платеж ${row.service} ${row.monthLabel}`}
+                                  disabled={savingPaymentRowId === row.id}
+                                  value={row.paymentDraft}
+                                  onValueChange={(paymentDraft) => handlePaymentDraftChange(row.id, paymentDraft)}
+                                  onBlur={() => formatPaymentDraft(row.id)}
+                                  onKeyDown={(event) => {
+                                    if (event.key === 'Enter') {
+                                      event.preventDefault()
+                                      void commitGaragePayment(row)
+                                    }
+                                  }}
+                                />
+                                <button
+                                  type="button"
+                                  className="icon-button payments-prototype-payment-save"
+                                  aria-label={savingPaymentRowId === row.id ? `Сохраняется платеж ${row.service} ${row.monthLabel}` : `Сохранить платеж ${row.service} ${row.monthLabel}`}
+                                  title={savingPaymentRowId === row.id ? 'Сохраняется платёж' : 'Сохранить платёж'}
+                                  disabled={savingPaymentRowId === row.id || !Number.isFinite(parsePaymentMoney(row.paymentDraft)) || parsePaymentMoney(row.paymentDraft) <= 0}
+                                  onClick={() => void commitGaragePayment(row)}
+                                >
+                                  {savingPaymentRowId === row.id
+                                    ? <LoaderCircle className="payments-prototype-meter-spinner" size={14} aria-hidden="true" />
+                                    : <Save size={14} aria-hidden="true" />}
+                                </button>
+                                {savingPaymentRowId === row.id
+                                  ? <span className="payments-prototype-payment-status" role="status" aria-live="polite">Сохраняем платёж…</span>
+                                  : null}
+                              </div>
                             </td>
                             <td>{formatPaymentMoney(row.paid)}</td>
                             {(() => {

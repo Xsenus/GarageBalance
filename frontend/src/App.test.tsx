@@ -5160,50 +5160,66 @@ describe('App', () => {
           ],
         })
       },
-      getGarageIncomeWorksheet: async () => createGarageIncomeWorksheet({
-        garageId: garage.id,
-        garageNumber: garage.number,
-        ownerName: garage.ownerName,
-        accrualTotal: 10174,
-        incomeTotal: 0,
-        debtTotal: 10174,
-        closingDebt: 10174,
-        rows: [
-          {
-            accountingMonth: '2026-06-01',
-            incomeTypeId: incomeType.id,
-            incomeTypeName: incomeType.name,
-            meterKind: 'electricity',
-            meterValue: 86,
-            meterConsumption: 18,
-            accrualAmount: 5674,
-            incomeAmount: 0,
-            debt: 5674,
-          },
-          {
-            accountingMonth: '2026-06-01',
-            incomeTypeId: waterIncomeType.id,
-            incomeTypeName: waterIncomeType.name,
-            meterKind: 'water',
-            meterValue: 59,
-            meterConsumption: 4,
-            accrualAmount: 4500,
-            incomeAmount: 0,
-            debt: 4500,
-          },
-          {
-            accountingMonth: '2026-05-01',
-            incomeTypeId: null,
-            incomeTypeName: 'Членский взнос',
-            meterKind: null,
-            meterValue: null,
-            meterConsumption: null,
-            accrualAmount: 0,
-            incomeAmount: 0,
-            debt: 0,
-          },
-        ],
-      }),
+      getGarageIncomeWorksheet: async () => {
+        const electricityPaid = Math.min(
+          savedIncomeRequests
+            .filter((request) => request.incomeTypeId === incomeType.id)
+            .reduce((total, request) => total + request.amount, 0),
+          5674,
+        )
+        const waterPaid = Math.min(
+          savedIncomeRequests
+            .filter((request) => request.incomeTypeId === waterIncomeType.id)
+            .reduce((total, request) => total + request.amount, 0),
+          4500,
+        )
+        const incomeTotal = electricityPaid + waterPaid
+        const closingDebt = 10174 - incomeTotal
+        return createGarageIncomeWorksheet({
+          garageId: garage.id,
+          garageNumber: garage.number,
+          ownerName: garage.ownerName,
+          accrualTotal: 10174,
+          incomeTotal,
+          debtTotal: closingDebt,
+          closingDebt,
+          rows: [
+            {
+              accountingMonth: '2026-06-01',
+              incomeTypeId: incomeType.id,
+              incomeTypeName: incomeType.name,
+              meterKind: 'electricity',
+              meterValue: 86,
+              meterConsumption: 18,
+              accrualAmount: 5674,
+              incomeAmount: electricityPaid,
+              debt: 5674 - electricityPaid,
+            },
+            {
+              accountingMonth: '2026-06-01',
+              incomeTypeId: waterIncomeType.id,
+              incomeTypeName: waterIncomeType.name,
+              meterKind: 'water',
+              meterValue: 59,
+              meterConsumption: 4,
+              accrualAmount: 4500,
+              incomeAmount: waterPaid,
+              debt: 4500 - waterPaid,
+            },
+            {
+              accountingMonth: '2026-05-01',
+              incomeTypeId: null,
+              incomeTypeName: 'Членский взнос',
+              meterKind: null,
+              meterValue: null,
+              meterConsumption: null,
+              accrualAmount: 0,
+              incomeAmount: 0,
+              debt: 0,
+            },
+          ],
+        })
+      },
       getExpenseWorksheet: async (_token, params) => {
         expenseWorksheetRequestCount += 1
         const bonusAmount = savedStaffSalaryAdjustmentRequests
@@ -6397,28 +6413,33 @@ describe('App', () => {
     const user = userEvent.setup()
     const garage = createGarage({ id: 'garage-overpayment', number: '78', ownerName: 'Смирнова Анна' })
     const waterIncomeType = createAccountingType({ id: 'income-water-overpayment', name: 'Водоснабжение', code: 'water' })
-    const createIncome = vi.fn(async (_token: string, request: CreateIncomeOperationRequest) => createFinancialOperation({
-      id: 'income-overpayment',
-      garageId: request.garageId,
-      garageNumber: garage.number,
-      ownerName: garage.ownerName,
-      incomeTypeId: request.incomeTypeId,
-      incomeTypeName: waterIncomeType.name,
-      operationDate: request.operationDate,
-      accountingMonth: request.accountingMonth,
-      amount: request.amount,
-      garageDebtBefore: 1000,
-      garageDebtAfter: 0,
-    }))
+    let paymentSaved = false
+    const createIncome = vi.fn(async (_token: string, request: CreateIncomeOperationRequest) => {
+      paymentSaved = true
+      return createFinancialOperation({
+        id: 'income-overpayment',
+        garageId: request.garageId,
+        garageNumber: garage.number,
+        ownerName: garage.ownerName,
+        incomeTypeId: request.incomeTypeId,
+        incomeTypeName: waterIncomeType.name,
+        operationDate: request.operationDate,
+        accountingMonth: request.accountingMonth,
+        amount: request.amount,
+        garageDebtBefore: 1000,
+        garageDebtAfter: 0,
+      })
+    })
     const getGarageIncomeWorksheet = vi.fn(async () => createGarageIncomeWorksheet({
       garageId: garage.id,
       garageNumber: garage.number,
       ownerName: garage.ownerName,
       accrualTotal: 1000,
-      incomeTotal: 0,
-      advanceTotal: 0,
-      debtTotal: 1000,
-      closingDebt: 1000,
+      incomeTotal: paymentSaved ? 1250 : 0,
+      advanceTotal: paymentSaved ? 250 : 0,
+      debtTotal: paymentSaved ? 0 : 1000,
+      closingBalance: paymentSaved ? -250 : 1000,
+      closingDebt: paymentSaved ? 0 : 1000,
       rows: [{
         accountingMonth: '2026-06-01',
         incomeTypeId: waterIncomeType.id,
@@ -6427,9 +6448,9 @@ describe('App', () => {
         meterValue: null,
         meterConsumption: null,
         accrualAmount: 1000,
-        incomeAmount: 0,
-        advanceAmount: 0,
-        debt: 1000,
+        incomeAmount: paymentSaved ? 1000 : 0,
+        advanceAmount: paymentSaved ? 250 : 0,
+        debt: paymentSaved ? 0 : 1000,
       }],
     }))
     render(<App
@@ -6479,31 +6500,35 @@ describe('App', () => {
     const user = userEvent.setup()
     const garage = createGarage({ id: 'garage-water-remainder', number: '80', ownerName: 'Петров Николай' })
     const waterIncomeTypeId = '3e79c525-377d-4168-b8de-f2ff736829df'
+    let paymentSaved = false
     const getIncomeTypes = vi.fn(async () => {
       throw new Error('Справочник видов поступлений не должен требоваться для оплаты серверной строки.')
     })
-    const createIncome = vi.fn(async (_token: string, request: CreateIncomeOperationRequest) => createFinancialOperation({
-      id: 'water-remainder-payment',
-      garageId: request.garageId,
-      garageNumber: garage.number,
-      ownerName: garage.ownerName,
-      incomeTypeId: request.incomeTypeId,
-      incomeTypeName: 'Вода',
-      operationDate: request.operationDate,
-      accountingMonth: request.accountingMonth,
-      amount: request.amount,
-      garageDebtBefore: 600,
-      garageDebtAfter: 0,
-    }))
+    const createIncome = vi.fn(async (_token: string, request: CreateIncomeOperationRequest) => {
+      paymentSaved = true
+      return createFinancialOperation({
+        id: 'water-remainder-payment',
+        garageId: request.garageId,
+        garageNumber: garage.number,
+        ownerName: garage.ownerName,
+        incomeTypeId: request.incomeTypeId,
+        incomeTypeName: 'Вода',
+        operationDate: request.operationDate,
+        accountingMonth: request.accountingMonth,
+        amount: request.amount,
+        garageDebtBefore: 600,
+        garageDebtAfter: 0,
+      })
+    })
     const getGarageIncomeWorksheet = vi.fn(async () => createGarageIncomeWorksheet({
       garageId: garage.id,
       garageNumber: garage.number,
       ownerName: garage.ownerName,
       accrualTotal: 1000,
-      incomeTotal: 400,
+      incomeTotal: paymentSaved ? 1000 : 400,
       advanceTotal: 0,
-      debtTotal: 600,
-      closingDebt: 600,
+      debtTotal: paymentSaved ? 0 : 600,
+      closingDebt: paymentSaved ? 0 : 600,
       rows: [{
         accountingMonth: '2026-06-01',
         incomeTypeId: waterIncomeTypeId,
@@ -6513,9 +6538,9 @@ describe('App', () => {
         meterConsumption: 5,
         accrualAmount: 1000,
         payableAmount: 1000,
-        incomeAmount: 400,
+        incomeAmount: paymentSaved ? 1000 : 400,
         advanceAmount: 0,
-        debt: 600,
+        debt: paymentSaved ? 0 : 600,
       }],
     }))
     render(<App
@@ -6559,6 +6584,195 @@ describe('App', () => {
     expect(cells[6]).toHaveTextContent('1 000.00')
     expect(cells[7]).toHaveTextContent('0.00')
     expect(cells).toHaveLength(8)
+  })
+
+  it('saves the April trash payment and removes the paid overdue debt without reloading the page', async () => {
+    const user = userEvent.setup()
+    const garage = createGarage({
+      id: 'garage-101-trash',
+      number: '101',
+      ownerName: 'Тестовый владелец',
+      balance: 360,
+      overdueDebt: 360,
+    })
+    const trashIncomeType = createAccountingType({
+      id: 'income-trash',
+      name: 'Мусор',
+      code: 'trash',
+    })
+    let paymentSaved = false
+    const getGarageIncomeWorksheet = vi.fn(async () => createGarageIncomeWorksheet({
+      garageId: garage.id,
+      garageNumber: garage.number,
+      ownerName: garage.ownerName,
+      monthFrom: '2026-04-01',
+      monthTo: '2026-06-01',
+      accrualTotal: 360,
+      incomeTotal: paymentSaved ? 360 : 0,
+      debtTotal: paymentSaved ? 0 : 360,
+      closingBalance: paymentSaved ? 0 : 360,
+      closingDebt: paymentSaved ? 0 : 360,
+      rows: [{
+        accountingMonth: '2026-04-01',
+        incomeTypeId: trashIncomeType.id,
+        incomeTypeName: trashIncomeType.name,
+        meterKind: null,
+        meterValue: null,
+        meterConsumption: null,
+        accrualAmount: 360,
+        payableAmount: 360,
+        incomeAmount: paymentSaved ? 360 : 0,
+        debt: paymentSaved ? 0 : 360,
+      }],
+    }))
+    const getGarageOverdueDebt = vi.fn(async () => ({
+      garageId: garage.id,
+      garageNumber: garage.number,
+      ownerName: garage.ownerName,
+      asOfDate: '2026-06-30',
+      total: paymentSaved ? 0 : 360,
+      rows: paymentSaved ? [] : [{
+        rowKind: 'accrual' as const,
+        incomeTypeId: trashIncomeType.id,
+        incomeTypeName: trashIncomeType.name,
+        accountingMonth: '2026-04-01',
+        dueDate: '2026-04-30',
+        overdueFromDate: '2026-05-01',
+        originalAmount: 360,
+        paidAmount: 0,
+        outstandingAmount: 360,
+      }],
+    }))
+    const createIncome = vi.fn(async (_token: string, request: CreateIncomeOperationRequest) => {
+      paymentSaved = true
+      return createFinancialOperation({
+        id: 'trash-payment-360',
+        garageId: garage.id,
+        garageNumber: garage.number,
+        ownerName: garage.ownerName,
+        incomeTypeId: trashIncomeType.id,
+        incomeTypeName: trashIncomeType.name,
+        operationDate: request.operationDate,
+        accountingMonth: request.accountingMonth,
+        amount: request.amount,
+        garageDebtBefore: 360,
+        garageDebtAfter: 0,
+      })
+    })
+    render(<App
+      authClient={createAuthClient()}
+      dictionaryClient={createDictionaryClient({
+        getGarages: async () => [garage],
+        getIncomeTypes: async () => [trashIncomeType],
+      })}
+      financeClient={createFinanceClient({ getGarageIncomeWorksheet, getGarageOverdueDebt, createIncome })}
+      importClient={createImportClient()}
+      reportClient={createReportClient()}
+      releaseClient={createReleaseClient()}
+      userClient={createUserClient()}
+    />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Платежи')
+    const prototype = within(await screen.findByRole('region', { name: 'Платежи' })).getByRole('region', { name: 'Форма платежей' })
+    await user.type(within(prototype).getByLabelText('Поиск номера гаража или ФИО владельца'), '101')
+    await user.click(await within(prototype).findByRole('option', { name: /Гараж\s*101\s*Тестовый владелец/ }))
+
+    const finances = within(prototype).getByRole('region', { name: 'Финансы' })
+    expect(finances).toHaveTextContent('Баланс-360.00')
+    expect(finances).toHaveTextContent('Просроченная задолженность360.00')
+    expect(await within(prototype).findByRole('table', { name: 'Расшифровка просроченной задолженности' })).toHaveTextContent('Мусор')
+
+    const paymentInput = within(prototype).getByLabelText('Платеж Мусор апр.26')
+    const saveButton = within(prototype).getByRole('button', { name: 'Сохранить платеж Мусор апр.26' })
+    expect(saveButton).toBeDisabled()
+    await user.type(paymentInput, '360')
+    expect(saveButton).toBeEnabled()
+    await user.click(saveButton)
+
+    await waitFor(() => expect(createIncome).toHaveBeenCalledWith('token', expect.objectContaining({
+      garageId: garage.id,
+      incomeTypeId: trashIncomeType.id,
+      accountingMonth: '2026-04-01',
+      amount: 360,
+    })))
+    await waitFor(() => {
+      expect(finances).toHaveTextContent('Баланс0.00')
+      expect(finances).toHaveTextContent('Просроченная задолженность0.00')
+      expect(within(prototype).queryByRole('table', { name: 'Расшифровка просроченной задолженности' })).not.toBeInTheDocument()
+    })
+    expect(paymentInput).toHaveValue('')
+    expect(getGarageIncomeWorksheet).toHaveBeenCalledTimes(2)
+    expect(getGarageOverdueDebt).toHaveBeenCalledTimes(2)
+  })
+
+  it('keeps a successful payment saved when the overdue refresh fails', async () => {
+    const user = userEvent.setup()
+    const garage = createGarage({ id: 'garage-payment-refresh-error', number: '102', ownerName: 'Тестовый владелец', balance: 100 })
+    let paymentSaved = false
+    const getGarageIncomeWorksheet = vi.fn(async () => createGarageIncomeWorksheet({
+      garageId: garage.id,
+      garageNumber: garage.number,
+      ownerName: garage.ownerName,
+      accrualTotal: 100,
+      incomeTotal: paymentSaved ? 100 : 0,
+      debtTotal: paymentSaved ? 0 : 100,
+      closingDebt: paymentSaved ? 0 : 100,
+      rows: [{
+        accountingMonth: '2026-06-01',
+        incomeTypeId: 'income-water-refresh-error',
+        incomeTypeName: 'Вода',
+        meterKind: 'water',
+        meterValue: null,
+        meterConsumption: null,
+        accrualAmount: 100,
+        incomeAmount: paymentSaved ? 100 : 0,
+        debt: paymentSaved ? 0 : 100,
+      }],
+    }))
+    const createIncome = vi.fn(async (_token: string, request: CreateIncomeOperationRequest) => {
+      paymentSaved = true
+      return createFinancialOperation({
+        id: 'payment-refresh-error',
+        garageId: garage.id,
+        incomeTypeId: request.incomeTypeId,
+        incomeTypeName: 'Вода',
+        accountingMonth: request.accountingMonth,
+        amount: request.amount,
+        garageDebtBefore: 100,
+        garageDebtAfter: 0,
+      })
+    })
+    render(<App
+      authClient={createAuthClient()}
+      dictionaryClient={createDictionaryClient({ getGarages: async () => [garage] })}
+      financeClient={createFinanceClient({
+        getGarageIncomeWorksheet,
+        getGarageOverdueDebt: async () => {
+          throw new Error('Сервис просрочки временно недоступен')
+        },
+        createIncome,
+      })}
+      importClient={createImportClient()}
+      reportClient={createReportClient()}
+      releaseClient={createReleaseClient()}
+      userClient={createUserClient()}
+    />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Платежи')
+    const prototype = within(await screen.findByRole('region', { name: 'Платежи' })).getByRole('region', { name: 'Форма платежей' })
+    await user.type(within(prototype).getByLabelText('Поиск номера гаража или ФИО владельца'), '102')
+    await user.click(await within(prototype).findByRole('option', { name: /Гараж\s*102\s*Тестовый владелец/ }))
+    const paymentInput = await within(prototype).findByLabelText('Платеж Вода июн.26')
+    await user.type(paymentInput, '100')
+    await user.click(within(prototype).getByRole('button', { name: 'Сохранить платеж Вода июн.26' }))
+
+    expect(await within(prototype).findByText('Платеж сохранён, но не удалось обновить просроченную задолженность. Обновите страницу.')).toBeInTheDocument()
+    expect(createIncome).toHaveBeenCalledTimes(1)
+    expect(paymentInput).toHaveValue('')
   })
 
   it('does not duplicate an annual obligation in full payment and hides its future row after payoff', async () => {
