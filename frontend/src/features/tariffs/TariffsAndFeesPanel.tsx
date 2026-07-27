@@ -309,12 +309,38 @@ function mergeTariffsIntoPrototypeRows(rows: ContractorTariffRow[], tariffs: Tar
 }
 
 function createTariffRowsFromBackend(tariffs: TariffDto[], settings: ChargeServiceSettingDto[]) {
+  const prototypeCategories = new Set(contractorTariffRows.map((row) => row.category.toLocaleLowerCase('ru')))
+  const customSettings = settings
+    .filter((setting) => !prototypeCategories.has(setting.name.toLocaleLowerCase('ru')))
+  const customServiceTariffIds = new Set(customSettings
+    .map((setting) => setting.tariffId)
+    .filter((tariffId): tariffId is string => Boolean(tariffId)))
+  const displacedPrototypeCategories = new Set(customSettings.flatMap((setting) => {
+    const linkedTariff = tariffs.find((tariff) => tariff.id === setting.tariffId)
+    if (!linkedTariff) {
+      return []
+    }
+
+    const normalizedTariffName = linkedTariff.name.toLocaleLowerCase('ru')
+    const prototypeRow = contractorTariffRows.find((row) => (
+      Boolean(row.calculationBase)
+      && (
+        row.title.toLocaleLowerCase('ru') === normalizedTariffName
+        || normalizedTariffName.includes(row.category.toLocaleLowerCase('ru'))
+      )
+    ))
+    return prototypeRow ? [prototypeRow.category] : []
+  }))
+  const prototypeTariffs = tariffs.filter((tariff) => !customServiceTariffIds.has(tariff.id))
   const backedCategories = new Set(contractorTariffRows
-    .filter((row) => Boolean(row.calculationBase && findTariffForPrototypeRow(tariffs, row)))
+    .filter((row) => (
+      !displacedPrototypeCategories.has(row.category)
+      && Boolean(row.calculationBase && findTariffForPrototypeRow(prototypeTariffs, row))
+    ))
     .map((row) => row.category))
   const rowsBackedByTariffs = contractorTariffRows.filter((row) => backedCategories.has(row.category))
   return mergeChargeServicesIntoPrototypeRows(
-    mergeTariffsIntoPrototypeRows(rowsBackedByTariffs, tariffs),
+    mergeTariffsIntoPrototypeRows(rowsBackedByTariffs, prototypeTariffs),
     settings.filter((setting) => setting.isRegular),
     tariffs,
   )
@@ -353,7 +379,7 @@ function createChargeServiceRows(setting: ChargeServiceSettingDto, tariffs: Tari
       serviceSettingKind: 'main',
       group: setting.name,
       category: setting.name,
-      title: setting.name,
+      title: linkedTariff?.name ?? setting.name,
       amount: linkedTariff ? formatPrototypeAmount(linkedTariff.rate) : '',
       unit: unitName,
       byMeter: setting.isMetered,
@@ -469,7 +495,19 @@ function mergeChargeServicesIntoPrototypeRows(rows: ContractorTariffRow[], setti
       return [{ ...common, backendServiceSettingId: setting.id, serviceSettingKind: 'overdue-days' as const, amount: String(setting.overdueGraceDays) }]
     }
     if (row.group && row.calculationBase) {
-      return [{ ...common, backendServiceSettingId: setting.id, serviceSettingKind: 'main' as const }]
+      return [{
+        ...common,
+        backendServiceSettingId: setting.id,
+        serviceSettingKind: 'main' as const,
+        group: setting.name,
+        category: setting.name,
+        title: linkedTariff?.name ?? setting.name,
+        amount: linkedTariff ? formatPrototypeAmount(linkedTariff.rate) : row.amount,
+        unit: linkedTariff ? getTariffCalculationUnitName(linkedTariff.calculationBase) : setting.unitName ?? row.unit,
+        calculationBase: linkedTariff?.calculationBase ?? row.calculationBase,
+        backendTariffId: linkedTariff?.id,
+        effectiveFrom: linkedTariff?.effectiveFrom,
+      }]
     }
     return [common]
   })
@@ -1140,7 +1178,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
     const unitName = linkedTariff ? getTariffCalculationUnitName(linkedTariff.calculationBase) : setting.unitName
 
     return {
-      name: (mainRow?.title ?? setting.name).trim() || setting.name,
+      name: (mainRow?.category ?? setting.name).trim() || setting.name,
       isRegular,
       periodicityMonths: isRegular ? periodicityMonths : null,
       accrualStartMonth: isRegular ? startMonth ?? 1 : null,
@@ -1171,7 +1209,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
       const request = buildChargeServiceRequest(serviceSetting, nextRows)
       const savedSetting = await dictionaryClient.updateChargeServiceSetting(auth.accessToken, serviceSetting.id, request)
       const nextSettings = backendChargeServices.map((setting) => (setting.id === savedSetting.id ? savedSetting : setting))
-      const mergedRows = mergeChargeServicesIntoPrototypeRows(nextRows, nextSettings, backendTariffs)
+      const mergedRows = createTariffRowsFromBackend(backendTariffs, nextSettings)
       setBackendChargeServices(nextSettings)
       setTariffRows(mergedRows)
       setTariffDrafts(createEditableDrafts(mergedRows))
@@ -1262,7 +1300,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
       const nextTariffs = backendTariffs.some((tariff) => tariff.id === savedTariff.id)
         ? backendTariffs.map((tariff) => (tariff.id === savedTariff.id ? savedTariff : tariff))
         : [...backendTariffs, savedTariff]
-      const mergedRows = mergeTariffsIntoPrototypeRows(nextRows, nextTariffs)
+      const mergedRows = createTariffRowsFromBackend(nextTariffs, backendChargeServices)
       setBackendTariffs(nextTariffs)
       setTariffRows(mergedRows)
       setTariffDrafts(createEditableDrafts(mergedRows))
@@ -1679,7 +1717,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
       const savedSetting = created.service
       const nextTariffs = [...backendTariffs.filter((tariff) => tariff.id !== created.tariff.id), created.tariff]
       const nextSettings = [...backendChargeServices.filter((setting) => setting.id !== savedSetting.id), savedSetting]
-      const nextRows = mergeChargeServicesIntoPrototypeRows(tariffRows, nextSettings, nextTariffs)
+      const nextRows = createTariffRowsFromBackend(nextTariffs, nextSettings)
       setBackendTariffs(nextTariffs)
       setBackendChargeServices(nextSettings)
       setTariffRows(nextRows)
@@ -1703,7 +1741,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
     try {
       const savedSetting = await dictionaryClient.updateChargeServiceSetting(auth.accessToken, chargeServiceEditTarget.id, request)
       const nextSettings = backendChargeServices.map((setting) => (setting.id === savedSetting.id ? savedSetting : setting))
-      const nextRows = mergeChargeServicesIntoPrototypeRows(tariffRows, nextSettings, backendTariffs)
+      const nextRows = createTariffRowsFromBackend(backendTariffs, nextSettings)
       setBackendChargeServices(nextSettings)
       setTariffRows(nextRows)
       setTariffDrafts(createEditableDrafts(nextRows))
@@ -1772,7 +1810,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
       const nextSettings = backendChargeServices.map((setting) => (
         setting.id === chargeServiceArchiveTarget.id ? { ...setting, isArchived: true } : setting
       ))
-      const nextRows = mergeChargeServicesIntoPrototypeRows(tariffRows, nextSettings, backendTariffs)
+      const nextRows = createTariffRowsFromBackend(backendTariffs, nextSettings)
       setBackendChargeServices(nextSettings)
       setTariffRows(nextRows)
       setTariffDrafts(createEditableDrafts(nextRows))
@@ -1796,7 +1834,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
       const nextSettings = backendChargeServices.map((setting) => (
         setting.id === restoredSetting.id ? restoredSetting : setting
       ))
-      const nextRows = mergeChargeServicesIntoPrototypeRows(tariffRows, nextSettings, backendTariffs)
+      const nextRows = createTariffRowsFromBackend(backendTariffs, nextSettings)
       setBackendChargeServices(nextSettings)
       setTariffRows(nextRows)
       setTariffDrafts(createEditableDrafts(nextRows))

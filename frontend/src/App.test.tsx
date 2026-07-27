@@ -3525,8 +3525,10 @@ describe('App', () => {
       effectiveFrom: expect.any(String),
     }))
     await waitFor(() => expect(within(tariffsPanel).getAllByText('Охрана').length).toBeGreaterThan(0))
-    const savedServiceCostInput = within(tariffsPanel).getByLabelText('Охрана: Охрана: значение')
+    const savedServiceCostInput = within(tariffsPanel).getByLabelText('Охрана: Охрана — тариф: значение')
     expect(savedServiceCostInput).toHaveValue('1 750.00')
+    expect(within(tariffsPanel).getByLabelText('Охрана: Охрана — тариф: единица')).toHaveValue('руб.')
+    expect(within(tariffsPanel).getByRole('combobox', { name: 'Охрана: Охрана — тариф: по счетчику' })).toHaveValue('Нет')
     expect(within(tariffsPanel).getByRole('combobox', { name: 'Охрана: Периодичность: значение' })).toHaveTextContent('Ежегодно')
     expect(within(tariffsPanel).getByLabelText('Охрана: Оплата до: день')).toHaveValue('28')
     const dueDateValue = within(tariffsPanel).getByLabelText('Охрана: Оплата до: день').closest('.contractors-date-value')
@@ -3701,12 +3703,14 @@ describe('App', () => {
     expect(within(tariffsPanel).getByLabelText('Охрана территории: Оплата до: день')).toHaveValue('15')
     expect(within(tariffsPanel).getAllByRole('combobox', { name: /Охрана территории: .*: по счетчику/i })).toHaveLength(1)
     expect(within(tariffsPanel).getAllByRole('combobox', { name: /Охрана территории: .*: пороговая тарификация/i })).toHaveLength(1)
-    expect(within(tariffsPanel).getByRole('combobox', { name: 'Охрана территории: Охрана территории: по счетчику' })).toHaveValue('Нет')
-    expect(within(tariffsPanel).getByRole('combobox', { name: 'Охрана территории: Охрана территории: пороговая тарификация' })).toHaveValue('Нет')
+    expect(within(tariffsPanel).getByRole('combobox', { name: 'Охрана территории: Тариф охраны: по счетчику' })).toHaveValue('Нет')
+    expect(within(tariffsPanel).getByRole('combobox', { name: 'Охрана территории: Тариф охраны: пороговая тарификация' })).toHaveValue('Нет')
+    expect(within(tariffsPanel).getByLabelText('Охрана территории: Тариф охраны: значение')).toHaveValue('1 200.00')
+    expect(within(tariffsPanel).getByLabelText('Охрана территории: Тариф охраны: единица')).toHaveValue('руб.')
     expect(within(tariffsPanel).queryByRole('combobox', { name: 'Охрана территории: Периодичность: по счетчику' })).not.toBeInTheDocument()
     expect(within(tariffsPanel).queryByRole('combobox', { name: 'Охрана территории: Оплата до: пороговая тарификация' })).not.toBeInTheDocument()
 
-    const meterModeControl = within(tariffsPanel).getByRole('combobox', { name: 'Охрана территории: Охрана территории: по счетчику' })
+    const meterModeControl = within(tariffsPanel).getByRole('combobox', { name: 'Охрана территории: Тариф охраны: по счетчику' })
     await user.selectOptions(meterModeControl, 'Да')
     const meterModeConfirmDialog = await screen.findByRole('dialog', { name: 'Подтвердить изменение?' })
     expect(within(meterModeConfirmDialog).getByText('По счетчику')).toBeInTheDocument()
@@ -3715,7 +3719,7 @@ describe('App', () => {
     await waitFor(() => expect(updateRequests).toHaveLength(3))
     expect(await within(tariffsPanel).findByRole('alert')).toHaveTextContent('Счётчиковый тариф временно не удалось сохранить.')
     expect(meterModeControl).toHaveValue('Нет')
-    expect(within(tariffsPanel).getByLabelText('Охрана территории: Охрана территории: значение')).toHaveValue('1 200.00')
+    expect(within(tariffsPanel).getByLabelText('Охрана территории: Тариф охраны: значение')).toHaveValue('1 200.00')
 
     await user.selectOptions(meterModeControl, 'Да')
     const retryMeterModeDialog = await screen.findByRole('dialog', { name: 'Подтвердить изменение?' })
@@ -3727,8 +3731,49 @@ describe('App', () => {
       tariffId: meterTariff.id,
       unitName: 'м³',
     })
-    expect(within(tariffsPanel).getByLabelText('Охрана территории: Охрана территории: значение')).toHaveValue('52.75')
-    expect(meterModeControl).toHaveValue('Да')
+    expect(within(tariffsPanel).getByLabelText('Охрана территории: Тариф охраны по счётчику: значение')).toHaveValue('52.75')
+    expect(within(tariffsPanel).getByLabelText('Охрана территории: Тариф охраны по счётчику: единица')).toHaveValue('м³')
+    expect(within(tariffsPanel).getByRole('combobox', { name: 'Охрана территории: Тариф охраны по счётчику: по счетчику' })).toHaveValue('Да')
+    expect(within(tariffsPanel).queryByLabelText('Вода: Тариф охраны по счётчику: значение')).not.toBeInTheDocument()
+  })
+
+  it('does not keep a prototype row after its linked service was renamed', async () => {
+    const user = userEvent.setup()
+    const lightingTariff = createTariff({
+      id: 'tariff-lighting-renamed-service',
+      name: 'Наружное освещение',
+      calculationBase: 'fixed',
+      rate: 300,
+    })
+    const renamedService = createChargeServiceSetting({
+      id: 'service-lighting-renamed',
+      name: 'Освещение территории',
+      isRegular: true,
+      periodicityMonths: 12,
+      accrualStartMonth: 1,
+      paymentDueDay: 31,
+      paymentDueMonth: 12,
+      overdueGraceDays: 0,
+      tariffId: lightingTariff.id,
+      unitName: 'руб.',
+    })
+    const dictionaryClient = createDictionaryClient({
+      getTariffs: async () => [lightingTariff],
+      getChargeServiceSettings: async () => [renamedService],
+    })
+
+    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Тарифы и сборы')
+    const tariffsPanel = await screen.findByRole('region', { name: 'Тарифы и сборы' })
+
+    expect(within(tariffsPanel).getByLabelText('Освещение территории: Наружное освещение: значение')).toHaveValue('300.00')
+    expect(within(tariffsPanel).getByLabelText('Освещение территории: Наружное освещение: единица')).toHaveValue('руб.')
+    expect(within(tariffsPanel).getByRole('button', { name: 'Изменить услугу Освещение территории' })).toBeInTheDocument()
+    expect(within(tariffsPanel).queryByLabelText('Наружное освещение: Наружное освещение: значение')).not.toBeInTheDocument()
+    expect(within(tariffsPanel).queryByRole('button', { name: 'Изменить услугу Наружное освещение' })).not.toBeInTheDocument()
   })
 
   it('shows configured thresholds immediately when tiered billing is enabled', async () => {
