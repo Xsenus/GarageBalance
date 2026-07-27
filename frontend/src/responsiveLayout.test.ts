@@ -151,10 +151,15 @@ describe('responsive layout styles', () => {
     expect(normalizedAppCss).toContain('.payments-prototype-history-actions .icon-button {\n  width: 32px;\n  height: 32px;\n  flex: 0 0 32px;')
   })
 
-  it('keeps the regular accrual dialog aligned and stacks its fields on narrow screens', () => {
+  it('keeps accrual and bonus form fields, hints and validation aligned', () => {
+    expect(normalizedAppCss).toContain('.payments-prototype-modal-form > .form-field:not(.full-payment-field) {\n  grid-column: 1 / -1;\n  display: grid;\n  grid-template-columns: minmax(130px, 180px) minmax(0, 1fr);')
+    expect(normalizedAppCss).toContain('.payments-prototype-modal-form > .form-field:not(.full-payment-field) > .form-field-hint {\n  grid-column: 2;')
+    expect(normalizedAppCss).toContain('.payments-prototype-modal-form > .form-hint,\n.payments-prototype-modal-form > .form-error {\n  grid-column: 2;\n  min-width: 0;\n  margin: 0;\n  box-sizing: border-box;')
   })
 
-  it('keeps the debt transfer dialog aligned and readable on narrow screens', () => {
+  it('stacks accrual and bonus form feedback without overlap on narrow screens', () => {
+    expect(normalizedAppCss).toContain('.payments-prototype-modal-form > .form-field:not(.full-payment-field) {\n    grid-template-columns: minmax(0, 1fr);\n    display: grid;\n    gap: 6px;')
+    expect(normalizedAppCss).toContain('.payments-prototype-modal-form > .form-field:not(.full-payment-field) > .form-field-hint,\n  .payments-prototype-modal-form > .form-hint,\n  .payments-prototype-modal-form > .form-error {\n    grid-column: 1;')
   })
 
   it('keeps the full payment form and its error at a comfortable width', () => {

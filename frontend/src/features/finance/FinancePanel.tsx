@@ -6095,7 +6095,9 @@ function StaffSalaryAdjustmentPrototypeDialog({
           </button>
         </div>
         <form className="dictionary-modal-form payments-prototype-modal-form" onSubmit={handleSubmit}>
-          <FormField label="Сотрудник">
+          <FormField
+            label="Сотрудник"
+            hint={selectedStaffMember ? `Месячный оклад: ${formatPaymentMoney(selectedStaffMember.rate)}` : undefined}>
             <SelectControl
               aria-label={`Сотрудник для ${isBonus ? 'премии' : 'штрафа'}`}
               value={staffMemberId}
@@ -6108,7 +6110,6 @@ function StaffSalaryAdjustmentPrototypeDialog({
                 setError(null)
               }} />
           </FormField>
-          {selectedStaffMember ? <p className="payments-prototype-form-hint">Месячный оклад: {formatPaymentMoney(selectedStaffMember.rate)}</p> : null}
           <FormField label="Месяц">
             <LocalizedDatePicker ariaLabel={`Месяц ${isBonus ? 'премии' : 'штрафа'}`} mode="month" value={accountingMonth} disabled={saving} onChange={(nextAccountingMonth) => {
               setAccountingMonth(nextAccountingMonth)
@@ -6242,7 +6243,9 @@ function NewAccrualPrototypeDialog({
                 setError(null)
               }} />
           </FormField>
-          <FormField label="Услуга">
+          <FormField
+            label="Услуга"
+            hint={`Фонд расходования: ${selectedSupplier?.chargeServiceExpenseFundName ?? 'не настроен'}`}>
             <SelectControl
               aria-label="Услуга начисления поставщику"
               value={expenseTypeId}
@@ -6258,9 +6261,6 @@ function NewAccrualPrototypeDialog({
               onChange={() => undefined}
               disabled />
           </FormField>
-          <p className="form-hint">
-            Фонд расходования: {selectedSupplier?.chargeServiceExpenseFundName ?? 'не настроен'}
-          </p>
           <FormField label="Месяц">
             <LocalizedDatePicker ariaLabel="Месяц начисления поставщику" mode="month" value={accountingMonth} disabled={saving} onChange={(nextAccountingMonth) => {
               setAccountingMonth(nextAccountingMonth)

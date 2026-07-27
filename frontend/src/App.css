@@ -3895,12 +3895,6 @@ h1 {
   line-height: 1.35;
 }
 
-.payments-prototype-form-hint {
-  margin: -4px 0 2px;
-  color: #667085;
-  font-size: 12px;
-}
-
 .payments-prototype-table label {
   display: grid;
   gap: 5px;
@@ -4217,15 +4211,30 @@ h1 {
   box-shadow: none;
 }
 
-.payments-prototype-modal-form label {
-  display: contents;
+.payments-prototype-modal-form > .form-field:not(.full-payment-field) {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: minmax(130px, 180px) minmax(0, 1fr);
+  gap: 5px 16px;
 }
 
-.payments-prototype-modal-form label > span {
+.payments-prototype-modal-form > .form-field:not(.full-payment-field) > .form-field-label {
   align-self: center;
   color: #475467;
   font-size: 13px;
   font-weight: 700;
+}
+
+.payments-prototype-modal-form > .form-field:not(.full-payment-field) > .form-field-hint {
+  grid-column: 2;
+}
+
+.payments-prototype-modal-form > .form-hint,
+.payments-prototype-modal-form > .form-error {
+  grid-column: 2;
+  min-width: 0;
+  margin: 0;
+  box-sizing: border-box;
 }
 
 .payments-prototype-modal-form input,
@@ -8386,9 +8395,16 @@ button.operation-row:focus-visible {
     grid-template-columns: 1fr;
   }
 
-  .payments-prototype-modal-form label {
+  .payments-prototype-modal-form > .form-field:not(.full-payment-field) {
+    grid-template-columns: minmax(0, 1fr);
     display: grid;
     gap: 6px;
+  }
+
+  .payments-prototype-modal-form > .form-field:not(.full-payment-field) > .form-field-hint,
+  .payments-prototype-modal-form > .form-hint,
+  .payments-prototype-modal-form > .form-error {
+    grid-column: 1;
   }
 
   .owner-name-grid,
