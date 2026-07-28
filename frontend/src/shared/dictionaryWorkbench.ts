@@ -199,11 +199,11 @@ const tariffCalculationBaseOptions: TariffCalculationBaseOption[] = [
   { value: 'meter_electricity', label: 'По счетчику электричества' },
 ]
 
-const tariffCalculationUnitNames: Record<string, string> = {
-  fixed: 'руб.',
-  people: 'чел.',
-  meter_water: 'м³',
-  meter_electricity: 'кВт·ч',
+const tariffCalculationUnitNames: Record<string, string[]> = {
+  fixed: ['руб.', 'руб./гараж'],
+  people: ['чел.', 'человек'],
+  meter_water: ['м³', 'куб. м'],
+  meter_electricity: ['кВт·ч'],
 }
 
 const electricityTierCalculationBase = 'meter_electricity'
@@ -342,7 +342,20 @@ export function getTariffCalculationBaseOptions() {
 }
 
 export function getTariffCalculationUnitName(calculationBase: string) {
-  return tariffCalculationUnitNames[calculationBase] ?? ''
+  return tariffCalculationUnitNames[calculationBase]?.[0] ?? ''
+}
+
+export function getTariffCalculationUnitOptions(calculationBase: string) {
+  return (tariffCalculationUnitNames[calculationBase] ?? [])
+    .map((unitName) => ({ value: unitName, label: unitName }))
+}
+
+export function normalizeTariffCalculationUnitName(calculationBase: string, unitName?: string | null) {
+  const compatibleUnitNames = tariffCalculationUnitNames[calculationBase] ?? []
+  const normalizedUnitName = unitName?.trim().toLocaleLowerCase('ru') ?? ''
+  return compatibleUnitNames.find((candidate) => candidate.toLocaleLowerCase('ru') === normalizedUnitName)
+    ?? compatibleUnitNames[0]
+    ?? ''
 }
 
 export function usesElectricityTariffTiers(calculationBase: string) {

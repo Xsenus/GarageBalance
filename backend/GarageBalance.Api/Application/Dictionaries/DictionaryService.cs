@@ -2565,12 +2565,12 @@ public sealed class DictionaryService(
                     : "Для тарифа воды или электроэнергии включите расчет по счетчику.");
         }
 
-        var expectedUnitName = TariffCalculationBases.GetUnitName(tariff.CalculationBase);
-        if (!StringEquals(NormalizeOptional(request.UnitName), expectedUnitName))
+        var compatibleUnitNames = TariffCalculationBases.GetUnitNames(tariff.CalculationBase);
+        if (!TariffCalculationBases.IsCompatibleUnitName(tariff.CalculationBase, request.UnitName))
         {
             return DictionaryResult<object>.Failure(
                 "charge_service_unit_mismatch",
-                $"Единица измерения для выбранного способа расчета должна быть «{expectedUnitName}».");
+                $"Выберите совместимую единицу измерения: {string.Join(" или ", compatibleUnitNames.Select(unitName => $"«{unitName}»"))}.");
         }
 
         return DictionaryResult<object>.Success(new object());

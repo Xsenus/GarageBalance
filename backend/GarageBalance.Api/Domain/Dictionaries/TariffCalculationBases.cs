@@ -15,6 +15,15 @@ public static class TariffCalculationBases
         MeterElectricity
     ];
 
+    private static readonly IReadOnlyDictionary<string, string[]> CompatibleUnitNames =
+        new Dictionary<string, string[]>
+        {
+            [Fixed] = ["руб.", "руб./гараж"],
+            [People] = ["чел.", "человек"],
+            [MeterWater] = ["м³", "куб. м"],
+            [MeterElectricity] = ["кВт·ч"]
+        };
+
     public static bool IsSupported(string calculationBase)
     {
         return SupportedValues.Contains(calculationBase);
@@ -22,13 +31,27 @@ public static class TariffCalculationBases
 
     public static string GetUnitName(string calculationBase)
     {
-        return calculationBase switch
+        return GetUnitNames(calculationBase)[0];
+    }
+
+    public static IReadOnlyList<string> GetUnitNames(string calculationBase)
+    {
+        if (!CompatibleUnitNames.TryGetValue(calculationBase, out var unitNames))
         {
-            Fixed => "руб.",
-            People => "чел.",
-            MeterWater => "м³",
-            MeterElectricity => "кВт·ч",
-            _ => throw new ArgumentOutOfRangeException(nameof(calculationBase), calculationBase, "Unsupported tariff calculation base.")
-        };
+            throw new ArgumentOutOfRangeException(nameof(calculationBase), calculationBase, "Unsupported tariff calculation base.");
+        }
+
+        return unitNames;
+    }
+
+    public static bool IsCompatibleUnitName(string calculationBase, string? unitName)
+    {
+        if (string.IsNullOrWhiteSpace(unitName))
+        {
+            return false;
+        }
+
+        return GetUnitNames(calculationBase)
+            .Any(candidate => string.Equals(candidate, unitName.Trim(), StringComparison.OrdinalIgnoreCase));
     }
 }

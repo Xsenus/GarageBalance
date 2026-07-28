@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { describe, expect, it } from 'vitest'
 import type { AccountingTypeDto, GarageDto, OwnerDto, SupplierDto, SupplierGroupDto, TariffDto } from '../services/dictionariesApi'
-import { canWriteDictionarySection, createAccountingTypeFormFromDto, createEmptyAccountingTypeForm, createEmptyGarageForm, createEmptyOwnerForm, createEmptyOwnerGarageLinkForm, createEmptySupplierForm, createEmptyTariffForm, createGarageFormFromDto, createOwnerFormFromDto, createSupplierFormFromDto, dictionarySectionGroups, dictionarySectionOptions, getDictionaryEditorFieldMeta, getDictionaryRecordCells, getDictionaryRecordTitle, getDictionarySearchPlaceholder, getDictionarySectionOption, getDictionaryTableHeaders, getOwnerGarageOptions, getTariffCalculationBaseOptions, getTariffCalculationUnitName, supportsDictionarySearch, usesElectricityTariffTiers } from './dictionaryWorkbench'
+import { canWriteDictionarySection, createAccountingTypeFormFromDto, createEmptyAccountingTypeForm, createEmptyGarageForm, createEmptyOwnerForm, createEmptyOwnerGarageLinkForm, createEmptySupplierForm, createEmptyTariffForm, createGarageFormFromDto, createOwnerFormFromDto, createSupplierFormFromDto, dictionarySectionGroups, dictionarySectionOptions, getDictionaryEditorFieldMeta, getDictionaryRecordCells, getDictionaryRecordTitle, getDictionarySearchPlaceholder, getDictionarySectionOption, getDictionaryTableHeaders, getOwnerGarageOptions, getTariffCalculationBaseOptions, getTariffCalculationUnitName, getTariffCalculationUnitOptions, normalizeTariffCalculationUnitName, supportsDictionarySearch, usesElectricityTariffTiers } from './dictionaryWorkbench'
 
 describe('dictionary workbench metadata', () => {
   it('keeps dictionary groups in the expected order', () => {
@@ -30,6 +30,21 @@ describe('dictionary workbench metadata', () => {
     expect(getTariffCalculationUnitName('meter_water')).toBe('м³')
     expect(getTariffCalculationUnitName('meter_electricity')).toBe('кВт·ч')
     expect(getTariffCalculationUnitName('unknown')).toBe('')
+    expect(getTariffCalculationUnitOptions('fixed')).toEqual([
+      { value: 'руб.', label: 'руб.' },
+      { value: 'руб./гараж', label: 'руб./гараж' },
+    ])
+    expect(getTariffCalculationUnitOptions('meter_water')).toEqual([
+      { value: 'м³', label: 'м³' },
+      { value: 'куб. м', label: 'куб. м' },
+    ])
+    expect(getTariffCalculationUnitOptions('meter_electricity')).toEqual([
+      { value: 'кВт·ч', label: 'кВт·ч' },
+    ])
+    expect(getTariffCalculationUnitOptions('unknown')).toEqual([])
+    expect(normalizeTariffCalculationUnitName('fixed', ' РУБ./ГАРАЖ ')).toBe('руб./гараж')
+    expect(normalizeTariffCalculationUnitName('meter_water', 'руб.')).toBe('м³')
+    expect(normalizeTariffCalculationUnitName('unknown', 'руб.')).toBe('')
   })
 
   it('returns section options and write access based on section permission', () => {

@@ -13,7 +13,7 @@ import type { ChangePreview } from '../../shared/changePreview'
 import { appendChangePreview, formatChangeDate, formatChangeNumber, formatChangeText } from '../../shared/changePreview'
 import { FormError } from '../../shared/formFeedback'
 import { FormField } from '../../shared/FormField'
-import { getTariffCalculationBaseOptions, getTariffCalculationUnitName } from '../../shared/dictionaryWorkbench'
+import { getTariffCalculationBaseOptions, getTariffCalculationUnitName, getTariffCalculationUnitOptions, normalizeTariffCalculationUnitName } from '../../shared/dictionaryWorkbench'
 import { formatDateOnly, formatMoney, formatTariffRateSummary, getCurrentMonthInputValue, getLocalDateInputValue } from '../../shared/formatters'
 import { useEscapeKey, useFocusOnOpen, useFocusTrap, useRestoreFocusOnClose } from '../../shared/focusHooks'
 import { LocalizedDatePicker } from '../../shared/LocalizedDatePicker'
@@ -372,7 +372,9 @@ function createChargeServiceRows(setting: ChargeServiceSettingDto, tariffs: Tari
   const periodicityMonths = normalizeRegularServicePeriodicity(setting.periodicityMonths)
   const isMonthly = periodicityMonths === '1'
   const linkedTariff = tariffs.find((tariff) => tariff.id === setting.tariffId)
-  const unitName = linkedTariff ? getTariffCalculationUnitName(linkedTariff.calculationBase) : setting.unitName ?? 'руб.'
+  const unitName = linkedTariff
+    ? normalizeTariffCalculationUnitName(linkedTariff.calculationBase, setting.unitName)
+    : setting.unitName ?? 'руб.'
   const rows: ContractorTariffRow[] = [
     {
       id: `charge-service-${setting.id}-main`,
@@ -466,7 +468,7 @@ function mergeChargeServicesIntoPrototypeRows(rows: ContractorTariffRow[], setti
     const common = {
       ...row,
       unit: (row.serviceSettingKind === 'main' || row.calculationBase) && linkedTariff
-        ? getTariffCalculationUnitName(linkedTariff.calculationBase)
+        ? normalizeTariffCalculationUnitName(linkedTariff.calculationBase, setting.unitName)
         : row.unit,
       byMeter: setting.isMetered,
       tiered: setting.hasTieredTariff,
@@ -504,7 +506,7 @@ function mergeChargeServicesIntoPrototypeRows(rows: ContractorTariffRow[], setti
         category: setting.name,
         title: linkedTariff?.name ?? setting.name,
         amount: linkedTariff ? formatPrototypeAmount(linkedTariff.rate) : row.amount,
-        unit: linkedTariff ? getTariffCalculationUnitName(linkedTariff.calculationBase) : setting.unitName ?? row.unit,
+        unit: linkedTariff ? normalizeTariffCalculationUnitName(linkedTariff.calculationBase, setting.unitName) : setting.unitName ?? row.unit,
         calculationBase: linkedTariff?.calculationBase ?? row.calculationBase,
         backendTariffId: linkedTariff?.id,
         effectiveFrom: linkedTariff?.effectiveFrom,
@@ -1037,9 +1039,28 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
       const nextRows = tariffRows.map((currentRow) => (
         currentRow.id === pendingChange.rowId ? { ...currentRow, [pendingChange.field]: pendingChange.nextValue } : currentRow
       ))
-      setTariffRows(nextRows)
+      const isServiceUnitChange = Boolean(
+        sourceRow?.backendServiceSettingId
+        && pendingChange.field === 'unit',
+      )
+      if (!isServiceUnitChange) {
+        setTariffRows(nextRows)
+      }
       if (sourceRow && (sourceRow.backendServiceSettingId || pendingChange.field !== 'unit')) {
-        await persistTariffRow(sourceRow, nextRows)
+        if (isServiceUnitChange) {
+          const saved = await persistServiceSettingRow(sourceRow, nextRows)
+          if (!saved) {
+            setTariffDrafts((drafts) => ({
+              ...drafts,
+              [sourceRow.id]: {
+                ...drafts[sourceRow.id],
+                unit: pendingChange.previousValue,
+              },
+            }))
+          }
+        } else {
+          await persistTariffRow(sourceRow, nextRows)
+        }
       }
     } else if (pendingChange.kind === 'tariff-boolean') {
       const sourceRow = tariffRows.find((currentRow) => currentRow.id === pendingChange.rowId)
@@ -1191,7 +1212,8 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
     const hasTieredTariff = isMetered ? (mainRow?.tiered ?? setting.hasTieredTariff) : false
     const linkedTariffId = mainRow?.backendTariffId ?? setting.tariffId
     const linkedTariff = linkedTariffId ? backendTariffs.find((tariff) => tariff.id === linkedTariffId) : null
-    const unitName = linkedTariff ? getTariffCalculationUnitName(linkedTariff.calculationBase) : setting.unitName
+    const unitName = mainRow?.unit
+      ?? (linkedTariff ? normalizeTariffCalculationUnitName(linkedTariff.calculationBase, setting.unitName) : setting.unitName)
 
     return {
       name: (mainRow?.category ?? setting.name).trim() || setting.name,
@@ -1418,8 +1440,8 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
     }
   }
 
-  const commitTariffTextChange = async (row: ContractorTariffRow, field: 'title' | 'amount' | 'unit') => {
-    const draftValue = (tariffDrafts[row.id]?.[field] ?? '').trim()
+  const commitTariffTextChange = async (row: ContractorTariffRow, field: 'title' | 'amount' | 'unit', selectedValue?: string) => {
+    const draftValue = (selectedValue ?? tariffDrafts[row.id]?.[field] ?? '').trim()
     const nextValue = normalizeTariffDraftValue(row, field, draftValue)
     const previousValue = row[field] ?? ''
 
@@ -2264,14 +2286,27 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
                   </span>
                   <span role="cell">
                     {row.dateDay === undefined && row.serviceSettingKind !== 'periodicity' ? (
-                      <input
-                        aria-label={`${row.category}: ${row.title}: единица`}
-                        className="contractors-editable-input contractors-editable-input--unit"
-                        disabled={!canManageTariffs || isRowDisabled || Boolean(row.calculationBase || row.serviceSettingKind === 'main')}
-                        value={tariffDrafts[row.id]?.unit ?? ''}
-                        onChange={(event) => setTariffDrafts((drafts) => ({ ...drafts, [row.id]: { ...drafts[row.id], unit: event.target.value } }))}
-                        onKeyDown={(event) => handleEditableInputKeyDown(event, () => commitTariffTextChange(row, 'unit'))}
-                      />
+                      row.serviceSettingKind === 'main' && row.calculationBase ? (
+                        <SelectControl
+                          aria-label={`${row.category}: ${row.title}: единица`}
+                          value={normalizeTariffCalculationUnitName(row.calculationBase, tariffDrafts[row.id]?.unit ?? row.unit)}
+                          options={getTariffCalculationUnitOptions(row.calculationBase)}
+                          disabled={!canManageTariffs || isRowDisabled}
+                          onChange={(nextUnitName) => {
+                            setTariffDrafts((drafts) => ({ ...drafts, [row.id]: { ...drafts[row.id], unit: nextUnitName } }))
+                            void commitTariffTextChange(row, 'unit', nextUnitName)
+                          }}
+                        />
+                      ) : (
+                        <input
+                          aria-label={`${row.category}: ${row.title}: единица`}
+                          className="contractors-editable-input contractors-editable-input--unit"
+                          disabled={!canManageTariffs || isRowDisabled || Boolean(row.calculationBase || row.serviceSettingKind === 'main')}
+                          value={tariffDrafts[row.id]?.unit ?? ''}
+                          onChange={(event) => setTariffDrafts((drafts) => ({ ...drafts, [row.id]: { ...drafts[row.id], unit: event.target.value } }))}
+                          onKeyDown={(event) => handleEditableInputKeyDown(event, () => commitTariffTextChange(row, 'unit'))}
+                        />
+                      )
                     ) : null}
                   </span>
                   <span role="cell" className="contractors-value-cell">
@@ -3071,6 +3106,13 @@ export function AddServicePrototypeDialog({
   const [expenseTypeId, setExpenseTypeId] = useState(initialSetting?.expenseTypeId ?? '')
   const [expenseFundId, setExpenseFundId] = useState(initialSetting?.expenseFundId ?? '')
   const [tariffId, setTariffId] = useState(() => initialSetting?.tariffId ?? chooseRegularTariffId(initialIncomeTypeId, '', incomeTypes, tariffs))
+  const [unitName, setUnitName] = useState(() => {
+    const initialTariffId = initialSetting?.tariffId ?? chooseRegularTariffId(initialIncomeTypeId, '', incomeTypes, tariffs)
+    const initialTariff = tariffs.find((tariff) => tariff.id === initialTariffId)
+    return initialTariff
+      ? normalizeTariffCalculationUnitName(initialTariff.calculationBase, initialSetting?.unitName)
+      : initialSetting?.unitName ?? ''
+  })
   const [isByMeter, setIsByMeter] = useState(() => {
     if (initialSetting) {
       return initialSetting.isMetered
@@ -3094,7 +3136,7 @@ export function AddServicePrototypeDialog({
   const compatibleTariffs = getCompatibleRegularTariffs(incomeTypeId, incomeTypes, tariffs)
   const selectedTariff = compatibleTariffs.find((tariff) => tariff.id === tariffId) ?? null
   const selectedTariffTiers = getElectricityTariffTiers(selectedTariff)
-  const unitName = selectedTariff ? getTariffCalculationUnitName(selectedTariff.calculationBase) : ''
+  const unitNameOptions = selectedTariff ? getTariffCalculationUnitOptions(selectedTariff.calculationBase) : []
   const calculationBaseOptions = getTariffCalculationBaseOptions()
   const calculationBaseOption = selectedTariff
     ? calculationBaseOptions.find((option) => option.value === selectedTariff.calculationBase)
@@ -3109,6 +3151,9 @@ export function AddServicePrototypeDialog({
     const nextIsMetered = isMeterTariff(nextTariff)
     setTariffId(nextTariffId)
     setRegularRate(nextTariff ? formatTariffDecimal(nextTariff.rate) : '')
+    setUnitName((currentUnitName) => (
+      nextTariff ? normalizeTariffCalculationUnitName(nextTariff.calculationBase, currentUnitName) : ''
+    ))
     setIsByMeter(nextIsMetered)
     if (!nextIsMetered) {
       setIsTiered(false)
@@ -3394,8 +3439,17 @@ export function AddServicePrototypeDialog({
                     <span>дн.</span>
                   </div>
                 </FormField>
-                <FormField label="Единица измерения" hint="Определяется способом расчёта выбранного тарифа.">
-                  <input aria-label="Единица измерения" value={unitName} readOnly />
+                <FormField label="Единица измерения" hint="Можно выбрать только обозначение, совместимое со способом расчёта тарифа.">
+                  <SelectControl
+                    aria-label="Единица измерения"
+                    value={unitName}
+                    options={unitNameOptions.length > 0 ? unitNameOptions : [{ value: '', label: 'Сначала выберите тариф' }]}
+                    disabled={unitNameOptions.length === 0}
+                    onChange={(nextUnitName) => {
+                      setUnitName(nextUnitName)
+                      setError(null)
+                    }}
+                  />
                 </FormField>
               </div>
               <div className="contractors-service-flags">
