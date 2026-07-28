@@ -412,31 +412,7 @@ public sealed class ReportService(
         }
 
         var report = reportResult.Value!;
-        var lines = new List<string>
-        {
-            $"Period: {report.PeriodFrom:yyyy-MM-dd} - {report.PeriodTo:yyyy-MM-dd}"
-        };
-        foreach (var month in report.MonthlyRows)
-        {
-            lines.Add(string.Empty);
-            lines.Add($"Month: {month.AccountingMonth:MM.yyyy}");
-            lines.Add("Income name | Income | Expense name | Expense");
-            var incomeRows = month.IncomeBreakdown ?? [];
-            var expenseRows = month.ExpenseBreakdown ?? [];
-            for (var index = 0; index < Math.Max(incomeRows.Count, expenseRows.Count); index++)
-            {
-                lines.Add(string.Join(" | ",
-                    index < incomeRows.Count ? incomeRows[index].Name : string.Empty,
-                    index < incomeRows.Count ? FormatAmount(incomeRows[index].Amount) : string.Empty,
-                    index < expenseRows.Count ? expenseRows[index].Name : string.Empty,
-                    index < expenseRows.Count ? FormatAmount(expenseRows[index].Amount) : string.Empty));
-            }
-
-            lines.Add($"TOTAL | {FormatAmount(month.IncomeTotal)} | TOTAL | {FormatAmount(month.ExpenseTotal)}");
-            lines.Add($"Difference: {FormatAmount(month.IncomeTotal - month.ExpenseTotal)} | Bank opening: {FormatAmount(month.BankBalanceOpening)} | Bank closing: {FormatAmount(month.BankBalanceClosing)}");
-        }
-
-        var content = PdfReportDocumentBuilder.Build("GarageBalance consolidated report", lines);
+        var content = ConsolidatedReportPdfDocumentBuilder.Build(report);
         var file = new ReportExportFileDto(
             BuildExportFileName("consolidated", report.PeriodFrom, report.PeriodTo, "pdf"),
             "application/pdf",

@@ -855,14 +855,16 @@ public sealed class ReportServiceTests
         await finance.CreateIncomeAsync(new CreateIncomeOperationRequest(fixtures.FirstGarage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 6, 10), new DateOnly(2026, 6, 1), 1500m, "PKO-1", "Оплата"), null, CancellationToken.None);
 
         var result = await service.ExportConsolidatedReportPdfAsync(new ConsolidatedReportRequest(new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 1), null), CancellationToken.None);
-
         Assert.True(result.Succeeded);
         Assert.Equal("garagebalance-consolidated-20260601-20260601.pdf", result.Value!.FileName);
         Assert.Equal("application/pdf", result.Value.ContentType);
-        AssertPdfContains(result.Value.Content, "GarageBalance consolidated report");
-        AssertPdfContains(result.Value.Content, "06.2026");
-        AssertPdfContains(result.Value.Content, "Income name | Income | Expense name | Expense");
-        AssertPdfContains(result.Value.Content, "Bank opening");
+        var pdfText = ReadPdfText(result.Value.Content);
+        Assert.Contains("Консолидированный отчёт", pdfText);
+        Assert.Contains("06.2026", pdfText);
+        Assert.Contains("Наименование поступления", pdfText);
+        Assert.Contains("Остаток по счёту на начало", pdfText);
+        Assert.Contains("Членский взнос", pdfText);
+        AssertPdfIsLandscape(result.Value.Content);
     }
 
     [Fact]
@@ -896,9 +898,10 @@ public sealed class ReportServiceTests
         var result = await service.ExportConsolidatedReportPdfAsync(new ConsolidatedReportRequest(new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 1), "21"), CancellationToken.None);
 
         Assert.True(result.Succeeded);
-        AssertPdfContains(result.Value!.Content, "GarageBalance consolidated report");
-        AssertPdfDoesNotContain(result.Value.Content, "21 |");
-        AssertPdfDoesNotContain(result.Value.Content, "12 |");
+        var pdfText = ReadPdfText(result.Value!.Content);
+        Assert.Contains("Консолидированный отчёт", pdfText);
+        Assert.DoesNotContain("21 |", pdfText);
+        Assert.DoesNotContain("12 |", pdfText);
     }
 
     [Fact]
