@@ -1,3 +1,5 @@
+import { apiFetch } from './apiFetch'
+
 export type FormStateDto<TPayload = unknown> = {
   scope: string
   payload: TPayload
@@ -30,7 +32,7 @@ export class FormStateApiError extends Error {
 }
 
 async function requestJson<TResponse>(accessToken: string, path: string, init?: RequestInit): Promise<TResponse> {
-  const response = await fetch(`${apiBaseUrl}${path}`, {
+  const response = await apiFetch(`${apiBaseUrl}${path}`, {
     ...init,
     headers: {
       'Content-Type': 'application/json',

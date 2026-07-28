@@ -1,3 +1,5 @@
+import { apiFetch } from './apiFetch'
+
 export type AccessImportCheckDto = {
   code: string
   title: string
@@ -95,7 +97,7 @@ export type ImportClient = {
 const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? ''
 
 async function requestJson<TResponse>(accessToken: string, path: string, init?: RequestInit): Promise<TResponse> {
-  const response = await fetch(`${apiBaseUrl}${path}`, {
+  const response = await apiFetch(`${apiBaseUrl}${path}`, {
     ...init,
     headers: {
       Authorization: `Bearer ${accessToken}`,
@@ -112,7 +114,7 @@ async function requestJson<TResponse>(accessToken: string, path: string, init?: 
 }
 
 async function requestBlob(accessToken: string, path: string, init?: RequestInit): Promise<Blob> {
-  const response = await fetch(`${apiBaseUrl}${path}`, {
+  const response = await apiFetch(`${apiBaseUrl}${path}`, {
     ...init,
     headers: {
       Authorization: `Bearer ${accessToken}`,

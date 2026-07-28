@@ -114,10 +114,17 @@ WantedBy=multi-user.target
 
 Рекомендуемый файл: `/etc/nginx/sites-available/garagebalance-staging`.
 
+Для отдельного безопасного журнала длительности создать `/etc/nginx/conf.d/garagebalance-timing.conf`. Формат использует `$uri`, а не `$request_uri`, поэтому поисковые строки и другие query-параметры в этот журнал не попадают:
+
+```nginx
+log_format garagebalance_timing '$time_iso8601 remote=$remote_addr method=$request_method uri=$uri status=$status bytes=$body_bytes_sent request_time=$request_time upstream_connect_time=$upstream_connect_time upstream_header_time=$upstream_header_time upstream_response_time=$upstream_response_time';
+```
+
 ```nginx
 server {
     listen 80;
     server_name sgk.blagodaty.ru;
+    access_log /var/log/nginx/garagebalance-staging-timing.log garagebalance_timing;
 
     root /opt/garagebalance-staging/frontend;
     index index.html;
@@ -158,6 +165,7 @@ server {
 - [ ] Проверить конфигурацию: `nginx -t`.
 - [ ] Перезагрузить nginx: `systemctl reload nginx`.
 - [ ] Проверить HTTP до TLS: `curl -fsS http://sgk.blagodaty.ru/health`.
+- [ ] Проверить строку времени без query-параметров: `tail -n 20 /var/log/nginx/garagebalance-staging-timing.log`.
 
 ## 7. TLS
 
@@ -167,6 +175,7 @@ server {
 - [ ] Перезагрузить nginx: `systemctl reload nginx`.
 - [ ] Проверить HTTPS health: `curl -fsS https://sgk.blagodaty.ru/health`.
 - [ ] Проверить, что опубликованный `appsettings.json` задает уровень `Warning` для категории `Microsoft.EntityFrameworkCore.Database.Command` и рабочее окружение не пишет каждый успешно выполненный SQL-запрос.
+- [ ] Проверить `Server-Timing: app;dur=...` в ответе API и отсутствие предупреждений `SlowHttpRequest` для обычных экранов.
 - [ ] Проверить главную страницу с телефона и desktop-браузера.
 - [ ] Проверить, что `index.html` и SPA fallback отдаются с `Cache-Control: no-store`.
 

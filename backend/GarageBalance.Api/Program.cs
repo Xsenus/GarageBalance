@@ -152,6 +152,11 @@ builder.Services.AddSingleton<ILoggerProvider>(provider => provider.GetRequiredS
 builder.Services.AddSingleton<IDiagnosticLogStore>(provider => provider.GetRequiredService<RollingJsonDiagnosticLoggerProvider>());
 builder.Services.AddScoped<IDiagnosticPackageService, DiagnosticPackageService>();
 builder.Services
+    .AddOptions<RequestPerformanceOptions>()
+    .Bind(builder.Configuration.GetSection(RequestPerformanceOptions.SectionName))
+    .ValidateDataAnnotations()
+    .ValidateOnStart();
+builder.Services
     .AddOptions<DatabaseBackupOptions>()
     .Bind(builder.Configuration.GetSection(DatabaseBackupOptions.SectionName))
     .ValidateDataAnnotations()
@@ -279,6 +284,7 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseMiddleware<RequestCorrelationMiddleware>();
+app.UseMiddleware<RequestPerformanceMiddleware>();
 app.UseMiddleware<ApiExceptionHandlingMiddleware>();
 app.UseMiddleware<ApiSecurityHeadersMiddleware>();
 app.UseHttpsRedirection();

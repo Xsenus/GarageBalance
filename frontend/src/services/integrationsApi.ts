@@ -1,3 +1,5 @@
+import { apiFetch } from './apiFetch'
+
 export type OneCFreshIntegrationStatusDto = {
   provider: string
   displayName: string
@@ -190,7 +192,7 @@ async function requestJson<TResponse>(accessToken: string, path: string, init: R
     headers.set('Content-Type', 'application/json')
   }
 
-  const response = await fetch(`${apiBaseUrl}${path}`, {
+  const response = await apiFetch(`${apiBaseUrl}${path}`, {
     ...init,
     headers,
   })

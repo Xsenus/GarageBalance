@@ -62,6 +62,21 @@ psql --host=127.0.0.1 --port=5432 --username=garagebalance_local --dbname=garage
 - [ ] Перед восстановлением выполнить `restore-postgres.ps1` в `garagebalance_restore_check`.
 - [ ] Если миграции не применились, сначала сгенерировать `dotnet tool run dotnet-ef migrations script --idempotent`.
 
+### Интерфейс периодически долго загружает разделы
+
+Сначала сравнить полное время nginx с временем backend, не копируя в обращение содержимое финансовых ответов:
+
+```bash
+tail -n 100 /var/log/nginx/garagebalance-staging-timing.log
+journalctl -u garagebalance-staging.service --since "30 minutes ago" --no-pager | grep -E "SlowHttpRequest|Warning|Error"
+curl -ksS -D - -o /dev/null --resolve sgk.blagodaty.ru:443:127.0.0.1 https://sgk.blagodaty.ru/health
+```
+
+- [ ] Если `request_time` большой, а `upstream_response_time` и `Server-Timing: app;dur=...` маленькие, задержка находится до nginx или при передаче ответа; проверить маршрут, Cloudflare и доступность IPv4/IPv6 клиента.
+- [ ] Если `upstream_response_time` и `app;dur` одновременно превышают секунду, найти соответствующее предупреждение `SlowHttpRequest` по времени и пути API.
+- [ ] Журнал длительности должен содержать только `$uri` без query-параметров, чтобы поисковая строка не попадала в диагностический файл.
+- [ ] Не увеличивать таймауты как способ скрыть проблему: запросы чтения уже ограничены по времени и один раз повторяются при сетевом обрыве, а операции записи намеренно не повторяются.
+
 ## 3. Импорт Access упал
 
 - [ ] Не менять исходный `.accdb`/`.mdb`.

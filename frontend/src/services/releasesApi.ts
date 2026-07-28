@@ -1,3 +1,5 @@
+import { apiFetch } from './apiFetch'
+
 export type AppReleaseItemDto = {
   type: string
   text: string
@@ -42,7 +44,7 @@ export type ReleaseClient = {
 const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? ''
 
 async function requestJson<TResponse>(accessToken: string, path: string, init: RequestInit = {}): Promise<TResponse> {
-  const response = await fetch(`${apiBaseUrl}${path}`, {
+  const response = await apiFetch(`${apiBaseUrl}${path}`, {
     ...init,
     headers: {
       'Content-Type': 'application/json',

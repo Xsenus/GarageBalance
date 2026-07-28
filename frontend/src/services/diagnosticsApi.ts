@@ -1,3 +1,5 @@
+import { apiFetch } from './apiFetch'
+
 export type ClientErrorReport = {
   clientErrorId: string
   errorName: string
@@ -9,7 +11,7 @@ export type ClientErrorReport = {
 const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? ''
 
 export async function reportClientError(accessToken: string, report: ClientErrorReport): Promise<void> {
-  const response = await fetch(`${apiBaseUrl}/api/diagnostics/client-errors`, {
+  const response = await apiFetch(`${apiBaseUrl}/api/diagnostics/client-errors`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
     body: JSON.stringify(report),

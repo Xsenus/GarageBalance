@@ -1,3 +1,5 @@
+import { apiFetch } from './apiFetch'
+
 export type OwnerDto = {
   id: string
   lastName: string
@@ -435,7 +437,7 @@ async function requestJson<TResponse>(accessToken: string, path: string, init?: 
     clearDictionaryResponseCache()
   }
 
-  const responsePromise = fetch(`${apiBaseUrl}${path}`, {
+  const responsePromise = apiFetch(`${apiBaseUrl}${path}`, {
     ...init,
     headers: {
       'Content-Type': 'application/json',

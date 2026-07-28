@@ -1,3 +1,5 @@
+import { apiFetch } from './apiFetch'
+
 export type PaymentDisplaySettingsDto = {
   showAllGarageOperationsByDefault: boolean
 }
@@ -88,7 +90,7 @@ export type ApplicationSettingsClient = {
 const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? ''
 
 async function requestJson<TResponse>(accessToken: string, path: string, init?: RequestInit): Promise<TResponse> {
-  const response = await fetch(`${apiBaseUrl}${path}`, {
+  const response = await apiFetch(`${apiBaseUrl}${path}`, {
     ...init,
     headers: {
       'Content-Type': 'application/json',
@@ -106,7 +108,7 @@ async function requestJson<TResponse>(accessToken: string, path: string, init?: 
 }
 
 async function requestBlob(accessToken: string, path: string, init?: RequestInit): Promise<Blob> {
-  const response = await fetch(`${apiBaseUrl}${path}`, {
+  const response = await apiFetch(`${apiBaseUrl}${path}`, {
     ...init,
     headers: { Authorization: `Bearer ${accessToken}`, ...init?.headers },
   })

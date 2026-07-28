@@ -1,3 +1,5 @@
+import { apiFetch } from './apiFetch'
+
 export type ManagedRoleDto = {
   code: string
   name: string
@@ -56,7 +58,7 @@ const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? ''
 const defaultUserListLimit = 50
 
 async function requestJson<TResponse>(accessToken: string, path: string, init?: RequestInit): Promise<TResponse> {
-  const response = await fetch(`${apiBaseUrl}${path}`, {
+  const response = await apiFetch(`${apiBaseUrl}${path}`, {
     ...init,
     headers: {
       'Content-Type': 'application/json',

@@ -33,6 +33,19 @@ public sealed class DiagnosticLoggingDeploymentTests
     }
 
     [Fact]
+    public void VpsChecklist_UsesQueryFreeRequestTimingDiagnostics()
+    {
+        var checklist = File.ReadAllText(Path.Combine(RepositoryRoot, "docs", "vps-deployment-checklist.md"));
+        var troubleshooting = File.ReadAllText(Path.Combine(RepositoryRoot, "docs", "troubleshooting-guide.md"));
+
+        Assert.Contains("garagebalance_timing", checklist, StringComparison.Ordinal);
+        Assert.Contains("uri=$uri", checklist, StringComparison.Ordinal);
+        Assert.DoesNotContain("uri=$request_uri", checklist, StringComparison.Ordinal);
+        Assert.Contains("Server-Timing: app;dur=", troubleshooting, StringComparison.Ordinal);
+        Assert.Contains("SlowHttpRequest", troubleshooting, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void DiagnosticArtifactsStayIgnoredAndOperationsAreDocumented()
     {
         var gitIgnore = File.ReadAllText(Path.Combine(RepositoryRoot, ".gitignore"));

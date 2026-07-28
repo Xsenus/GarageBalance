@@ -1,3 +1,5 @@
+import { apiFetch } from './apiFetch'
+
 export type PaymentAllocationDto = {
   allocationKind: 'starting_balance' | 'month' | 'overpayment'
   accountingMonth: string | null
@@ -636,7 +638,7 @@ function toMonthEnd(value?: string): string | undefined {
 }
 
 async function requestJson<TResponse>(accessToken: string, path: string, init?: RequestInit): Promise<TResponse> {
-  const response = await fetch(`${apiBaseUrl}${path}`, {
+  const response = await apiFetch(`${apiBaseUrl}${path}`, {
     ...init,
     headers: {
       'Content-Type': 'application/json',

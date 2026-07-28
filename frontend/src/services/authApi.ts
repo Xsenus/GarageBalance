@@ -1,3 +1,5 @@
+import { apiFetch } from './apiFetch'
+
 export type CurrentUserDto = {
   id: string
   email: string
@@ -37,7 +39,7 @@ export type AuthClient = {
 const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? ''
 
 async function postAuth<TRequest>(path: string, request: TRequest): Promise<AuthResponse> {
-  const response = await fetch(`${apiBaseUrl}${path}`, {
+  const response = await apiFetch(`${apiBaseUrl}${path}`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -54,7 +56,7 @@ async function postAuth<TRequest>(path: string, request: TRequest): Promise<Auth
 }
 
 async function putAuthorized<TRequest, TResponse>(path: string, accessToken: string, request: TRequest): Promise<TResponse> {
-  const response = await fetch(`${apiBaseUrl}${path}`, {
+  const response = await apiFetch(`${apiBaseUrl}${path}`, {
     method: 'PUT',
     headers: {
       Authorization: `Bearer ${accessToken}`,
