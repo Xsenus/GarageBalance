@@ -15988,7 +15988,7 @@ describe('App', () => {
     expect(within(reportsPanel).getByText('Отчёт по гаражам')).toBeInTheDocument()
     const garageFilter = within(reportsPanel).getByLabelText('Гаражи')
     expect(garageFilter).toHaveAttribute('role', 'combobox')
-    expect(garageFilter).toHaveAttribute('placeholder', 'Введите номер гаража или ФИО владельца')
+    expect(garageFilter).toHaveAttribute('placeholder', 'Выберите гаражи или начните вводить номер либо ФИО')
     expect(garageFilter).toHaveAttribute('aria-expanded', 'false')
     await user.type(garageFilter, '12')
     const garageSearchResults = within(reportsPanel).getByRole('listbox', { name: 'Найденные гаражи отчёта' })
@@ -16079,6 +16079,103 @@ describe('App', () => {
     const payoutReportTable = within(reportsPanel).getByRole('table', { name: 'Отчет по выплатам' })
     expect(payoutReportTable).toHaveTextContent('Поставщик/сотрудник')
     expect(payoutReportTable).toHaveTextContent('Водоканал')
+  })
+
+  it('creates, applies and deletes a named garage report quick list', async () => {
+    const user = userEvent.setup()
+    const baseReportClient = createReportClient()
+    const createGarageReportQuickList = vi.fn(baseReportClient.createGarageReportQuickList)
+    const updateGarageReportQuickList = vi.fn(baseReportClient.updateGarageReportQuickList)
+    const deleteGarageReportQuickList = vi.fn(baseReportClient.deleteGarageReportQuickList)
+    const getGarageReport = vi.fn(baseReportClient.getGarageReport)
+    const reportClient = createReportClient({
+      createGarageReportQuickList,
+      updateGarageReportQuickList,
+      deleteGarageReportQuickList,
+      getGarageReport,
+    })
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={reportClient} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Отчеты')
+    const reportsPanel = await screen.findByRole('region', { name: 'Отчеты' })
+    await openReportTab(user, reportsPanel, 'По гаражам')
+
+    const garageFilter = within(reportsPanel).getByLabelText('Гаражи')
+    await user.click(garageFilter)
+    const garageOptions = await within(reportsPanel).findByRole('listbox', { name: 'Найденные гаражи отчёта' })
+    expect(within(garageOptions).getByRole('checkbox', { name: /Выбрать гараж 12,/ })).toBeInTheDocument()
+    await user.click(within(garageOptions).getByRole('checkbox', { name: /Выбрать гараж 12,/ }))
+
+    await user.click(within(reportsPanel).getByRole('button', { name: 'Создать быстрый список' }))
+    const createDialog = await screen.findByRole('dialog', { name: 'Создать быстрый список' })
+    await user.type(within(createDialog).getByLabelText('Название быстрого списка'), 'Северный ряд')
+    await user.click(within(createDialog).getByRole('button', { name: 'Создать список' }))
+
+    await waitFor(() => expect(createGarageReportQuickList).toHaveBeenCalledWith(
+      expect.any(String),
+      { name: 'Северный ряд', garageIds: ['garage-1'] },
+    ))
+    expect(await within(reportsPanel).findByText('Быстрый список создан.')).toHaveAttribute('role', 'status')
+    expect(within(reportsPanel).getByRole('combobox', { name: 'Быстрый список гаражей' })).toHaveTextContent('Северный ряд (1)')
+
+    await user.click(within(reportsPanel).getByRole('button', { name: 'Изменить список' }))
+    const editDialog = await screen.findByRole('dialog', { name: 'Изменить быстрый список' })
+    const quickListName = within(editDialog).getByLabelText('Название быстрого списка')
+    await user.clear(quickListName)
+    await user.type(quickListName, 'Северные гаражи')
+    await user.click(within(editDialog).getByRole('button', { name: 'Сохранить список' }))
+    await waitFor(() => expect(updateGarageReportQuickList).toHaveBeenCalledWith(
+      expect.any(String),
+      'garage-quick-list-created',
+      { name: 'Северные гаражи', garageIds: ['garage-1'] },
+    ))
+
+    await user.click(within(reportsPanel).getByRole('button', { name: 'Все' }))
+    expect(within(reportsPanel).getByRole('button', { name: 'Все' })).toHaveAttribute('aria-pressed', 'true')
+    const quickListSelect = within(reportsPanel).getByRole('combobox', { name: 'Быстрый список гаражей' })
+    await user.click(quickListSelect)
+    await user.click(within(reportsPanel).getByRole('option', { name: 'Северные гаражи (1)' }))
+    await waitFor(() => expect(getGarageReport).toHaveBeenLastCalledWith(
+      expect.any(String),
+      expect.objectContaining({ garageIds: ['garage-1'] }),
+    ))
+
+    await user.click(within(reportsPanel).getByRole('button', { name: 'Удалить список' }))
+    const deleteDialog = await screen.findByRole('alertdialog', { name: 'Удалить список «Северные гаражи»?' })
+    await user.click(within(deleteDialog).getByRole('button', { name: 'Удалить список' }))
+    expect(within(deleteDialog).getByText('Укажите причину удаления быстрого списка.')).toHaveAttribute('role', 'alert')
+    await user.type(within(deleteDialog).getByLabelText('Причина удаления быстрого списка'), 'Список больше не используется')
+    await user.click(within(deleteDialog).getByRole('button', { name: 'Удалить список' }))
+
+    await waitFor(() => expect(deleteGarageReportQuickList).toHaveBeenCalledWith(
+      expect.any(String),
+      'garage-quick-list-created',
+      'Список больше не используется',
+    ))
+    expect(await within(reportsPanel).findByText('Быстрый список удалён.')).toHaveAttribute('role', 'status')
+    expect(within(reportsPanel).getByRole('button', { name: 'Все' })).toHaveAttribute('aria-pressed', 'true')
+  })
+
+  it('keeps the garage report available when quick lists cannot be loaded', async () => {
+    const user = userEvent.setup()
+    const reportClient = createReportClient({
+      getGarageReportQuickLists: async () => {
+        throw new Error('Быстрые списки временно недоступны')
+      },
+    })
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={reportClient} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Отчеты')
+    const reportsPanel = await screen.findByRole('region', { name: 'Отчеты' })
+    await openReportTab(user, reportsPanel, 'По гаражам')
+
+    expect(await within(reportsPanel).findByText('Быстрые списки временно недоступны')).toHaveAttribute('role', 'alert')
+    expect(within(reportsPanel).getByRole('table', { name: 'Отчет по гаражам' })).toBeInTheDocument()
+    expect(within(reportsPanel).getByRole('button', { name: 'Все' })).toHaveAttribute('aria-pressed', 'true')
   })
 
   it('loads report filter dictionaries only for the opened tab and keeps the consolidated report to one request', async () => {
@@ -18597,6 +18694,32 @@ function createIntegrationSecretSetting(overrides: Partial<IntegrationSecretSett
 
 function createReportClient(overrides: Partial<ReportClient> = {}): ReportClient {
   return {
+    getGarageReportQuickLists: async () => [],
+    createGarageReportQuickList: async (_token, request) => ({
+      id: 'garage-quick-list-created',
+      name: request.name,
+      garages: request.garageIds.map((garageId) => ({
+        garageId,
+        garageNumber: garageId.replace('garage-', ''),
+        ownerName: null,
+        isArchived: false,
+      })),
+      updatedAtUtc: '2026-07-28T03:00:00Z',
+      updatedByUserId: 'admin-user',
+    }),
+    updateGarageReportQuickList: async (_token, id, request) => ({
+      id,
+      name: request.name,
+      garages: request.garageIds.map((garageId) => ({
+        garageId,
+        garageNumber: garageId.replace('garage-', ''),
+        ownerName: null,
+        isArchived: false,
+      })),
+      updatedAtUtc: '2026-07-28T03:00:00Z',
+      updatedByUserId: 'admin-user',
+    }),
+    deleteGarageReportQuickList: async () => undefined,
     getConsolidatedReport: async (_token, params) => {
       const report = createConsolidatedReport()
       const search = params?.search?.toLowerCase() ?? ''

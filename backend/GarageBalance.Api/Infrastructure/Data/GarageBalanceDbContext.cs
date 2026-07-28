@@ -6,6 +6,7 @@ using GarageBalance.Api.Domain.Finance;
 using GarageBalance.Api.Domain.Import;
 using GarageBalance.Api.Domain.Integrations;
 using GarageBalance.Api.Domain.Releases;
+using GarageBalance.Api.Domain.Reports;
 using GarageBalance.Api.Domain.Settings;
 using GarageBalance.Api.Domain.Workflows;
 using GarageBalance.Api.Domain.Users;
@@ -45,6 +46,8 @@ public sealed class GarageBalanceDbContext(DbContextOptions<GarageBalanceDbConte
     public DbSet<Fund> Funds => Set<Fund>();
     public DbSet<FundOperation> FundOperations => Set<FundOperation>();
     public DbSet<FormState> FormStates => Set<FormState>();
+    public DbSet<GarageReportQuickList> GarageReportQuickLists => Set<GarageReportQuickList>();
+    public DbSet<GarageReportQuickListGarage> GarageReportQuickListGarages => Set<GarageReportQuickListGarage>();
     public DbSet<AccessImportRun> AccessImportRuns => Set<AccessImportRun>();
     public DbSet<AccessImportRunLogEntry> AccessImportRunLogEntries => Set<AccessImportRunLogEntry>();
     public DbSet<AccessImportRowFingerprint> AccessImportRowFingerprints => Set<AccessImportRowFingerprint>();
@@ -726,6 +729,33 @@ public sealed class GarageBalanceDbContext(DbContextOptions<GarageBalanceDbConte
             entity.Property(state => state.PayloadJson).IsRequired();
             entity.HasIndex(state => state.Scope).IsUnique();
             entity.HasIndex(state => state.UpdatedAtUtc);
+        });
+
+        modelBuilder.Entity<GarageReportQuickList>(entity =>
+        {
+            entity.ToTable("garage_report_quick_lists");
+            entity.HasKey(quickList => quickList.Id);
+            entity.Property(quickList => quickList.Name).HasMaxLength(100).IsRequired();
+            entity.Property(quickList => quickList.NormalizedName).HasMaxLength(100).IsRequired();
+            entity.HasIndex(quickList => quickList.NormalizedName)
+                .IsUnique()
+                .HasFilter("\"IsArchived\" = false");
+            entity.HasIndex(quickList => quickList.UpdatedAtUtc);
+        });
+
+        modelBuilder.Entity<GarageReportQuickListGarage>(entity =>
+        {
+            entity.ToTable("garage_report_quick_list_garages");
+            entity.HasKey(item => new { item.QuickListId, item.GarageId });
+            entity.HasOne(item => item.QuickList)
+                .WithMany(quickList => quickList.Garages)
+                .HasForeignKey(item => item.QuickListId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(item => item.Garage)
+                .WithMany()
+                .HasForeignKey(item => item.GarageId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(item => item.GarageId);
         });
 
         modelBuilder.Entity<AccessImportRun>(entity =>

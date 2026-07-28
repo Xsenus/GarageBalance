@@ -7103,6 +7103,41 @@ button.operation-row:focus-visible {
   width: 100%;
 }
 
+.report-garage-quick-lists {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.report-garage-quick-lists > label {
+  max-width: 520px;
+}
+
+.report-garage-quick-list-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.report-garage-quick-list-actions button {
+  min-height: 36px;
+}
+
+.report-garage-quick-list-delete {
+  color: #b42318;
+}
+
+.report-garage-quick-list-dialog {
+  width: min(520px, calc(100vw - 32px));
+}
+
+.report-garage-quick-list-dialog form,
+.report-garage-quick-list-dialog form > label {
+  display: grid;
+  gap: 8px;
+}
+
 .report-workbook-filter label {
   display: grid;
   gap: 5px;

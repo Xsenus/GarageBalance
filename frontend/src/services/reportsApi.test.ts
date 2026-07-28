@@ -108,6 +108,40 @@ describe('reportsApi', () => {
       '/api/reports/fund-changes/export/xlsx?sortBy=actorDisplayName&sortDirection=desc',
     ])
   })
+
+  it('loads and changes garage report quick lists with authenticated JSON requests', async () => {
+    const list = {
+      id: 'list/1',
+      name: 'Северный ряд',
+      garages: [{ garageId: 'garage-1', garageNumber: '12', ownerName: 'Иванов И.И.' }],
+      updatedAtUtc: '2026-07-28T02:00:00Z',
+      updatedByUserId: 'user-1',
+    }
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify([list]), { status: 200, headers: { 'Content-Type': 'application/json' } }))
+      .mockResolvedValueOnce(new Response(JSON.stringify(list), { status: 201, headers: { 'Content-Type': 'application/json' } }))
+      .mockResolvedValueOnce(new Response(JSON.stringify(list), { status: 200, headers: { 'Content-Type': 'application/json' } }))
+      .mockResolvedValueOnce(new Response(null, { status: 204 }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await reportsApi.getGarageReportQuickLists('token')
+    await reportsApi.createGarageReportQuickList('token', { name: 'Северный ряд', garageIds: ['garage-1'] })
+    await reportsApi.updateGarageReportQuickList('token', 'list/1', { name: 'Северные гаражи', garageIds: ['garage-1'] })
+    await reportsApi.deleteGarageReportQuickList('token', 'list/1', 'Список больше не используется')
+
+    expect(fetchMock).toHaveBeenNthCalledWith(1, '/api/reports/garage-quick-lists', getRequest())
+    expect(fetchMock).toHaveBeenNthCalledWith(2, '/api/reports/garage-quick-lists', jsonRequest('POST', {
+      name: 'Северный ряд',
+      garageIds: ['garage-1'],
+    }))
+    expect(fetchMock).toHaveBeenNthCalledWith(3, '/api/reports/garage-quick-lists/list%2F1', jsonRequest('PUT', {
+      name: 'Северные гаражи',
+      garageIds: ['garage-1'],
+    }))
+    expect(fetchMock).toHaveBeenNthCalledWith(4, '/api/reports/garage-quick-lists/list%2F1', jsonRequest('DELETE', {
+      reason: 'Список больше не используется',
+    }))
+  })
 })
 
 function getRequest() {
@@ -122,6 +156,17 @@ function postRequest() {
   return {
     method: 'POST',
     headers: {
+      Authorization: 'Bearer token',
+    },
+  }
+}
+
+function jsonRequest(method: string, body: object) {
+  return {
+    method,
+    body: JSON.stringify(body),
+    headers: {
+      'Content-Type': 'application/json',
       Authorization: 'Bearer token',
     },
   }

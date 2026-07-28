@@ -181,6 +181,8 @@ builder.Services.AddHostedService<DatabaseBackupWorker>();
 builder.Services.AddScoped<IRegularAccrualAutomationRunner, RegularAccrualAutomationRunner>();
 builder.Services.AddHostedService<RegularAccrualAutomationWorker>();
 builder.Services.AddScoped<IReportService, ReportService>();
+builder.Services.AddScoped<IGarageReportQuickListRepository, EfGarageReportQuickListRepository>();
+builder.Services.AddScoped<IGarageReportQuickListService, GarageReportQuickListService>();
 builder.Services.AddScoped<ICashMovementReportQuery, EfCashMovementReportQuery>();
 builder.Services.AddScoped<IFundChangeReportQuery, EfFundChangeReportQuery>();
 builder.Services.AddScoped<IConsolidatedMonthlyReportQuery, EfConsolidatedMonthlyReportQuery>();

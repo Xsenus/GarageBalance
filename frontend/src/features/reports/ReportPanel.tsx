@@ -1,12 +1,13 @@
 import { useEffect, useId, useRef, useState } from 'react'
 import type { CSSProperties, ReactNode } from 'react'
-import { FileSpreadsheet, FileText, LoaderCircle, Search, X } from 'lucide-react'
+import { FileSpreadsheet, FileText, ListPlus, LoaderCircle, Pencil, Search, Trash2, X } from 'lucide-react'
 import type { AuthResponse } from '../../services/authApi'
 import type { AccountingTypeDto, DictionaryClient, GarageDto, StaffMemberDto, SupplierDto } from '../../services/dictionariesApi'
-import type { BankDepositReportDto, CashPaymentReportDto, ConsolidatedReportDto, ExpenseReportDto, FeeReportDto, FundChangeReportDto, GarageDetailReportDto, IncomeReportDto, ReportClient } from '../../services/reportsApi'
+import type { BankDepositReportDto, CashPaymentReportDto, ConsolidatedReportDto, ExpenseReportDto, FeeReportDto, FundChangeReportDto, GarageDetailReportDto, GarageReportQuickListDto, IncomeReportDto, ReportClient } from '../../services/reportsApi'
 import { EmptyState, TableLoadingState } from '../../shared/AsyncState'
 import { buildReportFileName, buildSnapshotReportFileName, downloadBlob } from '../../shared/fileExports'
 import { FormError } from '../../shared/formFeedback'
+import { useEscapeKey, useFocusOnOpen, useFocusTrap } from '../../shared/focusHooks'
 import { formatMoney, formatMonth, formatOperationTime, getCurrentMonthInputValue, getLocalDateInputValue } from '../../shared/formatters'
 import { LocalizedDatePicker } from '../../shared/LocalizedDatePicker'
 import { createClientPage } from '../../shared/pagination'
@@ -15,6 +16,7 @@ import type { ReportQuickPeriodRange } from '../../shared/reportFilters'
 import { advanceReportSort } from '../../shared/reportSorting'
 import type { ReportSort } from '../../shared/reportSorting'
 import { TablePagination } from '../../shared/TablePagination'
+import { SelectControl } from '../../shared/SelectControl'
 
 type ReportWorkbookTab = 'consolidated' | 'garages' | 'payouts' | 'income' | 'cashPayments' | 'bankDeposits' | 'fees' | 'funds'
 type ReportMonthlyFilterKey = 'consolidated' | 'garages' | 'payouts'
@@ -43,6 +45,11 @@ type ReportColumn = {
   sortField?: string
 }
 
+type GarageQuickListEditor = {
+  id: string | null
+  name: string
+}
+
 function ReportCheckboxMultiSelect({
   label,
   ariaLabel,
@@ -52,6 +59,7 @@ function ReportCheckboxMultiSelect({
   selectedAriaLabel,
   options,
   selectedValues,
+  openOnFocus = false,
   onChange,
 }: {
   label: string
@@ -62,6 +70,7 @@ function ReportCheckboxMultiSelect({
   selectedAriaLabel: string
   options: ReportFilterOption[]
   selectedValues: string[]
+  openOnFocus?: boolean
   onChange: (values: string[]) => void
 }) {
   const searchId = useId()
@@ -73,11 +82,11 @@ function ReportCheckboxMultiSelect({
   const normalizedSearch = search.trim().toLocaleLowerCase('ru-RU')
   const filteredOptions = normalizedSearch
     ? options.filter((option) => `${option.label} ${option.description ?? ''}`.toLocaleLowerCase('ru-RU').includes(normalizedSearch)).slice(0, 20)
-    : []
+    : openOnFocus ? options : []
   const selectedOptions = selectedValues
     .map((value) => options.find((option) => option.value === value))
     .filter((option): option is ReportFilterOption => Boolean(option))
-  const shouldShowResults = searchOpen && normalizedSearch.length > 0
+  const shouldShowResults = searchOpen && (openOnFocus || normalizedSearch.length > 0)
 
   useEffect(() => {
     function handlePointerDown(event: PointerEvent) {
@@ -118,10 +127,10 @@ function ReportCheckboxMultiSelect({
             aria-describedby={statusId}
             placeholder={placeholder}
             value={search}
-            onFocus={() => setSearchOpen(search.trim().length > 0)}
+            onFocus={() => setSearchOpen(openOnFocus || search.trim().length > 0)}
             onChange={(event) => {
               setSearch(event.target.value)
-              setSearchOpen(event.target.value.trim().length > 0)
+              setSearchOpen(openOnFocus || event.target.value.trim().length > 0)
             }}
             onKeyDown={(event) => {
               if (event.key === 'Escape') {
@@ -226,6 +235,15 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
     funds: { dateFrom: today, dateTo: today },
   })
   const [selectedGarageIds, setSelectedGarageIds] = useState<string[]>([])
+  const [garageQuickLists, setGarageQuickLists] = useState<GarageReportQuickListDto[]>([])
+  const [selectedGarageQuickListId, setSelectedGarageQuickListId] = useState('')
+  const [garageQuickListsLoading, setGarageQuickListsLoading] = useState(false)
+  const [garageQuickListError, setGarageQuickListError] = useState<string | null>(null)
+  const [garageQuickListMessage, setGarageQuickListMessage] = useState<string | null>(null)
+  const [garageQuickListEditor, setGarageQuickListEditor] = useState<GarageQuickListEditor | null>(null)
+  const [garageQuickListDeleteTarget, setGarageQuickListDeleteTarget] = useState<GarageReportQuickListDto | null>(null)
+  const [garageQuickListDeleteReason, setGarageQuickListDeleteReason] = useState('')
+  const [garageQuickListSaving, setGarageQuickListSaving] = useState(false)
   const [selectedCounterpartyKeys, setSelectedCounterpartyKeys] = useState<string[]>([])
   const [selectedIncomeGarageIds, setSelectedIncomeGarageIds] = useState<string[]>([])
   const [feeVariationFilter, setFeeVariationFilter] = useState('')
@@ -280,6 +298,13 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
   const [fundChangePageRequest, setFundChangePageRequest] = useState({ offset: 0, limit: 25 })
   const [fundChangeReportLoading, setFundChangeReportLoading] = useState(false)
   const [fundChangeReportError, setFundChangeReportError] = useState<string | null>(null)
+  const garageQuickListDialogRef = useFocusTrap<HTMLElement>(garageQuickListEditor !== null)
+  const garageQuickListNameRef = useFocusOnOpen<HTMLInputElement>(garageQuickListEditor !== null)
+  const garageQuickListDeleteDialogRef = useFocusTrap<HTMLElement>(garageQuickListDeleteTarget !== null)
+  const garageQuickListDeleteCancelRef = useFocusOnOpen<HTMLButtonElement>(garageQuickListDeleteTarget !== null)
+
+  useEscapeKey(garageQuickListEditor !== null && !garageQuickListSaving, () => setGarageQuickListEditor(null))
+  useEscapeKey(garageQuickListDeleteTarget !== null && !garageQuickListSaving, () => setGarageQuickListDeleteTarget(null))
 
   useEffect(() => {
     if (feeVariationFilter === appliedFeeVariationFilter) {
@@ -292,6 +317,38 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
     }, 350)
     return () => window.clearTimeout(handle)
   }, [appliedFeeVariationFilter, feeVariationFilter])
+
+  useEffect(() => {
+    if (activeReportTab !== 'garages') {
+      return undefined
+    }
+
+    let ignore = false
+    const handle = window.setTimeout(() => {
+      setGarageQuickListsLoading(true)
+      setGarageQuickListError(null)
+      reportClient.getGarageReportQuickLists(auth.accessToken)
+        .then((items) => {
+          if (!ignore) {
+            setGarageQuickLists(items)
+          }
+        })
+        .catch((error: unknown) => {
+          if (!ignore) {
+            setGarageQuickListError(error instanceof Error ? error.message : 'Не удалось загрузить быстрые списки гаражей.')
+          }
+        })
+        .finally(() => {
+          if (!ignore) {
+            setGarageQuickListsLoading(false)
+          }
+        })
+    }, 0)
+    return () => {
+      ignore = true
+      window.clearTimeout(handle)
+    }
+  }, [activeReportTab, auth.accessToken, reportClient])
 
   useEffect(() => {
     if ((activeReportTab === 'garages' || activeReportTab === 'payouts' || activeReportTab === 'income' || activeReportTab === 'fees')
@@ -831,6 +888,114 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
     }
   }
 
+  function applyGarageQuickList(id: string) {
+    setGarageQuickListError(null)
+    setGarageQuickListMessage(null)
+    setSelectedGarageQuickListId(id)
+    setGaragePageRequest((current) => ({ ...current, offset: 0 }))
+    if (!id) {
+      setSelectedGarageIds([])
+      return
+    }
+
+    const quickList = garageQuickLists.find((item) => item.id === id)
+    if (!quickList) {
+      setSelectedGarageQuickListId('')
+      setSelectedGarageIds([])
+      setGarageQuickListError('Выбранный быстрый список больше не существует.')
+      return
+    }
+
+    const activeGarageIds = quickList.garages.filter((garage) => !garage.isArchived).map((garage) => garage.garageId)
+    setSelectedGarageIds(activeGarageIds)
+    if (activeGarageIds.length !== quickList.garages.length) {
+      setGarageQuickListMessage('Удалённые гаражи пропущены при применении списка.')
+    }
+  }
+
+  function openGarageQuickListCreate() {
+    setGarageQuickListError(null)
+    setGarageQuickListMessage(null)
+    setGarageQuickListEditor({ id: null, name: '' })
+  }
+
+  function openGarageQuickListEdit() {
+    const quickList = garageQuickLists.find((item) => item.id === selectedGarageQuickListId)
+    if (!quickList) {
+      return
+    }
+
+    setGarageQuickListError(null)
+    setGarageQuickListMessage(null)
+    setGarageQuickListEditor({ id: quickList.id, name: quickList.name })
+  }
+
+  async function saveGarageQuickList() {
+    if (!garageQuickListEditor) {
+      return
+    }
+
+    const name = garageQuickListEditor.name.trim()
+    if (!name) {
+      setGarageQuickListError('Укажите название быстрого списка.')
+      return
+    }
+    if (selectedGarageIds.length === 0) {
+      setGarageQuickListError('Выберите хотя бы один гараж.')
+      return
+    }
+
+    setGarageQuickListSaving(true)
+    setGarageQuickListError(null)
+    setGarageQuickListMessage(null)
+    try {
+      const request = { name, garageIds: selectedGarageIds }
+      const saved = garageQuickListEditor.id
+        ? await reportClient.updateGarageReportQuickList(auth.accessToken, garageQuickListEditor.id, request)
+        : await reportClient.createGarageReportQuickList(auth.accessToken, request)
+      setGarageQuickLists((current) => [...current.filter((item) => item.id !== saved.id), saved]
+        .sort((left, right) => left.name.localeCompare(right.name, 'ru-RU')))
+      setSelectedGarageQuickListId(saved.id)
+      setGarageQuickListEditor(null)
+      setGarageQuickListMessage(garageQuickListEditor.id ? 'Быстрый список обновлён.' : 'Быстрый список создан.')
+    } catch (error) {
+      setGarageQuickListError(error instanceof Error ? error.message : 'Не удалось сохранить быстрый список.')
+    } finally {
+      setGarageQuickListSaving(false)
+    }
+  }
+
+  async function deleteGarageQuickList() {
+    if (!garageQuickListDeleteTarget) {
+      return
+    }
+    const reason = garageQuickListDeleteReason.trim()
+    if (!reason) {
+      setGarageQuickListError('Укажите причину удаления быстрого списка.')
+      return
+    }
+
+    setGarageQuickListSaving(true)
+    setGarageQuickListError(null)
+    setGarageQuickListMessage(null)
+    try {
+      await reportClient.deleteGarageReportQuickList(auth.accessToken, garageQuickListDeleteTarget.id, reason)
+      setGarageQuickLists((current) => current.filter((item) => item.id !== garageQuickListDeleteTarget.id))
+      if (selectedGarageQuickListId === garageQuickListDeleteTarget.id) {
+        setSelectedGarageQuickListId('')
+        setSelectedGarageIds([])
+        setGaragePageRequest((current) => ({ ...current, offset: 0 }))
+      }
+      setGarageQuickListDeleteTarget(null)
+      setGarageQuickListDeleteReason('')
+      setGarageQuickListMessage('Быстрый список удалён.')
+    } catch (error) {
+      setGarageQuickListError(error instanceof Error ? error.message : 'Не удалось удалить быстрый список.')
+    } finally {
+      setGarageQuickListSaving(false)
+    }
+  }
+
   async function downloadPayoutReport(extension: 'xlsx' | 'pdf') {
     const filter = monthlyFilters.payouts
     const supplierIds = selectedCounterpartyKeys.filter((key) => key.startsWith('supplier:')).map((key) => key.slice('supplier:'.length))
@@ -1237,21 +1402,88 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
               </>
             ),
             extra: (
-              <ReportCheckboxMultiSelect
-                key="garage-report-filter"
-                label="Гаражи"
-                ariaLabel="Гаражи"
-                allLabel="Все гаражи"
-                placeholder="Введите номер гаража или ФИО владельца"
-                resultsAriaLabel="Найденные гаражи отчёта"
-                selectedAriaLabel="Выбранные гаражи отчёта"
-                options={garages.map((garage) => ({ value: garage.id, label: `Гараж ${garage.number}`, description: garage.ownerName ?? 'Без владельца' }))}
-                selectedValues={selectedGarageIds}
-                onChange={(values) => {
-                  setGaragePageRequest((current) => current.offset === 0 ? current : { ...current, offset: 0 })
-                  setSelectedGarageIds(values)
-                }}
-              />
+              <>
+                <div className="report-garage-quick-lists" aria-label="Быстрые списки гаражей">
+                  <label>
+                    <span>Быстрый список</span>
+                    <SelectControl
+                      aria-label="Быстрый список гаражей"
+                      value={selectedGarageQuickListId}
+                      options={[
+                        { value: '', label: 'Все гаражи' },
+                        ...garageQuickLists.map((item) => ({
+                          value: item.id,
+                          label: `${item.name} (${item.garages.filter((garage) => !garage.isArchived).length})`,
+                        })),
+                      ]}
+                      disabled={garageQuickListsLoading}
+                      maxVisibleOptions={8}
+                      onChange={applyGarageQuickList}
+                    />
+                  </label>
+                  <div className="report-garage-quick-list-actions" role="group" aria-label="Действия с быстрыми списками гаражей">
+                    <button
+                      className="secondary-button"
+                      type="button"
+                      aria-pressed={selectedGarageIds.length === 0}
+                      onClick={() => applyGarageQuickList('')}
+                    >
+                      Все
+                    </button>
+                    <button
+                      className="secondary-button create-action-button"
+                      type="button"
+                      disabled={selectedGarageIds.length === 0 || garageQuickListsLoading}
+                      title={selectedGarageIds.length === 0 ? 'Сначала выберите гаражи' : undefined}
+                      onClick={openGarageQuickListCreate}
+                    >
+                      <ListPlus size={16} aria-hidden="true" />
+                      Создать быстрый список
+                    </button>
+                    {selectedGarageQuickListId ? (
+                      <>
+                        <button className="ghost-button" type="button" onClick={openGarageQuickListEdit}>
+                          <Pencil size={15} aria-hidden="true" />
+                          Изменить список
+                        </button>
+                        <button
+                          className="ghost-button report-garage-quick-list-delete"
+                          type="button"
+                          onClick={() => {
+                            setGarageQuickListDeleteReason('')
+                            setGarageQuickListError(null)
+                            setGarageQuickListDeleteTarget(garageQuickLists.find((item) => item.id === selectedGarageQuickListId) ?? null)
+                          }}
+                        >
+                          <Trash2 size={15} aria-hidden="true" />
+                          Удалить список
+                        </button>
+                      </>
+                    ) : null}
+                  </div>
+                  {garageQuickListMessage ? <p className="form-success" role="status">{garageQuickListMessage}</p> : null}
+                  {garageQuickListError && !garageQuickListEditor && !garageQuickListDeleteTarget ? <FormError>{garageQuickListError}</FormError> : null}
+                </div>
+                <ReportCheckboxMultiSelect
+                  key="garage-report-filter"
+                  label="Гаражи"
+                  ariaLabel="Гаражи"
+                  allLabel="Все гаражи"
+                  placeholder="Выберите гаражи или начните вводить номер либо ФИО"
+                  resultsAriaLabel="Найденные гаражи отчёта"
+                  selectedAriaLabel="Выбранные гаражи отчёта"
+                  options={garages.map((garage) => ({ value: garage.id, label: `Гараж ${garage.number}`, description: garage.ownerName ?? 'Без владельца' }))}
+                  selectedValues={selectedGarageIds}
+                  openOnFocus
+                  onChange={(values) => {
+                    setGaragePageRequest((current) => current.offset === 0 ? current : { ...current, offset: 0 })
+                    setSelectedGarageQuickListId('')
+                    setGarageQuickListMessage(null)
+                    setGarageQuickListError(null)
+                    setSelectedGarageIds(values)
+                  }}
+                />
+              </>
             ),
           })}
           <p className="report-workbook-comment" role="note">
@@ -1688,6 +1920,94 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
       <div className="report-tab-panel" role="tabpanel" id={`report-panel-${activeReportTab}`} aria-labelledby={`report-tab-${activeReportTab}`}>
         {renderActiveReport()}
       </div>
+
+      {garageQuickListEditor ? (
+        <div className="modal-backdrop" role="presentation" onMouseDown={() => {
+          if (!garageQuickListSaving) setGarageQuickListEditor(null)
+        }}>
+          <section ref={garageQuickListDialogRef} className="detail-dialog dictionary-confirmation-dialog report-garage-quick-list-dialog" role="dialog" aria-modal="true" aria-labelledby="garage-quick-list-editor-title" aria-describedby="garage-quick-list-editor-description" onMouseDown={(event) => event.stopPropagation()}>
+            <div className="detail-dialog-header">
+              <div>
+                <p className="eyebrow">Отчёт по гаражам</p>
+                <h3 id="garage-quick-list-editor-title">{garageQuickListEditor.id ? 'Изменить быстрый список' : 'Создать быстрый список'}</h3>
+              </div>
+              <button className="icon-button" type="button" aria-label="Закрыть форму быстрого списка" disabled={garageQuickListSaving} onClick={() => setGarageQuickListEditor(null)}>
+                <X size={18} aria-hidden="true" />
+              </button>
+            </div>
+            <p id="garage-quick-list-editor-description">В список войдут выбранные сейчас гаражи: {selectedGarageIds.length}. Список будет доступен всем пользователям отчётов.</p>
+            <form onSubmit={(event) => {
+              event.preventDefault()
+              void saveGarageQuickList()
+            }}>
+              <label>
+                <span>Название списка</span>
+                <input
+                  ref={garageQuickListNameRef}
+                  aria-label="Название быстрого списка"
+                  value={garageQuickListEditor.name}
+                  maxLength={100}
+                  required
+                  disabled={garageQuickListSaving}
+                  onChange={(event) => {
+                    setGarageQuickListEditor({ ...garageQuickListEditor, name: event.target.value })
+                    setGarageQuickListError(null)
+                  }}
+                />
+              </label>
+              {garageQuickListError ? <FormError>{garageQuickListError}</FormError> : null}
+              <div className="detail-dialog-actions">
+                <button className="ghost-button" type="button" disabled={garageQuickListSaving} onClick={() => setGarageQuickListEditor(null)}>Отмена</button>
+                <button className="primary-button" type="submit" disabled={garageQuickListSaving}>
+                  {garageQuickListSaving ? <LoaderCircle className="button-spinner" size={16} aria-hidden="true" /> : null}
+                  {garageQuickListSaving ? 'Сохраняем...' : garageQuickListEditor.id ? 'Сохранить список' : 'Создать список'}
+                </button>
+              </div>
+            </form>
+          </section>
+        </div>
+      ) : null}
+
+      {garageQuickListDeleteTarget ? (
+        <div className="modal-backdrop" role="presentation" onMouseDown={() => {
+          if (!garageQuickListSaving) setGarageQuickListDeleteTarget(null)
+        }}>
+          <section ref={garageQuickListDeleteDialogRef} className="detail-dialog dictionary-confirmation-dialog report-garage-quick-list-dialog" role="alertdialog" aria-modal="true" aria-labelledby="garage-quick-list-delete-title" aria-describedby="garage-quick-list-delete-description" onMouseDown={(event) => event.stopPropagation()}>
+            <div className="detail-dialog-header">
+              <div>
+                <p className="eyebrow">Удаление списка</p>
+                <h3 id="garage-quick-list-delete-title">Удалить список «{garageQuickListDeleteTarget.name}»?</h3>
+              </div>
+              <button className="icon-button" type="button" aria-label="Закрыть подтверждение удаления списка" disabled={garageQuickListSaving} onClick={() => setGarageQuickListDeleteTarget(null)}>
+                <X size={18} aria-hidden="true" />
+              </button>
+            </div>
+            <p id="garage-quick-list-delete-description">Удалится только быстрый список. Гаражи, операции и отчёты не изменятся; действие сохранится в истории.</p>
+            <label>
+              <span>Причина удаления</span>
+              <textarea
+                aria-label="Причина удаления быстрого списка"
+                value={garageQuickListDeleteReason}
+                maxLength={1000}
+                required
+                disabled={garageQuickListSaving}
+                onChange={(event) => {
+                  setGarageQuickListDeleteReason(event.target.value)
+                  setGarageQuickListError(null)
+                }}
+              />
+            </label>
+            {garageQuickListError ? <FormError>{garageQuickListError}</FormError> : null}
+            <div className="detail-dialog-actions">
+              <button ref={garageQuickListDeleteCancelRef} className="ghost-button" type="button" disabled={garageQuickListSaving} onClick={() => setGarageQuickListDeleteTarget(null)}>Отмена</button>
+              <button className="danger-button" type="button" disabled={garageQuickListSaving} onClick={() => void deleteGarageQuickList()}>
+                {garageQuickListSaving ? <LoaderCircle className="button-spinner" size={16} aria-hidden="true" /> : <Trash2 size={16} aria-hidden="true" />}
+                {garageQuickListSaving ? 'Удаляем...' : 'Удалить список'}
+              </button>
+            </div>
+          </section>
+        </div>
+      ) : null}
     </section>
   )
 }

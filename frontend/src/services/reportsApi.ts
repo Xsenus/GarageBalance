@@ -48,6 +48,26 @@ export type GarageDetailReportDto = {
   limit: number
 }
 
+export type GarageReportQuickListGarageDto = {
+  garageId: string
+  garageNumber: string
+  ownerName: string | null
+  isArchived: boolean
+}
+
+export type GarageReportQuickListDto = {
+  id: string
+  name: string
+  garages: GarageReportQuickListGarageDto[]
+  updatedAtUtc: string
+  updatedByUserId: string | null
+}
+
+export type UpsertGarageReportQuickListRequest = {
+  name: string
+  garageIds: string[]
+}
+
 export type ConsolidatedReportDto = {
   periodFrom: string
   periodTo: string
@@ -240,6 +260,10 @@ export type FeeReportDto = {
 }
 
 export type ReportClient = {
+  getGarageReportQuickLists(accessToken: string): Promise<GarageReportQuickListDto[]>
+  createGarageReportQuickList(accessToken: string, request: UpsertGarageReportQuickListRequest): Promise<GarageReportQuickListDto>
+  updateGarageReportQuickList(accessToken: string, id: string, request: UpsertGarageReportQuickListRequest): Promise<GarageReportQuickListDto>
+  deleteGarageReportQuickList(accessToken: string, id: string, reason: string): Promise<void>
   getConsolidatedReport(accessToken: string, params?: { monthFrom?: string; monthTo?: string; search?: string; limit?: number; offset?: number; sortBy?: string; sortDirection?: string }): Promise<ConsolidatedReportDto>
   getGarageReport(
     accessToken: string,
@@ -472,10 +496,13 @@ export type ReportClient = {
 
 const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? ''
 
-async function requestJson<TResponse>(accessToken: string, path: string): Promise<TResponse> {
+async function requestJson<TResponse>(accessToken: string, path: string, init?: RequestInit): Promise<TResponse> {
   const response = await fetch(`${apiBaseUrl}${path}`, {
+    ...init,
     headers: {
+      ...(init?.body ? { 'Content-Type': 'application/json' } : {}),
       Authorization: `Bearer ${accessToken}`,
+      ...init?.headers,
     },
   })
 
@@ -484,7 +511,7 @@ async function requestJson<TResponse>(accessToken: string, path: string): Promis
     throw new Error(problem?.detail ?? 'Не удалось сформировать отчет.')
   }
 
-  return response.json()
+  return response.status === 204 ? undefined as TResponse : response.json()
 }
 
 async function requestBlob(accessToken: string, path: string, init?: RequestInit): Promise<Blob> {
@@ -715,6 +742,18 @@ function buildFeeReportQuery(params: Parameters<ReportClient['getFeeReport']>[1]
 }
 
 export const reportsApi: ReportClient = {
+  getGarageReportQuickLists(accessToken) {
+    return requestJson(accessToken, '/api/reports/garage-quick-lists')
+  },
+  createGarageReportQuickList(accessToken, request) {
+    return requestJson(accessToken, '/api/reports/garage-quick-lists', { method: 'POST', body: JSON.stringify(request) })
+  },
+  updateGarageReportQuickList(accessToken, id, request) {
+    return requestJson(accessToken, `/api/reports/garage-quick-lists/${encodeURIComponent(id)}`, { method: 'PUT', body: JSON.stringify(request) })
+  },
+  deleteGarageReportQuickList(accessToken, id, reason) {
+    return requestJson(accessToken, `/api/reports/garage-quick-lists/${encodeURIComponent(id)}`, { method: 'DELETE', body: JSON.stringify({ reason }) })
+  },
   getConsolidatedReport(accessToken, params = {}) {
     const query = buildConsolidatedReportQuery(params)
     return requestJson(accessToken, `/api/reports/consolidated${query ? `?${query}` : ''}`)
