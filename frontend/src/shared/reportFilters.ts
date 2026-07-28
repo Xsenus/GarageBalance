@@ -11,6 +11,66 @@ export type ReportQuickPeriodRange = {
   dateTo: string
 }
 
+export type RankableReportFilterOption = {
+  value: string
+  label: string
+  description?: string
+  rankingValue?: string
+}
+
+const reportFilterCollator = new Intl.Collator('ru-RU', {
+  numeric: true,
+  sensitivity: 'base',
+})
+
+export function filterAndRankReportOptions<T extends RankableReportFilterOption>(
+  options: readonly T[],
+  search: string,
+): T[] {
+  const normalizedSearch = search.trim().toLocaleLowerCase('ru-RU')
+  const matchingOptions = normalizedSearch
+    ? options.filter((option) => `${option.label} ${option.description ?? ''}`.toLocaleLowerCase('ru-RU').includes(normalizedSearch))
+    : [...options]
+
+  if (!matchingOptions.some((option) => option.rankingValue !== undefined)) {
+    return matchingOptions
+  }
+
+  function getRank(option: T) {
+    if (!normalizedSearch) {
+      return 0
+    }
+
+    const primaryValue = option.rankingValue?.trim().toLocaleLowerCase('ru-RU') ?? ''
+    if (primaryValue === normalizedSearch) {
+      return 0
+    }
+    if (primaryValue.startsWith(normalizedSearch)) {
+      return 1
+    }
+    if (primaryValue.includes(normalizedSearch)) {
+      return 2
+    }
+    return 3
+  }
+
+  return matchingOptions
+    .map((option, index) => ({ option, index }))
+    .sort((left, right) => {
+      const rankDifference = getRank(left.option) - getRank(right.option)
+      if (rankDifference !== 0) {
+        return rankDifference
+      }
+
+      const primaryDifference = reportFilterCollator.compare(
+        left.option.rankingValue ?? left.option.label,
+        right.option.rankingValue ?? right.option.label,
+      )
+      return primaryDifference !== 0 ? primaryDifference : left.index - right.index
+    })
+    .map(({ option }) => option)
+}
+
 export const reportQuickPeriodOptions: ReadonlyArray<{ key: ReportQuickPeriodKey; label: string }> = [
   { key: 'currentMonth', label: 'Текущий месяц' },
   { key: 'currentYear', label: 'Текущий год' },

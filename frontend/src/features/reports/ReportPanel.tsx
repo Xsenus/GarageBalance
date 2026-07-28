@@ -12,7 +12,8 @@ import { formatMoney, formatMonth, formatOperationTime, getCurrentMonthInputValu
 import { LocalizedDatePicker } from '../../shared/LocalizedDatePicker'
 import { createClientPage } from '../../shared/pagination'
 import { ReportPeriodQuickSelect } from '../../shared/ReportPeriodQuickSelect'
-import type { ReportQuickPeriodRange } from '../../shared/reportFilters'
+import { filterAndRankReportOptions } from '../../shared/reportFilters'
+import type { RankableReportFilterOption, ReportQuickPeriodRange } from '../../shared/reportFilters'
 import { advanceReportSort } from '../../shared/reportSorting'
 import type { ReportSort } from '../../shared/reportSorting'
 import { TablePagination } from '../../shared/TablePagination'
@@ -34,11 +35,7 @@ type ReportDateRange = {
 
 const dictionaryScreenRequestLimit = 100
 
-type ReportFilterOption = {
-  value: string
-  label: string
-  description?: string
-}
+type ReportFilterOption = RankableReportFilterOption
 
 type ReportColumn = {
   label: string
@@ -81,8 +78,8 @@ function ReportCheckboxMultiSelect({
   const [searchOpen, setSearchOpen] = useState(false)
   const normalizedSearch = search.trim().toLocaleLowerCase('ru-RU')
   const filteredOptions = normalizedSearch
-    ? options.filter((option) => `${option.label} ${option.description ?? ''}`.toLocaleLowerCase('ru-RU').includes(normalizedSearch)).slice(0, 20)
-    : openOnFocus ? options : []
+    ? filterAndRankReportOptions(options, normalizedSearch).slice(0, 20)
+    : openOnFocus ? filterAndRankReportOptions(options, '') : []
   const selectedOptions = selectedValues
     .map((value) => options.find((option) => option.value === value))
     .filter((option): option is ReportFilterOption => Boolean(option))
@@ -1472,7 +1469,7 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
                   placeholder="Выберите гаражи или начните вводить номер либо ФИО"
                   resultsAriaLabel="Найденные гаражи отчёта"
                   selectedAriaLabel="Выбранные гаражи отчёта"
-                  options={garages.map((garage) => ({ value: garage.id, label: `Гараж ${garage.number}`, description: garage.ownerName ?? 'Без владельца' }))}
+                  options={garages.map((garage) => ({ value: garage.id, label: `Гараж ${garage.number}`, description: garage.ownerName ?? 'Без владельца', rankingValue: garage.number }))}
                   selectedValues={selectedGarageIds}
                   openOnFocus
                   onChange={(values) => {
@@ -1615,7 +1612,7 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
                 placeholder="Введите номер гаража или ФИО владельца"
                 resultsAriaLabel="Найденные гаражи отчёта по поступлениям"
                 selectedAriaLabel="Выбранные гаражи отчёта по поступлениям"
-                options={garages.map((garage) => ({ value: garage.id, label: `Гараж ${garage.number}`, description: garage.ownerName ?? 'Без владельца' }))}
+                options={garages.map((garage) => ({ value: garage.id, label: `Гараж ${garage.number}`, description: garage.ownerName ?? 'Без владельца', rankingValue: garage.number }))}
                 selectedValues={selectedIncomeGarageIds}
                 onChange={(values) => {
                   setIncomePageRequest((current) => current.offset === 0 ? current : { ...current, offset: 0 })

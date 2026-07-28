@@ -5,6 +5,7 @@ import {
   createDefaultGarageBalanceHistoryFilters,
   createFullFinancialReportFilters,
   createDefaultIncomeReportFilters,
+  filterAndRankReportOptions,
   getReportQuickPeriodRange,
   loadConsolidatedReportFilters,
   loadExpenseReportFilters,
@@ -57,6 +58,40 @@ describe('report filter storage helpers', () => {
       monthFrom: '2025-09',
       monthTo: '2026-02',
     })
+  })
+
+  it('ranks garage options by exact number, prefix, other match and natural number order', () => {
+    const options = [
+      { value: 'garage-121', label: 'Гараж 121', description: 'Петров', rankingValue: '121' },
+      { value: 'garage-21-owner', label: 'Гараж 2', description: 'Владелец 21', rankingValue: '2' },
+      { value: 'garage-21-a10', label: 'Гараж 21А10', description: 'Сидоров', rankingValue: '21А10' },
+      { value: 'garage-21', label: 'Гараж 21', description: 'Иванов', rankingValue: '21' },
+      { value: 'garage-21-a2', label: 'Гараж 21А2', description: 'Орлов', rankingValue: '21А2' },
+    ]
+
+    expect(filterAndRankReportOptions(options, '21').map((option) => option.value)).toEqual([
+      'garage-21',
+      'garage-21-a2',
+      'garage-21-a10',
+      'garage-121',
+      'garage-21-owner',
+    ])
+    expect(filterAndRankReportOptions([
+      { value: '105', label: 'Гараж 105', rankingValue: '105' },
+      { value: '12', label: 'Гараж 12', rankingValue: '12' },
+      { value: '2', label: 'Гараж 2', rankingValue: '2' },
+      { value: '21', label: 'Гараж 21', rankingValue: '21' },
+      { value: '10', label: 'Гараж 10', rankingValue: '10' },
+    ], '').map((option) => option.value)).toEqual(['2', '10', '12', '21', '105'])
+  })
+
+  it('keeps the source order for report options without a garage ranking value', () => {
+    const options = [
+      { value: 'supplier-b', label: 'Бета' },
+      { value: 'supplier-a', label: 'Альфа' },
+    ]
+
+    expect(filterAndRankReportOptions(options, '')).toEqual(options)
   })
 
   it('creates a full financial report period from server month boundaries', () => {

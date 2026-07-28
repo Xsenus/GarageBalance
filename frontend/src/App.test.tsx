@@ -16649,6 +16649,43 @@ describe('App', () => {
     ]))
   })
 
+  it('ranks garages in the income report by number match and natural order', async () => {
+    const user = userEvent.setup()
+    const garages = [
+      createGarage({ id: 'garage-121', number: '121', ownerName: 'Петров' }),
+      createGarage({ id: 'garage-owner', number: '2', ownerName: 'Владелец 21' }),
+      createGarage({ id: 'garage-21-a10', number: '21А10', ownerName: 'Сидоров' }),
+      createGarage({ id: 'garage-21', number: '21', ownerName: 'Иванов' }),
+      createGarage({ id: 'garage-21-a2', number: '21А2', ownerName: 'Орлов' }),
+    ]
+    render(<App
+      authClient={createAuthClient()}
+      dictionaryClient={createDictionaryClient({ getGarages: async () => garages })}
+      financeClient={createFinanceClient()}
+      importClient={createImportClient()}
+      reportClient={createReportClient()}
+      releaseClient={createReleaseClient()}
+      userClient={createUserClient()}
+    />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Отчеты')
+    const reportsPanel = await screen.findByRole('region', { name: 'Отчеты' })
+    await openReportTab(user, reportsPanel, 'Поступления')
+    await user.type(within(reportsPanel).getByLabelText('Гаражи по поступлениям'), '21')
+
+    const results = await within(reportsPanel).findByRole('listbox', { name: 'Найденные гаражи отчёта по поступлениям' })
+    await waitFor(() => expect(within(results).getAllByRole('option')).toHaveLength(5))
+    expect(within(results).getAllByRole('option').map((option) => option.textContent)).toEqual([
+      'Гараж 21Иванов',
+      'Гараж 21А2Орлов',
+      'Гараж 21А10Сидоров',
+      'Гараж 121Петров',
+      'Гараж 2Владелец 21',
+    ])
+  })
+
   it('sends single, multiple and empty report selections and excludes archived filter dictionaries', async () => {
     const user = userEvent.setup()
     const baseReportClient = createReportClient()
