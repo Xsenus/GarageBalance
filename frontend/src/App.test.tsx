@@ -5678,9 +5678,11 @@ describe('App', () => {
     expect(expenseTable).toBeInTheDocument()
     expect(within(expenseTable).getByText('257 100.00')).toBeInTheDocument()
 
-    const addExpenseButton = within(prototype).getByRole('button', { name: 'Добавить выплату' })
-    await user.click(addExpenseButton)
-    const expenseDialog = await screen.findByRole('dialog', { name: 'Новая выплата' })
+    const regularExpenseButton = within(prototype).getByRole('button', { name: 'Регулярный поставщик' })
+    const episodicExpenseButton = within(prototype).getByRole('button', { name: 'Эпизодический поставщик' })
+    expect(within(prototype).getByRole('button', { name: 'Выплатить оклад' })).toBeInTheDocument()
+    await user.click(regularExpenseButton)
+    const expenseDialog = await screen.findByRole('dialog', { name: 'Выплата регулярному поставщику' })
     const expenseSupplier = within(expenseDialog).getByRole('combobox', { name: 'Поставщик выплаты' })
     expect(expenseSupplier).toHaveClass('select-control__trigger')
     expect(expenseSupplier).toHaveTextContent('Водоканал')
@@ -5693,9 +5695,8 @@ describe('App', () => {
     expect(expenseType).toHaveTextContent('Электроэнергия')
     expect(expenseType).toBeDisabled()
     expect(within(expenseDialog).getByText('Фонд расходования: Водоснабжение · доступно 100 000.00')).toBeInTheDocument()
-    const expensePaymentType = within(expenseDialog).getByRole('combobox', { name: 'Тип выплаты' })
-    expect(expensePaymentType).toHaveClass('select-control__trigger')
-    expect(expensePaymentType).toHaveTextContent('С чеком')
+    expect(within(expenseDialog).getByText(/Источник выплаты:/)).toHaveTextContent('банковский счёт')
+    expect(within(expenseDialog).queryByRole('combobox', { name: 'Тип выплаты' })).not.toBeInTheDocument()
     const expenseDate = within(expenseDialog).getByLabelText('Дата выплаты')
     expect(expenseDate).toHaveValue('30.06.2026')
     expect(expenseDate.closest('.localized-date-picker')).not.toBeNull()
@@ -5723,14 +5724,21 @@ describe('App', () => {
       amount: 1200,
       documentNumber: 'RKO-prototype',
       comment: 'Оплата из формы выплат',
+      expensePaymentType: 'with_receipt',
+      expensePaymentSource: 'bank',
+      expenseFundId: 'fund-water',
     })
-    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Новая выплата' })).not.toBeInTheDocument())
-    await waitFor(() => expect(addExpenseButton).toHaveFocus())
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Выплата регулярному поставщику' })).not.toBeInTheDocument())
+    await waitFor(() => expect(regularExpenseButton).toHaveFocus())
 
     const worksheetRequestsBeforeAtomicPayout = expenseWorksheetRequestCount
-    await user.click(addExpenseButton)
-    const atomicExpenseDialog = await screen.findByRole('dialog', { name: 'Новая выплата' })
-    expect(within(atomicExpenseDialog).getByRole('combobox', { name: 'Услуга или статья расхода выплаты' })).toHaveTextContent('Электроэнергия')
+    await user.click(episodicExpenseButton)
+    const atomicExpenseDialog = await screen.findByRole('dialog', { name: 'Выплата эпизодическому поставщику' })
+    expect(within(atomicExpenseDialog).getByText(/Источник выплаты:/)).toHaveTextContent('касса')
+    const atomicExpenseType = within(atomicExpenseDialog).getByRole('combobox', { name: 'Услуга или статья расхода выплаты' })
+    expect(atomicExpenseType).not.toBeDisabled()
+    const atomicExpenseFund = within(atomicExpenseDialog).getByRole('combobox', { name: 'Фонд расходования эпизодической выплаты' })
+    expect(atomicExpenseFund).toHaveTextContent('Водоснабжение')
     const atomicExpensePaymentType = within(atomicExpenseDialog).getByRole('combobox', { name: 'Тип выплаты' })
     await user.click(atomicExpensePaymentType)
     await user.click(within(atomicExpenseDialog).getByRole('option', { name: 'Без чека' }))
@@ -5742,6 +5750,8 @@ describe('App', () => {
     expect(savedExpenseRequests[1]).toMatchObject({
       expenseTypeId: electricityExpenseType.id,
       expensePaymentType: 'without_receipt',
+      expensePaymentSource: 'cash',
+      expenseFundId: 'fund-water',
       amount: 500,
       documentNumber: 'ADVANCE-ATOMIC',
     })
@@ -7833,7 +7843,7 @@ describe('App', () => {
     expect(within(expenseTotalRow!).getByText('-52 000.00')).not.toHaveClass('money-expense', 'money-income')
     expect(within(expenseTotalRow!).getByText('12 000.00')).toHaveClass('money-expense')
     await user.click(within(supplierExpenseRow!).getByRole('button', { name: 'Оплатить Водоснабжение' }))
-    const expenseDialog = await screen.findByRole('dialog', { name: 'Новая выплата' })
+    const expenseDialog = await screen.findByRole('dialog', { name: 'Выплата регулярному поставщику' })
     expect(within(expenseDialog).getByLabelText('Сумма выплаты')).toHaveValue('29 500.00')
     expect(within(prototype).getAllByText('12 000.00').length).toBeGreaterThan(0)
     expect(within(prototype).getByText('4 000.00')).toBeInTheDocument()
@@ -13698,13 +13708,13 @@ describe('App', () => {
     const garageOptions = await within(prototype).findAllByRole('option')
     await user.click(garageOptions[0])
     await user.click(within(prototype).getByRole('tab', { name: 'Выплаты' }))
-    const addExpenseButton = within(prototype).getByRole('button', { name: 'Добавить выплату' })
+    const addExpenseButton = within(prototype).getByRole('button', { name: 'Регулярный поставщик' })
     await user.click(addExpenseButton)
     expect(await within(financePanel).findByText('Справочники форм временно недоступны.')).toHaveAttribute('role', 'alert')
-    expect(screen.queryByRole('dialog', { name: 'Новая выплата' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('dialog', { name: 'Выплата регулярному поставщику' })).not.toBeInTheDocument()
 
     await user.click(addExpenseButton)
-    expect(await screen.findByRole('dialog', { name: 'Новая выплата' })).toBeInTheDocument()
+    expect(await screen.findByRole('dialog', { name: 'Выплата регулярному поставщику' })).toBeInTheDocument()
     expect(getSupplierGroups).toHaveBeenCalledTimes(2)
     expect(getSuppliers).toHaveBeenCalledTimes(2)
     expect(getStaffMembers).toHaveBeenCalledTimes(2)
@@ -13712,9 +13722,9 @@ describe('App', () => {
     expect(getExpenseTypes).toHaveBeenCalledTimes(2)
 
     await user.keyboard('{Escape}')
-    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Новая выплата' })).not.toBeInTheDocument())
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Выплата регулярному поставщику' })).not.toBeInTheDocument())
     await user.click(addExpenseButton)
-    expect(await screen.findByRole('dialog', { name: 'Новая выплата' })).toBeInTheDocument()
+    expect(await screen.findByRole('dialog', { name: 'Выплата регулярному поставщику' })).toBeInTheDocument()
     expect(getSuppliers).toHaveBeenCalledTimes(2)
   })
 

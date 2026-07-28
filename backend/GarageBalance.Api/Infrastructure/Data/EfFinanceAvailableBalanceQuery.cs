@@ -62,20 +62,24 @@ public sealed class EfFinanceAvailableBalanceQuery(GarageBalanceDbContext dbCont
                 BankDepositTotal = 0m,
                 CashExpenseTotal = group.Sum(operation =>
                     operation.OperationKind == FinancialOperationKinds.Expense &&
-                    (operation.ExpensePaymentType == ExpensePaymentTypes.WithoutReceipt ||
-                        (operation.ExpensePaymentType == null &&
+                    (operation.ExpensePaymentSource == ExpensePaymentSources.Cash ||
+                        (operation.ExpensePaymentSource == null &&
+                            (operation.ExpensePaymentType == ExpensePaymentTypes.WithoutReceipt ||
+                                (operation.ExpensePaymentType == null &&
                             operation.ExpenseType != null &&
                             ((operation.ExpenseType.Code != null && cashExpenseTypeCodes.Contains(operation.ExpenseType.Code)) ||
-                                cashExpenseTypeNames.Contains(operation.ExpenseType.Name))))
+                                    cashExpenseTypeNames.Contains(operation.ExpenseType.Name))))))
                         ? operation.Amount
                         : 0m),
                 BankExpenseTotal = group.Sum(operation =>
                     operation.OperationKind == FinancialOperationKinds.Expense &&
-                    operation.ExpensePaymentType != ExpensePaymentTypes.WithoutReceipt &&
-                    (operation.ExpensePaymentType != null ||
-                        operation.ExpenseType == null ||
-                        !((operation.ExpenseType.Code != null && cashExpenseTypeCodes.Contains(operation.ExpenseType.Code)) ||
-                            cashExpenseTypeNames.Contains(operation.ExpenseType.Name)))
+                    (operation.ExpensePaymentSource == ExpensePaymentSources.Bank ||
+                        (operation.ExpensePaymentSource == null &&
+                            operation.ExpensePaymentType != ExpensePaymentTypes.WithoutReceipt &&
+                            (operation.ExpensePaymentType != null ||
+                                operation.ExpenseType == null ||
+                                !((operation.ExpenseType.Code != null && cashExpenseTypeCodes.Contains(operation.ExpenseType.Code)) ||
+                                    cashExpenseTypeNames.Contains(operation.ExpenseType.Name)))))
                         ? operation.Amount
                         : 0m),
                 CashAdjustmentTotal = 0m,

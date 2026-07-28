@@ -492,11 +492,13 @@ public sealed class EfConsolidatedMonthlyReportQuery(GarageBalanceDbContext dbCo
                 !operation.IsCanceled &&
                 operation.OperationKind == FinancialOperationKinds.Expense &&
                 operation.OperationDate < periodEndExclusive &&
-                operation.ExpensePaymentType != ExpensePaymentTypes.WithoutReceipt &&
-                (operation.ExpensePaymentType != null ||
-                    operation.ExpenseType == null ||
-                    !((operation.ExpenseType.Code != null && CashExpenseTypeCodes.Contains(operation.ExpenseType.Code)) ||
-                        CashExpenseTypeNames.Contains(operation.ExpenseType.Name))))
+                (operation.ExpensePaymentSource == ExpensePaymentSources.Bank ||
+                    (operation.ExpensePaymentSource == null &&
+                        operation.ExpensePaymentType != ExpensePaymentTypes.WithoutReceipt &&
+                        (operation.ExpensePaymentType != null ||
+                            operation.ExpenseType == null ||
+                            !((operation.ExpenseType.Code != null && CashExpenseTypeCodes.Contains(operation.ExpenseType.Code)) ||
+                                CashExpenseTypeNames.Contains(operation.ExpenseType.Name))))))
             .GroupBy(operation => operation.OperationDate)
             .Select(group => new
             {

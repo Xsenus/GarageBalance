@@ -15,6 +15,7 @@ export type FinancialOperationDto = {
   amount: number
   receiptBatchId?: string | null
   expensePaymentType?: ExpensePaymentType | null
+  expensePaymentSource?: ExpensePaymentSource | null
   documentNumber: string | null
   comment: string | null
   garageId: string | null
@@ -55,6 +56,7 @@ export type FinanceSummaryDto = {
 }
 
 export type ExpensePaymentType = 'with_receipt' | 'without_receipt'
+export type ExpensePaymentSource = 'bank' | 'cash'
 
 export class FinanceApiError extends Error {
   readonly code: string
@@ -357,6 +359,8 @@ export type CreateExpenseOperationRequest = {
   supplierId: string
   expenseTypeId: string
   expensePaymentType: ExpensePaymentType
+  expensePaymentSource: ExpensePaymentSource
+  expenseFundId?: string
   operationDate: string
   accountingMonth: string
   amount: number

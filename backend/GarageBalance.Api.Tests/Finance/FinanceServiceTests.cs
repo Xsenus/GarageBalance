@@ -2089,7 +2089,10 @@ public sealed class FinanceServiceTests
                 new DateOnly(2026, 6, 15),
                 400.75m,
                 "RKO-20",
-                "Оплата воды"),
+                "Оплата воды",
+                ExpensePaymentTypes.WithReceipt,
+                ExpensePaymentSources.Bank,
+                fixtures.ExpenseFund.Id),
             actorUserId,
             CancellationToken.None);
 
@@ -2098,6 +2101,8 @@ public sealed class FinanceServiceTests
         Assert.Equal(new DateOnly(2026, 6, 1), result.Value.AccountingMonth);
         Assert.Equal("Vodokanal", result.Value.SupplierName);
         Assert.Equal("Вода", result.Value.ExpenseTypeName);
+        Assert.Equal(ExpensePaymentSources.Bank, result.Value.ExpensePaymentSource);
+        Assert.Equal(fixtures.ExpenseFund.Id, result.Value.ExpenseFundId);
         var audit = Assert.Single(database.Context.AuditEvents, item => item.Action == "finance.expense_created");
         Assert.Equal(actorUserId, audit.ActorUserId);
         Assert.Contains("Создана выплата 400.75", audit.Summary, StringComparison.Ordinal);
@@ -2435,8 +2440,10 @@ public sealed class FinanceServiceTests
         Assert.Single(database.Context.AuditEvents, item => item.Action == "finance.expense_created");
     }
 
-    [Fact]
-    public async Task CreateExpenseAsync_AllowsCashExpenseWithoutBankWhenCashIsAvailable()
+    [Theory]
+    [InlineData(ExpensePaymentTypes.WithReceipt)]
+    [InlineData(ExpensePaymentTypes.WithoutReceipt)]
+    public async Task CreateExpenseAsync_AllowsCashExpenseWithAnyReceiptTypeWhenCashIsAvailable(string paymentType)
     {
         await using var database = await TestDatabase.CreateAsync();
         var fixtures = await database.SeedAsync();
@@ -2465,14 +2472,18 @@ public sealed class FinanceServiceTests
                 300m,
                 "CASH-ADVANCE",
                 "Аванс из кассы",
-                ExpensePaymentTypes.WithoutReceipt),
+                paymentType,
+                ExpensePaymentSources.Cash,
+                fixtures.ExpenseFund.Id),
             Guid.NewGuid(),
             CancellationToken.None);
 
         Assert.True(result.Succeeded);
         Assert.Equal(300m, result.Value!.Amount);
         Assert.Equal("Вода", result.Value.ExpenseTypeName);
-        Assert.Equal(ExpensePaymentTypes.WithoutReceipt, result.Value.ExpensePaymentType);
+        Assert.Equal(paymentType, result.Value.ExpensePaymentType);
+        Assert.Equal(ExpensePaymentSources.Cash, result.Value.ExpensePaymentSource);
+        Assert.Equal(fixtures.ExpenseFund.Id, result.Value.ExpenseFundId);
         var accrual = Assert.Single(database.Context.SupplierAccruals);
         Assert.Equal(300m, accrual.Amount);
         Assert.Equal(result.Value.Id, accrual.SourceFinancialOperationId);
@@ -2526,7 +2537,9 @@ public sealed class FinanceServiceTests
                 300m,
                 "CASH-ROLLBACK",
                 "Проверка отката",
-                ExpensePaymentTypes.WithoutReceipt),
+                ExpensePaymentTypes.WithReceipt,
+                ExpensePaymentSources.Cash,
+                fixtures.ExpenseFund.Id),
             Guid.NewGuid(),
             CancellationToken.None));
         Assert.IsType<InvalidOperationException>(exception.InnerException);
@@ -2554,7 +2567,9 @@ public sealed class FinanceServiceTests
                 1m,
                 "CASH-NO-RECEIPT",
                 null,
-                ExpensePaymentTypes.WithoutReceipt),
+                ExpensePaymentTypes.WithReceipt,
+                ExpensePaymentSources.Cash,
+                fixtures.ExpenseFund.Id),
             Guid.NewGuid(),
             CancellationToken.None);
 
@@ -2565,12 +2580,17 @@ public sealed class FinanceServiceTests
     }
 
     [Fact]
-    public async Task CreateExpenseAsync_RejectsUnknownPaymentTypeAndUnlinkedExpenseArticle()
+    public async Task CreateExpenseAsync_RejectsUnknownTypeSourceUnlinkedBankArticleAndMissingCashFund()
     {
         await using var database = await TestDatabase.CreateAsync();
         var fixtures = await database.SeedAsync();
         var otherExpenseType = new ExpenseType { Name = "Ремонт", Code = "repair" };
-        database.Context.Add(otherExpenseType);
+        var episodicSupplier = new Supplier
+        {
+            Name = "Разовый подрядчик",
+            GroupId = fixtures.Supplier.GroupId
+        };
+        database.Context.AddRange(otherExpenseType, episodicSupplier);
         await database.Context.SaveChangesAsync();
         var service = FinanceServiceTestFactory.Create(database.Context);
 
@@ -2598,11 +2618,42 @@ public sealed class FinanceServiceTests
                 "cash"),
             Guid.NewGuid(),
             CancellationToken.None);
+        var invalidSource = await service.CreateExpenseAsync(
+            new CreateExpenseOperationRequest(
+                fixtures.Supplier.Id,
+                fixtures.ExpenseType.Id,
+                new DateOnly(2026, 6, 20),
+                new DateOnly(2026, 6, 1),
+                100m,
+                "INVALID-SOURCE",
+                null,
+                ExpensePaymentTypes.WithReceipt,
+                "wallet",
+                fixtures.ExpenseFund.Id),
+            Guid.NewGuid(),
+            CancellationToken.None);
+        var missingCashFund = await service.CreateExpenseAsync(
+            new CreateExpenseOperationRequest(
+                episodicSupplier.Id,
+                otherExpenseType.Id,
+                new DateOnly(2026, 6, 20),
+                new DateOnly(2026, 6, 1),
+                100m,
+                "MISSING-CASH-FUND",
+                null,
+                ExpensePaymentTypes.WithReceipt,
+                ExpensePaymentSources.Cash),
+            Guid.NewGuid(),
+            CancellationToken.None);
 
         Assert.False(mismatch.Succeeded);
         Assert.Equal("supplier_expense_type_mismatch", mismatch.ErrorCode);
         Assert.False(invalidType.Succeeded);
         Assert.Equal("expense_payment_type_invalid", invalidType.ErrorCode);
+        Assert.False(invalidSource.Succeeded);
+        Assert.Equal("expense_payment_source_invalid", invalidSource.ErrorCode);
+        Assert.False(missingCashFund.Succeeded);
+        Assert.Equal("episodic_expense_fund_required", missingCashFund.ErrorCode);
         Assert.DoesNotContain(database.Context.FinancialOperations, operation => operation.OperationKind == FinancialOperationKinds.Expense);
         Assert.Empty(database.Context.AuditEvents);
     }
@@ -2633,7 +2684,9 @@ public sealed class FinanceServiceTests
                 100m,
                 "SYNC-CASH",
                 "Исходный комментарий",
-                ExpensePaymentTypes.WithoutReceipt),
+                ExpensePaymentTypes.WithoutReceipt,
+                ExpensePaymentSources.Cash,
+                fixtures.ExpenseFund.Id),
             Guid.NewGuid(),
             CancellationToken.None);
         Assert.True(created.Succeeded);
@@ -2655,7 +2708,9 @@ public sealed class FinanceServiceTests
                 125m,
                 "SYNC-CASH-UPDATED",
                 "Обновленный комментарий",
-                ExpensePaymentTypes.WithoutReceipt),
+                ExpensePaymentTypes.WithoutReceipt,
+                ExpensePaymentSources.Cash,
+                fixtures.ExpenseFund.Id),
             Guid.NewGuid(),
             CancellationToken.None);
         Assert.True(updated.Succeeded);
@@ -2693,12 +2748,15 @@ public sealed class FinanceServiceTests
                 125m,
                 "SYNC-CASH-UPDATED",
                 "Теперь с чеком",
-                ExpensePaymentTypes.WithReceipt),
+                ExpensePaymentTypes.WithReceipt,
+                ExpensePaymentSources.Cash,
+                fixtures.ExpenseFund.Id),
             Guid.NewGuid(),
             CancellationToken.None);
         Assert.True(converted.Succeeded);
         Assert.Equal(ExpensePaymentTypes.WithReceipt, converted.Value!.ExpensePaymentType);
-        Assert.True(linkedAccrual.IsCanceled);
+        Assert.Equal(ExpensePaymentSources.Cash, converted.Value.ExpensePaymentSource);
+        Assert.False(linkedAccrual.IsCanceled);
         Assert.Equal(SeededBankAmount - 125m, fixtures.ExpenseFund.Balance);
     }
 

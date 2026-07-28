@@ -414,6 +414,7 @@ public sealed class GarageBalanceDbContext(DbContextOptions<GarageBalanceDbConte
             entity.HasKey(operation => operation.Id);
             entity.Property(operation => operation.OperationKind).HasMaxLength(20).IsRequired();
             entity.Property(operation => operation.ExpensePaymentType).HasMaxLength(30);
+            entity.Property(operation => operation.ExpensePaymentSource).HasMaxLength(20);
             entity.Property(operation => operation.Amount).HasPrecision(18, 2);
             entity.Property(operation => operation.DocumentNumber).HasMaxLength(120);
             entity.Property(operation => operation.Comment).HasMaxLength(1000);
@@ -422,9 +423,13 @@ public sealed class GarageBalanceDbContext(DbContextOptions<GarageBalanceDbConte
             entity.HasIndex(operation => operation.OperationKind);
             entity.HasIndex(operation => operation.ReceiptBatchId);
             entity.HasIndex(operation => operation.ExpensePaymentType);
+            entity.HasIndex(operation => operation.ExpensePaymentSource);
             entity.ToTable(table => table.HasCheckConstraint(
                 "CK_financial_operations_ExpensePaymentType",
                 "\"ExpensePaymentType\" IS NULL OR \"ExpensePaymentType\" IN ('with_receipt', 'without_receipt')"));
+            entity.ToTable(table => table.HasCheckConstraint(
+                "CK_financial_operations_ExpensePaymentSource",
+                "\"ExpensePaymentSource\" IS NULL OR \"ExpensePaymentSource\" IN ('bank', 'cash')"));
             entity.HasIndex(operation => new { operation.IsCanceled, operation.OperationKind });
             entity.HasIndex(operation => new { operation.OperationKind, operation.OperationDate, operation.DocumentNumber })
                 .IsUnique()

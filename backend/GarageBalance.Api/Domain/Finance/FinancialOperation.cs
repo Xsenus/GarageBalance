@@ -11,6 +11,7 @@ public sealed class FinancialOperation
     public decimal Amount { get; set; }
     public Guid? ReceiptBatchId { get; set; }
     public string? ExpensePaymentType { get; set; }
+    public string? ExpensePaymentSource { get; set; }
     public string? DocumentNumber { get; set; }
     public string? Comment { get; set; }
     public Guid? GarageId { get; set; }

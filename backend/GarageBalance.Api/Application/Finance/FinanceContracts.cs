@@ -42,6 +42,7 @@ public sealed record FinancialOperationDto(
     string? StaffDepartmentName = null,
     Guid? ReceiptBatchId = null,
     string? ExpensePaymentType = null,
+    string? ExpensePaymentSource = null,
     Guid? ExpenseFundId = null,
     string? ExpenseFundName = null);
 
@@ -75,7 +76,9 @@ public sealed record CreateExpenseOperationRequest(
     [Range(0.01, 999999999)] decimal Amount,
     [MaxLength(120)] string? DocumentNumber,
     [MaxLength(1000)] string? Comment,
-    string ExpensePaymentType = ExpensePaymentTypes.WithReceipt);
+    string ExpensePaymentType = ExpensePaymentTypes.WithReceipt,
+    string? ExpensePaymentSource = null,
+    Guid? ExpenseFundId = null);
 
 public sealed record CreateStaffPaymentRequest(
     Guid StaffMemberId,

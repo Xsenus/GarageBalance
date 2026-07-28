@@ -394,6 +394,14 @@ export function getExpenseValidationErrors(form: CreateExpenseOperationRequest) 
     errors.push('Выберите тип выплаты.')
   }
 
+  if (form.expensePaymentSource !== 'bank' && form.expensePaymentSource !== 'cash') {
+    errors.push('Выберите источник выплаты.')
+  }
+
+  if (form.expensePaymentSource === 'cash' && !form.expenseFundId) {
+    errors.push('Выберите фонд расходования для эпизодической выплаты.')
+  }
+
   if (!isDateInputValue(form.operationDate)) {
     errors.push('Укажите дату выплаты.')
   }

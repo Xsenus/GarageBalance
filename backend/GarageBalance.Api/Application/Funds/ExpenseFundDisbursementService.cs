@@ -40,6 +40,8 @@ public sealed class ExpenseFundDisbursementService(
                 "Фонд расходования услуги не найден.");
         }
 
+        sourceOperation.ExpenseFundId = fund.Id;
+        sourceOperation.ExpenseFund = fund;
         var amount = MoneyMath.RoundMoney(sourceOperation.Amount);
         if (amount > fund.Balance)
         {
@@ -96,6 +98,8 @@ public sealed class ExpenseFundDisbursementService(
                 "Фонд расходования услуги не найден.");
         }
 
+        sourceOperation.ExpenseFundId = destinationFund.Id;
+        sourceOperation.ExpenseFund = destinationFund;
         var destinationOperations = destinationFund.Id == oldFund.Id
             ? oldOperations
             : (await repository.GetOperationsOrderedAsync(destinationFund.Id, trackChanges: true, cancellationToken)).ToList();

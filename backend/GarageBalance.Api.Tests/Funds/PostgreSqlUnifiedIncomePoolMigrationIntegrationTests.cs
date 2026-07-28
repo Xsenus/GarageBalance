@@ -25,6 +25,7 @@ public sealed class PostgreSqlUnifiedIncomePoolMigrationIntegrationTests
                 """
                 ALTER TABLE funds ADD COLUMN "IsArchived" boolean NOT NULL DEFAULT FALSE;
                 ALTER TABLE financial_operations ADD COLUMN "ExpenseFundId" uuid NULL;
+                ALTER TABLE financial_operations ADD COLUMN "ExpensePaymentSource" character varying(20) NULL;
                 """);
         }
 
@@ -85,6 +86,7 @@ public sealed class PostgreSqlUnifiedIncomePoolMigrationIntegrationTests
                 """
                 ALTER TABLE funds DROP COLUMN "IsArchived";
                 ALTER TABLE financial_operations DROP COLUMN "ExpenseFundId";
+                ALTER TABLE financial_operations DROP COLUMN "ExpensePaymentSource";
                 """);
             await migrateContext.Database.MigrateAsync();
         }

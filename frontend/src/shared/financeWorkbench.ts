@@ -72,6 +72,8 @@ export type FinanceEditorFieldLabelKey =
   | 'expenseSupplier'
   | 'expenseType'
   | 'expensePaymentType'
+  | 'expensePaymentSource'
+  | 'expenseFund'
   | 'expenseDate'
   | 'expenseMonth'
   | 'expenseAmount'
@@ -234,6 +236,8 @@ const financeEditorFieldLabels: Record<FinanceEditorFieldLabelKey, string> = {
   expenseSupplier: 'Поставщик',
   expenseType: 'Услуга / статья расхода',
   expensePaymentType: 'Тип выплаты',
+  expensePaymentSource: 'Источник выплаты',
+  expenseFund: 'Фонд расходования',
   expenseDate: 'Дата выплаты',
   expenseMonth: 'Месяц учета',
   expenseAmount: 'Сумма выплаты',

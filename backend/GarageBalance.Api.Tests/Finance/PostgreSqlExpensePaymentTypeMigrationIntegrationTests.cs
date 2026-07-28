@@ -85,7 +85,9 @@ public sealed class PostgreSqlExpensePaymentTypeMigrationIntegrationTests
         var ordinaryOperation = await verificationContext.FinancialOperations.SingleAsync(operation => operation.Id == ordinaryOperationId);
         var linkedAccrual = await verificationContext.SupplierAccruals.SingleAsync(accrual => accrual.Id == atomicAccrualId);
         Assert.Equal(ExpensePaymentTypes.WithoutReceipt, atomicOperation.ExpensePaymentType);
+        Assert.Equal(ExpensePaymentSources.Cash, atomicOperation.ExpensePaymentSource);
         Assert.Equal(ExpensePaymentTypes.WithReceipt, ordinaryOperation.ExpensePaymentType);
+        Assert.Equal(ExpensePaymentSources.Bank, ordinaryOperation.ExpensePaymentSource);
         Assert.Equal(atomicOperationId, linkedAccrual.SourceFinancialOperationId);
 
         verificationContext.FinancialOperations.Add(new FinancialOperation
@@ -97,6 +99,18 @@ public sealed class PostgreSqlExpensePaymentTypeMigrationIntegrationTests
             ExpensePaymentType = "cash"
         });
         await Assert.ThrowsAsync<DbUpdateException>(() => verificationContext.SaveChangesAsync());
+
+        await using var invalidSourceContext = database.CreateContext();
+        invalidSourceContext.FinancialOperations.Add(new FinancialOperation
+        {
+            OperationKind = FinancialOperationKinds.Expense,
+            OperationDate = new DateOnly(2026, 7, 22),
+            AccountingMonth = new DateOnly(2026, 7, 1),
+            Amount = 1m,
+            ExpensePaymentType = ExpensePaymentTypes.WithReceipt,
+            ExpensePaymentSource = "wallet"
+        });
+        await Assert.ThrowsAsync<DbUpdateException>(() => invalidSourceContext.SaveChangesAsync());
     }
 
     private static Task InsertLegacyExpenseAsync(

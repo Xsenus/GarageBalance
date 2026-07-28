@@ -213,14 +213,20 @@ describe('shared validation helpers', () => {
       'Сумма поступления должна быть больше 0.',
     ])
 
-    expect(getExpenseValidationErrors({ supplierId: '', expenseTypeId: '', expensePaymentType: 'invalid' as never, operationDate: 'bad', accountingMonth: 'bad', amount: -1, documentNumber: '', comment: '' })).toEqual([
+    expect(getExpenseValidationErrors({ supplierId: '', expenseTypeId: '', expensePaymentType: 'invalid' as never, expensePaymentSource: 'invalid' as never, expenseFundId: '', operationDate: 'bad', accountingMonth: 'bad', amount: -1, documentNumber: '', comment: '' })).toEqual([
       'Выберите поставщика для выплаты.',
       'Для поставщика должна быть настроена услуга или статья расхода.',
       'Выберите тип выплаты.',
+      'Выберите источник выплаты.',
       'Укажите дату выплаты.',
       'Укажите месяц выплаты.',
       'Сумма выплаты должна быть больше 0.',
     ])
+    expect(getExpenseValidationErrors({ supplierId: 'supplier', expenseTypeId: 'expense', expensePaymentType: 'with_receipt', expensePaymentSource: 'cash', expenseFundId: '', operationDate: '2026-06-25', accountingMonth: '2026-06-01', amount: 1, documentNumber: '', comment: '' })).toEqual([
+      'Выберите фонд расходования для эпизодической выплаты.',
+    ])
+    expect(getExpenseValidationErrors({ supplierId: 'supplier', expenseTypeId: 'expense', expensePaymentType: 'without_receipt', expensePaymentSource: 'cash', expenseFundId: 'fund', operationDate: '2026-06-25', accountingMonth: '2026-06-01', amount: 1, documentNumber: '', comment: '' })).toEqual([])
+    expect(getExpenseValidationErrors({ supplierId: 'supplier', expenseTypeId: 'expense', expensePaymentType: 'with_receipt', expensePaymentSource: 'bank', expenseFundId: '', operationDate: '2026-06-25', accountingMonth: '2026-06-01', amount: 1, documentNumber: '', comment: '' })).toEqual([])
 
     expect(getAccrualValidationErrors({ garageId: '', incomeTypeId: '', accountingMonth: 'bad', amount: 0, source: 'manual', comment: '' })).toEqual([
       'Выберите гараж для начисления.',
