@@ -28,7 +28,7 @@ const meterReadingMonths = [
 ]
 
 const meterReadingTypes = [
-  { id: 'electricity', label: 'Электроэнергия', unit: 'кВт' },
+  { id: 'electricity', label: 'Электроэнергия', unit: 'кВт·ч' },
   { id: 'water', label: 'Вода', unit: 'м3' },
 ] as const
 

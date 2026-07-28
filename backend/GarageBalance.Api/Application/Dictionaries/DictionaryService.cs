@@ -2232,7 +2232,7 @@ public sealed class DictionaryService(
 
         var tierDetails = string.Join(", ", tiers.Select(tier =>
             tier.UpperBound.HasValue
-                ? $"{tier.Name} до {tier.UpperBound.Value.ToString("0.####", CultureInfo.InvariantCulture)} кВт по {MoneyFormatting.Format(tier.Rate)}"
+                ? $"{tier.Name} до {tier.UpperBound.Value.ToString("0.####", CultureInfo.InvariantCulture)} кВт·ч по {MoneyFormatting.Format(tier.Rate)}"
                 : $"{tier.Name} по {MoneyFormatting.Format(tier.Rate)}"));
         return $"{baseDetails}, электричество: {tierDetails}";
     }
@@ -2347,9 +2347,9 @@ public sealed class DictionaryService(
 
         var firstThreshold = MoneyMath.RoundMeterValue(request.ElectricityFirstThreshold!.Value);
         var secondThreshold = MoneyMath.RoundMeterValue(request.ElectricitySecondThreshold!.Value);
-        var firstTierName = NormalizeOptional(request.ElectricityFirstTierName) ?? "От 0 кВт";
-        var secondTierName = NormalizeOptional(request.ElectricitySecondTierName) ?? $"От {firstThreshold.ToString("0.####", CultureInfo.InvariantCulture)} кВт";
-        var thirdTierName = NormalizeOptional(request.ElectricityThirdTierName) ?? $"От {secondThreshold.ToString("0.####", CultureInfo.InvariantCulture)} кВт";
+        var firstTierName = NormalizeOptional(request.ElectricityFirstTierName) ?? "От 0 кВт·ч";
+        var secondTierName = NormalizeOptional(request.ElectricitySecondTierName) ?? $"От {firstThreshold.ToString("0.####", CultureInfo.InvariantCulture)} кВт·ч";
+        var thirdTierName = NormalizeOptional(request.ElectricityThirdTierName) ?? $"От {secondThreshold.ToString("0.####", CultureInfo.InvariantCulture)} кВт·ч";
         var firstRate = MoneyMath.RoundRate(request.ElectricityFirstRate!.Value);
         var secondRate = MoneyMath.RoundRate(request.ElectricitySecondRate!.Value);
         var thirdRate = MoneyMath.RoundRate(request.ElectricityThirdRate!.Value);

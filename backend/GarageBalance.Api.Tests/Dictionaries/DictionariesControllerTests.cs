@@ -997,12 +997,12 @@ public sealed class DictionariesControllerTests
         var serviceId = Guid.NewGuid();
         var service = new FakeDictionaryService
         {
-            CreateChargeServiceSettingResult = DictionaryResult<ChargeServiceSettingDto>.Success(new ChargeServiceSettingDto(serviceId, "Электроэнергия", true, 1, 1, 30, 6, 30, null, null, true, true, "кВт", false))
+            CreateChargeServiceSettingResult = DictionaryResult<ChargeServiceSettingDto>.Success(new ChargeServiceSettingDto(serviceId, "Электроэнергия", true, 1, 1, 30, 6, 30, null, null, true, true, "кВт·ч", false))
         };
         var controller = CreateController(service, actorUserId);
 
         var result = await controller.CreateChargeServiceSetting(
-            new UpsertChargeServiceSettingRequest("Электроэнергия", true, 1, 1, 30, 6, 30, true, true, "кВт"),
+            new UpsertChargeServiceSettingRequest("Электроэнергия", true, 1, 1, 30, 6, 30, true, true, "кВт·ч"),
             CancellationToken.None);
 
         var created = Assert.IsType<CreatedAtActionResult>(result.Result);
@@ -1023,7 +1023,7 @@ public sealed class DictionariesControllerTests
         var controller = CreateController(service, actorUserId);
 
         var result = await controller.CreateChargeServiceSetting(
-            new UpsertChargeServiceSettingRequest("Электроэнергия", true, 1, 1, 30, 6, 30, true, true, "кВт"),
+            new UpsertChargeServiceSettingRequest("Электроэнергия", true, 1, 1, 30, 6, 30, true, true, "кВт·ч"),
             CancellationToken.None);
 
         var conflict = Assert.IsType<ConflictObjectResult>(result.Result);
@@ -1063,7 +1063,7 @@ public sealed class DictionariesControllerTests
 
         var result = await controller.UpdateChargeServiceSetting(
             serviceId,
-            new UpsertChargeServiceSettingRequest("Электроэнергия", true, 1, 1, 30, 6, 30, true, true, "кВт"),
+            new UpsertChargeServiceSettingRequest("Электроэнергия", true, 1, 1, 30, 6, 30, true, true, "кВт·ч"),
             CancellationToken.None);
 
         var notFound = Assert.IsType<NotFoundObjectResult>(result.Result);
@@ -1086,7 +1086,7 @@ public sealed class DictionariesControllerTests
 
         var result = await controller.UpdateChargeServiceSetting(
             serviceId,
-            new UpsertChargeServiceSettingRequest("Электроэнергия", true, 1, 1, 30, 6, 30, true, true, "кВт"),
+            new UpsertChargeServiceSettingRequest("Электроэнергия", true, 1, 1, 30, 6, 30, true, true, "кВт·ч"),
             CancellationToken.None);
 
         var conflict = Assert.IsType<ConflictObjectResult>(result.Result);

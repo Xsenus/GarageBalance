@@ -2020,9 +2020,9 @@ public sealed class DictionaryServiceTests
         Assert.Equal(5.3333m, result.Value.ElectricityThirdRate);
         var audit = Assert.Single(database.Context.AuditEvents, item => item.Action == "dictionary.tariff_created");
         Assert.Equal(actorUserId, audit.ActorUserId);
-        Assert.Contains("электричество: От 0 кВт до 50.556 кВт по 3.11", audit.Summary, StringComparison.Ordinal);
-        Assert.Contains("От 50.556 кВт до 100.778 кВт по 4.22", audit.Summary, StringComparison.Ordinal);
-        Assert.Contains("От 100.778 кВт по 5.33", audit.Summary, StringComparison.Ordinal);
+        Assert.Contains("электричество: От 0 кВт·ч до 50.556 кВт·ч по 3.11", audit.Summary, StringComparison.Ordinal);
+        Assert.Contains("От 50.556 кВт·ч до 100.778 кВт·ч по 4.22", audit.Summary, StringComparison.Ordinal);
+        Assert.Contains("От 100.778 кВт·ч по 5.33", audit.Summary, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -2149,7 +2149,7 @@ public sealed class DictionaryServiceTests
         var actorUserId = Guid.NewGuid();
 
         var result = await service.CreateChargeServiceSettingAsync(
-            new UpsertChargeServiceSettingRequest("Электроэнергия", true, 1, 1, 30, 6, 30, true, true, "кВт"),
+            new UpsertChargeServiceSettingRequest("Электроэнергия", true, 1, 1, 30, 6, 30, true, true, "кВт·ч"),
             actorUserId,
             CancellationToken.None);
 
@@ -2163,7 +2163,7 @@ public sealed class DictionaryServiceTests
         Assert.Equal(30, result.Value.OverdueGraceDays);
         Assert.True(result.Value.IsMetered);
         Assert.True(result.Value.HasTieredTariff);
-        Assert.Equal("кВт", result.Value.UnitName);
+        Assert.Equal("кВт·ч", result.Value.UnitName);
         var audit = Assert.Single(database.Context.AuditEvents, item => item.Action == "dictionary.charge_service_created");
         Assert.Equal(actorUserId, audit.ActorUserId);
         Assert.Contains("Электроэнергия", audit.Summary, StringComparison.Ordinal);

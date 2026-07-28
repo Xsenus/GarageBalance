@@ -1299,9 +1299,9 @@ describe('App', () => {
     const waterTariff = createTariff({ id: 'tariff-water', name: 'Тариф на воду', calculationBase: 'meter_water', rate: 1250 })
     const lightingTariff = createTariff({ id: 'tariff-lighting', name: 'Наружное освещение', calculationBase: 'fixed', rate: 300 })
     let electricityTiers = [
-      { id: '11111111-1111-1111-1111-111111111111', name: 'От 0 кВт', upperBound: 1, rate: 2, isCustom: false },
-      { id: '22222222-2222-2222-2222-222222222222', name: 'От 1 кВт', upperBound: 3, rate: 3, isCustom: false },
-      { id: '33333333-3333-3333-3333-333333333333', name: 'От 3 кВт', upperBound: null, rate: 5, isCustom: false },
+      { id: '11111111-1111-1111-1111-111111111111', name: 'От 0 кВт·ч', upperBound: 1, rate: 2, isCustom: false },
+      { id: '22222222-2222-2222-2222-222222222222', name: 'От 1 кВт·ч', upperBound: 3, rate: 3, isCustom: false },
+      { id: '33333333-3333-3333-3333-333333333333', name: 'От 3 кВт·ч', upperBound: null, rate: 5, isCustom: false },
     ]
     const thresholdUpdateRequests: UpsertTariffRequest[] = []
     const electricityTariff = createTariff({
@@ -1311,9 +1311,9 @@ describe('App', () => {
       rate: 4,
       electricityFirstThreshold: 1,
       electricitySecondThreshold: 3,
-      electricityFirstTierName: 'От 0 кВт',
-      electricitySecondTierName: 'От 1 кВт',
-      electricityThirdTierName: 'От 3 кВт',
+      electricityFirstTierName: 'От 0 кВт·ч',
+      electricitySecondTierName: 'От 1 кВт·ч',
+      electricityThirdTierName: 'От 3 кВт·ч',
       electricityFirstRate: 2,
       electricitySecondRate: 3,
       electricityThirdRate: 5,
@@ -1417,8 +1417,8 @@ describe('App', () => {
     expect(within(tariffsPanel).getByLabelText('Наружное освещение: Наружное освещение: значение')).toHaveValue('300.00')
     expect(within(tariffsPanel).getAllByRole('combobox', { name: /Электроэнергия: .*: пороговая тарификация/i })).toHaveLength(1)
     expect(within(tariffsPanel).getAllByRole('combobox', { name: /Электроэнергия: .*: по счетчику/i })).toHaveLength(1)
-    expect(within(tariffsPanel).queryByRole('combobox', { name: 'Электроэнергия: От 1 кВт: пороговая тарификация' })).not.toBeInTheDocument()
-    expect(within(tariffsPanel).queryByRole('combobox', { name: 'Электроэнергия: От 1 кВт: по счетчику' })).not.toBeInTheDocument()
+    expect(within(tariffsPanel).queryByRole('combobox', { name: 'Электроэнергия: От 1 кВт·ч: пороговая тарификация' })).not.toBeInTheDocument()
+    expect(within(tariffsPanel).queryByRole('combobox', { name: 'Электроэнергия: От 1 кВт·ч: по счетчику' })).not.toBeInTheDocument()
     expect(within(tariffsPanel).getByRole('button', { name: 'Изменить услугу Членский взнос' })).toBeInTheDocument()
     expect(within(tariffsPanel).queryByRole('combobox', { name: 'Членский взнос: Периодичность: пороговая тарификация' })).not.toBeInTheDocument()
     expect(within(tariffsPanel).queryByRole('combobox', { name: 'Членский взнос: Периодичность: по счетчику' })).not.toBeInTheDocument()
@@ -1480,15 +1480,15 @@ describe('App', () => {
     expect(membershipDueDayInput).toHaveValue('28')
     expect(membershipDueMonthSelect).toHaveValue('фев')
 
-    const electricityThresholdNameInput = within(tariffsPanel).getByLabelText('Электроэнергия: От 1 кВт: наименование')
+    const electricityThresholdNameInput = within(tariffsPanel).getByLabelText('Электроэнергия: От 1 кВт·ч: наименование')
     await user.clear(electricityThresholdNameInput)
-    await user.type(electricityThresholdNameInput, 'От 2 кВт{Enter}')
+    await user.type(electricityThresholdNameInput, 'От 2 кВт·ч{Enter}')
     const thresholdNameConfirmDialog = await screen.findByRole('dialog', { name: 'Подтвердить изменение?' })
     expect(within(thresholdNameConfirmDialog).getByText('Наименование порога')).toBeInTheDocument()
-    expect(within(thresholdNameConfirmDialog).getByText('От 1 кВт')).toBeInTheDocument()
-    expect(within(thresholdNameConfirmDialog).getByText('От 2 кВт')).toBeInTheDocument()
+    expect(within(thresholdNameConfirmDialog).getByText('От 1 кВт·ч')).toBeInTheDocument()
+    expect(within(thresholdNameConfirmDialog).getByText('От 2 кВт·ч')).toBeInTheDocument()
     await user.click(within(thresholdNameConfirmDialog).getByRole('button', { name: 'Сохранить' }))
-    expect(electricityThresholdNameInput).toHaveValue('От 2 кВт')
+    expect(electricityThresholdNameInput).toHaveValue('От 2 кВт·ч')
 
     const addThresholdButton = within(tariffsPanel).getByRole('button', { name: 'Добавить порог' })
     expect(addThresholdButton).toHaveClass('tariffs-add-threshold-button')
@@ -3586,9 +3586,9 @@ describe('App', () => {
       rate: 4,
       electricityFirstThreshold: 1,
       electricitySecondThreshold: 3,
-      electricityFirstTierName: 'От 0 кВт',
-      electricitySecondTierName: 'От 1 кВт',
-      electricityThirdTierName: 'От 3 кВт',
+      electricityFirstTierName: 'От 0 кВт·ч',
+      electricitySecondTierName: 'От 1 кВт·ч',
+      electricityThirdTierName: 'От 3 кВт·ч',
       electricityFirstRate: 2,
       electricitySecondRate: 3,
       electricityThirdRate: 5,
@@ -3624,7 +3624,7 @@ describe('App', () => {
     await openSection(user, 'Тарифы и сборы')
     const tariffsPanel = await screen.findByRole('region', { name: 'Тарифы и сборы' })
 
-    const firstTierName = await within(tariffsPanel).findByLabelText('Электроэнергия: От 0 кВт: наименование')
+    const firstTierName = await within(tariffsPanel).findByLabelText('Электроэнергия: От 0 кВт·ч: наименование')
     await user.clear(firstTierName)
     await user.type(firstTierName, 'Льготный порог{Enter}')
     const confirmationDialog = await screen.findByRole('dialog', { name: 'Подтвердить изменение?' })
@@ -3634,8 +3634,8 @@ describe('App', () => {
       name: 'Электроэнергия',
       calculationBase: 'meter_electricity',
       electricityFirstTierName: 'Льготный порог',
-      electricitySecondTierName: 'От 1 кВт',
-      electricityThirdTierName: 'От 3 кВт',
+      electricitySecondTierName: 'От 1 кВт·ч',
+      electricityThirdTierName: 'От 3 кВт·ч',
       electricityFirstRate: 2,
       electricitySecondRate: 3,
       electricityThirdRate: 5,
@@ -4679,9 +4679,9 @@ describe('App', () => {
     expect(screen.queryByText('Поиск по гаражу, владельцу или поставщику')).not.toBeInTheDocument()
     expect(within(readingsPanel).getByLabelText('Год показаний')).toHaveValue('2026')
     expect(within(readingsPanel).queryByRole('combobox', { name: 'Тип показаний' })).not.toBeInTheDocument()
-    expect(within(readingsPanel).getByLabelText('Тип показаний')).toHaveTextContent('Электроэнергия, кВт')
+    expect(within(readingsPanel).getByLabelText('Тип показаний')).toHaveTextContent('Электроэнергия, кВт·ч')
     expect(within(readingsPanel).getByRole('table', { name: 'Показания счетчиков за 2026 год' })).toBeInTheDocument()
-    expect(within(readingsPanel).getByRole('columnheader', { name: /ЯнварькВт/i })).toBeInTheDocument()
+    expect(within(readingsPanel).getByRole('columnheader', { name: /ЯнварькВт·ч/i })).toBeInTheDocument()
     expect(await within(readingsPanel).findByLabelText('Гараж 12, Январь, показание')).toBeInTheDocument()
     await waitFor(() => expect(meterReadingYearPageRequests).toHaveLength(1))
     expect(meterReadingYearPageRequests[0]).toEqual({ year: 2026, meterKind: 'electricity', offset: 0, limit: 25 })
@@ -10864,8 +10864,8 @@ describe('App', () => {
       electricityThirdRate: 5,
     })
     expect(await screen.findByText('Запись добавлена.')).toBeInTheDocument()
-    expect(within(dictionaryPanel).getByText(/до 50 кВт: 2.00/)).toBeInTheDocument()
-    expect(within(dictionaryPanel).getByText(/до 100 кВт: 3.00/)).toBeInTheDocument()
+    expect(within(dictionaryPanel).getByText(/до 50 кВт·ч: 2.00/)).toBeInTheDocument()
+    expect(within(dictionaryPanel).getByText(/до 100 кВт·ч: 3.00/)).toBeInTheDocument()
     expect(within(dictionaryPanel).getByText(/выше: 5.00/)).toBeInTheDocument()
   })
 
@@ -11320,7 +11320,7 @@ describe('App', () => {
     if (!updatedTariffRow) {
       throw new Error('Строка тарифа воды не найдена после подтверждения.')
     }
-    expect(updatedTariffRow).toHaveTextContent('до 100 кВт: 4.25, до 200 кВт: 5.25, выше: 6.75')
+    expect(updatedTariffRow).toHaveTextContent('до 100 кВт·ч: 4.25, до 200 кВт·ч: 5.25, выше: 6.75')
     expect(updatedTariffRow).toHaveTextContent('15.08.2026')
   })
 

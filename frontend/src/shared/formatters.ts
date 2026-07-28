@@ -18,7 +18,7 @@ export function formatTariffRateSummary(tariff: TariffDto): string {
     return formatMoney(tariff.rate)
   }
 
-  return `до ${formatNullableNumber(tariff.electricityFirstThreshold!)} кВт: ${formatMoney(tariff.electricityFirstRate!)}, до ${formatNullableNumber(tariff.electricitySecondThreshold!)} кВт: ${formatMoney(tariff.electricitySecondRate!)}, выше: ${formatMoney(tariff.electricityThirdRate!)}`
+  return `до ${formatNullableNumber(tariff.electricityFirstThreshold!)} кВт·ч: ${formatMoney(tariff.electricityFirstRate!)}, до ${formatNullableNumber(tariff.electricitySecondThreshold!)} кВт·ч: ${formatMoney(tariff.electricitySecondRate!)}, выше: ${formatMoney(tariff.electricityThirdRate!)}`
 }
 
 export function formatDebtLabel(value: number): string {

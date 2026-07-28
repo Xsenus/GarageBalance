@@ -5406,7 +5406,7 @@ public sealed class FinanceServiceTests
         var accrual = Assert.Single(database.Context.Accruals);
         Assert.Equal(400m, accrual.Amount);
         Assert.Equal(tariff.Id, accrual.TariffId);
-        Assert.Contains("пороги электроэнергии до 50 кВт по 2.00, до 100 кВт по 3.00, свыше по 5.00", accrual.Comment, StringComparison.Ordinal);
+        Assert.Contains("пороги электроэнергии до 50 кВт·ч по 2.00, до 100 кВт·ч по 3.00, свыше по 5.00", accrual.Comment, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -5627,9 +5627,9 @@ public sealed class FinanceServiceTests
         Assert.Equal(400m, result.Value!.TotalAmount);
         Assert.Equal(400m, result.Value.CreatedAccruals[0].Amount);
         Assert.Equal("meter_electricity", result.Value.CalculationBase);
-        Assert.Contains("пороги электроэнергии до 50 кВт по 2.00, до 100 кВт по 3.00, свыше по 5.00", result.Value.CreatedAccruals[0].Comment, StringComparison.Ordinal);
+        Assert.Contains("пороги электроэнергии до 50 кВт·ч по 2.00, до 100 кВт·ч по 3.00, свыше по 5.00", result.Value.CreatedAccruals[0].Comment, StringComparison.Ordinal);
         var audit = Assert.Single(database.Context.AuditEvents, item => item.Action == "finance.regular_accruals_generated");
-        Assert.Contains("пороги электроэнергии до 50 кВт по 2.00, до 100 кВт по 3.00, свыше по 5.00", audit.Summary, StringComparison.Ordinal);
+        Assert.Contains("пороги электроэнергии до 50 кВт·ч по 2.00, до 100 кВт·ч по 3.00, свыше по 5.00", audit.Summary, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -5668,7 +5668,7 @@ public sealed class FinanceServiceTests
 
         Assert.True(result.Succeeded);
         Assert.Equal(370m, result.Value!.TotalAmount);
-        Assert.Contains("до 150 кВт по 4.00", result.Value.CreatedAccruals[0].Comment, StringComparison.Ordinal);
+        Assert.Contains("до 150 кВт·ч по 4.00", result.Value.CreatedAccruals[0].Comment, StringComparison.Ordinal);
     }
 
     [Fact]

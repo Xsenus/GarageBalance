@@ -238,6 +238,23 @@ public sealed class DatabaseMigrationPolicyTests
     }
 
     [Fact]
+    public void LocalInstallCheck_GeneratesMigrationsFromReleaseBuild()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var script = File.ReadAllText(Path.Combine(
+            repositoryRoot,
+            "infrastructure",
+            "scripts",
+            "check-local-install-without-docker.ps1"));
+
+        Assert.Contains("dotnet.Source publish", script, StringComparison.Ordinal);
+        Assert.Contains("-c Release", script, StringComparison.Ordinal);
+        Assert.Contains("dotnet-ef migrations script", script, StringComparison.Ordinal);
+        Assert.Contains("--configuration Release", script, StringComparison.Ordinal);
+        Assert.Contains("--no-build", script, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void AuditEventsSchema_KeepsStructuredHistoryColumnsAndIndexes()
     {
         var migrationRoot = FindMigrationRoot();

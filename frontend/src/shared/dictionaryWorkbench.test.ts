@@ -243,7 +243,7 @@ describe('dictionary workbench metadata', () => {
     expect(getDictionaryEditorFieldMeta('supplierLegalAddress')).toMatchObject({ label: 'Юридический адрес', ariaLabel: 'Юридический адрес поставщика' })
     expect(getDictionaryEditorFieldMeta('accountingTypeCode')).toMatchObject({ label: 'Код', ariaLabel: 'Код вида операции' })
     expect(getDictionaryEditorFieldMeta('tariffCalculationBase')).toMatchObject({ label: 'База расчета', ariaLabel: 'База расчета тарифа' })
-    expect(getDictionaryEditorFieldMeta('tariffElectricitySecondThreshold')).toMatchObject({ label: 'Порог 2, кВт', ariaLabel: 'Второй порог электроэнергии' })
+    expect(getDictionaryEditorFieldMeta('tariffElectricitySecondThreshold')).toMatchObject({ label: 'Порог 2, кВт·ч', ariaLabel: 'Второй порог электроэнергии' })
     expect(getDictionaryEditorFieldMeta('tariffComment')).toMatchObject({ label: 'Комментарий', ariaLabel: 'Комментарий тарифа' })
   })
 

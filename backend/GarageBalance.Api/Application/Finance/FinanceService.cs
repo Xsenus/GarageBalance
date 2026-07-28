@@ -4258,7 +4258,7 @@ public sealed class FinanceService(
         }
 
         var details = string.Join(", ", tiers.Select(tier => tier.UpperBound.HasValue
-            ? $"до {tier.UpperBound.Value.ToString("0.####", RussianCulture)} кВт по {MoneyFormatting.Format(tier.Rate)}"
+            ? $"до {tier.UpperBound.Value.ToString("0.####", RussianCulture)} кВт·ч по {MoneyFormatting.Format(tier.Rate)}"
             : $"свыше по {MoneyFormatting.Format(tier.Rate)}"));
         return $"пороги электроэнергии {details}";
     }

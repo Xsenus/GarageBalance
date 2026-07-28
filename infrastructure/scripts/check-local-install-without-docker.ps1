@@ -88,6 +88,7 @@ else {
     --project $ApiProject `
     --startup-project $ApiProject `
     --context GarageBalanceDbContext `
+    --configuration Release `
     --idempotent `
     --no-build `
     --output artifacts/local-install-migrations.sql

@@ -76,7 +76,7 @@ describe('shared formatters', () => {
     })
 
     expect(formatTariffRateSummary(fixedTariff)).toBe('250.00')
-    expect(formatTariffRateSummary(electricityTariff)).toBe('до 100 кВт: 3.10, до 250 кВт: 4.20, выше: 5.30')
+    expect(formatTariffRateSummary(electricityTariff)).toBe('до 100 кВт·ч: 3.10, до 250 кВт·ч: 4.20, выше: 5.30')
   })
 
   it('formats allocations and meter reading gaps compactly', () => {
