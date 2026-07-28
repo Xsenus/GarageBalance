@@ -7058,6 +7058,25 @@ button.operation-row:focus-visible {
   flex: 0 1 190px;
 }
 
+.report-quick-periods {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+.report-quick-periods__button {
+  min-height: 38px;
+  padding: 7px 10px;
+  white-space: nowrap;
+}
+
+.report-quick-periods__button[aria-pressed='true'] {
+  border-color: #475467;
+  background: #f2f4f7;
+  color: #101828;
+}
+
 .report-workbook-filter__fields > label:first-child .localized-date-picker__popover {
   right: auto;
   left: 0;
@@ -7790,6 +7809,10 @@ button.operation-row:focus-visible {
 .balance-history-summary strong {
   color: #101828;
   font-size: 16px;
+}
+
+.balance-history-filters__quick-periods {
+  grid-column: 1 / -1;
 }
 
 .contractor-financial-report__summary div {

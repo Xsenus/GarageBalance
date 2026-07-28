@@ -5,6 +5,7 @@ import {
   createDefaultGarageBalanceHistoryFilters,
   createFullFinancialReportFilters,
   createDefaultIncomeReportFilters,
+  getReportQuickPeriodRange,
   loadConsolidatedReportFilters,
   loadExpenseReportFilters,
   loadIncomeReportFilters,
@@ -63,6 +64,32 @@ describe('report filter storage helpers', () => {
       monthFrom: '2023-02',
       monthTo: '2026-07',
     })
+  })
+
+  it('creates quick report periods for the current month and adjacent years', () => {
+    expect(getReportQuickPeriodRange('currentMonth', '2026-07-28')).toEqual({
+      monthFrom: '2026-07',
+      monthTo: '2026-07',
+      dateFrom: '2026-07-01',
+      dateTo: '2026-07-31',
+    })
+    expect(getReportQuickPeriodRange('currentYear', '2026-07-28')).toEqual({
+      monthFrom: '2026-01',
+      monthTo: '2026-12',
+      dateFrom: '2026-01-01',
+      dateTo: '2026-12-31',
+    })
+    expect(getReportQuickPeriodRange('previousYear', '2026-01-01')).toEqual({
+      monthFrom: '2025-01',
+      monthTo: '2025-12',
+      dateFrom: '2025-01-01',
+      dateTo: '2025-12-31',
+    })
+  })
+
+  it('uses the real last day for a quick current-month period', () => {
+    expect(getReportQuickPeriodRange('currentMonth', '2024-02-10').dateTo).toBe('2024-02-29')
+    expect(getReportQuickPeriodRange('currentMonth', '2025-02-10').dateTo).toBe('2025-02-28')
   })
 
   it('loads saved report filters and normalizes unsafe values', () => {

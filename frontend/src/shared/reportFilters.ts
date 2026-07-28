@@ -1,6 +1,38 @@
-import { formatMonthInputValue } from './formatters'
+import { formatMonthInputValue, getLocalDateInputValue } from './formatters'
 import { getDateOnlyOrDefault, getRowModeOrDefault, getStringArrayOrDefault, getStringOrDefault, isRecord, readSessionJson, saveSessionJson } from './sessionStorage'
 import type { ConsolidatedReportFilters, ExpenseReportFilters, IncomeReportFilters } from './validation'
+
+export type ReportQuickPeriodKey = 'currentMonth' | 'currentYear' | 'previousYear'
+
+export type ReportQuickPeriodRange = {
+  monthFrom: string
+  monthTo: string
+  dateFrom: string
+  dateTo: string
+}
+
+export const reportQuickPeriodOptions: ReadonlyArray<{ key: ReportQuickPeriodKey; label: string }> = [
+  { key: 'currentMonth', label: 'Текущий месяц' },
+  { key: 'currentYear', label: 'Текущий год' },
+  { key: 'previousYear', label: 'Предыдущий год' },
+]
+
+export function getReportQuickPeriodRange(period: ReportQuickPeriodKey, referenceDate = getLocalDateInputValue()): ReportQuickPeriodRange {
+  const [referenceYearText, referenceMonthText] = referenceDate.split('-')
+  const referenceYear = Number(referenceYearText)
+  const targetYear = period === 'previousYear' ? referenceYear - 1 : referenceYear
+  const monthFrom = period === 'currentMonth' ? `${referenceYearText}-${referenceMonthText}` : `${targetYear}-01`
+  const monthTo = period === 'currentMonth' ? monthFrom : `${targetYear}-12`
+  const endMonth = Number(monthTo.slice(5, 7))
+  const endDate = new Date(Number(monthTo.slice(0, 4)), endMonth, 0)
+
+  return {
+    monthFrom,
+    monthTo,
+    dateFrom: `${monthFrom}-01`,
+    dateTo: `${monthTo}-${String(endDate.getDate()).padStart(2, '0')}`,
+  }
+}
 
 export const reportFilterStorageKeys = {
   consolidated: 'garagebalance.reports.consolidatedFilters',

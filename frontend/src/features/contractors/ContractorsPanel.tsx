@@ -18,6 +18,7 @@ import { LocalizedDatePicker } from '../../shared/LocalizedDatePicker'
 import { createSupplierOpeningBalanceEntries } from './contractorFinancialReport'
 import { useEscapeKey, useFocusOnOpen, useFocusTrap, useRestoreFocusOnClose } from '../../shared/focusHooks'
 import { createClientPage, createFallbackPage } from '../../shared/pagination'
+import { ReportPeriodQuickSelect } from '../../shared/ReportPeriodQuickSelect'
 import { TablePagination } from '../../shared/TablePagination'
 import { createDefaultGarageBalanceHistoryFilters, createFullFinancialReportFilters } from '../../shared/reportFilters'
 import { SelectControl } from '../../shared/SelectControl'
@@ -2524,6 +2525,13 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
                 {garageFinancialReportLoading ? <LoaderCircle className="financial-report-button__spinner" size={16} aria-hidden="true" /> : <Search size={16} />}
                 <span>{garageFinancialReportLoading ? 'Загружаем...' : 'Показать'}</span>
               </button>
+              <ReportPeriodQuickSelect
+                mode="month"
+                valueFrom={garageFinancialReportFilters.monthFrom}
+                valueTo={garageFinancialReportFilters.monthTo}
+                className="balance-history-filters__quick-periods"
+                onSelect={(range) => setGarageFinancialReportFilters({ monthFrom: range.monthFrom, monthTo: range.monthTo })}
+              />
             </form>
             {garageFinancialReportError ? <FormError>{garageFinancialReportError}</FormError> : null}
             {garageFinancialReportLoading && !garageFinancialReport ? (
@@ -2608,6 +2616,13 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
                 {contractorFinancialReportLoading ? <LoaderCircle className="financial-report-button__spinner" size={16} aria-hidden="true" /> : <Search size={16} />}
                 <span>{contractorFinancialReportLoading ? 'Загружаем...' : 'Показать'}</span>
               </button>
+              <ReportPeriodQuickSelect
+                mode="month"
+                valueFrom={contractorFinancialReportFilters.monthFrom}
+                valueTo={contractorFinancialReportFilters.monthTo}
+                className="balance-history-filters__quick-periods"
+                onSelect={(range) => setContractorFinancialReportFilters({ monthFrom: range.monthFrom, monthTo: range.monthTo })}
+              />
             </form>
             {contractorFinancialReportError ? <FormError>{contractorFinancialReportError}</FormError> : null}
             {contractorFinancialReportLoading && !contractorFinancialReport ? (

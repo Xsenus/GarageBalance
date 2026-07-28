@@ -89,11 +89,12 @@ describe('accessible dynamic messages', () => {
     expect(reportPanelSource).toContain('<LocalizedDatePicker ariaLabel={labels.from} mode="date"')
     expect(reportPanelSource).not.toContain('type="month"')
     expect(reportPanelSource).not.toContain('type="date"')
-    expect(reportPanelSource).toContain('applyPreviousMonth')
-    expect(reportPanelSource).toContain('applyToday')
-    expect(reportPanelSource).toContain('report-period-button')
+    expect(reportPanelSource).toContain('applyMonthlyQuickPeriod')
+    expect(reportPanelSource).toContain('applyDateQuickPeriod')
+    expect(reportPanelSource.match(/<ReportPeriodQuickSelect\b/g)).toHaveLength(2)
     expect(appCss).toContain('.report-workbook-filter')
-    expect(appCss).toContain('.report-period-button')
+    expect(appCss).toContain('.report-quick-periods')
+    expect(appCss).toContain('.report-quick-periods__button')
   })
 
   it('keeps every report multi-selection on the shared searchable checkbox pattern', () => {

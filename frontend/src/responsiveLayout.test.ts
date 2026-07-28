@@ -47,6 +47,12 @@ describe('responsive layout styles', () => {
     expect(normalizedAppCss).toContain('.report-export-button__spinner,\n  .financial-report-button__spinner {\n    animation: none;')
   })
 
+  it('wraps quick report periods and keeps dialog presets on their own row', () => {
+    expect(normalizedAppCss).toContain('.report-quick-periods {\n  display: flex;\n  flex-wrap: wrap;')
+    expect(normalizedAppCss).toContain(".report-quick-periods__button[aria-pressed='true'] {")
+    expect(normalizedAppCss).toContain('.balance-history-filters__quick-periods {\n  grid-column: 1 / -1;')
+  })
+
   it('makes the staff dialog wider and taller while keeping it responsive', () => {
     expect(normalizedAppCss).toContain('.detail-dialog.contractors-dialog--staff {\n  width: min(700px, calc(100vw - 48px));\n  min-height: 400px;')
     expect(normalizedAppCss).toContain('.contractors-dialog--staff .contractors-modal-form {\n  min-height: 300px;\n  align-content: space-between;')

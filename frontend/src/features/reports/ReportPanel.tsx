@@ -7,9 +7,11 @@ import type { BankDepositReportDto, CashPaymentReportDto, ConsolidatedReportDto,
 import { EmptyState, TableLoadingState } from '../../shared/AsyncState'
 import { buildReportFileName, buildSnapshotReportFileName, downloadBlob } from '../../shared/fileExports'
 import { FormError } from '../../shared/formFeedback'
-import { formatMoney, formatMonth, formatOperationTime, getCurrentMonthInputValue, getLocalDateInputValue, getPreviousMonthInputValue } from '../../shared/formatters'
+import { formatMoney, formatMonth, formatOperationTime, getCurrentMonthInputValue, getLocalDateInputValue } from '../../shared/formatters'
 import { LocalizedDatePicker } from '../../shared/LocalizedDatePicker'
 import { createClientPage } from '../../shared/pagination'
+import { ReportPeriodQuickSelect } from '../../shared/ReportPeriodQuickSelect'
+import type { ReportQuickPeriodRange } from '../../shared/reportFilters'
 import { advanceReportSort } from '../../shared/reportSorting'
 import type { ReportSort } from '../../shared/reportSorting'
 import { TablePagination } from '../../shared/TablePagination'
@@ -209,7 +211,6 @@ function getReportMonthEnd(monthValue: string) {
 export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: AuthResponse; dictionaryClient: DictionaryClient; reportClient: ReportClient }) {
   const today = getLocalDateInputValue()
   const currentMonth = getCurrentMonthInputValue(today)
-  const previousMonth = getPreviousMonthInputValue(currentMonth)
   const feeOptionsId = useId()
   const [activeReportTab, setActiveReportTab] = useState<ReportWorkbookTab>('consolidated')
   const [reportSorts, setReportSorts] = useState<Partial<Record<ReportWorkbookTab, ReportSort>>>({})
@@ -762,31 +763,19 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
     }))
   }
 
-  function applyPreviousMonth(key: ReportMonthlyFilterKey) {
-    if (key === 'garages') {
-      setGaragePageRequest((current) => ({ ...current, offset: 0 }))
-    } else if (key === 'payouts') {
-      setPayoutPageRequest((current) => ({ ...current, offset: 0 }))
-    }
+  function applyMonthlyQuickPeriod(key: ReportMonthlyFilterKey, range: ReportQuickPeriodRange) {
+    resetReportPage(key)
     setMonthlyFilters((current) => ({
       ...current,
-      [key]: { monthFrom: previousMonth, monthTo: previousMonth },
+      [key]: { monthFrom: range.monthFrom, monthTo: range.monthTo },
     }))
   }
 
-  function applyToday(key: ReportDateFilterKey) {
-    if (key === 'income') {
-      setIncomePageRequest((current) => ({ ...current, offset: 0 }))
-    } else if (key === 'cashPayments') {
-      setCashPaymentPageRequest((current) => ({ ...current, offset: 0 }))
-    } else if (key === 'bankDeposits') {
-      setBankDepositPageRequest((current) => ({ ...current, offset: 0 }))
-    } else if (key === 'funds') {
-      setFundChangePageRequest((current) => ({ ...current, offset: 0 }))
-    }
+  function applyDateQuickPeriod(key: ReportDateFilterKey, range: ReportQuickPeriodRange) {
+    resetReportPage(key)
     setDateFilters((current) => ({
       ...current,
-      [key]: { dateFrom: today, dateTo: today },
+      [key]: { dateFrom: range.dateFrom, dateTo: range.dateTo },
     }))
   }
 
@@ -989,7 +978,13 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
             <span>{labels.to}</span>
             <LocalizedDatePicker ariaLabel={labels.to} mode="month" value={filter.monthTo} onChange={(value) => updateMonthlyFilter(key, 'monthTo', value)} required />
           </label>
-          <button className="link-button report-period-button" type="button" onClick={() => applyPreviousMonth(key)}>Предыдущий</button>
+          <ReportPeriodQuickSelect
+            mode="month"
+            valueFrom={filter.monthFrom}
+            valueTo={filter.monthTo}
+            referenceDate={today}
+            onSelect={(range) => applyMonthlyQuickPeriod(key, range)}
+          />
         </div>
         {labels.actions ? <div className="report-workbook-filter__actions" role="group" aria-label="Действия с отчетом">{labels.actions}</div> : null}
         {labels.extra ? <div className="report-workbook-filter__extra">{labels.extra}</div> : null}
@@ -1010,7 +1005,13 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
             <span>{labels.to}</span>
             <LocalizedDatePicker ariaLabel={labels.to} mode="date" value={filter.dateTo} onChange={(value) => updateDateFilter(key, 'dateTo', value)} required />
           </label>
-          <button className="link-button report-period-button" type="button" onClick={() => applyToday(key)}>Сегодня</button>
+          <ReportPeriodQuickSelect
+            mode="date"
+            valueFrom={filter.dateFrom}
+            valueTo={filter.dateTo}
+            referenceDate={today}
+            onSelect={(range) => applyDateQuickPeriod(key, range)}
+          />
         </div>
         {labels.actions ? <div className="report-workbook-filter__actions" role="group" aria-label="Действия с отчетом">{labels.actions}</div> : null}
         {labels.extra ? <div className="report-workbook-filter__extra">{labels.extra}</div> : null}

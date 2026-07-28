@@ -2060,6 +2060,12 @@ describe('App', () => {
     expect(within(garageFinancialReportDialog).getAllByText('500.00').length).toBeGreaterThan(0)
     expect(requestedGarageFinancialReportId).toBe(contractorGarage.id)
     expect(requestedGarageFinancialReportPeriod).toEqual({ monthFrom: '2022-03', monthTo: '2026-07' })
+    const garageReportYear = new Date().getFullYear()
+    await user.click(within(garageFinancialReportDialog).getByRole('button', { name: 'Текущий год' }))
+    expect(within(garageFinancialReportDialog).getByLabelText('Начало периода финансового отчета гаража')).toHaveValue(`01.${garageReportYear}`)
+    expect(within(garageFinancialReportDialog).getByLabelText('Конец периода финансового отчета гаража')).toHaveValue(`12.${garageReportYear}`)
+    await user.click(within(garageFinancialReportDialog).getByRole('button', { name: 'Показать' }))
+    await waitFor(() => expect(requestedGarageFinancialReportPeriod).toEqual({ monthFrom: `${garageReportYear}-01`, monthTo: `${garageReportYear}-12` }))
     await user.keyboard('{Escape}')
     expect(screen.queryByRole('dialog', { name: 'Гараж 1' })).not.toBeInTheDocument()
     await waitFor(() => expect(openGarageFinancialReportButton).toHaveFocus())
@@ -3229,6 +3235,10 @@ describe('App', () => {
     expect(reportPeriodFrom).toBeRequired()
     expect(reportPeriodFrom).not.toHaveAttribute('type', 'month')
     expect(reportPeriodFrom).toHaveValue('03.2024')
+    const supplierReportYear = new Date().getFullYear()
+    await user.click(within(supplierReport).getByRole('button', { name: 'Предыдущий год' }))
+    expect(reportPeriodFrom).toHaveValue(`01.${supplierReportYear - 1}`)
+    expect(within(supplierReport).getByLabelText('Конец периода финансового отчета контрагента')).toHaveValue(`12.${supplierReportYear - 1}`)
     const reportCalendarTrigger = within(supplierReport).getByRole('button', { name: 'Открыть календарь: Начало периода финансового отчета контрагента' })
     await user.click(reportCalendarTrigger)
     expect(within(supplierReport).getByRole('dialog', { name: 'Начало периода финансового отчета контрагента: календарь' })).toBeInTheDocument()
@@ -15957,10 +15967,7 @@ describe('App', () => {
 
     const consolidatedMonthFrom = within(reportsPanel).getByLabelText('Месяц с') as HTMLInputElement
     const consolidatedMonthTo = within(reportsPanel).getByLabelText('Месяц по') as HTMLInputElement
-    const initialMonth = consolidatedMonthFrom.value
-    const [monthText, yearText] = initialMonth.split('.')
-    const previousDate = new Date(Number(yearText), Number(monthText) - 2, 1)
-    const previousMonth = `${String(previousDate.getMonth() + 1).padStart(2, '0')}.${previousDate.getFullYear()}`
+    const reportYear = new Date().getFullYear()
     await user.click(within(reportsPanel).getByRole('button', { name: 'Открыть календарь: Месяц с' }))
     expect(within(reportsPanel).getByRole('dialog', { name: 'Месяц с: календарь' })).toBeInTheDocument()
     await user.keyboard('{Escape}')
@@ -15968,9 +15975,14 @@ describe('App', () => {
     expect(consolidatedExportButton).toHaveClass('secondary-button', 'report-export-button', 'report-export-button--xlsx')
     expect(consolidatedExportButton).toHaveTextContent('')
     expect(consolidatedExportButton.closest('.report-workbook-filter')).toContainElement(consolidatedMonthFrom)
-    await user.click(within(reportsPanel).getByRole('button', { name: 'Предыдущий' }))
-    expect(consolidatedMonthFrom).toHaveValue(previousMonth)
-    expect(consolidatedMonthTo).toHaveValue(previousMonth)
+    const consolidatedQuickPeriods = within(reportsPanel).getByRole('group', { name: 'Быстрый выбор периода' })
+    await user.click(within(consolidatedQuickPeriods).getByRole('button', { name: 'Текущий год' }))
+    expect(consolidatedMonthFrom).toHaveValue(`01.${reportYear}`)
+    expect(consolidatedMonthTo).toHaveValue(`12.${reportYear}`)
+    expect(within(consolidatedQuickPeriods).getByRole('button', { name: 'Текущий год' })).toHaveAttribute('aria-pressed', 'true')
+    await user.click(within(consolidatedQuickPeriods).getByRole('button', { name: 'Предыдущий год' }))
+    expect(consolidatedMonthFrom).toHaveValue(`01.${reportYear - 1}`)
+    expect(consolidatedMonthTo).toHaveValue(`12.${reportYear - 1}`)
 
     await openReportTab(user, reportsPanel, 'По гаражам')
     expect(within(reportsPanel).getByText('Отчёт по гаражам')).toBeInTheDocument()
@@ -16316,14 +16328,16 @@ describe('App', () => {
     expect(within(reportsPanel).getByText('Отчет по поступлениям')).toBeInTheDocument()
     const incomeDateFrom = within(reportsPanel).getByLabelText('С') as HTMLInputElement
     const incomeDateTo = within(reportsPanel).getByLabelText('По') as HTMLInputElement
-    const today = incomeDateFrom.value
-    const [todayDay, todayMonth, todayYear] = today.split('.')
-    const todayIso = `${todayYear}-${todayMonth}-${todayDay}`
+    const currentDate = new Date()
+    const currentMonthLastDay = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0).getDate()
+    const currentMonthText = String(currentDate.getMonth() + 1).padStart(2, '0')
+    const todayIso = `${currentDate.getFullYear()}-${currentMonthText}-${String(currentDate.getDate()).padStart(2, '0')}`
     fireEvent.change(incomeDateFrom, { target: { value: '01.01.2026' } })
     fireEvent.change(incomeDateTo, { target: { value: '02.01.2026' } })
-    await user.click(within(reportsPanel).getByRole('button', { name: 'Сегодня' }))
-    expect(incomeDateFrom).toHaveValue(today)
-    expect(incomeDateTo).toHaveValue(today)
+    const incomeQuickPeriods = within(reportsPanel).getByRole('group', { name: 'Быстрый выбор периода' })
+    await user.click(within(incomeQuickPeriods).getByRole('button', { name: 'Текущий месяц' }))
+    expect(incomeDateFrom).toHaveValue(`01.${currentMonthText}.${currentDate.getFullYear()}`)
+    expect(incomeDateTo).toHaveValue(`${String(currentMonthLastDay).padStart(2, '0')}.${currentMonthText}.${currentDate.getFullYear()}`)
     const incomeReportTable = within(reportsPanel).getByRole('table', { name: 'Отчет по поступлениям' })
     expect(incomeReportTable).toBeInTheDocument()
     expect(incomeReportTable).toHaveTextContent('2026-06-10')
