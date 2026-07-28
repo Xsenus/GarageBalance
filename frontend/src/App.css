@@ -3332,6 +3332,7 @@ h1 {
   align-items: center;
   width: 100%;
   gap: 10px;
+  border: 0;
   border-bottom: 1px solid #eaecf0;
   background: #ffffff;
   color: #101828;
@@ -3354,12 +3355,6 @@ h1 {
 
 .payments-prototype-search-option:last-child {
   border-bottom: 0;
-}
-
-.payments-prototype-search-option input {
-  width: 18px;
-  height: 18px;
-  accent-color: #155eef;
 }
 
 .payments-prototype-search-option > span {
@@ -3398,81 +3393,6 @@ h1 {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
-}
-
-.payments-prototype-selected-item {
-  position: relative;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 30px;
-  align-items: center;
-  width: 100%;
-  max-width: 320px;
-  flex: 0 1 320px;
-  min-height: 78px;
-  border: 1px solid #d0d5dd;
-  border-radius: 8px;
-  background: #ffffff;
-  color: #344054;
-  overflow: hidden;
-}
-
-.payments-prototype-selected-item.is-active {
-  border-color: #155eef;
-  background: #eef4ff;
-  color: #155eef;
-}
-
-.payments-prototype-selected-activate {
-  display: grid;
-  min-width: 0;
-  gap: 2px;
-  border: 0;
-  background: transparent;
-  color: inherit;
-  cursor: pointer;
-  padding: 7px 10px;
-  text-align: left;
-}
-
-.payments-prototype-selected-activate small {
-  overflow: hidden;
-  color: #667085;
-  font-size: 0.78rem;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.payments-prototype-selected-metrics {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 3px 8px;
-  margin-top: 4px;
-}
-
-.payments-prototype-selected-metrics > span {
-  display: flex;
-  min-width: 0;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 4px;
-}
-
-.payments-prototype-selected-metrics small {
-  color: #667085;
-  font-size: 0.68rem;
-}
-
-.payments-prototype-selected-metrics b {
-  overflow: hidden;
-  color: #101828;
-  font-size: 0.72rem;
-  font-variant-numeric: tabular-nums;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.payments-prototype-selected-item.is-active .payments-prototype-selected-activate strong {
-  color: #155eef;
 }
 
 .payments-prototype-selected-remove.icon-button {
@@ -8341,11 +8261,6 @@ button.operation-row:focus-visible {
 
   .payments-prototype-summary-group--finances {
     grid-column: auto;
-  }
-
-  .payments-prototype-selected-item {
-    max-width: none;
-    flex-basis: 100%;
   }
 
   .payments-prototype-workspace-header > .payments-prototype-actions {

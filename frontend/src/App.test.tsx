@@ -4841,7 +4841,8 @@ describe('App', () => {
     expect(within(prototype).queryByText('Ищем гаражи...')).not.toBeInTheDocument()
 
     await user.click(localOption)
-    expect(within(prototype).getByLabelText('Выбранные гаражи')).toHaveTextContent('Гараж 1')
+    expect(within(prototype).queryByLabelText('Выбранные гаражи')).not.toBeInTheDocument()
+    expect(within(prototype).getByLabelText('Выбранный гараж')).toHaveTextContent('Номер1')
   })
 
   it('finishes a stalled garage search with a clear retry message', async () => {
@@ -4912,7 +4913,7 @@ describe('App', () => {
     expect(within(prototype).getByText('Новый результат')).toBeInTheDocument()
   })
 
-  it('keeps several garages selected across consecutive server searches', async () => {
+  it('replaces the active garage across consecutive server searches', async () => {
     const user = userEvent.setup()
     const firstGarage = createGarage({ id: 'garage-search-101', number: '101', ownerName: 'Иванов Иван' })
     const secondGarage = createGarage({ id: 'garage-search-202', number: '202', ownerName: 'Петров Петр' })
@@ -4947,21 +4948,20 @@ describe('App', () => {
 
     await user.type(search, '101')
     await user.click(await within(prototype).findByRole('option', { name: /Гараж\s*101\s*Иванов Иван/ }))
-    expect(within(prototype).getByLabelText('Выбранные гаражи')).toHaveTextContent('Выбрано: 1')
+    const activeGarage = within(prototype).getByLabelText('Выбранный гараж')
+    expect(activeGarage).toHaveTextContent('Номер101')
+    expect(activeGarage).toHaveTextContent('Иванов Иван')
+    expect(within(prototype).queryByLabelText('Выбранные гаражи')).not.toBeInTheDocument()
 
-    await user.clear(search)
     await user.type(search, '202')
     await waitFor(() => expect(getGaragesPage).toHaveBeenCalledWith('token', '202', 0, 20))
-    const selectedGarageList = within(prototype).getByLabelText('Выбранные гаражи')
-    expect(selectedGarageList).toHaveTextContent('Гараж 101Иванов Иван')
     await user.click(await within(prototype).findByRole('option', { name: /Гараж\s*202\s*Петров Петр/ }))
 
-    expect(selectedGarageList).toHaveTextContent('Выбрано: 2')
-    expect(selectedGarageList).toHaveTextContent('Гараж 101Иванов Иван')
-    expect(selectedGarageList).toHaveTextContent('Гараж 202Петров Петр')
-    await user.click(within(selectedGarageList).getByRole('button', { name: 'Гараж 101' }))
-    expect(within(selectedGarageList).getByRole('button', { name: 'Гараж 101' })).toHaveAttribute('aria-pressed', 'true')
-    expect(within(selectedGarageList).getByRole('button', { name: 'Гараж 202' })).toHaveAttribute('aria-pressed', 'false')
+    expect(activeGarage).toHaveTextContent('Номер202')
+    expect(activeGarage).toHaveTextContent('Петров Петр')
+    expect(activeGarage).not.toHaveTextContent('Номер101')
+    expect(activeGarage).not.toHaveTextContent('Иванов Иван')
+    expect(search).toHaveValue('')
   })
 
   it('ranks an exact garage number before prefixes and contained matches', async () => {
@@ -5453,20 +5453,10 @@ describe('App', () => {
     await waitFor(() => expect(searchGaragesPage).toHaveBeenCalledWith('token', 'Иванов', 0, 20))
     const garageOption = await within(prototype).findByRole('option', { name: /Гараж\s*1\s*Иванов Иван/ })
     await user.click(garageOption)
-    const secondGarageOption = await within(prototype).findByRole('option', { name: /Гараж\s*2\s*Иванов Петр/ })
-    await user.click(secondGarageOption)
-    const selectedGarageList = within(prototype).getByLabelText('Выбранные гаражи')
-    expect(selectedGarageList.closest('.payments-prototype-search-wrap')).toBeNull()
-    expect(selectedGarageList.parentElement).toHaveClass('payments-prototype-topline')
-    expect(selectedGarageList).toHaveTextContent('Выбрано: 2')
-    expect(selectedGarageList).toHaveTextContent('Гараж 1Иванов Иван')
-    expect(selectedGarageList).toHaveTextContent('Гараж 2Иванов Петр')
-    expect(selectedGarageList.querySelector('.payments-prototype-selected-list')).not.toBeNull()
-    expect(within(selectedGarageList).getByLabelText('Параметры гаража 1')).toHaveTextContent('Люди')
-    expect(within(selectedGarageList).getByLabelText('Параметры гаража 1')).toHaveTextContent('Баланс-1 500.00')
-    expect(within(selectedGarageList).getByLabelText('Параметры гаража 1')).toHaveTextContent('Просрочка500.00')
-    expect(within(selectedGarageList).getByLabelText('Параметры гаража 2')).toHaveTextContent('Этажи')
-    expect(within(selectedGarageList).getByLabelText('Параметры гаража 2')).toHaveTextContent('Просрочка')
+    expect(within(prototype).queryByLabelText('Выбранные гаражи')).not.toBeInTheDocument()
+    expect(garageSearchInput).toHaveValue('')
+
+    await user.type(garageSearchInput, 'Иванов')
     expect(within(prototype).getByRole('listbox', { name: 'Найденные гаражи' })).toBeInTheDocument()
     const outsideSearchTarget = within(prototype).getByRole('region', { name: 'Параметры выбранного гаража' })
     const stopOutsidePointer = (event: PointerEvent) => event.stopPropagation()
@@ -5478,10 +5468,6 @@ describe('App', () => {
     expect(within(prototype).getByRole('listbox', { name: 'Найденные гаражи' })).toBeInTheDocument()
     await user.keyboard('{Escape}')
     expect(within(prototype).queryByRole('listbox', { name: 'Найденные гаражи' })).not.toBeInTheDocument()
-    await user.click(within(prototype).getByRole('button', { name: 'Гараж 1' }))
-    await user.click(within(prototype).getByRole('button', { name: 'Убрать гараж 2 из выбранных' }))
-    expect(selectedGarageList).toHaveTextContent('Выбрано: 1')
-    expect(selectedGarageList).not.toHaveTextContent('Гараж 2')
 
     const workspaceHeader = within(prototype).getByRole('region', { name: 'Карточка выбранного гаража' })
     const selectedGarageSummary = within(workspaceHeader).getByRole('region', { name: 'Параметры выбранного гаража' })
@@ -6225,7 +6211,7 @@ describe('App', () => {
     await user.type(searchInput, 'Иванов')
     await user.click(await within(prototype).findByRole('option', { name: /Гараж\s*1\s*Иванов Иван/ }))
     expect(await within(prototype).findByRole('table', { name: 'Поступления гаража 1' })).toBeInTheDocument()
-    expect(within(prototype).getByLabelText('Выбранные гаражи')).toHaveTextContent('Гараж 1')
+    expect(within(prototype).getByLabelText('Выбранный гараж')).toHaveTextContent('Номер1')
 
     await openSection(user, 'Главное меню')
     await openSection(user, 'Платежи')
@@ -6233,6 +6219,7 @@ describe('App', () => {
     expect(await within(reopenedPrototype).findByText('Выберите гараж через поиск, чтобы увидеть карточку, поступления, историю платежей и задолженность.')).toHaveAttribute('role', 'status')
     expect(within(reopenedPrototype).getByLabelText('Поиск номера гаража или ФИО владельца')).toHaveValue('')
     expect(within(reopenedPrototype).queryByLabelText('Выбранные гаражи')).not.toBeInTheDocument()
+    expect(within(reopenedPrototype).queryByLabelText('Выбранный гараж')).not.toBeInTheDocument()
     expect(within(reopenedPrototype).queryByRole('table', { name: 'Поступления гаража 1' })).not.toBeInTheDocument()
     expect(within(reopenedPrototype).queryByRole('table', { name: 'История платежей гаража' })).not.toBeInTheDocument()
     expect(vi.mocked(formStatesApi.saveState).mock.calls.some((call) => call[1] === 'payments-prototype')).toBe(false)

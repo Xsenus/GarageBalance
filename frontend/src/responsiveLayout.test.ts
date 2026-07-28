@@ -97,7 +97,7 @@ describe('responsive layout styles', () => {
     expect(normalizedAppCss).toContain('.settings-card--backups .summary-strip,\n  .settings-card--diagnostics .summary-strip {\n    grid-template-columns: 1fr;')
   })
 
-  it('keeps garage multi-selection and the grouped garage card responsive', () => {
+  it('keeps the single garage search and grouped active card responsive', () => {
     expect(normalizedAppCss).toContain('.payments-prototype-heading {\n  margin-bottom: 2px;')
     expect(normalizedAppCss).toContain('.payments-prototype-workspace-header {\n  display: grid;\n  gap: 10px;\n  min-width: 0;\n  border: 1px solid #dfe4ec;\n  border-radius: 10px;')
     expect(normalizedAppCss).toContain('.payments-prototype-overdue-details {\n  min-width: 0;\n  border: 1px solid #fecdca;')
@@ -109,10 +109,9 @@ describe('responsive layout styles', () => {
     expect(appCss).toContain('grid-template-columns: repeat(3, minmax(190px, 1fr));')
     expect(normalizedAppCss).toContain('.payments-prototype-topline {\n  display: grid;\n  gap: 10px;\n  width: 100%;')
     expect(normalizedAppCss).toContain('.payments-prototype-search {\n  display: flex;\n  align-items: center;\n  width: min(680px, 100%);')
-    expect(normalizedAppCss).toContain('.payments-prototype-selected-list {\n  display: flex;\n  flex-wrap: wrap;')
-    expect(normalizedAppCss).toContain('.payments-prototype-selected-item {\n  position: relative;\n  display: grid;\n  grid-template-columns: minmax(0, 1fr) 30px;\n  align-items: center;\n  width: 100%;\n  max-width: 320px;\n  flex: 0 1 320px;')
-    expect(normalizedAppCss).toContain('.payments-prototype-selected-metrics b {\n  overflow: hidden;')
-    expect(normalizedAppCss).toContain('font-variant-numeric: tabular-nums;\n  text-overflow: ellipsis;\n  white-space: nowrap;')
+    expect(normalizedAppCss).toContain('.payments-prototype-search-option {\n  display: flex;\n  align-items: center;\n  width: 100%;\n  gap: 10px;\n  border: 0;')
+    expect(normalizedAppCss).not.toContain('.payments-prototype-selected-item {')
+    expect(normalizedAppCss).not.toContain('.payments-prototype-selected-metrics {')
     expect(normalizedAppCss).toContain('.payments-prototype-workspace-header > .payments-prototype-actions {\n  display: grid;\n  grid-template-columns: repeat(4, minmax(0, 1fr));\n  gap: 8px;')
     expect(normalizedAppCss).toContain('.payments-prototype-workspace-header .payments-prototype-action-button {\n  display: inline-flex;\n  align-items: center;\n  justify-content: center;\n  gap: 8px;\n  min-width: 0;\n  min-height: 58px;')
     expect(normalizedAppCss).toContain('line-height: 1.2;\n  text-align: center;\n  white-space: normal;')
@@ -128,7 +127,6 @@ describe('responsive layout styles', () => {
     expect(normalizedAppCss).toContain('.payments-prototype-summary-group--finances {\n    grid-column: auto;')
     expect(normalizedAppCss).toContain('.payments-prototype-search-results {\n    grid-template-columns: repeat(2, minmax(190px, 1fr));')
     expect(normalizedAppCss).toContain('.payments-prototype-search-results {\n    grid-template-columns: minmax(0, 1fr);\n    width: calc(100vw - 32px);')
-    expect(normalizedAppCss).toContain('.payments-prototype-selected-item {\n    max-width: none;\n    flex-basis: 100%;')
   })
 
   it('keeps report checkbox filters aligned with the shared responsive search layout', () => {

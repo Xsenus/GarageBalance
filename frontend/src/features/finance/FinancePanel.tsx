@@ -3102,7 +3102,7 @@ function PaymentsPrototypePanel({
   const [selectedGarageId, setSelectedGarageId] = useState<string | null>(null)
   const selectedGarageIdRef = useRef<string | null>(null)
   const [incomeWorksheetRequests] = useState(() => new LatestRequestSequence())
-  const [selectedGarages, setSelectedGarages] = useState<PaymentsPrototypeGarage[]>([])
+  const [selectedGarage, setSelectedGarage] = useState<PaymentsPrototypeGarage | null>(null)
   const [overdueDebtDetails, setOverdueDebtDetails] = useState<GarageOverdueDebtDto | null>(null)
   const [overdueDebtLoading, setOverdueDebtLoading] = useState(false)
   const [overdueDebtError, setOverdueDebtError] = useState<string | null>(null)
@@ -3163,9 +3163,9 @@ function PaymentsPrototypePanel({
   const realGarageIds = useMemo(
     () => new Set([
       ...availableGarages.filter((garage) => !garage.isArchived).map((garage) => garage.id),
-      ...selectedGarages.map((garage) => garage.id),
+      ...(selectedGarage ? [selectedGarage.id] : []),
     ]),
-    [availableGarages, selectedGarages],
+    [availableGarages, selectedGarage],
   )
   const garageOptions = useMemo<PaymentsPrototypeGarage[]>(
     () => availableGarages
@@ -3182,14 +3182,10 @@ function PaymentsPrototypePanel({
       })),
     [availableGarages],
   )
-  const selectedGarage = selectedGarages.find((garage) => garage.id === selectedGarageId)
-    ?? garageOptions.find((garage) => garage.id === selectedGarageId)
-    ?? null
   const selectedGarageBalance = selectedGarage
     ? getGarageBalancePresentation(selectedGarage.balance, selectedGarage.overdueDebt)
     : null
   const selectedGarageOverdueDebt = selectedGarage?.overdueDebt ?? 0
-  const selectedGarageIds = selectedGarages.map((garage) => garage.id)
   const normalizedSearch = garageSearch.trim().toLowerCase()
   const garageSearchResults = rankGarageSearchResults(garageOptions, normalizedSearch)
     .slice(0, 20)
@@ -3770,6 +3766,7 @@ function PaymentsPrototypePanel({
     selectedGarageIdRef.current = garage.id
     paymentHistoryRequests.invalidate()
     setSelectedGarageId(garage.id)
+    setSelectedGarage(garage)
     setGarageRows([])
     setGarageWorksheetSummary(null)
     setHistoryRows([])
@@ -3782,51 +3779,6 @@ function PaymentsPrototypePanel({
     setIncomeWorksheetMonthFrom(previousMonth)
     setIncomeWorksheetMonthTo(currentMonth)
     void loadGarageIncomeWorksheet(garage, previousMonth, currentMonth, undefined, true)
-  }
-
-  function removeGarageSelection(garage: PaymentsPrototypeGarage) {
-    const remainingGarages = selectedGarages.filter((selectedGarageOption) => selectedGarageOption.id !== garage.id)
-    setSelectedGarages(remainingGarages)
-    if (selectedGarageId === garage.id) {
-      const nextGarage = remainingGarages.at(-1) ?? null
-      if (nextGarage) {
-        activateGarage(nextGarage)
-      } else {
-        selectedGarageIdRef.current = null
-        incomeWorksheetRequests.invalidate()
-        paymentHistoryRequests.invalidate()
-        setSelectedGarageId(null)
-        setGarageRows([])
-        setGarageWorksheetSummary(null)
-        setHistoryRows([])
-        setPaymentHistoryOpen(false)
-        setGaragePaymentHistoryLoadingId(null)
-      }
-    }
-  }
-
-  function toggleGarageSelection(garage: PaymentsPrototypeGarage) {
-    if (selectedGarageIds.includes(garage.id)) {
-      removeGarageSelection(garage)
-      return
-    }
-
-    setSelectedGarages((garageOptionsState) => [...garageOptionsState, garage])
-    activateGarage(garage)
-  }
-
-  function clearGarageSelection() {
-    selectedGarageIdRef.current = null
-    incomeWorksheetRequests.invalidate()
-    paymentHistoryRequests.invalidate()
-    setSelectedGarages([])
-    setSelectedGarageId(null)
-    setGarageRows([])
-    setGarageWorksheetSummary(null)
-    setHistoryRows([])
-    setPaymentHistoryOpen(false)
-    setGaragePaymentHistoryLoadingId(null)
-    setPaymentError(null)
   }
 
   function handleIncomeWorksheetMonthFromChange(value: string) {
@@ -3949,7 +3901,8 @@ function PaymentsPrototypePanel({
 
   function selectFirstGarageResult() {
     if (garageSearchResults.length > 0) {
-      toggleGarageSelection(garageSearchResults[0])
+      activateGarage(garageSearchResults[0])
+      setGarageSearch('')
       setGarageSearchOpen(false)
     }
   }
@@ -4052,9 +4005,9 @@ function PaymentsPrototypePanel({
         { id: operation.id, date: formatDateOnly(operation.operationDate), time: formatOperationTime(operation.createdAtUtc) || paymentTime, amount: operation.amount, purpose: operation.incomeTypeName ?? row.service, debtAfter: historyDebtAfter },
         ...currentRows,
       ])
-      setSelectedGarages((currentGarages) => currentGarages.map((garage) => garage.id === selectedGarage.id
-        ? { ...garage, balance: optimisticGarageDebtAfter }
-        : garage))
+      setSelectedGarage((currentGarage) => currentGarage?.id === selectedGarage.id
+        ? { ...currentGarage, balance: optimisticGarageDebtAfter }
+        : currentGarage)
 
       let overdueRefreshFailed = false
       const overdueRefresh = financeClient.getGarageOverdueDebt(auth.accessToken, selectedGarage.id)
@@ -4063,9 +4016,9 @@ function PaymentsPrototypePanel({
             return
           }
 
-          setSelectedGarages((currentGarages) => currentGarages.map((garage) => garage.id === selectedGarage.id
-            ? { ...garage, balance: optimisticGarageDebtAfter, overdueDebt: details.total }
-            : garage))
+          setSelectedGarage((currentGarage) => currentGarage?.id === selectedGarage.id
+            ? { ...currentGarage, balance: optimisticGarageDebtAfter, overdueDebt: details.total }
+            : currentGarage)
           setOverdueDebtDetails(details.total > 0 ? details : null)
           setOverdueDebtError(null)
         })
@@ -4646,67 +4599,28 @@ function PaymentsPrototypePanel({
               {garageSearchLoading && garageSearchResults.length === 0 ? <span className="payments-prototype-search-empty" role="status">Ищем гаражи...</span> : null}
               {garageSearchError ? <span className="payments-prototype-search-empty" role="alert">{garageSearchError}</span> : null}
               {garageSearchResults.length > 0 ? garageSearchResults.map((garage) => (
-                <label className="payments-prototype-search-option" key={garage.id} role="option" aria-selected={selectedGarageIds.includes(garage.id)}>
-                  <input
-                    type="checkbox"
-                    aria-label={`Выбрать гараж ${garage.number}, ${garage.ownerName}`}
-                    checked={selectedGarageIds.includes(garage.id)}
-                    onChange={() => toggleGarageSelection(garage)}
-                  />
+                <button
+                  className="payments-prototype-search-option"
+                  key={garage.id}
+                  type="button"
+                  role="option"
+                  aria-label={`Открыть карточку: Гараж ${garage.number} ${garage.ownerName}`}
+                  aria-selected={selectedGarageId === garage.id}
+                  onClick={() => {
+                    activateGarage(garage)
+                    setGarageSearch('')
+                    setGarageSearchOpen(false)
+                  }}
+                >
                   <span>
                     <strong>Гараж {garage.number}</strong>
                     <small>{garage.ownerName}</small>
                   </span>
-                </label>
+                </button>
               )) : !garageSearchLoading && !garageSearchError ? <span className="payments-prototype-search-empty">Ничего не найдено</span> : null}
             </div>
           ) : null}
         </div>
-        {selectedGarages.length > 0 ? (
-          <div className="payments-prototype-selected-garages" aria-label="Выбранные гаражи">
-            <div className="payments-prototype-selected-heading">
-              <span>Выбрано: {selectedGarages.length}</span>
-              <button className="ghost-button" type="button" onClick={clearGarageSelection}>Очистить</button>
-            </div>
-            <div className="payments-prototype-selected-list">
-              {selectedGarages.map((garage) => {
-                const balancePresentation = getGarageBalancePresentation(garage.balance, garage.overdueDebt)
-                return (
-                <div className={`payments-prototype-selected-item${garage.id === selectedGarageId ? ' is-active' : ''}`} key={garage.id}>
-                  <button
-                    className="ghost-button payments-prototype-selected-activate"
-                    type="button"
-                    aria-label={`Гараж ${garage.number}`}
-                    aria-pressed={garage.id === selectedGarageId}
-                    onClick={() => {
-                      activateGarage(garage)
-                      setGarageSearchOpen(false)
-                    }}
-                  >
-                    <strong>Гараж {garage.number}</strong>
-                    <small>{garage.ownerName}</small>
-                    <span className="payments-prototype-selected-metrics" aria-label={`Параметры гаража ${garage.number}`}>
-                      <span><small>Люди</small><b>{garage.peopleCount}</b></span>
-                      <span><small>Этажи</small><b>{garage.floorCount}</b></span>
-                      <span><small>{balancePresentation.label}</small><b className={balancePresentation.moneyClassName}>{formatPaymentMoney(balancePresentation.amount)}</b></span>
-                      <span><small>Просрочка</small><b className={garage.overdueDebt > 0 ? 'money-expense' : undefined}>{formatPaymentMoney(garage.overdueDebt)}</b></span>
-                    </span>
-                  </button>
-                  <button
-                    className="icon-button payments-prototype-selected-remove"
-                    type="button"
-                    aria-label={`Убрать гараж ${garage.number} из выбранных`}
-                    title="Убрать из выбранных"
-                    onClick={() => removeGarageSelection(garage)}
-                  >
-                    <X size={14} aria-hidden="true" />
-                  </button>
-                </div>
-                )
-              })}
-            </div>
-          </div>
-        ) : null}
       </div> : null}
       {paymentError ? <FormError>{paymentError}</FormError> : null}
       {receiptActionStatus ? <p className="form-status" role="status">{receiptActionStatus}</p> : null}
