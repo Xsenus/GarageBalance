@@ -8,6 +8,7 @@ namespace GarageBalance.Api.Infrastructure.Data;
 
 public sealed class EfIncomeReportQuery(GarageBalanceDbContext dbContext) : IIncomeReportQuery
 {
+    private static readonly TimeSpan LegacyFullPaymentSessionGap = TimeSpan.FromMinutes(5);
     private const int StartingBalanceDebtCategory = 1;
     private const int AccrualDebtCategory = 2;
     private const int PaymentDebtCategory = 3;
@@ -404,8 +405,9 @@ public sealed class EfIncomeReportQuery(GarageBalanceDbContext dbContext) : IInc
                 .ToList();
         }
 
+        var legacyFullPaymentSessions = BuildLegacyFullPaymentSessions(payments);
         var groupedPayments = payments
-            .GroupBy(operation => operation.ReceiptBatchId ?? operation.Id)
+            .GroupBy(operation => GetPaymentGroupKey(operation, legacyFullPaymentSessions))
             .Select(group =>
             {
                 var representative = group
@@ -958,6 +960,47 @@ public sealed class EfIncomeReportQuery(GarageBalanceDbContext dbContext) : IInc
         var limitClause = limit is > 0 ? "LIMIT @limit" : string.Empty;
         var reportRowsCte = groupPayments
             ? """
+              legacy_full_payment_rows AS (
+                  SELECT id,
+                         garage_id,
+                         operation_date,
+                         created_at_utc,
+                         LAG(created_at_utc) OVER (
+                             PARTITION BY garage_id, operation_date
+                             ORDER BY created_at_utc, id
+                         ) AS previous_created_at_utc
+                  FROM filtered_rows
+                  WHERE receipt_batch_id IS NULL
+                    AND comment LIKE 'Полная оплата %'
+              ),
+              legacy_full_payment_sessions AS (
+                  SELECT id,
+                         SUM(
+                             CASE
+                                 WHEN previous_created_at_utc IS NULL
+                                   OR created_at_utc - previous_created_at_utc > @legacy_full_payment_session_gap
+                                 THEN 1
+                                 ELSE 0
+                             END
+                         ) OVER (
+                             PARTITION BY garage_id, operation_date
+                             ORDER BY created_at_utc, id
+                             ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+                         ) AS legacy_session
+                  FROM legacy_full_payment_rows
+              ),
+              payment_rows_with_group AS (
+                  SELECT filtered_rows.*,
+                         CASE
+                             WHEN receipt_batch_id IS NOT NULL THEN 'batch:' || receipt_batch_id::text
+                             WHEN legacy_full_payment_sessions.id IS NOT NULL
+                                 THEN 'legacy:' || garage_id::text || ':' || operation_date::text || ':' || legacy_session::text
+                             ELSE 'single:' || filtered_rows.id::text
+                         END AS payment_group_key
+                  FROM filtered_rows
+                  LEFT JOIN legacy_full_payment_sessions
+                    ON legacy_full_payment_sessions.id = filtered_rows.id
+              ),
               report_rows AS (
                   SELECT (ARRAY_AGG(id ORDER BY operation_date DESC, created_at_utc DESC, id DESC))[1] AS id,
                          (ARRAY_AGG(operation_date ORDER BY operation_date DESC, created_at_utc DESC, id DESC))[1] AS operation_date,
@@ -976,8 +1019,8 @@ public sealed class EfIncomeReportQuery(GarageBalanceDbContext dbContext) : IInc
                          STRING_AGG(DISTINCT comment, '; ' ORDER BY comment)
                              FILTER (WHERE comment IS NOT NULL) AS comment,
                          MAX(created_at_utc) AS created_at_utc
-                  FROM filtered_rows
-                  GROUP BY COALESCE(receipt_batch_id, id), garage_id, garage_number, owner_id, owner_name
+                  FROM payment_rows_with_group
+                  GROUP BY payment_group_key, garage_id, garage_number, owner_id, owner_name
               )
               """
             : """
@@ -1071,6 +1114,10 @@ public sealed class EfIncomeReportQuery(GarageBalanceDbContext dbContext) : IInc
         if (limit is > 0)
         {
             parameters.Add(new NpgsqlParameter<int>("limit", limit.Value));
+        }
+        if (groupPayments)
+        {
+            parameters.Add(new NpgsqlParameter<TimeSpan>("legacy_full_payment_session_gap", LegacyFullPaymentSessionGap));
         }
 
         var combinedRows = await dbContext.Database
@@ -1234,6 +1281,55 @@ public sealed class EfIncomeReportQuery(GarageBalanceDbContext dbContext) : IInc
     private bool IsNpgsql() =>
         dbContext.Database.ProviderName?.Contains("Npgsql", StringComparison.OrdinalIgnoreCase) == true;
 
+    private static IReadOnlyDictionary<Guid, int> BuildLegacyFullPaymentSessions(
+        IReadOnlyCollection<FinancialOperation> payments)
+    {
+        var sessions = new Dictionary<Guid, int>();
+        foreach (var group in payments
+                     .Where(IsLegacyFullPaymentPart)
+                     .GroupBy(operation => new { operation.GarageId, operation.OperationDate }))
+        {
+            var session = 0;
+            DateTimeOffset? previousCreatedAtUtc = null;
+            foreach (var operation in group
+                         .OrderBy(item => item.CreatedAtUtc)
+                         .ThenBy(item => item.Id))
+            {
+                if (previousCreatedAtUtc is null ||
+                    operation.CreatedAtUtc - previousCreatedAtUtc.Value > LegacyFullPaymentSessionGap)
+                {
+                    session++;
+                }
+
+                sessions[operation.Id] = session;
+                previousCreatedAtUtc = operation.CreatedAtUtc;
+            }
+        }
+
+        return sessions;
+    }
+
+    private static IncomePaymentGroupKey GetPaymentGroupKey(
+        FinancialOperation operation,
+        IReadOnlyDictionary<Guid, int> legacyFullPaymentSessions)
+    {
+        if (operation.ReceiptBatchId is Guid receiptBatchId)
+        {
+            return new IncomePaymentGroupKey(receiptBatchId, null, null, null, 0);
+        }
+
+        if (legacyFullPaymentSessions.TryGetValue(operation.Id, out var legacySession))
+        {
+            return new IncomePaymentGroupKey(null, null, operation.GarageId, operation.OperationDate, legacySession);
+        }
+
+        return new IncomePaymentGroupKey(null, operation.Id, null, null, 0);
+    }
+
+    private static bool IsLegacyFullPaymentPart(FinancialOperation operation) =>
+        operation.ReceiptBatchId is null &&
+        operation.Comment?.StartsWith("Полная оплата ", StringComparison.Ordinal) == true;
+
     private static IOrderedEnumerable<IncomeReportRowDto> ApplySort(IEnumerable<IncomeReportRowDto> rows, ReportSort sort) =>
         sort.Field switch
         {
@@ -1251,6 +1347,12 @@ public sealed class EfIncomeReportQuery(GarageBalanceDbContext dbContext) : IInc
     private readonly record struct IncomeDebtAccrualRow(Guid GarageId, DateOnly AccountingMonth, decimal Amount);
     private readonly record struct IncomeDebtPaymentRow(Guid OperationId, Guid GarageId, DateOnly OperationDate, DateTimeOffset CreatedAtUtc, decimal Amount);
     private readonly record struct IncomeDebtTarget(Guid OperationId, Guid GarageId, DateOnly AccountingMonth, DateOnly OperationDate);
+    private readonly record struct IncomePaymentGroupKey(
+        Guid? ReceiptBatchId,
+        Guid? StandaloneOperationId,
+        Guid? GarageId,
+        DateOnly? OperationDate,
+        int LegacySession);
 
     private sealed record IncomeAllCombinedQueryRow(
         int Category,

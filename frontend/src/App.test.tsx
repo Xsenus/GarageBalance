@@ -16296,6 +16296,30 @@ describe('App', () => {
       const offset = params.offset ?? 0
       const limit = params.limit ?? 25
       const paymentRow = createIncomeReport().rows.find((row) => row.rowType === 'payments')!
+      if (params.groupPayments === false && offset === 0) {
+        return createIncomeReport({
+          rowCount: 2,
+          offset,
+          limit,
+          incomeTotal: 1500,
+          rows: [
+            {
+              ...paymentRow,
+              date: '2026-06-10',
+              incomeAmount: 1000,
+              incomeTypeName: 'Членский взнос',
+              documentNumber: 'PKO-1-A',
+            },
+            {
+              ...paymentRow,
+              date: '2026-06-10',
+              incomeAmount: 500,
+              incomeTypeName: 'Электроэнергия',
+              documentNumber: 'PKO-1-B',
+            },
+          ],
+        })
+      }
       return createIncomeReport({
         rowCount: 30,
         offset,
@@ -16444,7 +16468,7 @@ describe('App', () => {
     expect(incomeReportTable).not.toHaveTextContent('Начисление за июнь')
     const incomeGroupingButton = within(reportsPanel).getByRole('button', { name: 'Показать отдельные платежи' })
     expect(incomeGroupingButton).toHaveAttribute('aria-pressed', 'true')
-    expect(within(reportsPanel).getByRole('note')).toHaveTextContent('По умолчанию части одной квитанции или полной оплаты объединены')
+    expect(within(reportsPanel).getByRole('note')).toHaveTextContent('По умолчанию части одной квитанции или полной оплаты, в том числе сохранённой ранее, объединены')
     const incomePagination = within(reportsPanel).getByRole('navigation', { name: 'Пагинация отчета по поступлениям' })
     expect(within(incomePagination).getByText('Показано 1-1 из 30')).toHaveAttribute('role', 'status')
     await user.click(within(incomePagination).getByRole('button', { name: 'Следующая страница' }))
@@ -16456,7 +16480,11 @@ describe('App', () => {
     await user.click(incomeGroupingButton)
     await waitFor(() => expect(incomePageRequests).toContainEqual({ offset: 0, limit: 25, groupPayments: false }))
     expect(within(reportsPanel).getByRole('button', { name: 'Сгруппировать платежи' })).toHaveAttribute('aria-pressed', 'false')
-    expect(await within(incomeReportTable).findByText('2026-06-10')).toBeInTheDocument()
+    expect(await within(incomeReportTable).findAllByText('2026-06-10')).toHaveLength(2)
+    expect(incomeReportTable).toHaveTextContent('1 000.00')
+    expect(incomeReportTable).toHaveTextContent('Членский взнос')
+    expect(incomeReportTable).toHaveTextContent('Электроэнергия')
+    expect(within(incomePagination).getByText('Показано 1-2 из 2')).toBeInTheDocument()
 
     await openReportTab(user, reportsPanel, 'Оплаты из кассы')
     expect(within(reportsPanel).getByText('Отчёт по оплатам из кассы')).toBeInTheDocument()

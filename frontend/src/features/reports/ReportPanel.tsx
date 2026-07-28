@@ -1622,7 +1622,7 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
             ),
           })}
           <p className="report-workbook-comment" role="note">
-            По умолчанию части одной квитанции или полной оплаты объединены. В режиме отдельных платежей каждая операция показана собственной строкой.
+            По умолчанию части одной квитанции или полной оплаты, в том числе сохранённой ранее, объединены. В режиме отдельных платежей каждая операция показана собственной строкой.
           </p>
           {incomeReportLoading ? <TableLoadingState label="Загружаем поступления..." /> : null}
           {incomeReportError ? <FormError>{incomeReportError}</FormError> : null}

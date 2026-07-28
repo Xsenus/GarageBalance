@@ -1495,6 +1495,85 @@ public sealed class ReportServiceTests
     }
 
     [Fact]
+    public async Task IncomePaymentQuery_GroupsLegacyFullPaymentSessionInFallbackProvider()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        var month = new DateOnly(2026, 6, 1);
+        database.Context.FinancialOperations.AddRange(
+            new FinancialOperation
+            {
+                OperationKind = FinancialOperationKinds.Income,
+                OperationDate = month.AddDays(4),
+                AccountingMonth = month,
+                Amount = 100m,
+                DocumentNumber = "PKO-LEGACY-1",
+                Comment = "Полная оплата Членский взнос июнь 2026",
+                GarageId = fixtures.FirstGarage.Id,
+                IncomeTypeId = fixtures.IncomeType.Id,
+                CreatedAtUtc = new DateTimeOffset(2026, 6, 5, 10, 0, 0, TimeSpan.Zero)
+            },
+            new FinancialOperation
+            {
+                OperationKind = FinancialOperationKinds.Income,
+                OperationDate = month.AddDays(4),
+                AccountingMonth = month,
+                Amount = 200m,
+                DocumentNumber = "PKO-LEGACY-2",
+                Comment = "Полная оплата Электроэнергия июнь 2026",
+                GarageId = fixtures.FirstGarage.Id,
+                IncomeTypeId = fixtures.IncomeType.Id,
+                CreatedAtUtc = new DateTimeOffset(2026, 6, 5, 10, 1, 0, TimeSpan.Zero)
+            },
+            new FinancialOperation
+            {
+                OperationKind = FinancialOperationKinds.Income,
+                OperationDate = month.AddDays(4),
+                AccountingMonth = month,
+                Amount = 50m,
+                DocumentNumber = "PKO-INDEPENDENT",
+                Comment = "Обычный отдельный платеж",
+                GarageId = fixtures.FirstGarage.Id,
+                IncomeTypeId = fixtures.IncomeType.Id,
+                CreatedAtUtc = new DateTimeOffset(2026, 6, 5, 10, 2, 0, TimeSpan.Zero)
+            },
+            new FinancialOperation
+            {
+                OperationKind = FinancialOperationKinds.Income,
+                OperationDate = month.AddDays(4),
+                AccountingMonth = month,
+                Amount = 25m,
+                DocumentNumber = "PKO-LEGACY-LATER",
+                Comment = "Полная оплата Электроэнергия июнь 2026",
+                GarageId = fixtures.FirstGarage.Id,
+                IncomeTypeId = fixtures.IncomeType.Id,
+                CreatedAtUtc = new DateTimeOffset(2026, 6, 5, 10, 10, 0, TimeSpan.Zero)
+            });
+        await database.Context.SaveChangesAsync();
+
+        var result = await new EfIncomeReportQuery(database.Context).GetRowsAsync(
+            month,
+            month.AddMonths(1).AddDays(-1),
+            "payments",
+            new HashSet<Guid>(),
+            new HashSet<Guid>(),
+            new HashSet<Guid>(),
+            null,
+            25,
+            0,
+            new ReportSort("date", false),
+            true,
+            CancellationToken.None);
+
+        Assert.Equal(3, result.RowCount);
+        Assert.Equal(375m, result.IncomeTotal);
+        var grouped = Assert.Single(result.Rows, row => row.IncomeAmount == 300m);
+        Assert.Equal("PKO-LEGACY-1, PKO-LEGACY-2", grouped.DocumentNumber);
+        Assert.Contains(result.Rows, row => row.DocumentNumber == "PKO-INDEPENDENT");
+        Assert.Contains(result.Rows, row => row.DocumentNumber == "PKO-LEGACY-LATER");
+    }
+
+    [Fact]
     public async Task IncomeAllRowsQuery_LoadsThreeSectionsDebtAndCombinedTotalsInFiveSelects()
     {
         var commandCounter = new SelectCommandCounter();
@@ -2550,6 +2629,66 @@ public sealed class ReportServiceTests
         var pdfText = ReadPdfText(pdf.Value!.Content);
         Assert.Contains("Rows: 2", pdfText);
         Assert.Contains("PKO-GROUP-1, PKO-GROUP-2", pdfText);
+        Assert.Contains("1 000.00", pdfText);
+    }
+
+    [Fact]
+    public async Task ExportIncomeReports_GroupLegacyFullPaymentPartsLikeScreen()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        var service = CreateService(database.Context);
+        var month = new DateOnly(2026, 6, 1);
+        database.Context.FinancialOperations.AddRange(
+            new FinancialOperation
+            {
+                OperationKind = FinancialOperationKinds.Income,
+                OperationDate = month.AddDays(9),
+                AccountingMonth = month,
+                Amount = 400m,
+                DocumentNumber = "PKO-LEGACY-EXPORT-1",
+                Comment = "Полная оплата Членский взнос июнь 2026",
+                GarageId = fixtures.FirstGarage.Id,
+                IncomeTypeId = fixtures.IncomeType.Id,
+                CreatedAtUtc = new DateTimeOffset(2026, 6, 10, 10, 0, 0, TimeSpan.Zero)
+            },
+            new FinancialOperation
+            {
+                OperationKind = FinancialOperationKinds.Income,
+                OperationDate = month.AddDays(9),
+                AccountingMonth = month,
+                Amount = 600m,
+                DocumentNumber = "PKO-LEGACY-EXPORT-2",
+                Comment = "Полная оплата Электроэнергия июнь 2026",
+                GarageId = fixtures.FirstGarage.Id,
+                IncomeTypeId = fixtures.IncomeType.Id,
+                CreatedAtUtc = new DateTimeOffset(2026, 6, 10, 10, 1, 0, TimeSpan.Zero)
+            });
+        await database.Context.SaveChangesAsync();
+        var request = new IncomeReportRequest(
+            month,
+            month.AddMonths(1).AddDays(-1),
+            null,
+            [],
+            [],
+            [],
+            "payments",
+            SortBy: "date",
+            SortDirection: "asc",
+            GroupPayments: true);
+
+        var xlsx = await service.ExportIncomeReportXlsxAsync(request, CancellationToken.None);
+        var pdf = await service.ExportIncomeReportPdfAsync(request, CancellationToken.None);
+
+        Assert.True(xlsx.Succeeded, xlsx.ErrorMessage);
+        var workbookRows = ReadFirstWorksheetRows(xlsx.Value!.Content);
+        Assert.Equal(2, workbookRows.Count);
+        Assert.Equal("1000.0", workbookRows[1][7]);
+        Assert.Equal("PKO-LEGACY-EXPORT-1, PKO-LEGACY-EXPORT-2", workbookRows[1][10]);
+        Assert.True(pdf.Succeeded, pdf.ErrorMessage);
+        var pdfText = ReadPdfText(pdf.Value!.Content);
+        Assert.Contains("Rows: 1", pdfText);
+        Assert.Contains("PKO-LEGACY-EXPORT-1, PKO-LEGACY-EXPORT-2", pdfText);
         Assert.Contains("1 000.00", pdfText);
     }
 
