@@ -28,6 +28,8 @@ public sealed class GitHubActionsDeploymentTests
         Assert.Contains("garagebalance-staging:~/uploads/${RELEASE_ID}/api.tar.gz", workflow, StringComparison.Ordinal);
         Assert.Contains("ssh -O exit garagebalance-staging", workflow, StringComparison.Ordinal);
         Assert.Contains("sudo /usr/local/bin/garagebalance-deploy-apply", workflow, StringComparison.Ordinal);
+        Assert.Contains("curl --http2 --compressed --fail", workflow, StringComparison.Ordinal);
+        Assert.Contains("https://sgk.blagodaty.ru${ENTRY_ASSET}?deployment=${GITHUB_SHA}-${ATTEMPT}", workflow, StringComparison.Ordinal);
     }
 
     [Fact]

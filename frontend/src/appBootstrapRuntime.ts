@@ -1,6 +1,7 @@
 const RELOAD_QUERY_PARAMETER = '_gb_reload'
 
 export function markBootstrapReady() {
+  document.documentElement.dataset.appReady = 'true'
   window.dispatchEvent(new Event('garagebalance:bootstrap-ready'))
 
   const currentUrl = new URL(window.location.href)

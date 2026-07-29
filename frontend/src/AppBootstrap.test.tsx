@@ -21,7 +21,9 @@ describe('application bootstrap protection', () => {
 
     expect(screen.getByText('Рабочий экран')).toBeInTheDocument()
     await waitFor(() => expect(readyListener).toHaveBeenCalledTimes(1))
+    expect(document.documentElement).toHaveAttribute('data-app-ready', 'true')
     window.removeEventListener('garagebalance:bootstrap-ready', readyListener)
+    delete document.documentElement.dataset.appReady
   })
 
   it('shows a retryable screen instead of a blank page after a root render failure', async () => {

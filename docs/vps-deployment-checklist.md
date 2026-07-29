@@ -136,6 +136,9 @@ server {
     }
 
     location /assets/ {
+        # Cloudflare выполняет edge-сжатие; динамический gzip origin для крупных
+        # JS-файлов отключён, чтобы не получать оборванные HTTP/2 streams.
+        gzip off;
         add_header Cache-Control "public, max-age=2592000, immutable" always;
         try_files $uri =404;
     }
