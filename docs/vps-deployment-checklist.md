@@ -119,7 +119,7 @@ WantedBy=multi-user.target
 Для отдельного безопасного журнала длительности создать `/etc/nginx/conf.d/garagebalance-timing.conf`. Формат использует `$uri`, а не `$request_uri`, поэтому поисковые строки и другие query-параметры в этот журнал не попадают:
 
 ```nginx
-log_format garagebalance_timing '$time_iso8601 remote=$remote_addr method=$request_method uri=$uri status=$status bytes=$body_bytes_sent request_time=$request_time upstream_connect_time=$upstream_connect_time upstream_header_time=$upstream_header_time upstream_response_time=$upstream_response_time';
+log_format garagebalance_timing '$time_iso8601 request_id=$request_id remote=$remote_addr method=$request_method uri=$uri status=$status bytes=$body_bytes_sent request_time=$request_time upstream_connect_time=$upstream_connect_time upstream_header_time=$upstream_header_time upstream_response_time=$upstream_response_time';
 ```
 
 ```nginx
@@ -154,11 +154,13 @@ server {
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Error-ID $request_id;
         add_header Cache-Control "no-store, no-transform" always;
     }
 
     location /health {
         proxy_pass http://127.0.0.1:3101/health;
+        proxy_set_header X-Error-ID $request_id;
     }
 
     location / {

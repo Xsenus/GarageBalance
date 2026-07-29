@@ -20,4 +20,8 @@ describe('frontend nginx config', () => {
     expect(nginxConfig).toContain('expires 30d;')
     expect(nginxConfig).toContain('Cache-Control "public, max-age=2592000, immutable"')
   })
+
+  it('forwards a safe nginx request identifier to API diagnostics', () => {
+    expect(nginxConfig.match(/proxy_set_header X-Error-ID \$request_id;/g)).toHaveLength(2)
+  })
 })

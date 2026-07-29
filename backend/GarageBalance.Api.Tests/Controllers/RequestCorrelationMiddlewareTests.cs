@@ -27,6 +27,7 @@ public sealed class RequestCorrelationMiddlewareTests
     [Theory]
     [InlineData("customer-error_123")]
     [InlineData("support-case-20260715")]
+    [InlineData("033928c7a98ac25f23e40463bea0d2ff")]
     public async Task InvokeAsync_PreservesSafeCallerIdentifier(string requestedId)
     {
         var context = new DefaultHttpContext();

@@ -46,6 +46,29 @@ public sealed class DiagnosticLoggingDeploymentTests
     }
 
     [Fact]
+    public void RequestDiagnostics_CorrelateNginxBackendAndDatabaseWithoutSqlText()
+    {
+        var checklist = File.ReadAllText(Path.Combine(RepositoryRoot, "docs", "vps-deployment-checklist.md"));
+        var troubleshooting = File.ReadAllText(Path.Combine(RepositoryRoot, "docs", "troubleshooting-guide.md"));
+        var dockerNginx = File.ReadAllText(Path.Combine(RepositoryRoot, "frontend", "nginx.conf"));
+        var interceptor = File.ReadAllText(Path.Combine(
+            RepositoryRoot,
+            "backend",
+            "GarageBalance.Api",
+            "Infrastructure",
+            "Diagnostics",
+            "DatabaseCommandPerformanceInterceptor.cs"));
+
+        Assert.Contains("request_id=$request_id", checklist, StringComparison.Ordinal);
+        Assert.Contains("proxy_set_header X-Error-ID $request_id;", checklist, StringComparison.Ordinal);
+        Assert.Contains("proxy_set_header X-Error-ID $request_id;", dockerNginx, StringComparison.Ordinal);
+        Assert.Contains("SlowDatabaseCommand", troubleshooting, StringComparison.Ordinal);
+        Assert.Contains("FailedDatabaseCommand", troubleshooting, StringComparison.Ordinal);
+        Assert.DoesNotContain(".CommandText", interceptor, StringComparison.Ordinal);
+        Assert.DoesNotContain(".Parameters", interceptor, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void DiagnosticArtifactsStayIgnoredAndOperationsAreDocumented()
     {
         var gitIgnore = File.ReadAllText(Path.Combine(RepositoryRoot, ".gitignore"));

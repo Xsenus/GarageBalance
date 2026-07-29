@@ -67,11 +67,19 @@ var dbConnectionString = NpgsqlConnectionStringFactory.Create(
         builder.Configuration.GetValue<int?>("DatabasePerformance:ConnectionIdleLifetimeSeconds") ?? 300,
         builder.Configuration.GetValue<int?>("DatabasePerformance:ConnectionPruningIntervalSeconds") ?? 10,
         builder.Configuration.GetValue<int?>("DatabasePerformance:KeepAliveSeconds") ?? 0));
-builder.Services.AddDbContextPool<GarageBalanceDbContext>(options =>
+builder.Services.AddHttpContextAccessor();
+builder.Services
+    .AddOptions<DatabaseCommandPerformanceOptions>()
+    .Bind(builder.Configuration.GetSection(DatabaseCommandPerformanceOptions.SectionName))
+    .ValidateDataAnnotations()
+    .ValidateOnStart();
+builder.Services.AddSingleton<DatabaseCommandPerformanceInterceptor>();
+builder.Services.AddDbContextPool<GarageBalanceDbContext>((services, options) =>
 {
     options.UseNpgsql(
         dbConnectionString,
         npgsqlOptions => npgsqlOptions.CommandTimeout(dbCommandTimeoutSeconds));
+    options.AddInterceptors(services.GetRequiredService<DatabaseCommandPerformanceInterceptor>());
 }, dbContextPoolSize);
 builder.Services.AddScoped<IApplicationUnitOfWork, EfApplicationUnitOfWork>();
 builder.Services.AddScoped<IApplicationSettingRepository, EfApplicationSettingRepository>();

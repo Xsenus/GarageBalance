@@ -68,12 +68,14 @@ psql --host=127.0.0.1 --port=5432 --username=garagebalance_local --dbname=garage
 
 ```bash
 tail -n 100 /var/log/nginx/garagebalance-staging-timing.log
-journalctl -u garagebalance-staging.service --since "30 minutes ago" --no-pager | grep -E "SlowHttpRequest|Warning|Error"
+journalctl -u garagebalance-staging.service --since "30 minutes ago" --no-pager | grep -E "SlowHttpRequest|SlowDatabaseCommand|FailedDatabaseCommand|Warning|Error"
 curl -ksS -D - -o /dev/null --resolve sgk.blagodaty.ru:443:127.0.0.1 https://sgk.blagodaty.ru/health
 ```
 
 - [ ] Если `request_time` большой, а `upstream_response_time` и `Server-Timing: app;dur=...` маленькие, задержка находится до nginx или при передаче ответа; проверить маршрут, Cloudflare и доступность IPv4/IPv6 клиента.
 - [ ] Если `upstream_response_time` и `app;dur` одновременно превышают секунду, найти соответствующее предупреждение `SlowHttpRequest` по времени и пути API.
+- [ ] Взять безопасный `request_id` из timing-журнала и найти тот же идентификатор в `SlowHttpRequest`, `SlowDatabaseCommand` или `FailedDatabaseCommand`. SQL-текст и параметры для этого не нужны и в performance-события не записываются.
+- [ ] Если есть `SlowHttpRequest`, но нет медленной SQL-команды, задержка возникла в приложении, файловой операции или внешнем вызове. Если совпал `SlowDatabaseCommand`, сравнить время и частоту события с агрегированным безопасным top SQL из `pg_stat_statements`; `queryid` не привязывается к пользователю или параметрам отдельного HTTP-запроса.
 - [ ] Журнал длительности должен содержать только `$uri` без query-параметров, чтобы поисковая строка не попадала в диагностический файл.
 - [ ] Не увеличивать таймауты как способ скрыть проблему: запросы чтения уже ограничены по времени и один раз повторяются при сетевом обрыве, а операции записи намеренно не повторяются.
 
