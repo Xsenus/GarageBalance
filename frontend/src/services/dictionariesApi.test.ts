@@ -54,6 +54,68 @@ describe('dictionariesApi response cache', () => {
     expect(fetchMock).toHaveBeenCalledTimes(3)
   })
 
+  it('keeps unrelated cached dictionaries after a successful mutation', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify([]), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify([]), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ id: 'owner-1' }), { status: 201 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify([]), { status: 200 }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await dictionariesApi.getGarages('token', undefined, 100)
+    await dictionariesApi.getSuppliers('token', undefined, undefined, 100)
+    await dictionariesApi.createOwner('token', { lastName: 'Иванов', firstName: 'Иван' })
+    await dictionariesApi.getGarages('token', undefined, 100)
+    await dictionariesApi.getSuppliers('token', undefined, undefined, 100)
+
+    expect(fetchMock).toHaveBeenCalledTimes(4)
+  })
+
+  it('keeps cached reads when a mutation fails', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify([]), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ detail: 'Не сохранено' }), { status: 500 }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await dictionariesApi.getGarages('token', undefined, 100)
+    await expect(dictionariesApi.createOwner('token', { lastName: 'Иванов', firstName: 'Иван' })).rejects.toThrow('Не сохранено')
+    await dictionariesApi.getGarages('token', undefined, 100)
+
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+  })
+
+  it('invalidates dependent supplier lists when a supplier group changes', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify([]), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify([]), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ id: 'group-1' }), { status: 201 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify([]), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify([]), { status: 200 }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await dictionariesApi.getSupplierGroups('token', undefined, 100)
+    await dictionariesApi.getSuppliers('token', undefined, undefined, 100)
+    await dictionariesApi.createSupplierGroup('token', { name: 'Коммунальные услуги' })
+    await dictionariesApi.getSupplierGroups('token', undefined, 100)
+    await dictionariesApi.getSuppliers('token', undefined, undefined, 100)
+
+    expect(fetchMock).toHaveBeenCalledTimes(5)
+  })
+
+  it('invalidates a dictionary after a successful no-content archive response', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify([]), { status: 200 }))
+      .mockResolvedValueOnce(new Response(null, { status: 204 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify([]), { status: 200 }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await dictionariesApi.getOwners('token', undefined, 100)
+    await dictionariesApi.archiveOwner('token', 'owner-1', 'Дубликат')
+    await dictionariesApi.getOwners('token', undefined, 100)
+
+    expect(fetchMock).toHaveBeenCalledTimes(3)
+  })
+
   it('creates a regular service and its tariff through one request', async () => {
     const response = { service: { id: 'service-1', tariffId: 'tariff-1' }, tariff: { id: 'tariff-1', rate: 1750 } }
     const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify(response), {
