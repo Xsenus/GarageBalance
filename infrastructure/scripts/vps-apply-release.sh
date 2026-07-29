@@ -135,6 +135,16 @@ tar -xzf "$FRONTEND_ARCHIVE" -C "$NEXT_FRONTEND"
 [[ -f "${NEXT_API}/GarageBalance.Api" ]] || fail "published API executable was not found"
 [[ -f "${NEXT_FRONTEND}/index.html" ]] || fail "frontend index.html was not found"
 
+mapfile -t frontend_entry_assets < <(
+  grep -oE '"/assets/[^"]+"' "${NEXT_FRONTEND}/index.html" \
+    | tr -d '"' \
+    | sort -u
+)
+(( ${#frontend_entry_assets[@]} > 0 )) || fail "frontend index.html does not reference production assets"
+for asset_path in "${frontend_entry_assets[@]}"; do
+  [[ -s "${NEXT_FRONTEND}${asset_path}" ]] || fail "frontend entry asset was not found or empty: ${asset_path}"
+done
+
 # Keep content-hashed assets from recent releases available for browser tabs that
 # were open during deployment. New files win; preserved files are pruned by age.
 if [[ -d "${APP_ROOT}/frontend/assets" ]]; then
@@ -184,6 +194,9 @@ sleep 3
 curl -fsS -H "Host: ${PUBLIC_HOST}" "${backend_base_url%/}/health" >/dev/null
 curl -fsSk -H "Host: ${PUBLIC_HOST}" "https://127.0.0.1/health" >/dev/null
 curl -fsSk -H "Host: ${PUBLIC_HOST}" "https://127.0.0.1/" >/dev/null
+for asset_path in "${frontend_entry_assets[@]}"; do
+  curl -fsSk -H "Host: ${PUBLIC_HOST}" "https://127.0.0.1${asset_path}" >/dev/null
+done
 
 find "/home/${DEPLOY_USER}/uploads" -mindepth 1 -maxdepth 1 -type d -mtime +14 -exec rm -rf {} +
 

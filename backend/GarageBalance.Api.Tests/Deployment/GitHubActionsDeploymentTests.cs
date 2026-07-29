@@ -48,6 +48,9 @@ public sealed class GitHubActionsDeploymentTests
         Assert.Contains("FRONTEND_ASSET_RETENTION_DAYS=30", script, StringComparison.Ordinal);
         Assert.Contains("cp -a -n \"${APP_ROOT}/frontend/assets/.\" \"${NEXT_FRONTEND}/assets/\"", script, StringComparison.Ordinal);
         Assert.Contains("-mtime \"+${FRONTEND_ASSET_RETENTION_DAYS}\" -delete", script, StringComparison.Ordinal);
+        Assert.Contains("frontend_entry_assets", script, StringComparison.Ordinal);
+        Assert.Contains("frontend entry asset was not found or empty", script, StringComparison.Ordinal);
+        Assert.Contains("https://127.0.0.1${asset_path}", script, StringComparison.Ordinal);
     }
 
     private static string FindRepositoryRoot()

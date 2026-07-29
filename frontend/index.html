@@ -6,6 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>GarageBalance - учет ГСК</title>
     <style>
+      html, body { min-height: 100%; margin: 0; background: #f5f7fb; }
       .app-bootstrap-loader { min-height: 100vh; display: grid; place-items: center; background: #f5f7fb; color: #344054; font: 600 14px/1.45 Inter, system-ui, sans-serif; }
       .app-bootstrap-loader__card { display: grid; justify-items: center; gap: 14px; border: 1px solid #d7e3fb; border-radius: 12px; background: #fff; box-shadow: 0 18px 45px rgba(16, 24, 40, .09); padding: 28px 36px; }
       .app-bootstrap-loader__spinner { width: 30px; height: 30px; border: 3px solid #dbe7ff; border-top-color: #155eef; border-radius: 50%; animation: app-bootstrap-spin .8s linear infinite; }
@@ -56,7 +57,11 @@
           retry.className = 'app-bootstrap-loader__retry'
           retry.type = 'button'
           retry.textContent = 'Повторить загрузку'
-          retry.addEventListener('click', () => window.location.reload())
+          retry.addEventListener('click', () => {
+            const nextUrl = new URL(window.location.href)
+            nextUrl.searchParams.set('_gb_reload', Date.now().toString())
+            window.location.replace(nextUrl)
+          })
 
           card.append(message, hint, retry)
           loader.append(card)
