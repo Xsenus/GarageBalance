@@ -5,7 +5,6 @@ import type { AuthResponse } from '../../services/authApi'
 import type { AccountingTypeDto, ChargeServiceSettingDto, CreateChargeServiceWithTariffRequest, DictionaryClient, GarageColumnFilters, GarageDto, OwnerDto, StaffDepartmentDto, StaffMemberDto, SupplierContactDto, SupplierDto, SupplierGroupDto, TariffDto, UpsertGarageRequest, UpsertOwnerRequest, UpsertStaffMemberRequest, UpsertSupplierContactRequest, UpsertSupplierRequest } from '../../services/dictionariesApi'
 import type { FinanceClient, GarageBalanceHistoryDto } from '../../services/financeApi'
 import type { FundDto, FundsClient } from '../../services/fundsApi'
-import type { FormStateClient } from '../../services/formStatesApi'
 import type { DadataAddressSuggestionDto, DadataPartySuggestionDto, IntegrationClient } from '../../services/integrationsApi'
 import { hasPermission, isAdministrator, permissions } from '../../shared/accessControl'
 import { LoadingSkeleton, TableLoadingState } from '../../shared/AsyncState'
@@ -26,8 +25,6 @@ import { formatPrototypeChangeValue } from '../../shared/prototypeEditing'
 import type { AuditPanelPreset, ContractorOpenTarget } from '../../shared/workspaceNavigation'
 import { AddServicePrototypeDialog } from '../tariffs/TariffsAndFeesPanel'
 import { formatStaffRate, parseStaffRate } from './staffRateFormatting'
-
-const contractorsFormStateScope = 'contractors-prototype'
 
 function normalizeContractorTargetText(value?: string | null) {
   return (value ?? '').trim().toLocaleLowerCase('ru-RU')
@@ -771,14 +768,7 @@ function getContractorRestoreTitle(target: ContractorRestoreTarget) {
   return target.item.fullName || 'Сотрудник без имени'
 }
 
-type ContractorsPrototypeSavedState = {
-  garages: ContractorGarageRow[]
-  suppliers: ContractorSupplierRow[]
-  staff: ContractorStaffRow[]
-  departments: ContractorDepartmentRow[]
-}
-
-export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClient, fundsClient, formStateClient, integrationClient, initialTarget = null, onOpenAudit }: { auth: AuthResponse; dictionaryClient: DictionaryClient; financeClient: FinanceClient; fundsClient: FundsClient; formStateClient: FormStateClient; integrationClient: IntegrationClient; initialTarget?: ContractorOpenTarget | null; onOpenAudit: (preset: AuditPanelPreset) => void }) {
+export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClient, fundsClient, integrationClient, initialTarget = null, onOpenAudit }: { auth: AuthResponse; dictionaryClient: DictionaryClient; financeClient: FinanceClient; fundsClient: FundsClient; integrationClient: IntegrationClient; initialTarget?: ContractorOpenTarget | null; onOpenAudit: (preset: AuditPanelPreset) => void }) {
   const [activeSection, setActiveSection] = useState<ContractorSection>(initialTarget?.section ?? 'garages')
   const [showGarageDebtorsOnly, setShowGarageDebtorsOnly] = useState(false)
   const [garageColumnFilterForm, setGarageColumnFilterForm] = useState<GarageColumnFilterForm>(emptyGarageColumnFilterForm)
@@ -804,7 +794,6 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
   const [serviceFunds, setServiceFunds] = useState<FundDto[]>([])
   const [serviceTariffs, setServiceTariffs] = useState<TariffDto[]>([])
   const [serviceSaving, setServiceSaving] = useState(false)
-  const [formStateLoaded, setFormStateLoaded] = useState(false)
   const [formStateError, setFormStateError] = useState<string | null>(null)
   const [modal, setModal] = useState<ContractorModal | null>(null)
   const [restoreTarget, setRestoreTarget] = useState<ContractorRestoreTarget | null>(null)
@@ -917,26 +906,6 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
       }
     }
   }, [auth.accessToken, dictionaryClient])
-
-  useEffect(() => {
-    let cancelled = false
-    formStateClient
-      .getState<ContractorsPrototypeSavedState>(auth.accessToken, contractorsFormStateScope)
-      .catch((error: unknown) => {
-        if (!cancelled) {
-          setFormStateError(error instanceof Error ? error.message : 'Не удалось загрузить сохраненное состояние контрагентов.')
-        }
-      })
-      .finally(() => {
-        if (!cancelled) {
-          setFormStateLoaded(true)
-        }
-      })
-
-    return () => {
-      cancelled = true
-    }
-  }, [auth.accessToken, formStateClient])
 
   useEffect(() => {
     if (loadedContractorSectionsRef.current[activeSection]) {
@@ -1123,23 +1092,6 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
 
     return () => window.clearTimeout(handle)
   }, [garages, initialTarget, openSupplierEditor, staff, suppliers])
-
-  useEffect(() => {
-    if (!formStateLoaded) {
-      return
-    }
-
-    const handle = window.setTimeout(() => {
-      void formStateClient
-        .saveState<ContractorsPrototypeSavedState>(auth.accessToken, contractorsFormStateScope, {
-          payload: { garages, suppliers, staff, departments },
-          summary: 'Сохранено состояние раздела контрагентов.'
-        })
-        .catch((error: unknown) => setFormStateError(error instanceof Error ? error.message : 'Не удалось сохранить состояние контрагентов.'))
-    }, 400)
-
-    return () => window.clearTimeout(handle)
-  }, [auth.accessToken, departments, formStateClient, formStateLoaded, garages, staff, suppliers])
 
   useEffect(() => {
     saveContractorColumnWidths(contractorGarageColumnStorageKey, garageColumnWidths)

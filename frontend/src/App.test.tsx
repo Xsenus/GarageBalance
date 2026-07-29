@@ -4704,6 +4704,39 @@ describe('App', () => {
     expect(getGarages).toHaveBeenCalledTimes(2)
   })
 
+  it('does not let obsolete contractor snapshots show a timeout over loaded dictionaries', async () => {
+    const user = userEvent.setup()
+    const getState = vi.fn(async () => {
+      throw new Error('Сервер слишком долго не отвечает. Проверьте подключение и повторите запрос.')
+    })
+    const saveState = vi.fn(async () => {
+      throw new Error('Сервер слишком долго не отвечает. Проверьте подключение и повторите запрос.')
+    })
+    const garage = createGarage({ id: 'garage-without-snapshot', number: '15' })
+
+    render(<App
+      authClient={createAuthClient()}
+      dictionaryClient={createDictionaryClient({ getGarages: async () => [garage] })}
+      financeClient={createFinanceClient()}
+      formStateClient={{ getState, saveState }}
+      importClient={createImportClient()}
+      reportClient={createReportClient()}
+      releaseClient={createReleaseClient()}
+      userClient={createUserClient()}
+    />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Контрагенты')
+    const contractorsPanel = await screen.findByRole('region', { name: 'Контрагенты' })
+
+    expect(await within(contractorsPanel).findByRole('button', { name: 'Изменить гараж 15' })).toBeInTheDocument()
+    await new Promise((resolve) => window.setTimeout(resolve, 500))
+    expect(getState).not.toHaveBeenCalled()
+    expect(saveState).not.toHaveBeenCalled()
+    expect(within(contractorsPanel).queryByText('Сервер слишком долго не отвечает. Проверьте подключение и повторите запрос.')).not.toBeInTheDocument()
+  })
+
   it('keeps backend contractor dictionaries above stale saved contractor form state', async () => {
     const user = userEvent.setup()
     vi.mocked(formStatesApi.getState).mockImplementation(async (_accessToken: string, scope: string) => scope === 'contractors-prototype'
