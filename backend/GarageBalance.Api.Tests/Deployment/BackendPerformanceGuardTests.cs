@@ -1056,6 +1056,8 @@ public sealed class BackendPerformanceGuardTests
         Assert.Contains("DatabasePerformance:MaximumPoolSize", program, StringComparison.Ordinal);
         Assert.Contains("NpgsqlConnectionStringFactory.Create(", program, StringComparison.Ordinal);
         Assert.Contains("Math.Min(configuredDbContextPoolSize, dbMaximumPoolSize)", program, StringComparison.Ordinal);
+        Assert.Contains("AddGarageBalanceResponseCompression()", program, StringComparison.Ordinal);
+        Assert.Contains("UseResponseCompression()", program, StringComparison.Ordinal);
         Assert.Contains("Math.Clamp(", program, StringComparison.Ordinal);
         Assert.Contains("npgsqlOptions.CommandTimeout(dbCommandTimeoutSeconds)", program, StringComparison.Ordinal);
         Assert.DoesNotContain("EnableRetryOnFailure", program, StringComparison.Ordinal);

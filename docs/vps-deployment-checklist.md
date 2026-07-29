@@ -147,12 +147,14 @@ server {
     location /api/ {
         proxy_pass http://127.0.0.1:3101/api/;
         proxy_http_version 1.1;
+        # JSON сжимает backend (Brotli/Gzip). nginx не должен кодировать ответ повторно.
+        gzip off;
         proxy_set_header Connection "";
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
-        add_header Cache-Control "no-store" always;
+        add_header Cache-Control "no-store, no-transform" always;
     }
 
     location /health {

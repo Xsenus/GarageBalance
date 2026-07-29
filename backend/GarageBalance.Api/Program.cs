@@ -21,6 +21,7 @@ using GarageBalance.Api.Controllers;
 using GarageBalance.Api.Domain.Security;
 using GarageBalance.Api.Infrastructure.Data;
 using GarageBalance.Api.Infrastructure.Backups;
+using GarageBalance.Api.Infrastructure.Compression;
 using GarageBalance.Api.Infrastructure.Diagnostics;
 using GarageBalance.Api.Infrastructure.Import;
 using GarageBalance.Api.Infrastructure.Integrations;
@@ -295,6 +296,7 @@ builder.Services
     {
         options.InvalidModelStateResponseFactory = ApiProblemDetails.CreateInvalidModelStateResponse;
     });
+builder.Services.AddGarageBalanceResponseCompression();
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
 builder.Services.AddOpenApi();
 
@@ -316,6 +318,7 @@ if (httpsRedirectionEnabled)
     app.UseHttpsRedirection();
 }
 app.UseCors("Frontend");
+app.UseResponseCompression();
 
 app.UseAuthentication();
 app.UseRateLimiter();

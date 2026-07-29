@@ -23,6 +23,8 @@ public sealed class DeploymentDocumentationTests
         Assert.Contains("dotnet tool run dotnet-ef migrations script --idempotent", document, StringComparison.Ordinal);
         Assert.Contains("Cache-Control", document, StringComparison.Ordinal);
         Assert.Contains("gzip off;", document, StringComparison.Ordinal);
+        Assert.Contains("JSON сжимает backend (Brotli/Gzip)", document, StringComparison.Ordinal);
+        Assert.Contains("Cache-Control \"no-store, no-transform\"", document, StringComparison.Ordinal);
         Assert.Contains("immutable, no-transform", document, StringComparison.Ordinal);
         Assert.Contains("curl -fsS https://sgk.blagodaty.ru/health", document, StringComparison.Ordinal);
         Assert.Contains("Rollback", document, StringComparison.Ordinal);
