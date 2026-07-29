@@ -20,6 +20,7 @@
 ```bash
 ASPNETCORE_ENVIRONMENT=Production
 ASPNETCORE_URLS=http://127.0.0.1:3101
+HttpsRedirection__Enabled=false
 ConnectionStrings__DefaultConnection=Host=127.0.0.1;Port=5432;Database=garagebalance_staging;Username=garagebalance_staging;Password=REPLACE_WITH_SECRET
 Jwt__Issuer=GarageBalance
 Jwt__Audience=GarageBalance

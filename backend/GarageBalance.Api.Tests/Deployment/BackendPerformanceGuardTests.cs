@@ -1050,6 +1050,20 @@ public sealed class BackendPerformanceGuardTests
     }
 
     [Fact]
+    public void ApiRuntime_AllowsHttpsRedirectionToBeDisabledBehindDocumentedReverseProxy()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var program = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "Program.cs"));
+        var settings = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "appsettings.json"));
+        var vpsChecklist = File.ReadAllText(Path.Combine(repositoryRoot, "docs", "vps-deployment-checklist.md"));
+
+        Assert.Contains("GetValue(\"HttpsRedirection:Enabled\", true)", program, StringComparison.Ordinal);
+        Assert.Contains("if (httpsRedirectionEnabled)", program, StringComparison.Ordinal);
+        Assert.Contains("\"HttpsRedirection\"", settings, StringComparison.Ordinal);
+        Assert.Contains("HttpsRedirection__Enabled=false", vpsChecklist, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void BankDepositTotal_IsFilteredAndAggregatedByAvailableBalanceQuery()
     {
         var source = ReadApiSource("Infrastructure/Data/EfFinanceAvailableBalanceQuery.cs");

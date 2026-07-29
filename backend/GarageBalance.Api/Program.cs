@@ -286,6 +286,7 @@ builder.Services
 builder.Services.AddOpenApi();
 
 var app = builder.Build();
+var httpsRedirectionEnabled = builder.Configuration.GetValue("HttpsRedirection:Enabled", true);
 
 // Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
@@ -297,7 +298,10 @@ app.UseMiddleware<RequestCorrelationMiddleware>();
 app.UseMiddleware<RequestPerformanceMiddleware>();
 app.UseMiddleware<ApiExceptionHandlingMiddleware>();
 app.UseMiddleware<ApiSecurityHeadersMiddleware>();
-app.UseHttpsRedirection();
+if (httpsRedirectionEnabled)
+{
+    app.UseHttpsRedirection();
+}
 app.UseCors("Frontend");
 
 app.UseAuthentication();

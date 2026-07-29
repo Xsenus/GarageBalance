@@ -35,6 +35,7 @@ Secrets-файл для локального ПК: `C:\GarageBalance\Config\gara
 ```powershell
 ASPNETCORE_ENVIRONMENT=Production
 ASPNETCORE_URLS=http://127.0.0.1:5080
+HttpsRedirection__Enabled=false
 ConnectionStrings__DefaultConnection=Host=127.0.0.1;Port=5432;Database=garagebalance_local;Username=garagebalance_local;Password=REPLACE_WITH_SECRET
 Jwt__Issuer=GarageBalance
 Jwt__Audience=GarageBalance
@@ -117,6 +118,7 @@ npm run build
 ```powershell
 $env:ASPNETCORE_ENVIRONMENT="Production"
 $env:ASPNETCORE_URLS="http://127.0.0.1:5080"
+$env:HttpsRedirection__Enabled="false"
 $env:ConnectionStrings__DefaultConnection="Host=127.0.0.1;Port=5432;Database=garagebalance_local;Username=garagebalance_local;Password=REPLACE_WITH_SECRET"
 $env:Jwt__Issuer="GarageBalance"
 $env:Jwt__Audience="GarageBalance"
