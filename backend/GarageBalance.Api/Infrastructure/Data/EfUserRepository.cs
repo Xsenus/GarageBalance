@@ -38,6 +38,7 @@ public sealed class EfUserRepository(GarageBalanceDbContext dbContext) : IUserRe
     public async Task<IReadOnlyList<AppRole>> GetUserRolesAsync(Guid userId, CancellationToken cancellationToken)
     {
         return await dbContext.UserRoles
+            .AsNoTracking()
             .Where(userRole => userRole.UserId == userId)
             .Select(userRole => userRole.Role)
             .ToListAsync(cancellationToken);
