@@ -45,10 +45,20 @@ builder.Services.AddSingleton<IValidateOptions<JwtOptions>>(_ => new JwtOptionsV
 var jwtOptions = builder.Configuration.GetSection(JwtOptions.SectionName).Get<JwtOptions>() ?? new JwtOptions();
 JwtOptionsValidator.ThrowIfInvalid(jwtOptions, builder.Environment.EnvironmentName);
 
-builder.Services.AddDbContext<GarageBalanceDbContext>(options =>
+var dbContextPoolSize = Math.Clamp(
+    builder.Configuration.GetValue<int?>("DatabasePerformance:DbContextPoolSize") ?? 32,
+    8,
+    128);
+var dbCommandTimeoutSeconds = Math.Clamp(
+    builder.Configuration.GetValue<int?>("DatabasePerformance:CommandTimeoutSeconds") ?? 30,
+    5,
+    120);
+builder.Services.AddDbContextPool<GarageBalanceDbContext>(options =>
 {
-    options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection"));
-});
+    options.UseNpgsql(
+        builder.Configuration.GetConnectionString("DefaultConnection"),
+        npgsqlOptions => npgsqlOptions.CommandTimeout(dbCommandTimeoutSeconds));
+}, dbContextPoolSize);
 builder.Services.AddScoped<IApplicationUnitOfWork, EfApplicationUnitOfWork>();
 builder.Services.AddScoped<IApplicationSettingRepository, EfApplicationSettingRepository>();
 builder.Services.AddScoped<IApplicationSettingsService, ApplicationSettingsService>();

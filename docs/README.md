@@ -35,6 +35,7 @@
 - [Завершённый roadmap замечаний от 22.07.2026](roadmaps/customer-comments-2026-07-22-roadmap.md) — проверенная история реализации предыдущего блока комментариев.
 - [Активный roadmap замечаний от 27.07.2026](roadmaps/customer-comments-2026-07-27-roadmap.md) — последовательная реализация нового блока комментариев и текущее состояние каждого пункта.
 - [Активный roadmap Docker-дистрибутива](roadmaps/docker-user-distribution-roadmap.md) — подготовка сценария «Docker Desktop + один ZIP» и оставшаяся приемка на чистом Windows-компьютере.
+- [Активный roadmap полной оптимизации](roadmaps/full-performance-optimization-2026-07-29-roadmap.md) — системная проверка и ускорение запросов, интерфейса, PostgreSQL и VPS.
 
 ## Правила актуальности
 

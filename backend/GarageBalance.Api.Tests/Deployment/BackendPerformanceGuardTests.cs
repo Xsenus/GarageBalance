@@ -1034,6 +1034,22 @@ public sealed class BackendPerformanceGuardTests
     }
 
     [Fact]
+    public void ApiRuntime_UsesBoundedDbContextPoolAndCommandTimeoutWithoutAutomaticWriteRetry()
+    {
+        var program = File.ReadAllText(Path.Combine(FindRepositoryRoot(), "backend", "GarageBalance.Api", "Program.cs"));
+        var settings = File.ReadAllText(Path.Combine(FindRepositoryRoot(), "backend", "GarageBalance.Api", "appsettings.json"));
+
+        Assert.Contains("AddDbContextPool<GarageBalanceDbContext>", program, StringComparison.Ordinal);
+        Assert.Contains("DatabasePerformance:DbContextPoolSize", program, StringComparison.Ordinal);
+        Assert.Contains("DatabasePerformance:CommandTimeoutSeconds", program, StringComparison.Ordinal);
+        Assert.Contains("Math.Clamp(", program, StringComparison.Ordinal);
+        Assert.Contains("npgsqlOptions.CommandTimeout(dbCommandTimeoutSeconds)", program, StringComparison.Ordinal);
+        Assert.DoesNotContain("EnableRetryOnFailure", program, StringComparison.Ordinal);
+        Assert.Contains("\"DbContextPoolSize\": 32", settings, StringComparison.Ordinal);
+        Assert.Contains("\"CommandTimeoutSeconds\": 30", settings, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void BankDepositTotal_IsFilteredAndAggregatedByAvailableBalanceQuery()
     {
         var source = ReadApiSource("Infrastructure/Data/EfFinanceAvailableBalanceQuery.cs");

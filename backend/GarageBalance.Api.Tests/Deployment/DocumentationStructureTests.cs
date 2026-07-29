@@ -24,6 +24,7 @@ public sealed partial class DocumentationStructureTests
         "roadmaps/customer-comments-2026-07-22-roadmap.md",
         "roadmaps/customer-comments-2026-07-27-roadmap.md",
         "roadmaps/docker-user-distribution-roadmap.md",
+        "roadmaps/full-performance-optimization-2026-07-29-roadmap.md",
         "security-data-protection.md",
         "testing-guide.md",
         "troubleshooting-guide.md",
