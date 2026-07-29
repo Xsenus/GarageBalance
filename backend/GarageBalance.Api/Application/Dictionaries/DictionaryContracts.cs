@@ -130,7 +130,14 @@ public sealed record UpsertStaffMemberRequest(
     Guid DepartmentId,
     [Range(0, 999999999)] decimal Rate);
 
-public sealed record AccountingTypeDto(Guid Id, string Name, string? Code, bool IsSystem, bool IsArchived);
+public sealed record AccountingTypeDto(
+    Guid Id,
+    string Name,
+    string? Code,
+    bool IsSystem,
+    bool IsArchived,
+    Guid? DestinationFundId = null,
+    string? DestinationFundName = null);
 
 public sealed record UpsertAccountingTypeRequest(
     [Required, MaxLength(200)] string Name,

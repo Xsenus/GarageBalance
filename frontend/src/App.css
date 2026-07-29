@@ -1205,6 +1205,10 @@ h1 {
   min-width: 118px;
 }
 
+.contractors-editable-select-control--month {
+  min-width: 118px;
+}
+
 .contractors-date-field {
   display: grid;
   justify-items: center;

@@ -101,6 +101,8 @@ export type AccountingTypeDto = {
   code: string | null
   isSystem: boolean
   isArchived: boolean
+  destinationFundId?: string | null
+  destinationFundName?: string | null
 }
 
 export type TariffDto = {

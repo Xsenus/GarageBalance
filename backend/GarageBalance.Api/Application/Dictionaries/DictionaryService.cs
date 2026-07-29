@@ -285,7 +285,14 @@ public sealed class DictionaryService(
     }
 
     private static AccountingTypeDto ToAccountingTypeDto(IncomeType item) =>
-        new(item.Id, item.Name, item.Code, item.IsSystem, item.IsArchived);
+        new(
+            item.Id,
+            item.Name,
+            item.Code,
+            item.IsSystem,
+            item.IsArchived,
+            item.DestinationFundId,
+            item.DestinationFund?.Name);
 
     private static AccountingTypeDto ToAccountingTypeDto(ExpenseType item) =>
         new(item.Id, item.Name, item.Code, item.IsSystem, item.IsArchived);
@@ -1153,10 +1160,21 @@ public sealed class DictionaryService(
             Code = NormalizeOptional(request.Code)
         };
 
+        var defaultFund = (await fundRepository.GetFundsAsync(cancellationToken))
+            .FirstOrDefault(fund => fund.AllowOperations && fund.NormalizedName == "ПРОЧЕЕ");
+        if (defaultFund is not null)
+        {
+            incomeType.DestinationFundId = defaultFund.Id;
+        }
+
         incomeTypeRepository.Add(incomeType);
         AddAudit(actorUserId, "dictionary.income_type_created", "income_type", incomeType.Id, $"Создан вид поступления {incomeType.Name}.");
         await unitOfWork.SaveChangesAsync(cancellationToken);
-        return DictionaryResult<AccountingTypeDto>.Success(new AccountingTypeDto(incomeType.Id, incomeType.Name, incomeType.Code, incomeType.IsSystem, incomeType.IsArchived));
+        var createdDto = ToAccountingTypeDto(incomeType) with
+        {
+            DestinationFundName = defaultFund?.Name
+        };
+        return DictionaryResult<AccountingTypeDto>.Success(createdDto);
     }
 
     public async Task<DictionaryResult<AccountingTypeDto>> UpdateIncomeTypeAsync(Guid id, UpsertAccountingTypeRequest request, Guid? actorUserId, CancellationToken cancellationToken)
@@ -1181,7 +1199,7 @@ public sealed class DictionaryService(
         var code = NormalizeOptional(request.Code);
         if (AccountingTypeMatches(incomeType, name, code))
         {
-            return DictionaryResult<AccountingTypeDto>.Success(new AccountingTypeDto(incomeType.Id, incomeType.Name, incomeType.Code, incomeType.IsSystem, incomeType.IsArchived));
+            return DictionaryResult<AccountingTypeDto>.Success(ToAccountingTypeDto(incomeType));
         }
 
         var oldValues = new Dictionary<string, object?>
@@ -1201,7 +1219,7 @@ public sealed class DictionaryService(
 
         AddAudit(actorUserId, "dictionary.income_type_updated", "income_type", incomeType.Id, $"Обновлен вид поступления {incomeType.Name}.", oldValues: oldValues, newValues: newValues);
         await unitOfWork.SaveChangesAsync(cancellationToken);
-        return DictionaryResult<AccountingTypeDto>.Success(new AccountingTypeDto(incomeType.Id, incomeType.Name, incomeType.Code, incomeType.IsSystem, incomeType.IsArchived));
+        return DictionaryResult<AccountingTypeDto>.Success(ToAccountingTypeDto(incomeType));
     }
 
     public async Task<DictionaryResult<AccountingTypeDto>> ArchiveIncomeTypeAsync(Guid id, string reason, Guid? actorUserId, CancellationToken cancellationToken)
@@ -1227,7 +1245,7 @@ public sealed class DictionaryService(
 
         AddAudit(actorUserId, "dictionary.income_type_archived", "income_type", incomeType.Id, $"Архивирован вид поступления {incomeType.Name}.", archiveReason);
         await unitOfWork.SaveChangesAsync(cancellationToken);
-        return DictionaryResult<AccountingTypeDto>.Success(new AccountingTypeDto(incomeType.Id, incomeType.Name, incomeType.Code, incomeType.IsSystem, incomeType.IsArchived));
+        return DictionaryResult<AccountingTypeDto>.Success(ToAccountingTypeDto(incomeType));
     }
 
     public async Task<DictionaryResult<AccountingTypeDto>> RestoreIncomeTypeAsync(Guid id, Guid? actorUserId, CancellationToken cancellationToken)
@@ -1248,7 +1266,7 @@ public sealed class DictionaryService(
 
         AddAudit(actorUserId, "dictionary.income_type_restored", "income_type", incomeType.Id, $"Восстановлен вид поступления {incomeType.Name}.");
         await unitOfWork.SaveChangesAsync(cancellationToken);
-        return DictionaryResult<AccountingTypeDto>.Success(new AccountingTypeDto(incomeType.Id, incomeType.Name, incomeType.Code, incomeType.IsSystem, incomeType.IsArchived));
+        return DictionaryResult<AccountingTypeDto>.Success(ToAccountingTypeDto(incomeType));
     }
 
     public async Task<IReadOnlyList<AccountingTypeDto>> GetExpenseTypesAsync(string? search, CancellationToken cancellationToken, int? limit = null, bool includeArchived = false)

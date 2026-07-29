@@ -432,7 +432,7 @@ describe('App', () => {
       getFeeCampaigns: async () => feeCampaignsPromise,
     })
 
-    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} fundsClient={createFundsClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
     await user.click(screen.getByRole('button', { name: 'Войти' }))
@@ -1476,9 +1476,9 @@ describe('App', () => {
     const membershipDueDayInput = within(tariffsPanel).getByLabelText('Членский взнос: Оплата до: день')
     const membershipDueMonthSelect = within(tariffsPanel).getByLabelText('Членский взнос: Оплата до: месяц')
     expect(membershipDueDayInput).toHaveValue('30')
-    expect(membershipDueMonthSelect).toHaveValue('июн')
-    await user.selectOptions(membershipDueMonthSelect, 'фев')
-    await user.keyboard('{Enter}')
+    expect(membershipDueMonthSelect).toHaveTextContent('Июнь')
+    await user.click(membershipDueMonthSelect)
+    await user.click(within(tariffsPanel).getByRole('option', { name: 'Февраль' }))
     expect(await within(tariffsPanel).findByRole('alert')).toHaveTextContent('В месяце "Февраль" можно указать день от 1 до 28.')
     expect(screen.queryByRole('dialog', { name: 'Подтвердить изменение?' })).not.toBeInTheDocument()
     await user.clear(membershipDueDayInput)
@@ -1488,7 +1488,7 @@ describe('App', () => {
     expect(within(dateConfirmDialog).getByText('28 фев')).toBeInTheDocument()
     await user.click(within(dateConfirmDialog).getByRole('button', { name: 'Сохранить' }))
     expect(membershipDueDayInput).toHaveValue('28')
-    expect(membershipDueMonthSelect).toHaveValue('фев')
+    expect(membershipDueMonthSelect).toHaveTextContent('Февраль')
 
     const electricityThresholdNameInput = within(tariffsPanel).getByLabelText('Электроэнергия: От 1 кВт·ч: наименование')
     await user.clear(electricityThresholdNameInput)
@@ -3805,8 +3805,20 @@ describe('App', () => {
     let updatedTariffRequest: UpsertTariffRequest | null = null
     let unitUpdateAttempts = 0
     let serviceSettings: ChargeServiceSettingDto[] = []
-    const serviceIncomeType = createAccountingType({ id: 'income-security', name: 'Охрана', code: 'membership' })
-    const waterIncomeType = createAccountingType({ id: 'income-water', name: 'Водоснабжение', code: 'water' })
+    const serviceIncomeType = createAccountingType({
+      id: 'income-security',
+      name: 'Охрана',
+      code: 'membership',
+      destinationFundId: 'fund-membership',
+      destinationFundName: 'Членские взносы',
+    })
+    const waterIncomeType = createAccountingType({
+      id: 'income-water',
+      name: 'Водоснабжение',
+      code: 'water',
+      destinationFundId: 'fund-water',
+      destinationFundName: 'Водоснабжение',
+    })
     const serviceTariff = createTariff({ id: 'tariff-security', name: 'Тариф охраны', calculationBase: 'fixed', rate: 1200 })
     const waterTariff = createTariff({ id: 'tariff-water', name: 'Тариф воды', calculationBase: 'meter_water', rate: 48.5 })
     const dictionaryClient = createDictionaryClient({
@@ -3879,7 +3891,7 @@ describe('App', () => {
       },
     })
 
-    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} fundsClient={createFundsClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
     await user.click(screen.getByRole('button', { name: 'Войти' }))
@@ -3894,6 +3906,9 @@ describe('App', () => {
     const calculationBaseControl = within(serviceDialog).getByRole('combobox', { name: 'Способ расчёта регулярной услуги' })
     const tariffControl = within(serviceDialog).getByRole('combobox', { name: 'Тариф регулярной услуги' })
     expect(incomeTypeControl).toHaveTextContent(serviceIncomeType.name)
+    const incomeFundControl = within(serviceDialog).getByRole('combobox', { name: 'Фонд поступления регулярной услуги' })
+    expect(incomeFundControl).toHaveTextContent('Членские взносы')
+    expect(incomeFundControl).toBeDisabled()
     expect(calculationBaseControl).toHaveTextContent('Фиксированно')
     expect(calculationBaseControl).toBeDisabled()
     expect(tariffControl).toHaveTextContent('Тариф охраны — 1 200.00 руб.')
@@ -3916,6 +3931,7 @@ describe('App', () => {
 
     await user.click(incomeTypeControl)
     await user.click(within(serviceDialog).getByRole('option', { name: waterIncomeType.name }))
+    expect(incomeFundControl).toHaveTextContent('Водоснабжение')
     expect(tariffControl).toHaveTextContent('Тариф воды — 48.50 руб.')
     expect(regularCostInput).toHaveValue('48.50')
     expect(calculationBaseControl).toHaveTextContent('По счетчику воды')
@@ -3924,6 +3940,7 @@ describe('App', () => {
     expect(within(serviceDialog).getByRole('combobox', { name: 'Единица измерения' })).toHaveTextContent('м³')
     await user.click(incomeTypeControl)
     await user.click(within(serviceDialog).getByRole('option', { name: serviceIncomeType.name }))
+    expect(incomeFundControl).toHaveTextContent('Членские взносы')
     expect(tariffControl).toHaveTextContent('Тариф охраны — 1 200.00 руб.')
     expect(regularCostInput).toHaveValue('1 200.00')
     expect(calculationBaseControl).toHaveTextContent('Фиксированно')
@@ -3977,12 +3994,12 @@ describe('App', () => {
     expect(savedServiceCostInput).toHaveValue('1 750.00')
     const savedServiceUnitControl = within(tariffsPanel).getByRole('combobox', { name: 'Охрана: Охрана — тариф: единица' })
     expect(savedServiceUnitControl).toHaveTextContent('руб./гараж')
-    expect(within(tariffsPanel).getByRole('combobox', { name: 'Охрана: Охрана — тариф: по счетчику' })).toHaveValue('Нет')
+    expect(within(tariffsPanel).getByRole('combobox', { name: 'Охрана: Охрана — тариф: по счетчику' })).toHaveTextContent('Нет')
     expect(within(tariffsPanel).getByRole('combobox', { name: 'Охрана: Периодичность: значение' })).toHaveTextContent('Ежегодно')
     expect(within(tariffsPanel).getByLabelText('Охрана: Оплата до: день')).toHaveValue('28')
     const dueDateValue = within(tariffsPanel).getByLabelText('Охрана: Оплата до: день').closest('.contractors-date-value')
     expect(dueDateValue).not.toBeNull()
-    expect(within(dueDateValue as HTMLElement).getByLabelText('Охрана: Оплата до: месяц')).toHaveValue('фев')
+    expect(within(dueDateValue as HTMLElement).getByLabelText('Охрана: Оплата до: месяц')).toHaveTextContent('Февраль')
 
     await user.click(savedServiceUnitControl)
     await user.click(within(tariffsPanel).getByRole('option', { name: 'руб.' }))
@@ -4109,7 +4126,7 @@ describe('App', () => {
       },
     })
 
-    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} fundsClient={createFundsClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
     await user.click(screen.getByRole('button', { name: 'Войти' }))
@@ -4174,25 +4191,27 @@ describe('App', () => {
     expect(within(tariffsPanel).getByLabelText('Охрана территории: Оплата до: день')).toHaveValue('15')
     expect(within(tariffsPanel).getAllByRole('combobox', { name: /Охрана территории: .*: по счетчику/i })).toHaveLength(1)
     expect(within(tariffsPanel).getAllByRole('combobox', { name: /Охрана территории: .*: пороговая тарификация/i })).toHaveLength(1)
-    expect(within(tariffsPanel).getByRole('combobox', { name: 'Охрана территории: Тариф охраны: по счетчику' })).toHaveValue('Нет')
-    expect(within(tariffsPanel).getByRole('combobox', { name: 'Охрана территории: Тариф охраны: пороговая тарификация' })).toHaveValue('Нет')
+    expect(within(tariffsPanel).getByRole('combobox', { name: 'Охрана территории: Тариф охраны: по счетчику' })).toHaveTextContent('Нет')
+    expect(within(tariffsPanel).getByRole('combobox', { name: 'Охрана территории: Тариф охраны: пороговая тарификация' })).toHaveTextContent('Нет')
     expect(within(tariffsPanel).getByLabelText('Охрана территории: Тариф охраны: значение')).toHaveValue('1 200.00')
     expect(within(tariffsPanel).getByRole('combobox', { name: 'Охрана территории: Тариф охраны: единица' })).toHaveTextContent('руб./гараж')
     expect(within(tariffsPanel).queryByRole('combobox', { name: 'Охрана территории: Периодичность: по счетчику' })).not.toBeInTheDocument()
     expect(within(tariffsPanel).queryByRole('combobox', { name: 'Охрана территории: Оплата до: пороговая тарификация' })).not.toBeInTheDocument()
 
     const meterModeControl = within(tariffsPanel).getByRole('combobox', { name: 'Охрана территории: Тариф охраны: по счетчику' })
-    await user.selectOptions(meterModeControl, 'Да')
+    await user.click(meterModeControl)
+    await user.click(within(tariffsPanel).getByRole('option', { name: 'Да' }))
     const meterModeConfirmDialog = await screen.findByRole('dialog', { name: 'Подтвердить изменение?' })
     expect(within(meterModeConfirmDialog).getByText('По счетчику')).toBeInTheDocument()
     await user.click(within(meterModeConfirmDialog).getByRole('button', { name: 'Сохранить' }))
 
     await waitFor(() => expect(updateRequests).toHaveLength(3))
     expect(await within(tariffsPanel).findByRole('alert')).toHaveTextContent('Счётчиковый тариф временно не удалось сохранить.')
-    expect(meterModeControl).toHaveValue('Нет')
+    expect(meterModeControl).toHaveTextContent('Нет')
     expect(within(tariffsPanel).getByLabelText('Охрана территории: Тариф охраны: значение')).toHaveValue('1 200.00')
 
-    await user.selectOptions(meterModeControl, 'Да')
+    await user.click(meterModeControl)
+    await user.click(within(tariffsPanel).getByRole('option', { name: 'Да' }))
     const retryMeterModeDialog = await screen.findByRole('dialog', { name: 'Подтвердить изменение?' })
     await user.click(within(retryMeterModeDialog).getByRole('button', { name: 'Сохранить' }))
 
@@ -4204,7 +4223,7 @@ describe('App', () => {
     })
     expect(within(tariffsPanel).getByLabelText('Охрана территории: Тариф охраны по счётчику: значение')).toHaveValue('52.75')
     expect(within(tariffsPanel).getByRole('combobox', { name: 'Охрана территории: Тариф охраны по счётчику: единица' })).toHaveTextContent('м³')
-    expect(within(tariffsPanel).getByRole('combobox', { name: 'Охрана территории: Тариф охраны по счётчику: по счетчику' })).toHaveValue('Да')
+    expect(within(tariffsPanel).getByRole('combobox', { name: 'Охрана территории: Тариф охраны по счётчику: по счетчику' })).toHaveTextContent('Да')
     expect(within(tariffsPanel).queryByLabelText('Вода: Тариф охраны по счётчику: значение')).not.toBeInTheDocument()
   })
 
@@ -4419,7 +4438,7 @@ describe('App', () => {
     expect(within(tariffsPanel).getByLabelText('Сумма: Сбор на ворота из БД')).toHaveValue('777.00')
     expect(within(tariffsPanel).getByRole('combobox', { name: 'Охрана из БД: Периодичность: значение' })).toHaveTextContent('Ежегодно')
     expect(within(tariffsPanel).getByLabelText('Охрана из БД: Оплата до: день')).toHaveValue('25')
-    expect(within(tariffsPanel).getByLabelText('Охрана из БД: Оплата до: месяц')).toHaveValue('дек')
+    expect(within(tariffsPanel).getByLabelText('Охрана из БД: Оплата до: месяц')).toHaveTextContent('Декабрь')
     expect(within(tariffsPanel).getByLabelText('Охрана из БД: Перенос долга в просроченный: значение')).toHaveValue('45')
   })
 
@@ -19932,6 +19951,8 @@ function createAccountingType(overrides: Partial<AccountingTypeDto>): Accounting
     code: null,
     isSystem: false,
     isArchived: false,
+    destinationFundId: 'fund-other',
+    destinationFundName: 'Прочее',
     ...overrides,
   }
 }

@@ -113,6 +113,10 @@ const contractorTariffMonthOptions = [
   { value: 'ноя', label: 'Ноябрь', maxDay: 30 },
   { value: 'дек', label: 'Декабрь', maxDay: 31 },
 ]
+const yesNoOptions = [
+  { value: 'Да', label: 'Да' },
+  { value: 'Нет', label: 'Нет' },
+]
 
 const regularServicePeriodicityOptions = [
   { value: '1', label: 'Ежемесячно' },
@@ -1512,10 +1516,10 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
     })
   }
 
-  const commitTariffDateChange = async (row: ContractorTariffRow) => {
+  const commitTariffDateChange = async (row: ContractorTariffRow, selectedMonth?: string) => {
     const draft = tariffDrafts[row.id] ?? { title: row.title, amount: '', unit: '', dateDay: '', dateMonth: row.dateMonth ?? '' }
     const nextDay = (draft.dateDay ?? '').trim().padStart(2, '0')
-    const nextMonth = row.monthlyDue ? '' : (draft.dateMonth || row.dateMonth || contractorTariffMonthOptions[0].value)
+    const nextMonth = row.monthlyDue ? '' : (selectedMonth || draft.dateMonth || row.dateMonth || contractorTariffMonthOptions[0].value)
     const dateError = getContractorTariffDateError(nextDay, nextMonth, row.monthlyDue)
 
     if (dateError) {
@@ -2279,25 +2283,24 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
                           }}
                           onKeyDown={(event) => handleEditableInputKeyDown(event, () => commitTariffDateChange(row))}
                         />
-                        {!row.monthlyDue ? <select
-                          aria-label={`${row.category}: ${row.title}: месяц`}
-                          className="contractors-editable-select contractors-editable-select--month"
-                          disabled={!canManageTariffs || isRowDisabled}
-                          value={tariffDrafts[row.id]?.dateMonth ?? row.dateMonth ?? contractorTariffMonthOptions[0].value}
-                          onChange={(event) => {
-                            setTariffDateErrors((errors) => {
-                              const nextErrors = { ...errors }
-                              delete nextErrors[row.id]
-                              return nextErrors
-                            })
-                            setTariffDrafts((drafts) => ({ ...drafts, [row.id]: { ...drafts[row.id], dateMonth: event.target.value } }))
-                          }}
-                          onKeyDown={(event) => handleEditableInputKeyDown(event, () => commitTariffDateChange(row))}
-                        >
-                          {contractorTariffMonthOptions.map((month) => (
-                            <option key={month.value} value={month.value}>{month.label}</option>
-                          ))}
-                        </select> : <span className="contractors-date-suffix">числа следующего месяца</span>}
+                        {!row.monthlyDue ? (
+                          <SelectControl
+                            aria-label={`${row.category}: ${row.title}: месяц`}
+                            className="contractors-editable-select-control--month"
+                            disabled={!canManageTariffs || isRowDisabled}
+                            value={tariffDrafts[row.id]?.dateMonth ?? row.dateMonth ?? contractorTariffMonthOptions[0].value}
+                            options={contractorTariffMonthOptions}
+                            onChange={(nextMonth) => {
+                              setTariffDateErrors((errors) => {
+                                const nextErrors = { ...errors }
+                                delete nextErrors[row.id]
+                                return nextErrors
+                              })
+                              setTariffDrafts((drafts) => ({ ...drafts, [row.id]: { ...drafts[row.id], dateMonth: nextMonth } }))
+                              void commitTariffDateChange(row, nextMonth)
+                            }}
+                          />
+                        ) : <span className="contractors-date-suffix">числа следующего месяца</span>}
                         {tariffDateErrors[row.id] ? <span id={`${row.id}-date-error`} className="contractors-field-error" role="alert">{tariffDateErrors[row.id]}</span> : null}
                       </div>
                     ) : isTariffMoneyAmount(row) ? (
@@ -2339,30 +2342,24 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
                   </span>
                   <span role="cell">
                     {showsServiceCalculationFlags ? (
-                      <select
+                      <SelectControl
                         aria-label={`${row.category}: ${row.title}: пороговая тарификация`}
-                        className="contractors-editable-select"
                         disabled={!canManageTariffs || isRowDisabled}
                         value={row.tiered ? 'Да' : 'Нет'}
-                        onChange={(event) => commitTariffBooleanChange(row, 'tiered', event.target.value === 'Да')}
-                      >
-                        <option>Да</option>
-                        <option>Нет</option>
-                      </select>
+                        options={yesNoOptions}
+                        onChange={(value) => commitTariffBooleanChange(row, 'tiered', value === 'Да')}
+                      />
                     ) : null}
                   </span>
                   <span role="cell">
                     {showsServiceCalculationFlags ? (
-                      <select
+                      <SelectControl
                         aria-label={`${row.category}: ${row.title}: по счетчику`}
-                        className="contractors-editable-select"
                         disabled={!canManageTariffs || isRowDisabled}
                         value={row.byMeter ? 'Да' : 'Нет'}
-                        onChange={(event) => commitTariffBooleanChange(row, 'byMeter', event.target.value === 'Да')}
-                      >
-                        <option>Да</option>
-                        <option>Нет</option>
-                      </select>
+                        options={yesNoOptions}
+                        onChange={(value) => commitTariffBooleanChange(row, 'byMeter', value === 'Да')}
+                      />
                     ) : null}
                   </span>
                   <span role="cell" className="tariffs-row-actions-cell">
@@ -3139,6 +3136,12 @@ export function AddServicePrototypeDialog({
     return initialTariff ? formatTariffDecimal(initialTariff.rate) : ''
   })
   const [error, setError] = useState<string | null>(null)
+  const selectedIncomeType = incomeTypes.find((incomeType) => incomeType.id === incomeTypeId) ?? null
+  const selectedIncomeFund = selectedIncomeType?.destinationFundId
+    ? funds.find((fund) => fund.id === selectedIncomeType.destinationFundId) ?? null
+    : null
+  const selectedIncomeFundId = selectedIncomeType?.destinationFundId ?? ''
+  const selectedIncomeFundName = selectedIncomeFund?.name ?? selectedIncomeType?.destinationFundName ?? ''
   const compatibleTariffs = getCompatibleRegularTariffs(incomeTypeId, incomeTypes, tariffs)
   const selectedTariff = compatibleTariffs.find((tariff) => tariff.id === tariffId) ?? null
   const selectedTariffTiers = getElectricityTariffTiers(selectedTariff)
@@ -3204,6 +3207,10 @@ export function AddServicePrototypeDialog({
     if (isRegular) {
       if (!incomeTypeId) {
         setError('Выберите вид поступления для регулярной услуги.')
+        return
+      }
+      if (!selectedIncomeFundId) {
+        setError('Для выбранного вида поступления не назначен действующий фонд.')
         return
       }
       if (regularOnly && !expenseTypeId) {
@@ -3345,6 +3352,17 @@ export function AddServicePrototypeDialog({
                       setIncomeTypeId(nextIncomeTypeId)
                       applyTariffSelection(nextTariffId)
                     }}
+                  />
+                </FormField>
+                <FormField label="Фонд поступления" hint="Подставляется по виду поступления; оплаты и автосозданные начисления направляются в этот фонд.">
+                  <SelectControl
+                    aria-label="Фонд поступления регулярной услуги"
+                    value={selectedIncomeFundId}
+                    options={selectedIncomeFundId
+                      ? [{ value: selectedIncomeFundId, label: selectedIncomeFundName || 'Назначенный фонд' }]
+                      : [{ value: '', label: 'Фонд не назначен' }]}
+                    disabled
+                    onChange={() => undefined}
                   />
                 </FormField>
                 <FormField label="Начисление поставщику" hint="Фиксирует допустимую связку услуги и контрагента в ведомости выплат.">

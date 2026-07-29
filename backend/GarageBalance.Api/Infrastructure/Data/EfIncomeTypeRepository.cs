@@ -54,7 +54,9 @@ public sealed class EfIncomeTypeRepository(GarageBalanceDbContext dbContext) : I
     }
 
     public Task<IncomeType?> FindActiveAsync(Guid id, CancellationToken cancellationToken) =>
-        dbContext.IncomeTypes.SingleOrDefaultAsync(item => item.Id == id && !item.IsArchived, cancellationToken);
+        dbContext.IncomeTypes
+            .Include(item => item.DestinationFund)
+            .SingleOrDefaultAsync(item => item.Id == id && !item.IsArchived, cancellationToken);
 
     public Task<IncomeType?> FindFirstActiveByCodeAsync(string code, CancellationToken cancellationToken) =>
         dbContext.IncomeTypes.FirstOrDefaultAsync(item => !item.IsArchived && item.Code == code, cancellationToken);
@@ -66,7 +68,9 @@ public sealed class EfIncomeTypeRepository(GarageBalanceDbContext dbContext) : I
         dbContext.IncomeTypes.FirstOrDefaultAsync(item => item.IsArchived && (item.Code == code || item.Name == name), cancellationToken);
 
     public Task<IncomeType?> FindArchivedAsync(Guid id, CancellationToken cancellationToken) =>
-        dbContext.IncomeTypes.SingleOrDefaultAsync(item => item.Id == id && item.IsArchived, cancellationToken);
+        dbContext.IncomeTypes
+            .Include(item => item.DestinationFund)
+            .SingleOrDefaultAsync(item => item.Id == id && item.IsArchived, cancellationToken);
 
     public Task<bool> ActiveDuplicateExistsAsync(Guid? ignoredId, string name, CancellationToken cancellationToken) =>
         dbContext.IncomeTypes.AsNoTracking().AnyAsync(
@@ -76,7 +80,9 @@ public sealed class EfIncomeTypeRepository(GarageBalanceDbContext dbContext) : I
     public void Add(IncomeType incomeType) => dbContext.IncomeTypes.Add(incomeType);
 
     private IQueryable<IncomeType> ApplyArchiveFilter(bool includeArchived) =>
-        dbContext.IncomeTypes.AsNoTracking().Where(item => includeArchived || !item.IsArchived);
+        dbContext.IncomeTypes.AsNoTracking()
+            .Include(item => item.DestinationFund)
+            .Where(item => includeArchived || !item.IsArchived);
 
     private static IQueryable<IncomeType> ApplySearch(IQueryable<IncomeType> query, string? normalizedSearch) =>
         normalizedSearch is null

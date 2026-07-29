@@ -9,6 +9,7 @@ export type SelectControlOption = {
 
 export function SelectControl({
   'aria-label': ariaLabel,
+  className,
   value,
   options,
   disabled = false,
@@ -17,6 +18,7 @@ export function SelectControl({
   onChange,
 }: {
   'aria-label': string
+  className?: string
   value: string
   options: SelectControlOption[]
   disabled?: boolean
@@ -98,7 +100,7 @@ export function SelectControl({
   }
 
   return (
-    <div className="select-control" ref={rootRef}>
+    <div className={`select-control${className ? ` ${className}` : ''}`} ref={rootRef}>
       <button
         className="select-control__trigger"
         type="button"

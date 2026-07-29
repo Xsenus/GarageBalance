@@ -1599,6 +1599,36 @@ public sealed class DictionaryServiceTests
     }
 
     [Fact]
+    public async Task CreateIncomeTypeAsync_AutomaticallyLinksCustomTypeToOtherFund()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var otherFund = new Fund
+        {
+            Name = "Прочее",
+            NormalizedName = "ПРОЧЕЕ",
+            AllowOperations = true
+        };
+        database.Context.Funds.Add(otherFund);
+        await database.Context.SaveChangesAsync();
+        var service = DictionaryServiceTestFactory.Create(database.Context);
+
+        var result = await service.CreateIncomeTypeAsync(
+            new UpsertAccountingTypeRequest("Охрана", "security"),
+            null,
+            CancellationToken.None);
+
+        Assert.True(result.Succeeded, result.ErrorMessage);
+        Assert.Equal(otherFund.Id, result.Value!.DestinationFundId);
+        Assert.Equal(otherFund.Name, result.Value.DestinationFundName);
+        Assert.Equal(
+            otherFund.Id,
+            await database.Context.IncomeTypes
+                .Where(item => item.Id == result.Value.Id)
+                .Select(item => item.DestinationFundId)
+                .SingleAsync());
+    }
+
+    [Fact]
     public async Task CreateIncomeTypeAsync_AllowsNameFromArchivedType()
     {
         await using var database = await TestDatabase.CreateAsync();
