@@ -1,0 +1,82 @@
+[
+  {
+    "name": "health",
+    "path": "/health",
+    "authorized": false,
+    "p50Milliseconds": 250,
+    "p95Milliseconds": 500,
+    "maxErrorRatePercent": 0
+  },
+  {
+    "name": "current-user",
+    "path": "/api/auth/me",
+    "authorized": true,
+    "p50Milliseconds": 500,
+    "p95Milliseconds": 1000,
+    "maxErrorRatePercent": 0
+  },
+  {
+    "name": "garage-page",
+    "path": "/api/dictionaries/garages/page?offset=0&limit=25&sortBy=number&sortDirection=asc",
+    "authorized": true,
+    "p50Milliseconds": 500,
+    "p95Milliseconds": 1000,
+    "maxErrorRatePercent": 0
+  },
+  {
+    "name": "finance-page",
+    "path": "/api/finance/operations/page?offset=0&limit=25",
+    "authorized": true,
+    "p50Milliseconds": 750,
+    "p95Milliseconds": 1500,
+    "maxErrorRatePercent": 0
+  },
+  {
+    "name": "meter-year",
+    "path": "/api/finance/meter-readings/year?year=2025&offset=0&limit=25",
+    "authorized": true,
+    "p50Milliseconds": 750,
+    "p95Milliseconds": 1500,
+    "maxErrorRatePercent": 0
+  },
+  {
+    "name": "funds",
+    "path": "/api/funds",
+    "authorized": true,
+    "p50Milliseconds": 500,
+    "p95Milliseconds": 1000,
+    "maxErrorRatePercent": 0
+  },
+  {
+    "name": "consolidated-report",
+    "path": "/api/reports/consolidated?monthFrom=2025-01-01&monthTo=2025-12-01&offset=0&limit=25",
+    "authorized": true,
+    "p50Milliseconds": 1000,
+    "p95Milliseconds": 2000,
+    "maxErrorRatePercent": 0
+  },
+  {
+    "name": "import-runs",
+    "path": "/api/import/access/runs",
+    "authorized": true,
+    "p50Milliseconds": 500,
+    "p95Milliseconds": 1000,
+    "maxErrorRatePercent": 0
+  },
+  {
+    "name": "audit-page",
+    "path": "/api/audit/events/page?offset=0&limit=25",
+    "authorized": true,
+    "p50Milliseconds": 750,
+    "p95Milliseconds": 1500,
+    "maxErrorRatePercent": 0
+  },
+  {
+    "name": "users-page",
+    "path": "/api/users/page?offset=0&limit=25",
+    "authorized": true,
+    "p50Milliseconds": 500,
+    "p95Milliseconds": 1000,
+    "maxErrorRatePercent": 0
+  }
+]

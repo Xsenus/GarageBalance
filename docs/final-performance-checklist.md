@@ -59,6 +59,26 @@ Get-Content .\garagebalance-staging-timing.log -Raw |
 ожидаемые бизнес-ответы `4xx` анализируются отдельно от `5xx`; они не должны скрывать
 серверные сбои и не включаются в пользовательский performance-SLA без проверки источника.
 
+Воспроизводимый smoke/benchmark основных API запускается после получения временного
+администраторского bearer token:
+
+```powershell
+$env:GARAGEBALANCE_BENCHMARK_TOKEN = "..."
+.\infrastructure\scripts\benchmark-api.ps1 `
+  -BaseUrl "https://sgk.blagodaty.ru" `
+  -Iterations 20 `
+  -WarmupIterations 2
+Remove-Item Env:GARAGEBALANCE_BENCHMARK_TOKEN
+```
+
+Сценарии и фиксированные пороги хранятся в
+`infrastructure/performance/api-smoke-scenarios.json`. Они покрывают health,
+текущего пользователя, гаражи, финансы, показания, фонды, отчёт, импорт, аудит и
+пользователей. Для одиночной проверки используется `-ScenarioName health`; для CI —
+`-AsJson`. Команда загружает тело ответа, но выводит только размер и агрегаты,
+никогда не печатает bearer token, query-данные ответа или содержимое финансовых строк.
+Любое превышение p50/p95/error-rate завершает процесс ненулевым кодом.
+
 ## Проверка PostgreSQL
 
 Перед релизом performance-sensitive изменения проверяются на локальной PostgreSQL или в изолированном CI/VPS-контуре:
