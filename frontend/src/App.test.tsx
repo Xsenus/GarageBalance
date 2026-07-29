@@ -2258,13 +2258,9 @@ describe('App', () => {
     let supplierRow = within(suppliersTable).getByText('Новый подрядчик').closest('[role="row"]')!
     expect(within(supplierRow as HTMLElement).getByText('Смирнов С.С.')).toBeInTheDocument()
     expect(within(supplierRow as HTMLElement).getByRole('button', { name: 'Изменить поставщика Новый подрядчик' })).toBeInTheDocument()
-    getContractorSupplierContacts.mockRejectedValueOnce(new Error('Не удалось получить контакты выбранного поставщика.'))
-    await user.click(within(supplierRow as HTMLElement).getByRole('button', { name: 'Изменить поставщика Новый подрядчик' }))
-    expect(await screen.findByText('Не удалось получить контакты выбранного поставщика.')).toBeInTheDocument()
-    expect(screen.queryByRole('dialog', { name: 'Новый подрядчик' })).not.toBeInTheDocument()
     await user.click(within(supplierRow as HTMLElement).getByRole('button', { name: 'Изменить поставщика Новый подрядчик' }))
     const editSupplierDialog = await screen.findByRole('dialog', { name: 'Новый подрядчик' })
-    expect(getContractorSupplierContacts).toHaveBeenLastCalledWith('token', '22222222-2222-4222-8222-222222222222', undefined, 500, true)
+    expect(getContractorSupplierContacts).toHaveBeenCalledTimes(1)
     expect(within(editSupplierDialog).getByLabelText('Услуга поставщика').tagName).toBe('BUTTON')
     expect(within(editSupplierDialog).getByLabelText('Наименование поставщика').closest('.contractors-supplier-primary-grid')).not.toBeNull()
     expect(within(editSupplierDialog).getByLabelText('Юридический адрес поставщика').closest('.contractors-supplier-lookup-grid')).not.toBeNull()
@@ -3479,6 +3475,99 @@ describe('App', () => {
     await user.click(within(supplierRow as HTMLElement).getByRole('button', { name: 'Изменить поставщика Водоканал' }))
     const reopenedSupplierDialog = await screen.findByRole('dialog', { name: 'Водоканал' })
     expect(within(reopenedSupplierDialog).getByLabelText('Стартовый баланс поставщика')).toHaveValue('200.00')
+  })
+
+  it('opens a supplier editor from loaded contacts without waiting for a duplicate request', async () => {
+    const user = userEvent.setup()
+    const group = createGroup({ id: 'group-water-cached', name: 'Коммунальные услуги' })
+    const supplier = createSupplier({
+      id: '22222222-2222-4222-8222-222222222224',
+      name: 'Водоканал без ожидания',
+      groupId: group.id,
+      groupName: group.name,
+    })
+    const contact = createSupplierContact({
+      id: 'contact-water-cached',
+      supplierId: supplier.id,
+      supplierName: supplier.name,
+      fullName: 'Озеров Михаил Владимирович',
+    })
+    const getSupplierContacts = vi.fn(async (_token: string, supplierId?: string) => {
+      if (supplierId) {
+        return new Promise<SupplierContactDto[]>(() => undefined)
+      }
+
+      return [contact]
+    })
+    const dictionaryClient = createDictionaryClient({
+      getSupplierGroups: async () => [group],
+      getSuppliers: async () => [supplier],
+      getSupplierContacts,
+    })
+
+    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Контрагенты')
+    const contractorsPanel = await screen.findByRole('region', { name: 'Контрагенты' })
+    await user.click(within(contractorsPanel).getByRole('tab', { name: 'Поставщики' }))
+    const suppliersTable = await within(contractorsPanel).findByRole('table', { name: 'Поставщики' })
+    const supplierRow = within(suppliersTable).getByText(supplier.name).closest('[role="row"]')
+    if (!supplierRow) {
+      throw new Error('Строка поставщика не найдена.')
+    }
+
+    await waitFor(() => expect(within(supplierRow).getByText(contact.fullName)).toBeInTheDocument())
+    await user.click(within(supplierRow).getByRole('button', { name: `Изменить поставщика ${supplier.name}` }))
+
+    const supplierDialog = await screen.findByRole('dialog', { name: supplier.name })
+    expect(within(supplierDialog).getByLabelText('Контакт 1: ФИО')).toHaveValue(contact.fullName)
+    expect(getSupplierContacts).toHaveBeenCalledTimes(1)
+    expect(within(supplierRow).getByRole('button', { name: `Изменить поставщика ${supplier.name}` })).not.toHaveAttribute('aria-busy', 'true')
+  })
+
+  it('reports a supplier contact loading error when editor references are not ready', async () => {
+    const user = userEvent.setup()
+    const group = createGroup({ id: 'group-water-loading', name: 'Коммунальные услуги' })
+    const supplier = createSupplier({
+      id: '22222222-2222-4222-8222-222222222225',
+      name: 'Водоканал с ошибкой',
+      groupId: group.id,
+      groupName: group.name,
+    })
+    const getSupplierContacts = vi.fn(async (_token: string, supplierId?: string) => {
+      if (supplierId) {
+        throw new Error('Не удалось получить контакты выбранного поставщика.')
+      }
+
+      return new Promise<SupplierContactDto[]>(() => undefined)
+    })
+    const dictionaryClient = createDictionaryClient({
+      getSupplierGroups: async () => [group],
+      getSuppliers: async () => [supplier],
+      getSupplierContacts,
+    })
+
+    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Контрагенты')
+    const contractorsPanel = await screen.findByRole('region', { name: 'Контрагенты' })
+    await user.click(within(contractorsPanel).getByRole('tab', { name: 'Поставщики' }))
+    const suppliersTable = await within(contractorsPanel).findByRole('table', { name: 'Поставщики' })
+    const supplierRow = within(suppliersTable).getByText(supplier.name).closest('[role="row"]')
+    if (!supplierRow) {
+      throw new Error('Строка поставщика не найдена.')
+    }
+
+    await user.click(within(supplierRow).getByRole('button', { name: `Изменить поставщика ${supplier.name}` }))
+
+    expect(await screen.findByText('Не удалось получить контакты выбранного поставщика.')).toBeInTheDocument()
+    expect(screen.queryByRole('dialog', { name: supplier.name })).not.toBeInTheDocument()
+    expect(within(supplierRow).getByRole('button', { name: `Изменить поставщика ${supplier.name}` })).not.toBeDisabled()
+    expect(getSupplierContacts).toHaveBeenCalledTimes(2)
   })
 
   it('filters garage debtors and sorts visible contractor rows without a supplier debtor toggle', async () => {

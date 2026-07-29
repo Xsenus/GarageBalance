@@ -882,6 +882,14 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
       return
     }
 
+    if (loadedContractorReferencesRef.current.suppliers) {
+      const cachedContacts = supplierContactsRef.current
+        .filter((contact) => contact.supplierId === row.id)
+        .map(createSupplierContactFromDto)
+      setModal({ type: 'supplier', item: normalizeSupplierPrototype({ ...row, contacts: cachedContacts }) })
+      return
+    }
+
     const requestSequence = ++supplierEditorRequestSequenceRef.current
     setSupplierEditorLoadingId(row.id)
     try {
@@ -898,13 +906,6 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
 
       const contactRows = contacts.map(createSupplierContactFromDto)
       const nextRow = normalizeSupplierPrototype({ ...row, contacts: contactRows })
-      const nextSupplierContacts = [
-        ...supplierContactsRef.current.filter((contact) => contact.supplierId !== row.id),
-        ...contacts,
-      ]
-      supplierContactsRef.current = nextSupplierContacts
-      setSupplierContacts(nextSupplierContacts)
-      setSuppliers((currentSuppliers) => currentSuppliers.map((supplier) => (supplier.id === row.id ? nextRow : supplier)))
       setModal({ type: 'supplier', item: nextRow })
     } catch (error) {
       if (requestSequence === supplierEditorRequestSequenceRef.current) {
