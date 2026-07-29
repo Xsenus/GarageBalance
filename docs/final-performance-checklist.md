@@ -42,6 +42,23 @@ npm run check:bundle
 - основной CSS gzip — не более `40 KiB`;
 - общий JavaScript/CSS gzip — не более `260 KiB`.
 
+## Ранжирование HTTP-маршрутов
+
+Timing-журнал nginx можно агрегировать без копирования исходных строк и без вывода IP,
+request ID или query-параметров:
+
+```powershell
+Get-Content .\garagebalance-staging-timing.log -Raw |
+  .\infrastructure\scripts\analyze-nginx-timing.ps1 -InputPath STDIN
+```
+
+Для автоматической обработки добавляется `-AsJson`, для отсечения единичных маршрутов —
+`-MinimumCount 5`. Результат содержит по разделам и нормализованным маршрутам `count`,
+`p50`, `p95`, `max`, количество `4xx`, `5xx` и общий error rate. Числовые и UUID-сегменты
+заменяются на `:id`, а query string удаляется до группировки. Ошибки внешних сканеров и
+ожидаемые бизнес-ответы `4xx` анализируются отдельно от `5xx`; они не должны скрывать
+серверные сбои и не включаются в пользовательский performance-SLA без проверки источника.
+
 ## Проверка PostgreSQL
 
 Перед релизом performance-sensitive изменения проверяются на локальной PostgreSQL или в изолированном CI/VPS-контуре:
