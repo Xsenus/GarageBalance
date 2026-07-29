@@ -70,6 +70,24 @@ Get-Content .\garagebalance-staging-timing.log -Raw |
 5. запустить соответствующие integration tests;
 6. проверить сохранение итогов, порядка и границ страниц.
 
+Для воспроизводимого объёма создаётся отдельная пустая БД с именем
+`garagebalance_performance` или префиксом `garagebalance_performance_`. После этого
+connection string передаётся только через переменную окружения:
+
+```powershell
+$env:GARAGEBALANCE_PERFORMANCE_CONNECTION = `
+  "Host=127.0.0.1;Database=garagebalance_performance;Username=...;Password=..."
+dotnet run --project .\backend\GarageBalance.PerformanceSeed\GarageBalance.PerformanceSeed.csproj `
+  --configuration Release -- --garages 500 --months 60
+```
+
+Команда сама применяет EF Core migrations и создаёт фиксированный обезличенный набор:
+500 владельцев и гаражей, по 60 месяцев начислений, платежей и показаний
+электросчётчиков (`30 000` строк каждого исторического вида). Повторный запуск
+идемпотентен. База с любым другим именем, включая staging/production, отклоняется до
+подключения; тестовое исключение разрешается только автоматической интеграционной
+проверкой через отдельный флаг окружения.
+
 После реалистичной нагрузки выполнить read-only снимок обслуживания:
 
 ```powershell

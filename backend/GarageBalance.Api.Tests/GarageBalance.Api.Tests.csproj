@@ -24,6 +24,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\GarageBalance.Api\GarageBalance.Api.csproj" />
+    <ProjectReference Include="..\GarageBalance.PerformanceSeed\GarageBalance.PerformanceSeed.csproj" />
   </ItemGroup>
 
 </Project>
