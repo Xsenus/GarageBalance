@@ -86,7 +86,7 @@ async function fetchWithRetry(input: RequestInfo | URL, init: RequestInit, metho
   try {
     return await fetchAttempt(input, init, timeoutMs)
   } catch (error) {
-    if (!canRetry || init.signal?.aborted || (!(error instanceof TypeError) && !(error instanceof ApiRequestTimeoutError))) {
+    if (!canRetry || init.signal?.aborted || !(error instanceof TypeError)) {
       throw error
     }
   }

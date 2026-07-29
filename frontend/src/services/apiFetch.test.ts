@@ -74,7 +74,7 @@ describe('apiFetch', () => {
     expect(fetchMock).toHaveBeenCalledTimes(3)
   })
 
-  it('aborts timed-out GET attempts and reports a clear error after the retry', async () => {
+  it('aborts a timed-out GET without doubling the wait with a retry', async () => {
     vi.useFakeTimers()
     const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation((_input, init) => new Promise((_resolve, reject) => {
       init?.signal?.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError')), { once: true })
@@ -83,10 +83,9 @@ describe('apiFetch', () => {
     const request = apiFetch('/api/dictionaries/garages')
     const assertion = expect(request).rejects.toBeInstanceOf(ApiRequestTimeoutError)
     await vi.advanceTimersByTimeAsync(15_000)
-    await vi.advanceTimersByTimeAsync(15_000)
 
     await assertion
-    expect(fetchMock).toHaveBeenCalledTimes(2)
+    expect(fetchMock).toHaveBeenCalledTimes(1)
   })
 
   it('does not retry write requests because the server may have accepted them', async () => {
