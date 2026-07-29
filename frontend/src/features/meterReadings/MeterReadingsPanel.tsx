@@ -175,6 +175,7 @@ export function MeterReadingsPrototypePanel({ auth, financeClient }: { auth: Aut
   const [savedReadingVersions, setSavedReadingVersions] = useState<Record<string, string>>({})
   const [savingReadingKey, setSavingReadingKey] = useState<string | null>(null)
   const [pendingReadingChange, setPendingReadingChange] = useState<MeterReadingPrototypePendingChange | null>(null)
+  const [readingChangeError, setReadingChangeError] = useState<string | null>(null)
   const [historicalCorrectionReason, setHistoricalCorrectionReason] = useState('')
   const [historicalCorrectionReasonError, setHistoricalCorrectionReasonError] = useState<string | null>(null)
 
@@ -192,6 +193,7 @@ export function MeterReadingsPrototypePanel({ auth, financeClient }: { auth: Aut
     }
 
     setPendingReadingChange(null)
+    setReadingChangeError(null)
     setHistoricalCorrectionReason('')
     setHistoricalCorrectionReasonError(null)
   }
@@ -213,6 +215,7 @@ export function MeterReadingsPrototypePanel({ auth, financeClient }: { auth: Aut
       pendingReadingChange.readingVersion,
       pendingReadingChange.nextValue,
       pendingReadingChange.isHistorical ? reason : undefined,
+      true,
     )
   }
 
@@ -297,11 +300,17 @@ export function MeterReadingsPrototypePanel({ auth, financeClient }: { auth: Aut
     readingVersion: string | undefined,
     nextValue: string,
     historicalCorrectionReason?: string,
+    showErrorInDialog = false,
   ) => {
     const [, , garageId, monthKey] = cellKey.split(':')
     const parsedValue = parseMeterReadingInputValue(nextValue)
     if (parsedValue === null) {
-      setError('Введите показание неотрицательным числом.')
+      const message = 'Введите показание неотрицательным числом.'
+      if (showErrorInDialog) {
+        setReadingChangeError(message)
+      } else {
+        setError(message)
+      }
       return
     }
 
@@ -317,6 +326,7 @@ export function MeterReadingsPrototypePanel({ auth, financeClient }: { auth: Aut
 
     setSavingReadingKey(cellKey)
     setError(null)
+    setReadingChangeError(null)
     try {
       const savedReading = readingId && historicalCorrectionReason
         ? await financeClient.correctHistoricalMeterReading!(auth.accessToken, readingId, {
@@ -335,10 +345,16 @@ export function MeterReadingsPrototypePanel({ auth, financeClient }: { auth: Aut
       setSavedReadingIds((currentIds) => ({ ...currentIds, [cellKey]: savedReading.id }))
       setSavedReadingVersions((currentVersions) => ({ ...currentVersions, [cellKey]: savedReading.version }))
       setPendingReadingChange(null)
+      setReadingChangeError(null)
       setHistoricalCorrectionReason('')
       setHistoricalCorrectionReasonError(null)
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : 'Не удалось сохранить показание.')
+      const message = caught instanceof Error ? caught.message : 'Не удалось сохранить показание.'
+      if (showErrorInDialog) {
+        setReadingChangeError(message)
+      } else {
+        setError(message)
+      }
     } finally {
       setSavingReadingKey(null)
     }
@@ -402,6 +418,8 @@ export function MeterReadingsPrototypePanel({ auth, financeClient }: { auth: Aut
       nextValue,
       isHistorical,
     })
+    setError(null)
+    setReadingChangeError(null)
     setHistoricalCorrectionReason('')
     setHistoricalCorrectionReasonError(null)
   }, [appliedYear, auth, currentMonth, draftReadings, financeClient.correctHistoricalMeterReading, meterType, savedReadingIds, savedReadingVersions, savedReadings, saveReadingValue, savingReadingKey, selectedMeterType.label, selectedMeterType.unit, yearIsValid])
@@ -502,15 +520,17 @@ export function MeterReadingsPrototypePanel({ auth, financeClient }: { auth: Aut
                     onChange={(event) => {
                       setHistoricalCorrectionReason(event.target.value)
                       setHistoricalCorrectionReasonError(null)
+                      setReadingChangeError(null)
                     }}
                   />
                 </FormField>
                 {historicalCorrectionReasonError ? <div className="form-error" role="alert">{historicalCorrectionReasonError}</div> : null}
               </>
             ) : null}
+            {readingChangeError ? <div className="form-error" role="alert">{readingChangeError}</div> : null}
             <div className="detail-dialog-actions contractors-dialog-actions">
               <button ref={readingChangeCancelRef} className="ghost-button" type="button" onClick={cancelPendingReadingChange}>Отмена</button>
-              <button className="secondary-button" type="button" onClick={confirmPendingReadingChange}>
+              <button className="secondary-button" type="button" disabled={savingReadingKey === pendingReadingChange.cellKey} onClick={confirmPendingReadingChange}>
                 <Save size={16} />
                 <span>Сохранить</span>
               </button>

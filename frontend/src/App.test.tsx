@@ -5019,6 +5019,76 @@ describe('App', () => {
     expect(within(readingsPanel).queryByRole('table', { name: 'История изменений показаний', hidden: true })).not.toBeInTheDocument()
   })
 
+  it('shows a meter reading save error inside the confirmation dialog and allows retry', async () => {
+    const user = userEvent.setup()
+    const existingReading = createMeterReading({
+      id: 'meter-reading-june-error',
+      garageId: 'garage-101',
+      garageNumber: '101',
+      meterKind: 'electricity',
+      accountingMonth: '2026-06-01',
+      currentValue: 17201,
+      previousValue: 17100,
+      consumption: 101,
+      version: 'meter-reading-june-version',
+    })
+    const updateMeterReading = vi.fn()
+      .mockRejectedValueOnce(new Error('Новое показание не может быть меньше предыдущего.'))
+      .mockResolvedValueOnce({
+        ...existingReading,
+        currentValue: 17250,
+        consumption: 150,
+        version: 'meter-reading-june-version-updated',
+      })
+    const financeClient = createFinanceClient({
+      getMeterReadingYearPage: async () => ({
+        garages: [{ id: 'garage-101', number: '101' }],
+        readings: [{
+          id: existingReading.id,
+          garageId: existingReading.garageId,
+          accountingMonth: existingReading.accountingMonth,
+          currentValue: existingReading.currentValue,
+          version: existingReading.version,
+        }],
+        totalCount: 1,
+        offset: 0,
+        limit: 25,
+      }),
+      updateMeterReading,
+    })
+
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={financeClient} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Показания')
+
+    const readingsPanel = await screen.findByRole('region', { name: 'Показания' })
+    const juneInput = await within(readingsPanel).findByLabelText('Гараж 101, Июнь, показание')
+    await user.clear(juneInput)
+    await user.type(juneInput, '17100{Enter}')
+
+    const dialog = await screen.findByRole('dialog', { name: 'Подтвердить показание?' })
+    await user.click(within(dialog).getByRole('button', { name: 'Сохранить' }))
+
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent('Новое показание не может быть меньше предыдущего.')
+    expect(Array.from(readingsPanel.children).some((element) => element.classList.contains('form-error') && element.textContent?.includes('Новое показание'))).toBe(false)
+    expect(dialog).toBeInTheDocument()
+    expect(within(dialog).getByRole('button', { name: 'Сохранить' })).toBeEnabled()
+
+    await user.click(within(dialog).getByRole('button', { name: 'Отмена' }))
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Подтвердить показание?' })).not.toBeInTheDocument())
+    expect(juneInput).toHaveValue('17201')
+
+    await user.clear(juneInput)
+    await user.type(juneInput, '17250{Enter}')
+    const retryDialog = await screen.findByRole('dialog', { name: 'Подтвердить показание?' })
+    expect(within(retryDialog).queryByRole('alert')).not.toBeInTheDocument()
+    await user.click(within(retryDialog).getByRole('button', { name: 'Сохранить' }))
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Подтвердить показание?' })).not.toBeInTheDocument())
+    expect(updateMeterReading).toHaveBeenCalledTimes(2)
+  })
+
   it('blocks historical meter reading edits without the dedicated permission', async () => {
     const user = userEvent.setup()
     const historicalReading = createMeterReading({
