@@ -76,3 +76,62 @@ WHERE namespace.nspname = 'public'
   AND relation.relkind = 'r'
   AND relation.reloptions IS NOT NULL
 ORDER BY relation.relname;
+
+\echo 'GarageBalance PostgreSQL: memory and connection settings'
+SELECT
+    name,
+    setting,
+    unit,
+    source
+FROM pg_settings
+WHERE name IN (
+    'autovacuum_work_mem',
+    'effective_cache_size',
+    'huge_pages',
+    'jit',
+    'maintenance_work_mem',
+    'max_connections',
+    'max_parallel_workers',
+    'max_parallel_workers_per_gather',
+    'max_worker_processes',
+    'shared_buffers',
+    'superuser_reserved_connections',
+    'temp_buffers',
+    'wal_buffers',
+    'work_mem'
+)
+ORDER BY name;
+
+\echo 'GarageBalance PostgreSQL: connection utilization'
+WITH limits AS
+(
+    SELECT
+        current_setting('max_connections')::integer AS maximum,
+        current_setting('superuser_reserved_connections')::integer AS reserved
+)
+SELECT
+    limits.maximum,
+    limits.reserved,
+    limits.maximum - limits.reserved AS client_capacity,
+    count(*) FILTER (WHERE backend_type = 'client backend') AS clients,
+    count(*) FILTER (WHERE state = 'active') AS active,
+    count(*) FILTER (WHERE state = 'idle') AS idle,
+    count(*) FILTER (WHERE state = 'idle in transaction') AS idle_in_transaction,
+    round(
+        100.0 * count(*) FILTER (WHERE backend_type = 'client backend')
+        / NULLIF(limits.maximum - limits.reserved, 0),
+        2
+    ) AS client_capacity_percent
+FROM pg_stat_activity
+CROSS JOIN limits
+GROUP BY limits.maximum, limits.reserved;
+
+\echo 'GarageBalance PostgreSQL: client connections by database'
+SELECT
+    coalesce(datname, 'background') AS database_name,
+    coalesce(state, 'background') AS state,
+    count(*) AS connections
+FROM pg_stat_activity
+WHERE backend_type = 'client backend'
+GROUP BY datname, state
+ORDER BY database_name, state;

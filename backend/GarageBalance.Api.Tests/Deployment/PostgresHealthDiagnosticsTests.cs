@@ -19,6 +19,10 @@ public sealed class PostgresHealthDiagnosticsTests
         Assert.Contains("autovacuum_analyze_scale_factor", sql, StringComparison.Ordinal);
         Assert.Contains("waiting_locks", sql, StringComparison.Ordinal);
         Assert.Contains("transactions_over_30_seconds", sql, StringComparison.Ordinal);
+        Assert.Contains("effective_cache_size", sql, StringComparison.Ordinal);
+        Assert.Contains("max_connections", sql, StringComparison.Ordinal);
+        Assert.Contains("client_capacity_percent", sql, StringComparison.Ordinal);
+        Assert.Contains("client connections by database", sql, StringComparison.Ordinal);
         Assert.DoesNotContain("query AS", sql, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("SELECT query", sql, StringComparison.OrdinalIgnoreCase);
     }
