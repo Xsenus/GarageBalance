@@ -30,9 +30,10 @@ public sealed class ReportService(
     {
         var periodFrom = MonthPeriod.Normalize(request.MonthFrom ?? MonthPeriod.CurrentLocalMonth());
         var periodTo = MonthPeriod.Normalize(request.MonthTo ?? periodFrom);
-        if (periodTo < periodFrom)
+        var periodFailure = ValidateReportPeriod<ConsolidatedReportDto>(periodFrom, periodTo);
+        if (periodFailure is not null)
         {
-            return ReportResult<ConsolidatedReportDto>.Failure("period_invalid", "Дата окончания отчета не может быть раньше даты начала.");
+            return periodFailure;
         }
 
         if (!TryNormalizeReportSort<ConsolidatedReportDto>(ReportSortKind.Consolidated, request.SortBy, request.SortDirection, out var sort, out var sortFailure))
@@ -178,9 +179,10 @@ public sealed class ReportService(
     {
         var periodFrom = MonthPeriod.Normalize(request.MonthFrom ?? MonthPeriod.CurrentLocalMonth());
         var periodTo = MonthPeriod.Normalize(request.MonthTo ?? periodFrom);
-        if (periodTo < periodFrom)
+        var periodFailure = ValidateReportPeriod<GarageDetailReportDto>(periodFrom, periodTo);
+        if (periodFailure is not null)
         {
-            return ReportResult<GarageDetailReportDto>.Failure("period_invalid", "Дата окончания отчета не может быть раньше даты начала.");
+            return periodFailure;
         }
 
         if (!TryNormalizeReportSort<GarageDetailReportDto>(ReportSortKind.Garages, request.SortBy, request.SortDirection, out var sort, out var sortFailure))
@@ -425,9 +427,10 @@ public sealed class ReportService(
     public async Task<ReportResult<IncomeReportDto>> GetIncomeReportAsync(IncomeReportRequest request, CancellationToken cancellationToken)
     {
         var (dateFrom, dateTo) = NormalizeDateRange(request.DateFrom, request.DateTo);
-        if (dateTo < dateFrom)
+        var periodFailure = ValidateReportPeriod<IncomeReportDto>(dateFrom, dateTo);
+        if (periodFailure is not null)
         {
-            return ReportResult<IncomeReportDto>.Failure("period_invalid", "Дата окончания отчета не может быть раньше даты начала.");
+            return periodFailure;
         }
 
         if (!TryNormalizeReportSort<IncomeReportDto>(ReportSortKind.Income, request.SortBy, request.SortDirection, out var sort, out var sortFailure))
@@ -487,9 +490,10 @@ public sealed class ReportService(
     public async Task<ReportResult<ExpenseReportDto>> GetExpenseReportAsync(ExpenseReportRequest request, CancellationToken cancellationToken)
     {
         var (dateFrom, dateTo) = NormalizeDateRange(request.DateFrom, request.DateTo);
-        if (dateTo < dateFrom)
+        var periodFailure = ValidateReportPeriod<ExpenseReportDto>(dateFrom, dateTo);
+        if (periodFailure is not null)
         {
-            return ReportResult<ExpenseReportDto>.Failure("period_invalid", "Дата окончания отчета не может быть раньше даты начала.");
+            return periodFailure;
         }
 
         if (!TryNormalizeReportSort<ExpenseReportDto>(ReportSortKind.Expense, request.SortBy, request.SortDirection, out var sort, out var sortFailure))
@@ -548,9 +552,10 @@ public sealed class ReportService(
     public async Task<ReportResult<FundChangeReportDto>> GetFundChangeReportAsync(FundChangeReportRequest request, CancellationToken cancellationToken)
     {
         var (dateFrom, dateTo) = NormalizeDateRange(request.DateFrom, request.DateTo);
-        if (dateTo < dateFrom)
+        var periodFailure = ValidateReportPeriod<FundChangeReportDto>(dateFrom, dateTo);
+        if (periodFailure is not null)
         {
-            return ReportResult<FundChangeReportDto>.Failure("period_invalid", "Дата окончания отчета не может быть раньше даты начала.");
+            return periodFailure;
         }
 
         if (!TryNormalizeReportSort<FundChangeReportDto>(ReportSortKind.FundChanges, request.SortBy, request.SortDirection, out var sort, out var sortFailure))
@@ -693,9 +698,10 @@ public sealed class ReportService(
     public async Task<ReportResult<CashPaymentReportDto>> GetCashPaymentReportAsync(CashPaymentReportRequest request, CancellationToken cancellationToken)
     {
         var (dateFrom, dateTo) = NormalizeDateRange(request.DateFrom, request.DateTo);
-        if (dateTo < dateFrom)
+        var periodFailure = ValidateReportPeriod<CashPaymentReportDto>(dateFrom, dateTo);
+        if (periodFailure is not null)
         {
-            return ReportResult<CashPaymentReportDto>.Failure("period_invalid", "Дата окончания отчета не может быть раньше даты начала.");
+            return periodFailure;
         }
 
         if (!TryNormalizeReportSort<CashPaymentReportDto>(ReportSortKind.CashPayments, request.SortBy, request.SortDirection, out var sort, out var sortFailure))
@@ -832,9 +838,10 @@ public sealed class ReportService(
     public async Task<ReportResult<BankDepositReportDto>> GetBankDepositReportAsync(BankDepositReportRequest request, CancellationToken cancellationToken)
     {
         var (dateFrom, dateTo) = NormalizeDateRange(request.DateFrom, request.DateTo);
-        if (dateTo < dateFrom)
+        var periodFailure = ValidateReportPeriod<BankDepositReportDto>(dateFrom, dateTo);
+        if (periodFailure is not null)
         {
-            return ReportResult<BankDepositReportDto>.Failure("period_invalid", "Дата окончания отчета не может быть раньше даты начала.");
+            return periodFailure;
         }
 
         if (!TryNormalizeReportSort<BankDepositReportDto>(ReportSortKind.BankDeposits, request.SortBy, request.SortDirection, out var sort, out var sortFailure))
@@ -1573,6 +1580,25 @@ public sealed class ReportService(
         return (start, end);
     }
 
+    private static ReportResult<T>? ValidateReportPeriod<T>(DateOnly periodFrom, DateOnly periodTo)
+    {
+        if (periodTo < periodFrom)
+        {
+            return ReportResult<T>.Failure(
+                "period_invalid",
+                "Дата окончания отчета не может быть раньше даты начала.");
+        }
+
+        if (QueryLimits.ExceedsMaximumReportPeriod(periodFrom, periodTo))
+        {
+            return ReportResult<T>.Failure(
+                "period_too_large",
+                $"Период отчета или экспорта не может превышать {QueryLimits.MaximumReportPeriodMonths} месяцев.");
+        }
+
+        return null;
+    }
+
     private static string BuildExportFileName(string reportType, DateOnly dateFrom, DateOnly dateTo, string extension)
     {
         return $"garagebalance-{reportType}-{dateFrom:yyyyMMdd}-{dateTo:yyyyMMdd}.{extension}";
@@ -1645,7 +1671,8 @@ public sealed class ReportService(
             : "Поступление";
     }
 
-    private static int NormalizeReportLimit(int limit) => Math.Clamp(limit, 1, 500);
+    private static int NormalizeReportLimit(int limit) =>
+        QueryLimits.NormalizePageSize(limit, defaultSize: 1);
 
     private static string FormatAmount(decimal value) => MoneyFormatting.Format(value);
 

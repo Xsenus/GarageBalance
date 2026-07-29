@@ -917,7 +917,7 @@ public sealed class BackendPerformanceGuardTests
         var serviceSource = ReadApiSource("Application/Import/ImportService.cs");
         var repositorySource = ReadApiSource("Infrastructure/Data/EfImportRepository.cs");
 
-        Assert.Contains("var limit = NormalizeLimit(request.Limit, 100, 500)", serviceSource, StringComparison.Ordinal);
+        Assert.Contains("var limit = QueryLimits.NormalizeListSize(request.Limit, 100)", serviceSource, StringComparison.Ordinal);
         Assert.Matches(
             BoundedQueryRegex(@"GetCreatedRecordsAsync[\s\S]*?IsNpgsql\(\)[\s\S]*?\.Take\(limit\)[\s\S]*?\.ToListAsync\(cancellationToken\)"),
             repositorySource);
@@ -1029,12 +1029,16 @@ public sealed class BackendPerformanceGuardTests
         var releaseSynchronizerSource = ReadApiSource("Application/Releases/AppReleaseCatalogSynchronizer.cs");
         var releaseRepositorySource = ReadApiSource("Infrastructure/Data/EfAppReleaseRepository.cs");
 
-        Assert.Contains("var boundedLimit = Math.Clamp(limit, 1, 100)", fundSource, StringComparison.Ordinal);
+        Assert.Contains(
+            "var boundedLimit = QueryLimits.NormalizePageSize(limit, defaultSize: 1, maximumSize: 100)",
+            fundSource,
+            StringComparison.Ordinal);
         Assert.True(
             CountOccurrences(fundRepositorySource, ".Take(limit)") >= 2,
             "Fund operation lists must apply the same bound in PostgreSQL and SQLite branches.");
         Assert.Contains("private const int DefaultLimit = 9", releaseSource, StringComparison.Ordinal);
         Assert.Contains("private const int MaxLimit = 50", releaseSource, StringComparison.Ordinal);
+        Assert.Contains("QueryLimits.NormalizeListSize(limit, DefaultLimit, MaxLimit)", releaseSource, StringComparison.Ordinal);
         Assert.Contains(".Skip(offset)", releaseRepositorySource, StringComparison.Ordinal);
         Assert.Contains(".Take(limit)", releaseRepositorySource, StringComparison.Ordinal);
         Assert.Contains("CountAsync(cancellationToken)", releaseRepositorySource, StringComparison.Ordinal);
@@ -1142,6 +1146,35 @@ public sealed class BackendPerformanceGuardTests
         Assert.Contains("PostgreSQL integration tests", document, StringComparison.Ordinal);
         Assert.Contains("браузер", document, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("не меняет формулы, округление, права и audit", document, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void QueryAndReportLimitsStayCentralizedAcrossGrowingSections()
+    {
+        var limits = ReadApiSource("Application/Common/QueryLimits.cs");
+        Assert.Contains("MaximumPageSize = 500", limits, StringComparison.Ordinal);
+        Assert.Contains("MaximumReportPeriodMonths = 120", limits, StringComparison.Ordinal);
+
+        string[] boundedServices =
+        [
+            "Application/Audit/AuditService.cs",
+            "Application/Dictionaries/DictionaryService.cs",
+            "Application/Finance/FinanceService.cs",
+            "Application/Funds/FundService.cs",
+            "Application/Import/ImportQuarantineService.cs",
+            "Application/Import/ImportService.cs",
+            "Application/Releases/AppReleaseService.cs",
+            "Application/Reports/ReportService.cs",
+            "Application/Users/UserManagementService.cs"
+        ];
+        foreach (var servicePath in boundedServices)
+        {
+            Assert.Contains("QueryLimits.", ReadApiSource(servicePath), StringComparison.Ordinal);
+        }
+
+        var reportService = ReadApiSource("Application/Reports/ReportService.cs");
+        Assert.Equal(8, CountOccurrences(reportService, "ValidateReportPeriod<"));
+        Assert.DoesNotContain("Math.Clamp(limit, 1, 500)", reportService, StringComparison.Ordinal);
     }
 
     private static string ReadApiSource(string relativePath)

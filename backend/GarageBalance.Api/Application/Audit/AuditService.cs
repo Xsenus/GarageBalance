@@ -1,4 +1,5 @@
 using GarageBalance.Api.Domain.Audit;
+using GarageBalance.Api.Application.Common;
 using GarageBalance.Api.Application.Reports;
 using System.Globalization;
 using System.Text;
@@ -9,8 +10,6 @@ namespace GarageBalance.Api.Application.Audit;
 
 public sealed class AuditService(IAuditEventRepository repository) : IAuditService
 {
-    private const int DefaultListLimit = 100;
-    private const int MaxListLimit = 500;
     private static readonly string[] ExportHeaders =
     [
         "createdAtUtc",
@@ -203,12 +202,7 @@ public sealed class AuditService(IAuditEventRepository repository) : IAuditServi
 
     private static int NormalizeLimit(int? limit)
     {
-        if (limit is null or <= 0)
-        {
-            return DefaultListLimit;
-        }
-
-        return Math.Min(limit.Value, MaxListLimit);
+        return QueryLimits.NormalizeListSize(limit);
     }
 
     private static int NormalizeOffset(int? offset)

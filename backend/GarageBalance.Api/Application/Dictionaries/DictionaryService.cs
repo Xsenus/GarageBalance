@@ -26,8 +26,6 @@ public sealed class DictionaryService(
     IApplicationUnitOfWork unitOfWork,
     IAuditEventWriter auditEventWriter) : IDictionaryService
 {
-    private const int DefaultListLimit = 100;
-    private const int MaxListLimit = 500;
     private const string OtherIncomeIncomeTypeCode = "other_income";
     private static readonly IReadOnlyDictionary<string, string> DictionaryFieldLabels = new Dictionary<string, string>(StringComparer.Ordinal)
     {
@@ -1414,12 +1412,7 @@ public sealed class DictionaryService(
 
     private static int NormalizeListLimit(int? limit)
     {
-        if (limit is null or <= 0)
-        {
-            return DefaultListLimit;
-        }
-
-        return Math.Min(limit.Value, MaxListLimit);
+        return QueryLimits.NormalizeListSize(limit);
     }
 
     private static int NormalizeListOffset(int? offset)

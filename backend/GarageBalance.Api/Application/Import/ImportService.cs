@@ -2,6 +2,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using GarageBalance.Api.Application.Audit;
+using GarageBalance.Api.Application.Common;
 using GarageBalance.Api.Domain.Import;
 
 namespace GarageBalance.Api.Application.Import;
@@ -25,7 +26,7 @@ public sealed class ImportService(
 
     public async Task<IReadOnlyList<AccessImportRunDto>> GetAccessImportRunsAsync(AccessImportRunListRequest request, CancellationToken cancellationToken)
     {
-        var limit = NormalizeLimit(request.Limit, 50, 200);
+        var limit = QueryLimits.NormalizeListSize(request.Limit, 50, 200);
         var runs = await repository.GetRunsAsync(limit, cancellationToken);
         return runs.Select(ToDto).ToList();
     }
@@ -38,14 +39,14 @@ public sealed class ImportService(
             return ImportResult<IReadOnlyList<AccessImportRunLogEntryDto>>.Failure("import_run_not_found", "Запуск dry-run импорта не найден.");
         }
 
-        var limit = NormalizeLimit(request.Limit, 100, 500);
+        var limit = QueryLimits.NormalizeListSize(request.Limit, 100);
         var entries = await repository.GetRunLogEntriesAsync(runId, limit, cancellationToken);
         return ImportResult<IReadOnlyList<AccessImportRunLogEntryDto>>.Success(entries.Select(ToLogEntryDto).ToList());
     }
 
     public async Task<ImportResult<IReadOnlyList<AccessImportCreatedRecordDto>>> GetAccessImportCreatedRecordsAsync(Guid runId, AccessImportCreatedRecordListRequest request, CancellationToken cancellationToken)
     {
-        var limit = NormalizeLimit(request.Limit, 100, 500);
+        var limit = QueryLimits.NormalizeListSize(request.Limit, 100);
         var runExists = await repository.RunExistsAsync(runId, cancellationToken);
         if (!runExists)
         {
@@ -512,16 +513,6 @@ public sealed class ImportService(
             Message = message,
             DetailsJson = JsonSerializer.Serialize(details, JsonOptions)
         });
-    }
-
-    private static int NormalizeLimit(int limit, int defaultLimit, int maxLimit)
-    {
-        if (limit <= 0)
-        {
-            return defaultLimit;
-        }
-
-        return Math.Min(limit, maxLimit);
     }
 
     private static List<AccessImportCheckDto> BuildChecks(string extension, byte[] bytes)

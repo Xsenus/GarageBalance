@@ -470,12 +470,7 @@ public sealed class AppReleaseService(
 
     private static int NormalizeLimit(int? limit)
     {
-        if (limit is null or <= 0)
-        {
-            return DefaultLimit;
-        }
-
-        return Math.Min(limit.Value, MaxLimit);
+        return QueryLimits.NormalizeListSize(limit, DefaultLimit, MaxLimit);
     }
 
     private static int NormalizeOffset(int? offset) => Math.Max(offset ?? 0, 0);

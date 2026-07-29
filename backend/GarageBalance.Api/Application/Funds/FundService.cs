@@ -189,7 +189,7 @@ public sealed class FundService(
 
     public async Task<IReadOnlyList<FundOperationDto>> GetOperationsAsync(int limit, bool includeCanceled, CancellationToken cancellationToken)
     {
-        var boundedLimit = Math.Clamp(limit, 1, 100);
+        var boundedLimit = QueryLimits.NormalizePageSize(limit, defaultSize: 1, maximumSize: 100);
         var operations = await repository.GetRecentOperationsAsync(boundedLimit, includeCanceled, cancellationToken);
 
         return operations.Select(ToDto).ToList();
@@ -198,7 +198,7 @@ public sealed class FundService(
     public async Task<FundOperationPageDto> GetOperationsPageAsync(int offset, int limit, bool includeCanceled, CancellationToken cancellationToken)
     {
         var boundedOffset = Math.Max(0, offset);
-        var boundedLimit = Math.Clamp(limit, 1, 100);
+        var boundedLimit = QueryLimits.NormalizePageSize(limit, defaultSize: 1, maximumSize: 100);
         var page = await repository.GetOperationsPageAsync(boundedOffset, boundedLimit, includeCanceled, cancellationToken);
 
         return new FundOperationPageDto(page.Items.Select(ToDto).ToList(), page.TotalCount, boundedOffset, boundedLimit);

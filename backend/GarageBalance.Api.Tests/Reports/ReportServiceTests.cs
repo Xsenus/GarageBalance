@@ -489,6 +489,24 @@ public sealed class ReportServiceTests
     }
 
     [Fact]
+    public async Task GetConsolidatedReportAsync_RejectsPeriodLongerThanSharedMaximum()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = CreateService(database.Context);
+
+        var result = await service.GetConsolidatedReportAsync(
+            new ConsolidatedReportRequest(
+                new DateOnly(2016, 12, 1),
+                new DateOnly(2026, 12, 1),
+                null),
+            CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Equal("period_too_large", result.ErrorCode);
+        Assert.Contains("120 месяцев", result.ErrorMessage, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task GetGarageReportAsync_AppliesPageAfterAggregationWithoutChangingTotals()
     {
         await using var database = await TestDatabase.CreateAsync();
@@ -580,6 +598,28 @@ public sealed class ReportServiceTests
 
         Assert.False(result.Succeeded);
         Assert.Equal("period_invalid", result.ErrorCode);
+    }
+
+    [Fact]
+    public async Task ExportIncomeReportXlsxAsync_RejectsPeriodLongerThanSharedMaximum()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = CreateService(database.Context);
+
+        var result = await service.ExportIncomeReportXlsxAsync(
+            new IncomeReportRequest(
+                new DateOnly(2016, 12, 31),
+                new DateOnly(2026, 12, 1),
+                null,
+                [],
+                [],
+                [],
+                null),
+            CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Equal("period_too_large", result.ErrorCode);
+        Assert.Contains("120 месяцев", result.ErrorMessage, StringComparison.Ordinal);
     }
 
     [Fact]

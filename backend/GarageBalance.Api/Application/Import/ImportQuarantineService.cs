@@ -1,5 +1,6 @@
 using System.Text.Json;
 using GarageBalance.Api.Application.Audit;
+using GarageBalance.Api.Application.Common;
 using GarageBalance.Api.Domain.Import;
 
 namespace GarageBalance.Api.Application.Import;
@@ -8,9 +9,6 @@ public sealed class ImportQuarantineService(
     IImportQuarantineRepository repository,
     IAuditEventWriter auditEventWriter) : IImportQuarantineService
 {
-    private const int DefaultListLimit = 50;
-    private const int MaxListLimit = 200;
-
     private static readonly HashSet<string> AllowedSeverities = new(StringComparer.OrdinalIgnoreCase)
     {
         "error",
@@ -27,12 +25,7 @@ public sealed class ImportQuarantineService(
 
     private static int NormalizeListLimit(int? limit)
     {
-        if (!limit.HasValue || limit.Value <= 0)
-        {
-            return DefaultListLimit;
-        }
-
-        return Math.Min(limit.Value, MaxListLimit);
+        return QueryLimits.NormalizeListSize(limit, defaultSize: 50, maximumSize: 200);
     }
 
     public async Task<ImportResult<AccessImportQuarantineItemDto>> RegisterAsync(

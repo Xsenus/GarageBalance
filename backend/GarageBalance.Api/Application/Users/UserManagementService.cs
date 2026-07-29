@@ -1,5 +1,6 @@
 using GarageBalance.Api.Application.Auth;
 using GarageBalance.Api.Application.Audit;
+using GarageBalance.Api.Application.Common;
 using GarageBalance.Api.Domain.Security;
 using GarageBalance.Api.Domain.Users;
 
@@ -11,10 +12,6 @@ public sealed class UserManagementService(
     IPasswordPolicyValidator passwordPolicyValidator,
     IAuditEventWriter auditEventWriter) : IUserManagementService
 {
-    private const int DefaultListLimit = 100;
-    private const int MaxListLimit = 500;
-    private const int DefaultPageLimit = 25;
-
     public async Task<IReadOnlyList<ManagedRoleDto>> GetRolesAsync(CancellationToken cancellationToken)
     {
         await EnsureSystemRolesAsync(cancellationToken);
@@ -45,17 +42,12 @@ public sealed class UserManagementService(
 
     private static int NormalizeListLimit(int? limit)
     {
-        if (limit is null or <= 0)
-        {
-            return DefaultListLimit;
-        }
-
-        return Math.Min(limit.Value, MaxListLimit);
+        return QueryLimits.NormalizeListSize(limit);
     }
 
     private static int NormalizePageLimit(int limit)
     {
-        return limit <= 0 ? DefaultPageLimit : Math.Min(limit, MaxListLimit);
+        return QueryLimits.NormalizePageSize(limit);
     }
 
     private static int NormalizeListOffset(int offset)

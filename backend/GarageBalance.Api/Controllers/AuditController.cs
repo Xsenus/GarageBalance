@@ -1,4 +1,5 @@
 using GarageBalance.Api.Application.Audit;
+using GarageBalance.Api.Application.Common;
 using GarageBalance.Api.Domain.Security;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -15,7 +16,7 @@ public sealed class AuditController(IAuditService auditService) : ControllerBase
     private const string InvalidDateRangeTitle = "Проверьте период истории";
     private const string InvalidDateRangeDetail = "Начало периода истории изменений не может быть позже конца.";
     private const string InvalidPaginationTitle = "Проверьте пагинацию истории";
-    private const int MaxPageLimit = 500;
+    private const int MaxPageLimit = QueryLimits.MaximumPageSize;
 
     [HttpGet("events")]
     [ProducesResponseType<IReadOnlyList<AuditEventDto>>(StatusCodes.Status200OK)]

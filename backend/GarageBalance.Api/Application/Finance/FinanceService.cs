@@ -43,8 +43,6 @@ public sealed class FinanceService(
     TimeProvider timeProvider,
     IBusinessDateProvider businessDateProvider) : IFinanceService
 {
-    private const int DefaultListLimit = 100;
-    private const int MaxListLimit = 500;
     private const int MaxAutomaticFeeCampaigns = 500;
     private const int MaxAutomaticMeteredServices = 20;
     private const int MaxBalanceHistoryMonths = 600;
@@ -775,12 +773,7 @@ public sealed class FinanceService(
 
     private static int NormalizeListLimit(int? limit)
     {
-        if (limit is null or <= 0)
-        {
-            return DefaultListLimit;
-        }
-
-        return Math.Min(limit.Value, MaxListLimit);
+        return QueryLimits.NormalizeListSize(limit);
     }
 
     private static int NormalizeListOffset(int? offset)
