@@ -173,6 +173,7 @@ jobs:
           test -n "${ENTRY_ASSET}"
           for ATTEMPT in 1 2 3; do
             curl --http2 --compressed --fail --silent --show-error \
+              --connect-timeout 10 --max-time 20 \
               "https://sgk.blagodaty.ru${ENTRY_ASSET}?deployment=${GITHUB_SHA}-${ATTEMPT}" \
               --output /dev/null
           done
