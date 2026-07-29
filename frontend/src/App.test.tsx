@@ -533,9 +533,10 @@ describe('App', () => {
     const periodicityOptions = within(serviceDialog).getByRole('listbox', { name: 'Периодичность регулярной услуги: варианты' })
     expect(within(periodicityOptions).getAllByRole('option')).toHaveLength(2)
     await user.click(within(periodicityOptions).getByRole('option', { name: 'Ежегодно' }))
-    for (const comboboxName of ['Вид поступления регулярной услуги', 'Способ расчёта регулярной услуги', 'Тариф регулярной услуги', 'Периодичность регулярной услуги', 'Месяц начисления ежегодной услуги', 'Месяц оплаты']) {
+    for (const comboboxName of ['Вид поступления регулярной услуги', 'Способ расчёта регулярной услуги', 'Периодичность регулярной услуги', 'Месяц начисления ежегодной услуги', 'Месяц оплаты']) {
       expect(within(serviceDialog).getByRole('combobox', { name: comboboxName })).toHaveClass('select-control__trigger')
     }
+    expect(within(serviceDialog).getByLabelText('Тариф регулярной услуги')).toHaveAttribute('inputmode', 'decimal')
     expect(within(serviceDialog).getByRole('combobox', { name: 'Способ расчёта регулярной услуги' })).toBeDisabled()
     const accrualStartMonthControl = within(serviceDialog).getByRole('combobox', { name: 'Месяц начисления ежегодной услуги' })
     expect(accrualStartMonthControl).toHaveTextContent('Январь')
@@ -2164,7 +2165,7 @@ describe('App', () => {
     const contractorServiceExpenseFund = within(serviceDialog).getByRole('combobox', { name: 'Фонд расходования услуги поставщика' })
     expect(contractorServiceExpenseFund).toBeEnabled()
     expect(contractorServiceExpenseFund).toHaveTextContent('Электроэнергия')
-    const contractorServiceCost = within(serviceDialog).getByLabelText('Стоимость регулярной услуги')
+    const contractorServiceCost = within(serviceDialog).getByLabelText('Тариф регулярной услуги')
     await user.clear(contractorServiceCost)
     await user.type(contractorServiceCost, '1000')
     await user.click(within(serviceDialog).getByRole('button', { name: /Сохранить/i }))
@@ -3904,17 +3905,15 @@ describe('App', () => {
     await user.click(within(serviceDialog).getByLabelText('Регулярные платежи'))
     const incomeTypeControl = within(serviceDialog).getByRole('combobox', { name: 'Вид поступления регулярной услуги' })
     const calculationBaseControl = within(serviceDialog).getByRole('combobox', { name: 'Способ расчёта регулярной услуги' })
-    const tariffControl = within(serviceDialog).getByRole('combobox', { name: 'Тариф регулярной услуги' })
+    const tariffInput = within(serviceDialog).getByLabelText('Тариф регулярной услуги')
     expect(incomeTypeControl).toHaveTextContent(serviceIncomeType.name)
     const incomeFundControl = within(serviceDialog).getByRole('combobox', { name: 'Фонд поступления регулярной услуги' })
     expect(incomeFundControl).toHaveTextContent('Членские взносы')
     expect(incomeFundControl).toBeDisabled()
     expect(calculationBaseControl).toHaveTextContent('Фиксированно')
     expect(calculationBaseControl).toBeDisabled()
-    expect(tariffControl).toHaveTextContent('Тариф охраны — 1 200.00 руб.')
-    const regularCostInput = within(serviceDialog).getByLabelText('Стоимость регулярной услуги')
-    expect(regularCostInput).toHaveValue('1 200.00')
-    expect(within(serviceDialog).getByText('Сохранится вместе с услугой как её действующая ставка.')).toBeInTheDocument()
+    expect(tariffInput).toHaveValue('1 200.00')
+    expect(tariffInput).toHaveAttribute('inputmode', 'decimal')
     expect(within(serviceDialog).getByText('Определяет, к какому виду будут относиться начисления и платежи по услуге.')).toBeInTheDocument()
     expect(within(serviceDialog).getByText('Определяется выбранным тарифом и показывает, как рассчитывается сумма.')).toBeInTheDocument()
     expect(within(serviceDialog).getByText('Конкретная ставка, которая применяется при начислении услуги.')).toBeInTheDocument()
@@ -3932,17 +3931,15 @@ describe('App', () => {
     await user.click(incomeTypeControl)
     await user.click(within(serviceDialog).getByRole('option', { name: waterIncomeType.name }))
     expect(incomeFundControl).toHaveTextContent('Водоснабжение')
-    expect(tariffControl).toHaveTextContent('Тариф воды — 48.50 руб.')
-    expect(regularCostInput).toHaveValue('48.50')
+    expect(tariffInput).toHaveValue('48.50')
     expect(calculationBaseControl).toHaveTextContent('По счетчику воды')
     expect(within(serviceDialog).getByLabelText('По счетчику')).toBeChecked()
-    expect(within(serviceDialog).getByLabelText('Ставка счётчикового тарифа')).toHaveValue('48.50 руб. / м³')
+    expect(within(serviceDialog).queryByLabelText('Ставка счётчикового тарифа')).not.toBeInTheDocument()
     expect(within(serviceDialog).getByRole('combobox', { name: 'Единица измерения' })).toHaveTextContent('м³')
     await user.click(incomeTypeControl)
     await user.click(within(serviceDialog).getByRole('option', { name: serviceIncomeType.name }))
     expect(incomeFundControl).toHaveTextContent('Членские взносы')
-    expect(tariffControl).toHaveTextContent('Тариф охраны — 1 200.00 руб.')
-    expect(regularCostInput).toHaveValue('1 200.00')
+    expect(tariffInput).toHaveValue('1 200.00')
     expect(calculationBaseControl).toHaveTextContent('Фиксированно')
     expect(within(serviceDialog).getByLabelText('По счетчику')).not.toBeChecked()
     expect(within(serviceDialog).queryByLabelText('Ставка счётчикового тарифа')).not.toBeInTheDocument()
@@ -3951,13 +3948,13 @@ describe('App', () => {
     await user.click(createUnitControl)
     await user.click(within(serviceDialog).getByRole('option', { name: 'руб./гараж' }))
     expect(createUnitControl).toHaveTextContent('руб./гараж')
-    await user.clear(regularCostInput)
-    await user.type(regularCostInput, '0')
+    await user.clear(tariffInput)
+    await user.type(tariffInput, '0')
     await user.click(within(serviceDialog).getByRole('button', { name: 'Сохранить' }))
-    expect(within(serviceDialog).getByText('Укажите корректную стоимость регулярной услуги.')).toBeInTheDocument()
+    expect(within(serviceDialog).getByText('Укажите корректный тариф услуги.')).toBeInTheDocument()
     expect(createdServiceRequest).toBeNull()
-    await user.clear(regularCostInput)
-    await user.type(regularCostInput, '1750')
+    await user.clear(tariffInput)
+    await user.type(tariffInput, '1750')
     await user.click(createPeriodicityControl)
     await user.click(within(serviceDialog).getByRole('option', { name: 'Ежегодно' }))
     expect(within(serviceDialog).getByRole('combobox', { name: 'Месяц начисления ежегодной услуги' })).toHaveTextContent('Январь')
@@ -4073,7 +4070,13 @@ describe('App', () => {
 
   it('edits a charge service in one form and keeps the draft after a failed save', async () => {
     const user = userEvent.setup()
-    const serviceIncomeType = createAccountingType({ id: 'income-security', name: 'Охрана', code: 'other_income' })
+    const serviceIncomeType = createAccountingType({
+      id: 'income-security',
+      name: 'Охрана',
+      code: 'other_income',
+      destinationFundId: 'fund-other',
+      destinationFundName: 'Прочее',
+    })
     const serviceTariff = createTariff({ id: 'tariff-security', name: 'Тариф охраны', calculationBase: 'fixed', rate: 1200 })
     const meterTariff = createTariff({ id: 'tariff-security-meter', name: 'Тариф охраны по счётчику', calculationBase: 'meter_water', rate: 52.75 })
     let serviceSetting = createChargeServiceSetting({
@@ -4092,16 +4095,44 @@ describe('App', () => {
       unitName: 'руб.',
     })
     const updateRequests: unknown[] = []
+    const inlineUpdateRequests: unknown[] = []
     let meterSaveFailuresRemaining = 1
     const dictionaryClient = createDictionaryClient({
       getIncomeTypes: async () => [serviceIncomeType],
       getTariffs: async () => [serviceTariff, meterTariff],
       getChargeServiceSettings: async () => [serviceSetting],
-      updateChargeServiceSetting: async (_token, id, request) => {
+      updateChargeServiceWithTariff: async (_token, id, request) => {
         updateRequests.push(request)
         if (updateRequests.length === 1) {
           throw new Error('Услугу временно не удалось сохранить.')
         }
+
+        serviceSetting = createChargeServiceSetting({
+          id,
+          name: request.service.name,
+          isRegular: request.service.isRegular,
+          periodicityMonths: request.service.periodicityMonths ?? null,
+          accrualStartMonth: request.service.accrualStartMonth ?? null,
+          paymentDueDay: request.service.paymentDueDay ?? null,
+          paymentDueMonth: request.service.paymentDueMonth ?? null,
+          overdueGraceDays: request.service.overdueGraceDays,
+          incomeTypeId: request.service.incomeTypeId ?? null,
+          tariffId: request.service.tariffId ?? null,
+          isMetered: request.service.isMetered,
+          hasTieredTariff: request.service.hasTieredTariff,
+          unitName: request.service.unitName ?? null,
+        })
+        return {
+          service: serviceSetting,
+          tariff: createTariff({
+            ...serviceTariff,
+            id: request.service.tariffId ?? serviceTariff.id,
+            rate: request.rate,
+          }),
+        }
+      },
+      updateChargeServiceSetting: async (_token, id, request) => {
+        inlineUpdateRequests.push(request)
         if (request.isMetered && meterSaveFailuresRemaining > 0) {
           meterSaveFailuresRemaining -= 1
           throw new Error('Счётчиковый тариф временно не удалось сохранить.')
@@ -4139,12 +4170,18 @@ describe('App', () => {
     expect(within(editDialog).getByLabelText('Наименование услуги')).toHaveValue('Охрана')
     expect(within(editDialog).getByLabelText('Регулярные платежи')).toBeChecked()
     expect(within(editDialog).getByLabelText('Регулярные платежи')).toBeDisabled()
+    expect(within(editDialog).getByLabelText('Наименование услуги').closest('.contractors-service-heading-grid')).toContainElement(within(editDialog).getByLabelText('Регулярные платежи'))
     expect(within(editDialog).getByText('Тип услуги нельзя менять после создания. Остальные параметры доступны для редактирования.')).toBeInTheDocument()
     expect(within(editDialog).getByRole('combobox', { name: 'Периодичность регулярной услуги' })).toHaveTextContent('Ежегодно')
     expect(within(editDialog).getByRole('combobox', { name: 'Месяц начисления ежегодной услуги' })).toHaveTextContent('Март')
     expect(within(editDialog).getByLabelText('День оплаты')).toHaveValue('25')
     expect(within(editDialog).getByRole('combobox', { name: 'Месяц оплаты' })).toHaveTextContent('Апрель')
     expect(within(editDialog).getByLabelText('Перенос долга в просроченный')).toHaveValue('20')
+    expect(within(editDialog).getByLabelText('Перенос долга в просроченный').closest('.contractors-service-secondary-grid')).toContainElement(within(editDialog).getByLabelText('Единица измерения'))
+    const editTariffInput = within(editDialog).getByLabelText('Тариф регулярной услуги')
+    expect(editTariffInput).toHaveValue('1 200.00')
+    await user.clear(editTariffInput)
+    await user.type(editTariffInput, '1350.75')
     const editUnitControl = within(editDialog).getByRole('combobox', { name: 'Единица измерения' })
     expect(editUnitControl).toHaveTextContent('руб.')
     await user.click(editUnitControl)
@@ -4171,20 +4208,23 @@ describe('App', () => {
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Изменить услугу' })).not.toBeInTheDocument())
     expect(updateRequests).toHaveLength(2)
     expect(updateRequests[1]).toEqual({
-      name: 'Охрана территории',
-      isRegular: true,
-      periodicityMonths: 1,
-      accrualStartMonth: 1,
-      paymentDueDay: 15,
-      paymentDueMonth: null,
-      overdueGraceDays: 10,
-      isMetered: false,
-      hasTieredTariff: false,
-      unitName: 'руб./гараж',
-      incomeTypeId: serviceIncomeType.id,
-      expenseTypeId: null,
-      expenseFundId: null,
-      tariffId: serviceTariff.id,
+      service: {
+        name: 'Охрана территории',
+        isRegular: true,
+        periodicityMonths: 1,
+        accrualStartMonth: 1,
+        paymentDueDay: 15,
+        paymentDueMonth: null,
+        overdueGraceDays: 10,
+        isMetered: false,
+        hasTieredTariff: false,
+        unitName: 'руб./гараж',
+        incomeTypeId: serviceIncomeType.id,
+        expenseTypeId: null,
+        expenseFundId: null,
+        tariffId: serviceTariff.id,
+      },
+      rate: 1350.75,
     })
     expect(within(tariffsPanel).getByRole('button', { name: 'Изменить услугу Охрана территории' })).toBeInTheDocument()
     expect(within(tariffsPanel).getByRole('combobox', { name: 'Охрана территории: Периодичность: значение' })).toHaveTextContent('Ежемесячно')
@@ -4193,7 +4233,7 @@ describe('App', () => {
     expect(within(tariffsPanel).getAllByRole('combobox', { name: /Охрана территории: .*: пороговая тарификация/i })).toHaveLength(1)
     expect(within(tariffsPanel).getByRole('combobox', { name: 'Охрана территории: Тариф охраны: по счетчику' })).toHaveTextContent('Нет')
     expect(within(tariffsPanel).getByRole('combobox', { name: 'Охрана территории: Тариф охраны: пороговая тарификация' })).toHaveTextContent('Нет')
-    expect(within(tariffsPanel).getByLabelText('Охрана территории: Тариф охраны: значение')).toHaveValue('1 200.00')
+    expect(within(tariffsPanel).getByLabelText('Охрана территории: Тариф охраны: значение')).toHaveValue('1 350.75')
     expect(within(tariffsPanel).getByRole('combobox', { name: 'Охрана территории: Тариф охраны: единица' })).toHaveTextContent('руб./гараж')
     expect(within(tariffsPanel).queryByRole('combobox', { name: 'Охрана территории: Периодичность: по счетчику' })).not.toBeInTheDocument()
     expect(within(tariffsPanel).queryByRole('combobox', { name: 'Охрана территории: Оплата до: пороговая тарификация' })).not.toBeInTheDocument()
@@ -4205,18 +4245,18 @@ describe('App', () => {
     expect(within(meterModeConfirmDialog).getByText('По счетчику')).toBeInTheDocument()
     await user.click(within(meterModeConfirmDialog).getByRole('button', { name: 'Сохранить' }))
 
-    await waitFor(() => expect(updateRequests).toHaveLength(3))
+    await waitFor(() => expect(inlineUpdateRequests).toHaveLength(1))
     expect(await within(tariffsPanel).findByRole('alert')).toHaveTextContent('Счётчиковый тариф временно не удалось сохранить.')
     expect(meterModeControl).toHaveTextContent('Нет')
-    expect(within(tariffsPanel).getByLabelText('Охрана территории: Тариф охраны: значение')).toHaveValue('1 200.00')
+    expect(within(tariffsPanel).getByLabelText('Охрана территории: Тариф охраны: значение')).toHaveValue('1 350.75')
 
     await user.click(meterModeControl)
     await user.click(within(tariffsPanel).getByRole('option', { name: 'Да' }))
     const retryMeterModeDialog = await screen.findByRole('dialog', { name: 'Подтвердить изменение?' })
     await user.click(within(retryMeterModeDialog).getByRole('button', { name: 'Сохранить' }))
 
-    await waitFor(() => expect(updateRequests).toHaveLength(4))
-    expect(updateRequests[3]).toMatchObject({
+    await waitFor(() => expect(inlineUpdateRequests).toHaveLength(2))
+    expect(inlineUpdateRequests[1]).toMatchObject({
       isMetered: true,
       tariffId: meterTariff.id,
       unitName: 'м³',
@@ -4225,6 +4265,59 @@ describe('App', () => {
     expect(within(tariffsPanel).getByRole('combobox', { name: 'Охрана территории: Тариф охраны по счётчику: единица' })).toHaveTextContent('м³')
     expect(within(tariffsPanel).getByRole('combobox', { name: 'Охрана территории: Тариф охраны по счётчику: по счетчику' })).toHaveTextContent('Да')
     expect(within(tariffsPanel).queryByLabelText('Вода: Тариф охраны по счётчику: значение')).not.toBeInTheDocument()
+  })
+
+  it('blocks service saving locally when its income type has no active fund', async () => {
+    const user = userEvent.setup()
+    const incomeTypeWithoutFund = createAccountingType({
+      id: 'income-water-without-fund',
+      name: 'Вода',
+      code: 'water',
+      destinationFundId: null,
+      destinationFundName: null,
+    })
+    const waterTariff = createTariff({
+      id: 'tariff-water-without-fund',
+      name: 'Тариф воды',
+      calculationBase: 'meter_water',
+      rate: 100.8,
+    })
+    const waterService = createChargeServiceSetting({
+      id: 'service-water-without-fund',
+      name: 'Вода',
+      isRegular: true,
+      periodicityMonths: 1,
+      accrualStartMonth: 1,
+      paymentDueDay: 30,
+      overdueGraceDays: 30,
+      incomeTypeId: incomeTypeWithoutFund.id,
+      tariffId: waterTariff.id,
+      isMetered: true,
+      unitName: 'м³',
+    })
+    const updateService = vi.fn()
+    const dictionaryClient = createDictionaryClient({
+      getIncomeTypes: async () => [incomeTypeWithoutFund],
+      getTariffs: async () => [waterTariff],
+      getChargeServiceSettings: async () => [waterService],
+      updateChargeServiceWithTariff: updateService,
+    })
+
+    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} fundsClient={createFundsClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Тарифы и сборы')
+    const tariffsPanel = await screen.findByRole('region', { name: 'Тарифы и сборы' })
+    await user.click(await within(tariffsPanel).findByRole('button', { name: 'Изменить услугу Вода' }))
+    const editDialog = await screen.findByRole('dialog', { name: 'Изменить услугу' })
+
+    expect(within(editDialog).getByRole('combobox', { name: 'Фонд поступления регулярной услуги' })).toHaveTextContent('Фонд не назначен')
+    await user.click(within(editDialog).getByRole('button', { name: 'Сохранить изменения' }))
+
+    expect(within(editDialog).getByText('Для выбранного вида поступления не назначен действующий фонд.')).toBeInTheDocument()
+    expect(updateService).not.toHaveBeenCalled()
+    expect(within(editDialog).getByRole('button', { name: 'Сохранить изменения' })).toBeEnabled()
   })
 
   it('does not keep a prototype row after its linked service was renamed', async () => {
@@ -18413,6 +18506,33 @@ function createDictionaryClient(overrides: Partial<DictionaryClient> = {}): Dict
       hasTieredTariff: request.hasTieredTariff,
       unitName: request.unitName ?? null,
     }),
+    updateChargeServiceWithTariff: async (_token, id, request) => {
+      const savedTariff = createTariff({
+        ...tariff,
+        id: request.service.tariffId ?? tariff.id,
+        rate: request.rate,
+      })
+      return {
+        service: createChargeServiceSetting({
+          id,
+          name: request.service.name,
+          isRegular: request.service.isRegular,
+          periodicityMonths: request.service.periodicityMonths ?? null,
+          accrualStartMonth: request.service.accrualStartMonth ?? null,
+          paymentDueDay: request.service.paymentDueDay ?? null,
+          paymentDueMonth: request.service.paymentDueMonth ?? null,
+          overdueGraceDays: request.service.overdueGraceDays,
+          incomeTypeId: request.service.incomeTypeId ?? null,
+          expenseTypeId: request.service.expenseTypeId ?? null,
+          expenseFundId: request.service.expenseFundId ?? null,
+          tariffId: savedTariff.id,
+          isMetered: request.service.isMetered,
+          hasTieredTariff: request.service.hasTieredTariff,
+          unitName: request.service.unitName ?? null,
+        }),
+        tariff: savedTariff,
+      }
+    },
     archiveChargeServiceSetting: async () => undefined,
     restoreChargeServiceSetting: async (_token, id) => createChargeServiceSetting({ id, isArchived: false }),
     getFeeCampaigns: async () => feeCampaigns,

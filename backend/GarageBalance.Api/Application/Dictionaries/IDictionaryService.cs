@@ -74,6 +74,7 @@ public interface IDictionaryService
     Task<DictionaryResult<CreatedChargeServiceWithTariffDto>> CreateChargeServiceWithTariffAsync(CreateChargeServiceWithTariffRequest request, Guid? actorUserId, CancellationToken cancellationToken);
     Task<DictionaryResult<ChargeServiceSettingDto>> CreateChargeServiceSettingAsync(UpsertChargeServiceSettingRequest request, Guid? actorUserId, CancellationToken cancellationToken);
     Task<DictionaryResult<ChargeServiceSettingDto>> UpdateChargeServiceSettingAsync(Guid id, UpsertChargeServiceSettingRequest request, Guid? actorUserId, CancellationToken cancellationToken);
+    Task<DictionaryResult<UpdatedChargeServiceWithTariffDto>> UpdateChargeServiceWithTariffAsync(Guid id, UpdateChargeServiceWithTariffRequest request, Guid? actorUserId, CancellationToken cancellationToken);
     Task<DictionaryResult<ChargeServiceSettingDto>> ArchiveChargeServiceSettingAsync(Guid id, string reason, Guid? actorUserId, CancellationToken cancellationToken);
     Task<DictionaryResult<ChargeServiceSettingDto>> RestoreChargeServiceSettingAsync(Guid id, Guid? actorUserId, CancellationToken cancellationToken);
 

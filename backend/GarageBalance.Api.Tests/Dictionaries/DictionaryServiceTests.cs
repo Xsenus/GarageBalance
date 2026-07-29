@@ -3331,6 +3331,140 @@ public sealed class DictionaryServiceTests
     }
 
     [Fact]
+    public async Task UpdateChargeServiceWithTariffAsync_SavesServiceAndNumericRateAtomically()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fund = CreateFund("Водоснабжение", 10);
+        var incomeType = new IncomeType { Name = "Вода", Code = "water", DestinationFundId = fund.Id };
+        var tariff = new Tariff { Name = "Тариф на воду", CalculationBase = "meter_water", Rate = 100.8m, EffectiveFrom = new DateOnly(2026, 1, 1) };
+        var setting = new ChargeServiceSetting
+        {
+            Name = "Вода",
+            IsRegular = true,
+            PeriodicityMonths = 1,
+            AccrualStartMonth = 1,
+            PaymentDueDay = 30,
+            OverdueGraceDays = 30,
+            IncomeTypeId = incomeType.Id,
+            TariffId = tariff.Id,
+            IsMetered = true,
+            UnitName = "м³"
+        };
+        database.Context.AddRange(fund, incomeType, tariff, setting);
+        await database.Context.SaveChangesAsync();
+        var service = DictionaryServiceTestFactory.Create(database.Context);
+        var actorUserId = Guid.NewGuid();
+
+        var result = await service.UpdateChargeServiceWithTariffAsync(
+            setting.Id,
+            new UpdateChargeServiceWithTariffRequest(
+                new UpsertChargeServiceSettingRequest(
+                    "Холодная вода",
+                    true,
+                    1,
+                    1,
+                    25,
+                    null,
+                    15,
+                    true,
+                    false,
+                    "м³",
+                    incomeType.Id,
+                    tariff.Id),
+                101.23456m),
+            actorUserId,
+            CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+        Assert.Equal("Холодная вода", result.Value!.Service.Name);
+        Assert.Equal(25, result.Value.Service.PaymentDueDay);
+        Assert.Equal(101.2346m, result.Value.Tariff.Rate);
+        Assert.Equal(101.2346m, tariff.Rate);
+        Assert.Equal(2, database.Context.AuditEvents.Count());
+        Assert.Contains(database.Context.AuditEvents, item => item.Action == "dictionary.charge_service_updated" && item.ActorUserId == actorUserId);
+        Assert.Contains(database.Context.AuditEvents, item => item.Action == "dictionary.tariff_updated" && item.ActorUserId == actorUserId);
+
+        var noOp = await service.UpdateChargeServiceWithTariffAsync(
+            setting.Id,
+            new UpdateChargeServiceWithTariffRequest(
+                new UpsertChargeServiceSettingRequest(
+                    "Холодная вода",
+                    true,
+                    1,
+                    1,
+                    25,
+                    null,
+                    15,
+                    true,
+                    false,
+                    "м³",
+                    incomeType.Id,
+                    tariff.Id),
+                101.2346m),
+            actorUserId,
+            CancellationToken.None);
+
+        Assert.True(noOp.Succeeded);
+        Assert.Equal(2, database.Context.AuditEvents.Count());
+    }
+
+    [Fact]
+    public async Task UpdateChargeServiceWithTariffAsync_RejectsMissingFundAndInvalidRateWithoutChanges()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var incomeType = new IncomeType { Name = "Вода", Code = "water" };
+        var tariff = new Tariff { Name = "Тариф на воду", CalculationBase = "meter_water", Rate = 100.8m, EffectiveFrom = new DateOnly(2026, 1, 1) };
+        var setting = new ChargeServiceSetting
+        {
+            Name = "Вода",
+            IsRegular = true,
+            PeriodicityMonths = 1,
+            AccrualStartMonth = 1,
+            PaymentDueDay = 30,
+            OverdueGraceDays = 30,
+            IncomeTypeId = incomeType.Id,
+            TariffId = tariff.Id,
+            IsMetered = true,
+            UnitName = "м³"
+        };
+        database.Context.AddRange(incomeType, tariff, setting);
+        await database.Context.SaveChangesAsync();
+        var service = DictionaryServiceTestFactory.Create(database.Context);
+        var validServiceRequest = new UpsertChargeServiceSettingRequest(
+            "Измененная вода",
+            true,
+            1,
+            1,
+            30,
+            null,
+            30,
+            true,
+            false,
+            "м³",
+            incomeType.Id,
+            tariff.Id);
+
+        var missingFund = await service.UpdateChargeServiceWithTariffAsync(
+            setting.Id,
+            new UpdateChargeServiceWithTariffRequest(validServiceRequest, 110m),
+            Guid.NewGuid(),
+            CancellationToken.None);
+        var invalidRate = await service.UpdateChargeServiceWithTariffAsync(
+            setting.Id,
+            new UpdateChargeServiceWithTariffRequest(validServiceRequest, 0m),
+            Guid.NewGuid(),
+            CancellationToken.None);
+
+        Assert.False(missingFund.Succeeded);
+        Assert.Equal("charge_service_fund_required", missingFund.ErrorCode);
+        Assert.False(invalidRate.Succeeded);
+        Assert.Equal("charge_service_rate_invalid", invalidRate.ErrorCode);
+        Assert.Equal("Вода", setting.Name);
+        Assert.Equal(100.8m, tariff.Rate);
+        Assert.Empty(database.Context.AuditEvents);
+    }
+
+    [Fact]
     public async Task CreateAndRestoreChargeServiceSettingAsync_RejectMissingOrDeletedDestinationFund()
     {
         await using var database = await TestDatabase.CreateAsync();

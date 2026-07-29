@@ -3,7 +3,7 @@ import type { FormEvent, MouseEvent } from 'react'
 import { CircleCheck, FileSpreadsheet, FileText, Pencil, PowerOff, RotateCcw, Save, Trash2, X } from 'lucide-react'
 import type { AuthResponse } from '../../services/authApi'
 import { DictionaryApiError } from '../../services/dictionariesApi'
-import type { AccountingTypeDto, ChargeServiceSettingDto, CreateChargeServiceWithTariffRequest, DictionaryClient, FeeCampaignDto, GarageDto, IrregularPaymentDto, TariffDto, UpsertChargeServiceSettingRequest, UpsertFeeCampaignRequest, UpsertIrregularPaymentRequest, UpsertTariffRequest } from '../../services/dictionariesApi'
+import type { AccountingTypeDto, ChargeServiceSettingDto, CreateChargeServiceWithTariffRequest, DictionaryClient, FeeCampaignDto, GarageDto, IrregularPaymentDto, TariffDto, UpdateChargeServiceWithTariffRequest, UpsertChargeServiceSettingRequest, UpsertFeeCampaignRequest, UpsertIrregularPaymentRequest, UpsertTariffRequest } from '../../services/dictionariesApi'
 import type { FinanceClient } from '../../services/financeApi'
 import type { FundDto, FundsClient } from '../../services/fundsApi'
 import type { FormStateClient } from '../../services/formStatesApi'
@@ -14,7 +14,7 @@ import { appendChangePreview, formatChangeDate, formatChangeNumber, formatChange
 import { FormError } from '../../shared/formFeedback'
 import { FormField } from '../../shared/FormField'
 import { getTariffCalculationBaseOptions, getTariffCalculationUnitName, getTariffCalculationUnitOptions, normalizeTariffCalculationUnitName } from '../../shared/dictionaryWorkbench'
-import { formatDateOnly, formatMoney, formatTariffRateSummary, getCurrentMonthInputValue, getLocalDateInputValue } from '../../shared/formatters'
+import { formatDateOnly, formatMoney, getCurrentMonthInputValue, getLocalDateInputValue } from '../../shared/formatters'
 import { useEscapeKey, useFocusOnOpen, useFocusTrap, useRestoreFocusOnClose } from '../../shared/focusHooks'
 import { LocalizedDatePicker } from '../../shared/LocalizedDatePicker'
 import { MeterReadingInput } from '../../shared/MeterReadingInput'
@@ -1773,7 +1773,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
     }
   }
 
-  async function updateServiceSetting(request: UpsertChargeServiceSettingRequest) {
+  async function updateServiceSettingWithTariff(request: UpdateChargeServiceWithTariffRequest) {
     if (!canManageTariffs || !chargeServiceEditTarget) {
       return
     }
@@ -1781,9 +1781,12 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
     setTariffSavingRowId(`charge-service-${chargeServiceEditTarget.id}`)
     setTariffPersistenceError(null)
     try {
-      const savedSetting = await dictionaryClient.updateChargeServiceSetting(auth.accessToken, chargeServiceEditTarget.id, request)
+      const saved = await dictionaryClient.updateChargeServiceWithTariff(auth.accessToken, chargeServiceEditTarget.id, request)
+      const savedSetting = saved.service
+      const nextTariffs = backendTariffs.map((tariff) => (tariff.id === saved.tariff.id ? saved.tariff : tariff))
       const nextSettings = backendChargeServices.map((setting) => (setting.id === savedSetting.id ? savedSetting : setting))
-      const nextRows = createTariffRowsFromBackend(backendTariffs, nextSettings)
+      const nextRows = createTariffRowsFromBackend(nextTariffs, nextSettings)
+      setBackendTariffs(nextTariffs)
       setBackendChargeServices(nextSettings)
       setTariffRows(nextRows)
       setTariffDrafts(createEditableDrafts(nextRows))
@@ -3040,7 +3043,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
           funds={backendFunds.filter((fund) => fund.allowOperations)}
           incomeTypes={backendIncomeTypes.filter((incomeType) => !incomeType.isArchived)}
           onClose={() => setChargeServiceEditTarget(null)}
-          onSave={updateServiceSetting}
+          onUpdateWithTariff={updateServiceSettingWithTariff}
           submitLabel="Сохранить изменения"
           tariffs={backendTariffs.filter((tariff) => !tariff.isArchived)}
           title="Изменить услугу"
@@ -3083,6 +3086,7 @@ export function AddServicePrototypeDialog({
   onCreateWithTariff,
   onSaveIrregular,
   onSave,
+  onUpdateWithTariff,
   regularOnly = false,
   submitLabel = 'Сохранить',
   tariffs,
@@ -3097,6 +3101,7 @@ export function AddServicePrototypeDialog({
   onCreateWithTariff?: (request: CreateChargeServiceWithTariffRequest) => Promise<void>
   onSaveIrregular?: (request: UpsertIrregularPaymentRequest) => Promise<void>
   onSave?: (request: UpsertChargeServiceSettingRequest) => Promise<void>
+  onUpdateWithTariff?: (request: UpdateChargeServiceWithTariffRequest) => Promise<void>
   regularOnly?: boolean
   submitLabel?: string
   tariffs: TariffDto[]
@@ -3140,7 +3145,7 @@ export function AddServicePrototypeDialog({
   const selectedIncomeFund = selectedIncomeType?.destinationFundId
     ? funds.find((fund) => fund.id === selectedIncomeType.destinationFundId) ?? null
     : null
-  const selectedIncomeFundId = selectedIncomeType?.destinationFundId ?? ''
+  const selectedIncomeFundId = selectedIncomeFund?.id ?? ''
   const selectedIncomeFundName = selectedIncomeFund?.name ?? selectedIncomeType?.destinationFundName ?? ''
   const compatibleTariffs = getCompatibleRegularTariffs(incomeTypeId, incomeTypes, tariffs)
   const selectedTariff = compatibleTariffs.find((tariff) => tariff.id === tariffId) ?? null
@@ -3227,8 +3232,8 @@ export function AddServicePrototypeDialog({
         return
       }
 
-      if (!initialSetting && (parsedRegularRate == null || parsedRegularRate <= 0 || parsedRegularRate > 999999999)) {
-        setError('Укажите корректную стоимость регулярной услуги.')
+      if (parsedRegularRate == null || parsedRegularRate <= 0 || parsedRegularRate > 999999999) {
+        setError('Укажите корректный тариф услуги.')
         return
       }
 
@@ -3293,6 +3298,11 @@ export function AddServicePrototypeDialog({
           rate: parsedRegularRate!,
           effectiveFrom: getLocalDateInputValue(),
         })
+      } else if (initialSetting && onUpdateWithTariff) {
+        await onUpdateWithTariff({
+          service: serviceRequest,
+          rate: parsedRegularRate!,
+        })
       } else if (onSave) {
         await onSave(serviceRequest)
       }
@@ -3313,29 +3323,31 @@ export function AddServicePrototypeDialog({
 
         <form className="dictionary-modal-form contractors-modal-form" onSubmit={submitService}>
           {error ? <FormError>{error}</FormError> : null}
-          <FormField label="Наименование услуги">
-            <input aria-label="Наименование услуги" value={name} onChange={(event) => setName(event.target.value)} />
-          </FormField>
-          {!regularOnly ? (
-            <label className="contractors-switch-row">
-              <span>Регулярные платежи</span>
-              <span className="contractors-switch-control">
-                <input
-                  type="checkbox"
-                  aria-label="Регулярные платежи"
-                  checked={isRegular}
-                  disabled={Boolean(initialSetting)}
-                  onChange={(event) => {
-                    setIsRegular(event.target.checked)
-                    if (event.target.checked && !regularRate && selectedTariff) {
-                      setRegularRate(formatTariffDecimal(selectedTariff.rate))
-                    }
-                    setError(null)
-                  }}
-                />
-              </span>
-            </label>
-          ) : null}
+          <div className={`contractors-service-heading-grid${regularOnly ? ' contractors-service-heading-grid--name-only' : ''}`}>
+            <FormField label="Наименование услуги">
+              <input aria-label="Наименование услуги" value={name} onChange={(event) => setName(event.target.value)} />
+            </FormField>
+            {!regularOnly ? (
+              <label className="contractors-switch-row contractors-switch-row--compact">
+                <span>Регулярные платежи</span>
+                <span className="contractors-switch-control">
+                  <input
+                    type="checkbox"
+                    aria-label="Регулярные платежи"
+                    checked={isRegular}
+                    disabled={Boolean(initialSetting)}
+                    onChange={(event) => {
+                      setIsRegular(event.target.checked)
+                      if (event.target.checked && !regularRate && selectedTariff) {
+                        setRegularRate(formatTariffDecimal(selectedTariff.rate))
+                      }
+                      setError(null)
+                    }}
+                  />
+                </span>
+              </label>
+            ) : null}
+          </div>
           {initialSetting ? <p className="form-hint">Тип услуги нельзя менять после создания. Остальные параметры доступны для редактирования.</p> : null}
           {isRegular ? (
             <>
@@ -3411,34 +3423,18 @@ export function AddServicePrototypeDialog({
                   />
                 </FormField>
                 <FormField label="Тариф" hint="Конкретная ставка, которая применяется при начислении услуги.">
-                  <SelectControl
-                    aria-label="Тариф регулярной услуги"
-                    value={tariffId}
-                    options={compatibleTariffs.length > 0
-                      ? compatibleTariffs.map((tariff) => ({ value: tariff.id, label: `${tariff.name} — ${formatTariffRateSummary(tariff)} руб.` }))
-                      : [{ value: '', label: 'Нет совместимых тарифов' }]}
-                    onChange={(nextTariffId) => {
-                      applyTariffSelection(nextTariffId)
-                    }}
-                  />
-                </FormField>
-                {isByMeter && selectedTariff ? (
-                  <FormField label="Ставка по счётчику" hint="Показывает действующую ставку автоматически выбранного счётчикового тарифа.">
-                    <input
-                      aria-label="Ставка счётчикового тарифа"
-                      value={`${formatTariffRateSummary(selectedTariff)} руб. / ${unitName}`}
-                      readOnly
+                  <div className="contractors-inline-field contractors-inline-field--tariff">
+                    <MoneyTextInput
+                      aria-label="Тариф регулярной услуги"
+                      value={regularRate}
+                      onValueChange={(nextRate) => {
+                        setRegularRate(nextRate)
+                        setError(null)
+                      }}
                     />
-                  </FormField>
-                ) : null}
-                {!initialSetting ? (
-                  <FormField label="Стоимость" hint="Сохранится вместе с услугой как её действующая ставка.">
-                    <div className="contractors-inline-field">
-                      <MoneyTextInput aria-label="Стоимость регулярной услуги" value={regularRate} onValueChange={setRegularRate} />
-                      <span>руб.</span>
-                    </div>
-                  </FormField>
-                ) : null}
+                    <span>{unitName ? `руб. / ${unitName}` : 'руб.'}</span>
+                  </div>
+                </FormField>
               </div>
               <div className={`contractors-service-period-grid contractors-service-period-grid--schedule${isMonthly ? ' contractors-service-period-grid--schedule-monthly' : ''}`}>
                 <FormField label="Периодичность" hint={isMonthly ? 'Начисление создаётся каждый месяц.' : 'Начисление создаётся один раз в год.'}>
@@ -3457,7 +3453,7 @@ export function AddServicePrototypeDialog({
                 </FormField>
               </div>
               <div className="contractors-service-secondary-grid">
-                <FormField label="Перенос долга в просроченный">
+                <FormField label="Перенос долга в просроченный" hint="Количество дней после срока оплаты до переноса задолженности в просроченную.">
                   <div className="contractors-inline-field">
                     <input aria-label="Перенос долга в просроченный" inputMode="numeric" value={overdueGraceDays} onChange={(event) => setOverdueGraceDays(event.target.value)} />
                     <span>дн.</span>

@@ -1774,6 +1774,110 @@ public sealed class DictionaryService(
         return DictionaryResult<ChargeServiceSettingDto>.Success(ToChargeServiceSettingDto(setting));
     }
 
+    public async Task<DictionaryResult<UpdatedChargeServiceWithTariffDto>> UpdateChargeServiceWithTariffAsync(
+        Guid id,
+        UpdateChargeServiceWithTariffRequest request,
+        Guid? actorUserId,
+        CancellationToken cancellationToken)
+    {
+        if (!request.Service.IsRegular || !request.Service.TariffId.HasValue)
+        {
+            return DictionaryResult<UpdatedChargeServiceWithTariffDto>.Failure(
+                "charge_service_tariff_regular_required",
+                "Изменить тариф можно только у регулярной услуги с назначенным тарифом.");
+        }
+
+        if (request.Rate is < 0.0001m or > 999999999m)
+        {
+            return DictionaryResult<UpdatedChargeServiceWithTariffDto>.Failure(
+                "charge_service_rate_invalid",
+                "Тариф услуги должен быть больше 0 и не превышать 999999999.");
+        }
+
+        await using var fundAllocationLock = await fundRepository.AcquireAllocationLockAsync(cancellationToken);
+        var setting = await chargeServiceSettingRepository.FindActiveAsync(id, cancellationToken);
+        if (setting is null)
+        {
+            return DictionaryResult<UpdatedChargeServiceWithTariffDto>.Failure(
+                "charge_service_not_found",
+                "Настройка услуги не найдена.");
+        }
+
+        var validation = ValidateChargeServiceSettingRequest(request.Service);
+        if (!validation.Succeeded)
+        {
+            return DictionaryResult<UpdatedChargeServiceWithTariffDto>.Failure(validation.ErrorCode!, validation.ErrorMessage!);
+        }
+
+        var linkValidation = await ValidateChargeServiceAccountingLinksAsync(request.Service, cancellationToken);
+        if (!linkValidation.Succeeded)
+        {
+            return DictionaryResult<UpdatedChargeServiceWithTariffDto>.Failure(linkValidation.ErrorCode!, linkValidation.ErrorMessage!);
+        }
+
+        var name = request.Service.Name.Trim();
+        if (await chargeServiceSettingRepository.ActiveDuplicateExistsAsync(id, name, cancellationToken))
+        {
+            return DictionaryResult<UpdatedChargeServiceWithTariffDto>.Failure(
+                "charge_service_duplicate",
+                "Услуга с таким наименованием уже существует.");
+        }
+
+        var tariff = await tariffRepository.FindActiveAsync(request.Service.TariffId!.Value, cancellationToken);
+        if (tariff is null)
+        {
+            return DictionaryResult<UpdatedChargeServiceWithTariffDto>.Failure(
+                "charge_service_tariff_not_found",
+                "Тариф для услуги не найден.");
+        }
+
+        var roundedRate = MoneyMath.RoundRate(request.Rate);
+        var serviceChanged = !ChargeServiceSettingMatches(setting, request.Service);
+        var tariffChanged = tariff.Rate != roundedRate;
+        if (!serviceChanged && !tariffChanged)
+        {
+            return DictionaryResult<UpdatedChargeServiceWithTariffDto>.Success(
+                new UpdatedChargeServiceWithTariffDto(ToChargeServiceSettingDto(setting), ToTariffDto(tariff)));
+        }
+
+        var now = DateTimeOffset.UtcNow;
+        if (serviceChanged)
+        {
+            var oldValues = ToChargeServiceAuditValues(setting);
+            ApplyChargeServiceSetting(setting, request.Service);
+            setting.UpdatedAtUtc = now;
+            var newValues = ToChargeServiceAuditValues(setting);
+            AddAudit(
+                actorUserId,
+                "dictionary.charge_service_updated",
+                "charge_service",
+                setting.Id,
+                $"Изменена настройка услуги {setting.Name}.",
+                oldValues: oldValues,
+                newValues: newValues);
+        }
+
+        if (tariffChanged)
+        {
+            var oldValues = new Dictionary<string, object?> { ["rate"] = tariff.Rate };
+            tariff.Rate = roundedRate;
+            tariff.UpdatedAtUtc = now;
+            var newValues = new Dictionary<string, object?> { ["rate"] = tariff.Rate };
+            AddAudit(
+                actorUserId,
+                "dictionary.tariff_updated",
+                "tariff",
+                tariff.Id,
+                $"Изменен тариф {FormatTariffAuditDetails(tariff)} вместе с услугой {name}.",
+                oldValues: oldValues,
+                newValues: newValues);
+        }
+
+        await unitOfWork.SaveChangesAsync(cancellationToken);
+        return DictionaryResult<UpdatedChargeServiceWithTariffDto>.Success(
+            new UpdatedChargeServiceWithTariffDto(ToChargeServiceSettingDto(setting), ToTariffDto(tariff)));
+    }
+
     public async Task<DictionaryResult<ChargeServiceSettingDto>> ArchiveChargeServiceSettingAsync(Guid id, string reason, Guid? actorUserId, CancellationToken cancellationToken)
     {
         if (ValidateArchiveReason<ChargeServiceSettingDto>(reason, out var archiveReason) is { } reasonError)

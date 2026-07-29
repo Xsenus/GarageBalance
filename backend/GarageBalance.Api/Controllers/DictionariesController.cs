@@ -726,6 +726,18 @@ public sealed class DictionariesController(IDictionaryService dictionaryService)
     }
 
     [Authorize(Policy = SystemPermissions.TariffsManage)]
+    [HttpPut("charge-services/{id:guid}/with-tariff")]
+    [ProducesResponseType<UpdatedChargeServiceWithTariffDto>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
+    public async Task<ActionResult<UpdatedChargeServiceWithTariffDto>> UpdateChargeServiceWithTariff(Guid id, UpdateChargeServiceWithTariffRequest request, CancellationToken cancellationToken)
+    {
+        var result = await dictionaryService.UpdateChargeServiceWithTariffAsync(id, request, GetActorUserId(), cancellationToken);
+        return result.Succeeded ? Ok(result.Value) : ToError(result);
+    }
+
+    [Authorize(Policy = SystemPermissions.TariffsManage)]
     [HttpDelete("charge-services/{id:guid}")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]

@@ -1941,6 +1941,34 @@ h1 {
   flex: 1 1 auto;
 }
 
+.contractors-service-heading-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 3fr) minmax(220px, 1fr);
+  gap: 12px;
+  align-items: end;
+}
+
+.contractors-service-heading-grid--name-only {
+  grid-template-columns: 1fr;
+}
+
+.contractors-switch-row--compact {
+  align-self: end;
+  max-width: 100%;
+}
+
+.contractors-inline-field--tariff input {
+  min-width: 0;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.contractors-inline-field--tariff > span {
+  flex: 0 0 auto;
+  color: #667085;
+  white-space: nowrap;
+}
+
 .contractors-fee-two-column-grid,
 .contractors-fee-date-grid {
   display: grid;
@@ -8540,6 +8568,7 @@ button.operation-row:focus-visible {
 
   .contractors-tariff-dialog .contractors-service-period-grid--catalogs,
   .contractors-tariff-dialog .contractors-service-period-grid--schedule,
+  .contractors-service-heading-grid,
   .contractors-service-secondary-grid,
   .contractors-fee-two-column-grid,
   .contractors-fee-date-grid,

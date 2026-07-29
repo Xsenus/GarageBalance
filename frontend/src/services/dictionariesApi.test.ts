@@ -92,6 +92,45 @@ describe('dictionariesApi response cache', () => {
     )
   })
 
+  it('updates a regular service and its tariff through one request', async () => {
+    const response = { service: { id: 'service-1', tariffId: 'tariff-1' }, tariff: { id: 'tariff-1', rate: 100.8 } }
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify(response), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    }))
+    vi.stubGlobal('fetch', fetchMock)
+    const request = {
+      service: {
+        name: 'Вода',
+        isRegular: true,
+        periodicityMonths: 1,
+        accrualStartMonth: 1,
+        paymentDueDay: 30,
+        paymentDueMonth: null,
+        overdueGraceDays: 30,
+        incomeTypeId: 'income-water',
+        expenseTypeId: 'expense-water',
+        expenseFundId: 'fund-water',
+        tariffId: 'tariff-1',
+        isMetered: true,
+        hasTieredTariff: false,
+        unitName: 'м³',
+      },
+      rate: 100.8,
+    }
+
+    await expect(dictionariesApi.updateChargeServiceWithTariff('token', 'service-1', request)).resolves.toEqual(response)
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/dictionaries/charge-services/service-1/with-tariff',
+      expect.objectContaining({
+        method: 'PUT',
+        body: JSON.stringify(request),
+        headers: expect.objectContaining({ Authorization: 'Bearer token' }),
+      }),
+    )
+  })
+
   it('closes a fee campaign with an optional closure comment', async () => {
     const response = {
       id: 'fee-campaign-1',

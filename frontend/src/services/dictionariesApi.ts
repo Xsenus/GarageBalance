@@ -305,6 +305,16 @@ export type CreatedChargeServiceWithTariffDto = {
   tariff: TariffDto
 }
 
+export type UpdateChargeServiceWithTariffRequest = {
+  service: UpsertChargeServiceSettingRequest
+  rate: number
+}
+
+export type UpdatedChargeServiceWithTariffDto = {
+  service: ChargeServiceSettingDto
+  tariff: TariffDto
+}
+
 export type UpsertFeeCampaignRequest = {
   name: string
   incomeTypeId: string
@@ -381,6 +391,7 @@ export type DictionaryClient = {
   createChargeServiceWithTariff(accessToken: string, request: CreateChargeServiceWithTariffRequest): Promise<CreatedChargeServiceWithTariffDto>
   createChargeServiceSetting(accessToken: string, request: UpsertChargeServiceSettingRequest): Promise<ChargeServiceSettingDto>
   updateChargeServiceSetting(accessToken: string, id: string, request: UpsertChargeServiceSettingRequest): Promise<ChargeServiceSettingDto>
+  updateChargeServiceWithTariff(accessToken: string, id: string, request: UpdateChargeServiceWithTariffRequest): Promise<UpdatedChargeServiceWithTariffDto>
   archiveChargeServiceSetting(accessToken: string, id: string, reason: string): Promise<void>
   restoreChargeServiceSetting(accessToken: string, id: string): Promise<ChargeServiceSettingDto>
   getFeeCampaigns(accessToken: string, search?: string, limit?: number, includeArchived?: boolean): Promise<FeeCampaignDto[]>
@@ -673,6 +684,9 @@ export const dictionariesApi: DictionaryClient = {
   },
   updateChargeServiceSetting(accessToken, id, request) {
     return requestJson(accessToken, `/api/dictionaries/charge-services/${id}`, { method: 'PUT', body: JSON.stringify(request) })
+  },
+  updateChargeServiceWithTariff(accessToken, id, request) {
+    return requestJson(accessToken, `/api/dictionaries/charge-services/${id}/with-tariff`, { method: 'PUT', body: JSON.stringify(request) })
   },
   archiveChargeServiceSetting(accessToken, id, reason) {
     return requestJson(accessToken, `/api/dictionaries/charge-services/${id}`, { method: 'DELETE', body: JSON.stringify({ reason }) })
