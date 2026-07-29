@@ -2855,6 +2855,12 @@ describe('App', () => {
     await openSection(user, 'Контрагенты')
     const panel = await screen.findByRole('region', { name: 'Контрагенты' })
     const pagination = await within(panel).findByRole('navigation', { name: 'Пагинация гаражей' })
+    const filtersForm = within(panel).getByRole('form', { name: 'Фильтры гаражей' })
+    expect(within(filtersForm).getByRole('group', { name: 'Количество людей' })).toBeInTheDocument()
+    expect(within(filtersForm).getByRole('group', { name: 'Количество этажей' })).toBeInTheDocument()
+    expect(within(filtersForm).getByLabelText('Фильтр по номеру гаража')).toHaveAttribute('placeholder', 'Например, А-20')
+    expect(within(filtersForm).getByLabelText('Минимальное количество человек')).toHaveAttribute('step', '1')
+    expect(within(filtersForm).getByRole('button', { name: 'Сбросить фильтры' })).toBeDisabled()
     await user.click(within(pagination).getByRole('button', { name: 'Страница 2' }))
 
     await user.type(within(panel).getByLabelText('Фильтр по номеру гаража'), 'А-')
@@ -2862,6 +2868,7 @@ describe('App', () => {
     await user.type(within(panel).getByLabelText('Максимальное количество человек'), '4')
     await user.type(within(panel).getByLabelText('Минимальное количество этажей'), '1')
     await user.type(within(panel).getByLabelText('Максимальное количество этажей'), '2')
+    expect(within(filtersForm).getByRole('button', { name: 'Сбросить фильтры' })).toBeEnabled()
     await user.click(within(panel).getByRole('button', { name: 'Применить фильтры' }))
 
     await waitFor(() => expect(requests).toContainEqual({

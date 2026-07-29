@@ -2043,32 +2043,53 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
             setGarageColumnFilters(filters)
             void loadGaragePage(0, garagePage.limit, undefined, undefined, filters)
           }}>
-            <label>
-              <span>Номер содержит</span>
-              <input aria-label="Фильтр по номеру гаража" value={garageColumnFilterForm.number} onChange={(event) => setGarageColumnFilterForm((current) => ({ ...current, number: event.target.value }))} />
+            <label className="contractors-column-filters__field contractors-column-filters__field--number">
+              <span>Номер гаража</span>
+              <span className="contractors-column-filters__input-shell">
+                <Search size={16} aria-hidden="true" />
+                <input aria-label="Фильтр по номеру гаража" placeholder="Например, А-20" value={garageColumnFilterForm.number} onChange={(event) => setGarageColumnFilterForm((current) => ({ ...current, number: event.target.value }))} />
+              </span>
             </label>
-            <label>
-              <span>Людей от</span>
-              <input aria-label="Минимальное количество человек" type="number" min="0" value={garageColumnFilterForm.peopleCountMin} onChange={(event) => setGarageColumnFilterForm((current) => ({ ...current, peopleCountMin: event.target.value }))} />
-            </label>
-            <label>
-              <span>Людей до</span>
-              <input aria-label="Максимальное количество человек" type="number" min="0" value={garageColumnFilterForm.peopleCountMax} onChange={(event) => setGarageColumnFilterForm((current) => ({ ...current, peopleCountMax: event.target.value }))} />
-            </label>
-            <label>
-              <span>Этажей от</span>
-              <input aria-label="Минимальное количество этажей" type="number" min="0" value={garageColumnFilterForm.floorCountMin} onChange={(event) => setGarageColumnFilterForm((current) => ({ ...current, floorCountMin: event.target.value }))} />
-            </label>
-            <label>
-              <span>Этажей до</span>
-              <input aria-label="Максимальное количество этажей" type="number" min="0" value={garageColumnFilterForm.floorCountMax} onChange={(event) => setGarageColumnFilterForm((current) => ({ ...current, floorCountMax: event.target.value }))} />
-            </label>
-            <button className="secondary-button" type="submit" disabled={contractorPageLoading.garages}>Применить фильтры</button>
-            <button className="secondary-button" type="button" disabled={Object.values(garageColumnFilterForm).every((value) => value === '')} onClick={() => {
-              setGarageColumnFilterForm(emptyGarageColumnFilterForm)
-              setGarageColumnFilters({})
-              void loadGaragePage(0, garagePage.limit, undefined, undefined, {})
-            }}>Сбросить фильтры</button>
+            <fieldset className="contractors-column-filters__range">
+              <legend>Количество людей</legend>
+              <div>
+                <label>
+                  <span>От</span>
+                  <input aria-label="Минимальное количество человек" type="number" inputMode="numeric" min="0" step="1" placeholder="0" value={garageColumnFilterForm.peopleCountMin} onChange={(event) => setGarageColumnFilterForm((current) => ({ ...current, peopleCountMin: event.target.value }))} />
+                </label>
+                <label>
+                  <span>До</span>
+                  <input aria-label="Максимальное количество человек" type="number" inputMode="numeric" min="0" step="1" placeholder="Любое" value={garageColumnFilterForm.peopleCountMax} onChange={(event) => setGarageColumnFilterForm((current) => ({ ...current, peopleCountMax: event.target.value }))} />
+                </label>
+              </div>
+            </fieldset>
+            <fieldset className="contractors-column-filters__range">
+              <legend>Количество этажей</legend>
+              <div>
+                <label>
+                  <span>От</span>
+                  <input aria-label="Минимальное количество этажей" type="number" inputMode="numeric" min="0" step="1" placeholder="0" value={garageColumnFilterForm.floorCountMin} onChange={(event) => setGarageColumnFilterForm((current) => ({ ...current, floorCountMin: event.target.value }))} />
+                </label>
+                <label>
+                  <span>До</span>
+                  <input aria-label="Максимальное количество этажей" type="number" inputMode="numeric" min="0" step="1" placeholder="Любое" value={garageColumnFilterForm.floorCountMax} onChange={(event) => setGarageColumnFilterForm((current) => ({ ...current, floorCountMax: event.target.value }))} />
+                </label>
+              </div>
+            </fieldset>
+            <div className="contractors-column-filters__actions">
+              <button className="secondary-button" type="submit" aria-label="Применить фильтры" disabled={contractorPageLoading.garages}>
+                <Search size={16} aria-hidden="true" />
+                <span>Применить</span>
+              </button>
+              <button className="ghost-button" type="button" aria-label="Сбросить фильтры" disabled={Object.values(garageColumnFilterForm).every((value) => value === '')} onClick={() => {
+                setGarageColumnFilterForm(emptyGarageColumnFilterForm)
+                setGarageColumnFilters({})
+                void loadGaragePage(0, garagePage.limit, undefined, undefined, {})
+              }}>
+                <RotateCcw size={16} aria-hidden="true" />
+                <span>Сбросить</span>
+              </button>
+            </div>
           </form> : null}
           <div className="contractors-directory-table contractors-directory-table--garages" role="table" aria-label="Гаражи" style={garageTableStyle}>
             <div className="contractors-directory-row contractors-directory-row--header" role="row">
