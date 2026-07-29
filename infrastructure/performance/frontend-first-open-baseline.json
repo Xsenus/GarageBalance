@@ -1,0 +1,268 @@
+{
+  "schemaVersion": 1,
+  "capturedAtUtc": "2026-07-29T22:58:00Z",
+  "source": "isolated-performance-seed",
+  "capture": {
+    "garageCount": 500,
+    "monthCount": 60,
+    "accrualCount": 30000,
+    "paymentCount": 30000,
+    "meterReadingCount": 30000,
+    "cacheMode": "no-store",
+    "queryStringsRecorded": false,
+    "responseBodiesRecorded": false
+  },
+  "mainShell": {
+    "requestCount": 3,
+    "rawBytes": 420029,
+    "gzipBytes": 105316,
+    "assets": [
+      {
+        "kind": "document",
+        "rawBytes": 4595,
+        "gzipBytes": 1761
+      },
+      {
+        "kind": "main-script",
+        "rawBytes": 279995,
+        "gzipBytes": 81397
+      },
+      {
+        "kind": "main-stylesheet",
+        "rawBytes": 135439,
+        "gzipBytes": 22158
+      }
+    ]
+  },
+  "sections": [
+    {
+      "name": "users",
+      "requestCount": 12,
+      "apiRequestCount": 2,
+      "staticRequestCount": 10,
+      "apiBytes": 1261,
+      "staticBytes": 31642,
+      "maxDurationMilliseconds": 411.5,
+      "errorCount": 0,
+      "apiOperations": [
+        "GET /api/users/page",
+        "GET /api/users/roles"
+      ],
+      "staticAssets": [
+        "FormField.js",
+        "TablePagination.js",
+        "UserManagementPanel.js",
+        "changePreview.js",
+        "chevron-right.js",
+        "rotate-ccw.js",
+        "save.js",
+        "search.js",
+        "trash-2.js",
+        "user-plus.js"
+      ]
+    },
+    {
+      "name": "tariffsAndFees",
+      "requestCount": 17,
+      "apiRequestCount": 9,
+      "staticRequestCount": 8,
+      "apiBytes": 24507,
+      "staticBytes": 124729,
+      "maxDurationMilliseconds": 323.3,
+      "errorCount": 0,
+      "apiOperations": [
+        "GET /api/dictionaries/charge-services",
+        "GET /api/dictionaries/expense-types",
+        "GET /api/dictionaries/fee-campaigns",
+        "GET /api/dictionaries/income-types",
+        "GET /api/dictionaries/irregular-payments",
+        "GET /api/dictionaries/tariffs",
+        "GET /api/form-states/tariffs-and-fees-prototype",
+        "GET /api/funds",
+        "PUT /api/form-states/tariffs-and-fees-prototype"
+      ],
+      "staticAssets": [
+        "LocalizedDatePicker.js",
+        "MeterReadingInput.js",
+        "MoneyInput.js",
+        "SelectControl.js",
+        "TariffsAndFeesPanel.js",
+        "dictionaryWorkbench.js",
+        "pencil.js",
+        "prototypeEditing.js"
+      ]
+    },
+    {
+      "name": "contractors",
+      "requestCount": 7,
+      "apiRequestCount": 2,
+      "staticRequestCount": 5,
+      "apiBytes": 169665,
+      "staticBytes": 109406,
+      "maxDurationMilliseconds": 286.7,
+      "errorCount": 0,
+      "apiOperations": [
+        "GET /api/dictionaries/garages/page",
+        "GET /api/dictionaries/owners"
+      ],
+      "staticAssets": [
+        "ContractorsPanel.js",
+        "PhoneInput.js",
+        "ReportPeriodQuickSelect.js",
+        "loader-circle.js",
+        "reportFilters.js"
+      ]
+    },
+    {
+      "name": "dictionaries",
+      "requestCount": 3,
+      "apiRequestCount": 2,
+      "staticRequestCount": 1,
+      "apiBytes": 220905,
+      "staticBytes": 50100,
+      "maxDurationMilliseconds": 387.0,
+      "errorCount": 0,
+      "apiOperations": [
+        "GET /api/dictionaries/garages",
+        "GET /api/dictionaries/owners/page"
+      ],
+      "staticAssets": [
+        "DictionaryPanel.js"
+      ]
+    },
+    {
+      "name": "meterReadings",
+      "requestCount": 2,
+      "apiRequestCount": 1,
+      "staticRequestCount": 1,
+      "apiBytes": 1741,
+      "staticBytes": 11554,
+      "maxDurationMilliseconds": 128.1,
+      "errorCount": 0,
+      "apiOperations": [
+        "GET /api/finance/meter-readings/year"
+      ],
+      "staticAssets": [
+        "MeterReadingsPanel.js"
+      ]
+    },
+    {
+      "name": "payments",
+      "requestCount": 4,
+      "apiRequestCount": 2,
+      "staticRequestCount": 2,
+      "apiBytes": 42537,
+      "staticBytes": 188698,
+      "maxDurationMilliseconds": 173.4,
+      "errorCount": 0,
+      "apiOperations": [
+        "GET /api/dictionaries/garages",
+        "GET /api/settings/payments/display"
+      ],
+      "staticAssets": [
+        "FinancePanel.js",
+        "banknote.js"
+      ]
+    },
+    {
+      "name": "funds",
+      "requestCount": 5,
+      "apiRequestCount": 2,
+      "staticRequestCount": 3,
+      "apiBytes": 1490,
+      "staticBytes": 36963,
+      "maxDurationMilliseconds": 160.1,
+      "errorCount": 0,
+      "apiOperations": [
+        "GET /api/funds",
+        "GET /api/funds/operations/page"
+      ],
+      "staticAssets": [
+        "FundsPanel.js",
+        "landmark.js",
+        "refresh-cw.js"
+      ]
+    },
+    {
+      "name": "reports",
+      "requestCount": 3,
+      "apiRequestCount": 1,
+      "staticRequestCount": 2,
+      "apiBytes": 781,
+      "staticBytes": 49624,
+      "maxDurationMilliseconds": 344.8,
+      "errorCount": 0,
+      "apiOperations": [
+        "GET /api/reports/consolidated"
+      ],
+      "staticAssets": [
+        "ReportPanel.js",
+        "fileExports.js"
+      ]
+    },
+    {
+      "name": "import",
+      "requestCount": 4,
+      "apiRequestCount": 3,
+      "staticRequestCount": 1,
+      "apiBytes": 528,
+      "staticBytes": 32652,
+      "maxDurationMilliseconds": 72.8,
+      "errorCount": 0,
+      "apiOperations": [
+        "GET /api/import/access/quarantine",
+        "GET /api/import/access/reader/status",
+        "GET /api/import/access/runs"
+      ],
+      "staticAssets": [
+        "ImportPanel.js"
+      ]
+    },
+    {
+      "name": "audit",
+      "requestCount": 2,
+      "apiRequestCount": 1,
+      "staticRequestCount": 1,
+      "apiBytes": 16771,
+      "staticBytes": 21170,
+      "maxDurationMilliseconds": 134.7,
+      "errorCount": 0,
+      "apiOperations": [
+        "GET /api/audit/events/page"
+      ],
+      "staticAssets": [
+        "AuditPanel.js"
+      ]
+    },
+    {
+      "name": "releases",
+      "requestCount": 2,
+      "apiRequestCount": 1,
+      "staticRequestCount": 1,
+      "apiBytes": 8577,
+      "staticBytes": 8661,
+      "maxDurationMilliseconds": 127.2,
+      "errorCount": 0,
+      "apiOperations": [
+        "GET /api/app-releases/manage"
+      ],
+      "staticAssets": [
+        "ReleasePanel.js"
+      ]
+    },
+    {
+      "name": "settings",
+      "requestCount": 1,
+      "apiRequestCount": 0,
+      "staticRequestCount": 1,
+      "apiBytes": 0,
+      "staticBytes": 48163,
+      "maxDurationMilliseconds": 25.3,
+      "errorCount": 0,
+      "apiOperations": [],
+      "staticAssets": [
+        "PasswordPanel.js"
+      ]
+    }
+  ]
+}
