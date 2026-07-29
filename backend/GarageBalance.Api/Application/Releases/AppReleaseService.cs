@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Text.Json;
 using GarageBalance.Api.Application.Audit;
 using GarageBalance.Api.Application.Common;
@@ -16,6 +17,8 @@ public sealed class AppReleaseService(
     private const string EntityType = "app_release";
 
     private static readonly SemaphoreSlim FileLock = new(1, 1);
+    private static readonly ConcurrentDictionary<string, SemaphoreSlim> ReleaseLocks =
+        new(StringComparer.OrdinalIgnoreCase);
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -106,29 +109,39 @@ public sealed class AppReleaseService(
             return normalized;
         }
 
-        await FileLock.WaitAsync(cancellationToken);
+        var releaseLock = GetReleaseLock(normalized.Value!.ReleaseId);
+        await releaseLock.WaitAsync(cancellationToken);
         try
         {
-            var loadResult = await LoadReleasesAsync(cancellationToken);
-            if (!loadResult.Succeeded)
+            await FileLock.WaitAsync(cancellationToken);
+            try
             {
-                return AppReleaseResult<AppReleaseDto>.Failure(loadResult.ErrorCode!, loadResult.ErrorMessage!);
+                var loadResult = await LoadReleasesAsync(cancellationToken);
+                if (!loadResult.Succeeded)
+                {
+                    return AppReleaseResult<AppReleaseDto>.Failure(loadResult.ErrorCode!, loadResult.ErrorMessage!);
+                }
+
+                var releases = loadResult.Value!.ToList();
+                if (releases.Any(release => string.Equals(release.ReleaseId, normalized.Value!.ReleaseId, StringComparison.OrdinalIgnoreCase)))
+                {
+                    return AppReleaseResult<AppReleaseDto>.Failure("release_duplicate_id", "Запись с таким идентификатором уже существует.");
+                }
+
+                if (releases.Any(release => string.Equals(release.Version, normalized.Value!.Version, StringComparison.OrdinalIgnoreCase)))
+                {
+                    return AppReleaseResult<AppReleaseDto>.Failure("release_duplicate_version", "Запись с такой версией уже существует.");
+                }
+
+                releases.Add(normalized.Value!);
+                await SaveReleasesAsync(releases, cancellationToken);
+            }
+            finally
+            {
+                FileLock.Release();
             }
 
-            var releases = loadResult.Value!.ToList();
-            if (releases.Any(release => string.Equals(release.ReleaseId, normalized.Value!.ReleaseId, StringComparison.OrdinalIgnoreCase)))
-            {
-                return AppReleaseResult<AppReleaseDto>.Failure("release_duplicate_id", "Запись с таким идентификатором уже существует.");
-            }
-
-            if (releases.Any(release => string.Equals(release.Version, normalized.Value!.Version, StringComparison.OrdinalIgnoreCase)))
-            {
-                return AppReleaseResult<AppReleaseDto>.Failure("release_duplicate_version", "Запись с такой версией уже существует.");
-            }
-
-            releases.Add(normalized.Value!);
-            await SaveReleasesAsync(releases, cancellationToken);
-            await SynchronizeDatabaseAsync(releases, cancellationToken);
+            await UpsertDatabaseAsync(normalized.Value!, cancellationToken);
             await AddAuditAsync(
                 actorUserId,
                 "app_releases.release_created",
@@ -143,104 +156,134 @@ public sealed class AppReleaseService(
         }
         finally
         {
-            FileLock.Release();
+            releaseLock.Release();
         }
     }
 
     public async Task<AppReleaseResult<AppReleaseDto>> UpdateReleaseAsync(string releaseId, UpsertAppReleaseRequest request, Guid? actorUserId, CancellationToken cancellationToken)
     {
-        await FileLock.WaitAsync(cancellationToken);
+        var releaseLock = GetReleaseLock(releaseId);
+        await releaseLock.WaitAsync(cancellationToken);
         try
         {
-            var loadResult = await LoadReleasesAsync(cancellationToken);
-            if (!loadResult.Succeeded)
+            AppReleaseDto current;
+            AppReleaseDto updated;
+            IReadOnlyDictionary<string, object?> oldAuditValues;
+            IReadOnlyDictionary<string, object?> newAuditValues;
+            string changeSummary;
+
+            await FileLock.WaitAsync(cancellationToken);
+            try
             {
-                return AppReleaseResult<AppReleaseDto>.Failure(loadResult.ErrorCode!, loadResult.ErrorMessage!);
+                var loadResult = await LoadReleasesAsync(cancellationToken);
+                if (!loadResult.Succeeded)
+                {
+                    return AppReleaseResult<AppReleaseDto>.Failure(loadResult.ErrorCode!, loadResult.ErrorMessage!);
+                }
+
+                var releases = loadResult.Value!.ToList();
+                var index = releases.FindIndex(release => string.Equals(release.ReleaseId, releaseId, StringComparison.OrdinalIgnoreCase));
+                if (index < 0)
+                {
+                    return AppReleaseResult<AppReleaseDto>.Failure("release_not_found", "Запись истории обновлений не найдена.");
+                }
+
+                current = releases[index];
+                var normalized = NormalizeRequest(request, current.ReleaseId);
+                if (!normalized.Succeeded)
+                {
+                    return normalized;
+                }
+
+                if (releases.Any(release =>
+                        !string.Equals(release.ReleaseId, current.ReleaseId, StringComparison.OrdinalIgnoreCase) &&
+                        string.Equals(release.Version, normalized.Value!.Version, StringComparison.OrdinalIgnoreCase)))
+                {
+                    return AppReleaseResult<AppReleaseDto>.Failure("release_duplicate_version", "Запись с такой версией уже существует.");
+                }
+
+                updated = normalized.Value!;
+                oldAuditValues = ToAuditValues(current);
+                newAuditValues = ToAuditValues(updated);
+                changeSummary = FormatReleaseChangeSummary(oldAuditValues, newAuditValues)!;
+                if (changeSummary is null)
+                {
+                    return AppReleaseResult<AppReleaseDto>.Success(current);
+                }
+
+                releases[index] = updated;
+                await SaveReleasesAsync(releases, cancellationToken);
+            }
+            finally
+            {
+                FileLock.Release();
             }
 
-            var releases = loadResult.Value!.ToList();
-            var index = releases.FindIndex(release => string.Equals(release.ReleaseId, releaseId, StringComparison.OrdinalIgnoreCase));
-            if (index < 0)
-            {
-                return AppReleaseResult<AppReleaseDto>.Failure("release_not_found", "Запись истории обновлений не найдена.");
-            }
-
-            var current = releases[index];
-            var normalized = NormalizeRequest(request, current.ReleaseId);
-            if (!normalized.Succeeded)
-            {
-                return normalized;
-            }
-
-            if (releases.Any(release =>
-                    !string.Equals(release.ReleaseId, current.ReleaseId, StringComparison.OrdinalIgnoreCase) &&
-                    string.Equals(release.Version, normalized.Value!.Version, StringComparison.OrdinalIgnoreCase)))
-            {
-                return AppReleaseResult<AppReleaseDto>.Failure("release_duplicate_version", "Запись с такой версией уже существует.");
-            }
-
-            var oldAuditValues = ToAuditValues(current);
-            var newAuditValues = ToAuditValues(normalized.Value!);
-            var changeSummary = FormatReleaseChangeSummary(oldAuditValues, newAuditValues);
-            if (changeSummary is null)
-            {
-                return AppReleaseResult<AppReleaseDto>.Success(current);
-            }
-
-            releases[index] = normalized.Value!;
-            await SaveReleasesAsync(releases, cancellationToken);
-            await SynchronizeDatabaseAsync(releases, cancellationToken);
+            await UpsertDatabaseAsync(updated, cancellationToken);
             await AddAuditAsync(
                 actorUserId,
                 "app_releases.release_updated",
-                normalized.Value!,
+                updated,
                 "update",
-                $"Обновлена запись \"Что нового\" {normalized.Value!.Version}: {changeSummary}.",
+                $"Обновлена запись \"Что нового\" {updated.Version}: {changeSummary}.",
                 oldAuditValues,
                 newAuditValues,
                 cancellationToken);
 
-            return AppReleaseResult<AppReleaseDto>.Success(normalized.Value!);
+            return AppReleaseResult<AppReleaseDto>.Success(updated);
         }
         finally
         {
-            FileLock.Release();
+            releaseLock.Release();
         }
     }
 
     public async Task<AppReleaseResult<AppReleaseDto>> PublishReleaseAsync(string releaseId, Guid? actorUserId, CancellationToken cancellationToken)
     {
-        await FileLock.WaitAsync(cancellationToken);
+        var releaseLock = GetReleaseLock(releaseId);
+        await releaseLock.WaitAsync(cancellationToken);
         try
         {
-            var loadResult = await LoadReleasesAsync(cancellationToken);
-            if (!loadResult.Succeeded)
+            AppReleaseDto current;
+            AppReleaseDto published;
+
+            await FileLock.WaitAsync(cancellationToken);
+            try
             {
-                return AppReleaseResult<AppReleaseDto>.Failure(loadResult.ErrorCode!, loadResult.ErrorMessage!);
+                var loadResult = await LoadReleasesAsync(cancellationToken);
+                if (!loadResult.Succeeded)
+                {
+                    return AppReleaseResult<AppReleaseDto>.Failure(loadResult.ErrorCode!, loadResult.ErrorMessage!);
+                }
+
+                var releases = loadResult.Value!.ToList();
+                var index = releases.FindIndex(release => string.Equals(release.ReleaseId, releaseId, StringComparison.OrdinalIgnoreCase));
+                if (index < 0)
+                {
+                    return AppReleaseResult<AppReleaseDto>.Failure("release_not_found", "Запись истории обновлений не найдена.");
+                }
+
+                current = releases[index];
+                if (current.IsPublished is true)
+                {
+                    return AppReleaseResult<AppReleaseDto>.Success(current);
+                }
+
+                published = current with
+                {
+                    PublishedAt = DateTimeOffset.Now,
+                    IsPublished = true
+                };
+
+                releases[index] = published;
+                await SaveReleasesAsync(releases, cancellationToken);
+            }
+            finally
+            {
+                FileLock.Release();
             }
 
-            var releases = loadResult.Value!.ToList();
-            var index = releases.FindIndex(release => string.Equals(release.ReleaseId, releaseId, StringComparison.OrdinalIgnoreCase));
-            if (index < 0)
-            {
-                return AppReleaseResult<AppReleaseDto>.Failure("release_not_found", "Запись истории обновлений не найдена.");
-            }
-
-            var current = releases[index];
-            if (current.IsPublished is true)
-            {
-                return AppReleaseResult<AppReleaseDto>.Success(current);
-            }
-
-            var published = current with
-            {
-                PublishedAt = DateTimeOffset.Now,
-                IsPublished = true
-            };
-
-            releases[index] = published;
-            await SaveReleasesAsync(releases, cancellationToken);
-            await SynchronizeDatabaseAsync(releases, cancellationToken);
+            await UpsertDatabaseAsync(published, cancellationToken);
             await AddAuditAsync(
                 actorUserId,
                 "app_releases.release_published",
@@ -255,7 +298,7 @@ public sealed class AppReleaseService(
         }
         finally
         {
-            FileLock.Release();
+            releaseLock.Release();
         }
     }
 
@@ -384,10 +427,13 @@ public sealed class AppReleaseService(
         File.Move(tempPath, path, overwrite: true);
     }
 
-    private Task SynchronizeDatabaseAsync(IReadOnlyList<AppReleaseDto> releases, CancellationToken cancellationToken)
+    private Task UpsertDatabaseAsync(AppReleaseDto release, CancellationToken cancellationToken)
     {
-        return releaseRepository?.SynchronizeAsync(releases, cancellationToken) ?? Task.CompletedTask;
+        return releaseRepository?.UpsertAsync(release, cancellationToken) ?? Task.CompletedTask;
     }
+
+    private static SemaphoreSlim GetReleaseLock(string releaseId) =>
+        ReleaseLocks.GetOrAdd(releaseId, static _ => new SemaphoreSlim(1, 1));
 
     private async Task AddAuditAsync(
         Guid? actorUserId,

@@ -136,6 +136,9 @@ public sealed class AppReleaseCatalogSynchronizerTests
         public Task<AppReleasePageDto> GetPageAsync(bool includeDrafts, int offset, int limit, CancellationToken cancellationToken) =>
             throw new NotSupportedException();
 
+        public Task UpsertAsync(AppReleaseDto release, CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+
         public async Task SynchronizeAsync(IReadOnlyList<AppReleaseDto> releases, CancellationToken cancellationToken)
         {
             await allowSynchronizationToFinish.Task.WaitAsync(cancellationToken);
@@ -145,6 +148,9 @@ public sealed class AppReleaseCatalogSynchronizerTests
     private sealed class FailingAppReleaseRepository : IAppReleaseRepository
     {
         public Task<AppReleasePageDto> GetPageAsync(bool includeDrafts, int offset, int limit, CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+
+        public Task UpsertAsync(AppReleaseDto release, CancellationToken cancellationToken) =>
             throw new NotSupportedException();
 
         public Task SynchronizeAsync(IReadOnlyList<AppReleaseDto> releases, CancellationToken cancellationToken) =>

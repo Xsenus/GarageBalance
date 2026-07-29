@@ -56,21 +56,35 @@ public sealed class EfAppReleaseRepository(GarageBalanceDbContext dbContext) : I
 
         foreach (var release in releases)
         {
-            if (!existingRecords.TryGetValue(release.ReleaseId, out var record))
-            {
-                record = new AppReleaseRecord { ReleaseId = release.ReleaseId };
-                dbContext.AppReleases.Add(record);
-            }
-
-            record.Version = release.Version;
-            record.PublishedAt = release.PublishedAt.ToUniversalTime();
-            record.Title = release.Title;
-            record.Summary = release.Summary;
-            record.ItemsJson = JsonSerializer.Serialize(release.Items, JsonOptions);
-            record.IsPublished = release.IsPublished is not false;
+            existingRecords.TryGetValue(release.ReleaseId, out var record);
+            ApplyRelease(release, record);
         }
 
         await dbContext.SaveChangesAsync(cancellationToken);
+    }
+
+    public async Task UpsertAsync(AppReleaseDto release, CancellationToken cancellationToken)
+    {
+        var record = await dbContext.AppReleases
+            .SingleOrDefaultAsync(item => item.ReleaseId == release.ReleaseId, cancellationToken);
+        ApplyRelease(release, record);
+        await dbContext.SaveChangesAsync(cancellationToken);
+    }
+
+    private void ApplyRelease(AppReleaseDto release, AppReleaseRecord? record)
+    {
+        if (record is null)
+        {
+            record = new AppReleaseRecord { ReleaseId = release.ReleaseId };
+            dbContext.AppReleases.Add(record);
+        }
+
+        record.Version = release.Version;
+        record.PublishedAt = release.PublishedAt.ToUniversalTime();
+        record.Title = release.Title;
+        record.Summary = release.Summary;
+        record.ItemsJson = JsonSerializer.Serialize(release.Items, JsonOptions);
+        record.IsPublished = release.IsPublished is not false;
     }
 
     private static AppReleaseDto ToDto(AppReleaseRecord release)

@@ -8,6 +8,36 @@ namespace GarageBalance.Api.Tests.Releases;
 public sealed class EfAppReleaseRepositoryTests
 {
     [Fact]
+    public async Task UpsertAsync_InsertsAndUpdatesOnlyRequestedRelease()
+    {
+        await using var connection = new SqliteConnection("DataSource=:memory:");
+        await connection.OpenAsync();
+        var options = new DbContextOptionsBuilder<GarageBalanceDbContext>()
+            .UseSqlite(connection)
+            .Options;
+        await using var context = new GarageBalanceDbContext(options);
+        await context.Database.EnsureCreatedAsync();
+        var repository = new EfAppReleaseRepository(context);
+        var first = CreateRelease("release-1", "0.1.0", "Первый релиз");
+        var second = CreateRelease("release-2", "0.2.0", "Второй релиз");
+        await repository.SynchronizeAsync([first, second], CancellationToken.None);
+
+        await repository.UpsertAsync(
+            CreateRelease("release-1", "0.1.1", "Обновлённый первый релиз"),
+            CancellationToken.None);
+
+        var records = await context.AppReleases
+            .AsNoTracking()
+            .OrderBy(release => release.ReleaseId)
+            .ToArrayAsync();
+        Assert.Equal(2, records.Length);
+        Assert.Equal("0.1.1", records[0].Version);
+        Assert.Equal("Обновлённый первый релиз", records[0].Title);
+        Assert.Equal("0.2.0", records[1].Version);
+        Assert.Equal("Второй релиз", records[1].Title);
+    }
+
+    [Fact]
     public async Task GetPageAsync_ReturnsPublishedDatabaseRowsInStablePages()
     {
         await using var connection = new SqliteConnection("DataSource=:memory:");
@@ -49,4 +79,14 @@ public sealed class EfAppReleaseRepositoryTests
         Assert.Equal(12, manageablePage.TotalCount);
         Assert.Equal("release-12", manageablePage.Items[0].ReleaseId);
     }
+
+    private static AppReleaseDto CreateRelease(string releaseId, string version, string title) =>
+        new(
+            releaseId,
+            version,
+            DateTimeOffset.Parse("2026-07-14T10:00:00+07:00"),
+            title,
+            "Описание.",
+            [new AppReleaseItemDto("improved", "Изменение.")],
+            true);
 }

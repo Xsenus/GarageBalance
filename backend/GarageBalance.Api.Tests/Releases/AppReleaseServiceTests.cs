@@ -157,6 +157,41 @@ public sealed class AppReleaseServiceTests
     }
 
     [Fact]
+    public async Task CreateReleaseAsync_DoesNotKeepFileLockWhileDatabaseWriteIsPending()
+    {
+        using var directory = new TempContentRoot();
+        directory.WriteReleasesJson("[]");
+        var repository = new BlockingAppReleaseRepository("slow-release");
+        var service = new AppReleaseService(directory.Environment, releaseRepository: repository);
+
+        var slowCreate = service.CreateReleaseAsync(
+            CreateRequest("slow-release", "0.900.0"),
+            null,
+            CancellationToken.None);
+        await repository.BlockedWriteStarted.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+        var fastCreate = service.CreateReleaseAsync(
+            CreateRequest("fast-release", "0.901.0"),
+            null,
+            CancellationToken.None);
+        var completed = await Task.WhenAny(fastCreate, Task.Delay(TimeSpan.FromSeconds(5)));
+
+        Assert.Same(fastCreate, completed);
+        Assert.True((await fastCreate).Succeeded);
+        repository.AllowBlockedWriteToFinish.TrySetResult();
+        Assert.True((await slowCreate).Succeeded);
+
+        using var document = JsonDocument.Parse(File.ReadAllText(
+            Path.Combine(directory.RootPath, "AppReleases", "releases.json")));
+        var releaseIds = document.RootElement
+            .EnumerateArray()
+            .Select(item => item.GetProperty("releaseId").GetString())
+            .ToArray();
+        Assert.Contains("slow-release", releaseIds);
+        Assert.Contains("fast-release", releaseIds);
+    }
+
+    [Fact]
     public async Task UpdateReleaseAsync_WritesReadableAuditDiffAndSkipsNoOpUpdate()
     {
         using var directory = new TempContentRoot();
@@ -346,6 +381,47 @@ public sealed class AppReleaseServiceTests
             await _connection.DisposeAsync();
         }
     }
+
+    private sealed class BlockingAppReleaseRepository(string blockedReleaseId) : IAppReleaseRepository
+    {
+        public TaskCompletionSource BlockedWriteStarted { get; } =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public TaskCompletionSource AllowBlockedWriteToFinish { get; } =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public Task<AppReleasePageDto> GetPageAsync(
+            bool includeDrafts,
+            int offset,
+            int limit,
+            CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+
+        public async Task UpsertAsync(AppReleaseDto release, CancellationToken cancellationToken)
+        {
+            if (!string.Equals(release.ReleaseId, blockedReleaseId, StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            BlockedWriteStarted.TrySetResult();
+            await AllowBlockedWriteToFinish.Task.WaitAsync(cancellationToken);
+        }
+
+        public Task SynchronizeAsync(
+            IReadOnlyList<AppReleaseDto> releases,
+            CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+    }
+
+    private static UpsertAppReleaseRequest CreateRequest(string releaseId, string version) =>
+        new(
+            releaseId,
+            version,
+            DateTimeOffset.Parse("2026-07-30T10:00:00+07:00"),
+            $"Обновление {version}",
+            "Описание обновления.",
+            [new AppReleaseItemDto("improved", "Улучшение.")]);
 
     private static string FindRepositoryRoot()
     {
