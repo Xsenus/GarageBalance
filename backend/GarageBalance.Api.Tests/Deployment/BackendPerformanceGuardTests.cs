@@ -1042,11 +1042,19 @@ public sealed class BackendPerformanceGuardTests
         Assert.Contains("AddDbContextPool<GarageBalanceDbContext>", program, StringComparison.Ordinal);
         Assert.Contains("DatabasePerformance:DbContextPoolSize", program, StringComparison.Ordinal);
         Assert.Contains("DatabasePerformance:CommandTimeoutSeconds", program, StringComparison.Ordinal);
+        Assert.Contains("DatabasePerformance:MaximumPoolSize", program, StringComparison.Ordinal);
+        Assert.Contains("NpgsqlConnectionStringFactory.Create(", program, StringComparison.Ordinal);
+        Assert.Contains("Math.Min(configuredDbContextPoolSize, dbMaximumPoolSize)", program, StringComparison.Ordinal);
         Assert.Contains("Math.Clamp(", program, StringComparison.Ordinal);
         Assert.Contains("npgsqlOptions.CommandTimeout(dbCommandTimeoutSeconds)", program, StringComparison.Ordinal);
         Assert.DoesNotContain("EnableRetryOnFailure", program, StringComparison.Ordinal);
         Assert.Contains("\"DbContextPoolSize\": 32", settings, StringComparison.Ordinal);
         Assert.Contains("\"CommandTimeoutSeconds\": 30", settings, StringComparison.Ordinal);
+        Assert.Contains("\"MaximumPoolSize\": 32", settings, StringComparison.Ordinal);
+        Assert.Contains("\"MinimumPoolSize\": 2", settings, StringComparison.Ordinal);
+        Assert.Contains("\"ConnectionIdleLifetimeSeconds\": 300", settings, StringComparison.Ordinal);
+        Assert.Contains("\"ConnectionPruningIntervalSeconds\": 10", settings, StringComparison.Ordinal);
+        Assert.Contains("\"KeepAliveSeconds\": 0", settings, StringComparison.Ordinal);
     }
 
     [Fact]

@@ -45,7 +45,7 @@ builder.Services.AddSingleton<IValidateOptions<JwtOptions>>(_ => new JwtOptionsV
 var jwtOptions = builder.Configuration.GetSection(JwtOptions.SectionName).Get<JwtOptions>() ?? new JwtOptions();
 JwtOptionsValidator.ThrowIfInvalid(jwtOptions, builder.Environment.EnvironmentName);
 
-var dbContextPoolSize = Math.Clamp(
+var configuredDbContextPoolSize = Math.Clamp(
     builder.Configuration.GetValue<int?>("DatabasePerformance:DbContextPoolSize") ?? 32,
     8,
     128);
@@ -53,10 +53,23 @@ var dbCommandTimeoutSeconds = Math.Clamp(
     builder.Configuration.GetValue<int?>("DatabasePerformance:CommandTimeoutSeconds") ?? 30,
     5,
     120);
+var dbMaximumPoolSize = Math.Clamp(
+    builder.Configuration.GetValue<int?>("DatabasePerformance:MaximumPoolSize") ?? 32,
+    8,
+    128);
+var dbContextPoolSize = Math.Min(configuredDbContextPoolSize, dbMaximumPoolSize);
+var dbConnectionString = NpgsqlConnectionStringFactory.Create(
+    builder.Configuration.GetConnectionString("DefaultConnection"),
+    new DatabaseConnectionPoolSettings(
+        dbMaximumPoolSize,
+        builder.Configuration.GetValue<int?>("DatabasePerformance:MinimumPoolSize") ?? 2,
+        builder.Configuration.GetValue<int?>("DatabasePerformance:ConnectionIdleLifetimeSeconds") ?? 300,
+        builder.Configuration.GetValue<int?>("DatabasePerformance:ConnectionPruningIntervalSeconds") ?? 10,
+        builder.Configuration.GetValue<int?>("DatabasePerformance:KeepAliveSeconds") ?? 0));
 builder.Services.AddDbContextPool<GarageBalanceDbContext>(options =>
 {
     options.UseNpgsql(
-        builder.Configuration.GetConnectionString("DefaultConnection"),
+        dbConnectionString,
         npgsqlOptions => npgsqlOptions.CommandTimeout(dbCommandTimeoutSeconds));
 }, dbContextPoolSize);
 builder.Services.AddScoped<IApplicationUnitOfWork, EfApplicationUnitOfWork>();
