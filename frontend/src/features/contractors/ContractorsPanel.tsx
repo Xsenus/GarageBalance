@@ -2465,7 +2465,7 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
       ) : null}
 
       {modal?.type === 'garage' ? <GaragePrototypeDialog accessToken={auth.accessToken} integrationClient={integrationClient} item={modal.item} onClose={() => setModal(null)} onSave={saveGarage} onOpenFinancialReport={openGarageFinancialReport} /> : null}
-      {modal?.type === 'supplier' ? <SupplierPrototypeDialog accessToken={auth.accessToken} integrationClient={integrationClient} item={modal.item} services={chargeServices} onClose={() => setModal(null)} onOpenFinancialReport={openSupplierFinancialReport} onSave={saveSupplier} /> : null}
+      {modal?.type === 'supplier' ? <SupplierPrototypeDialog accessToken={auth.accessToken} funds={serviceFunds} integrationClient={integrationClient} item={modal.item} services={chargeServices} onClose={() => setModal(null)} onOpenFinancialReport={openSupplierFinancialReport} onSave={saveSupplier} /> : null}
       {modal?.type === 'service' ? <AddServicePrototypeDialog expenseTypes={serviceExpenseTypes.filter((item) => !item.isArchived)} funds={serviceFunds.filter((fund) => fund.allowOperations)} isSaving={serviceSaving} incomeTypes={serviceIncomeTypes.filter((item) => !item.isArchived)} onClose={() => setModal(null)} onCreateWithTariff={saveServiceWithTariff} regularOnly tariffs={serviceTariffs.filter((item) => !item.isArchived)} /> : null}
       {modal?.type === 'employee' ? <EmployeePrototypeDialog departments={departments} item={modal.item} onClose={() => setModal(null)} onOpenFinancialReport={openEmployeeFinancialReport} onSave={saveEmployee} /> : null}
       {modal?.type === 'department' ? <DepartmentPrototypeDialog item={modal.item} onClose={() => setModal(null)} onSave={saveDepartment} /> : null}
@@ -3274,7 +3274,7 @@ function getDepartmentPrototypeChanges(previous: ContractorDepartmentRow, next: 
   ])
 }
 
-function SupplierPrototypeDialog({ accessToken, integrationClient, item, services, onClose, onOpenFinancialReport, onSave }: { accessToken: string; integrationClient: IntegrationClient; item?: ContractorSupplierRow; services: ChargeServiceSettingDto[]; onClose: () => void; onOpenFinancialReport: (item: ContractorSupplierRow) => void; onSave: (item: ContractorSupplierRow) => void }) {
+function SupplierPrototypeDialog({ accessToken, funds, integrationClient, item, services, onClose, onOpenFinancialReport, onSave }: { accessToken: string; funds: FundDto[]; integrationClient: IntegrationClient; item?: ContractorSupplierRow; services: ChargeServiceSettingDto[]; onClose: () => void; onOpenFinancialReport: (item: ContractorSupplierRow) => void; onSave: (item: ContractorSupplierRow) => void }) {
   const activeServices = services.filter((service) =>
     service.id === item?.serviceId || (!service.isArchived && Boolean(service.expenseTypeId)))
   const initialService = activeServices.find((service) => service.id === item?.serviceId) ?? activeServices.find((service) => service.name === item?.service) ?? activeServices[0] ?? null
@@ -3403,6 +3403,10 @@ function SupplierPrototypeDialog({ accessToken, integrationClient, item, service
   }
 
   const availableServices = [...activeServices].sort((left, right) => left.name.localeCompare(right.name, 'ru'))
+  const selectedService = availableServices.find((service) => service.id === form.serviceId) ?? null
+  const selectedFund = selectedService?.expenseFundId
+    ? funds.find((fund) => fund.id === selectedService.expenseFundId) ?? null
+    : null
 
   function selectPartySuggestion(suggestion: DadataPartySuggestionDto) {
     partyInputTouched.current = false
@@ -3437,6 +3441,18 @@ function SupplierPrototypeDialog({ accessToken, integrationClient, item, service
                     setForm({ ...form, serviceId: service?.id ?? null, service: service?.name ?? '' })
                   }}
                 />
+              </FormField>
+              <FormField label="Фонд расходования">
+                <SelectControl
+                  aria-label="Фонд расходования поставщика"
+                  value={selectedFund?.id ?? ''}
+                  options={selectedFund
+                    ? [{ value: selectedFund.id, label: selectedFund.name }]
+                    : [{ value: '', label: selectedService ? 'Не назначен' : 'Сначала выберите услугу' }]}
+                  disabled
+                  onChange={() => undefined}
+                />
+                <small className="contractors-supplier-fund-hint">Определяется выбранной услугой.</small>
               </FormField>
             </div>
             <div className="contractors-modal-grid contractors-supplier-lookup-grid">

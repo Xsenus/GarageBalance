@@ -1772,6 +1772,7 @@ describe('App', () => {
             name: request.service.name,
             incomeTypeId: request.service.incomeTypeId ?? null,
             expenseTypeId: request.service.expenseTypeId ?? null,
+            expenseFundId: request.service.expenseFundId ?? null,
             tariffId: tariff.id,
             isRegular: request.service.isRegular,
           }),
@@ -2225,6 +2226,10 @@ describe('App', () => {
     expect(supplierServiceControl).toHaveClass('select-control__trigger')
     await user.click(supplierServiceControl)
     await user.click(within(within(supplierDialog).getByRole('listbox', { name: 'Услуга поставщика: варианты' })).getByRole('option', { name: 'Уборка территории' }))
+    const supplierExpenseFundControl = within(supplierDialog).getByRole('combobox', { name: 'Фонд расходования поставщика' })
+    expect(supplierExpenseFundControl).toBeDisabled()
+    expect(supplierExpenseFundControl).toHaveTextContent('Электроэнергия')
+    expect(within(supplierDialog).getByText('Определяется выбранной услугой.')).toBeInTheDocument()
     expect(within(supplierDialog).getByLabelText('Телефон поставщика')).toHaveValue('')
     expect(within(supplierDialog).getByLabelText('Почта поставщика')).toHaveValue('')
     expect(within(supplierDialog).getByText('Телефон и почта берутся из первого действующего контакта. Изменение здесь сразу обновляет ту же строку в таблице контактов.')).toBeInTheDocument()
