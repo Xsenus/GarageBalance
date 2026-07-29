@@ -181,10 +181,9 @@
 
 .workspace--reports {
   display: flex;
-  height: 100dvh;
-  min-height: 0;
+  min-height: 100dvh;
   flex-direction: column;
-  overflow: hidden;
+  overflow: visible;
   box-sizing: border-box;
 }
 
@@ -7122,8 +7121,7 @@ button.operation-row:focus-visible {
 
 .workspace--reports > .reports-workbook-panel {
   display: flex;
-  min-height: 0;
-  flex: 1 1 auto;
+  flex: 0 0 auto;
   flex-direction: column;
 }
 
@@ -7135,18 +7133,14 @@ button.operation-row:focus-visible {
 }
 
 .reports-workbook-panel > .report-tab-panel {
-  display: flex;
-  min-height: 0;
-  flex: 1 1 auto;
+  display: block;
 }
 
 .report-workbook-sheet {
   display: flex;
-  min-height: 0;
-  flex: 1 1 auto;
   flex-direction: column;
   gap: 14px;
-  overflow: hidden;
+  overflow: visible;
   border: 1px solid #d0d5dd;
   border-radius: 8px;
   background: #ffffff;
@@ -7165,8 +7159,8 @@ button.operation-row:focus-visible {
 .report-workbook-filter {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
-  gap: 12px 16px;
-  align-items: start;
+  gap: 10px 14px;
+  align-items: end;
   padding: 0 16px;
 }
 
@@ -7183,7 +7177,7 @@ button.operation-row:focus-visible {
 }
 
 .report-workbook-filter__fields > label {
-  flex: 0 1 190px;
+  flex: 0 1 180px;
 }
 
 .report-quick-periods {
@@ -7224,6 +7218,10 @@ button.operation-row:focus-visible {
 
 .report-workbook-filter__extra {
   grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(280px, 520px));
+  gap: 10px 14px;
+  align-items: start;
   min-width: 0;
 }
 
@@ -7233,12 +7231,14 @@ button.operation-row:focus-visible {
 
 .report-garage-quick-lists {
   display: grid;
-  gap: 8px;
-  margin-bottom: 10px;
+  grid-template-columns: minmax(220px, 1fr) auto;
+  gap: 6px 8px;
+  align-items: end;
+  margin: 0;
 }
 
 .report-garage-quick-lists > label {
-  max-width: 520px;
+  min-width: 0;
 }
 
 .report-garage-quick-list-actions {
@@ -7246,6 +7246,11 @@ button.operation-row:focus-visible {
   flex-wrap: wrap;
   align-items: center;
   gap: 8px;
+}
+
+.report-garage-quick-lists > .form-success,
+.report-garage-quick-lists > .form-error {
+  grid-column: 1 / -1;
 }
 
 .report-garage-quick-list-actions button {
@@ -7311,7 +7316,22 @@ button.operation-row:focus-visible {
 }
 
 .report-checkbox-picker .payments-prototype-search {
-  width: min(680px, 100%);
+  width: 100%;
+  min-height: 38px;
+  gap: 8px;
+  border-color: #d0d5dd;
+  border-radius: 7px;
+  padding: 0 10px;
+  box-shadow: none;
+}
+
+.report-checkbox-picker .payments-prototype-search:hover {
+  border-color: #98a2b3;
+}
+
+.report-checkbox-picker .payments-prototype-search:focus-within {
+  border-color: #2e90fa;
+  box-shadow: 0 0 0 3px rgba(46, 144, 250, 0.14);
 }
 
 .report-workbook-filter .report-checkbox-picker .payments-prototype-search input {
@@ -7319,6 +7339,13 @@ button.operation-row:focus-visible {
   border: 0;
   padding: 0;
   box-shadow: none;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.report-workbook-filter .report-checkbox-picker .payments-prototype-search input::placeholder {
+  color: #98a2b3;
+  font-weight: 500;
 }
 
 .report-workbook-filter .report-checkbox-picker .payments-prototype-search-option input {
@@ -7565,24 +7592,14 @@ button.operation-row:focus-visible {
 }
 
 .report-workbook-sheet > .report-workbook-table {
-  min-height: 0;
-  flex: 1 1 auto;
-  overflow: auto;
-  overscroll-behavior: contain;
-  scrollbar-gutter: stable;
-  margin-bottom: 0;
-}
-
-.report-workbook-sheet > .dictionary-pagination {
   flex: 0 0 auto;
+  overflow-x: auto;
+  overflow-y: visible;
+  margin-bottom: 16px;
 }
 
 .report-workbook-sheet > .report-workbook-split {
-  min-height: 0;
-  flex: 1 1 auto;
-  overflow: auto;
-  overscroll-behavior: contain;
-  scrollbar-gutter: stable;
+  overflow: visible;
 }
 
 .report-workbook-row {
@@ -7675,7 +7692,7 @@ button.operation-row:focus-visible {
 
 .report-workbook-split {
   display: grid;
-  grid-template-columns: minmax(420px, 1fr) minmax(360px, 0.85fr);
+  grid-template-columns: minmax(0, 1fr);
   gap: 14px;
   padding: 0 16px 16px;
 }
@@ -8216,6 +8233,14 @@ button.operation-row:focus-visible {
 }
 
 @media (max-width: 980px) {
+  .report-workbook-filter__extra {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .report-garage-quick-lists {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
   .audit-detail-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -8442,6 +8467,14 @@ button.operation-row:focus-visible {
 }
 
 @media (max-width: 640px) {
+  .report-workbook-filter {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .report-workbook-filter__actions {
+    justify-content: flex-start;
+  }
+
   .audit-detail-grid {
     grid-template-columns: 1fr;
   }

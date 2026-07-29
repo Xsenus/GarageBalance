@@ -2433,17 +2433,38 @@ public sealed class ReportServiceTests
             AppliesToAllGarages = true,
             OverdueGraceDays = 30
         };
-        database.Context.Add(campaign);
+        var secondCampaign = new FeeCampaign
+        {
+            Name = "Сбор на освещение",
+            IncomeTypeId = fixtures.IncomeType.Id,
+            IncomeType = fixtures.IncomeType,
+            Goal = "Освещение территории",
+            ContributionAmount = 300m,
+            TargetAmount = 0m,
+            StartsOn = new DateOnly(2026, 7, 1),
+            AppliesToAllGarages = true,
+            OverdueGraceDays = 30
+        };
+        database.Context.AddRange(campaign, secondCampaign);
         await database.Context.SaveChangesAsync();
 
-        var result = await CreateService(database.Context).GetFeeReportAsync(
+        var service = CreateService(database.Context);
+        var limitedResult = await service.GetFeeReportAsync(
+            new FeeReportRequest(null, 1),
+            CancellationToken.None);
+        var result = await service.GetFeeReportAsync(
             new FeeReportRequest(null, 10),
             CancellationToken.None);
 
+        Assert.True(limitedResult.Succeeded);
+        Assert.Equal(2, limitedResult.Value!.SummaryRows.Count);
+        Assert.Empty(limitedResult.Value.GarageRows);
+        Assert.Equal(2, limitedResult.Value.RowCount);
         Assert.True(result.Succeeded);
         Assert.Equal("Все сборы", result.Value!.Variation);
-        Assert.Equal(1, result.Value.RowCount);
-        var summary = Assert.Single(result.Value.SummaryRows);
+        Assert.Equal(2, result.Value.RowCount);
+        Assert.Equal(2, result.Value.SummaryRows.Count);
+        var summary = Assert.Single(result.Value.SummaryRows, row => row.IncomeTypeId == campaign.Id);
         Assert.Equal(campaign.Id, summary.IncomeTypeId);
         Assert.Equal("Сбор на камеры", summary.Name);
         Assert.Equal("Установка камер", summary.Goal);

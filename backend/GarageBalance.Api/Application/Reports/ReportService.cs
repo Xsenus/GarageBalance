@@ -1064,14 +1064,13 @@ public sealed class ReportService(
             .ToList();
 
         var rowCount = summaryRows.Count + feeData.GarageRowCount;
-        var visibleSummaryRows = ApplyRowLimit(summaryRows, request.Limit);
         var report = new FeeReportDto(
             variation ?? "Все сборы",
             summaryRows.Sum(row => row.FeeAmount),
             summaryRows.Sum(row => row.Collected),
             feeData.DebtTotal,
             rowCount,
-            visibleSummaryRows,
+            summaryRows,
             feeGarageRows,
             debtorRows);
 
@@ -1582,13 +1581,6 @@ public sealed class ReportService(
     private static string BuildSnapshotExportFileName(string reportType, string extension)
     {
         return $"garagebalance-{reportType}.{extension}";
-    }
-
-    private static IReadOnlyList<T> ApplyRowLimit<T>(IReadOnlyList<T> rows, int? limit)
-    {
-        return limit is > 0 && rows.Count > limit.Value
-            ? rows.Take(NormalizeReportLimit(limit.Value)).ToList()
-            : rows;
     }
 
     private static IEnumerable<T> ApplyEnumerableReportRowLimit<T>(IEnumerable<T> rows, int? limit)

@@ -262,14 +262,15 @@ export type FeeReportDto = {
 }
 
 export type ReportClient = {
-  getGarageReportQuickLists(accessToken: string): Promise<GarageReportQuickListDto[]>
+  getGarageReportQuickLists(accessToken: string, signal?: AbortSignal): Promise<GarageReportQuickListDto[]>
   createGarageReportQuickList(accessToken: string, request: UpsertGarageReportQuickListRequest): Promise<GarageReportQuickListDto>
   updateGarageReportQuickList(accessToken: string, id: string, request: UpsertGarageReportQuickListRequest): Promise<GarageReportQuickListDto>
   deleteGarageReportQuickList(accessToken: string, id: string, reason: string): Promise<void>
-  getConsolidatedReport(accessToken: string, params?: { monthFrom?: string; monthTo?: string; search?: string; limit?: number; offset?: number; sortBy?: string; sortDirection?: string }): Promise<ConsolidatedReportDto>
+  getConsolidatedReport(accessToken: string, params?: { monthFrom?: string; monthTo?: string; search?: string; limit?: number; offset?: number; sortBy?: string; sortDirection?: string }, signal?: AbortSignal): Promise<ConsolidatedReportDto>
   getGarageReport(
     accessToken: string,
     params?: { monthFrom?: string; monthTo?: string; search?: string; garageIds?: string[]; ownerIds?: string[]; incomeTypeIds?: string[]; groupAccruals?: boolean; offset?: number; limit?: number; sortBy?: string; sortDirection?: string },
+    signal?: AbortSignal,
   ): Promise<GarageDetailReportDto>
   exportGarageReportXlsx(
     accessToken: string,
@@ -297,6 +298,7 @@ export type ReportClient = {
       sortBy?: string
       sortDirection?: string
     },
+    signal?: AbortSignal,
   ): Promise<IncomeReportDto>
   exportIncomeReportXlsx(
     accessToken: string,
@@ -343,6 +345,7 @@ export type ReportClient = {
       sortBy?: string
       sortDirection?: string
     },
+    signal?: AbortSignal,
   ): Promise<ExpenseReportDto>
   getFundChangeReport(
     accessToken: string,
@@ -355,6 +358,7 @@ export type ReportClient = {
       sortBy?: string
       sortDirection?: string
     },
+    signal?: AbortSignal,
   ): Promise<FundChangeReportDto>
   exportFundChangeReportXlsx(
     accessToken: string,
@@ -387,6 +391,7 @@ export type ReportClient = {
       sortBy?: string
       sortDirection?: string
     },
+    signal?: AbortSignal,
   ): Promise<CashPaymentReportDto>
   exportCashPaymentReportXlsx(
     accessToken: string,
@@ -419,6 +424,7 @@ export type ReportClient = {
       sortBy?: string
       sortDirection?: string
     },
+    signal?: AbortSignal,
   ): Promise<BankDepositReportDto>
   exportBankDepositReportXlsx(
     accessToken: string,
@@ -449,6 +455,7 @@ export type ReportClient = {
       sortBy?: string
       sortDirection?: string
     },
+    signal?: AbortSignal,
   ): Promise<FeeReportDto>
   exportFeeReportXlsx(
     accessToken: string,
@@ -744,8 +751,8 @@ function buildFeeReportQuery(params: Parameters<ReportClient['getFeeReport']>[1]
 }
 
 export const reportsApi: ReportClient = {
-  getGarageReportQuickLists(accessToken) {
-    return requestJson(accessToken, '/api/reports/garage-quick-lists')
+  getGarageReportQuickLists(accessToken, signal) {
+    return requestJson(accessToken, '/api/reports/garage-quick-lists', { signal })
   },
   createGarageReportQuickList(accessToken, request) {
     return requestJson(accessToken, '/api/reports/garage-quick-lists', { method: 'POST', body: JSON.stringify(request) })
@@ -756,13 +763,13 @@ export const reportsApi: ReportClient = {
   deleteGarageReportQuickList(accessToken, id, reason) {
     return requestJson(accessToken, `/api/reports/garage-quick-lists/${encodeURIComponent(id)}`, { method: 'DELETE', body: JSON.stringify({ reason }) })
   },
-  getConsolidatedReport(accessToken, params = {}) {
+  getConsolidatedReport(accessToken, params = {}, signal) {
     const query = buildConsolidatedReportQuery(params)
-    return requestJson(accessToken, `/api/reports/consolidated${query ? `?${query}` : ''}`)
+    return requestJson(accessToken, `/api/reports/consolidated${query ? `?${query}` : ''}`, { signal })
   },
-  getGarageReport(accessToken, params = {}) {
+  getGarageReport(accessToken, params = {}, signal) {
     const query = buildGarageReportQuery(params)
-    return requestJson(accessToken, `/api/reports/garages${query ? `?${query}` : ''}`)
+    return requestJson(accessToken, `/api/reports/garages${query ? `?${query}` : ''}`, { signal })
   },
   exportGarageReportXlsx(accessToken, params = {}) {
     const query = buildGarageReportQuery(params)
@@ -780,9 +787,9 @@ export const reportsApi: ReportClient = {
     const query = buildConsolidatedReportQuery(params)
     return requestBlob(accessToken, `/api/reports/consolidated/export/pdf${query ? `?${query}` : ''}`, { method: 'POST' })
   },
-  getIncomeReport(accessToken, params = {}) {
+  getIncomeReport(accessToken, params = {}, signal) {
     const query = buildIncomeReportQuery(params)
-    return requestJson(accessToken, `/api/reports/income${query ? `?${query}` : ''}`)
+    return requestJson(accessToken, `/api/reports/income${query ? `?${query}` : ''}`, { signal })
   },
   exportIncomeReportXlsx(accessToken, params = {}) {
     const query = buildIncomeReportQuery(params)
@@ -792,13 +799,13 @@ export const reportsApi: ReportClient = {
     const query = buildIncomeReportQuery(params)
     return requestBlob(accessToken, `/api/reports/income/export/pdf${query ? `?${query}` : ''}`, { method: 'POST' })
   },
-  getExpenseReport(accessToken, params = {}) {
+  getExpenseReport(accessToken, params = {}, signal) {
     const query = buildExpenseReportQuery(params)
-    return requestJson(accessToken, `/api/reports/expense${query ? `?${query}` : ''}`)
+    return requestJson(accessToken, `/api/reports/expense${query ? `?${query}` : ''}`, { signal })
   },
-  getFundChangeReport(accessToken, params = {}) {
+  getFundChangeReport(accessToken, params = {}, signal) {
     const query = buildFundChangeReportQuery(params)
-    return requestJson(accessToken, `/api/reports/fund-changes${query ? `?${query}` : ''}`)
+    return requestJson(accessToken, `/api/reports/fund-changes${query ? `?${query}` : ''}`, { signal })
   },
   exportFundChangeReportXlsx(accessToken, params = {}) {
     const query = buildFundChangeReportQuery(params)
@@ -808,9 +815,9 @@ export const reportsApi: ReportClient = {
     const query = buildFundChangeReportQuery(params)
     return requestBlob(accessToken, `/api/reports/fund-changes/export/pdf${query ? `?${query}` : ''}`, { method: 'POST' })
   },
-  getCashPaymentReport(accessToken, params = {}) {
+  getCashPaymentReport(accessToken, params = {}, signal) {
     const query = buildCashPaymentReportQuery(params)
-    return requestJson(accessToken, `/api/reports/cash-payments${query ? `?${query}` : ''}`)
+    return requestJson(accessToken, `/api/reports/cash-payments${query ? `?${query}` : ''}`, { signal })
   },
   exportCashPaymentReportXlsx(accessToken, params = {}) {
     const query = buildCashPaymentReportQuery(params)
@@ -820,9 +827,9 @@ export const reportsApi: ReportClient = {
     const query = buildCashPaymentReportQuery(params)
     return requestBlob(accessToken, `/api/reports/cash-payments/export/pdf${query ? `?${query}` : ''}`, { method: 'POST' })
   },
-  getBankDepositReport(accessToken, params = {}) {
+  getBankDepositReport(accessToken, params = {}, signal) {
     const query = buildBankDepositReportQuery(params)
-    return requestJson(accessToken, `/api/reports/bank-deposits${query ? `?${query}` : ''}`)
+    return requestJson(accessToken, `/api/reports/bank-deposits${query ? `?${query}` : ''}`, { signal })
   },
   exportBankDepositReportXlsx(accessToken, params = {}) {
     const query = buildBankDepositReportQuery(params)
@@ -832,9 +839,9 @@ export const reportsApi: ReportClient = {
     const query = buildBankDepositReportQuery(params)
     return requestBlob(accessToken, `/api/reports/bank-deposits/export/pdf${query ? `?${query}` : ''}`, { method: 'POST' })
   },
-  getFeeReport(accessToken, params = {}) {
+  getFeeReport(accessToken, params = {}, signal) {
     const query = buildFeeReportQuery(params)
-    return requestJson(accessToken, `/api/reports/fees${query ? `?${query}` : ''}`)
+    return requestJson(accessToken, `/api/reports/fees${query ? `?${query}` : ''}`, { signal })
   },
   exportFeeReportXlsx(accessToken, params = {}) {
     const query = buildFeeReportQuery(params)

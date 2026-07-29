@@ -12,7 +12,6 @@ const featureCoverage = [
   ['funds/FundsPanel.tsx', 1],
   ['import/ImportPanel.tsx', 4],
   ['meterReadings/MeterReadingsPanel.tsx', 1],
-  ['reports/ReportPanel.tsx', 1],
   ['tariffs/TariffsAndFeesPanel.tsx', 3],
   ['users/UserManagementPanel.tsx', 1],
 ] as const
@@ -33,5 +32,14 @@ describe('shared pagination coverage', () => {
     expect(appCss).not.toContain('.dictionary-pagination select')
     expect(paginationSource).not.toContain('<select')
     expect(paginationSource).toContain('pageSizeOptions.map')
+  })
+
+  it('keeps reports as the explicit all-rows exception without visible pagination', () => {
+    const source = readFileSync(resolve(process.cwd(), 'src', 'features', 'reports', 'ReportPanel.tsx'), 'utf8')
+
+    expect(source).not.toContain("from '../../shared/TablePagination'")
+    expect(source).not.toContain('<TablePagination')
+    expect(source).toContain('loadAllReportPages')
+    expect(source).toContain('loadAllFeeReportPages')
   })
 })

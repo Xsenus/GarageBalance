@@ -68,6 +68,27 @@ describe('reportsApi', () => {
     expect(fetchMock).toHaveBeenNthCalledWith(7, '/api/reports/garages?monthFrom=2026-06-01&monthTo=2026-07-01&search=12&groupAccruals=true&offset=20&limit=20&garageIds=garage-1&garageIds=garage-2&ownerIds=owner-1&incomeTypeIds=income-1', getRequest())
   })
 
+  it('forwards caller cancellation to report and quick-list reads', async () => {
+    const controller = new AbortController()
+    const observedSignals: Array<AbortSignal | null | undefined> = []
+    const fetchMock = vi.fn().mockImplementation((_input, init) => {
+      observedSignals.push(init?.signal)
+      return Promise.resolve(new Response('{}', {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+      }))
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    await reportsApi.getGarageReport('token', { limit: 500 }, controller.signal)
+    await reportsApi.getGarageReportQuickLists('token', controller.signal)
+
+    expect(fetchMock).toHaveBeenNthCalledWith(1, '/api/reports/garages?limit=500', getRequest())
+    expect(fetchMock).toHaveBeenNthCalledWith(2, '/api/reports/garage-quick-lists', getRequest())
+    expect(observedSignals).toHaveLength(2)
+    expect(observedSignals.every((signal) => signal instanceof AbortSignal)).toBe(true)
+  })
+
   it('forwards the same report sorting to screen and export requests', async () => {
     const fetchMock = vi.fn().mockImplementation(() => Promise.resolve(new Response('{}', { status: 200, headers: { 'Content-Type': 'application/json' } })))
     vi.stubGlobal('fetch', fetchMock)
@@ -144,11 +165,12 @@ describe('reportsApi', () => {
   })
 })
 
-function getRequest() {
+function getRequest(signal?: AbortSignal) {
   return {
     headers: {
       Authorization: 'Bearer token',
     },
+    ...(signal ? { signal } : {}),
   }
 }
 

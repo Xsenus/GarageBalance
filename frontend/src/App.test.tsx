@@ -16305,7 +16305,7 @@ describe('App', () => {
     expect(consolidatedTable).toHaveTextContent('98 000.00')
     expect(consolidatedTable).toHaveTextContent('32 500.00')
     expect(within(reportsPanel).queryByRole('table', { name: 'Расшифровка консолидированного отчета' })).not.toBeInTheDocument()
-    expect(within(reportsPanel).getByRole('navigation', { name: 'Пагинация консолидированного отчета' })).toBeInTheDocument()
+    expect(within(reportsPanel).queryByRole('navigation', { name: 'Пагинация консолидированного отчета' })).not.toBeInTheDocument()
     expect(within(reportsPanel).queryByRole('button', { name: /Скачать сводный/ })).not.toBeInTheDocument()
 
     const consolidatedMonthFrom = within(reportsPanel).getByLabelText('Месяц с') as HTMLInputElement
@@ -16483,6 +16483,7 @@ describe('App', () => {
     await waitFor(() => expect(getGarageReport).toHaveBeenLastCalledWith(
       expect.any(String),
       expect.objectContaining({ garageIds: ['garage-1'] }),
+      expect.any(AbortSignal),
     ))
 
     await user.click(within(reportsPanel).getByRole('button', { name: 'Удалить список' }))
@@ -16664,7 +16665,7 @@ describe('App', () => {
         })
       }
       return createIncomeReport({
-        rowCount: 30,
+        rowCount: 2,
         offset,
         limit,
         incomeTotal: 45000,
@@ -16687,7 +16688,7 @@ describe('App', () => {
       const limit = params.limit ?? 25
       const row = createExpenseReport().rows[0]
       return createExpenseReport({
-        rowCount: 30,
+        rowCount: 2,
         offset,
         limit,
         accrualTotal: 12000,
@@ -16709,12 +16710,12 @@ describe('App', () => {
       const offset = params?.offset ?? 0
       const limit = params?.limit ?? 25
       if (offset === 0) {
-        return createCashPaymentReport({ rowCount: 30, offset, limit })
+        return createCashPaymentReport({ rowCount: 2, offset, limit })
       }
 
       const row = createCashPaymentReport().rows[0]
       return createCashPaymentReport({
-        rowCount: 30,
+        rowCount: 2,
         offset,
         limit,
         rows: [{ ...row, operationId: 'cash-payment-26', purpose: 'Зарплата: Электрик', comment: 'Вторая страница' }],
@@ -16726,12 +16727,12 @@ describe('App', () => {
       const offset = params?.offset ?? 0
       const limit = params?.limit ?? 25
       if (offset === 0) {
-        return createBankDepositReport({ rowCount: 30, offset, limit })
+        return createBankDepositReport({ rowCount: 2, offset, limit })
       }
 
       const row = createBankDepositReport().rows[0]
       return createBankDepositReport({
-        rowCount: 30,
+        rowCount: 2,
         offset,
         limit,
         rows: [{ ...row, operationId: 'bank-deposit-26', amount: 5000, comment: 'Вторая сдача в банк' }],
@@ -16743,12 +16744,12 @@ describe('App', () => {
       const offset = params?.offset ?? 0
       const limit = params?.limit ?? 25
       if (offset === 0) {
-        return createFundChangeReport({ rowCount: 30, offset, limit })
+        return createFundChangeReport({ rowCount: 3, offset, limit })
       }
 
       const row = createFundChangeReport().rows[0]
       return createFundChangeReport({
-        rowCount: 30,
+        rowCount: 3,
         offset,
         limit,
         rows: [{ ...row, operationId: 'fund-operation-26', fundName: 'Резервный фонд', reason: 'Вторая страница' }],
@@ -16779,14 +16780,10 @@ describe('App', () => {
     await openReportTab(user, reportsPanel, 'По выплатам')
     const payoutReportTable = within(reportsPanel).getByRole('table', { name: 'Отчет по выплатам' })
     expect(await within(payoutReportTable).findByText('Водоканал')).toBeInTheDocument()
-    const payoutPagination = within(reportsPanel).getByRole('navigation', { name: 'Пагинация отчета по выплатам' })
-    expect(within(payoutPagination).getByText('Показано 1-1 из 30')).toHaveAttribute('role', 'status')
-    await user.click(within(payoutPagination).getByRole('button', { name: 'Следующая страница' }))
-    await waitFor(() => expect(payoutPageRequests).toContainEqual({ offset: 25, limit: 25 }))
+    await waitFor(() => expect(payoutPageRequests).toContainEqual({ offset: 1, limit: 500 }))
     expect(await within(payoutReportTable).findByText('Электрик')).toBeInTheDocument()
     expect(payoutReportTable).toHaveTextContent('2 600.00')
-    expect(within(payoutPagination).getByText('Показано 26-26 из 30')).toBeInTheDocument()
-    expect(within(payoutPagination).getByRole('button', { name: 'Следующая страница' })).toBeDisabled()
+    expect(within(reportsPanel).queryByRole('navigation', { name: 'Пагинация отчета по выплатам' })).not.toBeInTheDocument()
 
     await openReportTab(user, reportsPanel, 'Поступления')
     expect(within(reportsPanel).getByText('Отчет по поступлениям')).toBeInTheDocument()
@@ -16812,22 +16809,17 @@ describe('App', () => {
     const incomeGroupingButton = within(reportsPanel).getByRole('button', { name: 'Показать отдельные платежи' })
     expect(incomeGroupingButton).toHaveAttribute('aria-pressed', 'true')
     expect(within(reportsPanel).getByRole('note')).toHaveTextContent('По умолчанию части одной квитанции или полной оплаты, в том числе сохранённой ранее, объединены')
-    const incomePagination = within(reportsPanel).getByRole('navigation', { name: 'Пагинация отчета по поступлениям' })
-    expect(within(incomePagination).getByText('Показано 1-1 из 30')).toHaveAttribute('role', 'status')
-    await user.click(within(incomePagination).getByRole('button', { name: 'Следующая страница' }))
-    await waitFor(() => expect(incomePageRequests).toContainEqual({ offset: 25, limit: 25, groupPayments: true }))
+    await waitFor(() => expect(incomePageRequests).toContainEqual({ offset: 1, limit: 500, groupPayments: true }))
     expect(await within(incomeReportTable).findByText('2026-06-26')).toBeInTheDocument()
     expect(incomeReportTable).toHaveTextContent('2 600.00')
-    expect(within(incomePagination).getByText('Показано 26-26 из 30')).toBeInTheDocument()
-    expect(within(incomePagination).getByRole('button', { name: 'Следующая страница' })).toBeDisabled()
     await user.click(incomeGroupingButton)
-    await waitFor(() => expect(incomePageRequests).toContainEqual({ offset: 0, limit: 25, groupPayments: false }))
+    await waitFor(() => expect(incomePageRequests).toContainEqual({ offset: 0, limit: 500, groupPayments: false }))
     expect(within(reportsPanel).getByRole('button', { name: 'Сгруппировать платежи' })).toHaveAttribute('aria-pressed', 'false')
     expect(await within(incomeReportTable).findAllByText('2026-06-10')).toHaveLength(2)
     expect(incomeReportTable).toHaveTextContent('1 000.00')
     expect(incomeReportTable).toHaveTextContent('Членский взнос')
     expect(incomeReportTable).toHaveTextContent('Электроэнергия')
-    expect(within(incomePagination).getByText('Показано 1-2 из 2')).toBeInTheDocument()
+    expect(within(reportsPanel).queryByRole('navigation', { name: 'Пагинация отчета по поступлениям' })).not.toBeInTheDocument()
 
     await openReportTab(user, reportsPanel, 'Оплаты из кассы')
     expect(within(reportsPanel).getByText('Отчёт по оплатам из кассы')).toBeInTheDocument()
@@ -16836,13 +16828,9 @@ describe('App', () => {
     expect(cashPaymentsTable).toHaveTextContent('Оплата воды')
     expect(cashPaymentsTable).toHaveTextContent('400.00')
     expect(cashPaymentsTable).not.toHaveTextContent('Назначение платежа')
-    const cashPaymentPagination = within(reportsPanel).getByRole('navigation', { name: 'Пагинация отчета по оплатам из кассы' })
-    expect(within(cashPaymentPagination).getByText('Показано 1-1 из 30')).toHaveAttribute('role', 'status')
-    await user.click(within(cashPaymentPagination).getByRole('button', { name: 'Следующая страница' }))
-    await waitFor(() => expect(cashPaymentPageRequests).toContainEqual({ offset: 25, limit: 25 }))
+    await waitFor(() => expect(cashPaymentPageRequests).toContainEqual({ offset: 1, limit: 500 }))
     expect(await within(cashPaymentsTable).findByText('Зарплата: Электрик')).toBeInTheDocument()
-    expect(within(cashPaymentPagination).getByText('Показано 26-26 из 30')).toBeInTheDocument()
-    expect(within(cashPaymentPagination).getByRole('button', { name: 'Следующая страница' })).toBeDisabled()
+    expect(within(reportsPanel).queryByRole('navigation', { name: 'Пагинация отчета по оплатам из кассы' })).not.toBeInTheDocument()
     const cashXlsxButton = within(reportsPanel).getByRole('button', { name: 'Скачать XLSX' })
     expect(cashXlsxButton).toHaveAttribute('title', 'Скачать XLSX')
     expect(cashXlsxButton).toHaveAttribute('data-tooltip', 'Скачать XLSX')
@@ -16855,13 +16843,9 @@ describe('App', () => {
     const bankDepositsTable = within(reportsPanel).getByRole('table', { name: 'Отчет по сдаче кассы в банк' })
     expect(bankDepositsTable).toHaveTextContent('Сдача наличных в банк')
     expect(bankDepositsTable).toHaveTextContent('3 000.00')
-    const bankDepositPagination = within(reportsPanel).getByRole('navigation', { name: 'Пагинация отчета по сдаче кассы в банк' })
-    expect(within(bankDepositPagination).getByText('Показано 1-1 из 30')).toHaveAttribute('role', 'status')
-    await user.click(within(bankDepositPagination).getByRole('button', { name: 'Следующая страница' }))
-    await waitFor(() => expect(bankDepositPageRequests).toContainEqual({ offset: 25, limit: 25 }))
+    await waitFor(() => expect(bankDepositPageRequests).toContainEqual({ offset: 1, limit: 500 }))
     expect(await within(bankDepositsTable).findByText('Вторая сдача в банк')).toBeInTheDocument()
-    expect(within(bankDepositPagination).getByText('Показано 26-26 из 30')).toBeInTheDocument()
-    expect(within(bankDepositPagination).getByRole('button', { name: 'Следующая страница' })).toBeDisabled()
+    expect(within(reportsPanel).queryByRole('navigation', { name: 'Пагинация отчета по сдаче кассы в банк' })).not.toBeInTheDocument()
     const bankPdfButton = within(reportsPanel).getByRole('button', { name: 'Скачать PDF' })
     expect(bankPdfButton).toHaveAttribute('title', 'Скачать PDF')
     expect(bankPdfButton).toHaveAttribute('data-tooltip', 'Скачать PDF')
@@ -16915,14 +16899,9 @@ describe('App', () => {
     expect(fundChangesTable).toHaveTextContent('1 500.00')
     expect(fundChangesTable).toHaveTextContent('Распределение средств')
     expect(fundChangesTable).toHaveTextContent('Администратор ГСК')
-    expect(fundChangesTable).not.toHaveTextContent('Резервный фонд')
-    const fundPagination = within(reportsPanel).getByRole('navigation', { name: 'Пагинация отчета по изменению фондов' })
-    expect(within(fundPagination).getByText('Показано 1-2 из 30')).toHaveAttribute('role', 'status')
-    await user.click(within(fundPagination).getByRole('button', { name: 'Следующая страница' }))
-    await waitFor(() => expect(fundChangePageRequests).toContainEqual({ offset: 25, limit: 25 }))
+    await waitFor(() => expect(fundChangePageRequests).toContainEqual({ offset: 2, limit: 500 }))
     expect(await within(fundChangesTable).findByText('Резервный фонд')).toBeInTheDocument()
-    expect(within(fundPagination).getByText('Показано 26-26 из 30')).toBeInTheDocument()
-    expect(within(fundPagination).getByRole('button', { name: 'Следующая страница' })).toBeDisabled()
+    expect(within(reportsPanel).queryByRole('navigation', { name: 'Пагинация отчета по изменению фондов' })).not.toBeInTheDocument()
     const fundXlsxButton = within(reportsPanel).getByRole('button', { name: 'Скачать XLSX' })
     expect(fundXlsxButton).toHaveAttribute('title', 'Скачать XLSX')
     expect(fundXlsxButton.querySelector('svg')).toHaveAttribute('aria-hidden', 'true')
@@ -16963,7 +16942,11 @@ describe('App', () => {
     const reportsPanel = await screen.findByRole('region', { name: 'Отчеты' })
     await openReportTab(user, reportsPanel, 'Сборы')
 
-    await waitFor(() => expect(getFeeReport).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ variation: undefined })))
+    await waitFor(() => expect(getFeeReport).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({ variation: undefined }),
+      expect.any(AbortSignal),
+    ))
     expect(within(reportsPanel).getByLabelText('Вариация сбора')).toHaveValue('')
     const feeSummaryTable = within(reportsPanel).getByRole('table', { name: 'Отчет по сборам' })
     expect(await within(feeSummaryTable).findByText('Сбор на камеры')).toBeInTheDocument()
@@ -16971,7 +16954,7 @@ describe('App', () => {
     expect(reportsPanel.querySelector('datalist option[value="Сбор на камеры"]')).not.toBeNull()
   })
 
-  it('paginates and groups garage report rows on the server', async () => {
+  it('loads every garage report row in server-bounded chunks and supports grouping', async () => {
     const user = userEvent.setup()
     const garageRequests: Array<{ offset?: number; limit?: number; groupAccruals?: boolean }> = []
     const getGarageReport = vi.fn(async (_token: string, params?: Parameters<ReportClient['getGarageReport']>[1]) => {
@@ -16981,7 +16964,7 @@ describe('App', () => {
       const grouped = params?.groupAccruals ?? false
       const row = createGarageDetailReport().rows[0]
       return createGarageDetailReport({
-        rowCount: 30,
+        rowCount: grouped ? 1 : 2,
         offset,
         limit,
         rows: [{
@@ -17003,10 +16986,8 @@ describe('App', () => {
 
     const garageTable = within(reportsPanel).getByRole('table', { name: 'Отчет по гаражам' })
     expect(await within(garageTable).findByText('Членский взнос')).toBeInTheDocument()
-    expect(within(reportsPanel).getByRole('navigation', { name: 'Пагинация отчета по гаражам' })).toBeInTheDocument()
-    expect(within(reportsPanel).getByText('Показано 1-1 из 30')).toHaveAttribute('role', 'status')
+    expect(within(reportsPanel).queryByRole('navigation', { name: 'Пагинация отчета по гаражам' })).not.toBeInTheDocument()
 
-    await user.click(within(reportsPanel).getByRole('button', { name: 'Страница 2' }))
     expect(await within(garageTable).findByText('Электроэнергия')).toBeInTheDocument()
     expect(garageTable).toHaveTextContent('26')
 
@@ -17014,9 +16995,9 @@ describe('App', () => {
     expect(await within(garageTable).findByText('77')).toBeInTheDocument()
     expect(garageTable).not.toHaveTextContent('Услуга')
     expect(garageRequests).toEqual(expect.arrayContaining([
-      { offset: 0, limit: 25, groupAccruals: false },
-      { offset: 25, limit: 25, groupAccruals: false },
-      { offset: 0, limit: 25, groupAccruals: true },
+      { offset: 0, limit: 500, groupAccruals: false },
+      { offset: 1, limit: 500, groupAccruals: false },
+      { offset: 0, limit: 500, groupAccruals: true },
     ]))
   })
 
@@ -17066,7 +17047,7 @@ describe('App', () => {
     const getGarageReport = vi.fn(async (_token: string, params?: Parameters<ReportClient['getGarageReport']>[1]) => {
       garageRequests.push({ garageIds: params?.garageIds, offset: params?.offset })
       return createGarageDetailReport({
-        rowCount: 30,
+        rowCount: 1,
         offset: params?.offset ?? 0,
         limit: params?.limit ?? 25,
       })
@@ -17110,8 +17091,6 @@ describe('App', () => {
 
     await openReportTab(user, reportsPanel, 'По гаражам')
     await waitFor(() => expect(garageRequests).toContainEqual({ garageIds: [], offset: 0 }))
-    await user.click(within(reportsPanel).getByRole('button', { name: 'Страница 2' }))
-    await waitFor(() => expect(garageRequests).toContainEqual({ garageIds: [], offset: 25 }))
     const garageFilter = within(reportsPanel).getByLabelText('Гаражи')
     await user.type(garageFilter, 'гараж')
     const garageSearchResults = within(reportsPanel).getByRole('listbox', { name: 'Найденные гаражи отчёта' })
@@ -17168,8 +17147,7 @@ describe('App', () => {
       },
       getGarageReport: async (token, params) => {
         requests.garages.push(params ?? {})
-        const report = await baseReportClient.getGarageReport(token, params)
-        return { ...report, rowCount: 30, offset: params?.offset ?? 0, limit: params?.limit ?? 25 }
+        return baseReportClient.getGarageReport(token, params)
       },
       getExpenseReport: async (token, params) => {
         requests.payouts.push(params ?? {})
@@ -17218,9 +17196,7 @@ describe('App', () => {
     expect(within(reportsPanel).getByText('Сортировка: по умолчанию').closest('[role="status"]')).not.toBeNull()
 
     await openReportTab(user, reportsPanel, 'По гаражам')
-    await waitFor(() => expect(within(reportsPanel).getByRole('button', { name: 'Страница 2' })).toBeEnabled())
-    await user.click(within(reportsPanel).getByRole('button', { name: 'Страница 2' }))
-    await waitFor(() => expect(requests.garages).toContainEqual(expect.objectContaining({ offset: 25 })))
+    expect(within(reportsPanel).queryByRole('navigation', { name: 'Пагинация отчета по гаражам' })).not.toBeInTheDocument()
     await user.click(within(reportsPanel).getByRole('button', { name: /Сортировать Гараж/ }))
     await waitFor(() => expect(requests.garages).toContainEqual(expect.objectContaining({ sortBy: 'garageNumber', sortDirection: 'asc', offset: 0 })))
 
@@ -17263,7 +17239,7 @@ describe('App', () => {
     const exportFundChangeReportXlsx = vi.fn(async () => new Blob(['funds']))
     const baseReportClient = createReportClient()
     const reportClient = createReportClient({
-      getGarageReport: async (token, params) => ({ ...await baseReportClient.getGarageReport(token, params), rowCount: 30, offset: params?.offset ?? 0, limit: params?.limit ?? 25 }),
+      getGarageReport: async (token, params) => baseReportClient.getGarageReport(token, params),
       exportConsolidatedReportXlsx,
       exportGarageReportXlsx,
       exportExpenseReportXlsx,
@@ -17291,7 +17267,6 @@ describe('App', () => {
     await user.type(garageFilter, '12')
     const garageSearchResults = await within(reportsPanel).findByRole('listbox', { name: 'Найденные гаражи отчёта' })
     await user.click(within(garageSearchResults).getByRole('checkbox', { name: /Выбрать гараж 12,/ }))
-    await user.click(within(reportsPanel).getByRole('button', { name: 'Страница 2' }))
     await user.click(within(reportsPanel).getByRole('button', { name: /Сортировать Гараж/ }))
     await user.click(within(reportsPanel).getByRole('button', { name: 'Сгруппировать начисления' }))
     await exportXlsx()
@@ -17346,7 +17321,7 @@ describe('App', () => {
     await waitFor(() => expect(exportFundChangeReportXlsx).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ sortBy: 'actorDisplayName', sortDirection: 'asc' })))
   })
 
-  it('shows loading and error states for the paged garage report', async () => {
+  it('shows loading and error states for the complete garage report', async () => {
     const user = userEvent.setup()
     let rejectGarages: (reason?: unknown) => void = () => {}
     const garagePromise = new Promise<GarageDetailReportDto>((_resolve, reject) => {
@@ -17361,7 +17336,7 @@ describe('App', () => {
     await openReportTab(user, reportsPanel, 'По гаражам')
 
     expect(await within(reportsPanel).findByRole('status', { name: 'Загружаем отчет по гаражам...' })).toBeInTheDocument()
-    expect(within(within(reportsPanel).getByRole('group', { name: 'Количество строк отчета по гаражам' })).getByRole('button', { name: '25' })).toBeDisabled()
+    expect(within(reportsPanel).queryByRole('navigation', { name: 'Пагинация отчета по гаражам' })).not.toBeInTheDocument()
 
     await act(async () => {
       rejectGarages(new Error('Отчет по гаражам временно недоступен'))
@@ -17372,7 +17347,7 @@ describe('App', () => {
     expect(within(reportsPanel).queryByText('Загружаем отчет по гаражам...')).not.toBeInTheDocument()
   })
 
-  it('shows loading and error states for the paged payout report', async () => {
+  it('shows loading and error states for the complete payout report', async () => {
     const user = userEvent.setup()
     const baseReportClient = createReportClient()
     let rejectPayouts: (reason?: unknown) => void = () => {}
@@ -17393,7 +17368,7 @@ describe('App', () => {
     await openReportTab(user, reportsPanel, 'По выплатам')
 
     expect(await within(reportsPanel).findByRole('status', { name: 'Загружаем выплаты...' })).toBeInTheDocument()
-    expect(within(within(reportsPanel).getByRole('group', { name: 'Количество строк отчета по выплатам' })).getByRole('button', { name: '25' })).toBeDisabled()
+    expect(within(reportsPanel).queryByRole('navigation', { name: 'Пагинация отчета по выплатам' })).not.toBeInTheDocument()
 
     await act(async () => {
       rejectPayouts(new Error('Отчет по выплатам временно недоступен'))
@@ -17404,7 +17379,7 @@ describe('App', () => {
     expect(within(reportsPanel).queryByText('Загружаем выплаты...')).not.toBeInTheDocument()
   })
 
-  it('shows loading and error states for the paged income report', async () => {
+  it('shows loading and error states for the complete income report', async () => {
     const user = userEvent.setup()
     const baseReportClient = createReportClient()
     let rejectIncome: (reason?: unknown) => void = () => {}
@@ -17427,7 +17402,7 @@ describe('App', () => {
     expect(await within(reportsPanel).findByRole('status', { name: 'Загружаем поступления...' })).toBeInTheDocument()
     const incomeGroupingButton = within(reportsPanel).getByRole('button', { name: 'Показать отдельные платежи' })
     expect(incomeGroupingButton).toBeDisabled()
-    expect(within(within(reportsPanel).getByRole('group', { name: 'Количество строк отчета по поступлениям' })).getByRole('button', { name: '25' })).toBeDisabled()
+    expect(within(reportsPanel).queryByRole('navigation', { name: 'Пагинация отчета по поступлениям' })).not.toBeInTheDocument()
 
     await act(async () => {
       rejectIncome(new Error('Отчет по поступлениям временно недоступен'))
@@ -17439,7 +17414,7 @@ describe('App', () => {
     expect(incomeGroupingButton).toBeEnabled()
   })
 
-  it('shows loading and error states for the paged cash payment report', async () => {
+  it('shows loading and error states for the complete cash payment report', async () => {
     const user = userEvent.setup()
     let rejectCashPayments: (reason?: unknown) => void = () => {}
     const cashPaymentPromise = new Promise<CashPaymentReportDto>((_resolve, reject) => {
@@ -17457,7 +17432,7 @@ describe('App', () => {
     await openReportTab(user, reportsPanel, 'Оплаты из кассы')
 
     expect(await within(reportsPanel).findByRole('status', { name: 'Загружаем оплаты из кассы...' })).toBeInTheDocument()
-    expect(within(within(reportsPanel).getByRole('group', { name: 'Количество строк отчета по оплатам из кассы' })).getByRole('button', { name: '25' })).toBeDisabled()
+    expect(within(reportsPanel).queryByRole('navigation', { name: 'Пагинация отчета по оплатам из кассы' })).not.toBeInTheDocument()
 
     await act(async () => {
       rejectCashPayments(new Error('Отчет по кассе временно недоступен'))
@@ -17468,7 +17443,7 @@ describe('App', () => {
     expect(within(reportsPanel).queryByText('Загружаем оплаты из кассы...')).not.toBeInTheDocument()
   })
 
-  it('shows loading and error states for the paged bank deposit report', async () => {
+  it('shows loading and error states for the complete bank deposit report', async () => {
     const user = userEvent.setup()
     let rejectBankDeposits: (reason?: unknown) => void = () => {}
     const bankDepositPromise = new Promise<BankDepositReportDto>((_resolve, reject) => {
@@ -17486,7 +17461,7 @@ describe('App', () => {
     await openReportTab(user, reportsPanel, 'Сдача кассы в банк')
 
     expect(await within(reportsPanel).findByRole('status', { name: 'Загружаем сдачу кассы в банк...' })).toBeInTheDocument()
-    expect(within(within(reportsPanel).getByRole('group', { name: 'Количество строк отчета по сдаче кассы в банк' })).getByRole('button', { name: '25' })).toBeDisabled()
+    expect(within(reportsPanel).queryByRole('navigation', { name: 'Пагинация отчета по сдаче кассы в банк' })).not.toBeInTheDocument()
 
     await act(async () => {
       rejectBankDeposits(new Error('Отчет по сдаче кассы временно недоступен'))

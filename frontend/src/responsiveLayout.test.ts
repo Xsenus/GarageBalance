@@ -87,8 +87,8 @@ describe('responsive layout styles', () => {
     expect(normalizedAppCss).toContain('.localized-date-picker__popover {\n  position: absolute;')
     expect(normalizedAppCss).toContain('.audit-detail-dialog {\n  width: min(1120px, calc(100vw - 48px));')
     expect(normalizedAppCss).toContain('.audit-detail-grid {\n  grid-template-columns: repeat(3, minmax(0, 1fr));')
-    expect(normalizedAppCss).toContain('@media (max-width: 980px) {\n  .audit-detail-grid {\n    grid-template-columns: repeat(2, minmax(0, 1fr));')
-    expect(normalizedAppCss).toContain('@media (max-width: 640px) {\n  .audit-detail-grid {\n    grid-template-columns: 1fr;')
+    expect(normalizedAppCss).toContain('.audit-detail-grid {\n    grid-template-columns: repeat(2, minmax(0, 1fr));')
+    expect(normalizedAppCss).toContain('.audit-detail-grid {\n    grid-template-columns: 1fr;')
   })
 
   it('keeps shared dialogs usable on narrow screens without action overlap', () => {
@@ -141,7 +141,7 @@ describe('responsive layout styles', () => {
 
   it('keeps report checkbox filters aligned with the shared responsive search layout', () => {
     expect(normalizedAppCss).toContain('.report-checkbox-picker {\n  display: grid;\n  gap: 6px;')
-    expect(normalizedAppCss).toContain('.report-checkbox-picker .payments-prototype-search {\n  width: min(680px, 100%);')
+    expect(normalizedAppCss).toContain('.report-checkbox-picker .payments-prototype-search {\n  width: 100%;\n  min-height: 38px;')
     expect(normalizedAppCss).toContain('.report-checkbox-picker-selected-item {\n  display: grid;\n  min-width: 210px;\n  max-width: 320px;')
     expect(normalizedAppCss).toContain('.payments-prototype-search-results {\n    grid-template-columns: minmax(0, 1fr);\n    width: calc(100vw - 32px);')
   })
@@ -219,13 +219,13 @@ describe('responsive layout styles', () => {
     expect(normalizedAppCss).toContain('.contractors-page--directory > .contractors-directory-card > .dictionary-pagination {\n  flex: 0 0 auto;')
   })
 
-  it('keeps report pagination visible and report choices in one row', () => {
-    expect(normalizedAppCss).toContain('.workspace--reports {\n  display: flex;\n  height: 100dvh;\n  min-height: 0;\n  flex-direction: column;\n  overflow: hidden;\n  box-sizing: border-box;')
-    expect(normalizedAppCss).toContain('.workspace--reports > .reports-workbook-panel {\n  display: flex;\n  min-height: 0;\n  flex: 1 1 auto;\n  flex-direction: column;')
+  it('lets report tables extend down the page while keeping report choices in one row', () => {
+    expect(normalizedAppCss).toContain('.workspace--reports {\n  display: flex;\n  min-height: 100dvh;\n  flex-direction: column;\n  overflow: visible;\n  box-sizing: border-box;')
+    expect(normalizedAppCss).toContain('.workspace--reports > .reports-workbook-panel {\n  display: flex;\n  flex: 0 0 auto;\n  flex-direction: column;')
     expect(normalizedAppCss).toContain('.report-tabs--workbook {\n  display: flex;\n  overflow-x: auto;')
     expect(normalizedAppCss).toContain('.report-tabs--workbook button {\n  min-width: 150px;\n  flex: 1 0 150px;')
-    expect(normalizedAppCss).toContain('.report-workbook-sheet > .report-workbook-table {\n  min-height: 0;\n  flex: 1 1 auto;\n  overflow: auto;')
-    expect(normalizedAppCss).toContain('.report-workbook-sheet > .dictionary-pagination {\n  flex: 0 0 auto;')
+    expect(normalizedAppCss).toContain('.report-workbook-sheet > .report-workbook-table {\n  flex: 0 0 auto;\n  overflow-x: auto;\n  overflow-y: visible;')
+    expect(normalizedAppCss).not.toContain('.report-workbook-sheet > .dictionary-pagination {')
   })
 
   it('keeps fund operations in the right column with visible pagination', () => {
