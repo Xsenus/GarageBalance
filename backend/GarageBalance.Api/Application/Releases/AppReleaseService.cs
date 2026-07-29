@@ -272,7 +272,13 @@ public sealed class AppReleaseService(
 
         try
         {
-            await using var stream = File.OpenRead(path);
+            await using var stream = new FileStream(path, new FileStreamOptions
+            {
+                Mode = FileMode.Open,
+                Access = FileAccess.Read,
+                Share = FileShare.Read,
+                Options = FileOptions.Asynchronous | FileOptions.SequentialScan
+            });
             var releases = await JsonSerializer.DeserializeAsync<List<AppReleaseDto>>(stream, JsonOptions, cancellationToken)
                 ?? [];
 

@@ -584,8 +584,7 @@ public sealed class DictionaryService(
         };
         var sortDescending = string.Equals(sortDirection?.Trim(), "desc", StringComparison.OrdinalIgnoreCase);
         var page = await supplierRepository.GetPageAsync(groupId, normalizedSearch, includeArchived, normalizedOffset, normalizedLimit, normalizedSortBy, sortDescending, cancellationToken);
-        var debtTotals = await supplierRepository.GetDebtTotalsAsync(page.Items.Select(item => item.Supplier.Id).ToArray(), cancellationToken);
-        return new PagedResult<SupplierDto>(page.Items.Select(item => ToSupplierDto(item.Supplier, item.PrimaryContact, debtTotals.GetValueOrDefault(item.Supplier.Id, item.Supplier.StartingBalance))).ToList(), page.TotalCount, normalizedOffset, normalizedLimit);
+        return new PagedResult<SupplierDto>(page.Items.Select(item => ToSupplierDto(item.Supplier, item.PrimaryContact, item.DebtTotal)).ToList(), page.TotalCount, normalizedOffset, normalizedLimit);
     }
 
     public async Task<DictionaryResult<SupplierDto>> CreateSupplierAsync(UpsertSupplierRequest request, Guid? actorUserId, CancellationToken cancellationToken)

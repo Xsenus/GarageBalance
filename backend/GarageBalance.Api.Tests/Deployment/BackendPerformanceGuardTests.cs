@@ -340,6 +340,7 @@ public sealed class BackendPerformanceGuardTests
     public void SupplierRepository_UsesDatabaseCountOffsetAndLimitBeforeMaterialization()
     {
         var source = ReadApiSource("Infrastructure/Data/EfSupplierRepository.cs");
+        var serviceSource = ReadApiSource("Application/Dictionaries/DictionaryService.cs");
 
         Assert.Contains("CountAsync(cancellationToken)", source, StringComparison.Ordinal);
         Assert.Contains("IsSqliteProvider() && sortBy is \"debt\" or \"contactPerson\" or \"phone\" or \"email\"", source, StringComparison.Ordinal);
@@ -351,6 +352,11 @@ public sealed class BackendPerformanceGuardTests
         Assert.Contains(".First())", source, StringComparison.Ordinal);
         Assert.Contains("SupplierPrimaryContactData", source, StringComparison.Ordinal);
         Assert.Contains(".Skip(offset)", source, StringComparison.Ordinal);
+        Assert.Contains(".Select(supplier => new SupplierPageDebtRow(", source, StringComparison.Ordinal);
+        Assert.Contains("pageRows.ToDictionary(row => row.Supplier.Id, row => row.DebtTotal)", source, StringComparison.Ordinal);
+        var supplierPageMethod = serviceSource[
+            serviceSource.IndexOf("public async Task<PagedResult<SupplierDto>> GetSuppliersPageAsync", StringComparison.Ordinal)..serviceSource.IndexOf("public async Task<DictionaryResult<SupplierDto>> CreateSupplierAsync", StringComparison.Ordinal)];
+        Assert.DoesNotContain("GetDebtTotalsAsync", supplierPageMethod, StringComparison.Ordinal);
         Assert.True(CountOccurrences(source, ".Take(limit)") >= 2);
         Assert.True(CountOccurrences(source, ".ToListAsync(cancellationToken)") >= 2);
         Assert.Matches(
@@ -1020,6 +1026,7 @@ public sealed class BackendPerformanceGuardTests
         var fundSource = ReadApiSource("Application/Funds/FundService.cs");
         var fundRepositorySource = ReadApiSource("Infrastructure/Data/EfFundRepository.cs");
         var releaseSource = ReadApiSource("Application/Releases/AppReleaseService.cs");
+        var releaseSynchronizerSource = ReadApiSource("Application/Releases/AppReleaseCatalogSynchronizer.cs");
         var releaseRepositorySource = ReadApiSource("Infrastructure/Data/EfAppReleaseRepository.cs");
 
         Assert.Contains("var boundedLimit = Math.Clamp(limit, 1, 100)", fundSource, StringComparison.Ordinal);
@@ -1031,6 +1038,10 @@ public sealed class BackendPerformanceGuardTests
         Assert.Contains(".Skip(offset)", releaseRepositorySource, StringComparison.Ordinal);
         Assert.Contains(".Take(limit)", releaseRepositorySource, StringComparison.Ordinal);
         Assert.Contains("CountAsync(cancellationToken)", releaseRepositorySource, StringComparison.Ordinal);
+        Assert.Contains("FileOptions.Asynchronous | FileOptions.SequentialScan", releaseSource, StringComparison.Ordinal);
+        Assert.Contains("FileOptions.Asynchronous | FileOptions.SequentialScan", releaseSynchronizerSource, StringComparison.Ordinal);
+        Assert.DoesNotContain("File.OpenRead(", releaseSource, StringComparison.Ordinal);
+        Assert.DoesNotContain("File.OpenRead(", releaseSynchronizerSource, StringComparison.Ordinal);
     }
 
     [Fact]

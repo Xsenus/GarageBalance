@@ -18,7 +18,10 @@ public interface ISupplierRepository
 
 public sealed record SupplierPageData(IReadOnlyList<SupplierPageItem> Items, int TotalCount);
 
-public sealed record SupplierPageItem(Supplier Supplier, SupplierPrimaryContactData? PrimaryContact);
+public sealed record SupplierPageItem(
+    Supplier Supplier,
+    SupplierPrimaryContactData? PrimaryContact,
+    decimal DebtTotal);
 
 public sealed record SupplierPrimaryContactData(string FullName, string? Phone, string? Email);
 

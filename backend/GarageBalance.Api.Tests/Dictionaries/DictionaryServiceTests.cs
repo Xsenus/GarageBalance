@@ -3681,7 +3681,7 @@ public sealed class DictionaryServiceTests
     }
 
     [Fact]
-    public async Task SupplierPage_LoadsDebtsInFourSelectsRegardlessOfPageSize()
+    public async Task SupplierPage_LoadsDebtsInThreeSelectsRegardlessOfPageSize()
     {
         var commandCounter = new SelectCommandCounter();
         await using var database = await TestDatabase.CreateAsync(commandCounter);
@@ -3728,7 +3728,7 @@ public sealed class DictionaryServiceTests
             "asc",
             CancellationToken.None);
 
-        Assert.Equal(4, commandCounter.Count);
+        Assert.Equal(3, commandCounter.Count);
         Assert.Equal(200, result.TotalCount);
         Assert.Equal(25, result.Items.Count);
         Assert.All(result.Items, supplier => Assert.Equal(130m, supplier.Debt));

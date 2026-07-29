@@ -48,16 +48,38 @@ public sealed class EfSupplierRepository(GarageBalanceDbContext dbContext) : ISu
                 .Skip(offset)
                 .Take(limit)
                 .ToList();
-            return CreatePageData(sortedItems, primaryContacts, totalCount);
+            if (sortBy != "debt")
+            {
+                debtTotals = (await GetDebtTotalsAsync(sortedItems.Select(supplier => supplier.Id).ToArray(), cancellationToken))
+                    .ToDictionary(pair => pair.Key, pair => pair.Value);
+            }
+
+            return CreatePageData(sortedItems, primaryContacts, debtTotals, totalCount);
         }
 
-        var items = await ApplyPageSorting(query, sortBy, sortDescending)
+        var pageRows = await ApplyPageSorting(query, sortBy, sortDescending)
             .ThenBy(supplier => supplier.Id)
             .Skip(offset)
             .Take(limit)
+            .Select(supplier => new SupplierPageDebtRow(
+                supplier,
+                supplier.StartingBalance
+                + (dbContext.SupplierAccruals
+                    .Where(accrual => accrual.SupplierId == supplier.Id && !accrual.IsCanceled)
+                    .Sum(accrual => (decimal?)accrual.Amount) ?? 0m)
+                - (dbContext.FinancialOperations
+                    .Where(operation =>
+                        operation.SupplierId == supplier.Id
+                        && !operation.IsCanceled
+                        && operation.OperationKind == "expense")
+                    .Sum(operation => (decimal?)operation.Amount) ?? 0m)))
             .ToListAsync(cancellationToken);
-        var pageContacts = await GetPrimaryContactsAsync(items.Select(supplier => supplier.Id).ToArray(), cancellationToken);
-        return CreatePageData(items, pageContacts, totalCount);
+        var pageContacts = await GetPrimaryContactsAsync(pageRows.Select(row => row.Supplier.Id).ToArray(), cancellationToken);
+        return CreatePageData(
+            pageRows.Select(row => row.Supplier).ToList(),
+            pageContacts,
+            pageRows.ToDictionary(row => row.Supplier.Id, row => row.DebtTotal),
+            totalCount);
     }
 
     public Task<Supplier?> FindActiveWithGroupAsync(Guid id, CancellationToken cancellationToken)
@@ -340,8 +362,16 @@ public sealed class EfSupplierRepository(GarageBalanceDbContext dbContext) : ISu
     private static SupplierPageData CreatePageData(
         IReadOnlyList<Supplier> suppliers,
         IReadOnlyDictionary<Guid, SupplierPrimaryContactData> primaryContacts,
+        IReadOnlyDictionary<Guid, decimal> debtTotals,
         int totalCount) =>
-        new(suppliers.Select(supplier => new SupplierPageItem(supplier, primaryContacts.GetValueOrDefault(supplier.Id))).ToList(), totalCount);
+        new(
+            suppliers.Select(supplier => new SupplierPageItem(
+                supplier,
+                primaryContacts.GetValueOrDefault(supplier.Id),
+                debtTotals.GetValueOrDefault(supplier.Id, supplier.StartingBalance))).ToList(),
+            totalCount);
+
+    private sealed record SupplierPageDebtRow(Supplier Supplier, decimal DebtTotal);
 
     private bool IsSqliteProvider() =>
         dbContext.Database.ProviderName?.Contains("Sqlite", StringComparison.OrdinalIgnoreCase) == true;
