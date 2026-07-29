@@ -13,6 +13,28 @@ public sealed class LinkAllIncomeTypesToFunds : Migration
     {
         migrationBuilder.Sql(
             """
+            INSERT INTO funds (
+                "Id", "Name", "NormalizedName", "Balance", "SortOrder",
+                "AllowOperations", "IsSystem", "IsArchived", "CreatedAtUtc", "UpdatedAtUtc")
+            SELECT defaults.*
+            FROM (VALUES
+                ('16c1e6d9-52f8-4c57-9b4f-1cbd819d3981'::uuid, 'Электроэнергия', 'ЭЛЕКТРОЭНЕРГИЯ', 0::numeric, 10, TRUE, TRUE, FALSE,
+                 TIMESTAMPTZ '2026-07-29T14:38:35Z', TIMESTAMPTZ '2026-07-29T14:38:35Z'),
+                ('25e7390f-50ca-4d6a-871c-acde1563bffc'::uuid, 'Водоснабжение', 'ВОДОСНАБЖЕНИЕ', 0::numeric, 20, TRUE, TRUE, FALSE,
+                 TIMESTAMPTZ '2026-07-29T14:38:35Z', TIMESTAMPTZ '2026-07-29T14:38:35Z'),
+                ('3acaa67a-dcb3-4027-a199-0a27dbe426c1'::uuid, 'Вывоз мусора', 'ВЫВОЗ МУСОРА', 0::numeric, 30, TRUE, TRUE, FALSE,
+                 TIMESTAMPTZ '2026-07-29T14:38:35Z', TIMESTAMPTZ '2026-07-29T14:38:35Z'),
+                ('4ced0dd4-1635-44ea-82f9-85a6cf6217af'::uuid, 'Наружное освещение', 'НАРУЖНОЕ ОСВЕЩЕНИЕ', 0::numeric, 40, TRUE, TRUE, FALSE,
+                 TIMESTAMPTZ '2026-07-29T14:38:35Z', TIMESTAMPTZ '2026-07-29T14:38:35Z')
+            ) AS defaults(
+                "Id", "Name", "NormalizedName", "Balance", "SortOrder",
+                "AllowOperations", "IsSystem", "IsArchived", "CreatedAtUtc", "UpdatedAtUtc")
+            WHERE NOT EXISTS (
+                SELECT 1
+                FROM funds existing
+                WHERE existing."NormalizedName" = defaults."NormalizedName"
+                   OR (existing."IsSystem" = TRUE AND existing."SortOrder" = defaults."SortOrder"));
+
             WITH destination AS (
                 SELECT
                     income_type."Id" AS income_type_id,
@@ -186,6 +208,17 @@ public sealed class LinkAllIncomeTypesToFunds : Migration
             DELETE FROM audit_events
             WHERE COALESCE(("MetadataJson"::jsonb ->> 'allIncomeFundsBackfill')::boolean, FALSE)
                OR COALESCE(("MetadataJson"::jsonb ->> 'allIncomeTypeFundMapping')::boolean, FALSE);
+
+            DELETE FROM funds fund
+            WHERE fund."Id" IN (
+                    '16c1e6d9-52f8-4c57-9b4f-1cbd819d3981'::uuid,
+                    '25e7390f-50ca-4d6a-871c-acde1563bffc'::uuid,
+                    '3acaa67a-dcb3-4027-a199-0a27dbe426c1'::uuid,
+                    '4ced0dd4-1635-44ea-82f9-85a6cf6217af'::uuid)
+              AND NOT EXISTS (
+                  SELECT 1
+                  FROM fund_operations operation
+                  WHERE operation."FundId" = fund."Id");
             """);
     }
 }

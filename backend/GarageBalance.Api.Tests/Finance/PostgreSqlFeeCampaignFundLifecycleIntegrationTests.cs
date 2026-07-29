@@ -214,7 +214,7 @@ public sealed class PostgreSqlFeeCampaignFundLifecycleIntegrationTests
         Assert.Equal(150m, await context.AccrualPaymentAllocations
             .Where(item => item.FinancialOperationId == campaignIncome.Value.Id)
             .SumAsync(item => item.Amount));
-        Assert.Equal(3, await context.FundOperations.CountAsync(item =>
+        Assert.Equal(4, await context.FundOperations.CountAsync(item =>
             item.FundId == campaignFundId || item.FundId == operationalFund.Id));
         Assert.All(
             await context.FundOperations
@@ -227,7 +227,7 @@ public sealed class PostgreSqlFeeCampaignFundLifecycleIntegrationTests
             item.ActorUserId == actorUserId && item.Action == "finance.fee_campaign_accruals_generated"));
         Assert.Equal(2, await context.AuditEvents.CountAsync(item =>
             item.ActorUserId == actorUserId && item.Action == "finance.income_created"));
-        Assert.Equal(1, await context.AuditEvents.CountAsync(item =>
+        Assert.Equal(2, await context.AuditEvents.CountAsync(item =>
             item.ActorUserId == actorUserId && item.Action == "fund.income_assignment_created"));
         Assert.Equal(2, await context.AuditEvents.CountAsync(item =>
             item.ActorUserId == actorUserId && item.Action == "fund.operation_canceled"));
