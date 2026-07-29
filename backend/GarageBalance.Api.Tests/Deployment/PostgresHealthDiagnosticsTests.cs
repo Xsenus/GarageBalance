@@ -44,6 +44,28 @@ public sealed class PostgresHealthDiagnosticsTests
         Assert.DoesNotContain("PGPASSWORD=", script, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Fact]
+    public void TopStatementsSql_RanksSafeMetricsWithoutReturningStatementText()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var sql = File.ReadAllText(Path.Combine(
+            repositoryRoot,
+            "infrastructure",
+            "postgres",
+            "postgres-top-statements.sql"));
+
+        Assert.Contains("pg_stat_statements_available", sql, StringComparison.Ordinal);
+        Assert.Contains("pg_stat_statements_info", sql, StringComparison.Ordinal);
+        Assert.Contains("total_exec_time", sql, StringComparison.Ordinal);
+        Assert.Contains("mean_exec_time", sql, StringComparison.Ordinal);
+        Assert.Contains("max_exec_time", sql, StringComparison.Ordinal);
+        Assert.Contains("statements.calls >= 5", sql, StringComparison.Ordinal);
+        Assert.Contains("statements.rows", sql, StringComparison.Ordinal);
+        Assert.Contains("LIMIT 25", sql, StringComparison.Ordinal);
+        Assert.DoesNotContain("statements.query,", sql, StringComparison.Ordinal);
+        Assert.DoesNotContain("query AS", sql, StringComparison.OrdinalIgnoreCase);
+    }
+
     private static string FindRepositoryRoot()
     {
         var directory = new DirectoryInfo(AppContext.BaseDirectory);

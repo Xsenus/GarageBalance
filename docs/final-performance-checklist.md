@@ -69,6 +69,23 @@ $env:PGDATABASE = "garagebalance_staging"
 одному высокому проценту у маленькой таблицы. На общем PostgreSQL сначала учитывается сумма
 пулов всех сервисов; глобальная настройка не меняется только под GarageBalance.
 
+После накопления не менее суток статистики `pg_stat_statements` безопасный top SQL снимается
+без текста запросов и без пользовательских параметров:
+
+```powershell
+psql -X --set ON_ERROR_STOP=1 --dbname garagebalance_staging `
+  --file .\infrastructure\postgres\postgres-top-statements.sql
+```
+
+Снимок ранжирует `queryid` по total/mean/max execution time, calls, rows, shared/temp blocks.
+Если расширение не установлено, команда сообщает об этом и не пытается читать отсутствующее
+представление. На общем VPS включение расширения требует согласованного окна: необходимо
+добавить `pg_stat_statements` в `shared_preload_libraries`, ограничить `pg_stat_statements.max`,
+значением `5000`, оставить `track = top`, `track_planning = off`, `save = on`, перезапустить
+общий кластер и только затем создать extension в `garagebalance_staging`. Перезапуск нельзя
+выполнять как часть обычного deployment GarageBalance, поскольку тот же кластер обслуживает
+стороннюю базу.
+
 ## Приёмка
 
 - Поиск не зависает при быстром наборе и удалении текста.
