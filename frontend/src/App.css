@@ -3045,9 +3045,63 @@ h1 {
   align-items: center;
 }
 
+.tariffs-page .contractors-sheet-header,
+.tariffs-page .contractors-sheet-row {
+  grid-template-columns:
+    minmax(230px, 1.55fr)
+    minmax(70px, 0.4fr)
+    minmax(120px, 0.7fr)
+    minmax(120px, 0.55fr)
+    minmax(160px, 0.8fr)
+    minmax(120px, 0.7fr)
+    84px;
+  min-width: 980px;
+}
+
 .tariffs-page .contractors-sheet-header span,
 .tariffs-page .contractors-sheet-row > span {
   padding: 7px 10px;
+}
+
+.tariffs-page .contractors-sheet-header > span:last-child {
+  padding-right: 12px;
+  text-align: right;
+}
+
+.tariffs-page .contractors-sheet-row > .tariffs-row-actions-cell {
+  justify-content: flex-end;
+  padding-right: 12px;
+}
+
+.tariffs-row-actions {
+  display: flex;
+  min-height: 34px;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.tariffs-row-action-button.icon-button {
+  width: 34px;
+  height: 34px;
+  border-color: #d8dee8;
+  border-radius: 7px;
+  background: #ffffff;
+  color: #475467;
+  box-shadow: none;
+}
+
+.tariffs-row-action-button--deactivate.icon-button {
+  border-color: #e4e7ec;
+  color: #667085;
+}
+
+.tariffs-row-action-button--deactivate.icon-button:hover:not(:disabled),
+.tariffs-row-action-button--deactivate.icon-button:focus-visible {
+  border-color: #fda29b;
+  background: #fff5f4;
+  color: #b42318;
+  box-shadow: 0 6px 14px rgba(180, 35, 24, 0.08);
 }
 
 .tariffs-page .contractors-editable-input,

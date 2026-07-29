@@ -448,6 +448,7 @@ describe('App', () => {
       'Перенос долга в просроченный, дней',
       'Пороговая тарификация',
       'По счетчику',
+      'Действия',
     ])
     const unitInput = within(tariffsPanel).getByLabelText('Вода: Быстрый тариф воды: единица')
     const valueInput = within(tariffsPanel).getByLabelText('Вода: Быстрый тариф воды: значение')
@@ -1075,6 +1076,15 @@ describe('App', () => {
     await openSection(user, 'Тарифы и сборы')
     const tariffsPanel = await screen.findByRole('region', { name: 'Тарифы и сборы' })
     const deactivateButton = await within(tariffsPanel).findByRole('button', { name: 'Деактивировать услугу Охрана' })
+    const serviceRow = deactivateButton.closest('[role="row"]')
+    expect(serviceRow).not.toBeNull()
+    const serviceCells = within(serviceRow as HTMLElement).getAllByRole('cell')
+    const actionsCell = serviceCells.at(-1) as HTMLElement
+    expect(actionsCell).toHaveClass('tariffs-row-actions-cell')
+    expect(within(actionsCell).getByRole('button', { name: 'Изменить услугу Охрана' })).toHaveAttribute('title', 'Изменить')
+    expect(within(actionsCell).getByRole('button', { name: 'Деактивировать услугу Охрана' })).toHaveAttribute('title', 'Деактивировать')
+    expect(deactivateButton).toHaveClass('tariffs-row-action-button--deactivate')
+    expect(deactivateButton).not.toHaveClass('danger-button')
 
     await user.click(deactivateButton)
     const dialog = await screen.findByRole('dialog', { name: 'Деактивировать услугу?' })

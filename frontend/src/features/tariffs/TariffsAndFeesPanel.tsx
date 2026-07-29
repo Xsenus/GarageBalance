@@ -2171,6 +2171,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
               <span role="columnheader" aria-label="Перенос долга в просроченный, дней">Просрочка, дн.</span>
               <span role="columnheader">Пороговая тарификация</span>
               <span role="columnheader">По счетчику</span>
+              <span role="columnheader">Действия</span>
             </div>
             {tariffsLoading ? <TableLoadingState label="Загружаем тарифы и услуги" /> : null}
             {!tariffsLoading ? tariffPage.items.map((row, pageIndex) => {
@@ -2215,73 +2216,12 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
                     ) : (
                       <span>{row.title}</span>
                     )}
-                    {row.serviceSettingKind === 'main' && serviceSetting && !row.isDeleted ? (
-                      <span className="contractors-sheet-row-actions">
-                        <button
-                          className="icon-button"
-                          type="button"
-                          aria-label={`Изменить услугу ${serviceSetting.name}`}
-                          disabled={!canManageTariffs || isRowDisabled || tariffReferencesLoading}
-                          onClick={() => {
-                            setTariffPersistenceError(null)
-                            setChargeServiceEditTarget(serviceSetting)
-                          }}
-                        >
-                          <Pencil size={16} aria-hidden="true" />
-                        </button>
-                        <button
-                          className="icon-button danger-button"
-                          type="button"
-                          aria-label={`Деактивировать услугу ${serviceSetting.name}`}
-                          disabled={!canManageTariffs || isRowDisabled}
-                          onClick={() => {
-                            setTariffPersistenceError(null)
-                            setChargeServiceArchiveReason('')
-                            setChargeServiceArchiveTarget(serviceSetting)
-                          }}
-                        >
-                          <PowerOff size={16} aria-hidden="true" />
-                        </button>
-                      </span>
-                    ) : null}
-                    {row.serviceSettingKind === 'main' && serviceSetting && row.isDeleted ? (
-                      <span className="contractors-sheet-row-actions">
-                        <button
-                          className="icon-button"
-                          type="button"
-                          aria-label={`Вернуть услугу ${serviceSetting.name}`}
-                          disabled={!canManageTariffs || isServiceSaving}
-                          onClick={() => {
-                            setTariffPersistenceError(null)
-                            setChargeServiceRestoreTarget(serviceSetting)
-                          }}
-                        >
-                          <RotateCcw size={16} aria-hidden="true" />
-                        </button>
-                      </span>
-                    ) : null}
                     {row.calculationBase === 'meter_electricity' ? (
                       <small className="form-hint">
                         {row.electricityUpperBound == null
                           ? 'Без верхней границы'
                           : `До ${formatTariffDecimal(row.electricityUpperBound)} кВт·ч`}
                       </small>
-                    ) : null}
-                    {isCustomThreshold ? (
-                      <span className="contractors-sheet-row-actions">
-                        <button
-                          className="icon-button danger-button"
-                          type="button"
-                          aria-label={`Удалить порог ${row.title}`}
-                          disabled={!canManageTariffs || isRowDisabled}
-                          onClick={() => {
-                            setThresholdDeleteTarget(row)
-                            setThresholdDeleteReason('')
-                          }}
-                        >
-                          <Trash2 size={16} />
-                        </button>
-                      </span>
                     ) : null}
                   </span>
                   <span role="cell">
@@ -2425,6 +2365,71 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
                       </select>
                     ) : null}
                   </span>
+                  <span role="cell" className="tariffs-row-actions-cell">
+                    <span className="tariffs-row-actions">
+                      {row.serviceSettingKind === 'main' && serviceSetting && !row.isDeleted ? (
+                        <>
+                          <button
+                            className="icon-button tariffs-row-action-button"
+                            type="button"
+                            aria-label={`Изменить услугу ${serviceSetting.name}`}
+                            title="Изменить"
+                            disabled={!canManageTariffs || isRowDisabled || tariffReferencesLoading}
+                            onClick={() => {
+                              setTariffPersistenceError(null)
+                              setChargeServiceEditTarget(serviceSetting)
+                            }}
+                          >
+                            <Pencil size={16} aria-hidden="true" />
+                          </button>
+                          <button
+                            className="icon-button tariffs-row-action-button tariffs-row-action-button--deactivate"
+                            type="button"
+                            aria-label={`Деактивировать услугу ${serviceSetting.name}`}
+                            title="Деактивировать"
+                            disabled={!canManageTariffs || isRowDisabled}
+                            onClick={() => {
+                              setTariffPersistenceError(null)
+                              setChargeServiceArchiveReason('')
+                              setChargeServiceArchiveTarget(serviceSetting)
+                            }}
+                          >
+                            <PowerOff size={16} aria-hidden="true" />
+                          </button>
+                        </>
+                      ) : null}
+                      {row.serviceSettingKind === 'main' && serviceSetting && row.isDeleted ? (
+                        <button
+                          className="icon-button tariffs-row-action-button"
+                          type="button"
+                          aria-label={`Вернуть услугу ${serviceSetting.name}`}
+                          title="Вернуть"
+                          disabled={!canManageTariffs || isServiceSaving}
+                          onClick={() => {
+                            setTariffPersistenceError(null)
+                            setChargeServiceRestoreTarget(serviceSetting)
+                          }}
+                        >
+                          <RotateCcw size={16} aria-hidden="true" />
+                        </button>
+                      ) : null}
+                      {isCustomThreshold ? (
+                        <button
+                          className="icon-button tariffs-row-action-button tariffs-row-action-button--deactivate"
+                          type="button"
+                          aria-label={`Удалить порог ${row.title}`}
+                          title="Удалить порог"
+                          disabled={!canManageTariffs || isRowDisabled}
+                          onClick={() => {
+                            setThresholdDeleteTarget(row)
+                            setThresholdDeleteReason('')
+                          }}
+                        >
+                          <Trash2 size={16} aria-hidden="true" />
+                        </button>
+                      ) : null}
+                    </span>
+                  </span>
                 </div>
                 {row.id === lastElectricityThresholdRowId ? (
                   <div className="contractors-sheet-row contractors-sheet-action-row" role="row">
@@ -2434,6 +2439,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
                         <span>Добавить порог</span>
                       </button>
                     </span>
+                    <span role="cell" />
                     <span role="cell" />
                     <span role="cell" />
                     <span role="cell" />
