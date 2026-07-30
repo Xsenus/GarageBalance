@@ -14,7 +14,7 @@ public sealed class EfAuditEventRepository(GarageBalanceDbContext dbContext) : I
         var query = dbContext.AuditEvents.AsNoTracking();
         if (IsSqliteProvider())
         {
-            query = ApplyNonDateFilters(query, request);
+            query = ApplyNonDateFilters(query, request, usePostgresSearch: false);
             var events = await query.ToListAsync(cancellationToken);
             return ApplyDateFilters(events, request)
                 .OrderByDescending(auditEvent => auditEvent.CreatedAtUtc)
@@ -23,7 +23,7 @@ public sealed class EfAuditEventRepository(GarageBalanceDbContext dbContext) : I
         }
 
         query = ApplyDateFilters(query, request);
-        query = ApplyNonDateFilters(query, request);
+        query = ApplyNonDateFilters(query, request, IsNpgsqlProvider());
         return await query
             .OrderByDescending(auditEvent => auditEvent.CreatedAtUtc)
             .Take(limit)
@@ -39,7 +39,7 @@ public sealed class EfAuditEventRepository(GarageBalanceDbContext dbContext) : I
         var query = dbContext.AuditEvents.AsNoTracking();
         if (IsSqliteProvider())
         {
-            query = ApplyNonDateFilters(query, request);
+            query = ApplyNonDateFilters(query, request, usePostgresSearch: false);
             var sqliteRows = await ProjectPageRows(query).ToListAsync(cancellationToken);
             var filteredRows = ApplyDateFilters(sqliteRows, request).ToList();
             return CreatePageData(
@@ -48,7 +48,7 @@ public sealed class EfAuditEventRepository(GarageBalanceDbContext dbContext) : I
         }
 
         query = ApplyDateFilters(query, request);
-        query = ApplyNonDateFilters(query, request);
+        query = ApplyNonDateFilters(query, request, IsNpgsqlProvider());
         if (IsNpgsqlProvider())
         {
             return await GetPostgresEventsPageAsync(query, offset, limit, cancellationToken);
@@ -276,7 +276,8 @@ public sealed class EfAuditEventRepository(GarageBalanceDbContext dbContext) : I
 
     private static IQueryable<AuditEvent> ApplyNonDateFilters(
         IQueryable<AuditEvent> query,
-        AuditEventListRequest request)
+        AuditEventListRequest request,
+        bool usePostgresSearch)
     {
         if (!string.IsNullOrWhiteSpace(request.Action))
         {
@@ -310,23 +311,31 @@ public sealed class EfAuditEventRepository(GarageBalanceDbContext dbContext) : I
             query = ApplyQuickFilter(query, request.QuickFilter);
         }
 
-        query = ApplyRelatedFilters(query, request);
+        query = ApplyRelatedFilters(query, request, usePostgresSearch);
         if (!string.IsNullOrWhiteSpace(request.Search))
         {
             var search = request.Search.Trim().ToLowerInvariant();
-            query = query.Where(auditEvent =>
-                auditEvent.Action.ToLower().Contains(search) ||
-                auditEvent.EntityType.ToLower().Contains(search) ||
-                (auditEvent.EntityId != null && auditEvent.EntityId.ToLower().Contains(search)) ||
-                (auditEvent.EntityDisplayName != null && auditEvent.EntityDisplayName.ToLower().Contains(search)) ||
-                (auditEvent.RelatedGarageId != null && auditEvent.RelatedGarageId.ToLower().Contains(search)) ||
-                (auditEvent.RelatedGarageNumber != null && auditEvent.RelatedGarageNumber.ToLower().Contains(search)) ||
-                (auditEvent.RelatedAccountingMonth != null && auditEvent.RelatedAccountingMonth.ToLower().Contains(search)) ||
-                (auditEvent.RelatedCounterpartyId != null && auditEvent.RelatedCounterpartyId.ToLower().Contains(search)) ||
-                (auditEvent.RelatedCounterpartyName != null && auditEvent.RelatedCounterpartyName.ToLower().Contains(search)) ||
-                (auditEvent.RelatedDocumentId != null && auditEvent.RelatedDocumentId.ToLower().Contains(search)) ||
-                (auditEvent.RelatedDocumentNumber != null && auditEvent.RelatedDocumentNumber.ToLower().Contains(search)) ||
-                auditEvent.Summary.ToLower().Contains(search));
+            if (usePostgresSearch)
+            {
+                var pattern = $"%{EscapeLikePattern(search)}%";
+                query = query.Where(auditEvent => EF.Functions.ILike(auditEvent.SearchText, pattern, @"\"));
+            }
+            else
+            {
+                query = query.Where(auditEvent =>
+                    auditEvent.Action.ToLower().Contains(search) ||
+                    auditEvent.EntityType.ToLower().Contains(search) ||
+                    (auditEvent.EntityId != null && auditEvent.EntityId.ToLower().Contains(search)) ||
+                    (auditEvent.EntityDisplayName != null && auditEvent.EntityDisplayName.ToLower().Contains(search)) ||
+                    (auditEvent.RelatedGarageId != null && auditEvent.RelatedGarageId.ToLower().Contains(search)) ||
+                    (auditEvent.RelatedGarageNumber != null && auditEvent.RelatedGarageNumber.ToLower().Contains(search)) ||
+                    (auditEvent.RelatedAccountingMonth != null && auditEvent.RelatedAccountingMonth.ToLower().Contains(search)) ||
+                    (auditEvent.RelatedCounterpartyId != null && auditEvent.RelatedCounterpartyId.ToLower().Contains(search)) ||
+                    (auditEvent.RelatedCounterpartyName != null && auditEvent.RelatedCounterpartyName.ToLower().Contains(search)) ||
+                    (auditEvent.RelatedDocumentId != null && auditEvent.RelatedDocumentId.ToLower().Contains(search)) ||
+                    (auditEvent.RelatedDocumentNumber != null && auditEvent.RelatedDocumentNumber.ToLower().Contains(search)) ||
+                    auditEvent.Summary.ToLower().Contains(search));
+            }
         }
 
         return query;
@@ -334,14 +343,25 @@ public sealed class EfAuditEventRepository(GarageBalanceDbContext dbContext) : I
 
     private static IQueryable<AuditEvent> ApplyRelatedFilters(
         IQueryable<AuditEvent> query,
-        AuditEventListRequest request)
+        AuditEventListRequest request,
+        bool usePostgresSearch)
     {
         if (!string.IsNullOrWhiteSpace(request.RelatedGarage))
         {
             var garage = request.RelatedGarage.Trim().ToLowerInvariant();
-            query = query.Where(auditEvent =>
-                (auditEvent.RelatedGarageId != null && auditEvent.RelatedGarageId.ToLower().Contains(garage)) ||
-                (auditEvent.RelatedGarageNumber != null && auditEvent.RelatedGarageNumber.ToLower().Contains(garage)));
+            if (usePostgresSearch)
+            {
+                var pattern = $"%{EscapeLikePattern(garage)}%";
+                query = query.Where(auditEvent =>
+                    (auditEvent.RelatedGarageId != null && EF.Functions.ILike(auditEvent.RelatedGarageId, pattern, @"\")) ||
+                    (auditEvent.RelatedGarageNumber != null && EF.Functions.ILike(auditEvent.RelatedGarageNumber, pattern, @"\")));
+            }
+            else
+            {
+                query = query.Where(auditEvent =>
+                    (auditEvent.RelatedGarageId != null && auditEvent.RelatedGarageId.ToLower().Contains(garage)) ||
+                    (auditEvent.RelatedGarageNumber != null && auditEvent.RelatedGarageNumber.ToLower().Contains(garage)));
+            }
         }
 
         if (!string.IsNullOrWhiteSpace(request.RelatedAccountingMonth))
@@ -355,21 +375,46 @@ public sealed class EfAuditEventRepository(GarageBalanceDbContext dbContext) : I
         if (!string.IsNullOrWhiteSpace(request.RelatedCounterparty))
         {
             var counterparty = request.RelatedCounterparty.Trim().ToLowerInvariant();
-            query = query.Where(auditEvent =>
-                (auditEvent.RelatedCounterpartyId != null && auditEvent.RelatedCounterpartyId.ToLower().Contains(counterparty)) ||
-                (auditEvent.RelatedCounterpartyName != null && auditEvent.RelatedCounterpartyName.ToLower().Contains(counterparty)));
+            if (usePostgresSearch)
+            {
+                var pattern = $"%{EscapeLikePattern(counterparty)}%";
+                query = query.Where(auditEvent =>
+                    (auditEvent.RelatedCounterpartyId != null && EF.Functions.ILike(auditEvent.RelatedCounterpartyId, pattern, @"\")) ||
+                    (auditEvent.RelatedCounterpartyName != null && EF.Functions.ILike(auditEvent.RelatedCounterpartyName, pattern, @"\")));
+            }
+            else
+            {
+                query = query.Where(auditEvent =>
+                    (auditEvent.RelatedCounterpartyId != null && auditEvent.RelatedCounterpartyId.ToLower().Contains(counterparty)) ||
+                    (auditEvent.RelatedCounterpartyName != null && auditEvent.RelatedCounterpartyName.ToLower().Contains(counterparty)));
+            }
         }
 
         if (!string.IsNullOrWhiteSpace(request.RelatedDocument))
         {
             var document = request.RelatedDocument.Trim().ToLowerInvariant();
-            query = query.Where(auditEvent =>
-                (auditEvent.RelatedDocumentId != null && auditEvent.RelatedDocumentId.ToLower().Contains(document)) ||
-                (auditEvent.RelatedDocumentNumber != null && auditEvent.RelatedDocumentNumber.ToLower().Contains(document)));
+            if (usePostgresSearch)
+            {
+                var pattern = $"%{EscapeLikePattern(document)}%";
+                query = query.Where(auditEvent =>
+                    (auditEvent.RelatedDocumentId != null && EF.Functions.ILike(auditEvent.RelatedDocumentId, pattern, @"\")) ||
+                    (auditEvent.RelatedDocumentNumber != null && EF.Functions.ILike(auditEvent.RelatedDocumentNumber, pattern, @"\")));
+            }
+            else
+            {
+                query = query.Where(auditEvent =>
+                    (auditEvent.RelatedDocumentId != null && auditEvent.RelatedDocumentId.ToLower().Contains(document)) ||
+                    (auditEvent.RelatedDocumentNumber != null && auditEvent.RelatedDocumentNumber.ToLower().Contains(document)));
+            }
         }
 
         return query;
     }
+
+    private static string EscapeLikePattern(string value) =>
+        value.Replace(@"\", @"\\", StringComparison.Ordinal)
+            .Replace("%", @"\%", StringComparison.Ordinal)
+            .Replace("_", @"\_", StringComparison.Ordinal);
 
     private static IQueryable<AuditEvent> ApplySectionFilter(IQueryable<AuditEvent> query, string section)
     {

@@ -934,14 +934,14 @@ public sealed class BackendPerformanceGuardTests
         {
             "auditEvent.CreatedAtUtc >= request.DateFrom.Value",
             "auditEvent.CreatedAtUtc <= request.DateTo.Value",
-            "ApplyNonDateFilters(query, request)",
+            "ApplyNonDateFilters(query, request, IsNpgsqlProvider())",
             "auditEvent.Action == action",
             "ApplySectionFilter(query, request.Section)",
             "ApplyActionKindFilter(query, request.ActionKind)",
             "auditEvent.EntityType == entityType",
             "auditEvent.ActorUserId == request.ActorUserId.Value",
             "ApplyQuickFilter(query, request.QuickFilter)",
-            "ApplyRelatedFilters(query, request)",
+            "ApplyRelatedFilters(query, request, usePostgresSearch)",
             "auditEvent.RelatedGarageNumber",
             "auditEvent.RelatedAccountingMonth",
             "auditEvent.RelatedCounterpartyName",
@@ -951,7 +951,7 @@ public sealed class BackendPerformanceGuardTests
         Assert.Contains("GetEventsPageAsync", source, StringComparison.Ordinal);
         Assert.Contains("CountAsync(cancellationToken)", source, StringComparison.Ordinal);
         Assert.Matches(
-            BoundedQueryRegex(@"ApplyNonDateFilters\(query, request\)[\s\S]*?CountAsync\(cancellationToken\)[\s\S]*?ProjectPageRows\(query[\s\S]*?OrderByDescending\(auditEvent => auditEvent\.CreatedAtUtc\)[\s\S]*?\.Skip\(offset\)[\s\S]*?\.Take\(limit\)[\s\S]*?\.ToListAsync\(cancellationToken\)"),
+            BoundedQueryRegex(@"ApplyNonDateFilters\(query, request, IsNpgsqlProvider\(\)\)[\s\S]*?CountAsync\(cancellationToken\)[\s\S]*?ProjectPageRows\(query[\s\S]*?OrderByDescending\(auditEvent => auditEvent\.CreatedAtUtc\)[\s\S]*?\.Skip\(offset\)[\s\S]*?\.Take\(limit\)[\s\S]*?\.ToListAsync\(cancellationToken\)"),
             source);
         Assert.Matches(
             BoundedQueryRegex(@"OrderByDescending\(auditEvent => auditEvent\.CreatedAtUtc\)[\s\S]*?\.Take\(limit\)[\s\S]*?\.ToListAsync\(cancellationToken\)"),
@@ -1128,6 +1128,43 @@ public sealed class BackendPerformanceGuardTests
             CountOccurrences(source, "WHERE \"IsArchived\" = FALSE") >= 1,
             "Dictionary search indexes must stay scoped to active records.");
         Assert.All(expectedIndexNames, indexName => Assert.Contains(indexName, source, StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void UserAndAuditSearchStayBoundedAndIndexed()
+    {
+        var users = ReadApiSource("Infrastructure/Data/EfUserManagementRepository.cs");
+        var audit = ReadApiSource("Infrastructure/Data/EfAuditEventRepository.cs");
+        var migration = ReadApiSource(
+            "Infrastructure/Data/Migrations/20260729234018_OptimizeUsersAndAuditSearch.cs");
+
+        Assert.Contains(".Skip(offset)", users, StringComparison.Ordinal);
+        Assert.Contains(".Take(limit)", users, StringComparison.Ordinal);
+        Assert.Contains("EF.Functions.ILike(user.DisplayName", users, StringComparison.Ordinal);
+        Assert.Contains("ThenBy(user => user.Id)", users, StringComparison.Ordinal);
+        Assert.Contains("GetPostgresEventsPageAsync", audit, StringComparison.Ordinal);
+        Assert.Contains("EF.Functions.ILike(auditEvent.SearchText", audit, StringComparison.Ordinal);
+        Assert.Contains("IX_app_users_DisplayName_trgm", migration, StringComparison.Ordinal);
+        Assert.Contains("IX_app_users_NormalizedEmail_trgm", migration, StringComparison.Ordinal);
+        Assert.Contains("IX_audit_events_SearchText_trgm", migration, StringComparison.Ordinal);
+        Assert.True(
+            CountOccurrences(migration, "gin_trgm_ops") >= 9,
+            "Users and audit contains-search must keep its PostgreSQL trigram indexes.");
+    }
+
+    [Fact]
+    public void FormAndApplicationSettingsKeepOneCurrentRowPerKey()
+    {
+        var model = ReadApiSource("Infrastructure/Data/GarageBalanceDbContext.cs");
+        var formRepository = ReadApiSource("Infrastructure/Data/EfFormStateRepository.cs");
+        var settingsRepository = ReadApiSource("Infrastructure/Data/EfApplicationSettingRepository.cs");
+
+        Assert.Contains("entity.HasIndex(state => state.Scope).IsUnique()", model, StringComparison.Ordinal);
+        Assert.Contains("entity.HasIndex(setting => setting.Key).IsUnique()", model, StringComparison.Ordinal);
+        Assert.Contains("SingleOrDefaultAsync(item => item.Scope == scope", formRepository, StringComparison.Ordinal);
+        Assert.Contains("SingleOrDefaultAsync(setting => setting.Key == key", settingsRepository, StringComparison.Ordinal);
+        Assert.DoesNotContain(".ToList", formRepository, StringComparison.Ordinal);
+        Assert.DoesNotContain(".ToList", settingsRepository, StringComparison.Ordinal);
     }
 
     [Fact]

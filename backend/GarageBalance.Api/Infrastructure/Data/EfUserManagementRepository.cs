@@ -18,6 +18,7 @@ public sealed class EfUserManagementRepository(GarageBalanceDbContext dbContext)
     {
         return await BuildUsersQuery(normalizedSearch)
             .OrderBy(user => user.DisplayName)
+            .ThenBy(user => user.Id)
             .Take(limit)
             .ToListAsync(cancellationToken);
     }
@@ -32,6 +33,7 @@ public sealed class EfUserManagementRepository(GarageBalanceDbContext dbContext)
         var totalCount = await query.CountAsync(cancellationToken);
         var users = await query
             .OrderBy(user => user.DisplayName)
+            .ThenBy(user => user.Id)
             .Skip(offset)
             .Take(limit)
             .ToListAsync(cancellationToken);
@@ -113,11 +115,29 @@ public sealed class EfUserManagementRepository(GarageBalanceDbContext dbContext)
             .AsQueryable();
         if (!string.IsNullOrWhiteSpace(normalizedSearch))
         {
-            query = query.Where(user =>
-                user.NormalizedEmail.Contains(normalizedSearch) ||
-                user.DisplayName.ToLower().Contains(normalizedSearch));
+            if (IsNpgsqlProvider())
+            {
+                var pattern = $"%{EscapeLikePattern(normalizedSearch)}%";
+                query = query.Where(user =>
+                    EF.Functions.ILike(user.NormalizedEmail, pattern, @"\") ||
+                    EF.Functions.ILike(user.DisplayName, pattern, @"\"));
+            }
+            else
+            {
+                query = query.Where(user =>
+                    user.NormalizedEmail.ToLower().Contains(normalizedSearch) ||
+                    user.DisplayName.ToLower().Contains(normalizedSearch));
+            }
         }
 
         return query;
     }
+
+    private bool IsNpgsqlProvider() =>
+        dbContext.Database.ProviderName?.Contains("Npgsql", StringComparison.OrdinalIgnoreCase) == true;
+
+    private static string EscapeLikePattern(string value) =>
+        value.Replace(@"\", @"\\", StringComparison.Ordinal)
+            .Replace("%", @"\%", StringComparison.Ordinal)
+            .Replace("_", @"\_", StringComparison.Ordinal);
 }

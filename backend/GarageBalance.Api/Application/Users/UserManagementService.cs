@@ -441,7 +441,7 @@ public sealed class UserManagementService(
 
     private static string? NormalizeSearch(string? search)
     {
-        return string.IsNullOrWhiteSpace(search) ? null : search.Trim().ToUpperInvariant();
+        return string.IsNullOrWhiteSpace(search) ? null : search.Trim().ToLowerInvariant();
     }
 
     private static ManagedUserDto ToDto(AppUser user)

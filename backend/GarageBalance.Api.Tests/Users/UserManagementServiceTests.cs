@@ -448,6 +448,57 @@ public sealed class UserManagementServiceTests
         Assert.Equal("user1@example.com", user.Email);
     }
 
+    [Fact]
+    public async Task GetUsersPageAsync_SearchesDisplayNameCaseInsensitively()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = CreateService(database.Context);
+        var created = await service.CreateUserAsync(
+            new CreateManagedUserRequest(
+                "target@example.com",
+                "Target Accountant",
+                "StrongPass123",
+                [SystemRoles.Accountant]),
+            null,
+            CancellationToken.None);
+        Assert.True(created.Succeeded);
+
+        var page = await service.GetUsersPageAsync("  ACCOUNTANT  ", 0, 25, CancellationToken.None);
+
+        var user = Assert.Single(page.Items);
+        Assert.Equal("target@example.com", user.Email);
+        Assert.Equal(1, page.TotalCount);
+    }
+
+    [Fact]
+    public async Task GetUsersPageAsync_TreatsWildcardCharactersAsText()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = CreateService(database.Context);
+        Assert.True((await service.CreateUserAsync(
+            new CreateManagedUserRequest(
+                "percent@example.com",
+                "Percent % Operator",
+                "StrongPass123",
+                [SystemRoles.Operator]),
+            null,
+            CancellationToken.None)).Succeeded);
+        Assert.True((await service.CreateUserAsync(
+            new CreateManagedUserRequest(
+                "plain@example.com",
+                "Plain Operator",
+                "StrongPass123",
+                [SystemRoles.Operator]),
+            null,
+            CancellationToken.None)).Succeeded);
+
+        var page = await service.GetUsersPageAsync("%", 0, 25, CancellationToken.None);
+
+        var user = Assert.Single(page.Items);
+        Assert.Equal("percent@example.com", user.Email);
+        Assert.Equal(1, page.TotalCount);
+    }
+
     private static UserManagementService CreateService(GarageBalanceDbContext context)
     {
         return new UserManagementService(

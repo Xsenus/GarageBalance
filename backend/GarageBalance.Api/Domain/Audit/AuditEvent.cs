@@ -19,5 +19,6 @@ public sealed class AuditEvent
     public string? RelatedDocumentId { get; set; }
     public string? RelatedDocumentNumber { get; set; }
     public required string Summary { get; set; }
+    public string SearchText { get; private set; } = string.Empty;
     public string? MetadataJson { get; set; }
 }

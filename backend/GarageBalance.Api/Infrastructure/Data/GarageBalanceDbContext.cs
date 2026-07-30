@@ -159,6 +159,25 @@ public sealed class GarageBalanceDbContext(DbContextOptions<GarageBalanceDbConte
             entity.Property(item => item.RelatedDocumentId).HasMaxLength(120);
             entity.Property(item => item.RelatedDocumentNumber).HasMaxLength(120);
             entity.Property(item => item.Summary).HasMaxLength(1000).IsRequired();
+            entity.Property(item => item.SearchText)
+                .HasComputedColumnSql(
+                    """
+                    lower(
+                        coalesce("Action", '') || ' ' ||
+                        coalesce("EntityType", '') || ' ' ||
+                        coalesce("EntityId", '') || ' ' ||
+                        coalesce("EntityDisplayName", '') || ' ' ||
+                        coalesce("RelatedGarageId", '') || ' ' ||
+                        coalesce("RelatedGarageNumber", '') || ' ' ||
+                        coalesce("RelatedAccountingMonth", '') || ' ' ||
+                        coalesce("RelatedCounterpartyId", '') || ' ' ||
+                        coalesce("RelatedCounterpartyName", '') || ' ' ||
+                        coalesce("RelatedDocumentId", '') || ' ' ||
+                        coalesce("RelatedDocumentNumber", '') || ' ' ||
+                        coalesce("Summary", '')
+                    )
+                    """,
+                    stored: true);
             entity.HasIndex(item => item.CreatedAtUtc);
             entity.HasIndex(item => item.ActorUserId);
             entity.HasIndex(item => item.Section);
