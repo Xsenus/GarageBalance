@@ -331,7 +331,8 @@ public sealed class FundService(
 
         }
 
-        if (!await CanUpdateWithoutNegativeBalanceAsync(operation, amount, cancellationToken))
+        var operationTail = await GetOperationTailAsync(operation, cancellationToken);
+        if (!CanUpdateWithoutNegativeBalance(operationTail, operation.Id, amount))
         {
             return FundResult<FundOperationDto>.Failure("fund_balance_insufficient", "Операцию фонда нельзя изменить: после изменения остаток фонда станет отрицательным.");
         }
@@ -339,7 +340,7 @@ public sealed class FundService(
         operation.Amount = amount;
         operation.Reason = reason;
         operation.UpdatedAtUtc = DateTimeOffset.UtcNow;
-        await RecalculateFundBalancesAsync(operation.Fund, cancellationToken);
+        RecalculateFundBalances(operation.Fund, operationTail);
         AddUpdateAudit(operation.Fund, operation, actorUserId, oldValues);
         await repository.SaveChangesAsync(cancellationToken);
         return FundResult<FundOperationDto>.Success(ToDto(operation));
@@ -383,7 +384,8 @@ public sealed class FundService(
             }
         }
 
-        if (!await CanCancelWithoutNegativeBalanceAsync(operation, cancellationToken))
+        var operationTail = await GetOperationTailAsync(operation, cancellationToken);
+        if (!CanCancelWithoutNegativeBalance(operationTail, operation.Id))
         {
             return FundResult<FundOperationDto>.Failure("fund_balance_insufficient", "Операцию фонда нельзя отменить: после отмены остаток фонда станет отрицательным.");
         }
@@ -391,7 +393,7 @@ public sealed class FundService(
         operation.IsCanceled = true;
         operation.UpdatedAtUtc = DateTimeOffset.UtcNow;
         operation.Reason = AppendCancelReason(operation.Reason, reason);
-        await RecalculateFundBalancesAsync(operation.Fund, cancellationToken);
+        RecalculateFundBalances(operation.Fund, operationTail);
         AddCancelAudit(operation.Fund, operation, actorUserId, reason);
         await repository.SaveChangesAsync(cancellationToken);
         return FundResult<FundOperationDto>.Success(ToDto(operation));
@@ -430,14 +432,15 @@ public sealed class FundService(
 
         }
 
-        if (!await CanRestoreWithoutNegativeBalanceAsync(operation, cancellationToken))
+        var operationTail = await GetOperationTailAsync(operation, cancellationToken);
+        if (!CanRestoreWithoutNegativeBalance(operationTail, operation.Id))
         {
             return FundResult<FundOperationDto>.Failure("fund_balance_insufficient", "Нельзя восстановить изъятие, если в фонде недостаточно собранной суммы.");
         }
 
         operation.IsCanceled = false;
         operation.UpdatedAtUtc = DateTimeOffset.UtcNow;
-        await RecalculateFundBalancesAsync(operation.Fund, cancellationToken);
+        RecalculateFundBalances(operation.Fund, operationTail);
         AddRestoreAudit(operation.Fund, operation, actorUserId);
         await repository.SaveChangesAsync(cancellationToken);
         return FundResult<FundOperationDto>.Success(ToDto(operation));
@@ -488,15 +491,15 @@ public sealed class FundService(
         return MoneyMath.RoundMoney(Math.Max(totals.IncomeTotal - totals.ExpenseTotal - totals.AllocatedFundTotal, 0m));
     }
 
-    private async Task RecalculateFundBalancesAsync(Fund fund, CancellationToken cancellationToken)
+    private static void RecalculateFundBalances(Fund fund, IReadOnlyList<FundOperation> operations)
     {
-        var operations = await GetOperationsOrderedByBusinessTimeAsync(fund.Id, trackChanges: true, cancellationToken);
-
-        var balance = 0m;
+        var balance = operations.Count == 0 ? fund.Balance : operations[0].BalanceBefore;
         foreach (var operation in operations)
         {
             operation.BalanceBefore = balance;
-            if (operation.IsCanceled || operation.SourceFinancialOperationId.HasValue)
+            if (operation.IsCanceled ||
+                (operation.SourceFinancialOperationId.HasValue &&
+                 operation.OperationKind == FundOperationKinds.Deposit))
             {
                 operation.BalanceAfter = balance;
                 continue;
@@ -512,14 +515,14 @@ public sealed class FundService(
         fund.UpdatedAtUtc = DateTimeOffset.UtcNow;
     }
 
-    private async Task<bool> CanCancelWithoutNegativeBalanceAsync(FundOperation cancelingOperation, CancellationToken cancellationToken)
+    private static bool CanCancelWithoutNegativeBalance(
+        IReadOnlyList<FundOperation> operations,
+        Guid cancelingOperationId)
     {
-        var operations = await GetOperationsOrderedByBusinessTimeAsync(cancelingOperation.FundId, trackChanges: false, cancellationToken);
-
-        var balance = 0m;
+        var balance = operations.Count == 0 ? 0m : operations[0].BalanceBefore;
         foreach (var operation in operations)
         {
-            if (operation.Id == cancelingOperation.Id || operation.IsCanceled)
+            if (operation.Id == cancelingOperationId || operation.IsCanceled)
             {
                 continue;
             }
@@ -537,11 +540,12 @@ public sealed class FundService(
         return true;
     }
 
-    private async Task<bool> CanUpdateWithoutNegativeBalanceAsync(FundOperation updatingOperation, decimal newAmount, CancellationToken cancellationToken)
+    private static bool CanUpdateWithoutNegativeBalance(
+        IReadOnlyList<FundOperation> operations,
+        Guid updatingOperationId,
+        decimal newAmount)
     {
-        var operations = await GetOperationsOrderedByBusinessTimeAsync(updatingOperation.FundId, trackChanges: false, cancellationToken);
-
-        var balance = 0m;
+        var balance = operations.Count == 0 ? 0m : operations[0].BalanceBefore;
         foreach (var operation in operations)
         {
             if (operation.IsCanceled)
@@ -549,7 +553,7 @@ public sealed class FundService(
                 continue;
             }
 
-            var amount = operation.Id == updatingOperation.Id ? newAmount : operation.Amount;
+            var amount = operation.Id == updatingOperationId ? newAmount : operation.Amount;
             balance = operation.OperationKind == FundOperationKinds.Deposit
                 ? balance + amount
                 : balance - amount;
@@ -563,14 +567,14 @@ public sealed class FundService(
         return true;
     }
 
-    private async Task<bool> CanRestoreWithoutNegativeBalanceAsync(FundOperation restoringOperation, CancellationToken cancellationToken)
+    private static bool CanRestoreWithoutNegativeBalance(
+        IReadOnlyList<FundOperation> operations,
+        Guid restoringOperationId)
     {
-        var operations = await GetOperationsOrderedByBusinessTimeAsync(restoringOperation.FundId, trackChanges: false, cancellationToken);
-
-        var balance = 0m;
+        var balance = operations.Count == 0 ? 0m : operations[0].BalanceBefore;
         foreach (var operation in operations)
         {
-            var isCanceled = operation.Id == restoringOperation.Id ? false : operation.IsCanceled;
+            var isCanceled = operation.Id == restoringOperationId ? false : operation.IsCanceled;
             if (isCanceled)
             {
                 continue;
@@ -588,9 +592,15 @@ public sealed class FundService(
         return true;
     }
 
-    private async Task<List<FundOperation>> GetOperationsOrderedByBusinessTimeAsync(Guid fundId, bool trackChanges, CancellationToken cancellationToken)
+    private async Task<List<FundOperation>> GetOperationTailAsync(
+        FundOperation operation,
+        CancellationToken cancellationToken)
     {
-        return (await repository.GetOperationsOrderedAsync(fundId, trackChanges, cancellationToken)).ToList();
+        return (await repository.GetOperationsFromAsync(
+            operation.FundId,
+            operation.Id,
+            operation.CreatedAtUtc,
+            cancellationToken)).ToList();
     }
 
     private void AddAudit(Fund fund, FundOperation operation, Guid? actorUserId)

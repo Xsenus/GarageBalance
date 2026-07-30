@@ -237,20 +237,49 @@ public sealed class EfFundRepository(GarageBalanceDbContext dbContext) : IFundRe
             allocatedFundTotals?.AllocatedFundTotal ?? 0m);
     }
 
-    public async Task<IReadOnlyList<FundOperation>> GetOperationsOrderedAsync(
+    public async Task<IReadOnlyList<FundOperation>> GetOperationsFromAsync(
         Guid fundId,
-        bool trackChanges,
+        Guid operationId,
+        DateTimeOffset createdAtUtc,
         CancellationToken cancellationToken)
     {
         var query = dbContext.FundOperations.Where(operation => operation.FundId == fundId);
-        if (!trackChanges)
+        var ordered = IsSqliteProvider()
+            ? (await query.ToListAsync(cancellationToken))
+                .Where(operation => operation.CreatedAtUtc >= createdAtUtc)
+                .OrderBy(operation => operation.CreatedAtUtc)
+                .ThenBy(operation => operation.Id)
+                .ToList()
+            : await query.Where(operation => operation.CreatedAtUtc >= createdAtUtc)
+                .OrderBy(operation => operation.CreatedAtUtc)
+                .ThenBy(operation => operation.Id)
+                .ToListAsync(cancellationToken);
+        var startIndex = ordered.FindIndex(operation => operation.Id == operationId);
+        if (startIndex < 0)
         {
-            query = query.AsNoTracking();
+            return [];
         }
 
+        return ordered.GetRange(startIndex, ordered.Count - startIndex);
+    }
+
+    public async Task<IReadOnlyList<FundOperation>> GetOperationsSinceAsync(
+        Guid fundId,
+        DateTimeOffset createdAtUtc,
+        CancellationToken cancellationToken)
+    {
+        var query = dbContext.FundOperations.Where(operation => operation.FundId == fundId);
+
         return IsSqliteProvider()
-            ? (await query.ToListAsync(cancellationToken)).OrderBy(operation => operation.CreatedAtUtc).ThenBy(operation => operation.Id).ToList()
-            : await query.OrderBy(operation => operation.CreatedAtUtc).ThenBy(operation => operation.Id).ToListAsync(cancellationToken);
+            ? (await query.ToListAsync(cancellationToken))
+                .Where(operation => operation.CreatedAtUtc >= createdAtUtc)
+                .OrderBy(operation => operation.CreatedAtUtc)
+                .ThenBy(operation => operation.Id)
+                .ToList()
+            : await query.Where(operation => operation.CreatedAtUtc >= createdAtUtc)
+                .OrderBy(operation => operation.CreatedAtUtc)
+                .ThenBy(operation => operation.Id)
+                .ToListAsync(cancellationToken);
     }
 
     public void AddFund(Fund fund) => dbContext.Funds.Add(fund);

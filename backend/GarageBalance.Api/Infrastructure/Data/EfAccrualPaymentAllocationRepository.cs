@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using System.Buffers.Binary;
 using System.Data;
 using System.Data.Common;
+using System.Linq.Expressions;
 using System.Security.Cryptography;
 
 namespace GarageBalance.Api.Infrastructure.Data;
@@ -76,10 +77,10 @@ public sealed class EfAccrualPaymentAllocationRepository(GarageBalanceDbContext 
         var garageIds = distinctKeys.Select(key => key.GarageId).Distinct().ToArray();
         var incomeTypeIds = distinctKeys.Select(key => key.IncomeTypeId).Distinct().ToArray();
         var keySet = distinctKeys.ToHashSet();
-        var rows = await BuildLedgerQuery(garageIds, incomeTypeIds).ToListAsync(cancellationToken);
+        var rows = await BuildLedgerQuery(distinctKeys).ToListAsync(cancellationToken);
 
-        OverlayTrackedAccruals(rows, garageIds, incomeTypeIds);
-        OverlayTrackedPayments(rows, garageIds, incomeTypeIds);
+        OverlayTrackedAccruals(rows, garageIds, incomeTypeIds, keySet);
+        OverlayTrackedPayments(rows, garageIds, incomeTypeIds, keySet);
         var previousActiveAllocationCount = rows.Count(row =>
             row.Kind == AllocationRowKind && keySet.Contains(row.Key));
         var activeAllocationCount = 0;
@@ -144,10 +145,16 @@ public sealed class EfAccrualPaymentAllocationRepository(GarageBalanceDbContext 
             cancellationToken);
     }
 
-    private IQueryable<AllocationLedgerRow> BuildLedgerQuery(Guid[] garageIds, Guid[] incomeTypeIds)
+    private IQueryable<AllocationLedgerRow> BuildLedgerQuery(IReadOnlyCollection<AccrualPaymentAllocationKey> keys)
     {
+        var garageIds = keys.Select(key => key.GarageId).Distinct().ToArray();
+        var incomeTypeIds = keys.Select(key => key.IncomeTypeId).Distinct().ToArray();
         var accrualRows = dbContext.Accruals.AsNoTracking()
             .Where(item => !item.DueDateNeedsReview && garageIds.Contains(item.GarageId) && incomeTypeIds.Contains(item.IncomeTypeId))
+            .Where(BuildExactKeyPredicate<Accrual>(
+                keys,
+                item => item.GarageId,
+                item => item.IncomeTypeId))
             .Select(item => new
             {
                 Kind = AccrualRowKind,
@@ -163,8 +170,14 @@ public sealed class EfAccrualPaymentAllocationRepository(GarageBalanceDbContext 
             });
         var paymentRows = dbContext.FinancialOperations.AsNoTracking()
             .Where(item =>
+                !item.IsCanceled &&
+                item.OperationKind == FinancialOperationKinds.Income &&
                 item.GarageId.HasValue && garageIds.Contains(item.GarageId.Value) &&
                 item.IncomeTypeId.HasValue && incomeTypeIds.Contains(item.IncomeTypeId.Value))
+            .Where(BuildExactKeyPredicate<FinancialOperation>(
+                keys,
+                item => item.GarageId!.Value,
+                item => item.IncomeTypeId!.Value))
             .Select(item => new
             {
                 Kind = PaymentRowKind,
@@ -183,6 +196,10 @@ public sealed class EfAccrualPaymentAllocationRepository(GarageBalanceDbContext 
                 item.IsActive &&
                 garageIds.Contains(item.Accrual.GarageId) &&
                 incomeTypeIds.Contains(item.Accrual.IncomeTypeId))
+            .Where(BuildExactKeyPredicate<AccrualPaymentAllocation>(
+                keys,
+                item => item.Accrual.GarageId,
+                item => item.Accrual.IncomeTypeId))
             .Select(item => new
             {
                 Kind = AllocationRowKind,
@@ -197,7 +214,7 @@ public sealed class EfAccrualPaymentAllocationRepository(GarageBalanceDbContext 
                 OperationKind = string.Empty
             });
 
-        return accrualRows
+        var rows = accrualRows
             .Concat(paymentRows)
             .Concat(allocationRows)
             .Select(row => new AllocationLedgerRow(
@@ -211,6 +228,37 @@ public sealed class EfAccrualPaymentAllocationRepository(GarageBalanceDbContext 
                 row.CreatedAtUtc,
                 row.IsCanceled,
                 row.OperationKind));
+        return rows;
+    }
+
+    private static Expression<Func<TEntity, bool>> BuildExactKeyPredicate<TEntity>(
+        IReadOnlyCollection<AccrualPaymentAllocationKey> keys,
+        Expression<Func<TEntity, Guid>> garageSelector,
+        Expression<Func<TEntity, Guid>> incomeTypeSelector)
+    {
+        var entity = Expression.Parameter(typeof(TEntity), "item");
+        var garageId = new ParameterReplacingExpressionVisitor(
+            garageSelector.Parameters[0],
+            entity).Visit(garageSelector.Body)!;
+        var incomeTypeId = new ParameterReplacingExpressionVisitor(
+            incomeTypeSelector.Parameters[0],
+            entity).Visit(incomeTypeSelector.Body)!;
+        Expression body = Expression.Constant(false);
+
+        foreach (var garageGroup in keys.GroupBy(key => key.GarageId))
+        {
+            var garageMatches = Expression.Equal(garageId, Expression.Constant(garageGroup.Key));
+            var incomeTypeIds = garageGroup.Select(key => key.IncomeTypeId).Distinct().ToArray();
+            var incomeTypeMatches = Expression.Call(
+                typeof(Enumerable),
+                nameof(Enumerable.Contains),
+                [typeof(Guid)],
+                Expression.Constant(incomeTypeIds),
+                incomeTypeId);
+            body = Expression.OrElse(body, Expression.AndAlso(garageMatches, incomeTypeMatches));
+        }
+
+        return Expression.Lambda<Func<TEntity, bool>>(body, entity);
     }
 
     private static long CreateAdvisoryLockKey(AccrualPaymentAllocationKey key)
@@ -289,12 +337,19 @@ public sealed class EfAccrualPaymentAllocationRepository(GarageBalanceDbContext 
         public ValueTask DisposeAsync() => ValueTask.CompletedTask;
     }
 
-    private void OverlayTrackedAccruals(List<AllocationLedgerRow> rows, Guid[] garageIds, Guid[] incomeTypeIds)
+    private void OverlayTrackedAccruals(
+        List<AllocationLedgerRow> rows,
+        Guid[] garageIds,
+        Guid[] incomeTypeIds,
+        IReadOnlySet<AccrualPaymentAllocationKey> keys)
     {
         foreach (var accrual in dbContext.ChangeTracker.Entries<Accrual>().Select(entry => entry.Entity))
         {
             rows.RemoveAll(row => row.Kind == AccrualRowKind && row.Id == accrual.Id);
-            if (!accrual.DueDateNeedsReview && garageIds.Contains(accrual.GarageId) && incomeTypeIds.Contains(accrual.IncomeTypeId))
+            if (!accrual.DueDateNeedsReview &&
+                garageIds.Contains(accrual.GarageId) &&
+                incomeTypeIds.Contains(accrual.IncomeTypeId) &&
+                keys.Contains(new AccrualPaymentAllocationKey(accrual.GarageId, accrual.IncomeTypeId)))
             {
                 rows.Add(new AllocationLedgerRow(
                     AccrualRowKind,
@@ -311,13 +366,18 @@ public sealed class EfAccrualPaymentAllocationRepository(GarageBalanceDbContext 
         }
     }
 
-    private void OverlayTrackedPayments(List<AllocationLedgerRow> rows, Guid[] garageIds, Guid[] incomeTypeIds)
+    private void OverlayTrackedPayments(
+        List<AllocationLedgerRow> rows,
+        Guid[] garageIds,
+        Guid[] incomeTypeIds,
+        IReadOnlySet<AccrualPaymentAllocationKey> keys)
     {
         foreach (var payment in dbContext.ChangeTracker.Entries<FinancialOperation>().Select(entry => entry.Entity))
         {
             rows.RemoveAll(row => row.Kind == PaymentRowKind && row.Id == payment.Id);
             if (payment.GarageId.HasValue && payment.IncomeTypeId.HasValue &&
-                garageIds.Contains(payment.GarageId.Value) && incomeTypeIds.Contains(payment.IncomeTypeId.Value))
+                garageIds.Contains(payment.GarageId.Value) && incomeTypeIds.Contains(payment.IncomeTypeId.Value) &&
+                keys.Contains(new AccrualPaymentAllocationKey(payment.GarageId.Value, payment.IncomeTypeId.Value)))
             {
                 rows.Add(new AllocationLedgerRow(
                     PaymentRowKind,
@@ -347,5 +407,13 @@ public sealed class EfAccrualPaymentAllocationRepository(GarageBalanceDbContext 
         string OperationKind)
     {
         public AccrualPaymentAllocationKey Key => new(GarageId, IncomeTypeId);
+    }
+
+    private sealed class ParameterReplacingExpressionVisitor(
+        ParameterExpression source,
+        ParameterExpression target) : ExpressionVisitor
+    {
+        protected override Expression VisitParameter(ParameterExpression node) =>
+            node == source ? target : base.VisitParameter(node);
     }
 }

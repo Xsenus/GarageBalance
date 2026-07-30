@@ -110,7 +110,10 @@ public sealed class IncomeFundAssignmentService(
         }
 
         var oldFund = assignment.Fund;
-        var oldFundOperations = (await repository.GetOperationsOrderedAsync(oldFund.Id, trackChanges: true, cancellationToken)).ToList();
+        var oldFundOperations = (await repository.GetOperationsSinceAsync(
+            oldFund.Id,
+            assignment.CreatedAtUtc,
+            cancellationToken)).ToList();
         Fund? destinationFund = null;
         List<FundOperation>? destinationOperations = null;
         if (destinationFundId.HasValue)
@@ -127,10 +130,16 @@ public sealed class IncomeFundAssignmentService(
 
             destinationOperations = destinationFund.Id == oldFund.Id
                 ? oldFundOperations
-                : (await repository.GetOperationsOrderedAsync(destinationFund.Id, trackChanges: true, cancellationToken)).ToList();
+                : (await repository.GetOperationsSinceAsync(
+                    destinationFund.Id,
+                    assignment.CreatedAtUtc,
+                    cancellationToken)).ToList();
         }
 
         var oldValues = Snapshot(assignment);
+        var destinationOpeningBalance = destinationOperations is { Count: > 0 }
+            ? destinationOperations[0].BalanceBefore
+            : destinationFund?.Balance ?? 0m;
         assignment.FundId = destinationFund?.Id ?? oldFund.Id;
         assignment.Fund = destinationFund ?? oldFund;
         assignment.Amount = normalizedAmount;
@@ -140,7 +149,7 @@ public sealed class IncomeFundAssignmentService(
 
         if (destinationFund is null || destinationFund.Id != oldFund.Id)
         {
-            Recalculate(oldFund, oldFundOperations.Where(operation => operation.Id != assignment.Id));
+            RecalculateTail(oldFund, oldFundOperations.Where(operation => operation.Id != assignment.Id), oldFundOperations[0].BalanceBefore);
         }
 
         if (destinationFund is not null)
@@ -150,7 +159,10 @@ public sealed class IncomeFundAssignmentService(
             {
                 operations.Add(assignment);
             }
-            Recalculate(destinationFund, operations);
+            RecalculateTail(
+                destinationFund,
+                operations,
+                destinationOpeningBalance);
         }
 
         AddAudit("fund.income_assignment_updated", "update", assignment, actorUserId, null, oldValues);
@@ -176,10 +188,14 @@ public sealed class IncomeFundAssignmentService(
                 "Поступление нельзя отменить: часть общей нераспределенной суммы уже направлена в фонды.");
         }
 
-        var operations = (await repository.GetOperationsOrderedAsync(assignment.FundId, trackChanges: true, cancellationToken)).ToList();
+        var operations = (await repository.GetOperationsFromAsync(
+            assignment.FundId,
+            assignment.Id,
+            assignment.CreatedAtUtc,
+            cancellationToken)).ToList();
         assignment.IsCanceled = true;
         assignment.UpdatedAtUtc = DateTimeOffset.UtcNow;
-        Recalculate(assignment.Fund, operations);
+        RecalculateTail(assignment.Fund, operations, assignment.BalanceBefore);
         AddAudit("fund.income_assignment_canceled", "cancel", assignment, actorUserId, reason);
         return IncomeFundAssignmentResult.Success();
     }
@@ -202,8 +218,12 @@ public sealed class IncomeFundAssignmentService(
 
         assignment.IsCanceled = false;
         assignment.UpdatedAtUtc = DateTimeOffset.UtcNow;
-        var operations = (await repository.GetOperationsOrderedAsync(assignment.FundId, trackChanges: true, cancellationToken)).ToList();
-        Recalculate(assignment.Fund, operations);
+        var operations = (await repository.GetOperationsFromAsync(
+            assignment.FundId,
+            assignment.Id,
+            assignment.CreatedAtUtc,
+            cancellationToken)).ToList();
+        RecalculateTail(assignment.Fund, operations, assignment.BalanceBefore);
         AddAudit("fund.income_assignment_restored", "restore", assignment, actorUserId, null);
         return IncomeFundAssignmentResult.Success();
     }
@@ -216,9 +236,12 @@ public sealed class IncomeFundAssignmentService(
             0m));
     }
 
-    private static void Recalculate(Fund fund, IEnumerable<FundOperation> source)
+    private static void RecalculateTail(
+        Fund fund,
+        IEnumerable<FundOperation> source,
+        decimal openingBalance)
     {
-        var balance = 0m;
+        var balance = openingBalance;
         foreach (var operation in source.OrderBy(item => item.CreatedAtUtc).ThenBy(item => item.Id))
         {
             operation.BalanceBefore = balance;

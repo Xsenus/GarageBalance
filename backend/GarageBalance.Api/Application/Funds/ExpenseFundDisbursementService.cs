@@ -87,7 +87,10 @@ public sealed class ExpenseFundDisbursementService(
 
         var normalizedAmount = MoneyMath.RoundMoney(amount);
         var oldFund = disbursement.Fund;
-        var oldOperations = (await repository.GetOperationsOrderedAsync(oldFund.Id, trackChanges: true, cancellationToken)).ToList();
+        var oldOperations = (await repository.GetOperationsSinceAsync(
+            oldFund.Id,
+            disbursement.CreatedAtUtc,
+            cancellationToken)).ToList();
         var destinationFund = expenseFundId == oldFund.Id
             ? oldFund
             : await repository.FindFundForUpdateAsync(expenseFundId, cancellationToken);
@@ -102,7 +105,10 @@ public sealed class ExpenseFundDisbursementService(
         sourceOperation.ExpenseFund = destinationFund;
         var destinationOperations = destinationFund.Id == oldFund.Id
             ? oldOperations
-            : (await repository.GetOperationsOrderedAsync(destinationFund.Id, trackChanges: true, cancellationToken)).ToList();
+            : (await repository.GetOperationsSinceAsync(
+                destinationFund.Id,
+                disbursement.CreatedAtUtc,
+                cancellationToken)).ToList();
         var availableAmount = destinationFund.Id == oldFund.Id
             ? MoneyMath.RoundMoney(destinationFund.Balance + disbursement.Amount)
             : destinationFund.Balance;
@@ -112,6 +118,9 @@ public sealed class ExpenseFundDisbursementService(
         }
 
         var oldValues = Snapshot(disbursement);
+        var destinationOpeningBalance = destinationOperations.Count == 0
+            ? destinationFund.Balance
+            : destinationOperations[0].BalanceBefore;
         disbursement.FundId = destinationFund.Id;
         disbursement.Fund = destinationFund;
         disbursement.Amount = normalizedAmount;
@@ -120,11 +129,14 @@ public sealed class ExpenseFundDisbursementService(
 
         if (destinationFund.Id != oldFund.Id)
         {
-            Recalculate(oldFund, oldOperations.Where(operation => operation.Id != disbursement.Id));
+            RecalculateTail(oldFund, oldOperations.Where(operation => operation.Id != disbursement.Id), oldOperations[0].BalanceBefore);
             destinationOperations.Add(disbursement);
         }
 
-        Recalculate(destinationFund, destinationOperations);
+        RecalculateTail(
+            destinationFund,
+            destinationOperations,
+            destinationOpeningBalance);
         AddAudit("fund.expense_disbursement_updated", "update", disbursement, actorUserId, null, oldValues);
         return ExpenseFundDisbursementResult.Success();
     }
@@ -141,13 +153,14 @@ public sealed class ExpenseFundDisbursementService(
             return ExpenseFundDisbursementResult.Success();
         }
 
-        var operations = await repository.GetOperationsOrderedAsync(
+        var operations = await repository.GetOperationsFromAsync(
             disbursement.FundId,
-            trackChanges: true,
+            disbursement.Id,
+            disbursement.CreatedAtUtc,
             cancellationToken);
         disbursement.IsCanceled = true;
         disbursement.UpdatedAtUtc = DateTimeOffset.UtcNow;
-        Recalculate(disbursement.Fund, operations);
+        RecalculateTail(disbursement.Fund, operations, disbursement.BalanceBefore);
         AddAudit("fund.expense_disbursement_canceled", "cancel", disbursement, actorUserId, reason);
         return ExpenseFundDisbursementResult.Success();
     }
@@ -179,11 +192,12 @@ public sealed class ExpenseFundDisbursementService(
 
         disbursement.IsCanceled = false;
         disbursement.UpdatedAtUtc = DateTimeOffset.UtcNow;
-        var operations = await repository.GetOperationsOrderedAsync(
+        var operations = await repository.GetOperationsFromAsync(
             disbursement.FundId,
-            trackChanges: true,
+            disbursement.Id,
+            disbursement.CreatedAtUtc,
             cancellationToken);
-        Recalculate(disbursement.Fund, operations);
+        RecalculateTail(disbursement.Fund, operations, disbursement.BalanceBefore);
         AddAudit("fund.expense_disbursement_restored", "restore", disbursement, actorUserId, null);
         return ExpenseFundDisbursementResult.Success();
     }
@@ -196,9 +210,12 @@ public sealed class ExpenseFundDisbursementService(
     private static string BuildReason(string supplierName, string? expenseTypeName) =>
         $"Выплата поставщику «{supplierName}» по услуге «{expenseTypeName ?? "Без названия"}».";
 
-    private static void Recalculate(Fund fund, IEnumerable<FundOperation> source)
+    private static void RecalculateTail(
+        Fund fund,
+        IEnumerable<FundOperation> source,
+        decimal openingBalance)
     {
-        var balance = 0m;
+        var balance = openingBalance;
         foreach (var operation in source.OrderBy(item => item.CreatedAtUtc).ThenBy(item => item.Id))
         {
             operation.BalanceBefore = balance;

@@ -80,13 +80,14 @@ public sealed class PostgreSqlTariffAndMeterPerformanceTests
             "IX_charge_service_settings_IsRegular_IsMetered_TariffId",
             await ExplainAsync(
                 connection,
-                $"""
-                 SELECT "Id"
-                 FROM charge_service_settings
-                 WHERE "IsArchived" = false
-                   AND "IsRegular" = true
-                   AND "IsMetered" = true;
-                 """),
+                """
+                SELECT "Id"
+                FROM charge_service_settings
+                WHERE "IsArchived" = false
+                  AND "IsRegular" = true
+                  AND "IsMetered" = true
+                ORDER BY "TariffId";
+                """),
             StringComparison.Ordinal);
     }
 
@@ -161,7 +162,7 @@ public sealed class PostgreSqlTariffAndMeterPerformanceTests
     private static async Task<string> ExplainAsync(NpgsqlConnection connection, string query)
     {
         await using var command = connection.CreateCommand();
-        command.CommandText = $"SET enable_seqscan = off; EXPLAIN (ANALYZE, BUFFERS) {query}";
+        command.CommandText = $"SET enable_seqscan = off; SET enable_bitmapscan = off; SET enable_sort = off; EXPLAIN (ANALYZE, BUFFERS) {query}";
         await using var reader = await command.ExecuteReaderAsync();
         var lines = new List<string>();
         while (await reader.ReadAsync())

@@ -457,6 +457,11 @@ public sealed class GarageBalanceDbContext(DbContextOptions<GarageBalanceDbConte
                 "CK_financial_operations_ExpensePaymentSource",
                 "\"ExpensePaymentSource\" IS NULL OR \"ExpensePaymentSource\" IN ('bank', 'cash')"));
             entity.HasIndex(operation => new { operation.IsCanceled, operation.OperationKind });
+            entity.HasIndex(operation => new { operation.OperationKind, operation.OperationDate, operation.Id })
+                .IsDescending(false, true, false)
+                .HasFilter("\"IsCanceled\" = false");
+            entity.HasIndex(operation => new { operation.GarageId, operation.IncomeTypeId, operation.OperationDate, operation.CreatedAtUtc })
+                .HasFilter("\"IsCanceled\" = false AND \"OperationKind\" = 'income'");
             entity.HasIndex(operation => new { operation.OperationKind, operation.OperationDate, operation.DocumentNumber })
                 .IsUnique()
                 .HasFilter("\"IsCanceled\" = false AND \"DocumentNumber\" IS NOT NULL");
@@ -513,6 +518,11 @@ public sealed class GarageBalanceDbContext(DbContextOptions<GarageBalanceDbConte
             entity.HasIndex(accrual => accrual.FeeCampaignId);
             entity.HasIndex(accrual => accrual.TariffId);
             entity.HasIndex(accrual => new { accrual.GarageId, accrual.IncomeTypeId, accrual.AccountingYear, accrual.IsCanceled });
+            entity.HasIndex(accrual => new { accrual.GarageId, accrual.IncomeTypeId, accrual.DueDate, accrual.CreatedAtUtc })
+                .HasFilter("\"IsCanceled\" = false AND \"DueDateNeedsReview\" = false");
+            entity.HasIndex(accrual => new { accrual.AccountingMonth, accrual.GarageId, accrual.Id })
+                .IsDescending(true, false, false)
+                .HasFilter("\"IsCanceled\" = false");
             entity.HasIndex(accrual => new { accrual.GarageId, accrual.IncomeTypeId, accrual.AccountingMonth, accrual.Source })
                 .IsUnique()
                 .HasFilter("\"IsCanceled\" = false AND \"IrregularPaymentId\" IS NULL AND \"FeeCampaignId\" IS NULL AND \"Basis\" IS NULL");
@@ -555,6 +565,8 @@ public sealed class GarageBalanceDbContext(DbContextOptions<GarageBalanceDbConte
                 .IsUnique()
                 .HasFilter("\"IsActive\" = true");
             entity.HasIndex(item => item.AccrualId);
+            entity.HasIndex(item => new { item.AccrualId, item.FinancialOperationId })
+                .HasFilter("\"IsActive\" = true");
             entity.HasOne(item => item.FinancialOperation)
                 .WithMany()
                 .HasForeignKey(item => item.FinancialOperationId)
@@ -578,6 +590,9 @@ public sealed class GarageBalanceDbContext(DbContextOptions<GarageBalanceDbConte
             entity.HasIndex(accrual => accrual.ExpenseTypeId);
             entity.HasIndex(accrual => accrual.ExpenseFundId);
             entity.HasIndex(accrual => accrual.SourceFinancialOperationId).IsUnique();
+            entity.HasIndex(accrual => new { accrual.AccountingMonth, accrual.SupplierId, accrual.Id })
+                .IsDescending(true, false, false)
+                .HasFilter("\"IsCanceled\" = false");
             entity.HasIndex(accrual => new { accrual.SupplierId, accrual.ExpenseTypeId, accrual.AccountingMonth, accrual.Source, accrual.DocumentNumber })
                 .IsUnique()
                 .HasFilter("\"IsCanceled\" = false");
@@ -652,6 +667,7 @@ public sealed class GarageBalanceDbContext(DbContextOptions<GarageBalanceDbConte
                 .IsUnique()
                 .HasFilter("\"SourceFinancialOperationId\" IS NOT NULL");
             entity.HasIndex(operation => operation.CreatedAtUtc);
+            entity.HasIndex(operation => new { operation.FundId, operation.CreatedAtUtc, operation.Id });
             entity.HasIndex(operation => operation.OperationKind);
             entity.HasIndex(operation => operation.IsCanceled);
             entity.HasOne(operation => operation.Fund)

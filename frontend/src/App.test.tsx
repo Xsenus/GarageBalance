@@ -14313,6 +14313,63 @@ describe('App', () => {
     expect(within(financePanel).getByText('7 операций')).toBeInTheDocument()
   })
 
+  it('refreshes the active finance page and summary exactly once after saving', async () => {
+    const user = userEvent.setup()
+    let created = false
+    const savedOperation = createFinancialOperation({
+      id: 'operation-single-refresh',
+      documentNumber: 'PKO-SINGLE-REFRESH',
+      amount: 740,
+    })
+    const getOperationsPage = vi.fn(async (_token: string, params?: FinancePageParams & { operationKind?: 'income' | 'expense' }) => ({
+      items: created && params?.operationKind === 'income' ? [savedOperation] : [],
+      totalCount: created && params?.operationKind === 'income' ? 1 : 0,
+      offset: params?.offset ?? 0,
+      limit: params?.limit ?? 25,
+    }))
+    const getSummary = vi.fn(async () => ({
+      incomeTotal: created ? 740 : 0,
+      expenseTotal: 0,
+      accrualTotal: 0,
+      balance: created ? 740 : 0,
+      debt: created ? -740 : 0,
+      operationCount: created ? 1 : 0,
+      accrualCount: 0,
+      meterReadingCount: 0,
+      incomeCount: created ? 1 : 0,
+      expenseCount: 0,
+      supplierAccrualCount: 0,
+    }))
+    const createIncome = vi.fn(async () => {
+      created = true
+      return savedOperation
+    })
+    const financeClient = createFinanceClient({ getOperationsPage, getSummary, createIncome })
+
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={financeClient} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Платежи')
+    const financePanel = await screen.findByRole('region', { name: 'Платежи' })
+    await waitFor(() => expect(getSummary).toHaveBeenCalled())
+    await waitFor(() => expect(getOperationsPage).toHaveBeenCalled())
+    const summaryCallsBeforeSave = getSummary.mock.calls.length
+    const pageCallsBeforeSave = getOperationsPage.mock.calls.length
+
+    const amount = within(financePanel).getByLabelText('Сумма поступления')
+    const incomeForm = amount.closest('form')!
+    await user.clear(amount)
+    await user.type(amount, '740')
+    await user.type(within(incomeForm).getByLabelText('Документ поступления'), 'PKO-SINGLE-REFRESH')
+    await user.click(within(incomeForm).getByRole('button', { name: 'Провести' }))
+
+    expect(await within(financePanel).findByText('PKO-SINGLE-REFRESH')).toBeInTheDocument()
+    expect(createIncome).toHaveBeenCalledTimes(1)
+    await waitFor(() => expect(getSummary).toHaveBeenCalledTimes(summaryCallsBeforeSave + 1))
+    expect(getOperationsPage).toHaveBeenCalledTimes(pageCallsBeforeSave + 1)
+  })
+
   it('debounces server search in payment tables', async () => {
     const user = userEvent.setup()
     const operationSearches: string[] = []

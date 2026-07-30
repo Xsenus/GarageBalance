@@ -22,7 +22,15 @@ public interface IFundRepository
     Task<FundOperation?> FindOperationForUpdateAsync(Guid operationId, CancellationToken cancellationToken);
     Task<FundOperation?> FindIncomeAssignmentForUpdateAsync(Guid sourceFinancialOperationId, CancellationToken cancellationToken);
     Task<FundTotalsData> GetTotalsAsync(CancellationToken cancellationToken);
-    Task<IReadOnlyList<FundOperation>> GetOperationsOrderedAsync(Guid fundId, bool trackChanges, CancellationToken cancellationToken);
+    Task<IReadOnlyList<FundOperation>> GetOperationsFromAsync(
+        Guid fundId,
+        Guid operationId,
+        DateTimeOffset createdAtUtc,
+        CancellationToken cancellationToken);
+    Task<IReadOnlyList<FundOperation>> GetOperationsSinceAsync(
+        Guid fundId,
+        DateTimeOffset createdAtUtc,
+        CancellationToken cancellationToken);
     void AddFund(Fund fund);
     void AddOperation(FundOperation operation);
     Task SaveChangesAsync(CancellationToken cancellationToken);

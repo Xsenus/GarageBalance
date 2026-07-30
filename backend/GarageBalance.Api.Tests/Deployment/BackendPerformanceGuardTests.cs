@@ -80,7 +80,7 @@ public sealed class BackendPerformanceGuardTests
         var serviceSource = ReadApiSource("Application/Funds/FundService.cs");
         var repositorySource = ReadApiSource("Infrastructure/Data/EfFundRepository.cs");
         var totalsMethod = repositorySource[
-            repositorySource.IndexOf("public async Task<FundTotalsData> GetTotalsAsync", StringComparison.Ordinal)..repositorySource.IndexOf("public async Task<IReadOnlyList<FundOperation>> GetOperationsOrderedAsync", StringComparison.Ordinal)];
+            repositorySource.IndexOf("public async Task<FundTotalsData> GetTotalsAsync", StringComparison.Ordinal)..repositorySource.IndexOf("public async Task<IReadOnlyList<FundOperation>> GetOperationsFromAsync", StringComparison.Ordinal)];
 
         Assert.Contains("var funds = (await repository.GetFundsAsync(cancellationToken)).ToList();", serviceSource, StringComparison.Ordinal);
         Assert.Contains("EnsureDefaultFundsAsync(funds, cancellationToken)", serviceSource, StringComparison.Ordinal);
@@ -91,6 +91,37 @@ public sealed class BackendPerformanceGuardTests
         Assert.Equal(1, CountOccurrences(totalsMethod, ".ToListAsync(cancellationToken)"));
         Assert.DoesNotContain("FirstOrDefaultAsync", totalsMethod, StringComparison.Ordinal);
         Assert.DoesNotContain("SumAsync", totalsMethod, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void FundCorrections_LoadOnlyTheAffectedChronologicalTail()
+    {
+        var serviceSource = ReadApiSource("Application/Funds/FundService.cs");
+        var incomeAssignmentSource = ReadApiSource("Application/Funds/IncomeFundAssignmentService.cs");
+        var expenseDisbursementSource = ReadApiSource("Application/Funds/ExpenseFundDisbursementService.cs");
+        var repositorySource = ReadApiSource("Infrastructure/Data/EfFundRepository.cs");
+
+        Assert.DoesNotContain("GetOperationsOrderedAsync", serviceSource, StringComparison.Ordinal);
+        Assert.DoesNotContain("GetOperationsOrderedAsync", incomeAssignmentSource, StringComparison.Ordinal);
+        Assert.DoesNotContain("GetOperationsOrderedAsync", expenseDisbursementSource, StringComparison.Ordinal);
+        Assert.Contains("GetOperationsFromAsync", serviceSource, StringComparison.Ordinal);
+        Assert.Contains("GetOperationsSinceAsync", incomeAssignmentSource, StringComparison.Ordinal);
+        Assert.Contains("GetOperationsSinceAsync", expenseDisbursementSource, StringComparison.Ordinal);
+        Assert.True(CountOccurrences(repositorySource, "operation.CreatedAtUtc >= createdAtUtc") >= 2);
+        Assert.Contains(".OrderBy(operation => operation.CreatedAtUtc)", repositorySource, StringComparison.Ordinal);
+        Assert.Contains("operations[0].BalanceBefore", serviceSource, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void PaymentAllocationLedger_LoadsOnlyExactGarageAndIncomeTypePairs()
+    {
+        var source = ReadApiSource("Infrastructure/Data/EfAccrualPaymentAllocationRepository.cs");
+
+        Assert.Contains("BuildLedgerQuery(distinctKeys)", source, StringComparison.Ordinal);
+        Assert.True(CountOccurrences(source, ".Where(BuildExactKeyPredicate<") >= 3);
+        Assert.Contains("keys.GroupBy(key => key.GarageId)", source, StringComparison.Ordinal);
+        Assert.Contains("item.OperationKind == FinancialOperationKinds.Income", source, StringComparison.Ordinal);
+        Assert.Contains("!item.IsCanceled", source, StringComparison.Ordinal);
     }
 
     [Fact]
