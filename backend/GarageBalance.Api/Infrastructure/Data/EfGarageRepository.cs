@@ -28,7 +28,7 @@ public sealed class EfGarageRepository(GarageBalanceDbContext dbContext, IBusine
                 .ToList();
         }
 
-        var filteredQuery = ApplySearch(query, normalizedSearch);
+        var filteredQuery = ApplySearch(query, normalizedSearch, IsNpgsqlProvider());
         var orderedQuery = normalizedSearch is { } search
             ? ApplySearchRanking(filteredQuery, search)
             : filteredQuery.OrderBy(garage => garage.Number);
@@ -71,7 +71,7 @@ public sealed class EfGarageRepository(GarageBalanceDbContext dbContext, IBusine
             return new GaragePageData(pageItems, filtered.Count);
         }
 
-        query = ApplyColumnFilters(ApplySearch(query, normalizedSearch), filters);
+        query = ApplyColumnFilters(ApplySearch(query, normalizedSearch, IsNpgsqlProvider()), filters);
         if (debtorsOnly)
         {
             query = ApplyDebtorsFilter(query);
@@ -251,11 +251,29 @@ public sealed class EfGarageRepository(GarageBalanceDbContext dbContext, IBusine
             garage.Comment,
             garage.IsArchived));
 
-    private static IQueryable<Garage> ApplySearch(IQueryable<Garage> query, string? normalizedSearch)
+    private static IQueryable<Garage> ApplySearch(
+        IQueryable<Garage> query,
+        string? normalizedSearch,
+        bool usePostgresSearch)
     {
         if (normalizedSearch is null)
         {
             return query;
+        }
+
+        if (usePostgresSearch)
+        {
+            var pattern = PostgresLikeSearch.ContainsPattern(normalizedSearch);
+            return query.Where(garage =>
+                EF.Functions.ILike(garage.Number, pattern, @"\") ||
+                (garage.Owner != null && (
+                    EF.Functions.ILike(garage.Owner.LastName, pattern, @"\") ||
+                    EF.Functions.ILike(garage.Owner.FirstName, pattern, @"\") ||
+                    (garage.Owner.MiddleName != null && EF.Functions.ILike(garage.Owner.MiddleName, pattern, @"\")) ||
+                    EF.Functions.ILike(
+                        garage.Owner.LastName + " " + garage.Owner.FirstName + " " + (garage.Owner.MiddleName ?? string.Empty),
+                        pattern,
+                        @"\"))));
         }
 
         return query.Where(garage =>
@@ -296,6 +314,9 @@ public sealed class EfGarageRepository(GarageBalanceDbContext dbContext, IBusine
 
     private bool IsSqliteProvider() =>
         dbContext.Database.ProviderName?.Contains("Sqlite", StringComparison.OrdinalIgnoreCase) == true;
+
+    private bool IsNpgsqlProvider() =>
+        dbContext.Database.ProviderName?.Contains("Npgsql", StringComparison.OrdinalIgnoreCase) == true;
 
     private IOrderedQueryable<Garage> ApplyPageSorting(IQueryable<Garage> query, string sortBy, bool descending)
     {

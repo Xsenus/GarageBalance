@@ -827,6 +827,7 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
   const loadedContractorReferencesRef = useRef<Record<'garages' | 'suppliers', boolean>>({ garages: false, suppliers: false })
   const ownersRef = useRef<OwnerDto[]>([])
   const supplierContactsRef = useRef<SupplierContactDto[]>([])
+  const loadedSupplierContactsRef = useRef(new Set<string>())
   const supplierEditorRequestSequenceRef = useRef(0)
   const [supplierEditorLoadingId, setSupplierEditorLoadingId] = useState<string | null>(null)
   const garagePageRequestSequenceRef = useRef(0)
@@ -871,7 +872,7 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
       return
     }
 
-    if (loadedContractorReferencesRef.current.suppliers) {
+    if (loadedSupplierContactsRef.current.has(row.id)) {
       const cachedContacts = supplierContactsRef.current
         .filter((contact) => contact.supplierId === row.id)
         .map(createSupplierContactFromDto)
@@ -894,6 +895,13 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
       }
 
       const contactRows = contacts.map(createSupplierContactFromDto)
+      const nextContacts = [
+        ...supplierContactsRef.current.filter((contact) => contact.supplierId !== row.id),
+        ...contacts,
+      ]
+      supplierContactsRef.current = nextContacts
+      loadedSupplierContactsRef.current.add(row.id)
+      setSupplierContacts(nextContacts)
       const nextRow = normalizeSupplierPrototype({ ...row, contacts: contactRows })
       setModal({ type: 'supplier', item: nextRow })
     } catch (error) {
@@ -992,9 +1000,8 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
             }))
           }
         } else {
-          const [groups, supplierContactRows, loadedChargeServices, loadedIncomeTypes, loadedExpenseTypes, loadedTariffs, loadedFunds] = await Promise.all([
+          const [groups, loadedChargeServices, loadedIncomeTypes, loadedExpenseTypes, loadedTariffs, loadedFunds] = await Promise.all([
             dictionaryClient.getSupplierGroups(auth.accessToken, undefined, contractorsDictionaryListLimit, true),
-            dictionaryClient.getSupplierContacts(auth.accessToken, undefined, undefined, contractorsDictionaryListLimit, true),
             dictionaryClient.getChargeServiceSettings(auth.accessToken, undefined, contractorsDictionaryListLimit, true),
             dictionaryClient.getIncomeTypes(auth.accessToken, undefined, contractorsDictionaryListLimit, true),
             dictionaryClient.getExpenseTypes(auth.accessToken, undefined, contractorsDictionaryListLimit, true),
@@ -1002,20 +1009,12 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
             fundsClient.getFunds(auth.accessToken).catch(() => []),
           ])
           if (!cancelled) {
-            supplierContactsRef.current = supplierContactRows
             setSupplierGroups(groups)
-            setSupplierContacts(supplierContactRows)
             setChargeServices(loadedChargeServices)
             setServiceIncomeTypes(loadedIncomeTypes)
             setServiceExpenseTypes(loadedExpenseTypes)
             setServiceTariffs(loadedTariffs)
             setServiceFunds(loadedFunds)
-            setSuppliers((current) => current.map((supplier) => ({
-              ...supplier,
-              contacts: supplierContactRows
-                .filter((contact) => contact.supplierId === supplier.id)
-                .map(createSupplierContactFromDto),
-            })))
           }
         }
 
@@ -1546,6 +1545,7 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
         ...savedContacts,
       ]
       supplierContactsRef.current = nextSupplierContacts
+      loadedSupplierContactsRef.current.add(savedSupplier.id)
       setSupplierContacts(nextSupplierContacts)
       setSupplierGroups(groups)
       setSuppliers((currentSuppliers) => {
@@ -1780,6 +1780,13 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
         if (isBackendDictionaryId(restoreTarget.item.id)) {
           const restoredSupplier = await dictionaryClient.restoreSupplier(auth.accessToken, restoreTarget.item.id)
           const restoredContacts = await dictionaryClient.getSupplierContacts(auth.accessToken, restoredSupplier.id, undefined, contractorsDictionaryListLimit, true)
+          const nextSupplierContacts = [
+            ...supplierContactsRef.current.filter((contact) => contact.supplierId !== restoredSupplier.id),
+            ...restoredContacts,
+          ]
+          supplierContactsRef.current = nextSupplierContacts
+          loadedSupplierContactsRef.current.add(restoredSupplier.id)
+          setSupplierContacts(nextSupplierContacts)
           const nextSupplier = createSupplierRowFromDto(restoredSupplier, restoredContacts)
           setSuppliers((currentSuppliers) => currentSuppliers.map((item) => (item.id === restoreTarget.item.id ? nextSupplier : item)))
         } else {

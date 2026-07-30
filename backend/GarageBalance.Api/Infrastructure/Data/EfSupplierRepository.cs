@@ -21,6 +21,7 @@ public sealed class EfSupplierRepository(GarageBalanceDbContext dbContext) : ISu
         return await ApplyFilters(groupId, normalizedSearch, includeArchived)
             .OrderBy(supplier => supplier.Group.Name)
             .ThenBy(supplier => supplier.Name)
+            .ThenBy(supplier => supplier.Id)
             .Take(limit)
             .ToListAsync(cancellationToken);
     }
@@ -242,11 +243,25 @@ public sealed class EfSupplierRepository(GarageBalanceDbContext dbContext) : ISu
 
         if (normalizedSearch is not null)
         {
-            query = query.Where(supplier =>
-                supplier.Name.ToLower().Contains(normalizedSearch) ||
-                (supplier.ChargeServiceSetting != null && supplier.ChargeServiceSetting.Name.ToLower().Contains(normalizedSearch)) ||
-                (supplier.Inn != null && supplier.Inn.ToLower().Contains(normalizedSearch)) ||
-                (supplier.ContactPerson != null && supplier.ContactPerson.ToLower().Contains(normalizedSearch)));
+            if (IsNpgsqlProvider())
+            {
+                var pattern = PostgresLikeSearch.ContainsPattern(normalizedSearch);
+                query = query.Where(supplier =>
+                    EF.Functions.ILike(supplier.Name, pattern, @"\") ||
+                    EF.Functions.ILike(supplier.Group.Name, pattern, @"\") ||
+                    (supplier.ChargeServiceSetting != null && EF.Functions.ILike(supplier.ChargeServiceSetting.Name, pattern, @"\")) ||
+                    (supplier.Inn != null && EF.Functions.ILike(supplier.Inn, pattern, @"\")) ||
+                    (supplier.ContactPerson != null && EF.Functions.ILike(supplier.ContactPerson, pattern, @"\")));
+            }
+            else
+            {
+                query = query.Where(supplier =>
+                    supplier.Name.ToLower().Contains(normalizedSearch) ||
+                    supplier.Group.Name.ToLower().Contains(normalizedSearch) ||
+                    (supplier.ChargeServiceSetting != null && supplier.ChargeServiceSetting.Name.ToLower().Contains(normalizedSearch)) ||
+                    (supplier.Inn != null && supplier.Inn.ToLower().Contains(normalizedSearch)) ||
+                    (supplier.ContactPerson != null && supplier.ContactPerson.ToLower().Contains(normalizedSearch)));
+            }
         }
 
         return query;
@@ -375,4 +390,7 @@ public sealed class EfSupplierRepository(GarageBalanceDbContext dbContext) : ISu
 
     private bool IsSqliteProvider() =>
         dbContext.Database.ProviderName?.Contains("Sqlite", StringComparison.OrdinalIgnoreCase) == true;
+
+    private bool IsNpgsqlProvider() =>
+        dbContext.Database.ProviderName?.Contains("Npgsql", StringComparison.OrdinalIgnoreCase) == true;
 }

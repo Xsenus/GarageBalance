@@ -2276,7 +2276,7 @@ describe('App', () => {
     expect(within(supplierRow as HTMLElement).getByRole('button', { name: 'Изменить поставщика Новый подрядчик' })).toBeInTheDocument()
     await user.click(within(supplierRow as HTMLElement).getByRole('button', { name: 'Изменить поставщика Новый подрядчик' }))
     const editSupplierDialog = await screen.findByRole('dialog', { name: 'Новый подрядчик' })
-    expect(getContractorSupplierContacts).toHaveBeenCalledTimes(1)
+    expect(getContractorSupplierContacts).not.toHaveBeenCalled()
     expect(within(editSupplierDialog).getByLabelText('Услуга поставщика').tagName).toBe('BUTTON')
     expect(within(editSupplierDialog).getByLabelText('Наименование поставщика').closest('.contractors-supplier-primary-grid')).not.toBeNull()
     expect(within(editSupplierDialog).getByLabelText('Юридический адрес поставщика').closest('.contractors-supplier-lookup-grid')).not.toBeNull()
@@ -3500,7 +3500,7 @@ describe('App', () => {
     expect(within(reopenedSupplierDialog).getByLabelText('Стартовый баланс поставщика')).toHaveValue('200.00')
   })
 
-  it('opens a supplier editor from loaded contacts without waiting for a duplicate request', async () => {
+  it('loads contacts only for the selected supplier and reuses them on the next opening', async () => {
     const user = userEvent.setup()
     const group = createGroup({ id: 'group-water-cached', name: 'Коммунальные услуги' })
     const supplier = createSupplier({
@@ -3508,6 +3508,7 @@ describe('App', () => {
       name: 'Водоканал без ожидания',
       groupId: group.id,
       groupName: group.name,
+      contactPerson: 'Озеров Михаил Владимирович',
     })
     const contact = createSupplierContact({
       id: 'contact-water-cached',
@@ -3516,8 +3517,8 @@ describe('App', () => {
       fullName: 'Озеров Михаил Владимирович',
     })
     const getSupplierContacts = vi.fn(async (_token: string, supplierId?: string) => {
-      if (supplierId) {
-        return new Promise<SupplierContactDto[]>(() => undefined)
+      if (!supplierId) {
+        throw new Error('Глобальная загрузка контактов не должна выполняться.')
       }
 
       return [contact]
@@ -3541,13 +3542,18 @@ describe('App', () => {
       throw new Error('Строка поставщика не найдена.')
     }
 
-    await waitFor(() => expect(within(supplierRow).getByText(contact.fullName)).toBeInTheDocument())
+    expect(within(supplierRow).getByText(contact.fullName)).toBeInTheDocument()
     await user.click(within(supplierRow).getByRole('button', { name: `Изменить поставщика ${supplier.name}` }))
 
     const supplierDialog = await screen.findByRole('dialog', { name: supplier.name })
     expect(within(supplierDialog).getByLabelText('Контакт 1: ФИО')).toHaveValue(contact.fullName)
     expect(getSupplierContacts).toHaveBeenCalledTimes(1)
     expect(within(supplierRow).getByRole('button', { name: `Изменить поставщика ${supplier.name}` })).not.toHaveAttribute('aria-busy', 'true')
+
+    await user.click(within(supplierDialog).getByRole('button', { name: 'Закрыть форму поставщика' }))
+    await user.click(within(supplierRow).getByRole('button', { name: `Изменить поставщика ${supplier.name}` }))
+    expect(await screen.findByRole('dialog', { name: supplier.name })).toBeInTheDocument()
+    expect(getSupplierContacts).toHaveBeenCalledTimes(1)
   })
 
   it('reports a supplier contact loading error when editor references are not ready', async () => {
@@ -3564,7 +3570,7 @@ describe('App', () => {
         throw new Error('Не удалось получить контакты выбранного поставщика.')
       }
 
-      return new Promise<SupplierContactDto[]>(() => undefined)
+      throw new Error('Глобальная загрузка контактов не должна выполняться.')
     })
     const dictionaryClient = createDictionaryClient({
       getSupplierGroups: async () => [group],
@@ -3590,7 +3596,7 @@ describe('App', () => {
     expect(await screen.findByText('Не удалось получить контакты выбранного поставщика.')).toBeInTheDocument()
     expect(screen.queryByRole('dialog', { name: supplier.name })).not.toBeInTheDocument()
     expect(within(supplierRow).getByRole('button', { name: `Изменить поставщика ${supplier.name}` })).not.toBeDisabled()
-    expect(getSupplierContacts).toHaveBeenCalledTimes(2)
+    expect(getSupplierContacts).toHaveBeenCalledTimes(1)
   })
 
   it('filters garage debtors and sorts visible contractor rows without a supplier debtor toggle', async () => {

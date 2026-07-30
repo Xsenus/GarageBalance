@@ -15,6 +15,7 @@ public sealed class EfOwnerRepository(GarageBalanceDbContext dbContext) : IOwner
         return await ApplyFilters(normalizedSearch, includeArchived)
             .OrderBy(owner => owner.LastName)
             .ThenBy(owner => owner.FirstName)
+            .ThenBy(owner => owner.Id)
             .Take(limit)
             .ToListAsync(cancellationToken);
     }
@@ -31,6 +32,7 @@ public sealed class EfOwnerRepository(GarageBalanceDbContext dbContext) : IOwner
         var items = await query
             .OrderBy(owner => owner.LastName)
             .ThenBy(owner => owner.FirstName)
+            .ThenBy(owner => owner.Id)
             .Skip(offset)
             .Take(limit)
             .ToListAsync(cancellationToken);
@@ -44,7 +46,9 @@ public sealed class EfOwnerRepository(GarageBalanceDbContext dbContext) : IOwner
 
     public Task<Owner?> FindArchivedWithGaragesAsync(Guid id, CancellationToken cancellationToken)
     {
-        return dbContext.Owners.Include(owner => owner.Garages)
+        return dbContext.Owners
+            .Include(owner => owner.Garages)
+            .AsSplitQuery()
             .SingleOrDefaultAsync(owner => owner.Id == id && owner.IsArchived, cancellationToken);
     }
 
@@ -57,16 +61,32 @@ public sealed class EfOwnerRepository(GarageBalanceDbContext dbContext) : IOwner
     {
         var query = dbContext.Owners.AsNoTracking()
             .Include(owner => owner.Garages)
+            .AsSplitQuery()
             .Where(owner => includeArchived || !owner.IsArchived);
         if (normalizedSearch is not null)
         {
-            query = query.Where(owner =>
-                owner.LastName.ToLower().Contains(normalizedSearch) ||
-                owner.FirstName.ToLower().Contains(normalizedSearch) ||
-                (owner.MiddleName != null && owner.MiddleName.ToLower().Contains(normalizedSearch)) ||
-                (owner.Phone != null && owner.Phone.ToLower().Contains(normalizedSearch)));
+            if (IsNpgsqlProvider())
+            {
+                var pattern = PostgresLikeSearch.ContainsPattern(normalizedSearch);
+                query = query.Where(owner =>
+                    EF.Functions.ILike(owner.LastName, pattern, @"\") ||
+                    EF.Functions.ILike(owner.FirstName, pattern, @"\") ||
+                    (owner.MiddleName != null && EF.Functions.ILike(owner.MiddleName, pattern, @"\")) ||
+                    (owner.Phone != null && EF.Functions.ILike(owner.Phone, pattern, @"\")));
+            }
+            else
+            {
+                query = query.Where(owner =>
+                    owner.LastName.ToLower().Contains(normalizedSearch) ||
+                    owner.FirstName.ToLower().Contains(normalizedSearch) ||
+                    (owner.MiddleName != null && owner.MiddleName.ToLower().Contains(normalizedSearch)) ||
+                    (owner.Phone != null && owner.Phone.ToLower().Contains(normalizedSearch)));
+            }
         }
 
         return query;
     }
+
+    private bool IsNpgsqlProvider() =>
+        dbContext.Database.ProviderName?.Contains("Npgsql", StringComparison.OrdinalIgnoreCase) == true;
 }

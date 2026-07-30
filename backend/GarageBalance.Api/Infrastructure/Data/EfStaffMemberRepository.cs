@@ -11,6 +11,7 @@ public sealed class EfStaffMemberRepository(GarageBalanceDbContext dbContext) : 
         return await ApplyFilters(departmentId, normalizedSearch, includeArchived)
             .OrderBy(member => member.Department.Name)
             .ThenBy(member => member.FullName)
+            .ThenBy(member => member.Id)
             .Take(limit)
             .ToListAsync(cancellationToken);
     }
@@ -59,9 +60,19 @@ public sealed class EfStaffMemberRepository(GarageBalanceDbContext dbContext) : 
 
         if (normalizedSearch is not null)
         {
-            query = query.Where(member =>
-                member.FullName.ToLower().Contains(normalizedSearch) ||
-                member.Department.Name.ToLower().Contains(normalizedSearch));
+            if (IsNpgsqlProvider())
+            {
+                var pattern = PostgresLikeSearch.ContainsPattern(normalizedSearch);
+                query = query.Where(member =>
+                    EF.Functions.ILike(member.FullName, pattern, @"\") ||
+                    EF.Functions.ILike(member.Department.Name, pattern, @"\"));
+            }
+            else
+            {
+                query = query.Where(member =>
+                    member.FullName.ToLower().Contains(normalizedSearch) ||
+                    member.Department.Name.ToLower().Contains(normalizedSearch));
+            }
         }
 
         return query;
@@ -82,4 +93,7 @@ public sealed class EfStaffMemberRepository(GarageBalanceDbContext dbContext) : 
 
     private bool IsSqliteProvider() =>
         dbContext.Database.ProviderName?.Contains("Sqlite", StringComparison.OrdinalIgnoreCase) == true;
+
+    private bool IsNpgsqlProvider() =>
+        dbContext.Database.ProviderName?.Contains("Npgsql", StringComparison.OrdinalIgnoreCase) == true;
 }

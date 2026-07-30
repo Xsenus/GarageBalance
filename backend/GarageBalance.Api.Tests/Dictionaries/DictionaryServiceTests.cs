@@ -1419,12 +1419,27 @@ public sealed class DictionaryServiceTests
         var highestDebt = await service.GetSuppliersPageAsync(null, null, 0, 1, "debt", "desc", CancellationToken.None);
         var safeFallback = await service.GetSuppliersPageAsync(null, null, 0, 1, "unsupported", "asc", CancellationToken.None);
         var primaryContact = await service.GetSuppliersPageAsync(null, null, 0, 1, "contactPerson", "asc", CancellationToken.None);
+        var contactPage = await service.GetSupplierContactsPageAsync(null, "example.test", 1, 1, "status", "desc", CancellationToken.None);
+        PagedResult<SupplierContactDto>[] contactSortPages =
+        [
+            await service.GetSupplierContactsPageAsync(null, null, 0, 10, "supplier", "asc", CancellationToken.None),
+            await service.GetSupplierContactsPageAsync(null, null, 0, 10, "supplier", "desc", CancellationToken.None),
+            await service.GetSupplierContactsPageAsync(null, null, 0, 10, "position", "asc", CancellationToken.None),
+            await service.GetSupplierContactsPageAsync(null, null, 0, 10, "position", "desc", CancellationToken.None),
+            await service.GetSupplierContactsPageAsync(null, null, 0, 10, "status", "asc", CancellationToken.None),
+            await service.GetSupplierContactsPageAsync(null, null, 0, 10, "unsupported", "desc", CancellationToken.None)
+        ];
         Assert.Equal("Водоканал", highestDebt.Items[0].Name);
         Assert.Equal("Альфа-Банк", safeFallback.Items[0].Name);
         Assert.Equal("Альфа-Банк", primaryContact.Items[0].Name);
         Assert.Equal("Анна Алексеева", primaryContact.Items[0].ContactPerson);
         Assert.Equal("+7 (911) 000-00-01", primaryContact.Items[0].Phone);
         Assert.Equal("a@example.test", primaryContact.Items[0].Email);
+        Assert.Equal(2, contactPage.TotalCount);
+        Assert.Single(contactPage.Items);
+        Assert.Equal(1, contactPage.Offset);
+        Assert.Equal(1, contactPage.Limit);
+        Assert.All(contactSortPages, page => Assert.Equal(2, page.TotalCount));
     }
 
     [Fact]

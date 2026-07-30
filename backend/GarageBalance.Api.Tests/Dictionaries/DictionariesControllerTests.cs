@@ -1286,6 +1286,7 @@ public sealed class DictionariesControllerTests
         var controller = CreateController(service, actorId);
 
         await controller.GetSupplierContacts(supplierId, "петр", 11, true, CancellationToken.None);
+        var contactPageResult = await controller.GetSupplierContactsPage(supplierId, "петр", 20, 10, "status", "desc", true, CancellationToken.None);
         await controller.GetStaffDepartments(12, true, CancellationToken.None);
         await controller.GetStaffMembers(departmentId, "ольга", 13, true, CancellationToken.None);
         var staffPageResult = await controller.GetStaffMembersPage(departmentId, "ольга", 25, 10, "rate", "desc", true, CancellationToken.None);
@@ -1294,6 +1295,9 @@ public sealed class DictionariesControllerTests
         var staffResult = await controller.CreateStaffMember(new UpsertStaffMemberRequest("Петрова Ольга", departmentId, 40000), CancellationToken.None);
 
         Assert.Equal((supplierId, "петр", 11, true), service.LastSupplierContactListRequest);
+        Assert.Equal((supplierId, "петр", 20, 10, "status", "desc", true), service.LastSupplierContactPageRequest);
+        var contactPageOk = Assert.IsType<OkObjectResult>(contactPageResult.Result);
+        Assert.IsType<PagedResult<SupplierContactDto>>(contactPageOk.Value);
         Assert.Equal((12, true), service.LastStaffDepartmentListRequest);
         Assert.Equal((departmentId, "ольга", 13, true), service.LastStaffMemberListRequest);
         Assert.Equal((departmentId, "ольга", 25, 10, "rate", "desc", true), service.LastStaffMemberPageRequest);
@@ -1746,6 +1750,7 @@ public sealed class DictionariesControllerTests
         public (Guid? GroupId, string? Search, int? Limit, bool IncludeArchived) LastSupplierListRequest { get; private set; }
         public (Guid? GroupId, string? Search, int? Offset, int? Limit, string? SortBy, string? SortDirection, bool IncludeArchived) LastSupplierPageRequest { get; private set; }
         public (Guid? SupplierId, string? Search, int? Limit, bool IncludeArchived) LastSupplierContactListRequest { get; private set; }
+        public (Guid? SupplierId, string? Search, int? Offset, int? Limit, string? SortBy, string? SortDirection, bool IncludeArchived) LastSupplierContactPageRequest { get; private set; }
         public (int? Limit, bool IncludeArchived) LastStaffDepartmentListRequest { get; private set; }
         public (Guid? DepartmentId, string? Search, int? Limit, bool IncludeArchived) LastStaffMemberListRequest { get; private set; }
         public (Guid? DepartmentId, string? Search, int? Offset, int? Limit, string? SortBy, string? SortDirection, bool IncludeArchived) LastStaffMemberPageRequest { get; private set; }
@@ -1976,6 +1981,12 @@ public sealed class DictionariesControllerTests
         {
             LastSupplierContactListRequest = (supplierId, search, limit, includeArchived);
             return Task.FromResult<IReadOnlyList<SupplierContactDto>>([]);
+        }
+
+        public Task<PagedResult<SupplierContactDto>> GetSupplierContactsPageAsync(Guid? supplierId, string? search, int? offset, int? limit, string? sortBy, string? sortDirection, CancellationToken cancellationToken, bool includeArchived = false)
+        {
+            LastSupplierContactPageRequest = (supplierId, search, offset, limit, sortBy, sortDirection, includeArchived);
+            return Task.FromResult(new PagedResult<SupplierContactDto>([], 0, offset ?? 0, limit ?? 100));
         }
 
         public Task<DictionaryResult<SupplierContactDto>> CreateSupplierContactAsync(UpsertSupplierContactRequest request, Guid? actorUserId, CancellationToken cancellationToken)

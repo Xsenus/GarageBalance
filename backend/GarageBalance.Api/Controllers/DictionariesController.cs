@@ -292,6 +292,13 @@ public sealed class DictionariesController(IDictionaryService dictionaryService)
         return Ok(await dictionaryService.GetSupplierContactsAsync(supplierId, search, cancellationToken, limit, includeArchived));
     }
 
+    [HttpGet("supplier-contacts/page")]
+    [ProducesResponseType<PagedResult<SupplierContactDto>>(StatusCodes.Status200OK)]
+    public async Task<ActionResult<PagedResult<SupplierContactDto>>> GetSupplierContactsPage([FromQuery] Guid? supplierId, [FromQuery] string? search, [FromQuery] int? offset, [FromQuery] int? limit, [FromQuery] string? sortBy, [FromQuery] string? sortDirection, [FromQuery] bool includeArchived, CancellationToken cancellationToken)
+    {
+        return Ok(await dictionaryService.GetSupplierContactsPageAsync(supplierId, search, offset, limit, sortBy, sortDirection, cancellationToken, includeArchived));
+    }
+
     [Authorize(Policy = SystemPermissions.DictionariesWrite)]
     [HttpPost("supplier-contacts")]
     [ProducesResponseType<SupplierContactDto>(StatusCodes.Status201Created)]

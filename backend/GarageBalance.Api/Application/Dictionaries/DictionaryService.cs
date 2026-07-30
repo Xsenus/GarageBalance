@@ -791,6 +791,23 @@ public sealed class DictionaryService(
         return contacts.Select(ToSupplierContactDto).ToList();
     }
 
+    public async Task<PagedResult<SupplierContactDto>> GetSupplierContactsPageAsync(Guid? supplierId, string? search, int? offset, int? limit, string? sortBy, string? sortDirection, CancellationToken cancellationToken, bool includeArchived = false)
+    {
+        var normalizedSearch = NormalizeSearch(search);
+        var normalizedOffset = NormalizeListOffset(offset);
+        var normalizedLimit = NormalizeListLimit(limit);
+        var normalizedSortBy = sortBy?.Trim() switch
+        {
+            "supplier" => "supplier",
+            "position" => "position",
+            "status" => "status",
+            _ => "fullName"
+        };
+        var sortDescending = string.Equals(sortDirection?.Trim(), "desc", StringComparison.OrdinalIgnoreCase);
+        var page = await supplierContactRepository.GetPageAsync(supplierId, normalizedSearch, includeArchived, normalizedOffset, normalizedLimit, normalizedSortBy, sortDescending, cancellationToken);
+        return new PagedResult<SupplierContactDto>(page.Items.Select(ToSupplierContactDto).ToList(), page.TotalCount, normalizedOffset, normalizedLimit);
+    }
+
     public async Task<DictionaryResult<SupplierContactDto>> CreateSupplierContactAsync(UpsertSupplierContactRequest request, Guid? actorUserId, CancellationToken cancellationToken)
     {
         if (!PhoneNumberNormalizer.TryNormalize(request.Phone, out var phone))
