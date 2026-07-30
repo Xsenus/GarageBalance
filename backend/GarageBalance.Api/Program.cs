@@ -155,6 +155,13 @@ builder.Services.AddScoped<IFinanceService>(services => new FinanceService(
 builder.Services.AddScoped<IFundService, FundService>();
 builder.Services.AddScoped<IImportRepository, EfImportRepository>();
 builder.Services.AddScoped<IImportService, ImportService>();
+builder.Services
+    .AddOptions<ImportDryRunQueueOptions>()
+    .Bind(builder.Configuration.GetSection(ImportDryRunQueueOptions.SectionName))
+    .ValidateDataAnnotations()
+    .ValidateOnStart();
+builder.Services.AddSingleton<IImportDryRunQueue, ImportDryRunQueue>();
+builder.Services.AddScoped<IImportDryRunDispatcher, ImportDryRunDispatcher>();
 builder.Services.AddScoped<IAccessImportReader, DisabledAccessImportReader>();
 builder.Services.AddScoped<IImportFingerprintRepository, EfImportFingerprintRepository>();
 builder.Services.AddScoped<IImportFingerprintService, ImportFingerprintService>();
@@ -164,7 +171,14 @@ builder.Services.AddScoped<IIntegrationSecretSettingsRepository, EfIntegrationSe
 builder.Services.AddScoped<IIntegrationSecretSettingsService, IntegrationSecretSettingsService>();
 builder.Services.AddScoped<IIntegrationStatusService, IntegrationStatusService>();
 builder.Services.AddScoped<IOneCFreshSyncAdapter, DisabledOneCFreshSyncAdapter>();
-builder.Services.AddScoped<IOneCFreshSyncService, OneCFreshSyncService>();
+builder.Services
+    .AddOptions<OneCFreshSyncBackgroundOptions>()
+    .Bind(builder.Configuration.GetSection(OneCFreshSyncBackgroundOptions.SectionName))
+    .ValidateDataAnnotations()
+    .ValidateOnStart();
+builder.Services.AddSingleton<IOneCFreshSyncBackgroundQueue, OneCFreshSyncBackgroundQueue>();
+builder.Services.AddScoped<OneCFreshSyncService>();
+builder.Services.AddScoped<IOneCFreshSyncService>(services => services.GetRequiredService<OneCFreshSyncService>());
 builder.Services.AddScoped<IReceiptPrintingAdapter, DisabledReceiptPrintingAdapter>();
 builder.Services.AddScoped<IReceiptPrintingRepository, EfReceiptPrintingRepository>();
 builder.Services.AddScoped<IReceiptPrintingService, ReceiptPrintingService>();
@@ -192,6 +206,27 @@ builder.Services
     .AddOptions<DatabaseBackupOptions>()
     .Bind(builder.Configuration.GetSection(DatabaseBackupOptions.SectionName))
     .ValidateDataAnnotations()
+    .Validate(
+        options => options.AutomaticWindowStartHour < options.AutomaticWindowEndHour,
+        "DatabaseBackup automatic window start must be earlier than its end.")
+    .Validate(
+        options =>
+        {
+            try
+            {
+                _ = TimeZoneInfo.FindSystemTimeZoneById(options.AutomaticWindowTimeZoneId);
+                return true;
+            }
+            catch (TimeZoneNotFoundException)
+            {
+                return false;
+            }
+            catch (InvalidTimeZoneException)
+            {
+                return false;
+            }
+        },
+        "DatabaseBackup automatic window time zone must be valid.")
     .ValidateOnStart();
 builder.Services
     .AddOptions<DatabaseStartupOptions>()
@@ -214,6 +249,8 @@ builder.Services.AddSingleton<IBusinessDateProvider, BusinessDateProvider>();
 builder.Services.AddHostedService<DatabaseStartupHostedService>();
 builder.Services.AddHostedService<BusinessDateSettingsInitializer>();
 builder.Services.AddHostedService<AppReleaseCatalogSynchronizer>();
+builder.Services.AddHostedService<ImportDryRunWorker>();
+builder.Services.AddHostedService<OneCFreshSyncBackgroundWorker>();
 builder.Services.AddHostedService<DatabaseBackupWorker>();
 builder.Services.AddScoped<IRegularAccrualAutomationRunner, RegularAccrualAutomationRunner>();
 builder.Services.AddHostedService<RegularAccrualAutomationWorker>();

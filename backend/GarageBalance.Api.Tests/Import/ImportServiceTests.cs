@@ -587,6 +587,52 @@ public sealed class ImportServiceTests
         Assert.True(reader.WasCalled);
     }
 
+    [Fact]
+    public async Task QueuedDryRun_IsObservableAndCompletesFromBackgroundStream()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = CreateService(database.Context);
+        var runId = Guid.NewGuid();
+
+        var queued = await service.CreateQueuedDryRunAsync(
+            new QueuedAccessImportDryRunRequest(runId, "archive.accdb", 32, Guid.NewGuid()),
+            CancellationToken.None);
+
+        Assert.True(queued.Succeeded);
+        Assert.Equal("queued", queued.Value!.Status);
+        await service.ProcessQueuedDryRunAsync(
+            runId,
+            CreateAccessLikeStream("garage owner payment"),
+            CancellationToken.None);
+
+        database.Context.ChangeTracker.Clear();
+        var stored = await database.Context.AccessImportRuns.SingleAsync(run => run.Id == runId);
+        Assert.Equal("completed", stored.Status);
+        Assert.Equal(64, stored.ContentSha256.Length);
+        Assert.Contains(
+            await database.Context.AccessImportRunLogEntries.Where(entry => entry.AccessImportRunId == runId).ToListAsync(),
+            entry => entry.StepCode == "dry_run_started");
+    }
+
+    [Fact]
+    public async Task QueuedDryRun_MarksMissingStagedFileAsFailed()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = CreateService(database.Context);
+        var runId = Guid.NewGuid();
+        await service.CreateQueuedDryRunAsync(
+            new QueuedAccessImportDryRunRequest(runId, "archive.mdb", 100, null),
+            CancellationToken.None);
+
+        await service.FailQueuedDryRunAsync(runId, "staged_file_missing", CancellationToken.None);
+
+        database.Context.ChangeTracker.Clear();
+        var stored = await database.Context.AccessImportRuns.SingleAsync(run => run.Id == runId);
+        Assert.Equal("failed", stored.Status);
+        Assert.Equal(1, stored.ErrorCount);
+        Assert.Contains("Загрузите файл повторно", stored.Summary, StringComparison.Ordinal);
+    }
+
     private static MemoryStream CreateAccessLikeStream(string text)
     {
         var oleSignature = new byte[] { 0xD0, 0xCF, 0x11, 0xE0, 0xA1, 0xB1, 0x1A, 0xE1 };

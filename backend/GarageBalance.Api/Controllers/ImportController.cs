@@ -9,7 +9,10 @@ namespace GarageBalance.Api.Controllers;
 [ApiController]
 [Authorize(Policy = SystemPermissions.ImportRun)]
 [Route("api/import/access")]
-public sealed class ImportController(IImportService importService, IImportQuarantineService importQuarantineService) : ControllerBase
+public sealed class ImportController(
+    IImportService importService,
+    IImportQuarantineService importQuarantineService,
+    IImportDryRunDispatcher? importDryRunDispatcher = null) : ControllerBase
 {
     [HttpGet("reader/status")]
     [ProducesResponseType<AccessImportReaderStatusDto>(StatusCodes.Status200OK)]
@@ -145,6 +148,7 @@ public sealed class ImportController(IImportService importService, IImportQuaran
     [HttpPost("dry-run")]
     [Consumes("multipart/form-data")]
     [ProducesResponseType<AccessImportRunDto>(StatusCodes.Status201Created)]
+    [ProducesResponseType<AccessImportRunDto>(StatusCodes.Status202Accepted)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<AccessImportRunDto>> DryRunAccessImport([FromForm] IFormFile? file, CancellationToken cancellationToken)
     {
@@ -154,7 +158,23 @@ public sealed class ImportController(IImportService importService, IImportQuaran
         }
 
         await using var stream = file.OpenReadStream();
-        var result = await importService.DryRunAccessImportAsync(new AccessImportDryRunRequest(file.FileName, stream), GetActorUserId(), cancellationToken);
+        if (importDryRunDispatcher is not null)
+        {
+            var queued = await importDryRunDispatcher.QueueAsync(
+                file.FileName,
+                stream,
+                file.Length,
+                GetActorUserId(),
+                cancellationToken);
+            return queued.Succeeded
+                ? AcceptedAtAction(nameof(GetAccessImportRuns), new { id = queued.Value!.Id }, queued.Value)
+                : BadRequest(ApiProblemDetails.Create(queued.ErrorCode, queued.ErrorMessage, StatusCodes.Status400BadRequest));
+        }
+
+        var result = await importService.DryRunAccessImportAsync(
+            new AccessImportDryRunRequest(file.FileName, stream),
+            GetActorUserId(),
+            cancellationToken);
         return result.Succeeded
             ? CreatedAtAction(nameof(GetAccessImportRuns), new { id = result.Value!.Id }, result.Value)
             : BadRequest(ApiProblemDetails.Create(result.ErrorCode, result.ErrorMessage, StatusCodes.Status400BadRequest));

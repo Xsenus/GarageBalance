@@ -2,6 +2,7 @@ using GarageBalance.Api.Application.Audit;
 using GarageBalance.Api.Application.Common;
 using System.Security.Cryptography;
 using System.Text;
+using Microsoft.Extensions.Options;
 
 namespace GarageBalance.Api.Application.Integrations;
 
@@ -9,12 +10,16 @@ public sealed class OneCFreshSyncService(
     IApplicationUnitOfWork unitOfWork,
     IIntegrationSecretSettingsService secretSettingsService,
     IOneCFreshSyncAdapter syncAdapter,
-    IAuditEventWriter auditEventWriter) : IOneCFreshSyncService
+    IAuditEventWriter auditEventWriter,
+    IOneCFreshSyncBackgroundQueue? backgroundQueue = null,
+    IOptions<OneCFreshSyncBackgroundOptions>? backgroundOptions = null) : IOneCFreshSyncService
 {
     private const string Provider = IntegrationSecretCatalog.OneCFreshProvider;
     private const string RefreshTokenSettingKey = IntegrationSecretCatalog.OneCFreshRefreshToken;
     private const string PreviewDirection = "pending_decision";
     private const string PreviewStatus = "draft_preview";
+    private readonly TimeSpan _adapterTimeout = TimeSpan.FromSeconds(
+        backgroundOptions?.Value.AdapterTimeoutSeconds ?? 30);
 
     public async Task<OneCFreshSyncResult<OneCFreshSyncPreviewDto>> PreviewSyncAsync(
         OneCFreshSyncRequest request,
@@ -125,6 +130,92 @@ public sealed class OneCFreshSyncService(
         string summary,
         CancellationToken cancellationToken)
     {
+        if (backgroundQueue is not null)
+        {
+            return await QueueSyncAsync(request, actorUserId, isRetry, action, summary, cancellationToken);
+        }
+
+        return await RunSyncInlineAsync(request, actorUserId, isRetry, action, summary, cancellationToken);
+    }
+
+    internal Task<OneCFreshSyncResult<OneCFreshSyncDto>> ExecuteQueuedSyncAsync(
+        OneCFreshSyncBackgroundJob job,
+        CancellationToken cancellationToken)
+    {
+        return RunSyncInlineAsync(
+            job.Request,
+            job.ActorUserId,
+            job.IsRetry,
+            job.IsRetry ? "one_c_fresh.sync_retry_completed" : "one_c_fresh.sync_completed",
+            job.IsRetry ? "Завершён фоновый повтор синхронизации 1C Fresh." : "Завершена фоновая синхронизация 1C Fresh.",
+            cancellationToken);
+    }
+
+    private async Task<OneCFreshSyncResult<OneCFreshSyncDto>> QueueSyncAsync(
+        OneCFreshSyncRequest request,
+        Guid? actorUserId,
+        bool isRetry,
+        string action,
+        string summary,
+        CancellationToken cancellationToken)
+    {
+        var refreshToken = await secretSettingsService.GetSecretAsync(Provider, RefreshTokenSettingKey, cancellationToken);
+        if (!refreshToken.Succeeded || string.IsNullOrWhiteSpace(refreshToken.Value))
+        {
+            return OneCFreshSyncResult<OneCFreshSyncDto>.Failure(
+                "one_c_fresh_not_configured",
+                "Для запуска синхронизации сохраните защищенную настройку OneCFresh:RefreshToken.");
+        }
+
+        var comment = string.IsNullOrWhiteSpace(request.Comment) ? null : request.Comment.Trim();
+        var auditEvent = auditEventWriter.Add(new AuditEventWriteRequest(
+            actorUserId,
+            action,
+            "integration_sync",
+            Provider,
+            Summary: summary,
+            Section: "integrations",
+            ActionKind: "sync",
+            EntityDisplayName: "1C Fresh",
+            Reason: comment,
+            Metadata: new Dictionary<string, object?>
+            {
+                ["provider"] = Provider,
+                ["syncStatus"] = "queued",
+                ["isRetry"] = isRetry,
+                ["protectedCredentialConfigured"] = true
+            }));
+        await unitOfWork.SaveChangesAsync(cancellationToken);
+        if (!backgroundQueue!.TryQueue(
+                new OneCFreshSyncBackgroundJob(new OneCFreshSyncRequest(comment), actorUserId, isRetry)))
+        {
+            return OneCFreshSyncResult<OneCFreshSyncDto>.Failure(
+                "one_c_fresh_queue_busy",
+                "Очередь синхронизации занята. Повторите запуск позже.");
+        }
+
+        return OneCFreshSyncResult<OneCFreshSyncDto>.Success(new OneCFreshSyncDto(
+            auditEvent!.Id,
+            Provider,
+            "queued",
+            "Синхронизация поставлена в фоновую очередь. Раздел можно продолжать использовать.",
+            auditEvent.CreatedAtUtc,
+            isRetry,
+            CanRetry: false,
+            HasConflict: false,
+            ErrorCode: null,
+            ExternalRunId: null,
+            RecoveryAction: "watch_status"));
+    }
+
+    private async Task<OneCFreshSyncResult<OneCFreshSyncDto>> RunSyncInlineAsync(
+        OneCFreshSyncRequest request,
+        Guid? actorUserId,
+        bool isRetry,
+        string action,
+        string summary,
+        CancellationToken cancellationToken)
+    {
         var comment = string.IsNullOrWhiteSpace(request.Comment) ? null : request.Comment.Trim();
         var refreshToken = await secretSettingsService.GetSecretAsync(Provider, RefreshTokenSettingKey, cancellationToken);
         if (!refreshToken.Succeeded || string.IsNullOrWhiteSpace(refreshToken.Value))
@@ -135,9 +226,21 @@ public sealed class OneCFreshSyncService(
         }
 
         var requestedAtUtc = DateTimeOffset.UtcNow;
-        var adapterResult = await syncAdapter.StartAsync(
-            new OneCFreshSyncAdapterRequest(refreshToken.Value, comment, requestedAtUtc, isRetry),
-            cancellationToken);
+        OneCFreshSyncAdapterResult adapterResult;
+        try
+        {
+            adapterResult = await syncAdapter.StartAsync(
+                    new OneCFreshSyncAdapterRequest(refreshToken.Value, comment, requestedAtUtc, isRetry),
+                    cancellationToken)
+                .WaitAsync(_adapterTimeout, cancellationToken);
+        }
+        catch (TimeoutException)
+        {
+            adapterResult = OneCFreshSyncAdapterResult.Failed(
+                "timeout",
+                "Адаптер 1C Fresh не ответил вовремя. Операцию можно безопасно повторить вручную.",
+                "one_c_fresh_timeout");
+        }
         var outcome = ClassifyAdapterResult(adapterResult);
 
         var auditEvent = auditEventWriter.Add(new AuditEventWriteRequest(

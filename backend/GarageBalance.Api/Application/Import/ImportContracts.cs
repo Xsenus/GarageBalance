@@ -6,6 +6,12 @@ public sealed record AccessImportDryRunRequest(
     [Required] string FileName,
     [Required] Stream Content);
 
+public sealed record QueuedAccessImportDryRunRequest(
+    Guid RunId,
+    [Required] string FileName,
+    long FileSizeBytes,
+    Guid? ActorUserId);
+
 public sealed record AccessImportRunListRequest
 {
     [Range(1, 200)]

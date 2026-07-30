@@ -4,6 +4,7 @@ using GarageBalance.Api.Application.Integrations;
 using GarageBalance.Api.Infrastructure.Data;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 
 namespace GarageBalance.Api.Tests.Integrations;
 
@@ -334,6 +335,55 @@ public sealed class OneCFreshSyncServiceTests
             new AuditEventWriter(context));
     }
 
+    [Fact]
+    public async Task StartSyncAsync_WithProductionQueue_ReturnsImmediatelyWithoutCallingAdapter()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var adapter = new FakeSyncAdapter();
+        var options = Options.Create(new OneCFreshSyncBackgroundOptions { Capacity = 2, AdapterTimeoutSeconds = 30 });
+        var queue = new OneCFreshSyncBackgroundQueue(options);
+        var service = new OneCFreshSyncService(
+            new EfApplicationUnitOfWork(database.Context),
+            new FakeSecretSettingsService("secret"),
+            adapter,
+            new AuditEventWriter(database.Context),
+            queue,
+            options);
+
+        var result = await service.StartSyncAsync(new OneCFreshSyncRequest("Фоновый запуск"), Guid.NewGuid(), CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+        Assert.Equal("queued", result.Value!.Status);
+        Assert.Null(adapter.LastRequest);
+        var job = await queue.DequeueAsync(CancellationToken.None);
+        Assert.False(job.IsRetry);
+        Assert.Equal("Фоновый запуск", job.Request.Comment);
+    }
+
+    [Fact]
+    public async Task ExecuteQueuedSyncAsync_AppliesAdapterTimeoutOutsideRequestTransaction()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var options = Options.Create(new OneCFreshSyncBackgroundOptions { Capacity = 2, AdapterTimeoutSeconds = 0 });
+        var service = new OneCFreshSyncService(
+            new EfApplicationUnitOfWork(database.Context),
+            new FakeSecretSettingsService("secret"),
+            new NeverCompletingSyncAdapter(),
+            new AuditEventWriter(database.Context),
+            backgroundQueue: null,
+            options);
+
+        var result = await service.ExecuteQueuedSyncAsync(
+            new OneCFreshSyncBackgroundJob(new OneCFreshSyncRequest(null), Guid.NewGuid(), IsRetry: false),
+            CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+        Assert.Equal("timeout", result.Value!.Status);
+        Assert.True(result.Value.CanRetry);
+        Assert.Equal("one_c_fresh_timeout", result.Value.ErrorCode);
+        Assert.False(database.Context.Database.CurrentTransaction is not null);
+    }
+
     private sealed class FakeSecretSettingsService(string? refreshToken) : IIntegrationSecretSettingsService
     {
         public Task<IntegrationSecretSettingResult<IntegrationSecretSettingDto>> UpsertSecretAsync(
@@ -372,6 +422,15 @@ public sealed class OneCFreshSyncServiceTests
             LastCancellationToken = cancellationToken;
             return Task.FromResult(result ?? OneCFreshSyncAdapterResult.Pending("Ожидает адаптер."));
         }
+    }
+
+    private sealed class NeverCompletingSyncAdapter : IOneCFreshSyncAdapter
+    {
+        public Task<OneCFreshSyncAdapterResult> StartAsync(
+            OneCFreshSyncAdapterRequest request,
+            CancellationToken cancellationToken) =>
+            new TaskCompletionSource<OneCFreshSyncAdapterResult>(
+                TaskCreationOptions.RunContinuationsAsynchronously).Task;
     }
 
     private sealed class TestDatabase : IAsyncDisposable

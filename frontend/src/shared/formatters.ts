@@ -92,6 +92,14 @@ export function formatMissingMeterReadings(items: MissingMeterReadingDto[]): str
 }
 
 export function formatImportRunStatus(status: AccessImportRunDto['status']): string {
+  if (status === 'queued') {
+    return 'В очереди'
+  }
+
+  if (status === 'processing') {
+    return 'Выполняется'
+  }
+
   if (status === 'completed') {
     return 'Завершен'
   }
@@ -108,7 +116,7 @@ export function formatImportRunStatus(status: AccessImportRunDto['status']): str
     return 'Заявка отменена'
   }
 
-  return 'Заблокирован'
+  return status === 'failed' ? 'Ошибка' : 'Заблокирован'
 }
 
 export function formatImportCheckStatus(status: AccessImportCheckDto['status']): string {

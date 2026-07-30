@@ -48,6 +48,28 @@ public sealed class DatabaseBackupAutomationRunnerTests
         Assert.False(await runner.RunIfDueAsync(CancellationToken.None));
     }
 
+    [Fact]
+    public async Task RunIfDue_DoesNotCompeteWithWorkingRequestsOutsideAutomaticWindow()
+    {
+        var service = new FakeBackupService(CreateStatus([])) { ThrowOnStatusRead = true };
+        var runner = new DatabaseBackupAutomationRunner(
+            service,
+            Options.Create(new DatabaseBackupOptions
+            {
+                Enabled = true,
+                AutomaticEnabled = true,
+                IntervalHours = 24,
+                AutomaticWindowStartHour = 2,
+                AutomaticWindowEndHour = 5,
+                AutomaticWindowTimeZoneId = "UTC"
+            }),
+            new FixedTimeProvider(Now),
+            NullLogger<DatabaseBackupAutomationRunner>.Instance);
+
+        Assert.False(await runner.RunIfDueAsync(CancellationToken.None));
+        Assert.Equal(0, service.StatusReadCount);
+    }
+
     [Theory]
     [InlineData(false, true)]
     [InlineData(true, false)]
@@ -68,7 +90,15 @@ public sealed class DatabaseBackupAutomationRunnerTests
     {
         return new DatabaseBackupAutomationRunner(
             service,
-            Options.Create(new DatabaseBackupOptions { Enabled = true, AutomaticEnabled = true, IntervalHours = 24 }),
+            Options.Create(new DatabaseBackupOptions
+            {
+                Enabled = true,
+                AutomaticEnabled = true,
+                IntervalHours = 24,
+                AutomaticWindowStartHour = 0,
+                AutomaticWindowEndHour = 24,
+                AutomaticWindowTimeZoneId = "UTC"
+            }),
             new FixedTimeProvider(Now),
             NullLogger<DatabaseBackupAutomationRunner>.Instance);
     }

@@ -19,9 +19,29 @@ public sealed class EfImportFingerprintRepository(GarageBalanceDbContext dbConte
             .AnyAsync(item => item.FingerprintKey == fingerprintKey, cancellationToken);
     }
 
+    public async Task<IReadOnlyDictionary<string, AccessImportRowFingerprint>> FindByKeysAsync(
+        IReadOnlyCollection<string> fingerprintKeys,
+        CancellationToken cancellationToken)
+    {
+        if (fingerprintKeys.Count == 0)
+        {
+            return new Dictionary<string, AccessImportRowFingerprint>(StringComparer.Ordinal);
+        }
+
+        return await dbContext.AccessImportRowFingerprints
+            .AsNoTracking()
+            .Where(item => fingerprintKeys.Contains(item.FingerprintKey))
+            .ToDictionaryAsync(item => item.FingerprintKey, StringComparer.Ordinal, cancellationToken);
+    }
+
     public void Add(AccessImportRowFingerprint fingerprint)
     {
         dbContext.AccessImportRowFingerprints.Add(fingerprint);
+    }
+
+    public void AddRange(IEnumerable<AccessImportRowFingerprint> fingerprints)
+    {
+        dbContext.AccessImportRowFingerprints.AddRange(fingerprints);
     }
 
     public Task SaveChangesAsync(CancellationToken cancellationToken)

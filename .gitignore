@@ -36,6 +36,7 @@ local-db-backups/
 private-imports/
 imports/private/
 imports/raw/
+import-queue/
 artifacts/
 .deploy/
 

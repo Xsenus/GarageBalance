@@ -811,6 +811,8 @@ public sealed class GarageBalanceDbContext(DbContextOptions<GarageBalanceDbConte
             entity.HasIndex(run => run.StartedAtUtc);
             entity.HasIndex(run => run.Status);
             entity.HasIndex(run => run.ContentSha256);
+            entity.HasIndex(run => new { run.Status, run.StartedAtUtc });
+            entity.HasIndex(run => new { run.ContentSha256, run.StartedAtUtc });
         });
 
         modelBuilder.Entity<AccessImportRunLogEntry>(entity =>
@@ -859,6 +861,8 @@ public sealed class GarageBalanceDbContext(DbContextOptions<GarageBalanceDbConte
             entity.HasIndex(item => item.AccessImportRunId);
             entity.HasIndex(item => item.Status);
             entity.HasIndex(item => item.CreatedAtUtc);
+            entity.HasIndex(item => new { item.Status, item.CreatedAtUtc, item.Id });
+            entity.HasIndex(item => new { item.Status, item.AccessImportRunId, item.CreatedAtUtc, item.Id });
             entity.HasIndex(item => new { item.SourceSystem, item.EntityType });
             entity.HasIndex(item => item.RowHash);
         });

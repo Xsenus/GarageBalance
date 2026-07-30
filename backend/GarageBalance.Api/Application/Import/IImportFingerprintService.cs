@@ -6,6 +6,10 @@ public interface IImportFingerprintService
         RegisterImportRowFingerprintRequest request,
         Guid? actorUserId,
         CancellationToken cancellationToken);
+    Task<ImportResult<RegisterImportRowFingerprintBatchDto>> RegisterBatchAsync(
+        RegisterImportRowFingerprintBatchRequest request,
+        Guid? actorUserId,
+        CancellationToken cancellationToken);
 
     Task<bool> ExistsAsync(
         string sourceSystem,

@@ -8,6 +8,9 @@ public interface IImportService
     Task<ImportResult<IReadOnlyList<AccessImportCreatedRecordDto>>> GetAccessImportCreatedRecordsAsync(Guid runId, AccessImportCreatedRecordListRequest request, CancellationToken cancellationToken);
     Task<ImportResult<ImportReportFileDto>> ExportAccessImportRunReportAsync(Guid runId, Guid? actorUserId, CancellationToken cancellationToken);
     Task<ImportResult<AccessImportRunDto>> DryRunAccessImportAsync(AccessImportDryRunRequest request, Guid? actorUserId, CancellationToken cancellationToken);
+    Task<ImportResult<AccessImportRunDto>> CreateQueuedDryRunAsync(QueuedAccessImportDryRunRequest request, CancellationToken cancellationToken);
+    Task ProcessQueuedDryRunAsync(Guid runId, Stream content, CancellationToken cancellationToken);
+    Task FailQueuedDryRunAsync(Guid runId, string errorCode, CancellationToken cancellationToken);
     Task<ImportResult<AccessImportRunDto>> RequestAccessImportApplyAsync(Guid runId, AccessImportApplyRequest request, Guid? actorUserId, CancellationToken cancellationToken);
     Task<ImportResult<AccessImportRunDto>> CancelAccessImportApplyRequestAsync(Guid runId, AccessImportApplyCancelRequest request, Guid? actorUserId, CancellationToken cancellationToken);
     Task<ImportResult<AccessImportRunDto>> RequestAccessImportRollbackAsync(Guid runId, AccessImportRollbackRequest request, Guid? actorUserId, CancellationToken cancellationToken);

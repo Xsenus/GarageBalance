@@ -134,6 +134,25 @@ public sealed class ImportControllerTests
     }
 
     [Fact]
+    public async Task DryRunAccessImport_ReturnsAcceptedWhenProductionDispatcherQueuesWork()
+    {
+        var run = CreateRun("queued");
+        var dispatcher = new FakeImportDryRunDispatcher(
+            ImportResult<AccessImportRunDto>.Success(run));
+        var controller = new ImportController(
+            new FakeImportService(),
+            new FakeImportQuarantineService(),
+            dispatcher);
+        controller.ControllerContext.HttpContext = new DefaultHttpContext();
+
+        var result = await controller.DryRunAccessImport(CreateFormFile("archive.accdb"), CancellationToken.None);
+
+        var accepted = Assert.IsType<AcceptedAtActionResult>(result.Result);
+        Assert.Equal(run.Id, Assert.IsType<AccessImportRunDto>(accepted.Value).Id);
+        Assert.Equal("archive.accdb", dispatcher.FileName);
+    }
+
+    [Fact]
     public async Task DryRunAccessImport_ReturnsBadRequestForServiceError()
     {
         var service = new FakeImportService
@@ -732,6 +751,15 @@ public sealed class ImportControllerTests
             LastFileName = request.FileName;
             return Task.FromResult(DryRunResult);
         }
+
+        public Task<ImportResult<AccessImportRunDto>> CreateQueuedDryRunAsync(QueuedAccessImportDryRunRequest request, CancellationToken cancellationToken) =>
+            Task.FromResult(DryRunResult);
+
+        public Task ProcessQueuedDryRunAsync(Guid runId, Stream content, CancellationToken cancellationToken) =>
+            Task.CompletedTask;
+
+        public Task FailQueuedDryRunAsync(Guid runId, string errorCode, CancellationToken cancellationToken) =>
+            Task.CompletedTask;
     }
 
     private sealed class FakeImportQuarantineService : IImportQuarantineService
@@ -761,6 +789,23 @@ public sealed class ImportControllerTests
             LastResolveId = id;
             LastActorUserId = actorUserId;
             return Task.FromResult(ResolveResult);
+        }
+    }
+
+    private sealed class FakeImportDryRunDispatcher(
+        ImportResult<AccessImportRunDto> result) : IImportDryRunDispatcher
+    {
+        public string? FileName { get; private set; }
+
+        public Task<ImportResult<AccessImportRunDto>> QueueAsync(
+            string fileName,
+            Stream content,
+            long declaredLength,
+            Guid? actorUserId,
+            CancellationToken cancellationToken)
+        {
+            FileName = fileName;
+            return Task.FromResult(result);
         }
     }
 }

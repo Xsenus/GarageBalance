@@ -10,7 +10,7 @@ export type AccessImportCheckDto = {
 export type AccessImportRunDto = {
   id: string
   mode: string
-  status: 'completed' | 'blocked' | 'rollback_requested' | 'import_requested' | 'import_request_cancelled'
+  status: 'queued' | 'processing' | 'completed' | 'blocked' | 'failed' | 'rollback_requested' | 'import_requested' | 'import_request_cancelled'
   originalFileName: string
   fileExtension: string
   fileSizeBytes: number

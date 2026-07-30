@@ -43,9 +43,17 @@ services:
       DatabaseBackup__AutomaticEnabled: ${DATABASE_BACKUP_AUTOMATIC_ENABLED:-true}
       DatabaseBackup__Directory: /backups
       DatabaseBackup__IntervalHours: ${DATABASE_BACKUP_INTERVAL_HOURS:-24}
+      DatabaseBackup__AutomaticWindowStartHour: ${DATABASE_BACKUP_WINDOW_START_HOUR:-2}
+      DatabaseBackup__AutomaticWindowEndHour: ${DATABASE_BACKUP_WINDOW_END_HOUR:-5}
+      DatabaseBackup__AutomaticWindowTimeZoneId: ${DATABASE_BACKUP_TIME_ZONE_ID:-Europe/Moscow}
       DatabaseBackup__RetentionCount: ${DATABASE_BACKUP_RETENTION_COUNT:-30}
       DatabaseBackup__PgDumpPath: pg_dump
       DatabaseBackup__PgRestorePath: pg_restore
+      ImportProcessing__Capacity: ${IMPORT_PROCESSING_CAPACITY:-4}
+      ImportProcessing__WorkDirectory: /var/lib/garagebalance/import-queue
+      ImportProcessing__MaximumFileSizeMegabytes: ${IMPORT_MAXIMUM_FILE_SIZE_MB:-512}
+      Integrations__OneCFreshBackground__Capacity: ${ONE_C_FRESH_QUEUE_CAPACITY:-8}
+      Integrations__OneCFreshBackground__AdapterTimeoutSeconds: ${ONE_C_FRESH_ADAPTER_TIMEOUT_SECONDS:-30}
       DiagnosticLogging__Enabled: ${DIAGNOSTIC_LOGGING_ENABLED:-true}
       DiagnosticLogging__Directory: /logs
       DiagnosticLogging__RetentionDays: ${DIAGNOSTIC_LOGGING_RETENTION_DAYS:-14}
@@ -56,6 +64,7 @@ services:
       - data-protection-keys:${DATA_PROTECTION_KEYS_PATH:-/var/lib/garagebalance/keys}
       - ${BACKUP_HOST_PATH:-./backups}:/backups
       - ${LOG_HOST_PATH:-./logs}:/logs
+      - ${IMPORT_QUEUE_HOST_PATH:-./import-queue}:/var/lib/garagebalance/import-queue
     ports:
       - "${API_BIND_ADDRESS:-127.0.0.1}:${API_PORT:-5080}:8080"
     healthcheck:

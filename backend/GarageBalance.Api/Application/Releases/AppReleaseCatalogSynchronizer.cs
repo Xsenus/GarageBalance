@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using System.Text.Json;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.DependencyInjection;
@@ -12,6 +13,7 @@ public sealed class AppReleaseCatalogSynchronizer(
     ILogger<AppReleaseCatalogSynchronizer> logger) : BackgroundService
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
+    private string? _lastSynchronizedHash;
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -35,15 +37,24 @@ public sealed class AppReleaseCatalogSynchronizer(
 
             await using var stream = new FileStream(path, new FileStreamOptions
             {
-                Mode = FileMode.Open,
                 Access = FileAccess.Read,
+                Mode = FileMode.Open,
                 Share = FileShare.Read,
                 Options = FileOptions.Asynchronous | FileOptions.SequentialScan
             });
+            var contentHash = Convert.ToHexString(await SHA256.HashDataAsync(stream, stoppingToken));
+            if (string.Equals(contentHash, _lastSynchronizedHash, StringComparison.Ordinal))
+            {
+                logger.LogDebug("App release source is unchanged; synchronization was skipped.");
+                return;
+            }
+
+            stream.Position = 0;
             var releases = await JsonSerializer.DeserializeAsync<List<AppReleaseDto>>(stream, JsonOptions, stoppingToken) ?? [];
             using var scope = scopeFactory.CreateScope();
             var repository = scope.ServiceProvider.GetRequiredService<IAppReleaseRepository>();
             await repository.SynchronizeAsync(releases, stoppingToken);
+            _lastSynchronizedHash = contentHash;
             logger.LogInformation("Synchronized {Count} app releases with the database.", releases.Count);
         }
         catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)

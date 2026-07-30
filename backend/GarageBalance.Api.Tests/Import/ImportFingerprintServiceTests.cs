@@ -118,6 +118,53 @@ public sealed class ImportFingerprintServiceTests
         Assert.Empty(database.Context.AuditEvents);
     }
 
+    [Fact]
+    public async Task RegisterBatchAsync_FetchesExistingKeysAndWritesNewRowsAsOneBatch()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = CreateService(database.Context);
+        await service.RegisterAsync(
+            new RegisterImportRowFingerprintRequest("Access", "Garage", "1", RowHash, null, "garage", "1"),
+            null,
+            CancellationToken.None);
+
+        var result = await service.RegisterBatchAsync(
+            new RegisterImportRowFingerprintBatchRequest([
+                new("Access", "Garage", "1", AnotherRowHash, null, "garage", "duplicate"),
+                new("Access", "Garage", "2", AnotherRowHash, null, "garage", "2"),
+                new("Access", "Garage", "2", AnotherRowHash, null, "garage", "2")
+            ]),
+            Guid.NewGuid(),
+            CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+        Assert.Equal(3, result.Value!.RequestedCount);
+        Assert.Equal(1, result.Value.CreatedCount);
+        Assert.Equal(1, result.Value.ExistingCount);
+        Assert.Equal(2, result.Value.Fingerprints.Count);
+        Assert.Equal(2, await database.Context.AccessImportRowFingerprints.CountAsync());
+        Assert.Single(database.Context.AuditEvents, item => item.Action == "import.row_fingerprint_batch_registered");
+    }
+
+    [Fact]
+    public async Task RegisterBatchAsync_RejectsEmptyAndInvalidBatchesBeforeDatabaseWrite()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = CreateService(database.Context);
+
+        var empty = await service.RegisterBatchAsync(new RegisterImportRowFingerprintBatchRequest([]), null, CancellationToken.None);
+        var invalid = await service.RegisterBatchAsync(
+            new RegisterImportRowFingerprintBatchRequest([
+                new("Access", "Garage", "1", "bad-hash", null, null, null)
+            ]),
+            null,
+            CancellationToken.None);
+
+        Assert.Equal("import_fingerprint_batch_size_invalid", empty.ErrorCode);
+        Assert.Equal("import_row_hash_invalid", invalid.ErrorCode);
+        Assert.Empty(database.Context.AccessImportRowFingerprints);
+    }
+
     private static ImportFingerprintService CreateService(GarageBalanceDbContext context)
     {
         return new ImportFingerprintService(new EfImportFingerprintRepository(context), new AuditEventWriter(context));

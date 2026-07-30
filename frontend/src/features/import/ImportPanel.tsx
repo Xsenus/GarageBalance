@@ -66,7 +66,7 @@ export function ImportPanel({ auth, importClient }: { auth: AuthResponse; import
   const rollbackActionLabel = currentRun ? `Запросить rollback импорта ${currentRun.originalFileName}` : 'Запросить rollback импорта'
   const applyDisabled = !currentRun || (currentRun.status !== 'completed' && currentRun.status !== 'import_request_cancelled') || applyingRunId !== null || cancelingApplyRunId !== null || rollbackingRunId !== null
   const applyCancelDisabled = !currentRun || currentRun.status !== 'import_requested' || cancelingApplyRunId !== null
-  const rollbackDisabled = !currentRun || currentRun.status === 'rollback_requested' || currentRun.status === 'import_requested' || rollbackingRunId !== null || cancelingApplyRunId !== null
+  const rollbackDisabled = !currentRun || currentRun.status === 'queued' || currentRun.status === 'processing' || currentRun.status === 'rollback_requested' || currentRun.status === 'import_requested' || rollbackingRunId !== null || cancelingApplyRunId !== null
   useRestoreFocusOnClose(Boolean(quarantineResolveTarget))
   useRestoreFocusOnClose(Boolean(applyTarget))
   useRestoreFocusOnClose(Boolean(applyCancelTarget))
@@ -165,6 +165,36 @@ export function ImportPanel({ auth, importClient }: { auth: AuthResponse; import
   }, [auth.accessToken, currentRun, importClient])
 
   useEffect(() => {
+    if (!currentRun || (currentRun.status !== 'queued' && currentRun.status !== 'processing')) {
+      return
+    }
+
+    let ignore = false
+    const timer = window.setInterval(() => {
+      void importClient.getAccessRuns(auth.accessToken).then((loadedRuns) => {
+        if (ignore) {
+          return
+        }
+
+        setRuns(loadedRuns)
+        const updatedRun = loadedRuns.find((run) => run.id === currentRun.id)
+        if (updatedRun) {
+          setCurrentRun(updatedRun)
+        }
+      }).catch((caught) => {
+        if (!ignore) {
+          setError(caught instanceof Error ? caught.message : 'Не удалось обновить состояние фоновой проверки.')
+        }
+      })
+    }, 1000)
+
+    return () => {
+      ignore = true
+      window.clearInterval(timer)
+    }
+  }, [auth.accessToken, currentRun, importClient])
+
+  useEffect(() => {
     let ignore = false
 
     async function loadCreatedRecords() {
@@ -215,6 +245,9 @@ export function ImportPanel({ auth, importClient }: { auth: AuthResponse; import
       setQuarantineItems(await importClient.getOpenQuarantineItems(auth.accessToken, undefined, importQuarantineScreenRequestLimit))
       setSelectedFile(null)
       setExportMessage(null)
+      if (run.status === 'queued' || run.status === 'processing') {
+        setExportMessage('Файл принят. Проверка выполняется в фоне — раздел можно продолжать использовать.')
+      }
       form.reset()
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Не удалось выполнить dry-run импорта.')
@@ -510,7 +543,7 @@ export function ImportPanel({ auth, importClient }: { auth: AuthResponse; import
             <div className="import-report-group import-report-actions" aria-label="Действия с отчетом проверки">
               <h4>Действия</h4>
               <div>
-                <button className="secondary-button" type="button" aria-label={reportDownloadActionLabel} title={reportDownloadActionLabel} data-tooltip={reportDownloadActionLabel} disabled={!currentRun || exporting} onClick={downloadCurrentReport}>
+                <button className="secondary-button" type="button" aria-label={reportDownloadActionLabel} title={reportDownloadActionLabel} data-tooltip={reportDownloadActionLabel} disabled={!currentRun || currentRun.status === 'queued' || currentRun.status === 'processing' || exporting} onClick={downloadCurrentReport}>
                   <FileText size={16} aria-hidden="true" />
                   <span>Скачать отчет JSON</span>
                 </button>

@@ -9,6 +9,7 @@ public interface IImportRepository
     Task<IReadOnlyList<AccessImportRunLogEntry>> GetRunLogEntriesAsync(Guid runId, int limit, CancellationToken cancellationToken);
     Task<IReadOnlyList<AccessImportCreatedRecord>> GetCreatedRecordsAsync(Guid runId, int limit, CancellationToken cancellationToken);
     Task<AccessImportRun?> FindRunAsync(Guid runId, bool trackChanges, CancellationToken cancellationToken);
+    Task<IReadOnlyList<Guid>> GetQueuedRunIdsAsync(CancellationToken cancellationToken);
     Task<PreviousAccessImportRunData?> FindPreviousRunByContentAsync(string contentSha256, CancellationToken cancellationToken);
     Task<AccessImportAuditData> GetAuditDataAsync(Guid runId, CancellationToken cancellationToken);
     void AddRun(AccessImportRun run);

@@ -17,6 +17,14 @@ public sealed class DatabaseBackupAutomationRunner(
             return false;
         }
 
+        var localNow = TimeZoneInfo.ConvertTime(
+            timeProvider.GetUtcNow(),
+            TimeZoneInfo.FindSystemTimeZoneById(_options.AutomaticWindowTimeZoneId));
+        if (localNow.Hour < _options.AutomaticWindowStartHour || localNow.Hour >= _options.AutomaticWindowEndHour)
+        {
+            return false;
+        }
+
         var status = await backupService.GetStatusAsync(cancellationToken);
         var lastAutomatic = status.Backups
             .Where(backup => backup.Kind == "automatic")

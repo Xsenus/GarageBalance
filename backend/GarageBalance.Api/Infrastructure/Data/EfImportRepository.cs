@@ -70,6 +70,27 @@ public sealed class EfImportRepository(GarageBalanceDbContext dbContext) : IImpo
         return query.SingleOrDefaultAsync(run => run.Id == runId, cancellationToken);
     }
 
+    public async Task<IReadOnlyList<Guid>> GetQueuedRunIdsAsync(CancellationToken cancellationToken)
+    {
+        var query = dbContext.AccessImportRuns
+            .AsNoTracking()
+            .Where(run => run.Status == "queued" || run.Status == "processing");
+        if (IsSqliteProvider())
+        {
+            return (await query.ToListAsync(cancellationToken))
+                .OrderBy(run => run.StartedAtUtc)
+                .Take(1000)
+                .Select(run => run.Id)
+                .ToArray();
+        }
+
+        return await query
+            .OrderBy(run => run.StartedAtUtc)
+            .Take(1000)
+            .Select(run => run.Id)
+            .ToListAsync(cancellationToken);
+    }
+
     public async Task<PreviousAccessImportRunData?> FindPreviousRunByContentAsync(
         string contentSha256,
         CancellationToken cancellationToken)

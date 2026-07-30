@@ -14982,6 +14982,46 @@ describe('App', () => {
     expect(within(importPanel).getAllByText('Предупреждение').length).toBeGreaterThan(1)
   })
 
+  it('keeps import UI responsive while queued dry-run completes in background', async () => {
+    const user = userEvent.setup()
+    const queuedRun = createAccessImportRun({
+      id: 'queued-import-run',
+      status: 'queued',
+      summary: 'Файл принят. Dry-run поставлен в фоновую очередь.',
+      totalChecks: 0,
+      passedChecks: 0,
+      warningCount: 0,
+      checks: [],
+    })
+    const completedRun = createAccessImportRun({
+      ...queuedRun,
+      status: 'completed',
+      summary: 'Dry-run завершен с предупреждениями.',
+    })
+    let runListRequests = 0
+    const importClient = createImportClient({
+      getAccessRuns: async () => {
+        runListRequests += 1
+        return runListRequests === 1 ? [] : [completedRun]
+      },
+      dryRunAccess: async () => queuedRun,
+    })
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={importClient} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Импорт')
+    const importPanel = await screen.findByRole('region', { name: 'Импорт Access' })
+    const file = new File(['garage owner'], 'queue.accdb', { type: 'application/octet-stream' })
+    await user.upload(within(importPanel).getByLabelText('Файл Access'), file)
+    await user.click(within(importPanel).getByRole('button', { name: 'Проверить файл Access queue.accdb' }))
+
+    expect(await within(importPanel).findByText(/Проверка выполняется в фоне/)).toHaveAttribute('role', 'status')
+    expect(within(importPanel).getByRole('tab', { name: /История/ })).toBeEnabled()
+    expect(await within(importPanel).findByText('Dry-run завершен с предупреждениями.', {}, { timeout: 2500 })).toBeInTheDocument()
+    expect(runListRequests).toBeGreaterThanOrEqual(2)
+  })
+
   it('requests Access import rollback through confirmation with reason', async () => {
     const user = userEvent.setup()
     let rollbackReason: string | undefined

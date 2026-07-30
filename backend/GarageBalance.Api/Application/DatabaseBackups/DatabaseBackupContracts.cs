@@ -15,6 +15,15 @@ public sealed class DatabaseBackupOptions
     [Range(1, 168)]
     public int IntervalHours { get; init; } = 24;
 
+    [Range(0, 23)]
+    public int AutomaticWindowStartHour { get; init; } = 2;
+
+    [Range(1, 24)]
+    public int AutomaticWindowEndHour { get; init; } = 5;
+
+    [Required]
+    public string AutomaticWindowTimeZoneId { get; init; } = "Europe/Moscow";
+
     [Range(1, 365)]
     public int RetentionCount { get; init; } = 30;
 

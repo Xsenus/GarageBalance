@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using System.Buffers;
 using GarageBalance.Api.Application.Audit;
 using GarageBalance.Api.Application.Common;
 using GarageBalance.Api.Domain.Import;
@@ -13,6 +14,7 @@ public sealed class ImportService(
     IAuditEventWriter auditEventWriter) : IImportService
 {
     private const long MaxDryRunFileSizeBytes = 512L * 1024L * 1024L;
+    private const int MaxSchemaSampleBytes = 4 * 1024 * 1024;
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
     private static readonly JsonSerializerOptions ReportJsonOptions = new(JsonSerializerDefaults.Web)
     {
@@ -331,35 +333,161 @@ public sealed class ImportService(
 
     public async Task<ImportResult<AccessImportRunDto>> DryRunAccessImportAsync(AccessImportDryRunRequest request, Guid? actorUserId, CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(request.FileName))
+        var validation = ValidateDryRunFileName(request.FileName);
+        if (!validation.Succeeded)
         {
-            return ImportResult<AccessImportRunDto>.Failure("file_name_required", "Имя файла Access обязательно.");
+            return ImportResult<AccessImportRunDto>.Failure(validation.ErrorCode!, validation.ErrorMessage!);
         }
 
-        var fileName = Path.GetFileName(request.FileName.Trim());
+        var fileName = validation.Value!;
         var extension = Path.GetExtension(fileName).ToLowerInvariant();
-        if (extension is not ".accdb" and not ".mdb")
+        var analysis = await AnalyzeContentAsync(request.Content, cancellationToken);
+        if (!analysis.Succeeded)
         {
-            return ImportResult<AccessImportRunDto>.Failure("access_extension_required", "Для dry-run импорта нужен файл .accdb или .mdb.");
+            return ImportResult<AccessImportRunDto>.Failure(analysis.ErrorCode!, analysis.ErrorMessage!);
         }
 
-        await using var buffer = new MemoryStream();
-        await request.Content.CopyToAsync(buffer, cancellationToken);
-        if (buffer.Length == 0)
+        var run = new AccessImportRun
+        {
+            Mode = "dry_run",
+            Status = "processing",
+            OriginalFileName = fileName,
+            FileExtension = extension,
+            FileSizeBytes = analysis.Value!.Length,
+            ActorUserId = actorUserId,
+            Summary = "Dry-run выполняется."
+        };
+
+        return await CompleteDryRunAsync(run, analysis.Value, actorUserId, isNewRun: true, cancellationToken);
+    }
+
+    public async Task<ImportResult<AccessImportRunDto>> CreateQueuedDryRunAsync(
+        QueuedAccessImportDryRunRequest request,
+        CancellationToken cancellationToken)
+    {
+        var validation = ValidateDryRunFileName(request.FileName);
+        if (!validation.Succeeded)
+        {
+            return ImportResult<AccessImportRunDto>.Failure(validation.ErrorCode!, validation.ErrorMessage!);
+        }
+
+        if (request.FileSizeBytes <= 0)
         {
             return ImportResult<AccessImportRunDto>.Failure("file_empty", "Файл Access пустой.");
         }
 
-        if (buffer.Length > MaxDryRunFileSizeBytes)
+        var run = new AccessImportRun
         {
-            return ImportResult<AccessImportRunDto>.Failure("file_too_large", "Файл Access слишком большой для первичной проверки.");
+            Id = request.RunId,
+            Mode = "dry_run",
+            Status = "queued",
+            OriginalFileName = validation.Value!,
+            FileExtension = Path.GetExtension(validation.Value!).ToLowerInvariant(),
+            FileSizeBytes = request.FileSizeBytes,
+            ContentSha256 = string.Empty,
+            ActorUserId = request.ActorUserId,
+            Summary = "Файл принят. Dry-run поставлен в фоновую очередь.",
+            ReportJson = "[]"
+        };
+
+        repository.AddRun(run);
+        AddRunLog(run, "info", "dry_run_queued", "Файл принят и поставлен в фоновую очередь dry-run.", new
+        {
+            fileName = run.OriginalFileName,
+            run.FileSizeBytes
+        });
+        auditEventWriter.Add(new AuditEventWriteRequest(
+            request.ActorUserId,
+            "import.access_dry_run_queued",
+            "access_import_run",
+            run.Id.ToString(),
+            Summary: $"Dry-run импорта Access поставлен в очередь: {run.OriginalFileName}.",
+            ActionKind: "import",
+            EntityDisplayName: run.OriginalFileName,
+            RelatedDocumentId: run.Id.ToString(),
+            RelatedDocumentNumber: run.OriginalFileName,
+            Metadata: new Dictionary<string, object?>
+            {
+                ["mode"] = run.Mode,
+                ["status"] = run.Status,
+                ["originalFileName"] = run.OriginalFileName,
+                ["fileExtension"] = run.FileExtension,
+                ["fileSizeBytes"] = run.FileSizeBytes
+            }));
+        await repository.SaveChangesAsync(cancellationToken);
+        return ImportResult<AccessImportRunDto>.Success(ToDto(run));
+    }
+
+    public async Task ProcessQueuedDryRunAsync(Guid runId, Stream content, CancellationToken cancellationToken)
+    {
+        var run = await repository.FindRunAsync(runId, true, cancellationToken);
+        if (run is null || run.Status is not ("queued" or "processing"))
+        {
+            return;
         }
 
-        var bytes = buffer.ToArray();
-        var contentSha256 = Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant();
-        var previousRunWithSameContent = await repository.FindPreviousRunByContentAsync(contentSha256, cancellationToken);
-        var checks = BuildChecks(extension, bytes);
-        if (previousRunWithSameContent is not null)
+        run.Status = "processing";
+        run.Summary = "Фоновая dry-run проверка выполняется.";
+        AddRunLog(run, "info", "dry_run_started", "Фоновая dry-run проверка началась.", new { runId });
+        await repository.SaveChangesAsync(cancellationToken);
+
+        var analysis = await AnalyzeContentAsync(content, cancellationToken);
+        if (!analysis.Succeeded)
+        {
+            await FailQueuedDryRunAsync(runId, analysis.ErrorCode!, cancellationToken);
+            return;
+        }
+
+        await CompleteDryRunAsync(run, analysis.Value!, run.ActorUserId, isNewRun: false, cancellationToken);
+    }
+
+    public async Task FailQueuedDryRunAsync(Guid runId, string errorCode, CancellationToken cancellationToken)
+    {
+        var run = await repository.FindRunAsync(runId, true, cancellationToken);
+        if (run is null || run.Status is "completed" or "blocked" or "failed")
+        {
+            return;
+        }
+
+        var message = errorCode == "staged_file_missing"
+            ? "Временный файл задания не найден после перезапуска. Загрузите файл повторно."
+            : "Фоновая проверка файла не завершена. Повторите загрузку.";
+        var checks = new[] { new AccessImportCheckDto(errorCode, "Фоновая обработка", "error", message) };
+        run.Status = "failed";
+        run.FinishedAtUtc = DateTimeOffset.UtcNow;
+        run.TotalChecks = 1;
+        run.ErrorCount = 1;
+        run.Summary = message;
+        run.ReportJson = JsonSerializer.Serialize(checks, JsonOptions);
+        AddRunLog(run, "error", errorCode, message, new { runId });
+        auditEventWriter.Add(new AuditEventWriteRequest(
+            run.ActorUserId,
+            "import.access_dry_run_failed",
+            "access_import_run",
+            run.Id.ToString(),
+            Summary: $"Фоновый dry-run импорта Access не завершён: {run.OriginalFileName}.",
+            ActionKind: "import",
+            EntityDisplayName: run.OriginalFileName,
+            RelatedDocumentId: run.Id.ToString(),
+            RelatedDocumentNumber: run.OriginalFileName,
+            Metadata: new Dictionary<string, object?>
+            {
+                ["status"] = run.Status,
+                ["errorCode"] = errorCode
+            }));
+        await repository.SaveChangesAsync(cancellationToken);
+    }
+
+    private async Task<ImportResult<AccessImportRunDto>> CompleteDryRunAsync(
+        AccessImportRun run,
+        DryRunContentAnalysis analysis,
+        Guid? actorUserId,
+        bool isNewRun,
+        CancellationToken cancellationToken)
+    {
+        var previousRunWithSameContent = await repository.FindPreviousRunByContentAsync(analysis.ContentSha256, cancellationToken);
+        var checks = BuildChecks(run.FileExtension, analysis.Sample, analysis.Length);
+        if (previousRunWithSameContent is not null && previousRunWithSameContent.Id != run.Id)
         {
             checks.Add(new AccessImportCheckDto(
                 "duplicate_content",
@@ -378,36 +506,32 @@ public sealed class ImportService(
                 ? "Dry-run завершен с предупреждениями: можно продолжать подготовку, но нужен драйвер/конвертация Access."
                 : "Dry-run завершен: файл прошел первичные проверки.";
 
-        var run = new AccessImportRun
+        run.Status = status;
+        run.FileSizeBytes = analysis.Length;
+        run.ContentSha256 = analysis.ContentSha256;
+        run.FinishedAtUtc = DateTimeOffset.UtcNow;
+        run.TotalChecks = checks.Count;
+        run.PassedChecks = passed;
+        run.WarningCount = warnings;
+        run.ErrorCount = errors;
+        run.Summary = summary;
+        run.ReportJson = JsonSerializer.Serialize(checks, JsonOptions);
+        if (isNewRun)
         {
-            Mode = "dry_run",
-            Status = status,
-            OriginalFileName = fileName,
-            FileExtension = extension,
-            FileSizeBytes = buffer.Length,
-            ContentSha256 = contentSha256,
-            ActorUserId = actorUserId,
-            FinishedAtUtc = DateTimeOffset.UtcNow,
-            TotalChecks = checks.Count,
-            PassedChecks = passed,
-            WarningCount = warnings,
-            ErrorCount = errors,
-            Summary = summary,
-            ReportJson = JsonSerializer.Serialize(checks, JsonOptions)
-        };
+            repository.AddRun(run);
+        }
 
-        repository.AddRun(run);
-        AddRunLog(run, "info", "file_received", $"Файл {fileName} получен для dry-run проверки.", new
+        AddRunLog(run, "info", "file_received", $"Файл {run.OriginalFileName} получен для dry-run проверки.", new
         {
-            fileName,
-            extension,
-            fileSizeBytes = buffer.Length
+            fileName = run.OriginalFileName,
+            extension = run.FileExtension,
+            fileSizeBytes = analysis.Length
         });
-        AddRunLog(run, "info", "hash_calculated", "SHA-256 файла рассчитан для сверки и повторяемости dry-run.", new
+        AddRunLog(run, "info", "hash_calculated", "SHA-256 файла рассчитан потоково для сверки и повторяемости dry-run.", new
         {
             contentSha256 = run.ContentSha256
         });
-        if (previousRunWithSameContent is not null)
+        if (previousRunWithSameContent is not null && previousRunWithSameContent.Id != run.Id)
         {
             AddRunLog(run, "warning", "duplicate_content_detected", "Найден предыдущий dry-run с тем же содержимым файла Access.", new
             {
@@ -438,20 +562,20 @@ public sealed class ImportService(
             "import.access_dry_run",
             "access_import_run",
             run.Id.ToString(),
-            Summary: $"Dry-run импорта Access: {fileName}, статус {status}, проверок {checks.Count}.",
+            Summary: $"Dry-run импорта Access: {run.OriginalFileName}, статус {status}, проверок {checks.Count}.",
             ActionKind: "import",
-            EntityDisplayName: fileName,
+            EntityDisplayName: run.OriginalFileName,
             RelatedDocumentId: run.Id.ToString(),
-            RelatedDocumentNumber: fileName,
+            RelatedDocumentNumber: run.OriginalFileName,
             Metadata: new Dictionary<string, object?>
             {
                 ["mode"] = run.Mode,
                 ["status"] = status,
-                ["originalFileName"] = fileName,
-                ["fileExtension"] = extension,
-                ["fileSizeBytes"] = buffer.Length,
+                ["originalFileName"] = run.OriginalFileName,
+                ["fileExtension"] = run.FileExtension,
+                ["fileSizeBytes"] = analysis.Length,
                 ["contentSha256"] = run.ContentSha256,
-                ["duplicateContentDetected"] = previousRunWithSameContent is not null,
+                ["duplicateContentDetected"] = previousRunWithSameContent is not null && previousRunWithSameContent.Id != run.Id,
                 ["duplicateContentRunId"] = previousRunWithSameContent?.Id,
                 ["duplicateContentFileName"] = previousRunWithSameContent?.OriginalFileName,
                 ["totalChecks"] = checks.Count,
@@ -461,6 +585,70 @@ public sealed class ImportService(
             }));
         await repository.SaveChangesAsync(cancellationToken);
         return ImportResult<AccessImportRunDto>.Success(ToDto(run));
+    }
+
+    private static ImportResult<string> ValidateDryRunFileName(string? requestedFileName)
+    {
+        if (string.IsNullOrWhiteSpace(requestedFileName))
+        {
+            return ImportResult<string>.Failure("file_name_required", "Имя файла Access обязательно.");
+        }
+
+        var fileName = Path.GetFileName(requestedFileName.Trim());
+        var extension = Path.GetExtension(fileName).ToLowerInvariant();
+        return extension is ".accdb" or ".mdb"
+            ? ImportResult<string>.Success(fileName)
+            : ImportResult<string>.Failure("access_extension_required", "Для dry-run импорта нужен файл .accdb или .mdb.");
+    }
+
+    private static async Task<ImportResult<DryRunContentAnalysis>> AnalyzeContentAsync(
+        Stream content,
+        CancellationToken cancellationToken)
+    {
+        using var hasher = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
+        await using var sample = new MemoryStream(MaxSchemaSampleBytes);
+        var rented = ArrayPool<byte>.Shared.Rent(64 * 1024);
+        long length = 0;
+        try
+        {
+            while (true)
+            {
+                var read = await content.ReadAsync(rented.AsMemory(0, rented.Length), cancellationToken);
+                if (read == 0)
+                {
+                    break;
+                }
+
+                length += read;
+                if (length > MaxDryRunFileSizeBytes)
+                {
+                    return ImportResult<DryRunContentAnalysis>.Failure(
+                        "file_too_large",
+                        "Файл Access слишком большой для первичной проверки.");
+                }
+
+                hasher.AppendData(rented, 0, read);
+                var sampleBytes = Math.Min(read, MaxSchemaSampleBytes - (int)sample.Length);
+                if (sampleBytes > 0)
+                {
+                    await sample.WriteAsync(rented.AsMemory(0, sampleBytes), cancellationToken);
+                }
+            }
+        }
+        finally
+        {
+            ArrayPool<byte>.Shared.Return(rented, clearArray: true);
+        }
+
+        if (length == 0)
+        {
+            return ImportResult<DryRunContentAnalysis>.Failure("file_empty", "Файл Access пустой.");
+        }
+
+        return ImportResult<DryRunContentAnalysis>.Success(new DryRunContentAnalysis(
+            length,
+            Convert.ToHexString(hasher.GetHashAndReset()).ToLowerInvariant(),
+            sample.ToArray()));
     }
 
     private async Task<Dictionary<string, object?>> BuildAccessImportRunAuditMetadataAsync(
@@ -515,12 +703,12 @@ public sealed class ImportService(
         });
     }
 
-    private static List<AccessImportCheckDto> BuildChecks(string extension, byte[] bytes)
+    private static List<AccessImportCheckDto> BuildChecks(string extension, byte[] bytes, long fileSizeBytes)
     {
         var checks = new List<AccessImportCheckDto>
         {
             new("extension", "Формат файла", "passed", $"Расширение {extension} поддерживается для импорта Access."),
-            new("size", "Размер файла", "passed", $"Файл содержит {bytes.LongLength:N0} байт и может быть проверен."),
+            new("size", "Размер файла", "passed", $"Файл содержит {fileSizeBytes:N0} байт и может быть проверен."),
             HasOleSignature(bytes)
                 ? new AccessImportCheckDto("signature", "Сигнатура Access", "passed", "Файл похож на OLE Compound документ Access.")
                 : new AccessImportCheckDto("signature", "Сигнатура Access", "warning", "Не найдена стандартная OLE-сигнатура. Возможно, файл поврежден или требует конвертации."),
@@ -602,4 +790,6 @@ public sealed class ImportService(
             record.RolledBackByUserId,
             record.RollbackReason);
     }
+
+    private sealed record DryRunContentAnalysis(long Length, string ContentSha256, byte[] Sample);
 }

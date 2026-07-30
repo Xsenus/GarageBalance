@@ -25,3 +25,12 @@ public sealed record ImportRowFingerprintDto(
 public sealed record RegisterImportRowFingerprintDto(
     bool Created,
     ImportRowFingerprintDto Fingerprint);
+
+public sealed record RegisterImportRowFingerprintBatchRequest(
+    IReadOnlyList<RegisterImportRowFingerprintRequest> Items);
+
+public sealed record RegisterImportRowFingerprintBatchDto(
+    int RequestedCount,
+    int CreatedCount,
+    int ExistingCount,
+    IReadOnlyList<ImportRowFingerprintDto> Fingerprints);

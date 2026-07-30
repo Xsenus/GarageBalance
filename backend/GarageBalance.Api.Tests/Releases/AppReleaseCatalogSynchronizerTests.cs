@@ -130,6 +130,34 @@ public sealed class AppReleaseCatalogSynchronizerTests
         }
     }
 
+    [Fact]
+    public async Task SynchronizeOnceAsync_SkipsUnchangedReleaseSource()
+    {
+        var rootPath = Path.Combine(Path.GetTempPath(), $"garagebalance-release-sync-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(Path.Combine(rootPath, "AppReleases"));
+        await File.WriteAllTextAsync(Path.Combine(rootPath, "AppReleases", "releases.json"), "[]");
+        try
+        {
+            var repository = new CountingAppReleaseRepository();
+            var services = new ServiceCollection();
+            services.AddSingleton<IAppReleaseRepository>(repository);
+            await using var provider = services.BuildServiceProvider();
+            var synchronizer = new AppReleaseCatalogSynchronizer(
+                provider.GetRequiredService<IServiceScopeFactory>(),
+                new FakeWebHostEnvironment(rootPath),
+                NullLogger<AppReleaseCatalogSynchronizer>.Instance);
+
+            await synchronizer.SynchronizeOnceAsync(CancellationToken.None);
+            await synchronizer.SynchronizeOnceAsync(CancellationToken.None);
+
+            Assert.Equal(1, repository.SynchronizeCount);
+        }
+        finally
+        {
+            Directory.Delete(rootPath, recursive: true);
+        }
+    }
+
     private sealed class BlockingAppReleaseRepository(
         TaskCompletionSource allowSynchronizationToFinish) : IAppReleaseRepository
     {
@@ -155,6 +183,23 @@ public sealed class AppReleaseCatalogSynchronizerTests
 
         public Task SynchronizeAsync(IReadOnlyList<AppReleaseDto> releases, CancellationToken cancellationToken) =>
             throw new InvalidOperationException("Expected synchronization failure.");
+    }
+
+    private sealed class CountingAppReleaseRepository : IAppReleaseRepository
+    {
+        public int SynchronizeCount { get; private set; }
+
+        public Task<AppReleasePageDto> GetPageAsync(bool includeDrafts, int offset, int limit, CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+
+        public Task UpsertAsync(AppReleaseDto release, CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+
+        public Task SynchronizeAsync(IReadOnlyList<AppReleaseDto> releases, CancellationToken cancellationToken)
+        {
+            SynchronizeCount++;
+            return Task.CompletedTask;
+        }
     }
 
     private sealed class CapturingLogger : ILogger<AppReleaseCatalogSynchronizer>
