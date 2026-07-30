@@ -1,0 +1,14 @@
+/var/log/nginx/garagebalance-staging-timing.log /var/log/nginx/garagebalance-staging-error.log {
+    daily
+    rotate 14
+    maxsize 20M
+    missingok
+    notifempty
+    compress
+    delaycompress
+    create 0640 www-data adm
+    sharedscripts
+    postrotate
+        [ ! -f /run/nginx.pid ] || kill -USR1 $(cat /run/nginx.pid)
+    endscript
+}

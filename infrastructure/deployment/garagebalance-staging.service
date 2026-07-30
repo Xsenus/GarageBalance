@@ -1,0 +1,32 @@
+[Unit]
+Description=GarageBalance staging API
+After=network-online.target postgresql.service
+Wants=network-online.target postgresql.service
+StartLimitIntervalSec=120
+StartLimitBurst=5
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/garagebalance-staging/api
+ExecStart=/opt/garagebalance-staging/api/GarageBalance.Api
+Restart=on-failure
+RestartSec=5s
+KillSignal=SIGINT
+TimeoutStopSec=30s
+SyslogIdentifier=garagebalance-staging
+User=garagebalance
+Group=garagebalance
+EnvironmentFile=/etc/garagebalance-staging.env
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/garagebalance-staging /var/lib/garagebalance-staging
+MemoryHigh=900M
+MemoryMax=1200M
+CPUQuota=150%
+TasksMax=512
+OOMPolicy=stop
+
+[Install]
+WantedBy=multi-user.target

@@ -87,23 +87,12 @@ pg_dump --format=custom --file=/opt/garagebalance-staging/backups/garagebalance_
 
 Рекомендуемое имя сервиса: `garagebalance-staging.service`.
 
-```ini
-[Unit]
-Description=GarageBalance staging API
-After=network.target postgresql.service
-
-[Service]
-WorkingDirectory=/opt/garagebalance-staging/api
-EnvironmentFile=/etc/garagebalance-staging.env
-ExecStart=/opt/garagebalance-staging/api/GarageBalance.Api
-Restart=always
-RestartSec=5
-User=garagebalance
-Group=garagebalance
-
-[Install]
-WantedBy=multi-user.target
-```
+Источник конфигурации хранится в
+`infrastructure/deployment/garagebalance-staging.service`. Он задаёт
+`Restart=on-failure`, ограничение памяти 1,2 ГБ, мягкий порог 900 МБ,
+до 150% CPU и 512 задач, а также изоляцию файловой системы процесса.
+Таймер `garagebalance-healthcheck.timer` проверяет локальный `/health`
+каждую минуту и перезапускает API только после трёх последовательных ошибок.
 
 - [ ] Создать `/etc/systemd/system/garagebalance-staging.service`.
 - [ ] Выполнить `systemctl daemon-reload`.
@@ -122,59 +111,29 @@ WantedBy=multi-user.target
 log_format garagebalance_timing '$time_iso8601 request_id=$request_id remote=$remote_addr method=$request_method uri=$uri status=$status bytes=$body_bytes_sent request_time=$request_time upstream_connect_time=$upstream_connect_time upstream_header_time=$upstream_header_time upstream_response_time=$upstream_response_time';
 ```
 
-```nginx
-server {
-    listen 80;
-    server_name sgk.blagodaty.ru;
-    access_log /var/log/nginx/garagebalance-staging-timing.log garagebalance_timing;
+Полная воспроизводимая конфигурация хранится в
+`infrastructure/deployment/garagebalance-staging.nginx.conf`. Она включает
+HTTP/2, persistent upstream-соединения, явные connect/read/send timeout,
+буферизацию API, ограничение медленных и чрезмерно частых соединений,
+gzip для текстовой статики, immutable cache для hashed assets и `no-store`
+для `index.html`. Прямой DNS-маршрут не использует Cloudflare-трансформацию,
+поэтому прежние `gzip off` и `no-transform` не применяются.
 
-    root /opt/garagebalance-staging/frontend;
-    index index.html;
-
-    location = /index.html {
-        add_header Cache-Control "no-store, no-cache, must-revalidate, max-age=0" always;
-        try_files /index.html =404;
-    }
-
-    location /assets/ {
-        # Cloudflare выполняет edge-сжатие; динамический gzip origin для крупных
-        # JS-файлов отключён, чтобы не получать оборванные HTTP/2 streams.
-        gzip off;
-        add_header Cache-Control "public, max-age=2592000, immutable, no-transform" always;
-        try_files $uri =404;
-    }
-
-    location /api/ {
-        proxy_pass http://127.0.0.1:3101/api/;
-        proxy_http_version 1.1;
-        # JSON сжимает backend (Brotli/Gzip). nginx не должен кодировать ответ повторно.
-        gzip off;
-        proxy_set_header Connection "";
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-        proxy_set_header X-Error-ID $request_id;
-        add_header Cache-Control "no-store, no-transform" always;
-    }
-
-    location /health {
-        proxy_pass http://127.0.0.1:3101/health;
-        proxy_set_header X-Error-ID $request_id;
-    }
-
-    location / {
-        add_header Cache-Control "no-store" always;
-        try_files $uri /index.html;
-    }
-}
-```
+Установка выполняется скриптом
+`infrastructure/scripts/install-vps-performance-configuration.sh`: перед
+заменой он создаёт резервные копии nginx и systemd, проверяет `nginx -t`,
+после запуска проверяет локальный и публичный health и автоматически
+возвращает предыдущие конфигурации при любой ошибке.
 
 - [ ] Создать symlink в `/etc/nginx/sites-enabled`.
 - [ ] Проверить конфигурацию: `nginx -t`.
 - [ ] Перезагрузить nginx: `systemctl reload nginx`.
 - [ ] Проверить HTTP до TLS: `curl -fsS http://sgk.blagodaty.ru/health`.
 - [ ] Проверить строку времени без query-параметров: `tail -n 20 /var/log/nginx/garagebalance-staging-timing.log`.
+- [ ] Проверить сжатие hashed asset: `curl --http2 --compressed -sSI https://sgk.blagodaty.ru/assets/<entry>.js`.
+- [ ] Проверить отсутствие лишнего HTTPS redirect: `curl --http2 -sSI https://sgk.blagodaty.ru/`.
+- [ ] Проверить таймеры: `systemctl list-timers 'garagebalance-*'`.
+- [ ] Проверить ротацию без изменения файлов: `logrotate --debug /etc/logrotate.d/garagebalance`.
 
 ## 7. TLS
 

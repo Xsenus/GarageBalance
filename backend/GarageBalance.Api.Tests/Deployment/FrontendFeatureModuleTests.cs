@@ -66,7 +66,7 @@ public sealed class FrontendFeatureModuleTests
         Assert.Contains("<Workspace activeSection={effectiveActiveSection}", shellText, StringComparison.Ordinal);
         Assert.DoesNotContain("function Workspace(", appText, StringComparison.Ordinal);
         Assert.DoesNotContain("function AccessNotice(", appText, StringComparison.Ordinal);
-        Assert.Contains("export function Workspace(", featureText, StringComparison.Ordinal);
+        Assert.Contains("export const Workspace = memo(function Workspace(", featureText, StringComparison.Ordinal);
         Assert.Contains("const dashboardTiles", featureText, StringComparison.Ordinal);
         Assert.Contains("function AccessNotice(", featureText, StringComparison.Ordinal);
         Assert.Contains("case 'payments':", featureText, StringComparison.Ordinal);

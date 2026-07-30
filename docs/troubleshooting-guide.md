@@ -72,6 +72,28 @@ journalctl -u garagebalance-staging.service --since "30 minutes ago" --no-pager 
 curl -ksS -D - -o /dev/null --resolve sgk.blagodaty.ru:443:127.0.0.1 https://sgk.blagodaty.ru/health
 ```
 
+Runbook «раздел завис»:
+
+1. Зафиксировать точное время, раздел и значение `X-Request-ID` из ответа
+   проблемного API-запроса в DevTools → Network. Не копировать URL с
+   query-параметрами и тело ответа.
+2. Найти строку nginx:
+   `grep 'request_id=<X-Request-ID>' /var/log/nginx/garagebalance-staging-timing.log`.
+   Сравнить `request_time`, `upstream_connect_time`,
+   `upstream_header_time` и `upstream_response_time`.
+3. Найти backend-событие:
+   `journalctl -u garagebalance-staging.service --since '<время - 2 минуты>' --until '<время + 2 минуты>' --no-pager | grep '<X-Request-ID>'`.
+4. Если найдено `SlowDatabaseCommand` или `FailedDatabaseCommand`, проверить
+   ожидания PostgreSQL через `pg_stat_activity`/`pg_locks` и агрегированный
+   `queryid` в `pg_stat_statements`. Не включать SQL-текст, параметры или
+   персональные данные в обращение.
+5. Если nginx не получил upstream-заголовки, проверить service и пул
+   PostgreSQL. Если backend завершился быстро, а `request_time` большой,
+   проверить DNS, клиентский маршрут и передачу статического файла.
+6. После исправления повторить тот же сценарий, убедиться в отсутствии
+   `5xx`, `SlowHttpRequest`, рестартов и превышения порогов таймера
+   `garagebalance-performance-check.timer`.
+
 - [ ] Если `request_time` большой, а `upstream_response_time` и `Server-Timing: app;dur=...` маленькие, задержка находится до nginx или при передаче ответа; проверить маршрут, Cloudflare и доступность IPv4/IPv6 клиента.
 - [ ] Если `upstream_response_time` и `app;dur` одновременно превышают секунду, найти соответствующее предупреждение `SlowHttpRequest` по времени и пути API.
 - [ ] Взять безопасный `request_id` из timing-журнала и найти тот же идентификатор в `SlowHttpRequest`, `SlowDatabaseCommand` или `FailedDatabaseCommand`. SQL-текст и параметры для этого не нужны и в performance-события не записываются.

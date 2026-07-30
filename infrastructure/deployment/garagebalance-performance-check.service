@@ -1,0 +1,13 @@
+[Unit]
+Description=Check GarageBalance public performance thresholds
+After=nginx.service garagebalance-staging.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/garagebalance-performance-check
+User=root
+Group=root
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true

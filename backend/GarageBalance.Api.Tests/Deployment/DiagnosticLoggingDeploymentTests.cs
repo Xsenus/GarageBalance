@@ -51,6 +51,11 @@ public sealed class DiagnosticLoggingDeploymentTests
         var checklist = File.ReadAllText(Path.Combine(RepositoryRoot, "docs", "vps-deployment-checklist.md"));
         var troubleshooting = File.ReadAllText(Path.Combine(RepositoryRoot, "docs", "troubleshooting-guide.md"));
         var dockerNginx = File.ReadAllText(Path.Combine(RepositoryRoot, "frontend", "nginx.conf"));
+        var vpsNginx = File.ReadAllText(Path.Combine(
+            RepositoryRoot,
+            "infrastructure",
+            "deployment",
+            "garagebalance-staging.nginx.conf"));
         var interceptor = File.ReadAllText(Path.Combine(
             RepositoryRoot,
             "backend",
@@ -60,7 +65,7 @@ public sealed class DiagnosticLoggingDeploymentTests
             "DatabaseCommandPerformanceInterceptor.cs"));
 
         Assert.Contains("request_id=$request_id", checklist, StringComparison.Ordinal);
-        Assert.Contains("proxy_set_header X-Error-ID $request_id;", checklist, StringComparison.Ordinal);
+        Assert.Contains("proxy_set_header X-Error-ID $request_id;", vpsNginx, StringComparison.Ordinal);
         Assert.Contains("proxy_set_header X-Error-ID $request_id;", dockerNginx, StringComparison.Ordinal);
         Assert.Contains("SlowDatabaseCommand", troubleshooting, StringComparison.Ordinal);
         Assert.Contains("FailedDatabaseCommand", troubleshooting, StringComparison.Ordinal);

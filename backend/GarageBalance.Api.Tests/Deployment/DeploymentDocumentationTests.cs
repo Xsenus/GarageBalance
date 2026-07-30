@@ -5,7 +5,13 @@ public sealed class DeploymentDocumentationTests
     [Fact]
     public void VpsDeploymentChecklistCoversDomainTlsBackupsRollbackAndSmokeChecks()
     {
-        var document = File.ReadAllText(Path.Combine(FindRepositoryRoot(), "docs", "vps-deployment-checklist.md"));
+        var repositoryRoot = FindRepositoryRoot();
+        var document = File.ReadAllText(Path.Combine(repositoryRoot, "docs", "vps-deployment-checklist.md"));
+        var nginx = File.ReadAllText(Path.Combine(
+            repositoryRoot,
+            "infrastructure",
+            "deployment",
+            "garagebalance-staging.nginx.conf"));
 
         Assert.Contains("sgk.blagodaty.ru", document, StringComparison.Ordinal);
         Assert.Contains("/opt/garagebalance-staging", document, StringComparison.Ordinal);
@@ -14,18 +20,20 @@ public sealed class DeploymentDocumentationTests
         Assert.DoesNotContain("ConnectionStrings__Postgres", document, StringComparison.Ordinal);
         Assert.Contains("DataProtection__KeysPath=/var/lib/garagebalance-staging/data-protection-keys", document, StringComparison.Ordinal);
         Assert.Contains("Microsoft.EntityFrameworkCore.Database.Command", document, StringComparison.Ordinal);
-        Assert.Contains("proxy_http_version 1.1", document, StringComparison.Ordinal);
-        Assert.Contains("proxy_set_header Connection \"\"", document, StringComparison.Ordinal);
+        Assert.Contains("proxy_http_version 1.1", nginx, StringComparison.Ordinal);
+        Assert.Contains("proxy_set_header Connection \"\"", nginx, StringComparison.Ordinal);
         Assert.Contains("garagebalance-staging.service", document, StringComparison.Ordinal);
         Assert.Contains("certbot --nginx -d sgk.blagodaty.ru", document, StringComparison.Ordinal);
         Assert.Contains("nginx -t", document, StringComparison.Ordinal);
         Assert.Contains("pg_dump", document, StringComparison.Ordinal);
         Assert.Contains("dotnet tool run dotnet-ef migrations script --idempotent", document, StringComparison.Ordinal);
         Assert.Contains("Cache-Control", document, StringComparison.Ordinal);
-        Assert.Contains("gzip off;", document, StringComparison.Ordinal);
-        Assert.Contains("JSON сжимает backend (Brotli/Gzip)", document, StringComparison.Ordinal);
-        Assert.Contains("Cache-Control \"no-store, no-transform\"", document, StringComparison.Ordinal);
-        Assert.Contains("immutable, no-transform", document, StringComparison.Ordinal);
+        Assert.Contains("gzip on;", nginx, StringComparison.Ordinal);
+        Assert.Contains("gzip_proxied any;", nginx, StringComparison.Ordinal);
+        Assert.Contains("Cache-Control \"no-store", nginx, StringComparison.Ordinal);
+        Assert.Contains("immutable", nginx, StringComparison.Ordinal);
+        Assert.DoesNotContain("gzip off;", nginx, StringComparison.Ordinal);
+        Assert.DoesNotContain("no-transform", nginx, StringComparison.Ordinal);
         Assert.Contains("curl -fsS https://sgk.blagodaty.ru/health", document, StringComparison.Ordinal);
         Assert.Contains("Rollback", document, StringComparison.Ordinal);
         Assert.Contains("Не коммитить", document, StringComparison.Ordinal);
