@@ -12,11 +12,15 @@ public sealed class ApiBenchmarkScriptTests
     public void DefaultScenarios_CoverMainReadSectionsWithFixedSafeThresholds()
     {
         var root = FindRepositoryRoot();
+        var script = File.ReadAllText(
+            Path.Combine(root, "infrastructure", "scripts", "benchmark-api.ps1"));
         using var document = JsonDocument.Parse(
             File.ReadAllText(
                 Path.Combine(root, "infrastructure", "performance", "api-smoke-scenarios.json")));
         var scenarios = document.RootElement.EnumerateArray().ToArray();
 
+        Assert.Contains("$scenarios = @($scenarioDocument)", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("$scenarioDocument.GetEnumerator()", script, StringComparison.Ordinal);
         Assert.Equal(10, scenarios.Length);
         Assert.Equal(
             scenarios.Length,

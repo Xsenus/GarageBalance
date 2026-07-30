@@ -80,7 +80,7 @@ if (-not (Test-Path -LiteralPath $ScenarioPath -PathType Leaf)) {
 }
 
 $scenarioDocument = Get-Content -LiteralPath $ScenarioPath -Raw -Encoding UTF8 | ConvertFrom-Json
-$scenarios = @($scenarioDocument.GetEnumerator())
+$scenarios = @($scenarioDocument)
 if ($scenarios.Count -eq 0) {
     throw "API benchmark scenario file is empty."
 }
