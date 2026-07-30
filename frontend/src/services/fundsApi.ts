@@ -74,6 +74,56 @@ export type FundsClient = {
 }
 
 const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? ''
+const fundsResponseCacheLifetimeMs = 60_000
+
+type FundsCacheEntry = {
+  expiresAt: number
+  response: Promise<FundDto[]>
+}
+
+const fundsResponseCache = new Map<string, FundsCacheEntry>()
+const fundsCacheVersions = new Map<string, number>()
+
+export function clearFundsResponseCache() {
+  fundsResponseCache.clear()
+  fundsCacheVersions.clear()
+}
+
+function getFundsCacheVersion(accessToken: string): number {
+  return fundsCacheVersions.get(accessToken) ?? 0
+}
+
+function invalidateFundsResponseCache(accessToken: string) {
+  fundsCacheVersions.set(accessToken, getFundsCacheVersion(accessToken) + 1)
+  for (const cacheKey of fundsResponseCache.keys()) {
+    if (cacheKey.startsWith(`${accessToken}\n`)) {
+      fundsResponseCache.delete(cacheKey)
+    }
+  }
+}
+
+function getCachedFunds(accessToken: string): Promise<FundDto[]> {
+  const cacheKey = `${accessToken}\n${getFundsCacheVersion(accessToken)}`
+  const cached = fundsResponseCache.get(cacheKey)
+  if (cached && cached.expiresAt > Date.now()) {
+    return cached.response
+  }
+  if (cached) {
+    fundsResponseCache.delete(cacheKey)
+  }
+
+  const response = requestJson<FundDto[]>(accessToken, '/api/funds')
+  fundsResponseCache.set(cacheKey, {
+    expiresAt: Date.now() + fundsResponseCacheLifetimeMs,
+    response,
+  })
+  response.catch(() => {
+    if (fundsResponseCache.get(cacheKey)?.response === response) {
+      fundsResponseCache.delete(cacheKey)
+    }
+  })
+  return response
+}
 
 async function requestJson<TResponse>(accessToken: string, path: string, init?: RequestInit): Promise<TResponse> {
   const response = await apiFetch(`${apiBaseUrl}${path}`, {
@@ -110,20 +160,27 @@ async function requestVoid(accessToken: string, path: string, init?: RequestInit
 
 export const fundsApi: FundsClient = {
   getFunds(accessToken, signal) {
-    return requestJson(accessToken, '/api/funds', { signal })
+    return signal
+      ? requestJson(accessToken, '/api/funds', { signal })
+      : getCachedFunds(accessToken)
   },
-  createFund(accessToken, request) {
-    return requestJson(accessToken, '/api/funds', { method: 'POST', body: JSON.stringify(request) })
+  async createFund(accessToken, request) {
+    const result = await requestJson<FundDto>(accessToken, '/api/funds', { method: 'POST', body: JSON.stringify(request) })
+    invalidateFundsResponseCache(accessToken)
+    return result
   },
-  updateFund(accessToken, fundId, request) {
-    return requestJson(accessToken, `/api/funds/${fundId}`, { method: 'PUT', body: JSON.stringify(request) })
+  async updateFund(accessToken, fundId, request) {
+    const result = await requestJson<FundDto>(accessToken, `/api/funds/${fundId}`, { method: 'PUT', body: JSON.stringify(request) })
+    invalidateFundsResponseCache(accessToken)
+    return result
   },
-  deleteFund(accessToken, fundId, request) {
-    return requestVoid(accessToken, `/api/funds/${fundId}`, {
+  async deleteFund(accessToken, fundId, request) {
+    await requestVoid(accessToken, `/api/funds/${fundId}`, {
       method: 'DELETE',
       body: JSON.stringify(request),
       headers: { 'Content-Type': 'application/json' },
     })
+    invalidateFundsResponseCache(accessToken)
   },
   getOperations(accessToken, query = {}, signal) {
     const search = new URLSearchParams()
@@ -144,16 +201,24 @@ export const fundsApi: FundsClient = {
     search.set('includeCanceled', String(query.includeCanceled ?? false))
     return requestJson(accessToken, `/api/funds/operations/page?${search.toString()}`, { signal })
   },
-  createOperation(accessToken, fundId, request) {
-    return requestJson(accessToken, `/api/funds/${fundId}/operations`, { method: 'POST', body: JSON.stringify(request) })
+  async createOperation(accessToken, fundId, request) {
+    const result = await requestJson<FundOperationDto>(accessToken, `/api/funds/${fundId}/operations`, { method: 'POST', body: JSON.stringify(request) })
+    invalidateFundsResponseCache(accessToken)
+    return result
   },
-  updateOperation(accessToken, operationId, request) {
-    return requestJson(accessToken, `/api/funds/operations/${operationId}`, { method: 'PUT', body: JSON.stringify(request) })
+  async updateOperation(accessToken, operationId, request) {
+    const result = await requestJson<FundOperationDto>(accessToken, `/api/funds/operations/${operationId}`, { method: 'PUT', body: JSON.stringify(request) })
+    invalidateFundsResponseCache(accessToken)
+    return result
   },
-  cancelOperation(accessToken, operationId, request) {
-    return requestJson(accessToken, `/api/funds/operations/${operationId}/cancel`, { method: 'POST', body: JSON.stringify(request) })
+  async cancelOperation(accessToken, operationId, request) {
+    const result = await requestJson<FundOperationDto>(accessToken, `/api/funds/operations/${operationId}/cancel`, { method: 'POST', body: JSON.stringify(request) })
+    invalidateFundsResponseCache(accessToken)
+    return result
   },
-  restoreOperation(accessToken, operationId) {
-    return requestJson(accessToken, `/api/funds/operations/${operationId}/restore`, { method: 'POST' })
+  async restoreOperation(accessToken, operationId) {
+    const result = await requestJson<FundOperationDto>(accessToken, `/api/funds/operations/${operationId}/restore`, { method: 'POST' })
+    invalidateFundsResponseCache(accessToken)
+    return result
   },
 }

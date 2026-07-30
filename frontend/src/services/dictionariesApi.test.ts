@@ -27,6 +27,35 @@ describe('dictionariesApi response cache', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1)
   })
 
+  it('deduplicates the complete tariff reference bundle across repeated section loads', async () => {
+    const fetchMock = vi.fn().mockImplementation(async () => new Response(JSON.stringify([]), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    }))
+    vi.stubGlobal('fetch', fetchMock)
+    const loadTariffReferences = () => Promise.all([
+      dictionariesApi.getTariffs('token'),
+      dictionariesApi.getChargeServiceSettings('token'),
+      dictionariesApi.getIncomeTypes('token'),
+      dictionariesApi.getExpenseTypes('token'),
+      dictionariesApi.getIrregularPayments('token'),
+      dictionariesApi.getFeeCampaigns('token'),
+    ])
+
+    await Promise.all([loadTariffReferences(), loadTariffReferences()])
+    await loadTariffReferences()
+
+    expect(fetchMock).toHaveBeenCalledTimes(6)
+    expect(fetchMock.mock.calls.map(([path]) => path)).toEqual(expect.arrayContaining([
+      '/api/dictionaries/tariffs?limit=100',
+      '/api/dictionaries/charge-services?limit=100',
+      '/api/dictionaries/income-types?limit=100',
+      '/api/dictionaries/expense-types?limit=100',
+      '/api/dictionaries/irregular-payments?limit=100',
+      '/api/dictionaries/fee-campaigns?limit=100',
+    ]))
+  })
+
   it('does not share responses between authenticated sessions', async () => {
     const fetchMock = vi.fn().mockImplementation(async () => new Response(JSON.stringify([]), {
       status: 200,

@@ -348,6 +348,8 @@ public sealed class GarageBalanceDbContext(DbContextOptions<GarageBalanceDbConte
             entity.HasIndex(item => new { item.Name, item.EffectiveFrom }).IsUnique().HasFilter("\"IsArchived\" = false");
             entity.HasIndex(item => item.CalculationBase);
             entity.HasIndex(item => item.EffectiveFrom);
+            entity.HasIndex(item => new { item.CalculationBase, item.EffectiveFrom })
+                .HasFilter("\"IsArchived\" = false");
         });
 
         modelBuilder.Entity<ChargeServiceSetting>(entity =>
@@ -367,6 +369,8 @@ public sealed class GarageBalanceDbContext(DbContextOptions<GarageBalanceDbConte
             entity.HasIndex(item => item.ExpenseTypeId);
             entity.HasIndex(item => item.ExpenseFundId);
             entity.HasIndex(item => item.TariffId);
+            entity.HasIndex(item => new { item.IsRegular, item.IsMetered, item.TariffId })
+                .HasFilter("\"IsArchived\" = false");
             entity.HasOne(item => item.IncomeType)
                 .WithMany()
                 .HasForeignKey(item => item.IncomeTypeId)

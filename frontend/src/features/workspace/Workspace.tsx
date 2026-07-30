@@ -6,7 +6,6 @@ import type { AuditClient } from '../../services/auditApi'
 import type { DictionaryClient } from '../../services/dictionariesApi'
 import type { FinanceClient } from '../../services/financeApi'
 import type { FundsClient } from '../../services/fundsApi'
-import type { FormStateClient } from '../../services/formStatesApi'
 import type { ImportClient } from '../../services/importApi'
 import type { IntegrationClient } from '../../services/integrationsApi'
 import type { ReportClient } from '../../services/reportsApi'
@@ -85,7 +84,6 @@ export function Workspace({
   dictionaryClient,
   financeClient,
   fundsClient,
-  formStateClient,
   importClient,
   integrationClient,
   reportClient,
@@ -106,7 +104,6 @@ export function Workspace({
   dictionaryClient: DictionaryClient
   financeClient: FinanceClient
   fundsClient: FundsClient
-  formStateClient: FormStateClient
   importClient: ImportClient
   integrationClient: IntegrationClient
   reportClient: ReportClient
@@ -176,7 +173,7 @@ export function Workspace({
         )
       case 'tariffsAndFees':
         return canReadDictionaries ? (
-          <TariffsAndFeesPrototypePanel auth={auth} dictionaryClient={dictionaryClient} financeClient={financeClient} fundsClient={fundsClient} formStateClient={formStateClient} />
+          <TariffsAndFeesPrototypePanel auth={auth} dictionaryClient={dictionaryClient} financeClient={financeClient} fundsClient={fundsClient} />
         ) : (
           <AccessNotice label="Тарифы и сборы недоступны" title="Тарифы и сборы" permission={permissions.dictionariesRead} description="Для просмотра настроек услуг, тарифов и сборов нужно право на чтение справочников." />
         )

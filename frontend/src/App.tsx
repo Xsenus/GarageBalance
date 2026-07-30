@@ -11,8 +11,6 @@ import { financeApi } from './services/financeApi'
 import type { FinanceClient } from './services/financeApi'
 import { fundsApi } from './services/fundsApi'
 import type { FundsClient } from './services/fundsApi'
-import { formStatesApi } from './services/formStatesApi'
-import type { FormStateClient } from './services/formStatesApi'
 import { importApi } from './services/importApi'
 import type { ImportClient } from './services/importApi'
 import { integrationsApi } from './services/integrationsApi'
@@ -36,7 +34,6 @@ type AppProps = {
   dictionaryClient?: DictionaryClient
   financeClient?: FinanceClient
   fundsClient?: FundsClient
-  formStateClient?: FormStateClient
   importClient?: ImportClient
   integrationClient?: IntegrationClient
   reportClient?: ReportClient
@@ -47,7 +44,7 @@ type AppProps = {
 
 const authSessionStorageKey = 'garagebalance.auth.session'
 
-function App({ authClient = authApi, auditClient = auditApi, dictionaryClient = dictionariesApi, financeClient = financeApi, fundsClient = fundsApi, formStateClient = formStatesApi, importClient = importApi, integrationClient = integrationsApi, reportClient = reportsApi, releaseClient = releasesApi, settingsClient = settingsApi, userClient = usersApi }: AppProps) {
+function App({ authClient = authApi, auditClient = auditApi, dictionaryClient = dictionariesApi, financeClient = financeApi, fundsClient = fundsApi, importClient = importApi, integrationClient = integrationsApi, reportClient = reportsApi, releaseClient = releasesApi, settingsClient = settingsApi, userClient = usersApi }: AppProps) {
   const [auth, setAuth] = useState<AuthResponse | null>(() => loadStoredAuthSession(authSessionStorageKey))
   useClientErrorReporting(auth?.accessToken ?? null)
 
@@ -85,7 +82,7 @@ function App({ authClient = authApi, auditClient = auditApi, dictionaryClient = 
   }
 
   return (
-    <AuthenticatedAppShell auth={auth} authClient={authClient} auditClient={auditClient} dictionaryClient={dictionaryClient} financeClient={financeClient} fundsClient={fundsClient} formStateClient={formStateClient} importClient={importClient} integrationClient={integrationClient} reportClient={reportClient} releaseClient={releaseClient} settingsClient={settingsClient} userClient={userClient} onUserChanged={handleUserChanged} onLogout={handleLogout} />
+    <AuthenticatedAppShell auth={auth} authClient={authClient} auditClient={auditClient} dictionaryClient={dictionaryClient} financeClient={financeClient} fundsClient={fundsClient} importClient={importClient} integrationClient={integrationClient} reportClient={reportClient} releaseClient={releaseClient} settingsClient={settingsClient} userClient={userClient} onUserChanged={handleUserChanged} onLogout={handleLogout} />
   )
 }
 

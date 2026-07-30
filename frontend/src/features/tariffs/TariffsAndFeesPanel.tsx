@@ -6,7 +6,6 @@ import { DictionaryApiError } from '../../services/dictionariesApi'
 import type { AccountingTypeDto, ChargeServiceSettingDto, CreateChargeServiceWithTariffRequest, DictionaryClient, FeeCampaignDto, GarageDto, IrregularPaymentDto, TariffDto, UpdateChargeServiceWithTariffRequest, UpsertChargeServiceSettingRequest, UpsertFeeCampaignRequest, UpsertIrregularPaymentRequest, UpsertTariffRequest } from '../../services/dictionariesApi'
 import type { FinanceClient } from '../../services/financeApi'
 import type { FundDto, FundsClient } from '../../services/fundsApi'
-import type { FormStateClient } from '../../services/formStatesApi'
 import { hasPermission, permissions } from '../../shared/accessControl'
 import { EmptyState, TableLoadingState } from '../../shared/AsyncState'
 import type { ChangePreview } from '../../shared/changePreview'
@@ -26,7 +25,6 @@ import { TablePagination } from '../../shared/TablePagination'
 import { chooseRegularTariffId, chooseRegularTariffIdForMeterMode, getCompatibleRegularTariffs, isMeterTariff } from '../../shared/validation'
 import { formatTariffDecimal } from './tariffFormatting'
 
-const tariffsFormStateScope = 'tariffs-and-fees-prototype'
 const dictionaryScreenRequestLimit = 100
 
 type ContractorTariffRow = {
@@ -682,12 +680,7 @@ function mergeFeeCampaignSnapshots(currentCampaigns: FeeCampaignDto[], loadedCam
   ]
 }
 
-type TariffsPrototypeSavedState = {
-  tariffRows: ContractorTariffRow[]
-  oneTimeRows: ContractorOneTimeRow[]
-}
-
-export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeClient, fundsClient, formStateClient }: { auth: AuthResponse; dictionaryClient: DictionaryClient; financeClient: FinanceClient; fundsClient: FundsClient; formStateClient: FormStateClient }) {
+export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeClient, fundsClient }: { auth: AuthResponse; dictionaryClient: DictionaryClient; financeClient: FinanceClient; fundsClient: FundsClient }) {
   const [modal, setModal] = useState<'service' | 'fee' | null>(null)
   const [tariffRows, setTariffRows] = useState<ContractorTariffRow[]>([])
   const [tariffPageNumber, setTariffPageNumber] = useState(1)
@@ -733,7 +726,6 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
   const [oneTimePageSize, setOneTimePageSize] = useState(10)
   const [tariffDrafts, setTariffDrafts] = useState<Record<string, Partial<ContractorTariffRow>>>({})
   const [oneTimeDrafts, setOneTimeDrafts] = useState<Record<string, Partial<ContractorOneTimeRow>>>({})
-  const [formStateLoaded, setFormStateLoaded] = useState(false)
   const [pendingChange, setPendingChange] = useState<TariffPrototypePendingChange | null>(null)
   const [tariffDateErrors, setTariffDateErrors] = useState<Record<string, string>>({})
   const [tariffPersistenceError, setTariffPersistenceError] = useState<string | null>(null)
@@ -857,43 +849,6 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
       ignore = true
     }
   }, [auth.accessToken, dictionaryClient, fundsClient])
-
-  useEffect(() => {
-    let ignore = false
-    formStateClient
-      .getState<TariffsPrototypeSavedState>(auth.accessToken, tariffsFormStateScope)
-      .catch((error: unknown) => {
-        if (!ignore) {
-          setTariffPersistenceError(error instanceof Error ? error.message : 'Не удалось загрузить сохраненное состояние тарифов.')
-        }
-      })
-      .finally(() => {
-        if (!ignore) {
-          setFormStateLoaded(true)
-        }
-      })
-
-    return () => {
-      ignore = true
-    }
-  }, [auth.accessToken, formStateClient])
-
-  useEffect(() => {
-    if (!formStateLoaded || tariffsLoading || oneTimeLoading) {
-      return
-    }
-
-    const handle = window.setTimeout(() => {
-      void formStateClient
-        .saveState<TariffsPrototypeSavedState>(auth.accessToken, tariffsFormStateScope, {
-          payload: { tariffRows, oneTimeRows },
-          summary: 'Сохранено состояние формы тарифов и сборов.'
-        })
-        .catch((error: unknown) => setTariffPersistenceError(error instanceof Error ? error.message : 'Не удалось сохранить состояние тарифов.'))
-    }, 400)
-
-    return () => window.clearTimeout(handle)
-  }, [auth.accessToken, formStateClient, formStateLoaded, oneTimeLoading, oneTimeRows, tariffRows, tariffsLoading])
 
   function closeOneTimeDeleteDialog() {
     setOneTimeDeleteTarget(null)

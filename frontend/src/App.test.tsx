@@ -4551,6 +4551,8 @@ describe('App', () => {
     expect(within(tariffsPanel).getByLabelText('Охрана из БД: Оплата до: день')).toHaveValue('25')
     expect(within(tariffsPanel).getByLabelText('Охрана из БД: Оплата до: месяц')).toHaveTextContent('Декабрь')
     expect(within(tariffsPanel).getByLabelText('Охрана из БД: Перенос долга в просроченный: значение')).toHaveValue('45')
+    expect(vi.mocked(formStatesApi.getState).mock.calls.some((call) => call[1] === 'tariffs-and-fees-prototype')).toBe(false)
+    expect(vi.mocked(formStatesApi.saveState).mock.calls.some((call) => call[1] === 'tariffs-and-fees-prototype')).toBe(false)
   })
 
   it('keeps empty backend tariff dictionaries empty despite stale saved tariff form state', async () => {
@@ -4717,19 +4719,23 @@ describe('App', () => {
 
   it('does not let obsolete contractor snapshots show a timeout over loaded dictionaries', async () => {
     const user = userEvent.setup()
-    const getState = vi.fn(async () => {
+    const getState = vi.mocked(formStatesApi.getState).mockImplementation(async () => {
       throw new Error('Сервер слишком долго не отвечает. Проверьте подключение и повторите запрос.')
     })
-    const saveState = vi.fn(async () => {
+    const saveState = vi.mocked(formStatesApi.saveState).mockImplementation(async () => {
       throw new Error('Сервер слишком долго не отвечает. Проверьте подключение и повторите запрос.')
     })
     const garage = createGarage({ id: 'garage-without-snapshot', number: '15' })
 
     render(<App
       authClient={createAuthClient()}
-      dictionaryClient={createDictionaryClient({ getGarages: async () => [garage] })}
+      dictionaryClient={createDictionaryClient({
+        getGarages: async () => [garage],
+        getTariffs: async () => [],
+        getChargeServiceSettings: async () => [],
+        getIrregularPayments: async () => [],
+      })}
       financeClient={createFinanceClient()}
-      formStateClient={{ getState, saveState }}
       importClient={createImportClient()}
       reportClient={createReportClient()}
       releaseClient={createReleaseClient()}
@@ -4746,6 +4752,14 @@ describe('App', () => {
     expect(getState).not.toHaveBeenCalled()
     expect(saveState).not.toHaveBeenCalled()
     expect(within(contractorsPanel).queryByText('Сервер слишком долго не отвечает. Проверьте подключение и повторите запрос.')).not.toBeInTheDocument()
+
+    await openSection(user, 'Тарифы и сборы')
+    const tariffsPanel = await screen.findByRole('region', { name: 'Тарифы и сборы' })
+    expect(await within(tariffsPanel).findByText('Тарифы и услуги пока не настроены.')).toBeInTheDocument()
+    await new Promise((resolve) => window.setTimeout(resolve, 500))
+    expect(getState).not.toHaveBeenCalled()
+    expect(saveState).not.toHaveBeenCalled()
+    expect(within(tariffsPanel).queryByText('Сервер слишком долго не отвечает. Проверьте подключение и повторите запрос.')).not.toBeInTheDocument()
   })
 
   it('keeps backend contractor dictionaries above stale saved contractor form state', async () => {
