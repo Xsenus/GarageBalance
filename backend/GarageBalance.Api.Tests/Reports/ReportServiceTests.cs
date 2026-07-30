@@ -2989,6 +2989,33 @@ public sealed class ReportServiceTests
     }
 
     [Fact]
+    public async Task ExportBankDepositReportXlsxAsync_RejectsMoreThanMaximumExportRows()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        database.Context.CashBankTransfers.AddRange(
+            Enumerable.Range(0, QueryLimits.MaximumReportExportRows + 1)
+                .Select(index => new CashBankTransfer
+                {
+                    TransferDate = new DateOnly(2026, 6, 1).AddDays(index % 28),
+                    Amount = 1m,
+                    Comment = $"Экспорт {index}",
+                    CreatedAtUtc = new DateTimeOffset(2026, 6, 1, 0, 0, 0, TimeSpan.Zero).AddMinutes(index)
+                }));
+        await database.Context.SaveChangesAsync();
+
+        var result = await CreateService(database.Context).ExportBankDepositReportXlsxAsync(
+            new BankDepositReportRequest(
+                new DateOnly(2026, 6, 1),
+                new DateOnly(2026, 6, 30),
+                null),
+            CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Equal("export_too_large", result.ErrorCode);
+        Assert.Contains(QueryLimits.MaximumReportExportRows.ToString(CultureInfo.InvariantCulture), result.ErrorMessage, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task ExportIncomeReportXlsxAsync_WritesGeneratedAndExportedAuditWithoutRawSearch()
     {
         await using var database = await TestDatabase.CreateAsync();

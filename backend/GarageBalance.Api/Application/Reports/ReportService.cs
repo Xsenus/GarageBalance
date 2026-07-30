@@ -25,6 +25,7 @@ public sealed class ReportService(
     private const string ExpenseReportAllRows = "all";
     private const string ExpenseReportAccrualRows = "accruals";
     private const string ExpenseReportPaymentRows = "payments";
+    private const int MaximumExportRows = QueryLimits.MaximumReportExportRows;
 
     public async Task<ReportResult<ConsolidatedReportDto>> GetConsolidatedReportAsync(ConsolidatedReportRequest request, CancellationToken cancellationToken)
     {
@@ -253,13 +254,17 @@ public sealed class ReportService(
 
     public async Task<ReportResult<ReportExportFileDto>> ExportGarageReportXlsxAsync(GarageReportRequest request, CancellationToken cancellationToken)
     {
-        var reportResult = await BuildGarageReportAsync(request, null, cancellationToken);
+        var reportResult = await BuildGarageReportAsync(request with { Offset = 0 }, MaximumExportRows, cancellationToken);
         if (!reportResult.Succeeded)
         {
             return ReportResult<ReportExportFileDto>.Failure(reportResult.ErrorCode!, reportResult.ErrorMessage!);
         }
 
         var report = reportResult.Value!;
+        if (report.RowCount > report.Rows.Count)
+        {
+            return ExportLimitFailure();
+        }
         var layout = BuildGarageReportExportLayout(report, request.GroupAccruals);
         var rows = layout.Rows
             .Concat([layout.Footer])
@@ -272,7 +277,7 @@ public sealed class ReportService(
         var content = XlsxWorkbookBuilder.Build(
             [
                 new XlsxSheet("Гаражи", layout.Headers, rows)
-            ]);
+            ], cancellationToken);
         var file = new ReportExportFileDto(
             BuildExportFileName("garages", report.PeriodFrom, report.PeriodTo, "xlsx"),
             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -284,15 +289,19 @@ public sealed class ReportService(
 
     public async Task<ReportResult<ReportExportFileDto>> ExportGarageReportPdfAsync(GarageReportRequest request, CancellationToken cancellationToken)
     {
-        var reportResult = await BuildGarageReportAsync(request, null, cancellationToken);
+        var reportResult = await BuildGarageReportAsync(request with { Offset = 0 }, MaximumExportRows, cancellationToken);
         if (!reportResult.Succeeded)
         {
             return ReportResult<ReportExportFileDto>.Failure(reportResult.ErrorCode!, reportResult.ErrorMessage!);
         }
 
         var report = reportResult.Value!;
+        if (report.RowCount > report.Rows.Count)
+        {
+            return ExportLimitFailure();
+        }
         var layout = BuildGarageReportExportLayout(report, request.GroupAccruals);
-        var content = GarageReportPdfDocumentBuilder.Build(report, layout, GarageReportComment);
+        var content = GarageReportPdfDocumentBuilder.Build(report, layout, GarageReportComment, cancellationToken);
         var file = new ReportExportFileDto(
             BuildExportFileName("garages", report.PeriodFrom, report.PeriodTo, "pdf"),
             "application/pdf",
@@ -352,13 +361,19 @@ public sealed class ReportService(
 
     public async Task<ReportResult<ReportExportFileDto>> ExportConsolidatedReportXlsxAsync(ConsolidatedReportRequest request, CancellationToken cancellationToken)
     {
-        var reportResult = await GetConsolidatedReportAsync(request, cancellationToken);
+        var reportResult = await GetConsolidatedReportAsync(
+            request with { Offset = 0, Limit = MaximumExportRows },
+            cancellationToken);
         if (!reportResult.Succeeded)
         {
             return ReportResult<ReportExportFileDto>.Failure(reportResult.ErrorCode!, reportResult.ErrorMessage!);
         }
 
         var report = reportResult.Value!;
+        if (report.GarageRowCount > report.GarageRows.Count)
+        {
+            return ExportLimitFailure();
+        }
         var rows = report.MonthlyRows.SelectMany(month =>
         {
             var incomeRows = month.IncomeBreakdown ?? [];
@@ -394,7 +409,7 @@ public sealed class ReportService(
                     "Консолидированный",
                     ["Месяц", "Наименование", "Поступления", "Наименование", "Выплаты", "Разница", "Остаток по счёту — На начало месяца", "Остаток по счёту — На конец месяца"],
                     rows)
-            ]);
+            ], cancellationToken);
 
         var file = new ReportExportFileDto(
             BuildExportFileName("consolidated", report.PeriodFrom, report.PeriodTo, "xlsx"),
@@ -407,14 +422,20 @@ public sealed class ReportService(
 
     public async Task<ReportResult<ReportExportFileDto>> ExportConsolidatedReportPdfAsync(ConsolidatedReportRequest request, CancellationToken cancellationToken)
     {
-        var reportResult = await GetConsolidatedReportAsync(request, cancellationToken);
+        var reportResult = await GetConsolidatedReportAsync(
+            request with { Offset = 0, Limit = MaximumExportRows },
+            cancellationToken);
         if (!reportResult.Succeeded)
         {
             return ReportResult<ReportExportFileDto>.Failure(reportResult.ErrorCode!, reportResult.ErrorMessage!);
         }
 
         var report = reportResult.Value!;
-        var content = ConsolidatedReportPdfDocumentBuilder.Build(report);
+        if (report.GarageRowCount > report.GarageRows.Count)
+        {
+            return ExportLimitFailure();
+        }
+        var content = ConsolidatedReportPdfDocumentBuilder.Build(report, cancellationToken);
         var file = new ReportExportFileDto(
             BuildExportFileName("consolidated", report.PeriodFrom, report.PeriodTo, "pdf"),
             "application/pdf",
@@ -612,13 +633,19 @@ public sealed class ReportService(
 
     public async Task<ReportResult<ReportExportFileDto>> ExportFundChangeReportXlsxAsync(FundChangeReportRequest request, CancellationToken cancellationToken)
     {
-        var reportResult = await GetFundChangeReportAsync(request, cancellationToken);
+        var reportResult = await GetFundChangeReportAsync(
+            request with { Offset = 0, Limit = MaximumExportRows },
+            cancellationToken);
         if (!reportResult.Succeeded)
         {
             return ReportResult<ReportExportFileDto>.Failure(reportResult.ErrorCode!, reportResult.ErrorMessage!);
         }
 
         var report = reportResult.Value!;
+        if (report.RowCount > report.Rows.Count)
+        {
+            return ExportLimitFailure();
+        }
         var content = XlsxWorkbookBuilder.Build(
             [
                 new XlsxSheet(
@@ -647,7 +674,7 @@ public sealed class ReportService(
                             XlsxCell.Number(report.RowCount)
                         ]
                     ])
-            ]);
+            ], cancellationToken);
 
         var file = new ReportExportFileDto(
             BuildExportFileName("fund-changes", report.DateFrom, report.DateTo, "xlsx"),
@@ -660,13 +687,19 @@ public sealed class ReportService(
 
     public async Task<ReportResult<ReportExportFileDto>> ExportFundChangeReportPdfAsync(FundChangeReportRequest request, CancellationToken cancellationToken)
     {
-        var reportResult = await GetFundChangeReportAsync(request, cancellationToken);
+        var reportResult = await GetFundChangeReportAsync(
+            request with { Offset = 0, Limit = MaximumExportRows },
+            cancellationToken);
         if (!reportResult.Succeeded)
         {
             return ReportResult<ReportExportFileDto>.Failure(reportResult.ErrorCode!, reportResult.ErrorMessage!);
         }
 
         var report = reportResult.Value!;
+        if (report.RowCount > report.Rows.Count)
+        {
+            return ExportLimitFailure();
+        }
         var lines = new List<string>
         {
             $"Period: {report.DateFrom:yyyy-MM-dd} - {report.DateTo:yyyy-MM-dd}",
@@ -685,7 +718,7 @@ public sealed class ReportService(
                 row.ActorDisplayName ?? string.Empty,
                 row.Reason)));
 
-        var content = PdfReportDocumentBuilder.Build("GarageBalance fund changes report", lines);
+        var content = PdfReportDocumentBuilder.Build("GarageBalance fund changes report", lines, cancellationToken);
         var file = new ReportExportFileDto(
             BuildExportFileName("fund-changes", report.DateFrom, report.DateTo, "pdf"),
             "application/pdf",
@@ -755,13 +788,19 @@ public sealed class ReportService(
 
     public async Task<ReportResult<ReportExportFileDto>> ExportCashPaymentReportXlsxAsync(CashPaymentReportRequest request, CancellationToken cancellationToken)
     {
-        var reportResult = await GetCashPaymentReportAsync(request, cancellationToken);
+        var reportResult = await GetCashPaymentReportAsync(
+            request with { Offset = 0, Limit = MaximumExportRows },
+            cancellationToken);
         if (!reportResult.Succeeded)
         {
             return ReportResult<ReportExportFileDto>.Failure(reportResult.ErrorCode!, reportResult.ErrorMessage!);
         }
 
         var report = reportResult.Value!;
+        if (report.RowCount > report.Rows.Count)
+        {
+            return ExportLimitFailure();
+        }
         var content = XlsxWorkbookBuilder.Build(
             [
                 new XlsxSheet(
@@ -789,7 +828,7 @@ public sealed class ReportService(
                             XlsxCell.Number(report.RowCount)
                         ]
                     ])
-            ]);
+            ], cancellationToken);
 
         var file = new ReportExportFileDto(
             BuildExportFileName("cash-payments", report.DateFrom, report.DateTo, "xlsx"),
@@ -802,13 +841,19 @@ public sealed class ReportService(
 
     public async Task<ReportResult<ReportExportFileDto>> ExportCashPaymentReportPdfAsync(CashPaymentReportRequest request, CancellationToken cancellationToken)
     {
-        var reportResult = await GetCashPaymentReportAsync(request, cancellationToken);
+        var reportResult = await GetCashPaymentReportAsync(
+            request with { Offset = 0, Limit = MaximumExportRows },
+            cancellationToken);
         if (!reportResult.Succeeded)
         {
             return ReportResult<ReportExportFileDto>.Failure(reportResult.ErrorCode!, reportResult.ErrorMessage!);
         }
 
         var report = reportResult.Value!;
+        if (report.RowCount > report.Rows.Count)
+        {
+            return ExportLimitFailure();
+        }
         var lines = new List<string>
         {
             $"Period: {report.DateFrom:yyyy-MM-dd} - {report.DateTo:yyyy-MM-dd}",
@@ -825,7 +870,7 @@ public sealed class ReportService(
                 row.Purpose,
                 row.Comment ?? string.Empty)));
 
-        var content = PdfReportDocumentBuilder.Build("GarageBalance cash payments report", lines);
+        var content = PdfReportDocumentBuilder.Build("GarageBalance cash payments report", lines, cancellationToken);
         var file = new ReportExportFileDto(
             BuildExportFileName("cash-payments", report.DateFrom, report.DateTo, "pdf"),
             "application/pdf",
@@ -890,13 +935,19 @@ public sealed class ReportService(
 
     public async Task<ReportResult<ReportExportFileDto>> ExportBankDepositReportXlsxAsync(BankDepositReportRequest request, CancellationToken cancellationToken)
     {
-        var reportResult = await GetBankDepositReportAsync(request, cancellationToken);
+        var reportResult = await GetBankDepositReportAsync(
+            request with { Offset = 0, Limit = MaximumExportRows },
+            cancellationToken);
         if (!reportResult.Succeeded)
         {
             return ReportResult<ReportExportFileDto>.Failure(reportResult.ErrorCode!, reportResult.ErrorMessage!);
         }
 
         var report = reportResult.Value!;
+        if (report.RowCount > report.Rows.Count)
+        {
+            return ExportLimitFailure();
+        }
         var content = XlsxWorkbookBuilder.Build(
             [
                 new XlsxSheet(
@@ -919,7 +970,7 @@ public sealed class ReportService(
                             XlsxCell.Number(report.RowCount)
                         ]
                     ])
-            ]);
+            ], cancellationToken);
 
         var file = new ReportExportFileDto(
             BuildExportFileName("bank-deposits", report.DateFrom, report.DateTo, "xlsx"),
@@ -932,13 +983,19 @@ public sealed class ReportService(
 
     public async Task<ReportResult<ReportExportFileDto>> ExportBankDepositReportPdfAsync(BankDepositReportRequest request, CancellationToken cancellationToken)
     {
-        var reportResult = await GetBankDepositReportAsync(request, cancellationToken);
+        var reportResult = await GetBankDepositReportAsync(
+            request with { Offset = 0, Limit = MaximumExportRows },
+            cancellationToken);
         if (!reportResult.Succeeded)
         {
             return ReportResult<ReportExportFileDto>.Failure(reportResult.ErrorCode!, reportResult.ErrorMessage!);
         }
 
         var report = reportResult.Value!;
+        if (report.RowCount > report.Rows.Count)
+        {
+            return ExportLimitFailure();
+        }
         var lines = new List<string>
         {
             $"Period: {report.DateFrom:yyyy-MM-dd} - {report.DateTo:yyyy-MM-dd}",
@@ -952,7 +1009,7 @@ public sealed class ReportService(
                 FormatAmount(row.Amount),
                 row.Comment ?? string.Empty)));
 
-        var content = PdfReportDocumentBuilder.Build("GarageBalance bank deposits report", lines);
+        var content = PdfReportDocumentBuilder.Build("GarageBalance bank deposits report", lines, cancellationToken);
         var file = new ReportExportFileDto(
             BuildExportFileName("bank-deposits", report.DateFrom, report.DateTo, "pdf"),
             "application/pdf",
@@ -1088,13 +1145,19 @@ public sealed class ReportService(
 
     public async Task<ReportResult<ReportExportFileDto>> ExportFeeReportXlsxAsync(FeeReportRequest request, CancellationToken cancellationToken)
     {
-        var reportResult = await GetFeeReportAsync(request, cancellationToken);
+        var reportResult = await GetFeeReportAsync(
+            request with { Offset = 0, Limit = MaximumExportRows },
+            cancellationToken);
         if (!reportResult.Succeeded)
         {
             return ReportResult<ReportExportFileDto>.Failure(reportResult.ErrorCode!, reportResult.ErrorMessage!);
         }
 
         var report = reportResult.Value!;
+        if (report.RowCount > report.SummaryRows.Count + report.GarageRows.Count)
+        {
+            return ExportLimitFailure();
+        }
         var content = XlsxWorkbookBuilder.Build(
             [
                 new XlsxSheet(
@@ -1145,7 +1208,7 @@ public sealed class ReportService(
                             XlsxCell.Number(report.RowCount)
                         ]
                     ])
-            ]);
+            ], cancellationToken);
 
         var file = new ReportExportFileDto(
             BuildSnapshotExportFileName("fees", "xlsx"),
@@ -1158,13 +1221,19 @@ public sealed class ReportService(
 
     public async Task<ReportResult<ReportExportFileDto>> ExportFeeReportPdfAsync(FeeReportRequest request, CancellationToken cancellationToken)
     {
-        var reportResult = await GetFeeReportAsync(request, cancellationToken);
+        var reportResult = await GetFeeReportAsync(
+            request with { Offset = 0, Limit = MaximumExportRows },
+            cancellationToken);
         if (!reportResult.Succeeded)
         {
             return ReportResult<ReportExportFileDto>.Failure(reportResult.ErrorCode!, reportResult.ErrorMessage!);
         }
 
         var report = reportResult.Value!;
+        if (report.RowCount > report.SummaryRows.Count + report.GarageRows.Count)
+        {
+            return ExportLimitFailure();
+        }
         var lines = new List<string>
         {
             $"Variation: {report.Variation}",
@@ -1203,7 +1272,7 @@ public sealed class ReportService(
                 row.LastPaymentDate?.ToString("yyyy-MM-dd") ?? string.Empty,
                 FormatAmount(row.Debt))));
 
-        var content = PdfReportDocumentBuilder.Build("GarageBalance fees report", lines);
+        var content = PdfReportDocumentBuilder.Build("GarageBalance fees report", lines, cancellationToken);
         var file = new ReportExportFileDto(
             BuildSnapshotExportFileName("fees", "pdf"),
             "application/pdf",
@@ -1215,13 +1284,19 @@ public sealed class ReportService(
 
     public async Task<ReportResult<ReportExportFileDto>> ExportIncomeReportXlsxAsync(IncomeReportRequest request, CancellationToken cancellationToken)
     {
-        var reportResult = await GetIncomeReportAsync(request, cancellationToken);
+        var reportResult = await GetIncomeReportAsync(
+            request with { Offset = 0, Limit = MaximumExportRows },
+            cancellationToken);
         if (!reportResult.Succeeded)
         {
             return ReportResult<ReportExportFileDto>.Failure(reportResult.ErrorCode!, reportResult.ErrorMessage!);
         }
 
         var report = reportResult.Value!;
+        if (report.RowCount > report.Rows.Count)
+        {
+            return ExportLimitFailure();
+        }
         var content = XlsxWorkbookBuilder.Build(
             [
                 new XlsxSheet(
@@ -1255,7 +1330,7 @@ public sealed class ReportService(
                             XlsxCell.Number(report.RowCount)
                         ]
                     ])
-            ]);
+            ], cancellationToken);
 
         var file = new ReportExportFileDto(
             BuildExportFileName("income", report.DateFrom, report.DateTo, "xlsx"),
@@ -1268,13 +1343,19 @@ public sealed class ReportService(
 
     public async Task<ReportResult<ReportExportFileDto>> ExportIncomeReportPdfAsync(IncomeReportRequest request, CancellationToken cancellationToken)
     {
-        var reportResult = await GetIncomeReportAsync(request, cancellationToken);
+        var reportResult = await GetIncomeReportAsync(
+            request with { Offset = 0, Limit = MaximumExportRows },
+            cancellationToken);
         if (!reportResult.Succeeded)
         {
             return ReportResult<ReportExportFileDto>.Failure(reportResult.ErrorCode!, reportResult.ErrorMessage!);
         }
 
         var report = reportResult.Value!;
+        if (report.RowCount > report.Rows.Count)
+        {
+            return ExportLimitFailure();
+        }
         var lines = new List<string>
         {
             $"Period: {report.DateFrom:yyyy-MM-dd} - {report.DateTo:yyyy-MM-dd}",
@@ -1291,7 +1372,7 @@ public sealed class ReportService(
                 row.DocumentNumber ?? string.Empty,
                 row.IncomeTypeName)));
 
-        var content = PdfReportDocumentBuilder.Build("GarageBalance income report", lines);
+        var content = PdfReportDocumentBuilder.Build("GarageBalance income report", lines, cancellationToken);
         var file = new ReportExportFileDto(
             BuildExportFileName("income", report.DateFrom, report.DateTo, "pdf"),
             "application/pdf",
@@ -1303,13 +1384,19 @@ public sealed class ReportService(
 
     public async Task<ReportResult<ReportExportFileDto>> ExportExpenseReportXlsxAsync(ExpenseReportRequest request, CancellationToken cancellationToken)
     {
-        var reportResult = await GetExpenseReportAsync(request, cancellationToken);
+        var reportResult = await GetExpenseReportAsync(
+            request with { Offset = 0, Limit = MaximumExportRows },
+            cancellationToken);
         if (!reportResult.Succeeded)
         {
             return ReportResult<ReportExportFileDto>.Failure(reportResult.ErrorCode!, reportResult.ErrorMessage!);
         }
 
         var report = reportResult.Value!;
+        if (report.RowCount > report.Rows.Count)
+        {
+            return ExportLimitFailure();
+        }
         var content = XlsxWorkbookBuilder.Build(
             [
                 new XlsxSheet(
@@ -1341,7 +1428,7 @@ public sealed class ReportService(
                             XlsxCell.Number(report.RowCount)
                         ]
                     ])
-            ]);
+            ], cancellationToken);
 
         var file = new ReportExportFileDto(
             BuildExportFileName("expense", report.DateFrom, report.DateTo, "xlsx"),
@@ -1354,13 +1441,19 @@ public sealed class ReportService(
 
     public async Task<ReportResult<ReportExportFileDto>> ExportExpenseReportPdfAsync(ExpenseReportRequest request, CancellationToken cancellationToken)
     {
-        var reportResult = await GetExpenseReportAsync(request, cancellationToken);
+        var reportResult = await GetExpenseReportAsync(
+            request with { Offset = 0, Limit = MaximumExportRows },
+            cancellationToken);
         if (!reportResult.Succeeded)
         {
             return ReportResult<ReportExportFileDto>.Failure(reportResult.ErrorCode!, reportResult.ErrorMessage!);
         }
 
         var report = reportResult.Value!;
+        if (report.RowCount > report.Rows.Count)
+        {
+            return ExportLimitFailure();
+        }
         var lines = new List<string>
         {
             $"Period: {report.DateFrom:yyyy-MM-dd} - {report.DateTo:yyyy-MM-dd}",
@@ -1380,7 +1473,7 @@ public sealed class ReportService(
                 FormatAmount(row.Difference),
                 row.DocumentNumber ?? string.Empty)));
 
-        var content = PdfReportDocumentBuilder.Build("GarageBalance expense report", lines);
+        var content = PdfReportDocumentBuilder.Build("GarageBalance expense report", lines, cancellationToken);
         var file = new ReportExportFileDto(
             BuildExportFileName("expense", report.DateFrom, report.DateTo, "pdf"),
             "application/pdf",
@@ -1672,7 +1765,12 @@ public sealed class ReportService(
     }
 
     private static int NormalizeReportLimit(int limit) =>
-        QueryLimits.NormalizePageSize(limit, defaultSize: 1);
+        QueryLimits.NormalizePageSize(limit, defaultSize: 1, maximumSize: MaximumExportRows);
+
+    private static ReportResult<ReportExportFileDto> ExportLimitFailure() =>
+        ReportResult<ReportExportFileDto>.Failure(
+            "export_too_large",
+            $"В экспорт попало больше {MaximumExportRows} строк. Сократите период или уточните фильтры и повторите выгрузку.");
 
     private static string FormatAmount(decimal value) => MoneyFormatting.Format(value);
 

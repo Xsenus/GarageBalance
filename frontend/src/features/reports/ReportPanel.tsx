@@ -403,6 +403,10 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
   }, [activeReportTab, auth.accessToken, dictionaryClient, reportDataSettled])
 
   useEffect(() => {
+    if (activeReportTab !== 'consolidated') {
+      return
+    }
+
     let ignore = false
     const controller = new AbortController()
 
@@ -443,7 +447,7 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
       ignore = true
       controller.abort()
     }
-  }, [auth.accessToken, monthlyFilters.consolidated, reportClient, reportSorts.consolidated])
+  }, [activeReportTab, auth.accessToken, monthlyFilters.consolidated, reportClient, reportSorts.consolidated])
 
   useEffect(() => {
     if (activeReportTab !== 'fees') {

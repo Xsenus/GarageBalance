@@ -12,6 +12,42 @@ namespace GarageBalance.Api.Tests.Reports;
 public sealed class PostgreSqlReportSortingIntegrationTests
 {
     [PostgreSqlFact]
+    public async Task AllReportQueriesHonorCancellation()
+    {
+        await using var database = await PostgreSqlTestDatabase.CreateAsync();
+        await using var context = database.CreateContext();
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+        var month = new DateOnly(2026, 1, 1);
+        var dateTo = month.AddMonths(1).AddDays(-1);
+        var ascendingDate = new ReportSort("date", false);
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            new EfConsolidatedMonthlyReportQuery(context).GetMonthlyDataAsync(
+                month, month, new ReportSort("accountingMonth", false), 0, 25, cancellation.Token));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            new EfGarageReportQuery(context).GetRowsAsync(
+                month, month, null, new HashSet<Guid>(), new HashSet<Guid>(), new HashSet<Guid>(), false, 0, 25, ascendingDate, cancellation.Token));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            new EfIncomeReportQuery(context).GetRowsAsync(
+                month, dateTo, "all", new HashSet<Guid>(), new HashSet<Guid>(), new HashSet<Guid>(), null, 25, 0, ascendingDate, false, cancellation.Token));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            new EfExpenseReportQuery(context).GetRowsAsync(
+                month, dateTo, "all", new HashSet<Guid>(), new HashSet<Guid>(), new HashSet<Guid>(), null, 25, 0, ascendingDate, cancellation.Token));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            new EfCashMovementReportQuery(context).GetCashPaymentsAsync(
+                month, dateTo, null, 0, 25, ascendingDate, cancellation.Token));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            new EfCashMovementReportQuery(context).GetBankDepositsAsync(
+                month, dateTo, null, 0, 25, ascendingDate, cancellation.Token));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            new EfFundChangeReportQuery(context).GetFundChangesAsync(
+                month, dateTo, null, 0, 25, ascendingDate, cancellation.Token));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            new EfFeeReportQuery(context).GetActiveIncomeTypesAsync(cancellation.Token));
+    }
+
+    [PostgreSqlFact]
     public async Task GarageAndExpenseReportsSupportSingleMultipleAllAndUnknownSelections()
     {
         await using var database = await PostgreSqlTestDatabase.CreateAsync();
@@ -442,6 +478,15 @@ public sealed class PostgreSqlReportSortingIntegrationTests
         await using var database = await PostgreSqlTestDatabase.CreateAsync();
         await using var context = database.CreateContext();
         var incomeType = new IncomeType { Name = $"REPORT-PERFORMANCE-{Guid.NewGuid():N}" };
+        var supplierGroup = new SupplierGroup { Name = $"REPORT-PERFORMANCE-{Guid.NewGuid():N}" };
+        var supplier = new Supplier { Name = $"REPORT-PERFORMANCE-SUPPLIER-{Guid.NewGuid():N}", Group = supplierGroup };
+        var expenseType = new ExpenseType { Name = $"REPORT-PERFORMANCE-EXPENSE-{Guid.NewGuid():N}" };
+        var fund = new Fund
+        {
+            Name = $"REPORT-PERFORMANCE-FUND-{Guid.NewGuid():N}",
+            NormalizedName = $"REPORT-PERFORMANCE-FUND-{Guid.NewGuid():N}",
+            SortOrder = 900
+        };
         var garages = Enumerable.Range(1, garageCount)
             .Select(index => new Garage
             {
@@ -450,13 +495,14 @@ public sealed class PostgreSqlReportSortingIntegrationTests
                 FloorCount = 1
             })
             .ToArray();
-        context.Add(incomeType);
+        context.AddRange(incomeType, supplierGroup, supplier, expenseType, fund);
         context.Garages.AddRange(garages);
         await context.SaveChangesAsync();
         context.ChangeTracker.Clear();
 
         var accruals = new List<Accrual>(expectedRowCount);
         var payments = new List<FinancialOperation>(expectedRowCount);
+        var expenses = new List<FinancialOperation>(expectedRowCount);
         foreach (var garage in garages)
         {
             for (var monthOffset = 0; monthOffset < monthCount; monthOffset++)
@@ -483,16 +529,71 @@ public sealed class PostgreSqlReportSortingIntegrationTests
                     DocumentNumber = $"PERF-{garage.Number}-{month:yyyyMM}",
                     CreatedAtUtc = new DateTimeOffset(month.AddDays(14).ToDateTime(new TimeOnly(12, 0)), TimeSpan.Zero)
                 });
+                expenses.Add(new FinancialOperation
+                {
+                    OperationKind = FinancialOperationKinds.Expense,
+                    OperationDate = month.AddDays(18),
+                    AccountingMonth = month,
+                    Amount = 35m,
+                    SupplierId = supplier.Id,
+                    ExpenseTypeId = expenseType.Id,
+                    ExpensePaymentSource = ExpensePaymentSources.Cash,
+                    ExpensePaymentType = ExpensePaymentTypes.WithoutReceipt,
+                    DocumentNumber = $"PERF-EXPENSE-{garage.Number}-{month:yyyyMM}",
+                    CreatedAtUtc = new DateTimeOffset(month.AddDays(18).ToDateTime(new TimeOnly(12, 0)), TimeSpan.Zero)
+                });
             }
         }
 
         context.ChangeTracker.AutoDetectChangesEnabled = false;
         context.Accruals.AddRange(accruals);
         context.FinancialOperations.AddRange(payments);
+        context.FinancialOperations.AddRange(expenses);
+        context.SupplierAccruals.AddRange(
+            Enumerable.Range(0, monthCount)
+                .Select(monthOffset => new SupplierAccrual
+                {
+                    SupplierId = supplier.Id,
+                    ExpenseTypeId = expenseType.Id,
+                    AccountingMonth = firstMonth.AddMonths(monthOffset),
+                    Amount = garageCount * 40m,
+                    Source = "report_performance_test"
+                }));
+        context.CashBankTransfers.AddRange(
+            Enumerable.Range(0, monthCount)
+                .Select(monthOffset => new CashBankTransfer
+                {
+                    TransferDate = firstMonth.AddMonths(monthOffset).AddDays(20),
+                    Amount = garageCount * 10m,
+                    Comment = "report performance",
+                    CreatedAtUtc = new DateTimeOffset(firstMonth.AddMonths(monthOffset).AddDays(20).ToDateTime(TimeOnly.MinValue), TimeSpan.Zero)
+                }));
+        decimal fundBalance = 0m;
+        foreach (var monthOffset in Enumerable.Range(0, monthCount))
+        {
+            var amount = garageCount * 5m;
+            context.FundOperations.Add(new FundOperation
+            {
+                FundId = fund.Id,
+                OperationKind = FundOperationKinds.Deposit,
+                Amount = amount,
+                BalanceBefore = fundBalance,
+                BalanceAfter = fundBalance + amount,
+                Reason = "report performance",
+                CreatedAtUtc = new DateTimeOffset(firstMonth.AddMonths(monthOffset).AddDays(22).ToDateTime(TimeOnly.MinValue), TimeSpan.Zero)
+            });
+            fundBalance += amount;
+        }
         await context.SaveChangesAsync();
         context.ChangeTracker.AutoDetectChangesEnabled = true;
         context.ChangeTracker.Clear();
-        await context.Database.ExecuteSqlRawAsync("ANALYZE accruals; ANALYZE financial_operations; ANALYZE garages;");
+        await context.Database.ExecuteSqlRawAsync(
+            "ANALYZE accruals; ANALYZE financial_operations; ANALYZE garages; ANALYZE supplier_accruals; ANALYZE cash_bank_transfers; ANALYZE fund_operations;");
+
+        var smallBaseline = await MeasureAllReportsAsync(context, incomeType.Id, firstMonth, firstMonth, pageSize);
+        var mediumBaseline = await MeasureAllReportsAsync(context, incomeType.Id, firstMonth, firstMonth.AddMonths(11), pageSize);
+        Assert.True(smallBaseline < TimeSpan.FromSeconds(5), $"Small report baseline took {smallBaseline.TotalSeconds:F2}s.");
+        Assert.True(mediumBaseline < TimeSpan.FromSeconds(10), $"Medium report baseline took {mediumBaseline.TotalSeconds:F2}s.");
 
         var stopwatch = Stopwatch.StartNew();
         var debtors = await DictionaryServiceTestFactory.Create(context).GetGaragesPageAsync(
@@ -587,10 +688,100 @@ public sealed class PostgreSqlReportSortingIntegrationTests
         Assert.Equal(expectedIncomeTotal, fees.CollectedTotals[incomeType.Id]);
         Assert.Equal(expectedAccrualTotal - expectedIncomeTotal, fees.DebtTotal);
 
-        var totalQueryTime = debtorsElapsed + worksheetElapsed + incomeElapsed + garagesElapsed + consolidatedElapsed + feesElapsed;
+        stopwatch.Restart();
+        var expense = await new EfExpenseReportQuery(context).GetRowsAsync(
+            firstMonth,
+            dateTo,
+            "all",
+            new HashSet<Guid>(),
+            new HashSet<Guid>(),
+            new HashSet<Guid>(),
+            null,
+            pageSize,
+            0,
+            new ReportSort("date", true),
+            CancellationToken.None);
+        var expenseElapsed = stopwatch.Elapsed;
+        Assert.Equal(monthCount, expense.RowCount);
+        Assert.Equal(pageSize, expense.Rows.Count);
+
+        stopwatch.Restart();
+        var cash = await new EfCashMovementReportQuery(context).GetCashPaymentsAsync(
+            firstMonth,
+            dateTo,
+            null,
+            0,
+            pageSize,
+            new ReportSort("date", true),
+            CancellationToken.None);
+        var cashElapsed = stopwatch.Elapsed;
+        Assert.Equal(expectedRowCount, cash.RowCount);
+        Assert.Equal(pageSize, cash.Operations.Count);
+
+        stopwatch.Restart();
+        var bank = await new EfCashMovementReportQuery(context).GetBankDepositsAsync(
+            firstMonth,
+            dateTo,
+            null,
+            0,
+            pageSize,
+            new ReportSort("date", true),
+            CancellationToken.None);
+        var bankElapsed = stopwatch.Elapsed;
+        Assert.Equal(monthCount, bank.RowCount);
+        Assert.Equal(pageSize, bank.Operations.Count);
+
+        stopwatch.Restart();
+        var funds = await new EfFundChangeReportQuery(context).GetFundChangesAsync(
+            firstMonth,
+            dateTo,
+            null,
+            0,
+            pageSize,
+            new ReportSort("date", true),
+            CancellationToken.None);
+        var fundsElapsed = stopwatch.Elapsed;
+        Assert.Equal(monthCount, funds.RowCount);
+        Assert.Equal(pageSize, funds.Rows.Count);
+
+        var totalQueryTime = debtorsElapsed + worksheetElapsed + incomeElapsed + garagesElapsed + consolidatedElapsed + feesElapsed
+            + expenseElapsed + cashElapsed + bankElapsed + fundsElapsed;
+        Console.WriteLine(
+            $"REPORT_BASELINE small={smallBaseline.TotalMilliseconds:F0}ms; medium={mediumBaseline.TotalMilliseconds:F0}ms; realistic={totalQueryTime.TotalMilliseconds:F0}ms; income={incomeElapsed.TotalMilliseconds:F0}; garages={garagesElapsed.TotalMilliseconds:F0}; consolidated={consolidatedElapsed.TotalMilliseconds:F0}; fees={feesElapsed.TotalMilliseconds:F0}; expense={expenseElapsed.TotalMilliseconds:F0}; cash={cashElapsed.TotalMilliseconds:F0}; bank={bankElapsed.TotalMilliseconds:F0}; funds={fundsElapsed.TotalMilliseconds:F0}");
         Assert.True(
-            totalQueryTime < TimeSpan.FromSeconds(15),
-            $"Realistic finance queries took {totalQueryTime.TotalSeconds:F2}s: debtors {debtorsElapsed.TotalSeconds:F2}s, worksheet {worksheetElapsed.TotalSeconds:F2}s, income {incomeElapsed.TotalSeconds:F2}s, garages {garagesElapsed.TotalSeconds:F2}s, consolidated {consolidatedElapsed.TotalSeconds:F2}s, fees {feesElapsed.TotalSeconds:F2}s.");
+            totalQueryTime < TimeSpan.FromSeconds(25),
+            $"Realistic report queries took {totalQueryTime.TotalSeconds:F2}s: debtors {debtorsElapsed.TotalSeconds:F2}s, worksheet {worksheetElapsed.TotalSeconds:F2}s, income {incomeElapsed.TotalSeconds:F2}s, garages {garagesElapsed.TotalSeconds:F2}s, consolidated {consolidatedElapsed.TotalSeconds:F2}s, fees {feesElapsed.TotalSeconds:F2}s, expense {expenseElapsed.TotalSeconds:F2}s, cash {cashElapsed.TotalSeconds:F2}s, bank {bankElapsed.TotalSeconds:F2}s, funds {fundsElapsed.TotalSeconds:F2}s.");
+    }
+
+    private static async Task<TimeSpan> MeasureAllReportsAsync(
+        GarageBalanceDbContext context,
+        Guid incomeTypeId,
+        DateOnly firstMonth,
+        DateOnly lastMonth,
+        int pageSize)
+    {
+        var dateTo = lastMonth.AddMonths(1).AddDays(-1);
+        var stopwatch = Stopwatch.StartNew();
+        await new EfIncomeReportQuery(context).GetRowsAsync(
+            firstMonth, dateTo, "all", new HashSet<Guid>(), new HashSet<Guid>(), new HashSet<Guid> { incomeTypeId },
+            null, pageSize, 0, new ReportSort("date", true), CancellationToken.None);
+        await new EfGarageReportQuery(context).GetRowsAsync(
+            firstMonth, lastMonth, null, new HashSet<Guid>(), new HashSet<Guid>(), new HashSet<Guid> { incomeTypeId },
+            false, 0, pageSize, new ReportSort("difference", true), CancellationToken.None);
+        await new EfConsolidatedMonthlyReportQuery(context).GetMonthlyDataAsync(
+            firstMonth, lastMonth, new ReportSort("accountingMonth", true), 0, pageSize, CancellationToken.None);
+        await new EfFeeReportQuery(context).GetFeeReportPageAsync(
+            [incomeTypeId], false, new ReportSort("debt", true), 0, pageSize, CancellationToken.None);
+        await new EfExpenseReportQuery(context).GetRowsAsync(
+            firstMonth, dateTo, "all", new HashSet<Guid>(), new HashSet<Guid>(), new HashSet<Guid>(),
+            null, pageSize, 0, new ReportSort("date", true), CancellationToken.None);
+        await new EfCashMovementReportQuery(context).GetCashPaymentsAsync(
+            firstMonth, dateTo, null, 0, pageSize, new ReportSort("date", true), CancellationToken.None);
+        await new EfCashMovementReportQuery(context).GetBankDepositsAsync(
+            firstMonth, dateTo, null, 0, pageSize, new ReportSort("date", true), CancellationToken.None);
+        await new EfFundChangeReportQuery(context).GetFundChangesAsync(
+            firstMonth, dateTo, null, 0, pageSize, new ReportSort("date", true), CancellationToken.None);
+        return stopwatch.Elapsed;
     }
 
     private static Accrual CreateAccrual(Garage garage, IncomeType incomeType, DateOnly month, decimal amount) =>

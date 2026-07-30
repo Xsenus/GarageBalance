@@ -21,9 +21,11 @@ internal static class GarageReportPdfDocumentBuilder
     public static byte[] Build(
         GarageDetailReportDto report,
         GarageReportExportLayout layout,
-        string comment)
+        string comment,
+        CancellationToken cancellationToken = default)
     {
-        return Document.Create(document =>
+        cancellationToken.ThrowIfCancellationRequested();
+        var content = Document.Create(document =>
         {
             document.Page(page =>
             {
@@ -95,6 +97,7 @@ internal static class GarageReportPdfDocumentBuilder
 
                             foreach (var row in layout.Rows)
                             {
+                                cancellationToken.ThrowIfCancellationRequested();
                                 foreach (var cell in row)
                                 {
                                     table.Cell()
@@ -126,6 +129,8 @@ internal static class GarageReportPdfDocumentBuilder
                     });
             });
         }).GeneratePdf();
+        cancellationToken.ThrowIfCancellationRequested();
+        return content;
     }
 
     private static void AddSummary(RowDescriptor row, string label, decimal value)

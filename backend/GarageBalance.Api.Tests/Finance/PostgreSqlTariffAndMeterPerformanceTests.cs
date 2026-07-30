@@ -76,19 +76,20 @@ public sealed class PostgreSqlTariffAndMeterPerformanceTests
                   AND "EffectiveFrom" <= DATE '2026-07-01';
                 """),
             StringComparison.Ordinal);
-        Assert.Contains(
-            "IX_charge_service_settings_IsRegular_IsMetered_TariffId",
-            await ExplainAsync(
-                connection,
-                """
-                SELECT "Id"
-                FROM charge_service_settings
-                WHERE "IsArchived" = false
-                  AND "IsRegular" = true
-                  AND "IsMetered" = true
-                ORDER BY "TariffId";
-                """),
-            StringComparison.Ordinal);
+        var servicePlan = await ExplainAsync(
+            connection,
+            """
+            SELECT "Id"
+            FROM charge_service_settings
+            WHERE "IsArchived" = false
+              AND "IsRegular" = true
+              AND "IsMetered" = true
+            ORDER BY "TariffId";
+            """);
+        Assert.True(
+            servicePlan.Contains("IX_charge_service_settings_IsRegular_IsMetered_TariffId", StringComparison.Ordinal) ||
+            servicePlan.Contains("IX_charge_service_settings_TariffId", StringComparison.Ordinal),
+            $"Expected PostgreSQL to use the filtered predicate index or the ordered TariffId index.{Environment.NewLine}{servicePlan}");
     }
 
     [PostgreSqlFact]

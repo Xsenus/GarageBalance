@@ -18,9 +18,10 @@ internal static class ConsolidatedReportPdfDocumentBuilder
         QuestPDF.Settings.License = LicenseType.Community;
     }
 
-    public static byte[] Build(ConsolidatedReportDto report)
+    public static byte[] Build(ConsolidatedReportDto report, CancellationToken cancellationToken = default)
     {
-        return Document.Create(document =>
+        cancellationToken.ThrowIfCancellationRequested();
+        var content = Document.Create(document =>
         {
             document.Page(page =>
             {
@@ -49,6 +50,7 @@ internal static class ConsolidatedReportPdfDocumentBuilder
                         column.Spacing(12);
                         foreach (var month in report.MonthlyRows)
                         {
+                            cancellationToken.ThrowIfCancellationRequested();
                             column.Item()
                                 .EnsureSpace(110)
                                 .Table(table => AddMonthTable(table, month));
@@ -68,6 +70,8 @@ internal static class ConsolidatedReportPdfDocumentBuilder
                     });
             });
         }).GeneratePdf();
+        cancellationToken.ThrowIfCancellationRequested();
+        return content;
     }
 
     private static void AddMonthTable(TableDescriptor table, MonthlyReportRowDto month)

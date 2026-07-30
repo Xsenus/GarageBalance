@@ -12,8 +12,9 @@ internal static class PdfReportDocumentBuilder
     private const int LineHeight = 15;
     private const int LinesPerPage = 48;
 
-    public static byte[] Build(string title, IReadOnlyList<string> lines)
+    public static byte[] Build(string title, IReadOnlyList<string> lines, CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         var normalizedLines = new List<string> { title, string.Empty };
         normalizedLines.AddRange(lines);
         var pages = normalizedLines
@@ -48,11 +49,17 @@ internal static class PdfReportDocumentBuilder
 
         for (var index = 0; index < pages.Length; index++)
         {
+            if ((index & 15) == 0)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+            }
+
             var pageObject = $"<< /Type /Page /Parent {pagesId} 0 R /MediaBox [0 0 {PageWidth} {PageHeight}] /Resources << /Font << /F1 {fontId} 0 R >> >> /Contents {contentIds[index]} 0 R >>";
             AddObject(objects, pageObject);
             AddStreamObject(objects, BuildContentStream(pages[index], index + 1, pages.Length));
         }
 
+        cancellationToken.ThrowIfCancellationRequested();
         return BuildPdf(objects, catalogId);
     }
 

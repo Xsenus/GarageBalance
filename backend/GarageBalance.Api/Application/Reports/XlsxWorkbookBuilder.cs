@@ -10,8 +10,9 @@ internal static class XlsxWorkbookBuilder
     private static readonly XNamespace Relationships = "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
     private static readonly XNamespace PackageRelationships = "http://schemas.openxmlformats.org/package/2006/relationships";
 
-    public static byte[] Build(IReadOnlyList<XlsxSheet> sheets)
+    public static byte[] Build(IReadOnlyList<XlsxSheet> sheets, CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         using var stream = new MemoryStream();
         using (var archive = new ZipArchive(stream, ZipArchiveMode.Create, leaveOpen: true))
         {
@@ -23,10 +24,12 @@ internal static class XlsxWorkbookBuilder
 
             for (var index = 0; index < sheets.Count; index++)
             {
-                WriteEntry(archive, $"xl/worksheets/sheet{index + 1}.xml", BuildWorksheet(sheets[index]));
+                cancellationToken.ThrowIfCancellationRequested();
+                WriteEntry(archive, $"xl/worksheets/sheet{index + 1}.xml", BuildWorksheet(sheets[index], cancellationToken));
             }
         }
 
+        cancellationToken.ThrowIfCancellationRequested();
         return stream.ToArray();
     }
 
@@ -102,7 +105,7 @@ internal static class XlsxWorkbookBuilder
                 new XElement(Spreadsheet + "cellStyles", new XAttribute("count", 1), new XElement(Spreadsheet + "cellStyle", new XAttribute("name", "Normal"), new XAttribute("xfId", 0), new XAttribute("builtinId", 0)))));
     }
 
-    private static XDocument BuildWorksheet(XlsxSheet sheet)
+    private static XDocument BuildWorksheet(XlsxSheet sheet, CancellationToken cancellationToken)
     {
         var rows = new List<XElement>
         {
@@ -111,6 +114,11 @@ internal static class XlsxWorkbookBuilder
 
         for (var index = 0; index < sheet.Rows.Count; index++)
         {
+            if ((index & 63) == 0)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+            }
+
             rows.Add(BuildRow(index + 2, sheet.Rows[index]));
         }
 

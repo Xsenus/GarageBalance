@@ -5,6 +5,7 @@ public static class QueryLimits
     public const int DefaultListSize = 100;
     public const int DefaultPageSize = 25;
     public const int MaximumPageSize = 500;
+    public const int MaximumReportExportRows = 5000;
     public const int MaximumReportPeriodMonths = 120;
 
     public static int NormalizeListSize(int? requestedSize, int defaultSize = DefaultListSize, int maximumSize = MaximumPageSize)

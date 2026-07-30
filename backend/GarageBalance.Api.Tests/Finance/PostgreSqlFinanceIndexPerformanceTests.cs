@@ -17,11 +17,15 @@ public sealed class PostgreSqlFinanceIndexPerformanceTests
         var indexes = await ReadIndexesAsync(connection);
         AssertIndex(indexes, "IX_financial_operations_OperationKind_OperationDate_Id", "\"IsCanceled\" = false");
         AssertIndex(indexes, "IX_financial_operations_GarageId_IncomeTypeId_OperationDate_Cr~", "income");
+        AssertIndex(indexes, "IX_financial_operations_SupplierId", "\"SupplierId\"");
+        AssertIndex(indexes, "IX_financial_operations_StaffMemberId", "\"StaffMemberId\"");
         AssertIndex(indexes, "IX_accruals_AccountingMonth_GarageId_Id", "\"IsCanceled\" = false");
         AssertIndex(indexes, "IX_accruals_GarageId_IncomeTypeId_DueDate_CreatedAtUtc", "\"DueDateNeedsReview\" = false");
         AssertIndex(indexes, "IX_accrual_payment_allocations_AccrualId_FinancialOperationId", "\"IsActive\" = true");
         AssertIndex(indexes, "IX_supplier_accruals_AccountingMonth_SupplierId_Id", "\"IsCanceled\" = false");
         AssertIndex(indexes, "IX_fund_operations_FundId_CreatedAtUtc_Id", "\"FundId\"");
+        AssertIndex(indexes, "IX_fund_operations_CreatedAtUtc", "\"CreatedAtUtc\"");
+        AssertIndex(indexes, "IX_cash_bank_transfers_TransferDate", "\"TransferDate\"");
 
         await AssertPlanUsesAsync(
             connection,
@@ -93,6 +97,41 @@ public sealed class PostgreSqlFinanceIndexPerformanceTests
               AND "CreatedAtUtc" >= TIMESTAMPTZ '2026-01-01T00:00:00Z'
             ORDER BY "CreatedAtUtc", "Id";
             """);
+        await AssertPlanUsesAsync(
+            connection,
+            "IX_financial_operations_SupplierId",
+            """
+            SELECT "Id" FROM financial_operations
+            WHERE "SupplierId" = '00000000-0000-0000-0000-000000000005'
+              AND "OperationKind" = 'expense'
+              AND "OperationDate" BETWEEN DATE '2026-01-01' AND DATE '2026-12-31';
+            """);
+        await AssertPlanUsesAsync(
+            connection,
+            "IX_financial_operations_StaffMemberId",
+            """
+            SELECT "Id" FROM financial_operations
+            WHERE "StaffMemberId" = '00000000-0000-0000-0000-000000000006'
+              AND "OperationKind" = 'expense'
+              AND "OperationDate" BETWEEN DATE '2026-01-01' AND DATE '2026-12-31';
+            """);
+        await AssertPlanUsesAsync(
+            connection,
+            "IX_fund_operations_CreatedAtUtc",
+            """
+            SELECT "Id" FROM fund_operations
+            WHERE "IsCanceled" = false
+              AND "CreatedAtUtc" >= TIMESTAMPTZ '2026-01-01T00:00:00Z'
+              AND "CreatedAtUtc" < TIMESTAMPTZ '2027-01-01T00:00:00Z';
+            """);
+        await AssertPlanUsesAsync(
+            connection,
+            "IX_cash_bank_transfers_TransferDate",
+            """
+            SELECT "Id" FROM cash_bank_transfers
+            WHERE "IsCanceled" = false
+              AND "TransferDate" BETWEEN DATE '2026-01-01' AND DATE '2026-12-31';
+            """);
     }
 
     [PostgreSqlFact]
@@ -136,7 +175,8 @@ public sealed class PostgreSqlFinanceIndexPerformanceTests
                 'accruals',
                 'accrual_payment_allocations',
                 'supplier_accruals',
-                'fund_operations');
+                'fund_operations',
+                'cash_bank_transfers');
             """;
         await using var reader = await command.ExecuteReaderAsync();
         var indexes = new Dictionary<string, string>(StringComparer.Ordinal);

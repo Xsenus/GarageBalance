@@ -16579,6 +16579,28 @@ describe('App', () => {
     expect(within(reportsPanel).getByRole('button', { name: 'Все' })).toHaveAttribute('aria-pressed', 'true')
   })
 
+  it('loads only the active report and does not repeat the consolidated request after tab switches', async () => {
+    const user = userEvent.setup()
+    const baseReportClient = createReportClient()
+    const getConsolidatedReport = vi.fn(baseReportClient.getConsolidatedReport)
+    const getGarageReport = vi.fn(baseReportClient.getGarageReport)
+    const reportClient = createReportClient({ getConsolidatedReport, getGarageReport })
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={reportClient} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Отчеты')
+    const reportsPanel = await screen.findByRole('region', { name: 'Отчеты' })
+    await waitFor(() => expect(getConsolidatedReport).toHaveBeenCalledTimes(1))
+
+    await openReportTab(user, reportsPanel, 'По гаражам')
+    await waitFor(() => expect(getGarageReport).toHaveBeenCalledTimes(1))
+    expect(getConsolidatedReport).toHaveBeenCalledTimes(1)
+
+    await openReportTab(user, reportsPanel, 'По выплатам')
+    expect(getConsolidatedReport).toHaveBeenCalledTimes(1)
+  })
+
   it('keeps the garage report available when quick lists cannot be loaded', async () => {
     const user = userEvent.setup()
     const reportClient = createReportClient({

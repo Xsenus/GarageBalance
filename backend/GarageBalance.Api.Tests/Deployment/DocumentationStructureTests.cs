@@ -19,6 +19,7 @@ public sealed partial class DocumentationStructureTests
         "local-pc-install-checklist.md",
         "migration-verification-checklist.md",
         "monthly-cycle-checklist.md",
+        "performance/report-query-baseline.md",
         "postgres-backup-restore.md",
         "reports-guide.md",
         "roadmaps/customer-comments-2026-07-22-roadmap.md",
