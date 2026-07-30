@@ -556,23 +556,23 @@ export type CorrectHistoricalMeterReadingRequest = {
 
 export type FinanceClient = {
   getOperations(accessToken: string, limit?: number): Promise<FinancialOperationDto[]>
-  getOperationsPage(accessToken: string, params?: FinancePageParams & { operationKind?: 'income' | 'expense' }): Promise<FinancePagedResult<FinancialOperationDto>>
+  getOperationsPage(accessToken: string, params?: FinancePageParams & { operationKind?: 'income' | 'expense' }, signal?: AbortSignal): Promise<FinancePagedResult<FinancialOperationDto>>
   getAccruals(accessToken: string, limit?: number): Promise<AccrualDto[]>
-  getAccrualsPage(accessToken: string, params?: FinancePageParams): Promise<FinancePagedResult<AccrualDto>>
+  getAccrualsPage(accessToken: string, params?: FinancePageParams, signal?: AbortSignal): Promise<FinancePagedResult<AccrualDto>>
   getAccrualDueDateReviewPage?(accessToken: string, params?: Pick<FinancePageParams, 'offset' | 'limit'>): Promise<FinancePagedResult<AccrualDueDateReviewDto>>
   getSupplierAccruals(accessToken: string, limit?: number): Promise<SupplierAccrualDto[]>
-  getSupplierAccrualsPage(accessToken: string, params?: FinancePageParams): Promise<FinancePagedResult<SupplierAccrualDto>>
+  getSupplierAccrualsPage(accessToken: string, params?: FinancePageParams, signal?: AbortSignal): Promise<FinancePagedResult<SupplierAccrualDto>>
   getSupplierOpeningBalance(accessToken: string, supplierId: string, monthFrom: string): Promise<SupplierOpeningBalanceDto>
   getFinancialReportPeriod(accessToken: string, params: { garageId?: string; supplierId?: string; staffMemberId?: string }): Promise<FinancialReportPeriodDto>
   getMeterReadings(accessToken: string, limit?: number): Promise<MeterReadingDto[]>
-  getMeterReadingsPage(accessToken: string, params?: FinancePageParams & { meterKind?: 'water' | 'electricity' }): Promise<FinancePagedResult<MeterReadingDto>>
-  getMeterReadingYearPage(accessToken: string, params: { year: number; meterKind: 'water' | 'electricity'; offset?: number; limit?: number }): Promise<MeterReadingYearPageDto>
-  getMissingMeterReadings(accessToken: string, params?: { accountingMonth?: string; meterKind?: 'water' | 'electricity'; search?: string; limit?: number }): Promise<MissingMeterReadingDto[]>
+  getMeterReadingsPage(accessToken: string, params?: FinancePageParams & { meterKind?: 'water' | 'electricity' }, signal?: AbortSignal): Promise<FinancePagedResult<MeterReadingDto>>
+  getMeterReadingYearPage(accessToken: string, params: { year: number; meterKind: 'water' | 'electricity'; offset?: number; limit?: number }, signal?: AbortSignal): Promise<MeterReadingYearPageDto>
+  getMissingMeterReadings(accessToken: string, params?: { accountingMonth?: string; meterKind?: 'water' | 'electricity'; search?: string; limit?: number }, signal?: AbortSignal): Promise<MissingMeterReadingDto[]>
   getGarageBalanceHistory(accessToken: string, garageId: string, params?: { monthFrom?: string; monthTo?: string }): Promise<GarageBalanceHistoryDto>
   getGarageOverdueDebt(accessToken: string, garageId: string): Promise<GarageOverdueDebtDto>
   getGarageIncomeWorksheet(accessToken: string, garageId: string, params?: { monthFrom?: string; monthTo?: string }): Promise<GarageIncomeWorksheetDto>
   getExpenseWorksheet(accessToken: string, params?: { accountingMonth?: string }): Promise<ExpenseWorksheetDto>
-  getSummary(accessToken: string, params?: FinancePageParams): Promise<FinanceSummaryDto>
+  getSummary(accessToken: string, params?: FinancePageParams, signal?: AbortSignal): Promise<FinanceSummaryDto>
   getIncomePaymentWarning(accessToken: string, request: IncomePaymentWarningRequest): Promise<IncomePaymentWarningDto>
   createIncome(accessToken: string, request: CreateIncomeOperationRequest): Promise<FinancialOperationDto>
   createGarageDebtPayment(accessToken: string, request: CreateGarageDebtPaymentRequest): Promise<FinancialOperationDto>
@@ -663,7 +663,7 @@ export const financeApi: FinanceClient = {
   getOperations(accessToken, limit) {
     return requestJson(accessToken, withLimit('/api/finance/operations', limit))
   },
-  getOperationsPage(accessToken, params = {}) {
+  getOperationsPage(accessToken, params = {}, signal) {
     return requestJson(accessToken, withQuery('/api/finance/operations/page', {
       dateFrom: toMonthStart(params.monthFrom),
       dateTo: toMonthEnd(params.monthTo),
@@ -674,19 +674,19 @@ export const financeApi: FinanceClient = {
       staffMemberId: params.staffMemberId,
       offset: params.offset,
       limit: params.limit,
-    }))
+    }), { signal })
   },
   getAccruals(accessToken, limit) {
     return requestJson(accessToken, withLimit('/api/finance/accruals', limit))
   },
-  getAccrualsPage(accessToken, params = {}) {
+  getAccrualsPage(accessToken, params = {}, signal) {
     return requestJson(accessToken, withQuery('/api/finance/accruals/page', {
       monthFrom: toMonthStart(params.monthFrom),
       monthTo: toMonthStart(params.monthTo),
       search: params.search,
       offset: params.offset,
       limit: params.limit,
-    }))
+    }), { signal })
   },
   getAccrualDueDateReviewPage(accessToken, params = {}) {
     return requestJson(accessToken, withQuery('/api/finance/accruals/due-date-review', {
@@ -697,7 +697,7 @@ export const financeApi: FinanceClient = {
   getSupplierAccruals(accessToken, limit) {
     return requestJson(accessToken, withLimit('/api/finance/supplier-accruals', limit))
   },
-  getSupplierAccrualsPage(accessToken, params = {}) {
+  getSupplierAccrualsPage(accessToken, params = {}, signal) {
     return requestJson(accessToken, withQuery('/api/finance/supplier-accruals/page', {
       monthFrom: toMonthStart(params.monthFrom),
       monthTo: toMonthStart(params.monthTo),
@@ -705,12 +705,12 @@ export const financeApi: FinanceClient = {
       supplierId: params.supplierId,
       offset: params.offset,
       limit: params.limit,
-    }))
+    }), { signal })
   },
   getMeterReadings(accessToken, limit) {
     return requestJson(accessToken, withLimit('/api/finance/meter-readings', limit))
   },
-  getMeterReadingsPage(accessToken, params = {}) {
+  getMeterReadingsPage(accessToken, params = {}, signal) {
     return requestJson(accessToken, withQuery('/api/finance/meter-readings/page', {
       monthFrom: toMonthStart(params.monthFrom),
       monthTo: toMonthStart(params.monthTo),
@@ -718,23 +718,23 @@ export const financeApi: FinanceClient = {
       search: params.search,
       offset: params.offset,
       limit: params.limit,
-    }))
+    }), { signal })
   },
-  getMeterReadingYearPage(accessToken, params) {
+  getMeterReadingYearPage(accessToken, params, signal) {
     return requestJson(accessToken, withQuery('/api/finance/meter-readings/year', {
       year: params.year,
       meterKind: params.meterKind,
       offset: params.offset,
       limit: params.limit,
-    }))
+    }), { signal })
   },
-  getMissingMeterReadings(accessToken, params = {}) {
+  getMissingMeterReadings(accessToken, params = {}, signal) {
     return requestJson(accessToken, withQuery('/api/finance/meter-readings/missing', {
       accountingMonth: toMonthStart(params.accountingMonth),
       meterKind: params.meterKind,
       search: params.search,
       limit: params.limit,
-    }))
+    }), { signal })
   },
   getGarageBalanceHistory(accessToken, garageId, params = {}) {
     return requestJson(accessToken, withQuery(`/api/finance/garages/${garageId}/balance-history`, {
@@ -756,12 +756,12 @@ export const financeApi: FinanceClient = {
       accountingMonth: toMonthStart(params.accountingMonth),
     }))
   },
-  getSummary(accessToken, params = {}) {
+  getSummary(accessToken, params = {}, signal) {
     return requestJson(accessToken, withQuery('/api/finance/summary', {
       dateFrom: toMonthStart(params.monthFrom),
       dateTo: toMonthEnd(params.monthTo),
       search: params.search,
-    }))
+    }), { signal })
   },
   getSupplierOpeningBalance(accessToken, supplierId, monthFrom) {
     return requestJson(accessToken, withQuery(`/api/finance/suppliers/${supplierId}/opening-balance`, {

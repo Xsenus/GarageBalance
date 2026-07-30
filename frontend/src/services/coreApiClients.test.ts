@@ -191,4 +191,22 @@ describe('core API clients', () => {
     await expect(usersApi.getRoles('token')).rejects.toThrow('Недостаточно прав.')
     await expect(usersApi.restoreUser('token', 'user-1')).rejects.toThrow('Не удалось выполнить запрос.')
   })
+
+  it('forwards cancellation to audit and user-management pages', async () => {
+    const fetchMock = vi.fn().mockImplementation(() => Promise.resolve(jsonResponse({
+      items: [],
+      totalCount: 0,
+      offset: 0,
+      limit: 25,
+    })))
+    vi.stubGlobal('fetch', fetchMock)
+    const auditController = new AbortController()
+    const usersController = new AbortController()
+
+    await auditApi.getEventsPage('token', { limit: 25 }, auditController.signal)
+    await usersApi.getUsersPage('token', undefined, 0, 25, usersController.signal)
+
+    expect(fetchMock.mock.calls[0][1]?.signal).toBeInstanceOf(AbortSignal)
+    expect(fetchMock.mock.calls[1][1]?.signal).toBeInstanceOf(AbortSignal)
+  })
 })

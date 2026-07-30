@@ -291,4 +291,22 @@ describe('dictionariesApi response cache', () => {
       expect.objectContaining({ headers: expect.objectContaining({ Authorization: 'Bearer token' }) }),
     )
   })
+
+  it('forwards cancellation and bypasses the shared response cache for an abortable read', async () => {
+    const fetchMock = vi.fn().mockImplementation(async () => new Response(JSON.stringify({
+      items: [],
+      totalCount: 0,
+      offset: 0,
+      limit: 25,
+    }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
+    vi.stubGlobal('fetch', fetchMock)
+    const controller = new AbortController()
+
+    await dictionariesApi.getGaragesPage('token', undefined, 0, 25, false, undefined, undefined, false, {}, controller.signal)
+    await dictionariesApi.getGaragesPage('token', undefined, 0, 25, false, undefined, undefined, false, {}, controller.signal)
+
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+    expect(fetchMock.mock.calls[0][0]).toBe('/api/dictionaries/garages/page?offset=0&limit=25')
+    expect(fetchMock.mock.calls[0][1]?.signal).toBeInstanceOf(AbortSignal)
+  })
 })

@@ -145,4 +145,18 @@ describe('integrationsApi', () => {
     expect(fetchMock).toHaveBeenNthCalledWith(2, '/api/suggestions/addresses?query=%D0%9B%D0%B5%D0%BD%D0%B8%D0%BD%D0%B0%201&count=6', { headers: expect.any(Headers) })
     expect((fetchMock.mock.calls[0][1].headers as Headers).get('Authorization')).toBe('Bearer token')
   })
+
+  it('forwards cancellation to suggestion requests', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify([]), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    }))
+    vi.stubGlobal('fetch', fetchMock)
+    const controller = new AbortController()
+
+    await integrationsApi.suggestParties('token', 'вод', 5, controller.signal)
+
+    expect(fetchMock.mock.calls[0][0]).toBe('/api/suggestions/parties?query=%D0%B2%D0%BE%D0%B4&count=5')
+    expect(fetchMock.mock.calls[0][1]?.signal).toBeInstanceOf(AbortSignal)
+  })
 })

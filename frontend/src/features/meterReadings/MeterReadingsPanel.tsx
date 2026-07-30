@@ -242,6 +242,7 @@ export function MeterReadingsPrototypePanel({ auth, financeClient }: { auth: Aut
 
   useEffect(() => {
     let isMounted = true
+    const controller = new AbortController()
 
     async function loadMeterReadings() {
       setLoading(true)
@@ -252,7 +253,7 @@ export function MeterReadingsPrototypePanel({ auth, financeClient }: { auth: Aut
           meterKind: meterType,
           limit: pageSize,
           offset: pageOffset,
-        })
+        }, controller.signal)
         if (!isMounted) {
           return
         }
@@ -291,6 +292,7 @@ export function MeterReadingsPrototypePanel({ auth, financeClient }: { auth: Aut
 
     return () => {
       isMounted = false
+      controller.abort()
     }
   }, [appliedYear, auth.accessToken, financeClient, meterType, pageOffset, pageSize])
 

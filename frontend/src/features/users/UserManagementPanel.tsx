@@ -108,13 +108,14 @@ export function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; 
 
   useEffect(() => {
     let ignore = false
+    const controller = new AbortController()
 
     async function loadUsers() {
       setLoading(true)
       setError(null)
       let pageFailed = false
       try {
-        const loadedPage = await userClient.getUsersPage(auth.accessToken, appliedSearch, offset, pageSize)
+        const loadedPage = await userClient.getUsersPage(auth.accessToken, appliedSearch, offset, pageSize, controller.signal)
         if (!ignore) {
           setPage(loadedPage)
         }
@@ -149,6 +150,7 @@ export function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; 
     void loadUsers()
     return () => {
       ignore = true
+      controller.abort()
     }
   }, [appliedSearch, auth.accessToken, getRolesOnce, offset, pageSize, userClient])
 

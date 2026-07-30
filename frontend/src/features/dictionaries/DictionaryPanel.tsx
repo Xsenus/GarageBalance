@@ -174,13 +174,14 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, integ
   useEffect(() => {
     const query = ownerForm.address?.trim() ?? ''
     const sequence = ++ownerAddressRequestSequence.current
+    const controller = new AbortController()
     if (editor?.section !== 'owners' || !ownerAddressInputTouched.current || query.length < 2) {
       return undefined
     }
 
     const timeoutId = window.setTimeout(() => {
       setOwnerAddressSuggestionStatus('Ищем адрес...')
-      void integrationClient.suggestAddresses(auth.accessToken, query).then((suggestions) => {
+      void integrationClient.suggestAddresses(auth.accessToken, query, undefined, controller.signal).then((suggestions) => {
         if (sequence !== ownerAddressRequestSequence.current) {
           return
         }
@@ -190,7 +191,7 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, integ
         setOwnerAddressSuggestionsOpen(suggestions.length > 0)
         setOwnerAddressSuggestionStatus(suggestions.length > 0 ? `Найдено вариантов: ${suggestions.length}` : 'Подходящих адресов не найдено. Можно продолжить ввод вручную.')
       }).catch(() => {
-        if (sequence !== ownerAddressRequestSequence.current) {
+        if (controller.signal.aborted || sequence !== ownerAddressRequestSequence.current) {
           return
         }
 
@@ -200,7 +201,10 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, integ
       })
     }, 350)
 
-    return () => window.clearTimeout(timeoutId)
+    return () => {
+      window.clearTimeout(timeoutId)
+      controller.abort()
+    }
   }, [auth.accessToken, editor?.section, integrationClient, ownerForm.address])
 
   useEffect(() => {
@@ -267,11 +271,12 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, integ
 
   useEffect(() => {
     let ignore = false
+    const controller = new AbortController()
     const timeoutId = window.setTimeout(() => {
       const page = pages[activeSection]
       setLoading(true)
       setError(null)
-      loadPage(activeSection, 0, page.limit)
+      loadPage(activeSection, 0, page.limit, controller.signal)
         .catch((caught) => {
           if (!ignore) {
             const message = caught instanceof Error ? caught.message : 'Не удалось загрузить таблицу справочника.'
@@ -289,48 +294,49 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, integ
     return () => {
       ignore = true
       window.clearTimeout(timeoutId)
+      controller.abort()
     }
     // The loader intentionally captures the current page settings for the active dictionary section.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeSection, auth.accessToken, dictionaryClient, search, showArchived])
 
-  async function loadPage(section: DictionarySectionKey, offset = pages[section].offset, limit = pages[section].limit) {
+  async function loadPage(section: DictionarySectionKey, offset = pages[section].offset, limit = pages[section].limit, signal?: AbortSignal) {
     const query = supportsDictionarySearch(section) ? search.trim() || undefined : undefined
     let page: PagedResult<DictionaryRecord>
     if (section === 'owners') {
       page = dictionaryClient.getOwnersPage
-        ? await dictionaryClient.getOwnersPage(auth.accessToken, query, offset, limit, showArchived)
-        : createFallbackPage<DictionaryRecord>(await dictionaryClient.getOwners(auth.accessToken, query, 500, showArchived), offset, limit)
+        ? await dictionaryClient.getOwnersPage(auth.accessToken, query, offset, limit, showArchived, signal)
+        : createFallbackPage<DictionaryRecord>(await dictionaryClient.getOwners(auth.accessToken, query, 500, showArchived, signal), offset, limit)
       setOwners(page.items as OwnerDto[])
     } else if (section === 'garages') {
       page = dictionaryClient.getGaragesPage
-        ? await dictionaryClient.getGaragesPage(auth.accessToken, query, offset, limit, showArchived)
-        : createFallbackPage<DictionaryRecord>(await dictionaryClient.getGarages(auth.accessToken, query, 500, showArchived), offset, limit)
+        ? await dictionaryClient.getGaragesPage(auth.accessToken, query, offset, limit, showArchived, undefined, undefined, false, {}, signal)
+        : createFallbackPage<DictionaryRecord>(await dictionaryClient.getGarages(auth.accessToken, query, 500, showArchived, signal), offset, limit)
       setGarages(page.items as GarageDto[])
     } else if (section === 'supplierGroups') {
       page = dictionaryClient.getSupplierGroupsPage
-        ? await dictionaryClient.getSupplierGroupsPage(auth.accessToken, query, offset, limit, showArchived)
-        : createFallbackPage<DictionaryRecord>(await dictionaryClient.getSupplierGroups(auth.accessToken, query, 500, showArchived), offset, limit)
+        ? await dictionaryClient.getSupplierGroupsPage(auth.accessToken, query, offset, limit, showArchived, signal)
+        : createFallbackPage<DictionaryRecord>(await dictionaryClient.getSupplierGroups(auth.accessToken, query, 500, showArchived, signal), offset, limit)
       setGroups(page.items as SupplierGroupDto[])
     } else if (section === 'suppliers') {
       page = dictionaryClient.getSuppliersPage
-        ? await dictionaryClient.getSuppliersPage(auth.accessToken, undefined, query, offset, limit, showArchived)
-        : createFallbackPage<DictionaryRecord>(await dictionaryClient.getSuppliers(auth.accessToken, undefined, query, 500, showArchived), offset, limit)
+        ? await dictionaryClient.getSuppliersPage(auth.accessToken, undefined, query, offset, limit, showArchived, undefined, undefined, signal)
+        : createFallbackPage<DictionaryRecord>(await dictionaryClient.getSuppliers(auth.accessToken, undefined, query, 500, showArchived, signal), offset, limit)
       setSuppliers(page.items as SupplierDto[])
     } else if (section === 'incomeTypes') {
       page = dictionaryClient.getIncomeTypesPage
-        ? await dictionaryClient.getIncomeTypesPage(auth.accessToken, query, offset, limit, showArchived)
-        : createFallbackPage<DictionaryRecord>(await dictionaryClient.getIncomeTypes(auth.accessToken, query, 500, showArchived), offset, limit)
+        ? await dictionaryClient.getIncomeTypesPage(auth.accessToken, query, offset, limit, showArchived, signal)
+        : createFallbackPage<DictionaryRecord>(await dictionaryClient.getIncomeTypes(auth.accessToken, query, 500, showArchived, signal), offset, limit)
       setIncomeTypes(page.items as AccountingTypeDto[])
     } else if (section === 'expenseTypes') {
       page = dictionaryClient.getExpenseTypesPage
-        ? await dictionaryClient.getExpenseTypesPage(auth.accessToken, query, offset, limit, showArchived)
-        : createFallbackPage<DictionaryRecord>(await dictionaryClient.getExpenseTypes(auth.accessToken, query, 500, showArchived), offset, limit)
+        ? await dictionaryClient.getExpenseTypesPage(auth.accessToken, query, offset, limit, showArchived, signal)
+        : createFallbackPage<DictionaryRecord>(await dictionaryClient.getExpenseTypes(auth.accessToken, query, 500, showArchived, signal), offset, limit)
       setExpenseTypes(page.items as AccountingTypeDto[])
     } else {
       page = dictionaryClient.getTariffsPage
-        ? await dictionaryClient.getTariffsPage(auth.accessToken, query, offset, limit, showArchived)
-        : createFallbackPage<DictionaryRecord>(await dictionaryClient.getTariffs(auth.accessToken, query, 500, showArchived), offset, limit)
+        ? await dictionaryClient.getTariffsPage(auth.accessToken, query, offset, limit, showArchived, signal)
+        : createFallbackPage<DictionaryRecord>(await dictionaryClient.getTariffs(auth.accessToken, query, 500, showArchived, signal), offset, limit)
       setTariffs(page.items as TariffDto[])
     }
 
@@ -1585,18 +1591,19 @@ export function DictionaryPanel({ auth, dictionaryClient }: { auth: AuthResponse
 
   useEffect(() => {
     let ignore = false
+    const controller = new AbortController()
     async function load() {
       setLoading(true)
       setError(null)
       try {
         const [loadedOwners, loadedGarages, loadedGroups, loadedSuppliers, loadedIncomeTypes, loadedExpenseTypes, loadedTariffs] = await Promise.all([
-          dictionaryClient.getOwners(auth.accessToken, undefined, dictionaryScreenRequestLimit),
-          dictionaryClient.getGarages(auth.accessToken, undefined, dictionaryScreenRequestLimit),
-          dictionaryClient.getSupplierGroups(auth.accessToken, undefined, dictionaryScreenRequestLimit),
-          dictionaryClient.getSuppliers(auth.accessToken, undefined, undefined, dictionaryScreenRequestLimit),
-          dictionaryClient.getIncomeTypes(auth.accessToken, undefined, dictionaryScreenRequestLimit),
-          dictionaryClient.getExpenseTypes(auth.accessToken, undefined, dictionaryScreenRequestLimit),
-          dictionaryClient.getTariffs(auth.accessToken, undefined, dictionaryScreenRequestLimit),
+          dictionaryClient.getOwners(auth.accessToken, undefined, dictionaryScreenRequestLimit, false, controller.signal),
+          dictionaryClient.getGarages(auth.accessToken, undefined, dictionaryScreenRequestLimit, false, controller.signal),
+          dictionaryClient.getSupplierGroups(auth.accessToken, undefined, dictionaryScreenRequestLimit, false, controller.signal),
+          dictionaryClient.getSuppliers(auth.accessToken, undefined, undefined, dictionaryScreenRequestLimit, false, controller.signal),
+          dictionaryClient.getIncomeTypes(auth.accessToken, undefined, dictionaryScreenRequestLimit, false, controller.signal),
+          dictionaryClient.getExpenseTypes(auth.accessToken, undefined, dictionaryScreenRequestLimit, false, controller.signal),
+          dictionaryClient.getTariffs(auth.accessToken, undefined, dictionaryScreenRequestLimit, false, controller.signal),
         ])
         if (!ignore) {
           setOwners(loadedOwners)
@@ -1621,6 +1628,7 @@ export function DictionaryPanel({ auth, dictionaryClient }: { auth: AuthResponse
     void load()
     return () => {
       ignore = true
+      controller.abort()
     }
   }, [auth.accessToken, dictionaryClient])
 
@@ -1632,10 +1640,11 @@ export function DictionaryPanel({ auth, dictionaryClient }: { auth: AuthResponse
     }
 
     let ignore = false
+    const controller = new AbortController()
     const timeoutId = window.setTimeout(() => {
       setError(null)
       dictionaryClient
-        .getGarages(auth.accessToken, query || undefined, dictionaryScreenRequestLimit)
+        .getGarages(auth.accessToken, query || undefined, dictionaryScreenRequestLimit, false, controller.signal)
         .then((result) => {
           if (!ignore) {
             setGarages(result)
@@ -1652,6 +1661,7 @@ export function DictionaryPanel({ auth, dictionaryClient }: { auth: AuthResponse
     return () => {
       ignore = true
       window.clearTimeout(timeoutId)
+      controller.abort()
     }
   }, [auth.accessToken, dictionaryClient, garageSearch])
 
@@ -1663,10 +1673,11 @@ export function DictionaryPanel({ auth, dictionaryClient }: { auth: AuthResponse
     }
 
     let ignore = false
+    const controller = new AbortController()
     const timeoutId = window.setTimeout(() => {
       setError(null)
       dictionaryClient
-        .getSuppliers(auth.accessToken, undefined, query || undefined, dictionaryScreenRequestLimit)
+        .getSuppliers(auth.accessToken, undefined, query || undefined, dictionaryScreenRequestLimit, false, controller.signal)
         .then((result) => {
           if (!ignore) {
             setSuppliers(result)
@@ -1683,6 +1694,7 @@ export function DictionaryPanel({ auth, dictionaryClient }: { auth: AuthResponse
     return () => {
       ignore = true
       window.clearTimeout(timeoutId)
+      controller.abort()
     }
   }, [auth.accessToken, dictionaryClient, supplierSearch])
 

@@ -126,8 +126,8 @@ export type IntegrationClient = {
   getReceiptPrintingStatus(accessToken: string): Promise<ReceiptPrintingIntegrationStatusDto>
   registerReceiptPrintingAction(accessToken: string, operationId: string, request: ReceiptPrintingActionRequest): Promise<ReceiptPrintingActionDto>
   updateProtectedSetting(accessToken: string, provider: string, settingKey: string, plaintextValue: string): Promise<IntegrationSecretSettingDto>
-  suggestParties(accessToken: string, query: string, count?: number): Promise<DadataPartySuggestionDto[]>
-  suggestAddresses(accessToken: string, query: string, count?: number): Promise<DadataAddressSuggestionDto[]>
+  suggestParties(accessToken: string, query: string, count?: number, signal?: AbortSignal): Promise<DadataPartySuggestionDto[]>
+  suggestAddresses(accessToken: string, query: string, count?: number, signal?: AbortSignal): Promise<DadataAddressSuggestionDto[]>
 }
 
 export const integrationsApi: IntegrationClient = {
@@ -175,11 +175,11 @@ export const integrationsApi: IntegrationClient = {
       },
     )
   },
-  suggestParties(accessToken, query, count = 8) {
-    return requestJson<DadataPartySuggestionDto[]>(accessToken, `/api/suggestions/parties?query=${encodeURIComponent(query)}&count=${count}`)
+  suggestParties(accessToken, query, count = 8, signal) {
+    return requestJson<DadataPartySuggestionDto[]>(accessToken, `/api/suggestions/parties?query=${encodeURIComponent(query)}&count=${count}`, { signal })
   },
-  suggestAddresses(accessToken, query, count = 8) {
-    return requestJson<DadataAddressSuggestionDto[]>(accessToken, `/api/suggestions/addresses?query=${encodeURIComponent(query)}&count=${count}`)
+  suggestAddresses(accessToken, query, count = 8, signal) {
+    return requestJson<DadataAddressSuggestionDto[]>(accessToken, `/api/suggestions/addresses?query=${encodeURIComponent(query)}&count=${count}`, { signal })
   },
 }
 

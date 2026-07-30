@@ -37,17 +37,18 @@ export type AuditEventPageDto = {
 export type AuditEventQuery = { dateFrom?: string; dateTo?: string; action?: string; search?: string; offset?: number; limit?: number; section?: string; actionKind?: string; entityType?: string; actorUserId?: string; quickFilter?: string; relatedGarage?: string; relatedAccountingMonth?: string; relatedCounterparty?: string; relatedDocument?: string }
 
 export type AuditClient = {
-  getEvents(accessToken: string, params?: AuditEventQuery): Promise<AuditEventDto[]>
-  getEventsPage(accessToken: string, params?: AuditEventQuery): Promise<AuditEventPageDto>
-  getEvent(accessToken: string, id: string): Promise<AuditEventDto>
+  getEvents(accessToken: string, params?: AuditEventQuery, signal?: AbortSignal): Promise<AuditEventDto[]>
+  getEventsPage(accessToken: string, params?: AuditEventQuery, signal?: AbortSignal): Promise<AuditEventPageDto>
+  getEvent(accessToken: string, id: string, signal?: AbortSignal): Promise<AuditEventDto>
   exportEvents(accessToken: string, params?: AuditEventQuery): Promise<Blob>
   exportEventsXlsx(accessToken: string, params?: AuditEventQuery): Promise<Blob>
 }
 
 const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? ''
 
-async function requestJson<TResponse>(accessToken: string, path: string): Promise<TResponse> {
+async function requestJson<TResponse>(accessToken: string, path: string, signal?: AbortSignal): Promise<TResponse> {
   const response = await apiFetch(`${apiBaseUrl}${path}`, {
+    signal,
     headers: {
       Authorization: `Bearer ${accessToken}`,
     },
@@ -127,16 +128,16 @@ function buildQuery(params: AuditEventQuery = {}) {
 }
 
 export const auditApi: AuditClient = {
-  getEvents(accessToken, params) {
+  getEvents(accessToken, params, signal) {
     const query = buildQuery(params)
-    return requestJson(accessToken, `/api/audit/events${query ? `?${query}` : ''}`)
+    return requestJson(accessToken, `/api/audit/events${query ? `?${query}` : ''}`, signal)
   },
-  getEventsPage(accessToken, params) {
+  getEventsPage(accessToken, params, signal) {
     const query = buildQuery(params)
-    return requestJson(accessToken, `/api/audit/events/page${query ? `?${query}` : ''}`)
+    return requestJson(accessToken, `/api/audit/events/page${query ? `?${query}` : ''}`, signal)
   },
-  getEvent(accessToken, id) {
-    return requestJson(accessToken, `/api/audit/events/${encodeURIComponent(id)}`)
+  getEvent(accessToken, id, signal) {
+    return requestJson(accessToken, `/api/audit/events/${encodeURIComponent(id)}`, signal)
   },
   exportEvents(accessToken, params) {
     const query = buildQuery(params)

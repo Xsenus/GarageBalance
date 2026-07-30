@@ -329,26 +329,26 @@ export type UpsertFeeCampaignRequest = {
 }
 
 export type DictionaryClient = {
-  getOwners(accessToken: string, search?: string, limit?: number, includeArchived?: boolean): Promise<OwnerDto[]>
-  getOwnersPage?(accessToken: string, search?: string, offset?: number, limit?: number, includeArchived?: boolean): Promise<PagedResult<OwnerDto>>
+  getOwners(accessToken: string, search?: string, limit?: number, includeArchived?: boolean, signal?: AbortSignal): Promise<OwnerDto[]>
+  getOwnersPage?(accessToken: string, search?: string, offset?: number, limit?: number, includeArchived?: boolean, signal?: AbortSignal): Promise<PagedResult<OwnerDto>>
   createOwner(accessToken: string, request: UpsertOwnerRequest): Promise<OwnerDto>
   updateOwner(accessToken: string, id: string, request: UpsertOwnerRequest): Promise<OwnerDto>
   archiveOwner(accessToken: string, id: string, reason: string): Promise<void>
   restoreOwner(accessToken: string, id: string): Promise<OwnerDto>
-  getGarages(accessToken: string, search?: string, limit?: number, includeArchived?: boolean): Promise<GarageDto[]>
-  getGaragesPage?(accessToken: string, search?: string, offset?: number, limit?: number, includeArchived?: boolean, sortBy?: string, sortDirection?: string, debtorsOnly?: boolean, filters?: GarageColumnFilters): Promise<PagedResult<GarageDto>>
+  getGarages(accessToken: string, search?: string, limit?: number, includeArchived?: boolean, signal?: AbortSignal): Promise<GarageDto[]>
+  getGaragesPage?(accessToken: string, search?: string, offset?: number, limit?: number, includeArchived?: boolean, sortBy?: string, sortDirection?: string, debtorsOnly?: boolean, filters?: GarageColumnFilters, signal?: AbortSignal): Promise<PagedResult<GarageDto>>
   createGarage(accessToken: string, request: UpsertGarageRequest): Promise<GarageDto>
   updateGarage(accessToken: string, id: string, request: UpsertGarageRequest): Promise<GarageDto>
   archiveGarage(accessToken: string, id: string, reason: string): Promise<void>
   restoreGarage(accessToken: string, id: string): Promise<GarageDto>
-  getSupplierGroups(accessToken: string, search?: string, limit?: number, includeArchived?: boolean): Promise<SupplierGroupDto[]>
-  getSupplierGroupsPage?(accessToken: string, search?: string, offset?: number, limit?: number, includeArchived?: boolean): Promise<PagedResult<SupplierGroupDto>>
+  getSupplierGroups(accessToken: string, search?: string, limit?: number, includeArchived?: boolean, signal?: AbortSignal): Promise<SupplierGroupDto[]>
+  getSupplierGroupsPage?(accessToken: string, search?: string, offset?: number, limit?: number, includeArchived?: boolean, signal?: AbortSignal): Promise<PagedResult<SupplierGroupDto>>
   createSupplierGroup(accessToken: string, request: UpsertSupplierGroupRequest): Promise<SupplierGroupDto>
   updateSupplierGroup(accessToken: string, id: string, request: UpsertSupplierGroupRequest): Promise<SupplierGroupDto>
   archiveSupplierGroup(accessToken: string, id: string, reason: string): Promise<void>
   restoreSupplierGroup(accessToken: string, id: string): Promise<SupplierGroupDto>
-  getSuppliers(accessToken: string, groupId?: string, search?: string, limit?: number, includeArchived?: boolean): Promise<SupplierDto[]>
-  getSuppliersPage?(accessToken: string, groupId?: string, search?: string, offset?: number, limit?: number, includeArchived?: boolean, sortBy?: string, sortDirection?: string): Promise<PagedResult<SupplierDto>>
+  getSuppliers(accessToken: string, groupId?: string, search?: string, limit?: number, includeArchived?: boolean, signal?: AbortSignal): Promise<SupplierDto[]>
+  getSuppliersPage?(accessToken: string, groupId?: string, search?: string, offset?: number, limit?: number, includeArchived?: boolean, sortBy?: string, sortDirection?: string, signal?: AbortSignal): Promise<PagedResult<SupplierDto>>
   createSupplier(accessToken: string, request: UpsertSupplierRequest): Promise<SupplierDto>
   updateSupplier(accessToken: string, id: string, request: UpsertSupplierRequest): Promise<SupplierDto>
   archiveSupplier(accessToken: string, id: string, reason: string): Promise<void>
@@ -363,26 +363,26 @@ export type DictionaryClient = {
   updateStaffDepartment(accessToken: string, id: string, request: UpsertStaffDepartmentRequest): Promise<StaffDepartmentDto>
   archiveStaffDepartment(accessToken: string, id: string, reason: string): Promise<void>
   restoreStaffDepartment(accessToken: string, id: string): Promise<StaffDepartmentDto>
-  getStaffMembers(accessToken: string, departmentId?: string, search?: string, limit?: number, includeArchived?: boolean): Promise<StaffMemberDto[]>
-  getStaffMembersPage?(accessToken: string, departmentId?: string, search?: string, offset?: number, limit?: number, includeArchived?: boolean, sortBy?: string, sortDirection?: string): Promise<PagedResult<StaffMemberDto>>
+  getStaffMembers(accessToken: string, departmentId?: string, search?: string, limit?: number, includeArchived?: boolean, signal?: AbortSignal): Promise<StaffMemberDto[]>
+  getStaffMembersPage?(accessToken: string, departmentId?: string, search?: string, offset?: number, limit?: number, includeArchived?: boolean, sortBy?: string, sortDirection?: string, signal?: AbortSignal): Promise<PagedResult<StaffMemberDto>>
   createStaffMember(accessToken: string, request: UpsertStaffMemberRequest): Promise<StaffMemberDto>
   updateStaffMember(accessToken: string, id: string, request: UpsertStaffMemberRequest): Promise<StaffMemberDto>
   archiveStaffMember(accessToken: string, id: string, reason: string): Promise<void>
   restoreStaffMember(accessToken: string, id: string): Promise<StaffMemberDto>
-  getIncomeTypes(accessToken: string, search?: string, limit?: number, includeArchived?: boolean): Promise<AccountingTypeDto[]>
-  getIncomeTypesPage?(accessToken: string, search?: string, offset?: number, limit?: number, includeArchived?: boolean): Promise<PagedResult<AccountingTypeDto>>
+  getIncomeTypes(accessToken: string, search?: string, limit?: number, includeArchived?: boolean, signal?: AbortSignal): Promise<AccountingTypeDto[]>
+  getIncomeTypesPage?(accessToken: string, search?: string, offset?: number, limit?: number, includeArchived?: boolean, signal?: AbortSignal): Promise<PagedResult<AccountingTypeDto>>
   createIncomeType(accessToken: string, request: UpsertAccountingTypeRequest): Promise<AccountingTypeDto>
   updateIncomeType(accessToken: string, id: string, request: UpsertAccountingTypeRequest): Promise<AccountingTypeDto>
   archiveIncomeType(accessToken: string, id: string, reason: string): Promise<void>
   restoreIncomeType(accessToken: string, id: string): Promise<AccountingTypeDto>
-  getExpenseTypes(accessToken: string, search?: string, limit?: number, includeArchived?: boolean): Promise<AccountingTypeDto[]>
-  getExpenseTypesPage?(accessToken: string, search?: string, offset?: number, limit?: number, includeArchived?: boolean): Promise<PagedResult<AccountingTypeDto>>
+  getExpenseTypes(accessToken: string, search?: string, limit?: number, includeArchived?: boolean, signal?: AbortSignal): Promise<AccountingTypeDto[]>
+  getExpenseTypesPage?(accessToken: string, search?: string, offset?: number, limit?: number, includeArchived?: boolean, signal?: AbortSignal): Promise<PagedResult<AccountingTypeDto>>
   createExpenseType(accessToken: string, request: UpsertAccountingTypeRequest): Promise<AccountingTypeDto>
   updateExpenseType(accessToken: string, id: string, request: UpsertAccountingTypeRequest): Promise<AccountingTypeDto>
   archiveExpenseType(accessToken: string, id: string, reason: string): Promise<void>
   restoreExpenseType(accessToken: string, id: string): Promise<AccountingTypeDto>
-  getTariffs(accessToken: string, search?: string, limit?: number, includeArchived?: boolean): Promise<TariffDto[]>
-  getTariffsPage?(accessToken: string, search?: string, offset?: number, limit?: number, includeArchived?: boolean): Promise<PagedResult<TariffDto>>
+  getTariffs(accessToken: string, search?: string, limit?: number, includeArchived?: boolean, signal?: AbortSignal): Promise<TariffDto[]>
+  getTariffsPage?(accessToken: string, search?: string, offset?: number, limit?: number, includeArchived?: boolean, signal?: AbortSignal): Promise<PagedResult<TariffDto>>
   createTariff(accessToken: string, request: UpsertTariffRequest): Promise<TariffDto>
   updateTariff(accessToken: string, id: string, request: UpsertTariffRequest): Promise<TariffDto>
   archiveTariff(accessToken: string, id: string, reason: string): Promise<void>
@@ -487,7 +487,7 @@ async function requestJson<TResponse>(accessToken: string, path: string, init?: 
   const cacheTag = getDictionaryCacheTag(path)
   const cacheVersion = cacheTag ? getDictionaryCacheVersion(accessToken, cacheTag) : 0
   const cacheKey = `${accessToken}\n${cacheTag ?? ''}\n${cacheVersion}\n${path}`
-  if (method === 'GET' && cacheTag) {
+  if (method === 'GET' && cacheTag && !init?.signal) {
     const cached = dictionaryResponseCache.get(cacheKey)
     if (cached && cached.expiresAt > Date.now()) {
       return cached.response as Promise<TResponse>
@@ -525,7 +525,7 @@ async function requestJson<TResponse>(accessToken: string, path: string, init?: 
     return result
   })
 
-  if (method === 'GET' && cacheTag) {
+  if (method === 'GET' && cacheTag && !init?.signal) {
     dictionaryResponseCache.set(cacheKey, {
       accessToken,
       expiresAt: Date.now() + dictionaryResponseCacheLifetimeMs,
@@ -555,11 +555,11 @@ function withQuery(path: string, params: Record<string, string | number | boolea
 }
 
 export const dictionariesApi: DictionaryClient = {
-  getOwners(accessToken, search, limit = defaultDictionaryListLimit, includeArchived = false) {
-    return requestJson(accessToken, withQuery('/api/dictionaries/owners', { search, limit, includeArchived: includeArchived || undefined }))
+  getOwners(accessToken, search, limit = defaultDictionaryListLimit, includeArchived = false, signal) {
+    return requestJson(accessToken, withQuery('/api/dictionaries/owners', { search, limit, includeArchived: includeArchived || undefined }), { signal })
   },
-  getOwnersPage(accessToken, search, offset = 0, limit = defaultDictionaryListLimit, includeArchived = false) {
-    return requestJson(accessToken, withQuery('/api/dictionaries/owners/page', { search, offset, limit, includeArchived: includeArchived || undefined }))
+  getOwnersPage(accessToken, search, offset = 0, limit = defaultDictionaryListLimit, includeArchived = false, signal) {
+    return requestJson(accessToken, withQuery('/api/dictionaries/owners/page', { search, offset, limit, includeArchived: includeArchived || undefined }), { signal })
   },
   createOwner(accessToken, request) {
     return requestJson(accessToken, '/api/dictionaries/owners', { method: 'POST', body: JSON.stringify(request) })
@@ -573,11 +573,11 @@ export const dictionariesApi: DictionaryClient = {
   restoreOwner(accessToken, id) {
     return requestJson(accessToken, `/api/dictionaries/owners/${id}/restore`, { method: 'POST' })
   },
-  getGarages(accessToken, search, limit = defaultDictionaryListLimit, includeArchived = false) {
-    return requestJson(accessToken, withQuery('/api/dictionaries/garages', { search, limit, includeArchived: includeArchived || undefined }))
+  getGarages(accessToken, search, limit = defaultDictionaryListLimit, includeArchived = false, signal) {
+    return requestJson(accessToken, withQuery('/api/dictionaries/garages', { search, limit, includeArchived: includeArchived || undefined }), { signal })
   },
-  getGaragesPage(accessToken, search, offset = 0, limit = defaultDictionaryListLimit, includeArchived = false, sortBy, sortDirection, debtorsOnly = false, filters = {}) {
-    return requestJson(accessToken, withQuery('/api/dictionaries/garages/page', { search, offset, limit, includeArchived: includeArchived || undefined, sortBy, sortDirection, debtorsOnly: debtorsOnly || undefined, ...filters }))
+  getGaragesPage(accessToken, search, offset = 0, limit = defaultDictionaryListLimit, includeArchived = false, sortBy, sortDirection, debtorsOnly = false, filters = {}, signal) {
+    return requestJson(accessToken, withQuery('/api/dictionaries/garages/page', { search, offset, limit, includeArchived: includeArchived || undefined, sortBy, sortDirection, debtorsOnly: debtorsOnly || undefined, ...filters }), { signal })
   },
   createGarage(accessToken, request) {
     return requestJson(accessToken, '/api/dictionaries/garages', { method: 'POST', body: JSON.stringify(request) })
@@ -591,11 +591,11 @@ export const dictionariesApi: DictionaryClient = {
   restoreGarage(accessToken, id) {
     return requestJson(accessToken, `/api/dictionaries/garages/${id}/restore`, { method: 'POST' })
   },
-  getSupplierGroups(accessToken, search, limit = defaultDictionaryListLimit, includeArchived = false) {
-    return requestJson(accessToken, withQuery('/api/dictionaries/supplier-groups', { search, limit, includeArchived: includeArchived || undefined }))
+  getSupplierGroups(accessToken, search, limit = defaultDictionaryListLimit, includeArchived = false, signal) {
+    return requestJson(accessToken, withQuery('/api/dictionaries/supplier-groups', { search, limit, includeArchived: includeArchived || undefined }), { signal })
   },
-  getSupplierGroupsPage(accessToken, search, offset = 0, limit = defaultDictionaryListLimit, includeArchived = false) {
-    return requestJson(accessToken, withQuery('/api/dictionaries/supplier-groups/page', { search, offset, limit, includeArchived: includeArchived || undefined }))
+  getSupplierGroupsPage(accessToken, search, offset = 0, limit = defaultDictionaryListLimit, includeArchived = false, signal) {
+    return requestJson(accessToken, withQuery('/api/dictionaries/supplier-groups/page', { search, offset, limit, includeArchived: includeArchived || undefined }), { signal })
   },
   createSupplierGroup(accessToken, request) {
     return requestJson(accessToken, '/api/dictionaries/supplier-groups', { method: 'POST', body: JSON.stringify(request) })
@@ -609,11 +609,11 @@ export const dictionariesApi: DictionaryClient = {
   restoreSupplierGroup(accessToken, id) {
     return requestJson(accessToken, `/api/dictionaries/supplier-groups/${id}/restore`, { method: 'POST' })
   },
-  getSuppliers(accessToken, groupId, search, limit = defaultDictionaryListLimit, includeArchived = false) {
-    return requestJson(accessToken, withQuery('/api/dictionaries/suppliers', { groupId, search, limit, includeArchived: includeArchived || undefined }))
+  getSuppliers(accessToken, groupId, search, limit = defaultDictionaryListLimit, includeArchived = false, signal) {
+    return requestJson(accessToken, withQuery('/api/dictionaries/suppliers', { groupId, search, limit, includeArchived: includeArchived || undefined }), { signal })
   },
-  getSuppliersPage(accessToken, groupId, search, offset = 0, limit = defaultDictionaryListLimit, includeArchived = false, sortBy, sortDirection) {
-    return requestJson(accessToken, withQuery('/api/dictionaries/suppliers/page', { groupId, search, offset, limit, includeArchived: includeArchived || undefined, sortBy, sortDirection }))
+  getSuppliersPage(accessToken, groupId, search, offset = 0, limit = defaultDictionaryListLimit, includeArchived = false, sortBy, sortDirection, signal) {
+    return requestJson(accessToken, withQuery('/api/dictionaries/suppliers/page', { groupId, search, offset, limit, includeArchived: includeArchived || undefined, sortBy, sortDirection }), { signal })
   },
   createSupplier(accessToken, request) {
     return requestJson(accessToken, '/api/dictionaries/suppliers', { method: 'POST', body: JSON.stringify(request) })
@@ -657,11 +657,11 @@ export const dictionariesApi: DictionaryClient = {
   restoreStaffDepartment(accessToken, id) {
     return requestJson(accessToken, `/api/dictionaries/staff-departments/${id}/restore`, { method: 'POST' })
   },
-  getStaffMembers(accessToken, departmentId, search, limit = defaultDictionaryListLimit, includeArchived = false) {
-    return requestJson(accessToken, withQuery('/api/dictionaries/staff-members', { departmentId, search, limit, includeArchived: includeArchived || undefined }))
+  getStaffMembers(accessToken, departmentId, search, limit = defaultDictionaryListLimit, includeArchived = false, signal) {
+    return requestJson(accessToken, withQuery('/api/dictionaries/staff-members', { departmentId, search, limit, includeArchived: includeArchived || undefined }), { signal })
   },
-  getStaffMembersPage(accessToken, departmentId, search, offset = 0, limit = defaultDictionaryListLimit, includeArchived = false, sortBy, sortDirection) {
-    return requestJson(accessToken, withQuery('/api/dictionaries/staff-members/page', { departmentId, search, offset, limit, includeArchived: includeArchived || undefined, sortBy, sortDirection }))
+  getStaffMembersPage(accessToken, departmentId, search, offset = 0, limit = defaultDictionaryListLimit, includeArchived = false, sortBy, sortDirection, signal) {
+    return requestJson(accessToken, withQuery('/api/dictionaries/staff-members/page', { departmentId, search, offset, limit, includeArchived: includeArchived || undefined, sortBy, sortDirection }), { signal })
   },
   createStaffMember(accessToken, request) {
     return requestJson(accessToken, '/api/dictionaries/staff-members', { method: 'POST', body: JSON.stringify(request) })
@@ -675,11 +675,11 @@ export const dictionariesApi: DictionaryClient = {
   restoreStaffMember(accessToken, id) {
     return requestJson(accessToken, `/api/dictionaries/staff-members/${id}/restore`, { method: 'POST' })
   },
-  getIncomeTypes(accessToken, search, limit = defaultDictionaryListLimit, includeArchived = false) {
-    return requestJson(accessToken, withQuery('/api/dictionaries/income-types', { search, limit, includeArchived: includeArchived || undefined }))
+  getIncomeTypes(accessToken, search, limit = defaultDictionaryListLimit, includeArchived = false, signal) {
+    return requestJson(accessToken, withQuery('/api/dictionaries/income-types', { search, limit, includeArchived: includeArchived || undefined }), { signal })
   },
-  getIncomeTypesPage(accessToken, search, offset = 0, limit = defaultDictionaryListLimit, includeArchived = false) {
-    return requestJson(accessToken, withQuery('/api/dictionaries/income-types/page', { search, offset, limit, includeArchived: includeArchived || undefined }))
+  getIncomeTypesPage(accessToken, search, offset = 0, limit = defaultDictionaryListLimit, includeArchived = false, signal) {
+    return requestJson(accessToken, withQuery('/api/dictionaries/income-types/page', { search, offset, limit, includeArchived: includeArchived || undefined }), { signal })
   },
   createIncomeType(accessToken, request) {
     return requestJson(accessToken, '/api/dictionaries/income-types', { method: 'POST', body: JSON.stringify(request) })
@@ -693,11 +693,11 @@ export const dictionariesApi: DictionaryClient = {
   restoreIncomeType(accessToken, id) {
     return requestJson(accessToken, `/api/dictionaries/income-types/${id}/restore`, { method: 'POST' })
   },
-  getExpenseTypes(accessToken, search, limit = defaultDictionaryListLimit, includeArchived = false) {
-    return requestJson(accessToken, withQuery('/api/dictionaries/expense-types', { search, limit, includeArchived: includeArchived || undefined }))
+  getExpenseTypes(accessToken, search, limit = defaultDictionaryListLimit, includeArchived = false, signal) {
+    return requestJson(accessToken, withQuery('/api/dictionaries/expense-types', { search, limit, includeArchived: includeArchived || undefined }), { signal })
   },
-  getExpenseTypesPage(accessToken, search, offset = 0, limit = defaultDictionaryListLimit, includeArchived = false) {
-    return requestJson(accessToken, withQuery('/api/dictionaries/expense-types/page', { search, offset, limit, includeArchived: includeArchived || undefined }))
+  getExpenseTypesPage(accessToken, search, offset = 0, limit = defaultDictionaryListLimit, includeArchived = false, signal) {
+    return requestJson(accessToken, withQuery('/api/dictionaries/expense-types/page', { search, offset, limit, includeArchived: includeArchived || undefined }), { signal })
   },
   createExpenseType(accessToken, request) {
     return requestJson(accessToken, '/api/dictionaries/expense-types', { method: 'POST', body: JSON.stringify(request) })
@@ -711,11 +711,11 @@ export const dictionariesApi: DictionaryClient = {
   restoreExpenseType(accessToken, id) {
     return requestJson(accessToken, `/api/dictionaries/expense-types/${id}/restore`, { method: 'POST' })
   },
-  getTariffs(accessToken, search, limit = defaultDictionaryListLimit, includeArchived = false) {
-    return requestJson(accessToken, withQuery('/api/dictionaries/tariffs', { search, limit, includeArchived: includeArchived || undefined }))
+  getTariffs(accessToken, search, limit = defaultDictionaryListLimit, includeArchived = false, signal) {
+    return requestJson(accessToken, withQuery('/api/dictionaries/tariffs', { search, limit, includeArchived: includeArchived || undefined }), { signal })
   },
-  getTariffsPage(accessToken, search, offset = 0, limit = defaultDictionaryListLimit, includeArchived = false) {
-    return requestJson(accessToken, withQuery('/api/dictionaries/tariffs/page', { search, offset, limit, includeArchived: includeArchived || undefined }))
+  getTariffsPage(accessToken, search, offset = 0, limit = defaultDictionaryListLimit, includeArchived = false, signal) {
+    return requestJson(accessToken, withQuery('/api/dictionaries/tariffs/page', { search, offset, limit, includeArchived: includeArchived || undefined }), { signal })
   },
   createTariff(accessToken, request) {
     return requestJson(accessToken, '/api/dictionaries/tariffs', { method: 'POST', body: JSON.stringify(request) })

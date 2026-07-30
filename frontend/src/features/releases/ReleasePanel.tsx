@@ -24,19 +24,20 @@ export function ReleasePanel({ auth, releaseClient }: { auth: AuthResponse; rele
   const [editor, setEditor] = useState<ReleaseEditorState | null>(null)
   const canManageReleases = hasPermission(auth, permissions.appReleasesManage)
   const loadingMoreRef = useRef(false)
-  const getReleasePage = useCallback((offset: number) => canManageReleases
-    ? releaseClient.getManageableReleases(auth.accessToken, offset, releasePageSize)
-    : releaseClient.getReleases(auth.accessToken, offset, releasePageSize), [auth.accessToken, canManageReleases, releaseClient])
+  const getReleasePage = useCallback((offset: number, signal?: AbortSignal) => canManageReleases
+    ? releaseClient.getManageableReleases(auth.accessToken, offset, releasePageSize, signal)
+    : releaseClient.getReleases(auth.accessToken, offset, releasePageSize, signal), [auth.accessToken, canManageReleases, releaseClient])
 
   useEffect(() => {
     let ignore = false
+    const controller = new AbortController()
 
     async function loadReleases() {
       setLoading(true)
       setError(null)
 
       try {
-        const page = await getReleasePage(0)
+        const page = await getReleasePage(0, controller.signal)
         if (!ignore) {
           setReleases(page.items)
           setTotalCount(page.totalCount)
@@ -57,6 +58,7 @@ export function ReleasePanel({ auth, releaseClient }: { auth: AuthResponse; rele
 
     return () => {
       ignore = true
+      controller.abort()
     }
   }, [getReleasePage])
 

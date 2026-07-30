@@ -34,8 +34,8 @@ export type UpsertAppReleaseRequest = {
 }
 
 export type ReleaseClient = {
-  getReleases(accessToken: string, offset?: number, limit?: number): Promise<AppReleasePageDto>
-  getManageableReleases(accessToken: string, offset?: number, limit?: number): Promise<AppReleasePageDto>
+  getReleases(accessToken: string, offset?: number, limit?: number, signal?: AbortSignal): Promise<AppReleasePageDto>
+  getManageableReleases(accessToken: string, offset?: number, limit?: number, signal?: AbortSignal): Promise<AppReleasePageDto>
   createRelease(accessToken: string, request: UpsertAppReleaseRequest): Promise<AppReleaseDto>
   updateRelease(accessToken: string, releaseId: string, request: UpsertAppReleaseRequest): Promise<AppReleaseDto>
   publishRelease(accessToken: string, releaseId: string): Promise<AppReleaseDto>
@@ -62,17 +62,17 @@ async function requestJson<TResponse>(accessToken: string, path: string, init: R
 }
 
 export const releasesApi: ReleaseClient = {
-  getReleases(accessToken, offset = 0, limit = 9) {
+  getReleases(accessToken, offset = 0, limit = 9, signal) {
     const searchParams = new URLSearchParams()
     searchParams.set('offset', offset.toString())
     searchParams.set('limit', limit.toString())
-    return requestJson(accessToken, `/api/app-releases?${searchParams}`)
+    return requestJson(accessToken, `/api/app-releases?${searchParams}`, { signal })
   },
-  getManageableReleases(accessToken, offset = 0, limit = 9) {
+  getManageableReleases(accessToken, offset = 0, limit = 9, signal) {
     const searchParams = new URLSearchParams()
     searchParams.set('offset', offset.toString())
     searchParams.set('limit', limit.toString())
-    return requestJson(accessToken, `/api/app-releases/manage?${searchParams}`)
+    return requestJson(accessToken, `/api/app-releases/manage?${searchParams}`, { signal })
   },
   createRelease(accessToken, request) {
     return requestJson(accessToken, '/api/app-releases', {

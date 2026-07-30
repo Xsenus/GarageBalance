@@ -78,7 +78,7 @@ describe('shared loading-state coverage', () => {
       ['loadReleasePanel', 'releases/ReleasePanel'],
     ]
 
-    expect(workspace).toContain("import { Suspense, useState } from 'react'")
+    expect(workspace).toContain("import { memo, Suspense, useState } from 'react'")
     expect(workspace).toContain('<Suspense fallback={<TableLoadingState label="Загружаем выбранный раздел" />}>')
     expect(workspace).toContain('<WorkspaceSectionErrorBoundary')
     expect(workspace).toContain('onPointerEnter={() => preloadWorkspaceSection(tile.section)}')

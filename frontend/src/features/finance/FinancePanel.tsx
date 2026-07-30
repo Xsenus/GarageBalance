@@ -436,6 +436,7 @@ export function FinancePanel({
   const cancelFinanceTriggerRef = useRef<HTMLElement | null>(null)
   const restoreFinanceTriggerRef = useRef<HTMLElement | null>(null)
   const [financeWorkbenchRequests] = useState(() => new LatestRequestSequence())
+  const financeWorkbenchControllerRef = useRef<AbortController | null>(null)
   const financeSummaryCacheRef = useRef<{ key: string; promise: Promise<FinanceSummaryDto> } | null>(null)
   const financeReferenceBundlePromiseRef = useRef<Promise<void> | null>(null)
   const financeReferenceBundleLoadedRef = useRef(false)
@@ -798,6 +799,9 @@ export function FinancePanel({
   }, [financeSearchInput])
 
   const loadFinanceWorkbench = useCallback(async (section: FinanceSectionKey, offset: number, limit: number, refreshSummary = false) => {
+    financeWorkbenchControllerRef.current?.abort()
+    const controller = new AbortController()
+    financeWorkbenchControllerRef.current = controller
     const requestId = financeWorkbenchRequests.begin()
     setFinanceContextMenu(null)
     setWorkbenchLoading(true)
@@ -812,23 +816,23 @@ export function FinancePanel({
       }
       const missingMeterMonth = financeFilter.monthFrom || meterForm.accountingMonth
       const activePagePromise: Promise<FinancePagedResult<FinanceRecord>> = section === 'income'
-        ? financeClient.getOperationsPage(auth.accessToken, { ...params, operationKind: 'income' }) as Promise<FinancePagedResult<FinanceRecord>>
+        ? financeClient.getOperationsPage(auth.accessToken, { ...params, operationKind: 'income' }, controller.signal) as Promise<FinancePagedResult<FinanceRecord>>
         : section === 'expense'
-          ? financeClient.getOperationsPage(auth.accessToken, { ...params, operationKind: 'expense' }) as Promise<FinancePagedResult<FinanceRecord>>
+          ? financeClient.getOperationsPage(auth.accessToken, { ...params, operationKind: 'expense' }, controller.signal) as Promise<FinancePagedResult<FinanceRecord>>
           : section === 'accruals'
-            ? financeClient.getAccrualsPage(auth.accessToken, params) as Promise<FinancePagedResult<FinanceRecord>>
+            ? financeClient.getAccrualsPage(auth.accessToken, params, controller.signal) as Promise<FinancePagedResult<FinanceRecord>>
             : section === 'supplierAccruals'
-              ? financeClient.getSupplierAccrualsPage(auth.accessToken, params) as Promise<FinancePagedResult<FinanceRecord>>
-              : financeClient.getMeterReadingsPage(auth.accessToken, params) as Promise<FinancePagedResult<FinanceRecord>>
+              ? financeClient.getSupplierAccrualsPage(auth.accessToken, params, controller.signal) as Promise<FinancePagedResult<FinanceRecord>>
+              : financeClient.getMeterReadingsPage(auth.accessToken, params, controller.signal) as Promise<FinancePagedResult<FinanceRecord>>
       const missingMeterReadingsPromise = section === 'meterReadings'
-        ? financeClient.getMissingMeterReadings(auth.accessToken, { accountingMonth: missingMeterMonth, search: financeFilter.search, limit: financeScreenRequestLimit })
+        ? financeClient.getMissingMeterReadings(auth.accessToken, { accountingMonth: missingMeterMonth, search: financeFilter.search, limit: financeScreenRequestLimit }, controller.signal)
         : Promise.resolve(null)
       const summaryKey = JSON.stringify([financeFilter.monthFrom, financeFilter.monthTo, financeFilter.search])
       let summaryPromise = financeSummaryCacheRef.current?.key === summaryKey && !refreshSummary
         ? financeSummaryCacheRef.current.promise
         : null
       if (!summaryPromise) {
-        summaryPromise = financeClient.getSummary(auth.accessToken, { monthFrom: financeFilter.monthFrom, monthTo: financeFilter.monthTo, search: financeFilter.search })
+        summaryPromise = financeClient.getSummary(auth.accessToken, { monthFrom: financeFilter.monthFrom, monthTo: financeFilter.monthTo, search: financeFilter.search }, controller.signal)
         financeSummaryCacheRef.current = { key: summaryKey, promise: summaryPromise }
         void summaryPromise.catch(() => {
           if (financeSummaryCacheRef.current?.promise === summaryPromise) {
@@ -900,11 +904,13 @@ export function FinancePanel({
 
   useEffect(() => {
     if (!paymentDisplaySettingsLoaded || !showAllGarageOperations) {
+      financeWorkbenchControllerRef.current?.abort()
       return
     }
 
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void loadFinanceWorkbench(activeFinanceSection, 0, financePage.limit)
+    return () => financeWorkbenchControllerRef.current?.abort()
   }, [activeFinanceSection, financePage.limit, loadFinanceWorkbench, paymentDisplaySettingsLoaded, showAllGarageOperations])
 
   async function searchIncomeGarages() {
@@ -3212,16 +3218,22 @@ function PaymentsPrototypePanel({
     }
 
     let requestTimeoutHandle = 0
+    let timedOut = false
+    const controller = new AbortController()
     const handle = window.setTimeout(() => {
       setGarageSearchLoading(true)
       setGarageSearchError(null)
       const request = dictionaryClient.getGaragesPage
-        ? dictionaryClient.getGaragesPage(auth.accessToken, query, 0, 20)
+        ? dictionaryClient.getGaragesPage(auth.accessToken, query, 0, 20, false, undefined, undefined, false, {}, controller.signal)
             .then((page) => page.items)
-        : dictionaryClient.getGarages(auth.accessToken, query, 20)
+        : dictionaryClient.getGarages(auth.accessToken, query, 20, false, controller.signal)
       const timeout = new Promise<GarageDto[]>((_resolve, reject) => {
         requestTimeoutHandle = window.setTimeout(
-          () => reject(new Error('Поиск гаражей занял слишком много времени. Повторите запрос.')),
+          () => {
+            timedOut = true
+            controller.abort()
+            reject(new Error('Поиск гаражей занял слишком много времени. Повторите запрос.'))
+          },
           garageSearchTimeoutMs,
         )
       })
@@ -3233,7 +3245,9 @@ function PaymentsPrototypePanel({
         })
         .catch((error: unknown) => {
           if (garageSearchRequestSequenceRef.current === requestSequence) {
-            setGarageSearchError(error instanceof Error ? error.message : 'Не удалось выполнить поиск гаражей.')
+            setGarageSearchError(timedOut
+              ? 'Поиск гаражей занял слишком много времени. Повторите запрос.'
+              : error instanceof Error ? error.message : 'Не удалось выполнить поиск гаражей.')
           }
         })
         .finally(() => {
@@ -3247,6 +3261,7 @@ function PaymentsPrototypePanel({
     return () => {
       window.clearTimeout(handle)
       window.clearTimeout(requestTimeoutHandle)
+      controller.abort()
       if (garageSearchRequestSequenceRef.current === requestSequence) {
         garageSearchRequestSequenceRef.current += 1
       }

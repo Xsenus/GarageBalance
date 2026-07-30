@@ -2000,7 +2000,7 @@ describe('App', () => {
     expect(garageAddressStatus).toHaveAttribute('aria-hidden', 'true')
     await user.clear(garageAddressInput)
     await user.type(garageAddressInput, 'Советская')
-    await waitFor(() => expect(suggestAddresses).toHaveBeenCalledWith('token', 'Советская'))
+    await waitFor(() => expect(suggestAddresses).toHaveBeenCalledWith('token', 'Советская', undefined, expect.any(AbortSignal)))
     const garageAddressListbox = await within(garageDialog).findByRole('listbox', { name: 'Адреса гаражей DaData' })
     expect(garageAddressListbox).toHaveClass('suggestion-options--above')
     await user.click(await within(garageDialog).findByRole('option', { name: /Советская, д 2/ }))
@@ -2201,7 +2201,7 @@ describe('App', () => {
     expect(addressStatus).toHaveClass('suggestion-status')
     expect(addressStatus).toHaveAttribute('aria-hidden', 'true')
     await user.type(innInput, '5400')
-    await waitFor(() => expect(suggestParties).toHaveBeenCalledWith('token', '5400'))
+    await waitFor(() => expect(suggestParties).toHaveBeenCalledWith('token', '5400', undefined, expect.any(AbortSignal)))
     expect(innInput).toHaveAttribute('aria-describedby', 'supplier-party-suggestions-status')
     await user.click(await within(supplierDialog).findByRole('option', { name: /ООО Новый подрядчик/ }))
     expect(within(supplierDialog).getByLabelText('Наименование поставщика')).toHaveValue('ООО Новый подрядчик')
@@ -2214,7 +2214,7 @@ describe('App', () => {
     expect(legalAddressInput).toHaveValue('630000, г Новосибирск, ул Ленина, д 1')
     await user.clear(legalAddressInput)
     await user.type(legalAddressInput, 'Советская')
-    await waitFor(() => expect(suggestAddresses).toHaveBeenCalledWith('token', 'Советская'))
+    await waitFor(() => expect(suggestAddresses).toHaveBeenCalledWith('token', 'Советская', undefined, expect.any(AbortSignal)))
     expect(await within(supplierDialog).findByRole('listbox', { name: 'Адреса DaData' })).toHaveClass('suggestion-options--above')
     await user.click(await within(supplierDialog).findByRole('option', { name: /Советская, д 2/ }))
     expect(legalAddressInput).toHaveValue('630000, г Новосибирск, ул Советская, д 2')
@@ -2992,7 +2992,7 @@ describe('App', () => {
     await within(panel).findByRole('button', { name: 'Изменить гараж 7' })
 
     await user.click(within(panel).getByRole('button', { name: 'Показать должников' }))
-    await waitFor(() => expect(getGaragesPage).toHaveBeenLastCalledWith('token', undefined, 0, 25, true, 'number', 'asc', true))
+    await waitFor(() => expect(getGaragesPage).toHaveBeenLastCalledWith('token', undefined, 0, 25, true, 'number', 'asc', true, undefined, expect.any(AbortSignal)))
     expect(within(panel).getByRole('button', { name: 'Изменить гараж 7' })).toBeInTheDocument()
     expect(within(panel).getByRole('status', { name: 'Обновляем список гаражей' })).toHaveTextContent('Обновляем список гаражей…')
     expect(within(panel).getByRole('button', { name: 'Показать все гаражи' })).toHaveAttribute('aria-busy', 'true')
@@ -5181,7 +5181,7 @@ describe('App', () => {
     const prototype = within(await screen.findByRole('region', { name: 'Платежи' })).getByRole('region', { name: 'Форма платежей' })
 
     await user.type(within(prototype).getByLabelText('Поиск номера гаража или ФИО владельца'), '1')
-    await waitFor(() => expect(getGaragesPage).toHaveBeenCalledWith('token', '1', 0, 20))
+    await waitFor(() => expect(getGaragesPage).toHaveBeenCalledWith('token', '1', 0, 20, false, undefined, undefined, false, {}, expect.any(AbortSignal)))
     const localOption = within(prototype).getByRole('option', { name: /Гараж\s*1\s*Иванов Иван/ })
     expect(within(prototype).getByRole('listbox', { name: 'Найденные гаражи' })).toHaveAttribute('aria-busy', 'true')
     expect(within(prototype).queryByText('Ищем гаражи...')).not.toBeInTheDocument()
@@ -5217,7 +5217,7 @@ describe('App', () => {
     const timeoutAlert = await within(prototype).findByRole('alert')
     setTimeoutSpy.mockRestore()
 
-    expect(getGaragesPage).toHaveBeenCalledWith('token', '404', 0, 20)
+    expect(getGaragesPage).toHaveBeenCalledWith('token', '404', 0, 20, false, undefined, undefined, false, {}, expect.any(AbortSignal))
     expect(timeoutAlert).toHaveTextContent('Поиск гаражей занял слишком много времени. Повторите запрос.')
     expect(within(prototype).getByRole('listbox', { name: 'Найденные гаражи' })).toHaveAttribute('aria-busy', 'false')
   })
@@ -5246,10 +5246,10 @@ describe('App', () => {
     const prototype = within(await screen.findByRole('region', { name: 'Платежи' })).getByRole('region', { name: 'Форма платежей' })
     const search = within(prototype).getByLabelText('Поиск номера гаража или ФИО владельца')
     await user.type(search, '1')
-    await waitFor(() => expect(getGaragesPage).toHaveBeenCalledWith('token', '1', 0, 20))
+    await waitFor(() => expect(getGaragesPage).toHaveBeenCalledWith('token', '1', 0, 20, false, undefined, undefined, false, {}, expect.any(AbortSignal)))
     await user.clear(search)
     await user.type(search, '2')
-    await waitFor(() => expect(getGaragesPage).toHaveBeenCalledWith('token', '2', 0, 20))
+    await waitFor(() => expect(getGaragesPage).toHaveBeenCalledWith('token', '2', 0, 20, false, undefined, undefined, false, {}, expect.any(AbortSignal)))
 
     await act(async () => resolveSecond({ items: [createGarage({ id: 'garage-new-query', number: '2', ownerName: 'Новый результат' })], totalCount: 1, offset: 0, limit: 20 }))
     expect(await within(prototype).findByRole('option', { name: /Гараж\s*2\s*Новый результат/ })).toBeInTheDocument()
@@ -5300,7 +5300,7 @@ describe('App', () => {
     expect(within(prototype).queryByLabelText('Выбранные гаражи')).not.toBeInTheDocument()
 
     await user.type(search, '202')
-    await waitFor(() => expect(getGaragesPage).toHaveBeenCalledWith('token', '202', 0, 20))
+    await waitFor(() => expect(getGaragesPage).toHaveBeenCalledWith('token', '202', 0, 20, false, undefined, undefined, false, {}, expect.any(AbortSignal)))
     await user.click(await within(prototype).findByRole('option', { name: /Гараж\s*202\s*Петров Петр/ }))
 
     expect(activeGarage).toHaveTextContent('Номер202')
@@ -5336,7 +5336,7 @@ describe('App', () => {
     await openSection(user, 'Платежи')
     const prototype = within(await screen.findByRole('region', { name: 'Платежи' })).getByRole('region', { name: 'Форма платежей' })
     await user.type(within(prototype).getByLabelText('Поиск номера гаража или ФИО владельца'), '7')
-    await waitFor(() => expect(getGaragesPage).toHaveBeenCalledWith('token', '7', 0, 20))
+    await waitFor(() => expect(getGaragesPage).toHaveBeenCalledWith('token', '7', 0, 20, false, undefined, undefined, false, {}, expect.any(AbortSignal)))
 
     const options = within(prototype).getAllByRole('option').map((option) => option.textContent)
     expect(options).toEqual([
@@ -5796,7 +5796,7 @@ describe('App', () => {
     await waitFor(() => expect(within(prototype).getByRole('status')).toHaveTextContent('Выберите гараж через поиск'))
 
     await user.type(garageSearchInput, 'Иванов')
-    await waitFor(() => expect(searchGaragesPage).toHaveBeenCalledWith('token', 'Иванов', 0, 20))
+    await waitFor(() => expect(searchGaragesPage).toHaveBeenCalledWith('token', 'Иванов', 0, 20, false, undefined, undefined, false, {}, expect.any(AbortSignal)))
     const garageOption = await within(prototype).findByRole('option', { name: /Гараж\s*1\s*Иванов Иван/ })
     await user.click(garageOption)
     expect(within(prototype).queryByLabelText('Выбранные гаражи')).not.toBeInTheDocument()
@@ -12573,7 +12573,7 @@ describe('App', () => {
 
     const ownerAddressInput = within(editorDialog).getByRole('combobox', { name: 'Адрес владельца' })
     await user.type(ownerAddressInput, 'Советская')
-    await waitFor(() => expect(suggestAddresses).toHaveBeenCalledWith('token', 'Советская'))
+    await waitFor(() => expect(suggestAddresses).toHaveBeenCalledWith('token', 'Советская', undefined, expect.any(AbortSignal)))
     expect(await within(editorDialog).findByRole('listbox', { name: 'Адреса владельца DaData' })).toBeInTheDocument()
     await user.keyboard('{ArrowDown}{Enter}')
     expect(ownerAddressInput).toHaveValue('630000, г Новосибирск, ул Советская, д 2')
@@ -12679,7 +12679,7 @@ describe('App', () => {
     const addressInput = within(editorDialog).getByRole('combobox', { name: 'Адрес владельца' })
     await user.type(addressInput, 'Ручной адрес 10')
 
-    await waitFor(() => expect(suggestAddresses).toHaveBeenCalledWith('token', 'Ручной адрес 10'))
+    await waitFor(() => expect(suggestAddresses).toHaveBeenCalledWith('token', 'Ручной адрес 10', undefined, expect.any(AbortSignal)))
     const unavailableOwnerAddressStatus = await within(editorDialog).findByText('Подсказки DaData недоступны. Можно продолжить ввод вручную.')
     expect(unavailableOwnerAddressStatus).toHaveAttribute('role', 'status')
     expect(unavailableOwnerAddressStatus).not.toHaveClass('suggestion-status--visually-hidden')
@@ -13567,7 +13567,7 @@ describe('App', () => {
     const financePanel = await screen.findByRole('region', { name: 'Платежи' })
 
     await user.click(within(financePanel).getByRole('tab', { name: /Счетчики/ }))
-    await waitFor(() => expect(getMeterReadingsPage).toHaveBeenCalledWith('token', expect.objectContaining({ limit: 25, offset: 0 })))
+    await waitFor(() => expect(getMeterReadingsPage).toHaveBeenCalledWith('token', expect.objectContaining({ limit: 25, offset: 0 }), expect.any(AbortSignal)))
     const menu = await openFinanceContextMenuByCellText(financePanel, '28')
     expect(within(menu).getByRole('menuitem', { name: 'Изменить' })).toBeDisabled()
     expect(within(menu).getByRole('menuitem', { name: 'Удалить' })).toBeDisabled()
@@ -14226,7 +14226,7 @@ describe('App', () => {
     await openSection(user, 'Платежи')
     const financePanel = await screen.findByRole('region', { name: 'Платежи' })
 
-    await waitFor(() => expect(getOperationsPage).toHaveBeenCalledWith('token', expect.objectContaining({ operationKind: 'income' })))
+    await waitFor(() => expect(getOperationsPage).toHaveBeenCalledWith('token', expect.objectContaining({ operationKind: 'income' }), expect.any(AbortSignal)))
     expect(within(financePanel).getByLabelText('Загружаем таблицу платежей')).toHaveAttribute('role', 'status')
     await user.click(within(financePanel).getByRole('tab', { name: /Расходы/ }))
     const financeTableArea = within(financePanel).getByRole('group', { name: 'Рабочая область платежной таблицы' })

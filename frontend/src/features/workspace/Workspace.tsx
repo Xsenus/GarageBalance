@@ -1,4 +1,4 @@
-import { Suspense, useState } from 'react'
+import { memo, Suspense, useState } from 'react'
 import type { ReactNode } from 'react'
 import { AlertTriangle, ArrowLeft, Bell, LockKeyhole, LogOut, RotateCw, X } from 'lucide-react'
 import type { AuthClient, AuthResponse, CurrentUserDto } from '../../services/authApi'
@@ -74,7 +74,7 @@ const dashboardTiles: { title: string; section: WorkspaceSection }[] = [
   { title: 'Управление\nфондами', section: 'funds' },
 ]
 
-export function Workspace({
+export const Workspace = memo(function Workspace({
   activeSection,
   auth,
   authClient,
@@ -303,7 +303,7 @@ export function Workspace({
       ) : null}
     </>
   )
-}
+})
 
 function AccessNotice({ label, title, permission, description }: { label: string; title: string; permission: string; description: string }) {
   return (

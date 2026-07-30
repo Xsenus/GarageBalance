@@ -327,4 +327,20 @@ describe('financeApi', () => {
       },
     })
   })
+
+  it('forwards cancellation to performance-sensitive finance pages', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      items: [],
+      totalCount: 0,
+      offset: 0,
+      limit: 25,
+    }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
+    vi.stubGlobal('fetch', fetchMock)
+    const controller = new AbortController()
+
+    await financeApi.getOperationsPage('token', { limit: 25 }, controller.signal)
+
+    expect(fetchMock.mock.calls[0][0]).toBe('/api/finance/operations/page?limit=25')
+    expect(fetchMock.mock.calls[0][1]?.signal).toBeInstanceOf(AbortSignal)
+  })
 })

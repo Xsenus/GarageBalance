@@ -831,6 +831,9 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
   const supplierEditorRequestSequenceRef = useRef(0)
   const [supplierEditorLoadingId, setSupplierEditorLoadingId] = useState<string | null>(null)
   const garagePageRequestSequenceRef = useRef(0)
+  const garagePageRequestControllerRef = useRef<AbortController | null>(null)
+  const supplierPageRequestControllerRef = useRef<AbortController | null>(null)
+  const staffPageRequestControllerRef = useRef<AbortController | null>(null)
   useRestoreFocusOnClose(Boolean(restoreTarget))
   useRestoreFocusOnClose(Boolean(garageDeleteTarget))
   useRestoreFocusOnClose(Boolean(garageFinancialReportTarget))
@@ -838,6 +841,11 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
   useRestoreFocusOnClose(Boolean(supplierDeleteTarget))
   useRestoreFocusOnClose(Boolean(employeeDeleteTarget))
   useRestoreFocusOnClose(Boolean(departmentDeleteTarget))
+  useEffect(() => () => {
+    garagePageRequestControllerRef.current?.abort()
+    supplierPageRequestControllerRef.current?.abort()
+    staffPageRequestControllerRef.current?.abort()
+  }, [])
   const restoreDialogRef = useFocusTrap<HTMLElement>(Boolean(restoreTarget))
   const restoreCancelRef = useFocusOnOpen<HTMLButtonElement>(Boolean(restoreTarget))
   const garageDeleteDialogRef = useFocusTrap<HTMLElement>(Boolean(garageDeleteTarget))
@@ -922,6 +930,7 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
     }
 
     let cancelled = false
+    const controller = new AbortController()
     async function loadActiveContractorSection() {
       let garageRequestSequence: number | null = null
       const isCurrentRequest = () => !cancelled && (garageRequestSequence === null || garageRequestSequence === garagePageRequestSequenceRef.current)
@@ -930,16 +939,16 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
         if (activeSection === 'garages') {
           garageRequestSequence = ++garagePageRequestSequenceRef.current
           const garageRows = await (dictionaryClient.getGaragesPage
-            ? dictionaryClient.getGaragesPage(auth.accessToken, undefined, 0, contractorsDefaultPageSize, true)
-            : dictionaryClient.getGarages(auth.accessToken, undefined, contractorsDictionaryListLimit, true).then((items) => createFallbackPage(items, 0, contractorsDefaultPageSize)))
+            ? dictionaryClient.getGaragesPage(auth.accessToken, undefined, 0, contractorsDefaultPageSize, true, undefined, undefined, false, undefined, controller.signal)
+            : dictionaryClient.getGarages(auth.accessToken, undefined, contractorsDictionaryListLimit, true, controller.signal).then((items) => createFallbackPage(items, 0, contractorsDefaultPageSize)))
           if (isCurrentRequest()) {
             setGarages(garageRows.items.map((garage) => createGarageRowFromDto(garage, ownersRef.current)))
             setGaragePage({ totalCount: garageRows.totalCount, offset: garageRows.offset, limit: garageRows.limit })
           }
         } else if (activeSection === 'suppliers') {
           const supplierRows = await (dictionaryClient.getSuppliersPage
-            ? dictionaryClient.getSuppliersPage(auth.accessToken, undefined, undefined, 0, contractorsDefaultPageSize, true)
-            : dictionaryClient.getSuppliers(auth.accessToken, undefined, undefined, contractorsDictionaryListLimit, true).then((items) => createFallbackPage(items, 0, contractorsDefaultPageSize)))
+            ? dictionaryClient.getSuppliersPage(auth.accessToken, undefined, undefined, 0, contractorsDefaultPageSize, true, undefined, undefined, controller.signal)
+            : dictionaryClient.getSuppliers(auth.accessToken, undefined, undefined, contractorsDictionaryListLimit, true, controller.signal).then((items) => createFallbackPage(items, 0, contractorsDefaultPageSize)))
           if (!cancelled) {
             setSuppliers(supplierRows.items.map((supplier) => createSupplierRowFromDto(supplier, supplierContactsRef.current)))
             setSupplierPage({ totalCount: supplierRows.totalCount, offset: supplierRows.offset, limit: supplierRows.limit })
@@ -948,8 +957,8 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
           const [departmentRows, staffRows] = await Promise.all([
             dictionaryClient.getStaffDepartments(auth.accessToken, contractorsDictionaryListLimit, true),
             dictionaryClient.getStaffMembersPage
-              ? dictionaryClient.getStaffMembersPage(auth.accessToken, undefined, undefined, 0, contractorsDefaultPageSize, true)
-              : dictionaryClient.getStaffMembers(auth.accessToken, undefined, undefined, contractorsDictionaryListLimit, true).then((items) => createFallbackPage(items, 0, contractorsDefaultPageSize)),
+              ? dictionaryClient.getStaffMembersPage(auth.accessToken, undefined, undefined, 0, contractorsDefaultPageSize, true, undefined, undefined, controller.signal)
+              : dictionaryClient.getStaffMembers(auth.accessToken, undefined, undefined, contractorsDictionaryListLimit, true, controller.signal).then((items) => createFallbackPage(items, 0, contractorsDefaultPageSize)),
           ])
           if (!cancelled) {
             setDepartments(departmentRows.map(createStaffDepartmentRowFromDto))
@@ -975,6 +984,7 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
     void loadActiveContractorSection()
     return () => {
       cancelled = true
+      controller.abort()
     }
   }, [activeSection, auth.accessToken, dictionaryClient])
 
@@ -985,10 +995,11 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
 
     const referenceSection = activeSection
     let cancelled = false
+    const controller = new AbortController()
     async function loadEditorReferences() {
       try {
         if (referenceSection === 'garages') {
-          const ownerRows = await dictionaryClient.getOwners(auth.accessToken, undefined, contractorsDictionaryListLimit, true)
+          const ownerRows = await dictionaryClient.getOwners(auth.accessToken, undefined, contractorsDictionaryListLimit, true, controller.signal)
           if (!cancelled) {
             ownersRef.current = ownerRows
             setOwners(ownerRows)
@@ -1001,11 +1012,11 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
           }
         } else {
           const [groups, loadedChargeServices, loadedIncomeTypes, loadedExpenseTypes, loadedTariffs, loadedFunds] = await Promise.all([
-            dictionaryClient.getSupplierGroups(auth.accessToken, undefined, contractorsDictionaryListLimit, true),
+            dictionaryClient.getSupplierGroups(auth.accessToken, undefined, contractorsDictionaryListLimit, true, controller.signal),
             dictionaryClient.getChargeServiceSettings(auth.accessToken, undefined, contractorsDictionaryListLimit, true),
-            dictionaryClient.getIncomeTypes(auth.accessToken, undefined, contractorsDictionaryListLimit, true),
-            dictionaryClient.getExpenseTypes(auth.accessToken, undefined, contractorsDictionaryListLimit, true),
-            dictionaryClient.getTariffs(auth.accessToken, undefined, contractorsDictionaryListLimit, true),
+            dictionaryClient.getIncomeTypes(auth.accessToken, undefined, contractorsDictionaryListLimit, true, controller.signal),
+            dictionaryClient.getExpenseTypes(auth.accessToken, undefined, contractorsDictionaryListLimit, true, controller.signal),
+            dictionaryClient.getTariffs(auth.accessToken, undefined, contractorsDictionaryListLimit, true, controller.signal),
             fundsClient.getFunds(auth.accessToken).catch(() => []),
           ])
           if (!cancelled) {
@@ -1031,6 +1042,7 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
     void loadEditorReferences()
     return () => {
       cancelled = true
+      controller.abort()
     }
   }, [activeContractorPageLoading, activeSection, auth.accessToken, dictionaryClient, fundsClient])
 
@@ -1134,6 +1146,9 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
     debtorsOnly = showGarageDebtorsOnly,
     filters = garageColumnFilters,
   ) {
+    garagePageRequestControllerRef.current?.abort()
+    const controller = new AbortController()
+    garagePageRequestControllerRef.current = controller
     const effectiveFilters = canUseGarageColumnFilters ? filters : {}
     const requestSequence = ++garagePageRequestSequenceRef.current
     setContractorPageLoading((current) => ({ ...current, garages: true }))
@@ -1141,10 +1156,10 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
     try {
       const page = dictionaryClient.getGaragesPage
         ? await (hasGarageColumnFilters(effectiveFilters)
-            ? dictionaryClient.getGaragesPage(auth.accessToken, undefined, offset, limit, true, sort.key, sort.direction, debtorsOnly, effectiveFilters)
-            : dictionaryClient.getGaragesPage(auth.accessToken, undefined, offset, limit, true, sort.key, sort.direction, debtorsOnly))
+            ? dictionaryClient.getGaragesPage(auth.accessToken, undefined, offset, limit, true, sort.key, sort.direction, debtorsOnly, effectiveFilters, controller.signal)
+            : dictionaryClient.getGaragesPage(auth.accessToken, undefined, offset, limit, true, sort.key, sort.direction, debtorsOnly, undefined, controller.signal))
         : createFallbackPage(
-            (await dictionaryClient.getGarages(auth.accessToken, undefined, contractorsDictionaryListLimit, true))
+            (await dictionaryClient.getGarages(auth.accessToken, undefined, contractorsDictionaryListLimit, true, controller.signal))
               .filter((garage) => !debtorsOnly || (!garage.isArchived && garage.overdueDebt > 0))
               .filter((garage) => !effectiveFilters.number || garage.number.toLocaleLowerCase('ru-RU').includes(effectiveFilters.number.toLocaleLowerCase('ru-RU')))
               .filter((garage) => effectiveFilters.peopleCountMin === undefined || garage.peopleCount >= effectiveFilters.peopleCountMin)
@@ -1182,19 +1197,30 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
       ? contractorSort
       : { section: 'suppliers', key: 'service', direction: 'asc' },
   ) {
+    supplierPageRequestControllerRef.current?.abort()
+    const controller = new AbortController()
+    supplierPageRequestControllerRef.current = controller
     setContractorPageLoading((current) => ({ ...current, suppliers: true }))
     setSupplierContextMenu(null)
     try {
       const page = dictionaryClient.getSuppliersPage
-        ? await dictionaryClient.getSuppliersPage(auth.accessToken, undefined, undefined, offset, limit, true, sort.key, sort.direction)
-        : createFallbackPage(await dictionaryClient.getSuppliers(auth.accessToken, undefined, undefined, contractorsDictionaryListLimit, true), offset, limit)
+        ? await dictionaryClient.getSuppliersPage(auth.accessToken, undefined, undefined, offset, limit, true, sort.key, sort.direction, controller.signal)
+        : createFallbackPage(await dictionaryClient.getSuppliers(auth.accessToken, undefined, undefined, contractorsDictionaryListLimit, true, controller.signal), offset, limit)
+      if (controller.signal.aborted) {
+        return
+      }
       const nextSuppliers = page.items.map((supplier) => createSupplierRowFromDto(supplier, supplierContacts))
       setSuppliers(nextSuppliers)
       setSupplierPage({ totalCount: page.totalCount, offset: page.offset, limit: page.limit })
     } catch (error) {
+      if (controller.signal.aborted) {
+        return
+      }
       setFormStateError(error instanceof Error ? error.message : 'Не удалось загрузить страницу поставщиков.')
     } finally {
-      setContractorPageLoading((current) => ({ ...current, suppliers: false }))
+      if (supplierPageRequestControllerRef.current === controller) {
+        setContractorPageLoading((current) => ({ ...current, suppliers: false }))
+      }
     }
   }
 
@@ -1205,18 +1231,29 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
       ? contractorSort
       : { section: 'staff', key: 'fullName', direction: 'asc' },
   ) {
+    staffPageRequestControllerRef.current?.abort()
+    const controller = new AbortController()
+    staffPageRequestControllerRef.current = controller
     setContractorPageLoading((current) => ({ ...current, staff: true }))
     setEmployeeContextMenu(null)
     try {
       const page = dictionaryClient.getStaffMembersPage
-        ? await dictionaryClient.getStaffMembersPage(auth.accessToken, undefined, undefined, offset, limit, true, sort.key, sort.direction)
-        : createFallbackPage(await dictionaryClient.getStaffMembers(auth.accessToken, undefined, undefined, contractorsDictionaryListLimit, true), offset, limit)
+        ? await dictionaryClient.getStaffMembersPage(auth.accessToken, undefined, undefined, offset, limit, true, sort.key, sort.direction, controller.signal)
+        : createFallbackPage(await dictionaryClient.getStaffMembers(auth.accessToken, undefined, undefined, contractorsDictionaryListLimit, true, controller.signal), offset, limit)
+      if (controller.signal.aborted) {
+        return
+      }
       setStaff(page.items.map(createStaffRowFromDto))
       setStaffPage({ totalCount: page.totalCount, offset: page.offset, limit: page.limit })
     } catch (error) {
+      if (controller.signal.aborted) {
+        return
+      }
       setFormStateError(error instanceof Error ? error.message : 'Не удалось загрузить страницу персонала.')
     } finally {
-      setContractorPageLoading((current) => ({ ...current, staff: false }))
+      if (staffPageRequestControllerRef.current === controller) {
+        setContractorPageLoading((current) => ({ ...current, staff: false }))
+      }
     }
   }
 
@@ -3124,26 +3161,30 @@ function DadataAddressField({ accessToken, inputLabel, integrationClient, label,
   useEffect(() => {
     const query = value.trim()
     const sequence = ++requestSequence.current
+    const controller = new AbortController()
     if (!inputTouched.current || query.length < 2) {
       return
     }
 
     const timer = window.setTimeout(() => {
       setStatus('Ищем адрес...')
-      void integrationClient.suggestAddresses(accessToken, query).then((items) => {
+      void integrationClient.suggestAddresses(accessToken, query, undefined, controller.signal).then((items) => {
         if (sequence !== requestSequence.current) return
         setSuggestions(items)
         setSuggestionsOpen(items.length > 0)
         setStatus(items.length > 0 ? `Найдено вариантов: ${items.length}` : 'Подходящих адресов не найдено. Можно продолжить ввод вручную.')
       }).catch(() => {
-        if (sequence !== requestSequence.current) return
+        if (controller.signal.aborted || sequence !== requestSequence.current) return
         setSuggestions([])
         setSuggestionsOpen(false)
         setStatus('Подсказки DaData недоступны. Можно продолжить ввод вручную.')
       })
     }, 350)
 
-    return () => window.clearTimeout(timer)
+    return () => {
+      window.clearTimeout(timer)
+      controller.abort()
+    }
   }, [accessToken, integrationClient, value])
 
   function selectSuggestion(suggestion: DadataAddressSuggestionDto) {
@@ -3313,26 +3354,30 @@ function SupplierPrototypeDialog({ accessToken, funds, integrationClient, item, 
   useEffect(() => {
     const query = form.inn.trim()
     const sequence = ++partyRequestSequence.current
+    const controller = new AbortController()
     if (!partyInputTouched.current || query.length < 2) {
       return
     }
 
     const timer = window.setTimeout(() => {
       setPartySuggestionStatus('Ищем организацию...')
-      void integrationClient.suggestParties(accessToken, query).then((suggestions) => {
+      void integrationClient.suggestParties(accessToken, query, undefined, controller.signal).then((suggestions) => {
         if (sequence !== partyRequestSequence.current) return
         setPartySuggestions(suggestions)
         setPartySuggestionsOpen(suggestions.length > 0)
         setPartySuggestionStatus(suggestions.length > 0 ? `Найдено вариантов: ${suggestions.length}` : 'Подходящих организаций не найдено. Можно продолжить ввод вручную.')
       }).catch(() => {
-        if (sequence !== partyRequestSequence.current) return
+        if (controller.signal.aborted || sequence !== partyRequestSequence.current) return
         setPartySuggestions([])
         setPartySuggestionsOpen(false)
         setPartySuggestionStatus('Подсказки DaData недоступны. Можно продолжить ввод вручную.')
       })
     }, 350)
 
-    return () => window.clearTimeout(timer)
+    return () => {
+      window.clearTimeout(timer)
+      controller.abort()
+    }
   }, [accessToken, form.inn, integrationClient])
 
   function saveAndClose() {

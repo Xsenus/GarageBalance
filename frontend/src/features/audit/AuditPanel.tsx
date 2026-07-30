@@ -355,6 +355,7 @@ export function AuditPanel({ auth, auditClient, preset, onOpenSection }: { auth:
 
   useEffect(() => {
     let ignore = false
+    const controller = new AbortController()
 
     async function load() {
       if (auditValidationErrors.length > 0) {
@@ -366,7 +367,7 @@ export function AuditPanel({ auth, auditClient, preset, onOpenSection }: { auth:
       setLoading(true)
       setError(null)
       try {
-        const loadedPage = await auditClient.getEventsPage(auth.accessToken, auditQuery)
+        const loadedPage = await auditClient.getEventsPage(auth.accessToken, auditQuery, controller.signal)
         if (!ignore) {
           setPage(loadedPage)
         }
@@ -387,6 +388,7 @@ export function AuditPanel({ auth, auditClient, preset, onOpenSection }: { auth:
     void load()
     return () => {
       ignore = true
+      controller.abort()
     }
   }, [auditValidationErrors, auth.accessToken, auditClient, auditQuery, reloadToken])
 

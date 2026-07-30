@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import {
   BookOpenCheck,
   DatabaseZap,
@@ -93,7 +93,10 @@ export function AuthenticatedAppShell({ auth, authClient, auditClient, dictionar
   const [isSidebarExpanded, setSidebarExpanded] = useState(loadStoredSidebarExpanded)
 
   const effectiveActiveSection = canAccessWorkspaceSection(auth, activeSection) ? activeSection : 'dashboard'
-  const visibleNavigation = navigation.filter((item) => canAccessWorkspaceSection(auth, item.section))
+  const visibleNavigation = useMemo(
+    () => navigation.filter((item) => canAccessWorkspaceSection(auth, item.section)),
+    [auth],
+  )
   const showSidebar = isAdministrator(auth)
   const sidebarModeClass = isSidebarExpanded ? 'app-shell--sidebar-expanded' : 'app-shell--sidebar-collapsed'
   const sidebarToggleLabel = isSidebarExpanded ? 'Свернуть панель' : 'Развернуть панель'
@@ -105,22 +108,22 @@ export function AuthenticatedAppShell({ auth, authClient, auditClient, dictionar
     effectiveActiveSection === 'funds' ? 'workspace--funds' : '',
   ].filter(Boolean).join(' ')
 
-  function handleToggleSidebar() {
+  const handleToggleSidebar = useCallback(() => {
     setSidebarExpanded((current) => {
       const next = !current
       saveStoredSidebarExpanded(next)
       return next
     })
-  }
+  }, [])
 
-  function openWorkspaceSection(section: WorkspaceSection, context: WorkspaceOpenContext | null = null) {
+  const openWorkspaceSection = useCallback((section: WorkspaceSection, context: WorkspaceOpenContext | null = null) => {
     const canOpen = canAccessWorkspaceSection(auth, section)
     setAuditPreset(null)
     setWorkspaceOpenContext(canOpen ? context : null)
     setActiveSection(canOpen ? section : 'dashboard')
-  }
+  }, [auth])
 
-  function openAuditWithPreset(preset: AuditPanelPreset) {
+  const openAuditWithPreset = useCallback((preset: AuditPanelPreset) => {
     if (!canAccessWorkspaceSection(auth, 'audit')) {
       openWorkspaceSection('dashboard')
       return
@@ -129,7 +132,7 @@ export function AuthenticatedAppShell({ auth, authClient, auditClient, dictionar
     setAuditPreset(preset)
     setWorkspaceOpenContext(null)
     setActiveSection('audit')
-  }
+  }, [auth, openWorkspaceSection])
 
   return (
     <main className={showSidebar ? `app-shell ${sidebarModeClass}` : 'app-shell app-shell--no-sidebar'}>
