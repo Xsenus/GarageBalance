@@ -90,7 +90,9 @@ systemctl start garagebalance-healthcheck.service
 systemctl start garagebalance-performance-check.service
 
 curl --http2 --compressed --fail --silent --show-error --max-time 20 https://sgk.blagodaty.ru/ >/dev/null
-logrotate --debug /etc/logrotate.d/garagebalance >/dev/null
+logrotate --debug /etc/logrotate.conf >/dev/null 2>&1
+systemctl start logrotate.service
+systemctl reset-failed logrotate.service
 
 installation_complete=1
 trap - EXIT

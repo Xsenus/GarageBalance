@@ -121,8 +121,15 @@ jobs:
         run: |
           tar -czf artifacts/api.tar.gz -C artifacts/api .
           tar -czf artifacts/frontend.tar.gz -C frontend/dist .
+          tar -czf artifacts/operations.tar.gz \
+            infrastructure/deployment \
+            infrastructure/scripts/garagebalance-healthcheck.sh \
+            infrastructure/scripts/garagebalance-performance-check.sh \
+            infrastructure/scripts/install-vps-performance-configuration.sh \
+            infrastructure/scripts/vps-apply-release.sh
           test -s artifacts/api.tar.gz
           test -s artifacts/frontend.tar.gz
+          test -s artifacts/operations.tar.gz
 
       - name: Upload release artifacts
         uses: actions/upload-artifact@v4
@@ -132,6 +139,7 @@ jobs:
             artifacts/api.tar.gz
             artifacts/frontend.tar.gz
             artifacts/deploy-migrations.sql
+            artifacts/operations.tar.gz
           retention-days: 30
 
       - name: Prepare SSH
@@ -163,6 +171,8 @@ jobs:
             "garagebalance-staging:~/uploads/${RELEASE_ID}/frontend.tar.gz"
           scp artifacts/deploy-migrations.sql \
             "garagebalance-staging:~/uploads/${RELEASE_ID}/deploy-migrations.sql"
+          scp artifacts/operations.tar.gz \
+            "garagebalance-staging:~/uploads/${RELEASE_ID}/operations.tar.gz"
 
       - name: Apply release on VPS
         run: |

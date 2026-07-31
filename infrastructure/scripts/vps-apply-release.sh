@@ -22,6 +22,8 @@ UPLOAD_DIR="/home/${DEPLOY_USER}/uploads/${release_id}"
 API_ARCHIVE="${UPLOAD_DIR}/api.tar.gz"
 FRONTEND_ARCHIVE="${UPLOAD_DIR}/frontend.tar.gz"
 MIGRATION_SQL="${UPLOAD_DIR}/deploy-migrations.sql"
+OPERATIONS_ARCHIVE="${UPLOAD_DIR}/operations.tar.gz"
+OPERATIONS_DIR="${UPLOAD_DIR}/operations"
 RELEASE_DIR="${APP_ROOT}/releases/${release_id}"
 NEXT_API="${APP_ROOT}/api.next-${release_id}"
 NEXT_FRONTEND="${APP_ROOT}/frontend.next-${release_id}"
@@ -87,6 +89,7 @@ trap 'on_error "$LINENO"' ERR
 [[ -s "$API_ARCHIVE" ]] || fail "API archive was not found or empty: $API_ARCHIVE"
 [[ -s "$FRONTEND_ARCHIVE" ]] || fail "frontend archive was not found or empty: $FRONTEND_ARCHIVE"
 [[ -s "$MIGRATION_SQL" ]] || fail "migration SQL was not found or empty: $MIGRATION_SQL"
+[[ -s "$OPERATIONS_ARCHIVE" ]] || fail "operations archive was not found or empty: $OPERATIONS_ARCHIVE"
 
 install -d -o "${APP_USER}" -g "${APP_GROUP}" -m 750 "$DIAGNOSTIC_LOG_DIR"
 install -d -o "${APP_USER}" -g "${APP_GROUP}" -m 750 "$BACKUP_DIR"
@@ -125,15 +128,25 @@ if [[ -z "$backend_base_url" ]]; then
 fi
 
 mkdir -p "$RELEASE_DIR"
-rm -rf "$NEXT_API" "$NEXT_FRONTEND"
-mkdir -p "$NEXT_API" "$NEXT_FRONTEND"
+rm -rf "$NEXT_API" "$NEXT_FRONTEND" "$OPERATIONS_DIR"
+mkdir -p "$NEXT_API" "$NEXT_FRONTEND" "$OPERATIONS_DIR"
 
 log "releasePrepare=extracting; releaseId=${release_id}"
 tar -xzf "$API_ARCHIVE" -C "$NEXT_API"
 tar -xzf "$FRONTEND_ARCHIVE" -C "$NEXT_FRONTEND"
+tar -xzf "$OPERATIONS_ARCHIVE" -C "$OPERATIONS_DIR"
 
 [[ -f "${NEXT_API}/GarageBalance.Api" ]] || fail "published API executable was not found"
 [[ -f "${NEXT_FRONTEND}/index.html" ]] || fail "frontend index.html was not found"
+[[ -f "${OPERATIONS_DIR}/infrastructure/scripts/install-vps-performance-configuration.sh" ]] ||
+  fail "VPS performance installer was not found"
+[[ -f "${OPERATIONS_DIR}/infrastructure/scripts/vps-apply-release.sh" ]] ||
+  fail "VPS release script was not found"
+bash -n \
+  "${OPERATIONS_DIR}/infrastructure/scripts/install-vps-performance-configuration.sh" \
+  "${OPERATIONS_DIR}/infrastructure/scripts/garagebalance-healthcheck.sh" \
+  "${OPERATIONS_DIR}/infrastructure/scripts/garagebalance-performance-check.sh" \
+  "${OPERATIONS_DIR}/infrastructure/scripts/vps-apply-release.sh"
 
 mapfile -t frontend_entry_assets < <(
   grep -oE '"/assets/[^"]+"' "${NEXT_FRONTEND}/index.html" \
@@ -160,8 +173,11 @@ chmod +x "${NEXT_API}/GarageBalance.Api"
 chown -R "${APP_USER}:${APP_GROUP}" "$NEXT_API" "$NEXT_FRONTEND"
 
 cp "$MIGRATION_SQL" "${RELEASE_DIR}/deploy-migrations.sql"
+cp "$OPERATIONS_ARCHIVE" "${RELEASE_DIR}/operations.tar.gz"
 chown "${APP_USER}:${APP_GROUP}" "${RELEASE_DIR}/deploy-migrations.sql"
+chown "${APP_USER}:${APP_GROUP}" "${RELEASE_DIR}/operations.tar.gz"
 chmod 640 "${RELEASE_DIR}/deploy-migrations.sql"
+chmod 640 "${RELEASE_DIR}/operations.tar.gz"
 
 backup_file="${BACKUP_DIR}/garagebalance_${TIMESTAMP}_${release_id}.pgdump"
 log "backupStatus=started; file=${backup_file}"
@@ -197,6 +213,11 @@ curl -fsSk -H "Host: ${PUBLIC_HOST}" "https://127.0.0.1/" >/dev/null
 for asset_path in "${frontend_entry_assets[@]}"; do
   curl -fsSk -H "Host: ${PUBLIC_HOST}" "https://127.0.0.1${asset_path}" >/dev/null
 done
+
+bash "${OPERATIONS_DIR}/infrastructure/scripts/install-vps-performance-configuration.sh" "$OPERATIONS_DIR"
+install -o root -g root -m 0750 \
+  "${OPERATIONS_DIR}/infrastructure/scripts/vps-apply-release.sh" \
+  /usr/local/bin/garagebalance-deploy-apply
 
 find "/home/${DEPLOY_USER}/uploads" -mindepth 1 -maxdepth 1 -type d -mtime +14 -exec rm -rf {} +
 

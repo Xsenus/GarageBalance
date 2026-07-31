@@ -21,11 +21,13 @@ public sealed class GitHubActionsDeploymentTests
         Assert.Contains("dotnet publish", workflow, StringComparison.Ordinal);
         Assert.Contains("artifacts/api.tar.gz", workflow, StringComparison.Ordinal);
         Assert.Contains("artifacts/frontend.tar.gz", workflow, StringComparison.Ordinal);
+        Assert.Contains("artifacts/operations.tar.gz", workflow, StringComparison.Ordinal);
         Assert.Contains("secrets.VPS_SSH_KEY", workflow, StringComparison.Ordinal);
         Assert.Contains("Host garagebalance-staging", workflow, StringComparison.Ordinal);
         Assert.Contains("ControlMaster auto", workflow, StringComparison.Ordinal);
         Assert.Contains("ControlPersist 120", workflow, StringComparison.Ordinal);
         Assert.Contains("garagebalance-staging:~/uploads/${RELEASE_ID}/api.tar.gz", workflow, StringComparison.Ordinal);
+        Assert.Contains("garagebalance-staging:~/uploads/${RELEASE_ID}/operations.tar.gz", workflow, StringComparison.Ordinal);
         Assert.Contains("ssh -O exit garagebalance-staging", workflow, StringComparison.Ordinal);
         Assert.Contains("sudo /usr/local/bin/garagebalance-deploy-apply", workflow, StringComparison.Ordinal);
         Assert.Contains("curl --http2 --compressed --fail", workflow, StringComparison.Ordinal);
@@ -54,6 +56,10 @@ public sealed class GitHubActionsDeploymentTests
         Assert.Contains("frontend_entry_assets", script, StringComparison.Ordinal);
         Assert.Contains("frontend entry asset was not found or empty", script, StringComparison.Ordinal);
         Assert.Contains("https://127.0.0.1${asset_path}", script, StringComparison.Ordinal);
+        Assert.Contains("OPERATIONS_ARCHIVE=\"${UPLOAD_DIR}/operations.tar.gz\"", script, StringComparison.Ordinal);
+        Assert.Contains("bash -n", script, StringComparison.Ordinal);
+        Assert.Contains("bash \"${OPERATIONS_DIR}/infrastructure/scripts/install-vps-performance-configuration.sh\" \"$OPERATIONS_DIR\"", script, StringComparison.Ordinal);
+        Assert.Contains("/usr/local/bin/garagebalance-deploy-apply", script, StringComparison.Ordinal);
     }
 
     private static string FindRepositoryRoot()

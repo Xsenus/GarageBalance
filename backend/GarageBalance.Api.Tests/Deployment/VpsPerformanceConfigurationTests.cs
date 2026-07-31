@@ -101,7 +101,9 @@ public sealed class VpsPerformanceConfigurationTests
         Assert.Contains("GarageBalance did not become healthy within 30 seconds.", installer, StringComparison.Ordinal);
         Assert.Contains("--noproxy 127.0.0.1", installer, StringComparison.Ordinal);
         Assert.Contains("Host: sgk.blagodaty.ru", installer, StringComparison.Ordinal);
-        Assert.Contains("logrotate --debug", installer, StringComparison.Ordinal);
+        Assert.Contains("logrotate --debug /etc/logrotate.conf", installer, StringComparison.Ordinal);
+        Assert.Contains("systemctl start logrotate.service", installer, StringComparison.Ordinal);
+        Assert.Contains("systemctl reset-failed logrotate.service", installer, StringComparison.Ordinal);
         Assert.Contains("configuration were rolled back", installer, StringComparison.Ordinal);
     }
 
