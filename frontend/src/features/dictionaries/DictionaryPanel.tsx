@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import type { FormEvent, MouseEvent, ReactNode } from 'react'
 import { CircleHelp, FileText, RotateCcw, Save, Search, Trash2, X } from 'lucide-react'
 import type { AuthResponse } from '../../services/authApi'
+import { profileCatalogEntries, type CatalogWorkspaceSection } from '../../shared/catalogCoverage'
 import { DictionaryApiError } from '../../services/dictionariesApi'
 import type { AccountingTypeDto, DictionaryClient, GarageDto, OwnerDto, PagedResult, SupplierGroupDto, SupplierDto, TariffDto, UpsertGarageRequest, UpsertOwnerRequest, UpsertSupplierRequest, UpsertTariffRequest } from '../../services/dictionariesApi'
 import type { FinanceClient, GarageBalanceHistoryDto } from '../../services/financeApi'
@@ -75,7 +76,7 @@ function FieldHelpLabel({ id, label, help }: { id: string; label: string; help: 
   )
 }
 
-export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, integrationClient, initialSection }: { auth: AuthResponse; dictionaryClient: DictionaryClient; financeClient: FinanceClient; integrationClient: IntegrationClient; initialSection: DictionarySectionKey }) {
+export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, integrationClient, initialSection, onOpenWorkspaceSection }: { auth: AuthResponse; dictionaryClient: DictionaryClient; financeClient: FinanceClient; integrationClient: IntegrationClient; initialSection: DictionarySectionKey; onOpenWorkspaceSection?: (section: Exclude<CatalogWorkspaceSection, 'dictionaries'>) => void }) {
   const [activeSection, setActiveSection] = useState<DictionarySectionKey>(initialSection)
   const [owners, setOwners] = useState<OwnerDto[]>([])
   const [garages, setGarages] = useState<GarageDto[]>([])
@@ -1209,6 +1210,22 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, integ
               ))}
             </div>
           ))}
+          <div className="dictionary-subnav-group dictionary-subnav-group--related">
+            <span>Профильные справочники</span>
+            {profileCatalogEntries.map((entry) => (
+              <button
+                type="button"
+                className="secondary-button"
+                aria-label={`${entry.label}: открыть ${entry.workspaceLabel}`}
+                disabled={!onOpenWorkspaceSection}
+                onClick={() => onOpenWorkspaceSection?.(entry.workspaceSection as Exclude<CatalogWorkspaceSection, 'dictionaries'>)}
+                key={entry.apiRoute}
+              >
+                <strong>{entry.label}</strong>
+                <small>{entry.workspaceLabel}</small>
+              </button>
+            ))}
+          </div>
         </nav>
 
         <div className="dictionary-table-shell">

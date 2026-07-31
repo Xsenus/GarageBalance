@@ -10,17 +10,27 @@ describe('responsive layout styles', () => {
   const normalizedAppCss = appCss.replace(/\r\n/g, '\n')
 
   it('collapses the main shell and data rows on tablet width', () => {
-    expect(appCss).toContain('@media (max-width: 980px)')
+    expect(appCss).toContain('@media (max-width: 1100px)')
     expect(normalizedAppCss).toContain('.app-shell {\n    grid-template-columns: 1fr;')
     expect(normalizedAppCss).toContain('.user-table-row,\n  .operation-row {\n    grid-template-columns: 1fr;')
   })
 
-  it('keeps mobile navigation usable without stretching the viewport', () => {
-    expect(appCss).toContain('@media (max-width: 640px)')
+  it('keeps tablet and mobile navigation compact without stretching the viewport', () => {
+    expect(appCss).toContain('@media (max-width: 1100px)')
     expect(normalizedAppCss).toContain('.app-shell {\n    overflow-x: hidden;')
-    expect(normalizedAppCss).toContain('.nav-list {\n    display: flex;\n    width: 100%;\n    max-width: 100%;\n    overflow-x: auto;')
-    expect(normalizedAppCss).toContain('.nav-item {\n    flex: 0 0 160px;\n    min-width: 160px;')
+    expect(normalizedAppCss).toContain('.sidebar {\n    width: 100%;\n    max-width: 100vw;')
+    expect(normalizedAppCss).toContain('flex-direction: row;\n    align-items: center;')
+    expect(normalizedAppCss).toContain('.nav-list {\n    display: flex;\n    width: auto;\n    min-width: 0;\n    flex: 1 1 auto;')
+    expect(normalizedAppCss).toContain('.nav-item,\n  .sidebar--collapsed .nav-item {\n    width: 44px;\n    height: 44px;\n    min-width: 44px;')
     expect(normalizedAppCss).toContain('.operation-list {\n    overflow-x: hidden;')
+  })
+
+  it('contains responsive workspaces, tariff tables and dictionary actions', () => {
+    expect(normalizedAppCss).toContain('.workspace {\n  box-sizing: border-box;\n  max-width: 100%;\n  min-width: 0;')
+    expect(normalizedAppCss).toContain('.tariffs-page {\n  min-width: 0;')
+    expect(normalizedAppCss).toContain('.tariffs-page > * {\n  min-width: 0;')
+    expect(normalizedAppCss).toContain('.dictionary-toolbar {\n    grid-template-columns: minmax(0, 1fr);\n    align-items: stretch;')
+    expect(normalizedAppCss).toContain('.dictionary-toolbar .dictionary-archive-toggle,\n  .dictionary-toolbar .create-action-button {\n    width: 100%;')
   })
 
   it('allows long table cell text to shrink inside its grid column', () => {
@@ -89,6 +99,7 @@ describe('responsive layout styles', () => {
     expect(normalizedAppCss).toContain('.audit-detail-grid {\n  grid-template-columns: repeat(3, minmax(0, 1fr));')
     expect(normalizedAppCss).toContain('.audit-detail-grid {\n    grid-template-columns: repeat(2, minmax(0, 1fr));')
     expect(normalizedAppCss).toContain('.audit-detail-grid {\n    grid-template-columns: 1fr;')
+    expect(normalizedAppCss).toContain('.audit-filter-grid {\n    grid-template-columns: repeat(2, minmax(0, 1fr));')
   })
 
   it('keeps shared dialogs usable on narrow screens without action overlap', () => {
@@ -127,7 +138,7 @@ describe('responsive layout styles', () => {
     expect(normalizedAppCss).toContain('line-height: 1.2;\n  text-align: center;\n  white-space: normal;')
     expect(normalizedAppCss).toContain('.payments-prototype-workspace-header .payments-prototype-action-button span {\n  min-width: 0;\n  text-wrap: balance;')
     expect(normalizedAppCss).toContain('.payments-prototype-workspace-header .payments-prototype-action-button svg {\n  flex: 0 0 auto;')
-    expect(normalizedAppCss).toContain('@media (max-width: 980px) {')
+    expect(normalizedAppCss).toContain('@media (max-width: 1100px) {')
     expect(normalizedAppCss).toContain('.payments-prototype-workspace-header > .payments-prototype-actions {\n    grid-template-columns: repeat(2, minmax(0, 1fr));')
     expect(normalizedAppCss).toContain('@media (max-width: 640px) {')
     expect(normalizedAppCss).toContain('.payments-prototype-workspace-header > .payments-prototype-actions {\n    grid-template-columns: minmax(0, 1fr);')
@@ -189,6 +200,8 @@ describe('responsive layout styles', () => {
     expect(normalizedAppCss).toContain('.dictionary-editor-dialog--owners {\n  width: min(860px, calc(100vw - 32px));\n  max-width: 860px;')
     expect(normalizedAppCss).toContain('.owner-name-grid,\n.owner-contact-grid {\n  display: grid;\n  grid-template-columns: repeat(2, minmax(0, 1fr));')
     expect(normalizedAppCss).toContain('.owner-name-grid__middle-name {\n  grid-column: 1 / -1;')
+    expect(normalizedAppCss).toContain('.field-label-with-help {\n  position: relative;')
+    expect(normalizedAppCss).toContain('width: min(280px, 100%);')
     expect(normalizedAppCss).toContain('.field-help:hover .field-help__tooltip,\n.field-help:focus .field-help__tooltip,\n.field-help:focus-within .field-help__tooltip {')
     expect(normalizedAppCss).toContain('.owner-name-grid,\n  .owner-contact-grid {\n    grid-template-columns: minmax(0, 1fr);')
   })
@@ -249,6 +262,8 @@ describe('responsive layout styles', () => {
     expect(normalizedAppCss).toContain('.settings-card-body > .summary-strip {\n  grid-template-columns: repeat(2, minmax(0, 1fr));')
     expect(normalizedAppCss).toContain('.settings-display-switch > span:first-child {\n  display: grid;')
     expect(normalizedAppCss).toContain('.settings-layout {\n    grid-template-columns: 1fr;\n    min-height: 0;')
+    expect(normalizedAppCss).toContain('.password-panel,\n  .settings-card--security,\n  .settings-card--display,')
+    expect(normalizedAppCss).toContain('.settings-card--cash-bank {\n    grid-template-columns: minmax(0, 1fr);')
     expect(normalizedAppCss).toContain('.settings-card-body > .summary-strip {\n    grid-template-columns: 1fr;')
   })
 

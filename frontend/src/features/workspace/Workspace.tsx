@@ -161,7 +161,7 @@ export const Workspace = memo(function Workspace({
         )
       case 'dictionaries':
         return canReadDictionaries ? (
-          <DictionaryPanelV2 auth={auth} dictionaryClient={dictionaryClient} financeClient={financeClient} integrationClient={integrationClient} initialSection="owners" />
+          <DictionaryPanelV2 auth={auth} dictionaryClient={dictionaryClient} financeClient={financeClient} integrationClient={integrationClient} initialSection="owners" onOpenWorkspaceSection={onOpenSection} />
         ) : (
           <AccessNotice label="Справочники недоступны" title="Справочники" permission={permissions.dictionariesRead} description="Для просмотра гаражей, владельцев и поставщиков нужно право на чтение справочников." />
         )

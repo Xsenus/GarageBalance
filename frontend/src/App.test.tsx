@@ -317,6 +317,14 @@ describe('App', () => {
     expect(within(dictionaryPanel).getByText('Членский взнос')).toBeInTheDocument()
     await openDictionarySubgroup(user, dictionaryPanel, 'Тарифы')
     expect(within(dictionaryPanel).getByText('Тариф воды')).toBeInTheDocument()
+    expect(within(dictionaryPanel).getByRole('button', { name: 'Контакты поставщиков: открыть Контрагенты · Поставщики' })).toBeEnabled()
+    expect(within(dictionaryPanel).getByRole('button', { name: 'Отделы персонала: открыть Контрагенты · Персонал' })).toBeEnabled()
+    expect(within(dictionaryPanel).getByRole('button', { name: 'Сотрудники: открыть Контрагенты · Персонал' })).toBeEnabled()
+    expect(within(dictionaryPanel).getByRole('button', { name: 'Услуги начислений: открыть Тарифы и сборы' })).toBeEnabled()
+    expect(within(dictionaryPanel).getByRole('button', { name: 'Разовые платежи: открыть Тарифы и сборы' })).toBeEnabled()
+
+    await user.click(within(dictionaryPanel).getByRole('button', { name: 'Контакты поставщиков: открыть Контрагенты · Поставщики' }))
+    expect(await screen.findByRole('region', { name: 'Контрагенты' })).toBeInTheDocument()
 
     await openSection(user, 'Платежи')
 
