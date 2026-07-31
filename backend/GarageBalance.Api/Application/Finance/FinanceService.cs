@@ -383,7 +383,7 @@ public sealed class FinanceService(
 
     public async Task<FinanceResult<GarageIncomeWorksheetDto>> GetGarageIncomeWorksheetAsync(Guid garageId, GarageIncomeWorksheetRequest request, CancellationToken cancellationToken)
     {
-        var defaultMonthTo = MonthPeriod.CurrentLocalMonth();
+        var defaultMonthTo = GetCurrentAccountingMonth();
         var monthTo = MonthPeriod.Normalize(request.MonthTo ?? defaultMonthTo);
         var monthFrom = MonthPeriod.Normalize(request.MonthFrom ?? monthTo.AddMonths(-5));
         if (monthFrom > monthTo)

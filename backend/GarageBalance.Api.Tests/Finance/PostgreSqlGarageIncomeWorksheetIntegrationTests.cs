@@ -454,7 +454,9 @@ public sealed class PostgreSqlGarageIncomeWorksheetIntegrationTests
             });
         await context.SaveChangesAsync();
 
-        var service = FinanceServiceTestFactory.Create(context);
+        var service = FinanceServiceTestFactory.Create(
+            context,
+            new FixedTimeProvider(new DateTimeOffset(2026, 7, 20, 12, 0, 0, TimeSpan.Zero)));
         var result = await service.GetGarageIncomeWorksheetAsync(
             garage.Id,
             new GarageIncomeWorksheetRequest(new DateOnly(2026, 7, 1), new DateOnly(2026, 7, 1)),

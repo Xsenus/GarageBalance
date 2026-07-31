@@ -10,5 +10,7 @@ internal sealed class TestBusinessDateProvider(DateOnly today) : IBusinessDatePr
     public void SetOverride(DateOnly? value) => OverrideDate = value;
 
     public static TestBusinessDateProvider From(TimeProvider? timeProvider) =>
-        new(DateOnly.FromDateTime((timeProvider ?? TimeProvider.System).GetUtcNow().UtcDateTime));
+        new(timeProvider is null
+            ? DateOnly.FromDateTime(DateTime.Today)
+            : DateOnly.FromDateTime(timeProvider.GetUtcNow().UtcDateTime));
 }
