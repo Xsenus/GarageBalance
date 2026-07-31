@@ -62,6 +62,15 @@ public sealed class GitHubActionsDeploymentTests
         Assert.Contains("/usr/local/bin/garagebalance-deploy-apply", script, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void ShellScripts_KeepLinuxLineEndingsInReleaseArchives()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var attributes = File.ReadAllText(Path.Combine(repositoryRoot, ".gitattributes"));
+
+        Assert.Contains("*.sh text eol=lf", attributes, StringComparison.Ordinal);
+    }
+
     private static string FindRepositoryRoot()
     {
         var directory = new DirectoryInfo(AppContext.BaseDirectory);
