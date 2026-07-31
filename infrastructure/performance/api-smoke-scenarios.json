@@ -33,7 +33,7 @@
   },
   {
     "name": "meter-year",
-    "path": "/api/finance/meter-readings/year?year=2025&offset=0&limit=25",
+    "path": "/api/finance/meter-readings/year?year=2025&meterKind=electricity&offset=0&limit=25",
     "authorized": true,
     "p50Milliseconds": 750,
     "p95Milliseconds": 1500,

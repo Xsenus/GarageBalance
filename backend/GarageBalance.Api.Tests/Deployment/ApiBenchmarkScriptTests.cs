@@ -30,6 +30,10 @@ public sealed class ApiBenchmarkScriptTests
         Assert.Contains(scenarios, item => item.GetProperty("path").GetString()!.StartsWith("/api/finance/", StringComparison.Ordinal));
         Assert.Contains(scenarios, item => item.GetProperty("path").GetString()!.StartsWith("/api/reports/", StringComparison.Ordinal));
         Assert.Contains(scenarios, item => item.GetProperty("path").GetString()!.StartsWith("/api/import/", StringComparison.Ordinal));
+        Assert.Contains(
+            scenarios,
+            item => item.GetProperty("name").GetString() == "meter-year"
+                && item.GetProperty("path").GetString()!.Contains("meterKind=electricity", StringComparison.Ordinal));
         Assert.All(scenarios, item =>
         {
             Assert.True(item.GetProperty("p50Milliseconds").GetDouble() > 0);
