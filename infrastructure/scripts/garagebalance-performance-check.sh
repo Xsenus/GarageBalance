@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-readonly LOG_FILE="/var/log/nginx/garagebalance-staging-timing.log"
+readonly LOG_FILE="/var/log/garagebalance-nginx/garagebalance-staging-timing.log"
 readonly SAMPLE_LIMIT=1000
 readonly MINIMUM_SAMPLES=5
 readonly P95_LIMIT_SECONDS="1.500"

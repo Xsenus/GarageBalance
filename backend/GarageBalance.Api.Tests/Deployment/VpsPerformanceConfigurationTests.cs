@@ -66,6 +66,13 @@ public sealed class VpsPerformanceConfigurationTests
         Assert.DoesNotContain("for (index =", performanceScript, StringComparison.Ordinal);
         Assert.Contains("serverErrors=", performanceScript, StringComparison.Ordinal);
         Assert.DoesNotContain("exit 1", performanceScript, StringComparison.Ordinal);
+        Assert.Contains(
+            "LOG_FILE=\"/var/log/garagebalance-nginx/garagebalance-staging-timing.log\"",
+            performanceScript,
+            StringComparison.Ordinal);
+        Assert.Contains("/var/log/garagebalance-nginx/garagebalance-staging-timing.log", logrotate, StringComparison.Ordinal);
+        Assert.Contains("/var/log/garagebalance-nginx/garagebalance-staging-error.log", logrotate, StringComparison.Ordinal);
+        Assert.DoesNotContain("/var/log/nginx/", logrotate, StringComparison.Ordinal);
         Assert.Contains("rotate 14", logrotate, StringComparison.Ordinal);
         Assert.Contains("maxsize 20M", logrotate, StringComparison.Ordinal);
         Assert.Contains("compress", logrotate, StringComparison.Ordinal);
@@ -78,6 +85,7 @@ public sealed class VpsPerformanceConfigurationTests
 
         Assert.Contains("trap rollback EXIT", installer, StringComparison.Ordinal);
         Assert.Contains("install -d -o garagebalance -g garagebalance", installer, StringComparison.Ordinal);
+        Assert.Contains("install -d -o www-data -g adm -m 0750 /var/log/garagebalance-nginx", installer, StringComparison.Ordinal);
         Assert.Contains("enabled_site_is_regular", installer, StringComparison.Ordinal);
         Assert.Contains("enabled_site_backup", installer, StringComparison.Ordinal);
         Assert.Contains("/etc/nginx/config-backups", installer, StringComparison.Ordinal);

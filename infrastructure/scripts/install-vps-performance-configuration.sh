@@ -50,6 +50,7 @@ rollback() {
 trap rollback EXIT
 
 install -d -o garagebalance -g garagebalance -m 0750 /var/lib/garagebalance-staging
+install -d -o www-data -g adm -m 0750 /var/log/garagebalance-nginx
 install -o root -g root -m 0644 "$source_dir/infrastructure/deployment/garagebalance-staging.nginx.conf" "$site_target"
 if (( enabled_site_is_regular == 1 )); then
   rm -f "$enabled_site_target"
