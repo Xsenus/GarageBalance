@@ -92,6 +92,22 @@ public sealed record UpsertSupplierRequest(
     [MaxLength(1000)] string? Comment,
     Guid? ChargeServiceSettingId = null);
 
+public sealed record CreateOpeningBalanceAdjustmentRequest(
+    DateOnly EffectiveDate,
+    decimal NewAmount,
+    [Required, MaxLength(1000)] string Reason);
+
+public sealed record OpeningBalanceAdjustmentDto(
+    Guid Id,
+    string TargetKind,
+    Guid TargetId,
+    DateOnly EffectiveDate,
+    decimal PreviousAmount,
+    decimal NewAmount,
+    string Reason,
+    Guid? CreatedByUserId,
+    DateTimeOffset CreatedAtUtc);
+
 public sealed record SupplierContactDto(
     Guid Id,
     Guid SupplierId,

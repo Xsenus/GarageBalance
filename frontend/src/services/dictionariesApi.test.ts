@@ -83,6 +83,17 @@ describe('dictionariesApi response cache', () => {
     expect(fetchMock).toHaveBeenCalledTimes(3)
   })
 
+  it('creates opening-balance adjustment documents', async () => {
+    const adjustment = { id: 'adjustment-1', targetKind: 'garage', targetId: 'garage-1', effectiveDate: '2026-07-01', previousAmount: 100, newAmount: 120, reason: 'Сверка' }
+    const fetchMock = vi.fn().mockResolvedValueOnce(new Response(JSON.stringify(adjustment), { status: 201 }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const created = await dictionariesApi.adjustGarageOpeningBalance?.('token', 'garage-1', { effectiveDate: '2026-07-01', newAmount: 120, reason: 'Сверка' })
+
+    expect(created).toEqual(adjustment)
+    expect(fetchMock).toHaveBeenCalledWith('/api/dictionaries/garages/garage-1/opening-balance-adjustments', expect.objectContaining({ method: 'POST', body: JSON.stringify({ effectiveDate: '2026-07-01', newAmount: 120, reason: 'Сверка' }) }))
+  })
+
   it('keeps unrelated cached dictionaries after a successful mutation', async () => {
     const fetchMock = vi.fn()
       .mockResolvedValueOnce(new Response(JSON.stringify([]), { status: 200 }))

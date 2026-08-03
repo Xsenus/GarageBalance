@@ -2781,6 +2781,90 @@ describe('App', () => {
     expect(within(contractorsPanel).queryByLabelText('Раздел истории контрагентов')).not.toBeInTheDocument()
   }, 180000)
 
+  it('creates an auditable supplier opening-balance adjustment from the contractor card', async () => {
+    const user = userEvent.setup()
+    let supplier = createSupplier({ id: 'supplier-opening-adjustment', name: 'Водоканал', startingBalance: 200, debt: 200 })
+    const adjustSupplierOpeningBalance = vi.fn(async (_token: string, id: string, request: { effectiveDate: string; newAmount: number; reason: string }) => {
+      const previousAmount = supplier.startingBalance
+      supplier = createSupplier({ ...supplier, startingBalance: request.newAmount, debt: request.newAmount })
+      return { id: 'adjustment-new', targetKind: 'supplier' as const, targetId: id, effectiveDate: request.effectiveDate, previousAmount, newAmount: request.newAmount, reason: request.reason, createdByUserId: null, createdAtUtc: '2026-07-01T00:00:00Z' }
+    })
+    const dictionaryClient = createDictionaryClient({
+      getSuppliers: async () => [supplier],
+      getSuppliersPage: async (_token, _groupId, _search, offset = 0, limit = 25) => ({ items: [supplier], totalCount: 1, offset, limit }),
+      adjustSupplierOpeningBalance,
+    })
+    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Контрагенты')
+    const contractorsPanel = await screen.findByRole('region', { name: 'Контрагенты' })
+    await user.click(within(contractorsPanel).getByRole('tab', { name: 'Поставщики' }))
+    await user.click(await within(contractorsPanel).findByRole('button', { name: 'Изменить поставщика Водоканал' }))
+    const supplierDialog = await screen.findByRole('dialog', { name: /Водоканал/ })
+    await user.click(within(supplierDialog).getByRole('button', { name: 'Корректировать начальный баланс' }))
+
+    const adjustmentDialog = await screen.findByRole('dialog', { name: 'Корректировка: Водоканал' })
+    expect(within(adjustmentDialog).getByText(/История изменений/)).toBeInTheDocument()
+    await user.clear(within(adjustmentDialog).getByLabelText('Новое значение начального баланса'))
+    await user.type(within(adjustmentDialog).getByLabelText('Новое значение начального баланса'), '250')
+    await user.type(within(adjustmentDialog).getByLabelText('Причина корректировки начального баланса'), 'Исправление акта сверки')
+    await user.click(within(adjustmentDialog).getByRole('button', { name: 'Сохранить корректировку' }))
+
+    await waitFor(() => expect(adjustSupplierOpeningBalance).toHaveBeenCalledWith('token', supplier.id, expect.objectContaining({ newAmount: 250, reason: 'Исправление акта сверки' })))
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Корректировка: Водоканал' })).not.toBeInTheDocument())
+    expect(await within(contractorsPanel).findByText('250.00')).toBeInTheDocument()
+  })
+
+  it('keeps the opening-balance adjustment dialog open and shows a save error', async () => {
+    const user = userEvent.setup()
+    const supplier = createSupplier({ id: 'supplier-opening-error', name: 'Поставщик ошибки', startingBalance: 200 })
+    const dictionaryClient = createDictionaryClient({
+      getSuppliers: async () => [supplier],
+      getSuppliersPage: async (_token, _groupId, _search, offset = 0, limit = 25) => ({ items: [supplier], totalCount: 1, offset, limit }),
+      adjustSupplierOpeningBalance: vi.fn().mockRejectedValue(new Error('Корректировка отклонена сервером.')),
+    })
+    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Контрагенты')
+    const contractorsPanel = await screen.findByRole('region', { name: 'Контрагенты' })
+    await user.click(within(contractorsPanel).getByRole('tab', { name: 'Поставщики' }))
+    await user.click(await within(contractorsPanel).findByRole('button', { name: 'Изменить поставщика Поставщик ошибки' }))
+    await user.click(within(await screen.findByRole('dialog', { name: /Поставщик ошибки/ })).getByRole('button', { name: 'Корректировать начальный баланс' }))
+
+    const adjustmentDialog = await screen.findByRole('dialog', { name: 'Корректировка: Поставщик ошибки' })
+    await user.clear(within(adjustmentDialog).getByLabelText('Новое значение начального баланса'))
+    await user.type(within(adjustmentDialog).getByLabelText('Новое значение начального баланса'), '250')
+    await user.type(within(adjustmentDialog).getByLabelText('Причина корректировки начального баланса'), 'Проверка ошибки')
+    await user.click(within(adjustmentDialog).getByRole('button', { name: 'Сохранить корректировку' }))
+
+    expect(await within(adjustmentDialog).findByRole('alert')).toHaveTextContent('Корректировка отклонена сервером.')
+    expect(adjustmentDialog).toBeInTheDocument()
+  })
+
+  it('hides opening-balance adjustments without the dedicated permission', async () => {
+    const user = userEvent.setup()
+    const supplier = createSupplier({ id: 'supplier-opening-readonly', name: 'Поставщик без права', startingBalance: 200 })
+    const auth = createAuthResponse({ user: { permissions: createAuthResponse().user.permissions.filter((permission) => permission !== 'opening_data.adjust') } })
+    const dictionaryClient = createDictionaryClient({
+      getSuppliers: async () => [supplier],
+      getSuppliersPage: async (_token, _groupId, _search, offset = 0, limit = 25) => ({ items: [supplier], totalCount: 1, offset, limit }),
+    })
+    render(<App authClient={createAuthClient({ login: async () => auth })} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Контрагенты')
+    const contractorsPanel = await screen.findByRole('region', { name: 'Контрагенты' })
+    await user.click(within(contractorsPanel).getByRole('tab', { name: 'Поставщики' }))
+    await user.click(await within(contractorsPanel).findByRole('button', { name: 'Изменить поставщика Поставщик без права' }))
+
+    expect(within(await screen.findByRole('dialog', { name: /Поставщик без права/ })).queryByRole('button', { name: 'Корректировать начальный баланс' })).not.toBeInTheDocument()
+  })
+
   it('shows contractor pages without waiting for editor reference dictionaries', async () => {
     const user = userEvent.setup()
     let resolveOwners!: (owners: OwnerDto[]) => void
@@ -20502,7 +20586,7 @@ function createAuthResponse(overrides: Partial<AuthResponse> & { user?: Partial<
       email: 'admin@example.com',
       displayName: 'Администратор',
       roles: ['administrator'],
-      permissions: ['users.manage', 'dictionaries.read', 'dictionaries.write', 'tariffs.manage', 'payments.read', 'payments.write', 'payments.meter_readings.historical_correct', 'reports.read', 'import.run', 'app_releases.manage', 'audit.read'],
+      permissions: ['users.manage', 'dictionaries.read', 'dictionaries.write', 'tariffs.manage', 'payments.read', 'payments.write', 'payments.meter_readings.historical_correct', 'opening_data.adjust', 'reports.read', 'import.run', 'app_releases.manage', 'audit.read'],
     },
   }
 
@@ -20550,9 +20634,9 @@ function createAuditEvent(overrides: Partial<AuditEventDto>): AuditEventDto {
 
 function createRoles(): ManagedRoleDto[] {
   return [
-    { code: 'administrator', name: 'Администратор', permissions: ['users.manage', 'dictionaries.read', 'dictionaries.write', 'tariffs.manage', 'payments.read', 'payments.write', 'payments.meter_readings.historical_correct', 'reports.read', 'import.run', 'app_releases.manage', 'audit.read'] },
+    { code: 'administrator', name: 'Администратор', permissions: ['users.manage', 'dictionaries.read', 'dictionaries.write', 'tariffs.manage', 'payments.read', 'payments.write', 'payments.meter_readings.historical_correct', 'opening_data.adjust', 'reports.read', 'import.run', 'app_releases.manage', 'audit.read'] },
     { code: 'operator', name: 'Оператор', permissions: ['dictionaries.read', 'payments.read', 'payments.write'] },
-    { code: 'accountant', name: 'Бухгалтер', permissions: ['dictionaries.read', 'dictionaries.write', 'tariffs.manage', 'payments.read', 'payments.write', 'reports.read', 'import.run'] },
+    { code: 'accountant', name: 'Бухгалтер', permissions: ['dictionaries.read', 'dictionaries.write', 'tariffs.manage', 'payments.read', 'payments.write', 'opening_data.adjust', 'reports.read', 'import.run'] },
     { code: 'reports_viewer', name: 'Просмотр отчетов', permissions: ['dictionaries.read', 'reports.read'] },
   ]
 }

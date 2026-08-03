@@ -42,6 +42,7 @@ public sealed class GarageBalanceDbContext(DbContextOptions<GarageBalanceDbConte
     public DbSet<StaffSalaryAdjustment> StaffSalaryAdjustments => Set<StaffSalaryAdjustment>();
     public DbSet<CashBankTransfer> CashBankTransfers => Set<CashBankTransfer>();
     public DbSet<CashBankBalanceOperation> CashBankBalanceOperations => Set<CashBankBalanceOperation>();
+    public DbSet<OpeningBalanceAdjustment> OpeningBalanceAdjustments => Set<OpeningBalanceAdjustment>();
     public DbSet<MeterReading> MeterReadings => Set<MeterReading>();
     public DbSet<MeterDevice> MeterDevices => Set<MeterDevice>();
     public DbSet<Fund> Funds => Set<Fund>();
@@ -258,6 +259,22 @@ public sealed class GarageBalanceDbContext(DbContextOptions<GarageBalanceDbConte
             entity.HasOne(supplier => supplier.ChargeServiceSetting)
                 .WithMany()
                 .HasForeignKey(supplier => supplier.ChargeServiceSettingId)
+                .OnDelete(DeleteBehavior.SetNull);
+        });
+
+        modelBuilder.Entity<OpeningBalanceAdjustment>(entity =>
+        {
+            entity.ToTable("opening_balance_adjustments");
+            entity.HasKey(adjustment => adjustment.Id);
+            entity.Property(adjustment => adjustment.TargetKind).HasMaxLength(20).IsRequired();
+            entity.Property(adjustment => adjustment.PreviousAmount).HasPrecision(18, 2);
+            entity.Property(adjustment => adjustment.NewAmount).HasPrecision(18, 2);
+            entity.Property(adjustment => adjustment.Reason).HasMaxLength(1000).IsRequired();
+            entity.HasIndex(adjustment => new { adjustment.TargetKind, adjustment.TargetId, adjustment.EffectiveDate });
+            entity.HasIndex(adjustment => adjustment.CreatedByUserId);
+            entity.HasOne<AppUser>()
+                .WithMany()
+                .HasForeignKey(adjustment => adjustment.CreatedByUserId)
                 .OnDelete(DeleteBehavior.SetNull);
         });
 

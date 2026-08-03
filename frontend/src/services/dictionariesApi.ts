@@ -105,6 +105,12 @@ export type AccountingTypeDto = {
   destinationFundName?: string | null
 }
 
+export type CreateOpeningBalanceAdjustmentRequest = {
+  effectiveDate: string
+  newAmount: number
+  reason: string
+}
+
 export type TariffDto = {
   id: string
   name: string
@@ -349,6 +355,7 @@ export type DictionaryClient = {
   updateGarage(accessToken: string, id: string, request: UpsertGarageRequest): Promise<GarageDto>
   archiveGarage(accessToken: string, id: string, reason: string): Promise<void>
   restoreGarage(accessToken: string, id: string): Promise<GarageDto>
+  adjustGarageOpeningBalance?(accessToken: string, id: string, request: CreateOpeningBalanceAdjustmentRequest): Promise<unknown>
   getSupplierGroups(accessToken: string, search?: string, limit?: number, includeArchived?: boolean, signal?: AbortSignal): Promise<SupplierGroupDto[]>
   getSupplierGroupsPage?(accessToken: string, search?: string, offset?: number, limit?: number, includeArchived?: boolean, signal?: AbortSignal): Promise<PagedResult<SupplierGroupDto>>
   createSupplierGroup(accessToken: string, request: UpsertSupplierGroupRequest): Promise<SupplierGroupDto>
@@ -361,6 +368,7 @@ export type DictionaryClient = {
   updateSupplier(accessToken: string, id: string, request: UpsertSupplierRequest): Promise<SupplierDto>
   archiveSupplier(accessToken: string, id: string, reason: string): Promise<void>
   restoreSupplier(accessToken: string, id: string): Promise<SupplierDto>
+  adjustSupplierOpeningBalance?(accessToken: string, id: string, request: CreateOpeningBalanceAdjustmentRequest): Promise<unknown>
   getSupplierContacts(accessToken: string, supplierId?: string, search?: string, limit?: number, includeArchived?: boolean): Promise<SupplierContactDto[]>
   createSupplierContact(accessToken: string, request: UpsertSupplierContactRequest): Promise<SupplierContactDto>
   updateSupplierContact(accessToken: string, id: string, request: UpsertSupplierContactRequest): Promise<SupplierContactDto>
@@ -599,6 +607,9 @@ export const dictionariesApi: DictionaryClient = {
   restoreGarage(accessToken, id) {
     return requestJson(accessToken, `/api/dictionaries/garages/${id}/restore`, { method: 'POST' })
   },
+  adjustGarageOpeningBalance(accessToken, id, request) {
+    return requestJson(accessToken, `/api/dictionaries/garages/${id}/opening-balance-adjustments`, { method: 'POST', body: JSON.stringify(request) })
+  },
   getSupplierGroups(accessToken, search, limit = defaultDictionaryListLimit, includeArchived = false, signal) {
     return requestJson(accessToken, withQuery('/api/dictionaries/supplier-groups', { search, limit, includeArchived: includeArchived || undefined }), { signal })
   },
@@ -634,6 +645,9 @@ export const dictionariesApi: DictionaryClient = {
   },
   restoreSupplier(accessToken, id) {
     return requestJson(accessToken, `/api/dictionaries/suppliers/${id}/restore`, { method: 'POST' })
+  },
+  adjustSupplierOpeningBalance(accessToken, id, request) {
+    return requestJson(accessToken, `/api/dictionaries/suppliers/${id}/opening-balance-adjustments`, { method: 'POST', body: JSON.stringify(request) })
   },
   getSupplierContacts(accessToken, supplierId, search, limit = defaultDictionaryListLimit, includeArchived = false) {
     return requestJson(accessToken, withQuery('/api/dictionaries/supplier-contacts', { supplierId, search, limit, includeArchived: includeArchived || undefined }))

@@ -1,7 +1,9 @@
+using GarageBalance.Api.Application.Dictionaries;
 using GarageBalance.Api.Domain.Dictionaries;
 using GarageBalance.Api.Domain.Finance;
 using GarageBalance.Api.Infrastructure.Data;
 using GarageBalance.Api.Tests.Common;
+using Microsoft.EntityFrameworkCore;
 
 namespace GarageBalance.Api.Tests.Dictionaries;
 
@@ -81,5 +83,45 @@ public sealed class PostgreSqlOpeningDataLockIntegrationTests
         Assert.True(garageLock.HasWaterMeterHistory);
         Assert.True(garageLock.HasElectricityMeterHistory);
         Assert.True(supplierLock);
+    }
+
+    [PostgreSqlFact]
+    public async Task OpeningBalanceAdjustments_SerializeConcurrentGarageCorrections()
+    {
+        await using var database = await PostgreSqlTestDatabase.CreateAsync();
+        var garage = new Garage { Number = "OPENING-ADJUST-RACE", StartingBalance = 100m };
+        await using (var setupContext = database.CreateContext())
+        {
+            setupContext.Garages.Add(garage);
+            await setupContext.SaveChangesAsync();
+        }
+
+        await using var firstContext = database.CreateContext();
+        await using var secondContext = database.CreateContext();
+        var firstService = DictionaryServiceTestFactory.Create(firstContext);
+        var secondService = DictionaryServiceTestFactory.Create(secondContext);
+
+        var results = await Task.WhenAll(
+            firstService.AdjustGarageOpeningBalanceAsync(
+                garage.Id,
+                new CreateOpeningBalanceAdjustmentRequest(new DateOnly(2026, 7, 1), 120m, "Первая сверка"),
+                null,
+                CancellationToken.None),
+            secondService.AdjustGarageOpeningBalanceAsync(
+                garage.Id,
+                new CreateOpeningBalanceAdjustmentRequest(new DateOnly(2026, 7, 2), 140m, "Вторая сверка"),
+                null,
+                CancellationToken.None));
+
+        Assert.All(results, result => Assert.True(result.Succeeded));
+        await using var assertionContext = database.CreateContext();
+        var documents = await assertionContext.OpeningBalanceAdjustments
+            .Where(item => item.TargetId == garage.Id)
+            .ToListAsync();
+        Assert.Equal(2, documents.Count);
+        var firstDocument = Assert.Single(documents, item => item.PreviousAmount == 100m);
+        var secondDocument = Assert.Single(documents, item => item.PreviousAmount == firstDocument.NewAmount);
+        var finalBalance = await assertionContext.Garages.Where(item => item.Id == garage.Id).Select(item => item.StartingBalance).SingleAsync();
+        Assert.Equal(secondDocument.NewAmount, finalBalance);
     }
 }

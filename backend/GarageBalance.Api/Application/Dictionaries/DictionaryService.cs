@@ -23,6 +23,7 @@ public sealed class DictionaryService(
     IChargeServiceSettingRepository chargeServiceSettingRepository,
     IFeeCampaignRepository feeCampaignRepository,
     IFundRepository fundRepository,
+    IOpeningBalanceAdjustmentRepository openingBalanceAdjustmentRepository,
     IApplicationUnitOfWork unitOfWork,
     IAuditEventWriter auditEventWriter) : IDictionaryService
 {
@@ -460,6 +461,41 @@ public sealed class DictionaryService(
         return DictionaryResult<GarageDto>.Success(await ToGarageDtoWithBalanceAsync(garage, cancellationToken));
     }
 
+    public Task<IReadOnlyList<OpeningBalanceAdjustmentDto>> GetGarageOpeningBalanceAdjustmentsAsync(Guid id, CancellationToken cancellationToken) =>
+        GetOpeningBalanceAdjustmentsAsync(OpeningBalanceAdjustmentTargetKinds.Garage, id, cancellationToken);
+
+    public async Task<DictionaryResult<OpeningBalanceAdjustmentDto>> AdjustGarageOpeningBalanceAsync(
+        Guid id,
+        CreateOpeningBalanceAdjustmentRequest request,
+        Guid? actorUserId,
+        CancellationToken cancellationToken)
+    {
+        var validation = ValidateOpeningBalanceAdjustment(request);
+        if (validation is not null)
+        {
+            return validation;
+        }
+
+        await using var updateLock = await openingBalanceAdjustmentRepository.AcquireUpdateLockAsync(
+            OpeningBalanceAdjustmentTargetKinds.Garage, id, cancellationToken);
+        var garage = await garageRepository.FindActiveWithOwnerAsync(id, cancellationToken);
+        if (garage is null)
+        {
+            return DictionaryResult<OpeningBalanceAdjustmentDto>.Failure("garage_not_found", "Гараж не найден.");
+        }
+
+        return await SaveOpeningBalanceAdjustmentAsync(
+            OpeningBalanceAdjustmentTargetKinds.Garage,
+            garage.Id,
+            garage.Number,
+            garage.StartingBalance,
+            request,
+            actorUserId,
+            amount => garage.StartingBalance = amount,
+            () => garage.UpdatedAtUtc = DateTimeOffset.UtcNow,
+            cancellationToken);
+    }
+
     public async Task<IReadOnlyList<SupplierGroupDto>> GetSupplierGroupsAsync(string? search, CancellationToken cancellationToken, int? limit = null, bool includeArchived = false)
     {
         var normalizedSearch = NormalizeSearch(search);
@@ -811,6 +847,41 @@ public sealed class DictionaryService(
         AddAudit(actorUserId, "dictionary.supplier_restored", "supplier", supplier.Id, $"Восстановлен поставщик {supplier.Name}.");
         await unitOfWork.SaveChangesAsync(cancellationToken);
         return DictionaryResult<SupplierDto>.Success(ToSupplierDto(supplier));
+    }
+
+    public Task<IReadOnlyList<OpeningBalanceAdjustmentDto>> GetSupplierOpeningBalanceAdjustmentsAsync(Guid id, CancellationToken cancellationToken) =>
+        GetOpeningBalanceAdjustmentsAsync(OpeningBalanceAdjustmentTargetKinds.Supplier, id, cancellationToken);
+
+    public async Task<DictionaryResult<OpeningBalanceAdjustmentDto>> AdjustSupplierOpeningBalanceAsync(
+        Guid id,
+        CreateOpeningBalanceAdjustmentRequest request,
+        Guid? actorUserId,
+        CancellationToken cancellationToken)
+    {
+        var validation = ValidateOpeningBalanceAdjustment(request);
+        if (validation is not null)
+        {
+            return validation;
+        }
+
+        await using var updateLock = await openingBalanceAdjustmentRepository.AcquireUpdateLockAsync(
+            OpeningBalanceAdjustmentTargetKinds.Supplier, id, cancellationToken);
+        var supplier = await supplierRepository.FindActiveWithGroupAsync(id, cancellationToken);
+        if (supplier is null)
+        {
+            return DictionaryResult<OpeningBalanceAdjustmentDto>.Failure("supplier_not_found", "Поставщик не найден.");
+        }
+
+        return await SaveOpeningBalanceAdjustmentAsync(
+            OpeningBalanceAdjustmentTargetKinds.Supplier,
+            supplier.Id,
+            supplier.Name,
+            supplier.StartingBalance,
+            request,
+            actorUserId,
+            amount => supplier.StartingBalance = amount,
+            () => supplier.UpdatedAtUtc = DateTimeOffset.UtcNow,
+            cancellationToken);
     }
 
     public async Task<IReadOnlyList<SupplierContactDto>> GetSupplierContactsAsync(Guid? supplierId, string? search, CancellationToken cancellationToken, int? limit = null, bool includeArchived = false)
@@ -2490,6 +2561,92 @@ public sealed class DictionaryService(
 
         return null;
     }
+
+    private async Task<IReadOnlyList<OpeningBalanceAdjustmentDto>> GetOpeningBalanceAdjustmentsAsync(
+        string targetKind,
+        Guid targetId,
+        CancellationToken cancellationToken)
+    {
+        var items = await openingBalanceAdjustmentRepository.GetListAsync(targetKind, targetId, cancellationToken);
+        return items.Select(ToOpeningBalanceAdjustmentDto).ToList();
+    }
+
+    private static DictionaryResult<OpeningBalanceAdjustmentDto>? ValidateOpeningBalanceAdjustment(CreateOpeningBalanceAdjustmentRequest request)
+    {
+        if (request.EffectiveDate == default)
+        {
+            return DictionaryResult<OpeningBalanceAdjustmentDto>.Failure("opening_balance_effective_date_required", "Укажите дату корректировки.");
+        }
+
+        if (string.IsNullOrWhiteSpace(request.Reason))
+        {
+            return DictionaryResult<OpeningBalanceAdjustmentDto>.Failure("opening_balance_reason_required", "Укажите причину корректировки начального баланса.");
+        }
+
+        if (request.Reason.Trim().Length > 1000)
+        {
+            return DictionaryResult<OpeningBalanceAdjustmentDto>.Failure("opening_balance_reason_too_long", "Причина корректировки не должна быть длиннее 1000 символов.");
+        }
+
+        return null;
+    }
+
+    private async Task<DictionaryResult<OpeningBalanceAdjustmentDto>> SaveOpeningBalanceAdjustmentAsync(
+        string targetKind,
+        Guid targetId,
+        string targetName,
+        decimal previousAmount,
+        CreateOpeningBalanceAdjustmentRequest request,
+        Guid? actorUserId,
+        Action<decimal> updateAmount,
+        Action touchTarget,
+        CancellationToken cancellationToken)
+    {
+        var newAmount = MoneyMath.RoundMoney(request.NewAmount);
+        previousAmount = MoneyMath.RoundMoney(previousAmount);
+        if (newAmount == previousAmount)
+        {
+            return DictionaryResult<OpeningBalanceAdjustmentDto>.Failure("opening_balance_unchanged", "Новое значение совпадает с действующим начальным балансом.");
+        }
+
+        var adjustment = new OpeningBalanceAdjustment
+        {
+            TargetKind = targetKind,
+            TargetId = targetId,
+            EffectiveDate = request.EffectiveDate,
+            PreviousAmount = previousAmount,
+            NewAmount = newAmount,
+            Reason = request.Reason.Trim(),
+            CreatedByUserId = actorUserId
+        };
+        updateAmount(newAmount);
+        touchTarget();
+        openingBalanceAdjustmentRepository.Add(adjustment);
+
+        var entityLabel = targetKind == OpeningBalanceAdjustmentTargetKinds.Garage ? "гаража" : "поставщика";
+        AddAudit(
+            actorUserId,
+            $"dictionary.{targetKind}_opening_balance_adjusted",
+            "opening_balance_adjustment",
+            adjustment.Id,
+            $"Скорректирован начальный баланс {entityLabel} {targetName}.",
+            adjustment.Reason,
+            new Dictionary<string, object?> { ["startingBalance"] = previousAmount },
+            new Dictionary<string, object?> { ["startingBalance"] = newAmount });
+        await unitOfWork.SaveChangesAsync(cancellationToken);
+        return DictionaryResult<OpeningBalanceAdjustmentDto>.Success(ToOpeningBalanceAdjustmentDto(adjustment));
+    }
+
+    private static OpeningBalanceAdjustmentDto ToOpeningBalanceAdjustmentDto(OpeningBalanceAdjustment adjustment) => new(
+        adjustment.Id,
+        adjustment.TargetKind,
+        adjustment.TargetId,
+        adjustment.EffectiveDate,
+        adjustment.PreviousAmount,
+        adjustment.NewAmount,
+        adjustment.Reason,
+        adjustment.CreatedByUserId,
+        adjustment.CreatedAtUtc);
 
     private void AddAudit(
         Guid? actorUserId,

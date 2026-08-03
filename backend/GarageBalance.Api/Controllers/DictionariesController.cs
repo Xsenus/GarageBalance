@@ -149,6 +149,25 @@ public sealed class DictionariesController(IDictionaryService dictionaryService)
         return result.Succeeded ? Ok(result.Value) : ToError(result);
     }
 
+    [HttpGet("garages/{id:guid}/opening-balance-adjustments")]
+    [ProducesResponseType<IReadOnlyList<OpeningBalanceAdjustmentDto>>(StatusCodes.Status200OK)]
+    public async Task<ActionResult<IReadOnlyList<OpeningBalanceAdjustmentDto>>> GetGarageOpeningBalanceAdjustments(Guid id, CancellationToken cancellationToken) =>
+        Ok(await dictionaryService.GetGarageOpeningBalanceAdjustmentsAsync(id, cancellationToken));
+
+    [Authorize(Policy = SystemPermissions.OpeningDataAdjust)]
+    [Authorize(Policy = SystemPermissions.DictionariesWrite)]
+    [HttpPost("garages/{id:guid}/opening-balance-adjustments")]
+    [ProducesResponseType<OpeningBalanceAdjustmentDto>(StatusCodes.Status201Created)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<OpeningBalanceAdjustmentDto>> AdjustGarageOpeningBalance(Guid id, CreateOpeningBalanceAdjustmentRequest request, CancellationToken cancellationToken)
+    {
+        var result = await dictionaryService.AdjustGarageOpeningBalanceAsync(id, request, GetActorUserId(), cancellationToken);
+        return result.Succeeded
+            ? CreatedAtAction(nameof(GetGarageOpeningBalanceAdjustments), new { id }, result.Value)
+            : ToError(result);
+    }
+
     [HttpGet("supplier-groups")]
     [ProducesResponseType<IReadOnlyList<SupplierGroupDto>>(StatusCodes.Status200OK)]
     public async Task<ActionResult<IReadOnlyList<SupplierGroupDto>>> GetSupplierGroups([FromQuery] string? search, [FromQuery] int? limit, [FromQuery] bool includeArchived, CancellationToken cancellationToken)
@@ -283,6 +302,25 @@ public sealed class DictionariesController(IDictionaryService dictionaryService)
     {
         var result = await dictionaryService.RestoreSupplierAsync(id, GetActorUserId(), cancellationToken);
         return result.Succeeded ? Ok(result.Value) : ToError(result);
+    }
+
+    [HttpGet("suppliers/{id:guid}/opening-balance-adjustments")]
+    [ProducesResponseType<IReadOnlyList<OpeningBalanceAdjustmentDto>>(StatusCodes.Status200OK)]
+    public async Task<ActionResult<IReadOnlyList<OpeningBalanceAdjustmentDto>>> GetSupplierOpeningBalanceAdjustments(Guid id, CancellationToken cancellationToken) =>
+        Ok(await dictionaryService.GetSupplierOpeningBalanceAdjustmentsAsync(id, cancellationToken));
+
+    [Authorize(Policy = SystemPermissions.OpeningDataAdjust)]
+    [Authorize(Policy = SystemPermissions.DictionariesWrite)]
+    [HttpPost("suppliers/{id:guid}/opening-balance-adjustments")]
+    [ProducesResponseType<OpeningBalanceAdjustmentDto>(StatusCodes.Status201Created)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<OpeningBalanceAdjustmentDto>> AdjustSupplierOpeningBalance(Guid id, CreateOpeningBalanceAdjustmentRequest request, CancellationToken cancellationToken)
+    {
+        var result = await dictionaryService.AdjustSupplierOpeningBalanceAsync(id, request, GetActorUserId(), cancellationToken);
+        return result.Succeeded
+            ? CreatedAtAction(nameof(GetSupplierOpeningBalanceAdjustments), new { id }, result.Value)
+            : ToError(result);
     }
 
     [HttpGet("supplier-contacts")]

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { CSSProperties, FormEvent, MouseEvent, RefObject } from 'react'
+import type { CSSProperties, FormEvent, MouseEvent, ReactNode, RefObject } from 'react'
 import { FileText, Gauge, LoaderCircle, Pencil, RotateCcw, Save, Search, Trash2, UserPlus, UsersRound, X } from 'lucide-react'
 import type { AuthResponse } from '../../services/authApi'
 import type { AccountingTypeDto, ChargeServiceSettingDto, CreateChargeServiceWithTariffRequest, DictionaryClient, GarageColumnFilters, GarageDto, OwnerDto, StaffDepartmentDto, StaffMemberDto, SupplierContactDto, SupplierDto, SupplierGroupDto, TariffDto, UpsertGarageRequest, UpsertOwnerRequest, UpsertStaffMemberRequest, UpsertSupplierContactRequest, UpsertSupplierRequest } from '../../services/dictionariesApi'
@@ -193,6 +193,10 @@ type ContractorRestoreTarget =
   | { type: 'supplier'; item: ContractorSupplierRow }
   | { type: 'employee'; item: ContractorStaffRow }
   | { type: 'department'; item: ContractorDepartmentRow }
+
+type OpeningBalanceAdjustmentTarget =
+  | { type: 'garage'; id: string; name: string; currentAmount: number }
+  | { type: 'supplier'; id: string; name: string; currentAmount: number }
 
 const contractorSectionLabels: Record<ContractorSection, string> = {
   garages: 'Гаражи',
@@ -797,6 +801,7 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
   const [formStateError, setFormStateError] = useState<string | null>(null)
   const [modal, setModal] = useState<ContractorModal | null>(null)
   const [restoreTarget, setRestoreTarget] = useState<ContractorRestoreTarget | null>(null)
+  const [openingBalanceAdjustmentTarget, setOpeningBalanceAdjustmentTarget] = useState<OpeningBalanceAdjustmentTarget | null>(null)
   const [garageColumnWidths, setGarageColumnWidths] = useState(loadGarageColumnWidths)
   const [supplierColumnWidths, setSupplierColumnWidths] = useState(() => loadContractorColumnWidths(contractorSupplierColumnStorageKey, contractorSupplierColumnDefinitions))
   const [staffColumnWidths, setStaffColumnWidths] = useState(() => loadContractorColumnWidths(contractorStaffColumnStorageKey, contractorStaffColumnDefinitions))
@@ -1135,6 +1140,7 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
   }, [staffColumnWidths])
   const canReadContractorHistory = hasPermission(auth, permissions.auditRead)
   const canManageTariffs = hasPermission(auth, permissions.tariffsManage)
+  const canAdjustOpeningData = hasPermission(auth, permissions.openingDataAdjust)
   const canUseGarageColumnFilters = isAdministrator(auth)
 
   async function loadGaragePage(
@@ -1937,6 +1943,26 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
     })
   }
 
+  function openGarageOpeningBalanceAdjustment(row: ContractorGarageRow) {
+    setModal(null)
+    setOpeningBalanceAdjustmentTarget({ type: 'garage', id: row.id, name: `Гараж ${row.number}`, currentAmount: Number(row.startingBalance ?? 0) })
+  }
+
+  function openSupplierOpeningBalanceAdjustment(row: ContractorSupplierRow) {
+    setModal(null)
+    setOpeningBalanceAdjustmentTarget({ type: 'supplier', id: row.id, name: row.name, currentAmount: Number(row.startingBalance || 0) })
+  }
+
+  async function handleOpeningBalanceAdjusted() {
+    const target = openingBalanceAdjustmentTarget
+    setOpeningBalanceAdjustmentTarget(null)
+    if (target?.type === 'garage') {
+      await loadGaragePage()
+    } else if (target?.type === 'supplier') {
+      await loadSupplierPage()
+    }
+  }
+
   const filteredGarages = garages
 
   const visibleGarages = useMemo(() => {
@@ -2508,11 +2534,21 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
         </div>
       ) : null}
 
-      {modal?.type === 'garage' ? <GaragePrototypeDialog accessToken={auth.accessToken} integrationClient={integrationClient} item={modal.item} onClose={() => setModal(null)} onSave={saveGarage} onOpenFinancialReport={openGarageFinancialReport} /> : null}
-      {modal?.type === 'supplier' ? <SupplierPrototypeDialog accessToken={auth.accessToken} funds={serviceFunds} integrationClient={integrationClient} item={modal.item} services={chargeServices} onClose={() => setModal(null)} onOpenFinancialReport={openSupplierFinancialReport} onSave={saveSupplier} /> : null}
+      {modal?.type === 'garage' ? <GaragePrototypeDialog accessToken={auth.accessToken} canAdjustOpeningData={canAdjustOpeningData} integrationClient={integrationClient} item={modal.item} onAdjustOpeningBalance={openGarageOpeningBalanceAdjustment} onClose={() => setModal(null)} onSave={saveGarage} onOpenFinancialReport={openGarageFinancialReport} /> : null}
+      {modal?.type === 'supplier' ? <SupplierPrototypeDialog accessToken={auth.accessToken} canAdjustOpeningData={canAdjustOpeningData} funds={serviceFunds} integrationClient={integrationClient} item={modal.item} services={chargeServices} onAdjustOpeningBalance={openSupplierOpeningBalanceAdjustment} onClose={() => setModal(null)} onOpenFinancialReport={openSupplierFinancialReport} onSave={saveSupplier} /> : null}
       {modal?.type === 'service' ? <AddServicePrototypeDialog expenseTypes={serviceExpenseTypes.filter((item) => !item.isArchived)} funds={serviceFunds.filter((fund) => fund.allowOperations)} isSaving={serviceSaving} incomeTypes={serviceIncomeTypes.filter((item) => !item.isArchived)} onClose={() => setModal(null)} onCreateWithTariff={saveServiceWithTariff} regularOnly tariffs={serviceTariffs.filter((item) => !item.isArchived)} /> : null}
       {modal?.type === 'employee' ? <EmployeePrototypeDialog departments={departments} item={modal.item} onClose={() => setModal(null)} onOpenFinancialReport={openEmployeeFinancialReport} onSave={saveEmployee} /> : null}
       {modal?.type === 'department' ? <DepartmentPrototypeDialog item={modal.item} onClose={() => setModal(null)} onSave={saveDepartment} /> : null}
+
+      {openingBalanceAdjustmentTarget ? (
+        <OpeningBalanceAdjustmentDialog
+          accessToken={auth.accessToken}
+          dictionaryClient={dictionaryClient}
+          target={openingBalanceAdjustmentTarget}
+          onClose={() => setOpeningBalanceAdjustmentTarget(null)}
+          onSaved={() => void handleOpeningBalanceAdjusted()}
+        />
+      ) : null}
 
       {garageFinancialReportTarget ? (
         <div className="modal-backdrop" role="presentation" onMouseDown={closeGarageFinancialReport}>
@@ -3009,18 +3045,7 @@ function PrototypeChangeConfirmationDialog({
   useEscapeKey(true, onCancel)
 
   return (
-    <div className="modal-backdrop" role="presentation" onMouseDown={onCancel}>
-      <section ref={dialogRef} className="detail-dialog contractors-dialog dictionary-confirmation-dialog" role="dialog" aria-modal="true" aria-labelledby="prototype-change-title" aria-describedby="prototype-change-description" onMouseDown={(event) => event.stopPropagation()}>
-        <div className="detail-dialog-header">
-          <div>
-            <p className="eyebrow">Изменение</p>
-            <h3 id="prototype-change-title">{title}</h3>
-            <p>{objectName}</p>
-          </div>
-          <button className="icon-button" type="button" aria-label="Закрыть подтверждение изменений" onClick={onCancel}>
-            <X size={18} />
-          </button>
-        </div>
+    <ContractorDialogShell className="dictionary-confirmation-dialog" closeLabel="Закрыть подтверждение изменений" descriptionId="prototype-change-description" dialogRef={dialogRef} eyebrow="Изменение" onClose={onCancel} subtitle={objectName} title={title} titleId="prototype-change-title">
         <p className="confirmation-text" id="prototype-change-description">Проверьте, что именно изменится. Действие записывается в историю изменений.</p>
         <dl className="dictionary-change-list">
           {changes.map((change) => (
@@ -3037,8 +3062,7 @@ function PrototypeChangeConfirmationDialog({
             <span>Сохранить</span>
           </button>
         </div>
-      </section>
-    </div>
+    </ContractorDialogShell>
   )
 }
 
@@ -3060,18 +3084,16 @@ function SupplierContactDeleteConfirmationDialog({
   onConfirm: () => void
 }) {
   return (
-    <div className="modal-backdrop" role="presentation" onMouseDown={onCancel}>
-      <section ref={dialogRef} className="detail-dialog contractors-dialog" role="dialog" aria-modal="true" aria-labelledby="supplier-contact-delete-title" aria-describedby="supplier-contact-delete-description" onMouseDown={(event) => event.stopPropagation()}>
-        <div className="detail-dialog-header">
-          <div>
-            <p className="eyebrow">Удаление</p>
-            <h3 id="supplier-contact-delete-title">Удалить контакт?</h3>
-            <p>{contact.fullName || 'Контакт без ФИО'}</p>
-          </div>
-          <button className="icon-button" type="button" aria-label="Закрыть подтверждение удаления контакта" onClick={onCancel}>
-            <X size={18} />
-          </button>
-        </div>
+    <ContractorDialogShell
+      closeLabel="Закрыть подтверждение удаления контакта"
+      descriptionId="supplier-contact-delete-description"
+      dialogRef={dialogRef}
+      eyebrow="Удаление"
+      onClose={onCancel}
+      subtitle={contact.fullName || 'Контакт без ФИО'}
+      title="Удалить контакт?"
+      titleId="supplier-contact-delete-title"
+    >
         <p className="confirmation-text" id="supplier-contact-delete-description">Контакт будет скрыт в карточке поставщика, но его можно будет восстановить. Укажите причину, чтобы действие было видно в истории изменений.</p>
         <label className="field-label" htmlFor="supplier-contact-delete-reason">Причина удаления</label>
         <textarea
@@ -3090,8 +3112,7 @@ function SupplierContactDeleteConfirmationDialog({
           </button>
           <button ref={cancelRef} className="ghost-button" type="button" onClick={onCancel}>Отмена</button>
         </div>
-      </section>
-    </div>
+    </ContractorDialogShell>
   )
 }
 
@@ -3109,18 +3130,16 @@ function SupplierContactRestoreConfirmationDialog({
   onConfirm: () => void
 }) {
   return (
-    <div className="modal-backdrop" role="presentation" onMouseDown={onCancel}>
-      <section ref={dialogRef} className="detail-dialog contractors-dialog" role="dialog" aria-modal="true" aria-labelledby="supplier-contact-restore-title" aria-describedby="supplier-contact-restore-description" onMouseDown={(event) => event.stopPropagation()}>
-        <div className="detail-dialog-header">
-          <div>
-            <p className="eyebrow">Восстановление</p>
-            <h3 id="supplier-contact-restore-title">Восстановить контакт?</h3>
-            <p>{contact.fullName || 'Контакт без ФИО'}</p>
-          </div>
-          <button className="icon-button" type="button" aria-label="Закрыть подтверждение восстановления контакта" onClick={onCancel}>
-            <X size={18} />
-          </button>
-        </div>
+    <ContractorDialogShell
+      closeLabel="Закрыть подтверждение восстановления контакта"
+      descriptionId="supplier-contact-restore-description"
+      dialogRef={dialogRef}
+      eyebrow="Восстановление"
+      onClose={onCancel}
+      subtitle={contact.fullName || 'Контакт без ФИО'}
+      title="Восстановить контакт?"
+      titleId="supplier-contact-restore-title"
+    >
         <p className="confirmation-text" id="supplier-contact-restore-description">Контакт снова станет активным. Если поставщик был скрыт, он тоже будет восстановлен после сохранения карточки.</p>
         <div className="detail-dialog-actions contractors-dialog-actions">
           <button className="secondary-button" type="button" onClick={onConfirm}>
@@ -3129,8 +3148,7 @@ function SupplierContactRestoreConfirmationDialog({
           </button>
           <button ref={cancelRef} className="ghost-button" type="button" onClick={onCancel}>Отмена</button>
         </div>
-      </section>
-    </div>
+    </ContractorDialogShell>
   )
 }
 
@@ -3234,7 +3252,76 @@ function DadataAddressField({ accessToken, inputLabel, integrationClient, label,
   )
 }
 
-function GaragePrototypeDialog({ accessToken, integrationClient, item, onClose, onOpenFinancialReport, onSave }: { accessToken: string; integrationClient: IntegrationClient; item?: ContractorGarageRow; onClose: () => void; onOpenFinancialReport: (item: ContractorGarageRow) => void; onSave: (item: ContractorGarageRow) => void }) {
+function OpeningBalanceAdjustmentDialog({ accessToken, dictionaryClient, target, onClose, onSaved }: { accessToken: string; dictionaryClient: DictionaryClient; target: OpeningBalanceAdjustmentTarget; onClose: () => void; onSaved: () => void }) {
+  const [effectiveDate, setEffectiveDate] = useState(() => new Date().toLocaleDateString('sv-SE'))
+  const [newAmount, setNewAmount] = useState(String(target.currentAmount))
+  const [reason, setReason] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const dialogRef = useFocusTrap<HTMLElement>(true)
+  useRestoreFocusOnClose(true)
+  useEscapeKey(!saving, onClose)
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    const parsedAmount = parseStaffRate(newAmount)
+    if (!effectiveDate || parsedAmount === null || !reason.trim()) {
+      setError('Укажите дату, новое значение и причину корректировки.')
+      return
+    }
+
+    const save = target.type === 'garage'
+      ? dictionaryClient.adjustGarageOpeningBalance
+      : dictionaryClient.adjustSupplierOpeningBalance
+    if (!save) {
+      setError('Корректировка начальных данных недоступна в текущей сборке.')
+      return
+    }
+
+    setSaving(true)
+    setError(null)
+    try {
+      await save(accessToken, target.id, { effectiveDate, newAmount: parsedAmount, reason: reason.trim() })
+      onSaved()
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : 'Не удалось сохранить корректировку.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <ContractorDialogShell className="opening-balance-adjustment-dialog" closeDisabled={saving} closeLabel="Закрыть корректировку начального баланса" dialogRef={dialogRef} eyebrow="Начальные данные" onClose={onClose} title={`Корректировка: ${target.name}`} titleId="opening-balance-adjustment-title">
+        <form className="dictionary-modal-form contractors-modal-form" onSubmit={(event) => void submit(event)}>
+          {error ? <FormError>{error}</FormError> : null}
+          <div className="contractors-modal-grid">
+            <FormField label="Действующее значение"><input aria-label="Действующий начальный баланс" value={formatMoney(target.currentAmount)} readOnly /></FormField>
+            <FormField label="Новое значение"><MoneyTextInput aria-label="Новое значение начального баланса" value={newAmount} onValueChange={setNewAmount} /></FormField>
+            <FormField label="Дата корректировки"><LocalizedDatePicker ariaLabel="Дата корректировки начального баланса" mode="date" value={effectiveDate} required onChange={setEffectiveDate} /></FormField>
+          </div>
+          <FormField label="Причина"><textarea aria-label="Причина корректировки начального баланса" maxLength={1000} required value={reason} onChange={(event) => setReason(event.target.value)} /></FormField>
+          <p className="form-field-hint">Документ и его автор сохраняются в разделе «История изменений».</p>
+          <div className="detail-dialog-actions contractors-dialog-actions">
+            <button className="secondary-button" type="submit" disabled={saving}>{saving ? <LoaderCircle className="financial-report-button__spinner" size={16} aria-hidden="true" /> : <Save size={17} />}<span>{saving ? 'Сохраняем…' : 'Сохранить корректировку'}</span></button>
+            <button className="ghost-button" type="button" disabled={saving} onClick={onClose}>Отмена</button>
+          </div>
+        </form>
+    </ContractorDialogShell>
+  )
+}
+
+function ContractorDialogShell({ children, className = '', closeDisabled = false, closeLabel, descriptionId, dialogRef, eyebrow, onClose, subtitle, title, titleId }: { children: ReactNode; className?: string; closeDisabled?: boolean; closeLabel: string; descriptionId?: string; dialogRef: RefObject<HTMLElement | null>; eyebrow: string; onClose: () => void; subtitle?: string; title: string; titleId: string }) {
+  return (
+    <div className="modal-backdrop" role="presentation" onMouseDown={closeDisabled ? undefined : onClose}>
+      <section ref={dialogRef} className={`detail-dialog contractors-dialog ${className}`.trim()} role="dialog" aria-modal="true" aria-labelledby={titleId} aria-describedby={descriptionId} onMouseDown={(event) => event.stopPropagation()}>
+        <div className="detail-dialog-header"><div><p className="eyebrow">{eyebrow}</p><h3 id={titleId}>{title}</h3>{subtitle ? <p>{subtitle}</p> : null}</div><button className="icon-button" type="button" aria-label={closeLabel} disabled={closeDisabled} onClick={onClose}><X size={18} /></button></div>
+        {children}
+      </section>
+    </div>
+  )
+}
+
+function GaragePrototypeDialog({ accessToken, canAdjustOpeningData, integrationClient, item, onAdjustOpeningBalance, onClose, onOpenFinancialReport, onSave }: { accessToken: string; canAdjustOpeningData: boolean; integrationClient: IntegrationClient; item?: ContractorGarageRow; onAdjustOpeningBalance: (item: ContractorGarageRow) => void; onClose: () => void; onOpenFinancialReport: (item: ContractorGarageRow) => void; onSave: (item: ContractorGarageRow) => void }) {
   const [form, setForm] = useState<ContractorGarageRow>(item ?? createEmptyGaragePrototype())
   const [saveChanges, setSaveChanges] = useState<PrototypeChangeEntry[]>([])
   useRestoreFocusOnClose(true)
@@ -3302,6 +3389,12 @@ function GaragePrototypeDialog({ accessToken, integrationClient, item, onClose, 
                   <span>Открыть фин. отчет</span>
                 </button>
               ) : null}
+              {item && canAdjustOpeningData ? (
+                <button className="secondary-button" type="button" onClick={() => onAdjustOpeningBalance(form)}>
+                  <Pencil size={16} />
+                  <span>Корректировать начальный баланс</span>
+                </button>
+              ) : null}
               <button className="secondary-button" type="submit"><Save size={17} /><span>Сохранить</span></button>
               <button className="ghost-button" type="button" onClick={onClose}>Отмена</button>
             </div>
@@ -3322,7 +3415,7 @@ function getDepartmentPrototypeChanges(previous: ContractorDepartmentRow, next: 
   ])
 }
 
-function SupplierPrototypeDialog({ accessToken, funds, integrationClient, item, services, onClose, onOpenFinancialReport, onSave }: { accessToken: string; funds: FundDto[]; integrationClient: IntegrationClient; item?: ContractorSupplierRow; services: ChargeServiceSettingDto[]; onClose: () => void; onOpenFinancialReport: (item: ContractorSupplierRow) => void; onSave: (item: ContractorSupplierRow) => void }) {
+function SupplierPrototypeDialog({ accessToken, canAdjustOpeningData, funds, integrationClient, item, services, onAdjustOpeningBalance, onClose, onOpenFinancialReport, onSave }: { accessToken: string; canAdjustOpeningData: boolean; funds: FundDto[]; integrationClient: IntegrationClient; item?: ContractorSupplierRow; services: ChargeServiceSettingDto[]; onAdjustOpeningBalance: (item: ContractorSupplierRow) => void; onClose: () => void; onOpenFinancialReport: (item: ContractorSupplierRow) => void; onSave: (item: ContractorSupplierRow) => void }) {
   const activeServices = services.filter((service) =>
     service.id === item?.serviceId || (!service.isArchived && Boolean(service.expenseTypeId)))
   const initialService = activeServices.find((service) => service.id === item?.serviceId) ?? activeServices.find((service) => service.name === item?.service) ?? activeServices[0] ?? null
@@ -3623,6 +3716,12 @@ function SupplierPrototypeDialog({ accessToken, funds, integrationClient, item, 
                 <button className="secondary-button contractors-report-button" type="button" onClick={() => onOpenFinancialReport(form)}>
                   <FileText size={16} />
                   <span>Открыть фин. отчет</span>
+                </button>
+              ) : null}
+              {item && canAdjustOpeningData ? (
+                <button className="secondary-button" type="button" onClick={() => onAdjustOpeningBalance(form)}>
+                  <Pencil size={16} />
+                  <span>Корректировать начальный баланс</span>
                 </button>
               ) : null}
               <button className="secondary-button" type="submit"><Save size={17} /><span>Сохранить</span></button>

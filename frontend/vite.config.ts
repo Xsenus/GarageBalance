@@ -8,7 +8,9 @@ export default defineConfig({
     rollupOptions: {
       output: {
         manualChunks(id) {
-          return id.includes('lucide-react') ? 'icons' : undefined
+          if (id.includes('lucide-react')) return 'icons'
+          if (/[/\\]src[/\\]shared[/\\](FormField|LocalizedDatePicker|MoneyInput|SelectControl|TablePagination)\./.test(id)) return 'form-controls'
+          return undefined
         },
       },
     },

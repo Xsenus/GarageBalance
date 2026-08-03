@@ -9,6 +9,7 @@ public static class SystemPermissions
     public const string PaymentsRead = "payments.read";
     public const string PaymentsWrite = "payments.write";
     public const string HistoricalMeterReadingsCorrect = "payments.meter_readings.historical_correct";
+    public const string OpeningDataAdjust = "opening_data.adjust";
     public const string ReportsRead = "reports.read";
     public const string ImportRun = "import.run";
     public const string AppReleasesManage = "app_releases.manage";
@@ -23,6 +24,7 @@ public static class SystemPermissions
         PaymentsRead,
         PaymentsWrite,
         HistoricalMeterReadingsCorrect,
+        OpeningDataAdjust,
         ReportsRead,
         ImportRun,
         AppReleasesManage,
@@ -36,6 +38,7 @@ public static class SystemPermissions
         TariffsManage,
         PaymentsRead,
         PaymentsWrite,
+        OpeningDataAdjust,
         ReportsRead,
         ImportRun
     ];
@@ -62,6 +65,7 @@ public static class SystemPermissions
         PaymentsRead,
         PaymentsWrite,
         HistoricalMeterReadingsCorrect,
+        OpeningDataAdjust,
         ReportsRead,
         ImportRun,
         AppReleasesManage,

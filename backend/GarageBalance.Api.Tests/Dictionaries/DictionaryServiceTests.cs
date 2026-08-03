@@ -4,6 +4,7 @@ using GarageBalance.Api.Application.Dictionaries;
 using GarageBalance.Api.Tests.Common;
 using GarageBalance.Api.Domain.Dictionaries;
 using GarageBalance.Api.Domain.Finance;
+using GarageBalance.Api.Domain.Users;
 using GarageBalance.Api.Infrastructure.Data;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
@@ -1297,6 +1298,82 @@ public sealed class DictionaryServiceTests
         Assert.False(result.Succeeded);
         Assert.Equal("supplier_starting_balance_locked", result.ErrorCode);
         Assert.Equal(100m, supplier.StartingBalance);
+    }
+
+    [Fact]
+    public async Task OpeningBalanceAdjustments_SaveImmutableDocumentsAndAuditForGarageAndSupplier()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = DictionaryServiceTestFactory.Create(database.Context);
+        var actor = new AppUser
+        {
+            Email = "opening-adjustments@example.test",
+            NormalizedEmail = "OPENING-ADJUSTMENTS@EXAMPLE.TEST",
+            DisplayName = "Бухгалтер корректировок",
+            PasswordHash = "not-used"
+        };
+        database.Context.Users.Add(actor);
+        await database.Context.SaveChangesAsync();
+        var actorId = actor.Id;
+        var garage = await service.CreateGarageAsync(
+            new UpsertGarageRequest("ADJ-1", 1, 1, null, 100m, null, null, null),
+            actorId,
+            CancellationToken.None);
+        var group = await service.CreateSupplierGroupAsync(new UpsertSupplierGroupRequest("Корректировки"), actorId, CancellationToken.None);
+        var supplier = await service.CreateSupplierAsync(
+            new UpsertSupplierRequest("Поставщик корректировок", group.Value!.Id, null, null, null, null, null, 200m, null),
+            actorId,
+            CancellationToken.None);
+
+        var garageAdjustment = await service.AdjustGarageOpeningBalanceAsync(
+            garage.Value!.Id,
+            new CreateOpeningBalanceAdjustmentRequest(new DateOnly(2026, 7, 1), 125.555m, "Исправление акта сверки"),
+            actorId,
+            CancellationToken.None);
+        var supplierAdjustment = await service.AdjustSupplierOpeningBalanceAsync(
+            supplier.Value!.Id,
+            new CreateOpeningBalanceAdjustmentRequest(new DateOnly(2026, 7, 2), 180m, "Уточнение входящего долга"),
+            actorId,
+            CancellationToken.None);
+
+        Assert.True(garageAdjustment.Succeeded);
+        Assert.Equal(100m, garageAdjustment.Value!.PreviousAmount);
+        Assert.Equal(125.56m, garageAdjustment.Value.NewAmount);
+        Assert.True(supplierAdjustment.Succeeded);
+        Assert.Equal(200m, supplierAdjustment.Value!.PreviousAmount);
+        Assert.Equal(180m, supplierAdjustment.Value.NewAmount);
+        Assert.Equal(125.56m, (await database.Context.Garages.FindAsync(garage.Value.Id))!.StartingBalance);
+        Assert.Equal(180m, (await database.Context.Suppliers.FindAsync(supplier.Value.Id))!.StartingBalance);
+        Assert.Single(await service.GetGarageOpeningBalanceAdjustmentsAsync(garage.Value.Id, CancellationToken.None));
+        Assert.Single(await service.GetSupplierOpeningBalanceAdjustmentsAsync(supplier.Value.Id, CancellationToken.None));
+        Assert.Equal(2, await database.Context.OpeningBalanceAdjustments.CountAsync());
+        Assert.Equal(2, await database.Context.AuditEvents.CountAsync(item => item.Action.EndsWith("opening_balance_adjusted")));
+    }
+
+    [Fact]
+    public async Task OpeningBalanceAdjustment_RequiresReasonAndChangedAmount()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = DictionaryServiceTestFactory.Create(database.Context);
+        var garage = await service.CreateGarageAsync(
+            new UpsertGarageRequest("ADJ-VALIDATION", 1, 1, null, 100m, null, null, null),
+            null,
+            CancellationToken.None);
+
+        var missingReason = await service.AdjustGarageOpeningBalanceAsync(
+            garage.Value!.Id,
+            new CreateOpeningBalanceAdjustmentRequest(new DateOnly(2026, 7, 1), 120m, " "),
+            null,
+            CancellationToken.None);
+        var unchanged = await service.AdjustGarageOpeningBalanceAsync(
+            garage.Value.Id,
+            new CreateOpeningBalanceAdjustmentRequest(new DateOnly(2026, 7, 1), 100m, "Проверка"),
+            null,
+            CancellationToken.None);
+
+        Assert.Equal("opening_balance_reason_required", missingReason.ErrorCode);
+        Assert.Equal("opening_balance_unchanged", unchanged.ErrorCode);
+        Assert.Empty(database.Context.OpeningBalanceAdjustments);
     }
 
     [Fact]

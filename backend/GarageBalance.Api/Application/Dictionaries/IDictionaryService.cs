@@ -15,6 +15,8 @@ public interface IDictionaryService
     Task<DictionaryResult<GarageDto>> UpdateGarageAsync(Guid id, UpsertGarageRequest request, Guid? actorUserId, CancellationToken cancellationToken);
     Task<DictionaryResult<GarageDto>> ArchiveGarageAsync(Guid id, string reason, Guid? actorUserId, CancellationToken cancellationToken);
     Task<DictionaryResult<GarageDto>> RestoreGarageAsync(Guid id, Guid? actorUserId, CancellationToken cancellationToken);
+    Task<DictionaryResult<OpeningBalanceAdjustmentDto>> AdjustGarageOpeningBalanceAsync(Guid id, CreateOpeningBalanceAdjustmentRequest request, Guid? actorUserId, CancellationToken cancellationToken);
+    Task<IReadOnlyList<OpeningBalanceAdjustmentDto>> GetGarageOpeningBalanceAdjustmentsAsync(Guid id, CancellationToken cancellationToken);
 
     Task<IReadOnlyList<SupplierGroupDto>> GetSupplierGroupsAsync(string? search, CancellationToken cancellationToken, int? limit = null, bool includeArchived = false);
     Task<PagedResult<SupplierGroupDto>> GetSupplierGroupsPageAsync(string? search, int? offset, int? limit, CancellationToken cancellationToken, bool includeArchived = false);
@@ -29,6 +31,8 @@ public interface IDictionaryService
     Task<DictionaryResult<SupplierDto>> UpdateSupplierAsync(Guid id, UpsertSupplierRequest request, Guid? actorUserId, CancellationToken cancellationToken);
     Task<DictionaryResult<SupplierDto>> ArchiveSupplierAsync(Guid id, string reason, Guid? actorUserId, CancellationToken cancellationToken);
     Task<DictionaryResult<SupplierDto>> RestoreSupplierAsync(Guid id, Guid? actorUserId, CancellationToken cancellationToken);
+    Task<DictionaryResult<OpeningBalanceAdjustmentDto>> AdjustSupplierOpeningBalanceAsync(Guid id, CreateOpeningBalanceAdjustmentRequest request, Guid? actorUserId, CancellationToken cancellationToken);
+    Task<IReadOnlyList<OpeningBalanceAdjustmentDto>> GetSupplierOpeningBalanceAdjustmentsAsync(Guid id, CancellationToken cancellationToken);
 
     Task<IReadOnlyList<SupplierContactDto>> GetSupplierContactsAsync(Guid? supplierId, string? search, CancellationToken cancellationToken, int? limit = null, bool includeArchived = false);
     Task<PagedResult<SupplierContactDto>> GetSupplierContactsPageAsync(Guid? supplierId, string? search, int? offset, int? limit, string? sortBy, string? sortDirection, CancellationToken cancellationToken, bool includeArchived = false);

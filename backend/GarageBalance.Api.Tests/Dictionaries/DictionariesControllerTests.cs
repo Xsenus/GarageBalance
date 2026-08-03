@@ -3,11 +3,47 @@ using GarageBalance.Api.Application.Dictionaries;
 using GarageBalance.Api.Controllers;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Authorization;
+using GarageBalance.Api.Domain.Security;
 
 namespace GarageBalance.Api.Tests.Dictionaries;
 
 public sealed class DictionariesControllerTests
 {
+    [Fact]
+    public void OpeningBalanceAdjustments_RequireDictionaryWriteAndDedicatedPermission()
+    {
+        foreach (var actionName in new[] { nameof(DictionariesController.AdjustGarageOpeningBalance), nameof(DictionariesController.AdjustSupplierOpeningBalance) })
+        {
+            var action = typeof(DictionariesController).GetMethod(actionName);
+            Assert.NotNull(action);
+            var policies = action!.GetCustomAttributes(typeof(AuthorizeAttribute), inherit: true)
+                .Cast<AuthorizeAttribute>()
+                .Select(attribute => attribute.Policy)
+                .ToArray();
+            Assert.Contains(SystemPermissions.DictionariesWrite, policies);
+            Assert.Contains(SystemPermissions.OpeningDataAdjust, policies);
+        }
+    }
+
+    [Fact]
+    public async Task AdjustGarageOpeningBalance_ReturnsCreatedAndPassesActor()
+    {
+        var actorId = Guid.NewGuid();
+        var garageId = Guid.NewGuid();
+        var adjustment = new OpeningBalanceAdjustmentDto(Guid.NewGuid(), "garage", garageId, new DateOnly(2026, 7, 1), 100m, 120m, "Сверка", actorId, DateTimeOffset.UtcNow);
+        var service = new FakeDictionaryService { GarageOpeningBalanceAdjustmentResult = DictionaryResult<OpeningBalanceAdjustmentDto>.Success(adjustment) };
+        var controller = CreateController(service, actorId);
+
+        var response = await controller.AdjustGarageOpeningBalance(
+            garageId,
+            new CreateOpeningBalanceAdjustmentRequest(new DateOnly(2026, 7, 1), 120m, "Сверка"),
+            CancellationToken.None);
+
+        var created = Assert.IsType<CreatedAtActionResult>(response.Result);
+        Assert.Equal(nameof(DictionariesController.GetGarageOpeningBalanceAdjustments), created.ActionName);
+        Assert.Equal(actorId, service.LastActorUserId);
+    }
     [Fact]
     public async Task ListEndpoints_PassLimitToService()
     {
@@ -1784,12 +1820,14 @@ public sealed class DictionariesControllerTests
         public DictionaryResult<GarageDto> UpdateGarageResult { get; init; } = DictionaryResult<GarageDto>.Failure("not_configured", "Not configured.");
         public DictionaryResult<GarageDto> ArchiveGarageResult { get; init; } = DictionaryResult<GarageDto>.Failure("not_configured", "Not configured.");
         public DictionaryResult<GarageDto> RestoreGarageResult { get; init; } = DictionaryResult<GarageDto>.Failure("not_configured", "Not configured.");
+        public DictionaryResult<OpeningBalanceAdjustmentDto> GarageOpeningBalanceAdjustmentResult { get; init; } = DictionaryResult<OpeningBalanceAdjustmentDto>.Failure("not_configured", "Not configured.");
         public DictionaryResult<SupplierGroupDto> SupplierGroupMutationResult { get; init; } = DictionaryResult<SupplierGroupDto>.Failure("supplier_group_not_found", "Not found.");
         public DictionaryResult<SupplierGroupDto> RestoreSupplierGroupResult { get; init; } = DictionaryResult<SupplierGroupDto>.Failure("not_configured", "Not configured.");
         public DictionaryResult<SupplierDto> CreateSupplierResult { get; init; } = DictionaryResult<SupplierDto>.Failure("not_configured", "Not configured.");
         public DictionaryResult<SupplierDto> UpdateSupplierResult { get; init; } = DictionaryResult<SupplierDto>.Failure("not_configured", "Not configured.");
         public DictionaryResult<SupplierDto> ArchiveSupplierResult { get; init; } = DictionaryResult<SupplierDto>.Failure("not_configured", "Not configured.");
         public DictionaryResult<SupplierDto> RestoreSupplierResult { get; init; } = DictionaryResult<SupplierDto>.Failure("not_configured", "Not configured.");
+        public DictionaryResult<OpeningBalanceAdjustmentDto> SupplierOpeningBalanceAdjustmentResult { get; init; } = DictionaryResult<OpeningBalanceAdjustmentDto>.Failure("not_configured", "Not configured.");
         public DictionaryResult<SupplierContactDto> CreateSupplierContactResult { get; init; } = DictionaryResult<SupplierContactDto>.Failure("not_configured", "Not configured.");
         public DictionaryResult<SupplierContactDto> UpdateSupplierContactResult { get; init; } = DictionaryResult<SupplierContactDto>.Failure("not_configured", "Not configured.");
         public DictionaryResult<SupplierContactDto> ArchiveSupplierContactResult { get; init; } = DictionaryResult<SupplierContactDto>.Failure("not_configured", "Not configured.");
@@ -1906,6 +1944,15 @@ public sealed class DictionariesControllerTests
             return Task.FromResult(RestoreGarageResult);
         }
 
+        public Task<DictionaryResult<OpeningBalanceAdjustmentDto>> AdjustGarageOpeningBalanceAsync(Guid id, CreateOpeningBalanceAdjustmentRequest request, Guid? actorUserId, CancellationToken cancellationToken)
+        {
+            LastActorUserId = actorUserId;
+            return Task.FromResult(GarageOpeningBalanceAdjustmentResult);
+        }
+
+        public Task<IReadOnlyList<OpeningBalanceAdjustmentDto>> GetGarageOpeningBalanceAdjustmentsAsync(Guid id, CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<OpeningBalanceAdjustmentDto>>([]);
+
         public Task<IReadOnlyList<SupplierGroupDto>> GetSupplierGroupsAsync(string? search, CancellationToken cancellationToken, int? limit = null, bool includeArchived = false)
         {
             LastSupplierGroupListRequest = (search, limit, includeArchived);
@@ -1982,6 +2029,15 @@ public sealed class DictionariesControllerTests
             LastActorUserId = actorUserId;
             return Task.FromResult(RestoreSupplierResult);
         }
+
+        public Task<DictionaryResult<OpeningBalanceAdjustmentDto>> AdjustSupplierOpeningBalanceAsync(Guid id, CreateOpeningBalanceAdjustmentRequest request, Guid? actorUserId, CancellationToken cancellationToken)
+        {
+            LastActorUserId = actorUserId;
+            return Task.FromResult(SupplierOpeningBalanceAdjustmentResult);
+        }
+
+        public Task<IReadOnlyList<OpeningBalanceAdjustmentDto>> GetSupplierOpeningBalanceAdjustmentsAsync(Guid id, CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<OpeningBalanceAdjustmentDto>>([]);
 
         public Task<IReadOnlyList<SupplierContactDto>> GetSupplierContactsAsync(Guid? supplierId, string? search, CancellationToken cancellationToken, int? limit = null, bool includeArchived = false)
         {

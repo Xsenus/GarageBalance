@@ -93,6 +93,7 @@ builder.Services.AddScoped<IOwnerRepository, EfOwnerRepository>();
 builder.Services.AddScoped<IGarageRepository, EfGarageRepository>();
 builder.Services.AddScoped<ISupplierGroupRepository, EfSupplierGroupRepository>();
 builder.Services.AddScoped<ISupplierRepository, EfSupplierRepository>();
+builder.Services.AddScoped<IOpeningBalanceAdjustmentRepository, EfOpeningBalanceAdjustmentRepository>();
 builder.Services.AddScoped<ISupplierContactRepository, EfSupplierContactRepository>();
 builder.Services.AddScoped<IStaffDepartmentRepository, EfStaffDepartmentRepository>();
 builder.Services.AddScoped<IStaffMemberRepository, EfStaffMemberRepository>();
