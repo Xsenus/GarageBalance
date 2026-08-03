@@ -263,6 +263,16 @@ function getElectricityTariffTiers(tariff: TariffDto | null) {
     return tariff.electricityTiers!
   }
 
+  if (
+    tariff.electricityFirstThreshold == null
+    || tariff.electricitySecondThreshold == null
+    || tariff.electricityFirstRate == null
+    || tariff.electricitySecondRate == null
+    || tariff.electricityThirdRate == null
+  ) {
+    return []
+  }
+
   return [
     { id: `${tariff.id}-legacy-1`, name: tariff.electricityFirstTierName ?? 'Порог 1', upperBound: tariff.electricityFirstThreshold, rate: tariff.electricityFirstRate ?? tariff.rate, isCustom: false },
     { id: `${tariff.id}-legacy-2`, name: tariff.electricitySecondTierName ?? 'Порог 2', upperBound: tariff.electricitySecondThreshold, rate: tariff.electricitySecondRate ?? tariff.rate, isCustom: false },
@@ -1554,9 +1564,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
         : ''
       const nextTariff = backendTariffs.find((tariff) => tariff.id === nextTariffId)
       if (!serviceSetting || !nextTariff) {
-        setTariffPersistenceError(nextMetered
-          ? 'Для выбранного вида поступления нет совместимого тарифа по счётчику.'
-          : 'Для выбранного вида поступления нет совместимого тарифа без счётчика.')
+        setTariffPersistenceError('Для услуги нет совместимого тарифа.')
         return
       }
 
@@ -2231,6 +2239,27 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
               const showsElectricityRange = Boolean(row.threshold && tieredElectricityCategories.has(row.category))
               const electricityLowerBound = showsElectricityRange ? getElectricityTierLowerBound(tariffRows, row.id) : 0
               const showsServiceCalculationFlags = row.serviceSettingKind === 'main' || Boolean(row.group)
+              const linkedTariff = row.backendTariffId
+                ? backendTariffs.find((tariff) => tariff.id === row.backendTariffId) ?? null
+                : null
+              const meterModeOptions = serviceSetting
+                ? yesNoOptions.filter((option) => Boolean(chooseRegularTariffIdForMeterMode(
+                    serviceSetting.incomeTypeId ?? '',
+                    row.backendTariffId ?? serviceSetting.tariffId ?? '',
+                    option.value === 'Да',
+                    backendIncomeTypes,
+                    backendTariffs,
+                  )))
+                : yesNoOptions
+              const effectiveMeterModeOptions = meterModeOptions.some((option) => option.value === (row.byMeter ? 'Да' : 'Нет'))
+                ? meterModeOptions
+                : [...meterModeOptions, { value: row.byMeter ? 'Да' : 'Нет', label: row.byMeter ? 'Да' : 'Нет' }]
+              const tieredModeAvailable = row.byMeter
+                && row.calculationBase === 'meter_electricity'
+                && getElectricityTariffTiers(linkedTariff).length >= 2
+              const tieredModeOptions = tieredModeAvailable || row.tiered
+                ? yesNoOptions
+                : yesNoOptions.filter((option) => option.value === 'Нет')
               const showsOverdueGracePeriod = row.serviceSettingKind === 'main' || Boolean(row.group && row.calculationBase)
               const overdueRow = showsOverdueGracePeriod
                 ? tariffRows.find((candidate) => (
@@ -2408,9 +2437,9 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
                     {showsServiceCalculationFlags ? (
                       <SelectControl
                         aria-label={`${row.category}: ${row.title}: пороговая тарификация`}
-                        disabled={!canManageTariffs || isRowDisabled}
+                        disabled={!canManageTariffs || isRowDisabled || tieredModeOptions.length <= 1}
                         value={row.tiered ? 'Да' : 'Нет'}
-                        options={yesNoOptions}
+                        options={tieredModeOptions}
                         onChange={(value) => void commitTariffBooleanChange(row, 'tiered', value === 'Да')}
                       />
                     ) : null}
@@ -2419,9 +2448,9 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
                     {showsServiceCalculationFlags ? (
                       <SelectControl
                         aria-label={`${row.category}: ${row.title}: по счетчику`}
-                        disabled={!canManageTariffs || isRowDisabled}
+                        disabled={!canManageTariffs || isRowDisabled || effectiveMeterModeOptions.length <= 1}
                         value={row.byMeter ? 'Да' : 'Нет'}
-                        options={yesNoOptions}
+                        options={effectiveMeterModeOptions}
                         onChange={(value) => void commitTariffBooleanChange(row, 'byMeter', value === 'Да')}
                       />
                     ) : null}
@@ -3256,6 +3285,12 @@ export function AddServicePrototypeDialog({
   const compatibleTariffs = getCompatibleRegularTariffs(incomeTypeId, incomeTypes, tariffs)
   const selectedTariff = compatibleTariffs.find((tariff) => tariff.id === tariffId) ?? null
   const selectedTariffTiers = getElectricityTariffTiers(selectedTariff)
+  const hasCompatibleMeterTariff = Boolean(chooseRegularTariffIdForMeterMode(incomeTypeId, tariffId, true, incomeTypes, tariffs))
+  const hasCompatibleNonMeterTariff = Boolean(chooseRegularTariffIdForMeterMode(incomeTypeId, tariffId, false, incomeTypes, tariffs))
+  const canChangeMeterMode = hasCompatibleMeterTariff && hasCompatibleNonMeterTariff
+  const canUseTieredTariff = isByMeter
+    && selectedTariff?.calculationBase === 'meter_electricity'
+    && selectedTariffTiers.length >= 2
   const unitNameOptions = selectedTariff ? getTariffCalculationUnitOptions(selectedTariff.calculationBase) : []
   const calculationBaseOptions = getTariffCalculationBaseOptions()
   const calculationBaseOption = selectedTariff
@@ -3275,9 +3310,9 @@ export function AddServicePrototypeDialog({
       nextTariff ? normalizeTariffCalculationUnitName(nextTariff.calculationBase, currentUnitName) : ''
     ))
     setIsByMeter(nextIsMetered)
-    if (!nextIsMetered) {
-      setIsTiered(false)
-    }
+    setIsTiered((currentValue) => nextIsMetered && getElectricityTariffTiers(nextTariff ?? null).length >= 2
+      ? currentValue
+      : false)
     setError(null)
   }
 
@@ -3290,9 +3325,7 @@ export function AddServicePrototypeDialog({
       tariffs,
     )
     if (!nextTariffId) {
-      setError(nextIsMetered
-        ? 'Для выбранного вида поступления нет совместимого тарифа по счётчику.'
-        : 'Для выбранного вида поступления нет совместимого тарифа без счётчика.')
+      setError('Для услуги нет совместимого тарифа.')
       return
     }
 
@@ -3584,12 +3617,13 @@ export function AddServicePrototypeDialog({
                     type="checkbox"
                     aria-label="По счетчику"
                     checked={isByMeter}
+                    disabled={!canChangeMeterMode}
                     onChange={(event) => changeMeterMode(event.target.checked)}
                   />
                   <span>По счетчику</span>
                 </label>
                 <label className="contractors-check-row">
-                  <input type="checkbox" aria-label="Пороговая тарификация" checked={isTiered} disabled={!isByMeter} onChange={(event) => setIsTiered(event.target.checked)} />
+                  <input type="checkbox" aria-label="Пороговая тарификация" checked={isTiered} disabled={!canUseTieredTariff} onChange={(event) => setIsTiered(event.target.checked)} />
                   <span>Пороговая тарификация</span>
                 </label>
               </div>

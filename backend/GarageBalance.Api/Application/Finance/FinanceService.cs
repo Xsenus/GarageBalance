@@ -2782,6 +2782,7 @@ public sealed class FinanceService(
                 tariff.Id,
                 cancellationToken),
             month);
+        var useTieredElectricity = matchingSetting?.HasTieredTariff ?? true;
         var dueDates = AccrualDueDates.ForIncomeType(month, incomeType.Code, matchingSetting);
         var accountingYear = AnnualAccrualPolicy.ResolveAccountingYear(incomeType.Code, month);
         var activeAnnualGarageIds = accountingYear.HasValue
@@ -2857,7 +2858,7 @@ public sealed class FinanceService(
             }
 
             meterReadings.TryGetValue(garage.Id, out var meterReading);
-            var amountResult = CalculateRegularAccrualAmount(garage, tariff, meterReading);
+            var amountResult = CalculateRegularAccrualAmount(garage, tariff, meterReading, useTieredElectricity);
             if (!amountResult.Succeeded)
             {
                 skipped.Add($"Гараж {garage.Number}: {amountResult.ErrorMessage}");
@@ -2885,7 +2886,7 @@ public sealed class FinanceService(
                 OverdueFromDate = dueDates.OverdueFromDate,
                 Amount = amount,
                 Source = AccrualSources.Regular,
-                Comment = BuildRegularAccrualComment(tariff, request.Comment)
+                Comment = BuildRegularAccrualComment(tariff, request.Comment, useTieredElectricity)
             };
             accrualRepository.Add(accrual);
             created.Add(ToDto(accrual));
@@ -2908,7 +2909,7 @@ public sealed class FinanceService(
             "finance.regular_accruals_generated",
             "accrual",
             Guid.NewGuid(),
-            FormatRegularAccrualGenerationAuditSummary(month, incomeType, tariff, created, skipped),
+            FormatRegularAccrualGenerationAuditSummary(month, incomeType, tariff, created, skipped, useTieredElectricity),
             relatedAccountingMonth: month,
             relatedDocumentNumber: $"{incomeType.Name} {month:MM.yyyy}",
             metadata: new Dictionary<string, object?>
@@ -3673,7 +3674,11 @@ public sealed class FinanceService(
             .Select(accrual => new
             {
                 Accrual = accrual,
-                Calculation = CalculateRegularAccrualAmount(garage, accrual.Tariff!, prospectiveReading)
+                Calculation = CalculateRegularAccrualAmount(
+                    garage,
+                    accrual.Tariff!,
+                    prospectiveReading,
+                    UsesTieredElectricitySnapshot(accrual))
             })
             .Where(item => item.Calculation.Succeeded && item.Calculation.Value != item.Accrual.Amount)
             .Select(item => (item.Accrual, NewAmount: item.Calculation.Value))
@@ -3884,21 +3889,27 @@ public sealed class FinanceService(
         return FinanceResult<MeterReadingDto>.Success(ToDto(reading));
     }
 
-    private static AmountCalculationResult CalculateRegularAccrualAmount(Garage garage, Tariff tariff, MeterReading? meterReading)
+    private static AmountCalculationResult CalculateRegularAccrualAmount(
+        Garage garage,
+        Tariff tariff,
+        MeterReading? meterReading,
+        bool useTieredElectricity = true)
     {
         return tariff.CalculationBase switch
         {
             TariffCalculationBases.Fixed => AmountCalculationResult.Success(MoneyMath.RoundMoney(tariff.Rate)),
             TariffCalculationBases.People => AmountCalculationResult.Success(MoneyMath.RoundMoney(tariff.Rate * garage.PeopleCount)),
             TariffCalculationBases.MeterWater => CalculateMeterAmount(meterReading, tariff.Rate),
-            TariffCalculationBases.MeterElectricity => CalculateElectricityMeterAmount(meterReading, tariff),
+            TariffCalculationBases.MeterElectricity => useTieredElectricity
+                ? CalculateElectricityMeterAmount(meterReading, tariff)
+                : CalculateMeterAmount(meterReading, tariff.Rate),
             _ => AmountCalculationResult.Failure($"неподдерживаемая база расчета {tariff.CalculationBase}.")
         };
     }
 
-    private static string BuildRegularAccrualComment(Tariff tariff, string? comment)
+    private static string BuildRegularAccrualComment(Tariff tariff, string? comment, bool useTieredElectricity = true)
     {
-        var snapshot = $"тариф {tariff.Name}: {FormatTariffRateSnapshot(tariff)}, действует с {tariff.EffectiveFrom:dd.MM.yyyy}";
+        var snapshot = $"тариф {tariff.Name}: {FormatTariffRateSnapshot(tariff, useTieredElectricity)}, действует с {tariff.EffectiveFrom:dd.MM.yyyy}";
         var userComment = NormalizeOptional(comment);
         return userComment is null
             ? $"Автоначисление; {snapshot}."
@@ -4175,10 +4186,10 @@ public sealed class FinanceService(
         return comment is null ? summary : $"{summary} Комментарий: {comment}";
     }
 
-    private static string FormatRegularAccrualGenerationAuditSummary(DateOnly month, IncomeType incomeType, Tariff tariff, IReadOnlyCollection<AccrualDto> created, IReadOnlyCollection<string> skipped)
+    private static string FormatRegularAccrualGenerationAuditSummary(DateOnly month, IncomeType incomeType, Tariff tariff, IReadOnlyCollection<AccrualDto> created, IReadOnlyCollection<string> skipped, bool useTieredElectricity)
     {
         var totalAmount = MoneyFormatting.Format(created.Sum(item => item.Amount));
-        return $"Создано регулярных начислений: {created.Count} на сумму {totalAmount} за {month:MM.yyyy}; вид {incomeType.Name}; тариф {tariff.Name}, база {tariff.CalculationBase}, {FormatTariffRateSnapshot(tariff)}; пропущено {skipped.Count}.";
+        return $"Создано регулярных начислений: {created.Count} на сумму {totalAmount} за {month:MM.yyyy}; вид {incomeType.Name}; тариф {tariff.Name}, база {tariff.CalculationBase}, {FormatTariffRateSnapshot(tariff, useTieredElectricity)}; пропущено {skipped.Count}.";
     }
 
     private static string FormatFeeCampaignAccrualGenerationAuditSummary(
@@ -4242,9 +4253,9 @@ public sealed class FinanceService(
         return AmountCalculationResult.Success(MoneyMath.RoundMoney(amount));
     }
 
-    private static string FormatTariffRateSnapshot(Tariff tariff)
+    private static string FormatTariffRateSnapshot(Tariff tariff, bool useTieredElectricity = true)
     {
-        var tiers = ReadElectricityTiers(tariff);
+        var tiers = useTieredElectricity ? ReadElectricityTiers(tariff) : [];
         if (tiers.Count == 0)
         {
             return $"ставка {MoneyFormatting.Format(tariff.Rate)}";
@@ -4319,7 +4330,7 @@ public sealed class FinanceService(
                 continue;
             }
 
-            var calculation = CalculateRegularAccrualAmount(garage, tariff, reading);
+            var calculation = CalculateRegularAccrualAmount(garage, tariff, reading, setting.HasTieredTariff);
             if (!calculation.Succeeded || calculation.Value <= 0m)
             {
                 continue;
@@ -4341,7 +4352,8 @@ public sealed class FinanceService(
                 Source = AccrualSources.Regular,
                 Comment = BuildRegularAccrualComment(
                     tariff,
-                    $"Начисление по показанию {reading.MeterKind}: расход {reading.Consumption.ToString("0.###", RussianCulture)}")
+                    $"Начисление по показанию {reading.MeterKind}: расход {reading.Consumption.ToString("0.###", RussianCulture)}",
+                    setting.HasTieredTariff)
             };
             accrualRepository.Add(accrual);
             AddAudit(
@@ -4353,6 +4365,12 @@ public sealed class FinanceService(
         }
 
         return createdKeys;
+    }
+
+    private static bool UsesTieredElectricitySnapshot(Accrual accrual)
+    {
+        return accrual.Tariff?.CalculationBase == TariffCalculationBases.MeterElectricity
+            && accrual.Comment?.Contains("пороги электроэнергии", StringComparison.OrdinalIgnoreCase) == true;
     }
 
     private static IReadOnlyList<ElectricityTierSnapshot> ReadElectricityTiers(Tariff tariff)

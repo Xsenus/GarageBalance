@@ -6,6 +6,7 @@ import type { CreateMeterReadingRequest, FinanceClient, MeterReadingYearGarageDt
 import { TableLoadingState } from '../../shared/AsyncState'
 import { FormField } from '../../shared/FormField'
 import { MeterReadingInput } from '../../shared/MeterReadingInput'
+import { SelectControl } from '../../shared/SelectControl'
 import { TablePagination } from '../../shared/TablePagination'
 import { getLocalDateInputValue } from '../../shared/formatters'
 import { useEscapeKey, useFocusOnOpen, useFocusTrap, useRestoreFocusOnClose } from '../../shared/focusHooks'
@@ -160,7 +161,7 @@ const MeterReadingsTable = memo(function MeterReadingsTable({
   )
 })
 
-export function MeterReadingsPrototypePanel({ auth, financeClient }: { auth: AuthResponse; dictionaryClient: DictionaryClient; financeClient: FinanceClient }) {
+export function MeterReadingsPrototypePanel({ auth, dictionaryClient, financeClient }: { auth: AuthResponse; dictionaryClient: DictionaryClient; financeClient: FinanceClient }) {
   const [yearDraft, setYearDraft] = useState('2026')
   const [appliedYear, setAppliedYear] = useState('2026')
   const [garages, setGarages] = useState<MeterReadingYearGarageDto[]>([])
@@ -178,9 +179,10 @@ export function MeterReadingsPrototypePanel({ auth, financeClient }: { auth: Aut
   const [readingChangeError, setReadingChangeError] = useState<string | null>(null)
   const [historicalCorrectionReason, setHistoricalCorrectionReason] = useState('')
   const [historicalCorrectionReasonError, setHistoricalCorrectionReasonError] = useState<string | null>(null)
+  const [availableMeterTypes, setAvailableMeterTypes] = useState<Array<typeof meterReadingTypes[number]> | null>(null)
+  const [meterType, setMeterType] = useState<MeterReadingTypeId>('electricity')
 
-  const meterType: MeterReadingTypeId = 'electricity'
-  const selectedMeterType = meterReadingTypes[0]
+  const selectedMeterType = meterReadingTypes.find((item) => item.id === meterType) ?? meterReadingTypes[0]
   const yearIsValid = isValidMeterReadingYear(yearDraft)
   const currentMonth = getLocalDateInputValue().slice(0, 7)
 
@@ -242,6 +244,47 @@ export function MeterReadingsPrototypePanel({ auth, financeClient }: { auth: Aut
 
   useEffect(() => {
     let isMounted = true
+
+    async function loadMeterConfiguration() {
+      setError(null)
+      try {
+        const settings = await dictionaryClient.getChargeServiceSettings(auth.accessToken, undefined, 1000, false)
+        if (!isMounted) {
+          return
+        }
+
+        const nextTypes = meterReadingTypes.filter((item) => settings.some((setting) => (
+          setting.isRegular
+          && setting.isMetered
+          && !setting.isArchived
+          && setting.tariffCalculationBase === `meter_${item.id}`
+        )))
+        setAvailableMeterTypes(nextTypes)
+        setMeterType((currentType) => nextTypes.some((item) => item.id === currentType)
+          ? currentType
+          : nextTypes[0]?.id ?? 'electricity')
+      } catch (loadError) {
+        if (!isMounted) {
+          return
+        }
+
+        setAvailableMeterTypes([])
+        setError(loadError instanceof Error ? loadError.message : 'Не удалось загрузить настройки услуг по счётчикам.')
+      }
+    }
+
+    void loadMeterConfiguration()
+    return () => {
+      isMounted = false
+    }
+  }, [auth.accessToken, dictionaryClient])
+
+  useEffect(() => {
+    if (!availableMeterTypes?.some((item) => item.id === meterType)) {
+      return
+    }
+
+    let isMounted = true
     const controller = new AbortController()
 
     async function loadMeterReadings() {
@@ -294,7 +337,7 @@ export function MeterReadingsPrototypePanel({ auth, financeClient }: { auth: Aut
       isMounted = false
       controller.abort()
     }
-  }, [appliedYear, auth.accessToken, financeClient, meterType, pageOffset, pageSize])
+  }, [appliedYear, auth.accessToken, availableMeterTypes, financeClient, meterType, pageOffset, pageSize])
 
   const saveReadingValue = useCallback(async (
     cellKey: string,
@@ -451,7 +494,19 @@ export function MeterReadingsPrototypePanel({ auth, financeClient }: { auth: Aut
             />
           </FormField>
           <FormField label="Тип">
-            <div className="meter-readings-control meter-readings-fixed-type" aria-label="Тип показаний">{selectedMeterType.label}, {selectedMeterType.unit}</div>
+            <SelectControl
+              aria-label="Тип показаний"
+              className="meter-readings-control"
+              disabled={!availableMeterTypes || availableMeterTypes.length <= 1}
+              value={availableMeterTypes?.some((item) => item.id === meterType) ? meterType : ''}
+              options={(availableMeterTypes ?? []).map((item) => ({ value: item.id, label: `${item.label}, ${item.unit}` }))}
+              onChange={(value) => {
+                setMeterType(value as MeterReadingTypeId)
+                setPageOffset(0)
+                setPendingReadingChange(null)
+                setError(null)
+              }}
+            />
           </FormField>
         </div>
       </div>
@@ -460,7 +515,12 @@ export function MeterReadingsPrototypePanel({ auth, financeClient }: { auth: Aut
       {error ? <div className="form-error" role="alert">{error}</div> : null}
       <p className="form-hint">Показания будущих месяцев доступны только для просмотра и недоступны для ввода.</p>
 
-      <MeterReadingsTable
+      {availableMeterTypes === null ? <TableLoadingState label="Загружаем гаражи и показания" /> : null}
+      {availableMeterTypes?.length === 0 && !error ? (
+        <div className="meter-readings-empty-row" role="status">
+          <span>Нет действующих регулярных услуг по счётчику. В разделе «Тарифы и сборы» назначьте услуге счётчиковый тариф.</span>
+        </div>
+      ) : availableMeterTypes && availableMeterTypes.length > 0 ? <MeterReadingsTable
         appliedYear={appliedYear}
         currentMonth={currentMonth}
         draftReadings={draftReadings}
@@ -473,9 +533,9 @@ export function MeterReadingsPrototypePanel({ auth, financeClient }: { auth: Aut
         savingReadingKey={savingReadingKey}
         selectedMeterType={selectedMeterType}
         yearIsValid={yearIsValid}
-      />
+      /> : null}
 
-      <TablePagination
+      {availableMeterTypes && availableMeterTypes.length > 0 ? <TablePagination
         ariaLabel="Пагинация показаний"
         totalCount={totalGarageCount}
         offset={pageOffset}
@@ -485,7 +545,7 @@ export function MeterReadingsPrototypePanel({ auth, financeClient }: { auth: Aut
         pageSizeLabel="Количество гаражей с показаниями"
         onPageChange={(page) => setPageOffset((page - 1) * pageSize)}
         onPageSizeChange={(limit) => { setPageSize(limit); setPageOffset(0) }}
-      />
+      /> : null}
 
       {pendingReadingChange ? (
         <div className="modal-backdrop" role="presentation" onMouseDown={cancelPendingReadingChange}>

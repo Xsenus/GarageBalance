@@ -3282,7 +3282,8 @@ public sealed class DictionaryService(
             setting.UnitName,
             setting.IsArchived,
             setting.ExpenseTypeId,
-            setting.ExpenseFundId);
+            setting.ExpenseFundId,
+            setting.Tariff?.CalculationBase);
     }
 
     private async Task<IReadOnlyList<IrregularPaymentDto>> ToIrregularPaymentDtosAsync(IReadOnlyList<IrregularPayment> payments, CancellationToken cancellationToken)

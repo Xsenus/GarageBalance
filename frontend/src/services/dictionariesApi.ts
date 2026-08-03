@@ -150,6 +150,7 @@ export type ChargeServiceSettingDto = {
   hasTieredTariff: boolean
   unitName: string | null
   isArchived: boolean
+  tariffCalculationBase?: string | null
 }
 
 export type FeeCampaignDto = {

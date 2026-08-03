@@ -12,7 +12,10 @@ public sealed class EfChargeServiceSettingRepository(GarageBalanceDbContext dbCo
         int limit,
         CancellationToken cancellationToken)
     {
-        var query = dbContext.ChargeServiceSettings.AsNoTracking().Where(item => includeArchived || !item.IsArchived);
+        var query = dbContext.ChargeServiceSettings
+            .AsNoTracking()
+            .Include(item => item.Tariff)
+            .Where(item => includeArchived || !item.IsArchived);
         if (normalizedSearch is not null)
         {
             query = query.Where(item => item.Name.ToLower().Contains(normalizedSearch));

@@ -207,7 +207,8 @@ public sealed record ChargeServiceSettingDto(
     string? UnitName,
     bool IsArchived,
     Guid? ExpenseTypeId = null,
-    Guid? ExpenseFundId = null);
+    Guid? ExpenseFundId = null,
+    string? TariffCalculationBase = null);
 
 public sealed record UpsertChargeServiceSettingRequest(
     [Required, MaxLength(200)] string Name,
