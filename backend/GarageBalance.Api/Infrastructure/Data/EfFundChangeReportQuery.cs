@@ -131,9 +131,9 @@ public sealed class EfFundChangeReportQuery(GarageBalanceDbContext dbContext) : 
         var searchClause = string.IsNullOrWhiteSpace(search)
             ? string.Empty
             : """
-              AND (LOWER(fund."Name") LIKE '%' || @search || '%'
-                   OR LOWER(operation."OperationKind") LIKE '%' || @search || '%'
-                   OR LOWER(operation."Reason") LIKE '%' || @search || '%')
+              AND (fund."Name" ILIKE @search ESCAPE '\'
+                   OR operation."OperationKind" ILIKE @search ESCAPE '\'
+                   OR operation."Reason" ILIKE @search ESCAPE '\')
               """;
         var limitClause = limit is > 0 ? "LIMIT @limit" : string.Empty;
         var sql = $$"""
@@ -192,7 +192,7 @@ public sealed class EfFundChangeReportQuery(GarageBalanceDbContext dbContext) : 
         };
         if (!string.IsNullOrWhiteSpace(search))
         {
-            parameters.Add(new NpgsqlParameter<string>("search", search.Trim().ToLowerInvariant()));
+            parameters.Add(new NpgsqlParameter<string>("search", PostgresLikeSearch.ContainsPattern(search.Trim())));
         }
         if (limit is > 0)
         {

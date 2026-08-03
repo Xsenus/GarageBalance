@@ -94,9 +94,10 @@ public sealed class PostgreSqlFundChangeReportQueryIntegrationTests
         Assert.Contains(searchResult.Rows, operation => operation.ActorDisplayName is null && operation.OperationKind == FundOperationKinds.Withdraw);
         var searchCommand = Assert.Single(capture.Commands);
         Assert.Equal(1, CountOccurrences(searchCommand, "FROM fund_operations"));
-        Assert.Contains("LOWER(fund.\"Name\")", searchCommand, StringComparison.Ordinal);
-        Assert.Contains("LOWER(operation.\"OperationKind\")", searchCommand, StringComparison.Ordinal);
-        Assert.Contains("LOWER(operation.\"Reason\")", searchCommand, StringComparison.Ordinal);
+        Assert.Contains("fund.\"Name\" ILIKE @search ESCAPE '\\'", searchCommand, StringComparison.Ordinal);
+        Assert.Contains("operation.\"OperationKind\" ILIKE @search ESCAPE '\\'", searchCommand, StringComparison.Ordinal);
+        Assert.Contains("operation.\"Reason\" ILIKE @search ESCAPE '\\'", searchCommand, StringComparison.Ordinal);
+        Assert.DoesNotContain("LOWER(", searchCommand, StringComparison.Ordinal);
     }
 
     private static FundOperation CreateOperation(

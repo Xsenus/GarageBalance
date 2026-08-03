@@ -1,6 +1,9 @@
 using GarageBalance.Api.Application.Finance;
+using GarageBalance.Api.Domain.Dictionaries;
+using GarageBalance.Api.Domain.Finance;
 using GarageBalance.Api.Infrastructure.Data;
 using GarageBalance.Api.Tests.Common;
+using Microsoft.EntityFrameworkCore;
 using Npgsql;
 
 namespace GarageBalance.Api.Tests.Finance;
@@ -26,6 +29,15 @@ public sealed class PostgreSqlFinanceIndexPerformanceTests
         AssertIndex(indexes, "IX_fund_operations_FundId_CreatedAtUtc_Id", "\"FundId\"");
         AssertIndex(indexes, "IX_fund_operations_CreatedAtUtc", "\"CreatedAtUtc\"");
         AssertIndex(indexes, "IX_cash_bank_transfers_TransferDate", "\"TransferDate\"");
+        AssertIndex(indexes, "IX_funds_Name_trgm", "gin_trgm_ops");
+        AssertIndex(indexes, "IX_fund_operations_OperationKind_trgm", "gin_trgm_ops");
+        AssertIndex(indexes, "IX_fund_operations_Reason_trgm", "gin_trgm_ops");
+        AssertIndex(indexes, "IX_expense_types_Name_trgm", "gin_trgm_ops");
+        AssertIndex(indexes, "IX_income_types_Name_trgm", "gin_trgm_ops");
+        AssertIndex(indexes, "IX_supplier_accruals_DocumentNumber_trgm", "gin_trgm_ops");
+        AssertIndex(indexes, "IX_financial_operations_DocumentNumber_trgm", "gin_trgm_ops");
+        AssertIndex(indexes, "IX_financial_operations_Comment_trgm", "gin_trgm_ops");
+        AssertIndex(indexes, "IX_cash_bank_transfers_Comment_trgm", "gin_trgm_ops");
 
         await AssertPlanUsesAsync(
             connection,
@@ -132,6 +144,58 @@ public sealed class PostgreSqlFinanceIndexPerformanceTests
             WHERE "IsCanceled" = false
               AND "TransferDate" BETWEEN DATE '2026-01-01' AND DATE '2026-12-31';
             """);
+        await SeedSearchVolumeAsync(database);
+        await AssertPlanUsesAsync(
+            connection,
+            "IX_funds_Name_trgm",
+            """SELECT "Id" FROM funds WHERE "Name" ILIKE '%резерв%' ESCAPE '\';""");
+        await AssertPlanUsesAsync(
+            connection,
+            "IX_fund_operations_Reason_trgm",
+            """
+            SELECT "Id" FROM fund_operations
+            WHERE "Reason" ILIKE '%корректировка%' ESCAPE '\';
+            """);
+        await AssertPlanUsesAsync(
+            connection,
+            "IX_fund_operations_OperationKind_trgm",
+            """
+            SELECT "Id" FROM fund_operations
+            WHERE "OperationKind" ILIKE '%withdraw%' ESCAPE '\';
+            """);
+        await AssertPlanUsesAsync(
+            connection,
+            "IX_expense_types_Name_trgm",
+            """SELECT "Id" FROM expense_types WHERE "Name" ILIKE '%электроэнергия%' ESCAPE '\';""");
+        await AssertPlanUsesAsync(
+            connection,
+            "IX_income_types_Name_trgm",
+            """SELECT "Id" FROM income_types WHERE "Name" ILIKE '%членский взнос%' ESCAPE '\';""");
+        await AssertPlanUsesAsync(
+            connection,
+            "IX_supplier_accruals_DocumentNumber_trgm",
+            """SELECT "Id" FROM supplier_accruals WHERE "DocumentNumber" ILIKE '%счет-2026%' ESCAPE '\';""");
+        await AssertPlanUsesAsync(
+            connection,
+            "IX_financial_operations_DocumentNumber_trgm",
+            """
+            SELECT "Id" FROM financial_operations
+            WHERE "DocumentNumber" ILIKE '%акт-2026%' ESCAPE '\';
+            """);
+        await AssertPlanUsesAsync(
+            connection,
+            "IX_financial_operations_Comment_trgm",
+            """
+            SELECT "Id" FROM financial_operations
+            WHERE "Comment" ILIKE '%ремонт ворот%' ESCAPE '\';
+            """);
+        await AssertPlanUsesAsync(
+            connection,
+            "IX_cash_bank_transfers_Comment_trgm",
+            """
+            SELECT "Id" FROM cash_bank_transfers
+            WHERE "Comment" ILIKE '%сдача кассы%' ESCAPE '\';
+            """);
     }
 
     [PostgreSqlFact]
@@ -162,6 +226,51 @@ public sealed class PostgreSqlFinanceIndexPerformanceTests
                 cancellation.Token));
     }
 
+    private static async Task SeedSearchVolumeAsync(PostgreSqlTestDatabase database)
+    {
+        await using var context = database.CreateContext();
+        var funds = Enumerable.Range(0, 300)
+            .Select(index => new Fund
+            {
+                Name = index == 173 ? "Резерв для поиска" : $"Фонд производительности {index:D3}",
+                NormalizedName = $"PERFORMANCE FUND {index:D3}",
+                SortOrder = 1000 + index
+            })
+            .ToArray();
+        var operationFund = funds[0];
+        context.Funds.AddRange(funds);
+        context.FundOperations.AddRange(Enumerable.Range(0, 500).Select(index => new FundOperation
+        {
+            Fund = operationFund,
+            OperationKind = index == 271 ? "withdraw-needle" : "deposit",
+            Amount = 1m,
+            BalanceBefore = index,
+            BalanceAfter = index + 1,
+            Reason = index == 349 ? "Корректировка для поиска" : $"Операция {index:D3}"
+        }));
+        context.ExpenseTypes.AddRange(Enumerable.Range(0, 300).Select(index => new ExpenseType
+        {
+            Name = index == 147 ? "Электроэнергия для поиска" : $"Статья производительности {index:D3}"
+        }));
+        context.FinancialOperations.AddRange(Enumerable.Range(0, 500).Select(index => new FinancialOperation
+        {
+            OperationKind = FinancialOperationKinds.Expense,
+            OperationDate = new DateOnly(2026, 1, 1).AddDays(index % 300),
+            AccountingMonth = new DateOnly(2026, 1, 1),
+            Amount = 1m,
+            DocumentNumber = index == 201 ? "АКТ-2026-NEEDLE" : $"DOC-{index:D3}",
+            Comment = index == 389 ? "Ремонт ворот для поиска" : $"Расход {index:D3}"
+        }));
+        context.CashBankTransfers.AddRange(Enumerable.Range(0, 500).Select(index => new CashBankTransfer
+        {
+            TransferDate = new DateOnly(2026, 1, 1).AddDays(index % 300),
+            Amount = 1m,
+            Comment = index == 411 ? "Сдача кассы для поиска" : $"Перевод {index:D3}"
+        }));
+        await context.SaveChangesAsync();
+        await context.Database.ExecuteSqlRawAsync("ANALYZE;");
+    }
+
     private static async Task<Dictionary<string, string>> ReadIndexesAsync(NpgsqlConnection connection)
     {
         await using var command = connection.CreateCommand();
@@ -176,7 +285,10 @@ public sealed class PostgreSqlFinanceIndexPerformanceTests
                 'accrual_payment_allocations',
                 'supplier_accruals',
                 'fund_operations',
-                'cash_bank_transfers');
+                'cash_bank_transfers',
+                'funds',
+                'expense_types',
+                'income_types');
             """;
         await using var reader = await command.ExecuteReaderAsync();
         var indexes = new Dictionary<string, string>(StringComparer.Ordinal);
@@ -211,6 +323,9 @@ public sealed class PostgreSqlFinanceIndexPerformanceTests
             lines.Add(reader.GetString(0));
         }
 
-        Assert.Contains(indexName, string.Join(Environment.NewLine, lines), StringComparison.Ordinal);
+        var plan = string.Join(Environment.NewLine, lines);
+        Assert.True(
+            plan.Contains(indexName, StringComparison.Ordinal),
+            $"Expected PostgreSQL plan to use {indexName}.{Environment.NewLine}{plan}");
     }
 }

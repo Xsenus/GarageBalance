@@ -530,7 +530,7 @@ public sealed class EfIncomeReportQuery(GarageBalanceDbContext dbContext) : IInc
     {
         const int PageCategory = 1;
         const int TotalsCategory = 2;
-        var normalizedSearch = search?.Trim().ToLowerInvariant();
+        var normalizedSearch = search?.Trim();
         var hasSearch = !string.IsNullOrWhiteSpace(normalizedSearch);
         var includeStartingBalances = incomeTypeIds.Count == 0;
         var sortColumn = sort.Field switch
@@ -551,32 +551,32 @@ public sealed class EfIncomeReportQuery(GarageBalanceDbContext dbContext) : IInc
         var incomeTypeClause = incomeTypeIds.Count > 0 ? "AND income_type.\"Id\" = ANY(@income_type_ids)" : string.Empty;
         var startingSearchClause = hasSearch && !"Стартовый баланс".Contains(search!.Trim(), StringComparison.OrdinalIgnoreCase)
             ? """
-              AND (STRPOS(LOWER(garage."Number"), @search) > 0
-                   OR STRPOS(LOWER(owner."LastName"), @search) > 0
-                   OR STRPOS(LOWER(owner."FirstName"), @search) > 0
-                   OR STRPOS(LOWER(owner."MiddleName"), @search) > 0
-                   OR STRPOS(LOWER(owner."LastName" || ' ' || owner."FirstName" || ' ' || COALESCE(owner."MiddleName", '')), @search) > 0)
+              AND (garage."Number" ILIKE @search ESCAPE '\'
+                   OR owner."LastName" ILIKE @search ESCAPE '\'
+                   OR owner."FirstName" ILIKE @search ESCAPE '\'
+                   OR owner."MiddleName" ILIKE @search ESCAPE '\'
+                   OR (owner."LastName" || ' ' || owner."FirstName" || ' ' || COALESCE(owner."MiddleName", '')) ILIKE @search ESCAPE '\')
               """
             : string.Empty;
         var accrualSearchClause = hasSearch
             ? """
-              AND (STRPOS(LOWER(garage."Number"), @search) > 0
-                   OR STRPOS(LOWER(owner."LastName"), @search) > 0
-                   OR STRPOS(LOWER(owner."FirstName"), @search) > 0
-                   OR STRPOS(LOWER(owner."MiddleName"), @search) > 0
-                   OR STRPOS(LOWER(owner."LastName" || ' ' || owner."FirstName" || ' ' || COALESCE(owner."MiddleName", '')), @search) > 0
-                   OR STRPOS(LOWER(income_type."Name"), @search) > 0)
+              AND (garage."Number" ILIKE @search ESCAPE '\'
+                   OR owner."LastName" ILIKE @search ESCAPE '\'
+                   OR owner."FirstName" ILIKE @search ESCAPE '\'
+                   OR owner."MiddleName" ILIKE @search ESCAPE '\'
+                   OR (owner."LastName" || ' ' || owner."FirstName" || ' ' || COALESCE(owner."MiddleName", '')) ILIKE @search ESCAPE '\'
+                   OR income_type."Name" ILIKE @search ESCAPE '\')
               """
             : string.Empty;
         var paymentSearchClause = hasSearch
             ? """
-              AND (STRPOS(LOWER(garage."Number"), @search) > 0
-                   OR STRPOS(LOWER(owner."LastName"), @search) > 0
-                   OR STRPOS(LOWER(owner."FirstName"), @search) > 0
-                   OR STRPOS(LOWER(owner."MiddleName"), @search) > 0
-                   OR STRPOS(LOWER(owner."LastName" || ' ' || owner."FirstName" || ' ' || COALESCE(owner."MiddleName", '')), @search) > 0
-                   OR STRPOS(LOWER(income_type."Name"), @search) > 0
-                   OR STRPOS(LOWER(operation."DocumentNumber"), @search) > 0)
+              AND (garage."Number" ILIKE @search ESCAPE '\'
+                   OR owner."LastName" ILIKE @search ESCAPE '\'
+                   OR owner."FirstName" ILIKE @search ESCAPE '\'
+                   OR owner."MiddleName" ILIKE @search ESCAPE '\'
+                   OR (owner."LastName" || ' ' || owner."FirstName" || ' ' || COALESCE(owner."MiddleName", '')) ILIKE @search ESCAPE '\'
+                   OR income_type."Name" ILIKE @search ESCAPE '\'
+                   OR operation."DocumentNumber" ILIKE @search ESCAPE '\')
               """
             : string.Empty;
         var limitClause = limit is > 0 ? "LIMIT @limit" : string.Empty;
@@ -695,7 +695,7 @@ public sealed class EfIncomeReportQuery(GarageBalanceDbContext dbContext) : IInc
         }
         if (hasSearch)
         {
-            parameters.Add(new NpgsqlParameter<string>("search", normalizedSearch!));
+            parameters.Add(new NpgsqlParameter<string>("search", PostgresLikeSearch.ContainsPattern(normalizedSearch!)));
         }
         if (limit is > 0)
         {
@@ -751,7 +751,7 @@ public sealed class EfIncomeReportQuery(GarageBalanceDbContext dbContext) : IInc
     {
         const int PageCategory = 1;
         const int TotalsCategory = 2;
-        var normalizedSearch = search?.Trim().ToLowerInvariant();
+        var normalizedSearch = search?.Trim();
         var hasSearch = !string.IsNullOrWhiteSpace(normalizedSearch);
         var includeStartingBalances = incomeTypeIds.Count == 0;
         var sortColumn = sort.Field switch
@@ -772,21 +772,21 @@ public sealed class EfIncomeReportQuery(GarageBalanceDbContext dbContext) : IInc
         var incomeTypeClause = incomeTypeIds.Count > 0 ? "AND accrual.\"IncomeTypeId\" = ANY(@income_type_ids)" : string.Empty;
         var startingSearchClause = hasSearch && !"Стартовый баланс".Contains(search!.Trim(), StringComparison.OrdinalIgnoreCase)
             ? """
-              AND (STRPOS(LOWER(garage."Number"), @search) > 0
-                   OR STRPOS(LOWER(owner."LastName"), @search) > 0
-                   OR STRPOS(LOWER(owner."FirstName"), @search) > 0
-                   OR STRPOS(LOWER(owner."MiddleName"), @search) > 0
-                   OR STRPOS(LOWER(owner."LastName" || ' ' || owner."FirstName" || ' ' || COALESCE(owner."MiddleName", '')), @search) > 0)
+              AND (garage."Number" ILIKE @search ESCAPE '\'
+                   OR owner."LastName" ILIKE @search ESCAPE '\'
+                   OR owner."FirstName" ILIKE @search ESCAPE '\'
+                   OR owner."MiddleName" ILIKE @search ESCAPE '\'
+                   OR (owner."LastName" || ' ' || owner."FirstName" || ' ' || COALESCE(owner."MiddleName", '')) ILIKE @search ESCAPE '\')
               """
             : string.Empty;
         var accrualSearchClause = hasSearch
             ? """
-              AND (STRPOS(LOWER(garage."Number"), @search) > 0
-                   OR STRPOS(LOWER(owner."LastName"), @search) > 0
-                   OR STRPOS(LOWER(owner."FirstName"), @search) > 0
-                   OR STRPOS(LOWER(owner."MiddleName"), @search) > 0
-                   OR STRPOS(LOWER(owner."LastName" || ' ' || owner."FirstName" || ' ' || COALESCE(owner."MiddleName", '')), @search) > 0
-                   OR STRPOS(LOWER(income_type."Name"), @search) > 0)
+              AND (garage."Number" ILIKE @search ESCAPE '\'
+                   OR owner."LastName" ILIKE @search ESCAPE '\'
+                   OR owner."FirstName" ILIKE @search ESCAPE '\'
+                   OR owner."MiddleName" ILIKE @search ESCAPE '\'
+                   OR (owner."LastName" || ' ' || owner."FirstName" || ' ' || COALESCE(owner."MiddleName", '')) ILIKE @search ESCAPE '\'
+                   OR income_type."Name" ILIKE @search ESCAPE '\')
               """
             : string.Empty;
         var limitClause = limit is > 0 ? "LIMIT @limit" : string.Empty;
@@ -881,7 +881,7 @@ public sealed class EfIncomeReportQuery(GarageBalanceDbContext dbContext) : IInc
         }
         if (hasSearch)
         {
-            parameters.Add(new NpgsqlParameter<string>("search", normalizedSearch!));
+            parameters.Add(new NpgsqlParameter<string>("search", PostgresLikeSearch.ContainsPattern(normalizedSearch!)));
         }
         if (limit is > 0)
         {
@@ -949,13 +949,13 @@ public sealed class EfIncomeReportQuery(GarageBalanceDbContext dbContext) : IInc
         var searchClause = string.IsNullOrWhiteSpace(search)
             ? string.Empty
             : """
-              AND (STRPOS(LOWER(garage."Number"), @search) > 0
-                   OR STRPOS(LOWER(owner."LastName"), @search) > 0
-                   OR STRPOS(LOWER(owner."FirstName"), @search) > 0
-                   OR STRPOS(LOWER(owner."MiddleName"), @search) > 0
-                   OR STRPOS(LOWER(owner."LastName" || ' ' || owner."FirstName" || ' ' || COALESCE(owner."MiddleName", '')), @search) > 0
-                   OR STRPOS(LOWER(income_type."Name"), @search) > 0
-                   OR STRPOS(LOWER(operation."DocumentNumber"), @search) > 0)
+              AND (garage."Number" ILIKE @search ESCAPE '\'
+                   OR owner."LastName" ILIKE @search ESCAPE '\'
+                   OR owner."FirstName" ILIKE @search ESCAPE '\'
+                   OR owner."MiddleName" ILIKE @search ESCAPE '\'
+                   OR (owner."LastName" || ' ' || owner."FirstName" || ' ' || COALESCE(owner."MiddleName", '')) ILIKE @search ESCAPE '\'
+                   OR income_type."Name" ILIKE @search ESCAPE '\'
+                   OR operation."DocumentNumber" ILIKE @search ESCAPE '\')
               """;
         var limitClause = limit is > 0 ? "LIMIT @limit" : string.Empty;
         var reportRowsCte = groupPayments
@@ -1109,7 +1109,7 @@ public sealed class EfIncomeReportQuery(GarageBalanceDbContext dbContext) : IInc
         }
         if (!string.IsNullOrWhiteSpace(search))
         {
-            parameters.Add(new NpgsqlParameter<string>("search", search.Trim().ToLowerInvariant()));
+            parameters.Add(new NpgsqlParameter<string>("search", PostgresLikeSearch.ContainsPattern(search.Trim())));
         }
         if (limit is > 0)
         {

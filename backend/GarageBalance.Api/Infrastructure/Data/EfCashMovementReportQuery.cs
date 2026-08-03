@@ -78,10 +78,10 @@ public sealed class EfCashMovementReportQuery(GarageBalanceDbContext dbContext) 
         var searchClause = string.IsNullOrWhiteSpace(search)
             ? string.Empty
             : """
-              AND (LOWER(supplier."Name") LIKE '%' || @search || '%'
-                   OR LOWER(expense_type."Name") LIKE '%' || @search || '%'
-                   OR LOWER(operation."DocumentNumber") LIKE '%' || @search || '%'
-                   OR LOWER(operation."Comment") LIKE '%' || @search || '%')
+              AND (supplier."Name" ILIKE @search ESCAPE '\'
+                   OR expense_type."Name" ILIKE @search ESCAPE '\'
+                   OR operation."DocumentNumber" ILIKE @search ESCAPE '\'
+                   OR operation."Comment" ILIKE @search ESCAPE '\')
               """;
         var limitClause = limit is > 0 ? "LIMIT @limit" : string.Empty;
         var sql = $$"""
@@ -133,7 +133,7 @@ public sealed class EfCashMovementReportQuery(GarageBalanceDbContext dbContext) 
         };
         if (!string.IsNullOrWhiteSpace(search))
         {
-            parameters.Add(new NpgsqlParameter<string>("search", search.Trim().ToLowerInvariant()));
+            parameters.Add(new NpgsqlParameter<string>("search", PostgresLikeSearch.ContainsPattern(search.Trim())));
         }
         if (limit is > 0)
         {
@@ -212,7 +212,7 @@ public sealed class EfCashMovementReportQuery(GarageBalanceDbContext dbContext) 
         var searchClause = string.IsNullOrWhiteSpace(search)
             ? string.Empty
             : """
-              AND LOWER(COALESCE(transfer."Comment", '')) LIKE '%' || @search || '%'
+              AND transfer."Comment" ILIKE @search ESCAPE '\'
               """;
         var limitClause = limit is > 0 ? "LIMIT @limit" : string.Empty;
         var sql = $$"""
@@ -252,7 +252,7 @@ public sealed class EfCashMovementReportQuery(GarageBalanceDbContext dbContext) 
         };
         if (!string.IsNullOrWhiteSpace(search))
         {
-            parameters.Add(new NpgsqlParameter<string>("search", search.Trim().ToLowerInvariant()));
+            parameters.Add(new NpgsqlParameter<string>("search", PostgresLikeSearch.ContainsPattern(search.Trim())));
         }
         if (limit is > 0)
         {

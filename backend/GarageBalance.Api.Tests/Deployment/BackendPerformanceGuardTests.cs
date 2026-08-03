@@ -668,10 +668,12 @@ public sealed class BackendPerformanceGuardTests
         Assert.Equal(2, CountOccurrences(incomeDebtMethod, ".Concat("));
         Assert.Equal(1, CountOccurrences(incomeDebtMethod, ".ToListAsync(cancellationToken)"));
         Assert.Contains("useClientSearch = hasSearch && !", incomeSource, StringComparison.Ordinal);
+        Assert.DoesNotContain("STRPOS", incomeSource, StringComparison.OrdinalIgnoreCase);
         Assert.True(
             CountOccurrences(incomeSource, "ToLower().Contains(normalizedSearch!)") >= 6,
             "PostgreSQL income-report search must be applied to source queries before count, sum and page materialization.");
         Assert.Contains("useClientSearch = hasSearch && !", expenseSource, StringComparison.Ordinal);
+        Assert.DoesNotContain("STRPOS", expenseSource, StringComparison.OrdinalIgnoreCase);
         Assert.True(
             CountOccurrences(expenseSource, "ToLower().Contains(normalizedSearch!)") >= 7,
             "PostgreSQL expense-report search must be applied to source queries before count, sum and page materialization.");
@@ -684,7 +686,8 @@ public sealed class BackendPerformanceGuardTests
         var postgresGarageStart = garageSource.IndexOf("private async Task<ConsolidatedGarageRowsData> GetPostgresRowsAsync", StringComparison.Ordinal);
         var fallbackGarageStart = garageSource.IndexOf("private async Task<ConsolidatedGarageRowsData> GetRowsWithoutSearchAsync", StringComparison.Ordinal);
         var postgresGarageSource = garageSource[postgresGarageStart..fallbackGarageStart];
-        Assert.Contains("LOWER(owner.\"LastName\")", postgresGarageSource, StringComparison.Ordinal);
+        Assert.Contains("owner.\"LastName\" ILIKE @search", postgresGarageSource, StringComparison.Ordinal);
+        Assert.DoesNotContain("STRPOS", postgresGarageSource, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("LIMIT @limit", postgresGarageSource, StringComparison.Ordinal);
         Assert.Contains("FROM page_rows", postgresGarageSource, StringComparison.Ordinal);
         Assert.Contains("COUNT(*)::int", postgresGarageSource, StringComparison.Ordinal);
@@ -720,6 +723,8 @@ public sealed class BackendPerformanceGuardTests
         Assert.Contains("COALESCE(SUM(income_amount), 0)", postgresMethod, StringComparison.Ordinal);
         Assert.Contains("COUNT(*)::int", postgresMethod, StringComparison.Ordinal);
         Assert.Contains("SqlQueryRaw<GarageReportCombinedQueryRow>", postgresMethod, StringComparison.Ordinal);
+        Assert.Contains("ILIKE @search", postgresMethod, StringComparison.Ordinal);
+        Assert.DoesNotContain("STRPOS", postgresMethod, StringComparison.OrdinalIgnoreCase);
         Assert.Equal(1, CountOccurrences(postgresMethod, ".ToListAsync(cancellationToken)"));
         Assert.Equal(1, CountOccurrences(postgresMethod, "FROM financial_operations"));
         Assert.Equal(1, CountOccurrences(postgresMethod, "FROM accruals"));
@@ -740,8 +745,8 @@ public sealed class BackendPerformanceGuardTests
         Assert.Contains("COUNT(*)::int", method, StringComparison.Ordinal);
         Assert.Contains("OFFSET @offset", method, StringComparison.Ordinal);
         Assert.Contains("LIMIT @limit", method, StringComparison.Ordinal);
-        Assert.Contains("LOWER(supplier.\"Name\")", method, StringComparison.Ordinal);
-        Assert.Contains("LOWER(expense_type.\"Name\")", method, StringComparison.Ordinal);
+        Assert.Contains("supplier.\"Name\" ILIKE @search", method, StringComparison.Ordinal);
+        Assert.Contains("expense_type.\"Name\" ILIKE @search", method, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -758,7 +763,7 @@ public sealed class BackendPerformanceGuardTests
         Assert.Contains("COUNT(*)::int", method, StringComparison.Ordinal);
         Assert.Contains("OFFSET @offset", method, StringComparison.Ordinal);
         Assert.Contains("LIMIT @limit", method, StringComparison.Ordinal);
-        Assert.Contains("LOWER(COALESCE(transfer.\"Comment\", ''))", method, StringComparison.Ordinal);
+        Assert.Contains("transfer.\"Comment\" ILIKE @search", method, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -777,9 +782,9 @@ public sealed class BackendPerformanceGuardTests
         Assert.Contains("COUNT(*)::int", method, StringComparison.Ordinal);
         Assert.Contains("OFFSET @offset", method, StringComparison.Ordinal);
         Assert.Contains("LIMIT @limit", method, StringComparison.Ordinal);
-        Assert.Contains("LOWER(fund.\"Name\")", method, StringComparison.Ordinal);
-        Assert.Contains("LOWER(operation.\"OperationKind\")", method, StringComparison.Ordinal);
-        Assert.Contains("LOWER(operation.\"Reason\")", method, StringComparison.Ordinal);
+        Assert.Contains("fund.\"Name\" ILIKE @search", method, StringComparison.Ordinal);
+        Assert.Contains("operation.\"OperationKind\" ILIKE @search", method, StringComparison.Ordinal);
+        Assert.Contains("operation.\"Reason\" ILIKE @search", method, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -1158,6 +1163,30 @@ public sealed class BackendPerformanceGuardTests
         Assert.True(
             CountOccurrences(source, "WHERE \"IsArchived\" = FALSE") >= 1,
             "Dictionary search indexes must stay scoped to active records.");
+        Assert.All(expectedIndexNames, indexName => Assert.Contains(indexName, source, StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void ReportSearchMigration_AddsPostgresTrigramIndexesForRawIlikeExpressions()
+    {
+        var source = ReadApiSource(
+            "Infrastructure/Data/Migrations/20260803224435_OptimizeReportSearchExpressions.cs");
+        var expectedIndexNames = new[]
+        {
+            "IX_funds_Name_trgm",
+            "IX_fund_operations_OperationKind_trgm",
+            "IX_fund_operations_Reason_trgm",
+            "IX_expense_types_Name_trgm",
+            "IX_income_types_Name_trgm",
+            "IX_supplier_accruals_DocumentNumber_trgm",
+            "IX_financial_operations_DocumentNumber_trgm",
+            "IX_financial_operations_Comment_trgm",
+            "IX_cash_bank_transfers_Comment_trgm"
+        };
+
+        Assert.Contains("CREATE EXTENSION IF NOT EXISTS pg_trgm", source, StringComparison.Ordinal);
+        Assert.Contains("USING gin", source, StringComparison.Ordinal);
+        Assert.Contains("gin_trgm_ops", source, StringComparison.Ordinal);
         Assert.All(expectedIndexNames, indexName => Assert.Contains(indexName, source, StringComparison.Ordinal));
     }
 

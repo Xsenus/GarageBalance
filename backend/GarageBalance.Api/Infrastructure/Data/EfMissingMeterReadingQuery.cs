@@ -91,6 +91,9 @@ public sealed class EfMissingMeterReadingQuery(GarageBalanceDbContext dbContext)
         int limit,
         CancellationToken cancellationToken)
     {
+        var searchPattern = normalizedSearch is null
+            ? null
+            : PostgresLikeSearch.ContainsPattern(normalizedSearch);
         var rows = await dbContext.Database.SqlQuery<MissingMeterCandidateRow>($$"""
             SELECT
                 garage."Id" AS "GarageId",
@@ -119,12 +122,12 @@ public sealed class EfMissingMeterReadingQuery(GarageBalanceDbContext dbContext)
                  OR ({{includeElectricity}} AND NOT COALESCE(reading_status."HasElectricityReading", FALSE))
               )
               AND (
-                    {{normalizedSearch}}::text IS NULL
-                 OR STRPOS(LOWER(garage."Number"), {{normalizedSearch}}) > 0
-                 OR STRPOS(LOWER(owner."LastName"), {{normalizedSearch}}) > 0
-                 OR STRPOS(LOWER(owner."FirstName"), {{normalizedSearch}}) > 0
-                 OR STRPOS(LOWER(COALESCE(owner."MiddleName", '')), {{normalizedSearch}}) > 0
-                 OR STRPOS(LOWER(CONCAT_WS(' ', owner."LastName", owner."FirstName", owner."MiddleName")), {{normalizedSearch}}) > 0
+                    {{searchPattern}}::text IS NULL
+                 OR garage."Number" ILIKE {{searchPattern}} ESCAPE '\'
+                 OR owner."LastName" ILIKE {{searchPattern}} ESCAPE '\'
+                 OR owner."FirstName" ILIKE {{searchPattern}} ESCAPE '\'
+                 OR owner."MiddleName" ILIKE {{searchPattern}} ESCAPE '\'
+                 OR (owner."LastName" || ' ' || owner."FirstName" || ' ' || COALESCE(owner."MiddleName", '')) ILIKE {{searchPattern}} ESCAPE '\'
               )
             ORDER BY garage."Number"
             LIMIT {{limit}}

@@ -5,6 +5,7 @@ using GarageBalance.Api.Infrastructure.Data;
 using GarageBalance.Api.Tests.Common;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
+using Npgsql;
 
 namespace GarageBalance.Api.Tests.Dictionaries;
 
@@ -138,6 +139,45 @@ public sealed class PostgreSqlDictionarySearchPerformanceTests
             "IX_staff_members_FullName_trgm"
         ];
         Assert.All(expectedIndexes, expected => Assert.Contains(expected, indexNames));
+    }
+
+    [PostgreSqlFact]
+    public async Task ReportGarageSearchPredicatesUseDictionaryTrigramIndexes()
+    {
+        await using var database = await PostgreSqlTestDatabase.CreateAsync();
+        await using var connection = new NpgsqlConnection(database.ConnectionString);
+        await connection.OpenAsync();
+
+        await AssertPlanUsesAsync(
+            connection,
+            "IX_garages_Number_trgm",
+            """SELECT "Id" FROM garages WHERE "Number" ILIKE '%101-а%' ESCAPE '\';""");
+        await AssertPlanUsesAsync(
+            connection,
+            "IX_owners_LastName_trgm",
+            """SELECT "Id" FROM owners WHERE "LastName" ILIKE '%иванов%' ESCAPE '\';""");
+        await AssertPlanUsesAsync(
+            connection,
+            "IX_owners_FullName_trgm",
+            """
+            SELECT "Id" FROM owners
+            WHERE ("LastName" || ' ' || "FirstName" || ' ' || COALESCE("MiddleName", ''))
+                  ILIKE '%иванов иван%' ESCAPE '\';
+            """);
+    }
+
+    private static async Task AssertPlanUsesAsync(NpgsqlConnection connection, string indexName, string query)
+    {
+        await using var command = connection.CreateCommand();
+        command.CommandText = $"SET enable_seqscan = off; EXPLAIN (ANALYZE, BUFFERS) {query}";
+        await using var reader = await command.ExecuteReaderAsync();
+        var lines = new List<string>();
+        while (await reader.ReadAsync())
+        {
+            lines.Add(reader.GetString(0));
+        }
+
+        Assert.Contains(indexName, string.Join(Environment.NewLine, lines), StringComparison.Ordinal);
     }
 
     private sealed class SelectCommandCapture : DbCommandInterceptor

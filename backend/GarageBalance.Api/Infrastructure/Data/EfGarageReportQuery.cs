@@ -77,15 +77,17 @@ public sealed class EfGarageReportQuery(GarageBalanceDbContext dbContext) : IGar
             var normalizedSearch = search.Trim();
             if (IsNpgsql())
             {
-                var normalizedServerSearch = normalizedSearch.ToLowerInvariant();
+                var pattern = PostgresLikeSearch.ContainsPattern(normalizedSearch);
                 garages = garages.Where(garage =>
-                    garage.Number.ToLower().Contains(normalizedServerSearch) ||
+                    EF.Functions.ILike(garage.Number, pattern, @"\") ||
                     (garage.Owner != null && (
-                        garage.Owner.LastName.ToLower().Contains(normalizedServerSearch) ||
-                        garage.Owner.FirstName.ToLower().Contains(normalizedServerSearch) ||
-                        (garage.Owner.MiddleName != null && garage.Owner.MiddleName.ToLower().Contains(normalizedServerSearch)) ||
-                        (garage.Owner.LastName + " " + garage.Owner.FirstName).ToLower().Contains(normalizedServerSearch) ||
-                        (garage.Owner.LastName + " " + garage.Owner.FirstName + " " + (garage.Owner.MiddleName ?? string.Empty)).ToLower().Contains(normalizedServerSearch))));
+                        EF.Functions.ILike(garage.Owner.LastName, pattern, @"\") ||
+                        EF.Functions.ILike(garage.Owner.FirstName, pattern, @"\") ||
+                        (garage.Owner.MiddleName != null && EF.Functions.ILike(garage.Owner.MiddleName, pattern, @"\")) ||
+                        EF.Functions.ILike(
+                            garage.Owner.LastName + " " + garage.Owner.FirstName + " " + (garage.Owner.MiddleName ?? string.Empty),
+                            pattern,
+                            @"\"))));
             }
             else
             {
@@ -280,7 +282,7 @@ public sealed class EfGarageReportQuery(GarageBalanceDbContext dbContext) : IGar
     {
         const int PageCategory = 1;
         const int TotalsCategory = 2;
-        var normalizedSearch = search?.Trim().ToLowerInvariant();
+        var normalizedSearch = search?.Trim();
         var hasSearch = !string.IsNullOrWhiteSpace(normalizedSearch);
         var sortColumn = sort.Field switch
         {
@@ -298,12 +300,11 @@ public sealed class EfGarageReportQuery(GarageBalanceDbContext dbContext) : IGar
         var incomeTypeClause = incomeTypeIds.Count > 0 ? "AND income_type.\"Id\" = ANY(@income_type_ids)" : string.Empty;
         var searchClause = hasSearch
             ? """
-              AND (STRPOS(LOWER(garage."Number"), @search) > 0
-                   OR STRPOS(LOWER(owner."LastName"), @search) > 0
-                   OR STRPOS(LOWER(owner."FirstName"), @search) > 0
-                   OR STRPOS(LOWER(owner."MiddleName"), @search) > 0
-                   OR STRPOS(LOWER(owner."LastName" || ' ' || owner."FirstName"), @search) > 0
-                   OR STRPOS(LOWER(owner."LastName" || ' ' || owner."FirstName" || ' ' || COALESCE(owner."MiddleName", '')), @search) > 0)
+              AND (garage."Number" ILIKE @search ESCAPE '\'
+                   OR owner."LastName" ILIKE @search ESCAPE '\'
+                   OR owner."FirstName" ILIKE @search ESCAPE '\'
+                   OR owner."MiddleName" ILIKE @search ESCAPE '\'
+                   OR (owner."LastName" || ' ' || owner."FirstName" || ' ' || COALESCE(owner."MiddleName", '')) ILIKE @search ESCAPE '\')
               """
             : string.Empty;
         var groupedRowsSql = groupAccruals
@@ -429,7 +430,7 @@ public sealed class EfGarageReportQuery(GarageBalanceDbContext dbContext) : IGar
         }
         if (hasSearch)
         {
-            parameters.Add(new NpgsqlParameter<string>("search", normalizedSearch!));
+            parameters.Add(new NpgsqlParameter<string>("search", PostgresLikeSearch.ContainsPattern(normalizedSearch!)));
         }
         if (limit is > 0)
         {

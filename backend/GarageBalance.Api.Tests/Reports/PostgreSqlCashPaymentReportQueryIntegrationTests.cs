@@ -92,7 +92,8 @@ public sealed class PostgreSqlCashPaymentReportQueryIntegrationTests
         Assert.Equal(firstSupplierName, Assert.Single(searchResult.Operations).SupplierName);
         var searchCommand = Assert.Single(capture.Commands);
         Assert.Equal(1, CountOccurrences(searchCommand, "FROM financial_operations"));
-        Assert.Contains("LOWER(supplier.\"Name\")", searchCommand, StringComparison.Ordinal);
+        Assert.Contains("supplier.\"Name\" ILIKE @search ESCAPE '\\'", searchCommand, StringComparison.Ordinal);
+        Assert.DoesNotContain("LOWER(", searchCommand, StringComparison.Ordinal);
     }
 
     private static FinancialOperation CreateExpense(

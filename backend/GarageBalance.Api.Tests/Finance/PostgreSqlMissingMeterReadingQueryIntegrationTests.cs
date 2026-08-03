@@ -71,6 +71,8 @@ public sealed class PostgreSqlMissingMeterReadingQueryIntegrationTests
             Assert.Contains("LIMIT", command, StringComparison.OrdinalIgnoreCase);
         });
         Assert.DoesNotContain("missing-04", capture.Commands[1], StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("garage.\"Number\" ILIKE", capture.Commands[1], StringComparison.Ordinal);
+        Assert.DoesNotContain("STRPOS", capture.Commands[1], StringComparison.OrdinalIgnoreCase);
     }
 
     private static Garage CreateGarage(string number, bool isArchived = false) =>

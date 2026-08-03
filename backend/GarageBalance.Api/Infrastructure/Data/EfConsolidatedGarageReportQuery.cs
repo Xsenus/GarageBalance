@@ -41,12 +41,11 @@ public sealed class EfConsolidatedGarageReportQuery(GarageBalanceDbContext dbCon
             ? string.Empty
             : """
               AND (
-                  LOWER(garage."Number") LIKE '%' || @search || '%'
-                  OR LOWER(owner."LastName") LIKE '%' || @search || '%'
-                  OR LOWER(owner."FirstName") LIKE '%' || @search || '%'
-                  OR LOWER(COALESCE(owner."MiddleName", '')) LIKE '%' || @search || '%'
-                  OR LOWER(owner."LastName" || ' ' || owner."FirstName") LIKE '%' || @search || '%'
-                  OR LOWER(owner."LastName" || ' ' || owner."FirstName" || ' ' || COALESCE(owner."MiddleName", '')) LIKE '%' || @search || '%'
+                  garage."Number" ILIKE @search ESCAPE '\'
+                  OR owner."LastName" ILIKE @search ESCAPE '\'
+                  OR owner."FirstName" ILIKE @search ESCAPE '\'
+                  OR owner."MiddleName" ILIKE @search ESCAPE '\'
+                  OR (owner."LastName" || ' ' || owner."FirstName" || ' ' || COALESCE(owner."MiddleName", '')) ILIKE @search ESCAPE '\'
               )
               """;
         var limitClause = limit is > 0 ? "LIMIT @limit" : string.Empty;
@@ -119,7 +118,7 @@ public sealed class EfConsolidatedGarageReportQuery(GarageBalanceDbContext dbCon
         };
         if (!string.IsNullOrWhiteSpace(search))
         {
-            parameters.Add(new NpgsqlParameter<string>("search", search.Trim().ToLowerInvariant()));
+            parameters.Add(new NpgsqlParameter<string>("search", PostgresLikeSearch.ContainsPattern(search.Trim())));
         }
         if (limit is > 0)
         {

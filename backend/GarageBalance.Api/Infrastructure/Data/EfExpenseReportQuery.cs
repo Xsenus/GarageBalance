@@ -74,7 +74,7 @@ public sealed class EfExpenseReportQuery(GarageBalanceDbContext dbContext) : IEx
         var expenseTotal = 0m;
         var rowCount = 0;
         var hasSearch = !string.IsNullOrWhiteSpace(search);
-        var normalizedSearch = search?.Trim().ToLowerInvariant();
+        var normalizedSearch = search?.Trim();
         var useClientSearch = hasSearch && !(dbContext.Database.ProviderName?.Contains("Npgsql", StringComparison.OrdinalIgnoreCase) ?? false);
         // The non-PostgreSQL branch is used by the isolated test provider. In the
         // combined mode all source rows must be available before monthly grouping
@@ -500,7 +500,7 @@ public sealed class EfExpenseReportQuery(GarageBalanceDbContext dbContext) : IEx
                 cancellationToken);
         }
 
-        var normalizedSearch = search?.Trim().ToLowerInvariant();
+        var normalizedSearch = search?.Trim();
         var hasSearch = !string.IsNullOrWhiteSpace(normalizedSearch);
         var includeSuppliers = supplierIds.Count > 0 || staffMemberIds.Count == 0;
         var includeStaff = staffMemberIds.Count > 0 || supplierIds.Count == 0;
@@ -893,33 +893,33 @@ public sealed class EfExpenseReportQuery(GarageBalanceDbContext dbContext) : IEx
         var staffClause = staffMemberIds.Count > 0 ? "AND member.\"Id\" = ANY(@staff_ids)" : string.Empty;
         var expenseTypeClause = expenseTypeIds.Count > 0 ? "AND expense_type.\"Id\" = ANY(@expense_type_ids)" : string.Empty;
         var startingSearchClause = hasSearch && !"Стартовый баланс".Contains(search!.Trim(), StringComparison.OrdinalIgnoreCase)
-            ? "AND STRPOS(LOWER(supplier.\"Name\"), @search) > 0"
+            ? "AND supplier.\"Name\" ILIKE @search ESCAPE '\\'"
             : string.Empty;
         var supplierAccrualSearchClause = hasSearch
             ? """
-              AND (STRPOS(LOWER(supplier."Name"), @search) > 0
-                   OR STRPOS(LOWER(expense_type."Name"), @search) > 0
-                   OR STRPOS(LOWER(accrual."DocumentNumber"), @search) > 0)
+              AND (supplier."Name" ILIKE @search ESCAPE '\'
+                   OR expense_type."Name" ILIKE @search ESCAPE '\'
+                   OR accrual."DocumentNumber" ILIKE @search ESCAPE '\')
               """
             : string.Empty;
         var supplierPaymentSearchClause = hasSearch
             ? """
-              AND (STRPOS(LOWER(supplier."Name"), @search) > 0
-                   OR STRPOS(LOWER(expense_type."Name"), @search) > 0
-                   OR STRPOS(LOWER(operation."DocumentNumber"), @search) > 0)
+              AND (supplier."Name" ILIKE @search ESCAPE '\'
+                   OR expense_type."Name" ILIKE @search ESCAPE '\'
+                   OR operation."DocumentNumber" ILIKE @search ESCAPE '\')
               """
             : string.Empty;
         var staffAccrualSearchClause = hasSearch
             ? """
-              AND (STRPOS(LOWER(member."FullName"), @search) > 0
-                   OR STRPOS(LOWER(expense_type."Name"), @search) > 0)
+              AND (member."FullName" ILIKE @search ESCAPE '\'
+                   OR expense_type."Name" ILIKE @search ESCAPE '\')
               """
             : string.Empty;
         var staffPaymentSearchClause = hasSearch
             ? """
-              AND (STRPOS(LOWER(member."FullName"), @search) > 0
-                   OR STRPOS(LOWER(expense_type."Name"), @search) > 0
-                   OR STRPOS(LOWER(operation."DocumentNumber"), @search) > 0)
+              AND (member."FullName" ILIKE @search ESCAPE '\'
+                   OR expense_type."Name" ILIKE @search ESCAPE '\'
+                   OR operation."DocumentNumber" ILIKE @search ESCAPE '\')
               """
             : string.Empty;
         var limitClause = limit is > 0 ? "LIMIT @limit" : string.Empty;
@@ -1110,7 +1110,7 @@ public sealed class EfExpenseReportQuery(GarageBalanceDbContext dbContext) : IEx
         }
         if (hasSearch)
         {
-            parameters.Add(new NpgsqlParameter<string>("search", normalizedSearch!));
+            parameters.Add(new NpgsqlParameter<string>("search", PostgresLikeSearch.ContainsPattern(normalizedSearch!)));
         }
         if (limit is > 0)
         {
@@ -1177,19 +1177,19 @@ public sealed class EfExpenseReportQuery(GarageBalanceDbContext dbContext) : IEx
         var staffClause = staffMemberIds.Count > 0 ? "AND member.\"Id\" = ANY(@staff_ids)" : string.Empty;
         var expenseTypeClause = expenseTypeIds.Count > 0 ? "AND expense_type.\"Id\" = ANY(@expense_type_ids)" : string.Empty;
         var startingSearchClause = hasSearch && !"Стартовый баланс".Contains(search!.Trim(), StringComparison.OrdinalIgnoreCase)
-            ? "AND STRPOS(LOWER(supplier.\"Name\"), @search) > 0"
+            ? "AND supplier.\"Name\" ILIKE @search ESCAPE '\\'"
             : string.Empty;
         var supplierAccrualSearchClause = hasSearch
             ? """
-              AND (STRPOS(LOWER(supplier."Name"), @search) > 0
-                   OR STRPOS(LOWER(expense_type."Name"), @search) > 0
-                   OR STRPOS(LOWER(accrual."DocumentNumber"), @search) > 0)
+              AND (supplier."Name" ILIKE @search ESCAPE '\'
+                   OR expense_type."Name" ILIKE @search ESCAPE '\'
+                   OR accrual."DocumentNumber" ILIKE @search ESCAPE '\')
               """
             : string.Empty;
         var staffAccrualSearchClause = hasSearch
             ? """
-              AND (STRPOS(LOWER(member."FullName"), @search) > 0
-                   OR STRPOS(LOWER(expense_type."Name"), @search) > 0)
+              AND (member."FullName" ILIKE @search ESCAPE '\'
+                   OR expense_type."Name" ILIKE @search ESCAPE '\')
               """
             : string.Empty;
         var limitClause = limit is > 0 ? "LIMIT @limit" : string.Empty;
@@ -1314,7 +1314,7 @@ public sealed class EfExpenseReportQuery(GarageBalanceDbContext dbContext) : IEx
         }
         if (hasSearch)
         {
-            parameters.Add(new NpgsqlParameter<string>("search", normalizedSearch!));
+            parameters.Add(new NpgsqlParameter<string>("search", PostgresLikeSearch.ContainsPattern(normalizedSearch!)));
         }
         if (limit is > 0)
         {
@@ -1380,16 +1380,16 @@ public sealed class EfExpenseReportQuery(GarageBalanceDbContext dbContext) : IEx
         var supplierSearchClause = string.IsNullOrWhiteSpace(search)
             ? string.Empty
             : """
-              AND (STRPOS(LOWER(supplier."Name"), @search) > 0
-                   OR STRPOS(LOWER(expense_type."Name"), @search) > 0
-                   OR STRPOS(LOWER(operation."DocumentNumber"), @search) > 0)
+              AND (supplier."Name" ILIKE @search ESCAPE '\'
+                   OR expense_type."Name" ILIKE @search ESCAPE '\'
+                   OR operation."DocumentNumber" ILIKE @search ESCAPE '\')
               """;
         var staffSearchClause = string.IsNullOrWhiteSpace(search)
             ? string.Empty
             : """
-              AND (STRPOS(LOWER(member."FullName"), @search) > 0
-                   OR STRPOS(LOWER(expense_type."Name"), @search) > 0
-                   OR STRPOS(LOWER(operation."DocumentNumber"), @search) > 0)
+              AND (member."FullName" ILIKE @search ESCAPE '\'
+                   OR expense_type."Name" ILIKE @search ESCAPE '\'
+                   OR operation."DocumentNumber" ILIKE @search ESCAPE '\')
               """;
         var limitClause = limit is > 0 ? "LIMIT @limit" : string.Empty;
         var sql = $$"""
@@ -1488,7 +1488,7 @@ public sealed class EfExpenseReportQuery(GarageBalanceDbContext dbContext) : IEx
         }
         if (!string.IsNullOrWhiteSpace(search))
         {
-            parameters.Add(new NpgsqlParameter<string>("search", search.Trim().ToLowerInvariant()));
+            parameters.Add(new NpgsqlParameter<string>("search", PostgresLikeSearch.ContainsPattern(search.Trim())));
         }
         if (limit is > 0)
         {
