@@ -223,6 +223,17 @@ public sealed class EfGarageRepository(GarageBalanceDbContext dbContext, IBusine
             .Select(garage => garage.StartingBalance)
             .SingleAsync(cancellationToken);
 
+    public Task<GarageOpeningDataLock> GetOpeningDataLockAsync(Guid id, CancellationToken cancellationToken) =>
+        dbContext.Garages
+            .AsNoTracking()
+            .Where(garage => garage.Id == id)
+            .Select(garage => new GarageOpeningDataLock(
+                dbContext.Accruals.Any(accrual => accrual.GarageId == garage.Id)
+                    || dbContext.FinancialOperations.Any(operation => operation.GarageId == garage.Id),
+                dbContext.MeterReadings.Any(reading => reading.GarageId == garage.Id && reading.MeterKind == MeterKinds.Water),
+                dbContext.MeterReadings.Any(reading => reading.GarageId == garage.Id && reading.MeterKind == MeterKinds.Electricity)))
+            .SingleAsync(cancellationToken);
+
     public Task<bool> ActiveNumberExistsAsync(Guid? ignoredId, string number, CancellationToken cancellationToken) =>
         dbContext.Garages.AsNoTracking().AnyAsync(
             garage => !garage.IsArchived && garage.Number == number && (!ignoredId.HasValue || garage.Id != ignoredId.Value),

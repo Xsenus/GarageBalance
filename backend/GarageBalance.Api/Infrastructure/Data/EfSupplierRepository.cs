@@ -113,6 +113,15 @@ public sealed class EfSupplierRepository(GarageBalanceDbContext dbContext) : ISu
             .Select(supplier => supplier.StartingBalance)
             .SingleAsync(cancellationToken);
 
+    public Task<bool> HasFinancialHistoryAsync(Guid id, CancellationToken cancellationToken) =>
+        dbContext.Suppliers
+            .AsNoTracking()
+            .Where(supplier => supplier.Id == id)
+            .Select(supplier =>
+                dbContext.SupplierAccruals.Any(accrual => accrual.SupplierId == supplier.Id)
+                || dbContext.FinancialOperations.Any(operation => operation.SupplierId == supplier.Id))
+            .SingleAsync(cancellationToken);
+
     public async Task<SupplierOpeningBalanceData?> GetOpeningBalanceAsync(
         Guid id,
         DateOnly monthFrom,

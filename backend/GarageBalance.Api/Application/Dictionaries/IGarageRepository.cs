@@ -14,6 +14,7 @@ public interface IGarageRepository
     Task<int> CountActiveAsync(CancellationToken cancellationToken);
     Task<IReadOnlyList<Garage>> GetActiveByIdsAsync(IReadOnlyCollection<Guid> ids, CancellationToken cancellationToken);
     Task<decimal> GetStartingBalanceAsync(Guid id, CancellationToken cancellationToken);
+    Task<GarageOpeningDataLock> GetOpeningDataLockAsync(Guid id, CancellationToken cancellationToken);
     Task<bool> ActiveNumberExistsAsync(Guid? ignoredId, string number, CancellationToken cancellationToken);
     void Add(Garage garage);
 }
@@ -46,3 +47,8 @@ public sealed record GarageBalanceTotalsData(
     IReadOnlyDictionary<Guid, decimal> IncomeTotals,
     IReadOnlyDictionary<Guid, decimal> OverdueAccrualTotals,
     IReadOnlyDictionary<Guid, decimal> AllocatedIncomeTotals);
+
+public sealed record GarageOpeningDataLock(
+    bool HasFinancialHistory,
+    bool HasWaterMeterHistory,
+    bool HasElectricityMeterHistory);

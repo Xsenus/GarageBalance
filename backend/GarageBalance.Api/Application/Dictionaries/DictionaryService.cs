@@ -352,6 +352,28 @@ public sealed class DictionaryService(
         var initialWaterMeterValue = MoneyMath.RoundMeterValue(request.InitialWaterMeterValue);
         var initialElectricityMeterValue = MoneyMath.RoundMeterValue(request.InitialElectricityMeterValue);
         var comment = NormalizeOptional(request.Comment);
+        var openingDataLock = await garageRepository.GetOpeningDataLockAsync(garage.Id, cancellationToken);
+        if (garage.StartingBalance != startingBalance && openingDataLock.HasFinancialHistory)
+        {
+            return DictionaryResult<GarageDto>.Failure(
+                "garage_starting_balance_locked",
+                "Стартовый баланс нельзя менять после появления начислений или платежей. Оформите отдельную финансовую корректировку.");
+        }
+
+        if (garage.InitialWaterMeterValue != initialWaterMeterValue && openingDataLock.HasWaterMeterHistory)
+        {
+            return DictionaryResult<GarageDto>.Failure(
+                "garage_initial_water_meter_locked",
+                "Стартовое показание воды нельзя менять после внесения показаний. Для нового прибора оформите замену счетчика.");
+        }
+
+        if (garage.InitialElectricityMeterValue != initialElectricityMeterValue && openingDataLock.HasElectricityMeterHistory)
+        {
+            return DictionaryResult<GarageDto>.Failure(
+                "garage_initial_electricity_meter_locked",
+                "Стартовое показание электроэнергии нельзя менять после внесения показаний. Для нового прибора оформите замену счетчика.");
+        }
+
         if (GarageMatches(garage, number, request.PeopleCount, request.FloorCount, request.OwnerId, startingBalance, initialWaterMeterValue, initialElectricityMeterValue, comment))
         {
             return DictionaryResult<GarageDto>.Success(await ToGarageDtoWithBalanceAsync(garage, cancellationToken));
@@ -681,6 +703,13 @@ public sealed class DictionaryService(
         var email = NormalizeOptional(request.Email);
         var startingBalance = MoneyMath.RoundMoney(request.StartingBalance);
         var comment = NormalizeOptional(request.Comment);
+        if (supplier.StartingBalance != startingBalance && await supplierRepository.HasFinancialHistoryAsync(supplier.Id, cancellationToken))
+        {
+            return DictionaryResult<SupplierDto>.Failure(
+                "supplier_starting_balance_locked",
+                "Стартовый баланс поставщика нельзя менять после появления начислений или выплат. Оформите отдельную финансовую корректировку.");
+        }
+
         if (SupplierMatches(supplier, name, group.Id, chargeService?.Id, inn, legalAddress, contactPerson, phone, email, startingBalance, comment))
         {
             return DictionaryResult<SupplierDto>.Success(await ToSupplierDtoWithDebtAsync(supplier, cancellationToken));

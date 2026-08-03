@@ -5207,7 +5207,8 @@ describe('App', () => {
     await openSection(user, 'Показания')
 
     const readingsPanel = await screen.findByRole('region', { name: 'Показания' })
-    expect(await within(readingsPanel).findByRole('status')).toHaveTextContent('Нет действующих регулярных услуг по счётчику.')
+    await within(readingsPanel).findByText(/Нет действующих регулярных услуг по счётчику\./)
+    expect(within(readingsPanel).getByRole('status')).toHaveTextContent('Нет действующих регулярных услуг по счётчику.')
     expect(within(readingsPanel).queryByRole('table')).not.toBeInTheDocument()
     expect(getMeterReadingYearPage).not.toHaveBeenCalled()
   })

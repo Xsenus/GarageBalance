@@ -606,6 +606,56 @@ public sealed class DictionaryServiceTests
     }
 
     [Fact]
+    public async Task UpdateGarageAsync_LocksOpeningBalanceAndMeterBaselinesAfterHistoryExists()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = DictionaryServiceTestFactory.Create(database.Context);
+        var garageResult = await service.CreateGarageAsync(
+            new UpsertGarageRequest("15", 1, 1, null, 100m, 10m, 20m, null),
+            null,
+            CancellationToken.None);
+        var garage = await database.Context.Garages.SingleAsync(item => item.Id == garageResult.Value!.Id);
+        var incomeType = new IncomeType { Name = "Членский взнос", Code = "membership" };
+        database.Context.IncomeTypes.Add(incomeType);
+        database.Context.FinancialOperations.Add(new FinancialOperation
+        {
+            OperationKind = FinancialOperationKinds.Income,
+            OperationDate = new DateOnly(2026, 7, 1),
+            AccountingMonth = new DateOnly(2026, 7, 1),
+            Amount = 50m,
+            Garage = garage,
+            IncomeType = incomeType
+        });
+        database.Context.MeterReadings.AddRange(
+            new MeterReading { Garage = garage, MeterKind = MeterKinds.Water, AccountingMonth = new DateOnly(2026, 7, 1), ReadingDate = new DateOnly(2026, 7, 20), PreviousValue = 10m, CurrentValue = 12m, Consumption = 2m },
+            new MeterReading { Garage = garage, MeterKind = MeterKinds.Electricity, AccountingMonth = new DateOnly(2026, 7, 1), ReadingDate = new DateOnly(2026, 7, 20), PreviousValue = 20m, CurrentValue = 25m, Consumption = 5m });
+        await database.Context.SaveChangesAsync();
+
+        var balance = await service.UpdateGarageAsync(
+            garage.Id,
+            new UpsertGarageRequest("15", 1, 1, null, 101m, 10m, 20m, null),
+            null,
+            CancellationToken.None);
+        var water = await service.UpdateGarageAsync(
+            garage.Id,
+            new UpsertGarageRequest("15", 1, 1, null, 100m, 11m, 20m, null),
+            null,
+            CancellationToken.None);
+        var electricity = await service.UpdateGarageAsync(
+            garage.Id,
+            new UpsertGarageRequest("15", 1, 1, null, 100m, 10m, 21m, null),
+            null,
+            CancellationToken.None);
+
+        Assert.Equal("garage_starting_balance_locked", balance.ErrorCode);
+        Assert.Equal("garage_initial_water_meter_locked", water.ErrorCode);
+        Assert.Equal("garage_initial_electricity_meter_locked", electricity.ErrorCode);
+        Assert.Equal(100m, garage.StartingBalance);
+        Assert.Equal(10m, garage.InitialWaterMeterValue);
+        Assert.Equal(20m, garage.InitialElectricityMeterValue);
+    }
+
+    [Fact]
     public async Task ArchiveGarageAsync_HidesGarageFromList()
     {
         await using var database = await TestDatabase.CreateAsync();
@@ -1216,6 +1266,40 @@ public sealed class DictionaryServiceTests
     }
 
     [Fact]
+    public async Task UpdateSupplierAsync_LocksStartingBalanceAfterFinancialHistoryExists()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = DictionaryServiceTestFactory.Create(database.Context);
+        var group = await service.CreateSupplierGroupAsync(new UpsertSupplierGroupRequest("Коммунальные"), null, CancellationToken.None);
+        var supplierResult = await service.CreateSupplierAsync(
+            new UpsertSupplierRequest("Водоканал", group.Value!.Id, null, null, null, null, null, 100m, null),
+            null,
+            CancellationToken.None);
+        var supplier = await database.Context.Suppliers.SingleAsync(item => item.Id == supplierResult.Value!.Id);
+        var expenseType = new ExpenseType { Name = "Водоснабжение", Code = "water_supply" };
+        database.Context.ExpenseTypes.Add(expenseType);
+        database.Context.SupplierAccruals.Add(new SupplierAccrual
+        {
+            Supplier = supplier,
+            ExpenseType = expenseType,
+            AccountingMonth = new DateOnly(2026, 7, 1),
+            Amount = 50m,
+            Source = "manual"
+        });
+        await database.Context.SaveChangesAsync();
+
+        var result = await service.UpdateSupplierAsync(
+            supplier.Id,
+            new UpsertSupplierRequest("Водоканал", group.Value.Id, null, null, null, null, null, 101m, null),
+            null,
+            CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Equal("supplier_starting_balance_locked", result.ErrorCode);
+        Assert.Equal(100m, supplier.StartingBalance);
+    }
+
+    [Fact]
     public async Task SupplierContactAsync_SavesContactAndWritesAudit()
     {
         await using var database = await TestDatabase.CreateAsync();
@@ -1501,7 +1585,7 @@ public sealed class DictionaryServiceTests
     }
 
     [Fact]
-    public async Task UpdateSupplierAsync_ReturnsFullDebtForUnchangedAndUpdatedSupplier()
+    public async Task UpdateSupplierAsync_ReturnsFullDebtWhenNonOpeningDetailsAreUpdated()
     {
         await using var database = await TestDatabase.CreateAsync();
         var service = DictionaryServiceTestFactory.Create(database.Context);
@@ -1537,14 +1621,14 @@ public sealed class DictionaryServiceTests
             CancellationToken.None);
         var updated = await service.UpdateSupplierAsync(
             supplier.Value.Id,
-            new UpsertSupplierRequest("Водоканал", group.Value.Id, null, null, null, null, null, 200m, "Уточнен входящий остаток"),
+            new UpsertSupplierRequest("Водоканал", group.Value.Id, null, null, null, null, null, 100m, "Уточнены реквизиты"),
             Guid.NewGuid(),
             CancellationToken.None);
 
         Assert.True(unchanged.Succeeded);
         Assert.Equal(750m, unchanged.Value!.Debt);
         Assert.True(updated.Succeeded);
-        Assert.Equal(850m, updated.Value!.Debt);
+        Assert.Equal(750m, updated.Value!.Debt);
     }
 
     [Fact]
