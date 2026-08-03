@@ -937,6 +937,11 @@ public sealed class FinanceService(
             return FinanceResult<FinancialOperationDto>.Failure("income_type_not_found", "Вид поступления не найден.");
         }
 
+        await using var fundAssignmentLock = await incomeFundAssignmentService.AcquireUpdateLockAsync(cancellationToken);
+        await using var balanceLock = await financeAvailableBalanceQuery.AcquireUpdateLockAsync(
+            FinanceBalanceAccounts.Cash,
+            cancellationToken);
+
         var duplicate = await HasDocumentDuplicateAsync(FinancialOperationKinds.Income, request.DocumentNumber, request.OperationDate, cancellationToken);
         if (duplicate)
         {
@@ -954,8 +959,6 @@ public sealed class FinanceService(
                 "receipt_batch_conflict",
                 "Пакет единой квитанции уже связан с другим гаражом или датой платежа.");
         }
-
-        await using var fundAssignmentLock = await incomeFundAssignmentService.AcquireUpdateLockAsync(cancellationToken);
 
         var operation = new FinancialOperation
         {
@@ -1145,7 +1148,9 @@ public sealed class FinanceService(
         }
 
         await using var fundDisbursementLock = await expenseFundDisbursementService.AcquireUpdateLockAsync(cancellationToken);
-        await using var balanceLock = await financeAvailableBalanceQuery.AcquireUpdateLockAsync(isCashExpense, cancellationToken);
+        await using var balanceLock = await financeAvailableBalanceQuery.AcquireUpdateLockAsync(
+            isCashExpense ? FinanceBalanceAccounts.Cash : FinanceBalanceAccounts.Bank,
+            cancellationToken);
 
         var duplicate = await HasDocumentDuplicateAsync(FinancialOperationKinds.Expense, request.DocumentNumber, request.OperationDate, cancellationToken);
         if (duplicate)
@@ -1252,6 +1257,10 @@ public sealed class FinanceService(
         {
             return FinanceResult<FinancialOperationDto>.Failure("salary_expense_type_not_found", "Системная статья расхода «Зарплата» не найдена.");
         }
+
+        await using var balanceLock = await financeAvailableBalanceQuery.AcquireUpdateLockAsync(
+            FinanceBalanceAccounts.Bank,
+            cancellationToken);
 
         var duplicate = await HasDocumentDuplicateAsync(FinancialOperationKinds.Expense, request.DocumentNumber, request.OperationDate, cancellationToken);
         if (duplicate)
@@ -1419,7 +1428,7 @@ public sealed class FinanceService(
         }
 
         await using var balanceLock = await financeAvailableBalanceQuery.AcquireUpdateLockAsync(
-            cashExpense: true,
+            FinanceBalanceAccounts.Cash | FinanceBalanceAccounts.Bank,
             cancellationToken);
         var availableCash = await CalculateAvailableCashAmountAsync(cancellationToken);
         if (amount > availableCash)
@@ -1510,7 +1519,7 @@ public sealed class FinanceService(
 
         await using var fundAssignmentLock = await incomeFundAssignmentService.AcquireUpdateLockAsync(cancellationToken);
         await using var cashBalanceLock = amount < operation.Amount
-            ? await financeAvailableBalanceQuery.AcquireUpdateLockAsync(cashExpense: true, cancellationToken)
+            ? await financeAvailableBalanceQuery.AcquireUpdateLockAsync(FinanceBalanceAccounts.Cash, cancellationToken)
             : null;
         var reductionAmount = MoneyMath.RoundMoney(operation.Amount - amount);
         if (reductionAmount > 0m)
@@ -1694,7 +1703,11 @@ public sealed class FinanceService(
 
         var wasCashExpense = IsCashExpense(operation);
         await using var fundDisbursementLock = await expenseFundDisbursementService.AcquireUpdateLockAsync(cancellationToken);
-        await using var balanceLock = await financeAvailableBalanceQuery.AcquireUpdateLockAsync(isCashExpense, cancellationToken);
+        var balanceAccounts = (wasCashExpense ? FinanceBalanceAccounts.Cash : FinanceBalanceAccounts.Bank) |
+            (isCashExpense ? FinanceBalanceAccounts.Cash : FinanceBalanceAccounts.Bank);
+        await using var balanceLock = await financeAvailableBalanceQuery.AcquireUpdateLockAsync(
+            balanceAccounts,
+            cancellationToken);
         var linkedAtomicAccrual = wasCashExpense
             ? await supplierAccrualRepository.FindBySourceFinancialOperationForUpdateAsync(operation.Id, cancellationToken)
             : null;
@@ -1857,9 +1870,12 @@ public sealed class FinanceService(
             : hasSupplierExpenseFund
                 ? await expenseFundDisbursementService.AcquireUpdateLockAsync(cancellationToken)
             : null;
-        await using var cashBalanceLock = operation.OperationKind == FinancialOperationKinds.Income
-            ? await financeAvailableBalanceQuery.AcquireUpdateLockAsync(cashExpense: true, cancellationToken)
-            : null;
+        var balanceAccounts = operation.OperationKind == FinancialOperationKinds.Income || IsCashExpense(operation)
+            ? FinanceBalanceAccounts.Cash
+            : FinanceBalanceAccounts.Bank;
+        await using var balanceLock = await financeAvailableBalanceQuery.AcquireUpdateLockAsync(
+            balanceAccounts,
+            cancellationToken);
         if (operation.OperationKind == FinancialOperationKinds.Income)
         {
             var availableCashAmount = await CalculateAvailableCashAmountAsync(cancellationToken);
@@ -1961,6 +1977,12 @@ public sealed class FinanceService(
             : hasSupplierExpenseFund
                 ? await expenseFundDisbursementService.AcquireUpdateLockAsync(cancellationToken)
             : null;
+        var balanceAccounts = operation.OperationKind == FinancialOperationKinds.Income || IsCashExpense(operation)
+            ? FinanceBalanceAccounts.Cash
+            : FinanceBalanceAccounts.Bank;
+        await using var balanceLock = await financeAvailableBalanceQuery.AcquireUpdateLockAsync(
+            balanceAccounts,
+            cancellationToken);
 
         SupplierAccrual? linkedAtomicAccrualToRestore = null;
         if (operation.OperationKind == FinancialOperationKinds.Expense)

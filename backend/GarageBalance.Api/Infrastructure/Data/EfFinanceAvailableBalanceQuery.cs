@@ -15,10 +15,11 @@ public sealed class EfFinanceAvailableBalanceQuery(GarageBalanceDbContext dbCont
     private const long BankBalanceLockKey = 0x474242414E4B;
 
     public async Task<IAsyncDisposable> AcquireUpdateLockAsync(
-        bool cashExpense,
+        FinanceBalanceAccounts accounts,
         CancellationToken cancellationToken)
     {
-        if (!dbContext.Database.IsNpgsql())
+        var requestedAccounts = accounts & (FinanceBalanceAccounts.Cash | FinanceBalanceAccounts.Bank);
+        if (!dbContext.Database.IsNpgsql() || requestedAccounts == FinanceBalanceAccounts.None)
         {
             return NoOpAsyncDisposable.Instance;
         }
@@ -30,17 +31,45 @@ public sealed class EfFinanceAvailableBalanceQuery(GarageBalanceDbContext dbCont
             await connection.OpenAsync(cancellationToken);
         }
 
-        var lockKey = cashExpense ? CashBalanceLockKey : BankBalanceLockKey;
+        var lockKeys = new[]
+        {
+            (Account: FinanceBalanceAccounts.Cash, LockKey: CashBalanceLockKey),
+            (Account: FinanceBalanceAccounts.Bank, LockKey: BankBalanceLockKey)
+        }
+            .Where(item => requestedAccounts.HasFlag(item.Account))
+            .Select(item => item.LockKey)
+            .OrderBy(lockKey => lockKey)
+            .ToArray();
+        var acquiredLockKeys = new List<long>(lockKeys.Length);
         try
         {
-            await ExecuteAdvisoryLockCommandAsync(connection, "SELECT pg_advisory_lock(@lock_key)", lockKey, cancellationToken);
-            return new PostgreSqlAdvisoryLockLease(connection, lockKey, closeConnection);
+            foreach (var lockKey in lockKeys)
+            {
+                await ExecuteAdvisoryLockCommandAsync(connection, "SELECT pg_advisory_lock(@lock_key)", lockKey, cancellationToken);
+                acquiredLockKeys.Add(lockKey);
+            }
+
+            return new PostgreSqlAdvisoryLockLease(connection, acquiredLockKeys, closeConnection);
         }
         catch
         {
-            if (closeConnection)
+            try
             {
-                await connection.CloseAsync();
+                foreach (var lockKey in acquiredLockKeys.AsEnumerable().Reverse())
+                {
+                    await ExecuteAdvisoryLockCommandAsync(
+                        connection,
+                        "SELECT pg_advisory_unlock(@lock_key)",
+                        lockKey,
+                        CancellationToken.None);
+                }
+            }
+            finally
+            {
+                if (closeConnection)
+                {
+                    await connection.CloseAsync();
+                }
             }
 
             throw;
@@ -154,7 +183,7 @@ public sealed class EfFinanceAvailableBalanceQuery(GarageBalanceDbContext dbCont
 
     private sealed class PostgreSqlAdvisoryLockLease(
         DbConnection connection,
-        long lockKey,
+        IReadOnlyList<long> lockKeys,
         bool closeConnection) : IAsyncDisposable
     {
         private bool disposed;
@@ -169,11 +198,14 @@ public sealed class EfFinanceAvailableBalanceQuery(GarageBalanceDbContext dbCont
             disposed = true;
             try
             {
-                await ExecuteAdvisoryLockCommandAsync(
-                    connection,
-                    "SELECT pg_advisory_unlock(@lock_key)",
-                    lockKey,
-                    CancellationToken.None);
+                foreach (var lockKey in lockKeys.Reverse())
+                {
+                    await ExecuteAdvisoryLockCommandAsync(
+                        connection,
+                        "SELECT pg_advisory_unlock(@lock_key)",
+                        lockKey,
+                        CancellationToken.None);
+                }
             }
             finally
             {

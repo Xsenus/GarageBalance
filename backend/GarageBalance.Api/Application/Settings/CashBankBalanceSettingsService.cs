@@ -49,11 +49,8 @@ public sealed class CashBankBalanceSettingsService(
                 "Укажите причину изменения от 3 до 1000 символов.");
         }
 
-        await using var cashLock = await availableBalanceQuery.AcquireUpdateLockAsync(
-            cashExpense: true,
-            cancellationToken);
-        await using var bankLock = await availableBalanceQuery.AcquireUpdateLockAsync(
-            cashExpense: false,
+        await using var balanceLock = await availableBalanceQuery.AcquireUpdateLockAsync(
+            FinanceBalanceAccounts.Cash | FinanceBalanceAccounts.Bank,
             cancellationToken);
 
         var totals = await repository.GetTotalsAsync(cancellationToken);
@@ -163,7 +160,7 @@ public sealed class CashBankBalanceSettingsService(
 
         var cashAccount = account == CashBankAccounts.Cash;
         await using var balanceLock = await availableBalanceQuery.AcquireUpdateLockAsync(
-            cashAccount,
+            cashAccount ? FinanceBalanceAccounts.Cash : FinanceBalanceAccounts.Bank,
             cancellationToken);
         var balance = await availableBalanceQuery.GetAsync(
             CashExpenseTypeCodes,
