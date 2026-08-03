@@ -3277,6 +3277,29 @@ h1 {
   justify-self: start;
 }
 
+.tariffs-threshold-range {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  color: #475467;
+  font-size: 12px;
+}
+
+.tariffs-threshold-range__input {
+  width: 82px;
+  text-align: right;
+}
+
+.tariffs-threshold-range__unbounded,
+.tariffs-threshold-range__unit {
+  white-space: nowrap;
+}
+
+.tariffs-threshold-range .contractors-field-error {
+  width: 100%;
+}
+
 .tariffs-page .contractors-bottom-grid {
   gap: 12px;
   align-items: stretch;

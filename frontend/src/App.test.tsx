@@ -33,7 +33,7 @@ import type { ApplicationSettingsClient } from './services/settingsApi'
 import type { AuditClient, AuditEventDto } from './services/auditApi'
 import type { AuthClient, AuthResponse } from './services/authApi'
 import { DictionaryApiError } from './services/dictionariesApi'
-import type { AccountingTypeDto, ChargeServiceSettingDto, CreateChargeServiceWithTariffRequest, DictionaryClient, FeeCampaignDto, GarageDto, IrregularPaymentDto, OwnerDto, PagedResult, StaffDepartmentDto, StaffMemberDto, SupplierContactDto, SupplierDto, SupplierGroupDto, TariffDto, UpsertGarageRequest, UpsertIrregularPaymentRequest, UpsertStaffMemberRequest, UpsertSupplierRequest, UpsertTariffRequest } from './services/dictionariesApi'
+import type { AccountingTypeDto, ChargeServiceSettingDto, CreateChargeServiceWithTariffRequest, DictionaryClient, FeeCampaignDto, GarageDto, IrregularPaymentDto, OwnerDto, PagedResult, StaffDepartmentDto, StaffMemberDto, SupplierContactDto, SupplierDto, SupplierGroupDto, TariffDto, UpsertChargeServiceSettingRequest, UpsertGarageRequest, UpsertIrregularPaymentRequest, UpsertStaffMemberRequest, UpsertSupplierRequest, UpsertTariffRequest } from './services/dictionariesApi'
 import { FinanceApiError } from './services/financeApi'
 import type { AccrualDto, CorrectHistoricalMeterReadingRequest, CreateAccrualRequest, CreateCashBankTransferRequest, CreateExpenseOperationRequest, CreateIncomeOperationRequest, CreateIrregularAccrualRequest, CreateMeterReadingRequest, CreateStaffPaymentRequest, CreateStaffSalaryAdjustmentRequest, CreateSupplierAccrualRequest, ExpenseWorksheetDto, FeeCampaignAccrualGenerationResultDto, FinanceClient, FinancePagedResult, FinancePageParams, FinanceSummaryDto, FinancialOperationDto, GarageBalanceHistoryDto, GarageIncomeWorksheetDto, GenerateFeeCampaignAccrualsRequest, GenerateSupplierGroupSalaryAccrualsRequest, MeterReadingDto, MeterReadingYearPageDto, MissingMeterReadingDto, RegularAccrualGenerationResultDto, RegularCatalogAccrualGenerationResultDto, SupplierAccrualDto, SupplierGroupSalaryAccrualGenerationResultDto } from './services/financeApi'
 import type { FundDto, FundOperationDto, FundOperationPageDto, FundsClient } from './services/fundsApi'
@@ -1349,9 +1349,31 @@ describe('App', () => {
       overdueGraceDays: 30,
       unitName: 'руб.',
     })
+    let electricitySetting = createChargeServiceSetting({
+      id: 'electricity-service',
+      name: 'Электроэнергия',
+      isRegular: true,
+      isMetered: true,
+      hasTieredTariff: true,
+      tariffId: electricityTariff.id,
+      unitName: 'кВт·ч',
+    })
+    const electricitySettingRequests: UpsertChargeServiceSettingRequest[] = []
     const dictionaryClient = createDictionaryClient({
       getTariffs: async () => [waterTariff, electricityTariff, lightingTariff],
-      getChargeServiceSettings: async () => [membershipSetting],
+      getChargeServiceSettings: async () => [membershipSetting, electricitySetting],
+      updateChargeServiceSetting: async (_token, id, request) => {
+        electricitySettingRequests.push(request)
+        electricitySetting = createChargeServiceSetting({
+          ...electricitySetting,
+          id,
+          isMetered: request.isMetered,
+          hasTieredTariff: request.hasTieredTariff,
+          tariffId: request.tariffId ?? null,
+          unitName: request.unitName ?? null,
+        })
+        return electricitySetting
+      },
       getIrregularPayments: async (_token, _search, _limit, includeArchived) => {
         irregularPaymentListRequests.push({ includeArchived })
         return [
@@ -1499,34 +1521,45 @@ describe('App', () => {
     expect(membershipDueDayInput).toHaveValue('28')
     expect(membershipDueMonthSelect).toHaveTextContent('Февраль')
 
-    const electricityThresholdNameInput = within(tariffsPanel).getByLabelText('Электроэнергия: От 1 кВт·ч: наименование')
-    await user.clear(electricityThresholdNameInput)
-    await user.type(electricityThresholdNameInput, 'От 2 кВт·ч{Enter}')
-    const thresholdNameConfirmDialog = await screen.findByRole('dialog', { name: 'Подтвердить изменение?' })
-    expect(within(thresholdNameConfirmDialog).getByText('Наименование порога')).toBeInTheDocument()
-    expect(within(thresholdNameConfirmDialog).getByText('От 1 кВт·ч')).toBeInTheDocument()
-    expect(within(thresholdNameConfirmDialog).getByText('От 2 кВт·ч')).toBeInTheDocument()
-    await user.click(within(thresholdNameConfirmDialog).getByRole('button', { name: 'Сохранить' }))
-    expect(electricityThresholdNameInput).toHaveValue('От 2 кВт·ч')
+    const tieredControl = within(tariffsPanel).getByRole('combobox', { name: 'Электроэнергия: Электроэнергия: пороговая тарификация' })
+    await user.click(tieredControl)
+    await user.click(within(tariffsPanel).getByRole('option', { name: 'Нет' }))
+    await waitFor(() => expect(electricitySettingRequests.at(-1)?.hasTieredTariff).toBe(false))
+    expect(within(tariffsPanel).queryByRole('button', { name: 'Добавить порог' })).not.toBeInTheDocument()
+    expect(within(tariffsPanel).queryByLabelText('Электроэнергия: 1.00–3.00: до')).not.toBeInTheDocument()
+    await user.click(tieredControl)
+    await user.click(within(tariffsPanel).getByRole('option', { name: 'Да' }))
+    await waitFor(() => expect(electricitySettingRequests.at(-1)?.hasTieredTariff).toBe(true))
+    expect(await within(tariffsPanel).findByLabelText('Электроэнергия: 1.00–3.00: до')).toBeInTheDocument()
+
+    expect(within(tariffsPanel).queryByLabelText(/наименование$/i)).not.toBeInTheDocument()
+    const secondTierUpperBound = within(tariffsPanel).getByLabelText('Электроэнергия: 1.00–3.00: до')
+    await user.clear(secondTierUpperBound)
+    await user.type(secondTierUpperBound, '0.5{Enter}')
+    expect(await within(tariffsPanel).findByRole('alert')).toHaveTextContent('Значение «До» должно быть больше 1.00 кВт·ч.')
+    await user.clear(secondTierUpperBound)
+    await user.type(secondTierUpperBound, '4{Enter}')
+    await waitFor(() => expect(thresholdUpdateRequests.at(-1)?.electricityTiers?.[1]).toMatchObject({ name: '1.00–4.00', upperBound: 4, rate: 3 }))
 
     const addThresholdButton = within(tariffsPanel).getByRole('button', { name: 'Добавить порог' })
     expect(addThresholdButton).toHaveClass('tariffs-add-threshold-button')
     await user.click(addThresholdButton)
     const createThresholdDialog = await screen.findByRole('dialog', { name: 'Добавить порог электроэнергии' })
-    expect(within(createThresholdDialog).getByLabelText('Название нового порога')).toHaveValue('Порог 4')
+    expect(within(createThresholdDialog).queryByLabelText('Название нового порога')).not.toBeInTheDocument()
+    expect(within(createThresholdDialog).getByLabelText('Нижняя граница нового порога')).toHaveValue('4.00')
     await user.type(within(createThresholdDialog).getByLabelText('Верхняя граница нового порога'), '2')
     await user.click(within(createThresholdDialog).getByRole('button', { name: 'Добавить' }))
-    expect(within(createThresholdDialog).getByRole('alert')).toHaveTextContent('Верхняя граница должна быть больше 3.00 кВт·ч.')
+    expect(within(createThresholdDialog).getByRole('alert')).toHaveTextContent('Верхняя граница должна быть больше 4.00 кВт·ч.')
     await user.clear(within(createThresholdDialog).getByLabelText('Верхняя граница нового порога'))
     await user.type(within(createThresholdDialog).getByLabelText('Верхняя граница нового порога'), '5')
     await user.clear(within(createThresholdDialog).getByLabelText('Ставка нового порога'))
     await user.type(within(createThresholdDialog).getByLabelText('Ставка нового порога'), '7.5')
     await user.click(within(createThresholdDialog).getByRole('button', { name: 'Добавить' }))
-    const electricityThresholdInput = await within(tariffsPanel).findByLabelText('Электроэнергия: Порог 4: значение')
+    const electricityThresholdInput = await within(tariffsPanel).findByLabelText('Электроэнергия: 4.00–5.00: значение')
     expect(electricityThresholdInput).toHaveValue('7.50')
     expect(thresholdUpdateRequests.at(-1)?.electricityTiers).toHaveLength(4)
-    expect(thresholdUpdateRequests.at(-1)?.electricityTiers?.[2]).toMatchObject({ name: 'Порог 4', upperBound: 5, rate: 7.5 })
-    const deleteThresholdButton = within(tariffsPanel).getByRole('button', { name: 'Удалить порог Порог 4' })
+    expect(thresholdUpdateRequests.at(-1)?.electricityTiers?.[2]).toMatchObject({ name: '4.00–5.00', upperBound: 5, rate: 7.5 })
+    const deleteThresholdButton = within(tariffsPanel).getByRole('button', { name: 'Удалить порог 4.00–5.00' })
     await user.click(deleteThresholdButton)
     const thresholdDeleteDialog = await screen.findByRole('dialog', { name: 'Удалить порог тарификации?' })
     const thresholdDeleteCancelButton = within(thresholdDeleteDialog).getByRole('button', { name: 'Отмена' })
@@ -1536,13 +1569,13 @@ describe('App', () => {
     await user.keyboard('{Escape}')
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Удалить порог тарификации?' })).not.toBeInTheDocument())
     expect(deleteThresholdButton).toHaveFocus()
-    expect(within(tariffsPanel).getByLabelText('Электроэнергия: Порог 4: значение')).toHaveValue('7.50')
+    expect(within(tariffsPanel).getByLabelText('Электроэнергия: 4.00–5.00: значение')).toHaveValue('7.50')
 
     await user.click(deleteThresholdButton)
     const reopenedThresholdDeleteDialog = await screen.findByRole('dialog', { name: 'Удалить порог тарификации?' })
     await user.type(within(reopenedThresholdDeleteDialog).getByLabelText('Причина удаления порога'), 'Лишний порог добавлен ошибочно')
     await user.click(within(reopenedThresholdDeleteDialog).getByRole('button', { name: 'Удалить' }))
-    await waitFor(() => expect(within(tariffsPanel).queryByLabelText('Электроэнергия: Порог 4: значение')).not.toBeInTheDocument())
+    await waitFor(() => expect(within(tariffsPanel).queryByLabelText('Электроэнергия: 4.00–5.00: значение')).not.toBeInTheDocument())
     expect(thresholdUpdateRequests.at(-1)?.electricityTiers).toHaveLength(3)
     expect(thresholdUpdateRequests.at(-1)?.electricityTierChangeReason).toBe('Лишний порог добавлен ошибочно')
 
@@ -3702,7 +3735,7 @@ describe('App', () => {
     expect(within(staffTable).getByRole('cell', { name: 'Сотрудники пока не настроены.' })).toBeInTheDocument()
   }, 30000)
 
-  it('loads and saves tariff values and electricity tier names from tariffs screen', async () => {
+  it('loads and saves numeric electricity tier ranges from tariffs screen', async () => {
     const user = userEvent.setup()
     let updatedTariffRequest: UpsertTariffRequest | null = null
     const electricityTariff = createTariff({
@@ -3750,21 +3783,26 @@ describe('App', () => {
     await openSection(user, 'Тарифы и сборы')
     const tariffsPanel = await screen.findByRole('region', { name: 'Тарифы и сборы' })
 
-    const firstTierName = await within(tariffsPanel).findByLabelText('Электроэнергия: От 0 кВт·ч: наименование')
-    await user.clear(firstTierName)
-    await user.type(firstTierName, 'Льготный порог{Enter}')
-    const confirmationDialog = await screen.findByRole('dialog', { name: 'Подтвердить изменение?' })
-    await user.click(within(confirmationDialog).getByRole('button', { name: 'Сохранить' }))
+    const firstTierUpperBound = await within(tariffsPanel).findByLabelText('Электроэнергия: 0.00–1.00: до')
+    await user.clear(firstTierUpperBound)
+    await user.type(firstTierUpperBound, '2{Enter}')
+    expect(screen.queryByRole('dialog', { name: 'Подтвердить изменение?' })).not.toBeInTheDocument()
 
     await waitFor(() => expect(updatedTariffRequest).toMatchObject({
       name: 'Электроэнергия',
       calculationBase: 'meter_electricity',
-      electricityFirstTierName: 'Льготный порог',
-      electricitySecondTierName: 'От 1 кВт·ч',
-      electricityThirdTierName: 'От 3 кВт·ч',
+      electricityFirstThreshold: 2,
+      electricityFirstTierName: '0.00–2.00',
+      electricitySecondTierName: '2.00–3.00',
+      electricityThirdTierName: '3.00 и выше',
       electricityFirstRate: 2,
       electricitySecondRate: 3,
       electricityThirdRate: 5,
+      electricityTiers: [
+        expect.objectContaining({ name: '0.00–2.00', upperBound: 2, rate: 2 }),
+        expect.objectContaining({ name: '2.00–3.00', upperBound: 3, rate: 3 }),
+        expect.objectContaining({ name: '3.00 и выше', rate: 5 }),
+      ],
     }))
   })
 
@@ -4267,9 +4305,7 @@ describe('App', () => {
     const meterModeControl = within(tariffsPanel).getByRole('combobox', { name: 'Охрана территории: Тариф охраны: по счетчику' })
     await user.click(meterModeControl)
     await user.click(within(tariffsPanel).getByRole('option', { name: 'Да' }))
-    const meterModeConfirmDialog = await screen.findByRole('dialog', { name: 'Подтвердить изменение?' })
-    expect(within(meterModeConfirmDialog).getByText('По счетчику')).toBeInTheDocument()
-    await user.click(within(meterModeConfirmDialog).getByRole('button', { name: 'Сохранить' }))
+    expect(screen.queryByRole('dialog', { name: 'Подтвердить изменение?' })).not.toBeInTheDocument()
 
     await waitFor(() => expect(inlineUpdateRequests).toHaveLength(1))
     expect(await within(tariffsPanel).findByRole('alert')).toHaveTextContent('Счётчиковый тариф временно не удалось сохранить.')
@@ -4278,8 +4314,6 @@ describe('App', () => {
 
     await user.click(meterModeControl)
     await user.click(within(tariffsPanel).getByRole('option', { name: 'Да' }))
-    const retryMeterModeDialog = await screen.findByRole('dialog', { name: 'Подтвердить изменение?' })
-    await user.click(within(retryMeterModeDialog).getByRole('button', { name: 'Сохранить' }))
 
     await waitFor(() => expect(inlineUpdateRequests).toHaveLength(2))
     expect(inlineUpdateRequests[1]).toMatchObject({

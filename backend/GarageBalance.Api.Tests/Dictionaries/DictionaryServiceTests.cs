@@ -2065,9 +2065,9 @@ public sealed class DictionaryServiceTests
         Assert.Equal(5.3333m, result.Value.ElectricityThirdRate);
         var audit = Assert.Single(database.Context.AuditEvents, item => item.Action == "dictionary.tariff_created");
         Assert.Equal(actorUserId, audit.ActorUserId);
-        Assert.Contains("электричество: От 0 кВт·ч до 50.556 кВт·ч по 3.11", audit.Summary, StringComparison.Ordinal);
-        Assert.Contains("От 50.556 кВт·ч до 100.778 кВт·ч по 4.22", audit.Summary, StringComparison.Ordinal);
-        Assert.Contains("От 100.778 кВт·ч по 5.33", audit.Summary, StringComparison.Ordinal);
+        Assert.Contains("электричество: 0–50.556 кВт·ч по 3.11", audit.Summary, StringComparison.Ordinal);
+        Assert.Contains("50.556–100.778 кВт·ч по 4.22", audit.Summary, StringComparison.Ordinal);
+        Assert.Contains("100.778+ кВт·ч по 5.33", audit.Summary, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -2461,6 +2461,7 @@ public sealed class DictionaryServiceTests
 
         Assert.True(created.Succeeded);
         Assert.Equal(3, created.Value!.ElectricityTiers!.Count);
+        Assert.Equal(["0–50 кВт·ч", "50–100 кВт·ч", "100+ кВт·ч"], created.Value.ElectricityTiers.Select(tier => tier.Name));
         Assert.All(created.Value.ElectricityTiers, tier => Assert.True(tier.IsCustom));
         Assert.False(string.IsNullOrWhiteSpace((await database.Context.Tariffs.SingleAsync()).ElectricityTiersJson));
 
@@ -2485,7 +2486,7 @@ public sealed class DictionaryServiceTests
 
         Assert.True(added.Succeeded);
         Assert.Equal(4, added.Value!.ElectricityTiers!.Count);
-        var customTier = Assert.Single(added.Value.ElectricityTiers, tier => tier.Name == "До 150");
+        var customTier = Assert.Single(added.Value.ElectricityTiers, tier => tier.Name == "100–150 кВт·ч");
         Assert.True(customTier.IsCustom);
 
         var deleted = await service.UpdateTariffAsync(

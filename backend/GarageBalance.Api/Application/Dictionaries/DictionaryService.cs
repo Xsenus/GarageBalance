@@ -2361,10 +2361,17 @@ public sealed class DictionaryService(
             return baseDetails;
         }
 
+        var lowerBound = 0m;
         var tierDetails = string.Join(", ", tiers.Select(tier =>
-            tier.UpperBound.HasValue
-                ? $"{tier.Name} до {tier.UpperBound.Value.ToString("0.####", CultureInfo.InvariantCulture)} кВт·ч по {MoneyFormatting.Format(tier.Rate)}"
-                : $"{tier.Name} по {MoneyFormatting.Format(tier.Rate)}"));
+        {
+            var rangeName = FormatElectricityTierRangeName(lowerBound, tier.UpperBound);
+            if (tier.UpperBound.HasValue)
+            {
+                lowerBound = tier.UpperBound.Value;
+            }
+
+            return $"{rangeName} по {MoneyFormatting.Format(tier.Rate)}";
+        }));
         return $"{baseDetails}, электричество: {tierDetails}";
     }
 
@@ -2392,13 +2399,7 @@ public sealed class DictionaryService(
             for (var index = 0; index < request.ElectricityTiers.Count; index++)
             {
                 var requestedTier = request.ElectricityTiers[index];
-                var name = requestedTier.Name.Trim();
-                if (name.Length == 0)
-                {
-                    return DictionaryResult<ElectricityTierConfig?>.Failure(
-                        "tariff_electricity_tier_name_required",
-                        $"Укажите название ступени {index + 1}.");
-                }
+                var name = $"Ступень {index + 1}";
 
                 var rate = MoneyMath.RoundRate(requestedTier.Rate);
                 if (rate <= 0)
@@ -2432,6 +2433,8 @@ public sealed class DictionaryService(
                         "tariff_electricity_tier_upper_bound_invalid",
                         "Границы ступеней электроэнергии должны быть положительными и строго возрастать.");
                 }
+
+                name = FormatElectricityTierRangeName(previousUpperBound ?? 0m, upperBound);
 
                 var existingTier = requestedTier.Id.HasValue
                     ? existingTiers.FirstOrDefault(tier => tier.Id == requestedTier.Id.Value)
@@ -2478,9 +2481,9 @@ public sealed class DictionaryService(
 
         var firstThreshold = MoneyMath.RoundMeterValue(request.ElectricityFirstThreshold!.Value);
         var secondThreshold = MoneyMath.RoundMeterValue(request.ElectricitySecondThreshold!.Value);
-        var firstTierName = NormalizeOptional(request.ElectricityFirstTierName) ?? "От 0 кВт·ч";
-        var secondTierName = NormalizeOptional(request.ElectricitySecondTierName) ?? $"От {firstThreshold.ToString("0.####", CultureInfo.InvariantCulture)} кВт·ч";
-        var thirdTierName = NormalizeOptional(request.ElectricityThirdTierName) ?? $"От {secondThreshold.ToString("0.####", CultureInfo.InvariantCulture)} кВт·ч";
+        var firstTierName = FormatElectricityTierRangeName(0m, firstThreshold);
+        var secondTierName = FormatElectricityTierRangeName(firstThreshold, secondThreshold);
+        var thirdTierName = FormatElectricityTierRangeName(secondThreshold, null);
         var firstRate = MoneyMath.RoundRate(request.ElectricityFirstRate!.Value);
         var secondRate = MoneyMath.RoundRate(request.ElectricitySecondRate!.Value);
         var thirdRate = MoneyMath.RoundRate(request.ElectricityThirdRate!.Value);
@@ -2505,6 +2508,14 @@ public sealed class DictionaryService(
             new ElectricityTierConfigItem(Guid.Empty, secondTierName, secondThreshold, secondRate, false),
             new ElectricityTierConfigItem(Guid.Empty, thirdTierName, null, thirdRate, false)
         ], false));
+    }
+
+    private static string FormatElectricityTierRangeName(decimal lowerBound, decimal? upperBound)
+    {
+        var lower = lowerBound.ToString("0.####", CultureInfo.InvariantCulture);
+        return upperBound.HasValue
+            ? $"{lower}–{upperBound.Value.ToString("0.####", CultureInfo.InvariantCulture)} кВт·ч"
+            : $"{lower}+ кВт·ч";
     }
 
     private static void ApplyElectricityTiers(Tariff tariff, ElectricityTierConfig? tiers)
