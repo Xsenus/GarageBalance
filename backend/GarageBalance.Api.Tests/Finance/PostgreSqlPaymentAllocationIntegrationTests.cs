@@ -172,6 +172,77 @@ public sealed class PostgreSqlPaymentAllocationIntegrationTests
         Assert.True(inactiveAllocationCount > 0);
     }
 
+    [PostgreSqlFact]
+    public async Task AllocationRebuild_SerializesCreateUpdateCancelAndRestoreEntrypoints()
+    {
+        await using var database = await PostgreSqlTestDatabase.CreateAsync();
+        var ledger = await SeedLedgerAsync(database, "PG-ALLOCATION-ENTRYPOINTS", [100m, 100m]);
+        await using (var initialPaymentContext = database.CreateContext())
+        {
+            var result = await FinanceServiceTestFactory.Create(initialPaymentContext).CreateIncomeAsync(
+                CreateConcurrentPayment(ledger, "PG-ALLOCATION-INITIAL") with { Amount = 100m },
+                null,
+                CancellationToken.None);
+            Assert.True(result.Succeeded, result.ErrorMessage);
+        }
+
+        await using (var cancelContext = database.CreateContext())
+        await using (var paymentContext = database.CreateContext())
+        {
+            var results = await Task.WhenAll(
+                AsSucceeded(FinanceServiceTestFactory.Create(cancelContext).CancelAccrualAsync(
+                    ledger.AccrualIds[0],
+                    new CancelFinanceEntryRequest("Конкурентная отмена начисления"),
+                    null,
+                    CancellationToken.None)),
+                AsSucceeded(FinanceServiceTestFactory.Create(paymentContext).CreateIncomeAsync(
+                    CreateConcurrentPayment(ledger, "PG-ALLOCATION-CANCEL-RACE"),
+                    null,
+                    CancellationToken.None)));
+            Assert.All(results, Assert.True);
+        }
+        await AssertAllocationInvariantAsync(database, ledger, expectedActiveAccrualTotal: 100m);
+
+        await using (var restoreContext = database.CreateContext())
+        await using (var paymentContext = database.CreateContext())
+        {
+            var results = await Task.WhenAll(
+                AsSucceeded(FinanceServiceTestFactory.Create(restoreContext).RestoreAccrualAsync(
+                    ledger.AccrualIds[0],
+                    null,
+                    CancellationToken.None)),
+                AsSucceeded(FinanceServiceTestFactory.Create(paymentContext).CreateIncomeAsync(
+                    CreateConcurrentPayment(ledger, "PG-ALLOCATION-RESTORE-RACE"),
+                    null,
+                    CancellationToken.None)));
+            Assert.All(results, Assert.True);
+        }
+        await AssertAllocationInvariantAsync(database, ledger, expectedActiveAccrualTotal: 200m);
+
+        await using (var updateContext = database.CreateContext())
+        await using (var paymentContext = database.CreateContext())
+        {
+            var results = await Task.WhenAll(
+                AsSucceeded(FinanceServiceTestFactory.Create(updateContext).UpdateAccrualAsync(
+                    ledger.AccrualIds[1],
+                    new CreateAccrualRequest(
+                        ledger.GarageId,
+                        ledger.IncomeTypeId,
+                        new DateOnly(2026, 2, 1),
+                        50m,
+                        AccrualSources.Manual,
+                        "Конкурентное изменение начисления"),
+                    null,
+                    CancellationToken.None)),
+                AsSucceeded(FinanceServiceTestFactory.Create(paymentContext).CreateIncomeAsync(
+                    CreateConcurrentPayment(ledger, "PG-ALLOCATION-UPDATE-RACE"),
+                    null,
+                    CancellationToken.None)));
+            Assert.All(results, Assert.True);
+        }
+        await AssertAllocationInvariantAsync(database, ledger, expectedActiveAccrualTotal: 150m);
+    }
+
     private static async Task VerifyAdvisoryLockScopeAsync(
         PostgreSqlTestDatabase database,
         SeededLedger first,
@@ -209,6 +280,34 @@ public sealed class PostgreSqlPaymentAllocationIntegrationTests
             70m,
             documentNumber,
             null);
+
+    private static async Task<bool> AsSucceeded<T>(Task<FinanceResult<T>> task) => (await task).Succeeded;
+
+    private static async Task AssertAllocationInvariantAsync(
+        PostgreSqlTestDatabase database,
+        SeededLedger ledger,
+        decimal expectedActiveAccrualTotal)
+    {
+        await using var context = database.CreateContext();
+        var activeAccruals = await context.Accruals
+            .Where(accrual => ledger.AccrualIds.Contains(accrual.Id) && !accrual.IsCanceled)
+            .Select(accrual => new { accrual.Id, accrual.Amount })
+            .ToArrayAsync();
+        var activeAllocations = await context.AccrualPaymentAllocations
+            .Where(allocation => allocation.IsActive && ledger.AccrualIds.Contains(allocation.AccrualId))
+            .GroupBy(allocation => allocation.AccrualId)
+            .Select(group => new { AccrualId = group.Key, Amount = group.Sum(allocation => allocation.Amount) })
+            .ToArrayAsync();
+
+        Assert.Equal(expectedActiveAccrualTotal, activeAccruals.Sum(accrual => accrual.Amount));
+        Assert.Equal(expectedActiveAccrualTotal, activeAllocations.Sum(allocation => allocation.Amount));
+        Assert.All(activeAllocations, allocation =>
+        {
+            var accrual = Assert.Single(activeAccruals, item => item.Id == allocation.AccrualId);
+            Assert.True(allocation.Amount <= accrual.Amount);
+        });
+        Assert.DoesNotContain(activeAllocations, allocation => activeAccruals.All(accrual => accrual.Id != allocation.AccrualId));
+    }
 
     private static async Task<SeededLedger> SeedLedgerAsync(
         PostgreSqlTestDatabase database,

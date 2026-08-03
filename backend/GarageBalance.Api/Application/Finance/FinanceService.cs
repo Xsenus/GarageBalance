@@ -1579,6 +1579,9 @@ public sealed class FinanceService(
         operation.IncomeTypeId = incomeType.Id;
         operation.IncomeType = incomeType;
         operation.UpdatedAtUtc = DateTimeOffset.UtcNow;
+        await using var allocationLock = await accrualPaymentAllocationRepository.AcquireRebuildLockAsync(
+            [oldAllocationKey, new AccrualPaymentAllocationKey(garage.Id, incomeType.Id)],
+            cancellationToken);
         await RebuildPaymentAllocationsAsync(
             [oldAllocationKey, new AccrualPaymentAllocationKey(garage.Id, incomeType.Id)],
             actorUserId,
@@ -1939,6 +1942,9 @@ public sealed class FinanceService(
 
         if (operation.OperationKind == FinancialOperationKinds.Income)
         {
+            await using var allocationLock = await accrualPaymentAllocationRepository.AcquireRebuildLockAsync(
+                [new AccrualPaymentAllocationKey(operation.GarageId!.Value, operation.IncomeTypeId!.Value)],
+                cancellationToken);
             await RebuildPaymentAllocationsAsync(
                 [new AccrualPaymentAllocationKey(operation.GarageId!.Value, operation.IncomeTypeId!.Value)],
                 actorUserId,
@@ -2070,6 +2076,9 @@ public sealed class FinanceService(
 
         if (operation.OperationKind == FinancialOperationKinds.Income)
         {
+            await using var allocationLock = await accrualPaymentAllocationRepository.AcquireRebuildLockAsync(
+                [new AccrualPaymentAllocationKey(operation.GarageId!.Value, operation.IncomeTypeId!.Value)],
+                cancellationToken);
             await RebuildPaymentAllocationsAsync(
                 [new AccrualPaymentAllocationKey(operation.GarageId!.Value, operation.IncomeTypeId!.Value)],
                 actorUserId,
@@ -2103,6 +2112,9 @@ public sealed class FinanceService(
 
         accrual.IsCanceled = true;
         accrual.Comment = AppendCancelReason(accrual.Comment, reason);
+        await using var allocationLock = await accrualPaymentAllocationRepository.AcquireRebuildLockAsync(
+            [new AccrualPaymentAllocationKey(accrual.GarageId, accrual.IncomeTypeId)],
+            cancellationToken);
         await RebuildPaymentAllocationsAsync(
             [new AccrualPaymentAllocationKey(accrual.GarageId, accrual.IncomeTypeId)],
             actorUserId,
@@ -2161,6 +2173,9 @@ public sealed class FinanceService(
 
         accrual.IsCanceled = false;
         accrual.UpdatedAtUtc = DateTimeOffset.UtcNow;
+        await using var allocationLock = await accrualPaymentAllocationRepository.AcquireRebuildLockAsync(
+            [new AccrualPaymentAllocationKey(accrual.GarageId, accrual.IncomeTypeId)],
+            cancellationToken);
         await RebuildPaymentAllocationsAsync(
             [new AccrualPaymentAllocationKey(accrual.GarageId, accrual.IncomeTypeId)],
             actorUserId,
@@ -2250,6 +2265,9 @@ public sealed class FinanceService(
         };
 
         accrualRepository.Add(accrual);
+        await using var allocationLock = await accrualPaymentAllocationRepository.AcquireRebuildLockAsync(
+            [new AccrualPaymentAllocationKey(accrual.GarageId, accrual.IncomeTypeId)],
+            cancellationToken);
         await RebuildPaymentAllocationsAsync(
             [new AccrualPaymentAllocationKey(accrual.GarageId, accrual.IncomeTypeId)],
             actorUserId,
@@ -2325,6 +2343,9 @@ public sealed class FinanceService(
         };
 
         accrualRepository.Add(accrual);
+        await using var allocationLock = await accrualPaymentAllocationRepository.AcquireRebuildLockAsync(
+            [new AccrualPaymentAllocationKey(accrual.GarageId, accrual.IncomeTypeId)],
+            cancellationToken);
         await RebuildPaymentAllocationsAsync(
             [new AccrualPaymentAllocationKey(accrual.GarageId, accrual.IncomeTypeId)],
             actorUserId,
@@ -2384,6 +2405,9 @@ public sealed class FinanceService(
                 Comment = comment
             };
             accrualRepository.Add(accrual);
+            await using var debtTransferCreateAllocationLock = await accrualPaymentAllocationRepository.AcquireRebuildLockAsync(
+                [new AccrualPaymentAllocationKey(accrual.GarageId, accrual.IncomeTypeId)],
+                cancellationToken);
             await RebuildPaymentAllocationsAsync(
                 [new AccrualPaymentAllocationKey(accrual.GarageId, accrual.IncomeTypeId)],
                 actorUserId,
@@ -2409,6 +2433,9 @@ public sealed class FinanceService(
         accrual.Amount = MoneyMath.RoundMoney(accrual.Amount + amount);
         accrual.Comment = AppendDebtTransferComment(accrual.Comment, comment);
         accrual.UpdatedAtUtc = DateTimeOffset.UtcNow;
+        await using var debtTransferUpdateAllocationLock = await accrualPaymentAllocationRepository.AcquireRebuildLockAsync(
+            [new AccrualPaymentAllocationKey(accrual.GarageId, accrual.IncomeTypeId)],
+            cancellationToken);
         await RebuildPaymentAllocationsAsync(
             [new AccrualPaymentAllocationKey(accrual.GarageId, accrual.IncomeTypeId)],
             actorUserId,
@@ -2557,6 +2584,9 @@ public sealed class FinanceService(
         accrual.Source = source;
         accrual.Comment = comment;
         accrual.UpdatedAtUtc = DateTimeOffset.UtcNow;
+        await using var allocationLock = await accrualPaymentAllocationRepository.AcquireRebuildLockAsync(
+            [oldAllocationKey, new AccrualPaymentAllocationKey(accrual.GarageId, accrual.IncomeTypeId)],
+            cancellationToken);
         await RebuildPaymentAllocationsAsync(
             [oldAllocationKey, new AccrualPaymentAllocationKey(accrual.GarageId, accrual.IncomeTypeId)],
             actorUserId,
@@ -2809,16 +2839,9 @@ public sealed class FinanceService(
         var useTieredElectricity = matchingSetting?.HasTieredTariff ?? true;
         var dueDates = AccrualDueDates.ForIncomeType(month, incomeType.Code, matchingSetting);
         var accountingYear = AnnualAccrualPolicy.ResolveAccountingYear(incomeType.Code, month);
-        var activeAnnualGarageIds = accountingYear.HasValue
-            ? await garageRepository.GetActiveIdsAsync(cancellationToken)
-            : null;
-        await using var annualGenerationLock = accountingYear.HasValue
-            ? await accrualPaymentAllocationRepository.AcquireRebuildLockAsync(
-                activeAnnualGarageIds!
-                    .Select(garageId => new AccrualPaymentAllocationKey(garageId, incomeType.Id))
-                    .ToArray(),
-                cancellationToken)
-            : null;
+        await using var generationLock = await accrualPaymentAllocationRepository.AcquireRebuildLockAsync(
+            [new AccrualPaymentAllocationKey(Guid.Empty, incomeType.Id)],
+            cancellationToken);
 
         var existingAccrualCount = accountingYear.HasValue
             ? await accrualRepository.CountActiveAnnualRegularForGenerationAsync(
@@ -2832,8 +2855,7 @@ public sealed class FinanceService(
                 cancellationToken);
         if (existingAccrualCount > 0)
         {
-            var activeGarageCount = activeAnnualGarageIds?.Count
-                ?? await garageRepository.CountActiveAsync(cancellationToken);
+            var activeGarageCount = await garageRepository.CountActiveAsync(cancellationToken);
             if (activeGarageCount > 0 && existingAccrualCount >= activeGarageCount)
             {
                 var periodLabel = accountingYear.HasValue ? $"за {accountingYear.Value} год" : $"за {month:MM.yyyy}";
@@ -3103,6 +3125,10 @@ public sealed class FinanceService(
         {
             return FinanceResult<FeeCampaignAccrualGenerationResultDto>.Failure("fee_campaign_no_garages", "Нет активных гаражей для начисления сбора.");
         }
+
+        await using var generationLock = await accrualPaymentAllocationRepository.AcquireRebuildLockAsync(
+            garages.Select(garage => new AccrualPaymentAllocationKey(garage.Id, incomeType.Id)).ToArray(),
+            cancellationToken);
 
         var existingGarageIds = await accrualRepository.GetActiveFeeCampaignGarageIdsAsync(campaign.Id, month, cancellationToken);
         var fullyPaidGarageIds = await accrualRepository.GetFullyPaidFeeCampaignGarageIdsBeforeMonthAsync(
