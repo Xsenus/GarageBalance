@@ -1184,6 +1184,8 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
       hasTieredTariff,
       unitName: unitName?.trim() || null,
       incomeTypeId: isRegular ? setting.incomeTypeId ?? null : null,
+      expenseTypeId: setting.expenseTypeId ?? null,
+      expenseFundId: setting.expenseFundId ?? null,
       tariffId: isRegular ? linkedTariffId ?? null : null,
     }
   }

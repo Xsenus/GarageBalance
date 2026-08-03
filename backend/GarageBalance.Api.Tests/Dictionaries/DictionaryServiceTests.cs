@@ -2369,15 +2369,17 @@ public sealed class DictionaryServiceTests
         var secondFund = CreateFund("Фонд воды 2026", 20);
         var firstIncomeType = new IncomeType { Name = "Вода", Code = "other_income", DestinationFundId = firstFund.Id };
         var secondIncomeType = new IncomeType { Name = "Водоснабжение", Code = "other_income", DestinationFundId = secondFund.Id };
+        var expenseType = new ExpenseType { Name = "Оплата водоснабжения", Code = "water_supply" };
         var firstTariff = new Tariff { Name = "Вода 2025", CalculationBase = "meter_water", Rate = 40m, EffectiveFrom = new DateOnly(2025, 1, 1) };
         var secondTariff = new Tariff { Name = "Вода 2026", CalculationBase = "meter_water", Rate = 50m, EffectiveFrom = new DateOnly(2026, 1, 1) };
         database.Context.Funds.AddRange(firstFund, secondFund);
         database.Context.IncomeTypes.AddRange(firstIncomeType, secondIncomeType);
+        database.Context.ExpenseTypes.Add(expenseType);
         database.Context.Tariffs.AddRange(firstTariff, secondTariff);
         await database.Context.SaveChangesAsync();
         var service = DictionaryServiceTestFactory.Create(database.Context);
         var created = await service.CreateChargeServiceSettingAsync(
-            new UpsertChargeServiceSettingRequest("Вода", true, 1, 1, 30, 6, 30, true, false, "м³", firstIncomeType.Id, firstTariff.Id),
+            new UpsertChargeServiceSettingRequest("Вода", true, 1, 1, 30, 6, 30, true, false, "м³", firstIncomeType.Id, firstTariff.Id, expenseType.Id, firstFund.Id),
             null,
             CancellationToken.None);
         database.Context.AuditEvents.RemoveRange(database.Context.AuditEvents);
@@ -2386,7 +2388,7 @@ public sealed class DictionaryServiceTests
         var actorUserId = Guid.NewGuid();
         var result = await service.UpdateChargeServiceSettingAsync(
             created.Value!.Id,
-            new UpsertChargeServiceSettingRequest("Водоснабжение", true, 12, 2, 31, 12, 45, true, false, "м³", secondIncomeType.Id, secondTariff.Id),
+            new UpsertChargeServiceSettingRequest("Водоснабжение", true, 12, 2, 31, 12, 45, true, false, "м³", secondIncomeType.Id, secondTariff.Id, expenseType.Id, firstFund.Id),
             actorUserId,
             CancellationToken.None);
 
@@ -2394,6 +2396,8 @@ public sealed class DictionaryServiceTests
         Assert.Equal("Водоснабжение", result.Value!.Name);
         Assert.Equal(12, result.Value.PeriodicityMonths);
         Assert.Equal(31, result.Value.PaymentDueDay);
+        Assert.Equal(expenseType.Id, result.Value.ExpenseTypeId);
+        Assert.Equal(firstFund.Id, result.Value.ExpenseFundId);
         var audit = Assert.Single(database.Context.AuditEvents, item => item.Action == "dictionary.charge_service_updated");
         Assert.Equal(actorUserId, audit.ActorUserId);
         using var metadata = JsonDocument.Parse(audit.MetadataJson!);
@@ -2406,7 +2410,7 @@ public sealed class DictionaryServiceTests
 
         var noOp = await service.UpdateChargeServiceSettingAsync(
             created.Value.Id,
-            new UpsertChargeServiceSettingRequest("Водоснабжение", true, 12, 2, 31, 12, 45, true, false, "м³", secondIncomeType.Id, secondTariff.Id),
+            new UpsertChargeServiceSettingRequest("Водоснабжение", true, 12, 2, 31, 12, 45, true, false, "м³", secondIncomeType.Id, secondTariff.Id, expenseType.Id, firstFund.Id),
             actorUserId,
             CancellationToken.None);
 
