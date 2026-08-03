@@ -308,7 +308,6 @@ describe('accessible dynamic messages', () => {
   it('keeps tabs active focused and responsive', () => {
     const tabContainers = [
       '.contractors-prototype-tabs',
-      '.meter-readings-tabs',
       '.payments-prototype-tabs',
       '.finance-tabs',
       '.report-tabs',
@@ -325,8 +324,8 @@ describe('accessible dynamic messages', () => {
 
     expect(appCss).toContain('.dictionary-subnav button:focus-visible')
     expect(appCss).toContain('outline: 3px solid rgba(46, 144, 250, 0.18);')
-    expect(normalizedAppCss).toContain('.contractors-prototype-tabs,\n  .meter-readings-tabs,')
-    expect(normalizedAppCss).toContain('.payments-prototype-tabs button,\n  .contractors-prototype-tabs button,\n  .meter-readings-tabs button')
+    expect(normalizedAppCss).toContain('.payments-prototype-tabs,\n  .contractors-prototype-tabs,\n  .payments-prototype-actions')
+    expect(normalizedAppCss).toContain('.payments-prototype-tabs button,\n  .contractors-prototype-tabs button')
     expect(appCss).toContain('flex-wrap: wrap;')
     expect(appCss).toContain('grid-template-columns: 1fr;')
 

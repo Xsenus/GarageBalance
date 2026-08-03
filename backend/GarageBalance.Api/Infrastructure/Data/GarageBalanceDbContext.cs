@@ -43,6 +43,7 @@ public sealed class GarageBalanceDbContext(DbContextOptions<GarageBalanceDbConte
     public DbSet<CashBankTransfer> CashBankTransfers => Set<CashBankTransfer>();
     public DbSet<CashBankBalanceOperation> CashBankBalanceOperations => Set<CashBankBalanceOperation>();
     public DbSet<MeterReading> MeterReadings => Set<MeterReading>();
+    public DbSet<MeterDevice> MeterDevices => Set<MeterDevice>();
     public DbSet<Fund> Funds => Set<Fund>();
     public DbSet<FundOperation> FundOperations => Set<FundOperation>();
     public DbSet<FormState> FormStates => Set<FormState>();
@@ -614,6 +615,26 @@ public sealed class GarageBalanceDbContext(DbContextOptions<GarageBalanceDbConte
                 .OnDelete(DeleteBehavior.Restrict);
         });
 
+        modelBuilder.Entity<MeterDevice>(entity =>
+        {
+            entity.ToTable("meter_devices");
+            entity.HasKey(device => device.Id);
+            entity.Property(device => device.MeterKind).HasMaxLength(40).IsRequired();
+            entity.Property(device => device.SerialNumber).HasMaxLength(100).IsRequired();
+            entity.Property(device => device.InitialValue).HasPrecision(18, 3);
+            entity.Property(device => device.FinalValue).HasPrecision(18, 3);
+            entity.Property(device => device.Version).IsConcurrencyToken();
+            entity.HasIndex(device => new { device.GarageId, device.MeterKind, device.InstalledOn });
+            entity.HasIndex(device => new { device.GarageId, device.MeterKind, device.SerialNumber }).IsUnique();
+            entity.HasIndex(device => new { device.GarageId, device.MeterKind })
+                .IsUnique()
+                .HasFilter("\"RemovedOn\" IS NULL");
+            entity.HasOne(device => device.Garage)
+                .WithMany()
+                .HasForeignKey(device => device.GarageId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
         modelBuilder.Entity<MeterReading>(entity =>
         {
             entity.ToTable("meter_readings");
@@ -621,13 +642,16 @@ public sealed class GarageBalanceDbContext(DbContextOptions<GarageBalanceDbConte
             entity.Property(reading => reading.MeterKind).HasMaxLength(40).IsRequired();
             entity.Property(reading => reading.CurrentValue).HasPrecision(18, 3);
             entity.Property(reading => reading.PreviousValue).HasPrecision(18, 3);
+            entity.Property(reading => reading.PreviousDeviceConsumption).HasPrecision(18, 3).HasDefaultValue(0m);
             entity.Property(reading => reading.Consumption).HasPrecision(18, 3);
+            entity.Property(reading => reading.IsMeterReplacement).HasDefaultValue(false);
             entity.Property(reading => reading.HasGapWarning).HasDefaultValue(false);
             entity.Property(reading => reading.Comment).HasMaxLength(1000);
             entity.Property(reading => reading.Version).IsConcurrencyToken();
             entity.HasIndex(reading => reading.AccountingMonth);
             entity.HasIndex(reading => reading.ReadingDate);
             entity.HasIndex(reading => reading.GarageId);
+            entity.HasIndex(reading => reading.MeterDeviceId);
             entity.HasIndex(reading => new { reading.MeterKind, reading.AccountingMonth, reading.GarageId })
                 .HasFilter("\"IsCanceled\" = false");
             entity.HasIndex(reading => new { reading.GarageId, reading.MeterKind, reading.AccountingMonth })
@@ -636,6 +660,10 @@ public sealed class GarageBalanceDbContext(DbContextOptions<GarageBalanceDbConte
             entity.HasOne(reading => reading.Garage)
                 .WithMany()
                 .HasForeignKey(reading => reading.GarageId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(reading => reading.MeterDevice)
+                .WithMany()
+                .HasForeignKey(reading => reading.MeterDeviceId)
                 .OnDelete(DeleteBehavior.Restrict);
         });
 

@@ -157,7 +157,39 @@ export type MeterReadingDto = {
   comment: string | null
   isCanceled: boolean
   version: string
+  meterDeviceId?: string | null
+  meterDeviceSerialNumber?: string | null
+  previousDeviceConsumption?: number
+  isMeterReplacement?: boolean
 }
+
+export type ReplaceMeterDeviceRequest = {
+  garageId: string
+  meterKind: 'water' | 'electricity'
+  accountingMonth: string
+  replacementDate: string
+  newSerialNumber: string
+  newInitialValue: number
+  currentValue: number
+  removedDeviceFinalValue?: number
+  reason: string
+  meterReadingId?: string
+  expectedReadingVersion?: string
+}
+
+export type MeterDeviceDto = {
+  id: string
+  garageId: string
+  meterKind: 'water' | 'electricity'
+  serialNumber: string
+  installedOn: string
+  removedOn: string | null
+  initialValue: number
+  finalValue: number | null
+  version: string
+}
+
+export type MeterDeviceReplacementDto = { device: MeterDeviceDto; reading: MeterReadingDto }
 
 export type MeterReadingYearGarageDto = {
   id: string
@@ -604,6 +636,7 @@ export type FinanceClient = {
   correctHistoricalMeterReading?(accessToken: string, meterReadingId: string, request: CorrectHistoricalMeterReadingRequest): Promise<MeterReadingDto>
   cancelMeterReading(accessToken: string, meterReadingId: string, request: CancelFinanceEntryRequest): Promise<MeterReadingDto>
   restoreMeterReading(accessToken: string, meterReadingId: string): Promise<MeterReadingDto>
+  replaceMeterDevice?(accessToken: string, request: ReplaceMeterDeviceRequest): Promise<MeterDeviceReplacementDto>
 }
 
 const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? ''
@@ -863,5 +896,8 @@ export const financeApi: FinanceClient = {
   },
   restoreMeterReading(accessToken, meterReadingId) {
     return requestJson(accessToken, `/api/finance/meter-readings/${meterReadingId}/restore`, { method: 'POST' })
+  },
+  replaceMeterDevice(accessToken, request) {
+    return requestJson(accessToken, '/api/finance/meter-devices/replace', { method: 'POST', body: JSON.stringify(request) })
   },
 }

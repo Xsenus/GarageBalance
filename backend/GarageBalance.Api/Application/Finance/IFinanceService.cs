@@ -101,4 +101,8 @@ public interface IFinanceService
     Task<FinanceResult<MeterReadingDto>> CancelMeterReadingAsync(Guid meterReadingId, CancelFinanceEntryRequest request, Guid? actorUserId, CancellationToken cancellationToken);
 
     Task<FinanceResult<MeterReadingDto>> RestoreMeterReadingAsync(Guid meterReadingId, Guid? actorUserId, CancellationToken cancellationToken);
+
+    Task<IReadOnlyList<MeterDeviceDto>> GetMeterDevicesAsync(Guid garageId, string meterKind, CancellationToken cancellationToken);
+
+    Task<FinanceResult<MeterDeviceReplacementDto>> ReplaceMeterDeviceAsync(ReplaceMeterDeviceRequest request, Guid? actorUserId, CancellationToken cancellationToken);
 }

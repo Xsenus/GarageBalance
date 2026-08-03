@@ -362,6 +362,7 @@ public sealed class EfMeterReadingRepository(GarageBalanceDbContext dbContext) :
         DateOnly accountingMonth,
         CancellationToken cancellationToken) =>
         dbContext.MeterReadings.AsNoTracking()
+            .Include(reading => reading.MeterDevice)
             .Where(reading =>
                 !reading.IsCanceled &&
                 (!ignoredId.HasValue || reading.Id != ignoredId.Value) &&
@@ -378,6 +379,7 @@ public sealed class EfMeterReadingRepository(GarageBalanceDbContext dbContext) :
         DateOnly accountingMonth,
         CancellationToken cancellationToken) =>
         dbContext.MeterReadings.AsNoTracking()
+            .Include(reading => reading.MeterDevice)
             .Where(reading =>
                 !reading.IsCanceled &&
                 (!ignoredId.HasValue || reading.Id != ignoredId.Value) &&
@@ -394,6 +396,7 @@ public sealed class EfMeterReadingRepository(GarageBalanceDbContext dbContext) :
         DateOnly accountingMonth,
         CancellationToken cancellationToken) =>
         await dbContext.MeterReadings
+            .Include(reading => reading.MeterDevice)
             .Where(reading =>
                 !reading.IsCanceled &&
                 (!ignoredId.HasValue || reading.Id != ignoredId.Value) &&
@@ -408,6 +411,7 @@ public sealed class EfMeterReadingRepository(GarageBalanceDbContext dbContext) :
         dbContext.MeterReadings
             .Include(reading => reading.Garage)
             .ThenInclude(garage => garage.Owner)
+            .Include(reading => reading.MeterDevice)
             .SingleOrDefaultAsync(reading => reading.Id == id, cancellationToken);
 
     public async Task ReloadForUpdateAsync(MeterReading reading, CancellationToken cancellationToken)
@@ -433,7 +437,53 @@ public sealed class EfMeterReadingRepository(GarageBalanceDbContext dbContext) :
                 reading.AccountingMonth == accountingMonth,
             cancellationToken);
 
+    public async Task<IReadOnlyList<MeterDevice>> GetDevicesAsync(
+        Guid garageId,
+        string meterKind,
+        CancellationToken cancellationToken) =>
+        await dbContext.MeterDevices.AsNoTracking()
+            .Where(device => device.GarageId == garageId && device.MeterKind == meterKind)
+            .OrderByDescending(device => device.InstalledOn)
+            .ThenByDescending(device => device.Id)
+            .ToListAsync(cancellationToken);
+
+    public Task<MeterDevice?> GetDeviceForDateForUpdateAsync(
+        Guid garageId,
+        string meterKind,
+        DateOnly date,
+        CancellationToken cancellationToken) =>
+        dbContext.MeterDevices
+            .Where(device =>
+                device.GarageId == garageId &&
+                device.MeterKind == meterKind &&
+                device.InstalledOn <= date &&
+                (!device.RemovedOn.HasValue || device.RemovedOn.Value >= date))
+            .OrderByDescending(device => device.InstalledOn)
+            .ThenByDescending(device => device.Id)
+            .FirstOrDefaultAsync(cancellationToken);
+
+    public Task<MeterDevice?> GetActiveDeviceForUpdateAsync(
+        Guid garageId,
+        string meterKind,
+        CancellationToken cancellationToken) =>
+        dbContext.MeterDevices.SingleOrDefaultAsync(
+            device => device.GarageId == garageId && device.MeterKind == meterKind && !device.RemovedOn.HasValue,
+            cancellationToken);
+
+    public async Task<IReadOnlyList<MeterReading>> GetAllActiveForUpdateAsync(
+        Guid garageId,
+        string meterKind,
+        CancellationToken cancellationToken) =>
+        await dbContext.MeterReadings
+            .Include(reading => reading.MeterDevice)
+            .Where(reading => !reading.IsCanceled && reading.GarageId == garageId && reading.MeterKind == meterKind)
+            .OrderBy(reading => reading.AccountingMonth)
+            .ThenBy(reading => reading.Id)
+            .ToListAsync(cancellationToken);
+
     public void Add(MeterReading reading) => dbContext.MeterReadings.Add(reading);
+
+    public void Add(MeterDevice device) => dbContext.MeterDevices.Add(device);
 
     private IQueryable<MeterReading> QueryActive() =>
         dbContext.MeterReadings.AsNoTracking()

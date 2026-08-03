@@ -241,6 +241,63 @@ public sealed class FinanceControllerTests
     }
 
     [Fact]
+    public async Task GetMeterDevices_PassesGarageAndKindToService()
+    {
+        var garageId = Guid.NewGuid();
+        var device = new MeterDeviceDto(Guid.NewGuid(), garageId, MeterKinds.Electricity, "ЭЛ-001", new DateOnly(2026, 2, 1), null, 0m, null, Guid.NewGuid());
+        var service = new FakeFinanceService { MeterDevices = [device] };
+        var controller = CreateController(service);
+
+        var result = await controller.GetMeterDevices(garageId, MeterKinds.Electricity, CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        Assert.Same(service.MeterDevices, ok.Value);
+        Assert.Equal(garageId, service.LastMeterDevicesGarageId);
+        Assert.Equal(MeterKinds.Electricity, service.LastMeterDevicesKind);
+    }
+
+    [Fact]
+    public async Task ReplaceMeterDevice_PassesActorAndReturnsReplacement()
+    {
+        var garageId = Guid.NewGuid();
+        var actorUserId = Guid.NewGuid();
+        var request = new ReplaceMeterDeviceRequest(
+            garageId, MeterKinds.Electricity, new DateOnly(2026, 2, 1), new DateOnly(2026, 2, 15),
+            "ЭЛ-002", 0m, 5m, 150m, "Замена", null, null);
+        var device = new MeterDeviceDto(Guid.NewGuid(), garageId, MeterKinds.Electricity, "ЭЛ-002", request.ReplacementDate, null, 0m, null, Guid.NewGuid());
+        var reading = CreateMeterReading() with { GarageId = garageId, MeterDeviceId = device.Id, MeterDeviceSerialNumber = device.SerialNumber };
+        var replacement = new MeterDeviceReplacementDto(device, reading);
+        var service = new FakeFinanceService
+        {
+            ReplaceMeterDeviceResult = FinanceResult<MeterDeviceReplacementDto>.Success(replacement)
+        };
+        var controller = CreateController(service, actorUserId);
+
+        var result = await controller.ReplaceMeterDevice(request, CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        Assert.Same(replacement, ok.Value);
+        Assert.Same(request, service.LastReplaceMeterDeviceRequest);
+        Assert.Equal(actorUserId, service.LastActorUserId);
+    }
+
+    [Fact]
+    public async Task ReplaceMeterDevice_ReturnsConflictForConcurrentChange()
+    {
+        var controller = CreateController(new FakeFinanceService
+        {
+            ReplaceMeterDeviceResult = FinanceResult<MeterDeviceReplacementDto>.Failure("meter_device_conflict", "Обновите страницу.")
+        });
+
+        var result = await controller.ReplaceMeterDevice(
+            new ReplaceMeterDeviceRequest(Guid.NewGuid(), MeterKinds.Water, new DateOnly(2026, 2, 1), new DateOnly(2026, 2, 1), "В-2", 0m, 1m, 10m, "Замена", null, null),
+            CancellationToken.None);
+
+        var conflict = Assert.IsType<ConflictObjectResult>(result.Result);
+        Assert.Equal(StatusCodes.Status409Conflict, conflict.StatusCode);
+    }
+
+    [Fact]
     public async Task GetGarageBalanceHistory_PassesGarageAndPeriodToService()
     {
         var garageId = Guid.NewGuid();
@@ -1884,6 +1941,11 @@ public sealed class FinanceControllerTests
         public FinanceResult<MeterReadingDto> CorrectHistoricalMeterReadingResult { get; init; } = FinanceResult<MeterReadingDto>.Failure("not_configured", "Not configured.");
         public FinanceResult<MeterReadingDto> CancelMeterReadingResult { get; init; } = FinanceResult<MeterReadingDto>.Failure("not_configured", "Not configured.");
         public FinanceResult<MeterReadingDto> RestoreMeterReadingResult { get; init; } = FinanceResult<MeterReadingDto>.Failure("not_configured", "Not configured.");
+        public FinanceResult<MeterDeviceReplacementDto> ReplaceMeterDeviceResult { get; init; } = FinanceResult<MeterDeviceReplacementDto>.Failure("not_configured", "Not configured.");
+        public IReadOnlyList<MeterDeviceDto> MeterDevices { get; init; } = [];
+        public Guid? LastMeterDevicesGarageId { get; private set; }
+        public string? LastMeterDevicesKind { get; private set; }
+        public ReplaceMeterDeviceRequest? LastReplaceMeterDeviceRequest { get; private set; }
         public FinanceResult<MeterReadingYearPageDto> MeterReadingYearPageResult { get; init; } = FinanceResult<MeterReadingYearPageDto>.Failure("not_configured", "Not configured.");
         public FinanceSummaryDto SummaryResult { get; init; } = new(0, 0, 0, 0, 0, 0, 0, 0);
 
@@ -2226,6 +2288,20 @@ public sealed class FinanceControllerTests
             LastActorUserId = actorUserId;
             LastRestoredMeterReadingId = meterReadingId;
             return Task.FromResult(RestoreMeterReadingResult);
+        }
+
+        public Task<IReadOnlyList<MeterDeviceDto>> GetMeterDevicesAsync(Guid garageId, string meterKind, CancellationToken cancellationToken)
+        {
+            LastMeterDevicesGarageId = garageId;
+            LastMeterDevicesKind = meterKind;
+            return Task.FromResult(MeterDevices);
+        }
+
+        public Task<FinanceResult<MeterDeviceReplacementDto>> ReplaceMeterDeviceAsync(ReplaceMeterDeviceRequest request, Guid? actorUserId, CancellationToken cancellationToken)
+        {
+            LastActorUserId = actorUserId;
+            LastReplaceMeterDeviceRequest = request;
+            return Task.FromResult(ReplaceMeterDeviceResult);
         }
     }
 }

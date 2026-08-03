@@ -6825,6 +6825,237 @@ public sealed class FinanceServiceTests
     }
 
     [Fact]
+    public async Task GetMeterDevicesAsync_ReturnsOnlyRequestedGarageAndKindInNewestFirstOrder()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        database.Context.MeterDevices.AddRange(
+            new MeterDevice
+            {
+                GarageId = fixtures.Garage.Id,
+                MeterKind = MeterKinds.Electricity,
+                SerialNumber = "ЭЛ-СТАРЫЙ",
+                InstalledOn = new DateOnly(2025, 1, 1),
+                RemovedOn = new DateOnly(2026, 6, 30),
+                InitialValue = 0m,
+                FinalValue = 100m
+            },
+            new MeterDevice
+            {
+                GarageId = fixtures.Garage.Id,
+                MeterKind = MeterKinds.Electricity,
+                SerialNumber = "ЭЛ-НОВЫЙ",
+                InstalledOn = new DateOnly(2026, 7, 1),
+                InitialValue = 0m
+            },
+            new MeterDevice
+            {
+                GarageId = fixtures.Garage.Id,
+                MeterKind = MeterKinds.Water,
+                SerialNumber = "В-001",
+                InstalledOn = new DateOnly(2026, 1, 1),
+                InitialValue = 0m
+            });
+        await database.Context.SaveChangesAsync();
+
+        var service = FinanceServiceTestFactory.Create(database.Context);
+        var devices = await service.GetMeterDevicesAsync(fixtures.Garage.Id, MeterKinds.Electricity, CancellationToken.None);
+
+        Assert.Collection(
+            devices,
+            device =>
+            {
+                Assert.Equal("ЭЛ-НОВЫЙ", device.SerialNumber);
+                Assert.Null(device.RemovedOn);
+            },
+            device =>
+            {
+                Assert.Equal("ЭЛ-СТАРЫЙ", device.SerialNumber);
+                Assert.Equal(new DateOnly(2026, 6, 30), device.RemovedOn);
+            });
+        Assert.Empty(await service.GetMeterDevicesAsync(fixtures.Garage.Id, "unknown", CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task ReplaceMeterDeviceAsync_AllowsLowerReadingAndStartsNewPhysicalDeviceChain()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        var service = FinanceServiceTestFactory.Create(
+            database.Context,
+            new FixedTimeProvider(new DateTimeOffset(2026, 8, 20, 12, 0, 0, TimeSpan.Zero)));
+        var june = await service.CreateMeterReadingAsync(
+            new CreateMeterReadingRequest(fixtures.Garage.Id, MeterKinds.Electricity, new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 20), 150m, null),
+            null,
+            CancellationToken.None);
+        var july = await service.CreateMeterReadingAsync(
+            new CreateMeterReadingRequest(fixtures.Garage.Id, MeterKinds.Electricity, new DateOnly(2026, 7, 1), new DateOnly(2026, 7, 20), 160m, null),
+            null,
+            CancellationToken.None);
+
+        var replacement = await service.ReplaceMeterDeviceAsync(
+            new ReplaceMeterDeviceRequest(
+                fixtures.Garage.Id,
+                MeterKinds.Electricity,
+                new DateOnly(2026, 7, 1),
+                new DateOnly(2026, 7, 20),
+                "ЭЛ-2026-001",
+                0m,
+                5m,
+                160m,
+                "Плановая замена",
+                july.Value!.Id,
+                july.Value.Version),
+            Guid.NewGuid(),
+            CancellationToken.None);
+
+        Assert.True(replacement.Succeeded, replacement.ErrorMessage);
+        Assert.Equal("ЭЛ-2026-001", replacement.Value!.Device.SerialNumber);
+        Assert.Equal(0m, replacement.Value.Device.InitialValue);
+        Assert.Equal(5m, replacement.Value.Reading.CurrentValue);
+        Assert.Equal(0m, replacement.Value.Reading.PreviousValue);
+        Assert.Equal(10m, replacement.Value.Reading.PreviousDeviceConsumption);
+        Assert.Equal(15m, replacement.Value.Reading.Consumption);
+        Assert.True(replacement.Value.Reading.IsMeterReplacement);
+        Assert.NotEqual(june.Value!.MeterDeviceId, replacement.Value.Reading.MeterDeviceId);
+        var devices = database.Context.MeterDevices.OrderBy(item => item.InstalledOn).ToList();
+        Assert.Collection(
+            devices,
+            oldDevice =>
+            {
+                Assert.Equal("Без номера", oldDevice.SerialNumber);
+                Assert.Equal(new DateOnly(2026, 7, 19), oldDevice.RemovedOn);
+                Assert.Equal(160m, oldDevice.FinalValue);
+            },
+            newDevice => Assert.Null(newDevice.RemovedOn));
+
+        var august = await service.CreateMeterReadingAsync(
+            new CreateMeterReadingRequest(fixtures.Garage.Id, MeterKinds.Electricity, new DateOnly(2026, 8, 1), new DateOnly(2026, 8, 20), 15m, null),
+            null,
+            CancellationToken.None);
+        Assert.True(august.Succeeded, august.ErrorMessage);
+        Assert.Equal(replacement.Value.Device.Id, august.Value!.MeterDeviceId);
+        Assert.Equal(5m, august.Value.PreviousValue);
+        Assert.Equal(10m, august.Value.Consumption);
+        var canceledReplacement = await service.CancelMeterReadingAsync(
+            replacement.Value.Reading.Id,
+            new CancelFinanceEntryRequest("Ошибочная замена"),
+            null,
+            CancellationToken.None);
+        Assert.False(canceledReplacement.Succeeded);
+        Assert.Equal("meter_device_replacement_reading_cancel_forbidden", canceledReplacement.ErrorCode);
+        Assert.Contains(database.Context.AuditEvents, item => item.Action == "finance.meter_device_replaced");
+    }
+
+    [Fact]
+    public async Task ReplaceMeterDeviceAsync_RejectsInvalidNewDeviceValuesWithoutChangingHistory()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        var service = FinanceServiceTestFactory.Create(database.Context);
+        var reading = await service.CreateMeterReadingAsync(
+            new CreateMeterReadingRequest(fixtures.Garage.Id, MeterKinds.Water, new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 20), 15m, null),
+            null,
+            CancellationToken.None);
+
+        var result = await service.ReplaceMeterDeviceAsync(
+            new ReplaceMeterDeviceRequest(
+                fixtures.Garage.Id,
+                MeterKinds.Water,
+                new DateOnly(2026, 6, 1),
+                new DateOnly(2026, 6, 21),
+                "В-002",
+                10m,
+                5m,
+                15m,
+                "Замена",
+                reading.Value!.Id,
+                reading.Value.Version),
+            null,
+            CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Equal("meter_device_current_below_initial", result.ErrorCode);
+        Assert.Single(database.Context.MeterDevices);
+        Assert.Null(database.Context.MeterDevices.Single().RemovedOn);
+        Assert.Equal(15m, database.Context.MeterReadings.Single().CurrentValue);
+        Assert.DoesNotContain(database.Context.AuditEvents, item => item.Action == "finance.meter_device_replaced");
+    }
+
+    [Fact]
+    public async Task ReplaceMeterDeviceAsync_RejectsDifferentAccountingMonth()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        var service = FinanceServiceTestFactory.Create(database.Context);
+
+        var result = await service.ReplaceMeterDeviceAsync(
+            new ReplaceMeterDeviceRequest(
+                fixtures.Garage.Id, MeterKinds.Electricity, new DateOnly(2026, 6, 1), new DateOnly(2026, 7, 1),
+                "ЭЛ-003", 0m, 1m, 100m, "Замена", null, null),
+            null,
+            CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Equal("meter_device_replacement_date_month_mismatch", result.ErrorCode);
+        Assert.Empty(database.Context.MeterDevices);
+    }
+
+    [Fact]
+    public async Task ReplaceMeterDeviceAsync_RejectsPaidAccrualWithoutMutatingTrackedChain()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        fixtures.IncomeType.Code = "water";
+        var tariff = new Tariff
+        {
+            Name = "Вода по счетчику",
+            CalculationBase = TariffCalculationBases.MeterWater,
+            Rate = 50m,
+            EffectiveFrom = new DateOnly(2026, 1, 1)
+        };
+        database.Context.Tariffs.Add(tariff);
+        await database.Context.SaveChangesAsync();
+        var service = FinanceServiceTestFactory.Create(
+            database.Context,
+            new FixedTimeProvider(new DateTimeOffset(2026, 7, 20, 12, 0, 0, TimeSpan.Zero)));
+        await service.CreateMeterReadingAsync(
+            new CreateMeterReadingRequest(fixtures.Garage.Id, MeterKinds.Water, new DateOnly(2026, 5, 1), new DateOnly(2026, 5, 20), 20m, null),
+            null,
+            CancellationToken.None);
+        var june = await service.CreateMeterReadingAsync(
+            new CreateMeterReadingRequest(fixtures.Garage.Id, MeterKinds.Water, new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 20), 30m, null),
+            null,
+            CancellationToken.None);
+        Assert.True((await service.GenerateRegularAccrualsAsync(
+            new GenerateRegularAccrualsRequest(fixtures.IncomeType.Id, tariff.Id, new DateOnly(2026, 6, 1), null),
+            null,
+            CancellationToken.None)).Succeeded);
+        Assert.True((await service.CreateIncomeAsync(
+            new CreateIncomeOperationRequest(fixtures.Garage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 6, 25), new DateOnly(2026, 6, 1), 100m, "PKO-replace", null),
+            null,
+            CancellationToken.None)).Succeeded);
+        var oldDevice = Assert.Single(database.Context.MeterDevices);
+
+        var result = await service.ReplaceMeterDeviceAsync(
+            new ReplaceMeterDeviceRequest(
+                fixtures.Garage.Id, MeterKinds.Water, new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 20),
+                "В-003", 0m, 2m, 30m, "Проверка оплаты", june.Value!.Id, june.Value.Version),
+            null,
+            CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Equal("meter_reading_accrual_paid", result.ErrorCode);
+        Assert.Single(database.Context.MeterDevices);
+        Assert.Null(oldDevice.RemovedOn);
+        var unchangedReading = database.Context.MeterReadings.Single(item => item.Id == june.Value.Id);
+        Assert.Equal(oldDevice.Id, unchangedReading.MeterDeviceId);
+        Assert.Equal(30m, unchangedReading.CurrentValue);
+        Assert.Equal(10m, unchangedReading.Consumption);
+        Assert.DoesNotContain(database.Context.AuditEvents, item => item.Action == "finance.meter_device_replaced");
+    }
+
+    [Fact]
     public async Task CancelMeterReadingAsync_CancelsReadingAndRemovesItFromSummary()
     {
         await using var database = await TestDatabase.CreateAsync();

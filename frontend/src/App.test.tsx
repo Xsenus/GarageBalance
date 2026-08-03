@@ -5059,6 +5059,8 @@ describe('App', () => {
     let createdMeterReadingRequest: CreateMeterReadingRequest | null = null
     let correctedMeterReadingRequest: CorrectHistoricalMeterReadingRequest | null = null
     let correctedMeterReadingId: string | null = null
+    let persistedJanuaryValue: number | null = null
+    let persistedJanuaryVersion = 'meter-reading-version-created'
     let resolveMeterReadingYearPage!: (page: MeterReadingYearPageDto) => void
     const meterReadingYearPageRequests: Array<Parameters<FinanceClient['getMeterReadingYearPage']>[1]> = []
     const getGarages = vi.fn(async () => [createGarage({ id: 'unused-garage', number: '99' })])
@@ -5084,12 +5086,40 @@ describe('App', () => {
             limit: 25,
           }
         }
+        if (meterReadingYearPageRequests.length > 1) {
+          return {
+            garages: [
+              { id: 'garage-12', number: '12' },
+              { id: 'garage-27', number: '27' },
+            ],
+            readings: [
+              ...(persistedJanuaryValue === null ? [] : [{
+                id: 'meter-reading-jan',
+                garageId: 'garage-12',
+                accountingMonth: '2026-01-01',
+                currentValue: persistedJanuaryValue,
+                version: persistedJanuaryVersion,
+              }]),
+              {
+                id: 'future-meter-reading',
+                garageId: 'garage-12',
+                accountingMonth: '2026-12-01',
+                currentValue: 5000,
+                version: 'future-meter-reading-version',
+              },
+            ],
+            totalCount: 2,
+            offset: 0,
+            limit: 25,
+          }
+        }
         return await new Promise<MeterReadingYearPageDto>((resolve) => {
           resolveMeterReadingYearPage = resolve
         })
       },
       createMeterReading: async (_token, request) => {
         createdMeterReadingRequest = request
+        persistedJanuaryValue = request.currentValue
         return createMeterReading({
           id: 'meter-reading-jan',
           garageId: request.garageId,
@@ -5106,6 +5136,8 @@ describe('App', () => {
       correctHistoricalMeterReading: async (_token, meterReadingId, request) => {
         correctedMeterReadingId = meterReadingId
         correctedMeterReadingRequest = request
+        persistedJanuaryValue = request.currentValue
+        persistedJanuaryVersion = 'meter-reading-version-corrected'
         return createMeterReading({
           id: meterReadingId,
           garageId: 'garage-12',
@@ -5179,12 +5211,15 @@ describe('App', () => {
 
     await user.clear(yearInput)
     await user.type(yearInput, '2026')
-    const januaryInput = within(readingsPanel).getByLabelText('Гараж 12, Январь, показание')
+    let januaryInput = within(readingsPanel).getByLabelText('Гараж 12, Январь, показание')
     await user.type(januaryInput, '4654{Enter}')
     expect(screen.queryByRole('dialog', { name: 'Подтвердить показание?' })).not.toBeInTheDocument()
     await waitFor(() => expect(createdMeterReadingRequest?.currentValue).toBe(4654))
     expect(createdMeterReadingRequest).toMatchObject({ garageId: 'garage-12', meterKind: 'electricity', accountingMonth: '2026-01-01' })
-    await waitFor(() => expect(januaryInput).toHaveValue('4654'))
+    await waitFor(() => {
+      januaryInput = within(readingsPanel).getByLabelText('Гараж 12, Январь, показание')
+      expect(januaryInput).toHaveValue('4654')
+    })
 
     await user.clear(januaryInput)
     await user.type(januaryInput, '4660{Enter}')
@@ -5362,6 +5397,78 @@ describe('App', () => {
     await user.click(within(retryDialog).getByRole('button', { name: 'Сохранить' }))
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Подтвердить показание?' })).not.toBeInTheDocument())
     expect(updateMeterReading).toHaveBeenCalledTimes(2)
+  })
+
+  it('offers and saves a physical meter replacement when a reading becomes lower', async () => {
+    const user = userEvent.setup()
+    let replacementAttempt = 0
+    const replaceMeterDevice = vi.fn(async (_token, request) => {
+      replacementAttempt += 1
+      if (replacementAttempt === 1) {
+        throw new Error('Счетчик уже изменен. Обновите страницу.')
+      }
+      return ({
+      device: {
+        id: 'device-new', garageId: request.garageId, meterKind: request.meterKind, serialNumber: request.newSerialNumber,
+        installedOn: request.replacementDate, removedOn: null, initialValue: request.newInitialValue, finalValue: null, version: 'device-version',
+      },
+      reading: createMeterReading({
+        id: 'reading-new-device', garageId: request.garageId, garageNumber: '101', meterKind: request.meterKind,
+        accountingMonth: request.accountingMonth, readingDate: request.replacementDate, currentValue: request.currentValue,
+        previousValue: request.newInitialValue, consumption: request.currentValue - request.newInitialValue,
+      }),
+      })
+    })
+    const getMeterReadingYearPage = vi.fn(async () => ({
+      garages: [{ id: 'garage-101', number: '101' }],
+      readings: [{ id: 'reading-january', garageId: 'garage-101', accountingMonth: '2026-01-01', currentValue: 17201, version: 'reading-january-version' }],
+      totalCount: 1,
+      offset: 0,
+      limit: 25,
+    }))
+    const electricityTariff = createTariff({ id: 'replacement-electricity-tariff', calculationBase: 'meter_electricity' })
+    render(<App
+      authClient={createAuthClient()}
+      dictionaryClient={createDictionaryClient({
+        getTariffs: async () => [electricityTariff],
+        getChargeServiceSettings: async () => [createChargeServiceSetting({ isRegular: true, isMetered: true, tariffId: electricityTariff.id, tariffCalculationBase: 'meter_electricity' })],
+      })}
+      financeClient={createFinanceClient({ getMeterReadingYearPage, replaceMeterDevice })}
+      importClient={createImportClient()}
+      reportClient={createReportClient()}
+      releaseClient={createReleaseClient()}
+      userClient={createUserClient()}
+    />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Показания')
+    const readingsPanel = await screen.findByRole('region', { name: 'Показания' })
+    const februaryInput = await within(readingsPanel).findByLabelText('Гараж 101, Февраль, показание')
+    await user.type(februaryInput, '5{Enter}')
+
+    const dialog = await screen.findByRole('dialog', { name: 'Оформить замену счетчика?' })
+    expect(within(dialog).getByRole('status')).toHaveTextContent('Новое показание меньше предыдущего')
+    const replacementDateInput = within(dialog).getByLabelText('Дата замены счетчика')
+    expect(replacementDateInput).toHaveValue('01.02.2026')
+    expect(replacementDateInput.closest('.localized-date-picker')).not.toBeNull()
+    await user.click(within(dialog).getByRole('button', { name: 'Сохранить' }))
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent('Заполните все поля замены счетчика.')
+    expect(replaceMeterDevice).not.toHaveBeenCalled()
+    await user.type(within(dialog).getByLabelText('Номер нового счетчика'), 'ЭЛ-2026-001')
+    await user.clear(within(dialog).getByLabelText('Конечное показание старого счетчика'))
+    await user.type(within(dialog).getByLabelText('Конечное показание старого счетчика'), '17201')
+    await user.type(within(dialog).getByLabelText('Причина замены счетчика'), 'Плановая замена')
+    await user.click(within(dialog).getByRole('button', { name: 'Сохранить' }))
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent('Счетчик уже изменен. Обновите страницу.')
+    await user.click(within(dialog).getByRole('button', { name: 'Сохранить' }))
+
+    await waitFor(() => expect(replaceMeterDevice).toHaveBeenLastCalledWith('token', expect.objectContaining({
+      garageId: 'garage-101', meterKind: 'electricity', accountingMonth: '2026-02-01', replacementDate: '2026-02-01', newSerialNumber: 'ЭЛ-2026-001',
+      newInitialValue: 0, currentValue: 5, removedDeviceFinalValue: 17201, reason: 'Плановая замена',
+    })))
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Оформить замену счетчика?' })).not.toBeInTheDocument())
+    await waitFor(() => expect(getMeterReadingYearPage).toHaveBeenCalledTimes(2))
   })
 
   it('blocks historical meter reading edits without the dedicated permission', async () => {

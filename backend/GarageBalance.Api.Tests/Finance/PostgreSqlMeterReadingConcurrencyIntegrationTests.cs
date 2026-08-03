@@ -281,6 +281,84 @@ public sealed class PostgreSqlMeterReadingConcurrencyIntegrationTests
     }
 
     [PostgreSqlFact]
+    public async Task MeterDeviceReplacement_SerializesConcurrentRequestsAndKeepsSingleActiveDevice()
+    {
+        await using var database = await PostgreSqlTestDatabase.CreateAsync();
+        Guid garageId;
+        MeterReadingDto julyReading;
+        var now = new FixedTimeProvider(new DateTimeOffset(2026, 8, 20, 12, 0, 0, TimeSpan.Zero));
+        await using (var seedContext = database.CreateContext())
+        {
+            var garage = new Garage
+            {
+                Number = "PG-METER-REPLACE-RACE",
+                PeopleCount = 1,
+                FloorCount = 1,
+                InitialElectricityMeterValue = 100m
+            };
+            seedContext.Add(garage);
+            await seedContext.SaveChangesAsync();
+            garageId = garage.Id;
+
+            var service = FinanceServiceTestFactory.Create(seedContext, now);
+            var june = await service.CreateMeterReadingAsync(
+                new CreateMeterReadingRequest(garageId, MeterKinds.Electricity, new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 20), 150m, null),
+                null,
+                CancellationToken.None);
+            Assert.True(june.Succeeded, june.ErrorMessage);
+            var july = await service.CreateMeterReadingAsync(
+                new CreateMeterReadingRequest(garageId, MeterKinds.Electricity, new DateOnly(2026, 7, 1), new DateOnly(2026, 7, 20), 160m, null),
+                null,
+                CancellationToken.None);
+            Assert.True(july.Succeeded, july.ErrorMessage);
+            julyReading = july.Value!;
+        }
+
+        var start = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        async Task<FinanceResult<MeterDeviceReplacementDto>> ReplaceAsync(string serialNumber)
+        {
+            await using var context = database.CreateContext();
+            var service = FinanceServiceTestFactory.Create(context, now);
+            await start.Task;
+            return await service.ReplaceMeterDeviceAsync(
+                new ReplaceMeterDeviceRequest(
+                    garageId,
+                    MeterKinds.Electricity,
+                    new DateOnly(2026, 7, 1),
+                    new DateOnly(2026, 7, 20),
+                    serialNumber,
+                    0m,
+                    5m,
+                    160m,
+                    "Конкурентная замена",
+                    julyReading.Id,
+                    julyReading.Version),
+                null,
+                CancellationToken.None);
+        }
+
+        var replacements = new[] { ReplaceAsync("PG-NEW-001"), ReplaceAsync("PG-NEW-002") };
+        start.SetResult();
+        var results = await Task.WhenAll(replacements);
+
+        Assert.Single(results, result => result.Succeeded);
+        var conflict = Assert.Single(results, result => !result.Succeeded);
+        Assert.Contains(conflict.ErrorCode, new[] { "meter_reading_conflict", "meter_device_serial_duplicate" });
+
+        await using var assertionContext = database.CreateContext();
+        var devices = await assertionContext.MeterDevices
+            .Where(item => item.GarageId == garageId && item.MeterKind == MeterKinds.Electricity)
+            .OrderBy(item => item.InstalledOn)
+            .ToListAsync();
+        Assert.Equal(2, devices.Count);
+        Assert.Single(devices, item => item.RemovedOn is null);
+        var persistedReading = await assertionContext.MeterReadings.SingleAsync(item => item.Id == julyReading.Id);
+        Assert.True(persistedReading.IsMeterReplacement);
+        Assert.Equal(15m, persistedReading.Consumption);
+        Assert.Equal(devices.Single(item => item.RemovedOn is null).Id, persistedReading.MeterDeviceId);
+    }
+
+    [PostgreSqlFact]
     public async Task MeterReading_RejectsSecondDatabaseUpdateLoadedFromSameVersion()
     {
         await using var database = await PostgreSqlTestDatabase.CreateAsync();

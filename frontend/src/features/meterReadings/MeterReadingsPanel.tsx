@@ -5,6 +5,7 @@ import type { DictionaryClient } from '../../services/dictionariesApi'
 import type { CreateMeterReadingRequest, FinanceClient, MeterReadingYearGarageDto } from '../../services/financeApi'
 import { TableLoadingState } from '../../shared/AsyncState'
 import { FormField } from '../../shared/FormField'
+import { LocalizedDatePicker } from '../../shared/LocalizedDatePicker'
 import { MeterReadingInput } from '../../shared/MeterReadingInput'
 import { SelectControl } from '../../shared/SelectControl'
 import { TablePagination } from '../../shared/TablePagination'
@@ -34,6 +35,7 @@ const meterReadingTypes = [
 ] as const
 
 const defaultMeterReadingPageSize = 25
+const emptyMeterReplacementForm = { serial: '', initialValue: '0', finalValue: '', reason: '', date: '' }
 
 type MeterReadingTypeId = typeof meterReadingTypes[number]['id']
 
@@ -70,11 +72,10 @@ type MeterReadingPrototypePendingChange = {
   readingVersion?: string
   garageNumber: string
   monthLabel: string
-  meterTypeLabel: string
-  unit: string
   previousValue: string
   nextValue: string
   isHistorical: boolean
+  suggestsReplacement: boolean
 }
 
 type MeterReadingMonth = typeof meterReadingMonths[number]
@@ -181,6 +182,8 @@ export function MeterReadingsPrototypePanel({ auth, dictionaryClient, financeCli
   const [historicalCorrectionReasonError, setHistoricalCorrectionReasonError] = useState<string | null>(null)
   const [availableMeterTypes, setAvailableMeterTypes] = useState<Array<typeof meterReadingTypes[number]> | null>(null)
   const [meterType, setMeterType] = useState<MeterReadingTypeId>('electricity')
+  const [reloadRevision, setReloadRevision] = useState(0)
+  const [replacementForm, setReplacementForm] = useState(emptyMeterReplacementForm)
 
   const selectedMeterType = meterReadingTypes.find((item) => item.id === meterType) ?? meterReadingTypes[0]
   const yearIsValid = isValidMeterReadingYear(yearDraft)
@@ -198,10 +201,51 @@ export function MeterReadingsPrototypePanel({ auth, dictionaryClient, financeCli
     setReadingChangeError(null)
     setHistoricalCorrectionReason('')
     setHistoricalCorrectionReasonError(null)
+    setReplacementForm(emptyMeterReplacementForm)
   }
 
-  function confirmPendingReadingChange() {
+  function updateReplacementForm(field: keyof typeof emptyMeterReplacementForm, value: string) {
+    setReplacementForm((current) => ({ ...current, [field]: value }))
+  }
+
+  async function confirmPendingReadingChange() {
     if (!pendingReadingChange) {
+      return
+    }
+
+    if (pendingReadingChange.suggestsReplacement) {
+      const currentValue = parseMeterReadingInputValue(pendingReadingChange.nextValue)
+      const initialValue = parseMeterReadingInputValue(replacementForm.initialValue)
+      const finalValue = parseMeterReadingInputValue(replacementForm.finalValue)
+      if (!financeClient.replaceMeterDevice || currentValue === null || initialValue === null || finalValue === null || !replacementForm.serial.trim() || !replacementForm.reason.trim() || !replacementForm.date) {
+        setReadingChangeError('Заполните все поля замены счетчика.')
+        return
+      }
+
+      const [, , garageId, monthKey] = pendingReadingChange.cellKey.split(':')
+      setSavingReadingKey(pendingReadingChange.cellKey)
+      setReadingChangeError(null)
+      try {
+        await financeClient.replaceMeterDevice(auth.accessToken, {
+          garageId,
+          meterKind: meterType,
+          accountingMonth: `${appliedYear}-${monthKey}-01`,
+          replacementDate: replacementForm.date,
+          newSerialNumber: replacementForm.serial.trim(),
+          newInitialValue: initialValue,
+          currentValue,
+          removedDeviceFinalValue: finalValue,
+          reason: replacementForm.reason.trim(),
+          meterReadingId: pendingReadingChange.readingId,
+          expectedReadingVersion: pendingReadingChange.readingVersion,
+        })
+        setPendingReadingChange(null)
+        setReloadRevision((revision) => revision + 1)
+      } catch (caught) {
+        setReadingChangeError(caught instanceof Error ? caught.message : 'Не удалось оформить замену счетчика.')
+      } finally {
+        setSavingReadingKey(null)
+      }
       return
     }
 
@@ -337,7 +381,7 @@ export function MeterReadingsPrototypePanel({ auth, dictionaryClient, financeCli
       isMounted = false
       controller.abort()
     }
-  }, [appliedYear, auth.accessToken, availableMeterTypes, financeClient, meterType, pageOffset, pageSize])
+  }, [appliedYear, auth.accessToken, availableMeterTypes, financeClient, meterType, pageOffset, pageSize, reloadRevision])
 
   const saveReadingValue = useCallback(async (
     cellKey: string,
@@ -393,6 +437,7 @@ export function MeterReadingsPrototypePanel({ auth, dictionaryClient, financeCli
       setReadingChangeError(null)
       setHistoricalCorrectionReason('')
       setHistoricalCorrectionReasonError(null)
+      setReloadRevision((revision) => revision + 1)
     } catch (caught) {
       const message = caught instanceof Error ? caught.message : 'Не удалось сохранить показание.'
       if (showErrorInDialog) {
@@ -432,7 +477,20 @@ export function MeterReadingsPrototypePanel({ auth, dictionaryClient, financeCli
       return
     }
 
-    if (previousValue.trim() === '') {
+    const parsedNextValue = parseMeterReadingInputValue(nextValue)
+    let previousChainValue: string | undefined
+    for (let index = Number(month.key) - 1; index >= 1; index -= 1) {
+      const previousMonthKey = String(index).padStart(2, '0')
+      const candidate = savedReadings[createMeterReadingCellKey(appliedYear, meterType, garage.id, previousMonthKey)]
+      if (candidate?.trim()) {
+        previousChainValue = candidate
+        break
+      }
+    }
+    const parsedPreviousChainValue = previousChainValue ? parseMeterReadingInputValue(previousChainValue) : null
+    const suggestsReplacement = parsedNextValue !== null && parsedPreviousChainValue !== null && parsedNextValue < parsedPreviousChainValue
+
+    if (previousValue.trim() === '' && !suggestsReplacement) {
       void saveReadingValue(cellKey, undefined, undefined, nextValue)
       return
     }
@@ -445,7 +503,7 @@ export function MeterReadingsPrototypePanel({ auth, dictionaryClient, financeCli
       return
     }
 
-    if (isHistorical && (!financeClient.correctHistoricalMeterReading || !savedReadingVersions[cellKey])) {
+    if (isHistorical && !suggestsReplacement && (!financeClient.correctHistoricalMeterReading || !savedReadingVersions[cellKey])) {
       setDraftReadings((currentDrafts) => ({ ...currentDrafts, [cellKey]: previousValue }))
       setError('Не удалось подготовить безопасную историческую корректировку. Обновите страницу и повторите действие.')
       return
@@ -457,17 +515,23 @@ export function MeterReadingsPrototypePanel({ auth, dictionaryClient, financeCli
       readingVersion: savedReadingVersions[cellKey],
       garageNumber: garage.number,
       monthLabel: month.label,
-      meterTypeLabel: selectedMeterType.label,
-      unit: selectedMeterType.unit,
       previousValue,
       nextValue,
       isHistorical,
+      suggestsReplacement,
     })
     setError(null)
     setReadingChangeError(null)
     setHistoricalCorrectionReason('')
     setHistoricalCorrectionReasonError(null)
-  }, [appliedYear, auth, currentMonth, draftReadings, financeClient.correctHistoricalMeterReading, meterType, savedReadingIds, savedReadingVersions, savedReadings, saveReadingValue, savingReadingKey, selectedMeterType.label, selectedMeterType.unit, yearIsValid])
+    setReplacementForm({
+      serial: '',
+      initialValue: '0',
+      finalValue: previousValue.trim() || previousChainValue || '',
+      reason: '',
+      date: `${accountingMonth}-01`,
+    })
+  }, [appliedYear, auth, currentMonth, draftReadings, financeClient.correctHistoricalMeterReading, meterType, savedReadingIds, savedReadingVersions, savedReadings, saveReadingValue, savingReadingKey, yearIsValid])
 
   return (
     <section className="meter-readings-page" aria-label="Показания">
@@ -552,8 +616,8 @@ export function MeterReadingsPrototypePanel({ auth, dictionaryClient, financeCli
           <section ref={readingChangeDialogRef} className="detail-dialog contractors-dialog dictionary-confirmation-dialog" role="dialog" aria-modal="true" aria-labelledby="meter-reading-change-title" aria-describedby="meter-reading-change-description" onMouseDown={(event) => event.stopPropagation()}>
             <div className="detail-dialog-header">
               <div>
-                <p className="eyebrow">{pendingReadingChange.isHistorical ? 'Историческая корректировка' : 'Изменение'}</p>
-                <h3 id="meter-reading-change-title">{pendingReadingChange.isHistorical ? 'Скорректировать историческое показание?' : 'Подтвердить показание?'}</h3>
+                <p className="eyebrow">{pendingReadingChange.suggestsReplacement ? 'Замена счетчика' : pendingReadingChange.isHistorical ? 'Историческая корректировка' : 'Изменение'}</p>
+                <h3 id="meter-reading-change-title">{pendingReadingChange.suggestsReplacement ? 'Оформить замену счетчика?' : pendingReadingChange.isHistorical ? 'Скорректировать историческое показание?' : 'Подтвердить показание?'}</h3>
                 <p>{`Гараж ${pendingReadingChange.garageNumber}, ${pendingReadingChange.monthLabel}`}</p>
               </div>
               <button className="icon-button" type="button" aria-label="Закрыть подтверждение показания" onClick={cancelPendingReadingChange}>
@@ -571,7 +635,31 @@ export function MeterReadingsPrototypePanel({ auth, dictionaryClient, financeCli
                 </span>
               </li>
             </ul>
-            {pendingReadingChange.isHistorical ? (
+            {pendingReadingChange.suggestsReplacement ? (
+              <>
+                <div className="form-warning" role="status">
+                  Новое показание меньше предыдущего. Укажите замену физического счетчика, чтобы начать отсчет с нового стартового значения.
+                </div>
+                <div className="contractors-modal-grid">
+                <FormField label="Дата замены">
+                  <LocalizedDatePicker ariaLabel="Дата замены счетчика" mode="date" value={replacementForm.date} onChange={(value) => updateReplacementForm('date', value)} required />
+                </FormField>
+                <FormField label="Номер нового счетчика">
+                  <input aria-label="Номер нового счетчика" maxLength={100} value={replacementForm.serial} onChange={(event) => updateReplacementForm('serial', event.target.value)} />
+                </FormField>
+                <FormField label="Начальное показание нового">
+                  <MeterReadingInput aria-label="Начальное показание нового счетчика" value={replacementForm.initialValue} onChange={(event) => updateReplacementForm('initialValue', event.target.value)} />
+                </FormField>
+                <FormField label="Конечное показание старого">
+                  <MeterReadingInput aria-label="Конечное показание старого счетчика" value={replacementForm.finalValue} onChange={(event) => updateReplacementForm('finalValue', event.target.value)} />
+                </FormField>
+                <FormField label="Причина замены">
+                  <textarea aria-label="Причина замены счетчика" maxLength={500} value={replacementForm.reason} onChange={(event) => updateReplacementForm('reason', event.target.value)} />
+                </FormField>
+                </div>
+              </>
+            ) : null}
+            {pendingReadingChange.isHistorical && !pendingReadingChange.suggestsReplacement ? (
               <>
                 <FormField label="Причина исторической корректировки">
                   <textarea

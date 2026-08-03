@@ -119,6 +119,16 @@ public sealed class FinanceController(IFinanceService financeService) : Controll
         return Ok(await financeService.GetMeterReadingsAsync(new MeterReadingListRequest(monthFrom, monthTo, meterKind, search, limit), cancellationToken));
     }
 
+    [HttpGet("meter-devices")]
+    [ProducesResponseType<IReadOnlyList<MeterDeviceDto>>(StatusCodes.Status200OK)]
+    public async Task<ActionResult<IReadOnlyList<MeterDeviceDto>>> GetMeterDevices(
+        Guid garageId,
+        string meterKind,
+        CancellationToken cancellationToken)
+    {
+        return Ok(await financeService.GetMeterDevicesAsync(garageId, meterKind, cancellationToken));
+    }
+
     [HttpGet("meter-readings/page")]
     [ProducesResponseType<FinancePagedResult<MeterReadingDto>>(StatusCodes.Status200OK)]
     public async Task<ActionResult<FinancePagedResult<MeterReadingDto>>> GetMeterReadingsPage(
@@ -572,6 +582,21 @@ public sealed class FinanceController(IFinanceService financeService) : Controll
     }
 
     [Authorize(Policy = SystemPermissions.PaymentsWrite)]
+    [Authorize(Policy = SystemPermissions.HistoricalMeterReadingsCorrect)]
+    [HttpPost("meter-devices/replace")]
+    [ProducesResponseType<MeterDeviceReplacementDto>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
+    public async Task<ActionResult<MeterDeviceReplacementDto>> ReplaceMeterDevice(
+        ReplaceMeterDeviceRequest request,
+        CancellationToken cancellationToken)
+    {
+        var result = await financeService.ReplaceMeterDeviceAsync(request, GetActorUserId(), cancellationToken);
+        return result.Succeeded ? Ok(result.Value) : ToError(result);
+    }
+
+    [Authorize(Policy = SystemPermissions.PaymentsWrite)]
     [HttpPost("cash-bank-transfers")]
     [ProducesResponseType<CashBankTransferDto>(StatusCodes.Status201Created)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
@@ -716,7 +741,7 @@ public sealed class FinanceController(IFinanceService financeService) : Controll
         return result.ErrorCode switch
         {
             "garage_not_found" or "income_type_not_found" or "irregular_payment_not_found" or "supplier_not_found" or "expense_type_not_found" or "staff_member_not_found" or "tariff_not_found" or "operation_not_found" or "accrual_not_found" or "supplier_accrual_not_found" or "meter_reading_not_found" or "financial_report_target_not_found" => NotFound(ApiProblemDetails.Create(result.ErrorCode, result.ErrorMessage, StatusCodes.Status404NotFound)),
-            "operation_duplicate" or "receipt_batch_conflict" or "operation_already_canceled" or "operation_not_canceled" or "operation_kind_mismatch" or "accrual_duplicate" or "accrual_already_canceled" or "accrual_not_canceled" or "supplier_accrual_duplicate" or "supplier_accrual_already_canceled" or "supplier_accrual_not_canceled" or "meter_reading_duplicate" or "meter_reading_conflict" or "meter_reading_accrual_paid" or "meter_reading_current_month_required" or "meter_reading_historical_month_required" or "meter_reading_already_canceled" or "meter_reading_not_canceled" or "meter_reading_sequence_invalid" or "regular_accruals_empty" or "salary_accruals_empty" or "staff_payment_amount_exceeds_available" or "staff_penalty_exceeds_available" or "bank_amount_insufficient" or "cash_amount_insufficient" => Conflict(ApiProblemDetails.Create(result.ErrorCode, result.ErrorMessage, StatusCodes.Status409Conflict)),
+            "operation_duplicate" or "receipt_batch_conflict" or "operation_already_canceled" or "operation_not_canceled" or "operation_kind_mismatch" or "accrual_duplicate" or "accrual_already_canceled" or "accrual_not_canceled" or "supplier_accrual_duplicate" or "supplier_accrual_already_canceled" or "supplier_accrual_not_canceled" or "meter_reading_duplicate" or "meter_reading_conflict" or "meter_device_conflict" or "meter_device_serial_duplicate" or "meter_device_replacement_reading_cancel_forbidden" or "meter_reading_accrual_paid" or "meter_reading_current_month_required" or "meter_reading_historical_month_required" or "meter_reading_already_canceled" or "meter_reading_not_canceled" or "meter_reading_sequence_invalid" or "regular_accruals_empty" or "salary_accruals_empty" or "staff_payment_amount_exceeds_available" or "staff_penalty_exceeds_available" or "bank_amount_insufficient" or "cash_amount_insufficient" => Conflict(ApiProblemDetails.Create(result.ErrorCode, result.ErrorMessage, StatusCodes.Status409Conflict)),
             _ => BadRequest(ApiProblemDetails.Create(result.ErrorCode, result.ErrorMessage, StatusCodes.Status400BadRequest))
         };
     }

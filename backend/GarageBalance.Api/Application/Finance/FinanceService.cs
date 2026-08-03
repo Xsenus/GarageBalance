@@ -3370,6 +3370,326 @@ public sealed class FinanceService(
         return normalizedComment is null ? prefix : $"{prefix}; {normalizedComment}";
     }
 
+    public async Task<IReadOnlyList<MeterDeviceDto>> GetMeterDevicesAsync(
+        Guid garageId,
+        string meterKind,
+        CancellationToken cancellationToken)
+    {
+        var normalizedKind = meterKind.Trim();
+        if (normalizedKind is not MeterKinds.Water and not MeterKinds.Electricity)
+        {
+            return [];
+        }
+
+        var devices = await meterReadingRepository.GetDevicesAsync(garageId, normalizedKind, cancellationToken);
+        return devices.Select(ToDto).ToArray();
+    }
+
+    public async Task<FinanceResult<MeterDeviceReplacementDto>> ReplaceMeterDeviceAsync(
+        ReplaceMeterDeviceRequest request,
+        Guid? actorUserId,
+        CancellationToken cancellationToken)
+    {
+        var meterKind = request.MeterKind.Trim();
+        if (meterKind is not MeterKinds.Water and not MeterKinds.Electricity)
+        {
+            return FinanceResult<MeterDeviceReplacementDto>.Failure("meter_kind_invalid", "Тип счетчика должен быть water или electricity.");
+        }
+
+        var serialNumber = NormalizeOptional(request.NewSerialNumber);
+        var reason = NormalizeOptional(request.Reason);
+        if (serialNumber is null)
+        {
+            return FinanceResult<MeterDeviceReplacementDto>.Failure("meter_device_serial_required", "Укажите номер нового счетчика.");
+        }
+
+        if (reason is null)
+        {
+            return FinanceResult<MeterDeviceReplacementDto>.Failure("meter_device_replacement_reason_required", "Укажите причину замены счетчика.");
+        }
+
+        if (!request.NewInitialValue.HasValue || !request.CurrentValue.HasValue)
+        {
+            return FinanceResult<MeterDeviceReplacementDto>.Failure("meter_device_values_required", "Укажите начальное и текущее показания нового счетчика.");
+        }
+
+        var accountingMonth = MonthPeriod.Normalize(request.AccountingMonth);
+        if (accountingMonth > GetCurrentAccountingMonth())
+        {
+            return FinanceResult<MeterDeviceReplacementDto>.Failure("meter_reading_future_month_not_allowed", "Показание будущего учетного месяца вводить нельзя.");
+        }
+
+        if (request.ReplacementDate.Year != accountingMonth.Year || request.ReplacementDate.Month != accountingMonth.Month)
+        {
+            return FinanceResult<MeterDeviceReplacementDto>.Failure("meter_device_replacement_date_month_mismatch", "Дата замены счетчика должна относиться к выбранному учетному месяцу.");
+        }
+
+        var initialValue = MoneyMath.RoundMeterValue(request.NewInitialValue.Value);
+        var currentValue = MoneyMath.RoundMeterValue(request.CurrentValue.Value);
+        if (currentValue < initialValue)
+        {
+            return FinanceResult<MeterDeviceReplacementDto>.Failure("meter_device_current_below_initial", "Текущее показание нового счетчика не может быть меньше его начального показания.");
+        }
+
+        var garage = await garageRepository.FindActiveWithOwnerAsync(request.GarageId, cancellationToken);
+        if (garage is null)
+        {
+            return FinanceResult<MeterDeviceReplacementDto>.Failure("garage_not_found", "Гараж для замены счетчика не найден.");
+        }
+
+        await using var meterChainLock = await accrualPaymentAllocationRepository.AcquireRebuildLockAsync(
+            [GetMeterChainLockKey(garage.Id, meterKind)],
+            cancellationToken);
+        var allReadings = (await meterReadingRepository.GetAllActiveForUpdateAsync(garage.Id, meterKind, cancellationToken)).ToList();
+        var activeDevice = await meterReadingRepository.GetActiveDeviceForUpdateAsync(garage.Id, meterKind, cancellationToken);
+        var registerLegacyDevice = false;
+        if (activeDevice is null && allReadings.Count > 0)
+        {
+            var firstReading = allReadings[0];
+            activeDevice = new MeterDevice
+            {
+                GarageId = garage.Id,
+                Garage = garage,
+                MeterKind = meterKind,
+                SerialNumber = "Без номера",
+                InstalledOn = firstReading.ReadingDate,
+                InitialValue = firstReading.PreviousValue
+            };
+            registerLegacyDevice = true;
+        }
+
+        var devices = await meterReadingRepository.GetDevicesAsync(garage.Id, meterKind, cancellationToken);
+        if (devices.Any(device => string.Equals(device.SerialNumber, serialNumber, StringComparison.OrdinalIgnoreCase)))
+        {
+            return FinanceResult<MeterDeviceReplacementDto>.Failure("meter_device_serial_duplicate", "Счетчик с таким номером уже зарегистрирован для этого гаража.");
+        }
+
+        MeterReading? targetReading = null;
+        if (request.MeterReadingId.HasValue)
+        {
+            targetReading = allReadings.SingleOrDefault(reading => reading.Id == request.MeterReadingId.Value);
+            if (targetReading is null)
+            {
+                return FinanceResult<MeterDeviceReplacementDto>.Failure("meter_reading_not_found", "Изменяемое показание не найдено.");
+            }
+
+            if (!request.ExpectedReadingVersion.HasValue || targetReading.Version != request.ExpectedReadingVersion.Value)
+            {
+                return FinanceResult<MeterDeviceReplacementDto>.Failure("meter_reading_conflict", "Показание уже изменено другим пользователем. Обновите данные и повторите действие.");
+            }
+
+            if (targetReading.AccountingMonth != accountingMonth)
+            {
+                return FinanceResult<MeterDeviceReplacementDto>.Failure("meter_device_replacement_month_mismatch", "Месяц заменяемого показания не совпадает с выбранным месяцем.");
+            }
+        }
+        else if (allReadings.Any(reading => reading.AccountingMonth == accountingMonth))
+        {
+            return FinanceResult<MeterDeviceReplacementDto>.Failure("meter_reading_duplicate", "За выбранный месяц уже есть показание. Обновите таблицу и повторите замену из этой ячейки.");
+        }
+
+        if (activeDevice is not null && request.ReplacementDate <= activeDevice.InstalledOn)
+        {
+            return FinanceResult<MeterDeviceReplacementDto>.Failure("meter_device_replacement_date_invalid", "Дата замены должна быть позже даты установки действующего счетчика.");
+        }
+
+        var lastOldReading = allReadings
+            .Where(reading => reading.Id != targetReading?.Id && reading.ReadingDate < request.ReplacementDate)
+            .OrderByDescending(reading => reading.ReadingDate)
+            .ThenByDescending(reading => reading.AccountingMonth)
+            .FirstOrDefault();
+        var removedFinalValue = MoneyMath.RoundMeterValue(
+            request.RemovedDeviceFinalValue ?? targetReading?.CurrentValue ?? lastOldReading?.CurrentValue ?? activeDevice?.InitialValue ?? 0m);
+        if (lastOldReading is not null && removedFinalValue < lastOldReading.CurrentValue)
+        {
+            return FinanceResult<MeterDeviceReplacementDto>.Failure("meter_device_final_below_last_reading", "Конечное показание старого счетчика не может быть меньше его последнего сохраненного показания.");
+        }
+        var oldDeviceBaseline = lastOldReading?.CurrentValue ?? activeDevice?.InitialValue ?? removedFinalValue;
+        var previousDeviceConsumption = MoneyMath.RoundMeterValue(removedFinalValue - oldDeviceBaseline);
+        if (previousDeviceConsumption < 0)
+        {
+            return FinanceResult<MeterDeviceReplacementDto>.Failure("meter_device_final_below_initial", "Конечное показание старого счетчика не может быть меньше его начального показания.");
+        }
+
+        var newDevice = new MeterDevice
+        {
+            GarageId = garage.Id,
+            Garage = garage,
+            MeterKind = meterKind,
+            SerialNumber = serialNumber,
+            InstalledOn = request.ReplacementDate,
+            InitialValue = initialValue
+        };
+        var isNewReading = targetReading is null;
+        var prospectiveTarget = new MeterReading
+        {
+            Id = targetReading?.Id ?? Guid.NewGuid(),
+            GarageId = garage.Id,
+            Garage = garage,
+            MeterDeviceId = newDevice.Id,
+            MeterDevice = newDevice,
+            MeterKind = meterKind,
+            AccountingMonth = accountingMonth,
+            ReadingDate = request.ReplacementDate,
+            CurrentValue = currentValue,
+            PreviousValue = targetReading?.PreviousValue ?? initialValue,
+            PreviousDeviceConsumption = previousDeviceConsumption,
+            Consumption = targetReading?.Consumption ?? MoneyMath.RoundMeterValue(currentValue - initialValue),
+            IsMeterReplacement = true,
+            HasGapWarning = targetReading?.HasGapWarning ?? false,
+            Comment = $"Замена счетчика: {reason}"
+        };
+
+        var previousReading = allReadings
+            .Where(reading => reading.Id != prospectiveTarget.Id && reading.AccountingMonth < accountingMonth)
+            .OrderByDescending(reading => reading.AccountingMonth)
+            .FirstOrDefault();
+        var prospectiveLaterReadings = allReadings
+            .Where(reading => reading.Id != prospectiveTarget.Id && reading.AccountingMonth > accountingMonth)
+            .Select(reading => CloneMeterReadingForChain(
+                reading,
+                reading.ReadingDate >= request.ReplacementDate ? newDevice : reading.MeterDevice))
+            .ToArray();
+        var chainReadings = new[] { prospectiveTarget }
+            .Concat(prospectiveLaterReadings)
+            .ToArray();
+        var chainPlan = PlanMeterReadingChain(garage, meterKind, previousReading, chainReadings);
+        if (!chainPlan.Succeeded)
+        {
+            return FinanceResult<MeterDeviceReplacementDto>.Failure(chainPlan.ErrorCode!, chainPlan.ErrorMessage!);
+        }
+
+        var accrualRecalculations = await PlanMeteredAccrualRecalculationsAsync(
+            garage.Id,
+            meterKind,
+            accountingMonth,
+            chainPlan.Value!,
+            missingReadingMonth: null,
+            cancellationToken);
+        var meteredSettings = await GetApplicableMeteredSettingsAsync(prospectiveTarget, cancellationToken);
+        var allocationKeys = accrualRecalculations
+            .Select(item => new AccrualPaymentAllocationKey(item.Accrual.GarageId, item.Accrual.IncomeTypeId))
+            .Concat(meteredSettings.Select(setting => new AccrualPaymentAllocationKey(garage.Id, setting.IncomeTypeId!.Value)))
+            .Distinct()
+            .ToArray();
+        await using var allocationLock = await accrualPaymentAllocationRepository.AcquireRebuildLockAsync(allocationKeys, cancellationToken);
+        if (await accrualPaymentAllocationRepository.HasActiveAllocationAsync(
+            accrualRecalculations.Select(item => item.Accrual.Id).ToArray(),
+            cancellationToken))
+        {
+            return FinanceResult<MeterDeviceReplacementDto>.Failure(
+                "meter_reading_accrual_paid",
+                "Замена счетчика изменяет полностью или частично оплаченное начисление. Сначала исправьте оплату или оформите отдельную корректировку.");
+        }
+
+        if (registerLegacyDevice)
+        {
+            meterReadingRepository.Add(activeDevice!);
+            foreach (var existingReading in allReadings.Where(reading => reading.ReadingDate < request.ReplacementDate))
+            {
+                existingReading.MeterDeviceId = activeDevice!.Id;
+                existingReading.MeterDevice = activeDevice;
+            }
+        }
+
+        meterReadingRepository.Add(newDevice);
+        if (activeDevice is not null)
+        {
+            activeDevice.RemovedOn = request.ReplacementDate.AddDays(-1);
+            activeDevice.FinalValue = removedFinalValue;
+            activeDevice.Version = Guid.NewGuid();
+            activeDevice.UpdatedAtUtc = timeProvider.GetUtcNow();
+        }
+
+        targetReading ??= new MeterReading
+        {
+            Id = prospectiveTarget.Id,
+            GarageId = garage.Id,
+            Garage = garage,
+            MeterKind = meterKind,
+            AccountingMonth = accountingMonth
+        };
+        targetReading.MeterDeviceId = newDevice.Id;
+        targetReading.MeterDevice = newDevice;
+        targetReading.ReadingDate = request.ReplacementDate;
+        targetReading.CurrentValue = currentValue;
+        targetReading.PreviousDeviceConsumption = previousDeviceConsumption;
+        targetReading.IsMeterReplacement = true;
+        targetReading.Comment = prospectiveTarget.Comment;
+        foreach (var laterReading in allReadings.Where(reading => reading.Id != targetReading.Id && reading.ReadingDate >= request.ReplacementDate))
+        {
+            laterReading.MeterDeviceId = newDevice.Id;
+            laterReading.MeterDevice = newDevice;
+        }
+
+        var appliedChainPlan = PlanMeterReadingChain(
+            garage,
+            meterKind,
+            previousReading,
+            new[] { targetReading }
+                .Concat(allReadings.Where(reading => reading.Id != targetReading.Id && reading.AccountingMonth > accountingMonth))
+                .ToArray());
+        if (!appliedChainPlan.Succeeded)
+        {
+            throw new InvalidOperationException("Validated meter replacement chain could not be applied.");
+        }
+
+        ApplyMeterReadingChainChanges(appliedChainPlan.Value!, actorUserId, targetReading.Id);
+        var primaryChange = appliedChainPlan.Value![0];
+        targetReading.PreviousValue = primaryChange.PreviousValue;
+        targetReading.Consumption = primaryChange.Consumption;
+        targetReading.HasGapWarning = primaryChange.HasGapWarning;
+        targetReading.Version = Guid.NewGuid();
+        targetReading.UpdatedAtUtc = timeProvider.GetUtcNow();
+        if (isNewReading)
+        {
+            meterReadingRepository.Add(targetReading);
+        }
+
+        ApplyMeteredAccrualRecalculations(accrualRecalculations, actorUserId, "Пересчет после замены счетчика");
+        var createdAccrualKeys = await CreateMissingMeteredAccrualsAsync(
+            garage,
+            targetReading,
+            meteredSettings,
+            actorUserId,
+            cancellationToken);
+        AddAudit(
+            actorUserId,
+            "finance.meter_device_replaced",
+            "meter_device",
+            newDevice.Id,
+            $"В гараже {garage.Number} счетчик {meterKind} заменен на № {serialNumber}; начальное показание {initialValue:0.###}, текущее {currentValue:0.###}. Причина: {reason}.",
+            metadata: new Dictionary<string, object?>
+            {
+                ["garageId"] = garage.Id,
+                ["meterKind"] = meterKind,
+                ["removedDeviceId"] = activeDevice?.Id,
+                ["newDeviceId"] = newDevice.Id,
+                ["replacementDate"] = request.ReplacementDate,
+                ["reason"] = reason
+            });
+        await RebuildPaymentAllocationsAsync(
+            allocationKeys.Concat(createdAccrualKeys).Distinct().ToArray(),
+            actorUserId,
+            "Перераспределение после замены счетчика",
+            targetReading.Id,
+            cancellationToken);
+        try
+        {
+            await unitOfWork.SaveChangesAsync(cancellationToken);
+        }
+        catch (ApplicationConcurrencyException)
+        {
+            return FinanceResult<MeterDeviceReplacementDto>.Failure("meter_device_conflict", "Данные счетчика уже изменены другим пользователем. Обновите страницу и повторите действие.");
+        }
+        catch (ApplicationPersistenceConflictException)
+        {
+            return FinanceResult<MeterDeviceReplacementDto>.Failure("meter_device_conflict", "Не удалось сохранить замену из-за конкурентного изменения. Обновите страницу и повторите действие.");
+        }
+
+        return FinanceResult<MeterDeviceReplacementDto>.Success(new MeterDeviceReplacementDto(ToDto(newDevice), ToDto(targetReading)));
+    }
+
     public async Task<FinanceResult<MeterReadingDto>> CreateMeterReadingAsync(CreateMeterReadingRequest request, Guid? actorUserId, CancellationToken cancellationToken)
     {
         var meterKind = request.MeterKind.Trim();
@@ -3404,15 +3724,48 @@ public sealed class FinanceService(
             return FinanceResult<MeterReadingDto>.Failure("meter_reading_duplicate", "Показание этого счетчика за месяц уже внесено.");
         }
 
-        var previousReading = await meterReadingRepository.GetPreviousActiveAsync(null, garage.Id, meterKind, month, cancellationToken);
-        var currentValue = MoneyMath.RoundMeterValue(request.CurrentValue.Value);
-        var previousMeterValue = previousReading?.CurrentValue ?? GetInitialMeterValue(garage, meterKind);
-        if (!previousMeterValue.HasValue && meterKind == MeterKinds.Water)
+        var meterDevice = await meterReadingRepository.GetDeviceForDateForUpdateAsync(
+            garage.Id,
+            meterKind,
+            request.ReadingDate,
+            cancellationToken);
+        var registerMeterDevice = false;
+        var adjustMeterDeviceInstalledOn = false;
+        if (meterDevice is null)
         {
-            return WaterMeterReadingBaselineRequired();
+            var activeDevice = await meterReadingRepository.GetActiveDeviceForUpdateAsync(garage.Id, meterKind, cancellationToken);
+            if (activeDevice is not null && string.Equals(activeDevice.SerialNumber, "Без номера", StringComparison.Ordinal))
+            {
+                meterDevice = activeDevice;
+                adjustMeterDeviceInstalledOn = true;
+            }
         }
 
-        var previousValue = MoneyMath.RoundMeterValue(previousMeterValue ?? 0m);
+        if (meterDevice is null)
+        {
+            var initialValue = GetInitialMeterValue(garage, meterKind);
+            if (!initialValue.HasValue && meterKind == MeterKinds.Water)
+            {
+                return WaterMeterReadingBaselineRequired();
+            }
+
+            meterDevice = new MeterDevice
+            {
+                GarageId = garage.Id,
+                Garage = garage,
+                MeterKind = meterKind,
+                SerialNumber = "Без номера",
+                InstalledOn = request.ReadingDate,
+                InitialValue = MoneyMath.RoundMeterValue(initialValue ?? 0m)
+            };
+            registerMeterDevice = true;
+        }
+
+        var previousReading = await meterReadingRepository.GetPreviousActiveAsync(null, garage.Id, meterKind, month, cancellationToken);
+        var currentValue = MoneyMath.RoundMeterValue(request.CurrentValue.Value);
+        var previousBelongsToDevice = previousReading?.MeterDeviceId == meterDevice.Id;
+        var previousMeterValue = previousBelongsToDevice ? previousReading!.CurrentValue : meterDevice.InitialValue;
+        var previousValue = MoneyMath.RoundMeterValue(previousMeterValue);
         var consumption = MoneyMath.RoundMeterValue(currentValue - previousValue);
         if (consumption < 0)
         {
@@ -3424,6 +3777,8 @@ public sealed class FinanceService(
         {
             GarageId = garage.Id,
             Garage = garage,
+            MeterDeviceId = meterDevice.Id,
+            MeterDevice = meterDevice,
             MeterKind = meterKind,
             AccountingMonth = month,
             ReadingDate = request.ReadingDate,
@@ -3478,6 +3833,22 @@ public sealed class FinanceService(
 
         ApplyMeterReadingChainChanges(chainPlan.Value!, actorUserId, reading.Id);
         ApplyMeteredAccrualRecalculations(accrualRecalculations, actorUserId, "Пересчет после вставки показания");
+        if (adjustMeterDeviceInstalledOn)
+        {
+            meterDevice.InstalledOn = request.ReadingDate;
+            meterDevice.Version = Guid.NewGuid();
+            meterDevice.UpdatedAtUtc = timeProvider.GetUtcNow();
+        }
+        if (registerMeterDevice)
+        {
+            meterReadingRepository.Add(meterDevice);
+            AddAudit(
+                actorUserId,
+                "finance.meter_device_registered",
+                "meter_device",
+                meterDevice.Id,
+                $"Для гаража {garage.Number} зарегистрирован счетчик {meterKind} без указанного номера со стартовым значением {meterDevice.InitialValue:0.###}.");
+        }
         meterReadingRepository.Add(reading);
         AddAudit(actorUserId, "finance.meter_reading_created", reading, FormatMeterReadingCreatedAuditSummary(reading));
         var createdAccrualKeys = await CreateMissingMeteredAccrualsAsync(
@@ -3693,7 +4064,7 @@ public sealed class FinanceService(
         }
 
         var previousValue = MoneyMath.RoundMeterValue(previousMeterValue ?? 0m);
-        var consumption = MoneyMath.RoundMeterValue(currentValue - previousValue);
+        var consumption = MoneyMath.RoundMeterValue(currentValue - previousValue + reading.PreviousDeviceConsumption);
         if (consumption < 0)
         {
             return FinanceResult<MeterReadingDto>.Failure("meter_reading_decreased", "Новое показание не может быть меньше предыдущего.");
@@ -3714,11 +4085,14 @@ public sealed class FinanceService(
             Id = reading.Id,
             GarageId = garage.Id,
             Garage = garage,
+            MeterDeviceId = reading.MeterDeviceId,
+            MeterDevice = reading.MeterDevice,
             MeterKind = meterKind,
             AccountingMonth = month,
             ReadingDate = request.ReadingDate,
             CurrentValue = currentValue,
             PreviousValue = previousValue,
+            PreviousDeviceConsumption = reading.PreviousDeviceConsumption,
             Consumption = consumption,
             HasGapWarning = hasGapWarning
         };
@@ -3887,6 +4261,13 @@ public sealed class FinanceService(
         if (reading.IsCanceled)
         {
             return FinanceResult<MeterReadingDto>.Failure("meter_reading_already_canceled", "Показание счетчика уже отменено.");
+        }
+
+        if (reading.IsMeterReplacement)
+        {
+            return FinanceResult<MeterReadingDto>.Failure(
+                "meter_device_replacement_reading_cancel_forbidden",
+                "Переходное показание замены счетчика отменять нельзя. Исправьте значения и причину в записи замены.");
         }
 
         await using var meterChainLock = await accrualPaymentAllocationRepository.AcquireRebuildLockAsync(
@@ -4077,7 +4458,11 @@ public sealed class FinanceService(
         IReadOnlyList<MeterReading> readings)
     {
         var changes = new List<MeterReadingChainChange>(readings.Count);
-        var previousValue = previousReading?.CurrentValue ?? GetInitialMeterValue(garage, meterKind);
+        var firstReading = readings.OrderBy(item => item.AccountingMonth).ThenBy(item => item.Id).FirstOrDefault();
+        var sameDeviceAsFirst = firstReading is not null && MeterDevicesMatch(previousReading, firstReading);
+        var previousValue = sameDeviceAsFirst
+            ? previousReading!.CurrentValue
+            : firstReading?.MeterDevice?.InitialValue ?? GetInitialMeterValue(garage, meterKind);
         if (!previousValue.HasValue && meterKind == MeterKinds.Water)
         {
             return FinanceResult<IReadOnlyList<MeterReadingChainChange>>.Failure(
@@ -4087,8 +4472,14 @@ public sealed class FinanceService(
 
         foreach (var reading in readings.OrderBy(item => item.AccountingMonth).ThenBy(item => item.Id))
         {
+            if (previousReading is not null && !MeterDevicesMatch(previousReading, reading))
+            {
+                previousValue = reading.MeterDevice?.InitialValue ?? GetInitialMeterValue(garage, meterKind);
+            }
+
             var normalizedPreviousValue = MoneyMath.RoundMeterValue(previousValue ?? 0m);
-            var consumption = MoneyMath.RoundMeterValue(reading.CurrentValue - normalizedPreviousValue);
+            var consumption = MoneyMath.RoundMeterValue(
+                reading.CurrentValue - normalizedPreviousValue + reading.PreviousDeviceConsumption);
             if (consumption < 0)
             {
                 return FinanceResult<IReadOnlyList<MeterReadingChainChange>>.Failure(
@@ -4111,6 +4502,31 @@ public sealed class FinanceService(
 
         return FinanceResult<IReadOnlyList<MeterReadingChainChange>>.Success(changes);
     }
+
+    private static bool MeterDevicesMatch(MeterReading? left, MeterReading right) =>
+        left is not null && left.MeterDeviceId == right.MeterDeviceId;
+
+    private static MeterReading CloneMeterReadingForChain(MeterReading reading, MeterDevice? meterDevice) => new()
+    {
+        Id = reading.Id,
+        GarageId = reading.GarageId,
+        Garage = reading.Garage,
+        MeterDeviceId = meterDevice?.Id,
+        MeterDevice = meterDevice,
+        MeterKind = reading.MeterKind,
+        AccountingMonth = reading.AccountingMonth,
+        ReadingDate = reading.ReadingDate,
+        CurrentValue = reading.CurrentValue,
+        PreviousValue = reading.PreviousValue,
+        PreviousDeviceConsumption = reading.PreviousDeviceConsumption,
+        Consumption = reading.Consumption,
+        IsMeterReplacement = reading.IsMeterReplacement,
+        HasGapWarning = reading.HasGapWarning,
+        Comment = reading.Comment,
+        Version = reading.Version,
+        CreatedAtUtc = reading.CreatedAtUtc,
+        UpdatedAtUtc = reading.UpdatedAtUtc
+    };
 
     private async Task<IReadOnlyList<MeteredAccrualRecalculation>> PlanMeteredAccrualRecalculationsAsync(
         Guid garageId,
@@ -5628,8 +6044,24 @@ public sealed class FinanceService(
             reading.HasGapWarning,
             reading.Comment,
             reading.IsCanceled,
-            reading.Version);
+            reading.Version,
+            reading.MeterDeviceId,
+            reading.MeterDevice?.SerialNumber,
+            reading.PreviousDeviceConsumption,
+            reading.IsMeterReplacement);
     }
+
+    private static MeterDeviceDto ToDto(MeterDevice device) =>
+        new(
+            device.Id,
+            device.GarageId,
+            device.MeterKind,
+            device.SerialNumber,
+            device.InstalledOn,
+            device.RemovedOn,
+            device.InitialValue,
+            device.FinalValue,
+            device.Version);
 
     private readonly record struct AmountCalculationResult(bool Succeeded, decimal Value, string? ErrorMessage)
     {

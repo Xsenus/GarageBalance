@@ -3,6 +3,7 @@ using System;
 using GarageBalance.Api.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace GarageBalance.Api.Infrastructure.Data.Migrations
 {
     [DbContext(typeof(GarageBalanceDbContext))]
-    partial class GarageBalanceDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260803190820_PhysicalMeterDevices")]
+    partial class PhysicalMeterDevices
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -1164,6 +1167,11 @@ namespace GarageBalance.Api.Infrastructure.Data.Migrations
                     b.Property<bool>("IsCanceled")
                         .HasColumnType("boolean");
 
+                    b.Property<bool>("IsMeterReplacement")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false);
+
                     b.Property<DateOnly>("OperationDate")
                         .HasColumnType("date");
 
@@ -1439,11 +1447,6 @@ namespace GarageBalance.Api.Infrastructure.Data.Migrations
                     b.Property<bool>("IsCanceled")
                         .HasColumnType("boolean");
 
-                    b.Property<bool>("IsMeterReplacement")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("boolean")
-                        .HasDefaultValue(false);
-
                     b.Property<Guid?>("MeterDeviceId")
                         .HasColumnType("uuid");
 
@@ -1452,15 +1455,15 @@ namespace GarageBalance.Api.Infrastructure.Data.Migrations
                         .HasMaxLength(40)
                         .HasColumnType("character varying(40)");
 
+                    b.Property<decimal>("PreviousValue")
+                        .HasPrecision(18, 3)
+                        .HasColumnType("numeric(18,3)");
+
                     b.Property<decimal>("PreviousDeviceConsumption")
                         .ValueGeneratedOnAdd()
                         .HasPrecision(18, 3)
                         .HasColumnType("numeric(18,3)")
                         .HasDefaultValue(0m);
-
-                    b.Property<decimal>("PreviousValue")
-                        .HasPrecision(18, 3)
-                        .HasColumnType("numeric(18,3)");
 
                     b.Property<DateOnly>("ReadingDate")
                         .HasColumnType("date");

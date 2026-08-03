@@ -323,7 +323,37 @@ public sealed record MeterReadingDto(
     bool HasGapWarning,
     string? Comment,
     bool IsCanceled,
+    Guid Version,
+    Guid? MeterDeviceId = null,
+    string? MeterDeviceSerialNumber = null,
+    decimal PreviousDeviceConsumption = 0m,
+    bool IsMeterReplacement = false);
+
+public sealed record MeterDeviceDto(
+    Guid Id,
+    Guid GarageId,
+    string MeterKind,
+    string SerialNumber,
+    DateOnly InstalledOn,
+    DateOnly? RemovedOn,
+    decimal InitialValue,
+    decimal? FinalValue,
     Guid Version);
+
+public sealed record ReplaceMeterDeviceRequest(
+    Guid GarageId,
+    [Required, MaxLength(40)] string MeterKind,
+    DateOnly AccountingMonth,
+    DateOnly ReplacementDate,
+    [Required, MaxLength(100)] string NewSerialNumber,
+    [Required, Range(0, 999999999)] decimal? NewInitialValue,
+    [Required, Range(0, 999999999)] decimal? CurrentValue,
+    [Range(0, 999999999)] decimal? RemovedDeviceFinalValue,
+    [Required, MaxLength(500)] string Reason,
+    Guid? MeterReadingId = null,
+    Guid? ExpectedReadingVersion = null);
+
+public sealed record MeterDeviceReplacementDto(MeterDeviceDto Device, MeterReadingDto Reading);
 
 public sealed record MeterReadingYearGarageDto(Guid Id, string Number);
 
