@@ -1680,6 +1680,77 @@ describe('App', () => {
     expect(within(tariffsPanel).queryByRole('table', { name: 'История изменений тарифов и сборов', hidden: true })).not.toBeInTheDocument()
   }, 180000)
 
+  it('clearly edits and safely archives salary fund tariff rows', async () => {
+    const user = userEvent.setup()
+    let salaryTariffs = [
+      createTariff({ id: 'salary-electricians', name: 'Электрики', calculationBase: 'fixed', rate: 500 }),
+      createTariff({ id: 'salary-accounting', name: 'Бухгалтерия', calculationBase: 'fixed', rate: 700 }),
+      createTariff({ id: 'salary-management', name: 'Руководство', calculationBase: 'fixed', rate: 900 }),
+    ]
+    const updateTariff = vi.fn(async (_token: string, id: string, request: UpsertTariffRequest) => {
+      const saved = createTariff({
+        ...salaryTariffs.find((tariff) => tariff.id === id),
+        id,
+        name: request.name,
+        calculationBase: request.calculationBase,
+        rate: request.rate,
+        effectiveFrom: request.effectiveFrom,
+        comment: request.comment ?? null,
+      })
+      salaryTariffs = salaryTariffs.map((tariff) => tariff.id === id ? saved : tariff)
+      return saved
+    })
+    let archiveAttempts = 0
+    const archiveTariff = vi.fn(async (_token: string, id: string, reason: string) => {
+      archiveAttempts += 1
+      if (archiveAttempts === 1) {
+        throw new DictionaryApiError('temporary_error', 'Не удалось сохранить изменение.', 503)
+      }
+      expect(reason).toBe('Должность больше не используется')
+      salaryTariffs = salaryTariffs.filter((tariff) => tariff.id !== id)
+    })
+    const dictionaryClient = createDictionaryClient({
+      getTariffs: async () => salaryTariffs,
+      getChargeServiceSettings: async () => [],
+      updateTariff,
+      archiveTariff,
+    })
+
+    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Тарифы и сборы')
+    const panel = await screen.findByRole('region', { name: 'Тарифы и сборы' })
+
+    const electriciansInput = await within(panel).findByLabelText('Зарплатный фонд: Электрики: значение')
+    await user.click(within(panel).getByRole('button', { name: 'Изменить тариф Электрики' }))
+    expect(electriciansInput).toHaveFocus()
+    await user.clear(electriciansInput)
+    await user.type(electriciansInput, '650')
+    await user.tab()
+    const changeDialog = await screen.findByRole('dialog', { name: 'Подтвердить изменение?' })
+    expect(within(changeDialog).getByText('500.00')).toBeInTheDocument()
+    expect(within(changeDialog).getByText('650.00')).toBeInTheDocument()
+    await user.click(within(changeDialog).getByRole('button', { name: 'Сохранить' }))
+    await waitFor(() => expect(updateTariff).toHaveBeenCalledWith('token', 'salary-electricians', expect.objectContaining({ rate: 650 })))
+    expect(within(panel).getByLabelText('Зарплатный фонд: Электрики: значение')).toHaveValue('650.00')
+
+    await user.click(within(panel).getByRole('button', { name: 'Убрать тариф Бухгалтерия' }))
+    const archiveDialog = await screen.findByRole('dialog', { name: 'Убрать строку тарифа?' })
+    expect(within(archiveDialog).getByText(/Начисления и выплаты не изменятся/)).toBeInTheDocument()
+    const archiveButton = within(archiveDialog).getByRole('button', { name: 'Убрать строку' })
+    expect(archiveButton).toBeDisabled()
+    await user.type(within(archiveDialog).getByLabelText('Причина удаления тарифа'), 'Должность больше не используется')
+    await user.click(archiveButton)
+    expect(await screen.findByText('Не удалось сохранить изменение.')).toBeInTheDocument()
+    expect(within(archiveDialog).getByLabelText('Причина удаления тарифа')).toHaveValue('Должность больше не используется')
+
+    await user.click(within(archiveDialog).getByRole('button', { name: 'Убрать строку' }))
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Убрать строку тарифа?' })).not.toBeInTheDocument())
+    expect(within(panel).queryByLabelText('Зарплатный фонд: Бухгалтерия: значение')).not.toBeInTheDocument()
+    expect(archiveTariff).toHaveBeenCalledTimes(2)
+  })
+
   it('hides financial report actions until contractor records are saved', async () => {
     const user = userEvent.setup()
     render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} integrationClient={createIntegrationClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)

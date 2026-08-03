@@ -384,7 +384,10 @@ function createTariffRowsFromBackend(tariffs: TariffDto[], settings: ChargeServi
       && Boolean(row.calculationBase && findTariffForPrototypeRow(prototypeTariffs, row))
     ))
     .map((row) => row.category))
-  const rowsBackedByTariffs = contractorTariffRows.filter((row) => backedCategories.has(row.category))
+  const rowsBackedByTariffs = contractorTariffRows.filter((row) => (
+    backedCategories.has(row.category)
+    && (row.category !== 'Зарплатный фонд' || Boolean(findTariffForPrototypeRow(prototypeTariffs, row)))
+  ))
   return mergeChargeServicesIntoPrototypeRows(
     mergeTariffsIntoPrototypeRows(rowsBackedByTariffs, prototypeTariffs),
     settings.filter((setting) => setting.isRegular),
@@ -748,6 +751,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
   const [chargeServiceArchiveTarget, setChargeServiceArchiveTarget] = useState<ChargeServiceSettingDto | null>(null)
   const [chargeServiceArchiveReason, setChargeServiceArchiveReason] = useState('')
   const [chargeServiceRestoreTarget, setChargeServiceRestoreTarget] = useState<ChargeServiceSettingDto | null>(null)
+  const [standaloneTariffArchiveTarget, setStandaloneTariffArchiveTarget] = useState<ContractorTariffRow | null>(null)
   const [thresholdDeleteTarget, setThresholdDeleteTarget] = useState<ContractorTariffRow | null>(null)
   const [thresholdDeleteReason, setThresholdDeleteReason] = useState('')
   const [thresholdCreateOpen, setThresholdCreateOpen] = useState(false)
@@ -964,6 +968,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
 
   function closeChargeServiceArchiveDialog() {
     setChargeServiceArchiveTarget(null)
+    setStandaloneTariffArchiveTarget(null)
     setChargeServiceArchiveReason('')
   }
 
@@ -1104,9 +1109,10 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
   useRestoreFocusOnClose(Boolean(feeCampaignRestoreTarget))
   const feeCampaignRestoreDialogRef = useFocusTrap<HTMLElement>(Boolean(feeCampaignRestoreTarget))
   const feeCampaignRestoreCancelRef = useFocusOnOpen<HTMLButtonElement>(Boolean(feeCampaignRestoreTarget))
-  useRestoreFocusOnClose(Boolean(chargeServiceArchiveTarget))
-  const chargeServiceArchiveDialogRef = useFocusTrap<HTMLElement>(Boolean(chargeServiceArchiveTarget))
-  const chargeServiceArchiveCancelRef = useFocusOnOpen<HTMLButtonElement>(Boolean(chargeServiceArchiveTarget))
+  const tariffArchiveDialogOpen = Boolean(chargeServiceArchiveTarget || standaloneTariffArchiveTarget)
+  useRestoreFocusOnClose(tariffArchiveDialogOpen)
+  const chargeServiceArchiveDialogRef = useFocusTrap<HTMLElement>(tariffArchiveDialogOpen)
+  const chargeServiceArchiveCancelRef = useFocusOnOpen<HTMLButtonElement>(tariffArchiveDialogOpen)
   useRestoreFocusOnClose(Boolean(chargeServiceRestoreTarget))
   const chargeServiceRestoreDialogRef = useFocusTrap<HTMLElement>(Boolean(chargeServiceRestoreTarget))
   const chargeServiceRestoreCancelRef = useFocusOnOpen<HTMLButtonElement>(Boolean(chargeServiceRestoreTarget))
@@ -1125,7 +1131,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
   useEscapeKey(Boolean(feeCampaignArchiveTarget), () => closeFeeCampaignArchiveDialog())
   useEscapeKey(Boolean(feeCampaignCloseTarget), () => closeFeeCampaignCloseDialog())
   useEscapeKey(Boolean(feeCampaignRestoreTarget), () => closeFeeCampaignRestoreDialog())
-  useEscapeKey(Boolean(chargeServiceArchiveTarget), () => closeChargeServiceArchiveDialog())
+  useEscapeKey(tariffArchiveDialogOpen, () => closeChargeServiceArchiveDialog())
   useEscapeKey(Boolean(chargeServiceRestoreTarget), () => closeChargeServiceRestoreDialog())
   useEscapeKey(Boolean(thresholdDeleteTarget), () => closeThresholdDeleteDialog())
   useEscapeKey(thresholdCreateOpen, () => closeThresholdCreateDialog())
@@ -1945,6 +1951,30 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
     }
   }
 
+  async function archiveStandaloneTariff() {
+    const backendTariffId = standaloneTariffArchiveTarget?.backendTariffId
+    if (!standaloneTariffArchiveTarget || !backendTariffId || !chargeServiceArchiveReason.trim()) {
+      return
+    }
+
+    setTariffSavingRowId(standaloneTariffArchiveTarget.id)
+    setTariffPersistenceError(null)
+    try {
+      await dictionaryClient.archiveTariff(auth.accessToken, backendTariffId, chargeServiceArchiveReason.trim())
+      const nextTariffs = backendTariffs.filter((tariff) => tariff.id !== backendTariffId)
+      const nextRows = createTariffRowsFromBackend(nextTariffs, backendChargeServices)
+      setBackendTariffs(nextTariffs)
+      setTariffRows(nextRows)
+      setTariffDrafts(createEditableDrafts(nextRows))
+      setTariffPageNumber(1)
+      closeChargeServiceArchiveDialog()
+    } catch (caught) {
+      setTariffPersistenceError(caught instanceof Error ? caught.message : 'Не удалось убрать тариф из зарплатного фонда.')
+    } finally {
+      setTariffSavingRowId(null)
+    }
+  }
+
   async function commitElectricityThresholdBound(row: ContractorTariffRow) {
     if (row.electricityUpperBound == null) return
 
@@ -2338,6 +2368,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
                       </div>
                     ) : isTariffMoneyAmount(row) ? (
                       <MoneyTextInput
+                        id={`tariff-value-${row.id}`}
                         aria-label={`${row.category}: ${row.title}: значение`}
                         className="contractors-editable-input"
                         disabled={!canManageTariffs || isRowDisabled}
@@ -2397,6 +2428,40 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
                   </span>
                   <span role="cell" className="tariffs-row-actions-cell">
                     <span className="tariffs-row-actions">
+                      {row.category === 'Зарплатный фонд' && row.backendTariffId && !row.backendServiceSettingId ? (
+                        <>
+                          <button
+                            className="icon-button tariffs-row-action-button"
+                            type="button"
+                            aria-label={`Изменить тариф ${row.title}`}
+                            title="Изменить ставку"
+                            disabled={!canManageTariffs || isRowDisabled}
+                            onClick={() => {
+                              const input = document.getElementById(`tariff-value-${row.id}`)
+                              if (input instanceof HTMLInputElement) {
+                                input.focus()
+                                input.select()
+                              }
+                            }}
+                          >
+                            <Pencil size={16} aria-hidden="true" />
+                          </button>
+                          <button
+                            className="icon-button tariffs-row-action-button danger-icon-button"
+                            type="button"
+                            aria-label={`Убрать тариф ${row.title}`}
+                            title="Убрать из списка"
+                            disabled={!canManageTariffs || isRowDisabled}
+                            onClick={() => {
+                              setTariffPersistenceError(null)
+                              setChargeServiceArchiveReason('')
+                              setStandaloneTariffArchiveTarget(row)
+                            }}
+                          >
+                            <Trash2 size={16} aria-hidden="true" />
+                          </button>
+                        </>
+                      ) : null}
                       {row.serviceSettingKind === 'main' && serviceSetting && !row.isDeleted ? (
                         <>
                           <button
@@ -2860,39 +2925,46 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
         </div>
       ) : null}
 
-      {chargeServiceArchiveTarget ? (
+      {tariffArchiveDialogOpen ? (
         <div className="modal-backdrop" role="presentation" onMouseDown={closeChargeServiceArchiveDialog}>
           <section ref={chargeServiceArchiveDialogRef} className="detail-dialog contractors-dialog" role="dialog" aria-modal="true" aria-labelledby="charge-service-archive-title" aria-describedby="charge-service-archive-description" onMouseDown={(event) => event.stopPropagation()}>
             <div className="detail-dialog-header">
               <div>
-                <p className="eyebrow">Деактивация</p>
-                <h3 id="charge-service-archive-title">Деактивировать услугу?</h3>
-                <p>{chargeServiceArchiveTarget.name}</p>
+                <p className="eyebrow">{standaloneTariffArchiveTarget ? 'Зарплатный фонд' : 'Деактивация'}</p>
+                <h3 id="charge-service-archive-title">{standaloneTariffArchiveTarget ? 'Убрать строку тарифа?' : 'Деактивировать услугу?'}</h3>
+                <p>{standaloneTariffArchiveTarget?.title ?? chargeServiceArchiveTarget?.name}</p>
               </div>
-              <button className="icon-button" type="button" aria-label="Закрыть подтверждение деактивации услуги" onClick={closeChargeServiceArchiveDialog} disabled={tariffSavingRowId === `charge-service-${chargeServiceArchiveTarget.id}`}>
-                <X size={18} />
+              <button className="icon-button" type="button" aria-label={standaloneTariffArchiveTarget ? 'Закрыть подтверждение удаления тарифа' : 'Закрыть подтверждение деактивации услуги'} onClick={closeChargeServiceArchiveDialog} disabled={Boolean(tariffSavingRowId)}>
+                <X size={18} aria-hidden="true" />
               </button>
             </div>
             <div className="confirmation-text" id="charge-service-archive-description">
-              <p>Новые регулярные начисления по услуге больше не будут создаваться.</p>
-              <p>Уже созданные начисления и связанные платежи не удалятся: задолженность можно будет погашать, а операции останутся в отчётах и истории.</p>
-              <p>Причина и само действие попадут в историю изменений. После восстановления услуга снова будет участвовать только в будущих начислениях — прошлые периоды автоматически не пересчитаются.</p>
+              {standaloneTariffArchiveTarget ? (
+                <p>Строка перейдёт в архив. Начисления и выплаты не изменятся, причина сохранится в истории.</p>
+              ) : (
+                <>
+                  <p>Новые регулярные начисления по услуге больше не будут создаваться.</p>
+                  <p>Уже созданные начисления и связанные платежи не удалятся: задолженность можно будет погашать, а операции останутся в отчётах и истории.</p>
+                  <p>Причина и само действие попадут в историю изменений. После восстановления услуга снова будет участвовать только в будущих начислениях — прошлые периоды автоматически не пересчитаются.</p>
+                </>
+              )}
             </div>
-            <label className="field-label" htmlFor="charge-service-archive-reason">Причина деактивации</label>
+            <label className="field-label" htmlFor="charge-service-archive-reason">{standaloneTariffArchiveTarget ? 'Причина' : 'Причина деактивации'}</label>
             <textarea
               id="charge-service-archive-reason"
-              aria-label="Причина деактивации услуги"
+              aria-label={standaloneTariffArchiveTarget ? 'Причина удаления тарифа' : 'Причина деактивации услуги'}
               maxLength={1000}
               value={chargeServiceArchiveReason}
               onChange={(event) => setChargeServiceArchiveReason(event.target.value)}
-              placeholder="Например: услуга больше не используется"
+              placeholder={standaloneTariffArchiveTarget ? 'Например: должность больше не используется' : 'Например: услуга больше не используется'}
+              disabled={Boolean(tariffSavingRowId)}
               required
             />
             <div className="detail-dialog-actions contractors-dialog-actions">
-              <button ref={chargeServiceArchiveCancelRef} className="ghost-button" type="button" onClick={closeChargeServiceArchiveDialog} disabled={tariffSavingRowId === `charge-service-${chargeServiceArchiveTarget.id}`}>Отмена</button>
-              <button className="secondary-button danger-button" type="button" onClick={archiveChargeServiceSetting} disabled={!chargeServiceArchiveReason.trim() || tariffSavingRowId === `charge-service-${chargeServiceArchiveTarget.id}`}>
-                <PowerOff size={16} aria-hidden="true" />
-                <span>Деактивировать</span>
+              <button ref={chargeServiceArchiveCancelRef} className="ghost-button" type="button" onClick={closeChargeServiceArchiveDialog} disabled={Boolean(tariffSavingRowId)}>Отмена</button>
+              <button className="secondary-button danger-button" type="button" onClick={standaloneTariffArchiveTarget ? archiveStandaloneTariff : archiveChargeServiceSetting} disabled={!chargeServiceArchiveReason.trim() || Boolean(tariffSavingRowId)}>
+                {standaloneTariffArchiveTarget ? <Trash2 size={16} aria-hidden="true" /> : <PowerOff size={16} aria-hidden="true" />}
+                <span>{standaloneTariffArchiveTarget ? 'Убрать строку' : 'Деактивировать'}</span>
               </button>
             </div>
           </section>
