@@ -523,8 +523,9 @@ describe('accessible dynamic messages', () => {
     ]
     const destructiveStyleClasses = [
       'danger-button',
+      'danger-icon-button',
+      'danger-quiet-button',
       'context-menu-danger',
-      'dictionary-row-action-danger',
     ]
 
     for (const className of destructiveStyleClasses) {
@@ -541,6 +542,40 @@ describe('accessible dynamic messages', () => {
       .filter((buttonSource) => !destructiveStyleClasses.some((className) => buttonSource.includes(className)))
 
     expect(unmarkedDestructiveButtons).toEqual([])
+  })
+
+  it('keeps every trash and deactivation icon inside a shared destructive action style', () => {
+    const destructiveStyleClasses = [
+      'danger-button',
+      'danger-icon-button',
+      'danger-quiet-button',
+      'context-menu-danger',
+    ]
+    const destructiveIconButtons = [...workspaceSource.matchAll(/<button\b[\s\S]*?<\/button>/g)]
+      .map((match) => match[0])
+      .filter((buttonSource) => /<(?:Trash2|PowerOff)\b/.test(buttonSource))
+
+    expect(destructiveIconButtons.length).toBeGreaterThan(0)
+    expect(
+      destructiveIconButtons.filter(
+        (buttonSource) => !destructiveStyleClasses.some((className) => buttonSource.includes(className)),
+      ),
+    ).toEqual([])
+  })
+
+  it('keeps destructive buttons calm by default and explicit on hover, focus and disabled states', () => {
+    const dangerButtons = [...workspaceSource.matchAll(/<button\b[^>]*danger-button[^>]*>/g)].map((match) => match[0])
+
+    expect(dangerButtons.length).toBeGreaterThan(0)
+    expect(
+      dangerButtons.filter((buttonSource) => !buttonSource.includes('ghost-button') && !buttonSource.includes('secondary-button')),
+    ).toEqual([])
+    expect(normalizedAppCss).toMatch(
+      /\.danger-button \{[\s\S]*?border-color: #fda29b;[\s\S]*?color: #b42318;[\s\S]*?\}/u,
+    )
+    expect(normalizedAppCss).toContain('.danger-button:hover:not(:disabled),\n.danger-button:focus-visible')
+    expect(normalizedAppCss).toContain('.danger-button:disabled {')
+    expect(normalizedAppCss).toContain('.danger-icon-button:hover:not(:disabled),\n.danger-icon-button:focus-visible,\n.danger-quiet-button:hover:not(:disabled),\n.danger-quiet-button:focus-visible')
   })
 
   it('keeps form controls explicitly named', () => {

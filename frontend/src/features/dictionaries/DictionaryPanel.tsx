@@ -859,7 +859,7 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, integ
     }
 
     return (
-      <button className="ghost-button dictionary-row-action dictionary-row-action-danger" type="button" aria-label="Удалить" title="Удалить" disabled={!canWriteActiveSection} onClick={() => openArchiveTarget(activeSection, item)}>
+      <button className="ghost-button dictionary-row-action danger-icon-button" type="button" aria-label="Удалить" title="Удалить" disabled={!canWriteActiveSection} onClick={() => openArchiveTarget(activeSection, item)}>
         <Trash2 size={15} aria-hidden="true" />
       </button>
     )

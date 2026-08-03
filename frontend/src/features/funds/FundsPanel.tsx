@@ -726,7 +726,7 @@ export function FundsPrototypePanel({ auth, fundsClient }: { auth: AuthResponse;
                         <button className="funds-action-button" type="button" aria-label={`Создать обратную операцию фонда ${fundOperation.fundName}`} title={`Создать обратную операцию фонда ${fundOperation.fundName}`} data-tooltip="Обратная" onClick={() => openFundOperationReverse(fundOperation)}>
                           <RefreshCw size={16} aria-hidden="true" />
                         </button>
-                        <button className="funds-action-button funds-action-button--withdraw" type="button" aria-label={`Отменить операцию фонда ${fundOperation.fundName}`} title={`Отменить операцию фонда ${fundOperation.fundName}`} data-tooltip="Отменить" onClick={() => openFundStatusAction('cancel', fundOperation)}>
+                        <button className="funds-action-button danger-icon-button" type="button" aria-label={`Отменить операцию фонда ${fundOperation.fundName}`} title={`Отменить операцию фонда ${fundOperation.fundName}`} data-tooltip="Отменить" onClick={() => openFundStatusAction('cancel', fundOperation)}>
                           <Trash2 size={16} aria-hidden="true" />
                         </button>
                       </>
@@ -817,7 +817,7 @@ export function FundsPrototypePanel({ auth, fundsClient }: { auth: AuthResponse;
                 <button className="ghost-button" type="button" onClick={closeFundEditor} disabled={savingFund}>Отмена</button>
                 {fundEditor.mode === 'edit' && auth.user.permissions.includes('payments.write') ? (
                   <button
-                    className="danger-button"
+                    className="ghost-button danger-button"
                     type="button"
                     onClick={openFundDelete}
                     disabled={savingFund || fundEditor.linkedServices.length > 0}
@@ -867,7 +867,7 @@ export function FundsPrototypePanel({ auth, fundsClient }: { auth: AuthResponse;
             </FormField>
             {fundDeleteError ? <p className="form-error" role="alert">{fundDeleteError}</p> : null}
             <div className="detail-dialog-actions">
-              <button className="danger-button" type="button" onClick={() => void deleteFund()} disabled={deletingFund}>
+              <button className="ghost-button danger-button" type="button" onClick={() => void deleteFund()} disabled={deletingFund}>
                 <Trash2 size={16} aria-hidden="true" />
                 <span>{deletingFund ? 'Удаляем...' : 'Удалить фонд'}</span>
               </button>

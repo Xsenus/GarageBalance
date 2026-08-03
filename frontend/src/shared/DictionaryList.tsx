@@ -85,7 +85,7 @@ export function DictionaryList({ items, emptyText }: { items: DictionaryListItem
                 </button>
               ) : null}
               {item.onArchive ? (
-                <button className="icon-button" type="button" aria-label={item.archiveLabel ?? `Архивировать ${item.title}`} onClick={() => openArchiveDialog(item)}>
+                <button className="icon-button danger-icon-button" type="button" aria-label={item.archiveLabel ?? `Архивировать ${item.title}`} onClick={() => openArchiveDialog(item)}>
                   <Trash2 size={16} />
                 </button>
               ) : null}

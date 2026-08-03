@@ -2413,7 +2413,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
                             <Pencil size={16} aria-hidden="true" />
                           </button>
                           <button
-                            className="icon-button tariffs-row-action-button tariffs-row-action-button--deactivate"
+                            className="icon-button tariffs-row-action-button danger-icon-button"
                             type="button"
                             aria-label={`Деактивировать услугу ${serviceSetting.name}`}
                             title="Деактивировать"
@@ -2445,7 +2445,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
                       ) : null}
                       {isCustomThreshold ? (
                         <button
-                          className="icon-button tariffs-row-action-button tariffs-row-action-button--deactivate"
+                          className="icon-button tariffs-row-action-button danger-icon-button"
                           type="button"
                           aria-label={`Удалить порог ${row.title}`}
                           title="Удалить порог"
@@ -2606,7 +2606,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
                         <span>Вернуть</span>
                       </button>
                     ) : campaign.closedAtUtc ? (
-                      <button className="icon-button" type="button" aria-label={`Архивировать закрытый сбор ${campaign.name}`} disabled={!canManageTariffs || feeCampaignSavingId === campaign.id} onClick={() => {
+                      <button className="icon-button danger-icon-button" type="button" aria-label={`Архивировать закрытый сбор ${campaign.name}`} disabled={!canManageTariffs || feeCampaignSavingId === campaign.id} onClick={() => {
                         setFeeCampaignArchiveTarget(campaign)
                         setFeeCampaignArchiveReason('')
                       }}>
@@ -2631,7 +2631,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
                         }}>
                           <CircleCheck size={16} />
                         </button>
-                        <button className="icon-button" type="button" aria-label={`Архивировать сбор ${campaign.name}`} disabled={!canManageTariffs || feeCampaignSavingId === campaign.id} onClick={() => {
+                        <button className="icon-button danger-icon-button" type="button" aria-label={`Архивировать сбор ${campaign.name}`} disabled={!canManageTariffs || feeCampaignSavingId === campaign.id} onClick={() => {
                           setFeeCampaignArchiveTarget(campaign)
                           setFeeCampaignArchiveReason('')
                         }}>

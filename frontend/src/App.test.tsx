@@ -1092,7 +1092,7 @@ describe('App', () => {
     expect(actionsCell).toHaveClass('tariffs-row-actions-cell')
     expect(within(actionsCell).getByRole('button', { name: 'Изменить услугу Охрана' })).toHaveAttribute('title', 'Изменить')
     expect(within(actionsCell).getByRole('button', { name: 'Деактивировать услугу Охрана' })).toHaveAttribute('title', 'Деактивировать')
-    expect(deactivateButton).toHaveClass('tariffs-row-action-button--deactivate')
+    expect(deactivateButton).toHaveClass('danger-icon-button')
     expect(deactivateButton).not.toHaveClass('danger-button')
 
     await user.click(deactivateButton)
@@ -16645,9 +16645,13 @@ describe('App', () => {
       expect.any(AbortSignal),
     ))
 
-    await user.click(within(reportsPanel).getByRole('button', { name: 'Удалить список' }))
+    const openDeleteQuickListButton = within(reportsPanel).getByRole('button', { name: 'Удалить список' })
+    expect(openDeleteQuickListButton).toHaveClass('danger-quiet-button')
+    await user.click(openDeleteQuickListButton)
     const deleteDialog = await screen.findByRole('alertdialog', { name: 'Удалить список «Северные гаражи»?' })
-    await user.click(within(deleteDialog).getByRole('button', { name: 'Удалить список' }))
+    const confirmDeleteQuickListButton = within(deleteDialog).getByRole('button', { name: 'Удалить список' })
+    expect(confirmDeleteQuickListButton).toHaveClass('danger-button')
+    await user.click(confirmDeleteQuickListButton)
     expect(within(deleteDialog).getByText('Укажите причину удаления быстрого списка.')).toHaveAttribute('role', 'alert')
     await user.type(within(deleteDialog).getByLabelText('Причина удаления быстрого списка'), 'Список больше не используется')
     await user.click(within(deleteDialog).getByRole('button', { name: 'Удалить список' }))

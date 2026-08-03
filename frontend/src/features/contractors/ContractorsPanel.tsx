@@ -2126,7 +2126,7 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
                       <button className="icon-button" type="button" aria-label={`Открыть финансовый отчет гаража ${row.number}`} title="Финансовый отчет" onClick={() => openGarageFinancialReport(row)}>
                         <FileText size={16} />
                       </button>
-                      <button className="icon-button contractors-delete-button" type="button" aria-label={`Удалить гараж ${row.number}`} title="Удалить" onClick={() => openGarageDeleteDialog(row)}>
+                      <button className="icon-button danger-icon-button" type="button" aria-label={`Удалить гараж ${row.number}`} title="Удалить" onClick={() => openGarageDeleteDialog(row)}>
                         <Trash2 size={16} />
                       </button>
                     </>
@@ -2201,7 +2201,7 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
                         <button className="icon-button" type="button" aria-label={`Открыть финансовый отчет поставщика ${row.name}`} title="Финансовый отчет" onClick={() => openSupplierFinancialReport(row)}>
                           <FileText size={16} />
                         </button>
-                        <button className="icon-button contractors-delete-button" type="button" aria-label={`Удалить поставщика ${row.name}`} title="Удалить" onClick={() => openSupplierDeleteDialog(row)}>
+                        <button className="icon-button danger-icon-button" type="button" aria-label={`Удалить поставщика ${row.name}`} title="Удалить" onClick={() => openSupplierDeleteDialog(row)}>
                           <Trash2 size={16} />
                         </button>
                       </>
@@ -2271,7 +2271,7 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
                         <button className="icon-button" type="button" aria-label={`Открыть финансовый отчет сотрудника ${row.fullName}`} title="Финансовый отчет" onClick={() => openEmployeeFinancialReport(row)}>
                           <FileText size={16} />
                         </button>
-                        <button className="icon-button contractors-delete-button" type="button" aria-label={`Удалить сотрудника ${row.fullName}`} title="Удалить" onClick={() => openEmployeeDeleteDialog(row)}>
+                        <button className="icon-button danger-icon-button" type="button" aria-label={`Удалить сотрудника ${row.fullName}`} title="Удалить" onClick={() => openEmployeeDeleteDialog(row)}>
                           <Trash2 size={16} />
                         </button>
                       </>
@@ -2321,7 +2321,7 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
                         <button className="icon-button" type="button" aria-label={`Изменить отдел ${department.name}`} title="Изменить" onClick={() => openDepartmentEditor(department)}>
                           <Pencil size={16} />
                         </button>
-                        <button className="icon-button contractors-delete-button" type="button" aria-label={`Удалить отдел ${department.name}`} title="Удалить" onClick={() => openDepartmentDeleteDialog(department)}>
+                        <button className="icon-button danger-icon-button" type="button" aria-label={`Удалить отдел ${department.name}`} title="Удалить" onClick={() => openDepartmentDeleteDialog(department)}>
                           <Trash2 size={16} />
                         </button>
                       </>

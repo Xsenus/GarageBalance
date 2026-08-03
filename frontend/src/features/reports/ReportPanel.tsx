@@ -1391,7 +1391,7 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
                           Изменить список
                         </button>
                         <button
-                          className="ghost-button report-garage-quick-list-delete"
+                          className="ghost-button danger-quiet-button"
                           type="button"
                           onClick={() => {
                             setGarageQuickListDeleteReason('')
@@ -1874,7 +1874,7 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
             {garageQuickListError ? <FormError>{garageQuickListError}</FormError> : null}
             <div className="detail-dialog-actions">
               <button ref={garageQuickListDeleteCancelRef} className="ghost-button" type="button" disabled={garageQuickListSaving} onClick={() => setGarageQuickListDeleteTarget(null)}>Отмена</button>
-              <button className="danger-button" type="button" disabled={garageQuickListSaving} onClick={() => void deleteGarageQuickList()}>
+              <button className="ghost-button danger-button" type="button" disabled={garageQuickListSaving} onClick={() => void deleteGarageQuickList()}>
                 {garageQuickListSaving ? <LoaderCircle className="button-spinner" size={16} aria-hidden="true" /> : <Trash2 size={16} aria-hidden="true" />}
                 {garageQuickListSaving ? 'Удаляем...' : 'Удалить список'}
               </button>

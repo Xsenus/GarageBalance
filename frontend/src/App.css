@@ -1396,24 +1396,6 @@ h1 {
   padding: 10px 14px;
 }
 
-.contractors-delete-button {
-  width: 34px;
-  height: 34px;
-  color: #b42318;
-}
-
-.contractors-delete-button:hover:not(:disabled),
-.contractors-delete-button:focus-visible {
-  border-color: #fecdca;
-  background: #fef3f2;
-  color: #912018;
-}
-
-.contractors-delete-button:disabled {
-  cursor: not-allowed;
-  opacity: 0.45;
-}
-
 .contractors-history-panel {
   display: grid;
   gap: 12px;
@@ -2205,10 +2187,6 @@ h1 {
 
 .contractors-contacts-row:last-child span {
   border-bottom: 0;
-}
-
-.contractors-dialog .danger-button {
-  color: #ffffff;
 }
 
 .contractors-check-row {
@@ -3249,19 +3227,6 @@ h1 {
   background: #ffffff;
   color: #475467;
   box-shadow: none;
-}
-
-.tariffs-row-action-button--deactivate.icon-button {
-  border-color: #e4e7ec;
-  color: #667085;
-}
-
-.tariffs-row-action-button--deactivate.icon-button:hover:not(:disabled),
-.tariffs-row-action-button--deactivate.icon-button:focus-visible {
-  border-color: #fda29b;
-  background: #fff5f4;
-  color: #b42318;
-  box-shadow: 0 6px 14px rgba(180, 35, 24, 0.08);
 }
 
 .tariffs-page .contractors-editable-input,
@@ -4781,14 +4746,6 @@ h1 {
   box-shadow: 0 0 0 3px rgba(46, 144, 250, 0.16);
 }
 
-.funds-action-button--withdraw:hover,
-.funds-action-button--withdraw:focus-visible {
-  border-color: #fecdca;
-  background: #fff1f3;
-  color: #b42318;
-  box-shadow: 0 0 0 3px rgba(240, 68, 56, 0.14);
-}
-
 .funds-action-button::after {
   position: absolute;
   z-index: 5;
@@ -6096,10 +6053,6 @@ h1 {
   padding: 0;
 }
 
-.dictionary-row-action-danger {
-  color: #b42318;
-}
-
 .dictionary-data-table th.dictionary-actions-column,
 .dictionary-data-table td.dictionary-actions-column {
   width: 72px;
@@ -6404,6 +6357,12 @@ h1 {
   background: #fef3f2;
 }
 
+.context-menu .context-menu-danger:focus-visible {
+  background: #fef3f2;
+  outline: 3px solid rgba(240, 68, 56, 0.16);
+  outline-offset: 1px;
+}
+
 .context-menu button:disabled {
   cursor: not-allowed;
   opacity: 0.48;
@@ -6542,7 +6501,42 @@ h1 {
 }
 
 .danger-button {
-  background: #d92d20;
+  border-color: #fda29b;
+  color: #b42318;
+}
+
+.danger-button:hover:not(:disabled),
+.danger-button:focus-visible {
+  border-color: #f97066;
+  background: #fef3f2;
+  color: #912018;
+}
+
+.danger-button:focus-visible {
+  outline: 3px solid rgba(240, 68, 56, 0.16);
+  outline-offset: 2px;
+}
+
+.danger-button:disabled {
+  border-color: #e4e7ec;
+  background: #f9fafb;
+  color: #98a2b3;
+  cursor: not-allowed;
+  opacity: 1;
+}
+
+.danger-icon-button,
+.danger-quiet-button {
+  color: #667085;
+}
+
+.danger-icon-button:hover:not(:disabled),
+.danger-icon-button:focus-visible,
+.danger-quiet-button:hover:not(:disabled),
+.danger-quiet-button:focus-visible {
+  border-color: #fda29b;
+  background: #fff5f4;
+  color: #b42318;
 }
 
 .toast-message {
@@ -7310,10 +7304,6 @@ button.operation-row:focus-visible {
 
 .report-garage-quick-list-actions button {
   min-height: 36px;
-}
-
-.report-garage-quick-list-delete {
-  color: #b42318;
 }
 
 .report-garage-quick-list-dialog {

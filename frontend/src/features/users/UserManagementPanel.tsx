@@ -623,7 +623,7 @@ export function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; 
             <p className="confirmation-text" id="user-deactivation-confirmation-description">Пользователь потеряет доступ к системе. Причина и действие будут записаны в историю изменений.</p>
             <div className="detail-dialog-actions">
               <button ref={deactivationConfirmationCancelRef} className="ghost-button" type="button" onClick={() => setDeactivationConfirmation(null)} disabled={saving === 'edit'}>Отмена</button>
-              <button className="danger-button" type="button" onClick={() => void confirmDeactivateUser()} disabled={saving === 'edit'}>
+              <button className="ghost-button danger-button" type="button" onClick={() => void confirmDeactivateUser()} disabled={saving === 'edit'}>
                 <Trash2 size={16} />
                 <span>{saving === 'edit' ? 'Отключаем...' : 'Отключить'}</span>
               </button>
