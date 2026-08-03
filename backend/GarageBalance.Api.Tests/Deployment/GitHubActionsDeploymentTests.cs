@@ -42,6 +42,12 @@ public sealed class GitHubActionsDeploymentTests
         var script = File.ReadAllText(Path.Combine(repositoryRoot, "infrastructure", "scripts", "vps-apply-release.sh"));
 
         Assert.Contains("pg_dump --format=custom", script, StringComparison.Ordinal);
+        Assert.Contains("garagebalance_restore_check_${TIMESTAMP//-/}_$$", script, StringComparison.Ordinal);
+        Assert.Contains("pg_restore \\", script, StringComparison.Ordinal);
+        Assert.Contains("--exit-on-error", script, StringComparison.Ordinal);
+        Assert.Contains("restored_table_count", script, StringComparison.Ordinal);
+        Assert.Contains("cleanup_restore_check", script, StringComparison.Ordinal);
+        Assert.Contains("restoreCheckStatus=completed", script, StringComparison.Ordinal);
         Assert.Contains("psql --set ON_ERROR_STOP=1", script, StringComparison.Ordinal);
         Assert.Contains("systemctl stop \"$SERVICE_NAME\"", script, StringComparison.Ordinal);
         Assert.Contains("systemctl start \"$SERVICE_NAME\"", script, StringComparison.Ordinal);

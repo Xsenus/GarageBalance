@@ -343,6 +343,9 @@ public sealed class SettingsControllerTests
 
         public Task<DatabaseBackupStatusDto> GetStatusAsync(CancellationToken cancellationToken) => Task.FromResult(Status);
 
+        public Task<DateTimeOffset?> GetLastSuccessfulAutomaticBackupAtUtcAsync(CancellationToken cancellationToken) =>
+            Task.FromResult<DateTimeOffset?>(null);
+
         public Task<DatabaseBackupResult<DatabaseBackupFileDto>> CreateAsync(DatabaseBackupKind kind, string? reason, Guid? actorUserId, CancellationToken cancellationToken)
         {
             ReceivedKind = kind;

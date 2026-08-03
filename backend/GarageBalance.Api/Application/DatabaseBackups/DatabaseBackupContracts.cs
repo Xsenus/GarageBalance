@@ -67,6 +67,7 @@ public sealed record DatabaseBackupResult<T>(bool Succeeded, T? Value, string? E
 public interface IDatabaseBackupService
 {
     Task<DatabaseBackupStatusDto> GetStatusAsync(CancellationToken cancellationToken);
+    Task<DateTimeOffset?> GetLastSuccessfulAutomaticBackupAtUtcAsync(CancellationToken cancellationToken);
     Task<DatabaseBackupResult<DatabaseBackupFileDto>> CreateAsync(
         DatabaseBackupKind kind,
         string? reason,

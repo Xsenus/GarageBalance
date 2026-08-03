@@ -34,12 +34,14 @@ BACKUP_DIR="${APP_ROOT}/backups"
 DIAGNOSTIC_LOG_DIR="${APP_ROOT}/logs"
 SERVICE_STOPPED=0
 SWAPPED=0
+RESTORE_CHECK_DATABASE=""
 
 log() {
   printf '%s %s\n' "$(date --iso-8601=seconds)" "$*"
 }
 
 fail() {
+  cleanup_restore_check
   log "deployStatus=failed; reason=$*"
   exit 1
 }
@@ -73,10 +75,18 @@ restore_previous_release() {
   fi
 }
 
+cleanup_restore_check() {
+  if [[ -n "$RESTORE_CHECK_DATABASE" ]]; then
+    sudo -u postgres dropdb --if-exists --force "$RESTORE_CHECK_DATABASE" >/dev/null 2>&1 || true
+    RESTORE_CHECK_DATABASE=""
+  fi
+}
+
 on_error() {
   local exit_code=$?
   local line_number=$1
   log "deployError=line-${line_number}; exitCode=${exit_code}"
+  cleanup_restore_check
   restore_previous_release
   exit "$exit_code"
 }
@@ -185,6 +195,27 @@ sudo -u postgres pg_dump --format=custom "$database_name" > "$backup_file"
 [[ -s "$backup_file" ]] || fail "PostgreSQL backup was not created"
 chmod 600 "$backup_file"
 log "backupStatus=completed; file=${backup_file}"
+
+RESTORE_CHECK_DATABASE="garagebalance_restore_check_${TIMESTAMP//-/}_$$"
+log "restoreCheckStatus=started; database=${RESTORE_CHECK_DATABASE}"
+sudo -u postgres createdb "$RESTORE_CHECK_DATABASE"
+sudo -u postgres pg_restore \
+  --exit-on-error \
+  --no-owner \
+  --no-privileges \
+  --dbname="$RESTORE_CHECK_DATABASE" \
+  "$backup_file" >/dev/null
+restored_table_count="$(
+  sudo -u postgres psql \
+    --set ON_ERROR_STOP=1 \
+    --tuples-only \
+    --no-align \
+    --dbname="$RESTORE_CHECK_DATABASE" \
+    --command="SELECT count(*) FROM pg_catalog.pg_tables WHERE schemaname = 'public';"
+)"
+(( restored_table_count > 0 )) || fail "restore check database does not contain application tables"
+cleanup_restore_check
+log "restoreCheckStatus=completed; tables=${restored_table_count}"
 
 nginx -t
 

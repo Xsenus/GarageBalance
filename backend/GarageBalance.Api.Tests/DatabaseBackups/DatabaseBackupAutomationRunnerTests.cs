@@ -23,10 +23,10 @@ public sealed class DatabaseBackupAutomationRunnerTests
     }
 
     [Fact]
-    public async Task RunIfDue_SkipsBackupUntilConfiguredIntervalHasElapsed()
+    public async Task RunIfDue_SkipsBackupAlreadyCreatedOnTheSameLocalCalendarDay()
     {
         var service = new FakeBackupService(CreateStatus([
-            new DatabaseBackupFileDto("garagebalance_automatic.pgdump", 1, Now.AddHours(-23), "automatic")
+            new DatabaseBackupFileDto("garagebalance_automatic.pgdump", 1, Now.AddHours(-1), "automatic")
         ]));
         var runner = CreateRunner(service);
 
@@ -34,6 +34,58 @@ public sealed class DatabaseBackupAutomationRunnerTests
 
         Assert.False(created);
         Assert.Null(service.ReceivedKind);
+    }
+
+    [Fact]
+    public async Task RunIfDue_DoesNotMissNextWindowWhenPreviousBackupWasLate()
+    {
+        var currentWindow = new DateTimeOffset(2026, 7, 16, 4, 3, 0, TimeSpan.Zero);
+        var previousWindow = new DateTimeOffset(2026, 7, 15, 4, 52, 0, TimeSpan.Zero);
+        var service = new FakeBackupService(CreateStatus([
+            new DatabaseBackupFileDto("garagebalance_automatic.pgdump", 1, previousWindow, "automatic")
+        ]));
+        var runner = new DatabaseBackupAutomationRunner(
+            service,
+            Options.Create(new DatabaseBackupOptions
+            {
+                Enabled = true,
+                AutomaticEnabled = true,
+                IntervalHours = 24,
+                AutomaticWindowStartHour = 2,
+                AutomaticWindowEndHour = 5,
+                AutomaticWindowTimeZoneId = "UTC"
+            }),
+            new FixedTimeProvider(currentWindow),
+            NullLogger<DatabaseBackupAutomationRunner>.Instance);
+
+        Assert.True(await runner.RunIfDueAsync(CancellationToken.None));
+        Assert.Equal(DatabaseBackupKind.Automatic, service.ReceivedKind);
+    }
+
+    [Theory]
+    [InlineData(1, false)]
+    [InlineData(2, true)]
+    public async Task RunIfDue_ConvertsLongIntervalsToCalendarWindowDays(int elapsedDays, bool expectedCreated)
+    {
+        var now = new DateTimeOffset(2026, 7, 16, 3, 0, 0, TimeSpan.Zero);
+        var service = new FakeBackupService(CreateStatus([
+            new DatabaseBackupFileDto("garagebalance_automatic.pgdump", 1, now.AddDays(-elapsedDays), "automatic")
+        ]));
+        var runner = new DatabaseBackupAutomationRunner(
+            service,
+            Options.Create(new DatabaseBackupOptions
+            {
+                Enabled = true,
+                AutomaticEnabled = true,
+                IntervalHours = 48,
+                AutomaticWindowStartHour = 2,
+                AutomaticWindowEndHour = 5,
+                AutomaticWindowTimeZoneId = "UTC"
+            }),
+            new FixedTimeProvider(now),
+            NullLogger<DatabaseBackupAutomationRunner>.Instance);
+
+        Assert.Equal(expectedCreated, await runner.RunIfDueAsync(CancellationToken.None));
     }
 
     [Fact]
@@ -119,6 +171,17 @@ public sealed class DatabaseBackupAutomationRunnerTests
             return ThrowOnStatusRead
                 ? throw new InvalidOperationException("Status must not be read while automation is disabled.")
                 : Task.FromResult(status);
+        }
+
+        public Task<DateTimeOffset?> GetLastSuccessfulAutomaticBackupAtUtcAsync(CancellationToken cancellationToken)
+        {
+            StatusReadCount++;
+            return ThrowOnStatusRead
+                ? throw new InvalidOperationException("Status must not be read while automation is disabled.")
+                : Task.FromResult(status.Backups
+                    .Where(backup => backup.Kind == "automatic")
+                    .MaxBy(backup => backup.CreatedAtUtc)
+                    ?.CreatedAtUtc);
         }
 
         public Task<DatabaseBackupResult<DatabaseBackupFileDto>> CreateAsync(DatabaseBackupKind kind, string? reason, Guid? actorUserId, CancellationToken cancellationToken)

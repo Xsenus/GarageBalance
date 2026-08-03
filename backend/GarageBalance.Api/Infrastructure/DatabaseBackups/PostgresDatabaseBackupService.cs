@@ -42,6 +42,15 @@ public sealed partial class PostgresDatabaseBackupService(
             backups));
     }
 
+    public Task<DateTimeOffset?> GetLastSuccessfulAutomaticBackupAtUtcAsync(CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        var latest = EnumerateBackups(int.MaxValue)
+            .FirstOrDefault(backup => backup.Kind == "automatic")
+            ?.CreatedAtUtc;
+        return Task.FromResult(latest);
+    }
+
     public async Task<DatabaseBackupResult<DatabaseBackupFileDto>> CreateAsync(
         DatabaseBackupKind kind,
         string? reason,

@@ -151,6 +151,31 @@ public sealed class PostgresDatabaseBackupServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task LastAutomaticBackup_SearchesBeyondTwentyMostRecentManualFiles()
+    {
+        Directory.CreateDirectory(_directory);
+        var automaticPath = Path.Combine(_directory, "garagebalance_automatic_20260701_020000_000.pgdump");
+        await File.WriteAllBytesAsync(automaticPath, [1]);
+        File.SetLastWriteTimeUtc(automaticPath, _now.AddDays(-1).UtcDateTime);
+        for (var index = 0; index < 25; index++)
+        {
+            var manualPath = Path.Combine(
+                _directory,
+                $"garagebalance_manual_20260702_03{index:D2}00_000.pgdump");
+            await File.WriteAllBytesAsync(manualPath, [1]);
+            File.SetLastWriteTimeUtc(manualPath, _now.AddMinutes(index).UtcDateTime);
+        }
+        var service = CreateService(new FakeCommandRunner());
+
+        var status = await service.GetStatusAsync(CancellationToken.None);
+        var lastAutomatic = await service.GetLastSuccessfulAutomaticBackupAtUtcAsync(CancellationToken.None);
+
+        Assert.Equal(20, status.Backups.Count);
+        Assert.DoesNotContain(status.Backups, backup => backup.Kind == "automatic");
+        Assert.Equal(new DateTimeOffset(File.GetLastWriteTimeUtc(automaticPath), TimeSpan.Zero), lastAutomatic);
+    }
+
+    [Fact]
     public async Task CreateBackup_ReportsMissingPostgresClientToolsWithoutStartingProcess()
     {
         var runner = new FakeCommandRunner();

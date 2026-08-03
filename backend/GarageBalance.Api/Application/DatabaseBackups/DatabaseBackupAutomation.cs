@@ -25,13 +25,17 @@ public sealed class DatabaseBackupAutomationRunner(
             return false;
         }
 
-        var status = await backupService.GetStatusAsync(cancellationToken);
-        var lastAutomatic = status.Backups
-            .Where(backup => backup.Kind == "automatic")
-            .MaxBy(backup => backup.CreatedAtUtc);
-        if (lastAutomatic is not null && timeProvider.GetUtcNow() - lastAutomatic.CreatedAtUtc < TimeSpan.FromHours(_options.IntervalHours))
+        var lastAutomaticAtUtc = await backupService.GetLastSuccessfulAutomaticBackupAtUtcAsync(cancellationToken);
+        if (lastAutomaticAtUtc is not null)
         {
-            return false;
+            var lastAutomaticLocalDate = TimeZoneInfo.ConvertTime(
+                lastAutomaticAtUtc.Value,
+                TimeZoneInfo.FindSystemTimeZoneById(_options.AutomaticWindowTimeZoneId)).Date;
+            var calendarIntervalDays = Math.Max(1, (int)Math.Ceiling(_options.IntervalHours / 24d));
+            if (localNow.Date < lastAutomaticLocalDate.AddDays(calendarIntervalDays))
+            {
+                return false;
+            }
         }
 
         var result = await backupService.CreateAsync(
