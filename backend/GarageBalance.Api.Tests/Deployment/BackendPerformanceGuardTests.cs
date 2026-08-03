@@ -1191,6 +1191,26 @@ public sealed class BackendPerformanceGuardTests
     }
 
     [Fact]
+    public void BackgroundAccrualAutomation_UsesMonthScopedDistributedLock()
+    {
+        var program = ReadApiSource("Program.cs");
+        var runner = ReadApiSource("Application/Finance/RegularAccrualAutomationRunner.cs");
+        var lockSource = ReadApiSource("Infrastructure/Data/EfRegularAccrualAutomationLock.cs");
+
+        Assert.Contains(
+            "AddScoped<IRegularAccrualAutomationLock, EfRegularAccrualAutomationLock>()",
+            program,
+            StringComparison.Ordinal);
+        Assert.True(
+            runner.IndexOf("TryAcquireAsync(accountingMonth", StringComparison.Ordinal) <
+            runner.IndexOf("GenerateRegularCatalogAccrualsAsync", StringComparison.Ordinal),
+            "The distributed lock must be acquired before any automatic accrual is generated.");
+        Assert.Contains("pg_try_advisory_lock", lockSource, StringComparison.Ordinal);
+        Assert.Contains("pg_advisory_unlock", lockSource, StringComparison.Ordinal);
+        Assert.Contains("accountingMonth.Year * 100 + accountingMonth.Month", lockSource, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void UserAndAuditSearchStayBoundedAndIndexed()
     {
         var users = ReadApiSource("Infrastructure/Data/EfUserManagementRepository.cs");

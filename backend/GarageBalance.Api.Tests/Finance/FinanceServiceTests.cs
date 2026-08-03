@@ -4578,6 +4578,7 @@ public sealed class FinanceServiceTests
         var runner = new RegularAccrualAutomationRunner(
             financeService,
             new TestBusinessDateProvider(new DateOnly(2026, 8, 1)),
+            new EfRegularAccrualAutomationLock(database.Context),
             NullLogger<RegularAccrualAutomationRunner>.Instance);
 
         var firstRun = await runner.RunCurrentMonthAsync(CancellationToken.None);
@@ -4776,6 +4777,7 @@ public sealed class FinanceServiceTests
         var runner = new RegularAccrualAutomationRunner(
             FinanceServiceTestFactory.Create(database.Context),
             new TestBusinessDateProvider(new DateOnly(2026, 8, 1)),
+            new EfRegularAccrualAutomationLock(database.Context),
             NullLogger<RegularAccrualAutomationRunner>.Instance);
 
         var result = await runner.RunCurrentMonthAsync(CancellationToken.None);
@@ -4784,6 +4786,29 @@ public sealed class FinanceServiceTests
         Assert.Equal(0, result.CreatedCount);
         Assert.Contains("Проблемный автоматический сбор", result.Message, StringComparison.Ordinal);
         Assert.Contains("Фоновая задача повторит попытку", result.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task RegularAccrualAutomationRunner_SkipsMonthAlreadyRunningInAnotherInstance()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var businessDate = new DateOnly(2026, 8, 15);
+        var lockOwner = new EfRegularAccrualAutomationLock(database.Context);
+        await using var ownerLease = await lockOwner.TryAcquireAsync(businessDate, CancellationToken.None);
+        Assert.NotNull(ownerLease);
+        var runner = new RegularAccrualAutomationRunner(
+            FinanceServiceTestFactory.Create(database.Context),
+            new TestBusinessDateProvider(businessDate),
+            new EfRegularAccrualAutomationLock(database.Context),
+            NullLogger<RegularAccrualAutomationRunner>.Instance);
+
+        var result = await runner.RunCurrentMonthAsync(CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+        Assert.Equal(0, result.CreatedCount);
+        Assert.Equal(0, result.SkippedCount);
+        Assert.Contains("уже выполняется", result.Message, StringComparison.Ordinal);
+        Assert.Empty(database.Context.Accruals);
     }
 
     [Fact]

@@ -255,6 +255,7 @@ builder.Services.AddHostedService<ImportDryRunWorker>();
 builder.Services.AddHostedService<OneCFreshSyncBackgroundWorker>();
 builder.Services.AddHostedService<DatabaseBackupWorker>();
 builder.Services.AddScoped<IRegularAccrualAutomationRunner, RegularAccrualAutomationRunner>();
+builder.Services.AddScoped<IRegularAccrualAutomationLock, EfRegularAccrualAutomationLock>();
 builder.Services.AddHostedService<RegularAccrualAutomationWorker>();
 builder.Services.AddScoped<IReportService, ReportService>();
 builder.Services.AddScoped<IGarageReportQuickListRepository, EfGarageReportQuickListRepository>();

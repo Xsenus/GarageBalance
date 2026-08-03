@@ -18,6 +18,7 @@ public sealed record RegularAccrualAutomationRunResult(
 public sealed class RegularAccrualAutomationRunner(
     IFinanceService financeService,
     IBusinessDateProvider businessDateProvider,
+    IRegularAccrualAutomationLock automationLock,
     ILogger<RegularAccrualAutomationRunner> logger) : IRegularAccrualAutomationRunner
 {
     public Task<RegularAccrualAutomationRunResult> RunCurrentMonthAsync(CancellationToken cancellationToken) =>
@@ -29,6 +30,18 @@ public sealed class RegularAccrualAutomationRunner(
         CancellationToken cancellationToken)
     {
         var accountingMonth = new DateOnly(businessDate.Year, businessDate.Month, 1);
+        await using var automationLease = await automationLock.TryAcquireAsync(accountingMonth, cancellationToken);
+        if (automationLease is null)
+        {
+            logger.LogInformation(
+                "Accrual automation for {AccountingMonth} is already running in another application instance.",
+                accountingMonth);
+            return new RegularAccrualAutomationRunResult(
+                true,
+                0,
+                0,
+                $"Формирование начислений за {accountingMonth:MM.yyyy} уже выполняется другим экземпляром системы.");
+        }
 
         var regularResult = await financeService.GenerateRegularCatalogAccrualsAsync(
             new GenerateRegularCatalogAccrualsRequest(accountingMonth, "Автоматическое ежемесячное формирование"),
