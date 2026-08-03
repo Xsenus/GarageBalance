@@ -22,7 +22,7 @@ import { formatPrototypeChangeValue, handleEditableInputKeyDown } from '../../sh
 import { createClientPage } from '../../shared/pagination'
 import { SelectControl } from '../../shared/SelectControl'
 import { TablePagination } from '../../shared/TablePagination'
-import { chooseRegularTariffId, chooseRegularTariffIdForMeterMode, getCompatibleRegularTariffs, isMeterTariff } from '../../shared/validation'
+import { chooseRegularTariffId, chooseRegularTariffIdForMeterMode, getCompatibleRegularTariffs, getRegularIncomeTypeCalculationBase, isMeterTariff } from '../../shared/validation'
 import { formatTariffDecimal } from './tariffFormatting'
 
 const dictionaryScreenRequestLimit = 100
@@ -371,6 +371,12 @@ function createTariffRowsFromBackend(tariffs: TariffDto[], settings: ChargeServi
   const customServiceTariffIds = new Set(customSettings
     .map((setting) => setting.tariffId)
     .filter((tariffId): tariffId is string => Boolean(tariffId)))
+  const linkedTariffIds = new Set(settings
+    .map((setting) => setting.tariffId)
+    .filter((tariffId): tariffId is string => Boolean(tariffId)))
+  const linkedTariffNames = settings
+    .map((setting) => tariffs.find((tariff) => tariff.id === setting.tariffId)?.name.trim().toLocaleLowerCase('ru'))
+    .filter((name): name is string => Boolean(name))
   const displacedPrototypeCategories = new Set(customSettings.flatMap((setting) => {
     const linkedTariff = tariffs.find((tariff) => tariff.id === setting.tariffId)
     if (!linkedTariff) {
@@ -387,7 +393,21 @@ function createTariffRowsFromBackend(tariffs: TariffDto[], settings: ChargeServi
     ))
     return prototypeRow ? [prototypeRow.category] : []
   }))
-  const prototypeTariffs = tariffs.filter((tariff) => !customServiceTariffIds.has(tariff.id))
+  const prototypeTariffs = tariffs.filter((tariff) => {
+    if (customServiceTariffIds.has(tariff.id)) {
+      return false
+    }
+    if (linkedTariffIds.has(tariff.id)) {
+      return true
+    }
+
+    const normalizedName = tariff.name.trim().toLocaleLowerCase('ru')
+    return !linkedTariffNames.some((linkedName) => (
+      linkedName === normalizedName
+      || linkedName.startsWith(`${normalizedName} —`)
+      || normalizedName.startsWith(`${linkedName} —`)
+    ))
+  })
   const backedCategories = new Set(contractorTariffRows
     .filter((row) => (
       !displacedPrototypeCategories.has(row.category)
@@ -1219,6 +1239,101 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
     }
   }
 
+  async function persistServiceTariffMode(
+    row: ContractorTariffRow,
+    nextMetered: boolean,
+    nextTiered: boolean,
+  ) {
+    if (!canManageTariffs || row.isDeleted || !row.backendServiceSettingId) {
+      return false
+    }
+
+    const serviceSetting = backendChargeServices.find((setting) => setting.id === row.backendServiceSettingId)
+    const sourceTariffId = row.backendTariffId ?? serviceSetting?.tariffId
+    const sourceTariff = sourceTariffId ? backendTariffs.find((tariff) => tariff.id === sourceTariffId) : null
+    const incomeType = serviceSetting?.incomeTypeId
+      ? backendIncomeTypes.find((item) => item.id === serviceSetting.incomeTypeId)
+      : null
+    if (!serviceSetting || !sourceTariff || !incomeType) {
+      setTariffPersistenceError('Не удалось определить действующий тариф и вид поступления услуги.')
+      return false
+    }
+
+    const incomeCode = incomeType.code?.trim().toLowerCase()
+    const configuredMeterTariff = getCompatibleRegularTariffs(incomeType.id, backendIncomeTypes, backendTariffs)
+      .find((tariff) => isMeterTariff(tariff))
+    const targetCalculationBase = nextMetered
+      ? incomeCode === 'water'
+        ? 'meter_water'
+        : incomeCode === 'electricity'
+          ? 'meter_electricity'
+          : sourceTariff.calculationBase === 'meter_water' || sourceTariff.calculationBase === 'meter_electricity'
+            ? sourceTariff.calculationBase
+            : configuredMeterTariff?.calculationBase ?? null
+      : sourceTariff.calculationBase === 'people'
+        ? 'people'
+        : 'fixed'
+    if (!targetCalculationBase) {
+      setTariffPersistenceError('Для расчета по счетчику выберите вид поступления «Вода» или «Электроэнергия».')
+      return false
+    }
+
+    const tariffMode = nextTiered ? 'metered_tiered' : nextMetered ? 'metered' : 'regular'
+    const targetUnit = getTariffCalculationUnitName(targetCalculationBase)
+    const nextRows = tariffRows.map((currentRow) => currentRow.id === row.id
+      ? {
+        ...currentRow,
+        byMeter: nextMetered,
+        tiered: nextTiered,
+        calculationBase: targetCalculationBase,
+        unit: targetUnit,
+      }
+      : currentRow)
+    const rate = parseTariffAmount(row.amount ?? '') ?? sourceTariff.rate
+    const electricityTiers = nextTiered
+      ? getElectricityTariffTiers(sourceTariff).map((tier) => ({
+        id: tier.id,
+        name: tier.name,
+        upperBound: tier.upperBound ?? undefined,
+        rate: tier.rate,
+      }))
+      : null
+
+    setTariffSavingRowId(row.id)
+    setTariffPersistenceError(null)
+    try {
+      const serviceRequest = buildChargeServiceRequest(serviceSetting, nextRows)
+      const saved = await dictionaryClient.updateChargeServiceWithTariff(auth.accessToken, serviceSetting.id, {
+        service: {
+          ...serviceRequest,
+          tariffId: sourceTariff.id,
+          isMetered: nextMetered,
+          hasTieredTariff: nextTiered,
+          unitName: targetUnit,
+        },
+        rate,
+        tariffMode,
+        effectiveFrom: getLocalDateInputValue(),
+        electricityTiers: electricityTiers && electricityTiers.length >= 2 ? electricityTiers : null,
+        changeReason: 'Смена режима тарифа в таблице услуг.',
+        calculationBase: targetCalculationBase,
+      })
+      const nextTariffs = [...backendTariffs.filter((tariff) => tariff.id !== saved.tariff.id), saved.tariff]
+      const nextSettings = backendChargeServices.map((setting) => setting.id === saved.service.id ? saved.service : setting)
+      const mergedRows = createTariffRowsFromBackend(nextTariffs, nextSettings)
+      setBackendTariffs(nextTariffs)
+      setBackendChargeServices(nextSettings)
+      setTariffRows(mergedRows)
+      setTariffDrafts(createEditableDrafts(mergedRows))
+      return true
+    } catch (caught) {
+      setTariffPersistenceError(caught instanceof Error ? caught.message : 'Не удалось сменить режим тарифа.')
+      return false
+    } finally {
+      setTariffSavingRowId(null)
+    }
+  }
+
   async function persistTariffRow(row: ContractorTariffRow, nextRows: ContractorTariffRow[], electricityTierChangeReason?: string) {
     if (row.backendServiceSettingId && (row.serviceSettingKind !== 'main' || !row.backendTariffId)) {
       await persistServiceSettingRow(row, nextRows)
@@ -1549,37 +1664,14 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
     const previousRows = tariffRows
     const nextMetered = field === 'byMeter' ? nextValue : (nextValue ? true : row.byMeter)
     const nextTiered = field === 'tiered' ? nextValue : (nextMetered ? row.tiered : false)
-    let nextRows = tariffRows.map((currentRow) => currentRow.id === row.id
+    if (row.backendServiceSettingId) {
+      await persistServiceTariffMode(row, nextMetered, nextTiered)
+      return
+    }
+
+    const nextRows = tariffRows.map((currentRow) => currentRow.id === row.id
       ? { ...currentRow, byMeter: nextMetered, tiered: nextTiered }
       : currentRow)
-
-    if (row.backendServiceSettingId && nextMetered !== row.byMeter) {
-      const serviceSetting = backendChargeServices.find((setting) => setting.id === row.backendServiceSettingId)
-      const nextTariffId = serviceSetting
-        ? chooseRegularTariffIdForMeterMode(
-          serviceSetting.incomeTypeId ?? '',
-          row.backendTariffId ?? serviceSetting.tariffId ?? '',
-          nextMetered,
-          backendIncomeTypes,
-          backendTariffs,
-        )
-        : ''
-      const nextTariff = backendTariffs.find((tariff) => tariff.id === nextTariffId)
-      if (!serviceSetting || !nextTariff) {
-        setTariffPersistenceError('Для услуги нет совместимого тарифа.')
-        return
-      }
-
-      nextRows = nextRows.map((currentRow) => currentRow.id === row.id
-        ? {
-          ...currentRow,
-          backendTariffId: nextTariff.id,
-          calculationBase: nextTariff.calculationBase,
-          amount: formatPrototypeAmount(nextTariff.rate),
-          unit: getTariffCalculationUnitName(nextTariff.calculationBase),
-        }
-        : currentRow)
-    }
 
     setTariffRows(nextRows)
     setTariffDrafts(createEditableDrafts(nextRows))
@@ -2244,21 +2336,26 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
               const linkedTariff = row.backendTariffId
                 ? backendTariffs.find((tariff) => tariff.id === row.backendTariffId) ?? null
                 : null
+              const serviceIncomeType = serviceSetting?.incomeTypeId
+                ? backendIncomeTypes.find((incomeType) => incomeType.id === serviceSetting.incomeTypeId) ?? null
+                : null
+              const serviceIncomeCode = serviceIncomeType?.code?.trim().toLowerCase()
+              const configuredMeterTariff = serviceIncomeType
+                ? getCompatibleRegularTariffs(serviceIncomeType.id, backendIncomeTypes, backendTariffs).find((tariff) => isMeterTariff(tariff))
+                : null
+              const supportsMeterMode = serviceIncomeCode === 'water'
+                || serviceIncomeCode === 'electricity'
+                || linkedTariff?.calculationBase === 'meter_water'
+                || linkedTariff?.calculationBase === 'meter_electricity'
+                || Boolean(configuredMeterTariff)
               const meterModeOptions = serviceSetting
-                ? yesNoOptions.filter((option) => Boolean(chooseRegularTariffIdForMeterMode(
-                    serviceSetting.incomeTypeId ?? '',
-                    row.backendTariffId ?? serviceSetting.tariffId ?? '',
-                    option.value === 'Да',
-                    backendIncomeTypes,
-                    backendTariffs,
-                  )))
+                ? yesNoOptions.filter((option) => option.value === 'Нет' || supportsMeterMode)
                 : yesNoOptions
               const effectiveMeterModeOptions = meterModeOptions.some((option) => option.value === (row.byMeter ? 'Да' : 'Нет'))
                 ? meterModeOptions
                 : [...meterModeOptions, { value: row.byMeter ? 'Да' : 'Нет', label: row.byMeter ? 'Да' : 'Нет' }]
               const tieredModeAvailable = row.byMeter
-                && row.calculationBase === 'meter_electricity'
-                && getElectricityTariffTiers(linkedTariff).length >= 2
+                && (row.calculationBase === 'meter_electricity' || serviceIncomeCode === 'electricity')
               const tieredModeOptions = tieredModeAvailable || row.tiered
                 ? yesNoOptions
                 : yesNoOptions.filter((option) => option.value === 'Нет')
@@ -3287,16 +3384,31 @@ export function AddServicePrototypeDialog({
   const compatibleTariffs = getCompatibleRegularTariffs(incomeTypeId, incomeTypes, tariffs)
   const selectedTariff = compatibleTariffs.find((tariff) => tariff.id === tariffId) ?? null
   const selectedTariffTiers = getElectricityTariffTiers(selectedTariff)
+  const selectedIncomeCode = selectedIncomeType?.code?.trim().toLowerCase()
+  const configuredMeterTariff = compatibleTariffs.find((tariff) => isMeterTariff(tariff))
+  const supportedMeterCalculationBase = selectedIncomeCode === 'water'
+    ? 'meter_water'
+    : selectedIncomeCode === 'electricity'
+      ? 'meter_electricity'
+      : selectedTariff?.calculationBase === 'meter_water' || selectedTariff?.calculationBase === 'meter_electricity'
+        ? selectedTariff.calculationBase
+        : configuredMeterTariff?.calculationBase ?? null
   const hasCompatibleMeterTariff = Boolean(chooseRegularTariffIdForMeterMode(incomeTypeId, tariffId, true, incomeTypes, tariffs))
   const hasCompatibleNonMeterTariff = Boolean(chooseRegularTariffIdForMeterMode(incomeTypeId, tariffId, false, incomeTypes, tariffs))
-  const canChangeMeterMode = hasCompatibleMeterTariff && hasCompatibleNonMeterTariff
+  const canChangeMeterMode = initialSetting
+    ? isByMeter || Boolean(supportedMeterCalculationBase)
+    : hasCompatibleMeterTariff && hasCompatibleNonMeterTariff
+  const effectiveCalculationBase = initialSetting
+    ? isByMeter
+      ? supportedMeterCalculationBase ?? selectedTariff?.calculationBase
+      : selectedTariff?.calculationBase === 'people' ? 'people' : 'fixed'
+    : selectedTariff?.calculationBase
   const canUseTieredTariff = isByMeter
-    && selectedTariff?.calculationBase === 'meter_electricity'
-    && selectedTariffTiers.length >= 2
-  const unitNameOptions = selectedTariff ? getTariffCalculationUnitOptions(selectedTariff.calculationBase) : []
+    && effectiveCalculationBase === 'meter_electricity'
+  const unitNameOptions = effectiveCalculationBase ? getTariffCalculationUnitOptions(effectiveCalculationBase) : []
   const calculationBaseOptions = getTariffCalculationBaseOptions()
-  const calculationBaseOption = selectedTariff
-    ? calculationBaseOptions.find((option) => option.value === selectedTariff.calculationBase)
+  const calculationBaseOption = effectiveCalculationBase
+    ? calculationBaseOptions.find((option) => option.value === effectiveCalculationBase)
     : null
   const isMonthly = periodicityMonths === '1'
   useRestoreFocusOnClose(true)
@@ -3319,6 +3431,22 @@ export function AddServicePrototypeDialog({
   }
 
   function changeMeterMode(nextIsMetered: boolean) {
+    if (initialSetting) {
+      const nextCalculationBase = nextIsMetered
+        ? supportedMeterCalculationBase
+        : selectedTariff?.calculationBase === 'people' ? 'people' : 'fixed'
+      if (!nextCalculationBase) {
+        setError('Для расчета по счетчику выберите вид поступления «Вода» или «Электроэнергия».')
+        return
+      }
+
+      setIsByMeter(nextIsMetered)
+      setIsTiered((currentValue) => nextIsMetered && nextCalculationBase === 'meter_electricity' ? currentValue : false)
+      setUnitName(getTariffCalculationUnitName(nextCalculationBase))
+      setError(null)
+      return
+    }
+
     const nextTariffId = chooseRegularTariffIdForMeterMode(
       incomeTypeId,
       tariffId,
@@ -3440,9 +3568,25 @@ export function AddServicePrototypeDialog({
           effectiveFrom: getLocalDateInputValue(),
         })
       } else if (initialSetting && onUpdateWithTariff) {
+        const tariffMode = isTiered ? 'metered_tiered' : isByMeter ? 'metered' : 'regular'
+        const modeChanged = initialSetting.isMetered !== isByMeter || initialSetting.hasTieredTariff !== isTiered
         await onUpdateWithTariff({
           service: serviceRequest,
           rate: parsedRegularRate!,
+          ...(modeChanged ? {
+            tariffMode,
+            effectiveFrom: getLocalDateInputValue(),
+            electricityTiers: isTiered && selectedTariffTiers.length >= 2
+              ? selectedTariffTiers.map((tier) => ({
+                id: tier.id,
+                name: tier.name,
+                upperBound: tier.upperBound ?? undefined,
+                rate: tier.rate,
+              }))
+              : null,
+            changeReason: 'Изменение режима в карточке услуги.',
+            calculationBase: effectiveCalculationBase,
+          } : {}),
         })
       } else if (onSave) {
         await onSave(serviceRequest)
@@ -3501,7 +3645,13 @@ export function AddServicePrototypeDialog({
                       ? incomeTypes.map((incomeType) => ({ value: incomeType.id, label: incomeType.name }))
                       : [{ value: '', label: 'Нет видов поступлений' }]}
                     onChange={(nextIncomeTypeId) => {
-                      const nextTariffId = chooseRegularTariffId(nextIncomeTypeId, tariffId, incomeTypes, tariffs)
+                      const nextIncomeType = incomeTypes.find((incomeType) => incomeType.id === nextIncomeTypeId)
+                      const expectedCalculationBase = getRegularIncomeTypeCalculationBase(nextIncomeType)
+                      const preferredTariffId = initialSetting
+                        ? tariffId
+                        : getCompatibleRegularTariffs(nextIncomeTypeId, incomeTypes, tariffs)
+                          .find((tariff) => tariff.calculationBase === expectedCalculationBase)?.id ?? ''
+                      const nextTariffId = chooseRegularTariffId(nextIncomeTypeId, preferredTariffId, incomeTypes, tariffs)
                       setIncomeTypeId(nextIncomeTypeId)
                       applyTariffSelection(nextTariffId)
                     }}
@@ -3555,7 +3705,7 @@ export function AddServicePrototypeDialog({
                 <FormField label="Способ расчёта" hint="Определяется выбранным тарифом и показывает, как рассчитывается сумма.">
                   <SelectControl
                     aria-label="Способ расчёта регулярной услуги"
-                    value={selectedTariff?.calculationBase ?? ''}
+                    value={effectiveCalculationBase ?? ''}
                     options={calculationBaseOption
                       ? [{ value: calculationBaseOption.value, label: calculationBaseOption.label }]
                       : [{ value: '', label: 'Сначала выберите тариф' }]}
@@ -3644,7 +3794,7 @@ export function AddServicePrototypeDialog({
                       ))}
                     </div>
                   ) : (
-                    <p className="form-hint">У выбранного тарифа пороги пока не настроены. Сначала добавьте их в строках тарифа.</p>
+                    <p className="form-hint">После сохранения система создаст числовые диапазоны 0–1100, 1100–1700 и свыше 1700 кВт·ч. Их можно сразу изменить в таблице тарифов.</p>
                   )}
                 </div>
               ) : null}

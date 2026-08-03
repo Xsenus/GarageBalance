@@ -33,7 +33,7 @@ import type { ApplicationSettingsClient } from './services/settingsApi'
 import type { AuditClient, AuditEventDto } from './services/auditApi'
 import type { AuthClient, AuthResponse } from './services/authApi'
 import { DictionaryApiError } from './services/dictionariesApi'
-import type { AccountingTypeDto, ChargeServiceSettingDto, CreateChargeServiceWithTariffRequest, DictionaryClient, FeeCampaignDto, GarageDto, IrregularPaymentDto, OwnerDto, PagedResult, StaffDepartmentDto, StaffMemberDto, SupplierContactDto, SupplierDto, SupplierGroupDto, TariffDto, UpsertChargeServiceSettingRequest, UpsertGarageRequest, UpsertIrregularPaymentRequest, UpsertStaffMemberRequest, UpsertSupplierRequest, UpsertTariffRequest } from './services/dictionariesApi'
+import type { AccountingTypeDto, ChargeServiceSettingDto, CreateChargeServiceWithTariffRequest, DictionaryClient, FeeCampaignDto, GarageDto, IrregularPaymentDto, OwnerDto, PagedResult, StaffDepartmentDto, StaffMemberDto, SupplierContactDto, SupplierDto, SupplierGroupDto, TariffDto, UpdateChargeServiceWithTariffRequest, UpsertGarageRequest, UpsertIrregularPaymentRequest, UpsertStaffMemberRequest, UpsertSupplierRequest, UpsertTariffRequest } from './services/dictionariesApi'
 import { FinanceApiError } from './services/financeApi'
 import type { AccrualDto, CorrectHistoricalMeterReadingRequest, CreateAccrualRequest, CreateCashBankTransferRequest, CreateExpenseOperationRequest, CreateIncomeOperationRequest, CreateIrregularAccrualRequest, CreateMeterReadingRequest, CreateStaffPaymentRequest, CreateStaffSalaryAdjustmentRequest, CreateSupplierAccrualRequest, ExpenseWorksheetDto, FeeCampaignAccrualGenerationResultDto, FinanceClient, FinancePagedResult, FinancePageParams, FinanceSummaryDto, FinancialOperationDto, GarageBalanceHistoryDto, GarageIncomeWorksheetDto, GenerateFeeCampaignAccrualsRequest, GenerateSupplierGroupSalaryAccrualsRequest, MeterReadingDto, MeterReadingYearPageDto, MissingMeterReadingDto, RegularAccrualGenerationResultDto, RegularCatalogAccrualGenerationResultDto, SupplierAccrualDto, SupplierGroupSalaryAccrualGenerationResultDto } from './services/financeApi'
 import type { FundDto, FundOperationDto, FundOperationPageDto, FundsClient } from './services/fundsApi'
@@ -1340,7 +1340,7 @@ describe('App', () => {
       electricityThirdRate: 5,
       electricityTiers,
     })
-    const membershipSetting = createChargeServiceSetting({
+    let membershipSetting = createChargeServiceSetting({
       id: 'membership',
       name: 'Членский взнос',
       isRegular: true,
@@ -1362,13 +1362,55 @@ describe('App', () => {
       tariffId: electricityTariff.id,
       unitName: 'кВт·ч',
     })
-    const electricitySettingRequests: UpsertChargeServiceSettingRequest[] = []
+    const electricitySettingRequests: UpdateChargeServiceWithTariffRequest[] = []
     const dictionaryClient = createDictionaryClient({
       getTariffs: async () => [waterTariff, electricityTariff, lightingTariff],
       getIncomeTypes: async () => [membershipIncomeType, electricityIncomeType],
       getChargeServiceSettings: async () => [membershipSetting, electricitySetting],
-      updateChargeServiceSetting: async (_token, id, request) => {
+      updateChargeServiceWithTariff: async (_token, id, request) => {
         electricitySettingRequests.push(request)
+        const savedTiers = request.tariffMode === 'metered_tiered'
+          ? request.electricityTiers?.map((tier, index) => ({
+            id: tier.id ?? `55555555-5555-5555-5555-${String(index + 1).padStart(12, '0')}`,
+            name: tier.name,
+            upperBound: tier.upperBound ?? null,
+            rate: tier.rate,
+            isCustom: true,
+          })) ?? electricityTiers
+          : []
+        const savedTariff = createTariff({
+          ...electricityTariff,
+          id: `electricity-tariff-mode-${electricitySettingRequests.length}`,
+          calculationBase: request.calculationBase ?? electricityTariff.calculationBase,
+          rate: request.rate,
+          electricityTiers: savedTiers,
+        })
+        electricitySetting = createChargeServiceSetting({
+          ...electricitySetting,
+          id,
+          isMetered: request.service.isMetered,
+          hasTieredTariff: request.service.hasTieredTariff,
+          tariffId: savedTariff.id,
+          unitName: request.service.unitName ?? null,
+        })
+        return { service: electricitySetting, tariff: savedTariff }
+      },
+      updateChargeServiceSetting: async (_token, id, request) => {
+        if (id === membershipSetting.id) {
+          membershipSetting = createChargeServiceSetting({
+            ...membershipSetting,
+            id,
+            periodicityMonths: request.periodicityMonths ?? null,
+            accrualStartMonth: request.accrualStartMonth ?? null,
+            paymentDueDay: request.paymentDueDay ?? null,
+            paymentDueMonth: request.paymentDueMonth ?? null,
+            overdueGraceDays: request.overdueGraceDays,
+            tariffId: request.tariffId ?? null,
+            unitName: request.unitName ?? null,
+          })
+          return membershipSetting
+        }
+
         electricitySetting = createChargeServiceSetting({
           ...electricitySetting,
           id,
@@ -1463,7 +1505,7 @@ describe('App', () => {
     expect(within(tariffsPanel).getByLabelText('Наружное освещение: Наружное освещение: значение')).toHaveValue('300.00')
     expect(within(tariffsPanel).getAllByRole('combobox', { name: /Электроэнергия: .*: пороговая тарификация/i })).toHaveLength(1)
     expect(within(tariffsPanel).getAllByRole('combobox', { name: /Электроэнергия: .*: по счетчику/i })).toHaveLength(1)
-    expect(within(tariffsPanel).getByRole('combobox', { name: 'Электроэнергия: Электроэнергия: по счетчику' })).toBeDisabled()
+    expect(within(tariffsPanel).getByRole('combobox', { name: 'Электроэнергия: Электроэнергия: по счетчику' })).toBeEnabled()
     expect(within(tariffsPanel).queryByRole('combobox', { name: 'Электроэнергия: От 1 кВт·ч: пороговая тарификация' })).not.toBeInTheDocument()
     expect(within(tariffsPanel).queryByRole('combobox', { name: 'Электроэнергия: От 1 кВт·ч: по счетчику' })).not.toBeInTheDocument()
     expect(within(tariffsPanel).getByRole('button', { name: 'Изменить услугу Членский взнос' })).toBeInTheDocument()
@@ -1524,18 +1566,20 @@ describe('App', () => {
     expect(within(dateConfirmDialog).getByText('30 июн')).toBeInTheDocument()
     expect(within(dateConfirmDialog).getByText('28 фев')).toBeInTheDocument()
     await user.click(within(dateConfirmDialog).getByRole('button', { name: 'Сохранить' }))
-    expect(membershipDueDayInput).toHaveValue('28')
-    expect(membershipDueMonthSelect).toHaveTextContent('Февраль')
+    await waitFor(() => {
+      expect(within(tariffsPanel).getByLabelText('Членский взнос: Оплата до: день')).toHaveValue('28')
+      expect(within(tariffsPanel).getByLabelText('Членский взнос: Оплата до: месяц')).toHaveTextContent('Февраль')
+    })
 
     const tieredControl = within(tariffsPanel).getByRole('combobox', { name: 'Электроэнергия: Электроэнергия: пороговая тарификация' })
     await user.click(tieredControl)
     await user.click(within(tariffsPanel).getByRole('option', { name: 'Нет' }))
-    await waitFor(() => expect(electricitySettingRequests.at(-1)?.hasTieredTariff).toBe(false))
+    await waitFor(() => expect(electricitySettingRequests.at(-1)).toMatchObject({ tariffMode: 'metered', service: { hasTieredTariff: false } }))
     expect(within(tariffsPanel).queryByRole('button', { name: 'Добавить порог' })).not.toBeInTheDocument()
     expect(within(tariffsPanel).queryByLabelText('Электроэнергия: 1.00–3.00: до')).not.toBeInTheDocument()
-    await user.click(tieredControl)
+    await user.click(within(tariffsPanel).getByRole('combobox', { name: 'Электроэнергия: Электроэнергия: пороговая тарификация' }))
     await user.click(within(tariffsPanel).getByRole('option', { name: 'Да' }))
-    await waitFor(() => expect(electricitySettingRequests.at(-1)?.hasTieredTariff).toBe(true))
+    await waitFor(() => expect(electricitySettingRequests.at(-1)).toMatchObject({ tariffMode: 'metered_tiered', service: { hasTieredTariff: true } }))
     expect(await within(tariffsPanel).findByLabelText('Электроэнергия: 1.00–3.00: до')).toBeInTheDocument()
 
     expect(within(tariffsPanel).queryByLabelText(/наименование$/i)).not.toBeInTheDocument()
@@ -4238,7 +4282,6 @@ describe('App', () => {
       unitName: 'руб.',
     })
     const updateRequests: unknown[] = []
-    const inlineUpdateRequests: unknown[] = []
     let meterSaveFailuresRemaining = 1
     const dictionaryClient = createDictionaryClient({
       getIncomeTypes: async () => [serviceIncomeType],
@@ -4249,7 +4292,23 @@ describe('App', () => {
         if (updateRequests.length === 1) {
           throw new Error('Услугу временно не удалось сохранить.')
         }
+        if (request.tariffMode === 'metered' && meterSaveFailuresRemaining > 0) {
+          meterSaveFailuresRemaining -= 1
+          throw new Error('Счётчиковый тариф временно не удалось сохранить.')
+        }
 
+        const savedTariff = request.tariffMode
+          ? createTariff({
+            ...meterTariff,
+            id: 'tariff-security-meter-version',
+            calculationBase: request.calculationBase ?? meterTariff.calculationBase,
+            rate: request.rate,
+          })
+          : createTariff({
+            ...serviceTariff,
+            id: request.service.tariffId ?? serviceTariff.id,
+            rate: request.rate,
+          })
         serviceSetting = createChargeServiceSetting({
           id,
           name: request.service.name,
@@ -4262,27 +4321,17 @@ describe('App', () => {
           incomeTypeId: request.service.incomeTypeId ?? null,
           expenseTypeId: request.service.expenseTypeId ?? null,
           expenseFundId: request.service.expenseFundId ?? null,
-          tariffId: request.service.tariffId ?? null,
+          tariffId: savedTariff.id,
           isMetered: request.service.isMetered,
           hasTieredTariff: request.service.hasTieredTariff,
           unitName: request.service.unitName ?? null,
         })
         return {
           service: serviceSetting,
-          tariff: createTariff({
-            ...serviceTariff,
-            id: request.service.tariffId ?? serviceTariff.id,
-            rate: request.rate,
-          }),
+          tariff: savedTariff,
         }
       },
       updateChargeServiceSetting: async (_token, id, request) => {
-        inlineUpdateRequests.push(request)
-        if (request.isMetered && meterSaveFailuresRemaining > 0) {
-          meterSaveFailuresRemaining -= 1
-          throw new Error('Счётчиковый тариф временно не удалось сохранить.')
-        }
-
         serviceSetting = createChargeServiceSetting({
           id,
           name: request.name,
@@ -4390,7 +4439,7 @@ describe('App', () => {
     await user.click(within(tariffsPanel).getByRole('option', { name: 'Да' }))
     expect(screen.queryByRole('dialog', { name: 'Подтвердить изменение?' })).not.toBeInTheDocument()
 
-    await waitFor(() => expect(inlineUpdateRequests).toHaveLength(1))
+    await waitFor(() => expect(updateRequests).toHaveLength(3))
     expect(await within(tariffsPanel).findByRole('alert')).toHaveTextContent('Счётчиковый тариф временно не удалось сохранить.')
     expect(meterModeControl).toHaveTextContent('Нет')
     expect(within(tariffsPanel).getByLabelText('Охрана территории: Тариф охраны: значение')).toHaveValue('1 350.75')
@@ -4398,15 +4447,19 @@ describe('App', () => {
     await user.click(meterModeControl)
     await user.click(within(tariffsPanel).getByRole('option', { name: 'Да' }))
 
-    await waitFor(() => expect(inlineUpdateRequests).toHaveLength(2))
-    expect(inlineUpdateRequests[1]).toMatchObject({
-      isMetered: true,
-      tariffId: meterTariff.id,
-      unitName: 'м³',
-      expenseTypeId: 'expense-security',
-      expenseFundId: 'fund-security',
+    await waitFor(() => expect(updateRequests).toHaveLength(4))
+    expect(updateRequests[3]).toMatchObject({
+      tariffMode: 'metered',
+      calculationBase: 'meter_water',
+      service: {
+        isMetered: true,
+        tariffId: serviceTariff.id,
+        unitName: 'м³',
+        expenseTypeId: 'expense-security',
+        expenseFundId: 'fund-security',
+      },
     })
-    expect(within(tariffsPanel).getByLabelText('Охрана территории: Тариф охраны по счётчику: значение')).toHaveValue('52.75')
+    expect(within(tariffsPanel).getByLabelText('Охрана территории: Тариф охраны по счётчику: значение')).toHaveValue('1 350.75')
     expect(within(tariffsPanel).getByRole('combobox', { name: 'Охрана территории: Тариф охраны по счётчику: единица' })).toHaveTextContent('м³')
     expect(within(tariffsPanel).getByRole('combobox', { name: 'Охрана территории: Тариф охраны по счётчику: по счетчику' })).toHaveTextContent('Да')
     expect(within(tariffsPanel).queryByLabelText('Вода: Тариф охраны по счётчику: значение')).not.toBeInTheDocument()

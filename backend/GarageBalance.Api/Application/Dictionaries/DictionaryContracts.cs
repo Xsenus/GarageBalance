@@ -237,7 +237,12 @@ public sealed record CreatedChargeServiceWithTariffDto(
 
 public sealed record UpdateChargeServiceWithTariffRequest(
     [Required] UpsertChargeServiceSettingRequest Service,
-    [Range(0.0001, 999999999)] decimal Rate);
+    [Range(0.0001, 999999999)] decimal Rate,
+    [MaxLength(40)] string? TariffMode = null,
+    DateOnly? EffectiveFrom = null,
+    IReadOnlyList<UpsertElectricityTariffTierRequest>? ElectricityTiers = null,
+    [MaxLength(1000)] string? ChangeReason = null,
+    [MaxLength(80)] string? CalculationBase = null);
 
 public sealed record UpdatedChargeServiceWithTariffDto(
     ChargeServiceSettingDto Service,

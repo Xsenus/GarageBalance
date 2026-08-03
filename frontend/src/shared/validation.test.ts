@@ -252,6 +252,7 @@ describe('shared validation helpers', () => {
     const tariffs = [
       createTariffDto({ id: 'water-tariff', calculationBase: 'meter_water' }),
       createTariffDto({ id: 'fixed-tariff', calculationBase: 'fixed' }),
+      createTariffDto({ id: 'people-tariff', calculationBase: 'people' }),
     ]
 
     expect(getSupplierGroupSalaryValidationErrors({ supplierGroupId: '', accountingMonth: 'bad', amount: 0, documentNumber: '', comment: '' })).toEqual([
@@ -264,11 +265,11 @@ describe('shared validation helpers', () => {
       'Выберите тариф регулярного начисления.',
       'Укажите месяц регулярных начислений.',
     ])
-    expect(getRegularAccrualValidationErrorsForCatalog({ incomeTypeId: 'water-type', tariffId: 'fixed-tariff', accountingMonth: '2026-06-01', comment: '' }, incomeTypes, tariffs)).toEqual([
+    expect(getRegularAccrualValidationErrorsForCatalog({ incomeTypeId: 'water-type', tariffId: 'people-tariff', accountingMonth: '2026-06-01', comment: '' }, incomeTypes, tariffs)).toEqual([
       'Выбранный тариф не подходит для этого вида регулярного начисления.',
     ])
-    expect(getCompatibleRegularTariffs('water-type', incomeTypes, tariffs).map((tariff) => tariff.id)).toEqual(['water-tariff'])
-    expect(chooseRegularTariffId('water-type', 'fixed-tariff', incomeTypes, tariffs)).toBe('water-tariff')
+    expect(getCompatibleRegularTariffs('water-type', incomeTypes, tariffs).map((tariff) => tariff.id)).toEqual(['water-tariff', 'fixed-tariff'])
+    expect(chooseRegularTariffId('water-type', 'fixed-tariff', incomeTypes, tariffs)).toBe('fixed-tariff')
     expect(chooseRegularTariffId('membership-type', 'fixed-tariff', incomeTypes, tariffs)).toBe('fixed-tariff')
     expect(chooseRegularTariffIdForMeterMode('', 'fixed-tariff', true, [], tariffs)).toBe('water-tariff')
     expect(chooseRegularTariffIdForMeterMode('', 'water-tariff', false, [], tariffs)).toBe('fixed-tariff')

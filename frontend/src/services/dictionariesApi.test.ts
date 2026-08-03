@@ -208,6 +208,10 @@ describe('dictionariesApi response cache', () => {
         unitName: 'м³',
       },
       rate: 100.8,
+      tariffMode: 'metered' as const,
+      effectiveFrom: '2026-08-01',
+      changeReason: 'Смена режима',
+      calculationBase: 'meter_water',
     }
 
     await expect(dictionariesApi.updateChargeServiceWithTariff('token', 'service-1', request)).resolves.toEqual(response)

@@ -1137,7 +1137,11 @@ public sealed class DictionariesControllerTests
         var controller = CreateController(service, actorUserId);
         var request = new UpdateChargeServiceWithTariffRequest(
             new UpsertChargeServiceSettingRequest("Вода", true, 1, 1, 30, null, 30, true, false, "м³", incomeTypeId, tariffId),
-            100.8m);
+            100.8m,
+            "metered",
+            new DateOnly(2026, 8, 1),
+            ChangeReason: "Смена режима",
+            CalculationBase: "meter_water");
 
         var result = await controller.UpdateChargeServiceWithTariff(serviceId, request, CancellationToken.None);
 
@@ -1147,6 +1151,7 @@ public sealed class DictionariesControllerTests
         Assert.Equal(100.8m, dto.Tariff.Rate);
         Assert.Equal(actorUserId, service.LastActorUserId);
         Assert.Equal(serviceId, service.LastChargeServiceSettingId);
+        Assert.Same(request, service.LastUpdateChargeServiceWithTariffRequest);
     }
 
     [Fact]
@@ -1765,6 +1770,7 @@ public sealed class DictionariesControllerTests
         public Guid? LastGarageId { get; private set; }
         public Guid? LastSupplierId { get; private set; }
         public Guid? LastChargeServiceSettingId { get; private set; }
+        public UpdateChargeServiceWithTariffRequest? LastUpdateChargeServiceWithTariffRequest { get; private set; }
         public Guid? LastIrregularPaymentId { get; private set; }
         public Guid? LastFeeCampaignId { get; private set; }
         public Guid? LastSupplierContactId { get; private set; }
@@ -2231,6 +2237,7 @@ public sealed class DictionariesControllerTests
         {
             LastChargeServiceSettingId = id;
             LastActorUserId = actorUserId;
+            LastUpdateChargeServiceWithTariffRequest = request;
             return Task.FromResult(UpdateChargeServiceWithTariffResult);
         }
 

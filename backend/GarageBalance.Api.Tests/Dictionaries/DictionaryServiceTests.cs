@@ -3513,6 +3513,100 @@ public sealed class DictionaryServiceTests
     }
 
     [Fact]
+    public async Task UpdateChargeServiceWithTariffAsync_VersionsMeteredAndTieredModesAtomically()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fund = CreateFund("Электроэнергия", 10);
+        var incomeType = new IncomeType { Name = "Электроэнергия", Code = "electricity", DestinationFundId = fund.Id };
+        var sourceTariff = new Tariff { Name = "Электроэнергия — обычный", CalculationBase = "fixed", Rate = 7.47m, EffectiveFrom = new DateOnly(2026, 1, 1) };
+        var setting = new ChargeServiceSetting
+        {
+            Name = "Электроэнергия",
+            IsRegular = true,
+            PeriodicityMonths = 1,
+            AccrualStartMonth = 1,
+            PaymentDueDay = 30,
+            OverdueGraceDays = 30,
+            IncomeTypeId = incomeType.Id,
+            TariffId = sourceTariff.Id,
+            IsMetered = false,
+            HasTieredTariff = false,
+            UnitName = "руб."
+        };
+        database.Context.AddRange(fund, incomeType, sourceTariff, setting);
+        await database.Context.SaveChangesAsync();
+        var service = DictionaryServiceTestFactory.Create(database.Context);
+
+        var tiered = await service.UpdateChargeServiceWithTariffAsync(
+            setting.Id,
+            new UpdateChargeServiceWithTariffRequest(
+                new UpsertChargeServiceSettingRequest(
+                    setting.Name,
+                    true,
+                    1,
+                    1,
+                    30,
+                    null,
+                    30,
+                    true,
+                    true,
+                    "кВт·ч",
+                    incomeType.Id,
+                    sourceTariff.Id),
+                7.47m,
+                "metered_tiered",
+                new DateOnly(2026, 8, 1),
+                ChangeReason: "Переход на счетчик"),
+            Guid.NewGuid(),
+            CancellationToken.None);
+
+        Assert.True(tiered.Succeeded);
+        Assert.NotEqual(sourceTariff.Id, tiered.Value!.Tariff.Id);
+        Assert.Equal("meter_electricity", tiered.Value.Tariff.CalculationBase);
+        Assert.Equal(3, tiered.Value.Tariff.ElectricityTiers!.Count);
+        Assert.Equal(1100m, tiered.Value.Tariff.ElectricityTiers[0].UpperBound);
+        Assert.Equal(1700m, tiered.Value.Tariff.ElectricityTiers[1].UpperBound);
+        Assert.Null(tiered.Value.Tariff.ElectricityTiers[2].UpperBound);
+        Assert.True(tiered.Value.Service.IsMetered);
+        Assert.True(tiered.Value.Service.HasTieredTariff);
+        Assert.Equal("кВт·ч", tiered.Value.Service.UnitName);
+        Assert.Equal("fixed", sourceTariff.CalculationBase);
+        Assert.Equal(2, database.Context.Tariffs.Count());
+
+        var regular = await service.UpdateChargeServiceWithTariffAsync(
+            setting.Id,
+            new UpdateChargeServiceWithTariffRequest(
+                new UpsertChargeServiceSettingRequest(
+                    setting.Name,
+                    true,
+                    1,
+                    1,
+                    30,
+                    null,
+                    30,
+                    false,
+                    false,
+                    "руб.",
+                    incomeType.Id,
+                    tiered.Value.Tariff.Id),
+                7.47m,
+                "regular",
+                new DateOnly(2026, 8, 2),
+                ChangeReason: "Фиксированная ставка"),
+            Guid.NewGuid(),
+            CancellationToken.None);
+
+        Assert.True(regular.Succeeded);
+        Assert.Equal("fixed", regular.Value!.Tariff.CalculationBase);
+        Assert.False(regular.Value.Service.IsMetered);
+        Assert.False(regular.Value.Service.HasTieredTariff);
+        Assert.Equal("руб.", regular.Value.Service.UnitName);
+        Assert.Equal(3, database.Context.Tariffs.Count());
+        Assert.Equal(4, database.Context.AuditEvents.Count());
+        Assert.Contains(database.Context.AuditEvents, item => item.Action == "dictionary.charge_service_tariff_mode_changed");
+    }
+
+    [Fact]
     public async Task UpdateChargeServiceWithTariffAsync_RejectsMissingFundAndInvalidRateWithoutChanges()
     {
         await using var database = await TestDatabase.CreateAsync();

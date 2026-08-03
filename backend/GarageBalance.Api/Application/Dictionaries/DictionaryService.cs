@@ -1847,18 +1847,23 @@ public sealed class DictionaryService(
             return DictionaryResult<UpdatedChargeServiceWithTariffDto>.Failure(validation.ErrorCode!, validation.ErrorMessage!);
         }
 
-        var linkValidation = await ValidateChargeServiceAccountingLinksAsync(request.Service, cancellationToken);
-        if (!linkValidation.Succeeded)
-        {
-            return DictionaryResult<UpdatedChargeServiceWithTariffDto>.Failure(linkValidation.ErrorCode!, linkValidation.ErrorMessage!);
-        }
-
         var name = request.Service.Name.Trim();
         if (await chargeServiceSettingRepository.ActiveDuplicateExistsAsync(id, name, cancellationToken))
         {
             return DictionaryResult<UpdatedChargeServiceWithTariffDto>.Failure(
                 "charge_service_duplicate",
                 "Услуга с таким наименованием уже существует.");
+        }
+
+        if (!string.IsNullOrWhiteSpace(request.TariffMode))
+        {
+            return await ChangeChargeServiceTariffModeAsync(setting, request, name, actorUserId, cancellationToken);
+        }
+
+        var linkValidation = await ValidateChargeServiceAccountingLinksAsync(request.Service, cancellationToken);
+        if (!linkValidation.Succeeded)
+        {
+            return DictionaryResult<UpdatedChargeServiceWithTariffDto>.Failure(linkValidation.ErrorCode!, linkValidation.ErrorMessage!);
         }
 
         var tariff = await tariffRepository.FindActiveAsync(request.Service.TariffId!.Value, cancellationToken);
@@ -1912,6 +1917,143 @@ public sealed class DictionaryService(
         }
 
         await unitOfWork.SaveChangesAsync(cancellationToken);
+        return DictionaryResult<UpdatedChargeServiceWithTariffDto>.Success(
+            new UpdatedChargeServiceWithTariffDto(ToChargeServiceSettingDto(setting), ToTariffDto(tariff)));
+    }
+
+    private async Task<DictionaryResult<UpdatedChargeServiceWithTariffDto>> ChangeChargeServiceTariffModeAsync(
+        ChargeServiceSetting setting,
+        UpdateChargeServiceWithTariffRequest request,
+        string serviceName,
+        Guid? actorUserId,
+        CancellationToken cancellationToken)
+    {
+        var mode = request.TariffMode!.Trim().ToLowerInvariant();
+        if (mode is not "regular" and not "metered" and not "metered_tiered")
+        {
+            return DictionaryResult<UpdatedChargeServiceWithTariffDto>.Failure(
+                "charge_service_tariff_mode_invalid",
+                "Режим тарифа должен быть обычным, по счетчику или по счетчику с порогами.");
+        }
+
+        if (!request.EffectiveFrom.HasValue)
+        {
+            return DictionaryResult<UpdatedChargeServiceWithTariffDto>.Failure(
+                "charge_service_tariff_mode_date_required",
+                "Укажите дату начала действия новой версии тарифа.");
+        }
+
+        var sourceTariffId = setting.TariffId ?? request.Service.TariffId;
+        var sourceTariff = sourceTariffId.HasValue
+            ? await tariffRepository.FindActiveAsync(sourceTariffId.Value, cancellationToken)
+            : null;
+        if (sourceTariff is null)
+        {
+            return DictionaryResult<UpdatedChargeServiceWithTariffDto>.Failure(
+                "charge_service_tariff_not_found",
+                "Действующий тариф услуги не найден.");
+        }
+
+        var incomeType = request.Service.IncomeTypeId.HasValue
+            ? await incomeTypeRepository.FindActiveAsync(request.Service.IncomeTypeId.Value, cancellationToken)
+            : null;
+        if (incomeType is null)
+        {
+            return DictionaryResult<UpdatedChargeServiceWithTariffDto>.Failure(
+                "charge_service_income_type_not_found",
+                "Вид поступления для услуги не найден.");
+        }
+
+        var targetCalculationBase = ResolveTariffModeCalculationBase(
+            mode,
+            incomeType.Code,
+            sourceTariff.CalculationBase,
+            NormalizeOptional(request.CalculationBase));
+        if (targetCalculationBase is null)
+        {
+            return DictionaryResult<UpdatedChargeServiceWithTariffDto>.Failure(
+                "charge_service_meter_kind_required",
+                "Для расчета по счетчику выберите вид поступления «Вода» или «Электроэнергия».");
+        }
+
+        var isMetered = mode is "metered" or "metered_tiered";
+        var isTiered = mode == "metered_tiered";
+        if (isTiered && targetCalculationBase != TariffCalculationBases.MeterElectricity)
+        {
+            return DictionaryResult<UpdatedChargeServiceWithTariffDto>.Failure(
+                "charge_service_tiered_electricity_required",
+                "Пороговый режим доступен только для электроэнергии.");
+        }
+
+        if (request.Service.IsMetered != isMetered || request.Service.HasTieredTariff != isTiered)
+        {
+            return DictionaryResult<UpdatedChargeServiceWithTariffDto>.Failure(
+                "charge_service_tariff_mode_mismatch",
+                "Параметры услуги не соответствуют выбранному режиму тарифа. Обновите страницу и повторите действие.");
+        }
+
+        var roundedRate = MoneyMath.RoundRate(request.Rate);
+        var requestedTiers = isTiered
+            ? BuildTariffModeElectricityTiers(request.ElectricityTiers, sourceTariff, roundedRate)
+            : null;
+        var tariffValidationRequest = new UpsertTariffRequest(
+            serviceName,
+            targetCalculationBase,
+            roundedRate,
+            request.EffectiveFrom.Value,
+            request.ChangeReason,
+            ElectricityTiers: requestedTiers);
+        var tiersValidation = ValidateElectricityTiers(targetCalculationBase, tariffValidationRequest);
+        if (!tiersValidation.Succeeded)
+        {
+            return DictionaryResult<UpdatedChargeServiceWithTariffDto>.Failure(tiersValidation.ErrorCode!, tiersValidation.ErrorMessage!);
+        }
+
+        var tariff = new Tariff
+        {
+            Name = CreateServiceTariffVersionName(serviceName, mode, request.EffectiveFrom.Value),
+            CalculationBase = targetCalculationBase,
+            Rate = roundedRate,
+            EffectiveFrom = request.EffectiveFrom.Value,
+            Comment = NormalizeOptional(request.ChangeReason) ?? $"Новая версия режима услуги «{serviceName}»."
+        };
+        ApplyElectricityTiers(tariff, tiersValidation.Value);
+
+        var serviceRequest = request.Service with
+        {
+            TariffId = tariff.Id,
+            IsMetered = isMetered,
+            HasTieredTariff = isTiered,
+            UnitName = TariffCalculationBases.GetUnitName(targetCalculationBase)
+        };
+        var linkValidation = await ValidateChargeServiceAccountingLinksAsync(serviceRequest, cancellationToken, tariff);
+        if (!linkValidation.Succeeded)
+        {
+            return DictionaryResult<UpdatedChargeServiceWithTariffDto>.Failure(linkValidation.ErrorCode!, linkValidation.ErrorMessage!);
+        }
+
+        var oldValues = ToChargeServiceAuditValues(setting);
+        ApplyChargeServiceSetting(setting, serviceRequest);
+        setting.UpdatedAtUtc = DateTimeOffset.UtcNow;
+        tariffRepository.Add(tariff);
+        AddAudit(
+            actorUserId,
+            "dictionary.tariff_created",
+            "tariff",
+            tariff.Id,
+            $"Создана версия тарифа {FormatTariffAuditDetails(tariff)} при смене режима услуги {serviceName}.",
+            NormalizeOptional(request.ChangeReason));
+        AddAudit(
+            actorUserId,
+            "dictionary.charge_service_tariff_mode_changed",
+            "charge_service",
+            setting.Id,
+            $"Режим услуги {serviceName} изменен на {FormatTariffMode(mode)}.",
+            NormalizeOptional(request.ChangeReason),
+            oldValues,
+            ToChargeServiceAuditValues(setting));
+        await unitOfWork.SaveChangesAsync(cancellationToken);
+
         return DictionaryResult<UpdatedChargeServiceWithTariffDto>.Success(
             new UpdatedChargeServiceWithTariffDto(ToChargeServiceSettingDto(setting), ToTariffDto(tariff)));
     }
@@ -2669,7 +2811,10 @@ public sealed class DictionaryService(
         return DictionaryResult<object>.Success(new object());
     }
 
-    private async Task<DictionaryResult<object>> ValidateChargeServiceAccountingLinksAsync(UpsertChargeServiceSettingRequest request, CancellationToken cancellationToken)
+    private async Task<DictionaryResult<object>> ValidateChargeServiceAccountingLinksAsync(
+        UpsertChargeServiceSettingRequest request,
+        CancellationToken cancellationToken,
+        Tariff? tariffOverride = null)
     {
         if (request.ExpenseTypeId.HasValue &&
             await expenseTypeRepository.FindActiveAsync(request.ExpenseTypeId.Value, cancellationToken) is null)
@@ -2715,7 +2860,7 @@ public sealed class DictionaryService(
             return fundValidation;
         }
 
-        var tariff = await tariffRepository.FindActiveAsync(request.TariffId!.Value, cancellationToken);
+        var tariff = tariffOverride ?? await tariffRepository.FindActiveAsync(request.TariffId!.Value, cancellationToken);
         if (tariff is null)
         {
             return DictionaryResult<object>.Failure("charge_service_tariff_not_found", "Тариф для услуги не найден.");
@@ -2847,13 +2992,84 @@ public sealed class DictionaryService(
         return $"{serviceName[..Math.Min(serviceName.Length, maxServiceNameLength)]}{suffix}";
     }
 
+    private static string CreateServiceTariffVersionName(string serviceName, string mode, DateOnly effectiveFrom)
+    {
+        var versionToken = Guid.NewGuid().ToString("N", CultureInfo.InvariantCulture)[..8];
+        var suffix = $" — {FormatTariffMode(mode)}, {effectiveFrom:dd.MM.yyyy}, {versionToken}";
+        var maxServiceNameLength = 200 - suffix.Length;
+        return $"{serviceName[..Math.Min(serviceName.Length, maxServiceNameLength)]}{suffix}";
+    }
+
+    private static string FormatTariffMode(string mode) => mode switch
+    {
+        "regular" => "обычный",
+        "metered" => "по счетчику",
+        "metered_tiered" => "по счетчику с порогами",
+        _ => mode
+    };
+
+    private static string? ResolveTariffModeCalculationBase(
+        string mode,
+        string? incomeTypeCode,
+        string sourceCalculationBase,
+        string? requestedCalculationBase)
+    {
+        if (mode == "regular")
+        {
+            return requestedCalculationBase is TariffCalculationBases.Fixed or TariffCalculationBases.People
+                ? requestedCalculationBase
+                : sourceCalculationBase is TariffCalculationBases.Fixed or TariffCalculationBases.People
+                    ? sourceCalculationBase
+                    : TariffCalculationBases.Fixed;
+        }
+
+        if (requestedCalculationBase is TariffCalculationBases.MeterWater or TariffCalculationBases.MeterElectricity)
+        {
+            return requestedCalculationBase;
+        }
+
+        return NormalizeOptional(incomeTypeCode)?.Trim().ToLowerInvariant() switch
+        {
+            "water" => TariffCalculationBases.MeterWater,
+            "electricity" => TariffCalculationBases.MeterElectricity,
+            _ when sourceCalculationBase is TariffCalculationBases.MeterWater or TariffCalculationBases.MeterElectricity => sourceCalculationBase,
+            _ => null
+        };
+    }
+
+    private static IReadOnlyList<UpsertElectricityTariffTierRequest> BuildTariffModeElectricityTiers(
+        IReadOnlyList<UpsertElectricityTariffTierRequest>? requestedTiers,
+        Tariff sourceTariff,
+        decimal rate)
+    {
+        if (requestedTiers is { Count: > 0 })
+        {
+            return requestedTiers;
+        }
+
+        var sourceTiers = ReadElectricityTiers(sourceTariff);
+        if (sourceTiers.Count >= 2)
+        {
+            return sourceTiers
+                .Select(tier => new UpsertElectricityTariffTierRequest(tier.Id, tier.Name, tier.UpperBound, tier.Rate))
+                .ToList();
+        }
+
+        return
+        [
+            new UpsertElectricityTariffTierRequest(null, "0–1100 кВт·ч", 1100m, rate),
+            new UpsertElectricityTariffTierRequest(null, "1100–1700 кВт·ч", 1700m, rate),
+            new UpsertElectricityTariffTierRequest(null, "1700+ кВт·ч", null, rate)
+        ];
+    }
+
     private static bool IsIncomeTypeCompatibleWithTariff(string? incomeTypeCode, string calculationBase)
     {
         return NormalizeOptional(incomeTypeCode)?.Trim().ToLowerInvariant() switch
         {
-            "water" => calculationBase == TariffCalculationBases.MeterWater,
-            "trash" => calculationBase == TariffCalculationBases.People,
-            "electricity" => calculationBase == TariffCalculationBases.MeterElectricity,
+            "water" => calculationBase is TariffCalculationBases.Fixed or TariffCalculationBases.MeterWater,
+            "trash" => calculationBase is TariffCalculationBases.Fixed or TariffCalculationBases.People,
+            "electricity" => calculationBase is TariffCalculationBases.Fixed or TariffCalculationBases.MeterElectricity,
             "membership" or "target" or "entry" or "connection" => calculationBase == TariffCalculationBases.Fixed,
             _ => true
         };

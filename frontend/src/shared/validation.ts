@@ -529,6 +529,10 @@ export function getRegularIncomeTypeCalculationBase(incomeType?: AccountingTypeD
 
 export function isTariffCompatibleWithRegularIncomeType(incomeType: AccountingTypeDto, tariff: TariffDto) {
   const calculationBase = getRegularIncomeTypeCalculationBase(incomeType)
+  if (calculationBase === 'meter_water' || calculationBase === 'meter_electricity' || calculationBase === 'people') {
+    return tariff.calculationBase === calculationBase || tariff.calculationBase === 'fixed'
+  }
+
   return calculationBase === null || tariff.calculationBase === calculationBase
 }
 

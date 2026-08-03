@@ -249,6 +249,13 @@ export type UpsertAccountingTypeRequest = {
   code?: string
 }
 
+export type UpsertElectricityTariffTierRequest = {
+  id?: string
+  name: string
+  upperBound?: number
+  rate: number
+}
+
 export type UpsertTariffRequest = {
   name: string
   calculationBase: string
@@ -263,12 +270,7 @@ export type UpsertTariffRequest = {
   electricityFirstRate?: number
   electricitySecondRate?: number
   electricityThirdRate?: number
-  electricityTiers?: Array<{
-    id?: string
-    name: string
-    upperBound?: number
-    rate: number
-  }>
+  electricityTiers?: UpsertElectricityTariffTierRequest[]
   electricityTierChangeReason?: string
 }
 
@@ -309,6 +311,11 @@ export type CreatedChargeServiceWithTariffDto = {
 export type UpdateChargeServiceWithTariffRequest = {
   service: UpsertChargeServiceSettingRequest
   rate: number
+  tariffMode?: 'regular' | 'metered' | 'metered_tiered' | null
+  effectiveFrom?: string | null
+  electricityTiers?: UpsertElectricityTariffTierRequest[] | null
+  changeReason?: string | null
+  calculationBase?: string | null
 }
 
 export type UpdatedChargeServiceWithTariffDto = {
