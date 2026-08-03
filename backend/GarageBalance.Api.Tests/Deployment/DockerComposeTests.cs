@@ -29,7 +29,7 @@ public sealed class DockerComposeTests
         Assert.Contains("Database__RequirePreMigrationBackup: ${REQUIRE_PRE_MIGRATION_BACKUP:-true}", compose, StringComparison.Ordinal);
         Assert.Contains("DatabaseBackup__AutomaticEnabled: ${DATABASE_BACKUP_AUTOMATIC_ENABLED:-true}", compose, StringComparison.Ordinal);
         Assert.Contains("DatabaseBackup__RetentionCount: ${DATABASE_BACKUP_RETENTION_COUNT:-30}", compose, StringComparison.Ordinal);
-        Assert.Contains("curl -fsS http://127.0.0.1:8080/health > /dev/null", compose, StringComparison.Ordinal);
+        Assert.Contains("curl -fsS http://127.0.0.1:8080/health/ready > /dev/null", compose, StringComparison.Ordinal);
         Assert.Contains("\"${API_BIND_ADDRESS:-127.0.0.1}:${API_PORT:-5080}:8080\"", compose, StringComparison.Ordinal);
 
         Assert.Contains("frontend:", compose, StringComparison.Ordinal);
@@ -49,7 +49,7 @@ public sealed class DockerComposeTests
         Assert.Contains("postgresql-client", apiDockerfile, StringComparison.Ordinal);
         Assert.Contains("location /api/", nginx, StringComparison.Ordinal);
         Assert.Contains("proxy_pass http://api:8080", nginx, StringComparison.Ordinal);
-        Assert.Contains("location = /health", nginx, StringComparison.Ordinal);
+        Assert.Contains("location ~ ^/health(?:/(?:live|ready))?$", nginx, StringComparison.Ordinal);
     }
 
     [Fact]

@@ -1,7 +1,7 @@
 [
   {
     "name": "health",
-    "path": "/health",
+    "path": "/health/ready",
     "authorized": false,
     "p50Milliseconds": 250,
     "p95Milliseconds": 500,

@@ -14,7 +14,8 @@ public sealed class ControllerAuthorizationCoverageTests
     {
         $"{nameof(AuthController)}.{nameof(AuthController.BootstrapAdmin)}",
         $"{nameof(AuthController)}.{nameof(AuthController.Login)}",
-        $"{nameof(HealthController)}.{nameof(HealthController.Get)}"
+        $"{nameof(HealthController)}.{nameof(HealthController.GetLive)}",
+        $"{nameof(HealthController)}.{nameof(HealthController.GetReady)}"
     };
 
     [Fact]

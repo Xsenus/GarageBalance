@@ -47,7 +47,7 @@ public sealed class GitHubActionsDeploymentTests
         Assert.Contains("systemctl start \"$SERVICE_NAME\"", script, StringComparison.Ordinal);
         Assert.Contains("restore_previous_release", script, StringComparison.Ordinal);
         Assert.Contains("curl -fsS -H \"Host: ${PUBLIC_HOST}\"", script, StringComparison.Ordinal);
-        Assert.Contains("curl -fsSk -H \"Host: ${PUBLIC_HOST}\" \"https://127.0.0.1/health\"", script, StringComparison.Ordinal);
+        Assert.Contains("curl -fsSk -H \"Host: ${PUBLIC_HOST}\" \"https://127.0.0.1/health/ready\"", script, StringComparison.Ordinal);
         Assert.Contains("deployStatus=ok", script, StringComparison.Ordinal);
         Assert.Contains("garagebalance_${TIMESTAMP}_${release_id}.pgdump", script, StringComparison.Ordinal);
         Assert.Contains("FRONTEND_ASSET_RETENTION_DAYS=30", script, StringComparison.Ordinal);

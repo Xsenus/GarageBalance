@@ -9,7 +9,7 @@
 Проверить локальный ПК:
 
 ```powershell
-curl -fsS http://127.0.0.1:5080/health
+curl -fsS http://127.0.0.1:5080/health/ready
 docker compose ps
 docker compose logs --tail=200 api
 docker compose logs --tail=200 frontend
@@ -18,7 +18,7 @@ docker compose logs --tail=200 frontend
 Проверить VPS:
 
 ```bash
-curl -fsS https://sgk.blagodaty.ru/health
+curl -fsS https://sgk.blagodaty.ru/health/ready
 systemctl status garagebalance-staging.service
 journalctl -u garagebalance-staging.service -n 200 --no-pager
 nginx -t
@@ -69,7 +69,7 @@ psql --host=127.0.0.1 --port=5432 --username=garagebalance_local --dbname=garage
 ```bash
 tail -n 100 /var/log/nginx/garagebalance-staging-timing.log
 journalctl -u garagebalance-staging.service --since "30 minutes ago" --no-pager | grep -E "SlowHttpRequest|SlowDatabaseCommand|FailedDatabaseCommand|Warning|Error"
-curl -ksS -D - -o /dev/null --resolve sgk.blagodaty.ru:443:127.0.0.1 https://sgk.blagodaty.ru/health
+curl -ksS -D - -o /dev/null --resolve sgk.blagodaty.ru:443:127.0.0.1 https://sgk.blagodaty.ru/health/ready
 ```
 
 Runbook «раздел завис»:
@@ -173,7 +173,7 @@ Runbook «раздел завис»:
 ## 9. Минимальный порядок безопасной диагностики
 
 - [ ] Создать backup, если проблема связана с данными.
-- [ ] Проверить `/health`.
+- [ ] Проверить `/health/live` и `/health/ready`; если live успешен, а ready нет, проверить PostgreSQL.
 - [ ] Проверить актуальность версии в "Что нового".
 - [ ] Проверить историю изменений.
 - [ ] Проверить логи без секретов.

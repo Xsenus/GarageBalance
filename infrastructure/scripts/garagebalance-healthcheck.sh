@@ -2,7 +2,7 @@
 set -Eeuo pipefail
 
 readonly STATE_FILE="/run/garagebalance-healthcheck.failures"
-readonly HEALTH_URL="http://127.0.0.1:3101/health"
+readonly HEALTH_URL="http://127.0.0.1:3101/health/ready"
 readonly FAILURE_LIMIT=3
 
 failures=0

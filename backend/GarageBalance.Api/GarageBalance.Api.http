@@ -5,6 +5,16 @@ Accept: application/json
 
 ###
 
+GET {{GarageBalance.Api_HostAddress}}/health/live
+Accept: application/json
+
+###
+
+GET {{GarageBalance.Api_HostAddress}}/health/ready
+Accept: application/json
+
+###
+
 POST {{GarageBalance.Api_HostAddress}}/api/auth/bootstrap-admin
 Content-Type: application/json
 

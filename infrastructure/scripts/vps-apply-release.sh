@@ -207,8 +207,8 @@ systemctl start "$SERVICE_NAME"
 SERVICE_STOPPED=0
 
 sleep 3
-curl -fsS -H "Host: ${PUBLIC_HOST}" "${backend_base_url%/}/health" >/dev/null
-curl -fsSk -H "Host: ${PUBLIC_HOST}" "https://127.0.0.1/health" >/dev/null
+curl -fsS -H "Host: ${PUBLIC_HOST}" "${backend_base_url%/}/health/ready" >/dev/null
+curl -fsSk -H "Host: ${PUBLIC_HOST}" "https://127.0.0.1/health/ready" >/dev/null
 curl -fsSk -H "Host: ${PUBLIC_HOST}" "https://127.0.0.1/" >/dev/null
 for asset_path in "${frontend_entry_assets[@]}"; do
   curl -fsSk -H "Host: ${PUBLIC_HOST}" "https://127.0.0.1${asset_path}" >/dev/null

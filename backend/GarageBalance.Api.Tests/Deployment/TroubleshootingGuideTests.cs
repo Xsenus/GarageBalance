@@ -7,8 +7,8 @@ public sealed class TroubleshootingGuideTests
     {
         var document = File.ReadAllText(Path.Combine(FindRepositoryRoot(), "docs", "troubleshooting-guide.md"));
 
-        Assert.Contains("curl -fsS http://127.0.0.1:5080/health", document, StringComparison.Ordinal);
-        Assert.Contains("curl -fsS https://sgk.blagodaty.ru/health", document, StringComparison.Ordinal);
+        Assert.Contains("curl -fsS http://127.0.0.1:5080/health/ready", document, StringComparison.Ordinal);
+        Assert.Contains("curl -fsS https://sgk.blagodaty.ru/health/ready", document, StringComparison.Ordinal);
         Assert.Contains("docker compose logs --tail=200 api", document, StringComparison.Ordinal);
         Assert.Contains("journalctl -u garagebalance-staging.service -n 200 --no-pager", document, StringComparison.Ordinal);
         Assert.Contains("nginx -t", document, StringComparison.Ordinal);

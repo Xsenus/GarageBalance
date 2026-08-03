@@ -74,7 +74,7 @@ systemctl restart garagebalance-staging.service
 health_ready=0
 for _ in {1..30}; do
   if curl --noproxy 127.0.0.1 --fail --silent --max-time 3 \
-    -H "Host: sgk.blagodaty.ru" http://127.0.0.1:3101/health >/dev/null; then
+    -H "Host: sgk.blagodaty.ru" http://127.0.0.1:3101/health/ready >/dev/null; then
     health_ready=1
     break
   fi

@@ -50,7 +50,7 @@ function Get-Section {
         [string]$Route
     )
 
-    if ($Route -eq "/health") { return "health" }
+    if ($Route -match "^/health(?:/(?:live|ready))?$") { return "health" }
     if ($Route -match "^/api/auth(?:/|$)") { return "auth" }
     if ($Route -match "^/api/(?:users|roles|audit|settings|diagnostics)(?:/|$)") { return "administration" }
     if ($Route -match "^/api/dictionaries(?:/|$)") { return "dictionaries" }

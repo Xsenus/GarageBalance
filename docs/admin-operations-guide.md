@@ -156,13 +156,13 @@
 Локальная установка:
 
 ```powershell
-curl -fsS http://127.0.0.1:5080/health
+curl -fsS http://127.0.0.1:5080/health/ready
 ```
 
 VPS:
 
 ```bash
-curl -fsS https://sgk.blagodaty.ru/health
+curl -fsS https://sgk.blagodaty.ru/health/ready
 ```
 
 - [ ] После перезапуска проверить health endpoint.

@@ -34,7 +34,7 @@ public sealed class DeploymentDocumentationTests
         Assert.Contains("immutable", nginx, StringComparison.Ordinal);
         Assert.DoesNotContain("gzip off;", nginx, StringComparison.Ordinal);
         Assert.DoesNotContain("no-transform", nginx, StringComparison.Ordinal);
-        Assert.Contains("curl -fsS https://sgk.blagodaty.ru/health", document, StringComparison.Ordinal);
+        Assert.Contains("curl -fsS https://sgk.blagodaty.ru/health/ready", document, StringComparison.Ordinal);
         Assert.Contains("Rollback", document, StringComparison.Ordinal);
         Assert.Contains("Не коммитить", document, StringComparison.Ordinal);
         Assert.Contains("Условия финального закрытия VPS/domain deployment", document, StringComparison.Ordinal);

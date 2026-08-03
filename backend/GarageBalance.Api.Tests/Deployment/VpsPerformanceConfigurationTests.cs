@@ -57,6 +57,7 @@ public sealed class VpsPerformanceConfigurationTests
         var logrotate = ReadDeploymentFile("garagebalance.logrotate");
 
         Assert.Contains("FAILURE_LIMIT=3", healthScript, StringComparison.Ordinal);
+        Assert.Contains("/health/ready", healthScript, StringComparison.Ordinal);
         Assert.Contains("--noproxy 127.0.0.1", healthScript, StringComparison.Ordinal);
         Assert.Contains("Host: sgk.blagodaty.ru", healthScript, StringComparison.Ordinal);
         Assert.Contains("systemctl try-restart garagebalance-staging.service", healthScript, StringComparison.Ordinal);

@@ -198,6 +198,7 @@ builder.Services.AddSingleton<RollingJsonDiagnosticLoggerProvider>();
 builder.Services.AddSingleton<ILoggerProvider>(provider => provider.GetRequiredService<RollingJsonDiagnosticLoggerProvider>());
 builder.Services.AddSingleton<IDiagnosticLogStore>(provider => provider.GetRequiredService<RollingJsonDiagnosticLoggerProvider>());
 builder.Services.AddScoped<IDiagnosticPackageService, DiagnosticPackageService>();
+builder.Services.AddScoped<IApplicationReadinessService, DatabaseReadinessService>();
 builder.Services
     .AddOptions<RequestPerformanceOptions>()
     .Bind(builder.Configuration.GetSection(RequestPerformanceOptions.SectionName))

@@ -25,7 +25,7 @@ public sealed class ApiBenchmarkScriptTests
         Assert.Equal(
             scenarios.Length,
             scenarios.Select(item => item.GetProperty("name").GetString()).Distinct().Count());
-        Assert.Contains(scenarios, item => item.GetProperty("path").GetString() == "/health");
+        Assert.Contains(scenarios, item => item.GetProperty("path").GetString() == "/health/ready");
         Assert.Contains(scenarios, item => item.GetProperty("path").GetString()!.StartsWith("/api/dictionaries/", StringComparison.Ordinal));
         Assert.Contains(scenarios, item => item.GetProperty("path").GetString()!.StartsWith("/api/finance/", StringComparison.Ordinal));
         Assert.Contains(scenarios, item => item.GetProperty("path").GetString()!.StartsWith("/api/reports/", StringComparison.Ordinal));

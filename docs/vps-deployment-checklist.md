@@ -91,14 +91,14 @@ pg_dump --format=custom --file=/opt/garagebalance-staging/backups/garagebalance_
 `infrastructure/deployment/garagebalance-staging.service`. Он задаёт
 `Restart=on-failure`, ограничение памяти 1,2 ГБ, мягкий порог 900 МБ,
 до 150% CPU и 512 задач, а также изоляцию файловой системы процесса.
-Таймер `garagebalance-healthcheck.timer` проверяет локальный `/health`
+Таймер `garagebalance-healthcheck.timer` проверяет локальный `/health/ready`
 каждую минуту и перезапускает API только после трёх последовательных ошибок.
 
 - [ ] Создать `/etc/systemd/system/garagebalance-staging.service`.
 - [ ] Выполнить `systemctl daemon-reload`.
 - [ ] Запустить `systemctl enable --now garagebalance-staging.service`.
 - [ ] Проверить `systemctl status garagebalance-staging.service`.
-- [ ] Проверить backend health: `curl -fsS -H "Host: sgk.blagodaty.ru" http://127.0.0.1:3101/health`.
+- [ ] Проверить процесс: `curl -fsS -H "Host: sgk.blagodaty.ru" http://127.0.0.1:3101/health/live`; затем PostgreSQL и готовность приложения: `curl -fsS -H "Host: sgk.blagodaty.ru" http://127.0.0.1:3101/health/ready`.
 - [ ] Проверить логи без вывода secrets: `journalctl -u garagebalance-staging.service -n 100 --no-pager`.
 
 ## 6. nginx и домен
@@ -128,7 +128,7 @@ gzip для текстовой статики, immutable cache для hashed ass
 - [ ] Создать symlink в `/etc/nginx/sites-enabled`.
 - [ ] Проверить конфигурацию: `nginx -t`.
 - [ ] Перезагрузить nginx: `systemctl reload nginx`.
-- [ ] Проверить HTTP до TLS: `curl -fsS http://sgk.blagodaty.ru/health`.
+- [ ] Проверить HTTP до TLS: `curl -fsS http://sgk.blagodaty.ru/health/ready`.
 - [ ] Проверить строку времени без query-параметров: `tail -n 20 /var/log/nginx/garagebalance-staging-timing.log`.
 - [ ] Проверить сжатие hashed asset: `curl --http2 --compressed -sSI https://sgk.blagodaty.ru/assets/<entry>.js`.
 - [ ] Проверить отсутствие лишнего HTTPS redirect: `curl --http2 -sSI https://sgk.blagodaty.ru/`.
@@ -141,7 +141,7 @@ gzip для текстовой статики, immutable cache для hashed ass
 - [ ] Установить сертификат: `certbot --nginx -d sgk.blagodaty.ru`.
 - [ ] Повторно проверить `nginx -t`.
 - [ ] Перезагрузить nginx: `systemctl reload nginx`.
-- [ ] Проверить HTTPS health: `curl -fsS https://sgk.blagodaty.ru/health`.
+- [ ] Проверить HTTPS readiness: `curl -fsS https://sgk.blagodaty.ru/health/ready`.
 - [ ] Проверить, что опубликованный `appsettings.json` задает уровень `Warning` для категории `Microsoft.EntityFrameworkCore.Database.Command` и рабочее окружение не пишет каждый успешно выполненный SQL-запрос.
 - [ ] Проверить `Server-Timing: app;dur=...` в ответе API и отсутствие предупреждений `SlowHttpRequest` для обычных экранов.
 - [ ] Проверить главную страницу с телефона и desktop-браузера.
@@ -164,7 +164,7 @@ gzip для текстовой статики, immutable cache для hashed ass
 - [ ] Вернуть symlink/каталог frontend и backend на предыдущую версию.
 - [ ] При необходимости восстановить backup в отдельную проверочную базу.
 - [ ] Только после проверки восстановленной базы переключать рабочую БД.
-- [ ] Запустить сервис и проверить `curl -fsS https://sgk.blagodaty.ru/health`.
+- [ ] Запустить сервис и проверить `curl -fsS https://sgk.blagodaty.ru/health/ready`.
 - [ ] Записать причину rollback и результат проверки в журнал технических работ.
 
 ## 10. Что нельзя делать
@@ -182,6 +182,6 @@ gzip для текстовой статики, immutable cache для hashed ass
 - [ ] Workflow `.github/workflows/deploy-staging.yml` успешно прошел до конца на актуальном коммите.
 - [ ] Apply-скрипт `/usr/local/bin/garagebalance-deploy-apply <release-id>` создал непустой `pg_dump`, применил idempotent SQL, заменил API/frontend и сохранил предыдущие каталоги для rollback.
 - [ ] Проверены `systemctl status garagebalance-staging.service`, `journalctl -u garagebalance-staging.service -n 100 --no-pager`, `nginx -t` и `systemctl reload nginx`.
-- [ ] Проверены `curl -fsS https://sgk.blagodaty.ru/health`, открытие `https://sgk.blagodaty.ru` на desktop/mobile и hard refresh frontend.
+- [ ] Проверены `curl -fsS https://sgk.blagodaty.ru/health/live`, `curl -fsS https://sgk.blagodaty.ru/health/ready`, открытие `https://sgk.blagodaty.ru` на desktop/mobile и hard refresh frontend.
 - [ ] Выполнен smoke входа, справочников, платежей, отчетов, импорта dry-run, audit и "Что нового".
 - [ ] В журнале технических работ записаны commit, workflow run, release id, backup-файл, health-check и все оставшиеся блокеры.
