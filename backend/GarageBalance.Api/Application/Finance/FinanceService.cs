@@ -1999,7 +1999,15 @@ public sealed class FinanceService(
                     operation.StaffMemberId.Value,
                     operation.AccountingMonth,
                     cancellationToken);
-                var availableStaffAmount = MoneyMath.RoundMoney((operation.StaffMember?.Rate ?? 0m) - paidThisMonth);
+                var adjustmentTotals = await staffSalaryAdjustmentRepository.GetTotalsAsync(
+                    operation.StaffMemberId.Value,
+                    operation.AccountingMonth,
+                    cancellationToken);
+                var availableStaffAmount = MoneyMath.RoundMoney(
+                    (operation.StaffMember?.Rate ?? 0m) +
+                    adjustmentTotals.BonusAmount -
+                    adjustmentTotals.PenaltyAmount -
+                    paidThisMonth);
                 if (operation.Amount > availableStaffAmount)
                 {
                     return FinanceResult<FinancialOperationDto>.Failure("staff_payment_amount_exceeds_available", $"Сумма выплаты превышает доступный остаток по сотруднику {MoneyFormatting.Format(availableStaffAmount)}.");

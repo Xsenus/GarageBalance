@@ -2058,6 +2058,63 @@ public sealed class FinanceServiceTests
     }
 
     [Fact]
+    public async Task RestoreStaffPayment_UsesMonthlyBonusAndPenaltyInAvailableSalary()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        await database.SeedAsync();
+        var department = new StaffDepartment { Name = "Отдел восстановления зарплаты" };
+        var staffMember = new StaffMember
+        {
+            FullName = "Сотрудник восстановления зарплаты",
+            Department = department,
+            Rate = 100m,
+            CreatedAtUtc = new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero)
+        };
+        database.Context.AddRange(
+            department,
+            staffMember,
+            new ExpenseType { Name = "Зарплата восстановления", Code = "salary" });
+        await database.Context.SaveChangesAsync();
+        var service = FinanceServiceTestFactory.Create(database.Context);
+        var month = new DateOnly(2026, 6, 1);
+
+        Assert.True((await service.CreateStaffSalaryAdjustmentAsync(
+            new CreateStaffSalaryAdjustmentRequest(staffMember.Id, month, "bonus", 50m, "BONUS-RESTORE", "Премия"),
+            null,
+            CancellationToken.None)).Succeeded);
+        var payment = await service.CreateStaffPaymentAsync(
+            new CreateStaffPaymentRequest(staffMember.Id, month.AddDays(20), month, 120m, "SALARY-RESTORE", null),
+            null,
+            CancellationToken.None);
+        Assert.True(payment.Succeeded, payment.ErrorMessage);
+        Assert.True((await service.CancelOperationAsync(
+            payment.Value!.Id,
+            new CancelFinanceEntryRequest("Проверка премии"),
+            null,
+            CancellationToken.None)).Succeeded);
+
+        var restoredWithBonus = await service.RestoreOperationAsync(payment.Value.Id, null, CancellationToken.None);
+
+        Assert.True(restoredWithBonus.Succeeded, restoredWithBonus.ErrorMessage);
+        Assert.True((await service.CancelOperationAsync(
+            payment.Value.Id,
+            new CancelFinanceEntryRequest("Проверка штрафа"),
+            null,
+            CancellationToken.None)).Succeeded);
+        Assert.True((await service.CreateStaffSalaryAdjustmentAsync(
+            new CreateStaffSalaryAdjustmentRequest(staffMember.Id, month, "penalty", 40m, "PENALTY-RESTORE", "Штраф"),
+            null,
+            CancellationToken.None)).Succeeded);
+
+        var rejectedAfterPenalty = await service.RestoreOperationAsync(payment.Value.Id, null, CancellationToken.None);
+
+        Assert.False(rejectedAfterPenalty.Succeeded);
+        Assert.Equal("staff_payment_amount_exceeds_available", rejectedAfterPenalty.ErrorCode);
+        Assert.True(await database.Context.FinancialOperations.AnyAsync(operation =>
+            operation.Id == payment.Value.Id && operation.IsCanceled));
+    }
+
+    [Fact]
     public async Task CreateExpenseAsync_ReturnsNotFoundForMissingSupplier()
     {
         await using var database = await TestDatabase.CreateAsync();
