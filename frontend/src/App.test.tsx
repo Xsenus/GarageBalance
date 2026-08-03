@@ -16488,7 +16488,13 @@ describe('App', () => {
 
     await openReportTab(user, reportsPanel, 'По гаражам')
     expect(within(reportsPanel).getByText('Отчёт по гаражам')).toBeInTheDocument()
-    const garageFilter = within(reportsPanel).getByLabelText('Гаражи')
+    const garageFiltersButton = within(reportsPanel).getByRole('button', { name: /Гаражи и личные фильтры/ })
+    const garageFiltersDisclosure = garageFiltersButton.closest('details')
+    expect(garageFiltersDisclosure).not.toHaveAttribute('open')
+    await user.click(garageFiltersButton)
+    expect(garageFiltersDisclosure).toHaveAttribute('open')
+    const garageFiltersRegion = within(reportsPanel).getByRole('region', { name: 'Гаражи и личные фильтры отчёта' })
+    const garageFilter = within(garageFiltersRegion).getByLabelText('Гаражи')
     expect(garageFilter).toHaveAttribute('role', 'combobox')
     expect(garageFilter).toHaveAttribute('placeholder', 'Выберите гаражи или начните вводить номер либо ФИО')
     expect(garageFilter).toHaveAttribute('aria-expanded', 'false')
@@ -16511,7 +16517,8 @@ describe('App', () => {
     await user.clear(garageFilter)
     await user.type(garageFilter, 'нет такого гаража')
     expect(within(reportsPanel).getByText('Ничего не найдено')).toBeInTheDocument()
-    await user.click(within(reportsPanel).getByText('Отчёт по гаражам'))
+    await user.click(garageFiltersButton)
+    expect(garageFiltersDisclosure).not.toHaveAttribute('open')
     expect(within(reportsPanel).queryByRole('listbox', { name: 'Найденные гаражи отчёта' })).not.toBeInTheDocument()
     const garageReportTable = within(reportsPanel).getByRole('table', { name: 'Отчет по гаражам' })
     await waitFor(() => expect(garageReportTable).toHaveTextContent('12'))
@@ -16604,13 +16611,16 @@ describe('App', () => {
     const reportsPanel = await screen.findByRole('region', { name: 'Отчеты' })
     await openReportTab(user, reportsPanel, 'По гаражам')
 
-    const garageFilter = within(reportsPanel).getByLabelText('Гаражи')
+    const garageFiltersButton = within(reportsPanel).getByRole('button', { name: /Гаражи и личные фильтры/ })
+    await user.click(garageFiltersButton)
+    const garageFiltersRegion = within(reportsPanel).getByRole('region', { name: 'Гаражи и личные фильтры отчёта' })
+    const garageFilter = within(garageFiltersRegion).getByLabelText('Гаражи')
     await user.click(garageFilter)
     const garageOptions = await within(reportsPanel).findByRole('listbox', { name: 'Найденные гаражи отчёта' })
     expect(within(garageOptions).getByRole('checkbox', { name: /Выбрать гараж 12,/ })).toBeInTheDocument()
     await user.click(within(garageOptions).getByRole('checkbox', { name: /Выбрать гараж 12,/ }))
 
-    await user.click(within(reportsPanel).getByRole('button', { name: 'Создать быстрый список' }))
+    await user.click(within(garageFiltersRegion).getByRole('button', { name: 'Создать список' }))
     const createDialog = await screen.findByRole('dialog', { name: 'Создать быстрый список' })
     await user.type(within(createDialog).getByLabelText('Название быстрого списка'), 'Северный ряд')
     await user.click(within(createDialog).getByRole('button', { name: 'Создать список' }))
@@ -16622,7 +16632,7 @@ describe('App', () => {
     expect(await within(reportsPanel).findByText('Быстрый список создан.')).toHaveAttribute('role', 'status')
     expect(within(reportsPanel).getByRole('combobox', { name: 'Быстрый список гаражей' })).toHaveTextContent('Северный ряд (1)')
 
-    await user.click(within(reportsPanel).getByRole('button', { name: 'Изменить список' }))
+    await user.click(within(garageFiltersRegion).getByRole('button', { name: 'Изменить' }))
     const editDialog = await screen.findByRole('dialog', { name: 'Изменить быстрый список' })
     const quickListName = within(editDialog).getByLabelText('Название быстрого списка')
     await user.clear(quickListName)
@@ -16645,7 +16655,7 @@ describe('App', () => {
       expect.any(AbortSignal),
     ))
 
-    const openDeleteQuickListButton = within(reportsPanel).getByRole('button', { name: 'Удалить список' })
+    const openDeleteQuickListButton = within(garageFiltersRegion).getByRole('button', { name: 'Удалить' })
     expect(openDeleteQuickListButton).toHaveClass('danger-quiet-button')
     await user.click(openDeleteQuickListButton)
     const deleteDialog = await screen.findByRole('alertdialog', { name: 'Удалить список «Северные гаражи»?' })
@@ -16682,9 +16692,12 @@ describe('App', () => {
     await openReportTab(user, reportsPanel, 'По гаражам')
     await waitFor(() => expect(getGarageReport).toHaveBeenCalledTimes(1))
     expect(getConsolidatedReport).toHaveBeenCalledTimes(1)
+    await user.click(within(reportsPanel).getByRole('button', { name: /Гаражи и личные фильтры/ }))
 
     await openReportTab(user, reportsPanel, 'По выплатам')
     expect(getConsolidatedReport).toHaveBeenCalledTimes(1)
+    await openReportTab(user, reportsPanel, 'По гаражам')
+    expect(within(reportsPanel).getByRole('button', { name: /Гаражи и личные фильтры/ }).closest('details')).not.toHaveAttribute('open')
   })
 
   it('keeps the garage report available when quick lists cannot be loaded', async () => {
@@ -16702,6 +16715,7 @@ describe('App', () => {
     const reportsPanel = await screen.findByRole('region', { name: 'Отчеты' })
     await openReportTab(user, reportsPanel, 'По гаражам')
 
+    await user.click(within(reportsPanel).getByRole('button', { name: /Гаражи и личные фильтры/ }))
     expect(await within(reportsPanel).findByText('Быстрые списки временно недоступны')).toHaveAttribute('role', 'alert')
     expect(within(reportsPanel).getByRole('table', { name: 'Отчет по гаражам' })).toBeInTheDocument()
     expect(within(reportsPanel).getByRole('button', { name: 'Все' })).toHaveAttribute('aria-pressed', 'true')
@@ -17276,6 +17290,7 @@ describe('App', () => {
 
     await openReportTab(user, reportsPanel, 'По гаражам')
     await waitFor(() => expect(garageRequests).toContainEqual({ garageIds: [], offset: 0 }))
+    await user.click(within(reportsPanel).getByRole('button', { name: /Гаражи и личные фильтры/ }))
     const garageFilter = within(reportsPanel).getByLabelText('Гаражи')
     await user.type(garageFilter, 'гараж')
     const garageSearchResults = within(reportsPanel).getByRole('listbox', { name: 'Найденные гаражи отчёта' })
@@ -17448,6 +17463,7 @@ describe('App', () => {
     await waitFor(() => expect(exportConsolidatedReportXlsx).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ sortBy: 'accountingMonth', sortDirection: 'asc' })))
 
     await openReportTab(user, reportsPanel, 'По гаражам')
+    await user.click(within(reportsPanel).getByRole('button', { name: /Гаражи и личные фильтры/ }))
     const garageFilter = within(reportsPanel).getByLabelText('Гаражи')
     await user.type(garageFilter, '12')
     const garageSearchResults = await within(reportsPanel).findByRole('listbox', { name: 'Найденные гаражи отчёта' })

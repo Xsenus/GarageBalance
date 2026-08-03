@@ -7133,37 +7133,6 @@ button.operation-row:focus-visible {
   gap: 14px;
 }
 
-.report-card-heading {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.report-card-heading h3 {
-  margin: 0;
-  color: #101828;
-  font-size: 18px;
-}
-
-.report-card-heading p {
-  margin: 4px 0 0;
-  color: #667085;
-  font-size: 13px;
-}
-
-.report-filter--consolidated {
-  grid-template-columns: minmax(140px, 180px) minmax(140px, 180px) minmax(220px, 1fr);
-}
-
-.report-filter--detailed {
-  grid-template-columns: minmax(140px, 180px) minmax(140px, 180px) minmax(220px, 1fr) minmax(180px, 220px);
-}
-
-.report-filter--expense {
-  grid-template-columns: minmax(140px, 180px) minmax(140px, 180px) minmax(240px, 1fr) minmax(180px, 220px);
-}
-
 .reports-workbook-panel {
   gap: 14px;
 }
@@ -7267,43 +7236,49 @@ button.operation-row:focus-visible {
 
 .report-workbook-filter__extra {
   grid-column: 1 / -1;
-  display: grid;
-  grid-template-columns: repeat(2, minmax(280px, 520px));
-  gap: 10px 14px;
-  align-items: start;
   min-width: 0;
+}
+
+.report-workbook-filter__extra > .report-checkbox-picker {
+  width: min(520px, 100%);
 }
 
 .report-workbook-filter__extra .report-workbook-filter-wide {
   width: 100%;
 }
 
-.report-garage-quick-lists {
-  display: grid;
-  grid-template-columns: minmax(220px, 1fr) auto;
-  gap: 6px 8px;
-  align-items: end;
-  margin: 0;
+.report-garage-filter-disclosure {
+  position: relative;
 }
 
-.report-garage-quick-lists > label {
-  min-width: 0;
+.report-garage-filter-disclosure:not([open]) .report-garage-filter-panel {
+  display: none;
+}
+
+.report-garage-filter-toggle {
+  width: min(430px, 100%);
+  text-align: left;
+  list-style: none;
+}
+
+.report-garage-filter-panel {
+  left: 0;
+  display: grid;
+  width: min(620px, calc(100vw - 64px));
+  max-height: min(70vh, 620px);
+  gap: 14px;
+  overflow: auto;
+}
+
+.report-garage-quick-lists {
+  display: grid;
+  gap: 6px 8px;
 }
 
 .report-garage-quick-list-actions {
   display: flex;
   flex-wrap: wrap;
-  align-items: center;
   gap: 8px;
-}
-
-.report-garage-quick-lists > .form-success,
-.report-garage-quick-lists > .form-error {
-  grid-column: 1 / -1;
-}
-
-.report-garage-quick-list-actions button {
-  min-height: 36px;
 }
 
 .report-garage-quick-list-dialog {
@@ -7435,12 +7410,6 @@ button.operation-row:focus-visible {
   font-size: 0.78rem;
 }
 
-.report-period-button {
-  min-height: 38px;
-  align-self: end;
-  padding: 0 4px 8px;
-}
-
 .report-group-button {
   min-height: 38px;
   white-space: nowrap;
@@ -7560,6 +7529,18 @@ button.operation-row:focus-visible {
   .report-workbook-filter,
   .report-workbook-filter--single {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  .report-garage-filter-toggle {
+    width: 100%;
+  }
+
+  .report-garage-filter-panel {
+    position: static;
+    width: 100%;
+    max-height: none;
+    margin-top: 8px;
+    box-shadow: none;
   }
 
   .report-workbook-filter__actions {
@@ -7785,42 +7766,6 @@ button.operation-row:focus-visible {
   justify-content: center;
 }
 
-.report-summary-strip {
-  margin-bottom: 0;
-}
-
-.report-table-grid {
-  display: grid;
-  grid-template-columns: minmax(320px, 0.9fr) minmax(420px, 1.4fr);
-  gap: 12px;
-}
-
-.report-table {
-  min-width: 0;
-  overflow-x: auto;
-}
-
-.report-table .operation-row {
-  min-width: 520px;
-}
-
-.report-table--monthly .operation-row {
-  grid-template-columns: minmax(120px, 0.8fr) minmax(220px, 1.4fr) minmax(120px, 0.7fr);
-}
-
-.report-table--garages .operation-row,
-.report-table--wide .operation-row {
-  grid-template-columns: minmax(150px, 0.8fr) minmax(320px, 1.7fr) minmax(130px, 0.6fr);
-}
-
-.report-table--wide .operation-row {
-  min-width: 720px;
-}
-
-.report-table .operation-row > :last-child {
-  text-align: right;
-}
-
 .report-filter input,
 .report-filter select {
   width: 100%;
@@ -7837,14 +7782,6 @@ button.operation-row:focus-visible {
 .report-filter select[multiple] {
   min-height: 74px;
   padding: 7px 10px;
-}
-
-.report-date-format {
-  grid-column: 1 / -1;
-}
-
-.report-accounting-rule {
-  margin: -6px 0 16px;
 }
 
 .report-filter input:focus,
@@ -8278,14 +8215,6 @@ button.operation-row:focus-visible {
 }
 
 @media (max-width: 1100px) {
-  .report-workbook-filter__extra {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .report-garage-quick-lists {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
   .audit-detail-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -8443,7 +8372,6 @@ button.operation-row:focus-visible {
   .contractors-directory-grid,
   .contractors-bottom-grid,
   .payments-prototype-footer,
-  .report-table-grid,
   .summary-strip {
     grid-template-columns: 1fr;
   }
@@ -8505,12 +8433,6 @@ button.operation-row:focus-visible {
 .contractors-actions .primary-button {
     flex: 1;
     justify-content: center;
-  }
-
-  .report-filter--consolidated,
-  .report-filter--detailed,
-  .report-filter--expense {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .import-workbench {
@@ -8850,12 +8772,6 @@ button.operation-row:focus-visible {
   }
 
   .import-report-actions > div {
-    grid-template-columns: 1fr;
-  }
-
-  .report-filter--consolidated,
-  .report-filter--detailed,
-  .report-filter--expense {
     grid-template-columns: 1fr;
   }
 

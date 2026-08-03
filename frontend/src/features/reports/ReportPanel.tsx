@@ -1346,92 +1346,101 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
               </>
             ),
             extra: (
-              <>
-                <div className="report-garage-quick-lists" aria-label="Быстрые списки гаражей">
-                  <label>
-                    <span>Быстрый список</span>
-                    <SelectControl
-                      aria-label="Быстрый список гаражей"
-                      value={selectedGarageQuickListId}
-                      options={[
-                        { value: '', label: 'Все гаражи' },
-                        ...garageQuickLists.map((item) => ({
-                          value: item.id,
-                          label: `${item.name} (${item.garages.filter((garage) => !garage.isArchived).length})`,
-                        })),
-                      ]}
-                      disabled={garageQuickListsLoading}
-                      maxVisibleOptions={8}
-                      onChange={applyGarageQuickList}
-                    />
-                  </label>
-                  <div className="report-garage-quick-list-actions" role="group" aria-label="Действия с быстрыми списками гаражей">
-                    <button
-                      className="secondary-button"
-                      type="button"
-                      aria-pressed={selectedGarageIds.length === 0}
-                      onClick={() => applyGarageQuickList('')}
-                    >
-                      Все
-                    </button>
-                    <button
-                      className="secondary-button create-action-button"
-                      type="button"
-                      disabled={selectedGarageIds.length === 0 || garageQuickListsLoading}
-                      title={selectedGarageIds.length === 0 ? 'Сначала выберите гаражи' : undefined}
-                      onClick={openGarageQuickListCreate}
-                    >
-                      <ListPlus size={16} aria-hidden="true" />
-                      Создать быстрый список
-                    </button>
-                    {selectedGarageQuickListId ? (
-                      <>
-                        <button className="ghost-button" type="button" onClick={openGarageQuickListEdit}>
-                          <Pencil size={15} aria-hidden="true" />
-                          Изменить список
+              <details className="report-garage-filter-disclosure">
+                <summary
+                  className="ghost-button report-garage-filter-toggle"
+                  role="button"
+                  aria-controls="garage-report-personal-filters"
+                >
+                  Гаражи и личные фильтры
+                </summary>
+                <div id="garage-report-personal-filters" className="localized-date-picker__popover report-garage-filter-panel" role="region" aria-label="Гаражи и личные фильтры отчёта">
+                    <div className="report-garage-quick-lists" aria-label="Быстрые списки гаражей">
+                      <label>
+                        <span>Личный список</span>
+                        <SelectControl
+                          aria-label="Быстрый список гаражей"
+                          value={selectedGarageQuickListId}
+                          options={[
+                            { value: '', label: 'Все гаражи' },
+                            ...garageQuickLists.map((item) => ({
+                              value: item.id,
+                              label: `${item.name} (${item.garages.filter((garage) => !garage.isArchived).length})`,
+                            })),
+                          ]}
+                          disabled={garageQuickListsLoading}
+                          maxVisibleOptions={8}
+                          onChange={applyGarageQuickList}
+                        />
+                      </label>
+                      <div className="report-garage-quick-list-actions" role="group" aria-label="Действия с быстрыми списками гаражей">
+                        <button
+                          className="secondary-button"
+                          type="button"
+                          aria-pressed={selectedGarageIds.length === 0}
+                          onClick={() => applyGarageQuickList('')}
+                        >
+                          Все
                         </button>
                         <button
-                          className="ghost-button danger-quiet-button"
+                          className="secondary-button create-action-button"
                           type="button"
-                          onClick={() => {
-                            setGarageQuickListDeleteReason('')
-                            setGarageQuickListError(null)
-                            setGarageQuickListDeleteTarget(garageQuickLists.find((item) => item.id === selectedGarageQuickListId) ?? null)
-                          }}
+                          disabled={selectedGarageIds.length === 0 || garageQuickListsLoading}
+                          title={selectedGarageIds.length === 0 ? 'Сначала выберите гаражи' : undefined}
+                          onClick={openGarageQuickListCreate}
                         >
-                          <Trash2 size={15} aria-hidden="true" />
-                          Удалить список
+                          <ListPlus size={16} aria-hidden="true" />
+                          Создать список
                         </button>
-                      </>
-                    ) : null}
-                  </div>
-                  {garageQuickListMessage ? <p className="form-success" role="status">{garageQuickListMessage}</p> : null}
-                  {garageQuickListError
-                    && garageQuickListError !== garageReportError
-                    && !garageQuickListEditor
-                    && !garageQuickListDeleteTarget
-                    ? <FormError>{garageQuickListError}</FormError>
-                    : null}
+                        {selectedGarageQuickListId ? (
+                          <>
+                            <button className="ghost-button" type="button" onClick={openGarageQuickListEdit}>
+                              <Pencil size={15} aria-hidden="true" />
+                              Изменить
+                            </button>
+                            <button
+                              className="ghost-button danger-quiet-button"
+                              type="button"
+                              onClick={() => {
+                                setGarageQuickListDeleteReason('')
+                                setGarageQuickListError(null)
+                                setGarageQuickListDeleteTarget(garageQuickLists.find((item) => item.id === selectedGarageQuickListId) ?? null)
+                              }}
+                            >
+                              <Trash2 size={15} aria-hidden="true" />
+                              Удалить
+                            </button>
+                          </>
+                        ) : null}
+                      </div>
+                      {garageQuickListMessage ? <p className="form-success" role="status">{garageQuickListMessage}</p> : null}
+                      {garageQuickListError
+                        && garageQuickListError !== garageReportError
+                        && !garageQuickListEditor
+                        && !garageQuickListDeleteTarget
+                        ? <FormError>{garageQuickListError}</FormError>
+                        : null}
+                    </div>
+                    <ReportCheckboxMultiSelect
+                      key="garage-report-filter"
+                      label="Гаражи"
+                      ariaLabel="Гаражи"
+                      allLabel="Все гаражи"
+                      placeholder="Выберите гаражи или начните вводить номер либо ФИО"
+                      resultsAriaLabel="Найденные гаражи отчёта"
+                      selectedAriaLabel="Выбранные гаражи отчёта"
+                      options={garages.map((garage) => ({ value: garage.id, label: `Гараж ${garage.number}`, description: garage.ownerName ?? 'Без владельца', rankingValue: garage.number }))}
+                      selectedValues={selectedGarageIds}
+                      openOnFocus
+                      onChange={(values) => {
+                        setSelectedGarageQuickListId('')
+                        setGarageQuickListMessage(null)
+                        setGarageQuickListError(null)
+                        setSelectedGarageIds(values)
+                      }}
+                    />
                 </div>
-                <ReportCheckboxMultiSelect
-                  key="garage-report-filter"
-                  label="Гаражи"
-                  ariaLabel="Гаражи"
-                  allLabel="Все гаражи"
-                  placeholder="Выберите гаражи или начните вводить номер либо ФИО"
-                  resultsAriaLabel="Найденные гаражи отчёта"
-                  selectedAriaLabel="Выбранные гаражи отчёта"
-                  options={garages.map((garage) => ({ value: garage.id, label: `Гараж ${garage.number}`, description: garage.ownerName ?? 'Без владельца', rankingValue: garage.number }))}
-                  selectedValues={selectedGarageIds}
-                  openOnFocus
-                  onChange={(values) => {
-                    setSelectedGarageQuickListId('')
-                    setGarageQuickListMessage(null)
-                    setGarageQuickListError(null)
-                    setSelectedGarageIds(values)
-                  }}
-                />
-              </>
+              </details>
             ),
           })}
           <p className="report-workbook-comment" role="note">

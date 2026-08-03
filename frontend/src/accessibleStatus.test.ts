@@ -213,6 +213,11 @@ describe('accessible dynamic messages', () => {
     expect(normalizedAppCss).toMatch(/\.report-workbook-filter \{[\s\S]*?grid-template-columns: minmax\(0, 1fr\) auto;/u)
     expect(normalizedAppCss).toMatch(/\.report-workbook-filter__actions \{[\s\S]*?justify-content: flex-end;/u)
     expect(normalizedAppCss).toContain('.report-workbook-filter__fields > label:first-child .localized-date-picker__popover')
+    expect(reportPanelSource).toContain('<details className="report-garage-filter-disclosure">')
+    expect(reportPanelSource).toContain('aria-controls="garage-report-personal-filters"')
+    expect(reportPanelSource).toContain('role="region" aria-label="Гаражи и личные фильтры отчёта"')
+    expect(reportPanelSource).toContain('className="localized-date-picker__popover report-garage-filter-panel"')
+    expect(normalizedAppCss).toMatch(/@media \(max-width: 720px\) \{[\s\S]*?\.report-garage-filter-panel \{[\s\S]*?position: static;/u)
   })
 
   it('keeps text inputs and textareas consistently styled and labeled', () => {
