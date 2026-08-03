@@ -206,6 +206,81 @@ public sealed class PostgreSqlMeterReadingConcurrencyIntegrationTests
     }
 
     [PostgreSqlFact]
+    public async Task HistoricalInsertionsForSameMeter_SerializeAndPersistConsistentChain()
+    {
+        await using var database = await PostgreSqlTestDatabase.CreateAsync();
+        Guid garageId;
+        await using (var seedContext = database.CreateContext())
+        {
+            var garage = new Garage
+            {
+                Number = "PG-METER-CHAIN-RACE",
+                PeopleCount = 1,
+                FloorCount = 1,
+                InitialWaterMeterValue = 10m
+            };
+            seedContext.Add(garage);
+            await seedContext.SaveChangesAsync();
+            garageId = garage.Id;
+        }
+
+        var now = new FixedTimeProvider(new DateTimeOffset(2026, 7, 20, 12, 0, 0, TimeSpan.Zero));
+        await using (var context = database.CreateContext())
+        {
+            var service = FinanceServiceTestFactory.Create(context, now);
+            var june = await service.CreateMeterReadingAsync(
+                new CreateMeterReadingRequest(garageId, MeterKinds.Water, new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 20), 30m, null),
+                null,
+                CancellationToken.None);
+            Assert.True(june.Succeeded, june.ErrorMessage);
+        }
+
+        var start = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        async Task<FinanceResult<MeterReadingDto>> InsertAsync(DateOnly month, decimal value)
+        {
+            await using var context = database.CreateContext();
+            var service = FinanceServiceTestFactory.Create(context, now);
+            await start.Task;
+            return await service.CreateMeterReadingAsync(
+                new CreateMeterReadingRequest(garageId, MeterKinds.Water, month, month.AddDays(19), value, null),
+                null,
+                CancellationToken.None);
+        }
+
+        var insertions = new[]
+        {
+            InsertAsync(new DateOnly(2026, 4, 1), 15m),
+            InsertAsync(new DateOnly(2026, 5, 1), 20m)
+        };
+        start.SetResult();
+        var results = await Task.WhenAll(insertions);
+        Assert.All(results, result => Assert.True(result.Succeeded, result.ErrorMessage));
+
+        await using var assertionContext = database.CreateContext();
+        var readings = await assertionContext.MeterReadings
+            .Where(item => item.GarageId == garageId && !item.IsCanceled)
+            .OrderBy(item => item.AccountingMonth)
+            .ToListAsync();
+        Assert.Collection(
+            readings,
+            april =>
+            {
+                Assert.Equal(10m, april.PreviousValue);
+                Assert.Equal(5m, april.Consumption);
+            },
+            may =>
+            {
+                Assert.Equal(15m, may.PreviousValue);
+                Assert.Equal(5m, may.Consumption);
+            },
+            june =>
+            {
+                Assert.Equal(20m, june.PreviousValue);
+                Assert.Equal(10m, june.Consumption);
+            });
+    }
+
+    [PostgreSqlFact]
     public async Task MeterReading_RejectsSecondDatabaseUpdateLoadedFromSameVersion()
     {
         await using var database = await PostgreSqlTestDatabase.CreateAsync();

@@ -6360,9 +6360,10 @@ public sealed class FinanceServiceTests
             new CreateMeterReadingRequest(fixtures.Garage.Id, "water", new DateOnly(2026, 7, 1), new DateOnly(2026, 7, 18), 21m, null, current.Value.Version),
             null,
             CancellationToken.None);
+        var rebuiltFutureVersion = database.Context.MeterReadings.Single(item => item.Id == future.Value!.Id).Version;
         var futureUpdate = await service.UpdateMeterReadingAsync(
             future.Value!.Id,
-            new CreateMeterReadingRequest(fixtures.Garage.Id, "water", new DateOnly(2026, 8, 1), new DateOnly(2026, 8, 21), 26m, null, future.Value.Version),
+            new CreateMeterReadingRequest(fixtures.Garage.Id, "water", new DateOnly(2026, 8, 1), new DateOnly(2026, 8, 21), 26m, null, rebuiltFutureVersion),
             null,
             CancellationToken.None);
 
@@ -6690,6 +6691,137 @@ public sealed class FinanceServiceTests
         Assert.Equal(15m, (await database.Context.MeterReadings.SingleAsync()).CurrentValue);
         Assert.Equal(250m, (await database.Context.Accruals.SingleAsync()).Amount);
         Assert.DoesNotContain(database.Context.AuditEvents, item => item.Action == "finance.accrual_updated_from_meter_reading");
+    }
+
+    [Fact]
+    public async Task CreateMeterReadingAsync_InsertingHistoricalReadingRebuildsFollowingChain()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        var service = FinanceServiceTestFactory.Create(
+            database.Context,
+            new FixedTimeProvider(new DateTimeOffset(2026, 7, 20, 12, 0, 0, TimeSpan.Zero)));
+        await service.CreateMeterReadingAsync(
+            new CreateMeterReadingRequest(fixtures.Garage.Id, MeterKinds.Water, new DateOnly(2026, 4, 1), new DateOnly(2026, 4, 20), 15m, null),
+            null,
+            CancellationToken.None);
+        var june = await service.CreateMeterReadingAsync(
+            new CreateMeterReadingRequest(fixtures.Garage.Id, MeterKinds.Water, new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 20), 30m, null),
+            null,
+            CancellationToken.None);
+
+        var may = await service.CreateMeterReadingAsync(
+            new CreateMeterReadingRequest(fixtures.Garage.Id, MeterKinds.Water, new DateOnly(2026, 5, 1), new DateOnly(2026, 5, 20), 20m, null),
+            Guid.NewGuid(),
+            CancellationToken.None);
+
+        Assert.True(may.Succeeded, may.ErrorMessage);
+        var rebuiltJune = database.Context.MeterReadings.Single(item => item.Id == june.Value!.Id);
+        Assert.Equal(20m, rebuiltJune.PreviousValue);
+        Assert.Equal(10m, rebuiltJune.Consumption);
+        Assert.Contains(database.Context.AuditEvents, item => item.Action == "finance.meter_reading_chain_rebuilt" && item.EntityId == rebuiltJune.Id.ToString());
+    }
+
+    [Fact]
+    public async Task CorrectCancelAndRestoreHistoricalMeterReading_RebuildFollowingChain()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        var service = FinanceServiceTestFactory.Create(
+            database.Context,
+            new FixedTimeProvider(new DateTimeOffset(2026, 7, 20, 12, 0, 0, TimeSpan.Zero)));
+        await service.CreateMeterReadingAsync(
+            new CreateMeterReadingRequest(fixtures.Garage.Id, MeterKinds.Water, new DateOnly(2026, 4, 1), new DateOnly(2026, 4, 20), 15m, null),
+            null,
+            CancellationToken.None);
+        var may = await service.CreateMeterReadingAsync(
+            new CreateMeterReadingRequest(fixtures.Garage.Id, MeterKinds.Water, new DateOnly(2026, 5, 1), new DateOnly(2026, 5, 20), 20m, null),
+            null,
+            CancellationToken.None);
+        var june = await service.CreateMeterReadingAsync(
+            new CreateMeterReadingRequest(fixtures.Garage.Id, MeterKinds.Water, new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 20), 30m, null),
+            null,
+            CancellationToken.None);
+
+        var corrected = await service.CorrectHistoricalMeterReadingAsync(
+            may.Value!.Id,
+            new CorrectHistoricalMeterReadingRequest(new DateOnly(2026, 5, 21), 22m, null, "Сверка", may.Value.Version),
+            null,
+            CancellationToken.None);
+        Assert.True(corrected.Succeeded, corrected.ErrorMessage);
+        var juneId = june.Value!.Id;
+        Assert.Equal(8m, database.Context.MeterReadings.Single(item => item.Id == juneId).Consumption);
+
+        var canceled = await service.CancelMeterReadingAsync(
+            may.Value.Id,
+            new CancelFinanceEntryRequest("Ошибочная запись"),
+            null,
+            CancellationToken.None);
+        Assert.True(canceled.Succeeded, canceled.ErrorMessage);
+        var afterCancel = database.Context.MeterReadings.Single(item => item.Id == juneId);
+        Assert.Equal(15m, afterCancel.PreviousValue);
+        Assert.Equal(15m, afterCancel.Consumption);
+
+        var restored = await service.RestoreMeterReadingAsync(may.Value.Id, null, CancellationToken.None);
+        Assert.True(restored.Succeeded, restored.ErrorMessage);
+        var afterRestore = database.Context.MeterReadings.Single(item => item.Id == juneId);
+        Assert.Equal(22m, afterRestore.PreviousValue);
+        Assert.Equal(8m, afterRestore.Consumption);
+    }
+
+    [Fact]
+    public async Task InsertHistoricalMeterReading_RecalculatesFollowingUnpaidAccrualAndRejectsPaidAccrual()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        fixtures.IncomeType.Code = "water";
+        var tariff = new Tariff
+        {
+            Name = "Вода по счетчику",
+            CalculationBase = TariffCalculationBases.MeterWater,
+            Rate = 50m,
+            EffectiveFrom = new DateOnly(2026, 1, 1)
+        };
+        database.Context.Tariffs.Add(tariff);
+        await database.Context.SaveChangesAsync();
+        var service = FinanceServiceTestFactory.Create(
+            database.Context,
+            new FixedTimeProvider(new DateTimeOffset(2026, 7, 20, 12, 0, 0, TimeSpan.Zero)));
+        await service.CreateMeterReadingAsync(
+            new CreateMeterReadingRequest(fixtures.Garage.Id, MeterKinds.Water, new DateOnly(2026, 4, 1), new DateOnly(2026, 4, 20), 15m, null),
+            null,
+            CancellationToken.None);
+        await service.CreateMeterReadingAsync(
+            new CreateMeterReadingRequest(fixtures.Garage.Id, MeterKinds.Water, new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 20), 30m, null),
+            null,
+            CancellationToken.None);
+        Assert.True((await service.GenerateRegularAccrualsAsync(
+            new GenerateRegularAccrualsRequest(fixtures.IncomeType.Id, tariff.Id, new DateOnly(2026, 6, 1), null),
+            null,
+            CancellationToken.None)).Succeeded);
+
+        var inserted = await service.CreateMeterReadingAsync(
+            new CreateMeterReadingRequest(fixtures.Garage.Id, MeterKinds.Water, new DateOnly(2026, 5, 1), new DateOnly(2026, 5, 20), 20m, null),
+            null,
+            CancellationToken.None);
+        Assert.True(inserted.Succeeded, inserted.ErrorMessage);
+        Assert.Equal(500m, Assert.Single(database.Context.Accruals).Amount);
+
+        var payment = await service.CreateIncomeAsync(
+            new CreateIncomeOperationRequest(fixtures.Garage.Id, fixtures.IncomeType.Id, new DateOnly(2026, 6, 25), new DateOnly(2026, 6, 1), 100m, "PKO-chain", null),
+            null,
+            CancellationToken.None);
+        Assert.True(payment.Succeeded, payment.ErrorMessage);
+        var rejected = await service.CancelMeterReadingAsync(
+            inserted.Value!.Id,
+            new CancelFinanceEntryRequest("Проверка оплаченного периода"),
+            null,
+            CancellationToken.None);
+
+        Assert.False(rejected.Succeeded);
+        Assert.Equal("meter_reading_accrual_paid", rejected.ErrorCode);
+        Assert.False(database.Context.MeterReadings.Single(item => item.Id == inserted.Value.Id).IsCanceled);
+        Assert.Equal(500m, Assert.Single(database.Context.Accruals).Amount);
     }
 
     [Fact]

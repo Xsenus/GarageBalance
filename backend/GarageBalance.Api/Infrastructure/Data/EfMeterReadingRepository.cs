@@ -387,11 +387,38 @@ public sealed class EfMeterReadingRepository(GarageBalanceDbContext dbContext) :
             .OrderBy(reading => reading.AccountingMonth)
             .FirstOrDefaultAsync(cancellationToken);
 
+    public async Task<IReadOnlyList<MeterReading>> GetActiveFromForUpdateAsync(
+        Guid? ignoredId,
+        Guid garageId,
+        string meterKind,
+        DateOnly accountingMonth,
+        CancellationToken cancellationToken) =>
+        await dbContext.MeterReadings
+            .Where(reading =>
+                !reading.IsCanceled &&
+                (!ignoredId.HasValue || reading.Id != ignoredId.Value) &&
+                reading.GarageId == garageId &&
+                reading.MeterKind == meterKind &&
+                reading.AccountingMonth >= accountingMonth)
+            .OrderBy(reading => reading.AccountingMonth)
+            .ThenBy(reading => reading.Id)
+            .ToListAsync(cancellationToken);
+
     public Task<MeterReading?> FindForUpdateAsync(Guid id, CancellationToken cancellationToken) =>
         dbContext.MeterReadings
             .Include(reading => reading.Garage)
             .ThenInclude(garage => garage.Owner)
             .SingleOrDefaultAsync(reading => reading.Id == id, cancellationToken);
+
+    public async Task ReloadForUpdateAsync(MeterReading reading, CancellationToken cancellationToken)
+    {
+        await dbContext.Entry(reading).ReloadAsync(cancellationToken);
+        await dbContext.Entry(reading).Reference(item => item.Garage).LoadAsync(cancellationToken);
+        if (reading.Garage.OwnerId.HasValue)
+        {
+            await dbContext.Entry(reading.Garage).Reference(garage => garage.Owner).LoadAsync(cancellationToken);
+        }
+    }
 
     public Task<MeterReading?> GetActiveAsync(
         Guid garageId,

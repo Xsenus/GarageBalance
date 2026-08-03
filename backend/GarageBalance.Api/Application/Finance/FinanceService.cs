@@ -56,6 +56,8 @@ public sealed class FinanceService(
     private static readonly CultureInfo RussianCulture = CultureInfo.GetCultureInfo("ru-RU");
     private static readonly string[] CashExpenseTypeCodes = CashExpenseClassification.TypeCodes;
     private static readonly string[] CashExpenseTypeNames = CashExpenseClassification.TypeNames;
+    private static readonly Guid WaterMeterChainLockId = new("c51ef8f1-f56d-4f41-950c-613c43a03ea1");
+    private static readonly Guid ElectricityMeterChainLockId = new("a4427fef-41cb-4e85-bf59-cbd6d9337cf0");
 
     private static readonly HashSet<string> CashExpenseTypeKeys = CashExpenseTypeCodes
         .Select(NormalizeFinanceLookupKey)
@@ -3393,6 +3395,10 @@ public sealed class FinanceService(
             return FinanceResult<MeterReadingDto>.Failure("garage_not_found", "Гараж для показания счетчика не найден.");
         }
 
+        await using var meterChainLock = await accrualPaymentAllocationRepository.AcquireRebuildLockAsync(
+            [GetMeterChainLockKey(garage.Id, meterKind)],
+            cancellationToken);
+
         if (await meterReadingRepository.ActiveDuplicateExistsAsync(null, garage.Id, meterKind, month, cancellationToken))
         {
             return FinanceResult<MeterReadingDto>.Failure("meter_reading_duplicate", "Показание этого счетчика за месяц уже внесено.");
@@ -3428,15 +3434,50 @@ public sealed class FinanceService(
             Comment = NormalizeOptional(request.Comment)
         };
 
+        var subsequentReadings = await meterReadingRepository.GetActiveFromForUpdateAsync(
+            ignoredId: null,
+            garage.Id,
+            meterKind,
+            month.AddMonths(1),
+            cancellationToken);
+        var chainPlan = PlanMeterReadingChain(
+            garage,
+            meterKind,
+            previousReading,
+            new[] { reading }.Concat(subsequentReadings).ToArray());
+        if (!chainPlan.Succeeded)
+        {
+            return FinanceResult<MeterReadingDto>.Failure(chainPlan.ErrorCode!, chainPlan.ErrorMessage!);
+        }
+
+        var accrualRecalculations = await PlanMeteredAccrualRecalculationsAsync(
+            garage.Id,
+            meterKind,
+            month,
+            chainPlan.Value!,
+            missingReadingMonth: null,
+            cancellationToken);
+
         var meteredSettings = await GetApplicableMeteredSettingsAsync(reading, cancellationToken);
         var allocationKeys = meteredSettings
             .Select(setting => new AccrualPaymentAllocationKey(garage.Id, setting.IncomeTypeId!.Value))
+            .Concat(accrualRecalculations.Select(item => new AccrualPaymentAllocationKey(item.Accrual.GarageId, item.Accrual.IncomeTypeId)))
             .Distinct()
             .ToArray();
         await using var allocationLock = await accrualPaymentAllocationRepository.AcquireRebuildLockAsync(
             allocationKeys,
             cancellationToken);
+        if (await accrualPaymentAllocationRepository.HasActiveAllocationAsync(
+            accrualRecalculations.Select(item => item.Accrual.Id).ToArray(),
+            cancellationToken))
+        {
+            return FinanceResult<MeterReadingDto>.Failure(
+                "meter_reading_accrual_paid",
+                "Вставка показания изменяет уже оплаченное начисление последующего периода. Сначала исправьте оплату или оформите отдельную корректировку начисления.");
+        }
 
+        ApplyMeterReadingChainChanges(chainPlan.Value!, actorUserId, reading.Id);
+        ApplyMeteredAccrualRecalculations(accrualRecalculations, actorUserId, "Пересчет после вставки показания");
         meterReadingRepository.Add(reading);
         AddAudit(actorUserId, "finance.meter_reading_created", reading, FormatMeterReadingCreatedAuditSummary(reading));
         var createdAccrualKeys = await CreateMissingMeteredAccrualsAsync(
@@ -3590,6 +3631,16 @@ public sealed class FinanceService(
             return FinanceResult<MeterReadingDto>.Failure("meter_reading_already_canceled", "Отмененное показание нельзя изменить.");
         }
 
+        await using var meterChainLock = await accrualPaymentAllocationRepository.AcquireRebuildLockAsync(
+            [GetMeterChainLockKey(reading.GarageId, reading.MeterKind)],
+            cancellationToken);
+        await meterReadingRepository.ReloadForUpdateAsync(reading, cancellationToken);
+
+        if (reading.IsCanceled)
+        {
+            return FinanceResult<MeterReadingDto>.Failure("meter_reading_already_canceled", "Отмененное показание нельзя изменить.");
+        }
+
         if (request.ExpectedVersion.HasValue && reading.Version != request.ExpectedVersion.Value)
         {
             return MeterReadingConflict();
@@ -3615,6 +3666,13 @@ public sealed class FinanceService(
         if (garage is null)
         {
             return FinanceResult<MeterReadingDto>.Failure("garage_not_found", "Гараж для показания счетчика не найден.");
+        }
+
+        if (garage.Id != reading.GarageId || !string.Equals(meterKind, reading.MeterKind, StringComparison.Ordinal))
+        {
+            return FinanceResult<MeterReadingDto>.Failure(
+                "meter_reading_identity_immutable",
+                "Гараж и тип счетчика существующего показания менять нельзя. Отмените ошибочную запись и создайте новую.");
         }
 
         if (await meterReadingRepository.ActiveDuplicateExistsAsync(reading.Id, garage.Id, meterKind, month, cancellationToken))
@@ -3649,18 +3707,11 @@ public sealed class FinanceService(
 
         var hasGapWarning = HasGapWarning(meterKind, month, previousReading);
         var comment = NormalizeOptional(request.Comment);
-        if (MeterReadingMatches(reading, garage.Id, meterKind, month, request.ReadingDate, currentValue, previousValue, consumption, hasGapWarning, comment))
-        {
-            return FinanceResult<MeterReadingDto>.Success(ToDto(reading));
-        }
+        var primaryMatches = MeterReadingMatches(reading, garage.Id, meterKind, month, request.ReadingDate, currentValue, previousValue, consumption, hasGapWarning, comment);
 
-        var linkedAccruals = await accrualRepository.GetActiveMeteredForUpdateAsync(
-            garage.Id,
-            month,
-            meterKind,
-            cancellationToken);
         var prospectiveReading = new MeterReading
         {
+            Id = reading.Id,
             GarageId = garage.Id,
             Garage = garage,
             MeterKind = meterKind,
@@ -3668,21 +3719,36 @@ public sealed class FinanceService(
             ReadingDate = request.ReadingDate,
             CurrentValue = currentValue,
             PreviousValue = previousValue,
-            Consumption = consumption
+            Consumption = consumption,
+            HasGapWarning = hasGapWarning
         };
-        var accrualRecalculations = linkedAccruals
-            .Select(accrual => new
-            {
-                Accrual = accrual,
-                Calculation = CalculateRegularAccrualAmount(
-                    garage,
-                    accrual.Tariff!,
-                    prospectiveReading,
-                    UsesTieredElectricitySnapshot(accrual))
-            })
-            .Where(item => item.Calculation.Succeeded && item.Calculation.Value != item.Accrual.Amount)
-            .Select(item => (item.Accrual, NewAmount: item.Calculation.Value))
-            .ToArray();
+        var subsequentReadings = await meterReadingRepository.GetActiveFromForUpdateAsync(
+            reading.Id,
+            garage.Id,
+            meterKind,
+            month.AddMonths(1),
+            cancellationToken);
+        var chainPlan = PlanMeterReadingChain(
+            garage,
+            meterKind,
+            previousReading,
+            new[] { prospectiveReading }.Concat(subsequentReadings).ToArray());
+        if (!chainPlan.Succeeded)
+        {
+            return FinanceResult<MeterReadingDto>.Failure(chainPlan.ErrorCode!, chainPlan.ErrorMessage!);
+        }
+
+        var accrualRecalculations = await PlanMeteredAccrualRecalculationsAsync(
+            garage.Id,
+            meterKind,
+            month,
+            chainPlan.Value!,
+            missingReadingMonth: null,
+            cancellationToken);
+        if (primaryMatches && chainPlan.Value!.Skip(1).All(item => !item.Changed) && accrualRecalculations.Count == 0)
+        {
+            return FinanceResult<MeterReadingDto>.Success(ToDto(reading));
+        }
         var meteredSettings = await GetApplicableMeteredSettingsAsync(prospectiveReading, cancellationToken);
         var allocationKeys = accrualRecalculations
             .Select(item => new AccrualPaymentAllocationKey(item.Accrual.GarageId, item.Accrual.IncomeTypeId))
@@ -3732,27 +3798,15 @@ public sealed class FinanceService(
         reading.AccountingMonth = month;
         reading.ReadingDate = request.ReadingDate;
         reading.CurrentValue = currentValue;
-        reading.PreviousValue = previousValue;
-        reading.Consumption = consumption;
-        reading.HasGapWarning = hasGapWarning;
+        var primaryChainChange = chainPlan.Value![0];
+        reading.PreviousValue = primaryChainChange.PreviousValue;
+        reading.Consumption = primaryChainChange.Consumption;
+        reading.HasGapWarning = primaryChainChange.HasGapWarning;
         reading.Comment = comment;
         reading.Version = Guid.NewGuid();
         reading.UpdatedAtUtc = timeProvider.GetUtcNow();
-        foreach (var (accrual, newAmount) in accrualRecalculations)
-        {
-            var before = AccrualAuditSnapshot.From(accrual);
-            var oldAccrualValues = new Dictionary<string, object?> { ["amount"] = accrual.Amount };
-            var newAccrualValues = new Dictionary<string, object?> { ["amount"] = newAmount };
-            accrual.Amount = newAmount;
-            accrual.UpdatedAtUtc = timeProvider.GetUtcNow();
-            AddAudit(
-                actorUserId,
-                "finance.accrual_updated_from_meter_reading",
-                accrual,
-                $"Начисление пересчитано после изменения показания: было {FormatAccrualSnapshot(before)}; стало {FormatAccrualSnapshot(AccrualAuditSnapshot.From(accrual))}.",
-                oldAccrualValues,
-                newAccrualValues);
-        }
+        ApplyMeterReadingChainChanges(chainPlan.Value.Skip(1).ToArray(), actorUserId, reading.Id);
+        ApplyMeteredAccrualRecalculations(accrualRecalculations, actorUserId, "Начисление пересчитано после изменения показания");
         var createdAccrualKeys = await CreateMissingMeteredAccrualsAsync(
             garage,
             reading,
@@ -3835,11 +3889,67 @@ public sealed class FinanceService(
             return FinanceResult<MeterReadingDto>.Failure("meter_reading_already_canceled", "Показание счетчика уже отменено.");
         }
 
+        await using var meterChainLock = await accrualPaymentAllocationRepository.AcquireRebuildLockAsync(
+            [GetMeterChainLockKey(reading.GarageId, reading.MeterKind)],
+            cancellationToken);
+        await meterReadingRepository.ReloadForUpdateAsync(reading, cancellationToken);
+        if (reading.IsCanceled)
+        {
+            return FinanceResult<MeterReadingDto>.Failure("meter_reading_already_canceled", "Показание счетчика уже отменено.");
+        }
+
+        var previousReading = await meterReadingRepository.GetPreviousActiveAsync(
+            reading.Id,
+            reading.GarageId,
+            reading.MeterKind,
+            reading.AccountingMonth,
+            cancellationToken);
+        var subsequentReadings = await meterReadingRepository.GetActiveFromForUpdateAsync(
+            reading.Id,
+            reading.GarageId,
+            reading.MeterKind,
+            reading.AccountingMonth.AddMonths(1),
+            cancellationToken);
+        var chainPlan = PlanMeterReadingChain(reading.Garage, reading.MeterKind, previousReading, subsequentReadings);
+        if (!chainPlan.Succeeded)
+        {
+            return FinanceResult<MeterReadingDto>.Failure(chainPlan.ErrorCode!, chainPlan.ErrorMessage!);
+        }
+
+        var accrualRecalculations = await PlanMeteredAccrualRecalculationsAsync(
+            reading.GarageId,
+            reading.MeterKind,
+            reading.AccountingMonth,
+            chainPlan.Value!,
+            reading.AccountingMonth,
+            cancellationToken);
+        var allocationKeys = accrualRecalculations
+            .Select(item => new AccrualPaymentAllocationKey(item.Accrual.GarageId, item.Accrual.IncomeTypeId))
+            .Distinct()
+            .ToArray();
+        await using var allocationLock = await accrualPaymentAllocationRepository.AcquireRebuildLockAsync(allocationKeys, cancellationToken);
+        if (await accrualPaymentAllocationRepository.HasActiveAllocationAsync(
+            accrualRecalculations.Select(item => item.Accrual.Id).ToArray(),
+            cancellationToken))
+        {
+            return FinanceResult<MeterReadingDto>.Failure(
+                "meter_reading_accrual_paid",
+                "Отмена показания изменяет полностью или частично оплаченное начисление. Сначала исправьте оплату или оформите отдельную корректировку начисления.");
+        }
+
+        ApplyMeterReadingChainChanges(chainPlan.Value!, actorUserId, reading.Id);
+        ApplyMeteredAccrualRecalculations(accrualRecalculations, actorUserId, "Пересчет после отмены показания");
         reading.IsCanceled = true;
         reading.Comment = AppendCancelReason(reading.Comment, reason);
         reading.Version = Guid.NewGuid();
         reading.UpdatedAtUtc = timeProvider.GetUtcNow();
         AddAudit(actorUserId, "finance.meter_reading_canceled", reading, FormatMeterReadingCanceledAuditSummary(reading, reason));
+        await RebuildPaymentAllocationsAsync(
+            allocationKeys,
+            actorUserId,
+            "Перераспределение после отмены показания",
+            reading.Id,
+            cancellationToken);
         try
         {
             await unitOfWork.SaveChangesAsync(cancellationToken);
@@ -3864,6 +3974,15 @@ public sealed class FinanceService(
             return FinanceResult<MeterReadingDto>.Failure("meter_reading_not_canceled", "Показание счетчика уже активно.");
         }
 
+        await using var meterChainLock = await accrualPaymentAllocationRepository.AcquireRebuildLockAsync(
+            [GetMeterChainLockKey(reading.GarageId, reading.MeterKind)],
+            cancellationToken);
+        await meterReadingRepository.ReloadForUpdateAsync(reading, cancellationToken);
+        if (!reading.IsCanceled)
+        {
+            return FinanceResult<MeterReadingDto>.Failure("meter_reading_not_canceled", "Показание счетчика уже активно.");
+        }
+
         if (await meterReadingRepository.ActiveDuplicateExistsAsync(
             reading.Id,
             reading.GarageId,
@@ -3874,10 +3993,69 @@ public sealed class FinanceService(
             return FinanceResult<MeterReadingDto>.Failure("meter_reading_duplicate", "За этот гараж, месяц и счетчик уже есть активное показание.");
         }
 
+        var previousReading = await meterReadingRepository.GetPreviousActiveAsync(
+            reading.Id,
+            reading.GarageId,
+            reading.MeterKind,
+            reading.AccountingMonth,
+            cancellationToken);
+        var subsequentReadings = await meterReadingRepository.GetActiveFromForUpdateAsync(
+            reading.Id,
+            reading.GarageId,
+            reading.MeterKind,
+            reading.AccountingMonth.AddMonths(1),
+            cancellationToken);
+        var chainPlan = PlanMeterReadingChain(
+            reading.Garage,
+            reading.MeterKind,
+            previousReading,
+            new[] { reading }.Concat(subsequentReadings).ToArray());
+        if (!chainPlan.Succeeded)
+        {
+            return FinanceResult<MeterReadingDto>.Failure(chainPlan.ErrorCode!, chainPlan.ErrorMessage!);
+        }
+
+        var accrualRecalculations = await PlanMeteredAccrualRecalculationsAsync(
+            reading.GarageId,
+            reading.MeterKind,
+            reading.AccountingMonth,
+            chainPlan.Value!,
+            missingReadingMonth: null,
+            cancellationToken);
+        var meteredSettings = await GetApplicableMeteredSettingsAsync(reading, cancellationToken);
+        var allocationKeys = accrualRecalculations
+            .Select(item => new AccrualPaymentAllocationKey(item.Accrual.GarageId, item.Accrual.IncomeTypeId))
+            .Concat(meteredSettings.Select(setting => new AccrualPaymentAllocationKey(reading.GarageId, setting.IncomeTypeId!.Value)))
+            .Distinct()
+            .ToArray();
+        await using var allocationLock = await accrualPaymentAllocationRepository.AcquireRebuildLockAsync(allocationKeys, cancellationToken);
+        if (await accrualPaymentAllocationRepository.HasActiveAllocationAsync(
+            accrualRecalculations.Select(item => item.Accrual.Id).ToArray(),
+            cancellationToken))
+        {
+            return FinanceResult<MeterReadingDto>.Failure(
+                "meter_reading_accrual_paid",
+                "Восстановление показания изменяет полностью или частично оплаченное начисление. Сначала исправьте оплату или оформите отдельную корректировку начисления.");
+        }
+
         reading.IsCanceled = false;
+        ApplyMeterReadingChainChanges(chainPlan.Value!, actorUserId, reading.Id);
+        ApplyMeteredAccrualRecalculations(accrualRecalculations, actorUserId, "Пересчет после восстановления показания");
         reading.Version = Guid.NewGuid();
         reading.UpdatedAtUtc = timeProvider.GetUtcNow();
+        var createdAccrualKeys = await CreateMissingMeteredAccrualsAsync(
+            reading.Garage,
+            reading,
+            meteredSettings,
+            actorUserId,
+            cancellationToken);
         AddAudit(actorUserId, "finance.meter_reading_restored", reading, FormatMeterReadingRestoredAuditSummary(reading));
+        await RebuildPaymentAllocationsAsync(
+            allocationKeys.Concat(createdAccrualKeys).Distinct().ToArray(),
+            actorUserId,
+            "Перераспределение после восстановления показания",
+            reading.Id,
+            cancellationToken);
         try
         {
             await unitOfWork.SaveChangesAsync(cancellationToken);
@@ -3887,6 +4065,165 @@ public sealed class FinanceService(
             return MeterReadingConflict();
         }
         return FinanceResult<MeterReadingDto>.Success(ToDto(reading));
+    }
+
+    private static AccrualPaymentAllocationKey GetMeterChainLockKey(Guid garageId, string meterKind) =>
+        new(garageId, meterKind == MeterKinds.Water ? WaterMeterChainLockId : ElectricityMeterChainLockId);
+
+    private static FinanceResult<IReadOnlyList<MeterReadingChainChange>> PlanMeterReadingChain(
+        Garage garage,
+        string meterKind,
+        MeterReading? previousReading,
+        IReadOnlyList<MeterReading> readings)
+    {
+        var changes = new List<MeterReadingChainChange>(readings.Count);
+        var previousValue = previousReading?.CurrentValue ?? GetInitialMeterValue(garage, meterKind);
+        if (!previousValue.HasValue && meterKind == MeterKinds.Water)
+        {
+            return FinanceResult<IReadOnlyList<MeterReadingChainChange>>.Failure(
+                "water_meter_reading_baseline_required",
+                "Для первого показания воды укажите стартовое значение счетчика в карточке гаража.");
+        }
+
+        foreach (var reading in readings.OrderBy(item => item.AccountingMonth).ThenBy(item => item.Id))
+        {
+            var normalizedPreviousValue = MoneyMath.RoundMeterValue(previousValue ?? 0m);
+            var consumption = MoneyMath.RoundMeterValue(reading.CurrentValue - normalizedPreviousValue);
+            if (consumption < 0)
+            {
+                return FinanceResult<IReadOnlyList<MeterReadingChainChange>>.Failure(
+                    "meter_reading_sequence_invalid",
+                    $"Показание за {reading.AccountingMonth:MM.yyyy} меньше предыдущего активного показания. Проверьте последовательность или оформите замену счетчика.");
+            }
+
+            var hasGapWarning = HasGapWarning(meterKind, reading.AccountingMonth, previousReading);
+            changes.Add(new MeterReadingChainChange(
+                reading,
+                normalizedPreviousValue,
+                consumption,
+                hasGapWarning,
+                reading.PreviousValue != normalizedPreviousValue ||
+                reading.Consumption != consumption ||
+                reading.HasGapWarning != hasGapWarning));
+            previousValue = reading.CurrentValue;
+            previousReading = reading;
+        }
+
+        return FinanceResult<IReadOnlyList<MeterReadingChainChange>>.Success(changes);
+    }
+
+    private async Task<IReadOnlyList<MeteredAccrualRecalculation>> PlanMeteredAccrualRecalculationsAsync(
+        Guid garageId,
+        string meterKind,
+        DateOnly accountingMonth,
+        IReadOnlyList<MeterReadingChainChange> chainChanges,
+        DateOnly? missingReadingMonth,
+        CancellationToken cancellationToken)
+    {
+        var readingByMonth = chainChanges.ToDictionary(change => change.Reading.AccountingMonth);
+        var accruals = await accrualRepository.GetActiveMeteredFromForUpdateAsync(
+            garageId,
+            accountingMonth,
+            meterKind,
+            cancellationToken);
+        var recalculations = new List<MeteredAccrualRecalculation>();
+        foreach (var accrual in accruals)
+        {
+            decimal? newAmount = null;
+            if (missingReadingMonth.HasValue && accrual.AccountingMonth == missingReadingMonth.Value)
+            {
+                newAmount = 0m;
+            }
+            else if (readingByMonth.TryGetValue(accrual.AccountingMonth, out var change))
+            {
+                var prospectiveReading = new MeterReading
+                {
+                    GarageId = change.Reading.GarageId,
+                    Garage = change.Reading.Garage,
+                    MeterKind = change.Reading.MeterKind,
+                    AccountingMonth = change.Reading.AccountingMonth,
+                    ReadingDate = change.Reading.ReadingDate,
+                    CurrentValue = change.Reading.CurrentValue,
+                    PreviousValue = change.PreviousValue,
+                    Consumption = change.Consumption,
+                    HasGapWarning = change.HasGapWarning
+                };
+                var calculation = CalculateRegularAccrualAmount(
+                    change.Reading.Garage,
+                    accrual.Tariff!,
+                    prospectiveReading,
+                    UsesTieredElectricitySnapshot(accrual));
+                if (calculation.Succeeded)
+                {
+                    newAmount = calculation.Value;
+                }
+            }
+
+            if (newAmount.HasValue && accrual.Amount != newAmount.Value)
+            {
+                recalculations.Add(new MeteredAccrualRecalculation(accrual, newAmount.Value));
+            }
+        }
+
+        return recalculations;
+    }
+
+    private void ApplyMeterReadingChainChanges(
+        IReadOnlyList<MeterReadingChainChange> changes,
+        Guid? actorUserId,
+        Guid primaryReadingId)
+    {
+        foreach (var change in changes.Where(item => item.Changed))
+        {
+            var oldValues = new Dictionary<string, object?>
+            {
+                ["previousValue"] = change.Reading.PreviousValue,
+                ["consumption"] = change.Reading.Consumption,
+                ["hasGapWarning"] = change.Reading.HasGapWarning
+            };
+            change.Reading.PreviousValue = change.PreviousValue;
+            change.Reading.Consumption = change.Consumption;
+            change.Reading.HasGapWarning = change.HasGapWarning;
+            change.Reading.Version = Guid.NewGuid();
+            change.Reading.UpdatedAtUtc = timeProvider.GetUtcNow();
+            if (change.Reading.Id != primaryReadingId)
+            {
+                AddAudit(
+                    actorUserId,
+                    "finance.meter_reading_chain_rebuilt",
+                    change.Reading,
+                    $"Цепочка показаний пересчитана за {change.Reading.AccountingMonth:MM.yyyy}: предыдущее значение {change.PreviousValue:0.###}, расход {change.Consumption:0.###}.",
+                    oldValues,
+                    new Dictionary<string, object?>
+                    {
+                        ["previousValue"] = change.PreviousValue,
+                        ["consumption"] = change.Consumption,
+                        ["hasGapWarning"] = change.HasGapWarning
+                    });
+            }
+        }
+    }
+
+    private void ApplyMeteredAccrualRecalculations(
+        IReadOnlyList<MeteredAccrualRecalculation> recalculations,
+        Guid? actorUserId,
+        string reason)
+    {
+        foreach (var recalculation in recalculations)
+        {
+            var accrual = recalculation.Accrual;
+            var before = AccrualAuditSnapshot.From(accrual);
+            var oldAmount = accrual.Amount;
+            accrual.Amount = recalculation.NewAmount;
+            accrual.UpdatedAtUtc = timeProvider.GetUtcNow();
+            AddAudit(
+                actorUserId,
+                "finance.accrual_updated_from_meter_reading",
+                accrual,
+                $"{reason}: было {FormatAccrualSnapshot(before)}; стало {FormatAccrualSnapshot(AccrualAuditSnapshot.From(accrual))}.",
+                new Dictionary<string, object?> { ["amount"] = oldAmount },
+                new Dictionary<string, object?> { ["amount"] = recalculation.NewAmount });
+        }
     }
 
     private static AmountCalculationResult CalculateRegularAccrualAmount(
@@ -5179,6 +5516,15 @@ public sealed class FinanceService(
     private sealed record AllocationDebtBucket(string Kind, DateOnly? AccountingMonth, string Label, decimal Amount);
 
     private sealed record AvailableAmounts(decimal BankAmount, decimal CashAmount);
+
+    private sealed record MeterReadingChainChange(
+        MeterReading Reading,
+        decimal PreviousValue,
+        decimal Consumption,
+        bool HasGapWarning,
+        bool Changed);
+
+    private sealed record MeteredAccrualRecalculation(Accrual Accrual, decimal NewAmount);
 
     private sealed record AccrualAuditSnapshot(
         string GarageNumber,

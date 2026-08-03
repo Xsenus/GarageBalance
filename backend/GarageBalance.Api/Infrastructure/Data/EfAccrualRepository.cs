@@ -333,6 +333,38 @@ public sealed class EfAccrualRepository(GarageBalanceDbContext dbContext) : IAcc
             .ToListAsync(cancellationToken);
     }
 
+    public async Task<IReadOnlyList<Accrual>> GetActiveMeteredFromForUpdateAsync(
+        Guid garageId,
+        DateOnly accountingMonth,
+        string meterKind,
+        CancellationToken cancellationToken)
+    {
+        var calculationBase = meterKind switch
+        {
+            MeterKinds.Water => TariffCalculationBases.MeterWater,
+            MeterKinds.Electricity => TariffCalculationBases.MeterElectricity,
+            _ => null
+        };
+        if (calculationBase is null)
+        {
+            return [];
+        }
+
+        return await TrackedAggregate()
+            .Include(accrual => accrual.Tariff)
+            .Where(accrual =>
+                !accrual.IsCanceled &&
+                accrual.GarageId == garageId &&
+                accrual.AccountingMonth >= accountingMonth &&
+                accrual.Source == AccrualSources.Regular &&
+                accrual.Tariff != null &&
+                accrual.Tariff.CalculationBase == calculationBase)
+            .OrderBy(accrual => accrual.AccountingMonth)
+            .ThenBy(accrual => accrual.IncomeTypeId)
+            .ThenBy(accrual => accrual.Id)
+            .ToListAsync(cancellationToken);
+    }
+
     public async Task<IReadOnlySet<Guid>> GetActiveGarageIdsAsync(
         Guid incomeTypeId,
         DateOnly accountingMonth,
