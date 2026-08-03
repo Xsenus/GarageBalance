@@ -7176,6 +7176,16 @@ button.operation-row:focus-visible {
   margin-top: 2px;
 }
 
+.report-filter-search-status,
+.report-filter-search-error {
+  color: #667085;
+  font-size: 12px;
+}
+
+.report-filter-search-error {
+  color: #b42318;
+}
+
 .report-checkbox-picker-selected-item {
   display: grid;
   min-width: 210px;
@@ -7405,6 +7415,16 @@ button.operation-row:focus-visible {
 .report-sort-status .link-button {
   min-height: 26px;
   padding: 2px 4px;
+  font-size: 12px;
+}
+
+.report-workbook-limit-notice {
+  margin: 0 16px 8px;
+  border: 1px solid #fedf89;
+  border-radius: 8px;
+  background: #fffaeb;
+  color: #7a2e0e;
+  padding: 8px 10px;
   font-size: 12px;
 }
 

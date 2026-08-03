@@ -16909,7 +16909,7 @@ describe('App', () => {
     expect(garageFilter).toHaveAttribute('aria-expanded', 'false')
     await user.type(garageFilter, '12')
     const garageSearchResults = within(reportsPanel).getByRole('listbox', { name: 'Найденные гаражи отчёта' })
-    const garageCheckbox = within(garageSearchResults).getByRole('checkbox', { name: /Выбрать гараж 12,/ })
+    const garageCheckbox = await within(garageSearchResults).findByRole('checkbox', { name: /Выбрать гараж 12,/ })
     expect(garageCheckbox).not.toBeChecked()
     await user.click(garageCheckbox)
     expect(garageCheckbox).toBeChecked()
@@ -16988,7 +16988,7 @@ describe('App', () => {
     expect(counterpartyFilter).toHaveAttribute('placeholder', 'Введите поставщика или сотрудника')
     await user.type(counterpartyFilter, 'вод')
     const counterpartyResults = await within(reportsPanel).findByRole('listbox', { name: 'Найденные поставщики и сотрудники отчёта' })
-    const supplierCheckbox = within(counterpartyResults).getByRole('checkbox', { name: 'Выбрать водоканал, поставщик' })
+    const supplierCheckbox = await within(counterpartyResults).findByRole('checkbox', { name: 'Выбрать водоканал, поставщик' })
     expect(supplierCheckbox).not.toBeChecked()
     await user.click(supplierCheckbox)
     expect(supplierCheckbox).toBeChecked()
@@ -17026,8 +17026,9 @@ describe('App', () => {
     const garageFilter = within(garageFiltersRegion).getByLabelText('Гаражи')
     await user.click(garageFilter)
     const garageOptions = await within(reportsPanel).findByRole('listbox', { name: 'Найденные гаражи отчёта' })
-    expect(within(garageOptions).getByRole('checkbox', { name: /Выбрать гараж 12,/ })).toBeInTheDocument()
-    await user.click(within(garageOptions).getByRole('checkbox', { name: /Выбрать гараж 12,/ }))
+    const quickListGarage = await within(garageOptions).findByRole('checkbox', { name: /Выбрать гараж 12,/ })
+    expect(quickListGarage).toBeInTheDocument()
+    await user.click(quickListGarage)
 
     await user.click(within(garageFiltersRegion).getByRole('button', { name: 'Создать список' }))
     const createDialog = await screen.findByRole('dialog', { name: 'Создать быстрый список' })
@@ -17130,7 +17131,7 @@ describe('App', () => {
     expect(within(reportsPanel).getByRole('button', { name: 'Все' })).toHaveAttribute('aria-pressed', 'true')
   })
 
-  it('loads report filter dictionaries only for the opened tab and keeps the consolidated report to one request', async () => {
+  it('searches report dictionaries on demand and keeps the consolidated report to one request', async () => {
     const user = userEvent.setup()
     const baseDictionaryClient = createDictionaryClient()
     const getGarages = vi.fn(baseDictionaryClient.getGarages)
@@ -17138,7 +17139,7 @@ describe('App', () => {
     const getStaffMembers = vi.fn(baseDictionaryClient.getStaffMembers)
     const getIncomeTypes = vi.fn(baseDictionaryClient.getIncomeTypes)
     const getExpenseTypes = vi.fn(baseDictionaryClient.getExpenseTypes)
-    const dictionaryClient = createDictionaryClient({ getGarages, getSuppliers, getStaffMembers, getIncomeTypes, getExpenseTypes })
+    const dictionaryClient = createDictionaryClient({ getGaragesPage: undefined, getSuppliersPage: undefined, getStaffMembersPage: undefined, getGarages, getSuppliers, getStaffMembers, getIncomeTypes, getExpenseTypes })
     const baseReportClient = createReportClient()
     const getConsolidatedReport = vi.fn(baseReportClient.getConsolidatedReport)
     const getIncomeReport = vi.fn(baseReportClient.getIncomeReport)
@@ -17163,6 +17164,9 @@ describe('App', () => {
     expect(getExpenseTypes).not.toHaveBeenCalled()
 
     await openReportTab(user, reportsPanel, 'По гаражам')
+    expect(getGarages).not.toHaveBeenCalled()
+    await user.click(within(reportsPanel).getByRole('button', { name: /Гаражи и личные фильтры/ }))
+    await user.click(within(reportsPanel).getByRole('combobox', { name: 'Гаражи' }))
     await waitFor(() => expect(getGarages).toHaveBeenCalledTimes(1))
     expect(getSuppliers).not.toHaveBeenCalled()
     expect(getStaffMembers).not.toHaveBeenCalled()
@@ -17170,27 +17174,29 @@ describe('App', () => {
     expect(getExpenseTypes).not.toHaveBeenCalled()
 
     await openReportTab(user, reportsPanel, 'По выплатам')
+    expect(getSuppliers).not.toHaveBeenCalled()
+    await user.type(within(reportsPanel).getByRole('combobox', { name: 'Поставщики или сотрудники' }), 'вод')
     await waitFor(() => expect(getSuppliers).toHaveBeenCalledTimes(1))
     expect(getStaffMembers).toHaveBeenCalledTimes(1)
     expect(getExpenseTypes).not.toHaveBeenCalled()
     expect(getIncomeTypes).not.toHaveBeenCalled()
 
     await openReportTab(user, reportsPanel, 'Сборы')
-    await waitFor(() => expect(getIncomeTypes).toHaveBeenCalledTimes(1))
+    expect(getIncomeTypes).not.toHaveBeenCalled()
 
     await openReportTab(user, reportsPanel, 'Поступления')
     await waitFor(() => expect(getIncomeReport).toHaveBeenCalledTimes(1))
     expect(getGarages).toHaveBeenCalledTimes(1)
   })
 
-  it('starts report filter dictionaries only after the visible report finishes loading', async () => {
+  it('allows server-side report filter search while the visible report is loading', async () => {
     const user = userEvent.setup()
     let resolveGarageReport!: (report: GarageDetailReportDto) => void
     const garageReportPromise = new Promise<GarageDetailReportDto>((resolve) => { resolveGarageReport = resolve })
     const getGarageReport = vi.fn(() => garageReportPromise)
     const getGarages = vi.fn(async () => [createGarage()])
 
-    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient({ getGarages })} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient({ getGarageReport })} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient({ getGaragesPage: undefined, getGarages })} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient({ getGarageReport })} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
 
     await user.type(screen.getByLabelText('\u041f\u0430\u0440\u043e\u043b\u044c'), 'StrongPass123')
     await user.click(screen.getByRole('button', { name: '\u0412\u043e\u0439\u0442\u0438' }))
@@ -17199,15 +17205,16 @@ describe('App', () => {
 
     await openReportTab(user, reportsPanel, '\u041f\u043e \u0433\u0430\u0440\u0430\u0436\u0430\u043c')
     await waitFor(() => expect(getGarageReport).toHaveBeenCalledTimes(1))
-    expect(getGarages).not.toHaveBeenCalled()
+    await user.click(within(reportsPanel).getByRole('button', { name: /Гаражи и личные фильтры/ }))
+    await user.click(within(reportsPanel).getByRole('combobox', { name: 'Гаражи' }))
+    await waitFor(() => expect(getGarages).toHaveBeenCalledTimes(1))
 
     await act(async () => resolveGarageReport(createGarageDetailReport()))
 
-    await waitFor(() => expect(getGarages).toHaveBeenCalledTimes(1))
     expect(within(reportsPanel).getByRole('heading', { name: '\u041e\u0442\u0447\u0451\u0442 \u043f\u043e \u0433\u0430\u0440\u0430\u0436\u0430\u043c' })).toBeInTheDocument()
   })
 
-  it('shows a lazy report-filter error and retries the failed reference request when the tab is reopened', async () => {
+  it('shows a server-search error and retries after the filter changes', async () => {
     const user = userEvent.setup()
     let attempt = 0
     const getGarages = vi.fn(async () => {
@@ -17218,7 +17225,7 @@ describe('App', () => {
 
       return [createGarage()]
     })
-    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient({ getGarages })} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient({ getGaragesPage: undefined, getGarages })} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
     await user.click(screen.getByRole('button', { name: 'Войти' }))
@@ -17227,23 +17234,48 @@ describe('App', () => {
     expect(within(reportsPanel).queryByText('Справочник гаражей временно недоступен')).not.toBeInTheDocument()
 
     await openReportTab(user, reportsPanel, 'По гаражам')
+    await user.click(within(reportsPanel).getByRole('button', { name: /Гаражи и личные фильтры/ }))
+    const garageSearch = within(reportsPanel).getByRole('combobox', { name: 'Гаражи' })
+    await user.click(garageSearch)
     expect(await within(reportsPanel).findByText('Справочник гаражей временно недоступен')).toHaveAttribute('role', 'alert')
 
-    await openReportTab(user, reportsPanel, 'Консолидированный')
-    await openReportTab(user, reportsPanel, 'По гаражам')
+    await user.type(garageSearch, '12')
     await waitFor(() => expect(getGarages).toHaveBeenCalledTimes(2))
     await waitFor(() => expect(within(reportsPanel).queryByText('Справочник гаражей временно недоступен')).not.toBeInTheDocument())
   })
 
-  it('shows daily, fee and fund report filters with quick period buttons', async () => {
+  it('discards a stale report-filter response after the search changes', async () => {
     const user = userEvent.setup()
-    const baseReportClient = createReportClient()
-    const incomePageRequests: Array<{ offset?: number; limit?: number; groupPayments?: boolean }> = []
-    const getIncomeReport = vi.fn(async (token: string, params?: Parameters<ReportClient['getIncomeReport']>[1]) => {
-      if (params?.offset === undefined) {
-        return baseReportClient.getIncomeReport(token, params)
+    let resolveFirst!: (page: PagedResult<GarageDto>) => void
+    const firstRequest = new Promise<PagedResult<GarageDto>>((resolve) => { resolveFirst = resolve })
+    const getGaragesPage = vi.fn(async (_token: string, search?: string) => {
+      if (search === '1') {
+        return firstRequest
       }
 
+      return { items: [createGarage({ id: 'garage-12', number: '12' })], totalCount: 1, offset: 0, limit: 20 }
+    })
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient({ getGaragesPage })} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Отчеты')
+    const reportsPanel = await screen.findByRole('region', { name: 'Отчеты' })
+    await openReportTab(user, reportsPanel, 'Поступления')
+    const search = within(reportsPanel).getByRole('combobox', { name: 'Гаражи по поступлениям' })
+    await user.type(search, '1')
+    await waitFor(() => expect(getGaragesPage.mock.calls.some((call) => call[1] === '1')).toBe(true))
+    await user.type(search, '2')
+    expect(await within(reportsPanel).findByRole('checkbox', { name: /Выбрать гараж 12,/ })).toBeInTheDocument()
+
+    await act(async () => resolveFirst({ items: [createGarage({ id: 'garage-121', number: '121' })], totalCount: 1, offset: 0, limit: 20 }))
+    expect(within(reportsPanel).queryByRole('checkbox', { name: /Выбрать гараж 121,/ })).not.toBeInTheDocument()
+  })
+
+  it('shows daily, fee and fund report filters with quick period buttons', async () => {
+    const user = userEvent.setup()
+    const incomePageRequests: Array<{ offset?: number; limit?: number; groupPayments?: boolean }> = []
+    const getIncomeReport = vi.fn(async (_token: string, params?: Parameters<ReportClient['getIncomeReport']>[1]) => {
       incomePageRequests.push({ offset: params.offset, limit: params.limit, groupPayments: params.groupPayments })
       const offset = params.offset ?? 0
       const limit = params.limit ?? 25
@@ -17272,6 +17304,12 @@ describe('App', () => {
           ],
         })
       }
+      const secondPaymentRow = {
+        ...paymentRow,
+        date: '2026-06-26',
+        incomeAmount: 2600,
+        documentNumber: 'PKO-26',
+      }
       return createIncomeReport({
         rowCount: 2,
         offset,
@@ -17279,10 +17317,10 @@ describe('App', () => {
         incomeTotal: 45000,
         rows: [{
           ...paymentRow,
-          date: offset === 0 ? '2026-06-10' : '2026-06-26',
-          incomeAmount: offset === 0 ? 1500 : 2600,
-          documentNumber: offset === 0 ? 'PKO-1' : 'PKO-26',
-        }],
+          date: '2026-06-10',
+          incomeAmount: 1500,
+          documentNumber: 'PKO-1',
+        }, secondPaymentRow],
       })
     })
     const payoutPageRequests: Array<{ offset?: number; limit?: number }> = []
@@ -17304,12 +17342,12 @@ describe('App', () => {
         difference: 2000,
         rows: [{
           ...row,
-          supplierName: offset === 0 ? 'Водоканал' : 'Электрик',
-          expenseTypeName: offset === 0 ? 'Вода' : 'Зарплата',
-          expenseAmount: offset === 0 ? 400 : 2600,
-          difference: offset === 0 ? -400 : -2600,
-          documentNumber: offset === 0 ? 'RKO-1' : 'RKO-26',
-        }],
+          supplierName: 'Водоканал',
+          expenseTypeName: 'Вода',
+          expenseAmount: 400,
+          difference: -400,
+          documentNumber: 'RKO-1',
+        }, { ...row, supplierName: 'Электрик', expenseTypeName: 'Зарплата', expenseAmount: 2600, difference: -2600, documentNumber: 'RKO-26' }],
       })
     })
     const cashPaymentPageRequests: Array<{ offset?: number; limit?: number }> = []
@@ -17317,16 +17355,12 @@ describe('App', () => {
       cashPaymentPageRequests.push({ offset: params?.offset, limit: params?.limit })
       const offset = params?.offset ?? 0
       const limit = params?.limit ?? 25
-      if (offset === 0) {
-        return createCashPaymentReport({ rowCount: 2, offset, limit })
-      }
-
       const row = createCashPaymentReport().rows[0]
       return createCashPaymentReport({
         rowCount: 2,
         offset,
         limit,
-        rows: [{ ...row, operationId: 'cash-payment-26', purpose: 'Зарплата: Электрик', comment: 'Вторая страница' }],
+        rows: [row, { ...row, operationId: 'cash-payment-26', purpose: 'Зарплата: Электрик', comment: 'Вторая операция' }],
       })
     })
     const bankDepositPageRequests: Array<{ offset?: number; limit?: number }> = []
@@ -17334,16 +17368,12 @@ describe('App', () => {
       bankDepositPageRequests.push({ offset: params?.offset, limit: params?.limit })
       const offset = params?.offset ?? 0
       const limit = params?.limit ?? 25
-      if (offset === 0) {
-        return createBankDepositReport({ rowCount: 2, offset, limit })
-      }
-
       const row = createBankDepositReport().rows[0]
       return createBankDepositReport({
         rowCount: 2,
         offset,
         limit,
-        rows: [{ ...row, operationId: 'bank-deposit-26', amount: 5000, comment: 'Вторая сдача в банк' }],
+        rows: [row, { ...row, operationId: 'bank-deposit-26', amount: 5000, comment: 'Вторая сдача в банк' }],
       })
     })
     const fundChangePageRequests: Array<{ offset?: number; limit?: number }> = []
@@ -17351,16 +17381,12 @@ describe('App', () => {
       fundChangePageRequests.push({ offset: params?.offset, limit: params?.limit })
       const offset = params?.offset ?? 0
       const limit = params?.limit ?? 25
-      if (offset === 0) {
-        return createFundChangeReport({ rowCount: 3, offset, limit })
-      }
-
       const row = createFundChangeReport().rows[0]
       return createFundChangeReport({
         rowCount: 3,
         offset,
         limit,
-        rows: [{ ...row, operationId: 'fund-operation-26', fundName: 'Резервный фонд', reason: 'Вторая страница' }],
+        rows: [...createFundChangeReport().rows, { ...row, operationId: 'fund-operation-26', fundName: 'Резервный фонд', reason: 'Дополнительная операция' }],
       })
     })
     const exportCashPaymentReportXlsx = vi.fn(async () => new Blob(['cash xlsx'], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }))
@@ -17388,7 +17414,7 @@ describe('App', () => {
     await openReportTab(user, reportsPanel, 'По выплатам')
     const payoutReportTable = within(reportsPanel).getByRole('table', { name: 'Отчет по выплатам' })
     expect(await within(payoutReportTable).findByText('Водоканал')).toBeInTheDocument()
-    await waitFor(() => expect(payoutPageRequests).toContainEqual({ offset: 1, limit: 500 }))
+    await waitFor(() => expect(payoutPageRequests).toEqual([{ offset: 0, limit: 5000 }]))
     expect(await within(payoutReportTable).findByText('Электрик')).toBeInTheDocument()
     expect(payoutReportTable).toHaveTextContent('2 600.00')
     expect(within(reportsPanel).queryByRole('navigation', { name: 'Пагинация отчета по выплатам' })).not.toBeInTheDocument()
@@ -17417,11 +17443,11 @@ describe('App', () => {
     const incomeGroupingButton = within(reportsPanel).getByRole('button', { name: 'Показать отдельные платежи' })
     expect(incomeGroupingButton).toHaveAttribute('aria-pressed', 'true')
     expect(within(reportsPanel).getByRole('note')).toHaveTextContent('По умолчанию части одной квитанции или полной оплаты, в том числе сохранённой ранее, объединены')
-    await waitFor(() => expect(incomePageRequests).toContainEqual({ offset: 1, limit: 500, groupPayments: true }))
+    await waitFor(() => expect(incomePageRequests).toContainEqual({ offset: 0, limit: 5000, groupPayments: true }))
     expect(await within(incomeReportTable).findByText('2026-06-26')).toBeInTheDocument()
     expect(incomeReportTable).toHaveTextContent('2 600.00')
     await user.click(incomeGroupingButton)
-    await waitFor(() => expect(incomePageRequests).toContainEqual({ offset: 0, limit: 500, groupPayments: false }))
+    await waitFor(() => expect(incomePageRequests).toContainEqual({ offset: 0, limit: 5000, groupPayments: false }))
     expect(within(reportsPanel).getByRole('button', { name: 'Сгруппировать платежи' })).toHaveAttribute('aria-pressed', 'false')
     expect(await within(incomeReportTable).findAllByText('2026-06-10')).toHaveLength(2)
     expect(incomeReportTable).toHaveTextContent('1 000.00')
@@ -17436,7 +17462,7 @@ describe('App', () => {
     expect(cashPaymentsTable).toHaveTextContent('Оплата воды')
     expect(cashPaymentsTable).toHaveTextContent('400.00')
     expect(cashPaymentsTable).not.toHaveTextContent('Назначение платежа')
-    await waitFor(() => expect(cashPaymentPageRequests).toContainEqual({ offset: 1, limit: 500 }))
+    await waitFor(() => expect(cashPaymentPageRequests).toEqual([{ offset: 0, limit: 5000 }]))
     expect(await within(cashPaymentsTable).findByText('Зарплата: Электрик')).toBeInTheDocument()
     expect(within(reportsPanel).queryByRole('navigation', { name: 'Пагинация отчета по оплатам из кассы' })).not.toBeInTheDocument()
     const cashXlsxButton = within(reportsPanel).getByRole('button', { name: 'Скачать XLSX' })
@@ -17451,7 +17477,7 @@ describe('App', () => {
     const bankDepositsTable = within(reportsPanel).getByRole('table', { name: 'Отчет по сдаче кассы в банк' })
     expect(bankDepositsTable).toHaveTextContent('Сдача наличных в банк')
     expect(bankDepositsTable).toHaveTextContent('3 000.00')
-    await waitFor(() => expect(bankDepositPageRequests).toContainEqual({ offset: 1, limit: 500 }))
+    await waitFor(() => expect(bankDepositPageRequests).toEqual([{ offset: 0, limit: 5000 }]))
     expect(await within(bankDepositsTable).findByText('Вторая сдача в банк')).toBeInTheDocument()
     expect(within(reportsPanel).queryByRole('navigation', { name: 'Пагинация отчета по сдаче кассы в банк' })).not.toBeInTheDocument()
     const bankPdfButton = within(reportsPanel).getByRole('button', { name: 'Скачать PDF' })
@@ -17507,7 +17533,7 @@ describe('App', () => {
     expect(fundChangesTable).toHaveTextContent('1 500.00')
     expect(fundChangesTable).toHaveTextContent('Распределение средств')
     expect(fundChangesTable).toHaveTextContent('Администратор ГСК')
-    await waitFor(() => expect(fundChangePageRequests).toContainEqual({ offset: 2, limit: 500 }))
+    await waitFor(() => expect(fundChangePageRequests).toEqual([{ offset: 0, limit: 5000 }]))
     expect(await within(fundChangesTable).findByText('Резервный фонд')).toBeInTheDocument()
     expect(within(reportsPanel).queryByRole('navigation', { name: 'Пагинация отчета по изменению фондов' })).not.toBeInTheDocument()
     const fundXlsxButton = within(reportsPanel).getByRole('button', { name: 'Скачать XLSX' })
@@ -17562,7 +17588,7 @@ describe('App', () => {
     expect(reportsPanel.querySelector('datalist option[value="Сбор на камеры"]')).not.toBeNull()
   })
 
-  it('loads every garage report row in server-bounded chunks and supports grouping', async () => {
+  it('loads the garage report in one bounded request and supports grouping', async () => {
     const user = userEvent.setup()
     const garageRequests: Array<{ offset?: number; limit?: number; groupAccruals?: boolean }> = []
     const getGarageReport = vi.fn(async (_token: string, params?: Parameters<ReportClient['getGarageReport']>[1]) => {
@@ -17572,16 +17598,16 @@ describe('App', () => {
       const grouped = params?.groupAccruals ?? false
       const row = createGarageDetailReport().rows[0]
       return createGarageDetailReport({
-        rowCount: grouped ? 1 : 2,
+        rowCount: grouped ? 1 : 6001,
         offset,
         limit,
         rows: [{
           ...row,
-          garageId: grouped ? 'garage-grouped' : offset === 0 ? 'garage-1' : 'garage-26',
-          garageNumber: grouped ? '77' : offset === 0 ? '12' : '26',
+          garageId: grouped ? 'garage-grouped' : 'garage-1',
+          garageNumber: grouped ? '77' : '12',
           incomeTypeId: grouped ? null : row.incomeTypeId,
-          incomeTypeName: grouped ? 'ИТОГО' : offset === 0 ? 'Членский взнос' : 'Электроэнергия',
-        }],
+          incomeTypeName: grouped ? 'ИТОГО' : 'Членский взнос',
+        }, ...(grouped ? [] : [{ ...row, garageId: 'garage-26', garageNumber: '26', incomeTypeName: 'Электроэнергия' }])],
       })
     })
     render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient({ getGarageReport })} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
@@ -17598,15 +17624,17 @@ describe('App', () => {
 
     expect(await within(garageTable).findByText('Электроэнергия')).toBeInTheDocument()
     expect(garageTable).toHaveTextContent('26')
+    expect(within(reportsPanel).getByText('Показаны первые 2 из 6001 строк. Уточните период или фильтр, чтобы увидеть весь результат без перегрузки страницы.')).toHaveAttribute('role', 'status')
 
     await user.click(within(reportsPanel).getByRole('button', { name: 'Сгруппировать начисления' }))
     expect(await within(garageTable).findByText('77')).toBeInTheDocument()
+    expect(within(reportsPanel).queryByText(/Показаны первые/)).not.toBeInTheDocument()
     expect(garageTable).not.toHaveTextContent('Услуга')
     expect(garageRequests).toEqual(expect.arrayContaining([
-      { offset: 0, limit: 500, groupAccruals: false },
-      { offset: 1, limit: 500, groupAccruals: false },
-      { offset: 0, limit: 500, groupAccruals: true },
+      { offset: 0, limit: 5000, groupAccruals: false },
+      { offset: 0, limit: 5000, groupAccruals: true },
     ]))
+    expect(garageRequests).toHaveLength(2)
   })
 
   it('ranks garages in the income report by number match and natural order', async () => {
@@ -17618,9 +17646,10 @@ describe('App', () => {
       createGarage({ id: 'garage-21', number: '21', ownerName: 'Иванов' }),
       createGarage({ id: 'garage-21-a2', number: '21А2', ownerName: 'Орлов' }),
     ]
+    const getGaragesPage = vi.fn(async () => ({ items: garages, totalCount: 750, offset: 0, limit: 20 }))
     render(<App
       authClient={createAuthClient()}
-      dictionaryClient={createDictionaryClient({ getGarages: async () => garages })}
+      dictionaryClient={createDictionaryClient({ getGaragesPage })}
       financeClient={createFinanceClient()}
       importClient={createImportClient()}
       reportClient={createReportClient()}
@@ -17637,6 +17666,7 @@ describe('App', () => {
 
     const results = await within(reportsPanel).findByRole('listbox', { name: 'Найденные гаражи отчёта по поступлениям' })
     await waitFor(() => expect(within(results).getAllByRole('option')).toHaveLength(5))
+    expect(getGaragesPage).toHaveBeenCalledWith(expect.any(String), '21', 0, 20, false, 'number', 'asc', false, {}, expect.any(AbortSignal))
     expect(within(results).getAllByRole('option').map((option) => option.textContent)).toEqual([
       'Гараж 21Иванов',
       'Гараж 21А2Орлов',
@@ -17674,6 +17704,9 @@ describe('App', () => {
     })
     const reportClient = createReportClient({ getGarageReport, getExpenseReport, getIncomeReport })
     const dictionaryClient = createDictionaryClient({
+      getGaragesPage: undefined,
+      getSuppliersPage: undefined,
+      getStaffMembersPage: undefined,
       getGarages: async () => [
         createGarage({ id: 'garage-1', number: '12' }),
         createGarage({ id: 'garage-2', number: '205' }),
@@ -17705,8 +17738,8 @@ describe('App', () => {
     const garageSearchResults = within(reportsPanel).getByRole('listbox', { name: 'Найденные гаражи отчёта' })
     await waitFor(() => expect(within(garageSearchResults).getAllByRole('option')).toHaveLength(2))
     expect(within(garageSearchResults).queryByRole('option', { name: /999/ })).not.toBeInTheDocument()
-    await user.click(within(garageSearchResults).getByRole('checkbox', { name: /Выбрать гараж 12,/ }))
-    await user.click(within(garageSearchResults).getByRole('checkbox', { name: /Выбрать гараж 205,/ }))
+    await user.click(await within(garageSearchResults).findByRole('checkbox', { name: /Выбрать гараж 12,/ }))
+    await user.click(await within(garageSearchResults).findByRole('checkbox', { name: /Выбрать гараж 205,/ }))
     await waitFor(() => expect(garageRequests).toContainEqual({ garageIds: ['garage-1', 'garage-2'], offset: 0 }))
     const selectedReportGarages = within(reportsPanel).getByLabelText('Выбранные гаражи отчёта')
     expect(within(selectedReportGarages).getByRole('button', { name: 'Убрать гараж 12 из выбранных' })).toBeInTheDocument()
@@ -17737,7 +17770,7 @@ describe('App', () => {
     const incomeGarageFilter = within(reportsPanel).getByLabelText('Гаражи по поступлениям')
     await user.type(incomeGarageFilter, '205')
     const incomeGarageResults = await within(reportsPanel).findByRole('listbox', { name: 'Найденные гаражи отчёта по поступлениям' })
-    await user.click(within(incomeGarageResults).getByRole('checkbox', { name: /Выбрать гараж 205,/ }))
+    await user.click(await within(incomeGarageResults).findByRole('checkbox', { name: /Выбрать гараж 205,/ }))
     await waitFor(() => expect(incomeRequests).toContainEqual({ garageIds: ['garage-2'], rowMode: 'payments', groupPayments: true }))
     expect(within(reportsPanel).getByLabelText('Выбранные гаражи отчёта по поступлениям')).toHaveTextContent('Гараж 205')
   })
@@ -17876,7 +17909,7 @@ describe('App', () => {
     const garageFilter = within(reportsPanel).getByLabelText('Гаражи')
     await user.type(garageFilter, '12')
     const garageSearchResults = await within(reportsPanel).findByRole('listbox', { name: 'Найденные гаражи отчёта' })
-    await user.click(within(garageSearchResults).getByRole('checkbox', { name: /Выбрать гараж 12,/ }))
+    await user.click(await within(garageSearchResults).findByRole('checkbox', { name: /Выбрать гараж 12,/ }))
     await user.click(within(reportsPanel).getByRole('button', { name: /Сортировать Гараж/ }))
     await user.click(within(reportsPanel).getByRole('button', { name: 'Сгруппировать начисления' }))
     await exportXlsx()
@@ -17897,7 +17930,7 @@ describe('App', () => {
     const incomeGarageFilter = within(reportsPanel).getByLabelText('Гаражи по поступлениям')
     await user.type(incomeGarageFilter, '12')
     const incomeGarageResults = await within(reportsPanel).findByRole('listbox', { name: 'Найденные гаражи отчёта по поступлениям' })
-    await user.click(within(incomeGarageResults).getByRole('checkbox', { name: /Выбрать гараж 12,/ }))
+    await user.click(await within(incomeGarageResults).findByRole('checkbox', { name: /Выбрать гараж 12,/ }))
     await user.click(within(reportsPanel).getByRole('button', { name: /Сортировать Сумма платежа/ }))
     await user.click(within(reportsPanel).getByRole('button', { name: 'Показать отдельные платежи' }))
     await exportXlsx()
@@ -18523,6 +18556,7 @@ describe('App', () => {
       <App
         authClient={createAuthClient()}
         dictionaryClient={createDictionaryClient({
+          getGaragesPage: undefined,
           getOwners: async () => {
             throw new Error('Нет доступа к справочникам.')
           },
@@ -18584,6 +18618,8 @@ describe('App', () => {
     await openSection(user, 'Отчеты')
     const reportsPanel = await screen.findByRole('region', { name: 'Отчеты' })
     await openReportTab(user, reportsPanel, 'По гаражам')
+    await user.click(within(reportsPanel).getByRole('button', { name: /Гаражи и личные фильтры/ }))
+    await user.click(within(reportsPanel).getByRole('combobox', { name: 'Гаражи' }))
     expect(await screen.findByText('Нет доступа к отчетам.')).toBeInTheDocument()
     expect(screen.getAllByRole('alert').map((alert) => alert.textContent)).toEqual(expect.arrayContaining(['Нет доступа к отчетам.']))
 

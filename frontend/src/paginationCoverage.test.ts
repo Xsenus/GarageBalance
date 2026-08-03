@@ -39,7 +39,9 @@ describe('shared pagination coverage', () => {
 
     expect(source).not.toContain("from '../../shared/TablePagination'")
     expect(source).not.toContain('<TablePagination')
-    expect(source).toContain('loadAllReportPages')
-    expect(source).toContain('loadAllFeeReportPages')
+    expect(source).not.toContain('loadAllReportPages')
+    expect(source).toContain('reportFullViewLimit = 5000')
+    expect(source).toContain('loadGarageFilterOptions')
+    expect(source).not.toContain('loadAllFeeReportPages')
   })
 })
