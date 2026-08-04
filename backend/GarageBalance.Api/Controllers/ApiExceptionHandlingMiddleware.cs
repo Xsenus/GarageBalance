@@ -15,6 +15,13 @@ public sealed class ApiExceptionHandlingMiddleware(RequestDelegate next, ILogger
         {
             await next(context);
         }
+        catch (OperationCanceledException) when (context.RequestAborted.IsCancellationRequested)
+        {
+            logger.LogDebug(
+                "HTTP request {Method} {Path} was cancelled by the client.",
+                context.Request.Method,
+                context.Request.Path);
+        }
         catch (OptimisticConcurrencyException) when (!context.Response.HasStarted)
         {
             logger.LogWarning(

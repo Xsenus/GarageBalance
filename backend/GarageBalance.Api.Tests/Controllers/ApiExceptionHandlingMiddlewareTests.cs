@@ -50,6 +50,40 @@ public sealed class ApiExceptionHandlingMiddlewareTests
     }
 
     [Fact]
+    public async Task InvokeAsync_DoesNotConvertClientCancellationIntoServerError()
+    {
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+        var context = CreateHttpContext();
+        context.RequestAborted = cancellation.Token;
+        var middleware = new ApiExceptionHandlingMiddleware(
+            _ => throw new OperationCanceledException(cancellation.Token),
+            NullLogger<ApiExceptionHandlingMiddleware>.Instance);
+
+        await middleware.InvokeAsync(context);
+
+        Assert.Equal(StatusCodes.Status200OK, context.Response.StatusCode);
+        Assert.Equal(0, context.Response.Body.Length);
+    }
+
+    [Fact]
+    public async Task InvokeAsync_KeepsUnexpectedCancellationAsInternalError()
+    {
+        var context = CreateHttpContext();
+        context.TraceIdentifier = "server-error-cancel";
+        var middleware = new ApiExceptionHandlingMiddleware(
+            _ => throw new OperationCanceledException("Internal operation was cancelled unexpectedly."),
+            NullLogger<ApiExceptionHandlingMiddleware>.Instance);
+
+        await middleware.InvokeAsync(context);
+
+        var problem = await ReadProblemAsync(context);
+        Assert.Equal(StatusCodes.Status500InternalServerError, context.Response.StatusCode);
+        Assert.Equal(ApiProblemDetails.InternalErrorCode, problem.GetProperty(ApiProblemDetails.CodeExtensionKey).GetString());
+        Assert.Equal("server-error-cancel", problem.GetProperty(ApiProblemDetails.ErrorIdExtensionKey).GetString());
+    }
+
+    [Fact]
     public async Task InvokeAsync_ReturnsConflictForConcurrentUniqueWrite()
     {
         var context = CreateHttpContext();

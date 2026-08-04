@@ -218,11 +218,12 @@ public sealed class ImportDryRunWorker(
     IOptions<ImportDryRunQueueOptions> options,
     ILogger<ImportDryRunWorker> logger) : BackgroundService
 {
+    private static readonly TimeSpan RecoveryRetryDelay = TimeSpan.FromSeconds(5);
     private readonly ImportDryRunQueueOptions _options = options.Value;
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        await RecoverQueuedJobsAsync(stoppingToken);
+        await RecoverQueuedJobsUntilSuccessfulAsync(stoppingToken);
         while (!stoppingToken.IsCancellationRequested)
         {
             ImportDryRunJob job;
@@ -235,8 +236,39 @@ public sealed class ImportDryRunWorker(
                 break;
             }
 
-            await ProcessAsync(job, stoppingToken);
-            await RecoverQueuedJobsAsync(stoppingToken);
+            if (!await TryProcessAsync(job, stoppingToken))
+            {
+                await Task.Delay(RecoveryRetryDelay, stoppingToken);
+            }
+            await RecoverQueuedJobsUntilSuccessfulAsync(stoppingToken);
+        }
+    }
+
+    private async Task RecoverQueuedJobsUntilSuccessfulAsync(CancellationToken cancellationToken)
+    {
+        while (!await TryRecoverQueuedJobsAsync(cancellationToken))
+        {
+            await Task.Delay(RecoveryRetryDelay, cancellationToken);
+        }
+    }
+
+    internal async Task<bool> TryRecoverQueuedJobsAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            await RecoverQueuedJobsAsync(cancellationToken);
+            return true;
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception exception)
+        {
+            logger.LogError(
+                "Access import queue recovery failed and will be retried. ExceptionType={ExceptionType}",
+                exception.GetType().Name);
+            return false;
         }
     }
 
@@ -247,6 +279,27 @@ public sealed class ImportDryRunWorker(
         foreach (var runId in await repository.GetQueuedRunIdsAsync(cancellationToken))
         {
             _ = queue.TryQueue(new ImportDryRunJob(runId));
+        }
+    }
+
+    internal async Task<bool> TryProcessAsync(ImportDryRunJob job, CancellationToken cancellationToken)
+    {
+        try
+        {
+            await ProcessAsync(job, cancellationToken);
+            return true;
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception exception)
+        {
+            logger.LogError(
+                "Access import queued job failed unexpectedly and will be recovered. RunId={RunId} ExceptionType={ExceptionType}",
+                job.RunId,
+                exception.GetType().Name);
+            return false;
         }
     }
 

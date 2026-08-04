@@ -149,6 +149,68 @@ public sealed class ImportDryRunQueueTests
         }
     }
 
+    [Fact]
+    public async Task Worker_ReportsTransientQueueRecoveryFailureWithoutTerminating()
+    {
+        var options = Options.Create(new ImportDryRunQueueOptions());
+        var worker = new ImportDryRunWorker(
+            new ThrowingScopeFactory(new InvalidOperationException("Database is temporarily unavailable.")),
+            new ImportDryRunQueue(options),
+            options,
+            NullLogger<ImportDryRunWorker>.Instance);
+
+        var recovered = await worker.TryRecoverQueuedJobsAsync(CancellationToken.None);
+
+        Assert.False(recovered);
+    }
+
+    [Fact]
+    public async Task Worker_PropagatesQueueRecoveryCancellationDuringShutdown()
+    {
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+        var options = Options.Create(new ImportDryRunQueueOptions());
+        var worker = new ImportDryRunWorker(
+            new ThrowingScopeFactory(new OperationCanceledException(cancellation.Token)),
+            new ImportDryRunQueue(options),
+            options,
+            NullLogger<ImportDryRunWorker>.Instance);
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(
+            () => worker.TryRecoverQueuedJobsAsync(cancellation.Token));
+    }
+
+    [Fact]
+    public async Task Worker_ReportsUnexpectedQueuedJobFailureWithoutTerminating()
+    {
+        var options = Options.Create(new ImportDryRunQueueOptions());
+        var worker = new ImportDryRunWorker(
+            new ThrowingScopeFactory(new InvalidOperationException("Service scope is temporarily unavailable.")),
+            new ImportDryRunQueue(options),
+            options,
+            NullLogger<ImportDryRunWorker>.Instance);
+
+        var processed = await worker.TryProcessAsync(new ImportDryRunJob(Guid.NewGuid()), CancellationToken.None);
+
+        Assert.False(processed);
+    }
+
+    [Fact]
+    public async Task Worker_PropagatesQueuedJobCancellationDuringShutdown()
+    {
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+        var options = Options.Create(new ImportDryRunQueueOptions());
+        var worker = new ImportDryRunWorker(
+            new ThrowingScopeFactory(new OperationCanceledException(cancellation.Token)),
+            new ImportDryRunQueue(options),
+            options,
+            NullLogger<ImportDryRunWorker>.Instance);
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(
+            () => worker.TryProcessAsync(new ImportDryRunJob(Guid.NewGuid()), cancellation.Token));
+    }
+
     private static ServiceProvider BuildProvider(string databasePath, IOptions<ImportDryRunQueueOptions> options)
     {
         var services = new ServiceCollection();
@@ -187,5 +249,10 @@ public sealed class ImportDryRunQueueTests
                 "Ready",
                 [],
                 DateTimeOffset.UtcNow));
+    }
+
+    private sealed class ThrowingScopeFactory(Exception exception) : IServiceScopeFactory
+    {
+        public IServiceScope CreateScope() => throw exception;
     }
 }
