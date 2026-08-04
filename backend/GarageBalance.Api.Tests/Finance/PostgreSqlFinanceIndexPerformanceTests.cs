@@ -315,7 +315,8 @@ public sealed class PostgreSqlFinanceIndexPerformanceTests
         string query)
     {
         await using var command = connection.CreateCommand();
-        command.CommandText = $"SET enable_seqscan = off; EXPLAIN (ANALYZE, BUFFERS) {query}";
+        command.CommandText =
+            $"SET enable_seqscan = off; SET enable_indexscan = on; SET enable_bitmapscan = on; EXPLAIN (ANALYZE, BUFFERS) {query}";
         await using var reader = await command.ExecuteReaderAsync();
         var lines = new List<string>();
         while (await reader.ReadAsync())
