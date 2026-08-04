@@ -26,6 +26,10 @@ public sealed class VersionUpdateChecklistTests
         Assert.Contains("GET /api/app-releases", document, StringComparison.Ordinal);
         Assert.Contains("Cache-Control: no-store", document, StringComparison.Ordinal);
         Assert.Contains("Rollback", document, StringComparison.Ordinal);
+        Assert.Contains("Expand/contract", document, StringComparison.Ordinal);
+        Assert.Contains("expand", document, StringComparison.Ordinal);
+        Assert.Contains("contract", document, StringComparison.Ordinal);
+        Assert.Contains("databaseRollbackStatus=completed", document, StringComparison.Ordinal);
         Assert.Contains("git push", document, StringComparison.Ordinal);
     }
 

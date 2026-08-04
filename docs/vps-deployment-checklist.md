@@ -52,6 +52,7 @@ dotnet tool run dotnet-ef migrations script --idempotent \
 
 - [ ] Сохранить SQL-скрипт как артефакт релиза.
 - [ ] Применять миграции только после backup PostgreSQL.
+- [ ] Проверить expand/contract: текущий релиз не удаляет объекты схемы, которые нужны предыдущему бинарнику; contract выполняется только отдельным релизом после закрытия окна rollback.
 
 ## 3.1. Автоматический deploy через GitHub Actions
 
@@ -68,7 +69,7 @@ Workflow `.github/workflows/deploy-staging.yml` запускается при `p
 - [ ] Deploy-пользователь не входит в группу `sudo`.
 - [ ] В `/etc/sudoers.d/garagebalance-deploy` разрешен только запуск `/usr/local/bin/garagebalance-deploy-apply *` без пароля.
 - [ ] GitHub Actions загружает артефакты только в `/home/garagebalance-deploy/uploads/<release-id>`.
-- [ ] Серверный apply-скрипт сам создает `pg_dump`, применяет SQL миграций, заменяет только `/opt/garagebalance-staging/api` и `/opt/garagebalance-staging/frontend`, запускает health-check и возвращает предыдущие каталоги при ошибке.
+- [ ] Серверный apply-скрипт сам создает и проверяет `pg_dump`, применяет SQL миграций, заменяет только `/opt/garagebalance-staging/api` и `/opt/garagebalance-staging/frontend`, запускает health-check и при ошибке после начала миграций возвращает предрелизную БД вместе с предыдущими каталогами.
 - [ ] Перед включением автоматического deploy проверить вручную `sudo -l -U garagebalance-deploy` и убедиться, что лишних sudo-команд нет.
 
 ## 4. Backup перед обновлением
@@ -164,6 +165,7 @@ gzip для текстовой статики, immutable cache для hashed ass
 - [ ] Не удалять предыдущий release-каталог до завершения приемки.
 - [ ] При ошибке остановить сервис: `systemctl stop garagebalance-staging.service`.
 - [ ] Вернуть symlink/каталог frontend и backend на предыдущую версию.
+- [ ] Если миграция уже началась, сначала остановить сервис и восстановить предрелизный dump; предыдущий бинарник нельзя запускать на несовместимой contract-схеме.
 - [ ] При необходимости восстановить backup в отдельную проверочную базу.
 - [ ] Только после проверки восстановленной базы переключать рабочую БД.
 - [ ] Запустить сервис и проверить `curl -fsS https://sgk.blagodaty.ru/health/ready`.

@@ -35,6 +35,8 @@ DIAGNOSTIC_LOG_DIR="${APP_ROOT}/logs"
 SERVICE_STOPPED=0
 SWAPPED=0
 RESTORE_CHECK_DATABASE=""
+DATABASE_MUTATION_STARTED=0
+BACKUP_FILE=""
 
 log() {
   printf '%s %s\n' "$(date --iso-8601=seconds)" "$*"
@@ -56,6 +58,27 @@ ensure_env_setting() {
 
 restore_previous_release() {
   set +e
+
+  if [[ "$DATABASE_MUTATION_STARTED" == "1" && -s "$BACKUP_FILE" ]]; then
+    log "databaseRollbackStatus=started; database=${database_name}; backup=${BACKUP_FILE}"
+    systemctl stop "$SERVICE_NAME" >/dev/null 2>&1
+    SERVICE_STOPPED=1
+    sudo -u postgres psql \
+      --set ON_ERROR_STOP=1 \
+      --set="target_database=${database_name}" \
+      --dbname=postgres \
+      --command="SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = :'target_database' AND pid <> pg_backend_pid();" \
+      >/dev/null
+    sudo -u postgres pg_restore \
+      --clean \
+      --if-exists \
+      --exit-on-error \
+      --no-owner \
+      --no-privileges \
+      --dbname="$database_name" \
+      "$BACKUP_FILE" >/dev/null
+    log "databaseRollbackStatus=completed; database=${database_name}"
+  fi
 
   if [[ "$SWAPPED" == "1" ]]; then
     log "rollbackStatus=started"
@@ -189,12 +212,12 @@ chown "${APP_USER}:${APP_GROUP}" "${RELEASE_DIR}/operations.tar.gz"
 chmod 640 "${RELEASE_DIR}/deploy-migrations.sql"
 chmod 640 "${RELEASE_DIR}/operations.tar.gz"
 
-backup_file="${BACKUP_DIR}/garagebalance_${TIMESTAMP}_${release_id}.pgdump"
-log "backupStatus=started; file=${backup_file}"
-sudo -u postgres pg_dump --format=custom "$database_name" > "$backup_file"
-[[ -s "$backup_file" ]] || fail "PostgreSQL backup was not created"
-chmod 600 "$backup_file"
-log "backupStatus=completed; file=${backup_file}"
+BACKUP_FILE="${BACKUP_DIR}/garagebalance_${TIMESTAMP}_${release_id}.pgdump"
+log "backupStatus=started; file=${BACKUP_FILE}"
+sudo -u postgres pg_dump --format=custom "$database_name" > "$BACKUP_FILE"
+[[ -s "$BACKUP_FILE" ]] || fail "PostgreSQL backup was not created"
+chmod 600 "$BACKUP_FILE"
+log "backupStatus=completed; file=${BACKUP_FILE}"
 
 RESTORE_CHECK_DATABASE="garagebalance_restore_check_${TIMESTAMP//-/}_$$"
 log "restoreCheckStatus=started; database=${RESTORE_CHECK_DATABASE}"
@@ -204,7 +227,7 @@ sudo -u postgres pg_restore \
   --no-owner \
   --no-privileges \
   --dbname="$RESTORE_CHECK_DATABASE" \
-  "$backup_file" >/dev/null
+  "$BACKUP_FILE" >/dev/null
 restored_table_count="$(
   sudo -u postgres psql \
     --set ON_ERROR_STOP=1 \
@@ -224,6 +247,7 @@ systemctl stop "$SERVICE_NAME"
 SERVICE_STOPPED=1
 
 log "migrationStatus=started; database=${database_name}"
+DATABASE_MUTATION_STARTED=1
 sudo -u postgres psql --set ON_ERROR_STOP=1 --dbname="$database_name" < "$MIGRATION_SQL" >/dev/null
 log "migrationStatus=completed"
 
@@ -252,4 +276,4 @@ install -o root -g root -m 0750 \
 
 find "/home/${DEPLOY_USER}/uploads" -mindepth 1 -maxdepth 1 -type d -mtime +14 -exec rm -rf {} +
 
-log "deployStatus=ok; releaseId=${release_id}; backup=${backup_file}; previousApi=${PREV_API}; previousFrontend=${PREV_FRONTEND}"
+log "deployStatus=ok; releaseId=${release_id}; backup=${BACKUP_FILE}; previousApi=${PREV_API}; previousFrontend=${PREV_FRONTEND}"

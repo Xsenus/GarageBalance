@@ -22,15 +22,21 @@ public sealed class LegacyFormStateRemovalTests
     }
 
     [Fact]
-    public void CurrentMigration_DropsLegacyTable_AndFrontendHasNoSharedStateClient()
+    public void RuntimeRemoval_KeepsOneReleaseDatabaseCompatibility_AndFrontendHasNoSharedStateClient()
     {
         var root = FindRepositoryRoot();
         var migrationsDirectory = Path.Combine(root, "backend", "GarageBalance.Api", "Infrastructure", "Data", "Migrations");
         var migration = Directory.GetFiles(migrationsDirectory, "*_RemoveLegacyFormStates.cs").Single();
         var migrationSource = File.ReadAllText(migration);
+        var compatibilityMigration = Directory.GetFiles(migrationsDirectory, "*_RestoreLegacyFormStatesCompatibility.cs").Single();
+        var compatibilitySource = File.ReadAllText(compatibilityMigration);
 
         Assert.Contains("DropTable", migrationSource, StringComparison.Ordinal);
         Assert.Contains("form_states", migrationSource, StringComparison.Ordinal);
+        Assert.Contains("CREATE TABLE IF NOT EXISTS form_states", compatibilitySource, StringComparison.Ordinal);
+        Assert.Contains("previous release still expects it", compatibilitySource, StringComparison.Ordinal);
+        Assert.Contains("Production binary rollback restores the pre-release dump", compatibilitySource, StringComparison.Ordinal);
+        Assert.Contains("migrationBuilder.DropTable", compatibilitySource, StringComparison.Ordinal);
         Assert.False(File.Exists(Path.Combine(root, "frontend", "src", "services", "formStatesApi.ts")));
     }
 

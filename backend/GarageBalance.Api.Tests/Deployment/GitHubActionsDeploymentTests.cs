@@ -54,6 +54,12 @@ public sealed class GitHubActionsDeploymentTests
         Assert.Contains("systemctl stop \"$SERVICE_NAME\"", script, StringComparison.Ordinal);
         Assert.Contains("systemctl start \"$SERVICE_NAME\"", script, StringComparison.Ordinal);
         Assert.Contains("restore_previous_release", script, StringComparison.Ordinal);
+        Assert.Contains("DATABASE_MUTATION_STARTED=1", script, StringComparison.Ordinal);
+        Assert.Contains("databaseRollbackStatus=started", script, StringComparison.Ordinal);
+        Assert.Contains("pg_terminate_backend", script, StringComparison.Ordinal);
+        Assert.Contains("--clean", script, StringComparison.Ordinal);
+        Assert.Contains("--if-exists", script, StringComparison.Ordinal);
+        Assert.Contains("databaseRollbackStatus=completed", script, StringComparison.Ordinal);
         Assert.Contains("curl -fsS -H \"Host: ${PUBLIC_HOST}\"", script, StringComparison.Ordinal);
         Assert.Contains("curl -fsSk -H \"Host: ${PUBLIC_HOST}\" \"https://127.0.0.1/health/ready\"", script, StringComparison.Ordinal);
         Assert.Contains("deployStatus=ok", script, StringComparison.Ordinal);
