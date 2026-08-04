@@ -1,5 +1,5 @@
 import { memo, useCallback, useEffect, useState } from 'react'
-import { Save, X } from 'lucide-react'
+import { LoaderCircle, Save, X } from 'lucide-react'
 import type { AuthResponse } from '../../services/authApi'
 import type { DictionaryClient } from '../../services/dictionariesApi'
 import type { CreateMeterReadingRequest, FinanceClient, MeterReadingYearGarageDto } from '../../services/financeApi'
@@ -188,8 +188,12 @@ export function MeterReadingsPrototypePanel({ auth, dictionaryClient, financeCli
   const selectedMeterType = meterReadingTypes.find((item) => item.id === meterType) ?? meterReadingTypes[0]
   const yearIsValid = isValidMeterReadingYear(yearDraft)
   const currentMonth = getLocalDateInputValue().slice(0, 7)
+  const pendingReadingSaving = Boolean(pendingReadingChange && savingReadingKey === pendingReadingChange.cellKey)
 
   function cancelPendingReadingChange() {
+    if (pendingReadingSaving) {
+      return
+    }
     if (pendingReadingChange) {
       setDraftReadings((currentDrafts) => ({
         ...currentDrafts,
@@ -209,7 +213,7 @@ export function MeterReadingsPrototypePanel({ auth, dictionaryClient, financeCli
   }
 
   async function confirmPendingReadingChange() {
-    if (!pendingReadingChange) {
+    if (!pendingReadingChange || pendingReadingSaving) {
       return
     }
 
@@ -284,7 +288,7 @@ export function MeterReadingsPrototypePanel({ auth, dictionaryClient, financeCli
   useRestoreFocusOnClose(Boolean(pendingReadingChange))
   const readingChangeDialogRef = useFocusTrap<HTMLElement>(Boolean(pendingReadingChange))
   const readingChangeCancelRef = useFocusOnOpen<HTMLButtonElement>(Boolean(pendingReadingChange))
-  useEscapeKey(Boolean(pendingReadingChange), () => cancelPendingReadingChange())
+  useEscapeKey(Boolean(pendingReadingChange) && !pendingReadingSaving, () => cancelPendingReadingChange())
 
   useEffect(() => {
     let isMounted = true
@@ -618,7 +622,7 @@ export function MeterReadingsPrototypePanel({ auth, dictionaryClient, financeCli
                 <h3 id="meter-reading-change-title">{pendingReadingChange.suggestsReplacement ? 'Оформить замену счетчика?' : pendingReadingChange.isHistorical ? 'Скорректировать историческое показание?' : 'Подтвердить показание?'}</h3>
                 <p>{`Гараж ${pendingReadingChange.garageNumber}, ${pendingReadingChange.monthLabel}`}</p>
               </div>
-              <button className="icon-button" type="button" aria-label="Закрыть подтверждение показания" onClick={cancelPendingReadingChange}>
+              <button className="icon-button" type="button" aria-label="Закрыть подтверждение показания" disabled={pendingReadingSaving} onClick={cancelPendingReadingChange}>
                 <X size={18} />
               </button>
             </div>
@@ -640,19 +644,19 @@ export function MeterReadingsPrototypePanel({ auth, dictionaryClient, financeCli
                 </div>
                 <div className="contractors-modal-grid">
                 <FormField label="Дата замены">
-                  <LocalizedDatePicker ariaLabel="Дата замены счетчика" mode="date" value={replacementForm.date} onChange={(value) => updateReplacementForm('date', value)} required />
+                  <LocalizedDatePicker ariaLabel="Дата замены счетчика" mode="date" value={replacementForm.date} disabled={pendingReadingSaving} onChange={(value) => updateReplacementForm('date', value)} required />
                 </FormField>
                 <FormField label="Номер нового счетчика">
-                  <input aria-label="Номер нового счетчика" maxLength={100} value={replacementForm.serial} onChange={(event) => updateReplacementForm('serial', event.target.value)} />
+                  <input aria-label="Номер нового счетчика" maxLength={100} value={replacementForm.serial} disabled={pendingReadingSaving} onChange={(event) => updateReplacementForm('serial', event.target.value)} />
                 </FormField>
                 <FormField label="Начальное показание нового">
-                  <MeterReadingInput aria-label="Начальное показание нового счетчика" value={replacementForm.initialValue} onChange={(event) => updateReplacementForm('initialValue', event.target.value)} />
+                  <MeterReadingInput aria-label="Начальное показание нового счетчика" value={replacementForm.initialValue} disabled={pendingReadingSaving} onChange={(event) => updateReplacementForm('initialValue', event.target.value)} />
                 </FormField>
                 <FormField label="Конечное показание старого">
-                  <MeterReadingInput aria-label="Конечное показание старого счетчика" value={replacementForm.finalValue} onChange={(event) => updateReplacementForm('finalValue', event.target.value)} />
+                  <MeterReadingInput aria-label="Конечное показание старого счетчика" value={replacementForm.finalValue} disabled={pendingReadingSaving} onChange={(event) => updateReplacementForm('finalValue', event.target.value)} />
                 </FormField>
                 <FormField label="Причина замены">
-                  <textarea aria-label="Причина замены счетчика" maxLength={500} value={replacementForm.reason} onChange={(event) => updateReplacementForm('reason', event.target.value)} />
+                  <textarea aria-label="Причина замены счетчика" maxLength={500} value={replacementForm.reason} disabled={pendingReadingSaving} onChange={(event) => updateReplacementForm('reason', event.target.value)} />
                 </FormField>
                 </div>
               </>
@@ -665,6 +669,7 @@ export function MeterReadingsPrototypePanel({ auth, dictionaryClient, financeCli
                     aria-invalid={Boolean(historicalCorrectionReasonError)}
                     maxLength={500}
                     value={historicalCorrectionReason}
+                    disabled={pendingReadingSaving}
                     onChange={(event) => {
                       setHistoricalCorrectionReason(event.target.value)
                       setHistoricalCorrectionReasonError(null)
@@ -677,9 +682,9 @@ export function MeterReadingsPrototypePanel({ auth, dictionaryClient, financeCli
             ) : null}
             {readingChangeError ? <div className="form-error" role="alert">{readingChangeError}</div> : null}
             <div className="detail-dialog-actions contractors-dialog-actions">
-              <button ref={readingChangeCancelRef} className="ghost-button" type="button" onClick={cancelPendingReadingChange}>Отмена</button>
-              <button className="secondary-button" type="button" disabled={savingReadingKey === pendingReadingChange.cellKey} onClick={confirmPendingReadingChange}>
-                <Save size={16} />
+              <button ref={readingChangeCancelRef} className="ghost-button" type="button" disabled={pendingReadingSaving} onClick={cancelPendingReadingChange}>Отмена</button>
+              <button className="secondary-button" type="button" aria-busy={pendingReadingSaving} disabled={pendingReadingSaving} onClick={confirmPendingReadingChange}>
+                {pendingReadingSaving ? <LoaderCircle className="button-spinner" size={16} aria-hidden="true" /> : <Save size={16} />}
                 <span>Сохранить</span>
               </button>
             </div>

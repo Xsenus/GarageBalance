@@ -5516,9 +5516,12 @@ describe('App', () => {
   it('offers and saves a physical meter replacement when a reading becomes lower', async () => {
     const user = userEvent.setup()
     let replacementAttempt = 0
+    let releaseFirstReplacement!: () => void
+    const firstReplacementGate = new Promise<void>((resolve) => { releaseFirstReplacement = resolve })
     const replaceMeterDevice = vi.fn(async (_token, request) => {
       replacementAttempt += 1
       if (replacementAttempt === 1) {
+        await firstReplacementGate
         throw new Error('Счетчик уже изменен. Обновите страницу.')
       }
       return ({
@@ -5574,7 +5577,19 @@ describe('App', () => {
     await user.type(within(dialog).getByLabelText('Конечное показание старого счетчика'), '17201')
     await user.type(within(dialog).getByLabelText('Причина замены счетчика'), 'Плановая замена')
     await user.click(within(dialog).getByRole('button', { name: 'Сохранить' }))
+    await waitFor(() => expect(replaceMeterDevice).toHaveBeenCalledTimes(1))
+    expect(within(dialog).getByRole('button', { name: 'Сохранить' })).toBeDisabled()
+    expect(within(dialog).getByRole('button', { name: 'Отмена' })).toBeDisabled()
+    expect(within(dialog).getByRole('button', { name: 'Закрыть подтверждение показания' })).toBeDisabled()
+    expect(within(dialog).getByLabelText('Номер нового счетчика')).toBeDisabled()
+    expect(within(dialog).getByLabelText('Причина замены счетчика')).toBeDisabled()
+    await user.keyboard('{Escape}')
+    expect(screen.getByRole('dialog', { name: 'Оформить замену счетчика?' })).toBeInTheDocument()
+    releaseFirstReplacement()
     expect(await within(dialog).findByRole('alert')).toHaveTextContent('Счетчик уже изменен. Обновите страницу.')
+    expect(within(dialog).getByLabelText('Номер нового счетчика')).toHaveValue('ЭЛ-2026-001')
+    expect(within(dialog).getByLabelText('Причина замены счетчика')).toHaveValue('Плановая замена')
+    expect(within(dialog).getByRole('button', { name: 'Сохранить' })).toBeEnabled()
     await user.click(within(dialog).getByRole('button', { name: 'Сохранить' }))
 
     await waitFor(() => expect(replaceMeterDevice).toHaveBeenLastCalledWith('token', expect.objectContaining({
