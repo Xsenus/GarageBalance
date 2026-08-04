@@ -145,6 +145,8 @@ public sealed class PostgreSqlFinanceIndexPerformanceTests
               AND "TransferDate" BETWEEN DATE '2026-01-01' AND DATE '2026-12-31';
             """);
         await SeedSearchVolumeAsync(database);
+        await connection.CloseAsync();
+        await connection.OpenAsync();
         await AssertPlanUsesAsync(
             connection,
             "IX_funds_Name_trgm",
@@ -268,7 +270,10 @@ public sealed class PostgreSqlFinanceIndexPerformanceTests
             Comment = index == 411 ? "Сдача кассы для поиска" : $"Перевод {index:D3}"
         }));
         await context.SaveChangesAsync();
-        await context.Database.ExecuteSqlRawAsync("ANALYZE;");
+        // Flush GIN pending lists as well as refreshing statistics. During the full parallel
+        // PostgreSQL suite an unflushed pending list can make the planner reject an otherwise
+        // valid trigram index even with sequential scans disabled.
+        await context.Database.ExecuteSqlRawAsync("VACUUM (ANALYZE);");
     }
 
     private static async Task<Dictionary<string, string>> ReadIndexesAsync(NpgsqlConnection connection)
@@ -316,7 +321,7 @@ public sealed class PostgreSqlFinanceIndexPerformanceTests
     {
         await using var command = connection.CreateCommand();
         command.CommandText =
-            $"SET enable_seqscan = off; SET enable_indexscan = on; SET enable_bitmapscan = on; EXPLAIN (ANALYZE, BUFFERS) {query}";
+            $"SET enable_seqscan = off; SET enable_indexscan = on; SET enable_bitmapscan = on; SET jit = off; EXPLAIN (FORMAT TEXT) {query}";
         await using var reader = await command.ExecuteReaderAsync();
         var lines = new List<string>();
         while (await reader.ReadAsync())
