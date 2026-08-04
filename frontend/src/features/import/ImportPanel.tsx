@@ -317,17 +317,17 @@ export function ImportPanel({ auth, importClient }: { auth: AuthResponse; import
     }
 
     setApplyingRunId(applyTarget.id)
+    setApplyError(null)
     setError(null)
     setExportMessage(null)
     try {
       const updatedRun = await importClient.requestAccessImportApply(auth.accessToken, applyTarget.id, reason, applyBackupConfirmed)
       setCurrentRun(updatedRun)
       setRuns((items) => items.map((item) => item.id === updatedRun.id ? updatedRun : item))
-      setRunLogEntries(await importClient.getAccessRunLog(auth.accessToken, updatedRun.id))
       setExportMessage('Фактический импорт запрошен. Данные не переносились до подключения reader Access.')
       closeApplyDialog()
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : 'Не удалось запросить фактический импорт.')
+      setApplyError(caught instanceof Error ? caught.message : 'Не удалось запросить фактический импорт.')
     } finally {
       setApplyingRunId(null)
     }
@@ -360,17 +360,17 @@ export function ImportPanel({ auth, importClient }: { auth: AuthResponse; import
     }
 
     setCancelingApplyRunId(applyCancelTarget.id)
+    setApplyCancelError(null)
     setError(null)
     setExportMessage(null)
     try {
       const updatedRun = await importClient.cancelAccessImportApplyRequest(auth.accessToken, applyCancelTarget.id, reason)
       setCurrentRun(updatedRun)
       setRuns((items) => items.map((item) => item.id === updatedRun.id ? updatedRun : item))
-      setRunLogEntries(await importClient.getAccessRunLog(auth.accessToken, updatedRun.id))
       setExportMessage('Заявка на фактический импорт отменена. Данные не переносились.')
       closeApplyCancelDialog()
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : 'Не удалось отменить заявку на импорт.')
+      setApplyCancelError(caught instanceof Error ? caught.message : 'Не удалось отменить заявку на импорт.')
     } finally {
       setCancelingApplyRunId(null)
     }
@@ -403,17 +403,17 @@ export function ImportPanel({ auth, importClient }: { auth: AuthResponse; import
     }
 
     setRollbackingRunId(rollbackTarget.id)
+    setRollbackError(null)
     setError(null)
     setExportMessage(null)
     try {
       const updatedRun = await importClient.requestAccessImportRollback(auth.accessToken, rollbackTarget.id, reason)
       setCurrentRun(updatedRun)
       setRuns((items) => items.map((item) => item.id === updatedRun.id ? updatedRun : item))
-      setRunLogEntries(await importClient.getAccessRunLog(auth.accessToken, updatedRun.id))
       setExportMessage('Rollback импорта запрошен. Фактический откат данных не выполнялся для dry-run запуска.')
       closeRollbackDialog()
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : 'Не удалось запросить rollback импорта.')
+      setRollbackError(caught instanceof Error ? caught.message : 'Не удалось запросить rollback импорта.')
     } finally {
       setRollbackingRunId(null)
     }
@@ -435,6 +435,7 @@ export function ImportPanel({ auth, importClient }: { auth: AuthResponse; import
 
   async function resolveQuarantineItem(item: AccessImportQuarantineItemDto, resolutionComment: string) {
     setResolvingQuarantineId(item.id)
+    setQuarantineResolveError(null)
     setError(null)
     setExportMessage(null)
     try {
@@ -443,7 +444,7 @@ export function ImportPanel({ auth, importClient }: { auth: AuthResponse; import
       setExportMessage('Строка карантина закрыта.')
       closeQuarantineResolveDialog()
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : 'Не удалось закрыть строку карантина импорта.')
+      setQuarantineResolveError(caught instanceof Error ? caught.message : 'Не удалось закрыть строку карантина импорта.')
     } finally {
       setResolvingQuarantineId(null)
     }

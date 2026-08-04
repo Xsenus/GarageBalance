@@ -1,0 +1,259 @@
+import { render, screen, waitFor, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
+import { describe, expect, it } from 'vitest'
+import type { AuthResponse } from '../../services/authApi'
+import type {
+  AccessImportQuarantineItemDto,
+  AccessImportReaderStatusDto,
+  AccessImportRunDto,
+  ImportClient,
+} from '../../services/importApi'
+import { ImportPanel } from './ImportPanel'
+
+const auth: AuthResponse = {
+  accessToken: 'access-token',
+  expiresAtUtc: '2026-08-06T00:00:00Z',
+  user: {
+    id: 'admin-user',
+    email: 'admin@example.test',
+    displayName: 'Администратор',
+    roles: ['administrator'],
+    permissions: ['import.read', 'import.write'],
+  },
+}
+
+function createRun(overrides: Partial<AccessImportRunDto> = {}): AccessImportRunDto {
+  return {
+    id: 'access-run',
+    mode: 'dry-run',
+    status: 'completed',
+    originalFileName: 'ГСК.accdb',
+    fileExtension: '.accdb',
+    fileSizeBytes: 1024,
+    contentSha256: 'a'.repeat(64),
+    startedAtUtc: '2026-08-05T00:00:00Z',
+    finishedAtUtc: '2026-08-05T00:01:00Z',
+    totalChecks: 1,
+    passedChecks: 1,
+    warningCount: 0,
+    errorCount: 0,
+    summary: 'Dry-run завершён.',
+    checks: [],
+    ...overrides,
+  }
+}
+
+function createQuarantineItem(overrides: Partial<AccessImportQuarantineItemDto> = {}): AccessImportQuarantineItemDto {
+  return {
+    id: 'quarantine-1',
+    accessImportRunId: 'access-run',
+    sourceSystem: 'Access',
+    entityType: 'Garage',
+    externalId: '42',
+    rowHash: 'b'.repeat(64),
+    reasonCode: 'missing-owner',
+    reasonMessage: 'Не найден владелец гаража.',
+    severity: 'error',
+    status: 'open',
+    createdAtUtc: '2026-08-05T00:00:00Z',
+    createdByUserId: null,
+    resolvedAtUtc: null,
+    resolvedByUserId: null,
+    resolutionComment: null,
+    ...overrides,
+  }
+}
+
+function createReaderStatus(): AccessImportReaderStatusDto {
+  return {
+    provider: 'disabled',
+    displayName: 'Reader Access',
+    isAvailable: false,
+    status: 'not_configured',
+    statusMessage: 'Reader не настроен.',
+    requiredComponents: ['ACE OLE DB driver'],
+    checkedAtUtc: '2026-08-05T00:00:00Z',
+  }
+}
+
+function createClient(overrides: Partial<ImportClient> = {}): ImportClient {
+  const run = createRun()
+  return {
+    getAccessReaderStatus: async () => createReaderStatus(),
+    getAccessRuns: async () => [run],
+    getAccessRunLog: async () => [],
+    getAccessCreatedRecords: async () => [],
+    getOpenQuarantineItems: async () => [],
+    dryRunAccess: async () => run,
+    downloadAccessRunReport: async () => new Blob(['{}'], { type: 'application/json' }),
+    requestAccessImportApply: async (_token, runId) => createRun({ id: runId, status: 'import_requested' }),
+    cancelAccessImportApplyRequest: async (_token, runId) => createRun({ id: runId, status: 'import_request_cancelled' }),
+    requestAccessImportRollback: async (_token, runId) => createRun({ id: runId, status: 'rollback_requested' }),
+    resolveQuarantineItem: async (_token, itemId) => createQuarantineItem({ id: itemId, status: 'resolved' }),
+    ...overrides,
+  }
+}
+
+describe('ImportPanel server failures', () => {
+  it('shows an apply failure inside the dialog, preserves input and allows retry', async () => {
+    const user = userEvent.setup()
+    let attempts = 0
+    const run = createRun()
+    const client = createClient({
+      getAccessRuns: async () => [run],
+      requestAccessImportApply: async (_token, runId) => {
+        attempts += 1
+        if (attempts === 1) {
+          throw new Error('Сервер временно не принял заявку на импорт.')
+        }
+        return createRun({ id: runId, status: 'import_requested' })
+      },
+    })
+    render(<ImportPanel auth={auth} importClient={client} />)
+
+    await user.click(await screen.findByRole('button', { name: 'Запросить фактический импорт ГСК.accdb' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Запросить фактический импорт?' })
+    const reason = within(dialog).getByLabelText('Причина фактического импорта')
+    const backup = within(dialog).getByLabelText('Backup PostgreSQL создан перед фактическим импортом')
+    await user.type(reason, 'Dry-run проверен, backup создан')
+    await user.click(backup)
+    await user.click(within(dialog).getByRole('button', { name: 'Запросить импорт' }))
+
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent('Сервер временно не принял заявку на импорт.')
+    expect(screen.getAllByText('Сервер временно не принял заявку на импорт.')).toHaveLength(1)
+    expect(reason).toHaveValue('Dry-run проверен, backup создан')
+    expect(backup).toBeChecked()
+
+    await user.click(within(dialog).getByRole('button', { name: 'Запросить импорт' }))
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Запросить фактический импорт?' })).not.toBeInTheDocument())
+    expect(attempts).toBe(2)
+  })
+
+  it('does not repeat a completed apply request when only the follow-up log refresh fails', async () => {
+    const user = userEvent.setup()
+    let applyAttempts = 0
+    let logRequests = 0
+    const run = createRun()
+    const client = createClient({
+      getAccessRuns: async () => [run],
+      getAccessRunLog: async () => {
+        logRequests += 1
+        if (logRequests > 1) {
+          throw new Error('Журнал импорта временно недоступен.')
+        }
+        return []
+      },
+      requestAccessImportApply: async (_token, runId) => {
+        applyAttempts += 1
+        return createRun({ id: runId, status: 'import_requested' })
+      },
+    })
+    render(<ImportPanel auth={auth} importClient={client} />)
+
+    await user.click(await screen.findByRole('button', { name: 'Запросить фактический импорт ГСК.accdb' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Запросить фактический импорт?' })
+    await user.type(within(dialog).getByLabelText('Причина фактического импорта'), 'Dry-run проверен, backup создан')
+    await user.click(within(dialog).getByLabelText('Backup PostgreSQL создан перед фактическим импортом'))
+    await user.click(within(dialog).getByRole('button', { name: 'Запросить импорт' }))
+
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Запросить фактический импорт?' })).not.toBeInTheDocument())
+    expect(await screen.findByRole('alert')).toHaveTextContent('Журнал импорта временно недоступен.')
+    expect(screen.getByText('Фактический импорт запрошен. Данные не переносились до подключения reader Access.')).toHaveAttribute('role', 'status')
+    expect(applyAttempts).toBe(1)
+  })
+
+  it('shows an apply-cancel failure inside the dialog, preserves the reason and allows retry', async () => {
+    const user = userEvent.setup()
+    let attempts = 0
+    const run = createRun({ status: 'import_requested' })
+    const client = createClient({
+      getAccessRuns: async () => [run],
+      cancelAccessImportApplyRequest: async (_token, runId) => {
+        attempts += 1
+        if (attempts === 1) {
+          throw new Error('Сервер временно не отменил заявку на импорт.')
+        }
+        return createRun({ id: runId, status: 'import_request_cancelled' })
+      },
+    })
+    render(<ImportPanel auth={auth} importClient={client} />)
+
+    await user.click(await screen.findByRole('button', { name: 'Отменить заявку на импорт ГСК.accdb' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Отменить заявку на импорт?' })
+    const reason = within(dialog).getByLabelText('Причина отмены заявки на импорт')
+    await user.type(reason, 'Нужно перепроверить backup')
+    await user.click(within(dialog).getByRole('button', { name: 'Отменить заявку' }))
+
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent('Сервер временно не отменил заявку на импорт.')
+    expect(screen.getAllByText('Сервер временно не отменил заявку на импорт.')).toHaveLength(1)
+    expect(reason).toHaveValue('Нужно перепроверить backup')
+
+    await user.click(within(dialog).getByRole('button', { name: 'Отменить заявку' }))
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Отменить заявку на импорт?' })).not.toBeInTheDocument())
+    expect(attempts).toBe(2)
+  })
+
+  it('shows a rollback failure inside the dialog, preserves the reason and allows retry', async () => {
+    const user = userEvent.setup()
+    let attempts = 0
+    const run = createRun()
+    const client = createClient({
+      getAccessRuns: async () => [run],
+      requestAccessImportRollback: async (_token, runId) => {
+        attempts += 1
+        if (attempts === 1) {
+          throw new Error('Сервер временно не принял rollback.')
+        }
+        return createRun({ id: runId, status: 'rollback_requested' })
+      },
+    })
+    render(<ImportPanel auth={auth} importClient={client} />)
+
+    await user.click(await screen.findByRole('button', { name: 'Запросить rollback импорта ГСК.accdb' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Запросить rollback импорта?' })
+    const reason = within(dialog).getByLabelText('Причина rollback импорта')
+    await user.type(reason, 'Выбран неверный файл старой базы')
+    await user.click(within(dialog).getByRole('button', { name: 'Запросить rollback' }))
+
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent('Сервер временно не принял rollback.')
+    expect(screen.getAllByText('Сервер временно не принял rollback.')).toHaveLength(1)
+    expect(reason).toHaveValue('Выбран неверный файл старой базы')
+
+    await user.click(within(dialog).getByRole('button', { name: 'Запросить rollback' }))
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Запросить rollback импорта?' })).not.toBeInTheDocument())
+    expect(attempts).toBe(2)
+  })
+
+  it('shows a quarantine resolution failure inside the dialog, preserves the comment and allows retry', async () => {
+    const user = userEvent.setup()
+    let attempts = 0
+    const item = createQuarantineItem()
+    const client = createClient({
+      getAccessRuns: async () => [],
+      getOpenQuarantineItems: async () => [item],
+      resolveQuarantineItem: async (_token, itemId) => {
+        attempts += 1
+        if (attempts === 1) {
+          throw new Error('Сервер временно не закрыл строку карантина.')
+        }
+        return createQuarantineItem({ id: itemId, status: 'resolved' })
+      },
+    })
+    render(<ImportPanel auth={auth} importClient={client} />)
+
+    await user.click(await screen.findByRole('tab', { name: /Карантин/ }))
+    await user.click(await screen.findByRole('button', { name: 'Закрыть' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Закрыть строку карантина?' })
+    const comment = within(dialog).getByLabelText('Комментарий к закрытию строки карантина')
+    await user.type(comment, 'Владелец найден и сопоставлен вручную')
+    await user.click(within(dialog).getByRole('button', { name: 'Закрыть строку' }))
+
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent('Сервер временно не закрыл строку карантина.')
+    expect(screen.getAllByText('Сервер временно не закрыл строку карантина.')).toHaveLength(1)
+    expect(comment).toHaveValue('Владелец найден и сопоставлен вручную')
+
+    await user.click(within(dialog).getByRole('button', { name: 'Закрыть строку' }))
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Закрыть строку карантина?' })).not.toBeInTheDocument())
+    expect(attempts).toBe(2)
+  })
+})
