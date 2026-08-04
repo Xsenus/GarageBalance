@@ -3,52 +3,6 @@ namespace GarageBalance.Api.Tests.Deployment;
 public sealed class BackendLayeringTests
 {
     [Fact]
-    public void FormStateApplicationService_DependsOnRepositoryAbstractionInsteadOfEfInfrastructure()
-    {
-        var repositoryRoot = FindRepositoryRoot();
-        var service = File.ReadAllText(Path.Combine(
-            repositoryRoot,
-            "backend",
-            "GarageBalance.Api",
-            "Application",
-            "Workflows",
-            "FormStateService.cs"));
-
-        Assert.Contains("IFormStateRepository repository", service, StringComparison.Ordinal);
-        Assert.DoesNotContain("GarageBalanceDbContext", service, StringComparison.Ordinal);
-        Assert.DoesNotContain("GarageBalance.Api.Infrastructure", service, StringComparison.Ordinal);
-        Assert.DoesNotContain("Microsoft.EntityFrameworkCore", service, StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public void FormStateRepository_IsImplementedInInfrastructureAndRegisteredInCompositionRoot()
-    {
-        var repositoryRoot = FindRepositoryRoot();
-        var abstraction = File.ReadAllText(Path.Combine(
-            repositoryRoot,
-            "backend",
-            "GarageBalance.Api",
-            "Application",
-            "Workflows",
-            "IFormStateRepository.cs"));
-        var implementation = File.ReadAllText(Path.Combine(
-            repositoryRoot,
-            "backend",
-            "GarageBalance.Api",
-            "Infrastructure",
-            "Data",
-            "EfFormStateRepository.cs"));
-        var program = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "Program.cs"));
-
-        Assert.Contains("interface IFormStateRepository", abstraction, StringComparison.Ordinal);
-        Assert.DoesNotContain("Infrastructure", abstraction, StringComparison.Ordinal);
-        Assert.Contains("class EfFormStateRepository", implementation, StringComparison.Ordinal);
-        Assert.Contains(": IFormStateRepository", implementation, StringComparison.Ordinal);
-        Assert.Contains("GarageBalanceDbContext dbContext", implementation, StringComparison.Ordinal);
-        Assert.Contains("AddScoped<IFormStateRepository, EfFormStateRepository>()", program, StringComparison.Ordinal);
-    }
-
-    [Fact]
     public void AppReleaseApplicationService_UsesUnitOfWorkAbstractionInsteadOfEfInfrastructure()
     {
         var repositoryRoot = FindRepositoryRoot();

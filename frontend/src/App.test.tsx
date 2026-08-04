@@ -2,19 +2,6 @@ import { act, fireEvent, render, screen, waitFor, within } from '@testing-librar
 import userEvent from '@testing-library/user-event'
 import { vi } from 'vitest'
 
-vi.mock('./services/formStatesApi', () => ({
-  FormStateApiError: class FormStateApiError extends Error {},
-  formStatesApi: {
-    getState: vi.fn(async () => null),
-    saveState: vi.fn(async (_accessToken: string, scope: string, request: { payload: unknown }) => ({
-      scope,
-      payload: request.payload,
-      updatedAtUtc: '2026-06-30T03:00:00Z',
-      updatedByUserId: 'admin-user',
-    })),
-  },
-}))
-
 vi.mock('./services/settingsApi', () => ({
   settingsApi: {
     getPaymentDisplaySettings: vi.fn(async () => ({ showAllGarageOperationsByDefault: true, version: 'payment-version' })),
@@ -27,7 +14,6 @@ vi.mock('./services/settingsApi', () => ({
 }))
 
 import App from './App'
-import { formStatesApi } from './services/formStatesApi'
 import { settingsApi } from './services/settingsApi'
 import type { ApplicationSettingsClient } from './services/settingsApi'
 import type { AuditClient, AuditEventDto } from './services/auditApi'
@@ -47,13 +33,6 @@ describe('App', () => {
   beforeEach(() => {
     vi.useFakeTimers({ toFake: ['Date'] })
     vi.setSystemTime(new Date('2026-06-30T10:00:00+07:00'))
-    vi.mocked(formStatesApi.getState).mockImplementation(async () => null)
-    vi.mocked(formStatesApi.saveState).mockImplementation(async (_accessToken: string, scope: string, request: { payload: unknown }) => ({
-      scope,
-      payload: request.payload,
-      updatedAtUtc: '2026-06-30T03:00:00Z',
-      updatedByUserId: 'admin-user',
-    }))
     vi.mocked(settingsApi.getPaymentDisplaySettings).mockImplementation(async () => ({ showAllGarageOperationsByDefault: true, version: 'payment-version' }))
     vi.mocked(settingsApi.updatePaymentDisplaySettings).mockImplementation(async (_accessToken: string, request: { showAllGarageOperationsByDefault: boolean }) => request)
     window.sessionStorage.clear()
@@ -4739,36 +4718,8 @@ describe('App', () => {
     expect(within(editDialog).queryByRole('group', { name: 'Пороги тарификации выбранного тарифа' })).not.toBeInTheDocument()
   })
 
-  it('keeps backend tariff dictionaries above stale saved tariff form state', async () => {
+  it('loads tariff dictionaries from the backend', async () => {
     const user = userEvent.setup()
-    vi.mocked(formStatesApi.getState).mockImplementation(async () => ({
-      scope: 'tariffs-and-fees-prototype',
-      payload: {
-        tariffRows: [
-          {
-            id: 'water-rate',
-            group: 'Вода',
-            category: 'Вода',
-            title: 'Старый тариф воды',
-            amount: '1',
-            unit: 'руб.',
-            byMeter: false,
-            tiered: false,
-            calculationBase: 'meter_water',
-          },
-        ],
-        oneTimeRows: [
-          {
-            id: 'stale-fee',
-            name: 'Старый сбор',
-            amount: '10',
-            isActive: true,
-          },
-        ],
-      },
-      updatedAtUtc: '2026-06-29T03:00:00Z',
-      updatedByUserId: 'admin-user',
-    }))
     const dictionaryClient = createDictionaryClient({
       getTariffs: async () => [
         createTariff({
@@ -4817,44 +4768,10 @@ describe('App', () => {
     expect(within(tariffsPanel).getByLabelText('Охрана из БД: Оплата до: день')).toHaveValue('25')
     expect(within(tariffsPanel).getByLabelText('Охрана из БД: Оплата до: месяц')).toHaveTextContent('Декабрь')
     expect(within(tariffsPanel).getByLabelText('Охрана из БД: Перенос долга в просроченный: значение')).toHaveValue('45')
-    expect(vi.mocked(formStatesApi.getState).mock.calls.some((call) => call[1] === 'tariffs-and-fees-prototype')).toBe(false)
-    expect(vi.mocked(formStatesApi.saveState).mock.calls.some((call) => call[1] === 'tariffs-and-fees-prototype')).toBe(false)
   })
 
-  it('keeps empty backend tariff dictionaries empty despite stale saved tariff form state', async () => {
+  it('keeps empty backend tariff dictionaries empty', async () => {
     const user = userEvent.setup()
-    vi.mocked(formStatesApi.getState).mockImplementation(async (_accessToken: string, scope: string) => scope === 'tariffs-and-fees-prototype'
-      ? {
-        scope,
-        payload: {
-          tariffRows: [
-            {
-              id: 'stale-water-rate',
-              group: 'Вода',
-              category: 'Вода',
-              title: 'Старый тариф без БД',
-              amount: '1',
-              unit: 'руб.',
-              byMeter: false,
-              tiered: false,
-              calculationBase: 'meter_water',
-            },
-          ],
-          oneTimeRows: [
-            {
-              id: 'stale-one-time',
-              name: 'Старый нерегулярный платеж',
-              amount: '10',
-              isActive: true,
-              isDeleted: false,
-              isUsed: false,
-            },
-          ],
-        },
-        updatedAtUtc: '2026-06-29T03:00:00Z',
-        updatedByUserId: 'admin-user',
-      }
-      : null)
     const getTariffs = vi.fn(async () => [])
     const dictionaryClient = createDictionaryClient({
       getTariffs,
@@ -4983,75 +4900,8 @@ describe('App', () => {
     expect(getGarages).toHaveBeenCalledTimes(2)
   })
 
-  it('does not let obsolete contractor snapshots show a timeout over loaded dictionaries', async () => {
+  it('loads contractor dictionaries from the backend', async () => {
     const user = userEvent.setup()
-    const getState = vi.mocked(formStatesApi.getState).mockImplementation(async () => {
-      throw new Error('Сервер слишком долго не отвечает. Проверьте подключение и повторите запрос.')
-    })
-    const saveState = vi.mocked(formStatesApi.saveState).mockImplementation(async () => {
-      throw new Error('Сервер слишком долго не отвечает. Проверьте подключение и повторите запрос.')
-    })
-    const garage = createGarage({ id: 'garage-without-snapshot', number: '15' })
-
-    render(<App
-      authClient={createAuthClient()}
-      dictionaryClient={createDictionaryClient({
-        getGarages: async () => [garage],
-        getTariffs: async () => [],
-        getChargeServiceSettings: async () => [],
-        getIrregularPayments: async () => [],
-      })}
-      financeClient={createFinanceClient()}
-      importClient={createImportClient()}
-      reportClient={createReportClient()}
-      releaseClient={createReleaseClient()}
-      userClient={createUserClient()}
-    />)
-
-    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
-    await user.click(screen.getByRole('button', { name: 'Войти' }))
-    await openSection(user, 'Контрагенты')
-    const contractorsPanel = await screen.findByRole('region', { name: 'Контрагенты' })
-
-    expect(await within(contractorsPanel).findByRole('button', { name: 'Изменить гараж 15' })).toBeInTheDocument()
-    await new Promise((resolve) => window.setTimeout(resolve, 500))
-    expect(getState).not.toHaveBeenCalled()
-    expect(saveState).not.toHaveBeenCalled()
-    expect(within(contractorsPanel).queryByText('Сервер слишком долго не отвечает. Проверьте подключение и повторите запрос.')).not.toBeInTheDocument()
-
-    await openSection(user, 'Тарифы и сборы')
-    const tariffsPanel = await screen.findByRole('region', { name: 'Тарифы и сборы' })
-    expect(await within(tariffsPanel).findByText('Тарифы и услуги пока не настроены.')).toBeInTheDocument()
-    await new Promise((resolve) => window.setTimeout(resolve, 500))
-    expect(getState).not.toHaveBeenCalled()
-    expect(saveState).not.toHaveBeenCalled()
-    expect(within(tariffsPanel).queryByText('Сервер слишком долго не отвечает. Проверьте подключение и повторите запрос.')).not.toBeInTheDocument()
-  })
-
-  it('keeps backend contractor dictionaries above stale saved contractor form state', async () => {
-    const user = userEvent.setup()
-    vi.mocked(formStatesApi.getState).mockImplementation(async (_accessToken: string, scope: string) => scope === 'contractors-prototype'
-      ? {
-        scope,
-        payload: {
-          garages: [
-            { id: 'stale-garage', ownerId: null, number: '999', peopleCount: '9', floorCount: '9', owner: 'Stale Owner', phone: '', address: '', startingBalance: '0', balance: '0', overdueDebt: '', initialWater: '', initialElectricity: '', meters: '', comment: '', isDeleted: false },
-          ],
-          suppliers: [
-            { id: 'stale-supplier', name: 'Stale Supplier', service: 'Stale Service', inn: '', legalAddress: '', contactPerson: '', phone: '', email: '', contacts: [], debt: '', comment: '', isDeleted: false },
-          ],
-          staff: [
-            { id: 'stale-staff', fullName: 'Stale Staff', department: 'Stale Department', rate: '1', isDeleted: false },
-          ],
-          departments: [
-            { id: 'stale-department', name: 'Stale Department' },
-          ],
-          supplierServices: ['Stale Service'],
-        },
-        updatedAtUtc: '2026-06-29T03:00:00Z',
-        updatedByUserId: 'admin-user',
-      }
-      : null)
     const contractorOwner = createOwner({ id: 'owner-backend', lastName: 'Backend', firstName: 'Owner' })
     const contractorGarage = createGarage({ id: 'garage-backend', number: '77', ownerId: contractorOwner.id, ownerName: contractorOwner.fullName })
     const supplierGroup = createGroup({ id: 'group-backend', name: 'Backend Service' })
@@ -5077,45 +4927,19 @@ describe('App', () => {
     const contractorsPanel = await screen.findByRole('region', { name: 'Контрагенты' })
 
     await waitFor(() => expect(within(contractorsPanel).getByText('Backend Owner')).toBeInTheDocument())
-    expect(within(contractorsPanel).queryByText('Stale Owner')).not.toBeInTheDocument()
 
     await user.click(within(contractorsPanel).getByRole('tab', { name: 'Поставщики' }))
     await waitFor(() => expect(within(contractorsPanel).getByText('Backend Supplier')).toBeInTheDocument())
     expect(within(contractorsPanel).getByText('Backend Service')).toBeInTheDocument()
-    expect(within(contractorsPanel).queryByText('Stale Supplier')).not.toBeInTheDocument()
-    expect(within(contractorsPanel).queryByText('Stale Service')).not.toBeInTheDocument()
 
     await user.click(within(contractorsPanel).getByRole('tab', { name: 'Персонал' }))
     await waitFor(() => expect(within(contractorsPanel).getByText('Backend Staff')).toBeInTheDocument())
     const staffTable = within(contractorsPanel).getByRole('table', { name: 'Персонал' })
     expect(within(staffTable).getByText('Backend Department')).toBeInTheDocument()
-    expect(within(contractorsPanel).queryByText('Stale Staff')).not.toBeInTheDocument()
   })
 
-  it('keeps empty backend contractor dictionaries empty despite stale saved contractor form state', async () => {
+  it('keeps empty backend contractor dictionaries empty', async () => {
     const user = userEvent.setup()
-    vi.mocked(formStatesApi.getState).mockImplementation(async (_accessToken: string, scope: string) => scope === 'contractors-prototype'
-      ? {
-        scope,
-        payload: {
-          garages: [
-            { id: 'stale-empty-garage', ownerId: null, number: '404', peopleCount: '1', floorCount: '1', owner: 'Stale Empty Owner', phone: '', address: '', startingBalance: '0', balance: '0', overdueDebt: '', initialWater: '', initialElectricity: '', meters: '', comment: '', isDeleted: false },
-          ],
-          suppliers: [
-            { id: 'stale-empty-supplier', name: 'Stale Empty Supplier', service: 'Stale Empty Service', inn: '', legalAddress: '', contactPerson: '', phone: '', email: '', contacts: [], debt: '', comment: '', isDeleted: false },
-          ],
-          staff: [
-            { id: 'stale-empty-staff', fullName: 'Stale Empty Staff', department: 'Stale Empty Department', rate: '1', isDeleted: false },
-          ],
-          departments: [
-            { id: 'stale-empty-department', name: 'Stale Empty Department' },
-          ],
-          supplierServices: ['Stale Empty Service'],
-        },
-        updatedAtUtc: '2026-06-29T03:00:00Z',
-        updatedByUserId: 'admin-user',
-      }
-      : null)
     const getGarages = vi.fn(async () => [])
     const dictionaryClient = createDictionaryClient({
       getOwners: async () => [],
@@ -5135,9 +4959,7 @@ describe('App', () => {
     const contractorsPanel = await screen.findByRole('region', { name: 'Контрагенты' })
     await waitFor(() => expect(getGarages).toHaveBeenCalled())
 
-    expect(within(contractorsPanel).queryByText('Stale Empty Owner')).not.toBeInTheDocument()
-    expect(within(contractorsPanel).queryByText('Stale Empty Supplier')).not.toBeInTheDocument()
-    expect(within(contractorsPanel).queryByText('Stale Empty Staff')).not.toBeInTheDocument()
+    expect(within(contractorsPanel).getByText('Гаражи пока не настроены.')).toBeInTheDocument()
   })
 
   it('shows meter readings prototype as a yearly garage table', async () => {
@@ -6927,7 +6749,7 @@ describe('App', () => {
     expect(within(incomeTable).queryByText('май.26')).not.toBeInTheDocument()
   })
 
-  it('ignores saved payment state and clears search, garages and worksheet on every new opening', async () => {
+  it('clears payment search, garages and worksheet on every new opening', async () => {
     const user = userEvent.setup()
     const garageFromDictionary = createGarage({
       id: 'garage-1',
@@ -6941,43 +6763,6 @@ describe('App', () => {
       garageNumber: garageFromDictionary.number,
       ownerName: garageFromDictionary.ownerName,
     }))
-    vi.mocked(formStatesApi.getState).mockImplementation(async (_accessToken: string, scope: string) => scope === 'payments-prototype'
-      ? {
-          scope,
-          payload: {
-            selectedGarageId: garageFromDictionary.id,
-            garageSearch: 'Гараж 1 - Иванов Иван',
-            incomeWorksheetMonthFrom: '2026-05',
-            incomeWorksheetMonthTo: '2026-06',
-            garageRows: [
-              {
-                id: 'stale-income-row',
-                month: '2026-05',
-                monthLabel: 'май.26',
-                service: 'Старое начисление из сохраненного состояния',
-                meter: null,
-                difference: null,
-                payable: 9999,
-                paymentDraft: '',
-                paid: 0,
-                debt: 9999,
-              },
-            ],
-            historyRows: [
-              {
-                id: 'stale-history-row',
-                date: '01.05.2026',
-                time: '10:00',
-                amount: 9999,
-                purpose: 'Старая история из сохраненного состояния',
-                debtAfter: 9999,
-              },
-            ],
-          },
-          updatedAtUtc: '2026-06-30T03:00:00Z',
-          updatedByUserId: 'admin-user',
-        }
-      : null)
     render(
       <App
         authClient={createAuthClient()}
@@ -7005,7 +6790,6 @@ describe('App', () => {
     expect(within(prototype).queryByLabelText('Выбранные гаражи')).not.toBeInTheDocument()
     expect(within(prototype).queryByRole('table', { name: 'Поступления гаража 1' })).not.toBeInTheDocument()
     expect(getGarageIncomeWorksheet).not.toHaveBeenCalled()
-    expect(vi.mocked(formStatesApi.getState).mock.calls.some((call) => call[1] === 'payments-prototype')).toBe(false)
 
     await user.type(searchInput, 'Иванов')
     await user.click(await within(prototype).findByRole('option', { name: /Гараж\s*1\s*Иванов Иван/ }))
@@ -7021,60 +6805,6 @@ describe('App', () => {
     expect(within(reopenedPrototype).queryByLabelText('Выбранный гараж')).not.toBeInTheDocument()
     expect(within(reopenedPrototype).queryByRole('table', { name: 'Поступления гаража 1' })).not.toBeInTheDocument()
     expect(within(reopenedPrototype).queryByRole('table', { name: 'История платежей гаража' })).not.toBeInTheDocument()
-    expect(vi.mocked(formStatesApi.saveState).mock.calls.some((call) => call[1] === 'payments-prototype')).toBe(false)
-  })
-
-  it('does not restore saved payment rows for a garage missing from the dictionary', async () => {
-    const user = userEvent.setup()
-    vi.mocked(formStatesApi.getState).mockImplementation(async (_accessToken: string, scope: string) => scope === 'payments-prototype'
-      ? {
-          scope,
-          payload: {
-            selectedGarageId: 'prototype-garage-1',
-            garageSearch: 'Гараж 1 - Иванов Иван',
-            incomeWorksheetMonthFrom: '2026-05',
-            incomeWorksheetMonthTo: '2026-06',
-            garageRows: [
-              {
-                id: 'stale-prototype-income-row',
-                month: '2026-05',
-                monthLabel: 'май.26',
-                service: 'Старое демо-начисление',
-                meter: null,
-                difference: null,
-                payable: 9999,
-                paymentDraft: '',
-                paid: 0,
-                debt: 9999,
-              },
-            ],
-            historyRows: [
-              {
-                id: 'stale-prototype-history-row',
-                date: '19.06.2026',
-                time: '10:24',
-                amount: 5674,
-                purpose: 'Старый демо-платеж',
-                debtAfter: 0,
-              },
-            ],
-          },
-          updatedAtUtc: '2026-06-30T03:00:00Z',
-          updatedByUserId: 'admin-user',
-        }
-      : null)
-    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient({ getGarages: async () => [] })} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
-
-    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
-    await user.click(screen.getByRole('button', { name: 'Войти' }))
-
-    await openSection(user, 'Платежи')
-    const prototype = within(await screen.findByRole('region', { name: 'Платежи' })).getByRole('region', { name: 'Форма платежей' })
-
-    expect(await within(prototype).findByText('Выберите гараж через поиск, чтобы увидеть карточку, поступления, историю платежей и задолженность.')).toHaveAttribute('role', 'status')
-    expect(within(prototype).queryByText('Гараж 1 - Иванов Иван')).not.toBeInTheDocument()
-    expect(within(prototype).queryByText('Старое демо-начисление')).not.toBeInTheDocument()
-    expect(within(prototype).queryByText('Старый демо-платеж')).not.toBeInTheDocument()
   })
 
   it('loads selected garage income worksheet from finance backend', async () => {

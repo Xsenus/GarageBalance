@@ -41,7 +41,7 @@ public sealed class DataModelErdTests
         Assert.Contains("fee_campaign_garages", document, StringComparison.Ordinal);
         Assert.Contains("funds", document, StringComparison.Ordinal);
         Assert.Contains("fund_operations", document, StringComparison.Ordinal);
-        Assert.Contains("form_states", document, StringComparison.Ordinal);
+        Assert.DoesNotContain("form_states", document, StringComparison.Ordinal);
         Assert.Contains("income_types ||--o{ fee_campaigns", document, StringComparison.Ordinal);
         Assert.Contains("fee_campaigns ||--o{ fee_campaign_garages", document, StringComparison.Ordinal);
         Assert.Contains("garages ||--o{ fee_campaign_garages", document, StringComparison.Ordinal);
@@ -58,7 +58,6 @@ public sealed class DataModelErdTests
         Assert.Contains("IsActive", document, StringComparison.Ordinal);
         Assert.Contains("BalanceBefore", document, StringComparison.Ordinal);
         Assert.Contains("BalanceAfter", document, StringComparison.Ordinal);
-        Assert.Contains("Scope", document, StringComparison.Ordinal);
         Assert.Contains("Name` при `IsArchived = false", document, StringComparison.Ordinal);
         Assert.Contains("Name + EffectiveFrom", document, StringComparison.Ordinal);
         Assert.Contains("GarageId + IncomeTypeId + AccountingMonth + Source", document, StringComparison.Ordinal);

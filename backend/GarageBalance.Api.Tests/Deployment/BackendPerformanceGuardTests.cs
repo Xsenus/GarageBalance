@@ -1233,17 +1233,13 @@ public sealed class BackendPerformanceGuardTests
     }
 
     [Fact]
-    public void FormAndApplicationSettingsKeepOneCurrentRowPerKey()
+    public void ApplicationSettingsKeepOneCurrentRowPerKey()
     {
         var model = ReadApiSource("Infrastructure/Data/GarageBalanceDbContext.cs");
-        var formRepository = ReadApiSource("Infrastructure/Data/EfFormStateRepository.cs");
         var settingsRepository = ReadApiSource("Infrastructure/Data/EfApplicationSettingRepository.cs");
 
-        Assert.Contains("entity.HasIndex(state => state.Scope).IsUnique()", model, StringComparison.Ordinal);
         Assert.Contains("entity.HasIndex(setting => setting.Key).IsUnique()", model, StringComparison.Ordinal);
-        Assert.Contains("SingleOrDefaultAsync(item => item.Scope == scope", formRepository, StringComparison.Ordinal);
         Assert.Contains("SingleOrDefaultAsync(setting => setting.Key == key", settingsRepository, StringComparison.Ordinal);
-        Assert.DoesNotContain(".ToList", formRepository, StringComparison.Ordinal);
         Assert.DoesNotContain(".ToList", settingsRepository, StringComparison.Ordinal);
     }
 

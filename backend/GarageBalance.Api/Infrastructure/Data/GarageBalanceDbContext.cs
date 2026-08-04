@@ -9,7 +9,6 @@ using GarageBalance.Api.Domain.Integrations;
 using GarageBalance.Api.Domain.Releases;
 using GarageBalance.Api.Domain.Reports;
 using GarageBalance.Api.Domain.Settings;
-using GarageBalance.Api.Domain.Workflows;
 using GarageBalance.Api.Domain.Users;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
@@ -48,7 +47,6 @@ public sealed class GarageBalanceDbContext(DbContextOptions<GarageBalanceDbConte
     public DbSet<MeterDevice> MeterDevices => Set<MeterDevice>();
     public DbSet<Fund> Funds => Set<Fund>();
     public DbSet<FundOperation> FundOperations => Set<FundOperation>();
-    public DbSet<FormState> FormStates => Set<FormState>();
     public DbSet<GarageReportQuickList> GarageReportQuickLists => Set<GarageReportQuickList>();
     public DbSet<GarageReportQuickListGarage> GarageReportQuickListGarages => Set<GarageReportQuickListGarage>();
     public DbSet<AccessImportRun> AccessImportRuns => Set<AccessImportRun>();
@@ -814,16 +812,6 @@ public sealed class GarageBalanceDbContext(DbContextOptions<GarageBalanceDbConte
             entity.HasIndex(operation => operation.CreatedAtUtc);
             entity.HasIndex(operation => operation.ActorUserId);
             entity.HasIndex(operation => new { operation.Account, operation.OperationKind });
-        });
-
-        modelBuilder.Entity<FormState>(entity =>
-        {
-            entity.ToTable("form_states");
-            entity.HasKey(state => state.Id);
-            entity.Property(state => state.Scope).HasMaxLength(120).IsRequired();
-            entity.Property(state => state.PayloadJson).IsRequired();
-            entity.HasIndex(state => state.Scope).IsUnique();
-            entity.HasIndex(state => state.UpdatedAtUtc);
         });
 
         modelBuilder.Entity<GarageReportQuickList>(entity =>
