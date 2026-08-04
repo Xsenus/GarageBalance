@@ -6,6 +6,7 @@ import type { AppReleaseDto, AppReleaseItemDto, ReleaseClient, UpsertAppReleaseR
 import { hasPermission, permissions } from '../../shared/accessControl'
 import { formatReleaseDate } from '../../shared/formatters'
 import { AsyncErrorState, EmptyState, LoadingSkeleton } from '../../shared/AsyncState'
+import { SelectControl } from '../../shared/SelectControl'
 
 const showManualReleaseEditing = false
 const releasePageSize = 9
@@ -274,11 +275,11 @@ export function ReleasePanel({ auth, releaseClient }: { auth: AuthResponse; rele
               <div className="release-editor__item" key={`${index}-${item.type}`}>
                 <label>
                   Тип
-                  <select aria-label={`Тип пункта обновления ${index + 1}`} value={item.type} onChange={(event) => updateEditorItem(index, { type: event.target.value })}>
-                    {releaseItemTypeOptions.map((option) => (
-                      <option value={option.value} key={option.value}>{option.label}</option>
-                    ))}
-                  </select>
+                  <SelectControl
+                    aria-label={`Тип пункта обновления ${index + 1}`}
+                    value={item.type}
+                    options={releaseItemTypeOptions}
+                    onChange={(type) => updateEditorItem(index, { type })} />
                 </label>
                 <label>
                   Текст

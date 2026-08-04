@@ -176,8 +176,7 @@ describe('accessible dynamic messages', () => {
 
     const selectOpeningTags = [...workspaceSource.matchAll(/<select\b[\s\S]*?>/g)].map((match) => match[0])
 
-    expect(selectOpeningTags.length).toBeGreaterThan(0)
-    expect(selectOpeningTags.filter((tag) => !/\saria-label=|\saria-labelledby=/.test(tag))).toEqual([])
+    expect(selectOpeningTags).toEqual([])
     expect(dictionaryPanelSource).toContain("from '../../shared/SelectControl'")
     expect(dictionaryPanelSource).toContain("from '../../shared/LocalizedDatePicker'")
     expect(dictionaryPanelSource).not.toContain('<select')
@@ -188,6 +187,7 @@ describe('accessible dynamic messages', () => {
     expect(financePanelSource).toContain('aria-label="Гараж для поступления"')
     expect(financePanelSource).toContain('aria-label="Услуга или статья расхода выплаты"')
     expect(financePanelSource).toContain('aria-label="Тип выплаты"')
+    expect(financePanelSource).not.toContain('<select')
     expect(financePanelSource).toContain("pageSizeLabel={getFinanceToolbarLabel('pageSize')}")
     expect(financePanelSource).toContain('<SelectControl aria-label="Месяц поступлений с"')
     expect(financePanelSource).toContain('<SelectControl aria-label="Месяц поступлений по"')

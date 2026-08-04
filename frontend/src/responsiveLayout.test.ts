@@ -1,5 +1,5 @@
 // @vitest-environment node
-import { readFileSync } from 'node:fs'
+import { readFileSync, readdirSync } from 'node:fs'
 import { resolve } from 'node:path'
 
 import { describe, expect, it } from 'vitest'
@@ -8,6 +8,23 @@ describe('responsive layout styles', () => {
   const appCss = readFileSync(resolve(process.cwd(), 'src', 'App.css'), 'utf8')
   const contractorsPanel = readFileSync(resolve(process.cwd(), 'src', 'features', 'contractors', 'ContractorsPanel.tsx'), 'utf8')
   const normalizedAppCss = appCss.replace(/\r\n/g, '\n')
+
+  function collectFeatureTsxFiles(directory: string): string[] {
+    return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
+      const path = resolve(directory, entry.name)
+      if (entry.isDirectory()) return collectFeatureTsxFiles(path)
+      return entry.isFile() && entry.name.endsWith('.tsx') ? [path] : []
+    })
+  }
+
+  it('uses shared controls instead of browser-native selects and date pickers', () => {
+    const nativeControls = collectFeatureTsxFiles(resolve(process.cwd(), 'src', 'features')).flatMap((path) => {
+      const source = readFileSync(path, 'utf8')
+      return /<select\b|type=["'](?:date|month)["']/.test(source) ? [path] : []
+    })
+
+    expect(nativeControls).toEqual([])
+  })
 
   it('collapses the main shell and data rows on tablet width', () => {
     expect(appCss).toContain('@media (max-width: 1100px)')

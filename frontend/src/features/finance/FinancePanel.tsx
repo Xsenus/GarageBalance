@@ -2007,28 +2007,16 @@ export function FinancePanel({
           </div>
           {incomeGarageSearchStatus ? <p className="form-hint" role="status" aria-live="polite">{incomeGarageSearchStatus}</p> : null}
           {financeField('incomeGarage', (
-            <select aria-label="Гараж для поступления" value={incomeForm.garageId} onChange={(event) => setIncomeForm({ ...incomeForm, garageId: event.target.value })} required>
-              <option value="" disabled>
-                Выберите гараж
-              </option>
-              {incomeGarageOptions.map((garage) => (
-                <option value={garage.id} key={garage.id}>
-                  {garage.ownerName ? `Гараж ${garage.number} - ${garage.ownerName}` : `Гараж ${garage.number}`}
-                </option>
-              ))}
-            </select>
+            <SelectControl aria-label="Гараж для поступления" value={incomeForm.garageId} options={[
+              { value: '', label: 'Выберите гараж' },
+              ...incomeGarageOptions.map((garage) => ({ value: garage.id, label: garage.ownerName ? `Гараж ${garage.number} - ${garage.ownerName}` : `Гараж ${garage.number}` })),
+            ]} onChange={(garageId) => setIncomeForm({ ...incomeForm, garageId })} />
           ))}
           {financeField('incomeType', (
-            <select aria-label="Вид поступления для платежа" value={incomeForm.incomeTypeId} onChange={(event) => setIncomeForm({ ...incomeForm, incomeTypeId: event.target.value })} required>
-              <option value="" disabled>
-                Выберите вид
-              </option>
-              {incomeTypes.map((item) => (
-                <option value={item.id} key={item.id}>
-                  {item.name}
-                </option>
-              ))}
-            </select>
+            <SelectControl aria-label="Вид поступления для платежа" value={incomeForm.incomeTypeId} options={[
+              { value: '', label: 'Выберите вид' },
+              ...incomeTypes.map((item) => ({ value: item.id, label: item.name })),
+            ]} onChange={(incomeTypeId) => setIncomeForm({ ...incomeForm, incomeTypeId })} />
           ))}
           <div className="inline-fields">
             {financeField('incomeDate', <LocalizedDatePicker ariaLabel="Дата поступления" mode="date" value={incomeForm.operationDate} onChange={(operationDate) => setIncomeForm({ ...incomeForm, operationDate })} required />)}
@@ -2129,28 +2117,16 @@ export function FinancePanel({
       return (
         <>
           {financeField('accrualGarage', (
-            <select aria-label="Гараж для начисления" value={accrualForm.garageId} onChange={(event) => setAccrualForm({ ...accrualForm, garageId: event.target.value })} required>
-              <option value="" disabled>
-                Выберите гараж
-              </option>
-              {garages.map((garage) => (
-                <option value={garage.id} key={garage.id}>
-                  Гараж {garage.number}
-                </option>
-              ))}
-            </select>
+            <SelectControl aria-label="Гараж для начисления" value={accrualForm.garageId} options={[
+              { value: '', label: 'Выберите гараж' },
+              ...garages.map((garage) => ({ value: garage.id, label: `Гараж ${garage.number}` })),
+            ]} onChange={(garageId) => setAccrualForm({ ...accrualForm, garageId })} />
           ))}
           {financeField('accrualIncomeType', (
-            <select aria-label="Вид начисления" value={accrualForm.incomeTypeId} onChange={(event) => setAccrualForm({ ...accrualForm, incomeTypeId: event.target.value })} required>
-              <option value="" disabled>
-                Выберите вид
-              </option>
-              {incomeTypes.map((item) => (
-                <option value={item.id} key={item.id}>
-                  {item.name}
-                </option>
-              ))}
-            </select>
+            <SelectControl aria-label="Вид начисления" value={accrualForm.incomeTypeId} options={[
+              { value: '', label: 'Выберите вид' },
+              ...incomeTypes.map((item) => ({ value: item.id, label: item.name })),
+            ]} onChange={(incomeTypeId) => setAccrualForm({ ...accrualForm, incomeTypeId })} />
           ))}
           <div className="inline-fields">
           {financeField('accrualMonth', <LocalizedDatePicker ariaLabel="Месяц начисления" mode="month" value={accrualForm.accountingMonth.slice(0, 7)} onChange={(accountingMonth) => setAccrualForm({ ...accrualForm, accountingMonth: `${accountingMonth}-01` })} required />)}
@@ -2167,25 +2143,15 @@ export function FinancePanel({
       return (
         <>
           {financeField('supplierAccrualSupplier', (
-            <select aria-label="Поставщик для начисления" value={supplierAccrualForm.supplierId} onChange={(event) => selectSupplierForAccrual(event.target.value)} required>
-              <option value="" disabled>
-                Выберите поставщика
-              </option>
-              {suppliers.map((supplier) => (
-                <option value={supplier.id} key={supplier.id}>
-                  {supplier.name}
-                </option>
-              ))}
-            </select>
+            <SelectControl aria-label="Поставщик для начисления" value={supplierAccrualForm.supplierId} options={[
+              { value: '', label: 'Выберите поставщика' },
+              ...suppliers.map((supplier) => ({ value: supplier.id, label: supplier.name })),
+            ]} onChange={selectSupplierForAccrual} />
           ))}
           {financeField('supplierAccrualType', (
-            <select aria-label="Услуга начисления поставщику" value={supplierAccrualForm.expenseTypeId} disabled required>
-              {supplierAccrualForm.expenseTypeId ? (
-                <option value={supplierAccrualForm.expenseTypeId}>
-                  {getSupplierAccrualExpenseType(suppliers.find((supplier) => supplier.id === supplierAccrualForm.supplierId), expenseTypes)?.name}
-                </option>
-              ) : <option value="">Для поставщика услуга не настроена</option>}
-            </select>
+            <SelectControl aria-label="Услуга начисления поставщику" value={supplierAccrualForm.expenseTypeId} options={supplierAccrualForm.expenseTypeId
+              ? [{ value: supplierAccrualForm.expenseTypeId, label: getSupplierAccrualExpenseType(suppliers.find((supplier) => supplier.id === supplierAccrualForm.supplierId), expenseTypes)?.name ?? 'Настроенная услуга' }]
+              : [{ value: '', label: 'Для поставщика услуга не настроена' }]} onChange={() => undefined} disabled />
           ))}
           <div className="inline-fields">
           {financeField('supplierAccrualMonth', <LocalizedDatePicker ariaLabel="Месяц начисления поставщику" mode="month" value={supplierAccrualForm.accountingMonth.slice(0, 7)} onChange={(accountingMonth) => setSupplierAccrualForm({ ...supplierAccrualForm, accountingMonth: `${accountingMonth}-01` })} required />)}
@@ -2205,16 +2171,10 @@ export function FinancePanel({
       return (
         <>
           {financeField('salaryGroup', (
-            <select aria-label="Группа для зарплаты" value={salaryForm.supplierGroupId} onChange={(event) => setSalaryForm({ ...salaryForm, supplierGroupId: event.target.value })} required>
-              <option value="" disabled>
-                Выберите группу
-              </option>
-              {supplierGroups.map((group) => (
-                <option value={group.id} key={group.id}>
-                  {group.name}
-                </option>
-              ))}
-            </select>
+            <SelectControl aria-label="Группа для зарплаты" value={salaryForm.supplierGroupId} options={[
+              { value: '', label: 'Выберите группу' },
+              ...supplierGroups.map((group) => ({ value: group.id, label: group.name })),
+            ]} onChange={(supplierGroupId) => setSalaryForm({ ...salaryForm, supplierGroupId })} />
           ))}
           <div className="inline-fields">
           {financeField('salaryMonth', <LocalizedDatePicker ariaLabel="Месяц зарплаты" mode="month" value={salaryForm.accountingMonth.slice(0, 7)} onChange={(accountingMonth) => setSalaryForm({ ...salaryForm, accountingMonth: `${accountingMonth}-01` })} required />)}
@@ -2233,22 +2193,16 @@ export function FinancePanel({
     return (
       <>
         {financeField('meterGarage', (
-          <select aria-label="Гараж для показания" value={meterForm.garageId} onChange={(event) => setMeterForm({ ...meterForm, garageId: event.target.value })} required>
-            <option value="" disabled>
-              Выберите гараж
-            </option>
-            {garages.map((garage) => (
-              <option value={garage.id} key={garage.id}>
-                Гараж {garage.number}
-              </option>
-            ))}
-          </select>
+          <SelectControl aria-label="Гараж для показания" value={meterForm.garageId} options={[
+            { value: '', label: 'Выберите гараж' },
+            ...garages.map((garage) => ({ value: garage.id, label: `Гараж ${garage.number}` })),
+          ]} onChange={(garageId) => setMeterForm({ ...meterForm, garageId })} />
         ))}
         {financeField('meterKind', (
-          <select aria-label="Тип счетчика" value={meterForm.meterKind} onChange={(event) => setMeterForm({ ...meterForm, meterKind: event.target.value as 'water' | 'electricity' })} required>
-            <option value="water">Вода</option>
-            <option value="electricity">Электричество</option>
-          </select>
+          <SelectControl aria-label="Тип счетчика" value={meterForm.meterKind} options={[
+            { value: 'water', label: 'Вода' },
+            { value: 'electricity', label: 'Электричество' },
+          ]} onChange={(meterKind) => setMeterForm({ ...meterForm, meterKind: meterKind as 'water' | 'electricity' })} />
         ))}
         <div className="inline-fields">
           {financeField('meterMonth', <LocalizedDatePicker ariaLabel="Месяц показания" mode="month" value={meterForm.accountingMonth.slice(0, 7)} onChange={(accountingMonth) => setMeterForm({ ...meterForm, accountingMonth: `${accountingMonth}-01` })} required />)}
@@ -2405,26 +2359,14 @@ export function FinancePanel({
             </button>
           </div>
           {incomeGarageSearchStatus ? <p className="form-hint" role="status" aria-live="polite">{incomeGarageSearchStatus}</p> : null}
-          <select aria-label="Гараж для поступления" value={incomeForm.garageId} onChange={(event) => setIncomeForm({ ...incomeForm, garageId: event.target.value })} required>
-            <option value="" disabled>
-              Выберите гараж
-            </option>
-            {incomeGarageOptions.map((garage) => (
-              <option value={garage.id} key={garage.id}>
-                {garage.ownerName ? `Гараж ${garage.number} - ${garage.ownerName}` : `Гараж ${garage.number}`}
-              </option>
-            ))}
-          </select>
-          <select aria-label="Вид поступления для платежа" value={incomeForm.incomeTypeId} onChange={(event) => setIncomeForm({ ...incomeForm, incomeTypeId: event.target.value })} required>
-            <option value="" disabled>
-              Выберите вид
-            </option>
-            {incomeTypes.map((item) => (
-              <option value={item.id} key={item.id}>
-                {item.name}
-              </option>
-            ))}
-          </select>
+          <SelectControl aria-label="Гараж для поступления" value={incomeForm.garageId} options={[
+            { value: '', label: 'Выберите гараж' },
+            ...incomeGarageOptions.map((garage) => ({ value: garage.id, label: garage.ownerName ? `Гараж ${garage.number} - ${garage.ownerName}` : `Гараж ${garage.number}` })),
+          ]} onChange={(garageId) => setIncomeForm({ ...incomeForm, garageId })} />
+          <SelectControl aria-label="Вид поступления для платежа" value={incomeForm.incomeTypeId} options={[
+            { value: '', label: 'Выберите вид' },
+            ...incomeTypes.map((item) => ({ value: item.id, label: item.name })),
+          ]} onChange={(incomeTypeId) => setIncomeForm({ ...incomeForm, incomeTypeId })} />
           <div className="inline-fields">
             <LocalizedDatePicker ariaLabel="Дата поступления" mode="date" value={incomeForm.operationDate} onChange={(operationDate) => setIncomeForm({ ...incomeForm, operationDate })} required />
             <LocalizedDatePicker ariaLabel="Месяц поступления" mode="month" value={incomeForm.accountingMonth.slice(0, 7)} onChange={(accountingMonth) => setIncomeForm({ ...incomeForm, accountingMonth: `${accountingMonth}-01` })} required />
@@ -2515,26 +2457,14 @@ export function FinancePanel({
 
         <form className="dictionary-form" onSubmit={saveAccrual}>
           <h3>Ручное начисление</h3>
-          <select aria-label="Гараж для начисления" value={accrualForm.garageId} onChange={(event) => setAccrualForm({ ...accrualForm, garageId: event.target.value })} required>
-            <option value="" disabled>
-              Выберите гараж
-            </option>
-            {garages.map((garage) => (
-              <option value={garage.id} key={garage.id}>
-                Гараж {garage.number}
-              </option>
-            ))}
-          </select>
-          <select aria-label="Вид начисления" value={accrualForm.incomeTypeId} onChange={(event) => setAccrualForm({ ...accrualForm, incomeTypeId: event.target.value })} required>
-            <option value="" disabled>
-              Выберите вид
-            </option>
-            {incomeTypes.map((item) => (
-              <option value={item.id} key={item.id}>
-                {item.name}
-              </option>
-            ))}
-          </select>
+          <SelectControl aria-label="Гараж для начисления" value={accrualForm.garageId} options={[
+            { value: '', label: 'Выберите гараж' },
+            ...garages.map((garage) => ({ value: garage.id, label: `Гараж ${garage.number}` })),
+          ]} onChange={(garageId) => setAccrualForm({ ...accrualForm, garageId })} />
+          <SelectControl aria-label="Вид начисления" value={accrualForm.incomeTypeId} options={[
+            { value: '', label: 'Выберите вид' },
+            ...incomeTypes.map((item) => ({ value: item.id, label: item.name })),
+          ]} onChange={(incomeTypeId) => setAccrualForm({ ...accrualForm, incomeTypeId })} />
           <div className="inline-fields">
           <LocalizedDatePicker ariaLabel="Месяц начисления" mode="month" value={accrualForm.accountingMonth.slice(0, 7)} onChange={(accountingMonth) => setAccrualForm({ ...accrualForm, accountingMonth: `${accountingMonth}-01` })} required />
             <MoneyInput aria-label="Сумма начисления" min="0.01" value={accrualForm.amount} onValueChange={(amount) => setAccrualForm({ ...accrualForm, amount })} required />
@@ -2548,23 +2478,13 @@ export function FinancePanel({
 
         <form className="dictionary-form" onSubmit={saveSupplierAccrual}>
           <h3>Начисление поставщику</h3>
-          <select aria-label="Поставщик для начисления" value={supplierAccrualForm.supplierId} onChange={(event) => selectSupplierForAccrual(event.target.value)} required>
-            <option value="" disabled>
-              Выберите поставщика
-            </option>
-            {suppliers.map((supplier) => (
-              <option value={supplier.id} key={supplier.id}>
-                {supplier.name}
-              </option>
-            ))}
-          </select>
-          <select aria-label="Услуга начисления поставщику" value={supplierAccrualForm.expenseTypeId} disabled required>
-            {supplierAccrualForm.expenseTypeId ? (
-              <option value={supplierAccrualForm.expenseTypeId}>
-                {getSupplierAccrualExpenseType(suppliers.find((supplier) => supplier.id === supplierAccrualForm.supplierId), expenseTypes)?.name}
-              </option>
-            ) : <option value="">Для поставщика услуга не настроена</option>}
-          </select>
+          <SelectControl aria-label="Поставщик для начисления" value={supplierAccrualForm.supplierId} options={[
+            { value: '', label: 'Выберите поставщика' },
+            ...suppliers.map((supplier) => ({ value: supplier.id, label: supplier.name })),
+          ]} onChange={selectSupplierForAccrual} />
+          <SelectControl aria-label="Услуга начисления поставщику" value={supplierAccrualForm.expenseTypeId} options={supplierAccrualForm.expenseTypeId
+            ? [{ value: supplierAccrualForm.expenseTypeId, label: getSupplierAccrualExpenseType(suppliers.find((supplier) => supplier.id === supplierAccrualForm.supplierId), expenseTypes)?.name ?? 'Настроенная услуга' }]
+            : [{ value: '', label: 'Для поставщика услуга не настроена' }]} onChange={() => undefined} disabled />
           <div className="inline-fields">
           <LocalizedDatePicker ariaLabel="Месяц начисления поставщику" mode="month" value={supplierAccrualForm.accountingMonth.slice(0, 7)} onChange={(accountingMonth) => setSupplierAccrualForm({ ...supplierAccrualForm, accountingMonth: `${accountingMonth}-01` })} required />
             <MoneyInput aria-label="Сумма начисления поставщику" min="0.01" value={supplierAccrualForm.amount} onValueChange={(amount) => setSupplierAccrualForm({ ...supplierAccrualForm, amount })} required />
@@ -2581,20 +2501,14 @@ export function FinancePanel({
 
         <form className="dictionary-form" onSubmit={saveMeterReading}>
           <h3>Показание счетчика</h3>
-          <select aria-label="Гараж для счетчика" value={meterForm.garageId} onChange={(event) => setMeterForm({ ...meterForm, garageId: event.target.value })} required>
-            <option value="" disabled>
-              Выберите гараж
-            </option>
-            {garages.map((garage) => (
-              <option value={garage.id} key={garage.id}>
-                Гараж {garage.number}
-              </option>
-            ))}
-          </select>
-          <select aria-label="Тип счетчика" value={meterForm.meterKind} onChange={(event) => setMeterForm({ ...meterForm, meterKind: event.target.value as 'water' | 'electricity' })} required>
-            <option value="water">Вода</option>
-            <option value="electricity">Электричество</option>
-          </select>
+          <SelectControl aria-label="Гараж для счетчика" value={meterForm.garageId} options={[
+            { value: '', label: 'Выберите гараж' },
+            ...garages.map((garage) => ({ value: garage.id, label: `Гараж ${garage.number}` })),
+          ]} onChange={(garageId) => setMeterForm({ ...meterForm, garageId })} />
+          <SelectControl aria-label="Тип счетчика" value={meterForm.meterKind} options={[
+            { value: 'water', label: 'Вода' },
+            { value: 'electricity', label: 'Электричество' },
+          ]} onChange={(meterKind) => setMeterForm({ ...meterForm, meterKind: meterKind as 'water' | 'electricity' })} />
           <div className="inline-fields">
             <LocalizedDatePicker ariaLabel="Месяц показания" mode="month" value={meterForm.accountingMonth.slice(0, 7)} onChange={(accountingMonth) => setMeterForm({ ...meterForm, accountingMonth: `${accountingMonth}-01` })} required />
             <LocalizedDatePicker ariaLabel="Дата показания" mode="date" value={meterForm.readingDate} onChange={(readingDate) => setMeterForm({ ...meterForm, readingDate })} required />

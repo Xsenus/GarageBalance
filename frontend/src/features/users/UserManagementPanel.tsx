@@ -10,6 +10,7 @@ import { FormField } from '../../shared/FormField'
 import { formatDateTime } from '../../shared/formatters'
 import { useEscapeKey, useFocusOnOpen, useFocusTrap, useRestoreFocusOnClose } from '../../shared/focusHooks'
 import { createEmptyPage } from '../../shared/pagination'
+import { SelectControl } from '../../shared/SelectControl'
 import { TablePagination } from '../../shared/TablePagination'
 import type { UserFormState } from '../../shared/userManagement'
 import { getInitialRoleCodes, getRoleLabel, getUserEditorChanges, getUserEditorValidationErrors } from '../../shared/userManagement'
@@ -606,10 +607,11 @@ export function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; 
                 </div>
               </FormField>
               <FormField label="Статус">
-                <select aria-label="Статус пользователя" value={form.isActive ? 'active' : 'inactive'} onChange={(event) => setForm({ ...form, isActive: event.target.value === 'active' })}>
-                  <option value="active">Активен</option>
-                  <option value="inactive">Отключен</option>
-                </select>
+                <SelectControl
+                  aria-label="Статус пользователя"
+                  value={form.isActive ? 'active' : 'inactive'}
+                  options={[{ value: 'active', label: 'Активен' }, { value: 'inactive', label: 'Отключен' }]}
+                  onChange={(value) => setForm({ ...form, isActive: value === 'active' })} />
               </FormField>
               {editor.user?.isActive && !form.isActive ? (
                 <FormField label="Причина отключения">
