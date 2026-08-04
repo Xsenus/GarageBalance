@@ -83,7 +83,9 @@ public sealed class BackendPerformanceGuardTests
             repositorySource.IndexOf("public async Task<FundTotalsData> GetTotalsAsync", StringComparison.Ordinal)..repositorySource.IndexOf("public async Task<IReadOnlyList<FundOperation>> GetOperationsFromAsync", StringComparison.Ordinal)];
 
         Assert.Contains("var funds = (await repository.GetFundsAsync(cancellationToken)).ToList();", serviceSource, StringComparison.Ordinal);
-        Assert.Contains("EnsureDefaultFundsAsync(funds, cancellationToken)", serviceSource, StringComparison.Ordinal);
+        Assert.DoesNotContain("EnsureDefaultFundsAsync", serviceSource, StringComparison.Ordinal);
+        Assert.DoesNotContain("SaveChangesAsync", serviceSource[
+            serviceSource.IndexOf("public async Task<IReadOnlyList<FundDto>> GetFundsAsync", StringComparison.Ordinal)..serviceSource.IndexOf("public async Task<FundResult<FundDto>> CreateFundAsync", StringComparison.Ordinal)], StringComparison.Ordinal);
         Assert.DoesNotContain("GetNormalizedFundNamesAsync", serviceSource, StringComparison.Ordinal);
         Assert.Equal(3, CountOccurrences(totalsMethod, ".Sum("));
         Assert.Equal(2, CountOccurrences(totalsMethod, ".GroupBy("));

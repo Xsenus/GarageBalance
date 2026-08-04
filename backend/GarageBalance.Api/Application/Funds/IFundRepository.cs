@@ -9,7 +9,6 @@ public interface IFundRepository
     Task<IReadOnlyList<Fund>> GetFundsAsync(CancellationToken cancellationToken);
     Task<bool> FundNameExistsAsync(Guid? excludedFundId, string normalizedName, CancellationToken cancellationToken);
     Task<bool> ActiveFundExistsAsync(Guid fundId, CancellationToken cancellationToken);
-    Task<bool> SystemFundSlotExistsAsync(int sortOrder, CancellationToken cancellationToken);
     Task<IReadOnlyList<FundLinkedServiceData>> GetLinkedServicesAsync(
         IReadOnlyCollection<Guid> fundIds,
         CancellationToken cancellationToken);

@@ -23,23 +23,17 @@ public sealed class FundServiceTests
     }
 
     [Fact]
-    public async Task GetFundsAsync_SeedsDefaultFunds()
+    public async Task GetFundsAsync_DoesNotSeedOrWriteWhenCatalogIsEmpty()
     {
         await using var database = await TestDatabase.CreateAsync();
-        var service = CreateService(database.Context);
+        var service = CreateService(database.Context, seedSystemFunds: false);
 
         var funds = await service.GetFundsAsync(CancellationToken.None);
 
-        Assert.Equal(7, funds.Count);
-        Assert.Equal("Электроэнергия", funds[0].Name);
-        Assert.Equal("Прочее", funds[^1].Name);
-        Assert.All(funds, fund => Assert.Equal(0m, fund.AvailableToDistribute));
-        Assert.All(
-            funds.Where(fund => fund.Name is "Членские взносы" or "Целевые взносы" or "Прочее"),
-            fund => Assert.True(fund.AllowOperations));
-        Assert.All(funds, fund => Assert.Empty(fund.LinkedServices));
-        Assert.Equal(7, await database.Context.Funds.CountAsync());
+        Assert.Empty(funds);
+        Assert.Empty(database.Context.Funds);
         Assert.Empty(database.Context.AuditEvents);
+        Assert.False(database.Context.ChangeTracker.HasChanges());
     }
 
     [Fact]
@@ -949,12 +943,34 @@ public sealed class FundServiceTests
         Assert.DoesNotContain(database.Context.AuditEvents, item => item.Action == "fund.operation_restored");
     }
 
-    private static FundService CreateService(GarageBalanceDbContext context)
+    private static FundService CreateService(GarageBalanceDbContext context, bool seedSystemFunds = true)
     {
+        if (seedSystemFunds && !context.Funds.Any())
+        {
+            context.Funds.AddRange(
+                CreateSystemFund("Электроэнергия", "ЭЛЕКТРОЭНЕРГИЯ", 10),
+                CreateSystemFund("Водоснабжение", "ВОДОСНАБЖЕНИЕ", 20),
+                CreateSystemFund("Вывоз мусора", "ВЫВОЗ МУСОРА", 30),
+                CreateSystemFund("Наружное освещение", "НАРУЖНОЕ ОСВЕЩЕНИЕ", 40),
+                CreateSystemFund("Членские взносы", "ЧЛЕНСКИЕ ВЗНОСЫ", 50),
+                CreateSystemFund("Целевые взносы", "ЦЕЛЕВЫЕ ВЗНОСЫ", 60),
+                CreateSystemFund("Прочее", "ПРОЧЕЕ", 70));
+            context.SaveChanges();
+        }
+
         return new FundService(
             new EfFundRepository(context),
             new AuditEventWriter(context));
     }
+
+    private static Fund CreateSystemFund(string name, string normalizedName, int sortOrder) => new()
+    {
+        Name = name,
+        NormalizedName = normalizedName,
+        SortOrder = sortOrder,
+        AllowOperations = true,
+        IsSystem = true
+    };
 
     private static async Task SeedIncomeAsync(GarageBalanceDbContext context, decimal amount)
     {

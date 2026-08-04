@@ -71,12 +71,6 @@ public sealed class EfFundRepository(GarageBalanceDbContext dbContext) : IFundRe
             .AnyAsync(fund => fund.Id == fundId && !fund.IsArchived, cancellationToken);
     }
 
-    public Task<bool> SystemFundSlotExistsAsync(int sortOrder, CancellationToken cancellationToken)
-    {
-        return dbContext.Funds.AsNoTracking()
-            .AnyAsync(fund => fund.IsSystem && fund.SortOrder == sortOrder, cancellationToken);
-    }
-
     public async Task<IReadOnlyList<FundLinkedServiceData>> GetLinkedServicesAsync(
         IReadOnlyCollection<Guid> fundIds,
         CancellationToken cancellationToken)

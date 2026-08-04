@@ -8,21 +8,9 @@ public sealed class FundService(
     IFundRepository repository,
     IAuditEventWriter auditEventWriter) : IFundService
 {
-    private static readonly IReadOnlyList<DefaultFundDefinition> DefaultFunds =
-    [
-        new("Электроэнергия", 10, true),
-        new("Водоснабжение", 20, true),
-        new("Вывоз мусора", 30, true),
-        new("Наружное освещение", 40, true),
-        new("Членские взносы", 50, true),
-        new("Целевые взносы", 60, true),
-        new("Прочее", 70, true)
-    ];
-
     public async Task<IReadOnlyList<FundDto>> GetFundsAsync(CancellationToken cancellationToken)
     {
         var funds = (await repository.GetFundsAsync(cancellationToken)).ToList();
-        await EnsureDefaultFundsAsync(funds, cancellationToken);
         var availableToDistribute = await CalculateAvailableToDistributeAsync(cancellationToken);
         var linkedServicesByFundId = (await repository.GetLinkedServicesAsync(
             funds.Select(fund => fund.Id).ToArray(),
@@ -448,44 +436,6 @@ public sealed class FundService(
         return FundResult<FundOperationDto>.Success(ToDto(operation));
     }
 
-    private async Task EnsureDefaultFundsAsync(List<Fund> funds, CancellationToken cancellationToken)
-    {
-        var added = false;
-
-        foreach (var definition in DefaultFunds)
-        {
-            var normalizedName = NormalizeName(definition.Name);
-            if (funds.Any(fund =>
-                (fund.IsSystem && fund.SortOrder == definition.SortOrder) ||
-                fund.NormalizedName == normalizedName))
-            {
-                continue;
-            }
-
-            if (await repository.SystemFundSlotExistsAsync(definition.SortOrder, cancellationToken))
-            {
-                continue;
-            }
-
-            var fund = new Fund
-            {
-                Name = definition.Name,
-                NormalizedName = normalizedName,
-                SortOrder = definition.SortOrder,
-                AllowOperations = definition.AllowOperations,
-                IsSystem = true
-            };
-            repository.AddFund(fund);
-            funds.Add(fund);
-            added = true;
-        }
-
-        if (added)
-        {
-            await repository.SaveChangesAsync(cancellationToken);
-        }
-    }
-
     private async Task<decimal> CalculateAvailableToDistributeAsync(CancellationToken cancellationToken)
     {
         var totals = await repository.GetTotalsAsync(cancellationToken);
@@ -871,8 +821,6 @@ public sealed class FundService(
             : oldAmount - newAmount;
         return MoneyMath.RoundMoney(Math.Max(difference, 0m));
     }
-
-    private sealed record DefaultFundDefinition(string Name, int SortOrder, bool AllowOperations);
 
     private static readonly IReadOnlyDictionary<string, string> OperationFieldLabels = new Dictionary<string, string>
     {
