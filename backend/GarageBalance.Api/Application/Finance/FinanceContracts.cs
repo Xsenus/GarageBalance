@@ -230,6 +230,15 @@ public sealed record GenerateActiveFeeCampaignAccrualsRequest(
     DateOnly AccountingMonth,
     [MaxLength(1000)] string? Comment);
 
+public sealed record RegularAccrualAutomationPreviewDto(
+    DateOnly AccountingMonth,
+    int ActiveGarageCount,
+    int ActiveRegularServiceCount,
+    int DueRegularServiceCount,
+    int ActiveFeeCampaignCount,
+    int MaximumGarageChecks,
+    IReadOnlyList<string> Warnings);
+
 public sealed record GenerateSupplierGroupSalaryAccrualsRequest(
     Guid SupplierGroupId,
     DateOnly AccountingMonth,

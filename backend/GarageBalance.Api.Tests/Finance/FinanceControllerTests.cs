@@ -2221,6 +2221,18 @@ public sealed class FinanceControllerTests
             return Task.FromResult(GenerateRegularCatalogAccrualsResult);
         }
 
+        public Task<RegularAccrualAutomationPreviewDto> PreviewRegularAccrualAutomationAsync(
+            DateOnly businessDate,
+            CancellationToken cancellationToken) =>
+            Task.FromResult(new RegularAccrualAutomationPreviewDto(
+                new DateOnly(businessDate.Year, businessDate.Month, 1),
+                0,
+                0,
+                0,
+                0,
+                0,
+                []));
+
         public Task<FinanceResult<FeeCampaignAccrualGenerationResultDto>> GenerateFeeCampaignAccrualsAsync(GenerateFeeCampaignAccrualsRequest request, Guid? actorUserId, CancellationToken cancellationToken)
         {
             LastActorUserId = actorUserId;

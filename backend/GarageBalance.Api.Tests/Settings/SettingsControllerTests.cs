@@ -22,6 +22,7 @@ public sealed class SettingsControllerTests
         var backupStatusAction = typeof(SettingsController).GetMethod(nameof(SettingsController.GetDatabaseBackups));
         var backupCreateAction = typeof(SettingsController).GetMethod(nameof(SettingsController.CreateDatabaseBackup));
         var getBusinessDateAction = typeof(SettingsController).GetMethod(nameof(SettingsController.GetBusinessDateSettings));
+        var previewBusinessDateAction = typeof(SettingsController).GetMethod(nameof(SettingsController.PreviewBusinessDateChange));
         var updateBusinessDateAction = typeof(SettingsController).GetMethod(nameof(SettingsController.UpdateBusinessDateSettings));
         var getSalaryAccrualAction = typeof(SettingsController).GetMethod(nameof(SettingsController.GetSalaryAccrualSettings));
         var updateSalaryAccrualAction = typeof(SettingsController).GetMethod(nameof(SettingsController.UpdateSalaryAccrualSettings));
@@ -34,6 +35,7 @@ public sealed class SettingsControllerTests
         Assert.Equal(SystemPermissions.UsersManage, Assert.Single(backupStatusAction!.GetCustomAttributes<AuthorizeAttribute>()).Policy);
         Assert.Equal(SystemPermissions.UsersManage, Assert.Single(backupCreateAction!.GetCustomAttributes<AuthorizeAttribute>()).Policy);
         Assert.Equal(SystemRoles.Administrator, Assert.Single(getBusinessDateAction!.GetCustomAttributes<AuthorizeAttribute>()).Roles);
+        Assert.Equal(SystemRoles.Administrator, Assert.Single(previewBusinessDateAction!.GetCustomAttributes<AuthorizeAttribute>()).Roles);
         Assert.Equal(SystemRoles.Administrator, Assert.Single(updateBusinessDateAction!.GetCustomAttributes<AuthorizeAttribute>()).Roles);
         Assert.Equal(SystemPermissions.PaymentsRead, Assert.Single(getSalaryAccrualAction!.GetCustomAttributes<AuthorizeAttribute>()).Policy);
         Assert.Equal(SystemPermissions.UsersManage, Assert.Single(updateSalaryAccrualAction!.GetCustomAttributes<AuthorizeAttribute>()).Policy);
@@ -124,6 +126,22 @@ public sealed class SettingsControllerTests
         Assert.Equal(new DateOnly(2026, 8, 5), dto.EffectiveDate);
         Assert.Same(request, service.ReceivedBusinessDateRequest);
         Assert.Equal(actorUserId, service.ReceivedActorUserId);
+    }
+
+    [Fact]
+    public async Task PreviewBusinessDate_ReturnsScopeWithoutPassingActor()
+    {
+        var service = new FakeService();
+        var controller = CreateController(service);
+        var request = new PreviewBusinessDateRequest(new DateOnly(2026, 8, 5), Guid.NewGuid());
+
+        var result = await controller.PreviewBusinessDateChange(request, CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var preview = Assert.IsType<BusinessDateChangePreviewDto>(ok.Value);
+        Assert.Equal(new DateOnly(2026, 8, 5), preview.ProposedEffectiveDate);
+        Assert.Equal(new DateOnly(2026, 8, 1), preview.Automation.AccountingMonth);
+        Assert.Same(request, service.ReceivedBusinessDatePreviewRequest);
     }
 
     [Fact]
@@ -286,6 +304,7 @@ public sealed class SettingsControllerTests
         public UpdatePaymentDisplaySettingsRequest? ReceivedRequest { get; private set; }
         public Guid? ReceivedActorUserId { get; private set; }
         public UpdateBusinessDateRequest? ReceivedBusinessDateRequest { get; private set; }
+        public PreviewBusinessDateRequest? ReceivedBusinessDatePreviewRequest { get; private set; }
         public UpdateSalaryAccrualSettingsRequest? ReceivedSalaryAccrualRequest { get; private set; }
         public bool RejectSalaryAccrualUpdate { get; set; }
 
@@ -316,6 +335,27 @@ public sealed class SettingsControllerTests
 
         public Task<BusinessDateSettingsDto> GetBusinessDateSettingsAsync(CancellationToken cancellationToken) =>
             Task.FromResult(new BusinessDateSettingsDto(new DateOnly(2026, 7, 21), new DateOnly(2026, 7, 21), null, false, null, null));
+
+        public Task<BusinessDateChangePreviewDto> PreviewBusinessDateChangeAsync(PreviewBusinessDateRequest request, CancellationToken cancellationToken)
+        {
+            ReceivedBusinessDatePreviewRequest = request;
+            var proposedDate = request.OverrideDate ?? new DateOnly(2026, 7, 21);
+            return Task.FromResult(new BusinessDateChangePreviewDto(
+                new DateOnly(2026, 7, 21),
+                new DateOnly(2026, 7, 21),
+                proposedDate,
+                request.OverrideDate,
+                true,
+                new RegularAccrualAutomationPreviewDto(
+                    new DateOnly(proposedDate.Year, proposedDate.Month, 1),
+                    12,
+                    4,
+                    3,
+                    1,
+                    48,
+                    []),
+                request.Version ?? Guid.NewGuid()));
+        }
 
         public Task<BusinessDateSettingsDto> UpdateBusinessDateSettingsAsync(UpdateBusinessDateRequest request, Guid? actorUserId, CancellationToken cancellationToken)
         {

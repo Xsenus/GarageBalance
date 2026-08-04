@@ -7,6 +7,7 @@ public interface IRegularAccrualAutomationRunner
 {
     Task<RegularAccrualAutomationRunResult> RunCurrentMonthAsync(CancellationToken cancellationToken);
     Task<RegularAccrualAutomationRunResult> RunForDateAsync(DateOnly businessDate, Guid? actorUserId, CancellationToken cancellationToken);
+    Task<RegularAccrualAutomationPreviewDto> PreviewForDateAsync(DateOnly businessDate, CancellationToken cancellationToken);
 }
 
 public sealed record RegularAccrualAutomationRunResult(
@@ -23,6 +24,11 @@ public sealed class RegularAccrualAutomationRunner(
 {
     public Task<RegularAccrualAutomationRunResult> RunCurrentMonthAsync(CancellationToken cancellationToken) =>
         RunForDateAsync(businessDateProvider.Today, actorUserId: null, cancellationToken);
+
+    public Task<RegularAccrualAutomationPreviewDto> PreviewForDateAsync(
+        DateOnly businessDate,
+        CancellationToken cancellationToken) =>
+        financeService.PreviewRegularAccrualAutomationAsync(businessDate, cancellationToken);
 
     public async Task<RegularAccrualAutomationRunResult> RunForDateAsync(
         DateOnly businessDate,

@@ -152,6 +152,30 @@ public sealed class ApplicationSettingsServiceTests
     }
 
     [Fact]
+    public async Task PreviewBusinessDate_ReturnsAccrualScopeWithoutChangingState()
+    {
+        var repository = new FakeRepository();
+        var auditWriter = new CaptureAuditWriter();
+        var businessDateProvider = new TestBusinessDateProvider(new DateOnly(2026, 7, 21));
+        var automation = new FakeAutomationRunner();
+        var service = CreateService(repository, auditWriter, businessDateProvider, automation);
+
+        var preview = await service.PreviewBusinessDateChangeAsync(
+            new PreviewBusinessDateRequest(new DateOnly(2026, 9, 15), Guid.NewGuid()),
+            CancellationToken.None);
+
+        Assert.Equal(new DateOnly(2026, 7, 21), preview.CurrentEffectiveDate);
+        Assert.Equal(new DateOnly(2026, 9, 15), preview.ProposedEffectiveDate);
+        Assert.Equal(new DateOnly(2026, 9, 1), preview.Automation.AccountingMonth);
+        Assert.True(preview.IsChange);
+        Assert.Equal(new DateOnly(2026, 9, 15), automation.ReceivedPreviewDate);
+        Assert.Null(repository.Setting);
+        Assert.Equal(0, repository.SaveChangesCount);
+        Assert.Empty(auditWriter.Requests);
+        Assert.Equal(new DateOnly(2026, 7, 21), businessDateProvider.Today);
+    }
+
+    [Fact]
     public async Task UpdateBusinessDate_WithNullRestoresSystemDateAndRunsAutomation()
     {
         var repository = new FakeRepository
@@ -236,6 +260,7 @@ public sealed class ApplicationSettingsServiceTests
     {
         public DateOnly? ReceivedDate { get; private set; }
         public Guid? ReceivedActorUserId { get; private set; }
+        public DateOnly? ReceivedPreviewDate { get; private set; }
 
         public Task<RegularAccrualAutomationRunResult> RunCurrentMonthAsync(CancellationToken cancellationToken) =>
             RunForDateAsync(new DateOnly(2026, 7, 21), null, cancellationToken);
@@ -245,6 +270,19 @@ public sealed class ApplicationSettingsServiceTests
             ReceivedDate = businessDate;
             ReceivedActorUserId = actorUserId;
             return Task.FromResult(new RegularAccrualAutomationRunResult(true, 2, 3, "Готово"));
+        }
+
+        public Task<RegularAccrualAutomationPreviewDto> PreviewForDateAsync(DateOnly businessDate, CancellationToken cancellationToken)
+        {
+            ReceivedPreviewDate = businessDate;
+            return Task.FromResult(new RegularAccrualAutomationPreviewDto(
+                new DateOnly(businessDate.Year, businessDate.Month, 1),
+                12,
+                4,
+                3,
+                1,
+                48,
+                []));
         }
     }
 }

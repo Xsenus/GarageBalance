@@ -137,6 +137,29 @@ public sealed class ApplicationSettingsService(
         return CreateBusinessDateDto(setting, automation: null);
     }
 
+    public async Task<BusinessDateChangePreviewDto> PreviewBusinessDateChangeAsync(
+        PreviewBusinessDateRequest request,
+        CancellationToken cancellationToken)
+    {
+        ValidateBusinessDate(request.OverrideDate);
+        var setting = await repository.FindAsync(BusinessDateOverrideKey, cancellationToken);
+        if (setting is not null)
+        {
+            OptimisticConcurrencyGuard.EnsureCurrent(request.Version, setting);
+        }
+
+        var proposedDate = request.OverrideDate ?? businessDateProvider.SystemDate;
+        var automation = await regularAccrualAutomationRunner.PreviewForDateAsync(proposedDate, cancellationToken);
+        return new BusinessDateChangePreviewDto(
+            businessDateProvider.SystemDate,
+            businessDateProvider.Today,
+            proposedDate,
+            request.OverrideDate,
+            setting?.DateValue != request.OverrideDate,
+            automation,
+            setting?.Version ?? request.Version ?? Guid.NewGuid());
+    }
+
     public async Task<BusinessDateSettingsDto> UpdateBusinessDateSettingsAsync(
         UpdateBusinessDateRequest request,
         Guid? actorUserId,

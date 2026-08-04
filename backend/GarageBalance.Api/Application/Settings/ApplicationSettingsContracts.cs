@@ -1,3 +1,5 @@
+using GarageBalance.Api.Application.Finance;
+
 namespace GarageBalance.Api.Application.Settings;
 
 public sealed record PaymentDisplaySettingsDto(bool ShowAllGarageOperationsByDefault, Guid Version = default);
@@ -24,3 +26,14 @@ public sealed record RegularAccrualAutomationSummaryDto(
     string Message);
 
 public sealed record UpdateBusinessDateRequest(DateOnly? OverrideDate, Guid? Version = null);
+
+public sealed record PreviewBusinessDateRequest(DateOnly? OverrideDate, Guid? Version = null);
+
+public sealed record BusinessDateChangePreviewDto(
+    DateOnly SystemDate,
+    DateOnly CurrentEffectiveDate,
+    DateOnly ProposedEffectiveDate,
+    DateOnly? OverrideDate,
+    bool IsChange,
+    RegularAccrualAutomationPreviewDto Automation,
+    Guid Version);

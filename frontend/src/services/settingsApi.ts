@@ -25,6 +25,24 @@ export type BusinessDateSettingsDto = {
   version: string
 }
 
+export type BusinessDateChangePreviewDto = {
+  systemDate: string
+  currentEffectiveDate: string
+  proposedEffectiveDate: string
+  overrideDate: string | null
+  isChange: boolean
+  automation: {
+    accountingMonth: string
+    activeGarageCount: number
+    activeRegularServiceCount: number
+    dueRegularServiceCount: number
+    activeFeeCampaignCount: number
+    maximumGarageChecks: number
+    warnings: string[]
+  }
+  version: string
+}
+
 export type CashBankBalanceOperationDto = {
   id: string
   account: 'cash' | 'bank'
@@ -80,6 +98,7 @@ export type ApplicationSettingsClient = {
   getSalaryAccrualSettings(accessToken: string): Promise<SalaryAccrualSettingsDto>
   updateSalaryAccrualSettings(accessToken: string, request: SalaryAccrualSettingsDto): Promise<SalaryAccrualSettingsDto>
   getBusinessDateSettings(accessToken: string): Promise<BusinessDateSettingsDto>
+  previewBusinessDateChange(accessToken: string, request: { overrideDate: string | null; version?: string }): Promise<BusinessDateChangePreviewDto>
   updateBusinessDateSettings(accessToken: string, request: { overrideDate: string | null; version?: string }): Promise<BusinessDateSettingsDto>
   getCashBankBalances(accessToken: string): Promise<CashBankBalanceSettingsDto>
   updateCashBankOpeningBalances(accessToken: string, request: { cashOpeningBalance: number; bankOpeningBalance: number; reason: string }): Promise<CashBankBalanceSettingsDto>
@@ -137,6 +156,9 @@ export const settingsApi: ApplicationSettingsClient = {
   },
   getBusinessDateSettings(accessToken) {
     return requestJson(accessToken, '/api/settings/business-date')
+  },
+  previewBusinessDateChange(accessToken, request) {
+    return requestJson(accessToken, '/api/settings/business-date/preview', { method: 'POST', body: JSON.stringify(request) })
   },
   updateBusinessDateSettings(accessToken, request) {
     return requestJson(accessToken, '/api/settings/business-date', { method: 'PUT', body: JSON.stringify(request) })

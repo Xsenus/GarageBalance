@@ -4287,6 +4287,65 @@ public sealed class FinanceServiceTests
     }
 
     [Fact]
+    public async Task PreviewRegularAccrualAutomationAsync_ReturnsDueScopeWithoutWritingAccruals()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        var tariff = new Tariff
+        {
+            Name = "Предпросмотр",
+            CalculationBase = TariffCalculationBases.Fixed,
+            Rate = 300m,
+            EffectiveFrom = new DateOnly(2026, 1, 1)
+        };
+        database.Context.ChargeServiceSettings.AddRange(
+            new ChargeServiceSetting
+            {
+                Name = "Ежемесячная услуга",
+                IsRegular = true,
+                PeriodicityMonths = 1,
+                AccrualStartMonth = 1,
+                IncomeType = fixtures.IncomeType,
+                Tariff = tariff
+            },
+            new ChargeServiceSetting
+            {
+                Name = "Услуга другого месяца",
+                IsRegular = true,
+                PeriodicityMonths = 12,
+                AccrualStartMonth = 9,
+                IncomeType = fixtures.IncomeType,
+                Tariff = tariff
+            });
+        database.Context.FeeCampaigns.Add(new FeeCampaign
+        {
+            Name = "Августовский сбор",
+            IncomeType = fixtures.IncomeType,
+            ContributionAmount = 500m,
+            TargetAmount = 500m,
+            StartsOn = new DateOnly(2026, 8, 1),
+            AppliesToAllGarages = true
+        });
+        await database.Context.SaveChangesAsync();
+        var accrualCountBefore = await database.Context.Accruals.CountAsync();
+        var auditCountBefore = await database.Context.AuditEvents.CountAsync();
+
+        var preview = await FinanceServiceTestFactory.Create(database.Context)
+            .PreviewRegularAccrualAutomationAsync(new DateOnly(2026, 8, 15), CancellationToken.None);
+
+        Assert.Equal(new DateOnly(2026, 8, 1), preview.AccountingMonth);
+        Assert.Equal(1, preview.ActiveGarageCount);
+        Assert.Equal(2, preview.ActiveRegularServiceCount);
+        Assert.Equal(1, preview.DueRegularServiceCount);
+        Assert.Equal(1, preview.ActiveFeeCampaignCount);
+        Assert.Equal(2, preview.MaximumGarageChecks);
+        Assert.Empty(preview.Warnings);
+        Assert.Equal(accrualCountBefore, await database.Context.Accruals.CountAsync());
+        Assert.Equal(auditCountBefore, await database.Context.AuditEvents.CountAsync());
+        Assert.False(database.Context.ChangeTracker.HasChanges());
+    }
+
+    [Fact]
     public async Task GenerateRegularAccrualsAsync_DoesNotDuplicateAnnualObligationAcrossMonthsOrOwnerChange()
     {
         await using var database = await TestDatabase.CreateAsync();

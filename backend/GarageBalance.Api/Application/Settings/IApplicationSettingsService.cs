@@ -13,6 +13,9 @@ public interface IApplicationSettingsService
         Guid? actorUserId,
         CancellationToken cancellationToken);
     Task<BusinessDateSettingsDto> GetBusinessDateSettingsAsync(CancellationToken cancellationToken);
+    Task<BusinessDateChangePreviewDto> PreviewBusinessDateChangeAsync(
+        PreviewBusinessDateRequest request,
+        CancellationToken cancellationToken);
     Task<BusinessDateSettingsDto> UpdateBusinessDateSettingsAsync(
         UpdateBusinessDateRequest request,
         Guid? actorUserId,

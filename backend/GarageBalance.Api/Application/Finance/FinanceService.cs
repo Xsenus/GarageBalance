@@ -3083,6 +3083,48 @@ public sealed class FinanceService(
         return FinanceResult<RegularCatalogAccrualGenerationResultDto>.Success(result);
     }
 
+    public async Task<RegularAccrualAutomationPreviewDto> PreviewRegularAccrualAutomationAsync(
+        DateOnly businessDate,
+        CancellationToken cancellationToken)
+    {
+        var month = MonthPeriod.Normalize(businessDate);
+        var regularServices = await chargeServiceSettingRepository.GetActiveRegularAsync(cancellationToken);
+        var dueServices = regularServices.Where(setting => IsChargeServiceDueForMonth(setting, month)).ToList();
+        var configuredDueServiceCount = dueServices.Count(setting => setting.IncomeTypeId.HasValue && setting.TariffId.HasValue);
+        var feeCampaigns = await feeCampaignRepository.GetActiveAccrualCandidatesAsync(
+            month,
+            MaxAutomaticFeeCampaigns + 1,
+            cancellationToken);
+        var activeGarageCount = await garageRepository.CountActiveAsync(cancellationToken);
+        var warnings = new List<string>();
+        var incompleteServiceCount = dueServices.Count - configuredDueServiceCount;
+        if (incompleteServiceCount > 0)
+        {
+            warnings.Add($"У {incompleteServiceCount} регулярных услуг не указан вид начисления или тариф; они будут пропущены.");
+        }
+
+        if (feeCampaigns.Count > MaxAutomaticFeeCampaigns)
+        {
+            warnings.Add($"Найдено больше {MaxAutomaticFeeCampaigns} действующих сборов; автоматическое начисление потребует сначала архивировать завершённые сборы.");
+        }
+
+        if (activeGarageCount == 0)
+        {
+            warnings.Add("Нет активных гаражей: новые начисления созданы не будут.");
+        }
+
+        var boundedCampaignCount = Math.Min(feeCampaigns.Count, MaxAutomaticFeeCampaigns);
+        var maximumGarageChecks = (long)activeGarageCount * (configuredDueServiceCount + boundedCampaignCount);
+        return new RegularAccrualAutomationPreviewDto(
+            month,
+            activeGarageCount,
+            regularServices.Count,
+            configuredDueServiceCount,
+            feeCampaigns.Count,
+            (int)Math.Min(maximumGarageChecks, int.MaxValue),
+            warnings);
+    }
+
     public async Task<FinanceResult<FeeCampaignAccrualGenerationResultDto>> GenerateFeeCampaignAccrualsAsync(GenerateFeeCampaignAccrualsRequest request, Guid? actorUserId, CancellationToken cancellationToken)
     {
         var month = MonthPeriod.Normalize(request.AccountingMonth);

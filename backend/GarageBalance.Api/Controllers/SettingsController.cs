@@ -76,6 +76,28 @@ public sealed class SettingsController(
         return Ok(await applicationSettingsService.GetBusinessDateSettingsAsync(cancellationToken));
     }
 
+    [HttpPost("business-date/preview")]
+    [RequireConcurrencyVersion("request.Version")]
+    [Authorize(Roles = SystemRoles.Administrator)]
+    [ProducesResponseType<BusinessDateChangePreviewDto>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    public async Task<ActionResult<BusinessDateChangePreviewDto>> PreviewBusinessDateChange(
+        PreviewBusinessDateRequest request,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            return Ok(await applicationSettingsService.PreviewBusinessDateChangeAsync(request, cancellationToken));
+        }
+        catch (BusinessDateValidationException exception)
+        {
+            return Problem(
+                statusCode: StatusCodes.Status400BadRequest,
+                title: "business_date_out_of_range",
+                detail: exception.Message);
+        }
+    }
+
     [HttpPut("business-date")]
     [RequireConcurrencyVersion("request.Version")]
     [Authorize(Roles = SystemRoles.Administrator)]

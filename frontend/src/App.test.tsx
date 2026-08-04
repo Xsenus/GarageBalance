@@ -9,7 +9,12 @@ vi.mock('./services/settingsApi', () => ({
     getSalaryAccrualSettings: vi.fn(async () => ({ accrualDay: 10, version: 'salary-version' })),
     updateSalaryAccrualSettings: vi.fn(async (_accessToken: string, request: { accrualDay: number }) => request),
     getBusinessDateSettings: vi.fn(async () => ({ systemDate: '2026-07-21', effectiveDate: '2026-07-21', overrideDate: null, isOverrideActive: false, updatedAtUtc: null, automation: null, version: 'business-date-version' })),
-    updateBusinessDateSettings: vi.fn(async (_accessToken: string, request: { overrideDate: string | null }) => ({ systemDate: '2026-07-21', effectiveDate: request.overrideDate ?? '2026-07-21', overrideDate: request.overrideDate, isOverrideActive: request.overrideDate !== null, updatedAtUtc: '2026-07-21T09:00:00Z', automation: null })),
+    previewBusinessDateChange: vi.fn(async (_accessToken: string, request: { overrideDate: string | null }) => ({
+      systemDate: '2026-07-21', currentEffectiveDate: '2026-07-21', proposedEffectiveDate: request.overrideDate ?? '2026-07-21', overrideDate: request.overrideDate, isChange: true,
+      automation: { accountingMonth: '2026-08-01', activeGarageCount: 12, activeRegularServiceCount: 4, dueRegularServiceCount: 3, activeFeeCampaignCount: 1, maximumGarageChecks: 48, warnings: [] },
+      version: 'business-date-version',
+    })),
+    updateBusinessDateSettings: vi.fn(async (_accessToken: string, request: { overrideDate: string | null }) => ({ systemDate: '2026-07-21', effectiveDate: request.overrideDate ?? '2026-07-21', overrideDate: request.overrideDate, isOverrideActive: request.overrideDate !== null, updatedAtUtc: '2026-07-21T09:00:00Z', automation: null, version: 'business-date-next-version' })),
   },
 }))
 
@@ -9779,6 +9784,15 @@ describe('App', () => {
 
   it('lets only the administrator confirm a business date and starts automatic accruals', async () => {
     const user = userEvent.setup()
+    const previewBusinessDateChange = vi.fn(async (_accessToken: string, request: { overrideDate: string | null }) => ({
+      systemDate: '2026-07-21',
+      currentEffectiveDate: '2026-07-21',
+      proposedEffectiveDate: request.overrideDate ?? '2026-07-21',
+      overrideDate: request.overrideDate,
+      isChange: true,
+      automation: { accountingMonth: '2026-08-01', activeGarageCount: 12, activeRegularServiceCount: 4, dueRegularServiceCount: 3, activeFeeCampaignCount: 1, maximumGarageChecks: 48, warnings: [] },
+      version: 'business-date-version',
+    }))
     const updateBusinessDateSettings = vi.fn(async (_accessToken: string, request: { overrideDate: string | null }) => ({
       systemDate: '2026-07-21',
       effectiveDate: request.overrideDate ?? '2026-07-21',
@@ -9786,8 +9800,9 @@ describe('App', () => {
       isOverrideActive: request.overrideDate !== null,
       updatedAtUtc: '2026-07-21T09:00:00Z',
       automation: { succeeded: true, createdCount: 2, skippedCount: 3, message: 'Начисления за 08.2026: создано 2, пропущено 3.' },
+      version: 'business-date-next-version',
     }))
-    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} integrationClient={createIntegrationClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} settingsClient={createSettingsClient({ updateBusinessDateSettings })} userClient={createUserClient()} />)
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} integrationClient={createIntegrationClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} settingsClient={createSettingsClient({ previewBusinessDateChange, updateBusinessDateSettings })} userClient={createUserClient()} />)
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
     await user.click(screen.getByRole('button', { name: 'Войти' }))
@@ -9799,12 +9814,35 @@ describe('App', () => {
     await waitFor(() => expect(dateInput).toHaveValue('21.07.2026'))
     await user.clear(dateInput)
     await user.type(dateInput, '05.08.2026')
-    await user.click(within(panel).getByRole('button', { name: 'Установить рабочую дату' }))
+    await user.click(within(panel).getByRole('button', { name: 'Проверить и установить дату' }))
     const confirmation = await screen.findByRole('dialog', { name: 'Включить тестовую дату?' })
+    expect(previewBusinessDateChange).toHaveBeenCalledWith('token', { overrideDate: '2026-08-05', version: 'business-date-version' })
+    expect(within(confirmation).getByText('48', { exact: false })).toBeInTheDocument()
+    expect(updateBusinessDateSettings).not.toHaveBeenCalled()
     await user.click(within(confirmation).getByRole('button', { name: 'Подтвердить' }))
 
     await waitFor(() => expect(updateBusinessDateSettings).toHaveBeenCalledWith('token', { overrideDate: '2026-08-05', version: 'business-date-version' }))
     expect(await within(panel).findByText('Начисления за 08.2026: создано 2, пропущено 3.')).toHaveAttribute('role', 'status')
+  })
+
+  it('keeps the business-date confirmation closed when preview fails', async () => {
+    const user = userEvent.setup()
+    const previewBusinessDateChange = vi.fn().mockRejectedValue(new Error('Не удалось рассчитать влияние рабочей даты.'))
+    const updateBusinessDateSettings = vi.fn()
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} integrationClient={createIntegrationClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} settingsClient={createSettingsClient({ previewBusinessDateChange, updateBusinessDateSettings })} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Настройки')
+    const settings = await screen.findByRole('region', { name: 'Настройки' })
+    await user.click(within(settings).getByRole('tab', { name: 'Рабочая дата' }))
+    const panel = await within(settings).findByRole('region', { name: 'Эмулятор рабочей даты' })
+    await within(panel).findByLabelText('Новая рабочая дата')
+    await user.click(within(panel).getByRole('button', { name: 'Проверить и установить дату' }))
+
+    expect(await within(panel).findByRole('alert')).toHaveTextContent('Не удалось рассчитать влияние рабочей даты.')
+    expect(screen.queryByRole('dialog', { name: 'Включить тестовую дату?' })).not.toBeInTheDocument()
+    expect(updateBusinessDateSettings).not.toHaveBeenCalled()
   })
 
   it('lets an administrator configure the automatic salary accrual day', async () => {
@@ -18496,6 +18534,15 @@ function createSettingsClient(overrides: Partial<ApplicationSettingsClient> = {}
       automation: null,
       version: 'business-date-version',
     }),
+    previewBusinessDateChange: async (_accessToken, request) => ({
+      systemDate: '2026-07-21',
+      currentEffectiveDate: '2026-07-21',
+      proposedEffectiveDate: request.overrideDate ?? '2026-07-21',
+      overrideDate: request.overrideDate,
+      isChange: true,
+      automation: { accountingMonth: '2026-07-01', activeGarageCount: 12, activeRegularServiceCount: 4, dueRegularServiceCount: 3, activeFeeCampaignCount: 1, maximumGarageChecks: 48, warnings: [] },
+      version: 'business-date-version',
+    }),
     updateBusinessDateSettings: async (_accessToken, request) => ({
       systemDate: '2026-07-21',
       effectiveDate: request.overrideDate ?? '2026-07-21',
@@ -18503,6 +18550,7 @@ function createSettingsClient(overrides: Partial<ApplicationSettingsClient> = {}
       isOverrideActive: request.overrideDate !== null,
       updatedAtUtc: '2026-07-21T09:00:00Z',
       automation: { succeeded: true, createdCount: 2, skippedCount: 3, message: 'Начисления сформированы.' },
+      version: 'business-date-next-version',
     }),
     getCashBankBalances: async () => ({
       cashOpeningBalance: 1000,

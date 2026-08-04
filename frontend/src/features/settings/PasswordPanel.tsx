@@ -3,7 +3,7 @@ import type { FormEvent } from 'react'
 import { ArrowDownCircle, ArrowUpCircle, Banknote, CalendarClock, DatabaseBackup, Download, Eye, FileWarning, KeyRound, Landmark, PlugZap, RefreshCw, ShieldCheck, SlidersHorizontal, X } from 'lucide-react'
 import type { AuthClient, AuthResponse } from '../../services/authApi'
 import type { IntegrationClient, OneCFreshIntegrationStatusDto, OneCFreshSyncDto, OneCFreshSyncPreviewDto, ReceiptPrintingIntegrationStatusDto } from '../../services/integrationsApi'
-import type { ApplicationSettingsClient, BusinessDateSettingsDto, CashBankBalanceSettingsDto, DatabaseBackupStatusDto, DiagnosticLogStatusDto, SalaryAccrualSettingsDto } from '../../services/settingsApi'
+import type { ApplicationSettingsClient, BusinessDateChangePreviewDto, BusinessDateSettingsDto, CashBankBalanceSettingsDto, DatabaseBackupStatusDto, DiagnosticLogStatusDto, SalaryAccrualSettingsDto } from '../../services/settingsApi'
 import { hasPermission, isAdministrator, permissions } from '../../shared/accessControl'
 import { LoadingSkeleton } from '../../shared/AsyncState'
 import { LocalizedDatePicker } from '../../shared/LocalizedDatePicker'
@@ -76,7 +76,7 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
   const [businessDateSaving, setBusinessDateSaving] = useState(false)
   const [businessDateError, setBusinessDateError] = useState<string | null>(null)
   const [businessDateMessage, setBusinessDateMessage] = useState<string | null>(null)
-  const [businessDateConfirmation, setBusinessDateConfirmation] = useState<{ overrideDate: string | null } | null>(null)
+  const [businessDateConfirmation, setBusinessDateConfirmation] = useState<BusinessDateChangePreviewDto | null>(null)
   const [salaryAccrualSettings, setSalaryAccrualSettings] = useState<SalaryAccrualSettingsDto | null>(null)
   const [salaryAccrualDayDraft, setSalaryAccrualDayDraft] = useState('1')
   const [salaryAccrualSaving, setSalaryAccrualSaving] = useState(false)
@@ -332,8 +332,8 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
     setBusinessDateMessage(null)
     try {
       const settings = await settingsClient.updateBusinessDateSettings(auth.accessToken, {
-        ...businessDateConfirmation,
-        version: businessDateSettings?.version,
+        overrideDate: businessDateConfirmation.overrideDate,
+        version: businessDateConfirmation.version,
       })
       setBusinessDateSettings(settings)
       setBusinessDateDraft(settings.overrideDate ?? settings.systemDate)
@@ -343,6 +343,23 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
         : 'Восстановлена автоматическая системная дата.'))
     } catch (caught) {
       setBusinessDateError(caught instanceof Error ? caught.message : 'Не удалось изменить рабочую дату.')
+    } finally {
+      setBusinessDateSaving(false)
+    }
+  }
+
+  async function previewBusinessDateChange(overrideDate: string | null) {
+    setBusinessDateSaving(true)
+    setBusinessDateError(null)
+    setBusinessDateMessage(null)
+    try {
+      const preview = await settingsClient.previewBusinessDateChange(auth.accessToken, {
+        overrideDate,
+        version: businessDateSettings?.version,
+      })
+      setBusinessDateConfirmation(preview)
+    } catch (caught) {
+      setBusinessDateError(caught instanceof Error ? caught.message : 'Не удалось проверить рабочую дату.')
     } finally {
       setBusinessDateSaving(false)
     }
@@ -849,13 +866,13 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
               <FormField label="Новая рабочая дата">
                 <LocalizedDatePicker ariaLabel="Новая рабочая дата" mode="date" value={businessDateDraft} disabled={businessDateSaving} onChange={(value) => { setBusinessDateDraft(value); setBusinessDateMessage(null) }} required />
               </FormField>
-              <p className="form-hint">После подтверждения система сразу сформирует регулярные начисления выбранного месяца. Уже созданные начисления не дублируются.</p>
+              <p className="form-hint">Изменение применяется после предварительного просмотра и подтверждения.</p>
               <div className="dialog-actions dialog-actions--start">
-                <button className="secondary-button" type="button" disabled={!businessDateDraft || businessDateSaving} onClick={() => setBusinessDateConfirmation({ overrideDate: businessDateDraft })}>
+                <button className="secondary-button" type="button" disabled={!businessDateDraft || businessDateSaving} onClick={() => void previewBusinessDateChange(businessDateDraft)}>
                   <CalendarClock size={16} aria-hidden="true" />
-                  <span>Установить рабочую дату</span>
+                  <span>{businessDateSaving ? 'Проверяем влияние...' : 'Проверить и установить дату'}</span>
                 </button>
-                <button className="ghost-button" type="button" disabled={!businessDateSettings.isOverrideActive || businessDateSaving} onClick={() => setBusinessDateConfirmation({ overrideDate: null })}>Вернуть системную дату</button>
+                <button className="ghost-button" type="button" disabled={!businessDateSettings.isOverrideActive || businessDateSaving} onClick={() => void previewBusinessDateChange(null)}>Проверить возврат системной даты</button>
               </div>
               <form className="dictionary-form settings-card-form" aria-label="Настройка автоматического начисления зарплаты" onSubmit={(event) => void saveSalaryAccrualSettings(event)}>
                 <FormField label="День начисления зарплаты">
@@ -1435,10 +1452,18 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
               <button className="icon-button" type="button" aria-label="Закрыть подтверждение рабочей даты" onClick={() => setBusinessDateConfirmation(null)} disabled={businessDateSaving}><X size={18} aria-hidden="true" /></button>
             </div>
             <p className="confirmation-text" id="business-date-confirmation-description">
-              {businessDateConfirmation.overrideDate
-                ? `Расчёты задолженности и должников будут выполнены на ${formatBusinessDate(businessDateConfirmation.overrideDate)}. Регулярные начисления этого месяца сформируются автоматически.`
-                : 'Расчёты снова будут использовать текущую дату сервера. Регулярные начисления текущего месяца будут проверены автоматически.'}
+              Рабочая дата: {formatBusinessDate(businessDateConfirmation.currentEffectiveDate)} → {formatBusinessDate(businessDateConfirmation.proposedEffectiveDate)}.
             </p>
+            <p className="form-hint">
+              Месяц {formatBusinessDate(businessDateConfirmation.automation.accountingMonth)}: гаражей — {businessDateConfirmation.automation.activeGarageCount}, услуг — {businessDateConfirmation.automation.dueRegularServiceCount}, сборов — {businessDateConfirmation.automation.activeFeeCampaignCount}.
+            </p>
+            <p className="form-hint">До {businessDateConfirmation.automation.maximumGarageChecks} проверок без дублирования начислений.</p>
+            {businessDateConfirmation.automation.warnings.length > 0 ? (
+              <div className="form-warning" role="alert">
+                {businessDateConfirmation.automation.warnings.map((warning) => <p key={warning}>{warning}</p>)}
+              </div>
+            ) : null}
+            {businessDateError ? <FormError>{businessDateError}</FormError> : null}
             <div className="dialog-actions">
               <button className="ghost-button" type="button" onClick={() => setBusinessDateConfirmation(null)} disabled={businessDateSaving}>Отмена</button>
               <button className="secondary-button" type="button" onClick={() => void confirmBusinessDateChange()} disabled={businessDateSaving}>
