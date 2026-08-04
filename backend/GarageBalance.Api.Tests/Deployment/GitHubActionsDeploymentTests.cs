@@ -96,6 +96,29 @@ public sealed class GitHubActionsDeploymentTests
     }
 
     [Fact]
+    public void WorkflowsUseNode24CompatibleOfficialActions()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var workflows = new[]
+        {
+            File.ReadAllText(Path.Combine(repositoryRoot, ".github", "workflows", "deploy-staging.yml")),
+            File.ReadAllText(Path.Combine(repositoryRoot, ".github", "workflows", "publish-docker-release.yml")),
+        };
+
+        foreach (var workflow in workflows)
+        {
+            Assert.Contains("actions/checkout@v6", workflow, StringComparison.Ordinal);
+            Assert.Contains("actions/setup-dotnet@v5", workflow, StringComparison.Ordinal);
+            Assert.Contains("actions/setup-node@v6", workflow, StringComparison.Ordinal);
+            Assert.Contains("actions/upload-artifact@v6", workflow, StringComparison.Ordinal);
+            Assert.DoesNotContain("actions/checkout@v4", workflow, StringComparison.Ordinal);
+            Assert.DoesNotContain("actions/setup-dotnet@v4", workflow, StringComparison.Ordinal);
+            Assert.DoesNotContain("actions/setup-node@v4", workflow, StringComparison.Ordinal);
+            Assert.DoesNotContain("actions/upload-artifact@v4", workflow, StringComparison.Ordinal);
+        }
+    }
+
+    [Fact]
     public void ShellScripts_KeepLinuxLineEndingsInReleaseArchives()
     {
         var repositoryRoot = FindRepositoryRoot();
