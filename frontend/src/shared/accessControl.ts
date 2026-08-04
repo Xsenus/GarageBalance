@@ -17,6 +17,37 @@ export const permissions = {
 
 export type Permission = (typeof permissions)[keyof typeof permissions]
 
+const permissionDependencies: Readonly<Partial<Record<Permission, readonly Permission[]>>> = {
+  [permissions.dictionariesWrite]: [permissions.dictionariesRead],
+  [permissions.tariffsManage]: [permissions.dictionariesRead],
+  [permissions.paymentsWrite]: [permissions.paymentsRead, permissions.dictionariesRead],
+  [permissions.historicalMeterReadingsCorrect]: [permissions.paymentsWrite],
+  [permissions.openingDataAdjust]: [permissions.dictionariesWrite],
+  [permissions.reportsRead]: [permissions.dictionariesRead],
+}
+
+export function expandPermissionDependencies(selectedPermissions: readonly string[]): string[] {
+  const expanded = new Set(selectedPermissions)
+  const pending = [...expanded]
+  while (pending.length > 0) {
+    const permission = pending.shift() as Permission
+    for (const dependency of permissionDependencies[permission] ?? []) {
+      if (!expanded.has(dependency)) {
+        expanded.add(dependency)
+        pending.push(dependency)
+      }
+    }
+  }
+
+  return [...expanded].sort()
+}
+
+export function isPermissionRequiredBySelection(permission: string, selectedPermissions: readonly string[]): boolean {
+  return selectedPermissions.some((selected) => (
+    selected !== permission && expandPermissionDependencies([selected]).includes(permission)
+  ))
+}
+
 export const rolePermissionGroups: ReadonlyArray<{ label: string; permission: Permission }> = [
   { label: 'Пользователи', permission: permissions.usersManage },
   { label: 'Справочники', permission: permissions.dictionariesWrite },

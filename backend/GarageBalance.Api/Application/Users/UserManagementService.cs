@@ -435,7 +435,8 @@ public sealed class UserManagementService(
             return UserManagementResult<IReadOnlyList<string>>.Failure("permission_not_found", "Одно или несколько прав не поддерживаются системой.");
         }
 
-        return UserManagementResult<IReadOnlyList<string>>.Success(normalizedPermissions);
+        return UserManagementResult<IReadOnlyList<string>>.Success(
+            SystemPermissions.ExpandWithDependencies(normalizedPermissions));
     }
 
     private static string FormatRoleCodes(IEnumerable<AppRole> roles)

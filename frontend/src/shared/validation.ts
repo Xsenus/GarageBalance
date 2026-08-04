@@ -98,7 +98,7 @@ export function getPasswordChangeValidationErrors(currentPassword: string, newPa
   return errors
 }
 
-export function getManagedUserValidationErrors(email: string, displayName: string, password: string, roleCode: string) {
+export function getManagedUserValidationErrors(email: string, displayName: string, password: string, roleCodes: readonly string[]) {
   const errors: string[] = []
   const trimmedEmail = email.trim()
 
@@ -114,8 +114,8 @@ export function getManagedUserValidationErrors(email: string, displayName: strin
 
   errors.push(...getPasswordPolicyErrors(password, 'Укажите пароль пользователя.'))
 
-  if (!roleCode) {
-    errors.push('Выберите роль пользователя.')
+  if (roleCodes.length === 0) {
+    errors.push('Выберите хотя бы одну роль пользователя.')
   }
 
   return errors

@@ -67,14 +67,14 @@ describe('shared validation helpers', () => {
   })
 
   it('validates managed user creation form', () => {
-    expect(getManagedUserValidationErrors('operator@example.com', 'Оператор', 'StrongPass123', 'operator')).toEqual([])
-    expect(getManagedUserValidationErrors('bad-email', '', '', '')).toEqual([
+    expect(getManagedUserValidationErrors('operator@example.com', 'Оператор', 'StrongPass123', ['operator', 'reports_viewer'])).toEqual([])
+    expect(getManagedUserValidationErrors('bad-email', '', '', [])).toEqual([
       'Проверьте формат email пользователя.',
       'Укажите имя пользователя.',
       'Укажите пароль пользователя.',
-      'Выберите роль пользователя.',
+      'Выберите хотя бы одну роль пользователя.',
     ])
-    expect(getManagedUserValidationErrors(' ', 'Оператор', 'StrongPass123', 'operator')).toEqual(['Укажите email пользователя.'])
+    expect(getManagedUserValidationErrors(' ', 'Оператор', 'StrongPass123', ['operator'])).toEqual(['Укажите email пользователя.'])
   })
 
   it('validates owner and linked garage forms', () => {

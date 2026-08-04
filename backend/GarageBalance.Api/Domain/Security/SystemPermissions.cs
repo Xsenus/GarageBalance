@@ -71,4 +71,38 @@ public static class SystemPermissions
         AppReleasesManage,
         AuditRead
     ];
+
+    private static readonly IReadOnlyDictionary<string, string[]> Dependencies =
+        new Dictionary<string, string[]>(StringComparer.Ordinal)
+        {
+            [DictionariesWrite] = [DictionariesRead],
+            [TariffsManage] = [DictionariesRead],
+            [PaymentsWrite] = [PaymentsRead, DictionariesRead],
+            [HistoricalMeterReadingsCorrect] = [PaymentsWrite],
+            [OpeningDataAdjust] = [DictionariesWrite],
+            [ReportsRead] = [DictionariesRead]
+        };
+
+    public static IReadOnlyList<string> ExpandWithDependencies(IEnumerable<string> permissions)
+    {
+        var expanded = permissions.ToHashSet(StringComparer.Ordinal);
+        var pending = new Queue<string>(expanded);
+        while (pending.TryDequeue(out var permission))
+        {
+            if (!Dependencies.TryGetValue(permission, out var dependencies))
+            {
+                continue;
+            }
+
+            foreach (var dependency in dependencies)
+            {
+                if (expanded.Add(dependency))
+                {
+                    pending.Enqueue(dependency);
+                }
+            }
+        }
+
+        return expanded.Order(StringComparer.Ordinal).ToArray();
+    }
 }

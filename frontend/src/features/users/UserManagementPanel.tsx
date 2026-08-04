@@ -3,7 +3,7 @@ import type { FormEvent } from 'react'
 import { RotateCcw, Save, Search, ShieldCheck, Trash2, UserPlus, X } from 'lucide-react'
 import type { AuthResponse } from '../../services/authApi'
 import type { CreateManagedUserRequest, ManagedRoleDto, ManagedUserDto, PagedManagedUsersDto, UpdateManagedUserRequest, UserManagementClient } from '../../services/usersApi'
-import { permissions, rolePermissionGroups } from '../../shared/accessControl'
+import { expandPermissionDependencies, isPermissionRequiredBySelection, permissions, rolePermissionGroups } from '../../shared/accessControl'
 import { TableLoadingState } from '../../shared/AsyncState'
 import { FormError, FormValidationSummary } from '../../shared/formFeedback'
 import { FormField } from '../../shared/FormField'
@@ -12,7 +12,7 @@ import { useEscapeKey, useFocusOnOpen, useFocusTrap, useRestoreFocusOnClose } fr
 import { createEmptyPage } from '../../shared/pagination'
 import { TablePagination } from '../../shared/TablePagination'
 import type { UserFormState } from '../../shared/userManagement'
-import { getPrimaryRoleCode, getRoleLabel, getUserEditorChanges, getUserEditorValidationErrors } from '../../shared/userManagement'
+import { getInitialRoleCodes, getRoleLabel, getUserEditorChanges, getUserEditorValidationErrors } from '../../shared/userManagement'
 
 type UserEditorState = { mode: 'create' | 'edit'; user?: ManagedUserDto }
 type UserDeactivationConfirmationState = { user: ManagedUserDto; request: UpdateManagedUserRequest }
@@ -39,7 +39,7 @@ export function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; 
   const [restoreTarget, setRestoreTarget] = useState<ManagedUserDto | null>(null)
   const [deleteReason, setDeleteReason] = useState('')
   const [deleteReasonError, setDeleteReasonError] = useState<string | null>(null)
-  const [form, setForm] = useState<UserFormState>({ email: '', displayName: '', password: '', passwordConfirmation: '', roleCode: 'operator', isActive: true, deactivationReason: '' })
+  const [form, setForm] = useState<UserFormState>({ email: '', displayName: '', password: '', passwordConfirmation: '', roleCodes: ['operator'], isActive: true, deactivationReason: '' })
   const rolesRequestRef = useRef<{ accessToken: string; client: UserManagementClient; promise: Promise<ManagedRoleDto[]> } | null>(null)
   useRestoreFocusOnClose(Boolean(editor))
   const editorCloseRef = useFocusOnOpen<HTMLButtonElement>(Boolean(editor))
@@ -138,7 +138,10 @@ export function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; 
         const loadedRoles = await getRolesOnce()
         if (!ignore) {
           setRoles(loadedRoles)
-          setForm((value) => ({ ...value, roleCode: loadedRoles.find((role) => role.code === value.roleCode)?.code ?? loadedRoles[0]?.code ?? '' }))
+          setForm((value) => {
+            const availableRoleCodes = value.roleCodes.filter((roleCode) => loadedRoles.some((role) => role.code === roleCode))
+            return { ...value, roleCodes: availableRoleCodes.length > 0 ? availableRoleCodes : getInitialRoleCodes(undefined, loadedRoles) }
+          })
         }
       } catch (caught) {
         if (!ignore && !pageFailed) {
@@ -164,7 +167,7 @@ export function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; 
       displayName: user?.displayName ?? '',
       password: '',
       passwordConfirmation: '',
-      roleCode: getPrimaryRoleCode(user, roles),
+      roleCodes: getInitialRoleCodes(user, roles),
       isActive: user?.isActive ?? true,
       deactivationReason: '',
     })
@@ -193,7 +196,7 @@ export function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; 
     if (editor.mode === 'edit' && editor.user) {
       const request: UpdateManagedUserRequest = {
         displayName: form.displayName.trim(),
-        roleCodes: [form.roleCode],
+        roleCodes: form.roleCodes,
         isActive: form.isActive,
         newPassword: form.password.length > 0 ? form.password : null,
         deactivationReason: editor.user.isActive && !form.isActive ? form.deactivationReason.trim() : null,
@@ -221,7 +224,7 @@ export function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; 
           email: form.email,
           displayName: form.displayName,
           password: form.password,
-          roleCodes: [form.roleCode],
+          roleCodes: form.roleCodes,
           isActive: form.isActive,
         }
         await userClient.createUser(auth.accessToken, request)
@@ -282,7 +285,7 @@ export function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; 
     try {
       await userClient.updateUser(auth.accessToken, deleteTarget.id, {
         displayName: deleteTarget.displayName,
-        roleCodes: [getPrimaryRoleCode(deleteTarget, roles)],
+        roleCodes: deleteTarget.roles,
         isActive: false,
         newPassword: null,
         deactivationReason: reason,
@@ -320,7 +323,7 @@ export function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; 
 
   function openRoleEditor(role: ManagedRoleDto) {
     setRolePermissionError(null)
-    setRoleEditor({ role, permissions: [...role.permissions] })
+    setRoleEditor({ role, permissions: expandPermissionDependencies(role.permissions) })
   }
 
   function closeRoleEditor() {
@@ -342,7 +345,20 @@ export function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; 
         permissionsSet.delete(permission)
       }
 
-      return { ...current, permissions: [...permissionsSet].sort() }
+      return { ...current, permissions: expandPermissionDependencies([...permissionsSet]) }
+    })
+  }
+
+  function toggleUserRole(roleCode: string, checked: boolean) {
+    setForm((current) => {
+      const roleCodes = new Set(current.roleCodes)
+      if (checked) {
+        roleCodes.add(roleCode)
+      } else {
+        roleCodes.delete(roleCode)
+      }
+
+      return { ...current, roleCodes: [...roleCodes] }
     })
   }
 
@@ -536,12 +552,20 @@ export function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; 
               <FormField label="Имя сотрудника">
                 <input aria-label="Имя пользователя" autoComplete="off" name="managed-user-display-name" placeholder="ФИО или рабочее имя" value={form.displayName} onChange={(event) => setForm({ ...form, displayName: event.target.value })} required />
               </FormField>
-              <FormField label="Роль">
-                <select aria-label="Роль пользователя" value={form.roleCode} onChange={(event) => setForm({ ...form, roleCode: event.target.value })} required>
+              <FormField label="Роли">
+                <div className="user-role-assignment" role="group" aria-label="Роли пользователя">
                   {roles.map((role) => (
-                    <option value={role.code} key={role.code}>{role.name}</option>
+                    <label className="contractors-check-row" key={role.code}>
+                      <input
+                        type="checkbox"
+                        aria-label={`Роль пользователя: ${role.name}`}
+                        checked={form.roleCodes.includes(role.code)}
+                        onChange={(event) => toggleUserRole(role.code, event.target.checked)}
+                      />
+                      <span>{role.name}</span>
+                    </label>
                   ))}
-                </select>
+                </div>
               </FormField>
               <FormField label="Статус">
                 <select aria-label="Статус пользователя" value={form.isActive ? 'active' : 'inactive'} onChange={(event) => setForm({ ...form, isActive: event.target.value === 'active' })}>
@@ -649,16 +673,17 @@ export function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; 
               <div className="role-permission-editor" role="group" aria-label={`Права роли ${roleEditor.role.name}`}>
                 {rolePermissionGroups.map((group) => {
                   const administratorUsersManage = roleEditor.role.code === 'administrator' && group.permission === permissions.usersManage
+                  const requiredBySelection = isPermissionRequiredBySelection(group.permission, roleEditor.permissions)
                   return (
                     <label className="contractors-check-row" key={group.permission}>
                       <input
                         type="checkbox"
                         aria-label={`${roleEditor.role.name}: ${group.label}`}
                         checked={roleEditor.permissions.includes(group.permission)}
-                        disabled={saving === 'role' || administratorUsersManage}
+                        disabled={saving === 'role' || administratorUsersManage || requiredBySelection}
                         onChange={(event) => toggleRolePermission(group.permission, event.target.checked)}
                       />
-                      <span>{group.label}</span>
+                      <span>{group.label}{requiredBySelection ? ' · требуется выбранным правом' : ''}</span>
                     </label>
                   )
                 })}

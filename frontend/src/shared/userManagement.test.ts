@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { describe, expect, it } from 'vitest'
 import type { ManagedRoleDto, ManagedUserDto } from '../services/usersApi'
-import { getPrimaryRoleCode, getRoleLabel, getUserEditorChanges, getUserEditorValidationErrors } from './userManagement'
+import { getInitialRoleCodes, getRoleLabel, getRoleLabels, getUserEditorChanges, getUserEditorValidationErrors } from './userManagement'
 
 const roles: ManagedRoleDto[] = [
   { code: 'administrator', name: 'Администратор', permissions: ['users.manage'] },
@@ -9,15 +9,17 @@ const roles: ManagedRoleDto[] = [
 ]
 
 describe('user management helpers', () => {
-  it('chooses the user primary role or falls back to the first available role', () => {
-    expect(getPrimaryRoleCode(createUser(['operator', 'administrator']), roles)).toBe('operator')
-    expect(getPrimaryRoleCode(undefined, roles)).toBe('administrator')
-    expect(getPrimaryRoleCode(undefined, [])).toBe('')
+  it('keeps all known user roles or defaults a new user to operator', () => {
+    expect(getInitialRoleCodes(createUser(['operator', 'administrator']), roles)).toEqual(['operator', 'administrator'])
+    expect(getInitialRoleCodes(createUser(['missing']), roles)).toEqual([])
+    expect(getInitialRoleCodes(undefined, roles)).toEqual(['operator'])
+    expect(getInitialRoleCodes(undefined, [])).toEqual([])
   })
 
   it('returns a role label or the code when role metadata is missing', () => {
     expect(getRoleLabel('operator', roles)).toBe('Оператор')
     expect(getRoleLabel('accountant', roles)).toBe('accountant')
+    expect(getRoleLabels(['operator', 'administrator'], roles)).toBe('Администратор, Оператор')
   })
 
   it('returns no edit changes when the user form keeps the same values', () => {
@@ -27,7 +29,7 @@ describe('user management helpers', () => {
       displayName: `  ${user.displayName}  `,
       password: '',
       passwordConfirmation: '',
-      roleCode: 'operator',
+      roleCodes: ['operator'],
       isActive: true,
       deactivationReason: '',
     }, user, roles)).toEqual([])
@@ -40,12 +42,12 @@ describe('user management helpers', () => {
       displayName: 'Старший оператор',
       password: 'StrongPass123',
       passwordConfirmation: 'StrongPass123',
-      roleCode: 'administrator',
+      roleCodes: ['operator', 'administrator'],
       isActive: false,
       deactivationReason: 'Доступ больше не нужен',
     }, user, roles)).toEqual([
       { field: 'Имя', before: 'Оператор', after: 'Старший оператор' },
-      { field: 'Роль', before: 'Оператор', after: 'Администратор' },
+      { field: 'Роли', before: 'Оператор', after: 'Администратор, Оператор' },
       { field: 'Статус', before: 'Активен', after: 'Отключен' },
       { field: 'Пароль', before: 'Без изменения', after: 'изменено' },
     ])
@@ -57,14 +59,14 @@ describe('user management helpers', () => {
       displayName: '',
       password: 'weak',
       passwordConfirmation: 'weak',
-      roleCode: '',
+      roleCodes: [],
       isActive: true,
       deactivationReason: '',
     }, 'create')).toEqual([
       'Укажите email пользователя.',
       'Укажите имя пользователя.',
       'Пароль должен быть не короче 8 символов.',
-      'Выберите роль пользователя.',
+      'Выберите хотя бы одну роль пользователя.',
     ])
   })
 
@@ -74,7 +76,7 @@ describe('user management helpers', () => {
       displayName: 'Оператор',
       password: '',
       passwordConfirmation: '',
-      roleCode: 'operator',
+      roleCodes: ['operator'],
       isActive: true,
       deactivationReason: '',
     }, 'edit')).toEqual([])
@@ -84,12 +86,12 @@ describe('user management helpers', () => {
       displayName: '',
       password: 'weak',
       passwordConfirmation: 'weak',
-      roleCode: '',
+      roleCodes: [],
       isActive: true,
       deactivationReason: '',
     }, 'edit')).toEqual([
       'Укажите имя пользователя.',
-      'Выберите роль пользователя.',
+      'Выберите хотя бы одну роль пользователя.',
       'Пароль должен быть не короче 8 символов.',
     ])
   })
@@ -101,7 +103,7 @@ describe('user management helpers', () => {
       displayName: activeUser.displayName,
       password: '',
       passwordConfirmation: '',
-      roleCode: 'operator',
+      roleCodes: ['operator'],
       isActive: false,
       deactivationReason: '',
     }, 'edit', activeUser)).toContain('Укажите причину отключения пользователя.')
@@ -111,7 +113,7 @@ describe('user management helpers', () => {
       displayName: activeUser.displayName,
       password: '',
       passwordConfirmation: '',
-      roleCode: 'operator',
+      roleCodes: ['operator'],
       isActive: false,
       deactivationReason: 'Уволился',
     }, 'edit', activeUser)).toEqual([])
@@ -124,7 +126,7 @@ describe('user management helpers', () => {
       displayName: user.displayName,
       password: 'StrongPass123',
       passwordConfirmation: 'StrongPass124',
-      roleCode: 'operator',
+      roleCodes: ['operator'],
       isActive: true,
       deactivationReason: '',
     }, 'edit', user)).toContain('Пароль и подтверждение пароля не совпадают.')

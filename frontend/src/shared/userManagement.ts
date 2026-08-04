@@ -8,19 +8,28 @@ export type UserFormState = {
   displayName: string
   password: string
   passwordConfirmation: string
-  roleCode: string
+  roleCodes: string[]
   isActive: boolean
   deactivationReason: string
 }
 
 export type UserEditChange = ChangePreview
 
-export function getPrimaryRoleCode(user: ManagedUserDto | undefined, roles: ManagedRoleDto[]) {
-  return user?.roles[0] ?? roles[0]?.code ?? ''
+export function getInitialRoleCodes(user: ManagedUserDto | undefined, roles: ManagedRoleDto[]) {
+  if (user) {
+    return user.roles.filter((roleCode) => roles.some((role) => role.code === roleCode))
+  }
+
+  const preferredRole = roles.find((role) => role.code === 'operator') ?? roles[0]
+  return preferredRole ? [preferredRole.code] : []
 }
 
 export function getRoleLabel(roleCode: string, roles: ManagedRoleDto[]) {
   return roles.find((role) => role.code === roleCode)?.name ?? roleCode
+}
+
+export function getRoleLabels(roleCodes: readonly string[], roles: ManagedRoleDto[]) {
+  return roleCodes.map((roleCode) => getRoleLabel(roleCode, roles)).sort((left, right) => left.localeCompare(right, 'ru')).join(', ')
 }
 
 export function getUserStatusLabel(isActive: boolean) {
@@ -30,15 +39,16 @@ export function getUserStatusLabel(isActive: boolean) {
 export function getUserEditorChanges(form: UserFormState, user: ManagedUserDto, roles: ManagedRoleDto[]): UserEditChange[] {
   const changes: UserEditChange[] = []
   const nextDisplayName = form.displayName.trim()
-  const currentRoleCode = getPrimaryRoleCode(user, roles)
+  const currentRoleCodes = [...user.roles].sort()
+  const nextRoleCodes = [...form.roleCodes].sort()
 
   appendChangePreview(changes, 'Имя', formatChangeText(user.displayName), formatChangeText(nextDisplayName))
 
-  if (form.roleCode !== currentRoleCode) {
+  if (currentRoleCodes.join('\n') !== nextRoleCodes.join('\n')) {
     changes.push({
-      field: 'Роль',
-      before: getRoleLabel(currentRoleCode, roles),
-      after: getRoleLabel(form.roleCode, roles),
+      field: 'Роли',
+      before: getRoleLabels(currentRoleCodes, roles),
+      after: getRoleLabels(nextRoleCodes, roles),
     })
   }
 
@@ -58,7 +68,7 @@ export function getUserEditorValidationErrors(form: UserFormState, mode: 'create
     : null
 
   if (mode === 'create') {
-    const errors = getManagedUserValidationErrors(form.email, form.displayName, form.password, form.roleCode)
+    const errors = getManagedUserValidationErrors(form.email, form.displayName, form.password, form.roleCodes)
     if (passwordConfirmationError) {
       errors.push(passwordConfirmationError)
     }
@@ -71,8 +81,8 @@ export function getUserEditorValidationErrors(form: UserFormState, mode: 'create
     errors.push('Укажите имя пользователя.')
   }
 
-  if (!form.roleCode) {
-    errors.push('Выберите роль пользователя.')
+  if (form.roleCodes.length === 0) {
+    errors.push('Выберите хотя бы одну роль пользователя.')
   }
 
   if (passwordWasEntered) {

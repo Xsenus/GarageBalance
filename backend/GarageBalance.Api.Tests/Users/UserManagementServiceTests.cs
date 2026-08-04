@@ -81,12 +81,35 @@ public sealed class UserManagementServiceTests
 
         var result = await service.UpdateRolePermissionsAsync(
             SystemRoles.Operator,
-            new UpdateRolePermissionsRequest([SystemPermissions.PaymentsWrite, SystemPermissions.DictionariesRead, SystemPermissions.PaymentsRead]),
+            new UpdateRolePermissionsRequest([SystemPermissions.PaymentsWrite]),
             Guid.NewGuid(),
             CancellationToken.None);
 
         Assert.True(result.Succeeded);
         Assert.Empty(database.Context.AuditEvents);
+    }
+
+    [Fact]
+    public async Task UpdateRolePermissionsAsync_AddsTransitiveReadPermissions()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = CreateService(database.Context);
+
+        var result = await service.UpdateRolePermissionsAsync(
+            SystemRoles.Operator,
+            new UpdateRolePermissionsRequest([SystemPermissions.HistoricalMeterReadingsCorrect]),
+            Guid.NewGuid(),
+            CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+        Assert.Equal(
+            [
+                SystemPermissions.DictionariesRead,
+                SystemPermissions.HistoricalMeterReadingsCorrect,
+                SystemPermissions.PaymentsRead,
+                SystemPermissions.PaymentsWrite
+            ],
+            result.Value!.Permissions);
     }
 
     [Fact]

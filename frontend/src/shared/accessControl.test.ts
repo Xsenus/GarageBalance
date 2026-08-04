@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { describe, expect, it } from 'vitest'
 import type { AuthResponse } from '../services/authApi'
-import { hasAnyPermission, hasPermission, isAdministrator, permissions, rolePermissionGroups } from './accessControl'
+import { expandPermissionDependencies, hasAnyPermission, hasPermission, isAdministrator, isPermissionRequiredBySelection, permissions, rolePermissionGroups } from './accessControl'
 
 function createAuthResponse(permissionList: string[]): AuthResponse {
   return {
@@ -40,6 +40,24 @@ describe('accessControl', () => {
       ...createAuthResponse([permissions.usersManage]),
       user: { ...createAuthResponse([permissions.usersManage]).user, roles: ['operator'] },
     })).toBe(false)
+  })
+
+  it('adds transitive read permissions and identifies locked dependencies', () => {
+    expect(expandPermissionDependencies([
+      permissions.historicalMeterReadingsCorrect,
+      permissions.openingDataAdjust,
+      permissions.reportsRead,
+    ])).toEqual([
+      permissions.dictionariesRead,
+      permissions.dictionariesWrite,
+      permissions.openingDataAdjust,
+      permissions.historicalMeterReadingsCorrect,
+      permissions.paymentsRead,
+      permissions.paymentsWrite,
+      permissions.reportsRead,
+    ])
+    expect(isPermissionRequiredBySelection(permissions.paymentsRead, [permissions.historicalMeterReadingsCorrect])).toBe(true)
+    expect(isPermissionRequiredBySelection(permissions.auditRead, [permissions.historicalMeterReadingsCorrect])).toBe(false)
   })
 
   it('keeps role permission matrix labels tied to known permissions', () => {
