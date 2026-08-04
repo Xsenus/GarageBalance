@@ -109,6 +109,11 @@ public sealed class AppReleaseService(
             return normalized;
         }
 
+        if (releaseRepository is not null)
+        {
+            return await CreateDatabaseReleaseAsync(normalized.Value!, actorUserId, cancellationToken);
+        }
+
         var releaseLock = GetReleaseLock(normalized.Value!.ReleaseId);
         await releaseLock.WaitAsync(cancellationToken);
         try
@@ -141,7 +146,6 @@ public sealed class AppReleaseService(
                 FileLock.Release();
             }
 
-            await UpsertDatabaseAsync(normalized.Value!, cancellationToken);
             await AddAuditAsync(
                 actorUserId,
                 "app_releases.release_created",
@@ -162,6 +166,11 @@ public sealed class AppReleaseService(
 
     public async Task<AppReleaseResult<AppReleaseDto>> UpdateReleaseAsync(string releaseId, UpsertAppReleaseRequest request, Guid? actorUserId, CancellationToken cancellationToken)
     {
+        if (releaseRepository is not null)
+        {
+            return await UpdateDatabaseReleaseAsync(releaseId, request, actorUserId, cancellationToken);
+        }
+
         var releaseLock = GetReleaseLock(releaseId);
         await releaseLock.WaitAsync(cancellationToken);
         try
@@ -219,7 +228,6 @@ public sealed class AppReleaseService(
                 FileLock.Release();
             }
 
-            await UpsertDatabaseAsync(updated, cancellationToken);
             await AddAuditAsync(
                 actorUserId,
                 "app_releases.release_updated",
@@ -240,6 +248,11 @@ public sealed class AppReleaseService(
 
     public async Task<AppReleaseResult<AppReleaseDto>> PublishReleaseAsync(string releaseId, Guid? actorUserId, CancellationToken cancellationToken)
     {
+        if (releaseRepository is not null)
+        {
+            return await PublishDatabaseReleaseAsync(releaseId, actorUserId, cancellationToken);
+        }
+
         var releaseLock = GetReleaseLock(releaseId);
         await releaseLock.WaitAsync(cancellationToken);
         try
@@ -283,7 +296,6 @@ public sealed class AppReleaseService(
                 FileLock.Release();
             }
 
-            await UpsertDatabaseAsync(published, cancellationToken);
             await AddAuditAsync(
                 actorUserId,
                 "app_releases.release_published",
@@ -413,6 +425,167 @@ public sealed class AppReleaseService(
             request.IsPublished));
     }
 
+    private async Task<AppReleaseResult<AppReleaseDto>> CreateDatabaseReleaseAsync(
+        AppReleaseDto release,
+        Guid? actorUserId,
+        CancellationToken cancellationToken)
+    {
+        if (unitOfWork is null)
+        {
+            return DatabaseMutationNotConfigured();
+        }
+
+        await FileLock.WaitAsync(cancellationToken);
+        try
+        {
+            if (await releaseRepository!.FindAsync(release.ReleaseId, cancellationToken) is not null)
+            {
+                return AppReleaseResult<AppReleaseDto>.Failure("release_duplicate_id", "Запись с таким идентификатором уже существует.");
+            }
+
+            if (await releaseRepository.VersionExistsAsync(release.Version, null, cancellationToken))
+            {
+                return AppReleaseResult<AppReleaseDto>.Failure("release_duplicate_version", "Запись с такой версией уже существует.");
+            }
+
+            await releaseRepository.StageUpsertAsync(release, cancellationToken);
+            StageAudit(
+                actorUserId,
+                "app_releases.release_created",
+                release,
+                "create",
+                $"Создана запись \"Что нового\" {release.Version}.",
+                null,
+                ToAuditValues(release));
+            return await CommitDatabaseReleaseAsync(release, cancellationToken);
+        }
+        finally
+        {
+            FileLock.Release();
+        }
+    }
+
+    private async Task<AppReleaseResult<AppReleaseDto>> UpdateDatabaseReleaseAsync(
+        string releaseId,
+        UpsertAppReleaseRequest request,
+        Guid? actorUserId,
+        CancellationToken cancellationToken)
+    {
+        if (unitOfWork is null)
+        {
+            return DatabaseMutationNotConfigured();
+        }
+
+        await FileLock.WaitAsync(cancellationToken);
+        try
+        {
+            var current = await releaseRepository!.FindAsync(releaseId, cancellationToken);
+            if (current is null)
+            {
+                return AppReleaseResult<AppReleaseDto>.Failure("release_not_found", "Запись истории обновлений не найдена.");
+            }
+
+            var normalized = NormalizeRequest(request, current.ReleaseId);
+            if (!normalized.Succeeded)
+            {
+                return normalized;
+            }
+
+            var updated = normalized.Value!;
+            if (await releaseRepository.VersionExistsAsync(updated.Version, current.ReleaseId, cancellationToken))
+            {
+                return AppReleaseResult<AppReleaseDto>.Failure("release_duplicate_version", "Запись с такой версией уже существует.");
+            }
+
+            var oldValues = ToAuditValues(current);
+            var newValues = ToAuditValues(updated);
+            var changeSummary = FormatReleaseChangeSummary(oldValues, newValues);
+            if (changeSummary is null)
+            {
+                return AppReleaseResult<AppReleaseDto>.Success(current);
+            }
+
+            await releaseRepository.StageUpsertAsync(updated, cancellationToken);
+            StageAudit(
+                actorUserId,
+                "app_releases.release_updated",
+                updated,
+                "update",
+                $"Обновлена запись \"Что нового\" {updated.Version}: {changeSummary}.",
+                oldValues,
+                newValues);
+            return await CommitDatabaseReleaseAsync(updated, cancellationToken);
+        }
+        finally
+        {
+            FileLock.Release();
+        }
+    }
+
+    private async Task<AppReleaseResult<AppReleaseDto>> PublishDatabaseReleaseAsync(
+        string releaseId,
+        Guid? actorUserId,
+        CancellationToken cancellationToken)
+    {
+        if (unitOfWork is null)
+        {
+            return DatabaseMutationNotConfigured();
+        }
+
+        await FileLock.WaitAsync(cancellationToken);
+        try
+        {
+            var current = await releaseRepository!.FindAsync(releaseId, cancellationToken);
+            if (current is null)
+            {
+                return AppReleaseResult<AppReleaseDto>.Failure("release_not_found", "Запись истории обновлений не найдена.");
+            }
+
+            if (current.IsPublished is true)
+            {
+                return AppReleaseResult<AppReleaseDto>.Success(current);
+            }
+
+            var published = current with { PublishedAt = DateTimeOffset.Now, IsPublished = true };
+            await releaseRepository.StageUpsertAsync(published, cancellationToken);
+            StageAudit(
+                actorUserId,
+                "app_releases.release_published",
+                published,
+                "publish",
+                $"Опубликована запись \"Что нового\" {published.Version}.",
+                ToAuditValues(current),
+                ToAuditValues(published));
+            return await CommitDatabaseReleaseAsync(published, cancellationToken);
+        }
+        finally
+        {
+            FileLock.Release();
+        }
+    }
+
+    private static AppReleaseResult<AppReleaseDto> DatabaseMutationNotConfigured() =>
+        AppReleaseResult<AppReleaseDto>.Failure(
+            "releases_store_unavailable",
+            "Хранилище истории обновлений временно недоступно для изменения.");
+
+    private async Task<AppReleaseResult<AppReleaseDto>> CommitDatabaseReleaseAsync(
+        AppReleaseDto release,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            await unitOfWork!.SaveChangesAsync(cancellationToken);
+            return AppReleaseResult<AppReleaseDto>.Success(release);
+        }
+        catch (ApplicationPersistenceConflictException)
+        {
+            return AppReleaseResult<AppReleaseDto>.Failure(
+                "release_conflict",
+                "Запись или версия уже была сохранена другим администратором. Обновите список и повторите действие.");
+        }
+    }
+
     private async Task SaveReleasesAsync(IReadOnlyList<AppReleaseDto> releases, CancellationToken cancellationToken)
     {
         var path = GetReleasesPath();
@@ -423,13 +596,15 @@ public sealed class AppReleaseService(
         }
 
         var tempPath = $"{path}.{Guid.NewGuid():N}.tmp";
-        await File.WriteAllTextAsync(tempPath, JsonSerializer.Serialize(SortReleases(releases), JsonOptions), cancellationToken);
-        File.Move(tempPath, path, overwrite: true);
-    }
-
-    private Task UpsertDatabaseAsync(AppReleaseDto release, CancellationToken cancellationToken)
-    {
-        return releaseRepository?.UpsertAsync(release, cancellationToken) ?? Task.CompletedTask;
+        try
+        {
+            await File.WriteAllTextAsync(tempPath, JsonSerializer.Serialize(SortReleases(releases), JsonOptions), cancellationToken);
+            File.Move(tempPath, path, overwrite: true);
+        }
+        finally
+        {
+            File.Delete(tempPath);
+        }
     }
 
     private static SemaphoreSlim GetReleaseLock(string releaseId) =>
@@ -445,9 +620,26 @@ public sealed class AppReleaseService(
         IReadOnlyDictionary<string, object?>? newValues,
         CancellationToken cancellationToken)
     {
-        if (unitOfWork is null || auditEventWriter is null)
+        if (unitOfWork is null || !StageAudit(actorUserId, action, release, actionKind, summary, oldValues, newValues))
         {
             return;
+        }
+
+        await unitOfWork.SaveChangesAsync(cancellationToken);
+    }
+
+    private bool StageAudit(
+        Guid? actorUserId,
+        string action,
+        AppReleaseDto release,
+        string actionKind,
+        string summary,
+        IReadOnlyDictionary<string, object?>? oldValues,
+        IReadOnlyDictionary<string, object?>? newValues)
+    {
+        if (auditEventWriter is null)
+        {
+            return false;
         }
 
         auditEventWriter.Add(new AuditEventWriteRequest(
@@ -464,7 +656,7 @@ public sealed class AppReleaseService(
             FieldLabels: FieldLabels,
             RelatedDocumentId: release.ReleaseId,
             RelatedDocumentNumber: release.Version));
-        await unitOfWork.SaveChangesAsync(cancellationToken);
+        return true;
     }
 
     private string GetReleasesPath()

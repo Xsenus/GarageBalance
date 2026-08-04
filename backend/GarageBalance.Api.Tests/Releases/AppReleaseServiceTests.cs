@@ -4,7 +4,9 @@ using GarageBalance.Api.Infrastructure.Data;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.FileProviders;
+using System.Data.Common;
 using System.Text;
 using System.Text.Json;
 
@@ -148,6 +150,7 @@ public sealed class AppReleaseServiceTests
         var releasesJson = File.ReadAllText(Path.Combine(directory.RootPath, "AppReleases", "releases.json"));
         Assert.Contains("\"releaseId\": \"release-1\"", releasesJson, StringComparison.Ordinal);
         Assert.Contains("\"isPublished\": true", releasesJson, StringComparison.Ordinal);
+        Assert.Empty(Directory.GetFiles(Path.Combine(directory.RootPath, "AppReleases"), "*.tmp"));
 
         var auditActions = (await database.Context.AuditEvents.ToListAsync())
             .OrderBy(auditEvent => auditEvent.CreatedAtUtc)
@@ -157,38 +160,107 @@ public sealed class AppReleaseServiceTests
     }
 
     [Fact]
-    public async Task CreateReleaseAsync_DoesNotKeepFileLockWhileDatabaseWriteIsPending()
+    public async Task DatabaseBackedMutations_WorkWhenReleaseSourceIsReadOnlyAndLeaveItUnchanged()
     {
         using var directory = new TempContentRoot();
         directory.WriteReleasesJson("[]");
-        var repository = new BlockingAppReleaseRepository("slow-release");
-        var service = new AppReleaseService(directory.Environment, releaseRepository: repository);
+        var sourcePath = Path.Combine(directory.RootPath, "AppReleases", "releases.json");
+        File.SetAttributes(sourcePath, FileAttributes.ReadOnly);
+        await using var database = await TestDatabase.CreateAsync();
+        var repository = new EfAppReleaseRepository(database.Context);
+        var service = new AppReleaseService(
+            directory.Environment,
+            new EfApplicationUnitOfWork(database.Context),
+            new AuditEventWriter(database.Context),
+            repository);
 
-        var slowCreate = service.CreateReleaseAsync(
-            CreateRequest("slow-release", "0.900.0"),
+        try
+        {
+            var created = await service.CreateReleaseAsync(CreateRequest("database-release", "0.900.0"), null, CancellationToken.None);
+            var updated = await service.UpdateReleaseAsync(
+                "database-release",
+                CreateRequest("database-release", "0.900.1") with { Title = "Обновлено в PostgreSQL" },
+                null,
+                CancellationToken.None);
+            var published = await service.PublishReleaseAsync("database-release", null, CancellationToken.None);
+
+            Assert.True(created.Succeeded);
+            Assert.True(updated.Succeeded);
+            Assert.True(published.Succeeded);
+            Assert.True(published.Value!.IsPublished);
+            Assert.Equal("[]", await File.ReadAllTextAsync(sourcePath));
+            var stored = Assert.Single(await database.Context.AppReleases.AsNoTracking().ToArrayAsync());
+            Assert.Equal("0.900.1", stored.Version);
+            Assert.Equal("Обновлено в PostgreSQL", stored.Title);
+            Assert.True(stored.IsPublished);
+            Assert.Equal(3, await database.Context.AuditEvents.CountAsync());
+        }
+        finally
+        {
+            File.SetAttributes(sourcePath, FileAttributes.Normal);
+        }
+    }
+
+    [Fact]
+    public async Task DatabaseBackedMutation_RollsBackReleaseWhenAuditInsertFails()
+    {
+        using var directory = new TempContentRoot();
+        directory.WriteReleasesJson("[]");
+        var interceptor = new AuditInsertFailureInterceptor();
+        await using var database = await TestDatabase.CreateAsync(interceptor);
+        var service = new AppReleaseService(
+            directory.Environment,
+            new EfApplicationUnitOfWork(database.Context),
+            new AuditEventWriter(database.Context),
+            new EfAppReleaseRepository(database.Context));
+        interceptor.Enabled = true;
+
+        await Assert.ThrowsAsync<DbUpdateException>(() => service.CreateReleaseAsync(
+            CreateRequest("atomic-release", "0.901.0"),
             null,
-            CancellationToken.None);
-        await repository.BlockedWriteStarted.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            CancellationToken.None));
 
-        var fastCreate = service.CreateReleaseAsync(
-            CreateRequest("fast-release", "0.901.0"),
-            null,
-            CancellationToken.None);
-        var completed = await Task.WhenAny(fastCreate, Task.Delay(TimeSpan.FromSeconds(5)));
+        database.Context.ChangeTracker.Clear();
+        Assert.Empty(await database.Context.AppReleases.AsNoTracking().ToArrayAsync());
+        Assert.Empty(await database.Context.AuditEvents.AsNoTracking().ToArrayAsync());
+    }
 
-        Assert.Same(fastCreate, completed);
-        Assert.True((await fastCreate).Succeeded);
-        repository.AllowBlockedWriteToFinish.TrySetResult();
-        Assert.True((await slowCreate).Succeeded);
+    [Fact]
+    public async Task DatabaseBackedMutations_ValidateConflictsMissingRowsAndRepeatedPublish()
+    {
+        using var directory = new TempContentRoot();
+        await using var database = await TestDatabase.CreateAsync();
+        var repository = new EfAppReleaseRepository(database.Context);
+        var service = new AppReleaseService(
+            directory.Environment,
+            new EfApplicationUnitOfWork(database.Context),
+            new AuditEventWriter(database.Context),
+            repository);
+        var firstRequest = CreateRequest("release-1", "0.910.0");
 
-        using var document = JsonDocument.Parse(File.ReadAllText(
-            Path.Combine(directory.RootPath, "AppReleases", "releases.json")));
-        var releaseIds = document.RootElement
-            .EnumerateArray()
-            .Select(item => item.GetProperty("releaseId").GetString())
-            .ToArray();
-        Assert.Contains("slow-release", releaseIds);
-        Assert.Contains("fast-release", releaseIds);
+        Assert.True((await service.CreateReleaseAsync(firstRequest, null, CancellationToken.None)).Succeeded);
+        Assert.Equal("release_duplicate_id", (await service.CreateReleaseAsync(firstRequest, null, CancellationToken.None)).ErrorCode);
+        Assert.Equal(
+            "release_duplicate_version",
+            (await service.CreateReleaseAsync(CreateRequest("release-2", "0.910.0"), null, CancellationToken.None)).ErrorCode);
+        Assert.True((await service.CreateReleaseAsync(CreateRequest("release-2", "0.911.0"), null, CancellationToken.None)).Succeeded);
+        Assert.Equal(
+            "release_duplicate_version",
+            (await service.UpdateReleaseAsync("release-1", CreateRequest("release-1", "0.911.0"), null, CancellationToken.None)).ErrorCode);
+        Assert.Equal(
+            "release_not_found",
+            (await service.UpdateReleaseAsync("missing", CreateRequest("missing", "0.912.0"), null, CancellationToken.None)).ErrorCode);
+        Assert.Equal("release_not_found", (await service.PublishReleaseAsync("missing", null, CancellationToken.None)).ErrorCode);
+        Assert.True((await service.PublishReleaseAsync("release-1", null, CancellationToken.None)).Succeeded);
+        Assert.True((await service.PublishReleaseAsync("release-1", null, CancellationToken.None)).Succeeded);
+
+        Assert.Equal(3, await database.Context.AuditEvents.CountAsync());
+        Assert.Equal(2, await database.Context.AppReleases.CountAsync());
+
+        var unconfiguredService = new AppReleaseService(directory.Environment, releaseRepository: repository);
+        Assert.Equal(
+            "releases_store_unavailable",
+            (await unconfiguredService.CreateReleaseAsync(CreateRequest("release-3", "0.913.0"), null, CancellationToken.None)).ErrorCode);
     }
 
     [Fact]
@@ -363,13 +435,17 @@ public sealed class AppReleaseServiceTests
 
         public GarageBalanceDbContext Context { get; }
 
-        public static async Task<TestDatabase> CreateAsync()
+        public static async Task<TestDatabase> CreateAsync(DbCommandInterceptor? interceptor = null)
         {
             var connection = new SqliteConnection("DataSource=:memory:");
             await connection.OpenAsync();
-            var options = new DbContextOptionsBuilder<GarageBalanceDbContext>()
-                .UseSqlite(connection)
-                .Options;
+            var optionsBuilder = new DbContextOptionsBuilder<GarageBalanceDbContext>()
+                .UseSqlite(connection);
+            if (interceptor is not null)
+            {
+                optionsBuilder.AddInterceptors(interceptor);
+            }
+            var options = optionsBuilder.Options;
             var context = new GarageBalanceDbContext(options);
             await context.Database.EnsureCreatedAsync();
             return new TestDatabase(connection, context);
@@ -382,36 +458,23 @@ public sealed class AppReleaseServiceTests
         }
     }
 
-    private sealed class BlockingAppReleaseRepository(string blockedReleaseId) : IAppReleaseRepository
+    private sealed class AuditInsertFailureInterceptor : DbCommandInterceptor
     {
-        public TaskCompletionSource BlockedWriteStarted { get; } =
-            new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public bool Enabled { get; set; }
 
-        public TaskCompletionSource AllowBlockedWriteToFinish { get; } =
-            new(TaskCreationOptions.RunContinuationsAsynchronously);
-
-        public Task<AppReleasePageDto> GetPageAsync(
-            bool includeDrafts,
-            int offset,
-            int limit,
-            CancellationToken cancellationToken) =>
-            throw new NotSupportedException();
-
-        public async Task UpsertAsync(AppReleaseDto release, CancellationToken cancellationToken)
+        public override ValueTask<InterceptionResult<DbDataReader>> ReaderExecutingAsync(
+            DbCommand command,
+            CommandEventData eventData,
+            InterceptionResult<DbDataReader> result,
+            CancellationToken cancellationToken = default)
         {
-            if (!string.Equals(release.ReleaseId, blockedReleaseId, StringComparison.Ordinal))
+            if (Enabled && command.CommandText.Contains("INSERT INTO \"audit_events\"", StringComparison.OrdinalIgnoreCase))
             {
-                return;
+                throw new InvalidOperationException("Имитирована ошибка записи аудита.");
             }
 
-            BlockedWriteStarted.TrySetResult();
-            await AllowBlockedWriteToFinish.Task.WaitAsync(cancellationToken);
+            return base.ReaderExecutingAsync(command, eventData, result, cancellationToken);
         }
-
-        public Task SynchronizeAsync(
-            IReadOnlyList<AppReleaseDto> releases,
-            CancellationToken cancellationToken) =>
-            throw new NotSupportedException();
     }
 
     private static UpsertAppReleaseRequest CreateRequest(string releaseId, string version) =>

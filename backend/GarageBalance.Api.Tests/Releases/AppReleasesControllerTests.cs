@@ -91,6 +91,25 @@ public sealed class AppReleasesControllerTests
         Assert.Equal("release_not_found", problem.Title);
     }
 
+    [Theory]
+    [InlineData("release_conflict", 409)]
+    [InlineData("releases_store_unavailable", 500)]
+    public async Task CreateRelease_MapsDatabaseWriteFailures(string errorCode, int expectedStatus)
+    {
+        var controller = new AppReleasesController(new FakeAppReleaseService
+        {
+            CreateResult = AppReleaseResult<AppReleaseDto>.Failure(errorCode, "Изменение не сохранено.")
+        });
+
+        var result = await controller.CreateRelease(
+            new UpsertAppReleaseRequest(null, "0.2.0", null, "Заголовок", "Описание", [new AppReleaseItemDto("fixed", "Исправление.")]),
+            CancellationToken.None);
+
+        var objectResult = Assert.IsType<ObjectResult>(result.Result);
+        Assert.Equal(expectedStatus, objectResult.StatusCode);
+        Assert.Equal(errorCode, Assert.IsType<ProblemDetails>(objectResult.Value).Title);
+    }
+
     private sealed class FakeAppReleaseService : IAppReleaseService
     {
         public AppReleaseResult<AppReleasePageDto> Result { get; init; } =

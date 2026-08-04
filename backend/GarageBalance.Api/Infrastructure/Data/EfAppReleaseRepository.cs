@@ -48,27 +48,45 @@ public sealed class EfAppReleaseRepository(GarageBalanceDbContext dbContext) : I
     public async Task SynchronizeAsync(IReadOnlyList<AppReleaseDto> releases, CancellationToken cancellationToken)
     {
         var releaseIds = releases.Select(release => release.ReleaseId).ToArray();
-        var existingRecords = releaseIds.Length == 0
-            ? new Dictionary<string, AppReleaseRecord>(StringComparer.Ordinal)
+        var existingReleaseIds = releaseIds.Length == 0
+            ? new HashSet<string>(StringComparer.Ordinal)
             : await dbContext.AppReleases
                 .Where(record => releaseIds.Contains(record.ReleaseId))
-                .ToDictionaryAsync(record => record.ReleaseId, StringComparer.Ordinal, cancellationToken);
+                .Select(record => record.ReleaseId)
+                .ToHashSetAsync(StringComparer.Ordinal, cancellationToken);
 
         foreach (var release in releases)
         {
-            existingRecords.TryGetValue(release.ReleaseId, out var record);
-            ApplyRelease(release, record);
+            if (existingReleaseIds.Add(release.ReleaseId))
+            {
+                ApplyRelease(release, null);
+            }
         }
 
         await dbContext.SaveChangesAsync(cancellationToken);
     }
 
-    public async Task UpsertAsync(AppReleaseDto release, CancellationToken cancellationToken)
+    public async Task<AppReleaseDto?> FindAsync(string releaseId, CancellationToken cancellationToken)
+    {
+        var record = await dbContext.AppReleases
+            .AsNoTracking()
+            .SingleOrDefaultAsync(item => item.ReleaseId == releaseId, cancellationToken);
+        return record is null ? null : ToDto(record);
+    }
+
+    public Task<bool> VersionExistsAsync(string version, string? excludedReleaseId, CancellationToken cancellationToken)
+    {
+        var normalizedVersion = version.ToLower();
+        return dbContext.AppReleases.AnyAsync(
+            item => item.Version.ToLower() == normalizedVersion && (excludedReleaseId == null || item.ReleaseId != excludedReleaseId),
+            cancellationToken);
+    }
+
+    public async Task StageUpsertAsync(AppReleaseDto release, CancellationToken cancellationToken)
     {
         var record = await dbContext.AppReleases
             .SingleOrDefaultAsync(item => item.ReleaseId == release.ReleaseId, cancellationToken);
         ApplyRelease(release, record);
-        await dbContext.SaveChangesAsync(cancellationToken);
     }
 
     private void ApplyRelease(AppReleaseDto release, AppReleaseRecord? record)

@@ -38,6 +38,7 @@ public sealed class AppReleasesController(IAppReleaseService appReleaseService) 
     [HttpPost]
     [ProducesResponseType<AppReleaseDto>(StatusCodes.Status201Created)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status500InternalServerError)]
     public async Task<ActionResult<AppReleaseDto>> CreateRelease(UpsertAppReleaseRequest request, CancellationToken cancellationToken)
     {
@@ -55,6 +56,7 @@ public sealed class AppReleasesController(IAppReleaseService appReleaseService) 
     [ProducesResponseType<AppReleaseDto>(StatusCodes.Status200OK)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status500InternalServerError)]
     public async Task<ActionResult<AppReleaseDto>> UpdateRelease(string releaseId, UpsertAppReleaseRequest request, CancellationToken cancellationToken)
     {
@@ -66,6 +68,7 @@ public sealed class AppReleasesController(IAppReleaseService appReleaseService) 
     [HttpPost("{releaseId}/publish")]
     [ProducesResponseType<AppReleaseDto>(StatusCodes.Status200OK)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status500InternalServerError)]
     public async Task<ActionResult<AppReleaseDto>> PublishRelease(string releaseId, CancellationToken cancellationToken)
     {
@@ -78,7 +81,8 @@ public sealed class AppReleasesController(IAppReleaseService appReleaseService) 
         var statusCode = result.ErrorCode switch
         {
             "release_not_found" => StatusCodes.Status404NotFound,
-            "releases_file_missing" or "releases_file_invalid" or "releases_file_unavailable" => StatusCodes.Status500InternalServerError,
+            "release_conflict" => StatusCodes.Status409Conflict,
+            "releases_file_missing" or "releases_file_invalid" or "releases_file_unavailable" or "releases_store_unavailable" => StatusCodes.Status500InternalServerError,
             _ => StatusCodes.Status400BadRequest
         };
 

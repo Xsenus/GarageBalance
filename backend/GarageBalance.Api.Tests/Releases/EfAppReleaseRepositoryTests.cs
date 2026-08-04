@@ -22,19 +22,24 @@ public sealed class EfAppReleaseRepositoryTests
         var second = CreateRelease("release-2", "0.2.0", "Второй релиз");
         await repository.SynchronizeAsync([first, second], CancellationToken.None);
 
-        await repository.UpsertAsync(
-            CreateRelease("release-1", "0.1.1", "Обновлённый первый релиз"),
+        await repository.StageUpsertAsync(
+            CreateRelease("release-1", "Preview-1", "Обновлённый первый релиз"),
             CancellationToken.None);
+        await context.SaveChangesAsync();
 
         var records = await context.AppReleases
             .AsNoTracking()
             .OrderBy(release => release.ReleaseId)
             .ToArrayAsync();
         Assert.Equal(2, records.Length);
-        Assert.Equal("0.1.1", records[0].Version);
+        Assert.Equal("Preview-1", records[0].Version);
         Assert.Equal("Обновлённый первый релиз", records[0].Title);
         Assert.Equal("0.2.0", records[1].Version);
         Assert.Equal("Второй релиз", records[1].Title);
+        Assert.Equal("release-1", (await repository.FindAsync("release-1", CancellationToken.None))!.ReleaseId);
+        Assert.True(await repository.VersionExistsAsync("preview-1", null, CancellationToken.None));
+        Assert.True(await repository.VersionExistsAsync("PREVIEW-1", null, CancellationToken.None));
+        Assert.False(await repository.VersionExistsAsync("preview-1", "release-1", CancellationToken.None));
     }
 
     [Fact]
@@ -78,6 +83,39 @@ public sealed class EfAppReleaseRepositoryTests
         Assert.False(secondPage.HasMore);
         Assert.Equal(12, manageablePage.TotalCount);
         Assert.Equal("release-12", manageablePage.Items[0].ReleaseId);
+    }
+
+    [Fact]
+    public async Task SynchronizeAsync_DoesNotOverwriteDatabaseManagedRelease()
+    {
+        await using var connection = new SqliteConnection("DataSource=:memory:");
+        await connection.OpenAsync();
+        var options = new DbContextOptionsBuilder<GarageBalanceDbContext>()
+            .UseSqlite(connection)
+            .Options;
+        await using var context = new GarageBalanceDbContext(options);
+        await context.Database.EnsureCreatedAsync();
+        var repository = new EfAppReleaseRepository(context);
+        await repository.SynchronizeAsync(
+            [CreateRelease("release-1", "0.1.0", "Исходный заголовок")],
+            CancellationToken.None);
+        await repository.StageUpsertAsync(
+            CreateRelease("release-1", "0.1.1", "Изменено администратором"),
+            CancellationToken.None);
+        await context.SaveChangesAsync();
+
+        await repository.SynchronizeAsync(
+            [
+                CreateRelease("release-1", "0.1.0", "Исходный заголовок"),
+                CreateRelease("release-2", "0.2.0", "Новый релиз")
+            ],
+            CancellationToken.None);
+
+        var records = await context.AppReleases.AsNoTracking().OrderBy(item => item.ReleaseId).ToArrayAsync();
+        Assert.Equal(2, records.Length);
+        Assert.Equal("0.1.1", records[0].Version);
+        Assert.Equal("Изменено администратором", records[0].Title);
+        Assert.Equal("release-2", records[1].ReleaseId);
     }
 
     private static AppReleaseDto CreateRelease(string releaseId, string version, string title) =>

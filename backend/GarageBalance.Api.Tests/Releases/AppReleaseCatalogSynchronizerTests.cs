@@ -164,7 +164,13 @@ public sealed class AppReleaseCatalogSynchronizerTests
         public Task<AppReleasePageDto> GetPageAsync(bool includeDrafts, int offset, int limit, CancellationToken cancellationToken) =>
             throw new NotSupportedException();
 
-        public Task UpsertAsync(AppReleaseDto release, CancellationToken cancellationToken) =>
+        public Task<AppReleaseDto?> FindAsync(string releaseId, CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+
+        public Task<bool> VersionExistsAsync(string version, string? excludedReleaseId, CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+
+        public Task StageUpsertAsync(AppReleaseDto release, CancellationToken cancellationToken) =>
             throw new NotSupportedException();
 
         public async Task SynchronizeAsync(IReadOnlyList<AppReleaseDto> releases, CancellationToken cancellationToken)
@@ -178,7 +184,13 @@ public sealed class AppReleaseCatalogSynchronizerTests
         public Task<AppReleasePageDto> GetPageAsync(bool includeDrafts, int offset, int limit, CancellationToken cancellationToken) =>
             throw new NotSupportedException();
 
-        public Task UpsertAsync(AppReleaseDto release, CancellationToken cancellationToken) =>
+        public Task<AppReleaseDto?> FindAsync(string releaseId, CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+
+        public Task<bool> VersionExistsAsync(string version, string? excludedReleaseId, CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+
+        public Task StageUpsertAsync(AppReleaseDto release, CancellationToken cancellationToken) =>
             throw new NotSupportedException();
 
         public Task SynchronizeAsync(IReadOnlyList<AppReleaseDto> releases, CancellationToken cancellationToken) =>
@@ -192,7 +204,13 @@ public sealed class AppReleaseCatalogSynchronizerTests
         public Task<AppReleasePageDto> GetPageAsync(bool includeDrafts, int offset, int limit, CancellationToken cancellationToken) =>
             throw new NotSupportedException();
 
-        public Task UpsertAsync(AppReleaseDto release, CancellationToken cancellationToken) =>
+        public Task<AppReleaseDto?> FindAsync(string releaseId, CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+
+        public Task<bool> VersionExistsAsync(string version, string? excludedReleaseId, CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+
+        public Task StageUpsertAsync(AppReleaseDto release, CancellationToken cancellationToken) =>
             throw new NotSupportedException();
 
         public Task SynchronizeAsync(IReadOnlyList<AppReleaseDto> releases, CancellationToken cancellationToken)
