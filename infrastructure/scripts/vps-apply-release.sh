@@ -69,6 +69,7 @@ restore_previous_release() {
       --dbname=postgres \
       --command="SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = :'target_database' AND pid <> pg_backend_pid();" \
       >/dev/null
+    # Root opens the protected application-owned dump before sudo changes user.
     sudo -u postgres pg_restore \
       --clean \
       --if-exists \
@@ -76,7 +77,7 @@ restore_previous_release() {
       --no-owner \
       --no-privileges \
       --dbname="$database_name" \
-      "$BACKUP_FILE" >/dev/null
+      < "$BACKUP_FILE" >/dev/null
     log "databaseRollbackStatus=completed; database=${database_name}"
   fi
 
@@ -216,18 +217,20 @@ BACKUP_FILE="${BACKUP_DIR}/garagebalance_${TIMESTAMP}_${release_id}.pgdump"
 log "backupStatus=started; file=${BACKUP_FILE}"
 sudo -u postgres pg_dump --format=custom "$database_name" > "$BACKUP_FILE"
 [[ -s "$BACKUP_FILE" ]] || fail "PostgreSQL backup was not created"
+chown "${APP_USER}:${APP_GROUP}" "$BACKUP_FILE"
 chmod 600 "$BACKUP_FILE"
 log "backupStatus=completed; file=${BACKUP_FILE}"
 
 RESTORE_CHECK_DATABASE="garagebalance_restore_check_${TIMESTAMP//-/}_$$"
 log "restoreCheckStatus=started; database=${RESTORE_CHECK_DATABASE}"
 sudo -u postgres createdb "$RESTORE_CHECK_DATABASE"
+# Root opens the mode-600 dump before pg_restore runs as the database OS user.
 sudo -u postgres pg_restore \
   --exit-on-error \
   --no-owner \
   --no-privileges \
   --dbname="$RESTORE_CHECK_DATABASE" \
-  "$BACKUP_FILE" >/dev/null
+  < "$BACKUP_FILE" >/dev/null
 restored_table_count="$(
   sudo -u postgres psql \
     --set ON_ERROR_STOP=1 \

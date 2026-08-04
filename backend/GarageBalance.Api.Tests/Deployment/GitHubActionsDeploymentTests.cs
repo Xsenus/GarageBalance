@@ -44,8 +44,11 @@ public sealed class GitHubActionsDeploymentTests
         var script = File.ReadAllText(Path.Combine(repositoryRoot, "infrastructure", "scripts", "vps-apply-release.sh"));
 
         Assert.Contains("pg_dump --format=custom", script, StringComparison.Ordinal);
+        Assert.Contains("chown \"${APP_USER}:${APP_GROUP}\" \"$BACKUP_FILE\"", script, StringComparison.Ordinal);
         Assert.Contains("garagebalance_restore_check_${TIMESTAMP//-/}_$$", script, StringComparison.Ordinal);
         Assert.Contains("pg_restore \\", script, StringComparison.Ordinal);
+        Assert.Equal(2, CountOccurrences(script, "< \"$BACKUP_FILE\" >/dev/null"));
+        Assert.DoesNotContain("\"$BACKUP_FILE\" >/dev/null", script.Replace("< \"$BACKUP_FILE\" >/dev/null", string.Empty, StringComparison.Ordinal), StringComparison.Ordinal);
         Assert.Contains("--exit-on-error", script, StringComparison.Ordinal);
         Assert.Contains("restored_table_count", script, StringComparison.Ordinal);
         Assert.Contains("cleanup_restore_check", script, StringComparison.Ordinal);
@@ -113,5 +116,18 @@ public sealed class GitHubActionsDeploymentTests
         }
 
         throw new InvalidOperationException("Repository root was not found.");
+    }
+
+    private static int CountOccurrences(string value, string fragment)
+    {
+        var count = 0;
+        var offset = 0;
+        while ((offset = value.IndexOf(fragment, offset, StringComparison.Ordinal)) >= 0)
+        {
+            count++;
+            offset += fragment.Length;
+        }
+
+        return count;
     }
 }
