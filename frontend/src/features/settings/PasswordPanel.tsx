@@ -670,8 +670,8 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
         setOneCFreshStatus((state) => state ? {
           ...state,
           isConfigured: true,
-          status: 'prepared',
-          statusMessage: 'Токен 1C Fresh сохранен в защищенном хранилище. Запуск синхронизации будет доступен после подключения адаптера 1C Fresh.',
+          status: state.canSynchronize ? 'ready' : 'prepared',
+          statusMessage: 'Токен сохранен. Проверяем готовность адаптера 1C Fresh...',
           configuredSettings: Array.from(new Set([...state.configuredSettings, setting.settingKey])),
           lastProtectedSettingUpdatedAtUtc: setting.updatedAtUtc,
         } : state)
@@ -686,12 +686,13 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
             isConfigured,
             status: isConfigured ? 'prepared' : 'not_configured',
             statusMessage: isConfigured
-              ? 'Защищенные настройки печати сохранены. Печать, отмена и повторная печать станут доступны после подключения адаптера фискального оборудования.'
-              : 'Для будущей печати нужно сохранить защищенные настройки ReceiptPrinting:DeviceConnection и ReceiptPrinting:ReceiptTemplate.',
+              ? 'Защищенные настройки печати сохранены. Проверяем готовность адаптера...'
+              : 'Для печати нужно сохранить защищенные настройки ReceiptPrinting:DeviceConnection и ReceiptPrinting:ReceiptTemplate.',
             lastProtectedSettingUpdatedAtUtc: setting.updatedAtUtc,
           }
         })
       }
+      setSettingsReloadRevision((revision) => revision + 1)
     } catch (caught) {
       setProtectedSettingError(caught instanceof Error ? caught.message : 'Не удалось сохранить защищенную настройку.')
     } finally {
@@ -1264,7 +1265,7 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
           <div>
             <p className="eyebrow">Интеграции</p>
             <h2>1C Fresh</h2>
-            <p>Статус подготовки будущей синхронизации показывается без раскрытия токенов и других защищенных настроек.</p>
+            <p>Статус рабочего подключения показывается без раскрытия токенов и других защищенных настроек.</p>
           </div>
           {integrationError ? <AsyncErrorState message={integrationError} onRetry={() => setSettingsReloadRevision((value) => value + 1)} retrying={integrationLoading} /> : null}
           {integrationLoading ? <LoadingSkeleton className="loading-skeleton--compact" label="Загружаем статус 1C Fresh" rows={3} columns={4} /> : null}
@@ -1351,13 +1352,13 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
             </button>
           ) : null}
           {oneCFreshStatus ? (
-            <button className="secondary-button" type="button" onClick={(event) => openOneCFreshSyncConfirmation(event.currentTarget, 'start')} disabled={integrationLoading || oneCFreshSyncSaving || !oneCFreshStatus.isConfigured || Boolean(oneCFreshPreview && !oneCFreshPreview.canApply)}>
+            <button className="secondary-button" type="button" onClick={(event) => openOneCFreshSyncConfirmation(event.currentTarget, 'start')} disabled={integrationLoading || oneCFreshSyncSaving || !oneCFreshStatus.canSynchronize || Boolean(oneCFreshPreview && !oneCFreshPreview.canApply)}>
               <RefreshCw size={16} aria-hidden="true" />
               <span>{oneCFreshSyncSaving ? 'Запускаем...' : 'Запустить синхронизацию'}</span>
             </button>
           ) : null}
           {oneCFreshStatus && oneCFreshSyncResult?.canRetry ? (
-            <button className="ghost-button" type="button" onClick={(event) => openOneCFreshSyncConfirmation(event.currentTarget, 'retry')} disabled={integrationLoading || oneCFreshSyncSaving || !oneCFreshStatus.isConfigured}>
+            <button className="ghost-button" type="button" onClick={(event) => openOneCFreshSyncConfirmation(event.currentTarget, 'retry')} disabled={integrationLoading || oneCFreshSyncSaving || !oneCFreshStatus.canSynchronize}>
               <RefreshCw size={16} aria-hidden="true" />
               <span>Повторить запрос</span>
             </button>
@@ -1369,7 +1370,7 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
           <div>
             <p className="eyebrow">Интеграции</p>
             <h2>Чеки и квитанции</h2>
-            <p>Статус подготовки печати показывается без раскрытия параметров фискального оборудования и шаблонов.</p>
+            <p>Статус рабочего подключения печати показывается без раскрытия параметров фискального оборудования и шаблонов.</p>
           </div>
           {receiptPrintingError ? <AsyncErrorState message={receiptPrintingError} onRetry={() => setSettingsReloadRevision((value) => value + 1)} retrying={receiptPrintingLoading} /> : null}
           {receiptPrintingLoading ? <LoadingSkeleton className="loading-skeleton--compact" label="Загружаем статус печати" rows={3} columns={4} /> : null}
@@ -1647,8 +1648,8 @@ function getOneCFreshSyncConfirmationDescription(mode: 'preview' | 'start' | 're
   }
 
   return mode === 'retry'
-    ? 'Повтор будет записан в историю изменений отдельным событием. До подключения адаптера система зарегистрирует запрос и не будет передавать данные во внешнюю 1C Fresh.'
-    : 'Запуск будет записан в историю изменений. До подключения адаптера система зарегистрирует запрос и не будет передавать данные во внешнюю 1C Fresh.'
+    ? 'Повтор будет записан в историю изменений отдельным событием. Если HTTP-адаптер готов, задание будет передано в настроенный шлюз 1C Fresh.'
+    : 'Запуск будет записан в историю изменений. Если HTTP-адаптер готов, задание будет передано в настроенный шлюз 1C Fresh.'
 }
 
 function getOneCFreshSyncCommentLabel(mode: 'preview' | 'start' | 'retry') {
@@ -1674,7 +1675,9 @@ function formatOneCFreshPreviewMode(mode: string) {
 }
 
 function formatOneCFreshPreviewDirection(direction: string) {
-  return direction === 'pending_decision' ? 'Ожидает решения по направлению обмена' : direction
+  if (direction === 'pending_decision') return 'Ожидает решения по направлению обмена'
+  if (direction === 'configured_bridge') return 'Настроенный шлюз 1C Fresh'
+  return direction
 }
 
 function formatOneCFreshObjectType(objectType: string) {

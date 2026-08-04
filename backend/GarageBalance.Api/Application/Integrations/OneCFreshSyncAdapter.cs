@@ -2,6 +2,8 @@ namespace GarageBalance.Api.Application.Integrations;
 
 public interface IOneCFreshSyncAdapter
 {
+    IntegrationAdapterAvailability Availability => IntegrationAdapterAvailability.Disabled("Адаптер 1C Fresh не подключен.");
+
     Task<OneCFreshSyncAdapterResult> StartAsync(OneCFreshSyncAdapterRequest request, CancellationToken cancellationToken);
 }
 

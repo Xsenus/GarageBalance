@@ -1,6 +1,9 @@
 namespace GarageBalance.Api.Application.Integrations;
 
-public sealed class IntegrationStatusService(IIntegrationSecretSettingsService secretSettingsService) : IIntegrationStatusService
+public sealed class IntegrationStatusService(
+    IIntegrationSecretSettingsService secretSettingsService,
+    IOneCFreshSyncAdapter? oneCFreshSyncAdapter = null,
+    IReceiptPrintingAdapter? receiptPrintingAdapter = null) : IIntegrationStatusService
 {
     private const string OneCFreshProvider = IntegrationSecretCatalog.OneCFreshProvider;
     private const string ReceiptPrintingProvider = IntegrationSecretCatalog.ReceiptPrintingProvider;
@@ -27,15 +30,19 @@ public sealed class IntegrationStatusService(IIntegrationSecretSettingsService s
             .OrderByDescending(value => value)
             .FirstOrDefault();
 
+        var adapterAvailability = oneCFreshSyncAdapter?.Availability ??
+                                  new IntegrationAdapterAvailability(false, "prepared", "Токен сохранен; адаптер 1C Fresh ожидает подключения.");
+        var isAvailable = hasRefreshToken && adapterAvailability.IsAvailable;
+
         return new OneCFreshIntegrationStatusDto(
             OneCFreshProvider,
             "1C Fresh",
             hasRefreshToken,
-            false,
-            hasRefreshToken ? "prepared" : "not_configured",
-            hasRefreshToken
-                ? "Токен 1C Fresh сохранен в защищенном хранилище. Запуск синхронизации будет доступен после подключения адаптера 1C Fresh."
-                : "Для будущей синхронизации нужно сохранить защищенную настройку OneCFresh:RefreshToken.",
+            isAvailable,
+            !hasRefreshToken ? "not_configured" : adapterAvailability.Status,
+            !hasRefreshToken
+                ? "Для синхронизации нужно сохранить защищенную настройку OneCFresh:RefreshToken."
+                : adapterAvailability.Message,
             OneCFreshRequiredSettings,
             configuredSettings,
             lastProtectedSettingUpdatedAtUtc);
@@ -58,15 +65,19 @@ public sealed class IntegrationStatusService(IIntegrationSecretSettingsService s
             .OrderByDescending(value => value)
             .FirstOrDefault();
 
+        var adapterAvailability = receiptPrintingAdapter?.Availability ??
+                                  new IntegrationAdapterAvailability(false, "prepared", "Настройки сохранены; адаптер печати ожидает подключения.");
+        var isAvailable = hasRequiredSettings && adapterAvailability.IsAvailable;
+
         return new ReceiptPrintingIntegrationStatusDto(
             ReceiptPrintingProvider,
             "Печать чеков и квитанций",
             hasRequiredSettings,
-            false,
-            hasRequiredSettings ? "prepared" : "not_configured",
-            hasRequiredSettings
-                ? "Защищенные настройки печати сохранены. Печать, отмена и повторная печать станут доступны после подключения адаптера фискального оборудования."
-                : "Для будущей печати нужно сохранить защищенные настройки ReceiptPrinting:DeviceConnection и ReceiptPrinting:ReceiptTemplate.",
+            isAvailable,
+            !hasRequiredSettings ? "not_configured" : adapterAvailability.Status,
+            !hasRequiredSettings
+                ? "Для печати нужно сохранить защищенные настройки ReceiptPrinting:DeviceConnection и ReceiptPrinting:ReceiptTemplate."
+                : adapterAvailability.Message,
             ReceiptPrintingRequiredSettings,
             configuredSettings,
             ReceiptPrintingPlannedActions,

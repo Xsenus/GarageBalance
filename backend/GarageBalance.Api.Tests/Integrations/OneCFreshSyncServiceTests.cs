@@ -336,6 +336,26 @@ public sealed class OneCFreshSyncServiceTests
     }
 
     [Fact]
+    public async Task PreviewSyncAsync_AllowsStartWhenHttpAdapterIsReady()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var adapter = new FakeSyncAdapter(available: true);
+        var service = CreateService(database.Context, new FakeSecretSettingsService("super-secret-token"), adapter);
+
+        var result = await service.PreviewSyncAsync(
+            new OneCFreshSyncRequest("Проверить настроенный шлюз"),
+            Guid.NewGuid(),
+            CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+        Assert.True(result.Value!.CanApply);
+        Assert.Equal("configured_bridge", result.Value.Direction);
+        Assert.Equal("ready_preview", result.Value.Status);
+        Assert.Contains(result.Value.Warnings, warning => warning.Code == "one_c_fresh_bridge_scope");
+        Assert.Null(adapter.LastRequest);
+    }
+
+    [Fact]
     public async Task StartSyncAsync_WithProductionQueue_ReturnsImmediatelyWithoutCallingAdapter()
     {
         await using var database = await TestDatabase.CreateAsync();
@@ -358,6 +378,33 @@ public sealed class OneCFreshSyncServiceTests
         var job = await queue.DequeueAsync(CancellationToken.None);
         Assert.False(job.IsRetry);
         Assert.Equal("Фоновый запуск", job.Request.Comment);
+    }
+
+    [Fact]
+    public async Task StartSyncAsync_WhenQueueIsFull_DoesNotCreateFalseQueuedAudit()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var adapter = new FakeSyncAdapter(available: true);
+        var options = Options.Create(new OneCFreshSyncBackgroundOptions { Capacity = 1, AdapterTimeoutSeconds = 30 });
+        var queue = new OneCFreshSyncBackgroundQueue(options);
+        Assert.True(queue.TryQueue(new OneCFreshSyncBackgroundJob(new OneCFreshSyncRequest("Первое задание"), Guid.NewGuid(), false)));
+        var service = new OneCFreshSyncService(
+            new EfApplicationUnitOfWork(database.Context),
+            new FakeSecretSettingsService("secret"),
+            adapter,
+            new AuditEventWriter(database.Context),
+            queue,
+            options);
+
+        var result = await service.StartSyncAsync(
+            new OneCFreshSyncRequest("Не поместилось"),
+            Guid.NewGuid(),
+            CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Equal("one_c_fresh_queue_busy", result.ErrorCode);
+        Assert.Empty(database.Context.AuditEvents);
+        Assert.Null(adapter.LastRequest);
     }
 
     [Fact]
@@ -410,8 +457,12 @@ public sealed class OneCFreshSyncServiceTests
         }
     }
 
-    private sealed class FakeSyncAdapter(OneCFreshSyncAdapterResult? result = null) : IOneCFreshSyncAdapter
+    private sealed class FakeSyncAdapter(OneCFreshSyncAdapterResult? result = null, bool available = false) : IOneCFreshSyncAdapter
     {
+        public IntegrationAdapterAvailability Availability => available
+            ? IntegrationAdapterAvailability.Ready("Ready.")
+            : IntegrationAdapterAvailability.Disabled("Disabled.");
+
         public OneCFreshSyncAdapterRequest? LastRequest { get; private set; }
 
         public CancellationToken LastCancellationToken { get; private set; }

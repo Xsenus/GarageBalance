@@ -2,6 +2,8 @@ namespace GarageBalance.Api.Application.Integrations;
 
 public interface IReceiptPrintingAdapter
 {
+    IntegrationAdapterAvailability Availability => IntegrationAdapterAvailability.Disabled("Адаптер печати не подключен.");
+
     Task<ReceiptPrintingAdapterResult> ProcessAsync(ReceiptPrintingAdapterRequest request, CancellationToken cancellationToken);
 }
 
@@ -72,4 +74,13 @@ public static class ReceiptPrintingActions
     public const string Print = "print";
     public const string Cancel = "cancel";
     public const string Reprint = "reprint";
+}
+
+public sealed record IntegrationAdapterAvailability(bool IsAvailable, string Status, string Message)
+{
+    public static IntegrationAdapterAvailability Ready(string message) => new(true, "ready", message);
+
+    public static IntegrationAdapterAvailability Disabled(string message) => new(false, "adapter_disabled", message);
+
+    public static IntegrationAdapterAvailability Invalid(string message) => new(false, "adapter_not_configured", message);
 }

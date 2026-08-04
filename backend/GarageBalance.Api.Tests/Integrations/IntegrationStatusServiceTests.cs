@@ -53,6 +53,24 @@ public sealed class IntegrationStatusServiceTests
     }
 
     [Fact]
+    public async Task GetOneCFreshStatusAsync_ReturnsReadyWhenSecretAndAdapterAreAvailable()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var secretService = CreateSecretService(database.Context);
+        await secretService.UpsertSecretAsync(
+            new UpsertIntegrationSecretRequest("OneCFresh", "RefreshToken", "private-token"),
+            Guid.NewGuid(),
+            CancellationToken.None);
+        var service = new IntegrationStatusService(secretService, new ReadyOneCFreshAdapter());
+
+        var status = await service.GetOneCFreshStatusAsync(CancellationToken.None);
+
+        Assert.True(status.IsConfigured);
+        Assert.True(status.CanSynchronize);
+        Assert.Equal("ready", status.Status);
+    }
+
+    [Fact]
     public async Task GetReceiptPrintingStatusAsync_ReturnsNotConfiguredWithoutProtectedSettings()
     {
         await using var database = await TestDatabase.CreateAsync();
@@ -105,6 +123,28 @@ public sealed class IntegrationStatusServiceTests
         Assert.DoesNotContain(templateValue, status.StatusMessage, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public async Task GetReceiptPrintingStatusAsync_ReturnsReadyWhenSecretsAndAdapterAreAvailable()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var secretService = CreateSecretService(database.Context);
+        await secretService.UpsertSecretAsync(
+            new UpsertIntegrationSecretRequest("ReceiptPrinting", "DeviceConnection", "private-device"),
+            Guid.NewGuid(),
+            CancellationToken.None);
+        await secretService.UpsertSecretAsync(
+            new UpsertIntegrationSecretRequest("ReceiptPrinting", "ReceiptTemplate", "private-template"),
+            Guid.NewGuid(),
+            CancellationToken.None);
+        var service = new IntegrationStatusService(secretService, receiptPrintingAdapter: new ReadyReceiptAdapter());
+
+        var status = await service.GetReceiptPrintingStatusAsync(CancellationToken.None);
+
+        Assert.True(status.IsConfigured);
+        Assert.True(status.CanPrint);
+        Assert.Equal("ready", status.Status);
+    }
+
     private static IntegrationStatusService CreateStatusService(GarageBalanceDbContext context)
     {
         return new IntegrationStatusService(CreateSecretService(context));
@@ -118,6 +158,22 @@ public sealed class IntegrationStatusServiceTests
             new EfIntegrationSecretSettingsRepository(context),
             protector,
             new AuditEventWriter(context));
+    }
+
+    private sealed class ReadyOneCFreshAdapter : IOneCFreshSyncAdapter
+    {
+        public IntegrationAdapterAvailability Availability => IntegrationAdapterAvailability.Ready("Ready.");
+
+        public Task<OneCFreshSyncAdapterResult> StartAsync(OneCFreshSyncAdapterRequest request, CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+    }
+
+    private sealed class ReadyReceiptAdapter : IReceiptPrintingAdapter
+    {
+        public IntegrationAdapterAvailability Availability => IntegrationAdapterAvailability.Ready("Ready.");
+
+        public Task<ReceiptPrintingAdapterResult> ProcessAsync(ReceiptPrintingAdapterRequest request, CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
     }
 
     private sealed class TestDatabase : IAsyncDisposable

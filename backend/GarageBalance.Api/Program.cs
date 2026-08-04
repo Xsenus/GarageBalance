@@ -191,7 +191,16 @@ builder.Services.AddScoped<IImportQuarantineService, ImportQuarantineService>();
 builder.Services.AddScoped<IIntegrationSecretSettingsRepository, EfIntegrationSecretSettingsRepository>();
 builder.Services.AddScoped<IIntegrationSecretSettingsService, IntegrationSecretSettingsService>();
 builder.Services.AddScoped<IIntegrationStatusService, IntegrationStatusService>();
-builder.Services.AddScoped<IOneCFreshSyncAdapter, DisabledOneCFreshSyncAdapter>();
+builder.Services
+    .AddOptions<OneCFreshHttpSyncAdapterOptions>()
+    .Bind(builder.Configuration.GetSection(OneCFreshHttpSyncAdapterOptions.SectionName))
+    .ValidateDataAnnotations()
+    .ValidateOnStart();
+builder.Services.AddHttpClient<IOneCFreshSyncAdapter, OneCFreshHttpSyncAdapter>((services, client) =>
+{
+    var options = services.GetRequiredService<IOptions<OneCFreshHttpSyncAdapterOptions>>().Value;
+    client.Timeout = TimeSpan.FromSeconds(options.TimeoutSeconds);
+});
 builder.Services
     .AddOptions<OneCFreshSyncBackgroundOptions>()
     .Bind(builder.Configuration.GetSection(OneCFreshSyncBackgroundOptions.SectionName))
@@ -200,7 +209,16 @@ builder.Services
 builder.Services.AddSingleton<IOneCFreshSyncBackgroundQueue, OneCFreshSyncBackgroundQueue>();
 builder.Services.AddScoped<OneCFreshSyncService>();
 builder.Services.AddScoped<IOneCFreshSyncService>(services => services.GetRequiredService<OneCFreshSyncService>());
-builder.Services.AddScoped<IReceiptPrintingAdapter, DisabledReceiptPrintingAdapter>();
+builder.Services
+    .AddOptions<ReceiptPrintingHttpAdapterOptions>()
+    .Bind(builder.Configuration.GetSection(ReceiptPrintingHttpAdapterOptions.SectionName))
+    .ValidateDataAnnotations()
+    .ValidateOnStart();
+builder.Services.AddHttpClient<IReceiptPrintingAdapter, ReceiptPrintingHttpAdapter>((services, client) =>
+{
+    var options = services.GetRequiredService<IOptions<ReceiptPrintingHttpAdapterOptions>>().Value;
+    client.Timeout = TimeSpan.FromSeconds(options.TimeoutSeconds);
+});
 builder.Services.AddScoped<IReceiptPrintingRepository, EfReceiptPrintingRepository>();
 builder.Services.AddScoped<IReceiptPrintingService, ReceiptPrintingService>();
 builder.Services.AddHttpClient<IDadataSuggestionService, DadataSuggestionService>(client =>

@@ -10106,7 +10106,30 @@ describe('App', () => {
       saved.push({ provider, settingKey, plaintextValue })
       return createIntegrationSecretSetting({ provider, settingKey, purpose: `${provider}.${settingKey}` })
     })
-    const integrationClient = createIntegrationClient({ updateProtectedSetting })
+    const integrationClient = createIntegrationClient({
+      updateProtectedSetting,
+      getOneCFreshStatus: async () => {
+        const configured = saved.some((item) => item.provider === 'OneCFresh' && item.settingKey === 'RefreshToken')
+        return createOneCFreshStatus({
+          isConfigured: configured,
+          canSynchronize: configured,
+          status: configured ? 'ready' : 'not_configured',
+          configuredSettings: configured ? ['RefreshToken'] : [],
+        })
+      },
+      getReceiptPrintingStatus: async () => {
+        const configuredSettings = saved
+          .filter((item) => item.provider === 'ReceiptPrinting')
+          .map((item) => item.settingKey)
+        const configured = configuredSettings.includes('DeviceConnection') && configuredSettings.includes('ReceiptTemplate')
+        return createReceiptPrintingStatus({
+          isConfigured: configured,
+          canPrint: configured,
+          status: configured ? 'ready' : 'not_configured',
+          configuredSettings,
+        })
+      },
+    })
     render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} integrationClient={integrationClient} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
@@ -10241,7 +10264,8 @@ describe('App', () => {
     const integrationClient = createIntegrationClient({
       getOneCFreshStatus: async () => createOneCFreshStatus({
         isConfigured: true,
-        status: 'prepared',
+        canSynchronize: true,
+        status: 'ready',
         configuredSettings: ['RefreshToken'],
       }),
       startOneCFreshSync,
@@ -10303,7 +10327,8 @@ describe('App', () => {
     const integrationClient = createIntegrationClient({
       getOneCFreshStatus: async () => createOneCFreshStatus({
         isConfigured: true,
-        status: 'prepared',
+        canSynchronize: true,
+        status: 'ready',
         configuredSettings: ['RefreshToken'],
       }),
       previewOneCFreshSync,
@@ -10349,12 +10374,17 @@ describe('App', () => {
     const previewOneCFreshSync = vi.fn(async (_accessToken: string, request: OneCFreshSyncRequest) => createOneCFreshPreview({
       statusMessage: `Предпросмотр 1C подготовлен: ${request.comment ?? ''}`,
       periodSummary: 'Июль 2026, платежи и начисления',
+      direction: 'configured_bridge',
+      status: 'ready_preview',
+      canApply: true,
+      warnings: [{ code: 'one_c_fresh_bridge_scope', message: 'Состав документов проверит настроенный шлюз.' }],
     }))
     const startOneCFreshSync = vi.fn(async () => createOneCFreshSync())
     const integrationClient = createIntegrationClient({
       getOneCFreshStatus: async () => createOneCFreshStatus({
         isConfigured: true,
-        status: 'prepared',
+        canSynchronize: true,
+        status: 'ready',
         configuredSettings: ['RefreshToken'],
       }),
       previewOneCFreshSync,
@@ -10386,11 +10416,11 @@ describe('App', () => {
     expect(await within(integrationPanel).findByText('Предпросмотр 1C подготовлен: Проверить перед отправкой')).toHaveAttribute('role', 'status')
     const preview = within(integrationPanel).getByLabelText('Предпросмотр синхронизации 1C Fresh')
     expect(within(preview).getByText('Предпросмотр')).toBeInTheDocument()
-    expect(within(preview).getByText('Ожидает решения по направлению обмена')).toBeInTheDocument()
+    expect(within(preview).getByText('Настроенный шлюз 1C Fresh')).toBeInTheDocument()
     expect(within(preview).getByText('Июль 2026, платежи и начисления')).toBeInTheDocument()
-    expect(within(preview).getByText('Нет, нужен реальный контур и подтверждение состава обмена')).toBeInTheDocument()
-    expect(within(preview).getByText('Предпросмотр не отправлял данные в 1C Fresh: направление обмена, документы и тестовый контур еще требуют решения.')).toBeInTheDocument()
-    expect(within(integrationPanel).getByRole('button', { name: 'Запустить синхронизацию' })).toBeDisabled()
+    expect(within(preview).getByText('Да')).toBeInTheDocument()
+    expect(within(preview).getByText('Состав документов проверит настроенный шлюз.')).toBeInTheDocument()
+    expect(within(integrationPanel).getByRole('button', { name: 'Запустить синхронизацию' })).toBeEnabled()
   })
 
   it('shows 1C Fresh retry and conflict recovery states from backend result', async () => {
@@ -10415,7 +10445,8 @@ describe('App', () => {
     const integrationClient = createIntegrationClient({
       getOneCFreshStatus: async () => createOneCFreshStatus({
         isConfigured: true,
-        status: 'prepared',
+        canSynchronize: true,
+        status: 'ready',
         configuredSettings: ['RefreshToken'],
       }),
       startOneCFreshSync,

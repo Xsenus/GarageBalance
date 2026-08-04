@@ -1639,6 +1639,26 @@ public sealed class BackendLayeringTests
         }
     }
 
+    [Fact]
+    public void ProductionComposition_UsesConfigurableHttpIntegrationAdaptersInsteadOfDisabledStubs()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var program = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "Program.cs"));
+        var appsettings = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "appsettings.json"));
+        var guide = File.ReadAllText(Path.Combine(repositoryRoot, "docs", "integrations-guide.md"));
+
+        Assert.Contains("AddHttpClient<IOneCFreshSyncAdapter, OneCFreshHttpSyncAdapter>", program, StringComparison.Ordinal);
+        Assert.Contains("AddHttpClient<IReceiptPrintingAdapter, ReceiptPrintingHttpAdapter>", program, StringComparison.Ordinal);
+        Assert.DoesNotContain("AddScoped<IOneCFreshSyncAdapter, DisabledOneCFreshSyncAdapter>", program, StringComparison.Ordinal);
+        Assert.DoesNotContain("AddScoped<IReceiptPrintingAdapter, DisabledReceiptPrintingAdapter>", program, StringComparison.Ordinal);
+        Assert.Contains("\"OneCFreshAdapter\"", appsettings, StringComparison.Ordinal);
+        Assert.Contains("\"ReceiptPrintingAdapter\"", appsettings, StringComparison.Ordinal);
+        Assert.Contains("\"Enabled\": false", appsettings, StringComparison.Ordinal);
+        Assert.DoesNotContain("private-token", appsettings, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Integrations__OneCFreshAdapter__Endpoint", guide, StringComparison.Ordinal);
+        Assert.Contains("Integrations__ReceiptPrintingAdapter__Endpoint", guide, StringComparison.Ordinal);
+    }
+
     private static string FindRepositoryRoot()
     {
         var directory = new DirectoryInfo(AppContext.BaseDirectory);

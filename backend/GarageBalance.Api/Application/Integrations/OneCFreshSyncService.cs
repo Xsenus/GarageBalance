@@ -36,20 +36,22 @@ public sealed class OneCFreshSyncService(
         }
 
         var requestedAtUtc = DateTimeOffset.UtcNow;
-        const string periodSummary = "Период и документы не выбраны: требуется решение по направлению обмена и составу документов 1C Fresh.";
-        var snapshotHash = BuildPreviewSnapshotHash(comment, periodSummary);
+        var adapterAvailable = syncAdapter.Availability.IsAvailable;
+        var previewDirection = adapterAvailable ? "configured_bridge" : PreviewDirection;
+        var previewStatus = adapterAvailable ? "ready_preview" : PreviewStatus;
+        var periodSummary = adapterAvailable
+            ? "Состав и период обмена определяет настроенный шлюз 1C Fresh; GarageBalance передает подтвержденное задание."
+            : "Период и документы не выбраны: требуется включить и настроить шлюз 1C Fresh.";
+        var snapshotHash = BuildPreviewSnapshotHash(comment, periodSummary, previewDirection);
         IReadOnlyList<OneCFreshSyncPreviewCountDto> counts =
         [
             new("counterparty", "match", 0),
             new("payment", "export", 0),
             new("accrual", "export", 0)
         ];
-        IReadOnlyList<OneCFreshSyncPreviewNoticeDto> warnings =
-        [
-            new(
-                "one_c_fresh_exchange_decisions_required",
-                "Предпросмотр не отправлял данные в 1C Fresh: направление обмена, документы и тестовый контур еще требуют решения.")
-        ];
+        IReadOnlyList<OneCFreshSyncPreviewNoticeDto> warnings = adapterAvailable
+            ? [new("one_c_fresh_bridge_scope", "Предпросмотр не отправляет данные: состав документов проверит настроенный шлюз после подтверждения запуска.")]
+            : [new("one_c_fresh_exchange_decisions_required", "Предпросмотр не отправлял данные в 1C Fresh: сначала настройте HTTPS endpoint адаптера и тестовый контур.")];
         IReadOnlyList<OneCFreshSyncPreviewNoticeDto> conflicts = [];
 
         var auditEvent = auditEventWriter.Add(new AuditEventWriteRequest(
@@ -66,13 +68,13 @@ public sealed class OneCFreshSyncService(
             {
                 ["provider"] = Provider,
                 ["mode"] = "preview",
-                ["direction"] = PreviewDirection,
-                ["syncStatus"] = PreviewStatus,
+                ["direction"] = previewDirection,
+                ["syncStatus"] = previewStatus,
                 ["periodSummary"] = periodSummary,
                 ["snapshotHash"] = snapshotHash,
-                ["canApply"] = false,
+                ["canApply"] = adapterAvailable,
                 ["plannedObjectTypes"] = "counterparty,payment,accrual",
-                ["warningCodes"] = "one_c_fresh_exchange_decisions_required",
+                ["warningCodes"] = string.Join(',', warnings.Select(item => item.Code)),
                 ["conflictCount"] = conflicts.Count,
                 ["protectedCredentialConfigured"] = true
             }));
@@ -82,13 +84,15 @@ public sealed class OneCFreshSyncService(
             auditEvent!.Id,
             Provider,
             "preview",
-            PreviewDirection,
-            PreviewStatus,
-            "Предпросмотр синхронизации подготовлен без отправки данных в 1C Fresh.",
+            previewDirection,
+            previewStatus,
+            adapterAvailable
+                ? "Предпросмотр готов: после подтверждения задание будет передано настроенному шлюзу 1C Fresh."
+                : "Предпросмотр подготовлен без отправки данных; адаптер 1C Fresh пока недоступен.",
             auditEvent.CreatedAtUtc,
             periodSummary,
             snapshotHash,
-            CanApply: false,
+            CanApply: adapterAvailable,
             counts,
             warnings,
             conflicts));
@@ -168,6 +172,14 @@ public sealed class OneCFreshSyncService(
         }
 
         var comment = string.IsNullOrWhiteSpace(request.Comment) ? null : request.Comment.Trim();
+        var job = new OneCFreshSyncBackgroundJob(new OneCFreshSyncRequest(comment), actorUserId, isRetry);
+        if (!backgroundQueue!.TryQueue(job))
+        {
+            return OneCFreshSyncResult<OneCFreshSyncDto>.Failure(
+                "one_c_fresh_queue_busy",
+                "Очередь синхронизации занята. Повторите запуск позже.");
+        }
+
         var auditEvent = auditEventWriter.Add(new AuditEventWriteRequest(
             actorUserId,
             action,
@@ -186,13 +198,6 @@ public sealed class OneCFreshSyncService(
                 ["protectedCredentialConfigured"] = true
             }));
         await unitOfWork.SaveChangesAsync(cancellationToken);
-        if (!backgroundQueue!.TryQueue(
-                new OneCFreshSyncBackgroundJob(new OneCFreshSyncRequest(comment), actorUserId, isRetry)))
-        {
-            return OneCFreshSyncResult<OneCFreshSyncDto>.Failure(
-                "one_c_fresh_queue_busy",
-                "Очередь синхронизации занята. Повторите запуск позже.");
-        }
 
         return OneCFreshSyncResult<OneCFreshSyncDto>.Success(new OneCFreshSyncDto(
             auditEvent!.Id,
@@ -317,9 +322,9 @@ public sealed class OneCFreshSyncService(
         return new OneCFreshSyncOutcome(canRetry, hasConflict, errorCode, recoveryAction);
     }
 
-    private static string BuildPreviewSnapshotHash(string? comment, string periodSummary)
+    private static string BuildPreviewSnapshotHash(string? comment, string periodSummary, string direction)
     {
-        var source = string.Join('|', Provider, "preview", PreviewDirection, periodSummary, comment ?? string.Empty);
+        var source = string.Join('|', Provider, "preview", direction, periodSummary, comment ?? string.Empty);
         var hash = SHA256.HashData(Encoding.UTF8.GetBytes(source));
         return Convert.ToHexString(hash).ToLowerInvariant();
     }
