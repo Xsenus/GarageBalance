@@ -89,7 +89,7 @@
 - [x] Прогнать полный backend gate на реальном PostgreSQL, миграции с чистой базы и проверку модели EF.
 - [x] Прогнать полный frontend gate: тесты, coverage, lint, production build и bundle budget.
 - [x] Проверить privacy, кодировку, vulnerability audit и отсутствие временных процессов/артефактов.
-- [~] После разрешения на push дождаться зеленого GitHub Actions и проверить VPS `/health/live`, `/health/ready`, frontend и логи.
+- [x] После разрешения на push дождаться зеленого GitHub Actions и проверить VPS `/health/live`, `/health/ready`, frontend и логи.
 - [acceptance] Провести приемку финансовых сценариев на копии реальных данных заказчика.
 
 ## Определение готовности
@@ -102,6 +102,8 @@ Roadmap закрыт, когда все пункты, кроме явно отм
 - Ручная приемка на боевой копии данных не заменяет автоматические проверки и не выполняется без безопасной копии.
 
 ## История выполнения
+
+- 04.08.2026 — все автоматизируемые пункты roadmap опубликованы в `master`. GitHub Actions `Deploy staging` для коммита `d62a80fb` завершился успешно (run `30908816772`): полный CI gate прошёл, релиз применён на VPS со статусом `deployStatus=ok`, а `nginx -t` подтвердил корректную конфигурацию. Публичные smoke-проверки `https://sgk.blagodaty.ru/health/live`, `https://sgk.blagodaty.ru/health/ready` и frontend вернули HTTP 200; readiness подтвердил PostgreSQL, а имя загружаемого frontend-ресурса совпало с локальной production-сборкой. В системном журнале установки отмечено доступное обновление ядра VPS с плановой перезагрузкой; это не ошибка приложения и не повлияло на сервис. Незакрытой остаётся только отдельно отмеченная ручная приемка на безопасной копии реальных данных и реальных внешних шлюзах.
 
 - 04.08.2026 — завершён единый локальный release gate всей дорожной карты. На чистой PostgreSQL 17 все миграции применены, повторный update является no-op, EF не видит изменений модели, а idempotent SQL дважды применён без ошибок. Backend: 2027/2027 без пропусков, coverage 89,91% строк / 73,28% ветвей. Frontend: 777/777, coverage 83,33% statements / 75,94% branches / 79,09% functions / 84,00% lines, lint, production build и bundle 259,6/260 КиБ. Privacy проверила 1000 файлов, npm/NuGet audit не нашли уязвимостей, format, UTF-8/release JSON и `git diff --check` проходят. Тестовые PostgreSQL, coverage, SQL, dist, npm-логи и build-процессы удалены; сохранены только пользовательские локальные API/Vite, PostgreSQL, IDE и MCP/Codex. Следующий шаг — уже разрешённые push, GitHub Actions и VPS smoke.
 
