@@ -1595,6 +1595,7 @@ export function FinancePanel({
           ? items
           : [{
               id: garageId,
+              version: '',
               number: record.garageNumber ?? 'без номера',
               ownerId: null,
               ownerName: record.ownerName,

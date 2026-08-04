@@ -40,7 +40,8 @@ public sealed record GarageListItemData(
     decimal? InitialWaterMeterValue,
     decimal? InitialElectricityMeterValue,
     string? Comment,
-    bool IsArchived);
+    bool IsArchived,
+    Guid Version);
 
 public sealed record GarageBalanceTotalsData(
     IReadOnlyDictionary<Guid, decimal> AccrualTotals,

@@ -1,6 +1,8 @@
+using GarageBalance.Api.Domain.Common;
+
 namespace GarageBalance.Api.Domain.Finance;
 
-public sealed class Fund
+public sealed class Fund : IOptimisticConcurrencyEntity
 {
     public Guid Id { get; set; } = Guid.NewGuid();
     public string Name { get; set; } = string.Empty;
@@ -12,5 +14,6 @@ public sealed class Fund
     public bool IsArchived { get; set; }
     public DateTimeOffset CreatedAtUtc { get; set; } = DateTimeOffset.UtcNow;
     public DateTimeOffset UpdatedAtUtc { get; set; } = DateTimeOffset.UtcNow;
+    public Guid Version { get; set; } = Guid.NewGuid();
     public List<FundOperation> Operations { get; set; } = [];
 }

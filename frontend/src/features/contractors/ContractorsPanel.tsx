@@ -97,6 +97,7 @@ function hasGarageColumnFilters(filters: GarageColumnFilters) {
 
 type ContractorGarageRow = {
   id: string
+  version?: string
   ownerId?: string | null
   number: string
   peopleCount: string
@@ -116,6 +117,7 @@ type ContractorGarageRow = {
 
 type ContractorSupplierRow = {
   id: string
+  version?: string
   name: string
   serviceId?: string | null
   service: string
@@ -503,6 +505,7 @@ function createGarageRowFromDto(garage: GarageDto, owners: OwnerDto[]): Contract
 
   return {
     id: garage.id,
+    version: garage.version,
     ownerId: garage.ownerId,
     number: garage.number,
     peopleCount: String(garage.peopleCount),
@@ -531,6 +534,7 @@ function createGarageRequestFromRow(row: ContractorGarageRow, ownerId: string | 
     initialWaterMeterValue: parsePrototypeNullableNumber(row.initialWater),
     initialElectricityMeterValue: parsePrototypeNullableNumber(row.initialElectricity),
     comment: row.comment.trim(),
+    version: row.version,
   }
 }
 
@@ -582,6 +586,7 @@ function createSupplierRowFromDto(supplier: SupplierDto, contacts: SupplierConta
 
   return normalizeSupplierPrototype({
     id: supplier.id,
+    version: supplier.version,
     name: supplier.name,
     serviceId: supplier.chargeServiceSettingId ?? null,
     service: supplier.chargeServiceSettingName ?? supplier.groupName,
@@ -646,6 +651,7 @@ function createSupplierRequestFromRow(row: ContractorSupplierRow, groupId: strin
     startingBalance: parsePrototypeMoney(normalized.startingBalance),
     comment: normalized.comment.trim(),
     chargeServiceSettingId: normalized.serviceId,
+    version: normalized.version,
   }
 }
 

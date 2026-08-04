@@ -17,11 +17,11 @@ vi.mock('./services/formStatesApi', () => ({
 
 vi.mock('./services/settingsApi', () => ({
   settingsApi: {
-    getPaymentDisplaySettings: vi.fn(async () => ({ showAllGarageOperationsByDefault: true })),
+    getPaymentDisplaySettings: vi.fn(async () => ({ showAllGarageOperationsByDefault: true, version: 'payment-version' })),
     updatePaymentDisplaySettings: vi.fn(async (_accessToken: string, request: { showAllGarageOperationsByDefault: boolean }) => request),
-    getSalaryAccrualSettings: vi.fn(async () => ({ accrualDay: 10 })),
+    getSalaryAccrualSettings: vi.fn(async () => ({ accrualDay: 10, version: 'salary-version' })),
     updateSalaryAccrualSettings: vi.fn(async (_accessToken: string, request: { accrualDay: number }) => request),
-    getBusinessDateSettings: vi.fn(async () => ({ systemDate: '2026-07-21', effectiveDate: '2026-07-21', overrideDate: null, isOverrideActive: false, updatedAtUtc: null, automation: null })),
+    getBusinessDateSettings: vi.fn(async () => ({ systemDate: '2026-07-21', effectiveDate: '2026-07-21', overrideDate: null, isOverrideActive: false, updatedAtUtc: null, automation: null, version: 'business-date-version' })),
     updateBusinessDateSettings: vi.fn(async (_accessToken: string, request: { overrideDate: string | null }) => ({ systemDate: '2026-07-21', effectiveDate: request.overrideDate ?? '2026-07-21', overrideDate: request.overrideDate, isOverrideActive: request.overrideDate !== null, updatedAtUtc: '2026-07-21T09:00:00Z', automation: null })),
   },
 }))
@@ -54,7 +54,7 @@ describe('App', () => {
       updatedAtUtc: '2026-06-30T03:00:00Z',
       updatedByUserId: 'admin-user',
     }))
-    vi.mocked(settingsApi.getPaymentDisplaySettings).mockImplementation(async () => ({ showAllGarageOperationsByDefault: true }))
+    vi.mocked(settingsApi.getPaymentDisplaySettings).mockImplementation(async () => ({ showAllGarageOperationsByDefault: true, version: 'payment-version' }))
     vi.mocked(settingsApi.updatePaymentDisplaySettings).mockImplementation(async (_accessToken: string, request: { showAllGarageOperationsByDefault: boolean }) => request)
     window.sessionStorage.clear()
     window.localStorage.clear()
@@ -4489,6 +4489,7 @@ describe('App', () => {
     expect(updateRequests).toHaveLength(2)
     expect(updateRequests[1]).toEqual({
       service: {
+        version: 'charge-service-version',
         name: 'Охрана территории',
         isRegular: true,
         periodicityMonths: 1,
@@ -4505,6 +4506,7 @@ describe('App', () => {
         tariffId: serviceTariff.id,
       },
       rate: 1350.75,
+      tariffVersion: 'tariff-version',
     })
     expect(within(tariffsPanel).getByRole('button', { name: 'Изменить услугу Охрана территории' })).toBeInTheDocument()
     expect(within(tariffsPanel).getByRole('combobox', { name: 'Охрана территории: Периодичность: значение' })).toHaveTextContent('Ежемесячно')
@@ -7387,7 +7389,7 @@ describe('App', () => {
       reportClient={createReportClient()}
       releaseClient={createReleaseClient()}
       settingsClient={createSettingsClient({
-        getPaymentDisplaySettings: async () => ({ showAllGarageOperationsByDefault: false }),
+        getPaymentDisplaySettings: async () => ({ showAllGarageOperationsByDefault: false, version: 'payment-version' }),
       })}
       userClient={createUserClient()}
     />)
@@ -8892,7 +8894,7 @@ describe('App', () => {
     await user.type(editName, 'Резерв правления')
     await user.click(within(editDialog).getByRole('button', { name: 'Сохранить название' }))
 
-    await waitFor(() => expect(updateFundMock).toHaveBeenCalledWith(expect.any(String), 'fund-reserve', { name: 'Резерв правления' }))
+    await waitFor(() => expect(updateFundMock).toHaveBeenCalledWith(expect.any(String), 'fund-reserve', { name: 'Резерв правления', version: 'fund-version' }))
     expect(await within(fundsPanel).findByText('Фонд «Резервный фонд» переименован в «Резерв правления».')).toHaveAttribute('role', 'status')
     expect(within(fundsPanel).getByRole('button', { name: 'Открыть карточку фонда Резерв правления' })).toBeInTheDocument()
     expect(within(fundsPanel).queryByRole('button', { name: 'Открыть карточку фонда Резервный фонд' })).not.toBeInTheDocument()
@@ -9950,7 +9952,7 @@ describe('App', () => {
     await user.click(toggle)
     await user.click(within(displayPanel).getByRole('button', { name: 'Сохранить отображение' }))
 
-    await waitFor(() => expect(updatePaymentDisplaySettings).toHaveBeenCalledWith('token', { showAllGarageOperationsByDefault: true }))
+    await waitFor(() => expect(updatePaymentDisplaySettings).toHaveBeenCalledWith('token', { showAllGarageOperationsByDefault: true, version: 'payment-version' }))
     expect(await within(displayPanel).findByText('Настройка отображения платежей сохранена.')).toHaveAttribute('role', 'status')
   })
 
@@ -10071,7 +10073,7 @@ describe('App', () => {
     const confirmation = await screen.findByRole('dialog', { name: 'Включить тестовую дату?' })
     await user.click(within(confirmation).getByRole('button', { name: 'Подтвердить' }))
 
-    await waitFor(() => expect(updateBusinessDateSettings).toHaveBeenCalledWith('token', { overrideDate: '2026-08-05' }))
+    await waitFor(() => expect(updateBusinessDateSettings).toHaveBeenCalledWith('token', { overrideDate: '2026-08-05', version: 'business-date-version' }))
     expect(await within(panel).findByText('Начисления за 08.2026: создано 2, пропущено 3.')).toHaveAttribute('role', 'status')
   })
 
@@ -10092,7 +10094,7 @@ describe('App', () => {
     await user.type(dayInput, '15')
     await user.click(within(form).getByRole('button', { name: 'Сохранить день начисления' }))
 
-    await waitFor(() => expect(updateSalaryAccrualSettings).toHaveBeenCalledWith('token', { accrualDay: 15 }))
+    await waitFor(() => expect(updateSalaryAccrualSettings).toHaveBeenCalledWith('token', { accrualDay: 15, version: 'salary-version' }))
     expect(await within(form).findByRole('status')).toHaveTextContent('15-го числа каждого месяца')
   })
 
@@ -10934,6 +10936,7 @@ describe('App', () => {
     expect(await within(usersPanel).findByText('Старший оператор')).toBeInTheDocument()
     expect(updateCalls).toBe(2)
     expect(lastUpdateRequest?.newPassword).toBeNull()
+    expect(lastUpdateRequest?.version).toBe('user-version')
     expect(screen.queryByRole('dialog', { name: 'Подтвердите изменения пользователя' })).not.toBeInTheDocument()
     expect(await screen.findByText('Пользователь изменен.')).toHaveAttribute('role', 'status')
 
@@ -11917,6 +11920,7 @@ describe('App', () => {
     await user.click(within(reopenedConfirmationDialog).getByRole('button', { name: 'Сохранить изменения' }))
 
     await waitFor(() => expect(updateGarage).toHaveBeenCalledWith('token', garage.id, expect.objectContaining({
+      version: 'garage-version',
       ownerId: nextOwner.id,
       startingBalance: 350,
     })))
@@ -12015,6 +12019,7 @@ describe('App', () => {
     await user.click(within(reopenedConfirmationDialog).getByRole('button', { name: 'Сохранить изменения' }))
 
     await waitFor(() => expect(updateSupplier).toHaveBeenCalledWith('token', supplier.id, expect.objectContaining({
+      version: 'supplier-version',
       groupId: nextGroup.id,
       startingBalance: 2500,
     })))
@@ -12125,6 +12130,7 @@ describe('App', () => {
     await user.click(within(reopenedConfirmationDialog).getByRole('button', { name: 'Сохранить изменения' }))
 
     await waitFor(() => expect(updateTariff).toHaveBeenCalledWith('token', tariff.id, expect.objectContaining({
+      version: 'tariff-version',
       calculationBase: 'meter_electricity',
       rate: 6.5,
       effectiveFrom: '2026-08-15',
@@ -14546,7 +14552,7 @@ describe('App', () => {
     const getExpenseTypes = vi.fn(baseDictionaryClient.getExpenseTypes)
     const dictionaryClient = createDictionaryClient({ getSupplierGroups, getSuppliers, getStaffMembers, getIncomeTypes, getExpenseTypes })
 
-    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient({ getExpenseWorksheet: async () => createExpenseWorksheet({}) })} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} settingsClient={createSettingsClient({ getPaymentDisplaySettings: async () => ({ showAllGarageOperationsByDefault: false }) })} userClient={createUserClient()} />)
+    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient({ getExpenseWorksheet: async () => createExpenseWorksheet({}) })} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} settingsClient={createSettingsClient({ getPaymentDisplaySettings: async () => ({ showAllGarageOperationsByDefault: false, version: 'payment-version' }) })} userClient={createUserClient()} />)
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
     await user.click(screen.getByRole('button', { name: 'Войти' }))
@@ -18746,9 +18752,9 @@ function createReleasePage(
 
 function createSettingsClient(overrides: Partial<ApplicationSettingsClient> = {}): ApplicationSettingsClient {
   return {
-    getPaymentDisplaySettings: async () => ({ showAllGarageOperationsByDefault: false }),
+    getPaymentDisplaySettings: async () => ({ showAllGarageOperationsByDefault: false, version: 'payment-version' }),
     updatePaymentDisplaySettings: async (_accessToken, request) => request,
-    getSalaryAccrualSettings: async () => ({ accrualDay: 10 }),
+    getSalaryAccrualSettings: async () => ({ accrualDay: 10, version: 'salary-version' }),
     updateSalaryAccrualSettings: async (_accessToken, request) => request,
     getBusinessDateSettings: async () => ({
       systemDate: '2026-07-21',
@@ -18757,6 +18763,7 @@ function createSettingsClient(overrides: Partial<ApplicationSettingsClient> = {}
       isOverrideActive: false,
       updatedAtUtc: null,
       automation: null,
+      version: 'business-date-version',
     }),
     updateBusinessDateSettings: async (_accessToken, request) => ({
       systemDate: '2026-07-21',
@@ -19405,6 +19412,7 @@ function createFund(overrides: Partial<FundDto> = {}): FundDto {
     allowOperations: true,
     isSystem: true,
     linkedServices: [],
+    version: 'fund-version',
     ...overrides,
   }
 }
@@ -20741,6 +20749,7 @@ function createManagedUser(overrides: Partial<ManagedUserDto>): ManagedUserDto {
     lastLoginAtUtc: null,
     roles: ['operator'],
     permissions: ['dictionaries.read'],
+    version: 'user-version',
     ...overrides,
   }
 }
@@ -20778,6 +20787,7 @@ function createGarage(overrides: Partial<GarageDto>): GarageDto {
     initialElectricityMeterValue: null,
     comment: null,
     isArchived: false,
+    version: 'garage-version',
     ...overrides,
   }
 
@@ -20813,6 +20823,7 @@ function createSupplier(overrides: Partial<SupplierDto>): SupplierDto {
     debt: 0,
     comment: null,
     isArchived: false,
+    version: 'supplier-version',
     ...overrides,
   }
 }
@@ -20884,6 +20895,7 @@ function createTariff(overrides: Partial<TariffDto>): TariffDto {
     effectiveFrom: '2026-07-01',
     comment: null,
     isArchived: false,
+    version: 'tariff-version',
     ...overrides,
   }
 }
@@ -20946,6 +20958,7 @@ function createChargeServiceSetting(overrides: Partial<ChargeServiceSettingDto> 
     unitName: 'руб.',
     isArchived: false,
     tariffCalculationBase: null,
+    version: 'charge-service-version',
     ...overrides,
   }
 }

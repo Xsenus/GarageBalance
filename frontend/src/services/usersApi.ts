@@ -15,6 +15,7 @@ export type ManagedUserDto = {
   lastLoginAtUtc: string | null
   roles: string[]
   permissions: string[]
+  version: string
 }
 
 export type PagedManagedUsersDto = {
@@ -38,6 +39,7 @@ export type UpdateManagedUserRequest = {
   isActive: boolean
   newPassword?: string | null
   deactivationReason?: string | null
+  version?: string
 }
 
 export type UpdateRolePermissionsRequest = {

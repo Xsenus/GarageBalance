@@ -1207,6 +1207,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
       expenseTypeId: setting.expenseTypeId ?? null,
       expenseFundId: setting.expenseFundId ?? null,
       tariffId: isRegular ? linkedTariffId ?? null : null,
+      version: setting.version,
     }
   }
 
@@ -1317,6 +1318,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
         electricityTiers: electricityTiers && electricityTiers.length >= 2 ? electricityTiers : null,
         changeReason: 'Смена режима тарифа в таблице услуг.',
         calculationBase: targetCalculationBase,
+        tariffVersion: sourceTariff.version,
       })
       const nextTariffs = [...backendTariffs.filter((tariff) => tariff.id !== saved.tariff.id), saved.tariff]
       const nextSettings = backendChargeServices.map((setting) => setting.id === saved.service.id ? saved.service : setting)
@@ -1378,6 +1380,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
         rate: firstRate ?? amount,
         effectiveFrom,
         comment: backendTariff?.comment ?? '',
+        version: backendTariff?.version,
         electricityTiers,
         electricityTierChangeReason,
       }
@@ -1402,6 +1405,10 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
         effectiveFrom,
         comment: backendTariff?.comment ?? '',
       }
+    }
+
+    if (backendTariff) {
+      request = { ...request, version: backendTariff.version }
     }
 
     setTariffSavingRowId(targetRow.id)
@@ -1864,7 +1871,12 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
     setTariffSavingRowId(`charge-service-${chargeServiceEditTarget.id}`)
     setTariffPersistenceError(null)
     try {
-      const saved = await dictionaryClient.updateChargeServiceWithTariff(auth.accessToken, chargeServiceEditTarget.id, request)
+      const currentTariff = backendTariffs.find((tariff) => tariff.id === request.service.tariffId)
+      const saved = await dictionaryClient.updateChargeServiceWithTariff(auth.accessToken, chargeServiceEditTarget.id, {
+        ...request,
+        service: { ...request.service, version: chargeServiceEditTarget.version },
+        tariffVersion: currentTariff?.version,
+      })
       const savedSetting = saved.service
       const nextTariffs = backendTariffs.map((tariff) => (tariff.id === saved.tariff.id ? saved.tariff : tariff))
       const nextSettings = backendChargeServices.map((setting) => (setting.id === savedSetting.id ? savedSetting : setting))

@@ -58,6 +58,7 @@ public sealed class UsersController(IUserManagementService userManagementService
     }
 
     [HttpPut("{id:guid}")]
+    [RequireConcurrencyVersion("request.Version")]
     [ProducesResponseType<ManagedUserDto>(StatusCodes.Status200OK)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]

@@ -91,6 +91,8 @@ public sealed class FundService(
             return FundResult<FundDto>.Failure("fund_not_found", "Фонд не найден.");
         }
 
+        OptimisticConcurrencyGuard.EnsureCurrent(request.Version, fund);
+
         var name = nameValidation.Name!;
         var normalizedName = NormalizeName(name);
         if (await repository.FundNameExistsAsync(fundId, normalizedName, cancellationToken))
@@ -799,7 +801,8 @@ public sealed class FundService(
             fund.IsSystem,
             linkedServices
                 .Select(service => new FundLinkedServiceDto(service.ServiceId, service.ServiceName))
-                .ToList());
+                .ToList(),
+            fund.Version);
     }
 
     private static FundOperationDto ToDto(FundOperation operation)

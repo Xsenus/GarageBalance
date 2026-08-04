@@ -1,4 +1,5 @@
 using GarageBalance.Api.Application.Audit;
+using GarageBalance.Api.Application.Common;
 using GarageBalance.Api.Application.Finance;
 using GarageBalance.Api.Domain.Settings;
 
@@ -20,7 +21,7 @@ public sealed class ApplicationSettingsService(
     public async Task<PaymentDisplaySettingsDto> GetPaymentDisplaySettingsAsync(CancellationToken cancellationToken)
     {
         var setting = await repository.FindAsync(ShowAllGarageOperationsKey, cancellationToken);
-        return new PaymentDisplaySettingsDto(setting?.BooleanValue ?? false);
+        return new PaymentDisplaySettingsDto(setting?.BooleanValue ?? false, setting?.Version ?? Guid.NewGuid());
     }
 
     public async Task<PaymentDisplaySettingsDto> UpdatePaymentDisplaySettingsAsync(
@@ -30,10 +31,14 @@ public sealed class ApplicationSettingsService(
     {
         var setting = await repository.FindForUpdateAsync(ShowAllGarageOperationsKey, cancellationToken);
         var previousValue = setting?.BooleanValue ?? false;
+        if (setting is not null)
+        {
+            OptimisticConcurrencyGuard.EnsureCurrent(request.Version, setting);
+        }
 
         if (setting is null && !request.ShowAllGarageOperationsByDefault)
         {
-            return new PaymentDisplaySettingsDto(false);
+            return new PaymentDisplaySettingsDto(false, request.Version ?? Guid.NewGuid());
         }
 
         if (setting is null)
@@ -43,7 +48,7 @@ public sealed class ApplicationSettingsService(
         }
         else if (setting.BooleanValue == request.ShowAllGarageOperationsByDefault)
         {
-            return new PaymentDisplaySettingsDto(setting.BooleanValue);
+            return new PaymentDisplaySettingsDto(setting.BooleanValue, setting.Version);
         }
 
         setting.BooleanValue = request.ShowAllGarageOperationsByDefault;
@@ -66,13 +71,13 @@ public sealed class ApplicationSettingsService(
             FieldLabels: new Dictionary<string, string> { ["showAllGarageOperationsByDefault"] = "Показывать общую ведомость платежей" }));
 
         await repository.SaveChangesAsync(cancellationToken);
-        return new PaymentDisplaySettingsDto(setting.BooleanValue);
+        return new PaymentDisplaySettingsDto(setting.BooleanValue, setting.Version);
     }
 
     public async Task<SalaryAccrualSettingsDto> GetSalaryAccrualSettingsAsync(CancellationToken cancellationToken)
     {
         var setting = await repository.FindAsync(SalaryAccrualDayKey, cancellationToken);
-        return new SalaryAccrualSettingsDto(NormalizeSalaryAccrualDay(setting?.IntegerValue));
+        return new SalaryAccrualSettingsDto(NormalizeSalaryAccrualDay(setting?.IntegerValue), setting?.Version ?? Guid.NewGuid());
     }
 
     public async Task<SalaryAccrualSettingsDto> UpdateSalaryAccrualSettingsAsync(
@@ -87,9 +92,13 @@ public sealed class ApplicationSettingsService(
 
         var setting = await repository.FindForUpdateAsync(SalaryAccrualDayKey, cancellationToken);
         var previousValue = NormalizeSalaryAccrualDay(setting?.IntegerValue);
+        if (setting is not null)
+        {
+            OptimisticConcurrencyGuard.EnsureCurrent(request.Version, setting);
+        }
         if (setting is null && request.AccrualDay == DefaultSalaryAccrualDay)
         {
-            return new SalaryAccrualSettingsDto(DefaultSalaryAccrualDay);
+            return new SalaryAccrualSettingsDto(DefaultSalaryAccrualDay, request.Version ?? Guid.NewGuid());
         }
 
         if (setting is null)
@@ -99,7 +108,7 @@ public sealed class ApplicationSettingsService(
         }
         else if (setting.IntegerValue == request.AccrualDay)
         {
-            return new SalaryAccrualSettingsDto(request.AccrualDay);
+            return new SalaryAccrualSettingsDto(request.AccrualDay, setting.Version);
         }
 
         setting.IntegerValue = request.AccrualDay;
@@ -119,7 +128,7 @@ public sealed class ApplicationSettingsService(
             FieldLabels: new Dictionary<string, string> { ["accrualDay"] = "День начисления" }));
 
         await repository.SaveChangesAsync(cancellationToken);
-        return new SalaryAccrualSettingsDto(request.AccrualDay);
+        return new SalaryAccrualSettingsDto(request.AccrualDay, setting.Version);
     }
 
     public async Task<BusinessDateSettingsDto> GetBusinessDateSettingsAsync(CancellationToken cancellationToken)
@@ -136,6 +145,10 @@ public sealed class ApplicationSettingsService(
         ValidateBusinessDate(request.OverrideDate);
         var setting = await repository.FindForUpdateAsync(BusinessDateOverrideKey, cancellationToken);
         var previousValue = setting?.DateValue;
+        if (setting is not null)
+        {
+            OptimisticConcurrencyGuard.EnsureCurrent(request.Version, setting);
+        }
 
         if (previousValue == request.OverrideDate)
         {
@@ -206,7 +219,8 @@ public sealed class ApplicationSettingsService(
             businessDateProvider.OverrideDate,
             businessDateProvider.OverrideDate.HasValue,
             setting?.UpdatedAtUtc,
-            automation);
+            automation,
+            setting?.Version ?? Guid.NewGuid());
 
     private void ValidateBusinessDate(DateOnly? value)
     {

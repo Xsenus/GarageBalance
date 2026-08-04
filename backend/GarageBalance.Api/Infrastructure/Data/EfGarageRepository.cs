@@ -260,7 +260,8 @@ public sealed class EfGarageRepository(GarageBalanceDbContext dbContext, IBusine
             garage.InitialWaterMeterValue,
             garage.InitialElectricityMeterValue,
             garage.Comment,
-            garage.IsArchived));
+            garage.IsArchived,
+            garage.Version));
 
     private static IQueryable<Garage> ApplySearch(
         IQueryable<Garage> query,

@@ -19,6 +19,7 @@ public sealed class PostgreSqlAllIncomeFundsMigrationIntegrationTests
         await using (var downgradeContext = database.CreateContext())
         {
             await downgradeContext.GetService<IMigrator>().MigrateAsync(PreviousMigration);
+            await PostgreSqlLegacyModelCompatibility.AddCurrentVersionColumnsAsync(downgradeContext);
         }
 
         Guid waterOperationId;
@@ -57,6 +58,7 @@ public sealed class PostgreSqlAllIncomeFundsMigrationIntegrationTests
 
         await using (var migrateContext = database.CreateContext())
         {
+            await PostgreSqlLegacyModelCompatibility.RemoveCurrentVersionColumnsAsync(migrateContext);
             await migrateContext.Database.MigrateAsync();
         }
 

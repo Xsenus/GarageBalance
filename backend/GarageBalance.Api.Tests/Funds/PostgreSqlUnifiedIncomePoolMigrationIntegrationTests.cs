@@ -27,6 +27,7 @@ public sealed class PostgreSqlUnifiedIncomePoolMigrationIntegrationTests
                 ALTER TABLE financial_operations ADD COLUMN "ExpenseFundId" uuid NULL;
                 ALTER TABLE financial_operations ADD COLUMN "ExpensePaymentSource" character varying(20) NULL;
                 """);
+            await PostgreSqlLegacyModelCompatibility.AddCurrentVersionColumnsAsync(downgradeContext);
         }
 
         await using (var legacyContext = database.CreateContext())
@@ -82,6 +83,7 @@ public sealed class PostgreSqlUnifiedIncomePoolMigrationIntegrationTests
 
         await using (var migrateContext = database.CreateContext())
         {
+            await PostgreSqlLegacyModelCompatibility.RemoveCurrentVersionColumnsAsync(migrateContext);
             await migrateContext.Database.ExecuteSqlRawAsync(
                 """
                 ALTER TABLE funds DROP COLUMN "IsArchived";

@@ -2,6 +2,7 @@ using System.Text.Json;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
+using GarageBalance.Api.Application.Common;
 using GarageBalance.Api.Application.Diagnostics;
 
 namespace GarageBalance.Api.Controllers;
@@ -13,6 +14,22 @@ public sealed class ApiExceptionHandlingMiddleware(RequestDelegate next, ILogger
         try
         {
             await next(context);
+        }
+        catch (OptimisticConcurrencyException) when (!context.Response.HasStarted)
+        {
+            logger.LogWarning(
+                "Optimistic concurrency conflict for {Method} {Path}.",
+                context.Request.Method,
+                context.Request.Path);
+            await WriteProblemAsync(context, ApiProblemDetails.CreateConcurrentWriteConflict());
+        }
+        catch (DbUpdateConcurrencyException) when (!context.Response.HasStarted)
+        {
+            logger.LogWarning(
+                "Optimistic concurrency conflict for {Method} {Path}.",
+                context.Request.Method,
+                context.Request.Path);
+            await WriteProblemAsync(context, ApiProblemDetails.CreateConcurrentWriteConflict());
         }
         catch (DbUpdateException exception) when (!context.Response.HasStarted && IsUniqueConstraintViolation(exception))
         {

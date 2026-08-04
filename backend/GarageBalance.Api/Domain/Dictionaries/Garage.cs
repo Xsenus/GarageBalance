@@ -1,6 +1,8 @@
+using GarageBalance.Api.Domain.Common;
+
 namespace GarageBalance.Api.Domain.Dictionaries;
 
-public sealed class Garage
+public sealed class Garage : IOptimisticConcurrencyEntity
 {
     public Guid Id { get; set; } = Guid.NewGuid();
     public required string Number { get; set; }
@@ -13,6 +15,7 @@ public sealed class Garage
     public bool IsArchived { get; set; }
     public DateTimeOffset CreatedAtUtc { get; set; } = DateTimeOffset.UtcNow;
     public DateTimeOffset UpdatedAtUtc { get; set; } = DateTimeOffset.UtcNow;
+    public Guid Version { get; set; } = Guid.NewGuid();
 
     public Guid? OwnerId { get; set; }
     public Owner? Owner { get; set; }

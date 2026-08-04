@@ -51,6 +51,7 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
   const [protectedSettingMessage, setProtectedSettingMessage] = useState<string | null>(null)
   const [protectedSettingError, setProtectedSettingError] = useState<string | null>(null)
   const [showAllGarageOperationsByDefault, setShowAllGarageOperationsByDefault] = useState(false)
+  const [paymentDisplaySettingsVersion, setPaymentDisplaySettingsVersion] = useState<string | null>(null)
   const [paymentDisplaySettingsLoading, setPaymentDisplaySettingsLoading] = useState(false)
   const [paymentDisplaySettingsSaving, setPaymentDisplaySettingsSaving] = useState(false)
   const [paymentDisplaySettingsMessage, setPaymentDisplaySettingsMessage] = useState<string | null>(null)
@@ -173,6 +174,7 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
       .then((settings) => {
         if (!ignore) {
           setShowAllGarageOperationsByDefault(settings.showAllGarageOperationsByDefault)
+          setPaymentDisplaySettingsVersion(settings.version)
         }
       })
       .catch((caught: unknown) => {
@@ -309,8 +311,12 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
     setPaymentDisplaySettingsMessage(null)
     setPaymentDisplaySettingsError(null)
     try {
-      const settings = await settingsClient.updatePaymentDisplaySettings(auth.accessToken, { showAllGarageOperationsByDefault })
+      const settings = await settingsClient.updatePaymentDisplaySettings(auth.accessToken, {
+        showAllGarageOperationsByDefault,
+        version: paymentDisplaySettingsVersion ?? '',
+      })
       setShowAllGarageOperationsByDefault(settings.showAllGarageOperationsByDefault)
+      setPaymentDisplaySettingsVersion(settings.version)
       setPaymentDisplaySettingsMessage('Настройка отображения платежей сохранена.')
     } catch (caught) {
       setPaymentDisplaySettingsError(caught instanceof Error ? caught.message : 'Не удалось сохранить настройку отображения платежей.')
@@ -325,7 +331,10 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
     setBusinessDateError(null)
     setBusinessDateMessage(null)
     try {
-      const settings = await settingsClient.updateBusinessDateSettings(auth.accessToken, businessDateConfirmation)
+      const settings = await settingsClient.updateBusinessDateSettings(auth.accessToken, {
+        ...businessDateConfirmation,
+        version: businessDateSettings?.version,
+      })
       setBusinessDateSettings(settings)
       setBusinessDateDraft(settings.overrideDate ?? settings.systemDate)
       setBusinessDateConfirmation(null)
@@ -351,7 +360,10 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
     setBusinessDateError(null)
     setSalaryAccrualMessage(null)
     try {
-      const settings = await settingsClient.updateSalaryAccrualSettings(auth.accessToken, { accrualDay })
+      const settings = await settingsClient.updateSalaryAccrualSettings(auth.accessToken, {
+        accrualDay,
+        version: salaryAccrualSettings?.version ?? '',
+      })
       setSalaryAccrualSettings(settings)
       setSalaryAccrualDayDraft(String(settings.accrualDay))
       setSalaryAccrualMessage(`Зарплата активным сотрудникам будет начисляться автоматически ${settings.accrualDay}-го числа каждого месяца.`)

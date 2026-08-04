@@ -618,7 +618,8 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, integ
     } else if (currentEditor.section === 'garages') {
       const request = createGarageRequestFromForm()
       if (currentEditor.mode === 'edit' && currentEditor.item) {
-        await dictionaryClient.updateGarage(auth.accessToken, (currentEditor.item as GarageDto).id, request)
+        const garage = currentEditor.item as GarageDto
+        await dictionaryClient.updateGarage(auth.accessToken, garage.id, { ...request, version: garage.version })
       } else {
         await dictionaryClient.createGarage(auth.accessToken, request)
       }
@@ -632,7 +633,8 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, integ
     } else if (currentEditor.section === 'suppliers') {
       const request = createSupplierRequestFromForm()
       if (currentEditor.mode === 'edit' && currentEditor.item) {
-        await dictionaryClient.updateSupplier(auth.accessToken, (currentEditor.item as SupplierDto).id, request)
+        const supplier = currentEditor.item as SupplierDto
+        await dictionaryClient.updateSupplier(auth.accessToken, supplier.id, { ...request, version: supplier.version })
       } else {
         await dictionaryClient.createSupplier(auth.accessToken, request)
       }
@@ -650,7 +652,8 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, integ
       }
     } else {
       if (currentEditor.mode === 'edit' && currentEditor.item) {
-        await dictionaryClient.updateTariff(auth.accessToken, (currentEditor.item as TariffDto).id, tariffForm)
+        const tariff = currentEditor.item as TariffDto
+        await dictionaryClient.updateTariff(auth.accessToken, tariff.id, { ...tariffForm, version: tariff.version })
       } else {
         await dictionaryClient.createTariff(auth.accessToken, tariffForm)
       }
@@ -675,6 +678,7 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, integ
         initialWaterMeterValue: existingGarage.initialWaterMeterValue,
         initialElectricityMeterValue: existingGarage.initialElectricityMeterValue,
         comment: existingGarage.comment ?? undefined,
+        version: existingGarage.version,
       })
     }
 

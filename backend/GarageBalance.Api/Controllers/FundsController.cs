@@ -33,6 +33,7 @@ public sealed class FundsController(IFundService fundService) : ControllerBase
 
     [Authorize(Policy = SystemPermissions.PaymentsWrite)]
     [HttpPut("{fundId:guid}")]
+    [RequireConcurrencyVersion("request.Version")]
     [ProducesResponseType<FundDto>(StatusCodes.Status200OK)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]

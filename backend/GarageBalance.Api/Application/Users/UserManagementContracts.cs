@@ -12,7 +12,8 @@ public sealed record ManagedUserDto(
     DateTimeOffset CreatedAtUtc,
     DateTimeOffset? LastLoginAtUtc,
     IReadOnlyList<string> Roles,
-    IReadOnlyList<string> Permissions);
+    IReadOnlyList<string> Permissions,
+    Guid Version = default);
 
 public sealed record ManagedUsersPageDto(
     IReadOnlyList<ManagedUserDto> Items,
@@ -32,7 +33,8 @@ public sealed record UpdateManagedUserRequest(
     [MinLength(1)] IReadOnlyList<string> RoleCodes,
     bool IsActive,
     [MinLength(8), MaxLength(200)] string? NewPassword,
-    [MaxLength(1000)] string? DeactivationReason = null);
+    [MaxLength(1000)] string? DeactivationReason = null,
+    Guid? Version = null);
 
 public sealed record UpdateRolePermissionsRequest(
     [Required] IReadOnlyList<string> Permissions);

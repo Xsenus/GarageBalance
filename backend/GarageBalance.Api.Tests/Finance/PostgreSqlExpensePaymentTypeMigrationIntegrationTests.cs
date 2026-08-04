@@ -23,6 +23,7 @@ public sealed class PostgreSqlExpensePaymentTypeMigrationIntegrationTests
                 """
                 ALTER TABLE charge_service_settings ADD COLUMN "ExpenseFundId" uuid NULL
                 """);
+            await PostgreSqlLegacyModelCompatibility.AddCurrentVersionColumnsAsync(downgradeContext);
         }
 
         var atomicOperationId = Guid.NewGuid();
@@ -73,6 +74,7 @@ public sealed class PostgreSqlExpensePaymentTypeMigrationIntegrationTests
 
         await using (var migrateContext = database.CreateContext())
         {
+            await PostgreSqlLegacyModelCompatibility.RemoveCurrentVersionColumnsAsync(migrateContext);
             await migrateContext.Database.ExecuteSqlRawAsync(
                 """
                 ALTER TABLE charge_service_settings DROP COLUMN "ExpenseFundId"

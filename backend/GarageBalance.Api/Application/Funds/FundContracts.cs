@@ -10,14 +10,16 @@ public sealed record FundDto(
     int SortOrder,
     bool AllowOperations,
     bool IsSystem,
-    IReadOnlyList<FundLinkedServiceDto> LinkedServices);
+    IReadOnlyList<FundLinkedServiceDto> LinkedServices,
+    Guid Version = default);
 
 public sealed record FundLinkedServiceDto(
     Guid Id,
     string Name);
 
 public sealed record UpsertFundRequest(
-    [Required, MaxLength(200)] string Name);
+    [Required, MaxLength(200)] string Name,
+    Guid? Version = null);
 
 public sealed record DeleteFundRequest(
     [Required, MaxLength(1000)] string Reason);

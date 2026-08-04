@@ -1,5 +1,6 @@
 using System.Text.Json;
 using GarageBalance.Api.Controllers;
+using GarageBalance.Api.Application.Common;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.Features;
 using Microsoft.EntityFrameworkCore;
@@ -62,6 +63,25 @@ public sealed class ApiExceptionHandlingMiddlewareTests
             constraintName: "IX_accruals_active_unique");
         var middleware = new ApiExceptionHandlingMiddleware(
             _ => throw new DbUpdateException("Sensitive database command.", databaseException),
+            NullLogger<ApiExceptionHandlingMiddleware>.Instance);
+
+        await middleware.InvokeAsync(context);
+
+        var problem = await ReadProblemAsync(context);
+        Assert.Equal(StatusCodes.Status409Conflict, context.Response.StatusCode);
+        Assert.Equal(ApiProblemDetails.ConcurrentWriteConflictCode, problem.GetProperty("title").GetString());
+        Assert.Equal(ApiProblemDetails.ConcurrentWriteConflictCode, problem.GetProperty(ApiProblemDetails.CodeExtensionKey).GetString());
+        Assert.DoesNotContain("Sensitive", problem.GetProperty("detail").GetString(), StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task InvokeAsync_ReturnsConflictForStaleAggregateVersion()
+    {
+        var context = CreateHttpContext();
+        context.Request.Method = HttpMethods.Put;
+        context.Request.Path = "/api/dictionaries/garages/00000000-0000-0000-0000-000000000001";
+        var middleware = new ApiExceptionHandlingMiddleware(
+            _ => throw new OptimisticConcurrencyException("Sensitive stale state."),
             NullLogger<ApiExceptionHandlingMiddleware>.Instance);
 
         await middleware.InvokeAsync(context);

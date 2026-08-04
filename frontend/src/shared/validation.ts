@@ -310,6 +310,7 @@ export function createTariffFormFromDto(tariff: TariffDto): UpsertTariffRequest 
     rate: tariff.rate,
     effectiveFrom: tariff.effectiveFrom,
     comment: tariff.comment ?? '',
+    version: tariff.version,
   }
 
   const hasElectricityTiers = tariff.electricityFirstThreshold !== null
@@ -337,6 +338,7 @@ export function withoutElectricityTierFields(form: UpsertTariffRequest): UpsertT
     rate: form.rate,
     effectiveFrom: form.effectiveFrom,
     comment: form.comment,
+    version: form.version,
   }
 }
 

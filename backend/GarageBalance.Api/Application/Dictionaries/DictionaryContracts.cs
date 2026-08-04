@@ -43,7 +43,8 @@ public sealed record GarageDto(
     bool IsArchived,
     decimal Balance = 0,
     decimal OverdueDebt = 0,
-    string? OwnerPhone = null);
+    string? OwnerPhone = null,
+    Guid Version = default);
 
 public sealed record UpsertGarageRequest(
     [Required, MaxLength(80)] string Number,
@@ -53,7 +54,8 @@ public sealed record UpsertGarageRequest(
     decimal StartingBalance,
     [Range(0, 999999999)] decimal? InitialWaterMeterValue,
     [Range(0, 999999999)] decimal? InitialElectricityMeterValue,
-    [MaxLength(1000)] string? Comment);
+    [MaxLength(1000)] string? Comment,
+    Guid? Version = null);
 
 public sealed record SupplierGroupDto(Guid Id, string Name, bool IsSystem, bool IsArchived);
 
@@ -78,7 +80,8 @@ public sealed record SupplierDto(
     Guid? ChargeServiceExpenseTypeId = null,
     Guid? ChargeServiceExpenseFundId = null,
     string? ChargeServiceExpenseFundName = null,
-    decimal? ChargeServiceExpenseFundBalance = null);
+    decimal? ChargeServiceExpenseFundBalance = null,
+    Guid Version = default);
 
 public sealed record UpsertSupplierRequest(
     [Required, MaxLength(240)] string Name,
@@ -90,7 +93,8 @@ public sealed record UpsertSupplierRequest(
     [EmailAddress, MaxLength(320)] string? Email,
     decimal StartingBalance,
     [MaxLength(1000)] string? Comment,
-    Guid? ChargeServiceSettingId = null);
+    Guid? ChargeServiceSettingId = null,
+    Guid? Version = null);
 
 public sealed record CreateOpeningBalanceAdjustmentRequest(
     DateOnly EffectiveDate,
@@ -175,7 +179,8 @@ public sealed record TariffDto(
     decimal? ElectricityFirstRate = null,
     decimal? ElectricitySecondRate = null,
     decimal? ElectricityThirdRate = null,
-    IReadOnlyList<ElectricityTariffTierDto>? ElectricityTiers = null);
+    IReadOnlyList<ElectricityTariffTierDto>? ElectricityTiers = null,
+    Guid Version = default);
 
 public sealed record ElectricityTariffTierDto(
     Guid Id,
@@ -205,7 +210,8 @@ public sealed record UpsertTariffRequest(
     [Range(0.0001, 999999999)] decimal? ElectricitySecondRate = null,
     [Range(0.0001, 999999999)] decimal? ElectricityThirdRate = null,
     IReadOnlyList<UpsertElectricityTariffTierRequest>? ElectricityTiers = null,
-    [MaxLength(1000)] string? ElectricityTierChangeReason = null);
+    [MaxLength(1000)] string? ElectricityTierChangeReason = null,
+    Guid? Version = null);
 
 public sealed record ChargeServiceSettingDto(
     Guid Id,
@@ -224,7 +230,8 @@ public sealed record ChargeServiceSettingDto(
     bool IsArchived,
     Guid? ExpenseTypeId = null,
     Guid? ExpenseFundId = null,
-    string? TariffCalculationBase = null);
+    string? TariffCalculationBase = null,
+    Guid Version = default);
 
 public sealed record UpsertChargeServiceSettingRequest(
     [Required, MaxLength(200)] string Name,
@@ -240,7 +247,8 @@ public sealed record UpsertChargeServiceSettingRequest(
     Guid? IncomeTypeId = null,
     Guid? TariffId = null,
     Guid? ExpenseTypeId = null,
-    Guid? ExpenseFundId = null);
+    Guid? ExpenseFundId = null,
+    Guid? Version = null);
 
 public sealed record CreateChargeServiceWithTariffRequest(
     [Required] UpsertChargeServiceSettingRequest Service,
@@ -258,7 +266,8 @@ public sealed record UpdateChargeServiceWithTariffRequest(
     DateOnly? EffectiveFrom = null,
     IReadOnlyList<UpsertElectricityTariffTierRequest>? ElectricityTiers = null,
     [MaxLength(1000)] string? ChangeReason = null,
-    [MaxLength(80)] string? CalculationBase = null);
+    [MaxLength(80)] string? CalculationBase = null,
+    Guid? TariffVersion = null);
 
 public sealed record UpdatedChargeServiceWithTariffDto(
     ChargeServiceSettingDto Service,
@@ -300,7 +309,8 @@ public sealed record FeeCampaignDto(
     string? ClosureComment = null);
 
 public sealed record CloseFeeCampaignRequest(
-    [MaxLength(1000)] string? Comment);
+    [MaxLength(1000)] string? Comment,
+    Guid? Version = null);
 
 public sealed record UpsertFeeCampaignRequest(
     [Required, MaxLength(200)] string Name,

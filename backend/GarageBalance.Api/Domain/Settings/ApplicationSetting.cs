@@ -1,6 +1,8 @@
+using GarageBalance.Api.Domain.Common;
+
 namespace GarageBalance.Api.Domain.Settings;
 
-public sealed class ApplicationSetting
+public sealed class ApplicationSetting : IOptimisticConcurrencyEntity
 {
     public Guid Id { get; set; } = Guid.NewGuid();
     public string Key { get; set; } = string.Empty;
@@ -9,4 +11,5 @@ public sealed class ApplicationSetting
     public DateOnly? DateValue { get; set; }
     public DateTimeOffset UpdatedAtUtc { get; set; } = DateTimeOffset.UtcNow;
     public Guid? UpdatedByUserId { get; set; }
+    public Guid Version { get; set; } = Guid.NewGuid();
 }

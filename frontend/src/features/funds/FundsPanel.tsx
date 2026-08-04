@@ -16,6 +16,7 @@ import { TablePagination } from '../../shared/TablePagination'
 import { loadFundsRequest } from './fundsLoading'
 type FundPrototypeRow = {
   id: string
+  version: string
   name: string
   amount: number | null
   sortOrder: number
@@ -26,6 +27,7 @@ type FundPrototypeRow = {
 type FundEditorDraft = {
   mode: 'create' | 'edit'
   fundId?: string
+  version?: string
   originalName?: string
   name: string
   balance: number
@@ -76,6 +78,7 @@ type FundOperationReverseDraft = {
 function mapFundDtoToPrototypeRow(fund: FundDto): FundPrototypeRow {
   return {
     id: fund.id,
+    version: fund.version,
     name: fund.name,
     amount: fund.balance,
     sortOrder: fund.sortOrder,
@@ -250,6 +253,7 @@ export function FundsPrototypePanel({ auth, fundsClient }: { auth: AuthResponse;
     setFundEditor({
       mode: 'edit',
       fundId: fund.id,
+      version: fund.version,
       originalName: fund.name,
       name: fund.name,
       balance: fund.amount ?? 0,
@@ -341,7 +345,7 @@ export function FundsPrototypePanel({ auth, fundsClient }: { auth: AuthResponse;
     try {
       const saved = fundEditor.mode === 'create'
         ? await fundsClient.createFund(auth.accessToken, { name })
-        : await fundsClient.updateFund(auth.accessToken, fundEditor.fundId!, { name })
+        : await fundsClient.updateFund(auth.accessToken, fundEditor.fundId!, { name, version: fundEditor.version })
       const savedRow = mapFundDtoToPrototypeRow(saved)
       setRows((current) => {
         const next = fundEditor.mode === 'create'

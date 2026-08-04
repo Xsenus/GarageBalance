@@ -337,6 +337,8 @@ public sealed class DictionaryService(
             return DictionaryResult<GarageDto>.Failure("garage_not_found", "Гараж не найден.");
         }
 
+        OptimisticConcurrencyGuard.EnsureCurrent(request.Version, garage);
+
         var number = request.Number.Trim();
         if (await garageRepository.ActiveNumberExistsAsync(id, number, cancellationToken))
         {
@@ -705,6 +707,8 @@ public sealed class DictionaryService(
         {
             return DictionaryResult<SupplierDto>.Failure("supplier_not_found", "Поставщик не найден.");
         }
+
+        OptimisticConcurrencyGuard.EnsureCurrent(request.Version, supplier);
 
         var group = await supplierGroupRepository.FindActiveAsync(request.GroupId, cancellationToken);
         if (group is null)
@@ -1586,6 +1590,8 @@ public sealed class DictionaryService(
             return DictionaryResult<TariffDto>.Failure("tariff_not_found", "Тариф не найден.");
         }
 
+        OptimisticConcurrencyGuard.EnsureCurrent(request.Version, tariff);
+
         var name = request.Name.Trim();
         var calculationBase = request.CalculationBase.Trim();
         if (!TariffCalculationBases.IsSupported(calculationBase))
@@ -1850,6 +1856,8 @@ public sealed class DictionaryService(
             return DictionaryResult<ChargeServiceSettingDto>.Failure("charge_service_not_found", "Настройка услуги не найдена.");
         }
 
+        OptimisticConcurrencyGuard.EnsureCurrent(request.Version, setting);
+
         var validation = ValidateChargeServiceSettingRequest(request);
         if (!validation.Succeeded)
         {
@@ -1912,6 +1920,8 @@ public sealed class DictionaryService(
                 "Настройка услуги не найдена.");
         }
 
+        OptimisticConcurrencyGuard.EnsureCurrent(request.Service.Version, setting);
+
         var validation = ValidateChargeServiceSettingRequest(request.Service);
         if (!validation.Succeeded)
         {
@@ -1944,6 +1954,8 @@ public sealed class DictionaryService(
                 "charge_service_tariff_not_found",
                 "Тариф для услуги не найден.");
         }
+
+        OptimisticConcurrencyGuard.EnsureCurrent(request.TariffVersion, tariff);
 
         var roundedRate = MoneyMath.RoundRate(request.Rate);
         var serviceChanged = !ChargeServiceSettingMatches(setting, request.Service);
@@ -2024,6 +2036,8 @@ public sealed class DictionaryService(
                 "charge_service_tariff_not_found",
                 "Действующий тариф услуги не найден.");
         }
+
+        OptimisticConcurrencyGuard.EnsureCurrent(request.TariffVersion, sourceTariff);
 
         var incomeType = request.Service.IncomeTypeId.HasValue
             ? await incomeTypeRepository.FindActiveAsync(request.Service.IncomeTypeId.Value, cancellationToken)
@@ -3577,7 +3591,8 @@ public sealed class DictionaryService(
             garage.IsArchived,
             calculatedBalance,
             overdueDebt ?? Math.Max(calculatedBalance, 0m),
-            garage.Owner?.Phone);
+            garage.Owner?.Phone,
+            garage.Version);
     }
 
     private static DictionaryResult<T> InvalidPhone<T>() =>
@@ -3598,7 +3613,8 @@ public sealed class DictionaryService(
             garage.IsArchived,
             balance,
             overdueDebt,
-            garage.OwnerPhone);
+            garage.OwnerPhone,
+            garage.Version);
 
     private static SupplierDto ToSupplierDto(Supplier supplier, decimal? debt = null)
     {
@@ -3621,7 +3637,8 @@ public sealed class DictionaryService(
             supplier.ChargeServiceSetting?.ExpenseTypeId,
             supplier.ChargeServiceSetting?.ExpenseFundId,
             supplier.ChargeServiceSetting?.ExpenseFund?.Name,
-            supplier.ChargeServiceSetting?.ExpenseFund?.Balance);
+            supplier.ChargeServiceSetting?.ExpenseFund?.Balance,
+            supplier.Version);
     }
 
     private async Task<SupplierDto> ToSupplierDtoWithDebtAsync(Supplier supplier, CancellationToken cancellationToken)
@@ -3685,7 +3702,8 @@ public sealed class DictionaryService(
             setting.IsArchived,
             setting.ExpenseTypeId,
             setting.ExpenseFundId,
-            setting.Tariff?.CalculationBase);
+            setting.Tariff?.CalculationBase,
+            setting.Version);
     }
 
     private async Task<IReadOnlyList<IrregularPaymentDto>> ToIrregularPaymentDtosAsync(IReadOnlyList<IrregularPayment> payments, CancellationToken cancellationToken)
@@ -3760,7 +3778,8 @@ public sealed class DictionaryService(
             tariff.ElectricityThirdRate,
             ReadElectricityTiers(tariff)
                 .Select(tier => new ElectricityTariffTierDto(tier.Id, tier.Name, tier.UpperBound, tier.Rate, tier.IsCustom))
-                .ToArray());
+                .ToArray(),
+            tariff.Version);
     }
 
     private sealed record ElectricityTierConfig(

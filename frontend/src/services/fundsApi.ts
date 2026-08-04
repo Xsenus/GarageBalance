@@ -9,6 +9,7 @@ export type FundDto = {
   allowOperations: boolean
   isSystem: boolean
   linkedServices: FundLinkedServiceDto[]
+  version: string
 }
 
 export type FundLinkedServiceDto = {
@@ -50,6 +51,7 @@ export type UpdateFundOperationRequest = {
 
 export type UpsertFundRequest = {
   name: string
+  version?: string
 }
 
 export type DeleteFundRequest = {

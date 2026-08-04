@@ -137,6 +137,7 @@ public sealed class PostgreSqlIncomeFundAssignmentIntegrationTests
             await downgradeContext.GetService<IMigrator>().MigrateAsync(PreviousMigration);
             await downgradeContext.Database.ExecuteSqlRawAsync(
                 """ALTER TABLE funds ADD COLUMN "IsArchived" boolean NOT NULL DEFAULT FALSE""");
+            await PostgreSqlLegacyModelCompatibility.AddCurrentVersionColumnsAsync(downgradeContext);
         }
 
         Guid activeOperationId;
@@ -180,6 +181,7 @@ public sealed class PostgreSqlIncomeFundAssignmentIntegrationTests
 
         await using (var migrateContext = database.CreateContext())
         {
+            await PostgreSqlLegacyModelCompatibility.RemoveCurrentVersionColumnsAsync(migrateContext);
             await migrateContext.Database.ExecuteSqlRawAsync(
                 "ALTER TABLE funds DROP COLUMN \"IsArchived\"");
             await migrateContext.Database.MigrateAsync();

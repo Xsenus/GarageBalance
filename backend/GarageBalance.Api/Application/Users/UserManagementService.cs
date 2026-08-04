@@ -130,6 +130,8 @@ public sealed class UserManagementService(
             return UserManagementResult<ManagedUserDto>.Failure("user_not_found", "Пользователь не найден.");
         }
 
+        OptimisticConcurrencyGuard.EnsureCurrent(request.Version, user);
+
         var rolesResult = await GetRolesOrFailureAsync(request.RoleCodes, cancellationToken);
         if (!rolesResult.Succeeded)
         {
@@ -480,7 +482,8 @@ public sealed class UserManagementService(
             user.CreatedAtUtc,
             user.LastLoginAtUtc,
             roles.Select(role => role.Code).ToArray(),
-            permissions);
+            permissions,
+            user.Version);
     }
 
     private static ManagedRoleDto ToDto(AppRole role)

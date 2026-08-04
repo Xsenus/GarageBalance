@@ -113,6 +113,7 @@ public sealed class DictionariesController(IDictionaryService dictionaryService)
 
     [Authorize(Policy = SystemPermissions.DictionariesWrite)]
     [HttpPut("garages/{id:guid}")]
+    [RequireConcurrencyVersion("request.Version")]
     [ProducesResponseType<GarageDto>(StatusCodes.Status200OK)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
@@ -268,6 +269,7 @@ public sealed class DictionariesController(IDictionaryService dictionaryService)
 
     [Authorize(Policy = SystemPermissions.DictionariesWrite)]
     [HttpPut("suppliers/{id:guid}")]
+    [RequireConcurrencyVersion("request.Version")]
     [ProducesResponseType<SupplierDto>(StatusCodes.Status200OK)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
@@ -683,6 +685,7 @@ public sealed class DictionariesController(IDictionaryService dictionaryService)
 
     [Authorize(Policy = SystemPermissions.TariffsManage)]
     [HttpPut("tariffs/{id:guid}")]
+    [RequireConcurrencyVersion("request.Version")]
     [ProducesResponseType<TariffDto>(StatusCodes.Status200OK)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
@@ -760,6 +763,7 @@ public sealed class DictionariesController(IDictionaryService dictionaryService)
 
     [Authorize(Policy = SystemPermissions.TariffsManage)]
     [HttpPut("charge-services/{id:guid}")]
+    [RequireConcurrencyVersion("request.Version")]
     [ProducesResponseType<ChargeServiceSettingDto>(StatusCodes.Status200OK)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
@@ -772,6 +776,7 @@ public sealed class DictionariesController(IDictionaryService dictionaryService)
 
     [Authorize(Policy = SystemPermissions.TariffsManage)]
     [HttpPut("charge-services/{id:guid}/with-tariff")]
+    [RequireConcurrencyVersion("request.Service.Version", "request.TariffVersion")]
     [ProducesResponseType<UpdatedChargeServiceWithTariffDto>(StatusCodes.Status200OK)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]

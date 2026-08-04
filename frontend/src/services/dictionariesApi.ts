@@ -28,6 +28,7 @@ export type GarageDto = {
   balance: number
   overdueDebt: number
   ownerPhone: string | null
+  version: string
 }
 
 export type GarageColumnFilters = {
@@ -65,6 +66,7 @@ export type SupplierDto = {
   chargeServiceExpenseFundBalance?: number | null
   comment: string | null
   isArchived: boolean
+  version: string
 }
 
 export type SupplierContactDto = {
@@ -128,6 +130,7 @@ export type TariffDto = {
   effectiveFrom: string
   comment: string | null
   isArchived: boolean
+  version: string
 }
 
 export type IrregularPaymentDto = {
@@ -157,6 +160,7 @@ export type ChargeServiceSettingDto = {
   unitName: string | null
   isArchived: boolean
   tariffCalculationBase?: string | null
+  version: string
 }
 
 export type FeeCampaignDto = {
@@ -203,6 +207,7 @@ export type UpsertGarageRequest = {
   initialWaterMeterValue?: number | null
   initialElectricityMeterValue?: number | null
   comment?: string
+  version?: string
 }
 
 export type UpsertSupplierGroupRequest = {
@@ -220,6 +225,7 @@ export type UpsertSupplierRequest = {
   startingBalance: number
   comment?: string
   chargeServiceSettingId?: string | null
+  version?: string
 }
 
 export type ElectricityTariffTierDto = {
@@ -278,6 +284,7 @@ export type UpsertTariffRequest = {
   electricityThirdRate?: number
   electricityTiers?: UpsertElectricityTariffTierRequest[]
   electricityTierChangeReason?: string
+  version?: string
 }
 
 export type UpsertIrregularPaymentRequest = {
@@ -301,6 +308,7 @@ export type UpsertChargeServiceSettingRequest = {
   isMetered: boolean
   hasTieredTariff: boolean
   unitName?: string | null
+  version?: string
 }
 
 export type CreateChargeServiceWithTariffRequest = {
@@ -322,6 +330,7 @@ export type UpdateChargeServiceWithTariffRequest = {
   electricityTiers?: UpsertElectricityTariffTierRequest[] | null
   changeReason?: string | null
   calculationBase?: string | null
+  tariffVersion?: string
 }
 
 export type UpdatedChargeServiceWithTariffDto = {

@@ -1,6 +1,7 @@
 using System.Text.Json;
 using GarageBalance.Api.Application.Audit;
 using GarageBalance.Api.Domain.Audit;
+using GarageBalance.Api.Domain.Common;
 using GarageBalance.Api.Domain.Dictionaries;
 using GarageBalance.Api.Domain.Finance;
 using GarageBalance.Api.Domain.Import;
@@ -66,12 +67,14 @@ public sealed class GarageBalanceDbContext(DbContextOptions<GarageBalanceDbConte
 
     public override int SaveChanges(bool acceptAllChangesOnSuccess)
     {
+        RotateOptimisticConcurrencyVersions();
         NormalizeAuditEventRelatedFields();
         return base.SaveChanges(acceptAllChangesOnSuccess);
     }
 
     public override Task<int> SaveChangesAsync(bool acceptAllChangesOnSuccess, CancellationToken cancellationToken = default)
     {
+        RotateOptimisticConcurrencyVersions();
         NormalizeAuditEventRelatedFields();
         return base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
     }
@@ -89,6 +92,7 @@ public sealed class GarageBalanceDbContext(DbContextOptions<GarageBalanceDbConte
             entity.Property(user => user.DisplayName).HasMaxLength(200).IsRequired();
             entity.Property(user => user.PasswordHash).HasMaxLength(500).IsRequired();
             entity.Property(user => user.SessionVersion).HasDefaultValue(1L);
+            entity.Property(user => user.Version).HasDefaultValueSql("gen_random_uuid()").IsConcurrencyToken();
             entity.HasIndex(user => user.NormalizedEmail).IsUnique();
         });
 
@@ -97,6 +101,7 @@ public sealed class GarageBalanceDbContext(DbContextOptions<GarageBalanceDbConte
             entity.ToTable("application_settings");
             entity.HasKey(setting => setting.Id);
             entity.Property(setting => setting.Key).HasMaxLength(160).IsRequired();
+            entity.Property(setting => setting.Version).HasDefaultValueSql("gen_random_uuid()").IsConcurrencyToken();
             entity.HasIndex(setting => setting.Key).IsUnique();
         });
 
@@ -219,6 +224,7 @@ public sealed class GarageBalanceDbContext(DbContextOptions<GarageBalanceDbConte
             entity.Property(garage => garage.InitialWaterMeterValue).HasPrecision(18, 3);
             entity.Property(garage => garage.InitialElectricityMeterValue).HasPrecision(18, 3);
             entity.Property(garage => garage.Comment).HasMaxLength(1000);
+            entity.Property(garage => garage.Version).HasDefaultValueSql("gen_random_uuid()").IsConcurrencyToken();
             entity.HasIndex(garage => garage.Number).IsUnique().HasFilter("\"IsArchived\" = false");
             entity.HasIndex(garage => garage.OwnerId);
             entity.HasOne(garage => garage.Owner)
@@ -247,6 +253,7 @@ public sealed class GarageBalanceDbContext(DbContextOptions<GarageBalanceDbConte
             entity.Property(supplier => supplier.Email).HasMaxLength(320);
             entity.Property(supplier => supplier.StartingBalance).HasPrecision(18, 2);
             entity.Property(supplier => supplier.Comment).HasMaxLength(1000);
+            entity.Property(supplier => supplier.Version).HasDefaultValueSql("gen_random_uuid()").IsConcurrencyToken();
             entity.HasIndex(supplier => supplier.Name);
             entity.HasIndex(supplier => new { supplier.GroupId, supplier.Name }).IsUnique().HasFilter("\"IsArchived\" = false");
             entity.HasIndex(supplier => supplier.Inn);
@@ -364,6 +371,7 @@ public sealed class GarageBalanceDbContext(DbContextOptions<GarageBalanceDbConte
             entity.Property(item => item.ElectricityThirdRate).HasPrecision(18, 4);
             entity.Property(item => item.ElectricityTiersJson).HasColumnType("jsonb");
             entity.Property(item => item.Comment).HasMaxLength(1000);
+            entity.Property(item => item.Version).HasDefaultValueSql("gen_random_uuid()").IsConcurrencyToken();
             entity.HasIndex(item => new { item.Name, item.EffectiveFrom }).IsUnique().HasFilter("\"IsArchived\" = false");
             entity.HasIndex(item => item.CalculationBase);
             entity.HasIndex(item => item.EffectiveFrom);
@@ -380,6 +388,7 @@ public sealed class GarageBalanceDbContext(DbContextOptions<GarageBalanceDbConte
             entity.HasKey(item => item.Id);
             entity.Property(item => item.Name).HasMaxLength(200).IsRequired();
             entity.Property(item => item.UnitName).HasMaxLength(40);
+            entity.Property(item => item.Version).HasDefaultValueSql("gen_random_uuid()").IsConcurrencyToken();
             entity.HasIndex(item => item.Name).IsUnique().HasFilter("\"IsArchived\" = false");
             entity.HasIndex(item => item.IsRegular);
             entity.HasIndex(item => item.IsMetered);
@@ -692,6 +701,7 @@ public sealed class GarageBalanceDbContext(DbContextOptions<GarageBalanceDbConte
             entity.Property(fund => fund.Name).HasMaxLength(200).IsRequired();
             entity.Property(fund => fund.NormalizedName).HasMaxLength(200).IsRequired();
             entity.Property(fund => fund.Balance).HasPrecision(18, 2);
+            entity.Property(fund => fund.Version).HasDefaultValueSql("gen_random_uuid()").IsConcurrencyToken();
             entity.HasIndex(fund => fund.NormalizedName)
                 .IsUnique()
                 .HasFilter("\"IsArchived\" = false");
@@ -950,6 +960,21 @@ public sealed class GarageBalanceDbContext(DbContextOptions<GarageBalanceDbConte
             entity.HasIndex(setting => setting.Provider);
             entity.HasIndex(setting => setting.UpdatedAtUtc);
         });
+    }
+
+    private void RotateOptimisticConcurrencyVersions()
+    {
+        foreach (var entry in ChangeTracker.Entries<IOptimisticConcurrencyEntity>())
+        {
+            if (entry.State == EntityState.Added && entry.Entity.Version == Guid.Empty)
+            {
+                entry.Entity.Version = Guid.NewGuid();
+            }
+            else if (entry.State == EntityState.Modified)
+            {
+                entry.Entity.Version = Guid.NewGuid();
+            }
+        }
     }
 
     private void NormalizeAuditEventRelatedFields()

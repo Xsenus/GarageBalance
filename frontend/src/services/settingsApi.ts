@@ -2,10 +2,12 @@ import { apiFetch } from './apiFetch'
 
 export type PaymentDisplaySettingsDto = {
   showAllGarageOperationsByDefault: boolean
+  version: string
 }
 
 export type SalaryAccrualSettingsDto = {
   accrualDay: number
+  version: string
 }
 
 export type BusinessDateSettingsDto = {
@@ -20,6 +22,7 @@ export type BusinessDateSettingsDto = {
     skippedCount: number
     message: string
   } | null
+  version: string
 }
 
 export type CashBankBalanceOperationDto = {
@@ -77,7 +80,7 @@ export type ApplicationSettingsClient = {
   getSalaryAccrualSettings(accessToken: string): Promise<SalaryAccrualSettingsDto>
   updateSalaryAccrualSettings(accessToken: string, request: SalaryAccrualSettingsDto): Promise<SalaryAccrualSettingsDto>
   getBusinessDateSettings(accessToken: string): Promise<BusinessDateSettingsDto>
-  updateBusinessDateSettings(accessToken: string, request: { overrideDate: string | null }): Promise<BusinessDateSettingsDto>
+  updateBusinessDateSettings(accessToken: string, request: { overrideDate: string | null; version?: string }): Promise<BusinessDateSettingsDto>
   getCashBankBalances(accessToken: string): Promise<CashBankBalanceSettingsDto>
   updateCashBankOpeningBalances(accessToken: string, request: { cashOpeningBalance: number; bankOpeningBalance: number; reason: string }): Promise<CashBankBalanceSettingsDto>
   createCashBankBalanceAdjustment(accessToken: string, request: { account: 'cash' | 'bank'; direction: 'increase' | 'decrease'; operationDate: string; amount: number; reason: string }): Promise<CashBankBalanceSettingsDto>

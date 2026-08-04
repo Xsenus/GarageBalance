@@ -25,6 +25,7 @@ public sealed class SettingsController(
     }
 
     [HttpPut("payments/display")]
+    [RequireConcurrencyVersion("request.Version")]
     [Authorize(Policy = SystemPermissions.UsersManage)]
     [ProducesResponseType<PaymentDisplaySettingsDto>(StatusCodes.Status200OK)]
     public async Task<ActionResult<PaymentDisplaySettingsDto>> UpdatePaymentDisplaySettings(
@@ -43,6 +44,7 @@ public sealed class SettingsController(
     }
 
     [HttpPut("salary-accrual")]
+    [RequireConcurrencyVersion("request.Version")]
     [Authorize(Policy = SystemPermissions.UsersManage)]
     [ProducesResponseType<SalaryAccrualSettingsDto>(StatusCodes.Status200OK)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
@@ -75,6 +77,7 @@ public sealed class SettingsController(
     }
 
     [HttpPut("business-date")]
+    [RequireConcurrencyVersion("request.Version")]
     [Authorize(Roles = SystemRoles.Administrator)]
     [ProducesResponseType<BusinessDateSettingsDto>(StatusCodes.Status200OK)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]

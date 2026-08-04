@@ -1,8 +1,9 @@
+using GarageBalance.Api.Domain.Common;
 using GarageBalance.Api.Domain.Finance;
 
 namespace GarageBalance.Api.Domain.Dictionaries;
 
-public sealed class ChargeServiceSetting
+public sealed class ChargeServiceSetting : IOptimisticConcurrencyEntity
 {
     public Guid Id { get; set; } = Guid.NewGuid();
     public required string Name { get; set; }
@@ -26,4 +27,5 @@ public sealed class ChargeServiceSetting
     public bool IsArchived { get; set; }
     public DateTimeOffset CreatedAtUtc { get; set; } = DateTimeOffset.UtcNow;
     public DateTimeOffset UpdatedAtUtc { get; set; } = DateTimeOffset.UtcNow;
+    public Guid Version { get; set; } = Guid.NewGuid();
 }

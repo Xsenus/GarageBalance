@@ -18,6 +18,7 @@ public sealed class ApplicationSettingsServiceTests
         var result = await service.GetPaymentDisplaySettingsAsync(CancellationToken.None);
 
         Assert.False(result.ShowAllGarageOperationsByDefault);
+        Assert.NotEqual(Guid.Empty, result.Version);
     }
 
     [Fact]
@@ -77,6 +78,17 @@ public sealed class ApplicationSettingsServiceTests
         var result = await service.GetSalaryAccrualSettingsAsync(CancellationToken.None);
 
         Assert.Equal(1, result.AccrualDay);
+        Assert.NotEqual(Guid.Empty, result.Version);
+    }
+
+    [Fact]
+    public async Task GetBusinessDateSettings_ReturnsConcurrencyVersionWhenOverrideIsMissing()
+    {
+        var service = CreateService(new FakeRepository(), new CaptureAuditWriter());
+
+        var result = await service.GetBusinessDateSettingsAsync(CancellationToken.None);
+
+        Assert.NotEqual(Guid.Empty, result.Version);
     }
 
     [Fact]

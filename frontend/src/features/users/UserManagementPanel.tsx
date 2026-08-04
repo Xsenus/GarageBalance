@@ -195,6 +195,7 @@ export function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; 
 
     if (editor.mode === 'edit' && editor.user) {
       const request: UpdateManagedUserRequest = {
+        version: editor.user.version,
         displayName: form.displayName.trim(),
         roleCodes: form.roleCodes,
         isActive: form.isActive,
@@ -284,6 +285,7 @@ export function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; 
     setDeleteReasonError(null)
     try {
       await userClient.updateUser(auth.accessToken, deleteTarget.id, {
+        version: deleteTarget.version,
         displayName: deleteTarget.displayName,
         roleCodes: deleteTarget.roles,
         isActive: false,
