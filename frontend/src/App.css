@@ -6340,6 +6340,15 @@ h1 {
   color: #b42318;
 }
 
+.dictionary-modal-form__fields {
+  border: 0;
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  min-width: 0;
+  padding: 0;
+}
+
 .danger-button:hover:not(:disabled),
 .danger-button:focus-visible {
   border-color: #f97066;

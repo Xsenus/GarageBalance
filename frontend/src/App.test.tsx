@@ -13009,6 +13009,112 @@ describe('App', () => {
     expect(await screen.findByText('Запись удалена из рабочего списка.')).toBeInTheDocument()
   })
 
+  it('keeps dictionary mutation dialogs open and preserves input after server failures', async () => {
+    const user = userEvent.setup()
+    const activeOwner = createOwner({ id: 'owner-active-failure', lastName: 'Иванов', firstName: 'Иван' })
+    const archivedOwner = createOwner({ id: 'owner-archived-failure', lastName: 'Петров', firstName: 'Петр', isArchived: true })
+    let owners = [activeOwner, archivedOwner]
+    let createAttempt = 0
+    let archiveAttempt = 0
+    let restoreAttempt = 0
+    let releaseCreate!: () => void
+    let releaseArchive!: () => void
+    let releaseRestore!: () => void
+    const createGate = new Promise<void>((resolve) => { releaseCreate = resolve })
+    const archiveGate = new Promise<void>((resolve) => { releaseArchive = resolve })
+    const restoreGate = new Promise<void>((resolve) => { releaseRestore = resolve })
+    const dictionaryClient = createDictionaryClient({
+      getOwners: async (_token, _search, _limit, includeArchived) => owners.filter((owner) => includeArchived || !owner.isArchived),
+      createSupplierGroup: async (_token, request) => {
+        createAttempt += 1
+        if (createAttempt === 1) {
+          await createGate
+          throw new DictionaryApiError('supplier_group_save_failed', 'Группа не сохранена.', 503)
+        }
+        return createGroup({ id: 'group-retry-success', name: request.name })
+      },
+      archiveOwner: async () => {
+        archiveAttempt += 1
+        if (archiveAttempt === 1) {
+          await archiveGate
+          throw new DictionaryApiError('owner_archive_failed', 'Владелец не удален.', 503)
+        }
+      },
+      restoreOwner: async (_token, id) => {
+        restoreAttempt += 1
+        if (restoreAttempt === 1) {
+          await restoreGate
+          throw new DictionaryApiError('owner_restore_failed', 'Владелец не восстановлен.', 503)
+        }
+        owners = owners.map((owner) => owner.id === id ? { ...owner, isArchived: false } : owner)
+        return owners.find((owner) => owner.id === id)!
+      },
+    })
+    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Справочники')
+    const dictionaryPanel = await screen.findByRole('region', { name: 'Справочники' })
+
+    await openDictionarySubgroup(user, dictionaryPanel, 'Группы поставщиков')
+    let dialog = await openDictionaryCreateDialog(user, dictionaryPanel)
+    const groupName = within(dialog).getByLabelText('Группа поставщиков')
+    await user.type(groupName, 'Группа повторной отправки')
+    await user.click(within(dialog).getByRole('button', { name: 'Сохранить' }))
+    expect(within(dialog).getByRole('button', { name: 'Сохраняем...' })).toBeDisabled()
+    expect(within(dialog).getByRole('button', { name: 'Закрыть окно справочника' })).toBeDisabled()
+    expect(within(dialog).getByRole('button', { name: 'Отмена' })).toBeDisabled()
+    expect(groupName).toBeDisabled()
+    await user.keyboard('{Escape}')
+    expect(screen.getByRole('dialog', { name: 'Группы поставщиков и персонала' })).toBe(dialog)
+    releaseCreate()
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent('Группа не сохранена.')
+    expect(screen.getAllByText('Группа не сохранена.')).toHaveLength(1)
+    expect(groupName).toHaveValue('Группа повторной отправки')
+    expect(groupName).toBeEnabled()
+    await user.click(within(dialog).getByRole('button', { name: 'Сохранить' }))
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Группы поставщиков и персонала' })).not.toBeInTheDocument())
+
+    await openDictionarySubgroup(user, dictionaryPanel, 'Владельцы')
+    const activeOwnerRow = (await within(dictionaryPanel).findByText('Иванов Иван')).closest('tr')!
+    fireEvent.contextMenu(activeOwnerRow)
+    await user.click(await screen.findByRole('menuitem', { name: 'Удалить' }))
+    dialog = await screen.findByRole('dialog', { name: 'Подтвердите удаление' })
+    const archiveReason = within(dialog).getByLabelText('Причина удаления')
+    await user.type(archiveReason, 'Проверка сохранения причины')
+    await user.click(within(dialog).getByRole('button', { name: 'Удалить запись' }))
+    expect(within(dialog).getByRole('button', { name: 'Удаляем...' })).toBeDisabled()
+    expect(within(dialog).getByRole('button', { name: 'Отменить удаление' })).toBeDisabled()
+    expect(within(dialog).getByRole('button', { name: 'Отмена' })).toBeDisabled()
+    expect(archiveReason).toBeDisabled()
+    await user.keyboard('{Escape}')
+    expect(screen.getByRole('dialog', { name: 'Подтвердите удаление' })).toBe(dialog)
+    releaseArchive()
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent('Владелец не удален.')
+    expect(screen.getAllByText('Владелец не удален.')).toHaveLength(1)
+    expect(archiveReason).toHaveValue('Проверка сохранения причины')
+    await user.click(within(dialog).getByRole('button', { name: 'Удалить запись' }))
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Подтвердите удаление' })).not.toBeInTheDocument())
+
+    await user.click(within(dictionaryPanel).getByLabelText('Показывать архивные'))
+    const archivedOwnerRow = (await within(dictionaryPanel).findByText('Петров Петр')).closest('tr')!
+    await user.click(within(archivedOwnerRow).getByRole('button', { name: 'Вернуть' }))
+    dialog = await screen.findByRole('dialog', { name: 'Вернуть запись из архива?' })
+    await user.click(within(dialog).getByRole('button', { name: 'Вернуть запись' }))
+    expect(within(dialog).getByRole('button', { name: 'Возвращаем...' })).toBeDisabled()
+    expect(within(dialog).getByRole('button', { name: 'Отменить восстановление' })).toBeDisabled()
+    expect(within(dialog).getByRole('button', { name: 'Отмена' })).toBeDisabled()
+    await user.keyboard('{Escape}')
+    expect(screen.getByRole('dialog', { name: 'Вернуть запись из архива?' })).toBe(dialog)
+    releaseRestore()
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent('Владелец не восстановлен.')
+    expect(screen.getAllByText('Владелец не восстановлен.')).toHaveLength(1)
+    await user.click(within(dialog).getByRole('button', { name: 'Вернуть запись' }))
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Вернуть запись из архива?' })).not.toBeInTheDocument())
+    expect(await screen.findByText('Запись восстановлена и снова доступна в рабочих списках.')).toBeInTheDocument()
+  }, 30000)
+
   it('shows archived dictionary records and restores them after confirmation', async () => {
     const user = userEvent.setup()
     const activeOwner = createOwner({ id: 'owner-active', lastName: 'Иванов', firstName: 'Иван' })

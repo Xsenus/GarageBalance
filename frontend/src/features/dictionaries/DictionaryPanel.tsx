@@ -156,12 +156,13 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, integ
   const supportsSearch = supportsDictionarySearch(activeSection)
   const searchPlaceholder = getDictionarySearchPlaceholder(activeSection)
   const ownerGarageOptions = getOwnerGarageOptions(garageOptions, editor?.section === 'owners' && editor.item ? editor.item as OwnerDto : undefined)
+  const mutationDialogOpen = Boolean(editor || archiveTarget || restoreTarget)
 
   useEscapeKey(Boolean(contextMenu), () => setContextMenu(null))
-  useEscapeKey(Boolean(editor) && !pendingEditorConfirmation, () => closeEditor())
-  useEscapeKey(Boolean(pendingEditorConfirmation), () => setPendingEditorConfirmation(null))
-  useEscapeKey(Boolean(archiveTarget), () => closeArchiveTarget())
-  useEscapeKey(Boolean(restoreTarget), () => setRestoreTarget(null))
+  useEscapeKey(Boolean(editor) && !pendingEditorConfirmation && saving !== 'dictionary-editor', () => closeEditor())
+  useEscapeKey(Boolean(pendingEditorConfirmation) && saving !== 'dictionary-editor', () => setPendingEditorConfirmation(null))
+  useEscapeKey(Boolean(archiveTarget) && saving !== 'dictionary-archive', () => closeArchiveTarget())
+  useEscapeKey(Boolean(restoreTarget) && saving !== 'dictionary-restore', () => closeRestoreTarget())
   useEscapeKey(Boolean(balanceHistoryGarage), () => closeBalanceHistory())
 
   useEffect(() => {
@@ -379,12 +380,14 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, integ
   }
 
   function openArchiveTarget(section: DictionarySectionKey, item: DictionaryRecord) {
+    setError(null)
     setArchiveReason('')
     setArchiveReasonError(null)
     setArchiveTarget({ section, item })
   }
 
   function closeArchiveTarget() {
+    setError(null)
     setArchiveTarget(null)
     setArchiveReason('')
     setArchiveReasonError(null)
@@ -407,6 +410,16 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, integ
       setBalanceHistoryError(error instanceof Error ? error.message : 'Не удалось определить полный период истории баланса.')
       setBalanceHistoryLoading(false)
     }
+  }
+
+  function openRestoreTarget(section: DictionarySectionKey, item: DictionaryRecord) {
+    setError(null)
+    setRestoreTarget({ section, item })
+  }
+
+  function closeRestoreTarget() {
+    setError(null)
+    setRestoreTarget(null)
   }
 
   async function retryActivePage() {
@@ -494,6 +507,7 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, integ
 
   function closeEditor() {
     resetOwnerAddressSuggestions()
+    setError(null)
     setPendingEditorConfirmation(null)
     setEditor(null)
     setValidationErrors([])
@@ -568,7 +582,6 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, integ
     } catch (caught) {
       const message = caught instanceof Error ? caught.message : 'Не удалось сохранить запись.'
       setError(message)
-      showToast(message, 'error')
     } finally {
       setSaving(null)
     }
@@ -800,7 +813,6 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, integ
     } catch (caught) {
       const message = caught instanceof Error ? caught.message : 'Не удалось удалить запись.'
       setError(message)
-      showToast(message, 'error')
     } finally {
       setSaving(null)
     }
@@ -841,13 +853,12 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, integ
       }
 
       const section = restoreTarget.section
-      setRestoreTarget(null)
+      closeRestoreTarget()
       await refreshAfterMutation(section)
       showToast('Запись восстановлена и снова доступна в рабочих списках.')
     } catch (caught) {
       const message = getDictionaryRestoreErrorMessage(restoreTarget.section, caught)
       setError(message)
-      showToast(message, 'error')
     } finally {
       setSaving(null)
     }
@@ -885,7 +896,7 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, integ
   function renderRowAction(item: DictionaryRecord) {
     if (isArchivedRecord(item)) {
       return (
-        <button className="ghost-button dictionary-row-action" type="button" aria-label="Вернуть" title="Вернуть" disabled={!canWriteActiveSection} onClick={() => setRestoreTarget({ section: activeSection, item })}>
+        <button className="ghost-button dictionary-row-action" type="button" aria-label="Вернуть" title="Вернуть" disabled={!canWriteActiveSection} onClick={() => openRestoreTarget(activeSection, item)}>
           <RotateCcw size={15} aria-hidden="true" />
         </button>
       )
@@ -1218,9 +1229,9 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, integ
         {!loading ? <span>{activePage.totalCount} записей</span> : null}
       </div>
 
-      {error && !editor ? (
+      {error && !mutationDialogOpen ? (
         <AsyncErrorState message={error} onRetry={() => void retryActivePage()} retrying={loading} />
-      ) : error ? <FormError>{error}</FormError> : null}
+      ) : null}
       {!canWriteDictionaries ? <p className="form-hint">Режим просмотра: для добавления, изменения и удаления справочников нужно право dictionaries.write.</p> : null}
       {!canManageTariffs ? <p className="form-hint">Режим просмотра тарифов: для изменения тарифов нужно право tariffs.manage.</p> : null}
 
@@ -1332,7 +1343,7 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, integ
           <div className="context-menu-group" role="group">
             {isArchivedRecord(contextMenu.item) ? (
               <button type="button" role="menuitem" disabled={!canWriteActiveSection} onClick={() => {
-                setRestoreTarget({ section: contextMenu.section, item: contextMenu.item })
+                openRestoreTarget(contextMenu.section, contextMenu.item)
                 setContextMenu(null)
               }}>
                 <RotateCcw size={15} />
@@ -1451,26 +1462,29 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, integ
       ) : null}
 
       {editor ? (
-        <div className="modal-backdrop" role="presentation" onMouseDown={closeEditor}>
+        <div className="modal-backdrop" role="presentation" onMouseDown={saving === 'dictionary-editor' ? undefined : closeEditor}>
           <section ref={editorDialogRef} className={`detail-dialog dictionary-editor-dialog${editor.section === 'owners' ? ' dictionary-editor-dialog--owners' : ''}`} role="dialog" aria-modal="true" aria-labelledby="dictionary-editor-title" onMouseDown={(event) => event.stopPropagation()}>
             <div className="detail-dialog-header">
               <div>
                 <p className="eyebrow">{editor.mode === 'create' ? 'Добавление' : 'Изменение'}</p>
                 <h3 id="dictionary-editor-title">{dictionarySectionOptions.find((item) => item.key === editor.section)?.label ?? activeOption.label}</h3>
               </div>
-              <button ref={editorCloseRef} className="icon-button" type="button" aria-label="Закрыть окно справочника" onClick={closeEditor}>
+              <button ref={editorCloseRef} className="icon-button" type="button" aria-label="Закрыть окно справочника" onClick={closeEditor} disabled={saving === 'dictionary-editor'}>
                 <X size={18} />
               </button>
             </div>
             <form className="dictionary-modal-form" onSubmit={saveEditor}>
-              {renderEditorFields(editor.section)}
+              <fieldset className="dictionary-modal-form__fields" disabled={saving === 'dictionary-editor'}>
+                {renderEditorFields(editor.section)}
+              </fieldset>
               <FormValidationSummary title="Проверьте запись" items={validationErrors} />
+              {error ? <FormError>{error}</FormError> : null}
               <div className="detail-dialog-actions">
                 <button className="secondary-button" type="submit" disabled={saving === 'dictionary-editor'}>
                   <Save size={16} />
                   <span>{saving === 'dictionary-editor' ? 'Сохраняем...' : 'Сохранить'}</span>
                 </button>
-                <button className="ghost-button" type="button" onClick={closeEditor}>Отмена</button>
+                <button className="ghost-button" type="button" onClick={closeEditor} disabled={saving === 'dictionary-editor'}>Отмена</button>
               </div>
             </form>
           </section>
@@ -1478,7 +1492,7 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, integ
       ) : null}
 
       {pendingEditorConfirmation ? (
-        <div className="modal-backdrop" role="presentation" onMouseDown={() => setPendingEditorConfirmation(null)}>
+        <div className="modal-backdrop" role="presentation" onMouseDown={saving === 'dictionary-editor' ? undefined : () => setPendingEditorConfirmation(null)}>
           <section ref={editorConfirmationDialogRef} className="detail-dialog dictionary-confirmation-dialog" role="dialog" aria-modal="true" aria-labelledby="dictionary-edit-confirmation-title" aria-describedby="dictionary-edit-confirmation-description" onMouseDown={(event) => event.stopPropagation()}>
             <div className="detail-dialog-header">
               <div>
@@ -1515,7 +1529,7 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, integ
       ) : null}
 
       {archiveTarget ? (
-        <div className="modal-backdrop" role="presentation" onMouseDown={() => closeArchiveTarget()}>
+        <div className="modal-backdrop" role="presentation" onMouseDown={saving === 'dictionary-archive' ? undefined : () => closeArchiveTarget()}>
           <section ref={archiveDialogRef} className="detail-dialog" role="dialog" aria-modal="true" aria-labelledby="dictionary-archive-title" aria-describedby="dictionary-archive-description" onMouseDown={(event) => event.stopPropagation()}>
             <div className="detail-dialog-header">
               <div>
@@ -1528,6 +1542,7 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, integ
               </button>
             </div>
             <p className="confirmation-text" id="dictionary-archive-description">Запись будет скрыта из рабочих таблиц, но останется в истории изменений и связанной финансовой истории.</p>
+            {error ? <FormError>{error}</FormError> : null}
             <label className="field-label" htmlFor="dictionary-archive-reason">Причина удаления</label>
             <textarea
               id="dictionary-archive-reason"
@@ -1559,7 +1574,7 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, integ
       ) : null}
 
       {restoreTarget ? (
-        <div className="modal-backdrop" role="presentation" onMouseDown={() => setRestoreTarget(null)}>
+        <div className="modal-backdrop" role="presentation" onMouseDown={saving === 'dictionary-restore' ? undefined : closeRestoreTarget}>
           <section ref={restoreDialogRef} className="detail-dialog" role="dialog" aria-modal="true" aria-labelledby="dictionary-restore-title" aria-describedby="dictionary-restore-description" onMouseDown={(event) => event.stopPropagation()}>
             <div className="detail-dialog-header">
               <div>
@@ -1567,13 +1582,14 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, integ
                 <h3 id="dictionary-restore-title">Вернуть запись из архива?</h3>
                 <p>{getDictionaryRecordTitle(restoreTarget.section, restoreTarget.item)}</p>
               </div>
-              <button className="icon-button" type="button" aria-label="Отменить восстановление" onClick={() => setRestoreTarget(null)} disabled={saving === 'dictionary-restore'}>
+              <button className="icon-button" type="button" aria-label="Отменить восстановление" onClick={closeRestoreTarget} disabled={saving === 'dictionary-restore'}>
                 <X size={18} />
               </button>
             </div>
             <p className="confirmation-text" id="dictionary-restore-description">Запись снова появится в рабочих списках. Действие будет записано в историю изменений.</p>
+            {error ? <FormError>{error}</FormError> : null}
             <div className="detail-dialog-actions">
-              <button ref={restoreCancelRef} className="ghost-button" type="button" onClick={() => setRestoreTarget(null)} disabled={saving === 'dictionary-restore'}>Отмена</button>
+              <button ref={restoreCancelRef} className="ghost-button" type="button" onClick={closeRestoreTarget} disabled={saving === 'dictionary-restore'}>Отмена</button>
               <button className="secondary-button" type="button" onClick={() => void confirmRestore()} disabled={saving === 'dictionary-restore'}>
                 <RotateCcw size={16} />
                 <span>{saving === 'dictionary-restore' ? 'Возвращаем...' : 'Вернуть запись'}</span>
