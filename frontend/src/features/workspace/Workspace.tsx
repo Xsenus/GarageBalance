@@ -1,7 +1,7 @@
 import { memo, Suspense, useState } from 'react'
 import type { ReactNode } from 'react'
 import { AlertTriangle, ArrowLeft, Bell, LockKeyhole, LogOut, RotateCw, X } from 'lucide-react'
-import type { AuthClient, AuthResponse, CurrentUserDto } from '../../services/authApi'
+import type { AuthClient, AuthResponse } from '../../services/authApi'
 import type { AuditClient } from '../../services/auditApi'
 import type { DictionaryClient } from '../../services/dictionariesApi'
 import type { FinanceClient } from '../../services/financeApi'
@@ -92,7 +92,6 @@ export const Workspace = memo(function Workspace({
   settingsClient,
   onOpenAudit,
   onOpenSection,
-  onUserChanged,
   onLogout,
 }: {
   activeSection: WorkspaceSection
@@ -112,7 +111,6 @@ export const Workspace = memo(function Workspace({
   settingsClient: ApplicationSettingsClient
   onOpenAudit: (preset: AuditPanelPreset) => void
   onOpenSection: (section: WorkspaceSection, context?: WorkspaceOpenContext | null) => void
-  onUserChanged: (user: CurrentUserDto) => void
   onLogout: () => void
 }) {
   const [logoutConfirmationOpen, setLogoutConfirmationOpen] = useState(false)
@@ -227,7 +225,7 @@ export const Workspace = memo(function Workspace({
       case 'releases':
         return <ReleasePanel auth={auth} releaseClient={releaseClient} />
       case 'settings':
-        return <PasswordPanel auth={auth} authClient={authClient} integrationClient={integrationClient} settingsClient={settingsClient} onUserChanged={onUserChanged} />
+        return <PasswordPanel auth={auth} authClient={authClient} integrationClient={integrationClient} settingsClient={settingsClient} onSessionRevoked={onLogout} />
       default:
         return null
     }

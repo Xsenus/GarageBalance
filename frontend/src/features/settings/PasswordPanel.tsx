@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
 import { ArrowDownCircle, ArrowUpCircle, Banknote, CalendarClock, DatabaseBackup, Download, Eye, FileWarning, KeyRound, Landmark, PlugZap, RefreshCw, ShieldCheck, SlidersHorizontal, X } from 'lucide-react'
-import type { AuthClient, AuthResponse, CurrentUserDto } from '../../services/authApi'
+import type { AuthClient, AuthResponse } from '../../services/authApi'
 import type { IntegrationClient, OneCFreshIntegrationStatusDto, OneCFreshSyncDto, OneCFreshSyncPreviewDto, ReceiptPrintingIntegrationStatusDto } from '../../services/integrationsApi'
 import type { ApplicationSettingsClient, BusinessDateSettingsDto, CashBankBalanceSettingsDto, DatabaseBackupStatusDto, DiagnosticLogStatusDto, SalaryAccrualSettingsDto } from '../../services/settingsApi'
 import { hasPermission, isAdministrator, permissions } from '../../shared/accessControl'
@@ -17,7 +17,7 @@ import { downloadBlob } from '../../shared/fileExports'
 import { useEscapeKey, useFocusOnOpen, useFocusTrap, useRestoreFocusOnClose } from '../../shared/focusHooks'
 import { getPasswordChangeValidationErrors } from '../../shared/validation'
 
-export function PasswordPanel({ auth, authClient, integrationClient, settingsClient, onUserChanged }: { auth: AuthResponse; authClient: AuthClient; integrationClient: IntegrationClient; settingsClient: ApplicationSettingsClient; onUserChanged: (user: CurrentUserDto) => void }) {
+export function PasswordPanel({ auth, authClient, integrationClient, settingsClient, onSessionRevoked }: { auth: AuthResponse; authClient: AuthClient; integrationClient: IntegrationClient; settingsClient: ApplicationSettingsClient; onSessionRevoked: () => void }) {
   const integrationSettingsVisible = import.meta.env.VITE_SHOW_INTEGRATION_SETTINGS === 'true'
   const dadataSettingsVisible = hasPermission(auth, permissions.usersManage)
   const integrationTabVisible = integrationSettingsVisible || dadataSettingsVisible
@@ -27,7 +27,6 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
       : 'security'
   ))
   const [form, setForm] = useState({ currentPassword: '', newPassword: '', repeatPassword: '' })
-  const [message, setMessage] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [validationErrors, setValidationErrors] = useState<string[]>([])
   const [pendingPasswordChange, setPendingPasswordChange] = useState<{ currentPassword: string; newPassword: string } | null>(null)
@@ -531,7 +530,6 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     setError(null)
-    setMessage(null)
 
     const errors = getPasswordChangeValidationErrors(form.currentPassword, form.newPassword, form.repeatPassword)
     if (errors.length > 0) {
@@ -553,14 +551,13 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
 
     setSaving(true)
     try {
-      const user = await authClient.changeOwnPassword(auth.accessToken, {
+      await authClient.changeOwnPassword(auth.accessToken, {
         currentPassword: pendingPasswordChange.currentPassword,
         newPassword: pendingPasswordChange.newPassword,
       })
-      onUserChanged(user)
       setPendingPasswordChange(null)
       setForm({ currentPassword: '', newPassword: '', repeatPassword: '' })
-      setMessage('Пароль изменен. Используйте новый пароль при следующем входе.')
+      onSessionRevoked()
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Не удалось изменить пароль.')
       setPendingPasswordChange(null)
@@ -811,7 +808,6 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
           <p className="form-hint" id="own-password-policy-hint">Минимум 8 символов.</p>
           <FormValidationSummary title="Проверьте смену пароля" items={validationErrors} />
           {error ? <FormError>{error}</FormError> : null}
-          {message ? <div className="form-success" role="status" aria-live="polite">{message}</div> : null}
           <button className="secondary-button" type="submit" disabled={saving || Boolean(pendingPasswordChange)}>
             <ShieldCheck size={16} />
             <span>{saving ? 'Сохраняем...' : 'Изменить пароль'}</span>
@@ -1487,7 +1483,7 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
                 <X size={18} />
               </button>
             </div>
-            <p className="confirmation-text" id="password-change-confirmation-description">После подтверждения пароль будет изменен, а действие появится в истории изменений как смена учетных данных без раскрытия самого пароля.</p>
+            <p className="confirmation-text" id="password-change-confirmation-description">После подтверждения пароль будет изменен, текущая сессия завершится, а действие появится в истории изменений без раскрытия самого пароля.</p>
             <ul className="dictionary-change-list" aria-label="Изменяемые поля настройки">
               <li>
                 <span className="dictionary-change-field">Пароль</span>

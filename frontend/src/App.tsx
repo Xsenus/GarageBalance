@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { authApi } from './services/authApi'
-import type { AuthClient, AuthResponse, CurrentUserDto } from './services/authApi'
+import type { AuthClient, AuthResponse } from './services/authApi'
 import { AuthGate } from './features/auth/AuthGate'
 import { AuthenticatedAppShell } from './features/workspace/AppShell'
 import { auditApi } from './services/auditApi'
@@ -53,18 +53,6 @@ function App({ authClient = authApi, auditClient = auditApi, dictionaryClient = 
     setAuth(nextAuth)
   }
 
-  function handleUserChanged(user: CurrentUserDto) {
-    setAuth((current) => {
-      if (!current) {
-        return current
-      }
-
-      const nextAuth = { ...current, user }
-      saveStoredAuthSession(authSessionStorageKey, nextAuth)
-      return nextAuth
-    })
-  }
-
   function handleLogout() {
     clearDictionaryResponseCache()
     clearStoredAuthSession(authSessionStorageKey)
@@ -82,7 +70,7 @@ function App({ authClient = authApi, auditClient = auditApi, dictionaryClient = 
   }
 
   return (
-    <AuthenticatedAppShell auth={auth} authClient={authClient} auditClient={auditClient} dictionaryClient={dictionaryClient} financeClient={financeClient} fundsClient={fundsClient} importClient={importClient} integrationClient={integrationClient} reportClient={reportClient} releaseClient={releaseClient} settingsClient={settingsClient} userClient={userClient} onUserChanged={handleUserChanged} onLogout={handleLogout} />
+    <AuthenticatedAppShell auth={auth} authClient={authClient} auditClient={auditClient} dictionaryClient={dictionaryClient} financeClient={financeClient} fundsClient={fundsClient} importClient={importClient} integrationClient={integrationClient} reportClient={reportClient} releaseClient={releaseClient} settingsClient={settingsClient} userClient={userClient} onLogout={handleLogout} />
   )
 }
 

@@ -9770,7 +9770,7 @@ describe('App', () => {
 
     expect(passwordRequest).toBeNull()
     const confirmation = await screen.findByRole('dialog', { name: 'Подтвердить смену пароля?' })
-    expect(within(confirmation).getByText('После подтверждения пароль будет изменен, а действие появится в истории изменений как смена учетных данных без раскрытия самого пароля.')).toBeInTheDocument()
+    expect(within(confirmation).getByText('После подтверждения пароль будет изменен, текущая сессия завершится, а действие появится в истории изменений без раскрытия самого пароля.')).toBeInTheDocument()
     const confirmationChanges = within(confirmation).getByRole('list', { name: 'Изменяемые поля настройки' })
     expect(within(confirmationChanges).getByText('Пароль')).toBeInTheDocument()
     expect(within(confirmationChanges).getByText('Без изменения')).toBeInTheDocument()
@@ -9784,10 +9784,8 @@ describe('App', () => {
       currentPassword: 'StrongPass123',
       newPassword: 'password',
     })
-    expect(await within(passwordPanel).findByText('Пароль изменен. Используйте новый пароль при следующем входе.')).toHaveAttribute('role', 'status')
-    expect(within(passwordPanel).getByLabelText('Текущий пароль')).toHaveValue('')
-    expect(within(passwordPanel).getByLabelText('Новый пароль')).toHaveValue('')
-    expect(within(passwordPanel).getByLabelText('Повтор нового пароля')).toHaveValue('')
+    expect(await screen.findByRole('region', { name: 'Вход в систему' })).toBeInTheDocument()
+    expect(window.localStorage.getItem('garagebalance.auth.session')).toBeNull()
   })
 
   it('closes password change confirmation with Escape without changing password', async () => {

@@ -292,6 +292,7 @@ builder.Services.AddScoped<IAuditEventWriter, AuditEventWriter>();
 builder.Services.AddSingleton<IPasswordHasher, Pbkdf2PasswordHasher>();
 builder.Services.AddSingleton<IPasswordPolicyValidator, PasswordPolicyValidator>();
 builder.Services.AddSingleton<ITokenService, JwtTokenService>();
+builder.Services.AddScoped<JwtSessionValidationEvents>();
 builder.Services.AddSingleton<ISensitiveDataProtector, DataProtectionSensitiveDataProtector>();
 builder.Services.AddSingleton<IAuthorizationHandler, PermissionAuthorizationHandler>();
 builder.Services.AddSingleton<IAuthorizationMiddlewareResultHandler, ApiAuthorizationMiddlewareResultHandler>();
@@ -332,6 +333,7 @@ builder.Services
     .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
     {
+        options.EventsType = typeof(JwtSessionValidationEvents);
         options.TokenValidationParameters = new TokenValidationParameters
         {
             ValidateIssuer = true,

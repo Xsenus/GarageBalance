@@ -28,6 +28,15 @@ public sealed class EfUserRepository(GarageBalanceDbContext dbContext) : IUserRe
             .SingleOrDefaultAsync(user => user.Id == userId, cancellationToken);
     }
 
+    public Task<bool> IsSessionValidAsync(Guid userId, long sessionVersion, CancellationToken cancellationToken)
+    {
+        return dbContext.Users
+            .AsNoTracking()
+            .AnyAsync(
+                user => user.Id == userId && user.IsActive && user.SessionVersion == sessionVersion,
+                cancellationToken);
+    }
+
     public async Task<IReadOnlyList<AppRole>> GetRolesByCodesAsync(IReadOnlyList<string> roleCodes, CancellationToken cancellationToken)
     {
         return await dbContext.Roles

@@ -8,6 +8,7 @@ public sealed class AppUser
     public required string DisplayName { get; set; }
     public required string PasswordHash { get; set; }
     public bool IsActive { get; set; } = true;
+    public long SessionVersion { get; set; } = 1;
     public DateTimeOffset CreatedAtUtc { get; set; } = DateTimeOffset.UtcNow;
     public DateTimeOffset? LastLoginAtUtc { get; set; }
 

@@ -199,6 +199,7 @@ public sealed class AuthServiceTests
             CancellationToken.None);
         var user = repository.Users[0];
         var oldHash = user.PasswordHash;
+        var oldSessionVersion = user.SessionVersion;
         var principal = new ClaimsPrincipal(new ClaimsIdentity(
             [new Claim(ClaimTypes.NameIdentifier, user.Id.ToString())],
             "Test"));
@@ -211,6 +212,7 @@ public sealed class AuthServiceTests
         Assert.True(result.Succeeded);
         Assert.Equal(user.Id, result.Value!.Id);
         Assert.NotEqual(oldHash, user.PasswordHash);
+        Assert.Equal(oldSessionVersion + 1, user.SessionVersion);
         Assert.Contains(repository.AuditEvents, item =>
             item.Action == "auth.password_changed" &&
             item.ActorUserId == user.Id &&

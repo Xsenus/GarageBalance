@@ -149,6 +149,7 @@ public sealed class UserManagementService(
 
         var oldRoleCodes = FormatRoleCodes(user.UserRoles.Select(userRole => userRole.Role));
         var newRoleCodes = FormatRoleCodes(rolesResult.Value!);
+        var rolesChanged = !string.Equals(oldRoleCodes, newRoleCodes, StringComparison.Ordinal);
         var newDisplayName = request.DisplayName.Trim();
         var oldValues = new Dictionary<string, object?>
         {
@@ -178,10 +179,16 @@ public sealed class UserManagementService(
         }
 
         user.DisplayName = newDisplayName;
+        var activityChanged = user.IsActive != request.IsActive;
         user.IsActive = request.IsActive;
         if (passwordChanged)
         {
             user.PasswordHash = passwordHasher.HashPassword(request.NewPassword!);
+        }
+
+        if (activityChanged || rolesChanged || passwordChanged)
+        {
+            user.SessionVersion++;
         }
 
         user.UserRoles.Clear();
@@ -242,6 +249,7 @@ public sealed class UserManagementService(
         };
 
         user.IsActive = true;
+        user.SessionVersion++;
 
         auditEventWriter.Add(new AuditEventWriteRequest(
             actorUserId,
@@ -301,6 +309,10 @@ public sealed class UserManagementService(
         }
 
         role.Permissions = newPermissions.ToList();
+        foreach (var userRole in role.UserRoles)
+        {
+            userRole.User.SessionVersion++;
+        }
         auditEventWriter.Add(new AuditEventWriteRequest(
             actorUserId,
             "users.role_permissions_updated",

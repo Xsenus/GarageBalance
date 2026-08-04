@@ -26,6 +26,14 @@ internal sealed class InMemoryUserRepository : IUserRepository
         return Task.FromResult(Users.SingleOrDefault(user => user.Id == userId));
     }
 
+    public Task<bool> IsSessionValidAsync(Guid userId, long sessionVersion, CancellationToken cancellationToken)
+    {
+        return Task.FromResult(Users.Any(user =>
+            user.Id == userId &&
+            user.IsActive &&
+            user.SessionVersion == sessionVersion));
+    }
+
     public Task<IReadOnlyList<AppRole>> GetRolesByCodesAsync(IReadOnlyList<string> roleCodes, CancellationToken cancellationToken)
     {
         return Task.FromResult<IReadOnlyList<AppRole>>(Roles.Where(role => roleCodes.Contains(role.Code)).ToList());

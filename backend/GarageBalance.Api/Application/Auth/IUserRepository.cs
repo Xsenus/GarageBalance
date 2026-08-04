@@ -7,6 +7,7 @@ public interface IUserRepository
     Task<bool> HasAnyUsersAsync(CancellationToken cancellationToken);
     Task<AppUser?> FindUserByEmailAsync(string normalizedEmail, CancellationToken cancellationToken);
     Task<AppUser?> FindUserByIdAsync(Guid userId, CancellationToken cancellationToken);
+    Task<bool> IsSessionValidAsync(Guid userId, long sessionVersion, CancellationToken cancellationToken);
     Task<IReadOnlyList<AppRole>> GetRolesByCodesAsync(IReadOnlyList<string> roleCodes, CancellationToken cancellationToken);
     Task<IReadOnlyList<AppRole>> GetUserRolesAsync(Guid userId, CancellationToken cancellationToken);
     Task<int> CountAuditEventsAsync(string action, string entityType, string? entityId, DateTimeOffset createdSinceUtc, CancellationToken cancellationToken);

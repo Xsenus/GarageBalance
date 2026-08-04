@@ -202,6 +202,7 @@ public sealed class AuthService(
         }
 
         user.PasswordHash = passwordHasher.HashPassword(request.NewPassword);
+        user.SessionVersion++;
         auditEventWriter.Add(new AuditEventWriteRequest(
             user.Id,
             "auth.password_changed",

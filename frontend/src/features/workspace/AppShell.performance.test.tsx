@@ -49,7 +49,6 @@ function renderShell() {
       releaseClient={emptyClient}
       settingsClient={emptyClient}
       userClient={emptyClient}
-      onUserChanged={vi.fn()}
       onLogout={vi.fn()}
     />,
   )

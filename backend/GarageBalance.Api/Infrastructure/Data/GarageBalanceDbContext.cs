@@ -88,6 +88,7 @@ public sealed class GarageBalanceDbContext(DbContextOptions<GarageBalanceDbConte
             entity.Property(user => user.NormalizedEmail).HasMaxLength(320).IsRequired();
             entity.Property(user => user.DisplayName).HasMaxLength(200).IsRequired();
             entity.Property(user => user.PasswordHash).HasMaxLength(500).IsRequired();
+            entity.Property(user => user.SessionVersion).HasDefaultValue(1L);
             entity.HasIndex(user => user.NormalizedEmail).IsUnique();
         });
 

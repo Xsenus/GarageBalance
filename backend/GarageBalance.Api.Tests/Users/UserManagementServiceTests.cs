@@ -33,8 +33,14 @@ public sealed class UserManagementServiceTests
         var service = CreateService(database.Context);
         var actorUserId = Guid.NewGuid();
         await service.GetRolesAsync(CancellationToken.None);
+        var managedUser = await service.CreateUserAsync(
+            new CreateManagedUserRequest("operator@example.com", "Оператор", "StrongPass123", [SystemRoles.Operator]),
+            actorUserId,
+            CancellationToken.None);
+        Assert.True(managedUser.Succeeded);
         database.Context.AuditEvents.RemoveRange(database.Context.AuditEvents);
         await database.Context.SaveChangesAsync();
+        var oldSessionVersion = database.Context.Users.Single().SessionVersion;
 
         var result = await service.UpdateRolePermissionsAsync(
             SystemRoles.Operator,
@@ -47,6 +53,7 @@ public sealed class UserManagementServiceTests
         Assert.Equal([SystemPermissions.DictionariesRead, SystemPermissions.ReportsRead], result.Value.Permissions);
         var role = database.Context.Roles.Single(item => item.Code == SystemRoles.Operator);
         Assert.Equal([SystemPermissions.DictionariesRead, SystemPermissions.ReportsRead], role.Permissions.Order(StringComparer.Ordinal));
+        Assert.Equal(oldSessionVersion + 1, database.Context.Users.Single().SessionVersion);
         var auditEvent = Assert.Single(database.Context.AuditEvents, item => item.Action == "users.role_permissions_updated");
         Assert.Equal(actorUserId, auditEvent.ActorUserId);
         Assert.Equal("users", auditEvent.Section);
@@ -205,6 +212,7 @@ public sealed class UserManagementServiceTests
             null,
             CancellationToken.None);
         var oldHash = database.Context.Users.Single().PasswordHash;
+        var oldSessionVersion = database.Context.Users.Single().SessionVersion;
 
         var result = await service.UpdateUserAsync(
             created.Value!.Id,
@@ -216,6 +224,7 @@ public sealed class UserManagementServiceTests
         Assert.Equal("Бухгалтер", result.Value!.DisplayName);
         Assert.Contains(SystemRoles.Accountant, result.Value.Roles);
         Assert.NotEqual(oldHash, database.Context.Users.Single().PasswordHash);
+        Assert.Equal(oldSessionVersion + 1, database.Context.Users.Single().SessionVersion);
         var auditEvent = Assert.Single(database.Context.AuditEvents, item => item.Action == "users.user_updated");
         Assert.Equal("users", auditEvent.Section);
         Assert.Equal("update", auditEvent.ActionKind);
@@ -317,6 +326,7 @@ public sealed class UserManagementServiceTests
 
         Assert.True(result.Succeeded);
         Assert.False(result.Value!.IsActive);
+        Assert.Equal(2, database.Context.Users.Single().SessionVersion);
         var auditEvent = Assert.Single(database.Context.AuditEvents, item => item.Action == "users.user_updated");
         Assert.Equal(actorUserId, auditEvent.ActorUserId);
         Assert.Contains("Access no longer needed", auditEvent.Summary, StringComparison.Ordinal);
@@ -339,11 +349,13 @@ public sealed class UserManagementServiceTests
             null,
             CancellationToken.None);
         Assert.True(disabled.Succeeded);
+        var disabledSessionVersion = database.Context.Users.Single().SessionVersion;
 
         var result = await service.RestoreUserAsync(created.Value.Id, actorUserId, CancellationToken.None);
 
         Assert.True(result.Succeeded);
         Assert.True(result.Value!.IsActive);
+        Assert.Equal(disabledSessionVersion + 1, database.Context.Users.Single().SessionVersion);
         var auditEvent = Assert.Single(database.Context.AuditEvents, item => item.Action == "users.user_restored");
         Assert.Equal(actorUserId, auditEvent.ActorUserId);
         Assert.Equal("users", auditEvent.Section);

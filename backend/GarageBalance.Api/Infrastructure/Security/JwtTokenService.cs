@@ -19,7 +19,8 @@ public sealed class JwtTokenService(IOptions<JwtOptions> options) : ITokenServic
         {
             new(ClaimTypes.NameIdentifier, user.Id.ToString()),
             new(ClaimTypes.Email, user.Email),
-            new(ClaimTypes.Name, user.DisplayName)
+            new(ClaimTypes.Name, user.DisplayName),
+            new(JwtClaimNames.SessionVersion, user.SessionVersion.ToString(System.Globalization.CultureInfo.InvariantCulture))
         };
 
         claims.AddRange(roles.Select(role => new Claim(ClaimTypes.Role, role)));

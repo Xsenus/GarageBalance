@@ -68,7 +68,10 @@ public sealed class EfUserManagementRepository(GarageBalanceDbContext dbContext)
 
     public Task<AppRole?> FindRoleForUpdateAsync(string roleCode, CancellationToken cancellationToken)
     {
-        return dbContext.Roles.SingleOrDefaultAsync(role => role.Code == roleCode, cancellationToken);
+        return dbContext.Roles
+            .Include(role => role.UserRoles)
+            .ThenInclude(userRole => userRole.User)
+            .SingleOrDefaultAsync(role => role.Code == roleCode, cancellationToken);
     }
 
     public async Task<IReadOnlyList<Guid>> GetActiveAdministratorIdsAsync(CancellationToken cancellationToken)

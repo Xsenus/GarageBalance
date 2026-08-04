@@ -12,7 +12,7 @@ import {
   UsersRound,
   WalletCards,
 } from 'lucide-react'
-import type { AuthClient, AuthResponse, CurrentUserDto } from '../../services/authApi'
+import type { AuthClient, AuthResponse } from '../../services/authApi'
 import type { AuditClient } from '../../services/auditApi'
 import type { DictionaryClient } from '../../services/dictionariesApi'
 import type { FinanceClient } from '../../services/financeApi'
@@ -82,11 +82,10 @@ type AppShellProps = {
   releaseClient: ReleaseClient
   userClient: UserManagementClient
   settingsClient: ApplicationSettingsClient
-  onUserChanged: (user: CurrentUserDto) => void
   onLogout: () => void
 }
 
-export function AuthenticatedAppShell({ auth, authClient, auditClient, dictionaryClient, financeClient, fundsClient, importClient, integrationClient, reportClient, releaseClient, settingsClient, userClient, onUserChanged, onLogout }: AppShellProps) {
+export function AuthenticatedAppShell({ auth, authClient, auditClient, dictionaryClient, financeClient, fundsClient, importClient, integrationClient, reportClient, releaseClient, settingsClient, userClient, onLogout }: AppShellProps) {
   const [activeSection, setActiveSection] = useState<WorkspaceSection>('dashboard')
   const [auditPreset, setAuditPreset] = useState<AuditPanelPreset | null>(null)
   const [workspaceOpenContext, setWorkspaceOpenContext] = useState<WorkspaceOpenContext | null>(null)
@@ -165,7 +164,7 @@ export function AuthenticatedAppShell({ auth, authClient, auditClient, dictionar
       ) : null}
 
       <section className={workspaceClassName}>
-        <Workspace activeSection={effectiveActiveSection} auth={auth} authClient={authClient} auditClient={auditClient} auditPreset={auditPreset} workspaceOpenContext={workspaceOpenContext} dictionaryClient={dictionaryClient} financeClient={financeClient} fundsClient={fundsClient} importClient={importClient} integrationClient={integrationClient} reportClient={reportClient} releaseClient={releaseClient} settingsClient={settingsClient} userClient={userClient} onOpenAudit={openAuditWithPreset} onOpenSection={openWorkspaceSection} onUserChanged={onUserChanged} onLogout={onLogout} />
+        <Workspace activeSection={effectiveActiveSection} auth={auth} authClient={authClient} auditClient={auditClient} auditPreset={auditPreset} workspaceOpenContext={workspaceOpenContext} dictionaryClient={dictionaryClient} financeClient={financeClient} fundsClient={fundsClient} importClient={importClient} integrationClient={integrationClient} reportClient={reportClient} releaseClient={releaseClient} settingsClient={settingsClient} userClient={userClient} onOpenAudit={openAuditWithPreset} onOpenSection={openWorkspaceSection} onLogout={onLogout} />
       </section>
     </main>
   )
