@@ -23,7 +23,6 @@ import type { ReleaseClient } from '../../services/releasesApi'
 import type { ReportClient } from '../../services/reportsApi'
 import type { UserManagementClient } from '../../services/usersApi'
 import type { ApplicationSettingsClient } from '../../services/settingsApi'
-import { isAdministrator } from '../../shared/accessControl'
 import { canAccessWorkspaceSection } from '../../shared/workspaceNavigation'
 import type { AuditPanelPreset, WorkspaceOpenContext, WorkspaceSection } from '../../shared/workspaceNavigation'
 import { Workspace } from './Workspace'
@@ -96,7 +95,6 @@ export function AuthenticatedAppShell({ auth, authClient, auditClient, dictionar
     () => navigation.filter((item) => canAccessWorkspaceSection(auth, item.section)),
     [auth],
   )
-  const showSidebar = isAdministrator(auth)
   const sidebarModeClass = isSidebarExpanded ? 'app-shell--sidebar-expanded' : 'app-shell--sidebar-collapsed'
   const sidebarToggleLabel = isSidebarExpanded ? 'Свернуть панель' : 'Развернуть панель'
   const workspaceClassName = [
@@ -134,9 +132,8 @@ export function AuthenticatedAppShell({ auth, authClient, auditClient, dictionar
   }, [auth, openWorkspaceSection])
 
   return (
-    <main className={showSidebar ? `app-shell ${sidebarModeClass}` : 'app-shell app-shell--no-sidebar'}>
-      {showSidebar ? (
-        <aside className={isSidebarExpanded ? 'sidebar sidebar--expanded' : 'sidebar sidebar--collapsed'}>
+    <main className={`app-shell ${sidebarModeClass}`}>
+      <aside className={isSidebarExpanded ? 'sidebar sidebar--expanded' : 'sidebar sidebar--collapsed'}>
           <div className="brand">
             <div className="brand-mark">G</div>
             <div className="brand-text">
@@ -160,8 +157,7 @@ export function AuthenticatedAppShell({ auth, authClient, auditClient, dictionar
               )
             })}
           </nav>
-        </aside>
-      ) : null}
+      </aside>
 
       <section className={workspaceClassName}>
         <Workspace activeSection={effectiveActiveSection} auth={auth} authClient={authClient} auditClient={auditClient} auditPreset={auditPreset} workspaceOpenContext={workspaceOpenContext} dictionaryClient={dictionaryClient} financeClient={financeClient} fundsClient={fundsClient} importClient={importClient} integrationClient={integrationClient} reportClient={reportClient} releaseClient={releaseClient} settingsClient={settingsClient} userClient={userClient} onOpenAudit={openAuditWithPreset} onOpenSection={openWorkspaceSection} onLogout={onLogout} />

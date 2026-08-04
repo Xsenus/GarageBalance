@@ -9556,7 +9556,7 @@ describe('App', () => {
     expect(await screen.findByRole('button', { name: 'Свернуть панель' })).toBeInTheDocument()
   })
 
-  it('keeps the left sidebar exclusive to the administrator role', async () => {
+  it('builds the sidebar from permissions even when the user is not an administrator', async () => {
     const user = userEvent.setup()
     const nonAdministratorWithUserPermission = createAuthResponse({
       user: {
@@ -9572,8 +9572,35 @@ describe('App', () => {
     await user.click(screen.getByRole('button', { name: 'Войти' }))
 
     expect(await screen.findByRole('region', { name: 'Панель' })).toBeInTheDocument()
-    expect(screen.queryByRole('navigation', { name: 'Основные разделы' })).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Развернуть панель' })).not.toBeInTheDocument()
+    const navigation = screen.getByRole('navigation', { name: 'Основные разделы' })
+    expect(within(navigation).getByRole('button', { name: 'Пользователи' })).toBeInTheDocument()
+    expect(within(navigation).getByRole('button', { name: 'Справочники' })).toBeInTheDocument()
+    expect(within(navigation).queryByRole('button', { name: 'Платежи' })).not.toBeInTheDocument()
+    expect(within(navigation).queryByRole('button', { name: 'Отчёты' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Развернуть панель' })).toBeInTheDocument()
+  })
+
+  it('does not grant navigation sections from the administrator role name alone', async () => {
+    const user = userEvent.setup()
+    const administratorWithoutSectionPermissions = createAuthResponse({
+      user: {
+        email: 'limited-admin@example.com',
+        displayName: 'Ограниченный администратор',
+        roles: ['administrator'],
+        permissions: [],
+      },
+    })
+    render(<App authClient={createAuthClient({ login: async () => administratorWithoutSectionPermissions })} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+
+    const navigation = await screen.findByRole('navigation', { name: 'Основные разделы' })
+    expect(within(navigation).getAllByRole('button').map((button) => button.getAttribute('aria-label'))).toEqual([
+      'Главное меню',
+      'Что нового',
+      'Настройки',
+    ])
   })
 
   it('keeps shell navigation titles current state and icon-only actions in the rendered DOM', async () => {
@@ -11166,7 +11193,14 @@ describe('App', () => {
 
     expect(await screen.findByText('Оператор')).toBeInTheDocument()
     expect(await screen.findByRole('region', { name: 'Панель' })).toBeInTheDocument()
-    expect(screen.queryByRole('navigation', { name: 'Основные разделы' })).not.toBeInTheDocument()
+    const operatorNavigation = screen.getByRole('navigation', { name: 'Основные разделы' })
+    expect(within(operatorNavigation).getByRole('button', { name: 'Контрагенты' })).toBeEnabled()
+    expect(within(operatorNavigation).getByRole('button', { name: 'Платежи' })).toBeEnabled()
+    expect(within(operatorNavigation).getByRole('button', { name: 'Настройки' })).toBeEnabled()
+    expect(within(operatorNavigation).queryByRole('button', { name: 'Пользователи' })).not.toBeInTheDocument()
+    expect(within(operatorNavigation).queryByRole('button', { name: 'Отчёты' })).not.toBeInTheDocument()
+    expect(within(operatorNavigation).queryByRole('button', { name: 'Импорт' })).not.toBeInTheDocument()
+    expect(within(operatorNavigation).queryByRole('button', { name: 'История изменений' })).not.toBeInTheDocument()
     expect(screen.queryByText('Поиск по гаражу, владельцу или поставщику')).not.toBeInTheDocument()
     const operatorTiles = await screen.findByRole('group', { name: 'Главные разделы' })
     expect(within(operatorTiles).getByRole('button', { name: 'Контрагенты' })).toBeEnabled()
