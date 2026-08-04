@@ -1,5 +1,6 @@
 import { useState, type InputHTMLAttributes } from 'react'
 import { formatMoneyInput, formatMoneyTextInput, parseMoneyInput } from './moneyInputFormatting'
+import { wasEditableInputCommittedOnEnter } from './prototypeEditing'
 
 type MoneyInputProps = Omit<InputHTMLAttributes<HTMLInputElement>, 'type' | 'value' | 'onChange'> & {
   value: number
@@ -28,10 +29,12 @@ export function MoneyInput({ value, onValueChange, onBlur, onFocus, placeholder 
         onValueChange(parseMoneyInput(nextDraft))
       }}
       onBlur={(event) => {
-        const parsedValue = parseMoneyInput(draft)
-        setFocused(false)
-        setDraft(formatMoneyInput(parsedValue))
-        onValueChange(parsedValue)
+        if (!wasEditableInputCommittedOnEnter(event.currentTarget)) {
+          const parsedValue = parseMoneyInput(draft)
+          setFocused(false)
+          setDraft(formatMoneyInput(parsedValue))
+          onValueChange(parsedValue)
+        }
         onBlur?.(event)
       }}
     />
@@ -60,8 +63,10 @@ export function MoneyTextInput({ value, onValueChange, onBlur, onFocus, placehol
       }}
       onChange={(event) => onValueChange(event.target.value)}
       onBlur={(event) => {
-        onValueChange(formatMoneyTextInput(value))
-        setFocused(false)
+        if (!wasEditableInputCommittedOnEnter(event.currentTarget)) {
+          onValueChange(formatMoneyTextInput(value))
+          setFocused(false)
+        }
         onBlur?.(event)
       }}
     />

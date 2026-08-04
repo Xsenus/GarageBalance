@@ -11,7 +11,7 @@ import { SelectControl } from '../../shared/SelectControl'
 import { TablePagination } from '../../shared/TablePagination'
 import { getLocalDateInputValue } from '../../shared/formatters'
 import { useEscapeKey, useFocusOnOpen, useFocusTrap, useRestoreFocusOnClose } from '../../shared/focusHooks'
-import { formatPrototypeChangeValue, handleEditableInputKeyDown } from '../../shared/prototypeEditing'
+import { formatPrototypeChangeValue, handleEditableInputKeyDown, shouldCommitEditableInputOnBlur } from '../../shared/prototypeEditing'
 import { hasPermission, permissions } from '../../shared/accessControl'
 import { isFutureMeterReadingMonth } from './meterReadingPeriod'
 const meterReadingMonths = [
@@ -144,7 +144,9 @@ const MeterReadingsTable = memo(function MeterReadingsTable({
                     disabled={!yearIsValid || futureMonth || savingReadingKey === cellKey}
                     title={futureMonth ? 'Показания будущего месяца недоступны' : undefined}
                     value={draftReadings[cellKey] ?? savedReadings[cellKey] ?? ''}
-                    onBlur={() => onCommitReading(garage, month)}
+                    onBlur={(event) => {
+                      if (shouldCommitEditableInputOnBlur(event.currentTarget)) onCommitReading(garage, month)
+                    }}
                     onChange={(event) => onDraftReadingChange(cellKey, event.target.value)}
                     onKeyDown={(event) => handleEditableInputKeyDown(event, () => onCommitReading(garage, month))}
                   />

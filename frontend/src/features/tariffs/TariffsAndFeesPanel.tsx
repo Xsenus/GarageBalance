@@ -18,7 +18,7 @@ import { useEscapeKey, useFocusOnOpen, useFocusTrap, useRestoreFocusOnClose } fr
 import { LocalizedDatePicker } from '../../shared/LocalizedDatePicker'
 import { MeterReadingInput } from '../../shared/MeterReadingInput'
 import { MoneyTextInput } from '../../shared/MoneyInput'
-import { formatPrototypeChangeValue, handleEditableInputKeyDown } from '../../shared/prototypeEditing'
+import { formatPrototypeChangeValue, handleEditableInputKeyDown, shouldCommitEditableInputOnBlur } from '../../shared/prototypeEditing'
 import { createClientPage } from '../../shared/pagination'
 import { SelectControl } from '../../shared/SelectControl'
 import { TablePagination } from '../../shared/TablePagination'
@@ -2427,7 +2427,9 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
                               })
                               setTariffDrafts((drafts) => ({ ...drafts, [row.id]: { ...drafts[row.id], electricityUpperBoundText: event.target.value } }))
                             }}
-                            onBlur={() => void commitElectricityThresholdBound(row)}
+                            onBlur={(event) => {
+                              if (shouldCommitEditableInputOnBlur(event.currentTarget)) void commitElectricityThresholdBound(row)
+                            }}
                             onKeyDown={(event) => handleEditableInputKeyDown(event, () => commitElectricityThresholdBound(row))}
                           />
                         )}
@@ -2521,7 +2523,9 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
                         disabled={!canManageTariffs || isRowDisabled}
                         value={tariffDrafts[row.id]?.amount ?? ''}
                         onValueChange={(amount) => setTariffDrafts((drafts) => ({ ...drafts, [row.id]: { ...drafts[row.id], amount } }))}
-                        onBlur={() => void commitTariffTextChange(row, 'amount')}
+                        onBlur={(event) => {
+                          if (shouldCommitEditableInputOnBlur(event.currentTarget)) void commitTariffTextChange(row, 'amount')
+                        }}
                         onKeyDown={(event) => handleEditableInputKeyDown(event, () => commitTariffTextChange(row, 'amount'))}
                       />
                     ) : (
@@ -2532,7 +2536,9 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
                         inputMode="numeric"
                         value={tariffDrafts[row.id]?.amount ?? ''}
                         onChange={(event) => setTariffDrafts((drafts) => ({ ...drafts, [row.id]: { ...drafts[row.id], amount: event.target.value } }))}
-                        onBlur={() => void commitTariffTextChange(row, 'amount')}
+                        onBlur={(event) => {
+                          if (shouldCommitEditableInputOnBlur(event.currentTarget)) void commitTariffTextChange(row, 'amount')
+                        }}
                         onKeyDown={(event) => handleEditableInputKeyDown(event, () => commitTariffTextChange(row, 'amount'))}
                       />
                     )}
@@ -2546,7 +2552,9 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
                         inputMode="numeric"
                         value={tariffDrafts[overdueRow.id]?.amount ?? ''}
                         onChange={(event) => setTariffDrafts((drafts) => ({ ...drafts, [overdueRow.id]: { ...drafts[overdueRow.id], amount: event.target.value } }))}
-                        onBlur={() => void commitTariffTextChange(overdueRow, 'amount')}
+                        onBlur={(event) => {
+                          if (shouldCommitEditableInputOnBlur(event.currentTarget)) void commitTariffTextChange(overdueRow, 'amount')
+                        }}
                         onKeyDown={(event) => handleEditableInputKeyDown(event, () => commitTariffTextChange(overdueRow, 'amount'))}
                       />
                     ) : null}
@@ -2752,7 +2760,9 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
                         disabled={!canManageTariffs || !row.isActive || oneTimeSavingRowId === row.id}
                         value={oneTimeDrafts[row.id]?.amount ?? ''}
                         onValueChange={(amount) => setOneTimeDrafts((drafts) => ({ ...drafts, [row.id]: { ...drafts[row.id], amount } }))}
-                        onBlur={() => void commitOneTimeAmountChange(row)}
+                        onBlur={(event) => {
+                          if (shouldCommitEditableInputOnBlur(event.currentTarget)) void commitOneTimeAmountChange(row)
+                        }}
                         onKeyDown={(event) => handleEditableInputKeyDown(event, () => commitOneTimeAmountChange(row))}
                       />
                     )}

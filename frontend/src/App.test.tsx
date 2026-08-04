@@ -13459,7 +13459,7 @@ describe('App', () => {
 
     const startingBalanceHelp = within(editorDialog).getByLabelText('Справка: Стартовый баланс')
     expect(startingBalanceHelp).toHaveAttribute('tabindex', '0')
-    startingBalanceHelp.focus()
+    await act(() => startingBalanceHelp.focus())
     expect(startingBalanceHelp).toHaveFocus()
     const startingBalanceTooltip = within(editorDialog).getByRole('tooltip', { name: /Долг на начало учета/ })
     expect(startingBalanceHelp).toHaveAttribute('aria-describedby', startingBalanceTooltip.id)
