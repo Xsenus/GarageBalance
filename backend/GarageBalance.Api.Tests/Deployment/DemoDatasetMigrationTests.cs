@@ -162,7 +162,43 @@ public sealed class DemoDatasetMigrationTests
         Assert.Contains("Intentionally irreversible", migration, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void ProductionDeployment_DoesNotEnableDemoDataset()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        string[] productionFiles =
+        [
+            "docker-compose.yml",
+            ".github/workflows/deploy-staging.yml",
+            ".github/workflows/publish-docker-release.yml",
+            "infrastructure/deployment/garagebalance-staging.service",
+            "infrastructure/scripts/install-vps-performance-configuration.sh"
+        ];
+
+        foreach (var relativePath in productionFiles)
+        {
+            var fullPath = Path.Combine(repositoryRoot, relativePath.Replace('/', Path.DirectorySeparatorChar));
+            Assert.True(File.Exists(fullPath), $"Не найден deployment-файл {relativePath}.");
+            var source = File.ReadAllText(fullPath);
+            Assert.DoesNotContain("garagebalance.demo_seed_enabled", source, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("GARAGEBALANCE_DEMO_SEED", source, StringComparison.OrdinalIgnoreCase);
+        }
+    }
+
     private static string ReadMigration(string migrationFileName = MigrationFileName)
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        return File.ReadAllText(Path.Combine(
+            repositoryRoot,
+            "backend",
+            "GarageBalance.Api",
+            "Infrastructure",
+            "Data",
+            "Migrations",
+            migrationFileName));
+    }
+
+    private static string FindRepositoryRoot()
     {
         var directory = new DirectoryInfo(AppContext.BaseDirectory);
         while (directory is not null && !File.Exists(Path.Combine(directory.FullName, "GarageBalance.slnx")))
@@ -171,13 +207,6 @@ public sealed class DemoDatasetMigrationTests
         }
 
         Assert.NotNull(directory);
-        return File.ReadAllText(Path.Combine(
-            directory!.FullName,
-            "backend",
-            "GarageBalance.Api",
-            "Infrastructure",
-            "Data",
-            "Migrations",
-            migrationFileName));
+        return directory!.FullName;
     }
 }

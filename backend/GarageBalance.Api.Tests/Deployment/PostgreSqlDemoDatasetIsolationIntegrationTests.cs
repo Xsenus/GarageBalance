@@ -12,6 +12,36 @@ public sealed class PostgreSqlDemoDatasetIsolationIntegrationTests
     private const string MigrationId = "20260723002908_RemoveDemoDatasetFromWorkingDatabases";
 
     [PostgreSqlFact]
+    public async Task CleanProductionDatabase_ContainsNoCustomerOrFinancialDemoRows()
+    {
+        await using var database = await PostgreSqlTestDatabase.CreateAsync();
+        await using var context = database.CreateContext();
+
+        Assert.False(await context.Owners.AnyAsync());
+        Assert.False(await context.Garages.AnyAsync());
+        Assert.False(await context.SupplierGroups.AnyAsync());
+        Assert.False(await context.Suppliers.AnyAsync());
+        Assert.False(await context.SupplierContacts.AnyAsync());
+        Assert.False(await context.StaffDepartments.AnyAsync());
+        Assert.False(await context.StaffMembers.AnyAsync());
+        Assert.False(await context.MeterDevices.AnyAsync());
+        Assert.False(await context.MeterReadings.AnyAsync());
+        Assert.False(await context.FeeCampaigns.AnyAsync());
+        Assert.False(await context.FeeCampaignGarages.AnyAsync());
+        Assert.False(await context.Accruals.AnyAsync());
+        Assert.False(await context.AccrualPaymentAllocations.AnyAsync());
+        Assert.False(await context.SupplierAccruals.AnyAsync());
+        Assert.False(await context.StaffSalaryAdjustments.AnyAsync());
+        Assert.False(await context.FinancialOperations.AnyAsync());
+        Assert.False(await context.FundOperations.AnyAsync());
+        Assert.False(await context.CashBankTransfers.AnyAsync());
+        Assert.False(await context.CashBankBalanceOperations.AnyAsync());
+        Assert.False(await context.OpeningBalanceAdjustments.AnyAsync());
+        Assert.False(await context.GarageReportQuickLists.AnyAsync());
+        Assert.False(await context.GarageReportQuickListGarages.AnyAsync());
+    }
+
+    [PostgreSqlFact]
     public async Task CleanupMigration_RemovesSeedRowsAndPreservesCustomerAndManualRows()
     {
         await using var database = await PostgreSqlTestDatabase.CreateAsync();
