@@ -56,6 +56,10 @@ public sealed class EfTariffRepository(GarageBalanceDbContext dbContext) : ITari
             .Where(accrual => !accrual.IsCanceled && accrual.Source == AccrualSources.Regular && accrual.TariffId == id)
             .MinAsync(accrual => (DateOnly?)accrual.AccountingMonth, cancellationToken);
 
+    public Task<bool> HasActiveServiceAssignmentsAsync(Guid id, CancellationToken cancellationToken) =>
+        dbContext.ChargeServiceSettings.AsNoTracking()
+            .AnyAsync(setting => setting.TariffId == id && !setting.IsArchived, cancellationToken);
+
     public void Add(Tariff tariff) => dbContext.Tariffs.Add(tariff);
 
     private IQueryable<Tariff> ApplyFilters(string? normalizedSearch, bool includeArchived)

@@ -10,6 +10,7 @@ public interface ITariffRepository
     Task<Tariff?> FindArchivedAsync(Guid id, CancellationToken cancellationToken);
     Task<bool> ActiveDuplicateExistsAsync(Guid? ignoredId, string name, DateOnly effectiveFrom, CancellationToken cancellationToken);
     Task<DateOnly?> GetEarliestRegularAccrualMonthAsync(Guid id, CancellationToken cancellationToken);
+    Task<bool> HasActiveServiceAssignmentsAsync(Guid id, CancellationToken cancellationToken);
     void Add(Tariff tariff);
 }
 

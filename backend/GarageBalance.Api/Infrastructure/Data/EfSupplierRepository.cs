@@ -233,6 +233,16 @@ public sealed class EfSupplierRepository(GarageBalanceDbContext dbContext) : ISu
             cancellationToken);
     }
 
+    public Task<bool> HasActiveContactsAsync(Guid id, CancellationToken cancellationToken) =>
+        dbContext.SupplierContacts.AsNoTracking()
+            .AnyAsync(contact => contact.SupplierId == id && !contact.IsArchived, cancellationToken);
+
+    public Task<bool> HasActiveServiceAssignmentsAsync(Guid chargeServiceSettingId, CancellationToken cancellationToken) =>
+        dbContext.Suppliers.AsNoTracking()
+            .AnyAsync(
+                supplier => supplier.ChargeServiceSettingId == chargeServiceSettingId && !supplier.IsArchived,
+                cancellationToken);
+
     public void Add(Supplier supplier)
     {
         dbContext.Suppliers.Add(supplier);

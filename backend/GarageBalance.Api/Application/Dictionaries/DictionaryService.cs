@@ -195,6 +195,13 @@ public sealed class DictionaryService(
             return DictionaryResult<OwnerDto>.Failure("owner_not_found", "Владелец не найден.");
         }
 
+        if (await ownerRepository.HasActiveGaragesAsync(id, cancellationToken))
+        {
+            return DictionaryResult<OwnerDto>.Failure(
+                "owner_has_active_garages",
+                "Сначала архивируйте все гаражи этого владельца.");
+        }
+
         owner.IsArchived = true;
         owner.UpdatedAtUtc = DateTimeOffset.UtcNow;
 
@@ -589,6 +596,13 @@ public sealed class DictionaryService(
             return DictionaryResult<SupplierGroupDto>.Failure("supplier_group_system", "Системную группу поставщиков нельзя архивировать.");
         }
 
+        if (await supplierGroupRepository.HasActiveSuppliersAsync(id, cancellationToken))
+        {
+            return DictionaryResult<SupplierGroupDto>.Failure(
+                "supplier_group_has_active_suppliers",
+                "Сначала архивируйте всех поставщиков этой группы.");
+        }
+
         group.IsArchived = true;
         group.UpdatedAtUtc = DateTimeOffset.UtcNow;
 
@@ -817,6 +831,13 @@ public sealed class DictionaryService(
         if (supplier is null)
         {
             return DictionaryResult<SupplierDto>.Failure("supplier_not_found", "Поставщик не найден.");
+        }
+
+        if (await supplierRepository.HasActiveContactsAsync(id, cancellationToken))
+        {
+            return DictionaryResult<SupplierDto>.Failure(
+                "supplier_has_active_contacts",
+                "Сначала архивируйте все контакты этого поставщика.");
         }
 
         supplier.IsArchived = true;
@@ -1389,6 +1410,13 @@ public sealed class DictionaryService(
             return DictionaryResult<AccountingTypeDto>.Failure("income_type_system", "Системный вид поступления нельзя архивировать.");
         }
 
+        if (await incomeTypeRepository.HasActiveServiceAssignmentsAsync(id, cancellationToken))
+        {
+            return DictionaryResult<AccountingTypeDto>.Failure(
+                "income_type_has_active_services",
+                "Сначала назначьте услугам другой вид поступления или архивируйте эти услуги.");
+        }
+
         incomeType.IsArchived = true;
         incomeType.UpdatedAtUtc = DateTimeOffset.UtcNow;
 
@@ -1563,6 +1591,13 @@ public sealed class DictionaryService(
         if (expenseType.IsSystem)
         {
             return DictionaryResult<AccountingTypeDto>.Failure("expense_type_system", "Системную статью расхода нельзя архивировать.");
+        }
+
+        if (await expenseTypeRepository.HasActiveServiceAssignmentsAsync(id, cancellationToken))
+        {
+            return DictionaryResult<AccountingTypeDto>.Failure(
+                "expense_type_has_active_services",
+                "Сначала назначьте услугам другую статью расхода или архивируйте эти услуги.");
         }
 
         expenseType.IsArchived = true;
@@ -1792,6 +1827,13 @@ public sealed class DictionaryService(
         if (tariff is null)
         {
             return DictionaryResult<TariffDto>.Failure("tariff_not_found", "Тариф не найден.");
+        }
+
+        if (await tariffRepository.HasActiveServiceAssignmentsAsync(id, cancellationToken))
+        {
+            return DictionaryResult<TariffDto>.Failure(
+                "tariff_has_active_services",
+                "Сначала переведите на другой тариф или архивируйте все услуги с этим тарифом.");
         }
 
         tariff.IsArchived = true;
@@ -2250,6 +2292,13 @@ public sealed class DictionaryService(
         if (setting is null)
         {
             return DictionaryResult<ChargeServiceSettingDto>.Failure("charge_service_not_found", "Настройка услуги не найдена.");
+        }
+
+        if (await supplierRepository.HasActiveServiceAssignmentsAsync(id, cancellationToken))
+        {
+            return DictionaryResult<ChargeServiceSettingDto>.Failure(
+                "charge_service_has_active_suppliers",
+                "Сначала назначьте активным поставщикам другую услугу или архивируйте этих поставщиков.");
         }
 
         setting.IsArchived = true;

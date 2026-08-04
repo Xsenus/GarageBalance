@@ -14,6 +14,8 @@ public interface ISupplierRepository
     Task<SupplierOpeningBalanceData?> GetOpeningBalanceAsync(Guid id, DateOnly monthFrom, CancellationToken cancellationToken);
     Task<IReadOnlyDictionary<Guid, decimal>> GetDebtTotalsAsync(IReadOnlyCollection<Guid> ids, CancellationToken cancellationToken);
     Task<bool> ActiveDuplicateExistsAsync(Guid? ignoredId, Guid groupId, string name, CancellationToken cancellationToken);
+    Task<bool> HasActiveContactsAsync(Guid id, CancellationToken cancellationToken);
+    Task<bool> HasActiveServiceAssignmentsAsync(Guid chargeServiceSettingId, CancellationToken cancellationToken);
     void Add(Supplier supplier);
 }
 

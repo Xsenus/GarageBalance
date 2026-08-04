@@ -52,6 +52,9 @@ public sealed class EfOwnerRepository(GarageBalanceDbContext dbContext) : IOwner
             .SingleOrDefaultAsync(owner => owner.Id == id && owner.IsArchived, cancellationToken);
     }
 
+    public Task<bool> HasActiveGaragesAsync(Guid id, CancellationToken cancellationToken) =>
+        dbContext.Garages.AsNoTracking().AnyAsync(garage => garage.OwnerId == id && !garage.IsArchived, cancellationToken);
+
     public void Add(Owner owner)
     {
         dbContext.Owners.Add(owner);

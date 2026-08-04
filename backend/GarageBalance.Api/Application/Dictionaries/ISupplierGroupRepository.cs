@@ -9,6 +9,7 @@ public interface ISupplierGroupRepository
     Task<bool> ActiveDuplicateExistsAsync(Guid? ignoredId, string name, CancellationToken cancellationToken);
     Task<SupplierGroup?> FindActiveAsync(Guid id, CancellationToken cancellationToken);
     Task<SupplierGroup?> FindArchivedAsync(Guid id, CancellationToken cancellationToken);
+    Task<bool> HasActiveSuppliersAsync(Guid id, CancellationToken cancellationToken);
     void Add(SupplierGroup group);
 }
 

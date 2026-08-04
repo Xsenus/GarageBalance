@@ -67,6 +67,9 @@ public sealed class EfSupplierGroupRepository(GarageBalanceDbContext dbContext) 
         return dbContext.SupplierGroups.SingleOrDefaultAsync(group => group.Id == id && group.IsArchived, cancellationToken);
     }
 
+    public Task<bool> HasActiveSuppliersAsync(Guid id, CancellationToken cancellationToken) =>
+        dbContext.Suppliers.AsNoTracking().AnyAsync(supplier => supplier.GroupId == id && !supplier.IsArchived, cancellationToken);
+
     public void Add(SupplierGroup group)
     {
         dbContext.SupplierGroups.Add(group);

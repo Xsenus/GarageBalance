@@ -243,6 +243,128 @@ public sealed class DictionaryServiceTests
     }
 
     [Fact]
+    public async Task ArchiveOwnerAsync_RejectsOwnerWithActiveGarage()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = DictionaryServiceTestFactory.Create(database.Context);
+        var owner = await service.CreateOwnerAsync(new UpsertOwnerRequest("Иванов", "Иван", null, null, null, null), null, CancellationToken.None);
+        await service.CreateGarageAsync(new UpsertGarageRequest("12", 1, 1, owner.Value!.Id, 0, null, null, null), null, CancellationToken.None);
+
+        var result = await service.ArchiveOwnerAsync(owner.Value.Id, "Карточка больше не используется", null, CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Equal("owner_has_active_garages", result.ErrorCode);
+        Assert.False(database.Context.Owners.Single().IsArchived);
+        Assert.DoesNotContain(database.Context.AuditEvents, item => item.Action == "dictionary.owner_archived");
+    }
+
+    [Fact]
+    public async Task ArchiveSupplierGroupAsync_RejectsGroupWithActiveSupplier()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = DictionaryServiceTestFactory.Create(database.Context);
+        var group = await service.CreateSupplierGroupAsync(new UpsertSupplierGroupRequest("Коммунальные услуги"), null, CancellationToken.None);
+        await service.CreateSupplierAsync(new UpsertSupplierRequest("Водоканал", group.Value!.Id, null, null, null, null, null, 0, null), null, CancellationToken.None);
+
+        var result = await service.ArchiveSupplierGroupAsync(group.Value.Id, "Группа больше не используется", null, CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Equal("supplier_group_has_active_suppliers", result.ErrorCode);
+        Assert.False(database.Context.SupplierGroups.Single().IsArchived);
+        Assert.DoesNotContain(database.Context.AuditEvents, item => item.Action == "dictionary.supplier_group_archived");
+    }
+
+    [Fact]
+    public async Task ArchiveSupplierAsync_RejectsSupplierWithActiveContact()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = DictionaryServiceTestFactory.Create(database.Context);
+        var group = await service.CreateSupplierGroupAsync(new UpsertSupplierGroupRequest("Коммунальные услуги"), null, CancellationToken.None);
+        var supplier = await service.CreateSupplierAsync(new UpsertSupplierRequest("Водоканал", group.Value!.Id, null, null, null, null, null, 0, null), null, CancellationToken.None);
+        await service.CreateSupplierContactAsync(
+            new UpsertSupplierContactRequest(supplier.Value!.Id, "Петров Петр", null, null, null, "Работает", null),
+            null,
+            CancellationToken.None);
+
+        var result = await service.ArchiveSupplierAsync(supplier.Value.Id, "Поставщик больше не используется", null, CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Equal("supplier_has_active_contacts", result.ErrorCode);
+        Assert.False(database.Context.Suppliers.Single().IsArchived);
+        Assert.DoesNotContain(database.Context.AuditEvents, item => item.Action == "dictionary.supplier_archived");
+    }
+
+    [Fact]
+    public async Task ArchiveTariffAsync_RejectsTariffAssignedToActiveService()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = DictionaryServiceTestFactory.Create(database.Context);
+        var tariff = await service.CreateTariffAsync(new UpsertTariffRequest("Вода", "meter_water", 10, new DateOnly(2026, 1, 1), null), null, CancellationToken.None);
+        database.Context.ChargeServiceSettings.Add(new ChargeServiceSetting { Name = "Водоснабжение", TariffId = tariff.Value!.Id });
+        await database.Context.SaveChangesAsync();
+
+        var result = await service.ArchiveTariffAsync(tariff.Value.Id, "Тариф больше не используется", null, CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Equal("tariff_has_active_services", result.ErrorCode);
+        Assert.False(database.Context.Tariffs.Single().IsArchived);
+        Assert.DoesNotContain(database.Context.AuditEvents, item => item.Action == "dictionary.tariff_archived");
+    }
+
+    [Fact]
+    public async Task ArchiveIncomeTypeAsync_RejectsTypeAssignedToActiveService()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = DictionaryServiceTestFactory.Create(database.Context);
+        var incomeType = await service.CreateIncomeTypeAsync(new UpsertAccountingTypeRequest("Дополнительный взнос", "additional_fee"), null, CancellationToken.None);
+        database.Context.ChargeServiceSettings.Add(new ChargeServiceSetting { Name = "Дополнительная услуга", IncomeTypeId = incomeType.Value!.Id });
+        await database.Context.SaveChangesAsync();
+
+        var result = await service.ArchiveIncomeTypeAsync(incomeType.Value.Id, "Вид больше не используется", null, CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Equal("income_type_has_active_services", result.ErrorCode);
+        Assert.False(database.Context.IncomeTypes.Single().IsArchived);
+        Assert.DoesNotContain(database.Context.AuditEvents, item => item.Action == "dictionary.income_type_archived");
+    }
+
+    [Fact]
+    public async Task ArchiveExpenseTypeAsync_RejectsTypeAssignedToActiveService()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = DictionaryServiceTestFactory.Create(database.Context);
+        var expenseType = await service.CreateExpenseTypeAsync(new UpsertAccountingTypeRequest("Дополнительный расход", "additional_expense"), null, CancellationToken.None);
+        database.Context.ChargeServiceSettings.Add(new ChargeServiceSetting { Name = "Дополнительная услуга", ExpenseTypeId = expenseType.Value!.Id });
+        await database.Context.SaveChangesAsync();
+
+        var result = await service.ArchiveExpenseTypeAsync(expenseType.Value.Id, "Статья больше не используется", null, CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Equal("expense_type_has_active_services", result.ErrorCode);
+        Assert.False(database.Context.ExpenseTypes.Single().IsArchived);
+        Assert.DoesNotContain(database.Context.AuditEvents, item => item.Action == "dictionary.expense_type_archived");
+    }
+
+    [Fact]
+    public async Task ArchiveChargeServiceSettingAsync_RejectsServiceAssignedToActiveSupplier()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = DictionaryServiceTestFactory.Create(database.Context);
+        var group = await service.CreateSupplierGroupAsync(new UpsertSupplierGroupRequest("Коммунальные услуги"), null, CancellationToken.None);
+        var setting = new ChargeServiceSetting { Name = "Водоснабжение" };
+        database.Context.ChargeServiceSettings.Add(setting);
+        database.Context.Suppliers.Add(new Supplier { Name = "Водоканал", GroupId = group.Value!.Id, ChargeServiceSettingId = setting.Id });
+        await database.Context.SaveChangesAsync();
+
+        var result = await service.ArchiveChargeServiceSettingAsync(setting.Id, "Услуга больше не используется", null, CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Equal("charge_service_has_active_suppliers", result.ErrorCode);
+        Assert.False(database.Context.ChargeServiceSettings.Single().IsArchived);
+        Assert.DoesNotContain(database.Context.AuditEvents, item => item.Action == "dictionary.charge_service_archived");
+    }
+
+    [Fact]
     public async Task ListMethods_ReturnArchivedRecordsOnlyWhenRequested()
     {
         await using var database = await TestDatabase.CreateAsync();
@@ -1190,7 +1312,11 @@ public sealed class DictionaryServiceTests
             new UpsertSupplierRequest("Существующий поставщик", group.Value!.Id, null, null, null, null, null, 0, null, archived.Value!.Id),
             null,
             CancellationToken.None);
-        await service.ArchiveChargeServiceSettingAsync(archived.Value!.Id, "Услуга больше не используется", null, CancellationToken.None);
+        var blockedArchive = await service.ArchiveChargeServiceSettingAsync(archived.Value!.Id, "Услуга больше не используется", null, CancellationToken.None);
+        Assert.False(blockedArchive.Succeeded);
+        Assert.Equal("charge_service_has_active_suppliers", blockedArchive.ErrorCode);
+        await service.ArchiveSupplierAsync(existingSupplier.Value!.Id, "Поставщик больше не используется", null, CancellationToken.None);
+        Assert.True((await service.ArchiveChargeServiceSettingAsync(archived.Value.Id, "Услуга больше не используется", null, CancellationToken.None)).Succeeded);
 
         var missingResult = await service.CreateSupplierAsync(
             new UpsertSupplierRequest("Первый поставщик", group.Value!.Id, null, null, null, null, null, 0, null, Guid.NewGuid()),
@@ -1200,19 +1326,10 @@ public sealed class DictionaryServiceTests
             new UpsertSupplierRequest("Второй поставщик", group.Value.Id, null, null, null, null, null, 0, null, archived.Value.Id),
             null,
             CancellationToken.None);
-        var existingSupplierUpdate = await service.UpdateSupplierAsync(
-            existingSupplier.Value!.Id,
-            new UpsertSupplierRequest(existingSupplier.Value.Name, group.Value.Id, null, null, null, "+7 900 000-00-00", null, 0, null, archived.Value.Id),
-            null,
-            CancellationToken.None);
-
         Assert.False(missingResult.Succeeded);
         Assert.Equal("charge_service_not_found", missingResult.ErrorCode);
         Assert.False(archivedResult.Succeeded);
         Assert.Equal("charge_service_not_found", archivedResult.ErrorCode);
-        Assert.True(existingSupplierUpdate.Succeeded);
-        Assert.Equal(archived.Value.Id, existingSupplierUpdate.Value!.ChargeServiceSettingId);
-        Assert.Equal("+7 (900) 000-00-00", existingSupplierUpdate.Value.Phone);
     }
 
     [Fact]

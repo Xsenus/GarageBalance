@@ -334,6 +334,48 @@ public sealed class DictionariesControllerTests
         Assert.Equal("irregular_payment_used", problem.Title);
     }
 
+    [Theory]
+    [InlineData("owner", "owner_has_active_garages")]
+    [InlineData("supplierGroup", "supplier_group_has_active_suppliers")]
+    [InlineData("supplier", "supplier_has_active_contacts")]
+    [InlineData("incomeType", "income_type_has_active_services")]
+    [InlineData("expenseType", "expense_type_has_active_services")]
+    [InlineData("tariff", "tariff_has_active_services")]
+    [InlineData("chargeService", "charge_service_has_active_suppliers")]
+    public async Task ArchiveParentDictionaries_ReturnConflictForActiveDependencies(string operation, string errorCode)
+    {
+        var service = operation switch
+        {
+            "owner" => new FakeDictionaryService { ArchiveOwnerResult = DictionaryResult<OwnerDto>.Failure(errorCode, "Есть активные зависимости.") },
+            "supplierGroup" => new FakeDictionaryService { SupplierGroupMutationResult = DictionaryResult<SupplierGroupDto>.Failure(errorCode, "Есть активные зависимости.") },
+            "supplier" => new FakeDictionaryService { ArchiveSupplierResult = DictionaryResult<SupplierDto>.Failure(errorCode, "Есть активные зависимости.") },
+            "incomeType" => new FakeDictionaryService { ArchiveIncomeTypeResult = DictionaryResult<AccountingTypeDto>.Failure(errorCode, "Есть активные зависимости.") },
+            "expenseType" => new FakeDictionaryService { ExpenseTypeMutationResult = DictionaryResult<AccountingTypeDto>.Failure(errorCode, "Есть активные зависимости.") },
+            "tariff" => new FakeDictionaryService { TariffMutationResult = DictionaryResult<TariffDto>.Failure(errorCode, "Есть активные зависимости.") },
+            "chargeService" => new FakeDictionaryService { ArchiveChargeServiceSettingResult = DictionaryResult<ChargeServiceSettingDto>.Failure(errorCode, "Есть активные зависимости.") },
+            _ => throw new ArgumentOutOfRangeException(nameof(operation), operation, "Unsupported archive operation.")
+        };
+        var controller = CreateController(service);
+        var id = Guid.NewGuid();
+
+        var result = operation switch
+        {
+            "owner" => await controller.ArchiveOwner(id, new ArchiveDictionaryEntryRequest("Причина"), CancellationToken.None),
+            "supplierGroup" => await controller.ArchiveSupplierGroup(id, new ArchiveDictionaryEntryRequest("Причина"), CancellationToken.None),
+            "supplier" => await controller.ArchiveSupplier(id, new ArchiveDictionaryEntryRequest("Причина"), CancellationToken.None),
+            "incomeType" => await controller.ArchiveIncomeType(id, new ArchiveDictionaryEntryRequest("Причина"), CancellationToken.None),
+            "expenseType" => await controller.ArchiveExpenseType(id, new ArchiveDictionaryEntryRequest("Причина"), CancellationToken.None),
+            "tariff" => await controller.ArchiveTariff(id, new ArchiveDictionaryEntryRequest("Причина"), CancellationToken.None),
+            "chargeService" => await controller.ArchiveChargeServiceSetting(id, new ArchiveDictionaryEntryRequest("Причина"), CancellationToken.None),
+            _ => throw new ArgumentOutOfRangeException(nameof(operation), operation, "Unsupported archive operation.")
+        };
+
+        var conflict = Assert.IsType<ConflictObjectResult>(result);
+        var problem = Assert.IsType<ProblemDetails>(conflict.Value);
+        Assert.Equal(errorCode, problem.Title);
+        Assert.Equal(StatusCodes.Status409Conflict, problem.Status);
+    }
+
     [Fact]
     public async Task ArchiveIrregularPayment_ReturnsNoContentAndPassesActorUserId()
     {

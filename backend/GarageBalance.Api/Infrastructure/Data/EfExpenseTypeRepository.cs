@@ -72,6 +72,10 @@ public sealed class EfExpenseTypeRepository(GarageBalanceDbContext dbContext) : 
             item => !item.IsArchived && item.Code == normalizedCode && (!ignoredId.HasValue || item.Id != ignoredId.Value),
             cancellationToken);
 
+    public Task<bool> HasActiveServiceAssignmentsAsync(Guid id, CancellationToken cancellationToken) =>
+        dbContext.ChargeServiceSettings.AsNoTracking()
+            .AnyAsync(setting => setting.ExpenseTypeId == id && !setting.IsArchived, cancellationToken);
+
     public void Add(ExpenseType expenseType) => dbContext.ExpenseTypes.Add(expenseType);
 
     private IQueryable<ExpenseType> ApplyArchiveFilter(bool includeArchived) =>
