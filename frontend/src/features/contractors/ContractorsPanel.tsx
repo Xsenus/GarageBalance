@@ -808,6 +808,8 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
   const [sectionReloadRevision, setSectionReloadRevision] = useState(0)
   const [modal, setModal] = useState<ContractorModal | null>(null)
   const [restoreTarget, setRestoreTarget] = useState<ContractorRestoreTarget | null>(null)
+  const [confirmationSaving, setConfirmationSaving] = useState(false)
+  const [confirmationError, setConfirmationError] = useState<string | null>(null)
   const [openingBalanceAdjustmentTarget, setOpeningBalanceAdjustmentTarget] = useState<OpeningBalanceAdjustmentTarget | null>(null)
   const [garageColumnWidths, setGarageColumnWidths] = useState(loadGarageColumnWidths)
   const [supplierColumnWidths, setSupplierColumnWidths] = useState(() => loadContractorColumnWidths(contractorSupplierColumnStorageKey, contractorSupplierColumnDefinitions))
@@ -872,7 +874,7 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
   const employeeDeleteCancelRef = useFocusOnOpen<HTMLButtonElement>(Boolean(employeeDeleteTarget))
   const departmentDeleteDialogRef = useFocusTrap<HTMLElement>(Boolean(departmentDeleteTarget))
   const departmentDeleteCancelRef = useFocusOnOpen<HTMLButtonElement>(Boolean(departmentDeleteTarget))
-  useEscapeKey(Boolean(restoreTarget), () => setRestoreTarget(null))
+  useEscapeKey(Boolean(restoreTarget) && !confirmationSaving, () => closeRestoreDialog())
   useEscapeKey(Boolean(garageContextMenu), () => setGarageContextMenu(null))
   useEscapeKey(Boolean(garageDeleteTarget), () => closeGarageDeleteDialog())
   useEscapeKey(Boolean(garageFinancialReportTarget), () => closeGarageFinancialReport())
@@ -1329,14 +1331,9 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
     }
   }
 
-  const deleteGarage = async (garage: ContractorGarageRow, reason = 'Гараж удален из таблицы контрагентов.') => {
-    try {
-      if (isBackendDictionaryId(garage.id)) {
-        await dictionaryClient.archiveGarage(auth.accessToken, garage.id, reason)
-      }
-    } catch (error) {
-      setFormStateError(error instanceof Error ? error.message : 'Не удалось удалить гараж.')
-      return
+  const deleteGarage = async (garage: ContractorGarageRow, reason: string) => {
+    if (isBackendDictionaryId(garage.id)) {
+      await dictionaryClient.archiveGarage(auth.accessToken, garage.id, reason)
     }
 
     setGarages((currentGarages) => currentGarages.map((item) => (item.id === garage.id ? { ...item, isDeleted: true } : item)))
@@ -1356,24 +1353,49 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
     setGarageContextMenu(null)
     setGarageDeleteTarget(row)
     setGarageDeleteReason('')
+    setConfirmationError(null)
   }
 
   function closeGarageDeleteDialog() {
+    if (confirmationSaving) {
+      return
+    }
     setGarageDeleteTarget(null)
     setGarageDeleteReason('')
+    setConfirmationError(null)
   }
 
-  function confirmGarageDeleteFromTable() {
+  async function runConfirmation(action: () => Promise<void>, onSuccess: () => void, fallbackError: string) {
+    setConfirmationSaving(true)
+    setConfirmationError(null)
+    try {
+      await action()
+      onSuccess()
+    } catch (error) {
+      setConfirmationError(error instanceof Error ? error.message : fallbackError)
+    } finally {
+      setConfirmationSaving(false)
+    }
+  }
+
+  async function confirmGarageDeleteFromTable() {
     if (!garageDeleteTarget || !garageDeleteReason.trim()) {
       return
     }
 
-    void deleteGarage(garageDeleteTarget, garageDeleteReason.trim())
-    closeGarageDeleteDialog()
+    await runConfirmation(
+      () => deleteGarage(garageDeleteTarget, garageDeleteReason.trim()),
+      () => {
+      setGarageDeleteTarget(null)
+      setGarageDeleteReason('')
+      },
+      'Не удалось удалить гараж.',
+    )
   }
 
   function restoreGarage(row: ContractorGarageRow) {
     setGarageContextMenu(null)
+    setConfirmationError(null)
     setRestoreTarget({ type: 'garage', item: row })
   }
 
@@ -1624,14 +1646,9 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
     }
   }
 
-  const deleteSupplier = async (supplier: ContractorSupplierRow, reason = 'Поставщик удален из таблицы контрагентов.') => {
-    try {
-      if (isBackendDictionaryId(supplier.id)) {
-        await dictionaryClient.archiveSupplier(auth.accessToken, supplier.id, reason)
-      }
-    } catch (error) {
-      setFormStateError(error instanceof Error ? error.message : 'Не удалось удалить поставщика.')
-      return
+  const deleteSupplier = async (supplier: ContractorSupplierRow, reason: string) => {
+    if (isBackendDictionaryId(supplier.id)) {
+      await dictionaryClient.archiveSupplier(auth.accessToken, supplier.id, reason)
     }
 
     setSuppliers((currentSuppliers) => currentSuppliers.map((item) => (item.id === supplier.id ? { ...item, isDeleted: true } : item)))
@@ -1646,24 +1663,33 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
     setSupplierContextMenu(null)
     setSupplierDeleteTarget(row)
     setSupplierDeleteReason('')
+    setConfirmationError(null)
   }
 
   function closeSupplierDeleteDialog() {
+    if (confirmationSaving) {
+      return
+    }
     setSupplierDeleteTarget(null)
     setSupplierDeleteReason('')
+    setConfirmationError(null)
   }
 
-  function confirmSupplierDeleteFromTable() {
+  async function confirmSupplierDeleteFromTable() {
     if (!supplierDeleteTarget || !supplierDeleteReason.trim()) {
       return
     }
 
-    void deleteSupplier(supplierDeleteTarget, supplierDeleteReason.trim())
-    closeSupplierDeleteDialog()
+    await runConfirmation(
+      () => deleteSupplier(supplierDeleteTarget, supplierDeleteReason.trim()),
+      () => { setSupplierDeleteTarget(null); setSupplierDeleteReason('') },
+      'Не удалось удалить поставщика.',
+    )
   }
 
   function restoreSupplier(row: ContractorSupplierRow) {
     setSupplierContextMenu(null)
+    setConfirmationError(null)
     setRestoreTarget({ type: 'supplier', item: row })
   }
 
@@ -1709,27 +1735,17 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
     }
   }
 
-  const deleteEmployee = async (employee: ContractorStaffRow, reason = 'Сотрудник удален из таблицы контрагентов.') => {
-    try {
-      if (isBackendDictionaryId(employee.id)) {
-        await dictionaryClient.archiveStaffMember(auth.accessToken, employee.id, reason)
-      }
-    } catch (error) {
-      setFormStateError(error instanceof Error ? error.message : 'Не удалось удалить сотрудника.')
-      return
+  const deleteEmployee = async (employee: ContractorStaffRow, reason: string) => {
+    if (isBackendDictionaryId(employee.id)) {
+      await dictionaryClient.archiveStaffMember(auth.accessToken, employee.id, reason)
     }
 
     setStaff((currentStaff) => currentStaff.map((item) => (item.id === employee.id ? { ...item, isDeleted: true } : item)))
   }
 
-  const deleteDepartment = async (department: ContractorDepartmentRow, reason = 'Отдел удален из таблицы контрагентов.') => {
-    try {
-      if (isBackendDictionaryId(department.id)) {
-        await dictionaryClient.archiveStaffDepartment(auth.accessToken, department.id, reason)
-      }
-    } catch (error) {
-      setFormStateError(error instanceof Error ? error.message : 'Не удалось удалить отдел.')
-      return
+  const deleteDepartment = async (department: ContractorDepartmentRow, reason: string) => {
+    if (isBackendDictionaryId(department.id)) {
+      await dictionaryClient.archiveStaffDepartment(auth.accessToken, department.id, reason)
     }
 
     setDepartments((currentDepartments) => currentDepartments.map((item) => (item.id === department.id ? { ...item, isDeleted: true } : item)))
@@ -1749,49 +1765,67 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
     setEmployeeContextMenu(null)
     setEmployeeDeleteTarget(row)
     setEmployeeDeleteReason('')
+    setConfirmationError(null)
   }
 
   function closeEmployeeDeleteDialog() {
+    if (confirmationSaving) {
+      return
+    }
     setEmployeeDeleteTarget(null)
     setEmployeeDeleteReason('')
+    setConfirmationError(null)
   }
 
-  function confirmEmployeeDeleteFromTable() {
+  async function confirmEmployeeDeleteFromTable() {
     if (!employeeDeleteTarget || !employeeDeleteReason.trim()) {
       return
     }
 
-    void deleteEmployee(employeeDeleteTarget, employeeDeleteReason.trim())
-    closeEmployeeDeleteDialog()
+    await runConfirmation(
+      () => deleteEmployee(employeeDeleteTarget, employeeDeleteReason.trim()),
+      () => { setEmployeeDeleteTarget(null); setEmployeeDeleteReason('') },
+      'Не удалось удалить сотрудника.',
+    )
   }
 
   function openDepartmentDeleteDialog(row: ContractorDepartmentRow) {
     setDepartmentContextMenu(null)
     setDepartmentDeleteTarget(row)
     setDepartmentDeleteReason('')
+    setConfirmationError(null)
   }
 
   function closeDepartmentDeleteDialog() {
+    if (confirmationSaving) {
+      return
+    }
     setDepartmentDeleteTarget(null)
     setDepartmentDeleteReason('')
+    setConfirmationError(null)
   }
 
-  function confirmDepartmentDeleteFromTable() {
+  async function confirmDepartmentDeleteFromTable() {
     if (!departmentDeleteTarget || !departmentDeleteReason.trim()) {
       return
     }
 
-    void deleteDepartment(departmentDeleteTarget, departmentDeleteReason.trim())
-    closeDepartmentDeleteDialog()
+    await runConfirmation(
+      () => deleteDepartment(departmentDeleteTarget, departmentDeleteReason.trim()),
+      () => { setDepartmentDeleteTarget(null); setDepartmentDeleteReason('') },
+      'Не удалось удалить отдел.',
+    )
   }
 
   function restoreEmployee(row: ContractorStaffRow) {
     setEmployeeContextMenu(null)
+    setConfirmationError(null)
     setRestoreTarget({ type: 'employee', item: row })
   }
 
   function restoreDepartment(row: ContractorDepartmentRow) {
     setDepartmentContextMenu(null)
+    setConfirmationError(null)
     setRestoreTarget({ type: 'department', item: row })
   }
 
@@ -1814,6 +1848,8 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
       return
     }
 
+    setConfirmationSaving(true)
+    setConfirmationError(null)
     try {
       if (restoreTarget.type === 'garage') {
         if (isBackendDictionaryId(restoreTarget.item.id)) {
@@ -1853,11 +1889,21 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
         setStaff((currentStaff) => currentStaff.map((item) => (item.id === restoreTarget.item.id ? { ...item, isDeleted: false } : item)))
       }
     } catch (error) {
-      setFormStateError(error instanceof Error ? error.message : 'Не удалось восстановить запись.')
+      setConfirmationError(error instanceof Error ? error.message : 'Не удалось восстановить запись.')
+      setConfirmationSaving(false)
       return
     }
 
     setRestoreTarget(null)
+    setConfirmationSaving(false)
+  }
+
+  function closeRestoreDialog() {
+    if (confirmationSaving) {
+      return
+    }
+    setRestoreTarget(null)
+    setConfirmationError(null)
   }
 
   const saveDepartment = async (department: ContractorDepartmentRow) => {
@@ -2757,7 +2803,7 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
       ) : null}
 
       {restoreTarget ? (
-        <div className="modal-backdrop" role="presentation" onMouseDown={() => setRestoreTarget(null)}>
+        <div className="modal-backdrop" role="presentation" onMouseDown={closeRestoreDialog}>
           <section ref={restoreDialogRef} className="detail-dialog contractors-dialog" role="dialog" aria-modal="true" aria-labelledby="contractor-restore-title" aria-describedby="contractor-restore-description" onMouseDown={(event) => event.stopPropagation()}>
             <div className="detail-dialog-header">
               <div>
@@ -2765,15 +2811,16 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
                 <h3 id="contractor-restore-title">Вернуть запись?</h3>
                 <p>{getContractorRestoreTitle(restoreTarget)}</p>
               </div>
-              <button className="icon-button" type="button" aria-label="Закрыть подтверждение восстановления контрагента" onClick={() => setRestoreTarget(null)}>
+              <button className="icon-button" type="button" aria-label="Закрыть подтверждение восстановления контрагента" disabled={confirmationSaving} onClick={closeRestoreDialog}>
                 <X size={18} />
               </button>
             </div>
             <p className="confirmation-text" id="contractor-restore-description">Запись снова появится как активная в рабочем списке. Действие записывается в историю изменений.</p>
+            {confirmationError ? <FormError>{confirmationError}</FormError> : null}
             <div className="detail-dialog-actions contractors-dialog-actions">
-              <button ref={restoreCancelRef} className="ghost-button" type="button" onClick={() => setRestoreTarget(null)}>Отмена</button>
-              <button className="secondary-button" type="button" onClick={confirmRestore}>
-                <RotateCcw size={16} />
+              <button ref={restoreCancelRef} className="ghost-button" type="button" disabled={confirmationSaving} onClick={closeRestoreDialog}>Отмена</button>
+              <button className="secondary-button" type="button" aria-busy={confirmationSaving} disabled={confirmationSaving} onClick={() => void confirmRestore()}>
+                {confirmationSaving ? <LoaderCircle className="financial-report-button__spinner" size={16} aria-hidden="true" /> : <RotateCcw size={16} />}
                 <span>Вернуть запись</span>
               </button>
             </div>
@@ -2790,7 +2837,7 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
                 <h3 id="garage-table-delete-title">Удалить гараж?</h3>
                 <p>{`Гараж ${garageDeleteTarget.number || 'без номера'}`}</p>
               </div>
-              <button className="icon-button" type="button" aria-label="Закрыть подтверждение удаления гаража" onClick={closeGarageDeleteDialog}>
+              <button className="icon-button" type="button" aria-label="Закрыть подтверждение удаления гаража" disabled={confirmationSaving} onClick={closeGarageDeleteDialog}>
                 <X size={18} />
               </button>
             </div>
@@ -2801,14 +2848,16 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
               aria-label="Причина удаления гаража"
               maxLength={1000}
               value={garageDeleteReason}
+              disabled={confirmationSaving}
               onChange={(event) => setGarageDeleteReason(event.target.value)}
               placeholder="Например: дубликат карточки"
               required
             />
+            {confirmationError ? <FormError>{confirmationError}</FormError> : null}
             <div className="detail-dialog-actions contractors-dialog-actions">
-              <button ref={garageDeleteCancelRef} className="ghost-button" type="button" onClick={closeGarageDeleteDialog}>Отмена</button>
-              <button className="secondary-button danger-button" type="button" onClick={confirmGarageDeleteFromTable} disabled={!garageDeleteReason.trim()}>
-                <Trash2 size={16} />
+              <button ref={garageDeleteCancelRef} className="ghost-button" type="button" disabled={confirmationSaving} onClick={closeGarageDeleteDialog}>Отмена</button>
+              <button className="secondary-button danger-button" type="button" aria-busy={confirmationSaving} onClick={() => void confirmGarageDeleteFromTable()} disabled={confirmationSaving || !garageDeleteReason.trim()}>
+                {confirmationSaving ? <LoaderCircle className="financial-report-button__spinner" size={16} aria-hidden="true" /> : <Trash2 size={16} />}
                 <span>Удалить</span>
               </button>
             </div>
@@ -2825,7 +2874,7 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
                 <h3 id="supplier-table-delete-title">Удалить поставщика?</h3>
                 <p>{supplierDeleteTarget.name || 'Поставщик без названия'}</p>
               </div>
-              <button className="icon-button" type="button" aria-label="Закрыть подтверждение удаления поставщика" onClick={closeSupplierDeleteDialog}>
+              <button className="icon-button" type="button" aria-label="Закрыть подтверждение удаления поставщика" disabled={confirmationSaving} onClick={closeSupplierDeleteDialog}>
                 <X size={18} />
               </button>
             </div>
@@ -2836,14 +2885,16 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
               aria-label="Причина удаления поставщика"
               maxLength={1000}
               value={supplierDeleteReason}
+              disabled={confirmationSaving}
               onChange={(event) => setSupplierDeleteReason(event.target.value)}
               placeholder="Например: договор больше не действует"
               required
             />
+            {confirmationError ? <FormError>{confirmationError}</FormError> : null}
             <div className="detail-dialog-actions contractors-dialog-actions">
-              <button ref={supplierDeleteCancelRef} className="ghost-button" type="button" onClick={closeSupplierDeleteDialog}>Отмена</button>
-              <button className="secondary-button danger-button" type="button" onClick={confirmSupplierDeleteFromTable} disabled={!supplierDeleteReason.trim()}>
-                <Trash2 size={16} />
+              <button ref={supplierDeleteCancelRef} className="ghost-button" type="button" disabled={confirmationSaving} onClick={closeSupplierDeleteDialog}>Отмена</button>
+              <button className="secondary-button danger-button" type="button" aria-busy={confirmationSaving} onClick={() => void confirmSupplierDeleteFromTable()} disabled={confirmationSaving || !supplierDeleteReason.trim()}>
+                {confirmationSaving ? <LoaderCircle className="financial-report-button__spinner" size={16} aria-hidden="true" /> : <Trash2 size={16} />}
                 <span>Удалить</span>
               </button>
             </div>
@@ -2860,7 +2911,7 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
                 <h3 id="employee-table-delete-title">Удалить сотрудника?</h3>
                 <p>{employeeDeleteTarget.fullName || 'Сотрудник без имени'}</p>
               </div>
-              <button className="icon-button" type="button" aria-label="Закрыть подтверждение удаления сотрудника" onClick={closeEmployeeDeleteDialog}>
+              <button className="icon-button" type="button" aria-label="Закрыть подтверждение удаления сотрудника" disabled={confirmationSaving} onClick={closeEmployeeDeleteDialog}>
                 <X size={18} />
               </button>
             </div>
@@ -2871,14 +2922,16 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
               aria-label="Причина удаления сотрудника"
               maxLength={1000}
               value={employeeDeleteReason}
+              disabled={confirmationSaving}
               onChange={(event) => setEmployeeDeleteReason(event.target.value)}
               placeholder="Например: сотрудник больше не работает"
               required
             />
+            {confirmationError ? <FormError>{confirmationError}</FormError> : null}
             <div className="detail-dialog-actions contractors-dialog-actions">
-              <button ref={employeeDeleteCancelRef} className="ghost-button" type="button" onClick={closeEmployeeDeleteDialog}>Отмена</button>
-              <button className="secondary-button danger-button" type="button" onClick={confirmEmployeeDeleteFromTable} disabled={!employeeDeleteReason.trim()}>
-                <Trash2 size={16} />
+              <button ref={employeeDeleteCancelRef} className="ghost-button" type="button" disabled={confirmationSaving} onClick={closeEmployeeDeleteDialog}>Отмена</button>
+              <button className="secondary-button danger-button" type="button" aria-busy={confirmationSaving} onClick={() => void confirmEmployeeDeleteFromTable()} disabled={confirmationSaving || !employeeDeleteReason.trim()}>
+                {confirmationSaving ? <LoaderCircle className="financial-report-button__spinner" size={16} aria-hidden="true" /> : <Trash2 size={16} />}
                 <span>Удалить</span>
               </button>
             </div>
@@ -2895,7 +2948,7 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
                 <h3 id="department-table-delete-title">Удалить отдел?</h3>
                 <p>{departmentDeleteTarget.name || 'Отдел без названия'}</p>
               </div>
-              <button className="icon-button" type="button" aria-label="Закрыть подтверждение удаления отдела" onClick={closeDepartmentDeleteDialog}>
+              <button className="icon-button" type="button" aria-label="Закрыть подтверждение удаления отдела" disabled={confirmationSaving} onClick={closeDepartmentDeleteDialog}>
                 <X size={18} />
               </button>
             </div>
@@ -2906,14 +2959,16 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
               aria-label="Причина удаления отдела"
               maxLength={1000}
               value={departmentDeleteReason}
+              disabled={confirmationSaving}
               onChange={(event) => setDepartmentDeleteReason(event.target.value)}
               placeholder="Например: отдел больше не используется"
               required
             />
+            {confirmationError ? <FormError>{confirmationError}</FormError> : null}
             <div className="detail-dialog-actions contractors-dialog-actions">
-              <button ref={departmentDeleteCancelRef} className="ghost-button" type="button" onClick={closeDepartmentDeleteDialog}>Отмена</button>
-              <button className="secondary-button danger-button" type="button" onClick={confirmDepartmentDeleteFromTable} disabled={!departmentDeleteReason.trim()}>
-                <Trash2 size={16} />
+              <button ref={departmentDeleteCancelRef} className="ghost-button" type="button" disabled={confirmationSaving} onClick={closeDepartmentDeleteDialog}>Отмена</button>
+              <button className="secondary-button danger-button" type="button" aria-busy={confirmationSaving} onClick={() => void confirmDepartmentDeleteFromTable()} disabled={confirmationSaving || !departmentDeleteReason.trim()}>
+                {confirmationSaving ? <LoaderCircle className="financial-report-button__spinner" size={16} aria-hidden="true" /> : <Trash2 size={16} />}
                 <span>Удалить</span>
               </button>
             </div>

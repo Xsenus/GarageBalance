@@ -1925,6 +1925,94 @@ describe('App', () => {
     expect(within(dialog).getByRole('button', { name: 'Ок' })).toBeEnabled()
   }, 30000)
 
+  it('keeps contractor archive and restore confirmations open when the server rejects the operation', async () => {
+    const user = userEvent.setup()
+    let releaseGarageArchive!: () => void
+    const garageArchiveGate = new Promise<void>((resolve) => { releaseGarageArchive = resolve })
+    const owner = createOwner({ id: '10000000-0000-4000-8000-000000000001', lastName: 'Иванов', firstName: 'Иван' })
+    const activeGarage = createGarage({ id: '10000000-0000-4000-8000-000000000002', number: '12', ownerId: owner.id, ownerName: owner.fullName })
+    const archivedGarage = createGarage({ id: '10000000-0000-4000-8000-000000000003', number: '13', ownerId: owner.id, ownerName: owner.fullName, isArchived: true })
+    const group = createGroup({ id: '20000000-0000-4000-8000-000000000001', name: 'Коммунальные услуги' })
+    const supplier = createSupplier({ id: '20000000-0000-4000-8000-000000000002', name: 'Поставщик отказа', groupId: group.id, groupName: group.name })
+    const department = createStaffDepartment({ id: '30000000-0000-4000-8000-000000000001', name: 'Бухгалтерия' })
+    const employee = createStaffMember({ id: '30000000-0000-4000-8000-000000000002', fullName: 'Петрова Ольга', departmentId: department.id, departmentName: department.name })
+    const dictionaryClient = createDictionaryClient({
+      getOwners: async () => [owner],
+      getGarages: async () => [activeGarage, archivedGarage],
+      getSupplierGroups: async () => [group],
+      getSuppliers: async () => [supplier],
+      getSupplierContacts: async () => [],
+      getStaffDepartments: async () => [department],
+      getStaffMembers: async () => [employee],
+      archiveGarage: async () => {
+        await garageArchiveGate
+        throw new DictionaryApiError('garage_archive_failed', 'Гараж не удален.', 503)
+      },
+      restoreGarage: async () => { throw new DictionaryApiError('garage_restore_failed', 'Гараж не восстановлен.', 503) },
+      archiveSupplier: async () => { throw new DictionaryApiError('supplier_archive_failed', 'Поставщик не удален.', 503) },
+      archiveStaffMember: async () => { throw new DictionaryApiError('employee_archive_failed', 'Сотрудник не удален.', 503) },
+      archiveStaffDepartment: async () => { throw new DictionaryApiError('department_archive_failed', 'Отдел не удален.', 503) },
+    })
+    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} importClient={createImportClient()} integrationClient={createIntegrationClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    const dashboardTiles = await screen.findByRole('group', { name: 'Главные разделы' })
+    await user.click(within(dashboardTiles).getByRole('button', { name: 'Контрагенты' }))
+    const panel = await screen.findByRole('region', { name: 'Контрагенты' })
+
+    await user.click(await within(panel).findByRole('button', { name: 'Удалить гараж 12' }))
+    let dialog = await screen.findByRole('dialog', { name: 'Удалить гараж?' })
+    const garageReason = within(dialog).getByLabelText('Причина удаления гаража')
+    await user.type(garageReason, 'Проверка ошибки гаража')
+    await user.click(within(dialog).getByRole('button', { name: 'Удалить' }))
+    expect(within(dialog).getByRole('button', { name: 'Удалить' })).toBeDisabled()
+    expect(within(dialog).getByRole('button', { name: 'Отмена' })).toBeDisabled()
+    expect(within(dialog).getByRole('button', { name: 'Закрыть подтверждение удаления гаража' })).toBeDisabled()
+    expect(garageReason).toBeDisabled()
+    releaseGarageArchive()
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent('Гараж не удален.')
+    expect(garageReason).toHaveValue('Проверка ошибки гаража')
+    expect(within(dialog).getByRole('button', { name: 'Удалить' })).toBeEnabled()
+    await user.click(within(dialog).getByRole('button', { name: 'Отмена' }))
+    expect(within(panel).getByRole('button', { name: 'Удалить гараж 12' })).toBeInTheDocument()
+
+    await user.click(within(panel).getByRole('button', { name: 'Восстановить гараж 13' }))
+    dialog = await screen.findByRole('dialog', { name: 'Вернуть запись?' })
+    await user.click(within(dialog).getByRole('button', { name: 'Вернуть запись' }))
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent('Гараж не восстановлен.')
+    expect(within(dialog).getByRole('button', { name: 'Вернуть запись' })).toBeEnabled()
+    await user.click(within(dialog).getByRole('button', { name: 'Отмена' }))
+    expect(within(panel).getByRole('button', { name: 'Восстановить гараж 13' })).toBeInTheDocument()
+
+    await user.click(within(panel).getByRole('tab', { name: 'Поставщики' }))
+    await user.click(await within(panel).findByRole('button', { name: 'Удалить поставщика Поставщик отказа' }))
+    dialog = await screen.findByRole('dialog', { name: 'Удалить поставщика?' })
+    await user.type(within(dialog).getByLabelText('Причина удаления поставщика'), 'Проверка ошибки поставщика')
+    await user.click(within(dialog).getByRole('button', { name: 'Удалить' }))
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent('Поставщик не удален.')
+    expect(within(dialog).getByLabelText('Причина удаления поставщика')).toHaveValue('Проверка ошибки поставщика')
+    await user.click(within(dialog).getByRole('button', { name: 'Отмена' }))
+
+    await user.click(within(panel).getByRole('tab', { name: 'Персонал' }))
+    await user.click(await within(panel).findByRole('button', { name: 'Удалить сотрудника Петрова Ольга' }))
+    dialog = await screen.findByRole('dialog', { name: 'Удалить сотрудника?' })
+    await user.type(within(dialog).getByLabelText('Причина удаления сотрудника'), 'Проверка ошибки сотрудника')
+    await user.click(within(dialog).getByRole('button', { name: 'Удалить' }))
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent('Сотрудник не удален.')
+    expect(within(dialog).getByLabelText('Причина удаления сотрудника')).toHaveValue('Проверка ошибки сотрудника')
+    await user.click(within(dialog).getByRole('button', { name: 'Отмена' }))
+
+    await user.click(within(panel).getByRole('button', { name: 'Удалить отдел Бухгалтерия' }))
+    dialog = await screen.findByRole('dialog', { name: 'Удалить отдел?' })
+    await user.type(within(dialog).getByLabelText('Причина удаления отдела'), 'Проверка ошибки отдела')
+    await user.click(within(dialog).getByRole('button', { name: 'Удалить' }))
+    const departmentError = await within(dialog).findByRole('alert')
+    expect(departmentError).toHaveTextContent('Отдел не удален.')
+    expect(within(dialog).getByLabelText('Причина удаления отдела')).toHaveValue('Проверка ошибки отдела')
+    expect(departmentError.closest('[role="dialog"]')).toBe(dialog)
+  }, 30000)
+
   it('shows contractors tabs and section dialogs without local history access', async () => {
     const user = userEvent.setup()
     const contractorOwner = createOwner({
