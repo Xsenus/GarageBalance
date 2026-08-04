@@ -177,7 +177,13 @@ builder.Services
     .ValidateOnStart();
 builder.Services.AddSingleton<IImportDryRunQueue, ImportDryRunQueue>();
 builder.Services.AddScoped<IImportDryRunDispatcher, ImportDryRunDispatcher>();
-builder.Services.AddScoped<IAccessImportReader, DisabledAccessImportReader>();
+builder.Services
+    .AddOptions<MdbToolsAccessImportReaderOptions>()
+    .Bind(builder.Configuration.GetSection(MdbToolsAccessImportReaderOptions.SectionName))
+    .ValidateDataAnnotations()
+    .ValidateOnStart();
+builder.Services.AddSingleton<IAccessImportCommandRunner, ProcessAccessImportCommandRunner>();
+builder.Services.AddScoped<IAccessImportReader, MdbToolsAccessImportReader>();
 builder.Services.AddScoped<IImportFingerprintRepository, EfImportFingerprintRepository>();
 builder.Services.AddScoped<IImportFingerprintService, ImportFingerprintService>();
 builder.Services.AddScoped<IImportQuarantineRepository, EfImportQuarantineRepository>();

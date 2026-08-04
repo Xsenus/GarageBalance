@@ -588,6 +588,27 @@ public sealed class ImportServiceTests
     }
 
     [Fact]
+    public async Task DryRunAccessImportAsync_UsesReaderTablesInsteadOfBinaryHints()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var reader = new FakeAccessImportReader(
+            inspection: AccessImportReaderInspectionDto.Success(["Гаражи", "Платежи"]));
+        var service = CreateService(database.Context, reader);
+        await using var stream = CreateAccessLikeStream("opaque payload");
+
+        var result = await service.DryRunAccessImportAsync(
+            new AccessImportDryRunRequest("legacy.mdb", stream),
+            null,
+            CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+        Assert.Contains(result.Value!.Checks, check => check.Code == "native_reader" && check.Status == "passed");
+        Assert.Contains(result.Value.Checks, check => check.Code == "schema_tables" && check.Message.Contains("Гаражи", StringComparison.Ordinal));
+        Assert.DoesNotContain(result.Value.Checks, check => check.Code == "schema_hints");
+        Assert.True(reader.InspectWasCalled);
+    }
+
+    [Fact]
     public async Task QueuedDryRun_IsObservableAndCompletesFromBackgroundStream()
     {
         await using var database = await TestDatabase.CreateAsync();
@@ -674,9 +695,12 @@ public sealed class ImportServiceTests
         await context.SaveChangesAsync();
     }
 
-    private sealed class FakeAccessImportReader(AccessImportReaderStatusDto? status = null) : IAccessImportReader
+    private sealed class FakeAccessImportReader(
+        AccessImportReaderStatusDto? status = null,
+        AccessImportReaderInspectionDto? inspection = null) : IAccessImportReader
     {
         public bool WasCalled { get; private set; }
+        public bool InspectWasCalled { get; private set; }
 
         public Task<AccessImportReaderStatusDto> GetStatusAsync(CancellationToken cancellationToken)
         {
@@ -689,6 +713,17 @@ public sealed class ImportServiceTests
                 "Reader не настроен.",
                 ["ACE OLE DB driver"],
                 DateTimeOffset.UtcNow));
+        }
+
+        public Task<AccessImportReaderInspectionDto> InspectAsync(
+            ReadOnlyMemory<byte> content,
+            string fileExtension,
+            CancellationToken cancellationToken)
+        {
+            InspectWasCalled = true;
+            return Task.FromResult(inspection ?? AccessImportReaderInspectionDto.Unavailable(
+                "not_configured",
+                "Reader не настроен."));
         }
     }
 

@@ -486,7 +486,11 @@ public sealed class ImportService(
         CancellationToken cancellationToken)
     {
         var previousRunWithSameContent = await repository.FindPreviousRunByContentAsync(analysis.ContentSha256, cancellationToken);
-        var checks = BuildChecks(run.FileExtension, analysis.Sample, analysis.Length);
+        var readerInspection = await accessImportReader.InspectAsync(
+            analysis.Content,
+            run.FileExtension,
+            cancellationToken);
+        var checks = BuildChecks(run.FileExtension, analysis.Sample, analysis.Length, readerInspection);
         if (previousRunWithSameContent is not null && previousRunWithSameContent.Id != run.Id)
         {
             checks.Add(new AccessImportCheckDto(
@@ -607,6 +611,7 @@ public sealed class ImportService(
     {
         using var hasher = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
         await using var sample = new MemoryStream(MaxSchemaSampleBytes);
+        await using var completeContent = new MemoryStream();
         var rented = ArrayPool<byte>.Shared.Rent(64 * 1024);
         long length = 0;
         try
@@ -628,6 +633,7 @@ public sealed class ImportService(
                 }
 
                 hasher.AppendData(rented, 0, read);
+                await completeContent.WriteAsync(rented.AsMemory(0, read), cancellationToken);
                 var sampleBytes = Math.Min(read, MaxSchemaSampleBytes - (int)sample.Length);
                 if (sampleBytes > 0)
                 {
@@ -648,7 +654,8 @@ public sealed class ImportService(
         return ImportResult<DryRunContentAnalysis>.Success(new DryRunContentAnalysis(
             length,
             Convert.ToHexString(hasher.GetHashAndReset()).ToLowerInvariant(),
-            sample.ToArray()));
+            sample.ToArray(),
+            completeContent.ToArray()));
     }
 
     private async Task<Dictionary<string, object?>> BuildAccessImportRunAuditMetadataAsync(
@@ -703,7 +710,11 @@ public sealed class ImportService(
         });
     }
 
-    private static List<AccessImportCheckDto> BuildChecks(string extension, byte[] bytes, long fileSizeBytes)
+    private static List<AccessImportCheckDto> BuildChecks(
+        string extension,
+        byte[] bytes,
+        long fileSizeBytes,
+        AccessImportReaderInspectionDto readerInspection)
     {
         var checks = new List<AccessImportCheckDto>
         {
@@ -712,13 +723,28 @@ public sealed class ImportService(
             HasOleSignature(bytes)
                 ? new AccessImportCheckDto("signature", "Сигнатура Access", "passed", "Файл похож на OLE Compound документ Access.")
                 : new AccessImportCheckDto("signature", "Сигнатура Access", "warning", "Не найдена стандартная OLE-сигнатура. Возможно, файл поврежден или требует конвертации."),
-            new("native_reader", "Драйвер чтения .accdb", "warning", "На текущей машине прямое чтение Access не подтверждено. Для фактического переноса нужен ACE-драйвер, Microsoft Access или конвертация в промежуточный формат.")
+            readerInspection.Succeeded
+                ? new AccessImportCheckDto("native_reader", "Reader Access", "passed", readerInspection.StatusMessage)
+                : new AccessImportCheckDto("native_reader", "Reader Access", "warning", readerInspection.StatusMessage)
         };
 
-        var discoveredHints = DiscoverSchemaHints(bytes);
-        checks.Add(discoveredHints.Count == 0
-            ? new AccessImportCheckDto("schema_hints", "Ориентиры схемы", "warning", "В бинарном файле не найдены читаемые названия таблиц. Карта Access -> PostgreSQL потребует ACE-драйвер или экспорт.")
-            : new AccessImportCheckDto("schema_hints", "Ориентиры схемы", "passed", $"Найдены текстовые ориентиры: {string.Join(", ", discoveredHints.Take(8))}."));
+        if (readerInspection.Succeeded)
+        {
+            checks.Add(readerInspection.TableNames.Count == 0
+                ? new AccessImportCheckDto("schema_tables", "Таблицы Access", "error", "Reader открыл файл, но не нашёл пользовательских таблиц.")
+                : new AccessImportCheckDto(
+                    "schema_tables",
+                    "Таблицы Access",
+                    "passed",
+                    $"Reader обнаружил {readerInspection.TableNames.Count} таблиц: {string.Join(", ", readerInspection.TableNames.Take(8))}."));
+        }
+        else
+        {
+            var discoveredHints = DiscoverSchemaHints(bytes);
+            checks.Add(discoveredHints.Count == 0
+                ? new AccessImportCheckDto("schema_hints", "Ориентиры схемы", "warning", "В бинарном файле не найдены читаемые названия таблиц. Установите mdbtools для точного чтения структуры.")
+                : new AccessImportCheckDto("schema_hints", "Ориентиры схемы", "passed", $"Без reader найдены текстовые ориентиры: {string.Join(", ", discoveredHints.Take(8))}."));
+        }
 
         return checks;
     }
@@ -791,5 +817,5 @@ public sealed class ImportService(
             record.RollbackReason);
     }
 
-    private sealed record DryRunContentAnalysis(long Length, string ContentSha256, byte[] Sample);
+    private sealed record DryRunContentAnalysis(long Length, string ContentSha256, byte[] Sample, byte[] Content);
 }

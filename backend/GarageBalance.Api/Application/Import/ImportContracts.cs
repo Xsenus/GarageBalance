@@ -68,6 +68,19 @@ public sealed record AccessImportReaderStatusDto(
     IReadOnlyList<string> RequiredComponents,
     DateTimeOffset CheckedAtUtc);
 
+public sealed record AccessImportReaderInspectionDto(
+    bool Succeeded,
+    string Status,
+    string StatusMessage,
+    IReadOnlyList<string> TableNames)
+{
+    public static AccessImportReaderInspectionDto Success(IReadOnlyList<string> tableNames) =>
+        new(true, "ready", $"Структура Access прочитана: таблиц {tableNames.Count}.", tableNames);
+
+    public static AccessImportReaderInspectionDto Unavailable(string status, string statusMessage) =>
+        new(false, status, statusMessage, []);
+}
+
 public sealed record AccessImportRunDto(
     Guid Id,
     string Mode,

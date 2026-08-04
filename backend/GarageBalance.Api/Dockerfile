@@ -19,6 +19,7 @@ RUN echo "0144068502a1eddd2a0280ede10ef607d1ec592ce819940991203941564e8e76  /usr
     && apt-get update \
     && apt-get install -y --no-install-recommends \
         libpq5=18.4-1.pgdg24.04+1 \
+        mdbtools=1.0.0+dfsg-1.2ubuntu1 \
         postgresql-client-common=293.pgdg24.04+1 \
         postgresql-client-17=17.10-1.pgdg24.04+1 \
     && rm -rf /var/lib/apt/lists/* /var/cache/apt/* /var/log/apt/* /var/log/dpkg.log

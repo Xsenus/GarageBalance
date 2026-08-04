@@ -132,6 +132,8 @@ public sealed class VpsPerformanceConfigurationTests
         var installer = ReadScript("install-vps-performance-configuration.sh");
 
         Assert.Contains("trap rollback EXIT", installer, StringComparison.Ordinal);
+        Assert.Contains("command -v mdb-tables", installer, StringComparison.Ordinal);
+        Assert.Contains("apt-get install -y --no-install-recommends mdbtools", installer, StringComparison.Ordinal);
         Assert.Contains("install -d -o garagebalance -g garagebalance", installer, StringComparison.Ordinal);
         Assert.Contains("install -d -o www-data -g adm -m 0750 /var/log/garagebalance-nginx", installer, StringComparison.Ordinal);
         Assert.Contains("enabled_site_is_regular", installer, StringComparison.Ordinal);

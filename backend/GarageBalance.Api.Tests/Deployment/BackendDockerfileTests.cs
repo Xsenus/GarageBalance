@@ -25,6 +25,7 @@ public sealed class BackendDockerfileTests
         Assert.Contains("postgresql-client-17=17.10-1.pgdg24.04+1", dockerfile, StringComparison.Ordinal);
         Assert.Contains("postgresql-client-common=293.pgdg24.04+1", dockerfile, StringComparison.Ordinal);
         Assert.Contains("libpq5=18.4-1.pgdg24.04+1", dockerfile, StringComparison.Ordinal);
+        Assert.Contains("mdbtools=1.0.0+dfsg-1.2ubuntu1", dockerfile, StringComparison.Ordinal);
         Assert.DoesNotContain("curl", dockerfile, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("dotnet restore backend/GarageBalance.Api/GarageBalance.Api.csproj\n", dockerfile, StringComparison.Ordinal);
         Assert.Contains("rm -rf /var/lib/apt/lists/*", dockerfile, StringComparison.Ordinal);

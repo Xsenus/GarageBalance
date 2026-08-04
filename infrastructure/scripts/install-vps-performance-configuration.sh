@@ -49,6 +49,12 @@ rollback() {
 }
 trap rollback EXIT
 
+if ! command -v mdb-tables >/dev/null 2>&1; then
+  apt-get update
+  DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends mdbtools
+  rm -rf /var/lib/apt/lists/* /var/cache/apt/*
+fi
+
 install -d -o garagebalance -g garagebalance -m 0750 /var/lib/garagebalance-staging
 install -d -o www-data -g adm -m 0750 /var/log/garagebalance-nginx
 install -o root -g root -m 0644 "$source_dir/infrastructure/deployment/garagebalance-staging.nginx.conf" "$site_target"
