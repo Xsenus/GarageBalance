@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
-import { RotateCcw, Save, Search, ShieldCheck, Trash2, UserPlus, X } from 'lucide-react'
+import { Pencil, RotateCcw, Save, Search, ShieldCheck, Trash2, UserPlus, X } from 'lucide-react'
 import type { AuthResponse } from '../../services/authApi'
 import type { CreateManagedUserRequest, ManagedRoleDto, ManagedUserDto, PagedManagedUsersDto, UpdateManagedUserRequest, UserManagementClient } from '../../services/usersApi'
 import { expandPermissionDependencies, isPermissionRequiredBySelection, permissions, rolePermissionGroups } from '../../shared/accessControl'
@@ -458,7 +458,7 @@ export function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; 
           </form>
 
           <div className="dictionary-toolbar users-toolbar-actions">
-            <span className="form-hint">Действия по строкам доступны через ПКМ.</span>
+            <span className="form-hint">Действия доступны в последнем столбце и через ПКМ.</span>
             <button className="secondary-button create-action-button" type="button" onClick={() => openEditor('create')} disabled={roles.length === 0}>
               <UserPlus size={16} aria-hidden="true" />
               <span>Добавить</span>
@@ -474,6 +474,7 @@ export function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; 
                   <th>Роль</th>
                   <th>Статус</th>
                   <th>Последний вход</th>
+                  <th className="dictionary-actions-column users-actions-column table-actions-column">Действия</th>
                 </tr>
               </thead>
               <tbody>
@@ -492,11 +493,27 @@ export function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; 
                     <td>{managedUser.roles.map((role) => getRoleLabel(role, roles)).join(', ')}</td>
                     <td><span className={managedUser.isActive ? 'status-active' : 'status-disabled'}>{managedUser.isActive ? 'Активен' : 'Отключен'}</span></td>
                     <td>{managedUser.lastLoginAtUtc ? formatDateTime(managedUser.lastLoginAtUtc) : 'Не входил'}</td>
+                    <td className="dictionary-actions-column users-actions-column table-actions-column">
+                      <span className="dictionary-row-actions users-row-actions">
+                        <button className="icon-button dictionary-row-action" type="button" aria-label={`Изменить пользователя ${managedUser.displayName}`} title="Изменить" onClick={() => openEditor('edit', managedUser)}>
+                          <Pencil size={16} aria-hidden="true" />
+                        </button>
+                        {managedUser.isActive ? (
+                          <button className="icon-button danger-icon-button dictionary-row-action" type="button" aria-label={`Удалить пользователя ${managedUser.displayName}`} title="Удалить" onClick={() => openDeleteDialog(managedUser)}>
+                            <Trash2 size={16} aria-hidden="true" />
+                          </button>
+                        ) : (
+                          <button className="icon-button dictionary-row-action" type="button" aria-label={`Восстановить пользователя ${managedUser.displayName}`} title="Восстановить" onClick={() => setRestoreTarget(managedUser)}>
+                            <RotateCcw size={16} aria-hidden="true" />
+                          </button>
+                        )}
+                      </span>
+                    </td>
                   </tr>
                 )) : null}
                 {!loading && page.items.length === 0 ? (
                   <tr>
-                    <td colSpan={5}>
+                    <td colSpan={6}>
                       <EmptyState>Пользователей пока нет</EmptyState>
                     </td>
                   </tr>

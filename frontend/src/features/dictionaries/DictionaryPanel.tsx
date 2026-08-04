@@ -854,7 +854,7 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, integ
 
   function renderHeaders() {
     const headers = [...getDictionaryTableHeaders(activeSection), 'Статус', 'Действия']
-    return headers.map((header, index) => <th className={index === headers.length - 1 ? 'dictionary-actions-column' : undefined} key={header}>{header}</th>)
+    return headers.map((header, index) => <th className={index === headers.length - 1 ? 'dictionary-actions-column table-actions-column' : undefined} key={header}>{header}</th>)
   }
 
   function renderCells(item: DictionaryRecord) {
@@ -1277,7 +1277,7 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, integ
                         {isArchivedRecord(item) ? 'Архив' : 'Активна'}
                       </span>
                     </td>
-                    <td className="dictionary-actions-column"><span className="dictionary-row-actions">{renderRowAction(item)}</span></td>
+                    <td className="dictionary-actions-column table-actions-column"><span className="dictionary-row-actions">{renderRowAction(item)}</span></td>
                   </tr>
                 )) : null}
               </tbody>

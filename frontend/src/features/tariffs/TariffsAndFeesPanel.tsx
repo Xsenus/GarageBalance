@@ -2339,7 +2339,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
               <span role="columnheader" aria-label="Перенос долга в просроченный, дней">Просрочка, дн.</span>
               <span role="columnheader">Пороговая тарификация</span>
               <span role="columnheader">По счетчику</span>
-              <span role="columnheader">Действия</span>
+              <span className="table-actions-column" role="columnheader">Действия</span>
             </div>
             {tariffsLoading ? <TableLoadingState label="Загружаем тарифы и услуги" /> : null}
             {!tariffsLoading ? tariffPage.items.map((row, pageIndex) => {
@@ -2573,7 +2573,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
                       />
                     ) : null}
                   </span>
-                  <span role="cell" className="tariffs-row-actions-cell">
+                  <span role="cell" className="tariffs-row-actions-cell table-actions-column">
                     <span className="tariffs-row-actions">
                       {row.category === 'Зарплатный фонд' && row.backendTariffId && !row.backendServiceSettingId ? (
                         <>

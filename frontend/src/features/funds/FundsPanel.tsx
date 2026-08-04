@@ -622,9 +622,7 @@ export function FundsPrototypePanel({ auth, fundsClient }: { auth: AuthResponse;
             <tr>
               <th scope="col">Фонд</th>
               <th scope="col">Распределено</th>
-              <th className="funds-table-action-column" scope="col">Карточка</th>
-              <th className="funds-table-action-column" scope="col">Изъятие</th>
-              <th className="funds-table-action-column" scope="col">Пополнение</th>
+              <th className="funds-table-action-column table-actions-column" scope="col">Действия</th>
             </tr>
           </thead>
           <tbody>
@@ -632,29 +630,27 @@ export function FundsPrototypePanel({ auth, fundsClient }: { auth: AuthResponse;
               <tr key={row.id}>
                 <td>{row.name}</td>
                 <td>{row.amount === null ? '—' : `${formatMoney(row.amount)} руб.`}</td>
-                <td className="funds-table-action-column">
-                  <button className="funds-action-button" type="button" aria-label={`Открыть карточку фонда ${row.name}`} title={`Открыть карточку фонда ${row.name}`} data-tooltip="Карточка" onClick={() => openFundEdit(row)}>
-                    <Pencil size={16} aria-hidden="true" />
-                  </button>
-                </td>
-                <td className="funds-table-action-column">
-                  {row.actions === false ? null : (
-                    <button className="funds-action-button funds-action-button--withdraw" type="button" aria-label={`Изъять из фонда ${row.name}`} title={`Изъять из фонда ${row.name}`} data-tooltip="Изъять" onClick={() => openFundOperation('withdraw', row)}>
-                      <Minus size={16} aria-hidden="true" />
+                <td className="funds-table-action-column table-actions-column">
+                  <span className="funds-table-row-actions">
+                    <button className="funds-action-button" type="button" aria-label={`Открыть карточку фонда ${row.name}`} title={`Открыть карточку фонда ${row.name}`} data-tooltip="Карточка" onClick={() => openFundEdit(row)}>
+                      <Pencil size={16} aria-hidden="true" />
                     </button>
-                  )}
-                </td>
-                <td className="funds-table-action-column">
-                  {row.actions === false ? null : (
-                    <button className="funds-action-button funds-action-button--deposit" type="button" aria-label={`Пополнить фонд ${row.name}`} title={`Пополнить фонд ${row.name}`} data-tooltip="Пополнить" onClick={() => openFundOperation('deposit', row)}>
-                      <Plus size={16} aria-hidden="true" />
-                    </button>
-                  )}
+                    {row.actions === false ? null : (
+                      <>
+                        <button className="funds-action-button funds-action-button--withdraw" type="button" aria-label={`Изъять из фонда ${row.name}`} title={`Изъять из фонда ${row.name}`} data-tooltip="Изъять" onClick={() => openFundOperation('withdraw', row)}>
+                          <Minus size={16} aria-hidden="true" />
+                        </button>
+                        <button className="funds-action-button funds-action-button--deposit" type="button" aria-label={`Пополнить фонд ${row.name}`} title={`Пополнить фонд ${row.name}`} data-tooltip="Пополнить" onClick={() => openFundOperation('deposit', row)}>
+                          <Plus size={16} aria-hidden="true" />
+                        </button>
+                      </>
+                    )}
+                  </span>
                 </td>
               </tr>
             )) : (
               <tr>
-                <td colSpan={5}>Фонды пока не настроены.</td>
+                <td colSpan={3}>Фонды пока не настроены.</td>
               </tr>
             )}
           </tbody>

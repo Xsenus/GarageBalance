@@ -10678,8 +10678,11 @@ describe('App', () => {
     await user.click(within(createDialog).getByRole('button', { name: 'Сохранить' }))
 
     const row = await within(usersPanel).findByText('operator@example.com')
-    fireEvent.contextMenu(row.closest('tr')!)
-    await user.click(await screen.findByRole('menuitem', { name: 'Изменить' }))
+    const usersTable = within(usersPanel).getByRole('table', { name: 'Список пользователей' })
+    expect(within(usersTable).getByRole('columnheader', { name: 'Действия' })).toHaveClass('table-actions-column')
+    const createdUserRow = row.closest('tr')!
+    expect(within(createdUserRow).getByRole('button', { name: 'Удалить пользователя Оператор' })).toBeInTheDocument()
+    await user.click(within(createdUserRow).getByRole('button', { name: 'Изменить пользователя Оператор' }))
     const noChangeDialog = await screen.findByRole('dialog', { name: 'Изменить пользователя' })
     await user.click(within(noChangeDialog).getByRole('button', { name: 'Сохранить' }))
     await waitFor(() => {

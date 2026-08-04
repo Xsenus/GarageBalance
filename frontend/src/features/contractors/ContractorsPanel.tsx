@@ -2134,7 +2134,7 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
           <div className="contractors-directory-table contractors-directory-table--garages" role="table" aria-label="Гаражи" style={garageTableStyle}>
             <div className="contractors-directory-row contractors-directory-row--header" role="row">
               {contractorGarageColumnDefinitions.map((column) => (
-                <span className="contractors-directory-header-cell" role="columnheader" key={column.key}>
+                <span className={`contractors-directory-header-cell${column.key === 'actions' ? ' table-actions-column' : ''}`} role="columnheader" key={column.key}>
                   {column.key === 'actions' ? <span>{column.label}</span> : renderContractorSortHeader('garages', column.key, column.label)}
                   {column.key !== 'actions' ? (
                     <button
@@ -2157,7 +2157,7 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
                 <span role="cell" className={row.overdueDebt ? 'contractors-directory-cell--right money-expense' : 'contractors-directory-cell--right'}>
                   {row.isDeleted ? 'Удален' : row.overdueDebt || 'Нет'}
                 </span>
-                <span role="cell" className="contractors-row-actions">
+                <span role="cell" className="contractors-row-actions table-actions-column">
                   {row.isDeleted ? (
                     <button className="icon-button" type="button" aria-label={`Восстановить гараж ${row.number}`} title="Восстановить" onClick={() => restoreGarage(row)}>
                       <RotateCcw size={16} />
@@ -2207,7 +2207,7 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
           <div className="contractors-directory-table contractors-directory-table--suppliers" role="table" aria-label="Поставщики" style={supplierTableStyle}>
             <div className="contractors-directory-row contractors-directory-row--header" role="row">
               {contractorSupplierColumnDefinitions.map((column) => (
-                <span className={`contractors-directory-header-cell contractors-directory-header-cell--${column.key}`} role="columnheader" key={column.key}>
+                <span className={`contractors-directory-header-cell contractors-directory-header-cell--${column.key}${column.key === 'actions' ? ' table-actions-column' : ''}`} role="columnheader" key={column.key}>
                   {column.key === 'actions' ? <span>{column.label}</span> : renderContractorSortHeader('suppliers', column.key, column.label)}
                   {column.key !== 'actions' ? (
                     <button
@@ -2232,7 +2232,7 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
                   <span role="cell" className={row.debt ? 'contractors-supplier-cell contractors-supplier-cell--debt contractors-directory-cell--center money-expense' : 'contractors-supplier-cell contractors-supplier-cell--debt contractors-directory-cell--center'}>
                     {row.isDeleted ? 'Удален' : row.debt || 'Нет'}
                   </span>
-                  <span role="cell" className="contractors-row-actions">
+                  <span role="cell" className="contractors-row-actions table-actions-column">
                     {row.isDeleted ? (
                       <button className="icon-button" type="button" aria-label={`Восстановить поставщика ${row.name}`} title="Восстановить" onClick={() => restoreSupplier(row)}>
                         <RotateCcw size={16} />
@@ -2284,7 +2284,7 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
             <div className="contractors-directory-table contractors-directory-table--staff" role="table" aria-label="Персонал" style={staffTableStyle}>
               <div className="contractors-directory-row contractors-directory-row--header" role="row">
                 {contractorStaffColumnDefinitions.map((column) => (
-                  <span className="contractors-directory-header-cell" role="columnheader" key={column.key}>
+                  <span className={`contractors-directory-header-cell${column.key === 'actions' ? ' table-actions-column' : ''}`} role="columnheader" key={column.key}>
                     {column.key === 'actions' ? <span>{column.label}</span> : renderContractorSortHeader('staff', column.key, column.label)}
                     {column.key !== 'actions' ? (
                       <button
@@ -2302,7 +2302,7 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
                   <span role="cell">{row.fullName}</span>
                   <span role="cell">{row.department}</span>
                   <span role="cell" className="contractors-directory-cell--right contractors-staff-rate-cell">{row.isDeleted ? 'Удален' : formatStaffRate(row.rate)}</span>
-                  <span role="cell" className="contractors-row-actions">
+                  <span role="cell" className="contractors-row-actions table-actions-column">
                     {row.isDeleted ? (
                       <button className="icon-button" type="button" aria-label={`Восстановить сотрудника ${row.fullName}`} title="Восстановить" onClick={() => restoreEmployee(row)}>
                         <RotateCcw size={16} />
@@ -2350,12 +2350,12 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
             <div className="contractors-directory-table contractors-directory-table--departments" role="table" aria-label="Отделы персонала">
               <div className="contractors-directory-row contractors-directory-row--header" role="row">
                 <span className="contractors-directory-header-cell" role="columnheader">Отдел</span>
-                <span className="contractors-directory-header-cell" role="columnheader">Действия</span>
+                <span className="contractors-directory-header-cell table-actions-column" role="columnheader">Действия</span>
               </div>
               {departmentPage.items.map((department) => (
                 <div className={department.isDeleted ? 'contractors-directory-row contractors-directory-row--deleted' : 'contractors-directory-row'} role="row" key={department.id} onContextMenu={(event) => openDepartmentContextMenu(event, department)}>
                   <span role="cell">{department.name}</span>
-                  <span role="cell" className="contractors-row-actions">
+                  <span role="cell" className="contractors-row-actions table-actions-column">
                     {department.isDeleted ? (
                       <button className="icon-button" type="button" aria-label={`Восстановить отдел ${department.name}`} title="Восстановить" onClick={() => restoreDepartment(department)}>
                         <RotateCcw size={16} />

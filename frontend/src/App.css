@@ -4547,7 +4547,16 @@ h1 {
 }
 
 .funds-table .funds-table-action-column {
+  width: 132px;
   text-align: center;
+  white-space: nowrap;
+}
+
+.funds-table-row-actions {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
 }
 
 .funds-action-button {
@@ -5891,6 +5900,10 @@ h1 {
   align-items: center;
   justify-content: flex-end;
   gap: 6px;
+}
+
+.users-row-actions {
+  min-width: 70px;
 }
 
 .dictionary-pagination {
@@ -8611,5 +8624,53 @@ button.operation-row:focus-visible {
   .user-panel strong,
   .user-panel span {
     text-align: left;
+  }
+}
+
+@media (max-width: 900px) {
+  .dictionary-data-table th.table-actions-column,
+  .dictionary-data-table td.table-actions-column,
+  .funds-table th.table-actions-column,
+  .funds-table td.table-actions-column,
+  .contractors-directory-row > .table-actions-column,
+  .tariffs-page .contractors-sheet-header > .table-actions-column,
+  .tariffs-page .contractors-sheet-row > .table-actions-column {
+    position: sticky;
+    right: 0;
+    z-index: 3;
+    box-shadow: -10px 0 14px -14px rgba(15, 23, 42, 0.72);
+  }
+
+  .dictionary-data-table th.table-actions-column,
+  .funds-table th.table-actions-column,
+  .contractors-directory-row--header > .table-actions-column,
+  .tariffs-page .contractors-sheet-header > .table-actions-column {
+    z-index: 5;
+    background: #f8fafc;
+  }
+
+  .dictionary-data-table td.table-actions-column,
+  .funds-table td.table-actions-column,
+  .contractors-directory-row:not(.contractors-directory-row--header) > .table-actions-column,
+  .tariffs-page .contractors-sheet-row > .table-actions-column {
+    background: #ffffff;
+  }
+
+  .dictionary-data-row-archived td.table-actions-column,
+  .contractors-directory-row--deleted > .table-actions-column {
+    background: #fcfcfd;
+  }
+
+  .dictionary-data-table tbody tr:hover td.table-actions-column,
+  .dictionary-data-table tbody tr:focus td.table-actions-column,
+  .funds-table tbody tr:hover td.table-actions-column,
+  .contractors-directory-row:not(.contractors-directory-row--header):hover > .table-actions-column {
+    background: #eef4ff;
+  }
+
+  .table-actions-column .icon-button,
+  .table-actions-column .funds-action-button {
+    min-width: 36px;
+    min-height: 36px;
   }
 }

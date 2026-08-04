@@ -33,6 +33,14 @@ describe('responsive layout styles', () => {
     expect(normalizedAppCss).toContain('.dictionary-toolbar .dictionary-archive-toggle,\n  .dictionary-toolbar .create-action-button {\n    width: 100%;')
   })
 
+  it('keeps row actions visible at the right edge of wide mobile tables', () => {
+    expect(normalizedAppCss).toContain('@media (max-width: 900px) {\n  .dictionary-data-table th.table-actions-column,')
+    expect(normalizedAppCss).toContain('.contractors-directory-row > .table-actions-column,\n  .tariffs-page .contractors-sheet-header > .table-actions-column,')
+    expect(normalizedAppCss).toContain('position: sticky;\n    right: 0;\n    z-index: 3;')
+    expect(normalizedAppCss).toContain('.table-actions-column .icon-button,\n  .table-actions-column .funds-action-button {\n    min-width: 36px;')
+    expect(contractorsPanel).toContain("column.key === 'actions' ? ' table-actions-column' : ''")
+  })
+
   it('allows long table cell text to shrink inside its grid column', () => {
     expect(normalizedAppCss).toContain('.nav-item {\n  display: flex;\n  width: 100%;\n  min-width: 0;')
     expect(normalizedAppCss).toContain('.user-table-row > *,\n.operation-row > * {\n  min-width: 0;')
@@ -331,7 +339,8 @@ describe('responsive layout styles', () => {
   })
 
   it('centers fund action columns', () => {
-    expect(normalizedAppCss).toContain('.funds-table .funds-table-action-column {\n  text-align: center;')
+    expect(normalizedAppCss).toContain('.funds-table .funds-table-action-column {\n  width: 132px;\n  text-align: center;')
+    expect(normalizedAppCss).toContain('.funds-table-row-actions {\n  display: inline-flex;\n  align-items: center;')
   })
 
   it('lays out release notes as an adaptive card grid', () => {
