@@ -26,6 +26,36 @@ describe('responsive layout styles', () => {
     expect(nativeControls).toEqual([])
   })
 
+  it('keeps all twelve working sections inside the shared desktop and mobile shell', () => {
+    const appShellSource = readFileSync(resolve(process.cwd(), 'src', 'features', 'workspace', 'AppShell.tsx'), 'utf8')
+    const sectionCoverage = [
+      ['Пользователи', 'users/UserManagementPanel.tsx', 'aria-label="Пользователи"'],
+      ['Тарифы и сборы', 'tariffs/TariffsAndFeesPanel.tsx', 'aria-label="Тарифы и сборы"'],
+      ['Контрагенты', 'contractors/ContractorsPanel.tsx', 'aria-label="Контрагенты"'],
+      ['Справочники', 'dictionaries/DictionaryPanel.tsx', 'aria-label="Справочники"'],
+      ['Показания', 'meterReadings/MeterReadingsPanel.tsx', 'aria-label="Показания"'],
+      ['Платежи', 'finance/FinancePanel.tsx', 'aria-label="Форма платежей"'],
+      ['Фонды', 'funds/FundsPanel.tsx', 'aria-label="Управление фондами"'],
+      ['Отчеты', 'reports/ReportPanel.tsx', 'aria-label="Отчеты"'],
+      ['Импорт', 'import/ImportPanel.tsx', 'aria-label="Импорт Access"'],
+      ['История изменений', 'audit/AuditPanel.tsx', 'aria-label="История изменений"'],
+      ['Что нового', 'releases/ReleasePanel.tsx', 'aria-label="Что нового"'],
+      ['Настройки', 'settings/PasswordPanel.tsx', 'aria-label="Настройки"'],
+    ] as const
+
+    expect(sectionCoverage).toHaveLength(12)
+    for (const [navigationLabel, relativePath, accessibleRoot] of sectionCoverage) {
+      const source = readFileSync(resolve(process.cwd(), 'src', 'features', ...relativePath.split('/')), 'utf8')
+      expect(appShellSource, navigationLabel).toContain(`label: '${navigationLabel}'`)
+      expect(source, navigationLabel).toContain(accessibleRoot)
+    }
+
+    expect(normalizedAppCss).toContain('@media (max-width: 1100px) {')
+    expect(normalizedAppCss).toContain('@media (max-width: 640px) {')
+    expect(normalizedAppCss).toContain('.app-shell,\n  .sidebar,\n  .workspace,\n  .topbar,\n  .user-panel {\n    max-width: 100vw;\n    min-width: 0;')
+    expect(normalizedAppCss).toContain('.workspace {\n    overflow-x: hidden;\n    padding: 12px;')
+  })
+
   it('collapses the main shell and data rows on tablet width', () => {
     expect(appCss).toContain('@media (max-width: 1100px)')
     expect(normalizedAppCss).toContain('.app-shell {\n    grid-template-columns: 1fr;')
