@@ -75,6 +75,10 @@ public sealed class GitHubActionsDeploymentTests
         Assert.Contains("https://127.0.0.1${asset_path}", script, StringComparison.Ordinal);
         Assert.Contains("OPERATIONS_ARCHIVE=\"${UPLOAD_DIR}/operations.tar.gz\"", script, StringComparison.Ordinal);
         Assert.Contains("bash -n", script, StringComparison.Ordinal);
+        Assert.Contains("GARAGEBALANCE_DEPLOY_REEXECUTED", script, StringComparison.Ordinal);
+        Assert.Contains("cmp --silent \"$0\" \"$packaged_apply_script\"", script, StringComparison.Ordinal);
+        Assert.Contains("releasePrepare=reexec-updated-apply-script", script, StringComparison.Ordinal);
+        Assert.Contains("exec bash \"$REEXEC_APPLY_SCRIPT\" \"$release_id\"", script, StringComparison.Ordinal);
         Assert.Contains("bash \"${OPERATIONS_DIR}/infrastructure/scripts/install-vps-performance-configuration.sh\" \"$OPERATIONS_DIR\"", script, StringComparison.Ordinal);
         Assert.Contains("/usr/local/bin/garagebalance-deploy-apply", script, StringComparison.Ordinal);
     }

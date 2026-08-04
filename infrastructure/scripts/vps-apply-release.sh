@@ -25,6 +25,7 @@ MIGRATION_SQL="${UPLOAD_DIR}/deploy-migrations.sql"
 OPERATIONS_ARCHIVE="${UPLOAD_DIR}/operations.tar.gz"
 OPERATIONS_DIR="${UPLOAD_DIR}/operations"
 RELEASE_DIR="${APP_ROOT}/releases/${release_id}"
+REEXEC_APPLY_SCRIPT="${RELEASE_DIR}/vps-apply-release.next.sh"
 NEXT_API="${APP_ROOT}/api.next-${release_id}"
 NEXT_FRONTEND="${APP_ROOT}/frontend.next-${release_id}"
 TIMESTAMP="$(date +%Y%m%d-%H%M%S)"
@@ -181,6 +182,14 @@ bash -n \
   "${OPERATIONS_DIR}/infrastructure/scripts/garagebalance-healthcheck.sh" \
   "${OPERATIONS_DIR}/infrastructure/scripts/garagebalance-performance-check.sh" \
   "${OPERATIONS_DIR}/infrastructure/scripts/vps-apply-release.sh"
+
+packaged_apply_script="${OPERATIONS_DIR}/infrastructure/scripts/vps-apply-release.sh"
+if [[ "${GARAGEBALANCE_DEPLOY_REEXECUTED:-0}" != "1" ]] &&
+   ! cmp --silent "$0" "$packaged_apply_script"; then
+  install -o root -g root -m 700 "$packaged_apply_script" "$REEXEC_APPLY_SCRIPT"
+  log "releasePrepare=reexec-updated-apply-script; releaseId=${release_id}"
+  GARAGEBALANCE_DEPLOY_REEXECUTED=1 exec bash "$REEXEC_APPLY_SCRIPT" "$release_id"
+fi
 
 mapfile -t frontend_entry_assets < <(
   grep -oE '"/assets/[^"]+"' "${NEXT_FRONTEND}/index.html" \
