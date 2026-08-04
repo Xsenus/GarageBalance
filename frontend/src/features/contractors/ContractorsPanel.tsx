@@ -1324,8 +1324,8 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
       }
       return
     } catch (error) {
-      setFormStateError(error instanceof Error ? error.message : 'Не удалось сохранить гараж.')
-      return
+      const saveError = error instanceof Error ? error : new Error('Не удалось сохранить гараж.')
+      throw saveError
     }
   }
 
@@ -1619,15 +1619,9 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
       }
       return
     } catch (error) {
-      setFormStateError(error instanceof Error ? error.message : 'Не удалось сохранить поставщика.')
+      const saveError = error instanceof Error ? error : new Error('Не удалось сохранить поставщика.')
+      throw saveError
     }
-
-    if (currentSupplier) {
-      setSuppliers((currentSuppliers) => currentSuppliers.map((item) => (item.id === normalizedSupplier.id ? normalizedSupplier : item)))
-      return
-    }
-
-    setSuppliers((currentSuppliers) => [...currentSuppliers, normalizedSupplier])
   }
 
   const deleteSupplier = async (supplier: ContractorSupplierRow, reason = 'Поставщик удален из таблицы контрагентов.') => {
@@ -1710,15 +1704,9 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
       }
       return
     } catch (error) {
-      setFormStateError(error instanceof Error ? error.message : 'Не удалось сохранить сотрудника.')
+      const saveError = error instanceof Error ? error : new Error('Не удалось сохранить сотрудника.')
+      throw saveError
     }
-
-    if (currentEmployee) {
-      setStaff((currentStaff) => currentStaff.map((item) => (item.id === employee.id ? employee : item)))
-      return
-    }
-
-    setStaff((currentStaff) => [...currentStaff, employee])
   }
 
   const deleteEmployee = async (employee: ContractorStaffRow, reason = 'Сотрудник удален из таблицы контрагентов.') => {
@@ -1891,12 +1879,8 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
       }
       return
     } catch (error) {
-      setFormStateError(error instanceof Error ? error.message : 'Не удалось сохранить отдел.')
-    }
-
-    if (!currentDepartment) {
-      const nextDepartment = { id: `department-${Date.now()}`, name: normalizedName }
-      setDepartments((currentDepartments) => [...currentDepartments, nextDepartment])
+      const saveError = error instanceof Error ? error : new Error('Не удалось сохранить отдел.')
+      throw saveError
     }
   }
 
@@ -3049,21 +3033,23 @@ function PrototypeChangeConfirmationDialog({
   objectName,
   onCancel,
   onConfirm,
+  saving = false,
   title,
 }: {
   changes: PrototypeChangeEntry[]
   objectName: string
   onCancel: () => void
   onConfirm: () => void
+  saving?: boolean
   title: string
 }) {
   useRestoreFocusOnClose(true)
   const dialogRef = useFocusTrap<HTMLElement>(true)
   const cancelRef = useFocusOnOpen<HTMLButtonElement>(true)
-  useEscapeKey(true, onCancel)
+  useEscapeKey(!saving, onCancel)
 
   return (
-    <ContractorDialogShell className="dictionary-confirmation-dialog" closeLabel="Закрыть подтверждение изменений" descriptionId="prototype-change-description" dialogRef={dialogRef} eyebrow="Изменение" onClose={onCancel} subtitle={objectName} title={title} titleId="prototype-change-title">
+    <ContractorDialogShell className="dictionary-confirmation-dialog" closeDisabled={saving} closeLabel="Закрыть подтверждение изменений" descriptionId="prototype-change-description" dialogRef={dialogRef} eyebrow="Изменение" onClose={onCancel} subtitle={objectName} title={title} titleId="prototype-change-title">
         <p className="confirmation-text" id="prototype-change-description">Проверьте, что именно изменится. Действие записывается в историю изменений.</p>
         <dl className="dictionary-change-list">
           {changes.map((change) => (
@@ -3074,10 +3060,10 @@ function PrototypeChangeConfirmationDialog({
           ))}
         </dl>
         <div className="detail-dialog-actions contractors-dialog-actions">
-          <button ref={cancelRef} className="ghost-button" type="button" onClick={onCancel}>Отмена</button>
-          <button className="secondary-button" type="button" onClick={onConfirm}>
-            <Save size={16} />
-            <span>Сохранить</span>
+          <button ref={cancelRef} className="ghost-button" type="button" disabled={saving} onClick={onCancel}>Отмена</button>
+          <button className="secondary-button" type="button" aria-busy={saving} disabled={saving} onClick={onConfirm}>
+            {saving ? <LoaderCircle className="financial-report-button__spinner" size={16} aria-hidden="true" /> : <Save size={16} />}
+            <span>{saving ? 'Сохраняем…' : 'Сохранить'}</span>
           </button>
         </div>
     </ContractorDialogShell>
@@ -3339,24 +3325,35 @@ function ContractorDialogShell({ children, className = '', closeDisabled = false
   )
 }
 
-function GaragePrototypeDialog({ accessToken, canAdjustOpeningData, integrationClient, item, onAdjustOpeningBalance, onClose, onOpenFinancialReport, onSave }: { accessToken: string; canAdjustOpeningData: boolean; integrationClient: IntegrationClient; item?: ContractorGarageRow; onAdjustOpeningBalance: (item: ContractorGarageRow) => void; onClose: () => void; onOpenFinancialReport: (item: ContractorGarageRow) => void; onSave: (item: ContractorGarageRow) => void }) {
+function GaragePrototypeDialog({ accessToken, canAdjustOpeningData, integrationClient, item, onAdjustOpeningBalance, onClose, onOpenFinancialReport, onSave }: { accessToken: string; canAdjustOpeningData: boolean; integrationClient: IntegrationClient; item?: ContractorGarageRow; onAdjustOpeningBalance: (item: ContractorGarageRow) => void; onClose: () => void; onOpenFinancialReport: (item: ContractorGarageRow) => void; onSave: (item: ContractorGarageRow) => Promise<void> }) {
   const [form, setForm] = useState<ContractorGarageRow>(item ?? createEmptyGaragePrototype())
   const [saveChanges, setSaveChanges] = useState<PrototypeChangeEntry[]>([])
+  const [saving, setSaving] = useState(false)
+  const [saveError, setSaveError] = useState<string | null>(null)
   useRestoreFocusOnClose(true)
   const dialogRef = useFocusTrap<HTMLElement>(saveChanges.length === 0)
-  useEscapeKey(saveChanges.length === 0, onClose)
+  useEscapeKey(saveChanges.length === 0 && !saving, onClose)
 
-  function saveAndClose() {
-    onSave(form)
-    setSaveChanges([])
-    onClose()
+  async function saveAndClose() {
+    setSaving(true)
+    setSaveError(null)
+    try {
+      await onSave(form)
+      setSaveChanges([])
+      onClose()
+    } catch (error) {
+      setSaveChanges([])
+      setSaveError(error instanceof Error ? error.message : 'Не удалось сохранить гараж.')
+    } finally {
+      setSaving(false)
+    }
   }
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
 
     if (!item) {
-      saveAndClose()
+      void saveAndClose()
       return
     }
 
@@ -3371,13 +3368,14 @@ function GaragePrototypeDialog({ accessToken, canAdjustOpeningData, integrationC
 
   return (
     <>
-      <div className="modal-backdrop" role="presentation" onMouseDown={onClose}>
+      <div className="modal-backdrop" role="presentation" onMouseDown={saving ? undefined : onClose}>
         <section ref={dialogRef} className="detail-dialog contractors-dialog contractors-dialog--wide contractors-dialog--garage" role="dialog" aria-modal="true" aria-labelledby="garage-dialog-title" onMouseDown={(event) => event.stopPropagation()}>
           <div className="detail-dialog-header">
             <h3 id="garage-dialog-title">{item ? `Гараж ${item.number}` : 'Новый гараж'}</h3>
-            <button className="icon-button" type="button" aria-label="Закрыть форму гаража" onClick={onClose}><X size={18} /></button>
+            <button className="icon-button" type="button" aria-label="Закрыть форму гаража" disabled={saving} onClick={onClose}><X size={18} /></button>
           </div>
           <form className="dictionary-modal-form contractors-modal-form" onSubmit={handleSubmit}>
+            {saveError ? <FormError>{saveError}</FormError> : null}
             <div className="contractors-garage-form-columns">
               <div className="contractors-garage-form-column" role="group" aria-label="Основные сведения о гараже">
                 <FormField label="Номер"><input aria-label="Номер гаража" value={form.number} onChange={(event) => setForm({ ...form, number: event.target.value })} /></FormField>
@@ -3402,26 +3400,26 @@ function GaragePrototypeDialog({ accessToken, canAdjustOpeningData, integrationC
             </div>
             <div className="detail-dialog-actions contractors-dialog-actions contractors-garage-actions">
               {item ? (
-                <button className="secondary-button contractors-report-button" type="button" onClick={() => onOpenFinancialReport(form)}>
+                <button className="secondary-button contractors-report-button" type="button" disabled={saving} onClick={() => onOpenFinancialReport(form)}>
                   <FileText size={16} />
                   <span>Открыть фин. отчет</span>
                 </button>
               ) : null}
               {item && canAdjustOpeningData ? (
-                <button className="secondary-button" type="button" onClick={() => onAdjustOpeningBalance(form)}>
+                <button className="secondary-button" type="button" disabled={saving} onClick={() => onAdjustOpeningBalance(form)}>
                   <Pencil size={16} />
                   <span>Корректировать начальный баланс</span>
                 </button>
               ) : null}
-              <button className="secondary-button" type="submit"><Save size={17} /><span>Сохранить</span></button>
-              <button className="ghost-button" type="button" onClick={onClose}>Отмена</button>
+              <button className="secondary-button" type="submit" aria-busy={saving} disabled={saving}>{saving ? <LoaderCircle className="financial-report-button__spinner" size={17} aria-hidden="true" /> : <Save size={17} />}<span>{saving ? 'Сохраняем…' : 'Сохранить'}</span></button>
+              <button className="ghost-button" type="button" disabled={saving} onClick={onClose}>Отмена</button>
             </div>
           </form>
         </section>
       </div>
 
       {item && saveChanges.length > 0 ? (
-        <PrototypeChangeConfirmationDialog changes={saveChanges} objectName={`Гараж ${item.number || 'без номера'}`} onCancel={() => setSaveChanges([])} onConfirm={saveAndClose} title="Подтвердить изменения гаража" />
+        <PrototypeChangeConfirmationDialog changes={saveChanges} objectName={`Гараж ${item.number || 'без номера'}`} saving={saving} onCancel={() => setSaveChanges([])} onConfirm={() => void saveAndClose()} title="Подтвердить изменения гаража" />
       ) : null}
     </>
   )
@@ -3433,7 +3431,7 @@ function getDepartmentPrototypeChanges(previous: ContractorDepartmentRow, next: 
   ])
 }
 
-function SupplierPrototypeDialog({ accessToken, canAdjustOpeningData, funds, integrationClient, item, services, onAdjustOpeningBalance, onClose, onOpenFinancialReport, onSave }: { accessToken: string; canAdjustOpeningData: boolean; funds: FundDto[]; integrationClient: IntegrationClient; item?: ContractorSupplierRow; services: ChargeServiceSettingDto[]; onAdjustOpeningBalance: (item: ContractorSupplierRow) => void; onClose: () => void; onOpenFinancialReport: (item: ContractorSupplierRow) => void; onSave: (item: ContractorSupplierRow) => void }) {
+function SupplierPrototypeDialog({ accessToken, canAdjustOpeningData, funds, integrationClient, item, services, onAdjustOpeningBalance, onClose, onOpenFinancialReport, onSave }: { accessToken: string; canAdjustOpeningData: boolean; funds: FundDto[]; integrationClient: IntegrationClient; item?: ContractorSupplierRow; services: ChargeServiceSettingDto[]; onAdjustOpeningBalance: (item: ContractorSupplierRow) => void; onClose: () => void; onOpenFinancialReport: (item: ContractorSupplierRow) => void; onSave: (item: ContractorSupplierRow) => Promise<void> }) {
   const activeServices = services.filter((service) =>
     service.id === item?.serviceId || (!service.isArchived && Boolean(service.expenseTypeId)))
   const initialService = activeServices.find((service) => service.id === item?.serviceId) ?? activeServices.find((service) => service.name === item?.service) ?? activeServices[0] ?? null
@@ -3449,6 +3447,8 @@ function SupplierPrototypeDialog({ accessToken, canAdjustOpeningData, funds, int
   const [contactDeleteTarget, setContactDeleteTarget] = useState<ContractorSupplierContact | null>(null)
   const [contactDeleteReason, setContactDeleteReason] = useState('')
   const [contactRestoreTarget, setContactRestoreTarget] = useState<ContractorSupplierContact | null>(null)
+  const [saving, setSaving] = useState(false)
+  const [saveError, setSaveError] = useState<string | null>(null)
   useRestoreFocusOnClose(true)
   useRestoreFocusOnClose(Boolean(contactDeleteTarget))
   useRestoreFocusOnClose(Boolean(contactRestoreTarget))
@@ -3457,7 +3457,7 @@ function SupplierPrototypeDialog({ accessToken, canAdjustOpeningData, funds, int
   const contactDeleteCancelRef = useFocusOnOpen<HTMLButtonElement>(Boolean(contactDeleteTarget))
   const contactRestoreDialogRef = useFocusTrap<HTMLElement>(Boolean(contactRestoreTarget))
   const contactRestoreCancelRef = useFocusOnOpen<HTMLButtonElement>(Boolean(contactRestoreTarget))
-  useEscapeKey(!contactDeleteTarget && !contactRestoreTarget, onClose)
+  useEscapeKey(!contactDeleteTarget && !contactRestoreTarget && !saving, onClose)
   useEscapeKey(Boolean(contactContextMenu), () => setContactContextMenu(null))
   useEscapeKey(Boolean(contactDeleteTarget), () => closeContactDeleteDialog())
   useEscapeKey(Boolean(contactRestoreTarget), () => closeContactRestoreDialog())
@@ -3491,9 +3491,17 @@ function SupplierPrototypeDialog({ accessToken, canAdjustOpeningData, funds, int
     }
   }, [accessToken, form.inn, integrationClient])
 
-  function saveAndClose() {
-    onSave(normalizeSupplierPrototype(form))
-    onClose()
+  async function saveAndClose() {
+    setSaving(true)
+    setSaveError(null)
+    try {
+      await onSave(normalizeSupplierPrototype(form))
+      onClose()
+    } catch (error) {
+      setSaveError(error instanceof Error ? error.message : 'Не удалось сохранить поставщика.')
+    } finally {
+      setSaving(false)
+    }
   }
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -3504,7 +3512,7 @@ function SupplierPrototypeDialog({ accessToken, canAdjustOpeningData, funds, int
       return
     }
 
-    saveAndClose()
+    void saveAndClose()
   }
 
   function addContact() {
@@ -3585,13 +3593,14 @@ function SupplierPrototypeDialog({ accessToken, canAdjustOpeningData, funds, int
 
   return (
     <>
-      <div className="modal-backdrop" role="presentation" onMouseDown={onClose}>
+      <div className="modal-backdrop" role="presentation" onMouseDown={saving ? undefined : onClose}>
         <section ref={dialogRef} className="detail-dialog contractors-dialog contractors-dialog--wide contractors-dialog--supplier" role="dialog" aria-modal="true" aria-labelledby="supplier-dialog-title" onMouseDown={(event) => event.stopPropagation()}>
           <div className="detail-dialog-header">
             <h3 id="supplier-dialog-title">{item ? form.name : 'Новый поставщик'}</h3>
-            <button className="icon-button" type="button" aria-label="Закрыть форму поставщика" onClick={onClose}><X size={18} /></button>
+            <button className="icon-button" type="button" aria-label="Закрыть форму поставщика" disabled={saving} onClick={onClose}><X size={18} /></button>
           </div>
           <form className="dictionary-modal-form contractors-modal-form" onSubmit={handleSubmit}>
+            {saveError ? <FormError>{saveError}</FormError> : null}
             <div className="contractors-supplier-primary-grid">
               <FormField label="Наименование"><input aria-label="Наименование поставщика" value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} /></FormField>
               <FormField label="Услуга">
@@ -3731,19 +3740,19 @@ function SupplierPrototypeDialog({ accessToken, canAdjustOpeningData, funds, int
             </div>
             <div className="detail-dialog-actions contractors-dialog-actions contractors-garage-actions">
               {item ? (
-                <button className="secondary-button contractors-report-button" type="button" onClick={() => onOpenFinancialReport(form)}>
+                <button className="secondary-button contractors-report-button" type="button" disabled={saving} onClick={() => onOpenFinancialReport(form)}>
                   <FileText size={16} />
                   <span>Открыть фин. отчет</span>
                 </button>
               ) : null}
               {item && canAdjustOpeningData ? (
-                <button className="secondary-button" type="button" onClick={() => onAdjustOpeningBalance(form)}>
+                <button className="secondary-button" type="button" disabled={saving} onClick={() => onAdjustOpeningBalance(form)}>
                   <Pencil size={16} />
                   <span>Корректировать начальный баланс</span>
                 </button>
               ) : null}
-              <button className="secondary-button" type="submit"><Save size={17} /><span>Сохранить</span></button>
-              <button className="ghost-button" type="button" onClick={onClose}>Отмена</button>
+              <button className="secondary-button" type="submit" aria-busy={saving} disabled={saving}>{saving ? <LoaderCircle className="financial-report-button__spinner" size={17} aria-hidden="true" /> : <Save size={17} />}<span>{saving ? 'Сохраняем…' : 'Сохранить'}</span></button>
+              <button className="ghost-button" type="button" disabled={saving} onClick={onClose}>Отмена</button>
             </div>
           </form>
         </section>
@@ -3804,26 +3813,37 @@ function SupplierPrototypeDialog({ accessToken, canAdjustOpeningData, funds, int
   )
 }
 
-function EmployeePrototypeDialog({ departments, item, onClose, onOpenFinancialReport, onSave }: { departments: ContractorDepartmentRow[]; item?: ContractorStaffRow; onClose: () => void; onOpenFinancialReport: (item: ContractorStaffRow) => void; onSave: (item: ContractorStaffRow) => void }) {
+function EmployeePrototypeDialog({ departments, item, onClose, onOpenFinancialReport, onSave }: { departments: ContractorDepartmentRow[]; item?: ContractorStaffRow; onClose: () => void; onOpenFinancialReport: (item: ContractorStaffRow) => void; onSave: (item: ContractorStaffRow) => Promise<void> }) {
   const activeDepartments = departments.filter((department) => !department.isDeleted)
   const [form, setForm] = useState<ContractorStaffRow>(item ?? createEmptyEmployeePrototype(activeDepartments[0]?.name ?? departments[0]?.name ?? ''))
   const selectableDepartments = departments.filter((department) => !department.isDeleted || department.name === form.department)
   const [saveChanges, setSaveChanges] = useState<PrototypeChangeEntry[]>([])
+  const [saving, setSaving] = useState(false)
+  const [saveError, setSaveError] = useState<string | null>(null)
   useRestoreFocusOnClose(true)
   const dialogRef = useFocusTrap<HTMLElement>(saveChanges.length === 0)
-  useEscapeKey(saveChanges.length === 0, onClose)
+  useEscapeKey(saveChanges.length === 0 && !saving, onClose)
 
-  function saveAndClose() {
-    onSave({ ...form, rate: formatStaffRate(form.rate) })
-    setSaveChanges([])
-    onClose()
+  async function saveAndClose() {
+    setSaving(true)
+    setSaveError(null)
+    try {
+      await onSave({ ...form, rate: formatStaffRate(form.rate) })
+      setSaveChanges([])
+      onClose()
+    } catch (error) {
+      setSaveChanges([])
+      setSaveError(error instanceof Error ? error.message : 'Не удалось сохранить сотрудника.')
+    } finally {
+      setSaving(false)
+    }
   }
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
 
     if (!item) {
-      saveAndClose()
+      void saveAndClose()
       return
     }
 
@@ -3840,13 +3860,14 @@ function EmployeePrototypeDialog({ departments, item, onClose, onOpenFinancialRe
 
   return (
     <>
-      <div className="modal-backdrop" role="presentation" onMouseDown={onClose}>
+      <div className="modal-backdrop" role="presentation" onMouseDown={saving ? undefined : onClose}>
         <section ref={dialogRef} className="detail-dialog contractors-dialog contractors-dialog--staff" role="dialog" aria-modal="true" aria-labelledby="employee-dialog-title" onMouseDown={(event) => event.stopPropagation()}>
           <div className="detail-dialog-header">
             <h3 id="employee-dialog-title">{item ? form.fullName : 'Новый сотрудник'}</h3>
-            <button className="icon-button" type="button" aria-label="Закрыть форму сотрудника" onClick={onClose}><X size={18} /></button>
+            <button className="icon-button" type="button" aria-label="Закрыть форму сотрудника" disabled={saving} onClick={onClose}><X size={18} /></button>
           </div>
           <form className="dictionary-modal-form contractors-modal-form" onSubmit={handleSubmit}>
+            {saveError ? <FormError>{saveError}</FormError> : null}
             <FormField label="ФИО"><input aria-label="ФИО сотрудника" value={form.fullName} onChange={(event) => setForm({ ...form, fullName: event.target.value })} /></FormField>
             <div className="contractors-staff-fields">
               <FormField label="Отдел">
@@ -3874,14 +3895,14 @@ function EmployeePrototypeDialog({ departments, item, onClose, onOpenFinancialRe
             </div>
             <div className="detail-dialog-actions contractors-dialog-actions contractors-staff-actions">
               {item ? (
-                <button className="secondary-button contractors-report-button" type="button" onClick={() => onOpenFinancialReport(form)}>
+                <button className="secondary-button contractors-report-button" type="button" disabled={saving} onClick={() => onOpenFinancialReport(form)}>
                   <FileText size={16} />
                   <span>Открыть фин. отчет</span>
                 </button>
               ) : null}
               <div className="contractors-dialog-submit-actions">
-                <button className="secondary-button" type="submit"><Save size={17} /><span>Сохранить</span></button>
-                <button className="ghost-button" type="button" onClick={onClose}>Отмена</button>
+                <button className="secondary-button" type="submit" aria-busy={saving} disabled={saving}>{saving ? <LoaderCircle className="financial-report-button__spinner" size={17} aria-hidden="true" /> : <Save size={17} />}<span>{saving ? 'Сохраняем…' : 'Сохранить'}</span></button>
+                <button className="ghost-button" type="button" disabled={saving} onClick={onClose}>Отмена</button>
               </div>
             </div>
           </form>
@@ -3889,30 +3910,41 @@ function EmployeePrototypeDialog({ departments, item, onClose, onOpenFinancialRe
       </div>
 
       {item && saveChanges.length > 0 ? (
-        <PrototypeChangeConfirmationDialog changes={saveChanges} objectName={item.fullName || 'Сотрудник'} onCancel={() => setSaveChanges([])} onConfirm={saveAndClose} title="Подтвердить изменения сотрудника" />
+        <PrototypeChangeConfirmationDialog changes={saveChanges} objectName={item.fullName || 'Сотрудник'} saving={saving} onCancel={() => setSaveChanges([])} onConfirm={() => void saveAndClose()} title="Подтвердить изменения сотрудника" />
       ) : null}
 
     </>
   )
 }
 
-function DepartmentPrototypeDialog({ item, onClose, onSave }: { item?: ContractorDepartmentRow; onClose: () => void; onSave: (department: ContractorDepartmentRow) => void }) {
+function DepartmentPrototypeDialog({ item, onClose, onSave }: { item?: ContractorDepartmentRow; onClose: () => void; onSave: (department: ContractorDepartmentRow) => Promise<void> }) {
   const [form, setForm] = useState<ContractorDepartmentRow>(() => item ?? { id: `department-${Date.now()}`, name: '', isDeleted: false })
   const [saveChanges, setSaveChanges] = useState<PrototypeChangeEntry[]>([])
+  const [saving, setSaving] = useState(false)
+  const [saveError, setSaveError] = useState<string | null>(null)
   useRestoreFocusOnClose(true)
   const dialogRef = useFocusTrap<HTMLElement>(saveChanges.length === 0)
-  useEscapeKey(saveChanges.length === 0, onClose)
+  useEscapeKey(saveChanges.length === 0 && !saving, onClose)
 
-  function saveAndClose() {
-    onSave(form)
-    setSaveChanges([])
-    onClose()
+  async function saveAndClose() {
+    setSaving(true)
+    setSaveError(null)
+    try {
+      await onSave(form)
+      setSaveChanges([])
+      onClose()
+    } catch (error) {
+      setSaveChanges([])
+      setSaveError(error instanceof Error ? error.message : 'Не удалось сохранить отдел.')
+    } finally {
+      setSaving(false)
+    }
   }
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (!item) {
-      saveAndClose()
+      void saveAndClose()
       return
     }
 
@@ -3927,24 +3959,25 @@ function DepartmentPrototypeDialog({ item, onClose, onSave }: { item?: Contracto
 
   return (
     <>
-      <div className="modal-backdrop" role="presentation" onMouseDown={onClose}>
+      <div className="modal-backdrop" role="presentation" onMouseDown={saving ? undefined : onClose}>
         <section ref={dialogRef} className="detail-dialog contractors-dialog" role="dialog" aria-modal="true" aria-labelledby="department-dialog-title" onMouseDown={(event) => event.stopPropagation()}>
           <div className="detail-dialog-header">
             <h3 id="department-dialog-title">{item ? form.name : 'Новый отдел'}</h3>
-            <button className="icon-button" type="button" aria-label="Закрыть форму отдела" onClick={onClose}><X size={18} /></button>
+            <button className="icon-button" type="button" aria-label="Закрыть форму отдела" disabled={saving} onClick={onClose}><X size={18} /></button>
           </div>
           <form className="dictionary-modal-form contractors-modal-form" onSubmit={handleSubmit}>
+            {saveError ? <FormError>{saveError}</FormError> : null}
             <FormField label="Наименование"><input aria-label="Наименование отдела" maxLength={200} required value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} /></FormField>
             <div className="detail-dialog-actions">
-              <button className="secondary-button" type="submit"><Save size={17} /><span>{item ? 'Сохранить' : 'Ок'}</span></button>
-              <button className="ghost-button" type="button" onClick={onClose}>Отмена</button>
+              <button className="secondary-button" type="submit" aria-busy={saving} disabled={saving}>{saving ? <LoaderCircle className="financial-report-button__spinner" size={17} aria-hidden="true" /> : <Save size={17} />}<span>{saving ? 'Сохраняем…' : item ? 'Сохранить' : 'Ок'}</span></button>
+              <button className="ghost-button" type="button" disabled={saving} onClick={onClose}>Отмена</button>
             </div>
           </form>
         </section>
       </div>
 
       {item && saveChanges.length > 0 ? (
-        <PrototypeChangeConfirmationDialog changes={saveChanges} objectName={item.name || 'Отдел'} onCancel={() => setSaveChanges([])} onConfirm={saveAndClose} title="Подтвердить изменения отдела" />
+        <PrototypeChangeConfirmationDialog changes={saveChanges} objectName={item.name || 'Отдел'} saving={saving} onCancel={() => setSaveChanges([])} onConfirm={() => void saveAndClose()} title="Подтвердить изменения отдела" />
       ) : null}
     </>
   )

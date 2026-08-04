@@ -1842,6 +1842,89 @@ describe('App', () => {
     expect(within(employeeDialog).queryByRole('button', { name: 'Открыть фин. отчет' })).not.toBeInTheDocument()
   }, 20000)
 
+  it('keeps contractor editors open and preserves drafts when saving fails', async () => {
+    const user = userEvent.setup()
+    let releaseGarageSave!: () => void
+    const garageSaveGate = new Promise<void>((resolve) => { releaseGarageSave = resolve })
+    const dictionaryClient = createDictionaryClient({
+      createGarage: async (_token, request) => {
+        if (request.number !== '12') {
+          await garageSaveGate
+        }
+        throw new DictionaryApiError('garage_save_failed', request.number === '12' ? 'Изменения гаража не сохранены.' : 'Гараж не сохранен.', 503)
+      },
+      createSupplier: async () => { throw new DictionaryApiError('supplier_save_failed', 'Поставщик не сохранен.', 503) },
+      createStaffMember: async () => { throw new DictionaryApiError('employee_save_failed', 'Сотрудник не сохранен.', 503) },
+      createStaffDepartment: async (_token, request) => {
+        if (request.name === 'Бухгалтерия') {
+          return createStaffDepartment({ id: '77777777-7777-4777-8777-777777777777', name: request.name })
+        }
+        throw new DictionaryApiError('department_save_failed', 'Отдел не сохранен.', 503)
+      },
+    })
+    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} importClient={createImportClient()} integrationClient={createIntegrationClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    const dashboardTiles = await screen.findByRole('group', { name: 'Главные разделы' })
+    await user.click(within(dashboardTiles).getByRole('button', { name: 'Контрагенты' }))
+    const contractorsPanel = await screen.findByRole('region', { name: 'Контрагенты' })
+
+    await user.click(within(contractorsPanel).getByRole('button', { name: 'Добавить гараж' }))
+    let dialog = await screen.findByRole('dialog', { name: 'Новый гараж' })
+    await user.type(within(dialog).getByLabelText('Номер гаража'), 'Ошибка-1')
+    await user.click(within(dialog).getByRole('button', { name: 'Сохранить' }))
+    expect(within(dialog).getByRole('button', { name: 'Сохраняем…' })).toBeDisabled()
+    expect(within(dialog).getByRole('button', { name: 'Закрыть форму гаража' })).toBeDisabled()
+    expect(within(dialog).getByRole('button', { name: 'Отмена' })).toBeDisabled()
+    releaseGarageSave()
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent('Гараж не сохранен.')
+    expect(within(dialog).getByLabelText('Номер гаража')).toHaveValue('Ошибка-1')
+    expect(within(dialog).getByRole('button', { name: 'Сохранить' })).toBeEnabled()
+    await user.click(within(dialog).getByRole('button', { name: 'Отмена' }))
+    expect(within(contractorsPanel).queryByRole('alert')).not.toBeInTheDocument()
+
+    await user.click(within(contractorsPanel).getByRole('button', { name: 'Изменить гараж 12' }))
+    dialog = await screen.findByRole('dialog', { name: 'Гараж 12' })
+    await user.clear(within(dialog).getByLabelText('Количество человек'))
+    await user.type(within(dialog).getByLabelText('Количество человек'), '2')
+    await user.click(within(dialog).getByRole('button', { name: 'Сохранить' }))
+    const confirmation = await screen.findByRole('dialog', { name: 'Подтвердить изменения гаража' })
+    await user.click(within(confirmation).getByRole('button', { name: 'Сохранить' }))
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent('Изменения гаража не сохранены.')
+    expect(screen.queryByRole('dialog', { name: 'Подтвердить изменения гаража' })).not.toBeInTheDocument()
+    expect(within(dialog).getByLabelText('Количество человек')).toHaveValue('2')
+    await user.click(within(dialog).getByRole('button', { name: 'Отмена' }))
+
+    await user.click(within(contractorsPanel).getByRole('tab', { name: 'Поставщики' }))
+    await user.click(within(contractorsPanel).getByRole('button', { name: 'Добавить поставщика' }))
+    dialog = await screen.findByRole('dialog', { name: 'Новый поставщик' })
+    await user.type(within(dialog).getByLabelText('Наименование поставщика'), 'Поставщик с ошибкой')
+    await user.click(within(dialog).getByRole('button', { name: 'Сохранить' }))
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent('Поставщик не сохранен.')
+    expect(within(dialog).getByLabelText('Наименование поставщика')).toHaveValue('Поставщик с ошибкой')
+    expect(within(dialog).getByRole('button', { name: 'Сохранить' })).toBeEnabled()
+    await user.click(within(dialog).getByRole('button', { name: 'Отмена' }))
+
+    await user.click(within(contractorsPanel).getByRole('tab', { name: 'Персонал' }))
+    await user.click(within(contractorsPanel).getByRole('button', { name: 'Добавить сотрудника' }))
+    dialog = await screen.findByRole('dialog', { name: 'Новый сотрудник' })
+    await user.type(within(dialog).getByLabelText('ФИО сотрудника'), 'Сотрудник с ошибкой')
+    await user.click(within(dialog).getByRole('button', { name: 'Сохранить' }))
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent('Сотрудник не сохранен.')
+    expect(within(dialog).getByLabelText('ФИО сотрудника')).toHaveValue('Сотрудник с ошибкой')
+    expect(within(dialog).getByRole('button', { name: 'Сохранить' })).toBeEnabled()
+    await user.click(within(dialog).getByRole('button', { name: 'Отмена' }))
+
+    await user.click(within(contractorsPanel).getByRole('button', { name: 'Добавить отдел' }))
+    dialog = await screen.findByRole('dialog', { name: 'Новый отдел' })
+    await user.type(within(dialog).getByLabelText('Наименование отдела'), 'Отдел с ошибкой')
+    await user.click(within(dialog).getByRole('button', { name: 'Ок' }))
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent('Отдел не сохранен.')
+    expect(within(dialog).getByLabelText('Наименование отдела')).toHaveValue('Отдел с ошибкой')
+    expect(within(dialog).getByRole('button', { name: 'Ок' })).toBeEnabled()
+  }, 30000)
+
   it('shows contractors tabs and section dialogs without local history access', async () => {
     const user = userEvent.setup()
     const contractorOwner = createOwner({
