@@ -3969,7 +3969,11 @@ function AddFeePrototypeDialog({
       return
     }
 
-    await onSave(request)
+    try {
+      await onSave(request)
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Не удалось объявить сбор.')
+    }
   }
 
   async function confirmFeeChanges() {
@@ -3980,8 +3984,9 @@ function AddFeePrototypeDialog({
     try {
       await onSave(pendingConfirmation.request)
       setPendingConfirmation(null)
-    } catch {
+    } catch (caught) {
       setPendingConfirmation(null)
+      setError(caught instanceof Error ? caught.message : 'Не удалось сохранить изменения сбора.')
     }
   }
 

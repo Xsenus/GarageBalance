@@ -802,6 +802,36 @@ describe('App', () => {
     expect(within(feeCampaignsSection).queryByRole('button', { name: 'Изменить сбор Сбор на камеры' })).not.toBeInTheDocument()
   })
 
+  it('shows a fee campaign creation failure inside the open form', async () => {
+    const user = userEvent.setup()
+    const targetIncomeType = createAccountingType({ id: 'income-type-other-income', name: 'Прочие доходы', code: 'other_income', isSystem: true })
+    const dictionaryClient = createDictionaryClient({
+      getGarages: async () => [createGarage({ id: 'garage-fee-error', number: '12' })],
+      getIncomeTypes: async () => [targetIncomeType],
+      getFeeCampaigns: async () => [],
+      createFeeCampaign: async () => {
+        throw new Error('Сбор временно не удалось объявить.')
+      },
+    })
+
+    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Тарифы и сборы')
+    const tariffsPanel = await screen.findByRole('region', { name: 'Тарифы и сборы' })
+    const createButton = within(tariffsPanel).getAllByRole('button', { name: 'Объявить сбор' })[0]
+    await waitFor(() => expect(createButton).toBeEnabled())
+    await user.click(createButton)
+    const createDialog = await screen.findByRole('dialog', { name: 'Добавить сбор' })
+    await user.type(within(createDialog).getByLabelText('Наименование сбора'), 'Сбор на ремонт ворот')
+    await user.type(within(createDialog).getByLabelText('Сумма взноса'), '500')
+    await user.click(within(createDialog).getByRole('button', { name: 'Объявить сбор' }))
+
+    expect(await within(createDialog).findByRole('alert')).toHaveTextContent('Сбор временно не удалось объявить.')
+    expect(createDialog).toBeInTheDocument()
+    expect(within(createDialog).getByLabelText('Наименование сбора')).toHaveValue('Сбор на ремонт ворот')
+  })
+
   it('keeps a newly created fee campaign when the initial list finishes later', async () => {
     const user = userEvent.setup()
     const targetIncomeType = createAccountingType({ id: 'income-type-other-income', name: 'Прочие доходы', code: 'other_income', isSystem: true })
@@ -889,10 +919,10 @@ describe('App', () => {
     await user.click(within(confirmationDialog).getByRole('button', { name: 'Сохранить изменения' }))
 
     expect(updateCalls).toBe(1)
-    const alerts = await screen.findAllByRole('alert')
-    expect(alerts.some((alert) => alert.textContent?.includes('Исторический состав должен оставаться неизменным.'))).toBe(true)
-    expect(screen.getByRole('dialog', { name: 'Изменить сбор' })).toBeInTheDocument()
-    expect(within(screen.getByRole('dialog', { name: 'Изменить сбор' })).getByLabelText('Гараж 27')).toBeChecked()
+    const reopenedEditDialog = screen.getByRole('dialog', { name: 'Изменить сбор' })
+    expect(await within(reopenedEditDialog).findByRole('alert')).toHaveTextContent('Исторический состав должен оставаться неизменным.')
+    expect(reopenedEditDialog).toBeInTheDocument()
+    expect(within(reopenedEditDialog).getByLabelText('Гараж 27')).toBeChecked()
   })
 
   it('explains and performs manual fee campaign completion from tariffs page', async () => {
@@ -20583,7 +20613,9 @@ function createStatefulDictionaryClient(): DictionaryClient {
 function createAuthResponse(overrides: Partial<AuthResponse> & { user?: Partial<AuthResponse['user']> } = {}): AuthResponse {
   const response: AuthResponse = {
     accessToken: 'token',
-    expiresAtUtc: new Date(Date.now() + 60_000).toISOString(),
+    // Coverage instrumentation can make the longest workflow tests exceed one minute.
+    // Expiration-specific tests always override this value explicitly.
+    expiresAtUtc: new Date(Date.now() + 60 * 60_000).toISOString(),
     user: {
       id: '5df20dec-2959-4726-a1cb-0e6ec6b28674',
       email: 'admin@example.com',
