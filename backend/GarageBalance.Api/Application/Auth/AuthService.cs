@@ -11,7 +11,8 @@ public sealed class AuthService(
     IPasswordHasher passwordHasher,
     IPasswordPolicyValidator passwordPolicyValidator,
     ITokenService tokenService,
-    IAuditEventWriter auditEventWriter) : IAuthService
+    IAuditEventWriter auditEventWriter,
+    IUserSecurityMutationLock securityMutationLock) : IAuthService
 {
     private const int MaxFailedLoginAttempts = 5;
     private static readonly TimeSpan LoginAttemptWindow = TimeSpan.FromMinutes(15);
@@ -24,6 +25,7 @@ public sealed class AuthService(
             return AuthResult<AuthResponse>.Failure("password_policy_violation", passwordPolicy.ErrorMessage!);
         }
 
+        await using var mutationLock = await securityMutationLock.AcquireAsync(cancellationToken);
         if (await users.HasAnyUsersAsync(cancellationToken))
         {
             return AuthResult<AuthResponse>.Failure("bootstrap_closed", "Первый администратор уже создан.");

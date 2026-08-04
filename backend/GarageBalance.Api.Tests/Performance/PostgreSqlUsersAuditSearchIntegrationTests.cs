@@ -49,7 +49,8 @@ public sealed class PostgreSqlUsersAuditSearchIntegrationTests
                 new EfUserManagementRepository(context),
                 new Pbkdf2PasswordHasher(),
                 new PasswordPolicyValidator(),
-                new AuditEventWriter(context));
+                new AuditEventWriter(context),
+                new NoOpUserSecurityMutationLock());
             var userPage = await users.GetUsersPageAsync("NEEDLE %", 0, 25, CancellationToken.None);
             var user = Assert.Single(userPage.Items);
             Assert.Equal("operator-149@example.test", user.Email);

@@ -5,6 +5,7 @@ using GarageBalance.Api.Application.Users;
 using GarageBalance.Api.Domain.Security;
 using GarageBalance.Api.Infrastructure.Data;
 using GarageBalance.Api.Infrastructure.Security;
+using GarageBalance.Api.Tests.Common;
 using TestDatabase = GarageBalance.Api.Tests.Common.SqliteTestDatabase;
 
 namespace GarageBalance.Api.Tests.Users;
@@ -517,7 +518,8 @@ public sealed class UserManagementServiceTests
             new EfUserManagementRepository(context),
             new Pbkdf2PasswordHasher(),
             new PasswordPolicyValidator(),
-            new AuditEventWriter(context));
+            new AuditEventWriter(context),
+            new NoOpUserSecurityMutationLock());
     }
 
 }

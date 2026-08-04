@@ -98,6 +98,7 @@ builder.Services.AddScoped<ICashBankBalanceOperationRepository, EfCashBankBalanc
 builder.Services.AddScoped<ICashBankBalanceSettingsService, CashBankBalanceSettingsService>();
 builder.Services.AddScoped<IUserRepository, EfUserRepository>();
 builder.Services.AddScoped<IAuthService, AuthService>();
+builder.Services.AddScoped<IUserSecurityMutationLock, UserSecurityMutationLock>();
 builder.Services.AddScoped<IDictionaryService, DictionaryService>();
 builder.Services.AddScoped<IOwnerRepository, EfOwnerRepository>();
 builder.Services.AddScoped<IGarageRepository, EfGarageRepository>();

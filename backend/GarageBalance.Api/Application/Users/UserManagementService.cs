@@ -10,7 +10,8 @@ public sealed class UserManagementService(
     IUserManagementRepository repository,
     IPasswordHasher passwordHasher,
     IPasswordPolicyValidator passwordPolicyValidator,
-    IAuditEventWriter auditEventWriter) : IUserManagementService
+    IAuditEventWriter auditEventWriter,
+    IUserSecurityMutationLock securityMutationLock) : IUserManagementService
 {
     public async Task<IReadOnlyList<ManagedRoleDto>> GetRolesAsync(CancellationToken cancellationToken)
     {
@@ -119,6 +120,7 @@ public sealed class UserManagementService(
 
     public async Task<UserManagementResult<ManagedUserDto>> UpdateUserAsync(Guid userId, UpdateManagedUserRequest request, Guid? actorUserId, CancellationToken cancellationToken)
     {
+        await using var mutationLock = await securityMutationLock.AcquireAsync(cancellationToken);
         await EnsureSystemRolesAsync(cancellationToken);
 
         var user = await repository.FindUserForUpdateAsync(userId, inactiveOnly: false, cancellationToken);

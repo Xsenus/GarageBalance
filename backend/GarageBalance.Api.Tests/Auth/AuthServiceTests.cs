@@ -2,6 +2,7 @@ using System.Security.Claims;
 using GarageBalance.Api.Application.Auth;
 using GarageBalance.Api.Domain.Security;
 using GarageBalance.Api.Infrastructure.Security;
+using GarageBalance.Api.Tests.Common;
 using Microsoft.Extensions.Options;
 
 namespace GarageBalance.Api.Tests.Auth;
@@ -294,6 +295,7 @@ public sealed class AuthServiceTests
             new Pbkdf2PasswordHasher(),
             new PasswordPolicyValidator(),
             new JwtTokenService(jwtOptions),
-            new InMemoryAuditEventWriter(repository));
+            new InMemoryAuditEventWriter(repository),
+            new NoOpUserSecurityMutationLock());
     }
 }

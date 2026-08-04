@@ -3,6 +3,7 @@ using GarageBalance.Api.Application.Audit;
 using GarageBalance.Api.Domain.Security;
 using GarageBalance.Api.Infrastructure.Data;
 using GarageBalance.Api.Infrastructure.Security;
+using GarageBalance.Api.Tests.Common;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
@@ -26,7 +27,8 @@ public sealed class EfAuthServiceTests
             new Pbkdf2PasswordHasher(),
             new PasswordPolicyValidator(),
             new JwtTokenService(Options.Create(new JwtOptions { SigningKey = "test-signing-key-with-more-than-32-symbols" })),
-            new AuditEventWriter(context));
+            new AuditEventWriter(context),
+            new NoOpUserSecurityMutationLock());
 
         var result = await service.BootstrapAdminAsync(
             new BootstrapAdminRequest("admin@example.com", "StrongPass123", "Администратор"),
