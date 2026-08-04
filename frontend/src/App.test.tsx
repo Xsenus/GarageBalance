@@ -9780,6 +9780,58 @@ describe('App', () => {
     expect(window.localStorage.getItem('garagebalance.auth.session')).toBeNull()
   })
 
+  it('keeps password confirmation open and preserves fields after a server failure', async () => {
+    const user = userEvent.setup()
+    let attempt = 0
+    let releaseFailure!: () => void
+    const failureGate = new Promise<void>((resolve) => { releaseFailure = resolve })
+    const authClient = createAuthClient({
+      changeOwnPassword: async () => {
+        attempt += 1
+        if (attempt === 1) {
+          await failureGate
+          throw new Error('Сервер временно не изменил пароль.')
+        }
+
+        return createAuthResponse().user
+      },
+    })
+    render(<App authClient={authClient} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} integrationClient={createIntegrationClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Настройки')
+    const passwordPanel = await screen.findByRole('region', { name: 'Безопасность аккаунта' })
+    const currentPassword = within(passwordPanel).getByLabelText('Текущий пароль')
+    const newPassword = within(passwordPanel).getByLabelText('Новый пароль')
+    const repeatedPassword = within(passwordPanel).getByLabelText('Повтор нового пароля')
+
+    await user.type(currentPassword, 'StrongPass123')
+    await user.type(newPassword, 'NewStrongPass123')
+    await user.type(repeatedPassword, 'NewStrongPass123')
+    await user.click(within(passwordPanel).getByRole('button', { name: 'Изменить пароль' }))
+
+    let confirmation = await screen.findByRole('dialog', { name: 'Подтвердить смену пароля?' })
+    await user.click(within(confirmation).getByRole('button', { name: 'Подтвердить смену пароля' }))
+    expect(within(confirmation).getByRole('button', { name: 'Сохраняем...' })).toBeDisabled()
+    expect(within(confirmation).getByRole('button', { name: 'Отменить подтверждение смены пароля' })).toBeDisabled()
+    expect(within(confirmation).getByRole('button', { name: 'Отмена' })).toBeDisabled()
+    await user.keyboard('{Escape}')
+    expect(screen.getByRole('dialog', { name: 'Подтвердить смену пароля?' })).toBe(confirmation)
+
+    releaseFailure()
+    expect(await within(confirmation).findByRole('alert')).toHaveTextContent('Сервер временно не изменил пароль.')
+    expect(screen.getAllByText('Сервер временно не изменил пароль.')).toHaveLength(1)
+    expect(currentPassword).toHaveValue('StrongPass123')
+    expect(newPassword).toHaveValue('NewStrongPass123')
+    expect(repeatedPassword).toHaveValue('NewStrongPass123')
+
+    confirmation = screen.getByRole('dialog', { name: 'Подтвердить смену пароля?' })
+    await user.click(within(confirmation).getByRole('button', { name: 'Подтвердить смену пароля' }))
+    expect(attempt).toBe(2)
+    expect(await screen.findByRole('region', { name: 'Вход в систему' })).toBeInTheDocument()
+  })
+
   it('closes password change confirmation with Escape without changing password', async () => {
     const user = userEvent.setup()
     let changeCalled = false

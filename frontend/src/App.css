@@ -2611,10 +2611,6 @@ h1 {
   flex: 0 0 64px;
 }
 
-.contractors-inline-field--date select {
-  flex: 1;
-}
-
 .contractors-inline-field span {
   color: #475467;
   font-size: 13px;
@@ -3848,17 +3844,6 @@ h1 {
   gap: 5px;
 }
 
-.payments-prototype-table select {
-  width: 100%;
-  min-height: 32px;
-  border: 1px solid #d0d5dd;
-  border-radius: 8px;
-  background: #ffffff;
-  color: #101828;
-  padding: 5px 30px 5px 8px;
-  font: inherit;
-}
-
 .payments-prototype-period-row {
   display: flex;
   flex-wrap: wrap;
@@ -3876,16 +3861,6 @@ h1 {
   color: #475467;
   font-size: 12px;
   font-weight: 750;
-}
-
-.payments-prototype-period-row select {
-  min-height: 34px;
-  border: 1px solid #d0d5dd;
-  border-radius: 8px;
-  background: #ffffff;
-  color: #101828;
-  padding: 6px 32px 6px 10px;
-  font: inherit;
 }
 
 .payments-prototype-period-row .localized-date-picker__popover {
@@ -4186,7 +4161,6 @@ h1 {
 }
 
 .payments-prototype-modal-form input,
-.payments-prototype-modal-form select,
 .payments-prototype-modal-form textarea {
   width: 100%;
   min-height: 40px;
@@ -4907,22 +4881,16 @@ h1 {
 }
 
 .dictionary-form input:not([type='checkbox']):not([type='radio']):not([type='file']),
-.dictionary-form select,
 .dictionary-form textarea,
 .dictionary-toolbar input:not([type='checkbox']):not([type='radio']):not([type='file']),
 .dictionary-modal-form input:not([type='checkbox']):not([type='radio']):not([type='file']),
-.dictionary-modal-form select,
 .dictionary-modal-form textarea,
 .payments-prototype-modal-form input:not([type='checkbox']):not([type='radio']):not([type='file']),
-.payments-prototype-modal-form select,
 .payments-prototype-modal-form textarea,
 .report-filter input:not([type='checkbox']):not([type='radio']):not([type='file']),
-.report-filter select,
 .balance-history-filters input:not([type='checkbox']):not([type='radio']):not([type='file']),
-.balance-history-filters select,
 .finance-period-filter input:not([type='checkbox']):not([type='radio']):not([type='file']),
 .audit-filter-grid input:not([type='checkbox']):not([type='radio']):not([type='file']),
-.audit-filter-grid select,
 .detail-dialog input:not([type='checkbox']):not([type='radio']):not([type='file']),
 .detail-dialog textarea {
   width: 100%;
@@ -4933,31 +4901,6 @@ h1 {
   color: #101828;
   padding: 9px 10px;
   font: inherit;
-}
-
-.dictionary-form select,
-.dictionary-modal-form select,
-.report-filter select,
-.balance-history-filters select,
-.audit-filter-grid select {
-  appearance: none;
-  background-image:
-    linear-gradient(45deg, transparent 50%, #475467 50%),
-    linear-gradient(135deg, #475467 50%, transparent 50%);
-  background-position:
-    calc(100% - 18px) 50%,
-    calc(100% - 12px) 50%;
-  background-repeat: no-repeat;
-  background-size: 6px 6px;
-  padding-right: 34px;
-}
-
-.dictionary-form select[multiple],
-.dictionary-modal-form select[multiple],
-.report-filter select[multiple] {
-  appearance: auto;
-  background-image: none;
-  padding-right: 10px;
 }
 
 .dictionary-form input:not([type='checkbox']):not([type='radio']):not([type='file']):disabled,
@@ -4974,17 +4917,6 @@ h1 {
 .audit-filter-grid input:not([type='checkbox']):not([type='radio']):not([type='file']):disabled,
 .detail-dialog input:not([type='checkbox']):not([type='radio']):not([type='file']):disabled,
 .detail-dialog textarea:disabled {
-  cursor: not-allowed;
-  background-color: #f8fafc;
-  color: #667085;
-  opacity: 0.72;
-}
-
-.dictionary-form select:disabled,
-.dictionary-modal-form select:disabled,
-.report-filter select:disabled,
-.balance-history-filters select:disabled,
-.audit-filter-grid select:disabled {
   cursor: not-allowed;
   background-color: #f8fafc;
   color: #667085;
@@ -5114,22 +5046,16 @@ h1 {
 }
 
 .dictionary-form input:not([type='checkbox']):not([type='radio']):not([type='file']):focus,
-.dictionary-form select:focus,
 .dictionary-form textarea:focus,
 .dictionary-toolbar input:not([type='checkbox']):not([type='radio']):not([type='file']):focus,
 .dictionary-modal-form input:not([type='checkbox']):not([type='radio']):not([type='file']):focus,
-.dictionary-modal-form select:focus,
 .dictionary-modal-form textarea:focus,
 .payments-prototype-modal-form input:not([type='checkbox']):not([type='radio']):not([type='file']):focus,
-.payments-prototype-modal-form select:focus,
 .payments-prototype-modal-form textarea:focus,
 .report-filter input:not([type='checkbox']):not([type='radio']):not([type='file']):focus,
-.report-filter select:focus,
 .balance-history-filters input:not([type='checkbox']):not([type='radio']):not([type='file']):focus,
-.balance-history-filters select:focus,
 .finance-period-filter input:not([type='checkbox']):not([type='radio']):not([type='file']):focus,
 .audit-filter-grid input:not([type='checkbox']):not([type='radio']):not([type='file']):focus,
-.audit-filter-grid select:focus,
 .detail-dialog input:not([type='checkbox']):not([type='radio']):not([type='file']):focus,
 .detail-dialog textarea:focus {
   border-color: #2e90fa;
@@ -5754,7 +5680,6 @@ h1 {
 
 .dictionary-toolbar input,
 .dictionary-modal-form input,
-.dictionary-modal-form select,
 .dictionary-modal-form textarea {
   width: 100%;
   min-height: 40px;
@@ -5767,7 +5692,6 @@ h1 {
 }
 
 .dictionary-modal-form input:focus,
-.dictionary-modal-form select:focus,
 .dictionary-modal-form textarea:focus {
   border-color: #2e90fa;
   outline: 3px solid rgba(46, 144, 250, 0.16);
@@ -6340,7 +6264,7 @@ h1 {
   color: #b42318;
 }
 
-.dictionary-modal-form__fields {
+.dictionary-modal-form > fieldset {
   border: 0;
   display: grid;
   gap: 10px;
@@ -7589,8 +7513,7 @@ button.operation-row:focus-visible {
   justify-content: center;
 }
 
-.report-filter input,
-.report-filter select {
+.report-filter input {
   width: 100%;
   min-width: 160px;
   min-height: 40px;
@@ -7602,13 +7525,7 @@ button.operation-row:focus-visible {
   font: inherit;
 }
 
-.report-filter select[multiple] {
-  min-height: 74px;
-  padding: 7px 10px;
-}
-
-.report-filter input:focus,
-.report-filter select:focus {
+.report-filter input:focus {
   border-color: #2e90fa;
   outline: 3px solid rgba(46, 144, 250, 0.16);
 }

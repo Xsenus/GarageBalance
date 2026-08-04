@@ -1474,7 +1474,7 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, integ
               </button>
             </div>
             <form className="dictionary-modal-form" onSubmit={saveEditor}>
-              <fieldset className="dictionary-modal-form__fields" disabled={saving === 'dictionary-editor'}>
+              <fieldset disabled={saving === 'dictionary-editor'}>
                 {renderEditorFields(editor.section)}
               </fieldset>
               <FormValidationSummary title="Проверьте запись" items={validationErrors} />

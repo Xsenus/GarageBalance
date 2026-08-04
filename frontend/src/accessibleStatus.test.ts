@@ -129,9 +129,7 @@ describe('accessible dynamic messages', () => {
     }
 
     expect(appCss).toContain(".audit-filter-grid input:not([type='checkbox']):not([type='radio']):not([type='file'])")
-    expect(appCss).toContain('.audit-filter-grid select')
     expect(appCss).toContain(".audit-filter-grid input:not([type='checkbox']):not([type='radio']):not([type='file']):focus")
-    expect(appCss).toContain('.audit-filter-grid select:focus')
     expect(appCss).toContain('.meter-readings-control[aria-invalid=\'true\']')
 
     expect(meterReadingsPanelSource).toContain('function isValidMeterReadingYear(value: string)')
@@ -143,40 +141,18 @@ describe('accessible dynamic messages', () => {
     expect(meterReadingsPanelSource).toContain('Введите год четырьмя цифрами от 1900 до 9999.')
   })
 
-  it('keeps select controls consistently styled and labeled', () => {
-    const singleSelectContainers = [
-      '.dictionary-form select',
-      '.dictionary-modal-form select',
-      '.report-filter select',
-      '.balance-history-filters select',
-      '.audit-filter-grid select',
-    ]
-    const multipleSelectContainers = [
-      '.dictionary-form select[multiple]',
-      '.dictionary-modal-form select[multiple]',
-      '.report-filter select[multiple]',
-    ]
-
-    for (const selector of singleSelectContainers) {
-      expect(appCss).toContain(selector)
-      expect(appCss).toContain(`${selector}:disabled`)
-    }
-
-    for (const selector of multipleSelectContainers) {
-      expect(appCss).toContain(selector)
-    }
-
-    expect(appCss).toContain('appearance: none;')
-    expect(normalizedAppCss).toContain('background-image:\n    linear-gradient(45deg, transparent 50%, #475467 50%),')
-    expect(appCss).toContain('padding-right: 34px;')
-    expect(appCss).toContain('appearance: auto;')
-    expect(appCss).toContain('background-image: none;')
-    expect(appCss).toContain('cursor: not-allowed;')
-    expect(appCss).toContain('background-color: #f8fafc;')
-
+  it('keeps shared select controls consistently styled and labeled without native select rules', () => {
     const selectOpeningTags = [...workspaceSource.matchAll(/<select\b[\s\S]*?>/g)].map((match) => match[0])
 
     expect(selectOpeningTags).toEqual([])
+    expect(appCss).not.toMatch(/(^|[ ,>])select([:[ ,>{]|$)/m)
+    expect(appCss).toContain('.select-control__trigger')
+    expect(appCss).toContain('.select-control__trigger:hover')
+    expect(appCss).toContain('.select-control__trigger:focus-visible')
+    expect(appCss).toContain('.select-control__trigger:disabled')
+    expect(appCss).toContain('.select-control__list')
+    expect(appCss).toContain('.select-control__option')
+    expect(appCss).toContain(".select-control__option[aria-selected='true']")
     expect(dictionaryPanelSource).toContain("from '../../shared/SelectControl'")
     expect(dictionaryPanelSource).toContain("from '../../shared/LocalizedDatePicker'")
     expect(dictionaryPanelSource).not.toContain('<select')

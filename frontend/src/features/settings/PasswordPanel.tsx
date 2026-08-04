@@ -580,6 +580,7 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
     }
 
     setSaving(true)
+    setError(null)
     try {
       await authClient.changeOwnPassword(auth.accessToken, {
         currentPassword: pendingPasswordChange.currentPassword,
@@ -590,7 +591,6 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
       onSessionRevoked()
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Не удалось изменить пароль.')
-      setPendingPasswordChange(null)
     } finally {
       setSaving(false)
     }
@@ -838,7 +838,7 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
           </div>
           <p className="form-hint" id="own-password-policy-hint">Минимум 8 символов.</p>
           <FormValidationSummary title="Проверьте смену пароля" items={validationErrors} />
-          {error ? <FormError>{error}</FormError> : null}
+          {error && !pendingPasswordChange ? <FormError>{error}</FormError> : null}
           <button className="secondary-button" type="submit" disabled={saving || Boolean(pendingPasswordChange)}>
             <ShieldCheck size={16} />
             <span>{saving ? 'Сохраняем...' : 'Изменить пароль'}</span>
@@ -1539,6 +1539,7 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
                 </span>
               </li>
             </ul>
+            {error ? <FormError>{error}</FormError> : null}
             <div className="dialog-actions">
               <button ref={confirmationCancelRef} className="ghost-button" type="button" onClick={() => setPendingPasswordChange(null)} disabled={saving}>Отмена</button>
               <button className="secondary-button" type="button" onClick={() => void confirmPasswordChange()} disabled={saving}>
