@@ -1,4 +1,5 @@
 using System.Text;
+using System.ComponentModel.DataAnnotations;
 using GarageBalance.Api.Application.Audit;
 using GarageBalance.Api.Application.Import;
 using GarageBalance.Api.Infrastructure.Data;
@@ -12,6 +13,27 @@ namespace GarageBalance.Api.Tests.Import;
 
 public sealed class ImportDryRunQueueTests
 {
+    [Fact]
+    public void DefaultOptions_UseSharedFiftyMegabyteFileLimit()
+    {
+        var options = new ImportDryRunQueueOptions();
+
+        Assert.Equal(50, options.MaximumFileSizeMegabytes);
+        Assert.Equal(50L * 1024L * 1024L, ImportFileLimits.MaximumFileSizeBytes);
+    }
+
+    [Fact]
+    public void OptionsValidation_RejectsADeploymentLimitThatWouldDriftFromClientContract()
+    {
+        var options = new ImportDryRunQueueOptions { MaximumFileSizeMegabytes = 49 };
+        var results = new List<ValidationResult>();
+
+        var valid = Validator.TryValidateObject(options, new ValidationContext(options), results, true);
+
+        Assert.False(valid);
+        Assert.Contains(results, result => result.MemberNames.Contains(nameof(options.MaximumFileSizeMegabytes)));
+    }
+
     [Fact]
     public async Task Dispatcher_ReturnsQueuedRunBeforeWorkerProcessesAndWorkerCleansStagedFile()
     {

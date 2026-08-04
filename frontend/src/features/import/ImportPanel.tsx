@@ -11,6 +11,7 @@ import { formatDateTime, formatImportCheckStatus, formatImportCreatedRecordRollb
 import { useEscapeKey, useFocusOnOpen, useFocusTrap, useRestoreFocusOnClose } from '../../shared/focusHooks'
 import { createClientPage } from '../../shared/pagination'
 import { TablePagination } from '../../shared/TablePagination'
+import { maximumAccessImportFileSizeMegabytes, validateAccessImportFileSize } from './importFileLimits'
 
 const importQuarantineScreenRequestLimit = 50
 const importCreatedRecordsScreenRequestLimit = 100
@@ -256,6 +257,13 @@ export function ImportPanel({ auth, importClient }: { auth: AuthResponse; import
     }
   }
 
+  function selectImportFile(file: File | null) {
+    const validationError = file ? validateAccessImportFileSize(file) : null
+    setSelectedFile(validationError ? null : file)
+    setError(validationError)
+    return validationError
+  }
+
   async function downloadCurrentReport() {
     if (!currentRun) {
       return
@@ -474,12 +482,23 @@ export function ImportPanel({ auth, importClient }: { auth: AuthResponse; import
           <h3>Dry-run Access</h3>
           <div className="file-picker">
             <span className="form-field-label">Файл Access</span>
-            <input id={fileInputId} aria-label="Файл Access" type="file" accept=".accdb,.mdb" onChange={(event) => setSelectedFile(event.target.files?.[0] ?? null)} />
+            <input
+              id={fileInputId}
+              aria-label="Файл Access"
+              type="file"
+              accept=".accdb,.mdb"
+              onChange={(event) => {
+                if (selectImportFile(event.target.files?.[0] ?? null)) {
+                  event.currentTarget.value = ''
+                }
+              }}
+            />
             <label className="file-picker-button" htmlFor={fileInputId} title={filePickerActionLabel} data-tooltip={filePickerActionLabel}>
               <FileText size={16} aria-hidden="true" />
               <span>Выбрать .accdb или .mdb</span>
             </label>
             <span className="file-picker-name" role="status" aria-live="polite">{selectedFile ? selectedFile.name : 'Файл не выбран'}</span>
+            <span className="form-hint">Максимальный размер файла — {maximumAccessImportFileSizeMegabytes} МБ.</span>
           </div>
           <button className="secondary-button" type="submit" aria-label={dryRunActionLabel} title={dryRunActionLabel} data-tooltip={dryRunActionLabel} disabled={saving || !selectedFile}>
             <DatabaseZap size={16} aria-hidden="true" />

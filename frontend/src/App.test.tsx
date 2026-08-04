@@ -15401,6 +15401,26 @@ describe('App', () => {
     expect(exportReadyMessage).toHaveAttribute('aria-live', 'polite')
   })
 
+  it('rejects an oversized Access file before upload', async () => {
+    const user = userEvent.setup()
+    const importClient = createStatefulImportClient()
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={importClient} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Импорт')
+    const importPanel = await screen.findByRole('region', { name: 'Импорт Access' })
+    const file = new File(['access'], 'oversized.accdb', { type: 'application/octet-stream' })
+    Object.defineProperty(file, 'size', { value: 50 * 1024 * 1024 + 1 })
+
+    expect(within(importPanel).getByText('Максимальный размер файла — 50 МБ.')).toBeInTheDocument()
+    await user.upload(within(importPanel).getByLabelText('Файл Access'), file)
+
+    expect(await within(importPanel).findByText('Файл Access превышает допустимый размер 50 МБ.')).toHaveAttribute('role', 'alert')
+    expect(within(importPanel).getByText('Файл не выбран')).toHaveAttribute('role', 'status')
+    expect(within(importPanel).getByRole('button', { name: 'Проверить файл Access' })).toBeDisabled()
+  })
+
   it('shows duplicate Access file warning in dry-run checks', async () => {
     const user = userEvent.setup()
     const run = createAccessImportRun({

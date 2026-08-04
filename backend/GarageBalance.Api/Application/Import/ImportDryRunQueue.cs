@@ -5,6 +5,13 @@ using Microsoft.Extensions.Options;
 
 namespace GarageBalance.Api.Application.Import;
 
+public static class ImportFileLimits
+{
+    public const int MaximumFileSizeMegabytes = 50;
+    public const long MaximumFileSizeBytes = MaximumFileSizeMegabytes * 1024L * 1024L;
+    public const long MultipartRequestSizeBytes = (MaximumFileSizeMegabytes + 1L) * 1024L * 1024L;
+}
+
 public sealed class ImportDryRunQueueOptions
 {
     public const string SectionName = "ImportProcessing";
@@ -15,8 +22,8 @@ public sealed class ImportDryRunQueueOptions
     [Required]
     public string WorkDirectory { get; init; } = "auto";
 
-    [Range(1, 512)]
-    public int MaximumFileSizeMegabytes { get; init; } = 512;
+    [Range(ImportFileLimits.MaximumFileSizeMegabytes, ImportFileLimits.MaximumFileSizeMegabytes)]
+    public int MaximumFileSizeMegabytes { get; init; } = ImportFileLimits.MaximumFileSizeMegabytes;
 }
 
 public sealed record ImportDryRunJob(Guid RunId);
@@ -109,7 +116,7 @@ public sealed class ImportDryRunDispatcher(
         {
             return ImportResult<AccessImportRunDto>.Failure(
                 "file_too_large",
-                "Файл Access слишком большой для первичной проверки.");
+                $"Файл Access превышает допустимый размер {_options.MaximumFileSizeMegabytes} МБ.");
         }
 
         var runId = Guid.NewGuid();
@@ -154,7 +161,7 @@ public sealed class ImportDryRunDispatcher(
 
             return ImportResult<AccessImportRunDto>.Failure(
                 "file_too_large",
-                "Файл Access слишком большой для первичной проверки.");
+                $"Файл Access превышает допустимый размер {_options.MaximumFileSizeMegabytes} МБ.");
         }
         catch
         {

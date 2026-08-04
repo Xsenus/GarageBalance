@@ -31,12 +31,22 @@ using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Authorization.Policy;
 using Microsoft.AspNetCore.DataProtection;
+using Microsoft.AspNetCore.Http.Features;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.Extensions.Options;
 
 var builder = WebApplication.CreateBuilder(args);
+
+builder.WebHost.ConfigureKestrel(options =>
+{
+    options.Limits.MaxRequestBodySize = ImportFileLimits.MultipartRequestSizeBytes;
+});
+builder.Services.Configure<FormOptions>(options =>
+{
+    options.MultipartBodyLengthLimit = ImportFileLimits.MultipartRequestSizeBytes;
+});
 
 builder.Services
     .AddOptions<JwtOptions>()
@@ -160,6 +170,9 @@ builder.Services
     .AddOptions<ImportDryRunQueueOptions>()
     .Bind(builder.Configuration.GetSection(ImportDryRunQueueOptions.SectionName))
     .ValidateDataAnnotations()
+    .Validate(
+        options => options.MaximumFileSizeMegabytes == ImportFileLimits.MaximumFileSizeMegabytes,
+        $"ImportProcessing:MaximumFileSizeMegabytes must equal {ImportFileLimits.MaximumFileSizeMegabytes}.")
     .ValidateOnStart();
 builder.Services.AddSingleton<IImportDryRunQueue, ImportDryRunQueue>();
 builder.Services.AddScoped<IImportDryRunDispatcher, ImportDryRunDispatcher>();

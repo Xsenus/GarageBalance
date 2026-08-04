@@ -13,7 +13,7 @@ public sealed class ImportService(
     IAccessImportReader accessImportReader,
     IAuditEventWriter auditEventWriter) : IImportService
 {
-    private const long MaxDryRunFileSizeBytes = 512L * 1024L * 1024L;
+    private const long MaxDryRunFileSizeBytes = ImportFileLimits.MaximumFileSizeBytes;
     private const int MaxSchemaSampleBytes = 4 * 1024 * 1024;
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
     private static readonly JsonSerializerOptions ReportJsonOptions = new(JsonSerializerDefaults.Web)

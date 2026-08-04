@@ -150,6 +150,7 @@ public sealed class ImportController(
     [ProducesResponseType<AccessImportRunDto>(StatusCodes.Status201Created)]
     [ProducesResponseType<AccessImportRunDto>(StatusCodes.Status202Accepted)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    [RequestSizeLimit(ImportFileLimits.MultipartRequestSizeBytes)]
     public async Task<ActionResult<AccessImportRunDto>> DryRunAccessImport([FromForm] IFormFile? file, CancellationToken cancellationToken)
     {
         if (file is null)

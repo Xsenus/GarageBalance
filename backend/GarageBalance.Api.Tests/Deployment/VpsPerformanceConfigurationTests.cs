@@ -1,3 +1,6 @@
+using System.Text.Json;
+using GarageBalance.Api.Application.Import;
+
 namespace GarageBalance.Api.Tests.Deployment;
 
 public sealed class VpsPerformanceConfigurationTests
@@ -17,6 +20,36 @@ public sealed class VpsPerformanceConfigurationTests
         Assert.Contains("limit_req_zone $binary_remote_addr", nginx, StringComparison.Ordinal);
         Assert.Contains("client_header_timeout 10s;", nginx, StringComparison.Ordinal);
         Assert.Contains("client_body_timeout 30s;", nginx, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ImportUploadLimits_AreAlignedAcrossClientApiAndNginx()
+    {
+        var nginx = ReadDeploymentFile("garagebalance-staging.nginx.conf");
+        using var appSettings = JsonDocument.Parse(File.ReadAllText(Path.Combine(
+            RepositoryRoot,
+            "backend",
+            "GarageBalance.Api",
+            "appsettings.json")));
+        var configuredMaximum = appSettings.RootElement
+            .GetProperty("ImportProcessing")
+            .GetProperty("MaximumFileSizeMegabytes")
+            .GetInt32();
+        var frontendLimits = File.ReadAllText(Path.Combine(
+            RepositoryRoot,
+            "frontend",
+            "src",
+            "features",
+            "import",
+            "importFileLimits.ts"));
+
+        Assert.Equal(ImportFileLimits.MaximumFileSizeMegabytes, configuredMaximum);
+        Assert.Contains(
+            $"maximumAccessImportFileSizeMegabytes = {ImportFileLimits.MaximumFileSizeMegabytes}",
+            frontendLimits,
+            StringComparison.Ordinal);
+        Assert.Contains("client_max_body_size 51m;", nginx, StringComparison.Ordinal);
+        Assert.Equal(51L * 1024L * 1024L, ImportFileLimits.MultipartRequestSizeBytes);
     }
 
     [Fact]

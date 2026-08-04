@@ -134,6 +134,19 @@ public sealed class ImportControllerTests
     }
 
     [Fact]
+    public void DryRunAccessImport_UsesMultipartLimitWithEnvelopeReserve()
+    {
+        var method = typeof(ImportController).GetMethod(nameof(ImportController.DryRunAccessImport))!;
+        var attribute = Assert.Single(method.GetCustomAttributes(typeof(RequestSizeLimitAttribute), inherit: false)
+            .Cast<RequestSizeLimitAttribute>());
+
+        Assert.Equal(
+            ImportFileLimits.MultipartRequestSizeBytes,
+            ((Microsoft.AspNetCore.Http.Metadata.IRequestSizeLimitMetadata)attribute).MaxRequestBodySize);
+        Assert.True(ImportFileLimits.MultipartRequestSizeBytes > ImportFileLimits.MaximumFileSizeBytes);
+    }
+
+    [Fact]
     public async Task DryRunAccessImport_ReturnsAcceptedWhenProductionDispatcherQueuesWork()
     {
         var run = CreateRun("queued");
