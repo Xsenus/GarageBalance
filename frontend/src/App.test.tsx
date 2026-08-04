@@ -327,10 +327,13 @@ describe('App', () => {
     const user = userEvent.setup()
     let roles = createRoles()
     let updateAttempt = 0
+    let rejectRoleUpdate: ((reason?: unknown) => void) | undefined
     const updateRolePermissions = vi.fn(async (_token: string, roleCode: string, request: { permissions: string[] }) => {
       updateAttempt += 1
       if (updateAttempt === 1) {
-        throw new Error('Не удалось сохранить права роли.')
+        await new Promise<never>((_resolve, reject) => {
+          rejectRoleUpdate = reject
+        })
       }
 
       const role = roles.find((item) => item.code === roleCode)
@@ -364,11 +367,20 @@ describe('App', () => {
     await user.click(within(roleMatrix).getByRole('button', { name: 'Изменить права роли Оператор' }))
     roleDialog = await screen.findByRole('dialog', { name: 'Изменить права роли' })
     await user.click(within(roleDialog).getByLabelText('Оператор: Отчеты'))
-    await user.click(within(roleDialog).getByRole('button', { name: 'Сохранить' }))
+    const roleSaveButton = within(roleDialog).getByRole('button', { name: 'Сохранить' })
+    await user.click(roleSaveButton)
 
-    expect((await screen.findAllByText('Не удалось сохранить права роли.')).length).toBeGreaterThan(0)
+    await waitFor(() => expect(rejectRoleUpdate).toBeDefined())
+    expect(roleSaveButton).toBeDisabled()
+    expect(within(roleDialog).getByRole('button', { name: 'Отмена' })).toBeDisabled()
+    expect(within(roleDialog).getByRole('button', { name: 'Закрыть изменение прав роли' })).toBeDisabled()
+    expect(within(roleDialog).getByLabelText('Оператор: Отчеты')).toBeDisabled()
+    await user.keyboard('{Escape}')
     expect(screen.getByRole('dialog', { name: 'Изменить права роли' })).toBeInTheDocument()
-    await user.click(within(roleDialog).getByRole('button', { name: 'Сохранить' }))
+    await act(async () => rejectRoleUpdate?.(new Error('Не удалось сохранить права роли.')))
+    expect(await within(roleDialog).findByRole('alert')).toHaveTextContent('Не удалось сохранить права роли.')
+    expect(screen.getAllByText('Не удалось сохранить права роли.')).toHaveLength(1)
+    await user.click(roleSaveButton)
 
     await waitFor(() => expect(updateRolePermissions).toHaveBeenCalledWith('token', 'operator', expect.objectContaining({
       permissions: expect.arrayContaining(['reports.read']),
@@ -10869,6 +10881,43 @@ describe('App', () => {
     expect(createUser).not.toHaveBeenCalled()
   })
 
+  it('keeps a failed managed-user creation inside its dialog with the draft preserved', async () => {
+    const user = userEvent.setup()
+    const statefulUserClient = createStatefulUserClient()
+    let createAttempt = 0
+    const userClient: UserManagementClient = {
+      ...statefulUserClient,
+      createUser: async (...args) => {
+        createAttempt += 1
+        if (createAttempt === 1) {
+          throw new Error('Email уже занят другим пользователем.')
+        }
+
+        return statefulUserClient.createUser(...args)
+      },
+    }
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={userClient} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Пользователи')
+    const usersPanel = await screen.findByRole('region', { name: 'Пользователи' })
+    await user.click(within(usersPanel).getByRole('button', { name: 'Добавить' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Новый пользователь' })
+    await user.type(within(dialog).getByLabelText('Email пользователя'), 'operator@example.com')
+    await user.type(within(dialog).getByLabelText('Имя пользователя'), 'Оператор')
+    await user.type(within(dialog).getByLabelText('Пароль пользователя'), 'StrongPass123')
+    await user.type(within(dialog).getByLabelText('Подтверждение пароля пользователя'), 'StrongPass123')
+    await user.click(within(dialog).getByRole('button', { name: 'Сохранить' }))
+
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent('Email уже занят другим пользователем.')
+    expect(screen.getAllByText('Email уже занят другим пользователем.')).toHaveLength(1)
+    expect(within(dialog).getByLabelText('Email пользователя')).toHaveValue('operator@example.com')
+    expect(within(dialog).getByLabelText('Имя пользователя')).toHaveValue('Оператор')
+    await user.click(within(dialog).getByRole('button', { name: 'Сохранить' }))
+    expect(await within(usersPanel).findByText('operator@example.com')).toBeInTheDocument()
+  })
+
   it('opens user edit and delete operations from context menu modals', async () => {
     const user = userEvent.setup()
     const statefulUserClient = createStatefulUserClient()
@@ -10877,6 +10926,13 @@ describe('App', () => {
     let deactivationRefresh: Promise<void> | null = null
     let updateCalls = 0
     let failNextOrdinaryUpdate = true
+    let rejectOrdinaryUpdate: ((reason?: unknown) => void) | undefined
+    let rejectDelete: ((reason?: unknown) => void) | undefined
+    let rejectDeactivation: ((reason?: unknown) => void) | undefined
+    let rejectRestore: ((reason?: unknown) => void) | undefined
+    let failNextDelete = true
+    let failNextDeactivation = true
+    let failNextRestore = true
     let lastUpdateRequest: UpdateManagedUserRequest | null = null
     const userClient: UserManagementClient = {
       ...statefulUserClient,
@@ -10895,7 +10951,23 @@ describe('App', () => {
         lastUpdateRequest = request
         if (request.displayName === 'Старший оператор' && failNextOrdinaryUpdate) {
           failNextOrdinaryUpdate = false
-          throw new Error('Не удалось сохранить пользователя.')
+          await new Promise<never>((_resolve, reject) => {
+            rejectOrdinaryUpdate = reject
+          })
+        }
+
+        if (request.deactivationReason === 'Access no longer needed' && failNextDelete) {
+          failNextDelete = false
+          await new Promise<never>((_resolve, reject) => {
+            rejectDelete = reject
+          })
+        }
+
+        if (request.deactivationReason === 'Доступ прекращен' && failNextDeactivation) {
+          failNextDeactivation = false
+          await new Promise<never>((_resolve, reject) => {
+            rejectDeactivation = reject
+          })
         }
 
         if (!request.isActive) {
@@ -10906,6 +10978,16 @@ describe('App', () => {
         }
 
         return statefulUserClient.updateUser(...args)
+      },
+      restoreUser: async (...args) => {
+        if (failNextRestore) {
+          failNextRestore = false
+          await new Promise<never>((_resolve, reject) => {
+            rejectRestore = reject
+          })
+        }
+
+        return statefulUserClient.restoreUser(...args)
       },
     }
     render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={userClient} />)
@@ -10946,8 +11028,17 @@ describe('App', () => {
     const editSaveButton = within(editDialog).getByRole('button', { name: 'Сохранить' })
     await user.click(editSaveButton)
 
-    expect((await screen.findAllByText('Не удалось сохранить пользователя.')).length).toBeGreaterThan(0)
+    await waitFor(() => expect(rejectOrdinaryUpdate).toBeDefined())
+    expect(editSaveButton).toBeDisabled()
+    expect(within(editDialog).getByRole('button', { name: 'Отмена' })).toBeDisabled()
+    expect(within(editDialog).getByRole('button', { name: 'Закрыть окно пользователя' })).toBeDisabled()
+    expect(within(editDialog).getByLabelText('Имя пользователя')).toBeDisabled()
+    await user.keyboard('{Escape}')
     expect(screen.getByRole('dialog', { name: 'Изменить пользователя' })).toBeInTheDocument()
+    await act(async () => rejectOrdinaryUpdate?.(new Error('Не удалось сохранить пользователя.')))
+    expect(await within(editDialog).findByRole('alert')).toHaveTextContent('Не удалось сохранить пользователя.')
+    expect(screen.getAllByText('Не удалось сохранить пользователя.')).toHaveLength(1)
+    expect(within(editDialog).getByLabelText('Имя пользователя')).toHaveValue('Старший оператор')
     expect(updateCalls).toBe(1)
     await user.click(editSaveButton)
 
@@ -10988,6 +11079,17 @@ describe('App', () => {
     await user.type(reopenedDeleteReasonInput, 'Access no longer needed')
     await user.click(reopenedDeleteButton)
 
+    await waitFor(() => expect(rejectDelete).toBeDefined())
+    expect(reopenedDeleteButton).toBeDisabled()
+    expect(within(reopenedDeleteDialog).getByRole('button', { name: 'Отмена' })).toBeDisabled()
+    expect(within(reopenedDeleteDialog).getByRole('button', { name: 'Закрыть подтверждение удаления' })).toBeDisabled()
+    expect(reopenedDeleteReasonInput).toBeDisabled()
+    await user.keyboard('{Escape}')
+    expect(screen.getByRole('dialog', { name: 'Удалить пользователя' })).toBeInTheDocument()
+    await act(async () => rejectDelete?.(new Error('Не удалось отключить пользователя.')))
+    expect(await within(reopenedDeleteDialog).findByRole('alert')).toHaveTextContent('Не удалось отключить пользователя.')
+    expect(reopenedDeleteReasonInput).toHaveValue('Access no longer needed')
+    await user.click(reopenedDeleteButton)
     await waitFor(() => expect(releaseDeactivationRefresh).toBeDefined())
     expect(screen.queryByText('Пользователь отключен.')).not.toBeInTheDocument()
     await act(async () => {
@@ -11013,8 +11115,16 @@ describe('App', () => {
     expect(restoreCancelButton).toHaveFocus()
     await user.keyboard('{Tab}')
     expect(restoreConfirmButton).toHaveFocus()
-    await user.click(within(restoreDialog).getByRole('button', { name: 'Вернуть' }))
-
+    await user.click(restoreConfirmButton)
+    await waitFor(() => expect(rejectRestore).toBeDefined())
+    expect(restoreConfirmButton).toBeDisabled()
+    expect(restoreCancelButton).toBeDisabled()
+    expect(restoreCloseButton).toBeDisabled()
+    await user.keyboard('{Escape}')
+    expect(screen.getByRole('dialog', { name: 'Вернуть пользователя?' })).toBeInTheDocument()
+    await act(async () => rejectRestore?.(new Error('Не удалось восстановить пользователя.')))
+    expect(await within(restoreDialog).findByRole('alert')).toHaveTextContent('Не удалось восстановить пользователя.')
+    await user.click(restoreConfirmButton)
     expect(await screen.findByText('Пользователь восстановлен.')).toHaveAttribute('role', 'status')
     expect(await within(usersPanel).findByText('Активен')).toBeInTheDocument()
 
@@ -11028,17 +11138,28 @@ describe('App', () => {
     await user.click(deactivationSaveButton)
 
     const deactivationConfirmation = await screen.findByRole('dialog', { name: 'Отключить пользователя?' })
-    expect(within(deactivationConfirmation).getByText('Пользователь потеряет доступ к системе. Причина и действие будут записаны в историю изменений.')).toBeInTheDocument()
-    expect(updateCalls).toBe(3)
+    expect(within(deactivationConfirmation).getByText('Пользователь потеряет доступ. Причина отключения сохранится в истории изменений.')).toBeInTheDocument()
+    expect(updateCalls).toBe(4)
     await user.keyboard('{Escape}')
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Отключить пользователя?' })).not.toBeInTheDocument())
-    expect(updateCalls).toBe(3)
+    expect(updateCalls).toBe(4)
     expect(within(within(usersPanel).getByRole('table', { name: 'Список пользователей' })).getByText('Активен')).toBeInTheDocument()
 
     await user.click(deactivationSaveButton)
     const reopenedDeactivationConfirmation = await screen.findByRole('dialog', { name: 'Отключить пользователя?' })
-    await user.click(within(reopenedDeactivationConfirmation).getByRole('button', { name: 'Отключить' }))
-    await waitFor(() => expect(updateCalls).toBe(4))
+    const confirmDeactivationButton = within(reopenedDeactivationConfirmation).getByRole('button', { name: 'Отключить' })
+    await user.click(confirmDeactivationButton)
+    await waitFor(() => expect(updateCalls).toBe(5))
+    await waitFor(() => expect(rejectDeactivation).toBeDefined())
+    expect(confirmDeactivationButton).toBeDisabled()
+    expect(within(reopenedDeactivationConfirmation).getByRole('button', { name: 'Отмена' })).toBeDisabled()
+    expect(within(reopenedDeactivationConfirmation).getByRole('button', { name: 'Отменить отключение пользователя' })).toBeDisabled()
+    await user.keyboard('{Escape}')
+    expect(screen.getByRole('dialog', { name: 'Отключить пользователя?' })).toBeInTheDocument()
+    await act(async () => rejectDeactivation?.(new Error('Не удалось отключить пользователя из редактора.')))
+    expect(await within(reopenedDeactivationConfirmation).findByRole('alert')).toHaveTextContent('Не удалось отключить пользователя из редактора.')
+    await user.click(confirmDeactivationButton)
+    await waitFor(() => expect(updateCalls).toBe(6))
     await act(async () => {
       releaseDeactivationRefresh?.()
       await Promise.resolve()

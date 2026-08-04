@@ -30,7 +30,7 @@ export function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; 
   const [saving, setSaving] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [validationErrors, setValidationErrors] = useState<string[]>([])
-  const [toast, setToast] = useState<{ id: number; text: string; kind: 'success' | 'error' } | null>(null)
+  const [toast, setToast] = useState<string | null>(null)
   const [contextMenu, setContextMenu] = useState<{ user: ManagedUserDto; x: number; y: number } | null>(null)
   const [editor, setEditor] = useState<UserEditorState | null>(null)
   const [deactivationConfirmation, setDeactivationConfirmation] = useState<UserDeactivationConfirmationState | null>(null)
@@ -42,6 +42,7 @@ export function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; 
   const [deleteReasonError, setDeleteReasonError] = useState<string | null>(null)
   const [form, setForm] = useState<UserFormState>({ email: '', displayName: '', password: '', passwordConfirmation: '', roleCodes: ['operator'], isActive: true, deactivationReason: '' })
   const rolesRequestRef = useRef<{ accessToken: string; client: UserManagementClient; promise: Promise<ManagedRoleDto[]> } | null>(null)
+  const busy = saving !== null
   useRestoreFocusOnClose(Boolean(editor))
   const editorCloseRef = useFocusOnOpen<HTMLButtonElement>(Boolean(editor))
   const editorDialogRef = useFocusTrap<HTMLElement>(Boolean(editor) && !deactivationConfirmation)
@@ -59,11 +60,11 @@ export function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; 
   const restoreDialogRef = useFocusTrap<HTMLElement>(Boolean(restoreTarget))
 
   useEscapeKey(Boolean(contextMenu), () => setContextMenu(null))
-  useEscapeKey(Boolean(editor) && !deactivationConfirmation, () => closeEditor())
-  useEscapeKey(Boolean(deactivationConfirmation), () => setDeactivationConfirmation(null))
-  useEscapeKey(Boolean(roleEditor), () => closeRoleEditor())
-  useEscapeKey(Boolean(deleteTarget), () => closeDeleteDialog())
-  useEscapeKey(Boolean(restoreTarget), () => setRestoreTarget(null))
+  useEscapeKey(Boolean(editor) && !deactivationConfirmation && !busy, () => closeEditor())
+  useEscapeKey(Boolean(deactivationConfirmation) && saving !== 'edit', () => closeDeactivationConfirmation())
+  useEscapeKey(Boolean(roleEditor) && saving !== 'role', () => closeRoleEditor())
+  useEscapeKey(Boolean(deleteTarget) && saving !== 'delete', () => closeDeleteDialog())
+  useEscapeKey(Boolean(restoreTarget) && saving !== 'restore', () => closeRestoreDialog())
 
   useEffect(() => {
     if (!toast) {
@@ -73,10 +74,6 @@ export function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; 
     const timeoutId = window.setTimeout(() => setToast(null), 3200)
     return () => window.clearTimeout(timeoutId)
   }, [toast])
-
-  function showToast(text: string, kind: 'success' | 'error' = 'success') {
-    setToast({ id: Date.now(), text, kind })
-  }
 
   const getRolesOnce = useCallback(() => {
     const cached = rolesRequestRef.current
@@ -178,6 +175,7 @@ export function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; 
     setEditor(null)
     setDeactivationConfirmation(null)
     setValidationErrors([])
+    setError(null)
   }
 
   async function saveUser(event: FormEvent<HTMLFormElement>) {
@@ -235,11 +233,10 @@ export function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; 
 
       closeEditor()
       await refreshUsers()
-      showToast('Пользователь добавлен.')
+      setToast('Пользователь добавлен.')
     } catch (caught) {
       const message = caught instanceof Error ? caught.message : 'Не удалось сохранить пользователя.'
       setError(message)
-      showToast(message, 'error')
     } finally {
       setSaving(null)
     }
@@ -252,11 +249,10 @@ export function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; 
       await userClient.updateUser(auth.accessToken, user.id, request)
       closeEditor()
       await refreshUsers()
-      showToast(user.isActive && !request.isActive ? 'Пользователь отключен.' : 'Пользователь изменен.')
+      setToast(user.isActive && !request.isActive ? 'Пользователь отключен.' : 'Пользователь изменен.')
     } catch (caught) {
       const message = caught instanceof Error ? caught.message : 'Не удалось сохранить пользователя.'
       setError(message)
-      showToast(message, 'error')
     } finally {
       setSaving(null)
     }
@@ -280,7 +276,7 @@ export function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; 
   }
 
   async function confirmDeactivateUser() {
-    if (!deactivationConfirmation) {
+    if (!deactivationConfirmation || busy) {
       return
     }
 
@@ -288,7 +284,7 @@ export function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; 
   }
 
   async function deleteUser() {
-    if (!deleteTarget) {
+    if (!deleteTarget || busy) {
       return
     }
 
@@ -312,18 +308,17 @@ export function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; 
       })
       closeDeleteDialog()
       await refreshUsers()
-      showToast('Пользователь отключен.')
+      setToast('Пользователь отключен.')
     } catch (caught) {
       const message = caught instanceof Error ? caught.message : 'Не удалось отключить пользователя.'
       setError(message)
-      showToast(message, 'error')
     } finally {
       setSaving(null)
     }
   }
 
   async function restoreUser() {
-    if (!restoreTarget) {
+    if (!restoreTarget || busy) {
       return
     }
 
@@ -331,9 +326,9 @@ export function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; 
     setError(null)
     try {
       await userClient.restoreUser(auth.accessToken, restoreTarget.id)
-      setRestoreTarget(null)
+      closeRestoreDialog()
       await refreshUsers()
-      showToast('Пользователь восстановлен.')
+      setToast('Пользователь восстановлен.')
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Не удалось восстановить пользователя.')
     } finally {
@@ -343,12 +338,14 @@ export function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; 
 
   function openRoleEditor(role: ManagedRoleDto) {
     setRolePermissionError(null)
+    setError(null)
     setRoleEditor({ role, permissions: expandPermissionDependencies(role.permissions) })
   }
 
   function closeRoleEditor() {
     setRoleEditor(null)
     setRolePermissionError(null)
+    setError(null)
   }
 
   function toggleRolePermission(permission: string, checked: boolean) {
@@ -403,13 +400,12 @@ export function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; 
     try {
       const updatedRole = await userClient.updateRolePermissions(auth.accessToken, roleEditor.role.code, { permissions: roleEditor.permissions })
       setRoles((current) => current.map((role) => (role.code === updatedRole.code ? updatedRole : role)))
-      setRoleEditor(null)
+      closeRoleEditor()
       await refreshUsers()
-      showToast('Права роли изменены.')
+      setToast('Права роли изменены.')
     } catch (caught) {
       const message = caught instanceof Error ? caught.message : 'Не удалось сохранить права роли.'
       setError(message)
-      showToast(message, 'error')
     } finally {
       setSaving(null)
     }
@@ -418,6 +414,7 @@ export function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; 
   function openDeleteDialog(user: ManagedUserDto) {
     setDeleteReason('')
     setDeleteReasonError(null)
+    setError(null)
     setDeleteTarget(user)
   }
 
@@ -425,6 +422,17 @@ export function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; 
     setDeleteTarget(null)
     setDeleteReason('')
     setDeleteReasonError(null)
+    setError(null)
+  }
+
+  function closeDeactivationConfirmation() {
+    setDeactivationConfirmation(null)
+    setError(null)
+  }
+
+  function closeRestoreDialog() {
+    setRestoreTarget(null)
+    setError(null)
   }
 
   function submitSearch(event: FormEvent<HTMLFormElement>) {
@@ -433,6 +441,8 @@ export function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; 
     setOffset(0)
   }
 
+  const dialogErrorMessage = error ? <FormError>{error}</FormError> : null
+  const dialogOpen = Boolean(editor || roleEditor || deleteTarget || restoreTarget)
 
   return (
     <section className="dictionary-panel-v2 users-panel-v2" aria-label="Пользователи" onClick={() => setContextMenu(null)}>
@@ -444,9 +454,9 @@ export function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; 
         {!loading ? <span>{page.totalCount} пользователей</span> : null}
       </div>
 
-      {error && !editor && !roleEditor ? (
+      {error && !dialogOpen ? (
         <AsyncErrorState message={error} onRetry={() => void retryUsersLoad()} retrying={loading} />
-      ) : error ? <FormError>{error}</FormError> : null}
+      ) : null}
 
       <div className="users-workbench">
         <div className="dictionary-table-shell">
@@ -459,7 +469,6 @@ export function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; 
           </form>
 
           <div className="dictionary-toolbar users-toolbar-actions">
-            <span className="form-hint">Действия доступны в последнем столбце и через ПКМ.</span>
             <button className="secondary-button create-action-button" type="button" onClick={() => openEditor('create')} disabled={roles.length === 0}>
               <UserPlus size={16} aria-hidden="true" />
               <span>Добавить</span>
@@ -543,13 +552,6 @@ export function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; 
       {contextMenu ? (
         <div className="context-menu" role="menu" style={{ left: contextMenu.x, top: contextMenu.y }} onClick={(event) => event.stopPropagation()}>
           <div className="context-menu-group" role="group">
-            <button type="button" role="menuitem" onClick={() => openEditor('create')}>
-              <UserPlus size={15} aria-hidden="true" />
-              <span>Добавить</span>
-            </button>
-          </div>
-          <div className="context-menu-separator" role="separator" />
-          <div className="context-menu-group" role="group">
             <button type="button" role="menuitem" onClick={() => openEditor('edit', contextMenu.user)}>
               <Save size={15} />
               <span>Изменить</span>
@@ -567,21 +569,21 @@ export function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; 
       ) : null}
 
       {editor ? (
-        <div className="modal-backdrop" role="presentation" onMouseDown={closeEditor}>
+        <div className="modal-backdrop" role="presentation" onMouseDown={busy ? undefined : closeEditor}>
           <section ref={editorDialogRef} className="detail-dialog dictionary-editor-dialog" role="dialog" aria-modal="true" aria-labelledby="user-editor-title" onMouseDown={(event) => event.stopPropagation()}>
             <div className="detail-dialog-header">
               <div>
                 <h3 id="user-editor-title">{editor.mode === 'create' ? 'Новый пользователь' : 'Изменить пользователя'}</h3>
-                <p>{editor.mode === 'create' ? 'Создайте сотрудника и назначьте роль.' : 'Измените имя, роль, статус или задайте новый пароль.'}</p>
+                <p>{editor.mode === 'create' ? 'Создайте сотрудника и назначьте роль.' : 'Измените имя, роли, статус или пароль.'}</p>
               </div>
-              <button ref={editorCloseRef} className="icon-button" type="button" onClick={closeEditor} aria-label="Закрыть окно пользователя">
+              <button ref={editorCloseRef} className="icon-button" type="button" onClick={closeEditor} aria-label="Закрыть окно пользователя" disabled={busy}>
                 <X size={18} />
               </button>
             </div>
             <form className="dictionary-modal-form" autoComplete="off" onSubmit={saveUser}>
               {editor.mode === 'create' ? (
                 <FormField label="Email">
-                  <input aria-label="Email пользователя" autoComplete="off" data-1p-ignore data-lpignore="true" name="managed-user-email" placeholder="email@example.com" value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} type="email" required />
+                  <input aria-label="Email пользователя" autoComplete="off" data-1p-ignore data-lpignore="true" name="managed-user-email" placeholder="email@example.com" value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} type="email" disabled={busy} required />
                 </FormField>
               ) : (
                 <FormField label="Email">
@@ -589,7 +591,7 @@ export function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; 
                 </FormField>
               )}
               <FormField label="Имя сотрудника">
-                <input aria-label="Имя пользователя" autoComplete="off" name="managed-user-display-name" placeholder="ФИО или рабочее имя" value={form.displayName} onChange={(event) => setForm({ ...form, displayName: event.target.value })} required />
+                <input aria-label="Имя пользователя" autoComplete="off" name="managed-user-display-name" placeholder="ФИО или рабочее имя" value={form.displayName} onChange={(event) => setForm({ ...form, displayName: event.target.value })} disabled={busy} required />
               </FormField>
               <FormField label="Роли">
                 <div className="user-role-assignment" role="group" aria-label="Роли пользователя">
@@ -599,6 +601,7 @@ export function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; 
                         type="checkbox"
                         aria-label={`Роль пользователя: ${role.name}`}
                         checked={form.roleCodes.includes(role.code)}
+                        disabled={busy}
                         onChange={(event) => toggleUserRole(role.code, event.target.checked)}
                       />
                       <span>{role.name}</span>
@@ -610,6 +613,7 @@ export function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; 
                 <SelectControl
                   aria-label="Статус пользователя"
                   value={form.isActive ? 'active' : 'inactive'}
+                  disabled={busy}
                   options={[{ value: 'active', label: 'Активен' }, { value: 'inactive', label: 'Отключен' }]}
                   onChange={(value) => setForm({ ...form, isActive: value === 'active' })} />
               </FormField>
@@ -620,6 +624,7 @@ export function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; 
                     placeholder="Например: сотрудник больше не работает или доступ выдан ошибочно"
                     maxLength={1000}
                     value={form.deactivationReason}
+                    disabled={busy}
                     onChange={(event) => setForm({ ...form, deactivationReason: event.target.value })}
                     required
                   />
@@ -635,6 +640,7 @@ export function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; 
                   name="managed-user-new-password"
                   placeholder={editor.mode === 'create' ? 'Пароль' : 'Оставьте пустым, если менять не нужно'}
                   value={form.password}
+                  disabled={busy}
                   onChange={(event) => setForm({ ...form, password: event.target.value })}
                   type="password"
                   minLength={editor.mode === 'create' ? 8 : undefined}
@@ -651,6 +657,7 @@ export function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; 
                   name="managed-user-new-password-confirmation"
                   placeholder={editor.mode === 'create' ? 'Повторите пароль' : 'Повторите новый пароль'}
                   value={form.passwordConfirmation}
+                  disabled={busy}
                   onChange={(event) => setForm({ ...form, passwordConfirmation: event.target.value })}
                   type="password"
                   minLength={editor.mode === 'create' ? 8 : undefined}
@@ -659,12 +666,13 @@ export function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; 
               </FormField>
               <p className="form-hint" id="new-user-password-policy-hint">Минимум 8 символов.</p>
               <FormValidationSummary title={editor.mode === 'create' ? 'Проверьте нового пользователя' : 'Проверьте пользователя'} items={validationErrors} />
+              {!deactivationConfirmation ? dialogErrorMessage : null}
               <div className="detail-dialog-actions">
-                <button className="secondary-button" type="submit" disabled={saving !== null || roles.length === 0}>
+                <button className="secondary-button" type="submit" disabled={busy || roles.length === 0}>
                   <Save size={16} />
                   <span>{saving === editor.mode ? 'Сохраняем...' : 'Сохранить'}</span>
                 </button>
-                <button className="ghost-button" type="button" onClick={closeEditor}>Отмена</button>
+                <button className="ghost-button" type="button" onClick={closeEditor} disabled={busy}>Отмена</button>
               </div>
             </form>
           </section>
@@ -672,7 +680,7 @@ export function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; 
       ) : null}
 
       {deactivationConfirmation ? (
-        <div className="modal-backdrop" role="presentation" onMouseDown={() => setDeactivationConfirmation(null)}>
+        <div className="modal-backdrop" role="presentation" onMouseDown={saving === 'edit' ? undefined : closeDeactivationConfirmation}>
           <section ref={deactivationConfirmationDialogRef} className="detail-dialog dictionary-confirmation-dialog" role="dialog" aria-modal="true" aria-labelledby="user-deactivation-confirmation-title" aria-describedby="user-deactivation-confirmation-description" onMouseDown={(event) => event.stopPropagation()}>
             <div className="detail-dialog-header">
               <div>
@@ -680,13 +688,14 @@ export function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; 
                 <h3 id="user-deactivation-confirmation-title">Отключить пользователя?</h3>
                 <p>{deactivationConfirmation.user.displayName}</p>
               </div>
-              <button className="icon-button" type="button" aria-label="Отменить отключение пользователя" onClick={() => setDeactivationConfirmation(null)} disabled={saving === 'edit'}>
+              <button className="icon-button" type="button" aria-label="Отменить отключение пользователя" onClick={closeDeactivationConfirmation} disabled={saving === 'edit'}>
                 <X size={18} />
               </button>
             </div>
-            <p className="confirmation-text" id="user-deactivation-confirmation-description">Пользователь потеряет доступ к системе. Причина и действие будут записаны в историю изменений.</p>
+            <p className="confirmation-text" id="user-deactivation-confirmation-description">Пользователь потеряет доступ. Причина отключения сохранится в истории изменений.</p>
+            {dialogErrorMessage}
             <div className="detail-dialog-actions">
-              <button ref={deactivationConfirmationCancelRef} className="ghost-button" type="button" onClick={() => setDeactivationConfirmation(null)} disabled={saving === 'edit'}>Отмена</button>
+              <button ref={deactivationConfirmationCancelRef} className="ghost-button" type="button" onClick={closeDeactivationConfirmation} disabled={saving === 'edit'}>Отмена</button>
               <button className="ghost-button danger-button" type="button" onClick={() => void confirmDeactivateUser()} disabled={saving === 'edit'}>
                 <Trash2 size={16} />
                 <span>{saving === 'edit' ? 'Отключаем...' : 'Отключить'}</span>
@@ -697,7 +706,7 @@ export function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; 
       ) : null}
 
       {roleEditor ? (
-        <div className="modal-backdrop" role="presentation" onMouseDown={closeRoleEditor}>
+        <div className="modal-backdrop" role="presentation" onMouseDown={saving === 'role' ? undefined : closeRoleEditor}>
           <section ref={roleEditorDialogRef} className="detail-dialog dictionary-editor-dialog" role="dialog" aria-modal="true" aria-labelledby="role-permissions-title" aria-describedby="role-permissions-description" onMouseDown={(event) => event.stopPropagation()}>
             <div className="detail-dialog-header">
               <div>
@@ -729,6 +738,7 @@ export function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; 
                 })}
               </div>
               {rolePermissionError ? <p className="form-error" role="alert">{rolePermissionError}</p> : null}
+              {dialogErrorMessage}
               <p className="form-hint">Права применяются к пользователям с этой ролью после обновления их сессии. Изменение будет записано в историю.</p>
               <div className="detail-dialog-actions">
                 <button className="ghost-button" type="button" onClick={closeRoleEditor} disabled={saving === 'role'}>Отмена</button>
@@ -743,14 +753,14 @@ export function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; 
       ) : null}
 
       {deleteTarget ? (
-        <div className="modal-backdrop" role="presentation" onMouseDown={() => closeDeleteDialog()}>
+        <div className="modal-backdrop" role="presentation" onMouseDown={saving === 'delete' ? undefined : closeDeleteDialog}>
           <section ref={deleteDialogRef} className="detail-dialog dictionary-editor-dialog" role="dialog" aria-modal="true" aria-labelledby="user-delete-title" onMouseDown={(event) => event.stopPropagation()}>
             <div className="detail-dialog-header">
               <div>
                 <h3 id="user-delete-title">Удалить пользователя</h3>
-                <p>{deleteTarget.displayName} будет отключен и не сможет входить в систему. История изменений сохранится.</p>
+                <p>{deleteTarget.displayName} будет отключен. История изменений сохранится.</p>
               </div>
-              <button className="icon-button" type="button" onClick={() => closeDeleteDialog()} aria-label="Закрыть подтверждение удаления">
+              <button className="icon-button" type="button" onClick={closeDeleteDialog} aria-label="Закрыть подтверждение удаления" disabled={saving === 'delete'}>
                 <X size={18} />
               </button>
             </div>
@@ -773,11 +783,12 @@ export function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; 
               required
             />
             {deleteReasonError ? <p className="form-error" id="user-delete-reason-error">{deleteReasonError}</p> : null}
+            {dialogErrorMessage}
             <div className="detail-dialog-actions">
-              <button ref={deleteCancelRef} className="ghost-button" type="button" onClick={() => closeDeleteDialog()}>Отмена</button>
+              <button ref={deleteCancelRef} className="ghost-button" type="button" onClick={closeDeleteDialog} disabled={saving === 'delete'}>Отмена</button>
               <button className="secondary-button danger-button" type="button" onClick={deleteUser} disabled={saving === 'delete' || !deleteReason.trim()}>
                 <Trash2 size={16} />
-                <span>Удалить</span>
+                <span>{saving === 'delete' ? 'Удаляем...' : 'Удалить'}</span>
               </button>
             </div>
           </section>
@@ -785,20 +796,21 @@ export function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; 
       ) : null}
 
       {restoreTarget ? (
-        <div className="modal-backdrop" role="presentation" onMouseDown={() => setRestoreTarget(null)}>
+        <div className="modal-backdrop" role="presentation" onMouseDown={saving === 'restore' ? undefined : closeRestoreDialog}>
           <section ref={restoreDialogRef} className="detail-dialog dictionary-editor-dialog" role="dialog" aria-modal="true" aria-labelledby="user-restore-title" aria-describedby="user-restore-description" onMouseDown={(event) => event.stopPropagation()}>
             <div className="detail-dialog-header">
               <div>
                 <h3 id="user-restore-title">Вернуть пользователя?</h3>
                 <p>{restoreTarget.displayName} снова сможет входить в систему с прежними ролями.</p>
               </div>
-              <button className="icon-button" type="button" onClick={() => setRestoreTarget(null)} aria-label="Отменить восстановление пользователя" disabled={saving === 'restore'}>
+              <button className="icon-button" type="button" onClick={closeRestoreDialog} aria-label="Отменить восстановление пользователя" disabled={saving === 'restore'}>
                 <X size={18} />
               </button>
             </div>
             <p className="confirmation-text" id="user-restore-description">Действие будет записано в историю изменений.</p>
+            {dialogErrorMessage}
             <div className="detail-dialog-actions">
-              <button ref={restoreCancelRef} className="ghost-button" type="button" onClick={() => setRestoreTarget(null)} disabled={saving === 'restore'}>Отмена</button>
+              <button ref={restoreCancelRef} className="ghost-button" type="button" onClick={closeRestoreDialog} disabled={saving === 'restore'}>Отмена</button>
               <button className="secondary-button" type="button" onClick={() => void restoreUser()} disabled={saving === 'restore'}>
                 <RotateCcw size={16} />
                 <span>{saving === 'restore' ? 'Возвращаем...' : 'Вернуть'}</span>
@@ -808,7 +820,7 @@ export function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; 
         </div>
       ) : null}
 
-      {toast ? <div className={`toast-message ${toast.kind === 'error' ? 'toast-message--error' : ''}`} role="status" aria-live="polite">{toast.text}</div> : null}
+      {toast ? <div className="toast-message" role="status" aria-live="polite">{toast}</div> : null}
     </section>
   )
 }
