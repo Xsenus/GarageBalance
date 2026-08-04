@@ -22,7 +22,7 @@ public sealed class PostgreSqlOpeningDataLockIntegrationTests
         };
         var group = new SupplierGroup { Name = "Opening lock suppliers" };
         var supplier = new Supplier { Name = "Opening lock supplier", Group = group, StartingBalance = 200m };
-        var incomeType = new IncomeType { Name = "Opening lock income", Code = "other_income" };
+        var incomeType = new IncomeType { Name = "Opening lock income", Code = "opening_lock_income" };
         var expenseType = new ExpenseType { Name = "Opening lock expense", Code = "other_expense" };
 
         await using (var setupContext = database.CreateContext())

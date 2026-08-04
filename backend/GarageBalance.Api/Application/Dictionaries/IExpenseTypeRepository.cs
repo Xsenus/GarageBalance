@@ -10,6 +10,7 @@ public interface IExpenseTypeRepository
     Task<ExpenseType?> FindActiveByCodeAsync(string code, CancellationToken cancellationToken);
     Task<ExpenseType?> FindArchivedAsync(Guid id, CancellationToken cancellationToken);
     Task<bool> ActiveDuplicateExistsAsync(Guid? ignoredId, string name, CancellationToken cancellationToken);
+    Task<bool> ActiveCodeExistsAsync(Guid? ignoredId, string normalizedCode, CancellationToken cancellationToken);
     void Add(ExpenseType expenseType);
 }
 

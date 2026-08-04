@@ -77,6 +77,11 @@ public sealed class EfIncomeTypeRepository(GarageBalanceDbContext dbContext) : I
             item => !item.IsArchived && item.Name == name && (!ignoredId.HasValue || item.Id != ignoredId.Value),
             cancellationToken);
 
+    public Task<bool> ActiveCodeExistsAsync(Guid? ignoredId, string normalizedCode, CancellationToken cancellationToken) =>
+        dbContext.IncomeTypes.AsNoTracking().AnyAsync(
+            item => !item.IsArchived && item.Code == normalizedCode && (!ignoredId.HasValue || item.Id != ignoredId.Value),
+            cancellationToken);
+
     public void Add(IncomeType incomeType) => dbContext.IncomeTypes.Add(incomeType);
 
     private IQueryable<IncomeType> ApplyArchiveFilter(bool includeArchived) =>

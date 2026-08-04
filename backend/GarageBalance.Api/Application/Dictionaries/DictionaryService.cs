@@ -1267,6 +1267,17 @@ public sealed class DictionaryService(
     public async Task<DictionaryResult<AccountingTypeDto>> CreateIncomeTypeAsync(UpsertAccountingTypeRequest request, Guid? actorUserId, CancellationToken cancellationToken)
     {
         var name = request.Name.Trim();
+        var code = AccountingTypeCodePolicy.Normalize(request.Code);
+        if (!AccountingTypeCodePolicy.IsValid(code))
+        {
+            return DictionaryResult<AccountingTypeDto>.Failure("income_type_code_invalid", "Код вида поступления должен начинаться с латинской буквы и содержать только строчные латинские буквы, цифры и знак подчёркивания.");
+        }
+
+        if (code is not null && AccountingTypeCodePolicy.IsReservedIncomeCode(code))
+        {
+            return DictionaryResult<AccountingTypeDto>.Failure("income_type_code_reserved", "Этот код зарезервирован для системного вида поступления.");
+        }
+
         if (await incomeTypeRepository.ActiveDuplicateExistsAsync(null, name, cancellationToken))
         {
             return DictionaryResult<AccountingTypeDto>.Failure("income_type_duplicate", "Вид поступления с таким названием уже существует.");
@@ -1275,8 +1286,13 @@ public sealed class DictionaryService(
         var incomeType = new IncomeType
         {
             Name = name,
-            Code = NormalizeOptional(request.Code)
+            Code = code
         };
+
+        if (code is not null && await incomeTypeRepository.ActiveCodeExistsAsync(null, code, cancellationToken))
+        {
+            return DictionaryResult<AccountingTypeDto>.Failure("income_type_code_duplicate", "Активный вид поступления с таким кодом уже существует.");
+        }
 
         var defaultFund = (await fundRepository.GetFundsAsync(cancellationToken))
             .FirstOrDefault(fund => fund.AllowOperations && fund.NormalizedName == "ПРОЧЕЕ");
@@ -1314,7 +1330,22 @@ public sealed class DictionaryService(
             return DictionaryResult<AccountingTypeDto>.Failure("income_type_duplicate", "Вид поступления с таким названием уже существует.");
         }
 
-        var code = NormalizeOptional(request.Code);
+        var code = AccountingTypeCodePolicy.Normalize(request.Code);
+        if (!AccountingTypeCodePolicy.IsValid(code))
+        {
+            return DictionaryResult<AccountingTypeDto>.Failure("income_type_code_invalid", "Код вида поступления должен начинаться с латинской буквы и содержать только строчные латинские буквы, цифры и знак подчёркивания.");
+        }
+
+        if (code is not null && AccountingTypeCodePolicy.IsReservedIncomeCode(code))
+        {
+            return DictionaryResult<AccountingTypeDto>.Failure("income_type_code_reserved", "Этот код зарезервирован для системного вида поступления.");
+        }
+
+        if (code is not null && await incomeTypeRepository.ActiveCodeExistsAsync(id, code, cancellationToken))
+        {
+            return DictionaryResult<AccountingTypeDto>.Failure("income_type_code_duplicate", "Активный вид поступления с таким кодом уже существует.");
+        }
+
         if (AccountingTypeMatches(incomeType, name, code))
         {
             return DictionaryResult<AccountingTypeDto>.Success(ToAccountingTypeDto(incomeType));
@@ -1379,6 +1410,23 @@ public sealed class DictionaryService(
             return DictionaryResult<AccountingTypeDto>.Failure("income_type_duplicate", "Активный вид поступления с таким названием уже существует.");
         }
 
+        var code = AccountingTypeCodePolicy.Normalize(incomeType.Code);
+        if (!AccountingTypeCodePolicy.IsValid(code))
+        {
+            return DictionaryResult<AccountingTypeDto>.Failure("income_type_code_invalid", "Исправьте код архивного вида поступления перед восстановлением.");
+        }
+
+        if (!incomeType.IsSystem && code is not null && AccountingTypeCodePolicy.IsReservedIncomeCode(code))
+        {
+            return DictionaryResult<AccountingTypeDto>.Failure("income_type_code_reserved", "Этот код зарезервирован для системного вида поступления.");
+        }
+
+        if (code is not null && await incomeTypeRepository.ActiveCodeExistsAsync(id, code, cancellationToken))
+        {
+            return DictionaryResult<AccountingTypeDto>.Failure("income_type_code_duplicate", "Активный вид поступления с таким кодом уже существует.");
+        }
+
+        incomeType.Code = code;
         incomeType.IsArchived = false;
         incomeType.UpdatedAtUtc = DateTimeOffset.UtcNow;
 
@@ -1406,6 +1454,17 @@ public sealed class DictionaryService(
     public async Task<DictionaryResult<AccountingTypeDto>> CreateExpenseTypeAsync(UpsertAccountingTypeRequest request, Guid? actorUserId, CancellationToken cancellationToken)
     {
         var name = request.Name.Trim();
+        var code = AccountingTypeCodePolicy.Normalize(request.Code);
+        if (!AccountingTypeCodePolicy.IsValid(code))
+        {
+            return DictionaryResult<AccountingTypeDto>.Failure("expense_type_code_invalid", "Код статьи расхода должен начинаться с латинской буквы и содержать только строчные латинские буквы, цифры и знак подчёркивания.");
+        }
+
+        if (code is not null && AccountingTypeCodePolicy.IsReservedExpenseCode(code))
+        {
+            return DictionaryResult<AccountingTypeDto>.Failure("expense_type_code_reserved", "Этот код зарезервирован для системной статьи расхода.");
+        }
+
         if (await expenseTypeRepository.ActiveDuplicateExistsAsync(null, name, cancellationToken))
         {
             return DictionaryResult<AccountingTypeDto>.Failure("expense_type_duplicate", "Статья расхода с таким названием уже существует.");
@@ -1414,8 +1473,13 @@ public sealed class DictionaryService(
         var expenseType = new ExpenseType
         {
             Name = name,
-            Code = NormalizeOptional(request.Code)
+            Code = code
         };
+
+        if (code is not null && await expenseTypeRepository.ActiveCodeExistsAsync(null, code, cancellationToken))
+        {
+            return DictionaryResult<AccountingTypeDto>.Failure("expense_type_code_duplicate", "Активная статья расхода с таким кодом уже существует.");
+        }
 
         expenseTypeRepository.Add(expenseType);
         AddAudit(actorUserId, "dictionary.expense_type_created", "expense_type", expenseType.Id, $"Создана статья расхода {expenseType.Name}.");
@@ -1442,7 +1506,22 @@ public sealed class DictionaryService(
             return DictionaryResult<AccountingTypeDto>.Failure("expense_type_duplicate", "Статья расхода с таким названием уже существует.");
         }
 
-        var code = NormalizeOptional(request.Code);
+        var code = AccountingTypeCodePolicy.Normalize(request.Code);
+        if (!AccountingTypeCodePolicy.IsValid(code))
+        {
+            return DictionaryResult<AccountingTypeDto>.Failure("expense_type_code_invalid", "Код статьи расхода должен начинаться с латинской буквы и содержать только строчные латинские буквы, цифры и знак подчёркивания.");
+        }
+
+        if (code is not null && AccountingTypeCodePolicy.IsReservedExpenseCode(code))
+        {
+            return DictionaryResult<AccountingTypeDto>.Failure("expense_type_code_reserved", "Этот код зарезервирован для системной статьи расхода.");
+        }
+
+        if (code is not null && await expenseTypeRepository.ActiveCodeExistsAsync(id, code, cancellationToken))
+        {
+            return DictionaryResult<AccountingTypeDto>.Failure("expense_type_code_duplicate", "Активная статья расхода с таким кодом уже существует.");
+        }
+
         if (AccountingTypeMatches(expenseType, name, code))
         {
             return DictionaryResult<AccountingTypeDto>.Success(new AccountingTypeDto(expenseType.Id, expenseType.Name, expenseType.Code, expenseType.IsSystem, expenseType.IsArchived));
@@ -1507,6 +1586,23 @@ public sealed class DictionaryService(
             return DictionaryResult<AccountingTypeDto>.Failure("expense_type_duplicate", "Активная статья расхода с таким названием уже существует.");
         }
 
+        var code = AccountingTypeCodePolicy.Normalize(expenseType.Code);
+        if (!AccountingTypeCodePolicy.IsValid(code))
+        {
+            return DictionaryResult<AccountingTypeDto>.Failure("expense_type_code_invalid", "Исправьте код архивной статьи расхода перед восстановлением.");
+        }
+
+        if (!expenseType.IsSystem && code is not null && AccountingTypeCodePolicy.IsReservedExpenseCode(code))
+        {
+            return DictionaryResult<AccountingTypeDto>.Failure("expense_type_code_reserved", "Этот код зарезервирован для системной статьи расхода.");
+        }
+
+        if (code is not null && await expenseTypeRepository.ActiveCodeExistsAsync(id, code, cancellationToken))
+        {
+            return DictionaryResult<AccountingTypeDto>.Failure("expense_type_code_duplicate", "Активная статья расхода с таким кодом уже существует.");
+        }
+
+        expenseType.Code = code;
         expenseType.IsArchived = false;
         expenseType.UpdatedAtUtc = DateTimeOffset.UtcNow;
 

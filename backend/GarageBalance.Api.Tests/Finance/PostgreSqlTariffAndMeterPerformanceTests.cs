@@ -12,7 +12,7 @@ public sealed class PostgreSqlTariffAndMeterPerformanceTests
     public async Task ActiveMeteredServicesUseEffectiveTariffsAndIndexedPredicates()
     {
         await using var database = await PostgreSqlTestDatabase.CreateAsync();
-        var incomeType = new IncomeType { Name = "Вода performance", Code = "water-performance" };
+        var incomeType = new IncomeType { Name = "Вода performance", Code = "water_performance" };
         var activeTariff = CreateTariff("Действующий", TariffCalculationBases.MeterWater, new DateOnly(2026, 1, 1));
         var futureTariff = CreateTariff("Будущий", TariffCalculationBases.MeterWater, new DateOnly(2027, 1, 1));
         var archivedTariff = CreateTariff("Архивный", TariffCalculationBases.MeterWater, new DateOnly(2025, 1, 1), true);

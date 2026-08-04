@@ -245,8 +245,12 @@ export function getAccountingTypeValidationErrors(form: UpsertAccountingTypeRequ
     errors.push(`Укажите название ${title}.`)
   }
 
-  if (code && !/^[a-z0-9_-]+$/i.test(code)) {
-    errors.push(`Код ${title} должен содержать только латиницу, цифры, дефис или подчеркивание.`)
+  if (code && !/^[a-z][a-z0-9_]*$/i.test(code)) {
+    errors.push(`Код ${title} должен начинаться с латинской буквы и содержать только латинские буквы, цифры и знак подчёркивания.`)
+  }
+
+  if (code && code.length > 80) {
+    errors.push(`Код ${title} не должен превышать 80 символов.`)
   }
 
   return errors

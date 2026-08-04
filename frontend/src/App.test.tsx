@@ -13067,6 +13067,7 @@ describe('App', () => {
     await openDictionarySubgroup(user, dictionaryPanel, 'Виды поступлений')
     const addIncomeTypeButton = within(dictionaryPanel).getByRole('button', { name: 'Добавить' })
     validationDialog = await openDictionaryCreateDialog(user, dictionaryPanel)
+    expect(within(validationDialog).getByText('Код хранится строчными латинскими буквами. Системные коды зарезервированы.')).toBeInTheDocument()
     await user.type(within(validationDialog).getByLabelText('Название вида операции'), '   ')
     await user.type(within(validationDialog).getByLabelText('Код вида операции'), 'членский')
     await user.click(within(validationDialog).getByRole('button', { name: 'Сохранить' }))
@@ -13134,7 +13135,7 @@ describe('App', () => {
 
     expect(await within(dictionaryPanel).findByText('Проверьте вид поступления')).toBeInTheDocument()
     expect(within(dictionaryPanel).getByText('Укажите название вида поступления.')).toBeInTheDocument()
-    expect(within(dictionaryPanel).getByText('Код вида поступления должен содержать только латиницу, цифры, дефис или подчеркивание.')).toBeInTheDocument()
+    expect(within(dictionaryPanel).getByText('Код вида поступления должен начинаться с латинской буквы и содержать только латинские буквы, цифры и знак подчёркивания.')).toBeInTheDocument()
     expect(createIncomeTypeCalled).toBe(false)
 
     await user.type(within(dictionaryPanel).getByLabelText('Название вида выплаты'), '   ')

@@ -179,7 +179,7 @@ const dictionaryEditorFieldMeta: Record<DictionaryEditorFieldKey, DictionaryEdit
   supplierStartingBalance: { label: 'Стартовый баланс', ariaLabel: 'Стартовый баланс поставщика', hint: 'Наша задолженность поставщику на начало учета.' },
   supplierComment: { label: 'Комментарий', ariaLabel: 'Комментарий поставщика', placeholder: 'Договор, условия оплаты или заметки' },
   accountingTypeName: { label: 'Название', ariaLabel: 'Название вида операции', placeholder: 'Например, Членский взнос' },
-  accountingTypeCode: { label: 'Код', ariaLabel: 'Код вида операции', placeholder: 'Код из старой базы или учета' },
+  accountingTypeCode: { label: 'Код', ariaLabel: 'Код вида операции', placeholder: 'Например, security_2026' },
   tariffName: { label: 'Название тарифа', ariaLabel: 'Название тарифа', placeholder: 'Например, Электроэнергия' },
   tariffCalculationBase: { label: 'База расчета', ariaLabel: 'База расчета тарифа' },
   tariffRate: { label: 'Ставка', ariaLabel: 'Ставка тарифа' },

@@ -209,7 +209,7 @@ public sealed class PostgreSqlFundAllocationIntegrationTests
             var incomeType = new IncomeType
             {
                 Name = "Поступления за охрану",
-                Code = "membership",
+                Code = "security_membership",
                 DestinationFundId = fundId
             };
             var tariff = new Tariff

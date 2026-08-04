@@ -377,7 +377,7 @@ public sealed class DictionaryServiceTests
         var garage = await service.CreateGarageAsync(new UpsertGarageRequest("12", 2, 1, owner.Value!.Id, 10.005m, 1.2345m, 9.8765m, "Угловой"), null, CancellationToken.None);
         var group = await service.CreateSupplierGroupAsync(new UpsertSupplierGroupRequest("Коммунальные услуги"), null, CancellationToken.None);
         var supplier = await service.CreateSupplierAsync(new UpsertSupplierRequest("Водоканал", group.Value!.Id, "123", "Юр. адрес", "Петров", "+7 (901) 123-45-67", "mail@example.com", 20.005m, "Комментарий"), null, CancellationToken.None);
-        var incomeType = await service.CreateIncomeTypeAsync(new UpsertAccountingTypeRequest("Членский взнос", "membership"), null, CancellationToken.None);
+        var incomeType = await service.CreateIncomeTypeAsync(new UpsertAccountingTypeRequest("Членский взнос", "membership_custom"), null, CancellationToken.None);
         var expenseType = await service.CreateExpenseTypeAsync(new UpsertAccountingTypeRequest("Электрик", "electrician"), null, CancellationToken.None);
         var tariff = await service.CreateTariffAsync(new UpsertTariffRequest("Вода", "meter_water", 12.34555m, new DateOnly(2026, 7, 1), "Комментарий"), null, CancellationToken.None);
         database.Context.AuditEvents.RemoveRange(database.Context.AuditEvents);
@@ -387,7 +387,7 @@ public sealed class DictionaryServiceTests
         Assert.True((await service.UpdateGarageAsync(garage.Value!.Id, new UpsertGarageRequest(" 12 ", 2, 1, owner.Value.Id, 10.005m, 1.2345m, 9.8765m, " Угловой "), actorUserId, CancellationToken.None)).Succeeded);
         Assert.True((await service.UpdateSupplierGroupAsync(group.Value.Id, new UpsertSupplierGroupRequest(" Коммунальные услуги "), actorUserId, CancellationToken.None)).Succeeded);
         Assert.True((await service.UpdateSupplierAsync(supplier.Value!.Id, new UpsertSupplierRequest(" Водоканал ", group.Value.Id, " 123 ", " Юр. адрес ", " Петров ", " +7 (901) 123-45-67 ", " mail@example.com ", 20.005m, " Комментарий "), actorUserId, CancellationToken.None)).Succeeded);
-        Assert.True((await service.UpdateIncomeTypeAsync(incomeType.Value!.Id, new UpsertAccountingTypeRequest(" Членский взнос ", " membership "), actorUserId, CancellationToken.None)).Succeeded);
+        Assert.True((await service.UpdateIncomeTypeAsync(incomeType.Value!.Id, new UpsertAccountingTypeRequest(" Членский взнос ", " membership_custom "), actorUserId, CancellationToken.None)).Succeeded);
         Assert.True((await service.UpdateExpenseTypeAsync(expenseType.Value!.Id, new UpsertAccountingTypeRequest(" Электрик ", " electrician "), actorUserId, CancellationToken.None)).Succeeded);
         Assert.True((await service.UpdateTariffAsync(tariff.Value!.Id, new UpsertTariffRequest(" Вода ", " meter_water ", 12.34555m, new DateOnly(2026, 7, 1), " Комментарий "), actorUserId, CancellationToken.None)).Succeeded);
 
@@ -739,7 +739,7 @@ public sealed class DictionaryServiceTests
     {
         await using var database = await TestDatabase.CreateAsync();
         var service = DictionaryServiceTestFactory.Create(database.Context);
-        var incomeType = await service.CreateIncomeTypeAsync(new UpsertAccountingTypeRequest("Electricity", "electricity"), null, CancellationToken.None);
+        var incomeType = await service.CreateIncomeTypeAsync(new UpsertAccountingTypeRequest("Electricity", "electricity_custom"), null, CancellationToken.None);
         var debtGarage = await service.CreateGarageAsync(new UpsertGarageRequest("BAL-1", 1, 1, null, 100m, null, null, null), null, CancellationToken.None);
         var overpaidGarage = await service.CreateGarageAsync(new UpsertGarageRequest("BAL-2", 1, 1, null, 0m, null, null, null), null, CancellationToken.None);
 
@@ -1088,8 +1088,8 @@ public sealed class DictionaryServiceTests
         var expenseFund = new Fund { Name = "Коммунальные расходы", NormalizedName = "КОММУНАЛЬНЫЕ РАСХОДЫ" };
         database.Context.Add(expenseFund);
         await database.Context.SaveChangesAsync();
-        var waterExpense = await service.CreateExpenseTypeAsync(new UpsertAccountingTypeRequest("Водоснабжение", "water_supply"), null, CancellationToken.None);
-        var electricityExpense = await service.CreateExpenseTypeAsync(new UpsertAccountingTypeRequest("Электроэнергия", "electricity"), null, CancellationToken.None);
+        var waterExpense = await service.CreateExpenseTypeAsync(new UpsertAccountingTypeRequest("Водоснабжение", "water_supply_custom"), null, CancellationToken.None);
+        var electricityExpense = await service.CreateExpenseTypeAsync(new UpsertAccountingTypeRequest("Электроэнергия", "electricity_custom"), null, CancellationToken.None);
         var water = await service.CreateChargeServiceSettingAsync(
             new UpsertChargeServiceSettingRequest("Вода", false, null, null, null, null, 0, false, false, "руб.", ExpenseTypeId: waterExpense.Value!.Id, ExpenseFundId: expenseFund.Id),
             null,
@@ -1671,7 +1671,7 @@ public sealed class DictionaryServiceTests
             new UpsertSupplierRequest("Водоканал", group.Value!.Id, null, null, null, null, null, 100m, null),
             null,
             CancellationToken.None);
-        var expenseType = await service.CreateExpenseTypeAsync(new UpsertAccountingTypeRequest("Водоснабжение", "water_supply"), null, CancellationToken.None);
+        var expenseType = await service.CreateExpenseTypeAsync(new UpsertAccountingTypeRequest("Водоснабжение", "water_supply_custom"), null, CancellationToken.None);
         database.Context.SupplierAccruals.Add(new SupplierAccrual
         {
             SupplierId = supplier.Value!.Id,
@@ -1766,12 +1766,63 @@ public sealed class DictionaryServiceTests
     {
         await using var database = await TestDatabase.CreateAsync();
         var service = DictionaryServiceTestFactory.Create(database.Context);
-        await service.CreateIncomeTypeAsync(new UpsertAccountingTypeRequest("Членский взнос", "membership"), null, CancellationToken.None);
+        await service.CreateIncomeTypeAsync(new UpsertAccountingTypeRequest("Членский взнос", "membership_custom"), null, CancellationToken.None);
 
         var result = await service.CreateIncomeTypeAsync(new UpsertAccountingTypeRequest("Членский взнос", "membership2"), null, CancellationToken.None);
 
         Assert.False(result.Succeeded);
         Assert.Equal("income_type_duplicate", result.ErrorCode);
+    }
+
+    [Fact]
+    public async Task CreateIncomeTypeAsync_NormalizesCodeAndRejectsInvalidReservedOrDuplicateCodes()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = DictionaryServiceTestFactory.Create(database.Context);
+
+        var created = await service.CreateIncomeTypeAsync(
+            new UpsertAccountingTypeRequest("Охрана", "  SECURITY_2026  "),
+            null,
+            CancellationToken.None);
+        var duplicate = await service.CreateIncomeTypeAsync(
+            new UpsertAccountingTypeRequest("Охрана территории", "security_2026"),
+            null,
+            CancellationToken.None);
+        var invalid = await service.CreateIncomeTypeAsync(
+            new UpsertAccountingTypeRequest("Русский код", "охрана"),
+            null,
+            CancellationToken.None);
+        var reserved = await service.CreateIncomeTypeAsync(
+            new UpsertAccountingTypeRequest("Пользовательская вода", "water"),
+            null,
+            CancellationToken.None);
+
+        Assert.True(created.Succeeded, created.ErrorMessage);
+        Assert.Equal("security_2026", created.Value!.Code);
+        Assert.Equal("income_type_code_duplicate", duplicate.ErrorCode);
+        Assert.Equal("income_type_code_invalid", invalid.ErrorCode);
+        Assert.Equal("income_type_code_reserved", reserved.ErrorCode);
+    }
+
+    [Fact]
+    public async Task RestoreIncomeTypeAsync_RejectsDuplicateActiveCode()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = DictionaryServiceTestFactory.Create(database.Context);
+        var archived = await service.CreateIncomeTypeAsync(
+            new UpsertAccountingTypeRequest("Старый тип", "shared_income_code"),
+            null,
+            CancellationToken.None);
+        await service.ArchiveIncomeTypeAsync(archived.Value!.Id, "Проверка конфликта кода", null, CancellationToken.None);
+        await service.CreateIncomeTypeAsync(
+            new UpsertAccountingTypeRequest("Новый тип", "shared_income_code"),
+            null,
+            CancellationToken.None);
+
+        var result = await service.RestoreIncomeTypeAsync(archived.Value.Id, null, CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Equal("income_type_code_duplicate", result.ErrorCode);
     }
 
     [Fact]
@@ -2062,11 +2113,62 @@ public sealed class DictionaryServiceTests
         var service = DictionaryServiceTestFactory.Create(database.Context);
         var actorUserId = Guid.NewGuid();
 
-        var result = await service.CreateExpenseTypeAsync(new UpsertAccountingTypeRequest("Электроэнергия", "electricity"), actorUserId, CancellationToken.None);
+        var result = await service.CreateExpenseTypeAsync(new UpsertAccountingTypeRequest("Электроэнергия", "electricity_custom"), actorUserId, CancellationToken.None);
 
         Assert.True(result.Succeeded);
         Assert.Equal("Электроэнергия", result.Value!.Name);
         Assert.Contains(database.Context.AuditEvents, item => item.Action == "dictionary.expense_type_created" && item.ActorUserId == actorUserId);
+    }
+
+    [Fact]
+    public async Task CreateExpenseTypeAsync_NormalizesCodeAndRejectsInvalidReservedOrDuplicateCodes()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = DictionaryServiceTestFactory.Create(database.Context);
+
+        var created = await service.CreateExpenseTypeAsync(
+            new UpsertAccountingTypeRequest("Ремонт", "  REPAIR_2026  "),
+            null,
+            CancellationToken.None);
+        var duplicate = await service.CreateExpenseTypeAsync(
+            new UpsertAccountingTypeRequest("Ремонт кровли", "repair_2026"),
+            null,
+            CancellationToken.None);
+        var invalid = await service.CreateExpenseTypeAsync(
+            new UpsertAccountingTypeRequest("Русский код", "ремонт"),
+            null,
+            CancellationToken.None);
+        var reserved = await service.CreateExpenseTypeAsync(
+            new UpsertAccountingTypeRequest("Пользовательская зарплата", "salary"),
+            null,
+            CancellationToken.None);
+
+        Assert.True(created.Succeeded, created.ErrorMessage);
+        Assert.Equal("repair_2026", created.Value!.Code);
+        Assert.Equal("expense_type_code_duplicate", duplicate.ErrorCode);
+        Assert.Equal("expense_type_code_invalid", invalid.ErrorCode);
+        Assert.Equal("expense_type_code_reserved", reserved.ErrorCode);
+    }
+
+    [Fact]
+    public async Task RestoreExpenseTypeAsync_RejectsDuplicateActiveCode()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = DictionaryServiceTestFactory.Create(database.Context);
+        var archived = await service.CreateExpenseTypeAsync(
+            new UpsertAccountingTypeRequest("Старая статья", "shared_expense_code"),
+            null,
+            CancellationToken.None);
+        await service.ArchiveExpenseTypeAsync(archived.Value!.Id, "Проверка конфликта кода", null, CancellationToken.None);
+        await service.CreateExpenseTypeAsync(
+            new UpsertAccountingTypeRequest("Новая статья", "shared_expense_code"),
+            null,
+            CancellationToken.None);
+
+        var result = await service.RestoreExpenseTypeAsync(archived.Value.Id, null, CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Equal("expense_type_code_duplicate", result.ErrorCode);
     }
 
     [Fact]
@@ -2528,9 +2630,9 @@ public sealed class DictionaryServiceTests
         await using var database = await TestDatabase.CreateAsync();
         var firstFund = CreateFund("Фонд воды 2025", 10);
         var secondFund = CreateFund("Фонд воды 2026", 20);
-        var firstIncomeType = new IncomeType { Name = "Вода", Code = "other_income", DestinationFundId = firstFund.Id };
-        var secondIncomeType = new IncomeType { Name = "Водоснабжение", Code = "other_income", DestinationFundId = secondFund.Id };
-        var expenseType = new ExpenseType { Name = "Оплата водоснабжения", Code = "water_supply" };
+        var firstIncomeType = new IncomeType { Name = "Вода", Code = "water_2025", DestinationFundId = firstFund.Id };
+        var secondIncomeType = new IncomeType { Name = "Водоснабжение", Code = "water_2026", DestinationFundId = secondFund.Id };
+        var expenseType = new ExpenseType { Name = "Оплата водоснабжения", Code = "water_supply_custom" };
         var firstTariff = new Tariff { Name = "Вода 2025", CalculationBase = "meter_water", Rate = 40m, EffectiveFrom = new DateOnly(2025, 1, 1) };
         var secondTariff = new Tariff { Name = "Вода 2026", CalculationBase = "meter_water", Rate = 50m, EffectiveFrom = new DateOnly(2026, 1, 1) };
         database.Context.Funds.AddRange(firstFund, secondFund);
@@ -3038,7 +3140,7 @@ public sealed class DictionaryServiceTests
         var service = DictionaryServiceTestFactory.Create(database.Context);
         var actorUserId = Guid.NewGuid();
         var created = await service.CreateIrregularPaymentAsync(new UpsertIrregularPaymentRequest("Вступительный взнос", 1500m), actorUserId, CancellationToken.None);
-        var incomeType = await service.CreateIncomeTypeAsync(new UpsertAccountingTypeRequest("Вступительный взнос", "entry"), null, CancellationToken.None);
+        var incomeType = await service.CreateIncomeTypeAsync(new UpsertAccountingTypeRequest("Вступительный взнос", "entry_custom"), null, CancellationToken.None);
         var garage = await service.CreateGarageAsync(new UpsertGarageRequest("1", 1, 1, null, 0m, null, null, null), null, CancellationToken.None);
         database.Context.Accruals.Add(new Accrual
         {
@@ -3745,11 +3847,11 @@ public sealed class DictionaryServiceTests
         await using var database = await TestDatabase.CreateAsync();
         var archivedFund = CreateFund("Удаленный фонд", 10);
         archivedFund.IsArchived = true;
-        var withoutFund = new IncomeType { Name = "Поступления без фонда", Code = "membership" };
+        var withoutFund = new IncomeType { Name = "Поступления без фонда", Code = "membership_without_fund" };
         var withArchivedFund = new IncomeType
         {
             Name = "Поступления удаленного фонда",
-            Code = "membership",
+            Code = "membership_archived_fund",
             DestinationFundId = archivedFund.Id
         };
         var tariff = new Tariff

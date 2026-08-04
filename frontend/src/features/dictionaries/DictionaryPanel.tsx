@@ -1149,7 +1149,7 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, integ
       return (
         <>
           {dictionaryField('accountingTypeName', <input aria-label={fieldMeta('accountingTypeName').ariaLabel} placeholder={fieldMeta('accountingTypeName').placeholder} value={accountingTypeForm.name} onChange={(event) => setAccountingTypeForm({ ...accountingTypeForm, name: event.target.value })} required />)}
-          {dictionaryField('accountingTypeCode', <input aria-label={fieldMeta('accountingTypeCode').ariaLabel} placeholder={fieldMeta('accountingTypeCode').placeholder} value={accountingTypeForm.code} onChange={(event) => setAccountingTypeForm({ ...accountingTypeForm, code: event.target.value })} />)}
+          {dictionaryField('accountingTypeCode', <input aria-label={fieldMeta('accountingTypeCode').ariaLabel} placeholder={fieldMeta('accountingTypeCode').placeholder} value={accountingTypeForm.code} onChange={(event) => setAccountingTypeForm({ ...accountingTypeForm, code: event.target.value })} maxLength={80} autoCapitalize="none" spellCheck={false} />, { help: 'Код хранится строчными латинскими буквами. Системные коды зарезервированы.' })}
         </>
       )
     }
@@ -2181,7 +2181,8 @@ export function DictionaryPanel({ auth, dictionaryClient }: { auth: AuthResponse
         <form className="dictionary-form" onSubmit={saveIncomeType}>
           <h3>Виды поступлений</h3>
           <input aria-label="Название вида поступления" placeholder="Членский взнос" value={incomeTypeForm.name} onChange={(event) => setIncomeTypeForm({ ...incomeTypeForm, name: event.target.value })} required />
-          <input aria-label="Код вида поступления" placeholder="Код" value={incomeTypeForm.code} onChange={(event) => setIncomeTypeForm({ ...incomeTypeForm, code: event.target.value })} />
+          <input aria-label="Код вида поступления" placeholder="Например, security_2026" value={incomeTypeForm.code} onChange={(event) => setIncomeTypeForm({ ...incomeTypeForm, code: event.target.value })} maxLength={80} autoCapitalize="none" spellCheck={false} />
+          <small className="form-field-hint">Код хранится строчными латинскими буквами. Системные коды зарезервированы.</small>
           <FormValidationSummary title="Проверьте вид поступления" items={incomeTypeValidationErrors} />
           <button className="secondary-button create-action-button" type="submit" disabled={!canWriteDictionaries || saving === 'income-type'}>
             <FileText size={16} aria-hidden="true" />
@@ -2205,7 +2206,8 @@ export function DictionaryPanel({ auth, dictionaryClient }: { auth: AuthResponse
         <form className="dictionary-form" onSubmit={saveExpenseType}>
           <h3>Статьи расходов</h3>
           <input aria-label="Название вида выплаты" placeholder="Электроэнергия" value={expenseTypeForm.name} onChange={(event) => setExpenseTypeForm({ ...expenseTypeForm, name: event.target.value })} required />
-          <input aria-label="Код вида выплаты" placeholder="Код" value={expenseTypeForm.code} onChange={(event) => setExpenseTypeForm({ ...expenseTypeForm, code: event.target.value })} />
+          <input aria-label="Код вида выплаты" placeholder="Например, repair_2026" value={expenseTypeForm.code} onChange={(event) => setExpenseTypeForm({ ...expenseTypeForm, code: event.target.value })} maxLength={80} autoCapitalize="none" spellCheck={false} />
+          <small className="form-field-hint">Код хранится строчными латинскими буквами. Системные коды зарезервированы.</small>
           <FormValidationSummary title="Проверьте статью расхода" items={expenseTypeValidationErrors} />
           <button className="secondary-button create-action-button" type="submit" disabled={!canWriteDictionaries || saving === 'expense-type'}>
             <FileText size={16} aria-hidden="true" />

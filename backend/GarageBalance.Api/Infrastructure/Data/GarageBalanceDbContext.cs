@@ -333,8 +333,20 @@ public sealed class GarageBalanceDbContext(DbContextOptions<GarageBalanceDbConte
             entity.HasKey(item => item.Id);
             entity.Property(item => item.Name).HasMaxLength(200).IsRequired();
             entity.Property(item => item.Code).HasMaxLength(80);
+            if (Database.IsNpgsql())
+            {
+                entity.ToTable(table =>
+                {
+                    table.HasCheckConstraint(
+                        "CK_income_types_Code_Format",
+                        "\"Code\" IS NULL OR \"Code\" ~ '^[a-z][a-z0-9_]*$'");
+                    table.HasCheckConstraint(
+                        "CK_income_types_Reserved_Code_System_Only",
+                        "\"IsSystem\" OR \"Code\" IS NULL OR \"Code\" <> ALL (ARRAY['water','trash','electricity','membership','target','entry','connection','outdoor_lighting','penalty','notice','fee_campaign','other_payments','other_income','debt_transfer'])");
+                });
+            }
             entity.HasIndex(item => item.Name).IsUnique().HasFilter("\"IsArchived\" = false");
-            entity.HasIndex(item => item.Code);
+            entity.HasIndex(item => item.Code).IsUnique().HasFilter("\"Code\" IS NOT NULL AND \"IsArchived\" = false");
             entity.HasIndex(item => item.DestinationFundId);
             entity.HasOne(item => item.DestinationFund)
                 .WithMany()
@@ -348,8 +360,20 @@ public sealed class GarageBalanceDbContext(DbContextOptions<GarageBalanceDbConte
             entity.HasKey(item => item.Id);
             entity.Property(item => item.Name).HasMaxLength(200).IsRequired();
             entity.Property(item => item.Code).HasMaxLength(80);
+            if (Database.IsNpgsql())
+            {
+                entity.ToTable(table =>
+                {
+                    table.HasCheckConstraint(
+                        "CK_expense_types_Code_Format",
+                        "\"Code\" IS NULL OR \"Code\" ~ '^[a-z][a-z0-9_]*$'");
+                    table.HasCheckConstraint(
+                        "CK_expense_types_Reserved_Code_System_Only",
+                        "\"IsSystem\" OR \"Code\" IS NULL OR \"Code\" <> ALL (ARRAY['electricity','trash_removal','water_supply','bank','legal','salary','other','penalty'])");
+                });
+            }
             entity.HasIndex(item => item.Name).IsUnique().HasFilter("\"IsArchived\" = false");
-            entity.HasIndex(item => item.Code);
+            entity.HasIndex(item => item.Code).IsUnique().HasFilter("\"Code\" IS NOT NULL AND \"IsArchived\" = false");
         });
 
         modelBuilder.Entity<Tariff>(entity =>

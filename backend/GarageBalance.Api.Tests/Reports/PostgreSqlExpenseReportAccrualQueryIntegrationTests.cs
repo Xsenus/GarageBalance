@@ -41,7 +41,7 @@ public sealed class PostgreSqlExpenseReportAccrualQueryIntegrationTests
                 CreatedAtUtc = new DateTimeOffset(2042, 12, 1, 0, 0, 0, TimeSpan.Zero),
                 UpdatedAtUtc = new DateTimeOffset(2042, 12, 1, 0, 0, 0, TimeSpan.Zero)
             };
-            var serviceExpenseType = new ExpenseType { Name = $"Эксплуатация {suffix}", Code = $"service-{suffix}" };
+            var serviceExpenseType = new ExpenseType { Name = $"Эксплуатация {suffix}", Code = $"service_{suffix}" };
             var salaryExpenseType = await seedContext.ExpenseTypes.SingleAsync(expenseType => expenseType.Code == "salary");
             seedContext.AddRange(group, supplier, department, staff, serviceExpenseType);
             seedContext.SupplierAccruals.AddRange(

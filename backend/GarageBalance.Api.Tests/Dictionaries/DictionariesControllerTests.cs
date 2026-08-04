@@ -875,6 +875,31 @@ public sealed class DictionariesControllerTests
         Assert.Equal("income_type_system", problem.Title);
     }
 
+    [Theory]
+    [InlineData("income", "income_type_code_duplicate")]
+    [InlineData("income", "income_type_code_reserved")]
+    [InlineData("expense", "expense_type_code_duplicate")]
+    [InlineData("expense", "expense_type_code_reserved")]
+    public async Task AccountingTypeCodeConflicts_ReturnConflict(string kind, string errorCode)
+    {
+        var failure = DictionaryResult<AccountingTypeDto>.Failure(errorCode, "Конфликт кода.");
+        var service = new FakeDictionaryService
+        {
+            IncomeTypeMutationResult = failure,
+            ExpenseTypeMutationResult = failure
+        };
+        var controller = CreateController(service);
+
+        var result = kind == "income"
+            ? (await controller.CreateIncomeType(new UpsertAccountingTypeRequest("Тип", "custom_code"), CancellationToken.None)).Result
+            : (await controller.CreateExpenseType(new UpsertAccountingTypeRequest("Статья", "custom_code"), CancellationToken.None)).Result;
+
+        var conflict = Assert.IsType<ConflictObjectResult>(result);
+        var problem = Assert.IsType<ProblemDetails>(conflict.Value);
+        Assert.Equal(errorCode, problem.Title);
+        Assert.Equal(StatusCodes.Status409Conflict, problem.Status);
+    }
+
     [Fact]
     public async Task CreateTariff_ReturnsConflictForDuplicateTariff()
     {
