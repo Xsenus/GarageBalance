@@ -50,6 +50,20 @@ public sealed class VpsPerformanceConfigurationTests
             StringComparison.Ordinal);
         Assert.Contains("client_max_body_size 51m;", nginx, StringComparison.Ordinal);
         Assert.Equal(51L * 1024L * 1024L, ImportFileLimits.MultipartRequestSizeBytes);
+
+        foreach (var composePath in new[]
+        {
+            Path.Combine(RepositoryRoot, "docker-compose.yml"),
+            Path.Combine(RepositoryRoot, "distribution", "docker", "docker-compose.yml")
+        })
+        {
+            var compose = File.ReadAllText(composePath);
+            Assert.Contains(
+                $"ImportProcessing__MaximumFileSizeMegabytes: ${{IMPORT_MAXIMUM_FILE_SIZE_MB:-{ImportFileLimits.MaximumFileSizeMegabytes}}}",
+                compose,
+                StringComparison.Ordinal);
+            Assert.DoesNotContain("IMPORT_MAXIMUM_FILE_SIZE_MB:-512", compose, StringComparison.Ordinal);
+        }
     }
 
     [Fact]

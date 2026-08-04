@@ -51,7 +51,7 @@ services:
       DatabaseBackup__PgRestorePath: pg_restore
       ImportProcessing__Capacity: ${IMPORT_PROCESSING_CAPACITY:-4}
       ImportProcessing__WorkDirectory: /var/lib/garagebalance/import-queue
-      ImportProcessing__MaximumFileSizeMegabytes: ${IMPORT_MAXIMUM_FILE_SIZE_MB:-512}
+      ImportProcessing__MaximumFileSizeMegabytes: ${IMPORT_MAXIMUM_FILE_SIZE_MB:-50}
       Integrations__OneCFreshBackground__Capacity: ${ONE_C_FRESH_QUEUE_CAPACITY:-8}
       Integrations__OneCFreshBackground__AdapterTimeoutSeconds: ${ONE_C_FRESH_ADAPTER_TIMEOUT_SECONDS:-30}
       DiagnosticLogging__Enabled: ${DIAGNOSTIC_LOGGING_ENABLED:-true}
