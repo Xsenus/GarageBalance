@@ -5,7 +5,7 @@ import type { AuthClient, AuthResponse } from '../../services/authApi'
 import type { IntegrationClient, OneCFreshIntegrationStatusDto, OneCFreshSyncDto, OneCFreshSyncPreviewDto, ReceiptPrintingIntegrationStatusDto } from '../../services/integrationsApi'
 import type { ApplicationSettingsClient, BusinessDateChangePreviewDto, BusinessDateSettingsDto, CashBankBalanceSettingsDto, DatabaseBackupStatusDto, DiagnosticLogStatusDto, SalaryAccrualSettingsDto } from '../../services/settingsApi'
 import { hasPermission, isAdministrator, permissions } from '../../shared/accessControl'
-import { LoadingSkeleton } from '../../shared/AsyncState'
+import { AsyncErrorState, EmptyState, LoadingSkeleton } from '../../shared/AsyncState'
 import { LocalizedDatePicker } from '../../shared/LocalizedDatePicker'
 import { MoneyTextInput } from '../../shared/MoneyInput'
 import { parseMoneyInput } from '../../shared/moneyInputFormatting'
@@ -86,6 +86,7 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
   const [cashBankSaving, setCashBankSaving] = useState(false)
   const [cashBankError, setCashBankError] = useState<string | null>(null)
   const [cashBankMessage, setCashBankMessage] = useState<string | null>(null)
+  const [settingsReloadRevision, setSettingsReloadRevision] = useState(0)
   const [openingBalanceDraft, setOpeningBalanceDraft] = useState({ cash: '', bank: '', reason: '' })
   const [balanceAdjustmentDraft, setBalanceAdjustmentDraft] = useState<{
     account: 'cash' | 'bank'
@@ -136,7 +137,7 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
         if (!ignore) setBusinessDateLoading(false)
       })
     return () => { ignore = true }
-  }, [activeSettingsTab, auth.accessToken, canManageBusinessDate, settingsClient])
+  }, [activeSettingsTab, auth.accessToken, canManageBusinessDate, settingsClient, settingsReloadRevision])
 
   useEffect(() => {
     if (!canManageBusinessDate || activeSettingsTab !== 'cash-bank') return
@@ -160,7 +161,7 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
         if (!ignore) setCashBankLoading(false)
       })
     return () => { ignore = true }
-  }, [activeSettingsTab, auth.accessToken, canManageBusinessDate, settingsClient])
+  }, [activeSettingsTab, auth.accessToken, canManageBusinessDate, settingsClient, settingsReloadRevision])
 
   useEffect(() => {
     if (!canManageApplicationSettings || activeSettingsTab !== 'display') {
@@ -191,7 +192,7 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
     return () => {
       ignore = true
     }
-  }, [activeSettingsTab, auth.accessToken, canManageApplicationSettings, settingsClient])
+  }, [activeSettingsTab, auth.accessToken, canManageApplicationSettings, settingsClient, settingsReloadRevision])
 
   useEffect(() => {
     if (!canManageApplicationSettings || activeSettingsTab !== 'backups') {
@@ -516,7 +517,7 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
     return () => {
       ignore = true
     }
-  }, [auth.accessToken, canViewIntegrationStatus, integrationClient])
+  }, [auth.accessToken, canViewIntegrationStatus, integrationClient, settingsReloadRevision])
 
   useEffect(() => {
     if (!canViewReceiptPrintingStatus) {
@@ -554,7 +555,7 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
     return () => {
       ignore = true
     }
-  }, [auth.accessToken, canViewReceiptPrintingStatus, integrationClient])
+  }, [auth.accessToken, canViewReceiptPrintingStatus, integrationClient, settingsReloadRevision])
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -902,7 +903,9 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
               </form>
             </>
           ) : null}
-          {businessDateError ? <FormError>{businessDateError}</FormError> : null}
+          {businessDateError && !businessDateSettings ? (
+            <AsyncErrorState message={businessDateError} onRetry={() => setSettingsReloadRevision((value) => value + 1)} retrying={businessDateLoading} />
+          ) : businessDateError ? <FormError>{businessDateError}</FormError> : null}
           {businessDateMessage ? <div className="form-success" role="status" aria-live="polite">{businessDateMessage}</div> : null}
         </div>
       </section>
@@ -1073,7 +1076,9 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
               </div>
             </>
           ) : null}
-          {cashBankError ? <FormError>{cashBankError}</FormError> : null}
+          {cashBankError && !cashBankSettings ? (
+            <AsyncErrorState message={cashBankError} onRetry={() => setSettingsReloadRevision((value) => value + 1)} retrying={cashBankLoading} />
+          ) : cashBankError ? <FormError>{cashBankError}</FormError> : null}
           {cashBankMessage ? <div className="form-success" role="status" aria-live="polite">{cashBankMessage}</div> : null}
         </div>
       </section>
@@ -1105,7 +1110,9 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
             </span>
           </label>
           {paymentDisplaySettingsLoading ? <LoadingSkeleton className="loading-skeleton--compact" label="Загружаем настройку отображения платежей" rows={2} columns={2} /> : null}
-          {paymentDisplaySettingsError ? <FormError>{paymentDisplaySettingsError}</FormError> : null}
+          {paymentDisplaySettingsError && !paymentDisplaySettingsVersion ? (
+            <AsyncErrorState message={paymentDisplaySettingsError} onRetry={() => setSettingsReloadRevision((value) => value + 1)} retrying={paymentDisplaySettingsLoading} />
+          ) : paymentDisplaySettingsError ? <FormError>{paymentDisplaySettingsError}</FormError> : null}
           {paymentDisplaySettingsMessage ? <div className="form-success" role="status" aria-live="polite">{paymentDisplaySettingsMessage}</div> : null}
           <button className="secondary-button" type="button" disabled={paymentDisplaySettingsLoading || paymentDisplaySettingsSaving} onClick={() => void savePaymentDisplaySettings()}>
             <SlidersHorizontal size={16} aria-hidden="true" />
@@ -1189,7 +1196,7 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
                   ))}
                   {backupStatus.backups.length === 0 ? (
                     <tr>
-                      <td colSpan={4}><p className="empty-state" role="status">Резервные копии еще не создавались.</p></td>
+                      <td colSpan={4}><EmptyState>Резервные копии еще не создавались.</EmptyState></td>
                     </tr>
                   ) : null}
                 </tbody>
@@ -1259,7 +1266,7 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
             <h2>1C Fresh</h2>
             <p>Статус подготовки будущей синхронизации показывается без раскрытия токенов и других защищенных настроек.</p>
           </div>
-          {integrationError ? <FormError>{integrationError}</FormError> : null}
+          {integrationError ? <AsyncErrorState message={integrationError} onRetry={() => setSettingsReloadRevision((value) => value + 1)} retrying={integrationLoading} /> : null}
           {integrationLoading ? <LoadingSkeleton className="loading-skeleton--compact" label="Загружаем статус 1C Fresh" rows={3} columns={4} /> : null}
           {oneCFreshStatus ? (
             <div className="summary-strip" aria-label="Статус интеграции 1C Fresh">
@@ -1282,7 +1289,7 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
         </div>
           ) : null}
           {oneCFreshStatus ? (
-            <p className="empty-state" role="status" aria-live="polite">{oneCFreshStatus.statusMessage}</p>
+            <EmptyState>{oneCFreshStatus.statusMessage}</EmptyState>
           ) : null}
           {canManageIntegrationSettings ? (
             <form className="dictionary-form" aria-label="Защищенная настройка 1C Fresh" onSubmit={(event) => {
@@ -1364,7 +1371,7 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
             <h2>Чеки и квитанции</h2>
             <p>Статус подготовки печати показывается без раскрытия параметров фискального оборудования и шаблонов.</p>
           </div>
-          {receiptPrintingError ? <FormError>{receiptPrintingError}</FormError> : null}
+          {receiptPrintingError ? <AsyncErrorState message={receiptPrintingError} onRetry={() => setSettingsReloadRevision((value) => value + 1)} retrying={receiptPrintingLoading} /> : null}
           {receiptPrintingLoading ? <LoadingSkeleton className="loading-skeleton--compact" label="Загружаем статус печати" rows={3} columns={4} /> : null}
           {receiptPrintingStatus ? (
             <div className="summary-strip" aria-label="Статус печати чеков и квитанций">

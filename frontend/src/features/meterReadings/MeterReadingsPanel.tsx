@@ -3,7 +3,7 @@ import { Save, X } from 'lucide-react'
 import type { AuthResponse } from '../../services/authApi'
 import type { DictionaryClient } from '../../services/dictionariesApi'
 import type { CreateMeterReadingRequest, FinanceClient, MeterReadingYearGarageDto } from '../../services/financeApi'
-import { TableLoadingState } from '../../shared/AsyncState'
+import { AsyncErrorState, EmptyState, TableLoadingState } from '../../shared/AsyncState'
 import { FormField } from '../../shared/FormField'
 import { LocalizedDatePicker } from '../../shared/LocalizedDatePicker'
 import { MeterReadingInput } from '../../shared/MeterReadingInput'
@@ -576,14 +576,12 @@ export function MeterReadingsPrototypePanel({ auth, dictionaryClient, financeCli
       </div>
 
       {!yearIsValid ? <div className="form-error" role="alert">Введите год четырьмя цифрами от 1900 до 9999.</div> : null}
-      {error ? <div className="form-error" role="alert">{error}</div> : null}
+      {error && !pendingReadingChange ? <AsyncErrorState message={error} onRetry={() => setReloadRevision((value) => value + 1)} retrying={loading} /> : null}
       <p className="form-hint">Показания будущих месяцев доступны только для просмотра и недоступны для ввода.</p>
 
       {availableMeterTypes === null ? <TableLoadingState label="Загружаем гаражи и показания" /> : null}
       {availableMeterTypes?.length === 0 && !error ? (
-        <div className="meter-readings-empty-row" role="status">
-          <span>Нет действующих регулярных услуг по счётчику. В разделе «Тарифы и сборы» назначьте услуге счётчиковый тариф.</span>
-        </div>
+        <EmptyState>Нет действующих регулярных услуг по счётчику. В разделе «Тарифы и сборы» назначьте услуге счётчиковый тариф.</EmptyState>
       ) : availableMeterTypes && availableMeterTypes.length > 0 ? <MeterReadingsTable
         appliedYear={appliedYear}
         currentMonth={currentMonth}

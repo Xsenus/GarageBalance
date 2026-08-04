@@ -10,6 +10,7 @@ export default defineConfig({
         manualChunks(id) {
           if (id.includes('lucide-react')) return 'icons'
           if (/[/\\]src[/\\]shared[/\\](FormField|LocalizedDatePicker|MoneyInput|SelectControl|TablePagination)\./.test(id)) return 'form-controls'
+          if (/[/\\]src[/\\]shared[/\\](changePreview|dictionaryWorkbench|fileExports|MeterReadingInput|PhoneInput|prototypeEditing|reportFilters|ReportPeriodQuickSelect)\./.test(id)) return 'workflow-tools'
           return undefined
         },
       },

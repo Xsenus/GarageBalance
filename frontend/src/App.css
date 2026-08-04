@@ -758,6 +758,34 @@ h1 {
   min-width: 890px;
 }
 
+.async-error-state {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-block: 10px;
+}
+
+.async-error-state .form-error {
+  flex: 1 1 auto;
+  margin: 0;
+}
+
+.async-error-state .ghost-button {
+  flex: 0 0 auto;
+}
+
+@media (max-width: 560px) {
+  .async-error-state {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .async-error-state .ghost-button {
+    justify-content: center;
+    width: 100%;
+  }
+}
+
 .contractors-sheet-header {
   position: sticky;
   z-index: 1;
@@ -6419,17 +6447,6 @@ h1 {
   overflow-x: auto;
 }
 
-.audit-error-state {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-  align-items: center;
-}
-
-.audit-error-state .form-error {
-  margin: 0;
-}
-
 .dictionary-subnav-group--related {
   margin-top: 8px;
   padding-top: 12px;
@@ -6451,30 +6468,6 @@ h1 {
   color: #667085;
   font-size: 11px;
   font-weight: 500;
-}
-
-.funds-load-error {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 12px;
-}
-
-.funds-load-error .form-error {
-  flex: 1;
-  margin: 0;
-}
-
-.funds-load-error .ghost-button {
-  flex: 0 0 auto;
-}
-
-@media (max-width: 720px) {
-  .funds-load-error {
-    align-items: stretch;
-    flex-direction: column;
-  }
 }
 
 .audit-event-row {

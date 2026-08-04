@@ -4,7 +4,7 @@ import { FileSpreadsheet, FileText, ListPlus, LoaderCircle, Pencil, Search, Tras
 import type { AuthResponse } from '../../services/authApi'
 import type { DictionaryClient } from '../../services/dictionariesApi'
 import type { BankDepositReportDto, CashPaymentReportDto, ConsolidatedReportDto, ExpenseReportDto, FeeReportDto, FundChangeReportDto, GarageDetailReportDto, GarageReportQuickListDto, IncomeReportDto, ReportClient } from '../../services/reportsApi'
-import { EmptyState, TableLoadingState } from '../../shared/AsyncState'
+import { AsyncErrorState, EmptyState, TableLoadingState } from '../../shared/AsyncState'
 import { buildReportFileName, buildSnapshotReportFileName, downloadBlob } from '../../shared/fileExports'
 import { FormError } from '../../shared/formFeedback'
 import { useEscapeKey, useFocusOnOpen, useFocusTrap } from '../../shared/focusHooks'
@@ -318,6 +318,7 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
   const [fundChangeReport, setFundChangeReport] = useState<FundChangeReportDto | null>(null)
   const [fundChangeReportLoading, setFundChangeReportLoading] = useState(false)
   const [fundChangeReportError, setFundChangeReportError] = useState<string | null>(null)
+  const [reportReloadRevision, setReportReloadRevision] = useState(0)
   const garageQuickListDialogRef = useFocusTrap<HTMLElement>(garageQuickListEditor !== null)
   const garageQuickListNameRef = useFocusOnOpen<HTMLInputElement>(garageQuickListEditor !== null)
   const garageQuickListDeleteDialogRef = useFocusTrap<HTMLElement>(garageQuickListDeleteTarget !== null)
@@ -447,7 +448,7 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
       ignore = true
       controller.abort()
     }
-  }, [activeReportTab, auth.accessToken, monthlyFilters.consolidated, reportClient, reportSorts.consolidated])
+  }, [activeReportTab, auth.accessToken, monthlyFilters.consolidated, reportClient, reportReloadRevision, reportSorts.consolidated])
 
   useEffect(() => {
     if (activeReportTab !== 'fees') {
@@ -488,7 +489,7 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
       ignore = true
       controller.abort()
     }
-  }, [activeReportTab, appliedFeeVariationFilter, auth.accessToken, reportClient, reportSorts.fees])
+  }, [activeReportTab, appliedFeeVariationFilter, auth.accessToken, reportClient, reportReloadRevision, reportSorts.fees])
 
   useEffect(() => {
     if (activeReportTab !== 'garages') {
@@ -535,7 +536,7 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
       ignore = true
       controller.abort()
     }
-  }, [activeReportTab, auth.accessToken, garageAccrualsGrouped, monthlyFilters.garages, reportClient, reportSorts.garages, selectedGarageIds])
+  }, [activeReportTab, auth.accessToken, garageAccrualsGrouped, monthlyFilters.garages, reportClient, reportReloadRevision, reportSorts.garages, selectedGarageIds])
 
   useEffect(() => {
     if (activeReportTab !== 'payouts') {
@@ -584,7 +585,7 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
       ignore = true
       controller.abort()
     }
-  }, [activeReportTab, auth.accessToken, monthlyFilters.payouts, reportClient, reportSorts.payouts, selectedCounterpartyKeys])
+  }, [activeReportTab, auth.accessToken, monthlyFilters.payouts, reportClient, reportReloadRevision, reportSorts.payouts, selectedCounterpartyKeys])
 
   useEffect(() => {
     if (activeReportTab !== 'income') {
@@ -632,7 +633,7 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
       ignore = true
       controller.abort()
     }
-  }, [activeReportTab, auth.accessToken, dateFilters.income, incomePaymentsGrouped, reportClient, reportSorts.income, selectedIncomeGarageIds])
+  }, [activeReportTab, auth.accessToken, dateFilters.income, incomePaymentsGrouped, reportClient, reportReloadRevision, reportSorts.income, selectedIncomeGarageIds])
 
   useEffect(() => {
     if (activeReportTab !== 'cashPayments') {
@@ -677,7 +678,7 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
       ignore = true
       controller.abort()
     }
-  }, [activeReportTab, auth.accessToken, dateFilters.cashPayments, reportClient, reportSorts.cashPayments])
+  }, [activeReportTab, auth.accessToken, dateFilters.cashPayments, reportClient, reportReloadRevision, reportSorts.cashPayments])
 
   useEffect(() => {
     if (activeReportTab !== 'bankDeposits') {
@@ -722,7 +723,7 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
       ignore = true
       controller.abort()
     }
-  }, [activeReportTab, auth.accessToken, dateFilters.bankDeposits, reportClient, reportSorts.bankDeposits])
+  }, [activeReportTab, auth.accessToken, dateFilters.bankDeposits, reportClient, reportReloadRevision, reportSorts.bankDeposits])
 
   useEffect(() => {
     if (activeReportTab !== 'funds') {
@@ -767,7 +768,7 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
       ignore = true
       controller.abort()
     }
-  }, [activeReportTab, auth.accessToken, dateFilters.funds, reportClient, reportSorts.funds])
+  }, [activeReportTab, auth.accessToken, dateFilters.funds, reportClient, reportReloadRevision, reportSorts.funds])
 
   const selectedTab = reportWorkbookTabs.find((tab) => tab.key === activeReportTab) ?? reportWorkbookTabs[0]
   const feeVariationLabel = feeVariationFilter.trim() || 'Все сборы'
@@ -1287,7 +1288,7 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
             actions: <>{renderReportExportButton('xlsx', 'consolidated-xlsx', () => void downloadConsolidatedReport('xlsx'))}{renderReportExportButton('pdf', 'consolidated-pdf', () => void downloadConsolidatedReport('pdf'))}</>,
           })}
           {consolidatedReportLoading ? <TableLoadingState label="Загружаем сводный отчёт" /> : null}
-          {consolidatedReportError ? <FormError>{consolidatedReportError}</FormError> : null}
+          {consolidatedReportError ? <AsyncErrorState message={consolidatedReportError} onRetry={() => setReportReloadRevision((value) => value + 1)} retrying={consolidatedReportLoading} /> : null}
           {renderReportTable(
             'Консолидированный отчет',
             [{ label: 'Месяц', sortField: 'accountingMonth' }, 'Наименование поступления', 'Поступления', 'Наименование выплаты', 'Выплаты', 'Разница', 'Остаток по счёту — На начало месяца', 'Остаток по счёту — На конец месяца'],
@@ -1450,7 +1451,7 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
             Начисления и поступления сопоставлены по месяцу, гаражу и услуге. Разница = начисления − поступления. Группировка объединяет услуги в одну строку по гаражу и месяцу.
           </p>
           {garageReportLoading ? <TableLoadingState label="Загружаем отчет по гаражам..." /> : null}
-          {garageReportError ? <FormError>{garageReportError}</FormError> : null}
+          {garageReportError ? <AsyncErrorState message={garageReportError} onRetry={() => setReportReloadRevision((value) => value + 1)} retrying={garageReportLoading} /> : null}
           <div className="report-workbook-summary-row">
             <strong>ИТОГО начислений</strong>
             <strong>ИТОГО поступлений</strong>
@@ -1500,7 +1501,7 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
             ),
           })}
           {payoutReportLoading ? <TableLoadingState label="Загружаем выплаты..." /> : null}
-          {payoutReportError ? <FormError>{payoutReportError}</FormError> : null}
+          {payoutReportError ? <AsyncErrorState message={payoutReportError} onRetry={() => setReportReloadRevision((value) => value + 1)} retrying={payoutReportLoading} /> : null}
           <div className="report-workbook-summary-row">
             <strong>ИТОГО начислений</strong>
             <strong>ИТОГО выплат</strong>
@@ -1569,7 +1570,7 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
             По умолчанию части одной квитанции или полной оплаты, в том числе сохранённой ранее, объединены. В режиме отдельных платежей каждая операция показана собственной строкой.
           </p>
           {incomeReportLoading ? <TableLoadingState label="Загружаем поступления..." /> : null}
-          {incomeReportError ? <FormError>{incomeReportError}</FormError> : null}
+          {incomeReportError ? <AsyncErrorState message={incomeReportError} onRetry={() => setReportReloadRevision((value) => value + 1)} retrying={incomeReportLoading} /> : null}
           <div className="report-workbook-summary-row report-workbook-summary-row--single"><strong>ИТОГО</strong></div>
           {renderReportTable(
             'Отчет по поступлениям',
@@ -1595,7 +1596,7 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
         <ReportWorkbookSheet title="Отчёт по оплатам из кассы">
           {renderDateFilter('cashPayments', { from: 'С', to: 'По', actions: <>{renderReportExportButton('xlsx', 'cashPayments-xlsx', () => void downloadCashOrBankReport('cashPayments', 'xlsx'))}{renderReportExportButton('pdf', 'cashPayments-pdf', () => void downloadCashOrBankReport('cashPayments', 'pdf'))}</> })}
           {cashPaymentReportLoading ? <TableLoadingState label="Загружаем оплаты из кассы..." /> : null}
-          {cashPaymentReportError ? <FormError>{cashPaymentReportError}</FormError> : null}
+          {cashPaymentReportError ? <AsyncErrorState message={cashPaymentReportError} onRetry={() => setReportReloadRevision((value) => value + 1)} retrying={cashPaymentReportLoading} /> : null}
           <div className="report-workbook-summary-row report-workbook-summary-row--single"><strong>ИТОГО</strong></div>
           {renderReportTable(
             'Отчет по оплатам из кассы',
@@ -1619,7 +1620,7 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
         <ReportWorkbookSheet title="Отчёт по сдаче кассы в банк">
           {renderDateFilter('bankDeposits', { from: 'С', to: 'По', actions: <>{renderReportExportButton('xlsx', 'bankDeposits-xlsx', () => void downloadCashOrBankReport('bankDeposits', 'xlsx'))}{renderReportExportButton('pdf', 'bankDeposits-pdf', () => void downloadCashOrBankReport('bankDeposits', 'pdf'))}</> })}
           {bankDepositReportLoading ? <TableLoadingState label="Загружаем сдачу кассы в банк..." /> : null}
-          {bankDepositReportError ? <FormError>{bankDepositReportError}</FormError> : null}
+          {bankDepositReportError ? <AsyncErrorState message={bankDepositReportError} onRetry={() => setReportReloadRevision((value) => value + 1)} retrying={bankDepositReportLoading} /> : null}
           <div className="report-workbook-summary-row report-workbook-summary-row--single"><strong>ИТОГО</strong></div>
           {renderReportTable(
             'Отчет по сдаче кассы в банк',
@@ -1667,7 +1668,7 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
       return (
           <ReportWorkbookSheet title="Отчёт по сборам">
           {feeReportLoading ? <TableLoadingState label="Загружаем отчёт по сборам" /> : null}
-          {feeReportError ? <FormError>{feeReportError}</FormError> : null}
+          {feeReportError ? <AsyncErrorState message={feeReportError} onRetry={() => setReportReloadRevision((value) => value + 1)} retrying={feeReportLoading} /> : null}
           <div className="report-workbook-filter report-workbook-filter--single" aria-label="Фильтры отчета по сборам">
             <div className="report-workbook-filter__fields">
               <label className="report-workbook-filter-wide">
@@ -1744,7 +1745,7 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
       <ReportWorkbookSheet title="Отчёт по изменению фондов">
         {renderDateFilter('funds', { from: 'С', to: 'По', actions: <>{renderReportExportButton('xlsx', 'funds-xlsx', () => void downloadFundChangeReport('xlsx'))}{renderReportExportButton('pdf', 'funds-pdf', () => void downloadFundChangeReport('pdf'))}</> })}
         {fundChangeReportLoading ? <TableLoadingState label="Загружаем изменения фондов..." /> : null}
-        {fundChangeReportError ? <FormError>{fundChangeReportError}</FormError> : null}
+        {fundChangeReportError ? <AsyncErrorState message={fundChangeReportError} onRetry={() => setReportReloadRevision((value) => value + 1)} retrying={fundChangeReportLoading} /> : null}
         {fundChangeReport ? (
           <div className="report-workbook-summary-row">
             <strong>Пополнено: {formatMoney(fundChangeReport.depositTotal)}</strong>

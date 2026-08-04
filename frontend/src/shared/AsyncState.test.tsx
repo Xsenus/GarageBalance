@@ -1,22 +1,33 @@
 import { fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
-import { AsyncErrorBoundary, EmptyState, LoadingSkeleton, TableLoadingState } from './AsyncState'
+import { AsyncErrorBoundary, AsyncErrorState, EmptyState, LoadingSkeleton, TableLoadingState } from './AsyncState'
 
 describe('AsyncState', () => {
-  it('announces loading without exposing decorative skeleton rows', () => {
-    const { container } = render(<LoadingSkeleton label="Загружаем тарифы" rows={4} columns={3} />)
+  it('announces loading without exposing decorative bars', () => {
+    const { container } = render(<LoadingSkeleton label="Загружаем данные" rows={2} columns={3} />)
 
-    expect(screen.getByRole('status', { name: 'Загружаем тарифы' })).toBeInTheDocument()
-    expect(container.querySelectorAll('.loading-skeleton-row')).toHaveLength(4)
-    expect(container.querySelectorAll('.loading-skeleton-line')).toHaveLength(12)
+    expect(screen.getByRole('status', { name: 'Загружаем данные' })).toBeInTheDocument()
+    expect(container.querySelectorAll('.loading-skeleton-line')).toHaveLength(6)
     expect(container.querySelector('.loading-skeleton-row')).toHaveAttribute('aria-hidden', 'true')
   })
 
-  it('renders a polite spacious empty state', () => {
-    render(<EmptyState>Данных пока нет.</EmptyState>)
+  it('renders a spacious announced empty state', () => {
+    render(<EmptyState>Записей пока нет</EmptyState>)
 
-    expect(screen.getByRole('status')).toHaveTextContent('Данных пока нет.')
+    expect(screen.getByRole('status')).toHaveTextContent('Записей пока нет')
     expect(screen.getByRole('status')).toHaveClass('empty-state--spacious')
+  })
+
+  it('announces an error and lets the user retry', () => {
+    const onRetry = vi.fn()
+    const { rerender } = render(<AsyncErrorState message="Сервер не ответил" onRetry={onRetry} />)
+
+    expect(screen.getByRole('alert')).toHaveTextContent('Сервер не ответил')
+    fireEvent.click(screen.getByRole('button', { name: 'Повторить загрузку' }))
+    expect(onRetry).toHaveBeenCalledOnce()
+
+    rerender(<AsyncErrorState message="Сервер не ответил" onRetry={onRetry} retrying />)
+    expect(screen.getByRole('button', { name: 'Загружаем…' })).toBeDisabled()
   })
 
   it('isolates a failed async section and can reset without crashing the application shell', () => {

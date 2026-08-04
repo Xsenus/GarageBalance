@@ -7,7 +7,7 @@ import type { AccountingTypeDto, ChargeServiceSettingDto, CreateChargeServiceWit
 import type { FinanceClient } from '../../services/financeApi'
 import type { FundDto, FundsClient } from '../../services/fundsApi'
 import { hasPermission, permissions } from '../../shared/accessControl'
-import { EmptyState, TableLoadingState } from '../../shared/AsyncState'
+import { AsyncErrorState, EmptyState, TableLoadingState } from '../../shared/AsyncState'
 import type { ChangePreview } from '../../shared/changePreview'
 import { appendChangePreview, formatChangeDate, formatChangeNumber, formatChangeText } from '../../shared/changePreview'
 import { FormError } from '../../shared/formFeedback'
@@ -797,6 +797,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
   const [pendingChange, setPendingChange] = useState<TariffPrototypePendingChange | null>(null)
   const [tariffDateErrors, setTariffDateErrors] = useState<Record<string, string>>({})
   const [tariffPersistenceError, setTariffPersistenceError] = useState<string | null>(null)
+  const [tariffReloadRevision, setTariffReloadRevision] = useState(0)
   const [tariffsLoading, setTariffsLoading] = useState(true)
   const [oneTimeLoading, setOneTimeLoading] = useState(true)
   const [feeCampaignsLoading, setFeeCampaignsLoading] = useState(true)
@@ -916,7 +917,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
     return () => {
       ignore = true
     }
-  }, [auth.accessToken, dictionaryClient, fundsClient])
+  }, [auth.accessToken, dictionaryClient, fundsClient, tariffReloadRevision])
 
   function closeOneTimeDeleteDialog() {
     setOneTimeDeleteTarget(null)
@@ -2283,7 +2284,13 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
         <div>
           <h1>Тарифы и сборы</h1>
           {!canManageTariffs ? <p className="form-hint">Режим просмотра: для изменения тарифов нужно право tariffs.manage.</p> : null}
-          {tariffPersistenceError ? <FormError>{tariffPersistenceError}</FormError> : null}
+          {tariffPersistenceError && !modal ? (
+            <AsyncErrorState
+              message={tariffPersistenceError}
+              onRetry={() => setTariffReloadRevision((value) => value + 1)}
+              retrying={tariffsLoading || oneTimeLoading || feeCampaignsLoading || tariffReferencesLoading}
+            />
+          ) : tariffPersistenceError ? <FormError>{tariffPersistenceError}</FormError> : null}
         </div>
         <div className="contractors-actions">
           <button className="secondary-button create-action-button tariffs-action-button" type="button" disabled={tariffReferencesLoading} onClick={() => setModal('service')}>

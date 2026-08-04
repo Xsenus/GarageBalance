@@ -38,6 +38,31 @@ export function EmptyState({ children, className = '' }: { children: ReactNode; 
   )
 }
 
+type AsyncErrorStateProps = {
+  message: ReactNode
+  onRetry: () => void
+  retrying?: boolean
+  retryLabel?: string
+  className?: string
+}
+
+export function AsyncErrorState({
+  message,
+  onRetry,
+  retrying = false,
+  retryLabel = 'Повторить загрузку',
+  className = '',
+}: AsyncErrorStateProps) {
+  return (
+    <div className={`async-error-state ${className}`.trim()}>
+      <div className="form-error" role="alert">{message}</div>
+      <button className="ghost-button" type="button" onClick={onRetry} disabled={retrying}>
+        <span>{retrying ? 'Загружаем…' : retryLabel}</span>
+      </button>
+    </div>
+  )
+}
+
 type AsyncErrorBoundaryProps = {
   children: ReactNode
   fallback: (error: Error, reset: () => void, errorId: string) => ReactNode

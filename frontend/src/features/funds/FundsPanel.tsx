@@ -5,7 +5,7 @@ import type { AuthResponse } from '../../services/authApi'
 import type { FundDto, FundLinkedServiceDto, FundOperationDto, FundsClient } from '../../services/fundsApi'
 import type { ChangePreview } from '../../shared/changePreview'
 import { appendChangePreview, formatChangeMoney, formatChangeText } from '../../shared/changePreview'
-import { LoadingSkeleton, TableLoadingState } from '../../shared/AsyncState'
+import { AsyncErrorState, LoadingSkeleton, TableLoadingState } from '../../shared/AsyncState'
 import { FormField } from '../../shared/FormField'
 import { formatDateTime, formatMoney } from '../../shared/formatters'
 import { MoneyTextInput } from '../../shared/MoneyInput'
@@ -602,13 +602,13 @@ export function FundsPrototypePanel({ auth, fundsClient }: { auth: AuthResponse;
       {fundMessage ? <p className="form-success" role="status">{fundMessage}</p> : null}
 
       {loadError ? (
-        <div className="funds-load-error">
-          <p className="form-error" role="alert">{loadError}</p>
-          <button className="ghost-button" type="button" onClick={() => setReloadToken((current) => current + 1)}>
-            <RefreshCw size={16} aria-hidden="true" />
-            <span>Повторить загрузку фондов</span>
-          </button>
-        </div>
+        <AsyncErrorState
+          className="funds-load-error"
+          message={loadError}
+          onRetry={() => setReloadToken((current) => current + 1)}
+          retrying={fundsLoading || operationsLoading}
+          retryLabel="Повторить загрузку фондов"
+        />
       ) : null}
 
       <div className="funds-content">

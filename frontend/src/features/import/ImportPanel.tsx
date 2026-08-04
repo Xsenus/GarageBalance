@@ -3,10 +3,9 @@ import type { FormEvent } from 'react'
 import { DatabaseZap, FileText, RotateCcw, Save, X } from 'lucide-react'
 import type { AuthResponse } from '../../services/authApi'
 import type { AccessImportCreatedRecordDto, AccessImportQuarantineItemDto, AccessImportReaderStatusDto, AccessImportRunDto, AccessImportRunLogEntryDto, ImportClient } from '../../services/importApi'
-import { LoadingSkeleton, TableLoadingState } from '../../shared/AsyncState'
+import { AsyncErrorState, LoadingSkeleton, TableLoadingState } from '../../shared/AsyncState'
 import { buildImportReportFileName, downloadBlob } from '../../shared/fileExports'
 import { FormField } from '../../shared/FormField'
-import { FormError } from '../../shared/formFeedback'
 import { formatDateTime, formatImportCheckStatus, formatImportCreatedRecordRollbackStatus, formatImportLogLevel, formatImportReaderStatus, formatImportRunCheckSummary, formatImportRunStatus } from '../../shared/formatters'
 import { useEscapeKey, useFocusOnOpen, useFocusTrap, useRestoreFocusOnClose } from '../../shared/focusHooks'
 import { createClientPage } from '../../shared/pagination'
@@ -58,6 +57,7 @@ export function ImportPanel({ auth, importClient }: { auth: AuthResponse; import
   const [quarantineResolveComment, setQuarantineResolveComment] = useState('')
   const [quarantineResolveError, setQuarantineResolveError] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [reloadRevision, setReloadRevision] = useState(0)
   const [exportMessage, setExportMessage] = useState<string | null>(null)
   const filePickerActionLabel = 'Выбрать файл Access .accdb или .mdb'
   const dryRunActionLabel = selectedFile ? `Проверить файл Access ${selectedFile.name}` : 'Проверить файл Access'
@@ -129,7 +129,7 @@ export function ImportPanel({ auth, importClient }: { auth: AuthResponse; import
     return () => {
       ignore = true
     }
-  }, [auth.accessToken, importClient])
+  }, [auth.accessToken, importClient, reloadRevision])
 
   useEffect(() => {
     let ignore = false
@@ -474,7 +474,9 @@ export function ImportPanel({ auth, importClient }: { auth: AuthResponse; import
         {!loading ? <span>{runs.length} запусков</span> : null}
       </div>
 
-      {error ? <FormError>{error}</FormError> : null}
+      {error && !applyTarget && !applyCancelTarget && !rollbackTarget && !quarantineResolveTarget ? (
+        <AsyncErrorState message={error} onRetry={() => setReloadRevision((value) => value + 1)} retrying={loading} />
+      ) : null}
       {exportMessage ? <div className="form-note" role="status" aria-live="polite">{exportMessage}</div> : null}
 
       <div className="import-workbench">

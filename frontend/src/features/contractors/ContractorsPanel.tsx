@@ -7,7 +7,7 @@ import type { FinanceClient, GarageBalanceHistoryDto } from '../../services/fina
 import type { FundDto, FundsClient } from '../../services/fundsApi'
 import type { DadataAddressSuggestionDto, DadataPartySuggestionDto, IntegrationClient } from '../../services/integrationsApi'
 import { hasPermission, isAdministrator, permissions } from '../../shared/accessControl'
-import { LoadingSkeleton, TableLoadingState } from '../../shared/AsyncState'
+import { AsyncErrorState, LoadingSkeleton, TableLoadingState } from '../../shared/AsyncState'
 import { FormError } from '../../shared/formFeedback'
 import { FormField } from '../../shared/FormField'
 import { MoneyTextInput } from '../../shared/MoneyInput'
@@ -805,6 +805,7 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
   const [serviceTariffs, setServiceTariffs] = useState<TariffDto[]>([])
   const [serviceSaving, setServiceSaving] = useState(false)
   const [formStateError, setFormStateError] = useState<string | null>(null)
+  const [sectionReloadRevision, setSectionReloadRevision] = useState(0)
   const [modal, setModal] = useState<ContractorModal | null>(null)
   const [restoreTarget, setRestoreTarget] = useState<ContractorRestoreTarget | null>(null)
   const [openingBalanceAdjustmentTarget, setOpeningBalanceAdjustmentTarget] = useState<OpeningBalanceAdjustmentTarget | null>(null)
@@ -997,7 +998,7 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
       cancelled = true
       controller.abort()
     }
-  }, [activeSection, auth.accessToken, dictionaryClient])
+  }, [activeSection, auth.accessToken, dictionaryClient, sectionReloadRevision])
 
   useEffect(() => {
     if (activeSection === 'staff' || activeContractorPageLoading || loadedContractorReferencesRef.current[activeSection]) {
@@ -1148,6 +1149,15 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
   const canManageTariffs = hasPermission(auth, permissions.tariffsManage)
   const canAdjustOpeningData = hasPermission(auth, permissions.openingDataAdjust)
   const canUseGarageColumnFilters = isAdministrator(auth)
+
+  function retryActiveContractorSection() {
+    setFormStateError(null)
+    loadedContractorSectionsRef.current[activeSection] = false
+    if (activeSection !== 'staff') {
+      loadedContractorReferencesRef.current[activeSection] = false
+    }
+    setSectionReloadRevision((value) => value + 1)
+  }
 
   async function loadGaragePage(
     offset = garagePage.offset,
@@ -2053,7 +2063,9 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
           ) : null}
         </div>
       </div>
-      {formStateError ? <FormError>{formStateError}</FormError> : null}
+      {formStateError && !modal ? (
+        <AsyncErrorState message={formStateError} onRetry={retryActiveContractorSection} retrying={activeContractorPageLoading || supplierEditorLoadingId !== null} />
+      ) : null}
 
       <div className="contractors-prototype-tabs" role="tablist" aria-label="Разделы контрагентов">
         {Object.entries(contractorSectionLabels).map(([section, label]) => (

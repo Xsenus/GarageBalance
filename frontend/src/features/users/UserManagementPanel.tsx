@@ -4,7 +4,7 @@ import { RotateCcw, Save, Search, ShieldCheck, Trash2, UserPlus, X } from 'lucid
 import type { AuthResponse } from '../../services/authApi'
 import type { CreateManagedUserRequest, ManagedRoleDto, ManagedUserDto, PagedManagedUsersDto, UpdateManagedUserRequest, UserManagementClient } from '../../services/usersApi'
 import { expandPermissionDependencies, isPermissionRequiredBySelection, permissions, rolePermissionGroups } from '../../shared/accessControl'
-import { TableLoadingState } from '../../shared/AsyncState'
+import { AsyncErrorState, EmptyState, TableLoadingState } from '../../shared/AsyncState'
 import { FormError, FormValidationSummary } from '../../shared/formFeedback'
 import { FormField } from '../../shared/FormField'
 import { formatDateTime } from '../../shared/formatters'
@@ -261,6 +261,23 @@ export function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; 
     }
   }
 
+  async function retryUsersLoad() {
+    setLoading(true)
+    setError(null)
+    try {
+      const [loadedPage, loadedRoles] = await Promise.all([
+        userClient.getUsersPage(auth.accessToken, appliedSearch, offset, pageSize),
+        getRolesOnce(),
+      ])
+      setPage(loadedPage)
+      setRoles(loadedRoles)
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Не удалось загрузить пользователей.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
   async function confirmDeactivateUser() {
     if (!deactivationConfirmation) {
       return
@@ -426,7 +443,9 @@ export function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; 
         {!loading ? <span>{page.totalCount} пользователей</span> : null}
       </div>
 
-      {error ? <FormError>{error}</FormError> : null}
+      {error && !editor && !roleEditor ? (
+        <AsyncErrorState message={error} onRetry={() => void retryUsersLoad()} retrying={loading} />
+      ) : error ? <FormError>{error}</FormError> : null}
 
       <div className="users-workbench">
         <div className="dictionary-table-shell">
@@ -478,7 +497,7 @@ export function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; 
                 {!loading && page.items.length === 0 ? (
                   <tr>
                     <td colSpan={5}>
-                      <p className="empty-state" role="status" aria-live="polite">Пользователей пока нет</p>
+                      <EmptyState>Пользователей пока нет</EmptyState>
                     </td>
                   </tr>
                 ) : null}

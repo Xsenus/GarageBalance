@@ -4,9 +4,8 @@ import { BookOpenCheck, FileText, Pencil, Save } from 'lucide-react'
 import type { AuthResponse } from '../../services/authApi'
 import type { AppReleaseDto, AppReleaseItemDto, ReleaseClient, UpsertAppReleaseRequest } from '../../services/releasesApi'
 import { hasPermission, permissions } from '../../shared/accessControl'
-import { FormError } from '../../shared/formFeedback'
 import { formatReleaseDate } from '../../shared/formatters'
-import { LoadingSkeleton } from '../../shared/AsyncState'
+import { AsyncErrorState, EmptyState, LoadingSkeleton } from '../../shared/AsyncState'
 
 const showManualReleaseEditing = false
 const releasePageSize = 9
@@ -67,6 +66,18 @@ export function ReleasePanel({ auth, releaseClient }: { auth: AuthResponse; rele
     setReleases(page.items)
     setTotalCount(page.totalCount)
     setHasMore(page.hasMore)
+  }
+
+  async function retryInitialLoad() {
+    setLoading(true)
+    setError(null)
+    try {
+      await refreshReleases()
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Не удалось загрузить историю обновлений.')
+    } finally {
+      setLoading(false)
+    }
   }
 
   const loadMoreReleases = useCallback(async () => {
@@ -229,7 +240,7 @@ export function ReleasePanel({ auth, releaseClient }: { auth: AuthResponse; rele
       </div>
 
       {loading ? <LoadingSkeleton className="release-list-skeleton" label="Загружаем историю обновлений" rows={3} columns={3} /> : null}
-      {error ? <FormError>{error}</FormError> : null}
+      {error && !editor ? <AsyncErrorState message={error} onRetry={() => void retryInitialLoad()} retrying={loading} /> : null}
       {successMessage ? <p className="success-text" role="status" aria-live="polite">{successMessage}</p> : null}
       {editor ? (
         <form className="release-editor" aria-label={editor.mode === 'create' ? 'Новая запись Что нового' : `Редактирование ${editor.version}`} onSubmit={saveRelease}>
@@ -290,7 +301,7 @@ export function ReleasePanel({ auth, releaseClient }: { auth: AuthResponse; rele
           </div>
         </form>
       ) : null}
-      {!loading && !error && releases.length === 0 ? <p className="muted" role="status" aria-live="polite">Пока нет опубликованных изменений.</p> : null}
+      {!loading && !error && releases.length === 0 ? <EmptyState>Пока нет опубликованных изменений.</EmptyState> : null}
 
       {!loading && !error && releases.length > 0 ? (
         <div className="release-list">
@@ -341,12 +352,7 @@ export function ReleasePanel({ auth, releaseClient }: { auth: AuthResponse; rele
         </div>
       ) : null}
       {loadMoreError ? (
-        <div className="release-load-more-error">
-          <FormError>{loadMoreError}</FormError>
-          <button className="ghost-button" type="button" onClick={() => void loadMoreReleases()} disabled={loadingMore}>
-            Повторить загрузку
-          </button>
-        </div>
+        <AsyncErrorState className="release-load-more-error" message={loadMoreError} onRetry={() => void loadMoreReleases()} retrying={loadingMore} />
       ) : null}
     </section>
   )

@@ -8,7 +8,7 @@ import type { AccountingTypeDto, DictionaryClient, GarageDto, OwnerDto, PagedRes
 import type { FinanceClient, GarageBalanceHistoryDto } from '../../services/financeApi'
 import type { DadataAddressSuggestionDto, IntegrationClient } from '../../services/integrationsApi'
 import { hasPermission, permissions } from '../../shared/accessControl'
-import { TableLoadingState } from '../../shared/AsyncState'
+import { AsyncErrorState, EmptyState, TableLoadingState } from '../../shared/AsyncState'
 import type { DictionaryEditorFieldKey, DictionaryRecord, DictionarySectionKey } from '../../shared/dictionaryWorkbench'
 import { canWriteDictionarySection, createAccountingTypeFormFromDto, createEmptyAccountingTypeForm, createEmptyGarageForm, createEmptyOwnerForm, createEmptyOwnerGarageLinkForm, createEmptySupplierForm, createEmptyTariffForm, createGarageFormFromDto, createOwnerFormFromDto, createSupplierFormFromDto, dictionarySectionGroups, dictionarySectionOptions, getDictionaryEditorFieldMeta, getDictionaryRecordCells, getDictionaryRecordTitle, getDictionarySearchPlaceholder, getDictionarySectionOption, getDictionaryTableHeaders, getOwnerGarageOptions, getTariffCalculationBaseOptions, supportsDictionarySearch, usesElectricityTariffTiers } from '../../shared/dictionaryWorkbench'
 import type { ChangePreview } from '../../shared/changePreview'
@@ -386,6 +386,18 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, integ
     } catch (error) {
       setBalanceHistoryError(error instanceof Error ? error.message : 'Не удалось определить полный период истории баланса.')
       setBalanceHistoryLoading(false)
+    }
+  }
+
+  async function retryActivePage() {
+    setLoading(true)
+    setError(null)
+    try {
+      await loadPage(activeSection, activePage.offset, activePage.limit)
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Не удалось загрузить справочник.')
+    } finally {
+      setLoading(false)
     }
   }
 
@@ -1189,7 +1201,9 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, integ
         {!loading ? <span>{activePage.totalCount} записей</span> : null}
       </div>
 
-      {error ? <FormError>{error}</FormError> : null}
+      {error && !editor ? (
+        <AsyncErrorState message={error} onRetry={() => void retryActivePage()} retrying={loading} />
+      ) : error ? <FormError>{error}</FormError> : null}
       {!canWriteDictionaries ? <p className="form-hint">Режим просмотра: для добавления, изменения и удаления справочников нужно право dictionaries.write.</p> : null}
       {!canManageTariffs ? <p className="form-hint">Режим просмотра тарифов: для изменения тарифов нужно право tariffs.manage.</p> : null}
 
@@ -1269,7 +1283,7 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, integ
               </tbody>
             </table>
             {loading ? <TableLoadingState label={`Загружаем справочник: ${activeOption.label}`} /> : null}
-            {!loading && rows.length === 0 ? <p className="empty-state" role="status" aria-live="polite">В этом справочнике пока нет записей</p> : null}
+            {!loading && rows.length === 0 ? <EmptyState>В этом справочнике пока нет записей</EmptyState> : null}
           </div>
 
           <TablePagination

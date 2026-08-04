@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ArrowLeft, FileSpreadsheet, FileText, RefreshCw, X } from 'lucide-react'
 import type { AuthResponse } from '../../services/authApi'
 import type { AuditClient, AuditEventDto } from '../../services/auditApi'
-import { TableLoadingState } from '../../shared/AsyncState'
+import { AsyncErrorState, TableLoadingState } from '../../shared/AsyncState'
 import { buildAuditExportFileName, downloadBlob } from '../../shared/fileExports'
 import { FormField } from '../../shared/FormField'
 import { FormError, FormValidationSummary } from '../../shared/formFeedback'
@@ -483,13 +483,13 @@ export function AuditPanel({ auth, auditClient, preset, onOpenSection }: { auth:
       </div>
 
       {error ? (
-        <div className="audit-error-state">
-          <FormError>{error.message}</FormError>
-          <button className="ghost-button" type="button" onClick={retryAuditError} disabled={retryAuditErrorBusy}>
-            <RefreshCw size={16} aria-hidden="true" />
-            <span>{retryAuditErrorLabel}</span>
-          </button>
-        </div>
+        <AsyncErrorState
+          className="audit-error-state"
+          message={error.message}
+          onRetry={retryAuditError}
+          retrying={retryAuditErrorBusy}
+          retryLabel={retryAuditErrorLabel}
+        />
       ) : null}
       {exportMessage ? <div className="form-note" role="status" aria-live="polite">{exportMessage}</div> : null}
       <FormValidationSummary title="Проверьте период истории" items={auditValidationErrors} />

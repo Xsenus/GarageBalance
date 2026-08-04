@@ -8,7 +8,7 @@ import { FinanceApiError } from '../../services/financeApi'
 import type { IntegrationClient, ReceiptPrintingActionKind } from '../../services/integrationsApi'
 import type { ApplicationSettingsClient } from '../../services/settingsApi'
 import { hasPermission, permissions } from '../../shared/accessControl'
-import { LoadingSkeleton, TableLoadingState } from '../../shared/AsyncState'
+import { AsyncErrorState, LoadingSkeleton, TableLoadingState } from '../../shared/AsyncState'
 import type { FinanceEditorKey, FinanceSectionKey } from '../../shared/financeWorkbench'
 import { financeSectionOptions, formatFinanceGarageLabel, formatFinanceIncomeGarageSearchStatus, formatFinanceOperationCount, formatFinanceVisibleListStatus, getFinanceContextMenuLabel, getFinanceEditorFieldLabel, getFinanceEditorSavingScope, getFinanceEditorSubmitLabel, getFinanceEditorTitle, getFinanceEditorUiLabel, getFinanceEditorValidationTitle, getFinanceFallbackLabel, getFinanceMeterKindLabel, getFinanceOptionalText, getFinancePanelLabel, getFinanceSectionDescription, getFinanceTableHeaders, getFinanceToolbarLabel, getFinanceVisibleListEmptyLabel, getFinanceVisibleListTableHeaders, getFinanceVisibleListTableLabel } from '../../shared/financeWorkbench'
 import type { ChangePreview } from '../../shared/changePreview'
@@ -464,6 +464,7 @@ export function FinancePanel({
   const [paymentDisplaySettingsError, setPaymentDisplaySettingsError] = useState<string | null>(null)
   const [saving, setSaving] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [financeReloadRevision, setFinanceReloadRevision] = useState(0)
   const loading = workbenchLoading || !paymentDisplaySettingsLoaded || (showAllGarageOperations && !workbenchLoaded)
   const paymentsPrototypeLoading = referencesLoading
   const closeCancelFinanceDialog = useCallback(() => {
@@ -708,7 +709,7 @@ export function FinancePanel({
       ignore = true
       financeReferenceBundleGenerationRef.current += 1
     }
-  }, [auth.accessToken, dictionaryClient])
+  }, [auth.accessToken, dictionaryClient, financeReloadRevision])
 
   useEffect(() => {
     let ignore = false
@@ -911,7 +912,7 @@ export function FinancePanel({
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void loadFinanceWorkbench(activeFinanceSection, 0, financePage.limit)
     return () => financeWorkbenchControllerRef.current?.abort()
-  }, [activeFinanceSection, financePage.limit, loadFinanceWorkbench, paymentDisplaySettingsLoaded, showAllGarageOperations])
+  }, [activeFinanceSection, financePage.limit, financeReloadRevision, loadFinanceWorkbench, paymentDisplaySettingsLoaded, showAllGarageOperations])
 
   async function searchIncomeGarages() {
     const query = incomeGarageSearch.trim()
@@ -2287,7 +2288,13 @@ export function FinancePanel({
         headingStatus={paymentsHeadingStatus}
         headingNotices={(
           <>
-            {error ? <FormError>{error}</FormError> : null}
+            {error ? (
+              <AsyncErrorState
+                message={error}
+                onRetry={() => setFinanceReloadRevision((value) => value + 1)}
+                retrying={referencesLoading || workbenchLoading}
+              />
+            ) : null}
             {paymentDisplaySettingsError ? <FormError>{paymentDisplaySettingsError}</FormError> : null}
             {!canWritePayments ? <p className="form-hint">{getFinancePanelLabel('readOnlyHint')}</p> : null}
           </>
