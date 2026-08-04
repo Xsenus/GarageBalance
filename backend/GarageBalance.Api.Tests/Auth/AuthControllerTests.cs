@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using GarageBalance.Api.Application.Auth;
 using GarageBalance.Api.Controllers;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 
@@ -8,6 +9,17 @@ namespace GarageBalance.Api.Tests.Auth;
 
 public sealed class AuthControllerTests
 {
+    [Fact]
+    public void AnonymousCredentialEndpoints_UseIpRateLimitPolicy()
+    {
+        foreach (var methodName in new[] { nameof(AuthController.BootstrapAdmin), nameof(AuthController.Login) })
+        {
+            var method = typeof(AuthController).GetMethod(methodName)!;
+            var attribute = Assert.Single(method.GetCustomAttributes(typeof(EnableRateLimitingAttribute), inherit: true).Cast<EnableRateLimitingAttribute>());
+            Assert.Equal(AuthRateLimitPolicy.Name, attribute.PolicyName);
+        }
+    }
+
     [Fact]
     public async Task BootstrapAdmin_ReturnsCreatedForSuccessfulBootstrap()
     {

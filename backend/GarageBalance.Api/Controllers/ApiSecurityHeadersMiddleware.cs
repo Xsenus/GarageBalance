@@ -8,6 +8,10 @@ public sealed class ApiSecurityHeadersMiddleware(RequestDelegate next)
         headers.TryAdd("X-Content-Type-Options", "nosniff");
         headers.TryAdd("X-Frame-Options", "DENY");
         headers.TryAdd("Referrer-Policy", "no-referrer");
+        headers.TryAdd("Permissions-Policy", "camera=(), microphone=(), geolocation=(), payment=(), usb=()");
+        headers.TryAdd("Cross-Origin-Opener-Policy", "same-origin");
+        headers.TryAdd("X-Permitted-Cross-Domain-Policies", "none");
+        headers.TryAdd("Content-Security-Policy", "default-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'");
 
         if (context.Request.Path.StartsWithSegments("/api", StringComparison.OrdinalIgnoreCase))
         {

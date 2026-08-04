@@ -32,6 +32,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Authorization.Policy;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Http.Features;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
@@ -320,6 +321,15 @@ builder.Services.AddCors(options =>
 });
 builder.Services.AddRateLimiter(options =>
 {
+    options.AddPolicy(AuthRateLimitPolicy.Name, context => RateLimitPartition.GetFixedWindowLimiter(
+        AuthRateLimitPolicy.GetPartitionKey(context),
+        _ => new FixedWindowRateLimiterOptions
+        {
+            PermitLimit = AuthRateLimitPolicy.PermitLimit,
+            Window = AuthRateLimitPolicy.Window,
+            QueueLimit = 0,
+            AutoReplenishment = true
+        }));
     options.AddPolicy("client-diagnostics", context => RateLimitPartition.GetFixedWindowLimiter(
         context.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? context.Connection.RemoteIpAddress?.ToString() ?? "anonymous",
         _ => new FixedWindowRateLimiterOptions
@@ -329,6 +339,16 @@ builder.Services.AddRateLimiter(options =>
             QueueLimit = 0
         }));
     options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    options.OnRejected = (context, cancellationToken) =>
+        new ValueTask(RateLimitProblemResponse.WriteAsync(context.HttpContext, context.Lease, cancellationToken));
+});
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+{
+    options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+    options.ForwardLimit = 1;
+    options.KnownIPNetworks.Add(System.Net.IPNetwork.Parse("10.0.0.0/8"));
+    options.KnownIPNetworks.Add(System.Net.IPNetwork.Parse("172.16.0.0/12"));
+    options.KnownIPNetworks.Add(System.Net.IPNetwork.Parse("192.168.0.0/16"));
 });
 builder.Services
     .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
@@ -368,6 +388,7 @@ var app = builder.Build();
 var httpsRedirectionEnabled = builder.Configuration.GetValue("HttpsRedirection:Enabled", true);
 
 // Configure the HTTP request pipeline.
+app.UseForwardedHeaders();
 if (app.Environment.IsDevelopment())
 {
     app.MapOpenApi();
@@ -377,6 +398,10 @@ app.UseMiddleware<RequestCorrelationMiddleware>();
 app.UseMiddleware<RequestPerformanceMiddleware>();
 app.UseMiddleware<ApiExceptionHandlingMiddleware>();
 app.UseMiddleware<ApiSecurityHeadersMiddleware>();
+if (!app.Environment.IsDevelopment())
+{
+    app.UseHsts();
+}
 if (httpsRedirectionEnabled)
 {
     app.UseHttpsRedirection();

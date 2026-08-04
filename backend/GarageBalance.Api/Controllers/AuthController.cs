@@ -1,6 +1,7 @@
 using GarageBalance.Api.Application.Auth;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 
 namespace GarageBalance.Api.Controllers;
 
@@ -10,6 +11,7 @@ public sealed class AuthController(IAuthService authService) : ControllerBase
 {
     [AllowAnonymous]
     [HttpPost("bootstrap-admin")]
+    [EnableRateLimiting(AuthRateLimitPolicy.Name)]
     [ProducesResponseType<AuthResponse>(StatusCodes.Status201Created)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
     public async Task<ActionResult<AuthResponse>> BootstrapAdmin(BootstrapAdminRequest request, CancellationToken cancellationToken)
@@ -30,6 +32,7 @@ public sealed class AuthController(IAuthService authService) : ControllerBase
 
     [AllowAnonymous]
     [HttpPost("login")]
+    [EnableRateLimiting(AuthRateLimitPolicy.Name)]
     [ProducesResponseType<AuthResponse>(StatusCodes.Status200OK)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status403Forbidden)]

@@ -146,6 +146,8 @@ gzip для текстовой статики, immutable cache для hashed ass
 - [ ] Проверить `Server-Timing: app;dur=...` в ответе API и отсутствие предупреждений `SlowHttpRequest` для обычных экранов.
 - [ ] Проверить главную страницу с телефона и desktop-браузера.
 - [ ] Проверить, что `index.html` и SPA fallback отдаются с `Cache-Control: no-store`.
+- [ ] Проверить `curl -sSI https://sgk.blagodaty.ru/` и `/api/releases`: должны присутствовать `Content-Security-Policy`, `Strict-Transport-Security`, `Permissions-Policy`, `X-Content-Type-Options`, `X-Frame-Options` и `Referrer-Policy`; в production CSP не должна требовать `unsafe-inline`.
+- [ ] Отправить контролируемую серию запросов к `/api/auth/login` с одного тестового адреса и подтвердить ответ `429`, код `ip_rate_limited` и заголовок `Retry-After`, не используя реальные пароли.
 
 ## 8. Smoke-проверка после выкладки
 
