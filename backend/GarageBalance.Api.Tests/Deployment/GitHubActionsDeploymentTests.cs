@@ -12,7 +12,9 @@ public sealed class GitHubActionsDeploymentTests
         Assert.Contains("- master", workflow, StringComparison.Ordinal);
         Assert.Contains("dotnet test GarageBalance.slnx --configuration Release --no-restore", workflow, StringComparison.Ordinal);
         Assert.Contains("dotnet format GarageBalance.slnx --verify-no-changes --no-restore", workflow, StringComparison.Ordinal);
+        Assert.Contains("dotnet list GarageBalance.slnx package --vulnerable --include-transitive", workflow, StringComparison.Ordinal);
         Assert.Contains("./infrastructure/scripts/verify-package-privacy.ps1", workflow, StringComparison.Ordinal);
+        Assert.Contains("npm audit --audit-level=high", workflow, StringComparison.Ordinal);
         Assert.Contains("npm run test", workflow, StringComparison.Ordinal);
         Assert.Contains("npm run lint", workflow, StringComparison.Ordinal);
         Assert.Contains("npm run build", workflow, StringComparison.Ordinal);
@@ -66,6 +68,18 @@ public sealed class GitHubActionsDeploymentTests
         Assert.Contains("bash -n", script, StringComparison.Ordinal);
         Assert.Contains("bash \"${OPERATIONS_DIR}/infrastructure/scripts/install-vps-performance-configuration.sh\" \"$OPERATIONS_DIR\"", script, StringComparison.Ordinal);
         Assert.Contains("/usr/local/bin/garagebalance-deploy-apply", script, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void DockerReleaseWorkflowBlocksPublishingWhenDependencyAuditFails()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var workflow = File.ReadAllText(Path.Combine(repositoryRoot, ".github", "workflows", "publish-docker-release.yml"));
+
+        Assert.Contains("dotnet list GarageBalance.slnx package --vulnerable --include-transitive", workflow, StringComparison.Ordinal);
+        Assert.Contains("npm audit --prefix frontend --audit-level=high", workflow, StringComparison.Ordinal);
+        Assert.Contains("needs:", workflow, StringComparison.Ordinal);
+        Assert.Contains("- verify", workflow, StringComparison.Ordinal);
     }
 
     [Fact]

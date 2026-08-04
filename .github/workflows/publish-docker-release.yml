@@ -91,6 +91,11 @@ jobs:
           dotnet tool restore
           npm ci --prefix frontend
 
+      - name: Audit dependencies
+        run: |
+          dotnet list GarageBalance.slnx package --vulnerable --include-transitive
+          npm audit --prefix frontend --audit-level=high
+
       - name: Check privacy and distribution contracts
         shell: pwsh
         run: |

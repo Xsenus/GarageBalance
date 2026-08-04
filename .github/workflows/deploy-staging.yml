@@ -64,6 +64,9 @@ jobs:
           dotnet restore GarageBalance.slnx
           dotnet tool restore
 
+      - name: Audit backend dependencies
+        run: dotnet list GarageBalance.slnx package --vulnerable --include-transitive
+
       - name: Check repository privacy
         shell: pwsh
         run: ./infrastructure/scripts/verify-package-privacy.ps1
@@ -84,6 +87,10 @@ jobs:
       - name: Install frontend dependencies
         working-directory: ${{ env.FRONTEND_DIR }}
         run: npm ci
+
+      - name: Audit frontend dependencies
+        working-directory: ${{ env.FRONTEND_DIR }}
+        run: npm audit --audit-level=high
 
       - name: Test frontend
         working-directory: ${{ env.FRONTEND_DIR }}
