@@ -89,6 +89,7 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, integ
   const [garageOptions, setGarageOptions] = useState<GarageDto[]>([])
   const [groupOptions, setGroupOptions] = useState<SupplierGroupDto[]>([])
   const loadedEditorReferences = useRef({ owners: false, garages: false, suppliers: false })
+  const pageRequestSequence = useRef(0)
   const [editorReferencesLoading, setEditorReferencesLoading] = useState(false)
   const [pages, setPages] = useState<Record<DictionarySectionKey, PagedResult<DictionaryRecord>>>({
     owners: createEmptyPage<DictionaryRecord>(),
@@ -275,7 +276,6 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, integ
     const controller = new AbortController()
     const timeoutId = window.setTimeout(() => {
       const page = pages[activeSection]
-      setLoading(true)
       setError(null)
       loadPage(activeSection, 0, page.limit, controller.signal)
         .catch((caught) => {
@@ -283,11 +283,6 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, integ
             const message = caught instanceof Error ? caught.message : 'Не удалось загрузить таблицу справочника.'
             setError(message)
             showToast(message, 'error')
-          }
-        })
-        .finally(() => {
-          if (!ignore) {
-            setLoading(false)
           }
         })
     }, supportsSearch && search.trim() ? 250 : 0)
@@ -302,50 +297,75 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, integ
   }, [activeSection, auth.accessToken, dictionaryClient, search, showArchived])
 
   async function loadPage(section: DictionarySectionKey, offset = pages[section].offset, limit = pages[section].limit, signal?: AbortSignal) {
+    const requestSequence = ++pageRequestSequence.current
     const query = supportsDictionarySearch(section) ? search.trim() || undefined : undefined
-    let page: PagedResult<DictionaryRecord>
-    if (section === 'owners') {
-      page = dictionaryClient.getOwnersPage
-        ? await dictionaryClient.getOwnersPage(auth.accessToken, query, offset, limit, showArchived, signal)
-        : createFallbackPage<DictionaryRecord>(await dictionaryClient.getOwners(auth.accessToken, query, 500, showArchived, signal), offset, limit)
-      setOwners(page.items as OwnerDto[])
-    } else if (section === 'garages') {
-      page = dictionaryClient.getGaragesPage
-        ? await dictionaryClient.getGaragesPage(auth.accessToken, query, offset, limit, showArchived, undefined, undefined, false, {}, signal)
-        : createFallbackPage<DictionaryRecord>(await dictionaryClient.getGarages(auth.accessToken, query, 500, showArchived, signal), offset, limit)
-      setGarages(page.items as GarageDto[])
-    } else if (section === 'supplierGroups') {
-      page = dictionaryClient.getSupplierGroupsPage
-        ? await dictionaryClient.getSupplierGroupsPage(auth.accessToken, query, offset, limit, showArchived, signal)
-        : createFallbackPage<DictionaryRecord>(await dictionaryClient.getSupplierGroups(auth.accessToken, query, 500, showArchived, signal), offset, limit)
-      setGroups(page.items as SupplierGroupDto[])
-    } else if (section === 'suppliers') {
-      page = dictionaryClient.getSuppliersPage
-        ? await dictionaryClient.getSuppliersPage(auth.accessToken, undefined, query, offset, limit, showArchived, undefined, undefined, signal)
-        : createFallbackPage<DictionaryRecord>(await dictionaryClient.getSuppliers(auth.accessToken, undefined, query, 500, showArchived, signal), offset, limit)
-      setSuppliers(page.items as SupplierDto[])
-    } else if (section === 'incomeTypes') {
-      page = dictionaryClient.getIncomeTypesPage
-        ? await dictionaryClient.getIncomeTypesPage(auth.accessToken, query, offset, limit, showArchived, signal)
-        : createFallbackPage<DictionaryRecord>(await dictionaryClient.getIncomeTypes(auth.accessToken, query, 500, showArchived, signal), offset, limit)
-      setIncomeTypes(page.items as AccountingTypeDto[])
-    } else if (section === 'expenseTypes') {
-      page = dictionaryClient.getExpenseTypesPage
-        ? await dictionaryClient.getExpenseTypesPage(auth.accessToken, query, offset, limit, showArchived, signal)
-        : createFallbackPage<DictionaryRecord>(await dictionaryClient.getExpenseTypes(auth.accessToken, query, 500, showArchived, signal), offset, limit)
-      setExpenseTypes(page.items as AccountingTypeDto[])
-    } else {
-      page = dictionaryClient.getTariffsPage
-        ? await dictionaryClient.getTariffsPage(auth.accessToken, query, offset, limit, showArchived, signal)
-        : createFallbackPage<DictionaryRecord>(await dictionaryClient.getTariffs(auth.accessToken, query, 500, showArchived, signal), offset, limit)
-      setTariffs(page.items as TariffDto[])
-    }
+    setLoading(true)
+    try {
+      let page: PagedResult<DictionaryRecord>
+      if (section === 'owners') {
+        page = dictionaryClient.getOwnersPage
+          ? await dictionaryClient.getOwnersPage(auth.accessToken, query, offset, limit, showArchived, signal)
+          : createFallbackPage<DictionaryRecord>(await dictionaryClient.getOwners(auth.accessToken, query, 500, showArchived, signal), offset, limit)
+      } else if (section === 'garages') {
+        page = dictionaryClient.getGaragesPage
+          ? await dictionaryClient.getGaragesPage(auth.accessToken, query, offset, limit, showArchived, undefined, undefined, false, {}, signal)
+          : createFallbackPage<DictionaryRecord>(await dictionaryClient.getGarages(auth.accessToken, query, 500, showArchived, signal), offset, limit)
+      } else if (section === 'supplierGroups') {
+        page = dictionaryClient.getSupplierGroupsPage
+          ? await dictionaryClient.getSupplierGroupsPage(auth.accessToken, query, offset, limit, showArchived, signal)
+          : createFallbackPage<DictionaryRecord>(await dictionaryClient.getSupplierGroups(auth.accessToken, query, 500, showArchived, signal), offset, limit)
+      } else if (section === 'suppliers') {
+        page = dictionaryClient.getSuppliersPage
+          ? await dictionaryClient.getSuppliersPage(auth.accessToken, undefined, query, offset, limit, showArchived, undefined, undefined, signal)
+          : createFallbackPage<DictionaryRecord>(await dictionaryClient.getSuppliers(auth.accessToken, undefined, query, 500, showArchived, signal), offset, limit)
+      } else if (section === 'incomeTypes') {
+        page = dictionaryClient.getIncomeTypesPage
+          ? await dictionaryClient.getIncomeTypesPage(auth.accessToken, query, offset, limit, showArchived, signal)
+          : createFallbackPage<DictionaryRecord>(await dictionaryClient.getIncomeTypes(auth.accessToken, query, 500, showArchived, signal), offset, limit)
+      } else if (section === 'expenseTypes') {
+        page = dictionaryClient.getExpenseTypesPage
+          ? await dictionaryClient.getExpenseTypesPage(auth.accessToken, query, offset, limit, showArchived, signal)
+          : createFallbackPage<DictionaryRecord>(await dictionaryClient.getExpenseTypes(auth.accessToken, query, 500, showArchived, signal), offset, limit)
+      } else {
+        page = dictionaryClient.getTariffsPage
+          ? await dictionaryClient.getTariffsPage(auth.accessToken, query, offset, limit, showArchived, signal)
+          : createFallbackPage<DictionaryRecord>(await dictionaryClient.getTariffs(auth.accessToken, query, 500, showArchived, signal), offset, limit)
+      }
 
-    setPages((current) => ({ ...current, [section]: page }))
+      if (requestSequence !== pageRequestSequence.current) {
+        return
+      }
+
+      if (section === 'owners') setOwners(page.items as OwnerDto[])
+      else if (section === 'garages') setGarages(page.items as GarageDto[])
+      else if (section === 'supplierGroups') setGroups(page.items as SupplierGroupDto[])
+      else if (section === 'suppliers') setSuppliers(page.items as SupplierDto[])
+      else if (section === 'incomeTypes') setIncomeTypes(page.items as AccountingTypeDto[])
+      else if (section === 'expenseTypes') setExpenseTypes(page.items as AccountingTypeDto[])
+      else setTariffs(page.items as TariffDto[])
+
+      setPages((current) => ({ ...current, [section]: page }))
+    } catch (caught) {
+      if (requestSequence !== pageRequestSequence.current || signal?.aborted) {
+        return
+      }
+
+      throw caught
+    } finally {
+      if (requestSequence === pageRequestSequence.current) {
+        setLoading(false)
+      }
+    }
   }
 
   function showToast(text: string, kind: 'success' | 'error' = 'success') {
     setToast({ id: Date.now(), text, kind })
+  }
+
+  function reportPageLoadError(caught: unknown) {
+    const message = caught instanceof Error ? caught.message : 'Не удалось загрузить таблицу справочника.'
+    setError(message)
+    showToast(message, 'error')
   }
 
   function openContextMenu(event: MouseEvent, section: DictionarySectionKey, item: DictionaryRecord) {
@@ -390,14 +410,11 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, integ
   }
 
   async function retryActivePage() {
-    setLoading(true)
     setError(null)
     try {
       await loadPage(activeSection, activePage.offset, activePage.limit)
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Не удалось загрузить справочник.')
-    } finally {
-      setLoading(false)
     }
   }
 
@@ -838,8 +855,8 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, integ
 
   function changePageSize(value: number) {
     setPages((current) => ({ ...current, [activeSection]: { ...current[activeSection], offset: 0, limit: value } }))
-    setLoading(true)
-    void loadPage(activeSection, 0, value).finally(() => setLoading(false))
+    setError(null)
+    void loadPage(activeSection, 0, value).catch(reportPageLoadError)
   }
 
   function getRows(): DictionaryRecord[] {
@@ -1295,8 +1312,8 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, integ
             disabled={loading}
             pageSizeLabel="Количество строк справочника"
             onPageChange={(page) => {
-              setLoading(true)
-              void loadPage(activeSection, (page - 1) * activePage.limit, activePage.limit).finally(() => setLoading(false))
+              setError(null)
+              void loadPage(activeSection, (page - 1) * activePage.limit, activePage.limit).catch(reportPageLoadError)
             }}
             onPageSizeChange={changePageSize}
           />

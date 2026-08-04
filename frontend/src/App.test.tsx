@@ -12185,6 +12185,93 @@ describe('App', () => {
     await waitFor(() => expect(getGarages).toHaveBeenCalledWith(expect.any(String), undefined, 500))
   })
 
+  it('keeps the newest dictionary search result when an older request finishes later', async () => {
+    const user = userEvent.setup()
+    let resolveOldSearch!: (page: PagedResult<OwnerDto>) => void
+    let resolveNewSearch!: (page: PagedResult<OwnerDto>) => void
+    const oldSearchPromise = new Promise<PagedResult<OwnerDto>>((resolve) => { resolveOldSearch = resolve })
+    const newSearchPromise = new Promise<PagedResult<OwnerDto>>((resolve) => { resolveNewSearch = resolve })
+    const getOwnersPage = vi.fn((_token: string, query?: string) => {
+      if (query === 'старый') {
+        return oldSearchPromise
+      }
+      if (query === 'новый') {
+        return newSearchPromise
+      }
+      return Promise.resolve({
+        items: [createOwner({ id: 'owner-initial', lastName: 'Исходный', firstName: 'Владелец' })],
+        totalCount: 1,
+        offset: 0,
+        limit: 25,
+      })
+    })
+    const dictionaryClient = createDictionaryClient({ getOwnersPage })
+
+    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Справочники')
+    const dictionaryPanel = await screen.findByRole('region', { name: 'Справочники' })
+    expect(await within(dictionaryPanel).findByText('Исходный Владелец')).toBeInTheDocument()
+
+    const searchInput = within(dictionaryPanel).getByLabelText('Поиск: Владельцы')
+    await user.type(searchInput, 'старый')
+    await waitFor(() => expect(getOwnersPage).toHaveBeenCalledWith(expect.any(String), 'старый', 0, 25, false, expect.any(AbortSignal)))
+
+    await user.clear(searchInput)
+    await user.type(searchInput, 'новый')
+    await waitFor(() => expect(getOwnersPage).toHaveBeenCalledWith(expect.any(String), 'новый', 0, 25, false, expect.any(AbortSignal)))
+
+    await act(async () => resolveNewSearch({
+      items: [createOwner({ id: 'owner-new', lastName: 'Новый', firstName: 'Результат' })],
+      totalCount: 1,
+      offset: 0,
+      limit: 25,
+    }))
+    expect(await within(dictionaryPanel).findByText('Новый Результат')).toBeInTheDocument()
+
+    await act(async () => resolveOldSearch({
+      items: [createOwner({ id: 'owner-old', lastName: 'Устаревший', firstName: 'Результат' })],
+      totalCount: 1,
+      offset: 0,
+      limit: 25,
+    }))
+    expect(within(dictionaryPanel).queryByText('Устаревший Результат')).not.toBeInTheDocument()
+    expect(within(dictionaryPanel).getByText('Новый Результат')).toBeInTheDocument()
+  })
+
+  it('shows a recoverable error when a dictionary pagination request fails', async () => {
+    const user = userEvent.setup()
+    const firstPageOwners = Array.from({ length: 25 }, (_, index) => createOwner({
+      id: `owner-page-${index + 1}`,
+      lastName: `Владелец${index + 1}`,
+      firstName: 'Тест',
+    }))
+    const getOwnersPage = vi.fn(async (_token: string, _query?: string, offset = 0, limit = 25) => {
+      if (offset === 25) {
+        throw new Error('Не удалось загрузить вторую страницу.')
+      }
+      return { items: firstPageOwners, totalCount: 26, offset, limit }
+    })
+    const dictionaryClient = createDictionaryClient({ getOwnersPage })
+
+    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Справочники')
+    const dictionaryPanel = await screen.findByRole('region', { name: 'Справочники' })
+    expect(await within(dictionaryPanel).findByText('Владелец1 Тест')).toBeInTheDocument()
+
+    await user.click(within(dictionaryPanel).getByRole('button', { name: 'Страница 2' }))
+
+    await waitFor(() => expect(getOwnersPage).toHaveBeenCalledWith(expect.any(String), undefined, 25, 25, false, undefined))
+    expect((await screen.findAllByText('Не удалось загрузить вторую страницу.')).length).toBeGreaterThan(0)
+    expect(within(dictionaryPanel).getByRole('button', { name: 'Повторить загрузку' })).toBeEnabled()
+    expect(within(dictionaryPanel).getByText('Владелец1 Тест')).toBeInTheDocument()
+  })
+
   it('requests bounded dictionary lists from dictionaries workspace', async () => {
     const user = userEvent.setup()
     const requestedLimits: Record<string, number | undefined> = {}
