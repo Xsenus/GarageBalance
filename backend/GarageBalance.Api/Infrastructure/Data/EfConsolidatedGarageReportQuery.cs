@@ -41,11 +41,11 @@ public sealed class EfConsolidatedGarageReportQuery(GarageBalanceDbContext dbCon
             ? string.Empty
             : """
               AND (
-                  garage."Number" ILIKE @search ESCAPE '\'
-                  OR owner."LastName" ILIKE @search ESCAPE '\'
-                  OR owner."FirstName" ILIKE @search ESCAPE '\'
-                  OR owner."MiddleName" ILIKE @search ESCAPE '\'
-                  OR (owner."LastName" || ' ' || owner."FirstName" || ' ' || COALESCE(owner."MiddleName", '')) ILIKE @search ESCAPE '\'
+                  garage."Number" ILIKE @search COLLATE "und-x-icu" ESCAPE '\'
+                  OR owner."LastName" ILIKE @search COLLATE "und-x-icu" ESCAPE '\'
+                  OR owner."FirstName" ILIKE @search COLLATE "und-x-icu" ESCAPE '\'
+                  OR owner."MiddleName" ILIKE @search COLLATE "und-x-icu" ESCAPE '\'
+                  OR (owner."LastName" || ' ' || owner."FirstName" || ' ' || COALESCE(owner."MiddleName", '')) ILIKE @search COLLATE "und-x-icu" ESCAPE '\'
               )
               """;
         var limitClause = limit is > 0 ? "LIMIT @limit" : string.Empty;

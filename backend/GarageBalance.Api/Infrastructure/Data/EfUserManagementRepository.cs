@@ -122,8 +122,8 @@ public sealed class EfUserManagementRepository(GarageBalanceDbContext dbContext)
             {
                 var pattern = $"%{EscapeLikePattern(normalizedSearch)}%";
                 query = query.Where(user =>
-                    EF.Functions.ILike(user.NormalizedEmail, pattern, @"\") ||
-                    EF.Functions.ILike(user.DisplayName, pattern, @"\"));
+                    EF.Functions.ILike(user.NormalizedEmail, EF.Functions.Collate(pattern, PostgresLikeSearch.UnicodeCollation), @"\") ||
+                    EF.Functions.ILike(user.DisplayName, EF.Functions.Collate(pattern, PostgresLikeSearch.UnicodeCollation), @"\"));
             }
             else
             {

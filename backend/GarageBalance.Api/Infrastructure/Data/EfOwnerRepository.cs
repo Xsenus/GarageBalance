@@ -72,10 +72,10 @@ public sealed class EfOwnerRepository(GarageBalanceDbContext dbContext) : IOwner
             {
                 var pattern = PostgresLikeSearch.ContainsPattern(normalizedSearch);
                 query = query.Where(owner =>
-                    EF.Functions.ILike(owner.LastName, pattern, @"\") ||
-                    EF.Functions.ILike(owner.FirstName, pattern, @"\") ||
-                    (owner.MiddleName != null && EF.Functions.ILike(owner.MiddleName, pattern, @"\")) ||
-                    (owner.Phone != null && EF.Functions.ILike(owner.Phone, pattern, @"\")));
+                    EF.Functions.ILike(owner.LastName, EF.Functions.Collate(pattern, PostgresLikeSearch.UnicodeCollation), @"\") ||
+                    EF.Functions.ILike(owner.FirstName, EF.Functions.Collate(pattern, PostgresLikeSearch.UnicodeCollation), @"\") ||
+                    (owner.MiddleName != null && EF.Functions.ILike(owner.MiddleName, EF.Functions.Collate(pattern, PostgresLikeSearch.UnicodeCollation), @"\")) ||
+                    (owner.Phone != null && EF.Functions.ILike(owner.Phone, EF.Functions.Collate(pattern, PostgresLikeSearch.UnicodeCollation), @"\")));
             }
             else
             {

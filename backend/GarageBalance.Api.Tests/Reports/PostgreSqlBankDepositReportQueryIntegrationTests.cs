@@ -71,7 +71,7 @@ public sealed class PostgreSqlBankDepositReportQueryIntegrationTests
         Assert.Equal($"Сдача резерва {suffix}", Assert.Single(searchResult.Operations).Comment);
         var searchCommand = Assert.Single(capture.Commands);
         Assert.Equal(1, CountOccurrences(searchCommand, "FROM cash_bank_transfers"));
-        Assert.Contains("transfer.\"Comment\" ILIKE @search ESCAPE '\\'", searchCommand, StringComparison.Ordinal);
+        Assert.Contains("transfer.\"Comment\" ILIKE @search COLLATE \"und-x-icu\" ESCAPE '\\'", searchCommand, StringComparison.Ordinal);
         Assert.DoesNotContain("LOWER(", searchCommand, StringComparison.Ordinal);
     }
 

@@ -21,7 +21,8 @@ public sealed class PostgreSqlExpensePaymentTypeMigrationIntegrationTests
             await downgradeContext.GetService<IMigrator>().MigrateAsync(PreviousMigration);
             await downgradeContext.Database.ExecuteSqlRawAsync(
                 """
-                ALTER TABLE charge_service_settings ADD COLUMN "ExpenseFundId" uuid NULL
+                ALTER TABLE charge_service_settings ADD COLUMN "ExpenseFundId" uuid NULL;
+                ALTER TABLE suppliers ADD COLUMN "ExpenseFundId" uuid NULL;
                 """);
             await PostgreSqlLegacyModelCompatibility.AddCurrentVersionColumnsAsync(downgradeContext);
         }
@@ -77,7 +78,8 @@ public sealed class PostgreSqlExpensePaymentTypeMigrationIntegrationTests
             await PostgreSqlLegacyModelCompatibility.RemoveCurrentVersionColumnsAsync(migrateContext);
             await migrateContext.Database.ExecuteSqlRawAsync(
                 """
-                ALTER TABLE charge_service_settings DROP COLUMN "ExpenseFundId"
+                ALTER TABLE charge_service_settings DROP COLUMN "ExpenseFundId";
+                ALTER TABLE suppliers DROP COLUMN "ExpenseFundId";
                 """);
             await migrateContext.Database.MigrateAsync();
         }

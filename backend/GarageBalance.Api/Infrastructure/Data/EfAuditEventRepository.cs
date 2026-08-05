@@ -318,7 +318,9 @@ public sealed class EfAuditEventRepository(GarageBalanceDbContext dbContext) : I
             if (usePostgresSearch)
             {
                 var pattern = $"%{EscapeLikePattern(search)}%";
-                query = query.Where(auditEvent => EF.Functions.ILike(auditEvent.SearchText, pattern, @"\"));
+                query = query.Where(auditEvent => EF.Functions.ILike(auditEvent.SearchText,
+                    EF.Functions.Collate(pattern, PostgresLikeSearch.UnicodeCollation),
+                    @"\"));
             }
             else
             {
@@ -353,8 +355,8 @@ public sealed class EfAuditEventRepository(GarageBalanceDbContext dbContext) : I
             {
                 var pattern = $"%{EscapeLikePattern(garage)}%";
                 query = query.Where(auditEvent =>
-                    (auditEvent.RelatedGarageId != null && EF.Functions.ILike(auditEvent.RelatedGarageId, pattern, @"\")) ||
-                    (auditEvent.RelatedGarageNumber != null && EF.Functions.ILike(auditEvent.RelatedGarageNumber, pattern, @"\")));
+                    (auditEvent.RelatedGarageId != null && EF.Functions.ILike(auditEvent.RelatedGarageId, EF.Functions.Collate(pattern, PostgresLikeSearch.UnicodeCollation), @"\")) ||
+                    (auditEvent.RelatedGarageNumber != null && EF.Functions.ILike(auditEvent.RelatedGarageNumber, EF.Functions.Collate(pattern, PostgresLikeSearch.UnicodeCollation), @"\")));
             }
             else
             {
@@ -379,8 +381,8 @@ public sealed class EfAuditEventRepository(GarageBalanceDbContext dbContext) : I
             {
                 var pattern = $"%{EscapeLikePattern(counterparty)}%";
                 query = query.Where(auditEvent =>
-                    (auditEvent.RelatedCounterpartyId != null && EF.Functions.ILike(auditEvent.RelatedCounterpartyId, pattern, @"\")) ||
-                    (auditEvent.RelatedCounterpartyName != null && EF.Functions.ILike(auditEvent.RelatedCounterpartyName, pattern, @"\")));
+                    (auditEvent.RelatedCounterpartyId != null && EF.Functions.ILike(auditEvent.RelatedCounterpartyId, EF.Functions.Collate(pattern, PostgresLikeSearch.UnicodeCollation), @"\")) ||
+                    (auditEvent.RelatedCounterpartyName != null && EF.Functions.ILike(auditEvent.RelatedCounterpartyName, EF.Functions.Collate(pattern, PostgresLikeSearch.UnicodeCollation), @"\")));
             }
             else
             {
@@ -397,8 +399,8 @@ public sealed class EfAuditEventRepository(GarageBalanceDbContext dbContext) : I
             {
                 var pattern = $"%{EscapeLikePattern(document)}%";
                 query = query.Where(auditEvent =>
-                    (auditEvent.RelatedDocumentId != null && EF.Functions.ILike(auditEvent.RelatedDocumentId, pattern, @"\")) ||
-                    (auditEvent.RelatedDocumentNumber != null && EF.Functions.ILike(auditEvent.RelatedDocumentNumber, pattern, @"\")));
+                    (auditEvent.RelatedDocumentId != null && EF.Functions.ILike(auditEvent.RelatedDocumentId, EF.Functions.Collate(pattern, PostgresLikeSearch.UnicodeCollation), @"\")) ||
+                    (auditEvent.RelatedDocumentNumber != null && EF.Functions.ILike(auditEvent.RelatedDocumentNumber, EF.Functions.Collate(pattern, PostgresLikeSearch.UnicodeCollation), @"\")));
             }
             else
             {

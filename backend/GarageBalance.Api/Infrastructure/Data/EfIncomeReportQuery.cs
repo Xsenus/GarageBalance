@@ -551,32 +551,32 @@ public sealed class EfIncomeReportQuery(GarageBalanceDbContext dbContext) : IInc
         var incomeTypeClause = incomeTypeIds.Count > 0 ? "AND income_type.\"Id\" = ANY(@income_type_ids)" : string.Empty;
         var startingSearchClause = hasSearch && !"Стартовый баланс".Contains(search!.Trim(), StringComparison.OrdinalIgnoreCase)
             ? """
-              AND (garage."Number" ILIKE @search ESCAPE '\'
-                   OR owner."LastName" ILIKE @search ESCAPE '\'
-                   OR owner."FirstName" ILIKE @search ESCAPE '\'
-                   OR owner."MiddleName" ILIKE @search ESCAPE '\'
-                   OR (owner."LastName" || ' ' || owner."FirstName" || ' ' || COALESCE(owner."MiddleName", '')) ILIKE @search ESCAPE '\')
+              AND (garage."Number" ILIKE @search COLLATE "und-x-icu" ESCAPE '\'
+                   OR owner."LastName" ILIKE @search COLLATE "und-x-icu" ESCAPE '\'
+                   OR owner."FirstName" ILIKE @search COLLATE "und-x-icu" ESCAPE '\'
+                   OR owner."MiddleName" ILIKE @search COLLATE "und-x-icu" ESCAPE '\'
+                   OR (owner."LastName" || ' ' || owner."FirstName" || ' ' || COALESCE(owner."MiddleName", '')) ILIKE @search COLLATE "und-x-icu" ESCAPE '\')
               """
             : string.Empty;
         var accrualSearchClause = hasSearch
             ? """
-              AND (garage."Number" ILIKE @search ESCAPE '\'
-                   OR owner."LastName" ILIKE @search ESCAPE '\'
-                   OR owner."FirstName" ILIKE @search ESCAPE '\'
-                   OR owner."MiddleName" ILIKE @search ESCAPE '\'
-                   OR (owner."LastName" || ' ' || owner."FirstName" || ' ' || COALESCE(owner."MiddleName", '')) ILIKE @search ESCAPE '\'
-                   OR income_type."Name" ILIKE @search ESCAPE '\')
+              AND (garage."Number" ILIKE @search COLLATE "und-x-icu" ESCAPE '\'
+                   OR owner."LastName" ILIKE @search COLLATE "und-x-icu" ESCAPE '\'
+                   OR owner."FirstName" ILIKE @search COLLATE "und-x-icu" ESCAPE '\'
+                   OR owner."MiddleName" ILIKE @search COLLATE "und-x-icu" ESCAPE '\'
+                   OR (owner."LastName" || ' ' || owner."FirstName" || ' ' || COALESCE(owner."MiddleName", '')) ILIKE @search COLLATE "und-x-icu" ESCAPE '\'
+                   OR income_type."Name" ILIKE @search COLLATE "und-x-icu" ESCAPE '\')
               """
             : string.Empty;
         var paymentSearchClause = hasSearch
             ? """
-              AND (garage."Number" ILIKE @search ESCAPE '\'
-                   OR owner."LastName" ILIKE @search ESCAPE '\'
-                   OR owner."FirstName" ILIKE @search ESCAPE '\'
-                   OR owner."MiddleName" ILIKE @search ESCAPE '\'
-                   OR (owner."LastName" || ' ' || owner."FirstName" || ' ' || COALESCE(owner."MiddleName", '')) ILIKE @search ESCAPE '\'
-                   OR income_type."Name" ILIKE @search ESCAPE '\'
-                   OR operation."DocumentNumber" ILIKE @search ESCAPE '\')
+              AND (garage."Number" ILIKE @search COLLATE "und-x-icu" ESCAPE '\'
+                   OR owner."LastName" ILIKE @search COLLATE "und-x-icu" ESCAPE '\'
+                   OR owner."FirstName" ILIKE @search COLLATE "und-x-icu" ESCAPE '\'
+                   OR owner."MiddleName" ILIKE @search COLLATE "und-x-icu" ESCAPE '\'
+                   OR (owner."LastName" || ' ' || owner."FirstName" || ' ' || COALESCE(owner."MiddleName", '')) ILIKE @search COLLATE "und-x-icu" ESCAPE '\'
+                   OR income_type."Name" ILIKE @search COLLATE "und-x-icu" ESCAPE '\'
+                   OR operation."DocumentNumber" ILIKE @search COLLATE "und-x-icu" ESCAPE '\')
               """
             : string.Empty;
         var limitClause = limit is > 0 ? "LIMIT @limit" : string.Empty;
@@ -772,21 +772,21 @@ public sealed class EfIncomeReportQuery(GarageBalanceDbContext dbContext) : IInc
         var incomeTypeClause = incomeTypeIds.Count > 0 ? "AND accrual.\"IncomeTypeId\" = ANY(@income_type_ids)" : string.Empty;
         var startingSearchClause = hasSearch && !"Стартовый баланс".Contains(search!.Trim(), StringComparison.OrdinalIgnoreCase)
             ? """
-              AND (garage."Number" ILIKE @search ESCAPE '\'
-                   OR owner."LastName" ILIKE @search ESCAPE '\'
-                   OR owner."FirstName" ILIKE @search ESCAPE '\'
-                   OR owner."MiddleName" ILIKE @search ESCAPE '\'
-                   OR (owner."LastName" || ' ' || owner."FirstName" || ' ' || COALESCE(owner."MiddleName", '')) ILIKE @search ESCAPE '\')
+              AND (garage."Number" ILIKE @search COLLATE "und-x-icu" ESCAPE '\'
+                   OR owner."LastName" ILIKE @search COLLATE "und-x-icu" ESCAPE '\'
+                   OR owner."FirstName" ILIKE @search COLLATE "und-x-icu" ESCAPE '\'
+                   OR owner."MiddleName" ILIKE @search COLLATE "und-x-icu" ESCAPE '\'
+                   OR (owner."LastName" || ' ' || owner."FirstName" || ' ' || COALESCE(owner."MiddleName", '')) ILIKE @search COLLATE "und-x-icu" ESCAPE '\')
               """
             : string.Empty;
         var accrualSearchClause = hasSearch
             ? """
-              AND (garage."Number" ILIKE @search ESCAPE '\'
-                   OR owner."LastName" ILIKE @search ESCAPE '\'
-                   OR owner."FirstName" ILIKE @search ESCAPE '\'
-                   OR owner."MiddleName" ILIKE @search ESCAPE '\'
-                   OR (owner."LastName" || ' ' || owner."FirstName" || ' ' || COALESCE(owner."MiddleName", '')) ILIKE @search ESCAPE '\'
-                   OR income_type."Name" ILIKE @search ESCAPE '\')
+              AND (garage."Number" ILIKE @search COLLATE "und-x-icu" ESCAPE '\'
+                   OR owner."LastName" ILIKE @search COLLATE "und-x-icu" ESCAPE '\'
+                   OR owner."FirstName" ILIKE @search COLLATE "und-x-icu" ESCAPE '\'
+                   OR owner."MiddleName" ILIKE @search COLLATE "und-x-icu" ESCAPE '\'
+                   OR (owner."LastName" || ' ' || owner."FirstName" || ' ' || COALESCE(owner."MiddleName", '')) ILIKE @search COLLATE "und-x-icu" ESCAPE '\'
+                   OR income_type."Name" ILIKE @search COLLATE "und-x-icu" ESCAPE '\')
               """
             : string.Empty;
         var limitClause = limit is > 0 ? "LIMIT @limit" : string.Empty;
@@ -949,13 +949,13 @@ public sealed class EfIncomeReportQuery(GarageBalanceDbContext dbContext) : IInc
         var searchClause = string.IsNullOrWhiteSpace(search)
             ? string.Empty
             : """
-              AND (garage."Number" ILIKE @search ESCAPE '\'
-                   OR owner."LastName" ILIKE @search ESCAPE '\'
-                   OR owner."FirstName" ILIKE @search ESCAPE '\'
-                   OR owner."MiddleName" ILIKE @search ESCAPE '\'
-                   OR (owner."LastName" || ' ' || owner."FirstName" || ' ' || COALESCE(owner."MiddleName", '')) ILIKE @search ESCAPE '\'
-                   OR income_type."Name" ILIKE @search ESCAPE '\'
-                   OR operation."DocumentNumber" ILIKE @search ESCAPE '\')
+              AND (garage."Number" ILIKE @search COLLATE "und-x-icu" ESCAPE '\'
+                   OR owner."LastName" ILIKE @search COLLATE "und-x-icu" ESCAPE '\'
+                   OR owner."FirstName" ILIKE @search COLLATE "und-x-icu" ESCAPE '\'
+                   OR owner."MiddleName" ILIKE @search COLLATE "und-x-icu" ESCAPE '\'
+                   OR (owner."LastName" || ' ' || owner."FirstName" || ' ' || COALESCE(owner."MiddleName", '')) ILIKE @search COLLATE "und-x-icu" ESCAPE '\'
+                   OR income_type."Name" ILIKE @search COLLATE "und-x-icu" ESCAPE '\'
+                   OR operation."DocumentNumber" ILIKE @search COLLATE "und-x-icu" ESCAPE '\')
               """;
         var limitClause = limit is > 0 ? "LIMIT @limit" : string.Empty;
         var reportRowsCte = groupPayments

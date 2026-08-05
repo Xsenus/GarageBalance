@@ -64,8 +64,8 @@ public sealed class EfStaffMemberRepository(GarageBalanceDbContext dbContext) : 
             {
                 var pattern = PostgresLikeSearch.ContainsPattern(normalizedSearch);
                 query = query.Where(member =>
-                    EF.Functions.ILike(member.FullName, pattern, @"\") ||
-                    EF.Functions.ILike(member.Department.Name, pattern, @"\"));
+                    EF.Functions.ILike(member.FullName, EF.Functions.Collate(pattern, PostgresLikeSearch.UnicodeCollation), @"\") ||
+                    EF.Functions.ILike(member.Department.Name, EF.Functions.Collate(pattern, PostgresLikeSearch.UnicodeCollation), @"\"));
             }
             else
             {

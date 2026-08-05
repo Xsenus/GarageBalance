@@ -102,11 +102,10 @@ public sealed class PostgreSqlUnifiedIncomePoolMigrationIntegrationTests
             .OrderBy(item => item.SortOrder)
             .ToListAsync();
         Assert.Equal(3, pooledFunds.Count);
-        Assert.All(pooledFunds, fund =>
-        {
-            Assert.True(fund.AllowOperations);
-            Assert.Equal(0m, fund.Balance);
-        });
+        Assert.All(pooledFunds, fund => Assert.True(fund.AllowOperations));
+        Assert.Equal(
+            new[] { 100m, 200m, 300m },
+            pooledFunds.Select(fund => fund.Balance).Order().ToArray());
 
         var linkedIncomeTypes = await verificationContext.IncomeTypes
             .Where(item => item.Code == "membership" || item.Code == "target" || item.Code == "other_income")
@@ -116,17 +115,16 @@ public sealed class PostgreSqlUnifiedIncomePoolMigrationIntegrationTests
             .Where(item => item.SourceFinancialOperationId != null)
             .ToListAsync();
         Assert.Equal(3, assignments.Count);
-        Assert.All(assignments, assignment =>
-        {
-            Assert.Equal(assignment.BalanceBefore, assignment.BalanceAfter);
-            Assert.Equal(0m, assignment.BalanceAfter);
-        });
+        Assert.All(assignments, assignment => Assert.Equal(0m, assignment.BalanceBefore));
+        Assert.Equal(
+            new[] { 100m, 200m, 300m },
+            assignments.Select(assignment => assignment.BalanceAfter).Order().ToArray());
 
         var service = new FundService(
             new EfFundRepository(verificationContext),
             new AuditEventWriter(verificationContext));
         var funds = await service.GetFundsAsync(CancellationToken.None);
-        Assert.All(funds, fund => Assert.Equal(550m, fund.AvailableToDistribute));
+        Assert.All(funds, fund => Assert.Equal(0m, fund.AvailableToDistribute));
 
         var targetFund = Assert.Single(funds, fund => fund.Name == "Целевые взносы");
         var excessive = await service.CreateOperationAsync(
@@ -134,7 +132,7 @@ public sealed class PostgreSqlUnifiedIncomePoolMigrationIntegrationTests
             new CreateFundOperationRequest(FundOperationKinds.Deposit, 550.01m, "Проверка двойного распределения"),
             null,
             CancellationToken.None);
-        var exact = await service.CreateOperationAsync(
+        var duplicateDistribution = await service.CreateOperationAsync(
             targetFund.Id,
             new CreateFundOperationRequest(FundOperationKinds.Deposit, 550m, "Распределение общего пула"),
             null,
@@ -142,8 +140,8 @@ public sealed class PostgreSqlUnifiedIncomePoolMigrationIntegrationTests
 
         Assert.False(excessive.Succeeded);
         Assert.Equal("fund_distribution_amount_exceeded", excessive.ErrorCode);
-        Assert.True(exact.Succeeded, exact.ErrorMessage);
-        Assert.Equal(550m, exact.Value!.BalanceAfter);
+        Assert.False(duplicateDistribution.Succeeded);
+        Assert.Equal("fund_distribution_amount_exceeded", duplicateDistribution.ErrorCode);
         Assert.All(
             await service.GetFundsAsync(CancellationToken.None),
             fund => Assert.Equal(0m, fund.AvailableToDistribute));

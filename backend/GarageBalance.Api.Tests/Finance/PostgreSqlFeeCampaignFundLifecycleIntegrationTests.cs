@@ -133,27 +133,27 @@ public sealed class PostgreSqlFeeCampaignFundLifecycleIntegrationTests
         Assert.Equal(0m, campaignIncome.Value.GarageDebtAfter);
         Assert.True(freeIncome.Succeeded, freeIncome.ErrorMessage);
 
-        var operationalFund = Assert.Single(
-            (await funds.GetFundsAsync(CancellationToken.None))
-                .Where(item => item.AllowOperations && item.Id != campaignFundId)
-                .Take(1));
-        var distribution = await funds.CreateOperationAsync(
-            operationalFund.Id,
-            new CreateFundOperationRequest("deposit", 200m, "Распределение поступления в фонд PG"),
+        var campaignFund = Assert.Single(
+            await funds.GetFundsAsync(CancellationToken.None),
+            item => item.Id == campaignFundId);
+        Assert.Equal(450m, campaignFund.Balance);
+        Assert.Equal(0m, campaignFund.AvailableToDistribute);
+        var duplicateDistribution = await funds.CreateOperationAsync(
+            campaignFund.Id,
+            new CreateFundOperationRequest("deposit", 1m, "Повторное распределение поступления PG"),
             actorUserId,
             CancellationToken.None);
         var withdrawal = await funds.CreateOperationAsync(
-            operationalFund.Id,
+            campaignFund.Id,
             new CreateFundOperationRequest("withdraw", 50m, "Изъятие из фонда PG"),
             actorUserId,
             CancellationToken.None);
 
-        Assert.True(distribution.Succeeded, distribution.ErrorMessage);
-        Assert.Equal(0m, distribution.Value!.BalanceBefore);
-        Assert.Equal(200m, distribution.Value.BalanceAfter);
+        Assert.False(duplicateDistribution.Succeeded);
+        Assert.Equal("fund_distribution_amount_exceeded", duplicateDistribution.ErrorCode);
         Assert.True(withdrawal.Succeeded, withdrawal.ErrorMessage);
-        Assert.Equal(200m, withdrawal.Value!.BalanceBefore);
-        Assert.Equal(150m, withdrawal.Value.BalanceAfter);
+        Assert.Equal(450m, withdrawal.Value!.BalanceBefore);
+        Assert.Equal(400m, withdrawal.Value.BalanceAfter);
 
         var canceledWithdrawal = await funds.CancelOperationAsync(
             withdrawal.Value.Id,
@@ -164,31 +164,8 @@ public sealed class PostgreSqlFeeCampaignFundLifecycleIntegrationTests
         Assert.True(canceledWithdrawal.Value!.IsCanceled);
         context.ChangeTracker.Clear();
         Assert.Equal(
-            200m,
-            Assert.Single(await funds.GetFundsAsync(CancellationToken.None), item => item.Id == operationalFund.Id).Balance);
-
-        var canceledDistribution = await funds.CancelOperationAsync(
-            distribution.Value.Id,
-            new CancelFundOperationRequest("Проверка отмены распределения PG"),
-            actorUserId,
-            CancellationToken.None);
-        Assert.True(canceledDistribution.Succeeded, canceledDistribution.ErrorMessage);
-        Assert.True(canceledDistribution.Value!.IsCanceled);
-        context.ChangeTracker.Clear();
-        Assert.Equal(
-            0m,
-            Assert.Single(await funds.GetFundsAsync(CancellationToken.None), item => item.Id == operationalFund.Id).Balance);
-
-        var restoredDistribution = await funds.RestoreOperationAsync(
-            distribution.Value.Id,
-            actorUserId,
-            CancellationToken.None);
-        Assert.True(restoredDistribution.Succeeded, restoredDistribution.ErrorMessage);
-        Assert.False(restoredDistribution.Value!.IsCanceled);
-        context.ChangeTracker.Clear();
-        Assert.Equal(
-            200m,
-            Assert.Single(await funds.GetFundsAsync(CancellationToken.None), item => item.Id == operationalFund.Id).Balance);
+            450m,
+            Assert.Single(await funds.GetFundsAsync(CancellationToken.None), item => item.Id == campaignFund.Id).Balance);
 
         var restoredWithdrawal = await funds.RestoreOperationAsync(
             withdrawal.Value.Id,
@@ -198,15 +175,14 @@ public sealed class PostgreSqlFeeCampaignFundLifecycleIntegrationTests
         Assert.False(restoredWithdrawal.Value!.IsCanceled);
         context.ChangeTracker.Clear();
         Assert.Equal(
-            150m,
-            Assert.Single(await funds.GetFundsAsync(CancellationToken.None), item => item.Id == operationalFund.Id).Balance);
+            400m,
+            Assert.Single(await funds.GetFundsAsync(CancellationToken.None), item => item.Id == campaignFund.Id).Balance);
 
         context.ChangeTracker.Clear();
         var finalFunds = await funds.GetFundsAsync(CancellationToken.None);
-        Assert.Equal(0m, Assert.Single(finalFunds, item => item.Id == campaignFundId).Balance);
-        var finalOperationalFund = Assert.Single(finalFunds, item => item.Id == operationalFund.Id);
-        Assert.Equal(150m, finalOperationalFund.Balance);
-        Assert.Equal(300m, finalOperationalFund.AvailableToDistribute);
+        var finalCampaignFund = Assert.Single(finalFunds, item => item.Id == campaignFundId);
+        Assert.Equal(400m, finalCampaignFund.Balance);
+        Assert.Equal(50m, finalCampaignFund.AvailableToDistribute);
         Assert.Equal(5, await context.Accruals.CountAsync(item =>
             item.FeeCampaignId == allCampaignId || item.FeeCampaignId == selectedCampaignId));
         Assert.Equal(2, await context.AccrualPaymentAllocations.CountAsync(item =>
@@ -214,11 +190,10 @@ public sealed class PostgreSqlFeeCampaignFundLifecycleIntegrationTests
         Assert.Equal(150m, await context.AccrualPaymentAllocations
             .Where(item => item.FinancialOperationId == campaignIncome.Value.Id)
             .SumAsync(item => item.Amount));
-        Assert.Equal(4, await context.FundOperations.CountAsync(item =>
-            item.FundId == campaignFundId || item.FundId == operationalFund.Id));
+        Assert.Equal(3, await context.FundOperations.CountAsync(item => item.FundId == campaignFundId));
         Assert.All(
             await context.FundOperations
-                .Where(item => item.FundId == campaignFundId || item.FundId == operationalFund.Id)
+                .Where(item => item.FundId == campaignFundId)
                 .ToListAsync(),
             item => Assert.False(item.IsCanceled));
         Assert.Equal(2, await context.AuditEvents.CountAsync(item =>
@@ -229,9 +204,9 @@ public sealed class PostgreSqlFeeCampaignFundLifecycleIntegrationTests
             item.ActorUserId == actorUserId && item.Action == "finance.income_created"));
         Assert.Equal(2, await context.AuditEvents.CountAsync(item =>
             item.ActorUserId == actorUserId && item.Action == "fund.income_assignment_created"));
-        Assert.Equal(2, await context.AuditEvents.CountAsync(item =>
+        Assert.Equal(1, await context.AuditEvents.CountAsync(item =>
             item.ActorUserId == actorUserId && item.Action == "fund.operation_canceled"));
-        Assert.Equal(2, await context.AuditEvents.CountAsync(item =>
+        Assert.Equal(1, await context.AuditEvents.CountAsync(item =>
             item.ActorUserId == actorUserId && item.Action == "fund.operation_restored"));
     }
 

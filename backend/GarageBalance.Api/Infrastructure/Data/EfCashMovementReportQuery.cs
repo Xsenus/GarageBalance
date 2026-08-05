@@ -78,10 +78,10 @@ public sealed class EfCashMovementReportQuery(GarageBalanceDbContext dbContext) 
         var searchClause = string.IsNullOrWhiteSpace(search)
             ? string.Empty
             : """
-              AND (supplier."Name" ILIKE @search ESCAPE '\'
-                   OR expense_type."Name" ILIKE @search ESCAPE '\'
-                   OR operation."DocumentNumber" ILIKE @search ESCAPE '\'
-                   OR operation."Comment" ILIKE @search ESCAPE '\')
+              AND (supplier."Name" ILIKE @search COLLATE "und-x-icu" ESCAPE '\'
+                   OR expense_type."Name" ILIKE @search COLLATE "und-x-icu" ESCAPE '\'
+                   OR operation."DocumentNumber" ILIKE @search COLLATE "und-x-icu" ESCAPE '\'
+                   OR operation."Comment" ILIKE @search COLLATE "und-x-icu" ESCAPE '\')
               """;
         var limitClause = limit is > 0 ? "LIMIT @limit" : string.Empty;
         var sql = $$"""
@@ -212,7 +212,7 @@ public sealed class EfCashMovementReportQuery(GarageBalanceDbContext dbContext) 
         var searchClause = string.IsNullOrWhiteSpace(search)
             ? string.Empty
             : """
-              AND transfer."Comment" ILIKE @search ESCAPE '\'
+              AND transfer."Comment" ILIKE @search COLLATE "und-x-icu" ESCAPE '\'
               """;
         var limitClause = limit is > 0 ? "LIMIT @limit" : string.Empty;
         var sql = $$"""

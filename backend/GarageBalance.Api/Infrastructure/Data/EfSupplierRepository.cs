@@ -269,11 +269,11 @@ public sealed class EfSupplierRepository(GarageBalanceDbContext dbContext) : ISu
             {
                 var pattern = PostgresLikeSearch.ContainsPattern(normalizedSearch);
                 query = query.Where(supplier =>
-                    EF.Functions.ILike(supplier.Name, pattern, @"\") ||
-                    EF.Functions.ILike(supplier.Group.Name, pattern, @"\") ||
-                    (supplier.ChargeServiceSetting != null && EF.Functions.ILike(supplier.ChargeServiceSetting.Name, pattern, @"\")) ||
-                    (supplier.Inn != null && EF.Functions.ILike(supplier.Inn, pattern, @"\")) ||
-                    (supplier.ContactPerson != null && EF.Functions.ILike(supplier.ContactPerson, pattern, @"\")));
+                    EF.Functions.ILike(supplier.Name, EF.Functions.Collate(pattern, PostgresLikeSearch.UnicodeCollation), @"\") ||
+                    EF.Functions.ILike(supplier.Group.Name, EF.Functions.Collate(pattern, PostgresLikeSearch.UnicodeCollation), @"\") ||
+                    (supplier.ChargeServiceSetting != null && EF.Functions.ILike(supplier.ChargeServiceSetting.Name, EF.Functions.Collate(pattern, PostgresLikeSearch.UnicodeCollation), @"\")) ||
+                    (supplier.Inn != null && EF.Functions.ILike(supplier.Inn, EF.Functions.Collate(pattern, PostgresLikeSearch.UnicodeCollation), @"\")) ||
+                    (supplier.ContactPerson != null && EF.Functions.ILike(supplier.ContactPerson, EF.Functions.Collate(pattern, PostgresLikeSearch.UnicodeCollation), @"\")));
             }
             else
             {

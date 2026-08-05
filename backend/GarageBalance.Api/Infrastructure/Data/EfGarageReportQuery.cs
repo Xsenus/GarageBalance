@@ -79,14 +79,14 @@ public sealed class EfGarageReportQuery(GarageBalanceDbContext dbContext) : IGar
             {
                 var pattern = PostgresLikeSearch.ContainsPattern(normalizedSearch);
                 garages = garages.Where(garage =>
-                    EF.Functions.ILike(garage.Number, pattern, @"\") ||
+                    EF.Functions.ILike(garage.Number, EF.Functions.Collate(pattern, PostgresLikeSearch.UnicodeCollation), @"\") ||
                     (garage.Owner != null && (
-                        EF.Functions.ILike(garage.Owner.LastName, pattern, @"\") ||
-                        EF.Functions.ILike(garage.Owner.FirstName, pattern, @"\") ||
-                        (garage.Owner.MiddleName != null && EF.Functions.ILike(garage.Owner.MiddleName, pattern, @"\")) ||
+                        EF.Functions.ILike(garage.Owner.LastName, EF.Functions.Collate(pattern, PostgresLikeSearch.UnicodeCollation), @"\") ||
+                        EF.Functions.ILike(garage.Owner.FirstName, EF.Functions.Collate(pattern, PostgresLikeSearch.UnicodeCollation), @"\") ||
+                        (garage.Owner.MiddleName != null && EF.Functions.ILike(garage.Owner.MiddleName, EF.Functions.Collate(pattern, PostgresLikeSearch.UnicodeCollation), @"\")) ||
                         EF.Functions.ILike(
                             garage.Owner.LastName + " " + garage.Owner.FirstName + " " + (garage.Owner.MiddleName ?? string.Empty),
-                            pattern,
+                            EF.Functions.Collate(pattern, PostgresLikeSearch.UnicodeCollation),
                             @"\"))));
             }
             else
@@ -300,11 +300,11 @@ public sealed class EfGarageReportQuery(GarageBalanceDbContext dbContext) : IGar
         var incomeTypeClause = incomeTypeIds.Count > 0 ? "AND income_type.\"Id\" = ANY(@income_type_ids)" : string.Empty;
         var searchClause = hasSearch
             ? """
-              AND (garage."Number" ILIKE @search ESCAPE '\'
-                   OR owner."LastName" ILIKE @search ESCAPE '\'
-                   OR owner."FirstName" ILIKE @search ESCAPE '\'
-                   OR owner."MiddleName" ILIKE @search ESCAPE '\'
-                   OR (owner."LastName" || ' ' || owner."FirstName" || ' ' || COALESCE(owner."MiddleName", '')) ILIKE @search ESCAPE '\')
+              AND (garage."Number" ILIKE @search COLLATE "und-x-icu" ESCAPE '\'
+                   OR owner."LastName" ILIKE @search COLLATE "und-x-icu" ESCAPE '\'
+                   OR owner."FirstName" ILIKE @search COLLATE "und-x-icu" ESCAPE '\'
+                   OR owner."MiddleName" ILIKE @search COLLATE "und-x-icu" ESCAPE '\'
+                   OR (owner."LastName" || ' ' || owner."FirstName" || ' ' || COALESCE(owner."MiddleName", '')) ILIKE @search COLLATE "und-x-icu" ESCAPE '\')
               """
             : string.Empty;
         var groupedRowsSql = groupAccruals

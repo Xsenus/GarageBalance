@@ -78,10 +78,10 @@ public sealed class EfSupplierContactRepository(GarageBalanceDbContext dbContext
         {
             var pattern = PostgresLikeSearch.ContainsPattern(normalizedSearch);
             return query.Where(contact =>
-                EF.Functions.ILike(contact.FullName, pattern, @"\") ||
-                (contact.Position != null && EF.Functions.ILike(contact.Position, pattern, @"\")) ||
-                (contact.Phone != null && EF.Functions.ILike(contact.Phone, pattern, @"\")) ||
-                (contact.Email != null && EF.Functions.ILike(contact.Email, pattern, @"\")));
+                EF.Functions.ILike(contact.FullName, EF.Functions.Collate(pattern, PostgresLikeSearch.UnicodeCollation), @"\") ||
+                (contact.Position != null && EF.Functions.ILike(contact.Position, EF.Functions.Collate(pattern, PostgresLikeSearch.UnicodeCollation), @"\")) ||
+                (contact.Phone != null && EF.Functions.ILike(contact.Phone, EF.Functions.Collate(pattern, PostgresLikeSearch.UnicodeCollation), @"\")) ||
+                (contact.Email != null && EF.Functions.ILike(contact.Email, EF.Functions.Collate(pattern, PostgresLikeSearch.UnicodeCollation), @"\")));
         }
 
         return query.Where(contact =>

@@ -51,13 +51,13 @@ namespace GarageBalance.Api.Infrastructure.Data.Migrations
                         operation."FundId",
                         operation.row_number,
                         operation.opening_balance AS balance_before,
-                        CASE
+                        CAST(CASE
                             WHEN operation."IsCanceled" OR {{ignoredAutomaticDepositCondition}}
                                 THEN operation.opening_balance
                             WHEN operation."OperationKind" = 'deposit'
                                 THEN operation.opening_balance + operation."Amount"
                             ELSE operation.opening_balance - operation."Amount"
-                        END AS balance_after
+                        END AS numeric(18, 2)) AS balance_after
                     FROM ordered_operations AS operation
                     WHERE operation.row_number = 1
 
@@ -68,13 +68,13 @@ namespace GarageBalance.Api.Infrastructure.Data.Migrations
                         operation."FundId",
                         operation.row_number,
                         previous.balance_after AS balance_before,
-                        CASE
+                        CAST(CASE
                             WHEN operation."IsCanceled" OR {{ignoredAutomaticDepositCondition}}
                                 THEN previous.balance_after
                             WHEN operation."OperationKind" = 'deposit'
                                 THEN previous.balance_after + operation."Amount"
                             ELSE previous.balance_after - operation."Amount"
-                        END AS balance_after
+                        END AS numeric(18, 2)) AS balance_after
                     FROM recalculated AS previous
                     INNER JOIN ordered_operations AS operation
                         ON operation."FundId" = previous."FundId"

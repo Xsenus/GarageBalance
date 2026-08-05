@@ -71,7 +71,10 @@ public sealed class EfGarageRepository(GarageBalanceDbContext dbContext, IBusine
             return new GaragePageData(pageItems, filtered.Count);
         }
 
-        query = ApplyColumnFilters(ApplySearch(query, normalizedSearch, IsNpgsqlProvider()), filters);
+        query = ApplyColumnFilters(
+            ApplySearch(query, normalizedSearch, IsNpgsqlProvider()),
+            filters,
+            IsNpgsqlProvider());
         if (debtorsOnly)
         {
             query = ApplyDebtorsFilter(query);
@@ -277,14 +280,14 @@ public sealed class EfGarageRepository(GarageBalanceDbContext dbContext, IBusine
         {
             var pattern = PostgresLikeSearch.ContainsPattern(normalizedSearch);
             return query.Where(garage =>
-                EF.Functions.ILike(garage.Number, pattern, @"\") ||
+                EF.Functions.ILike(garage.Number, EF.Functions.Collate(pattern, PostgresLikeSearch.UnicodeCollation), @"\") ||
                 (garage.Owner != null && (
-                    EF.Functions.ILike(garage.Owner.LastName, pattern, @"\") ||
-                    EF.Functions.ILike(garage.Owner.FirstName, pattern, @"\") ||
-                    (garage.Owner.MiddleName != null && EF.Functions.ILike(garage.Owner.MiddleName, pattern, @"\")) ||
+                    EF.Functions.ILike(garage.Owner.LastName, EF.Functions.Collate(pattern, PostgresLikeSearch.UnicodeCollation), @"\") ||
+                    EF.Functions.ILike(garage.Owner.FirstName, EF.Functions.Collate(pattern, PostgresLikeSearch.UnicodeCollation), @"\") ||
+                    (garage.Owner.MiddleName != null && EF.Functions.ILike(garage.Owner.MiddleName, EF.Functions.Collate(pattern, PostgresLikeSearch.UnicodeCollation), @"\")) ||
                     EF.Functions.ILike(
                         garage.Owner.LastName + " " + garage.Owner.FirstName + " " + (garage.Owner.MiddleName ?? string.Empty),
-                        pattern,
+                        EF.Functions.Collate(pattern, PostgresLikeSearch.UnicodeCollation),
                         @"\"))));
         }
 
@@ -362,11 +365,19 @@ public sealed class EfGarageRepository(GarageBalanceDbContext dbContext, IBusine
         };
     }
 
-    private static IQueryable<Garage> ApplyColumnFilters(IQueryable<Garage> query, GarageColumnFilters filters)
+    private static IQueryable<Garage> ApplyColumnFilters(
+        IQueryable<Garage> query,
+        GarageColumnFilters filters,
+        bool usePostgresSearch)
     {
         if (filters.Number is { } number)
         {
-            query = query.Where(garage => garage.Number.ToLower().Contains(number));
+            query = usePostgresSearch
+                ? query.Where(garage => EF.Functions.ILike(
+                    garage.Number,
+                    EF.Functions.Collate(PostgresLikeSearch.ContainsPattern(number), PostgresLikeSearch.UnicodeCollation),
+                    @"\"))
+                : query.Where(garage => garage.Number.ToLower().Contains(number));
         }
         if (filters.PeopleCountMin is { } peopleCountMin)
         {

@@ -893,33 +893,33 @@ public sealed class EfExpenseReportQuery(GarageBalanceDbContext dbContext) : IEx
         var staffClause = staffMemberIds.Count > 0 ? "AND member.\"Id\" = ANY(@staff_ids)" : string.Empty;
         var expenseTypeClause = expenseTypeIds.Count > 0 ? "AND expense_type.\"Id\" = ANY(@expense_type_ids)" : string.Empty;
         var startingSearchClause = hasSearch && !"Стартовый баланс".Contains(search!.Trim(), StringComparison.OrdinalIgnoreCase)
-            ? "AND supplier.\"Name\" ILIKE @search ESCAPE '\\'"
+            ? "AND supplier.\"Name\" ILIKE @search COLLATE \"und-x-icu\" ESCAPE '\\'"
             : string.Empty;
         var supplierAccrualSearchClause = hasSearch
             ? """
-              AND (supplier."Name" ILIKE @search ESCAPE '\'
-                   OR expense_type."Name" ILIKE @search ESCAPE '\'
-                   OR accrual."DocumentNumber" ILIKE @search ESCAPE '\')
+              AND (supplier."Name" ILIKE @search COLLATE "und-x-icu" ESCAPE '\'
+                   OR expense_type."Name" ILIKE @search COLLATE "und-x-icu" ESCAPE '\'
+                   OR accrual."DocumentNumber" ILIKE @search COLLATE "und-x-icu" ESCAPE '\')
               """
             : string.Empty;
         var supplierPaymentSearchClause = hasSearch
             ? """
-              AND (supplier."Name" ILIKE @search ESCAPE '\'
-                   OR expense_type."Name" ILIKE @search ESCAPE '\'
-                   OR operation."DocumentNumber" ILIKE @search ESCAPE '\')
+              AND (supplier."Name" ILIKE @search COLLATE "und-x-icu" ESCAPE '\'
+                   OR expense_type."Name" ILIKE @search COLLATE "und-x-icu" ESCAPE '\'
+                   OR operation."DocumentNumber" ILIKE @search COLLATE "und-x-icu" ESCAPE '\')
               """
             : string.Empty;
         var staffAccrualSearchClause = hasSearch
             ? """
-              AND (member."FullName" ILIKE @search ESCAPE '\'
-                   OR expense_type."Name" ILIKE @search ESCAPE '\')
+              AND (member."FullName" ILIKE @search COLLATE "und-x-icu" ESCAPE '\'
+                   OR expense_type."Name" ILIKE @search COLLATE "und-x-icu" ESCAPE '\')
               """
             : string.Empty;
         var staffPaymentSearchClause = hasSearch
             ? """
-              AND (member."FullName" ILIKE @search ESCAPE '\'
-                   OR expense_type."Name" ILIKE @search ESCAPE '\'
-                   OR operation."DocumentNumber" ILIKE @search ESCAPE '\')
+              AND (member."FullName" ILIKE @search COLLATE "und-x-icu" ESCAPE '\'
+                   OR expense_type."Name" ILIKE @search COLLATE "und-x-icu" ESCAPE '\'
+                   OR operation."DocumentNumber" ILIKE @search COLLATE "und-x-icu" ESCAPE '\')
               """
             : string.Empty;
         var limitClause = limit is > 0 ? "LIMIT @limit" : string.Empty;
@@ -1177,19 +1177,19 @@ public sealed class EfExpenseReportQuery(GarageBalanceDbContext dbContext) : IEx
         var staffClause = staffMemberIds.Count > 0 ? "AND member.\"Id\" = ANY(@staff_ids)" : string.Empty;
         var expenseTypeClause = expenseTypeIds.Count > 0 ? "AND expense_type.\"Id\" = ANY(@expense_type_ids)" : string.Empty;
         var startingSearchClause = hasSearch && !"Стартовый баланс".Contains(search!.Trim(), StringComparison.OrdinalIgnoreCase)
-            ? "AND supplier.\"Name\" ILIKE @search ESCAPE '\\'"
+            ? "AND supplier.\"Name\" ILIKE @search COLLATE \"und-x-icu\" ESCAPE '\\'"
             : string.Empty;
         var supplierAccrualSearchClause = hasSearch
             ? """
-              AND (supplier."Name" ILIKE @search ESCAPE '\'
-                   OR expense_type."Name" ILIKE @search ESCAPE '\'
-                   OR accrual."DocumentNumber" ILIKE @search ESCAPE '\')
+              AND (supplier."Name" ILIKE @search COLLATE "und-x-icu" ESCAPE '\'
+                   OR expense_type."Name" ILIKE @search COLLATE "und-x-icu" ESCAPE '\'
+                   OR accrual."DocumentNumber" ILIKE @search COLLATE "und-x-icu" ESCAPE '\')
               """
             : string.Empty;
         var staffAccrualSearchClause = hasSearch
             ? """
-              AND (member."FullName" ILIKE @search ESCAPE '\'
-                   OR expense_type."Name" ILIKE @search ESCAPE '\')
+              AND (member."FullName" ILIKE @search COLLATE "und-x-icu" ESCAPE '\'
+                   OR expense_type."Name" ILIKE @search COLLATE "und-x-icu" ESCAPE '\')
               """
             : string.Empty;
         var limitClause = limit is > 0 ? "LIMIT @limit" : string.Empty;
@@ -1380,16 +1380,16 @@ public sealed class EfExpenseReportQuery(GarageBalanceDbContext dbContext) : IEx
         var supplierSearchClause = string.IsNullOrWhiteSpace(search)
             ? string.Empty
             : """
-              AND (supplier."Name" ILIKE @search ESCAPE '\'
-                   OR expense_type."Name" ILIKE @search ESCAPE '\'
-                   OR operation."DocumentNumber" ILIKE @search ESCAPE '\')
+              AND (supplier."Name" ILIKE @search COLLATE "und-x-icu" ESCAPE '\'
+                   OR expense_type."Name" ILIKE @search COLLATE "und-x-icu" ESCAPE '\'
+                   OR operation."DocumentNumber" ILIKE @search COLLATE "und-x-icu" ESCAPE '\')
               """;
         var staffSearchClause = string.IsNullOrWhiteSpace(search)
             ? string.Empty
             : """
-              AND (member."FullName" ILIKE @search ESCAPE '\'
-                   OR expense_type."Name" ILIKE @search ESCAPE '\'
-                   OR operation."DocumentNumber" ILIKE @search ESCAPE '\')
+              AND (member."FullName" ILIKE @search COLLATE "und-x-icu" ESCAPE '\'
+                   OR expense_type."Name" ILIKE @search COLLATE "und-x-icu" ESCAPE '\'
+                   OR operation."DocumentNumber" ILIKE @search COLLATE "und-x-icu" ESCAPE '\')
               """;
         var limitClause = limit is > 0 ? "LIMIT @limit" : string.Empty;
         var sql = $$"""

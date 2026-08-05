@@ -164,7 +164,7 @@ public sealed class PostgreSqlIncomeFundAssignmentIntegrationTests
         Assert.False(restoredSource.IsCanceled);
         Assert.False(restoredAssignment.IsCanceled);
         Assert.Equal(325m, restoredAssignment.Amount);
-        Assert.Equal(0m, await verificationContext.Funds
+        Assert.Equal(325m, await verificationContext.Funds
             .Where(item => item.Id == destinationFundId)
             .Select(item => item.Balance)
             .SingleAsync());
@@ -254,7 +254,7 @@ public sealed class PostgreSqlIncomeFundAssignmentIntegrationTests
         Assert.Contains("Автоматическое назначение поступления", assignments[0].Reason, StringComparison.Ordinal);
         Assert.False(assignments[1].IsCanceled);
         Assert.Equal(125m, assignments[1].Amount);
-        Assert.Equal(balanceBeforeMigration, await verificationContext.Funds
+        Assert.Equal(balanceBeforeMigration + 125m, await verificationContext.Funds
             .Where(item => item.Id == destinationFundId)
             .Select(item => item.Balance)
             .SingleAsync());

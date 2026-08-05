@@ -131,9 +131,9 @@ public sealed class EfFundChangeReportQuery(GarageBalanceDbContext dbContext) : 
         var searchClause = string.IsNullOrWhiteSpace(search)
             ? string.Empty
             : """
-              AND (fund."Name" ILIKE @search ESCAPE '\'
-                   OR operation."OperationKind" ILIKE @search ESCAPE '\'
-                   OR operation."Reason" ILIKE @search ESCAPE '\')
+              AND (fund."Name" ILIKE @search COLLATE "und-x-icu" ESCAPE '\'
+                   OR operation."OperationKind" ILIKE @search COLLATE "und-x-icu" ESCAPE '\'
+                   OR operation."Reason" ILIKE @search COLLATE "und-x-icu" ESCAPE '\')
               """;
         var limitClause = limit is > 0 ? "LIMIT @limit" : string.Empty;
         var sql = $$"""

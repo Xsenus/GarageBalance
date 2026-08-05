@@ -65,7 +65,7 @@ public sealed class PostgreSqlConsolidatedGarageReportQueryIntegrationTests
             Assert.Equal(0, searchedRow.MeterReadingCount);
             var searchCommand = Assert.Single(capture.Commands);
             AssertQueryShape(searchCommand);
-            Assert.Contains("owner.\"LastName\" ILIKE @search ESCAPE '\\'", searchCommand, StringComparison.Ordinal);
+            Assert.Contains("owner.\"LastName\" ILIKE @search COLLATE \"und-x-icu\" ESCAPE '\\'", searchCommand, StringComparison.Ordinal);
             Assert.DoesNotContain("LOWER(", searchCommand, StringComparison.Ordinal);
         }
     }
