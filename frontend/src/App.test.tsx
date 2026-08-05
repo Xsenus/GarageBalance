@@ -1529,9 +1529,9 @@ describe('App', () => {
     const waterRateInput = await within(tariffsPanel).findByLabelText('Вода: Тариф на воду: значение')
     expect(waterRateInput).toHaveValue('1 250.00')
     expect(within(tariffsPanel).getByLabelText('Наружное освещение: Наружное освещение: значение')).toHaveValue('300.00')
-    expect(within(tariffsPanel).getAllByRole('combobox', { name: /Электроэнергия: .*: пороговая тарификация/i })).toHaveLength(1)
-    expect(within(tariffsPanel).getAllByRole('combobox', { name: /Электроэнергия: .*: по счетчику/i })).toHaveLength(1)
-    expect(within(tariffsPanel).getByRole('combobox', { name: 'Электроэнергия: Электроэнергия: по счетчику' })).toBeEnabled()
+    expect(within(tariffsPanel).getAllByRole('combobox', { name: 'Электроэнергия: пороговая тарификация' })).toHaveLength(1)
+    expect(within(tariffsPanel).getAllByRole('combobox', { name: 'Электроэнергия: по счетчику' })).toHaveLength(1)
+    expect(within(tariffsPanel).getByRole('combobox', { name: 'Электроэнергия: по счетчику' })).toBeEnabled()
     expect(within(tariffsPanel).queryByRole('combobox', { name: 'Электроэнергия: От 1 кВт·ч: пороговая тарификация' })).not.toBeInTheDocument()
     expect(within(tariffsPanel).queryByRole('combobox', { name: 'Электроэнергия: От 1 кВт·ч: по счетчику' })).not.toBeInTheDocument()
     expect(within(tariffsPanel).getByRole('button', { name: 'Изменить услугу Членский взнос' })).toBeInTheDocument()
@@ -1578,8 +1578,8 @@ describe('App', () => {
     await user.click(within(blurredWaterRateConfirmDialog).getByRole('button', { name: 'Отмена' }))
     expect(waterRateInput).toHaveValue('1 300.00')
 
-    const membershipDueDayInput = within(tariffsPanel).getByLabelText('Членский взнос: Оплата до: день')
-    const membershipDueMonthSelect = within(tariffsPanel).getByLabelText('Членский взнос: Оплата до: месяц')
+    const membershipDueDayInput = within(tariffsPanel).getByLabelText('Членский взнос: оплата до: день')
+    const membershipDueMonthSelect = within(tariffsPanel).getByLabelText('Членский взнос: оплата до: месяц')
     expect(membershipDueDayInput).toHaveValue('30')
     expect(membershipDueMonthSelect).toHaveTextContent('Июнь')
     await user.click(membershipDueMonthSelect)
@@ -1593,17 +1593,17 @@ describe('App', () => {
     expect(within(dateConfirmDialog).getByText('28 фев')).toBeInTheDocument()
     await user.click(within(dateConfirmDialog).getByRole('button', { name: 'Сохранить' }))
     await waitFor(() => {
-      expect(within(tariffsPanel).getByLabelText('Членский взнос: Оплата до: день')).toHaveValue('28')
-      expect(within(tariffsPanel).getByLabelText('Членский взнос: Оплата до: месяц')).toHaveTextContent('Февраль')
+      expect(within(tariffsPanel).getByLabelText('Членский взнос: оплата до: день')).toHaveValue('28')
+      expect(within(tariffsPanel).getByLabelText('Членский взнос: оплата до: месяц')).toHaveTextContent('Февраль')
     })
 
-    const tieredControl = within(tariffsPanel).getByRole('combobox', { name: 'Электроэнергия: Электроэнергия: пороговая тарификация' })
+    const tieredControl = within(tariffsPanel).getByRole('combobox', { name: 'Электроэнергия: пороговая тарификация' })
     await user.click(tieredControl)
     await user.click(within(tariffsPanel).getByRole('option', { name: 'Нет' }))
     await waitFor(() => expect(electricitySettingRequests.at(-1)).toMatchObject({ tariffMode: 'metered', service: { hasTieredTariff: false } }))
     expect(within(tariffsPanel).queryByRole('button', { name: 'Добавить порог' })).not.toBeInTheDocument()
     expect(within(tariffsPanel).queryByLabelText('Электроэнергия: 1.00–3.00: до')).not.toBeInTheDocument()
-    await user.click(within(tariffsPanel).getByRole('combobox', { name: 'Электроэнергия: Электроэнергия: пороговая тарификация' }))
+    await user.click(within(tariffsPanel).getByRole('combobox', { name: 'Электроэнергия: пороговая тарификация' }))
     await user.click(within(tariffsPanel).getByRole('option', { name: 'Да' }))
     await waitFor(() => expect(electricitySettingRequests.at(-1)).toMatchObject({ tariffMode: 'metered_tiered', service: { hasTieredTariff: true } }))
     expect(await within(tariffsPanel).findByLabelText('Электроэнергия: 1.00–3.00: до')).toBeInTheDocument()
@@ -1620,7 +1620,7 @@ describe('App', () => {
     const addThresholdButton = within(tariffsPanel).getByRole('button', { name: 'Добавить порог' })
     expect(addThresholdButton).toHaveClass('tariffs-add-threshold-button')
     await user.click(addThresholdButton)
-    const createThresholdDialog = await screen.findByRole('dialog', { name: 'Добавить порог электроэнергии' })
+    const createThresholdDialog = await screen.findByRole('dialog', { name: 'Добавить тарифный порог' })
     expect(within(createThresholdDialog).queryByLabelText('Название нового порога')).not.toBeInTheDocument()
     expect(within(createThresholdDialog).getByLabelText('Нижняя граница нового порога')).toHaveValue('4.00')
     await user.type(within(createThresholdDialog).getByLabelText('Верхняя граница нового порога'), '2')
@@ -1756,35 +1756,15 @@ describe('App', () => {
     expect(within(tariffsPanel).queryByRole('table', { name: 'История изменений тарифов и сборов', hidden: true })).not.toBeInTheDocument()
   }, 180000)
 
-  it('clearly edits and safely archives salary fund tariff rows', async () => {
+  it('keeps salary fund tariff rows read-only and routes editing to dictionaries', async () => {
     const user = userEvent.setup()
-    let salaryTariffs = [
+    const salaryTariffs = [
       createTariff({ id: 'salary-electricians', name: 'Электрики', calculationBase: 'fixed', rate: 500 }),
       createTariff({ id: 'salary-accounting', name: 'Бухгалтерия', calculationBase: 'fixed', rate: 700 }),
       createTariff({ id: 'salary-management', name: 'Руководство', calculationBase: 'fixed', rate: 900 }),
     ]
-    const updateTariff = vi.fn(async (_token: string, id: string, request: UpsertTariffRequest) => {
-      const saved = createTariff({
-        ...salaryTariffs.find((tariff) => tariff.id === id),
-        id,
-        name: request.name,
-        calculationBase: request.calculationBase,
-        rate: request.rate,
-        effectiveFrom: request.effectiveFrom,
-        comment: request.comment ?? null,
-      })
-      salaryTariffs = salaryTariffs.map((tariff) => tariff.id === id ? saved : tariff)
-      return saved
-    })
-    let archiveAttempts = 0
-    const archiveTariff = vi.fn(async (_token: string, id: string, reason: string) => {
-      archiveAttempts += 1
-      if (archiveAttempts === 1) {
-        throw new DictionaryApiError('temporary_error', 'Не удалось сохранить изменение.', 503)
-      }
-      expect(reason).toBe('Должность больше не используется')
-      salaryTariffs = salaryTariffs.filter((tariff) => tariff.id !== id)
-    })
+    const updateTariff = vi.fn()
+    const archiveTariff = vi.fn()
     const dictionaryClient = createDictionaryClient({
       getTariffs: async () => salaryTariffs,
       getChargeServiceSettings: async () => [],
@@ -1799,32 +1779,14 @@ describe('App', () => {
     const panel = await screen.findByRole('region', { name: 'Тарифы и сборы' })
 
     const electriciansInput = await within(panel).findByLabelText('Зарплатный фонд: Электрики: значение')
-    await user.click(within(panel).getByRole('button', { name: 'Изменить тариф Электрики' }))
-    expect(electriciansInput).toHaveFocus()
-    await user.clear(electriciansInput)
-    await user.type(electriciansInput, '650')
-    await user.tab()
-    const changeDialog = await screen.findByRole('dialog', { name: 'Подтвердить изменение?' })
-    expect(within(changeDialog).getByText('500.00')).toBeInTheDocument()
-    expect(within(changeDialog).getByText('650.00')).toBeInTheDocument()
-    await user.click(within(changeDialog).getByRole('button', { name: 'Сохранить' }))
-    await waitFor(() => expect(updateTariff).toHaveBeenCalledWith('token', 'salary-electricians', expect.objectContaining({ rate: 650 })))
-    expect(within(panel).getByLabelText('Зарплатный фонд: Электрики: значение')).toHaveValue('650.00')
-
-    await user.click(within(panel).getByRole('button', { name: 'Убрать тариф Бухгалтерия' }))
-    const archiveDialog = await screen.findByRole('dialog', { name: 'Убрать строку тарифа?' })
-    expect(within(archiveDialog).getByText(/Начисления и выплаты не изменятся/)).toBeInTheDocument()
-    const archiveButton = within(archiveDialog).getByRole('button', { name: 'Убрать строку' })
-    expect(archiveButton).toBeDisabled()
-    await user.type(within(archiveDialog).getByLabelText('Причина удаления тарифа'), 'Должность больше не используется')
-    await user.click(archiveButton)
-    expect(await screen.findByText('Не удалось сохранить изменение.')).toBeInTheDocument()
-    expect(within(archiveDialog).getByLabelText('Причина удаления тарифа')).toHaveValue('Должность больше не используется')
-
-    await user.click(within(archiveDialog).getByRole('button', { name: 'Убрать строку' }))
-    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Убрать строку тарифа?' })).not.toBeInTheDocument())
-    expect(within(panel).queryByLabelText('Зарплатный фонд: Бухгалтерия: значение')).not.toBeInTheDocument()
-    expect(archiveTariff).toHaveBeenCalledTimes(2)
+    expect(electriciansInput).toBeDisabled()
+    expect(within(panel).getByLabelText('Зарплатный фонд: Бухгалтерия: значение')).toBeDisabled()
+    expect(within(panel).getByLabelText('Зарплатный фонд: Руководство: значение')).toBeDisabled()
+    expect(within(panel).getByText('Изменяется в разделе «Справочники → Тарифы»')).toBeInTheDocument()
+    expect(within(panel).queryByRole('button', { name: 'Изменить тариф Электрики' })).not.toBeInTheDocument()
+    expect(within(panel).queryByRole('button', { name: 'Убрать тариф Бухгалтерия' })).not.toBeInTheDocument()
+    expect(updateTariff).not.toHaveBeenCalled()
+    expect(archiveTariff).not.toHaveBeenCalled()
   })
 
   it('hides financial report actions until contractor records are saved', async () => {
@@ -4193,13 +4155,6 @@ describe('App', () => {
     await waitFor(() => expect(updatedTariffRequest).toMatchObject({
       name: 'Электроэнергия',
       calculationBase: 'meter_electricity',
-      electricityFirstThreshold: 2,
-      electricityFirstTierName: '0.00–2.00',
-      electricitySecondTierName: '2.00–3.00',
-      electricityThirdTierName: '3.00 и выше',
-      electricityFirstRate: 2,
-      electricitySecondRate: 3,
-      electricityThirdRate: 5,
       electricityTiers: [
         expect.objectContaining({ name: '0.00–2.00', upperBound: 2, rate: 2 }),
         expect.objectContaining({ name: '2.00–3.00', upperBound: 3, rate: 3 }),
@@ -4457,12 +4412,12 @@ describe('App', () => {
     expect(savedServiceCostInput).toHaveValue('1 750.00')
     const savedServiceUnitControl = within(tariffsPanel).getByRole('combobox', { name: 'Охрана: Охрана — тариф: единица' })
     expect(savedServiceUnitControl).toHaveTextContent('руб./гараж')
-    expect(within(tariffsPanel).getByRole('combobox', { name: 'Охрана: Охрана — тариф: по счетчику' })).toHaveTextContent('Нет')
-    expect(within(tariffsPanel).getByRole('combobox', { name: 'Охрана: Периодичность: значение' })).toHaveTextContent('Ежегодно')
-    expect(within(tariffsPanel).getByLabelText('Охрана: Оплата до: день')).toHaveValue('28')
-    const dueDateValue = within(tariffsPanel).getByLabelText('Охрана: Оплата до: день').closest('.contractors-date-value')
+    expect(within(tariffsPanel).getByRole('combobox', { name: 'Охрана: по счетчику' })).toHaveTextContent('Нет')
+    expect(within(tariffsPanel).getByRole('combobox', { name: 'Охрана: периодичность' })).toHaveTextContent('Ежегодно')
+    expect(within(tariffsPanel).getByLabelText('Охрана: оплата до: день')).toHaveValue('28')
+    const dueDateValue = within(tariffsPanel).getByLabelText('Охрана: оплата до: день').closest('.contractors-date-value')
     expect(dueDateValue).not.toBeNull()
-    expect(within(dueDateValue as HTMLElement).getByLabelText('Охрана: Оплата до: месяц')).toHaveTextContent('Февраль')
+    expect(within(dueDateValue as HTMLElement).getByLabelText('Охрана: оплата до: месяц')).toHaveTextContent('Февраль')
 
     await user.click(savedServiceUnitControl)
     await user.click(within(tariffsPanel).getByRole('option', { name: 'руб.' }))
@@ -4490,7 +4445,7 @@ describe('App', () => {
     await waitFor(() => expect(updatedTariffRequest).toMatchObject({ rate: 1800, calculationBase: 'fixed' }))
     expect(savedServiceCostInput).toHaveValue('1 800.00')
 
-    const periodicityControl = within(tariffsPanel).getByRole('combobox', { name: 'Охрана: Периодичность: значение' })
+    const periodicityControl = within(tariffsPanel).getByRole('combobox', { name: 'Охрана: периодичность' })
     await user.click(periodicityControl)
     await user.click(within(tariffsPanel).getByRole('option', { name: 'Ежемесячно' }))
     let confirmationDialog = await screen.findByRole('dialog', { name: 'Подтвердить изменение?' })
@@ -4524,11 +4479,11 @@ describe('App', () => {
       hasTieredTariff: false,
       unitName: 'руб.',
     }))
-    expect(within(tariffsPanel).getByRole('combobox', { name: 'Охрана: Периодичность: значение' })).toHaveTextContent('Ежемесячно')
-    const monthlyDueDateValue = within(tariffsPanel).getByLabelText('Охрана: Оплата до: день').closest('.contractors-date-value')
+    expect(within(tariffsPanel).getByRole('combobox', { name: 'Охрана: периодичность' })).toHaveTextContent('Ежемесячно')
+    const monthlyDueDateValue = within(tariffsPanel).getByLabelText('Охрана: оплата до: день').closest('.contractors-date-value')
     expect(monthlyDueDateValue).not.toBeNull()
-    expect(within(monthlyDueDateValue as HTMLElement).queryByRole('combobox', { name: 'Охрана: Оплата до: месяц' })).not.toBeInTheDocument()
-    expect(within(monthlyDueDateValue as HTMLElement).getByText('числа следующего месяца')).toBeInTheDocument()
+    expect(within(monthlyDueDateValue as HTMLElement).queryByRole('combobox', { name: 'Охрана: оплата до: месяц' })).not.toBeInTheDocument()
+    expect(within(monthlyDueDateValue as HTMLElement).getByText('следующего месяца')).toBeInTheDocument()
 
     expect(within(tariffsPanel).getByRole('button', { name: 'Деактивировать услугу Охрана' })).toBeEnabled()
     expect(within(tariffsPanel).queryByRole('button', { name: 'Вернуть услугу Охрана' })).not.toBeInTheDocument()
@@ -4706,18 +4661,18 @@ describe('App', () => {
       tariffVersion: 'tariff-version',
     })
     expect(within(tariffsPanel).getByRole('button', { name: 'Изменить услугу Охрана территории' })).toBeInTheDocument()
-    expect(within(tariffsPanel).getByRole('combobox', { name: 'Охрана территории: Периодичность: значение' })).toHaveTextContent('Ежемесячно')
-    expect(within(tariffsPanel).getByLabelText('Охрана территории: Оплата до: день')).toHaveValue('15')
-    expect(within(tariffsPanel).getAllByRole('combobox', { name: /Охрана территории: .*: по счетчику/i })).toHaveLength(1)
-    expect(within(tariffsPanel).getAllByRole('combobox', { name: /Охрана территории: .*: пороговая тарификация/i })).toHaveLength(1)
-    expect(within(tariffsPanel).getByRole('combobox', { name: 'Охрана территории: Тариф охраны: по счетчику' })).toHaveTextContent('Нет')
-    expect(within(tariffsPanel).getByRole('combobox', { name: 'Охрана территории: Тариф охраны: пороговая тарификация' })).toHaveTextContent('Нет')
+    expect(within(tariffsPanel).getByRole('combobox', { name: 'Охрана территории: периодичность' })).toHaveTextContent('Ежемесячно')
+    expect(within(tariffsPanel).getByLabelText('Охрана территории: оплата до: день')).toHaveValue('15')
+    expect(within(tariffsPanel).getAllByRole('combobox', { name: 'Охрана территории: по счетчику' })).toHaveLength(1)
+    expect(within(tariffsPanel).getAllByRole('combobox', { name: 'Охрана территории: пороговая тарификация' })).toHaveLength(1)
+    expect(within(tariffsPanel).getByRole('combobox', { name: 'Охрана территории: по счетчику' })).toHaveTextContent('Нет')
+    expect(within(tariffsPanel).getByRole('combobox', { name: 'Охрана территории: пороговая тарификация' })).toHaveTextContent('Нет')
     expect(within(tariffsPanel).getByLabelText('Охрана территории: Тариф охраны: значение')).toHaveValue('1 350.75')
     expect(within(tariffsPanel).getByRole('combobox', { name: 'Охрана территории: Тариф охраны: единица' })).toHaveTextContent('руб./гараж')
     expect(within(tariffsPanel).queryByRole('combobox', { name: 'Охрана территории: Периодичность: по счетчику' })).not.toBeInTheDocument()
     expect(within(tariffsPanel).queryByRole('combobox', { name: 'Охрана территории: Оплата до: пороговая тарификация' })).not.toBeInTheDocument()
 
-    const meterModeControl = within(tariffsPanel).getByRole('combobox', { name: 'Охрана территории: Тариф охраны: по счетчику' })
+    const meterModeControl = within(tariffsPanel).getByRole('combobox', { name: 'Охрана территории: по счетчику' })
     await user.click(meterModeControl)
     await user.click(within(tariffsPanel).getByRole('option', { name: 'Да' }))
     expect(screen.queryByRole('dialog', { name: 'Подтвердить изменение?' })).not.toBeInTheDocument()
@@ -4744,7 +4699,7 @@ describe('App', () => {
     })
     expect(within(tariffsPanel).getByLabelText('Охрана территории: Тариф охраны по счётчику: значение')).toHaveValue('1 350.75')
     expect(within(tariffsPanel).getByRole('combobox', { name: 'Охрана территории: Тариф охраны по счётчику: единица' })).toHaveTextContent('м³')
-    expect(within(tariffsPanel).getByRole('combobox', { name: 'Охрана территории: Тариф охраны по счётчику: по счетчику' })).toHaveTextContent('Да')
+    expect(within(tariffsPanel).getByRole('combobox', { name: 'Охрана территории: по счетчику' })).toHaveTextContent('Да')
     expect(within(tariffsPanel).queryByLabelText('Вода: Тариф охраны по счётчику: значение')).not.toBeInTheDocument()
   })
 
@@ -4982,9 +4937,9 @@ describe('App', () => {
     await waitFor(() => expect(within(tariffsPanel).getByLabelText('Вода: Тариф воды из БД: значение')).toHaveValue('125.00'))
     expect(within(tariffsPanel).queryByText('Старый сбор')).not.toBeInTheDocument()
     expect(within(tariffsPanel).getByLabelText('Сумма: Сбор на ворота из БД')).toHaveValue('777.00')
-    expect(within(tariffsPanel).getByRole('combobox', { name: 'Охрана из БД: Периодичность: значение' })).toHaveTextContent('Ежегодно')
-    expect(within(tariffsPanel).getByLabelText('Охрана из БД: Оплата до: день')).toHaveValue('25')
-    expect(within(tariffsPanel).getByLabelText('Охрана из БД: Оплата до: месяц')).toHaveTextContent('Декабрь')
+    expect(within(tariffsPanel).getByRole('combobox', { name: 'Охрана из БД: периодичность' })).toHaveTextContent('Ежегодно')
+    expect(within(tariffsPanel).getByLabelText('Охрана из БД: оплата до: день')).toHaveValue('25')
+    expect(within(tariffsPanel).getByLabelText('Охрана из БД: оплата до: месяц')).toHaveTextContent('Декабрь')
     expect(within(tariffsPanel).getByLabelText('Охрана из БД: Перенос долга в просроченный: значение')).toHaveValue('45')
   })
 

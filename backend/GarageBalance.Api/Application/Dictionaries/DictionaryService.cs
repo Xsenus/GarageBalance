@@ -2201,11 +2201,11 @@ public sealed class DictionaryService(
 
         var isMetered = mode is "metered" or "metered_tiered";
         var isTiered = mode == "metered_tiered";
-        if (isTiered && targetCalculationBase != TariffCalculationBases.MeterElectricity)
+        if (isTiered && !IsMeterCalculationBase(targetCalculationBase))
         {
             return DictionaryResult<UpdatedChargeServiceWithTariffDto>.Failure(
-                "charge_service_tiered_electricity_required",
-                "Пороговый режим доступен только для электроэнергии.");
+                "charge_service_tiered_meter_required",
+                "Пороговый режим доступен только для тарифа по счетчику.");
         }
 
         if (request.Service.IsMetered != isMetered || request.Service.HasTieredTariff != isTiered)
@@ -2851,7 +2851,10 @@ public sealed class DictionaryService(
         var lowerBound = 0m;
         var tierDetails = string.Join(", ", tiers.Select(tier =>
         {
-            var rangeName = FormatElectricityTierRangeName(lowerBound, tier.UpperBound);
+            var rangeName = FormatElectricityTierRangeName(
+                lowerBound,
+                tier.UpperBound,
+                TariffCalculationBases.GetUnitName(tariff.CalculationBase));
             if (tier.UpperBound.HasValue)
             {
                 lowerBound = tier.UpperBound.Value;
@@ -2859,15 +2862,17 @@ public sealed class DictionaryService(
 
             return $"{rangeName} по {MoneyFormatting.Format(tier.Rate)}";
         }));
-        return $"{baseDetails}, электричество: {tierDetails}";
+        return $"{baseDetails}, пороги: {tierDetails}";
     }
 
     private static DictionaryResult<ElectricityTierConfig?> ValidateElectricityTiers(string calculationBase, UpsertTariffRequest request, Tariff? existingTariff = null)
     {
-        if (calculationBase != TariffCalculationBases.MeterElectricity)
+        if (!IsMeterCalculationBase(calculationBase))
         {
             return DictionaryResult<ElectricityTierConfig?>.Success(null);
         }
+
+        var unitName = TariffCalculationBases.GetUnitName(calculationBase);
 
         if (request.ElectricityTiers is not null)
         {
@@ -2875,7 +2880,7 @@ public sealed class DictionaryService(
             {
                 return DictionaryResult<ElectricityTierConfig?>.Failure(
                     "tariff_electricity_tier_count_invalid",
-                    "Для электроэнергии укажите от 2 до 20 тарифных ступеней.");
+                    "Укажите от 2 до 20 тарифных ступеней: минимум один порог и последнюю ступень без верхней границы.");
             }
 
             var existingTiers = existingTariff is null
@@ -2911,17 +2916,17 @@ public sealed class DictionaryService(
                 {
                     return DictionaryResult<ElectricityTierConfig?>.Failure(
                         "tariff_electricity_last_tier_unbounded_required",
-                        "Последняя ступень электроэнергии должна применяться без верхней границы.");
+                        "Последняя ступень тарифа должна применяться без верхней границы.");
                 }
 
                 if (upperBound.HasValue && (upperBound <= 0 || previousUpperBound.HasValue && upperBound <= previousUpperBound))
                 {
                     return DictionaryResult<ElectricityTierConfig?>.Failure(
                         "tariff_electricity_tier_upper_bound_invalid",
-                        "Границы ступеней электроэнергии должны быть положительными и строго возрастать.");
+                        "Границы тарифных ступеней должны быть положительными и строго возрастать.");
                 }
 
-                name = FormatElectricityTierRangeName(previousUpperBound ?? 0m, upperBound);
+                name = FormatElectricityTierRangeName(previousUpperBound ?? 0m, upperBound, unitName);
 
                 var existingTier = requestedTier.Id.HasValue
                     ? existingTiers.FirstOrDefault(tier => tier.Id == requestedTier.Id.Value)
@@ -2968,9 +2973,9 @@ public sealed class DictionaryService(
 
         var firstThreshold = MoneyMath.RoundMeterValue(request.ElectricityFirstThreshold!.Value);
         var secondThreshold = MoneyMath.RoundMeterValue(request.ElectricitySecondThreshold!.Value);
-        var firstTierName = FormatElectricityTierRangeName(0m, firstThreshold);
-        var secondTierName = FormatElectricityTierRangeName(firstThreshold, secondThreshold);
-        var thirdTierName = FormatElectricityTierRangeName(secondThreshold, null);
+        var firstTierName = FormatElectricityTierRangeName(0m, firstThreshold, unitName);
+        var secondTierName = FormatElectricityTierRangeName(firstThreshold, secondThreshold, unitName);
+        var thirdTierName = FormatElectricityTierRangeName(secondThreshold, null, unitName);
         var firstRate = MoneyMath.RoundRate(request.ElectricityFirstRate!.Value);
         var secondRate = MoneyMath.RoundRate(request.ElectricitySecondRate!.Value);
         var thirdRate = MoneyMath.RoundRate(request.ElectricityThirdRate!.Value);
@@ -2997,12 +3002,12 @@ public sealed class DictionaryService(
         ], false));
     }
 
-    private static string FormatElectricityTierRangeName(decimal lowerBound, decimal? upperBound)
+    private static string FormatElectricityTierRangeName(decimal lowerBound, decimal? upperBound, string unitName = "кВт·ч")
     {
         var lower = lowerBound.ToString("0.####", CultureInfo.InvariantCulture);
         return upperBound.HasValue
-            ? $"{lower}–{upperBound.Value.ToString("0.####", CultureInfo.InvariantCulture)} кВт·ч"
-            : $"{lower}+ кВт·ч";
+            ? $"{lower}–{upperBound.Value.ToString("0.####", CultureInfo.InvariantCulture)} {unitName}"
+            : $"{lower}+ {unitName}";
     }
 
     private static void ApplyElectricityTiers(Tariff tariff, ElectricityTierConfig? tiers)
@@ -3349,9 +3354,12 @@ public sealed class DictionaryService(
             "water" => TariffCalculationBases.MeterWater,
             "electricity" => TariffCalculationBases.MeterElectricity,
             _ when sourceCalculationBase is TariffCalculationBases.MeterWater or TariffCalculationBases.MeterElectricity => sourceCalculationBase,
-            _ => null
+            _ => TariffCalculationBases.MeterElectricity
         };
     }
+
+    private static bool IsMeterCalculationBase(string calculationBase) =>
+        calculationBase is TariffCalculationBases.MeterWater or TariffCalculationBases.MeterElectricity;
 
     private static IReadOnlyList<UpsertElectricityTariffTierRequest> BuildTariffModeElectricityTiers(
         IReadOnlyList<UpsertElectricityTariffTierRequest>? requestedTiers,
@@ -3383,10 +3391,10 @@ public sealed class DictionaryService(
     {
         return NormalizeOptional(incomeTypeCode)?.Trim().ToLowerInvariant() switch
         {
-            "water" => calculationBase is TariffCalculationBases.Fixed or TariffCalculationBases.MeterWater,
-            "trash" => calculationBase is TariffCalculationBases.Fixed or TariffCalculationBases.People,
-            "electricity" => calculationBase is TariffCalculationBases.Fixed or TariffCalculationBases.MeterElectricity,
-            "membership" or "target" or "entry" or "connection" => calculationBase == TariffCalculationBases.Fixed,
+            "water" => calculationBase is TariffCalculationBases.Fixed or TariffCalculationBases.MeterWater or TariffCalculationBases.MeterElectricity,
+            "trash" => calculationBase is TariffCalculationBases.Fixed or TariffCalculationBases.People or TariffCalculationBases.MeterWater or TariffCalculationBases.MeterElectricity,
+            "electricity" => calculationBase is TariffCalculationBases.Fixed or TariffCalculationBases.MeterWater or TariffCalculationBases.MeterElectricity,
+            "membership" or "target" or "entry" or "connection" => calculationBase is TariffCalculationBases.Fixed or TariffCalculationBases.MeterWater or TariffCalculationBases.MeterElectricity,
             _ => true
         };
     }

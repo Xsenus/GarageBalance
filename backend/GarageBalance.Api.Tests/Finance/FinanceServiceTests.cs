@@ -5547,7 +5547,63 @@ public sealed class FinanceServiceTests
         var accrual = Assert.Single(database.Context.Accruals);
         Assert.Equal(400m, accrual.Amount);
         Assert.Equal(tariff.Id, accrual.TariffId);
-        Assert.Contains("пороги электроэнергии до 50 кВт·ч по 2.00, до 100 кВт·ч по 3.00, свыше по 5.00", accrual.Comment, StringComparison.Ordinal);
+        Assert.Contains("пороговый тариф до 50 кВт·ч по 2.00, до 100 кВт·ч по 3.00, свыше по 5.00", accrual.Comment, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task SavePaymentFormMeterReadingAsync_AppliesActiveTieredWaterRatesImmediately()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        fixtures.IncomeType.Code = "water";
+        database.Context.ChargeServiceSettings.RemoveRange(database.Context.ChargeServiceSettings);
+        var tariff = new Tariff
+        {
+            Name = "Вода по диапазонам",
+            CalculationBase = TariffCalculationBases.MeterWater,
+            Rate = 2m,
+            ElectricityFirstThreshold = 50m,
+            ElectricitySecondThreshold = 100m,
+            ElectricityFirstRate = 2m,
+            ElectricitySecondRate = 3m,
+            ElectricityThirdRate = 5m,
+            EffectiveFrom = new DateOnly(2026, 1, 1)
+        };
+        database.Context.ChargeServiceSettings.Add(new ChargeServiceSetting
+        {
+            Name = "Вода",
+            IsRegular = true,
+            PeriodicityMonths = 1,
+            AccrualStartMonth = 1,
+            OverdueGraceDays = 30,
+            IncomeType = fixtures.IncomeType,
+            Tariff = tariff,
+            IsMetered = true,
+            HasTieredTariff = true,
+            UnitName = "м³"
+        });
+        await database.Context.SaveChangesAsync();
+        var service = FinanceServiceTestFactory.Create(
+            database.Context,
+            new FixedTimeProvider(new DateTimeOffset(2026, 6, 20, 12, 0, 0, TimeSpan.Zero)));
+
+        var result = await service.SavePaymentFormMeterReadingAsync(
+            new SavePaymentFormMeterReadingRequest(
+                fixtures.Garage.Id,
+                MeterKinds.Water,
+                new DateOnly(2026, 6, 1),
+                new DateOnly(2026, 6, 20),
+                140m,
+                null),
+            null,
+            CancellationToken.None);
+
+        Assert.True(result.Succeeded, result.ErrorMessage);
+        Assert.Equal(130m, result.Value!.Consumption);
+        var accrual = Assert.Single(database.Context.Accruals);
+        Assert.Equal(400m, accrual.Amount);
+        Assert.Equal(tariff.Id, accrual.TariffId);
+        Assert.Contains("пороговый тариф до 50 м³ по 2.00, до 100 м³ по 3.00, свыше по 5.00", accrual.Comment, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -5602,7 +5658,7 @@ public sealed class FinanceServiceTests
         var accrual = Assert.Single(database.Context.Accruals);
         Assert.Equal(260m, accrual.Amount);
         Assert.Contains("ставка 2.00", accrual.Comment, StringComparison.Ordinal);
-        Assert.DoesNotContain("пороги электроэнергии", accrual.Comment, StringComparison.Ordinal);
+        Assert.DoesNotContain("пороговый тариф", accrual.Comment, StringComparison.Ordinal);
 
         var updated = await service.UpdateMeterReadingAsync(
             result.Value.Id,
@@ -5840,9 +5896,9 @@ public sealed class FinanceServiceTests
         Assert.Equal(400m, result.Value!.TotalAmount);
         Assert.Equal(400m, result.Value.CreatedAccruals[0].Amount);
         Assert.Equal("meter_electricity", result.Value.CalculationBase);
-        Assert.Contains("пороги электроэнергии до 50 кВт·ч по 2.00, до 100 кВт·ч по 3.00, свыше по 5.00", result.Value.CreatedAccruals[0].Comment, StringComparison.Ordinal);
+        Assert.Contains("пороговый тариф до 50 кВт·ч по 2.00, до 100 кВт·ч по 3.00, свыше по 5.00", result.Value.CreatedAccruals[0].Comment, StringComparison.Ordinal);
         var audit = Assert.Single(database.Context.AuditEvents, item => item.Action == "finance.regular_accruals_generated");
-        Assert.Contains("пороги электроэнергии до 50 кВт·ч по 2.00, до 100 кВт·ч по 3.00, свыше по 5.00", audit.Summary, StringComparison.Ordinal);
+        Assert.Contains("пороговый тариф до 50 кВт·ч по 2.00, до 100 кВт·ч по 3.00, свыше по 5.00", audit.Summary, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -5897,7 +5953,7 @@ public sealed class FinanceServiceTests
         Assert.True(result.Succeeded, result.ErrorMessage);
         Assert.Equal(260m, result.Value!.TotalAmount);
         Assert.Contains("ставка 2.00", result.Value.CreatedAccruals[0].Comment, StringComparison.Ordinal);
-        Assert.DoesNotContain("пороги электроэнергии", result.Value.CreatedAccruals[0].Comment, StringComparison.Ordinal);
+        Assert.DoesNotContain("пороговый тариф", result.Value.CreatedAccruals[0].Comment, StringComparison.Ordinal);
         var audit = Assert.Single(database.Context.AuditEvents, item => item.Action == "finance.regular_accruals_generated");
         Assert.Contains("ставка 2.00", audit.Summary, StringComparison.Ordinal);
     }

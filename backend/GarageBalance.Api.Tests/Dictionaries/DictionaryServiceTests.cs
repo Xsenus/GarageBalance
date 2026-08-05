@@ -2445,7 +2445,7 @@ public sealed class DictionaryServiceTests
         Assert.Equal(5.3333m, result.Value.ElectricityThirdRate);
         var audit = Assert.Single(database.Context.AuditEvents, item => item.Action == "dictionary.tariff_created");
         Assert.Equal(actorUserId, audit.ActorUserId);
-        Assert.Contains("электричество: 0–50.556 кВт·ч по 3.11", audit.Summary, StringComparison.Ordinal);
+        Assert.Contains("пороги: 0–50.556 кВт·ч по 3.11", audit.Summary, StringComparison.Ordinal);
         Assert.Contains("50.556–100.778 кВт·ч по 4.22", audit.Summary, StringComparison.Ordinal);
         Assert.Contains("100.778+ кВт·ч по 5.33", audit.Summary, StringComparison.Ordinal);
     }
@@ -2700,7 +2700,7 @@ public sealed class DictionaryServiceTests
             null,
             CancellationToken.None);
         var mismatch = await service.CreateChargeServiceSettingAsync(
-            new UpsertChargeServiceSettingRequest("Вода как членский", true, 1, 1, 30, 6, 30, true, false, "м3", incomeType.Id, waterTariff.Id),
+            new UpsertChargeServiceSettingRequest("Вода как членский", true, 1, 1, 30, 6, 30, true, false, "м³", incomeType.Id, waterTariff.Id),
             null,
             CancellationToken.None);
         var incomplete = await service.CreateChargeServiceSettingAsync(
@@ -2723,9 +2723,9 @@ public sealed class DictionaryServiceTests
         Assert.True(result.Succeeded);
         Assert.Equal(incomeType.Id, result.Value!.IncomeTypeId);
         Assert.Equal(tariff.Id, result.Value.TariffId);
-        Assert.False(mismatch.Succeeded);
-        Assert.Equal("charge_service_tariff_mismatch", mismatch.ErrorCode);
-        Assert.Equal("Выбранный тариф не подходит для вида поступления услуги.", mismatch.ErrorMessage);
+        Assert.True(mismatch.Succeeded);
+        Assert.Equal(waterTariff.Id, mismatch.Value!.TariffId);
+        Assert.Equal("м³", mismatch.Value.UnitName);
         Assert.False(incomplete.Succeeded);
         Assert.Equal("charge_service_regular_link_incomplete", incomplete.ErrorCode);
         Assert.Equal("Для регулярной услуги заполните и вид поступления, и тариф.", incomplete.ErrorMessage);
@@ -2737,8 +2737,8 @@ public sealed class DictionaryServiceTests
         Assert.Equal("Выберите совместимую единицу измерения: «руб.» или «руб./гараж».", wrongUnit.ErrorMessage);
         Assert.True(compatibleUnit.Succeeded);
         Assert.Equal("руб./гараж", compatibleUnit.Value!.UnitName);
-        Assert.Equal(2, database.Context.ChargeServiceSettings.Count());
-        Assert.Equal(2, database.Context.AuditEvents.Count(item => item.Action == "dictionary.charge_service_created"));
+        Assert.Equal(3, database.Context.ChargeServiceSettings.Count());
+        Assert.Equal(3, database.Context.AuditEvents.Count(item => item.Action == "dictionary.charge_service_created"));
     }
 
     [Fact]
@@ -3900,6 +3900,67 @@ public sealed class DictionaryServiceTests
         Assert.Equal(3, database.Context.Tariffs.Count());
         Assert.Equal(4, database.Context.AuditEvents.Count());
         Assert.Contains(database.Context.AuditEvents, item => item.Action == "dictionary.charge_service_tariff_mode_changed");
+    }
+
+    [Fact]
+    public async Task UpdateChargeServiceWithTariffAsync_AllowsTieredWaterModeForAnyManagedService()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fund = CreateFund("Членские взносы", 10);
+        var incomeType = new IncomeType { Name = "Членский взнос", Code = "membership", DestinationFundId = fund.Id };
+        var sourceTariff = new Tariff { Name = "Членский взнос", CalculationBase = "fixed", Rate = 100m, EffectiveFrom = new DateOnly(2026, 1, 1) };
+        var setting = new ChargeServiceSetting
+        {
+            Name = "Членский взнос",
+            IsRegular = true,
+            PeriodicityMonths = 1,
+            AccrualStartMonth = 1,
+            PaymentDueDay = 30,
+            OverdueGraceDays = 30,
+            IncomeTypeId = incomeType.Id,
+            TariffId = sourceTariff.Id,
+            IsMetered = false,
+            HasTieredTariff = false,
+            UnitName = "руб."
+        };
+        database.Context.AddRange(fund, incomeType, sourceTariff, setting);
+        await database.Context.SaveChangesAsync();
+
+        var result = await DictionaryServiceTestFactory.Create(database.Context).UpdateChargeServiceWithTariffAsync(
+            setting.Id,
+            new UpdateChargeServiceWithTariffRequest(
+                new UpsertChargeServiceSettingRequest(
+                    setting.Name,
+                    true,
+                    1,
+                    1,
+                    30,
+                    null,
+                    30,
+                    true,
+                    true,
+                    "м³",
+                    incomeType.Id,
+                    sourceTariff.Id),
+                2m,
+                "metered_tiered",
+                new DateOnly(2026, 8, 1),
+                [
+                    new(null, "Первый", 10m, 2m),
+                    new(null, "Второй", null, 3m)
+                ],
+                "Настройка порогов воды",
+                TariffCalculationBases.MeterWater),
+            Guid.NewGuid(),
+            CancellationToken.None);
+
+        Assert.True(result.Succeeded, result.ErrorMessage);
+        Assert.Equal(TariffCalculationBases.MeterWater, result.Value!.Tariff.CalculationBase);
+        Assert.Equal("0–10 м³", result.Value.Tariff.ElectricityTiers![0].Name);
+        Assert.Equal("10+ м³", result.Value.Tariff.ElectricityTiers[1].Name);
+        Assert.True(result.Value.Service.IsMetered);
+        Assert.True(result.Value.Service.HasTieredTariff);
+        Assert.Equal("м³", result.Value.Service.UnitName);
     }
 
     [Fact]

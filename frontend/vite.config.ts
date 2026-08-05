@@ -9,8 +9,7 @@ export default defineConfig({
       output: {
         manualChunks(id) {
           if (id.includes('lucide-react')) return 'icons'
-          if (/[/\\]src[/\\]shared[/\\](FormField|LocalizedDatePicker|MoneyInput|SelectControl|TablePagination)\./.test(id)) return 'form-controls'
-          if (/[/\\]src[/\\]shared[/\\](changePreview|dictionaryWorkbench|fileExports|MeterReadingInput|PhoneInput|prototypeEditing|reportFilters|ReportPeriodQuickSelect)\./.test(id)) return 'workflow-tools'
+          if (/[/\\]src[/\\]shared[/\\](FormField|LocalizedDatePicker|MoneyInput|SelectControl|TablePagination|changePreview|dictionaryWorkbench|fileExports|MeterReadingInput|PhoneInput|prototypeEditing|reportFilters|ReportPeriodQuickSelect)\./.test(id)) return 'shared-ui'
           return undefined
         },
       },

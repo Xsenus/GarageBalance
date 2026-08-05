@@ -256,11 +256,11 @@ describe('dictionary workbench metadata', () => {
     ])
   })
 
-  it('detects when tariff editor should show electricity tier fields', () => {
+  it('detects when any meter tariff editor should show tier fields', () => {
     expect(Object.fromEntries(getTariffCalculationBaseOptions().map((option) => [option.value, usesElectricityTariffTiers(option.value)]))).toEqual({
       fixed: false,
       people: false,
-      meter_water: false,
+      meter_water: true,
       meter_electricity: true,
     })
     expect(usesElectricityTariffTiers('unknown')).toBe(false)

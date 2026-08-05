@@ -58,9 +58,9 @@ const contractorTariffRows: ContractorTariffRow[] = [
   { id: 'water-overdue-days', category: 'Вода', title: 'Перенос долга в просроченный', amount: '30', unit: 'дн.', byMeter: true, tiered: false },
   { id: 'waste-rate', group: 'Мусор', category: 'Мусор', title: 'Ставка за вывоз мусора', amount: '', unit: 'руб.', byMeter: false, tiered: false, calculationBase: 'people' },
   { id: 'waste-overdue-days', category: 'Мусор', title: 'Перенос долга в просроченный', amount: '30', unit: 'дн.', byMeter: false, tiered: false },
-  { id: 'electricity-tier-0', group: 'Электроэнергия', category: 'Электроэнергия', title: 'До 1 100 кВт·ч', threshold: 'x', amount: '', unit: 'руб.', byMeter: true, tiered: true, calculationBase: 'meter_electricity', electricityFirstThreshold: 1100, electricitySecondThreshold: 1700 },
-  { id: 'electricity-tier-1', category: 'Электроэнергия', title: 'От 1 100 до 1 700 кВт·ч', threshold: 'x', amount: '', unit: 'руб.', byMeter: true, tiered: true, calculationBase: 'meter_electricity', electricityFirstThreshold: 1100, electricitySecondThreshold: 1700 },
-  { id: 'electricity-tier-3', category: 'Электроэнергия', title: 'Свыше 1 700 кВт·ч', threshold: 'x', amount: '', unit: 'руб.', byMeter: true, tiered: true, calculationBase: 'meter_electricity', electricityFirstThreshold: 1100, electricitySecondThreshold: 1700 },
+  { id: 'electricity-tier-0', group: 'Электроэнергия', category: 'Электроэнергия', title: 'До 1 100 кВт·ч', threshold: 'x', amount: '', unit: 'руб.', byMeter: true, tiered: true, calculationBase: 'meter_electricity' },
+  { id: 'electricity-tier-1', category: 'Электроэнергия', title: 'От 1 100 до 1 700 кВт·ч', threshold: 'x', amount: '', unit: 'руб.', byMeter: true, tiered: true, calculationBase: 'meter_electricity' },
+  { id: 'electricity-tier-3', category: 'Электроэнергия', title: 'Свыше 1 700 кВт·ч', threshold: 'x', amount: '', unit: 'руб.', byMeter: true, tiered: true, calculationBase: 'meter_electricity' },
   { id: 'electricity-overdue-days', category: 'Электроэнергия', title: 'Перенос долга в просроченный', amount: '30', unit: 'дн.', byMeter: true, tiered: true },
   { id: 'membership-fee', group: 'Членский взнос', category: 'Членский взнос', title: 'Сумма членского взноса', amount: '', unit: 'руб.', byMeter: false, tiered: false, calculationBase: 'fixed' },
   { id: 'membership-due-date', category: 'Членский взнос', title: 'Оплата до', dateDay: '30', dateMonth: 'июн', byMeter: false, tiered: false },
@@ -184,12 +184,14 @@ function formatTariffNumber(value: number | null | undefined) {
   return value == null ? '' : formatTariffDecimal(value)
 }
 
-function getElectricityThresholdRows(rows: ContractorTariffRow[]) {
-  return rows.filter((row) => row.calculationBase === 'meter_electricity' && Boolean(row.threshold))
+function getElectricityThresholdRows(rows: ContractorTariffRow[], sourceRow?: ContractorTariffRow) {
+  return rows.filter((row) => Boolean(row.threshold)
+    && (!sourceRow?.backendTariffId || row.backendTariffId === sourceRow.backendTariffId))
 }
 
 function getElectricityTierLowerBound(rows: ContractorTariffRow[], rowId: string) {
-  const thresholdRows = getElectricityThresholdRows(rows)
+  const sourceRow = rows.find((row) => row.id === rowId)
+  const thresholdRows = getElectricityThresholdRows(rows, sourceRow)
   const rowIndex = thresholdRows.findIndex((row) => row.id === rowId)
   return rowIndex <= 0 ? 0 : thresholdRows[rowIndex - 1].electricityUpperBound ?? 0
 }
@@ -202,12 +204,16 @@ function formatElectricityTierName(lowerBound: number, upperBound: number | null
 }
 
 function normalizeElectricityTierNames(rows: ContractorTariffRow[]) {
-  const thresholdRows = getElectricityThresholdRows(rows)
-  const lowerBounds = new Map(thresholdRows.map((row, index) => [
-    row.id,
-    index === 0 ? 0 : thresholdRows[index - 1].electricityUpperBound ?? 0,
-  ]))
-  return rows.map((row) => row.threshold && row.calculationBase === 'meter_electricity'
+  const lowerBounds = new Map<string, number>()
+  const groups = new Map<string, ContractorTariffRow[]>()
+  rows.filter((row) => row.threshold).forEach((row) => {
+    const key = row.backendTariffId ?? row.category
+    groups.set(key, [...(groups.get(key) ?? []), row])
+  })
+  groups.forEach((thresholdRows) => thresholdRows.forEach((row, index) => {
+    lowerBounds.set(row.id, index === 0 ? 0 : thresholdRows[index - 1].electricityUpperBound ?? 0)
+  }))
+  return rows.map((row) => row.threshold
     ? { ...row, title: formatElectricityTierName(lowerBounds.get(row.id) ?? 0, row.electricityUpperBound) }
     : row)
 }
@@ -224,6 +230,12 @@ function parsePrototypeAmount(value: string) {
 
   const parsed = Number(normalized)
   return Number.isFinite(parsed) && parsed >= 0 ? parsed : null
+}
+
+function getServiceTariffDisplayName(tariffName: string | null | undefined, serviceName: string) {
+  if (!tariffName) return serviceName
+  const generatedVersionSuffix = /\s+—\s+(?:обычный|по счетчику|по счетчику с порогами),\s+\d{2}\.\d{2}\.\d{4},\s+[0-9a-f]{8}$/iu
+  return generatedVersionSuffix.test(tariffName) ? serviceName : tariffName
 }
 
 function calculateFeeCampaignTargetAmount(contributionAmount: number | null, participantCount: number) {
@@ -255,7 +267,7 @@ function parseTariffAmount(value: string) {
 }
 
 function getElectricityTariffTiers(tariff: TariffDto | null) {
-  if (!tariff || tariff.calculationBase !== 'meter_electricity') {
+  if (!tariff || !tariff.calculationBase.startsWith('meter_')) {
     return []
   }
 
@@ -311,9 +323,8 @@ function findTariffForPrototypeRow(tariffs: TariffDto[], row: ContractorTariffRo
 }
 
 function mergeTariffsIntoPrototypeRows(rows: ContractorTariffRow[], tariffs: TariffDto[]) {
-  const electricityTariff = tariffs.find((tariff) => tariff.calculationBase === 'meter_electricity')
-  const mergedWithoutElectricity = rows
-    .filter((row) => row.calculationBase !== 'meter_electricity' || row.serviceSettingKind === 'main')
+  return rows
+    .filter((row) => row.calculationBase !== 'meter_electricity' || Boolean(row.group))
     .map((row) => {
       const tariff = row.backendTariffId
         ? tariffs.find((item) => item.id === row.backendTariffId) ?? null
@@ -329,39 +340,32 @@ function mergeTariffsIntoPrototypeRows(rows: ContractorTariffRow[], tariffs: Tar
           }
         : row
     })
+}
 
-  if (!electricityTariff) {
-    return mergedWithoutElectricity
-  }
+function expandTieredServiceRows(rows: ContractorTariffRow[], tariffs: TariffDto[]) {
+  return normalizeElectricityTierNames(rows.flatMap((row) => {
+    if ((row.serviceSettingKind !== 'main' && !row.group) || !row.tiered || !row.backendTariffId) return [row]
+    const tariff = tariffs.find((candidate) => candidate.id === row.backendTariffId) ?? null
+    const tiers = getElectricityTariffTiers(tariff)
+    if (!tariff || tiers.length < 2) return [row]
 
-  const electricityTiers = getElectricityTariffTiers(electricityTariff)
-  const electricityRows: ContractorTariffRow[] = electricityTiers.map((tier, index) => ({
-    id: `electricity-tier-${tier.id}`,
-    group: index === 0 ? 'Электроэнергия' : undefined,
-    category: 'Электроэнергия',
-    title: formatElectricityTierName(index === 0 ? 0 : electricityTiers[index - 1].upperBound ?? 0, tier.upperBound),
-    threshold: 'x',
-    amount: formatTariffNumber(tier.rate),
-    unit: getTariffCalculationUnitName(electricityTariff.calculationBase),
-    byMeter: true,
-    tiered: true,
-    calculationBase: 'meter_electricity',
-    backendTariffId: electricityTariff.id,
-    effectiveFrom: electricityTariff.effectiveFrom,
-    electricityTierId: tier.id,
-    electricityUpperBound: tier.upperBound,
-    isCustomThreshold: tier.isCustom,
+    return tiers.map((tier, index): ContractorTariffRow => ({
+      ...row,
+      id: `tariff-tier-${tariff.id}-${tier.id}`,
+      serviceSettingKind: index === 0 ? row.serviceSettingKind : undefined,
+      group: index === 0 ? row.group : undefined,
+      title: formatElectricityTierName(index === 0 ? 0 : tiers[index - 1].upperBound ?? 0, tier.upperBound),
+      threshold: 'x',
+      amount: formatTariffNumber(tier.rate),
+      unit: getTariffCalculationUnitName(tariff.calculationBase),
+      byMeter: true,
+      tiered: true,
+      calculationBase: tariff.calculationBase,
+      electricityTierId: tier.id,
+      electricityUpperBound: tier.upperBound,
+      isCustomThreshold: tier.isCustom,
+    }))
   }))
-  const electricityInsertIndex = mergedWithoutElectricity.findIndex((row) => row.id === 'electricity-overdue-days')
-  if (electricityInsertIndex < 0) {
-    return [...mergedWithoutElectricity, ...electricityRows]
-  }
-
-  return normalizeElectricityTierNames([
-    ...mergedWithoutElectricity.slice(0, electricityInsertIndex),
-    ...electricityRows,
-    ...mergedWithoutElectricity.slice(electricityInsertIndex),
-  ])
 }
 
 function createTariffRowsFromBackend(tariffs: TariffDto[], settings: ChargeServiceSettingDto[]) {
@@ -418,11 +422,11 @@ function createTariffRowsFromBackend(tariffs: TariffDto[], settings: ChargeServi
     backedCategories.has(row.category)
     && (row.category !== 'Зарплатный фонд' || Boolean(findTariffForPrototypeRow(prototypeTariffs, row)))
   ))
-  return mergeChargeServicesIntoPrototypeRows(
+  return expandTieredServiceRows(mergeChargeServicesIntoPrototypeRows(
     mergeTariffsIntoPrototypeRows(rowsBackedByTariffs, prototypeTariffs),
     settings.filter((setting) => setting.isRegular),
     tariffs,
-  )
+  ), tariffs)
 }
 
 function getContractorTariffMonthNumber(monthValue?: string | null) {
@@ -460,7 +464,7 @@ function createChargeServiceRows(setting: ChargeServiceSettingDto, tariffs: Tari
       serviceSettingKind: 'main',
       group: setting.name,
       category: setting.name,
-      title: linkedTariff?.name ?? setting.name,
+      title: getServiceTariffDisplayName(linkedTariff?.name, setting.name),
       amount: linkedTariff ? formatPrototypeAmount(linkedTariff.rate) : '',
       unit: unitName,
       byMeter: setting.isMetered,
@@ -582,7 +586,7 @@ function mergeChargeServicesIntoPrototypeRows(rows: ContractorTariffRow[], setti
         serviceSettingKind: 'main' as const,
         group: setting.name,
         category: setting.name,
-        title: linkedTariff?.name ?? setting.name,
+        title: getServiceTariffDisplayName(linkedTariff?.name, setting.name),
         amount: linkedTariff ? formatPrototypeAmount(linkedTariff.rate) : row.amount,
         unit: linkedTariff ? normalizeTariffCalculationUnitName(linkedTariff.calculationBase, setting.unitName) : setting.unitName ?? row.unit,
         calculationBase: linkedTariff?.calculationBase ?? row.calculationBase,
@@ -785,6 +789,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
   const [thresholdDeleteTarget, setThresholdDeleteTarget] = useState<ContractorTariffRow | null>(null)
   const [thresholdDeleteReason, setThresholdDeleteReason] = useState('')
   const [thresholdCreateOpen, setThresholdCreateOpen] = useState(false)
+  const [thresholdCreateTarget, setThresholdCreateTarget] = useState<ContractorTariffRow | null>(null)
   const [thresholdCreateUpperBound, setThresholdCreateUpperBound] = useState('')
   const [thresholdCreateRate, setThresholdCreateRate] = useState('')
   const [thresholdCreateError, setThresholdCreateError] = useState<string | null>(null)
@@ -1014,6 +1019,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
 
   function closeThresholdCreateDialog() {
     setThresholdCreateOpen(false)
+    setThresholdCreateTarget(null)
     setThresholdCreateUpperBound('')
     setThresholdCreateRate('')
     setThresholdCreateError(null)
@@ -1271,7 +1277,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
           ? 'meter_electricity'
           : sourceTariff.calculationBase === 'meter_water' || sourceTariff.calculationBase === 'meter_electricity'
             ? sourceTariff.calculationBase
-            : configuredMeterTariff?.calculationBase ?? null
+            : configuredMeterTariff?.calculationBase ?? 'meter_electricity'
       : sourceTariff.calculationBase === 'people'
         ? 'people'
         : 'fixed'
@@ -1338,7 +1344,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
   }
 
   async function persistTariffRow(row: ContractorTariffRow, nextRows: ContractorTariffRow[], electricityTierChangeReason?: string) {
-    if (row.backendServiceSettingId && (row.serviceSettingKind !== 'main' || !row.backendTariffId)) {
+    if (row.backendServiceSettingId && !row.threshold && (row.serviceSettingKind !== 'main' || !row.backendTariffId)) {
       await persistServiceSettingRow(row, nextRows)
       return true
     }
@@ -1358,17 +1364,11 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
     }
 
     let request: UpsertTariffRequest
-    if (targetRow.calculationBase === 'meter_electricity') {
+    if (targetRow.threshold && targetRow.calculationBase?.startsWith('meter_')) {
       const normalizedRows = normalizeElectricityTierNames(nextRows)
-      const electricityRows = getElectricityThresholdRows(normalizedRows)
+      const electricityRows = getElectricityThresholdRows(normalizedRows, targetRow)
       const firstRow = electricityRows[0] ?? targetRow
-      const secondRow = electricityRows[1] ?? targetRow
-      const thirdRow = electricityRows[2] ?? targetRow
       const firstRate = parseTariffAmount(firstRow.amount ?? '')
-      const secondRate = parseTariffAmount(secondRow.amount ?? '')
-      const thirdRate = parseTariffAmount(thirdRow.amount ?? '')
-      const firstThreshold = firstRow.electricityUpperBound ?? backendTariff?.electricityFirstThreshold ?? 1
-      const secondThreshold = secondRow.electricityUpperBound ?? backendTariff?.electricitySecondThreshold ?? 3
       const electricityTiers = electricityRows.map((tierRow) => ({
         id: tierRow.electricityTierId,
         name: tierRow.title,
@@ -1376,27 +1376,14 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
         rate: parseTariffAmount(tierRow.amount ?? '') ?? 0,
       }))
       request = {
-        name: backendTariff?.name ?? 'Электроэнергия',
-        calculationBase: 'meter_electricity',
+        name: backendTariff?.name ?? targetRow.category,
+        calculationBase: targetRow.calculationBase,
         rate: firstRate ?? amount,
         effectiveFrom,
         comment: backendTariff?.comment ?? '',
         version: backendTariff?.version,
         electricityTiers,
         electricityTierChangeReason,
-      }
-      if (firstRate != null && secondRate != null && thirdRate != null) {
-        request = {
-          ...request,
-          electricityFirstThreshold: firstThreshold,
-          electricitySecondThreshold: secondThreshold,
-          electricityFirstTierName: firstRow.title,
-          electricitySecondTierName: secondRow.title,
-          electricityThirdTierName: thirdRow.title,
-          electricityFirstRate: firstRate,
-          electricitySecondRate: secondRate,
-          electricityThirdRate: thirdRate,
-        }
       }
     } else {
       request = {
@@ -2059,7 +2046,23 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
       return
     }
 
-    const nextRows = tariffRows.filter((row) => row.id !== thresholdDeleteTarget.id)
+    const currentThresholdRows = getElectricityThresholdRows(tariffRows, thresholdDeleteTarget)
+    if (currentThresholdRows.length <= 2) {
+      setThresholdRangeErrors((errors) => ({
+        ...errors,
+        [thresholdDeleteTarget.id]: 'Должен остаться минимум один порог и две тарифные ступени.',
+      }))
+      closeThresholdDeleteDialog()
+      return
+    }
+    const deletingLastTier = currentThresholdRows.at(-1)?.id === thresholdDeleteTarget.id
+    const remainingThresholdRows = currentThresholdRows.filter((row) => row.id !== thresholdDeleteTarget.id)
+    const nextLastTierId = remainingThresholdRows.at(-1)?.id
+    const nextRows = normalizeElectricityTierNames(tariffRows
+      .filter((row) => row.id !== thresholdDeleteTarget.id)
+      .map((row) => deletingLastTier && row.id === nextLastTierId
+        ? { ...row, electricityUpperBound: null }
+        : row))
     const saved = await persistTariffRow(thresholdDeleteTarget, nextRows, thresholdDeleteReason.trim())
     if (saved) {
       closeThresholdDeleteDialog()
@@ -2093,15 +2096,15 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
   async function commitElectricityThresholdBound(row: ContractorTariffRow) {
     if (row.electricityUpperBound == null) return
 
-    const thresholdRows = getElectricityThresholdRows(tariffRows)
+    const thresholdRows = getElectricityThresholdRows(tariffRows, row)
     const rowIndex = thresholdRows.findIndex((candidate) => candidate.id === row.id)
     const lowerBound = rowIndex <= 0 ? 0 : thresholdRows[rowIndex - 1].electricityUpperBound ?? 0
     const nextUpperBound = parseTariffAmount(tariffDrafts[row.id]?.electricityUpperBoundText ?? '')
     const followingUpperBound = thresholdRows[rowIndex + 1]?.electricityUpperBound
     const error = nextUpperBound == null || nextUpperBound <= lowerBound
-      ? `Значение «До» должно быть больше ${formatTariffDecimal(lowerBound)} кВт·ч.`
+      ? `Значение «До» должно быть больше ${formatTariffDecimal(lowerBound)} ${row.unit}.`
       : followingUpperBound != null && nextUpperBound >= followingUpperBound
-        ? `Значение «До» должно быть меньше ${formatTariffDecimal(followingUpperBound)} кВт·ч.`
+        ? `Значение «До» должно быть меньше ${formatTariffDecimal(followingUpperBound)} ${row.unit}.`
         : null
     if (error) {
       setThresholdRangeErrors((errors) => ({ ...errors, [row.id]: error }))
@@ -2149,13 +2152,14 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
     }
   }
 
-  const addElectricityThreshold = () => {
-    const electricityThresholdRows = tariffRows.filter((row) => row.category === 'Электроэнергия' && row.threshold)
+  const addElectricityThreshold = (targetRow: ContractorTariffRow) => {
+    const electricityThresholdRows = getElectricityThresholdRows(tariffRows, targetRow)
     if (electricityThresholdRows.length >= 20) {
-      setTariffPersistenceError('Можно настроить не более 20 порогов электроэнергии.')
+      setTariffPersistenceError('Можно настроить не более 20 тарифных ступеней.')
       return
     }
 
+    setThresholdCreateTarget(targetRow)
     setThresholdCreateUpperBound('')
     setThresholdCreateRate(electricityThresholdRows.at(-1)?.amount ?? '')
     setThresholdCreateError(null)
@@ -2190,7 +2194,8 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
 
   async function confirmThresholdCreate(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    const electricityThresholdRows = tariffRows.filter((row) => row.category === 'Электроэнергия' && row.threshold)
+    if (!thresholdCreateTarget) return
+    const electricityThresholdRows = getElectricityThresholdRows(tariffRows, thresholdCreateTarget)
     const lastRow = electricityThresholdRows.at(-1)
     const upperBound = parseTariffAmount(thresholdCreateUpperBound)
     const rate = parseTariffAmount(thresholdCreateRate)
@@ -2199,7 +2204,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
       .filter((value): value is number => value != null)
       .at(-1) ?? 0
     if (upperBound == null || upperBound <= previousUpperBound) {
-      setThresholdCreateError(`Верхняя граница должна быть больше ${formatTariffDecimal(previousUpperBound)} кВт·ч.`)
+      setThresholdCreateError(`Верхняя граница должна быть больше ${formatTariffDecimal(previousUpperBound)} ${thresholdCreateTarget.unit ?? ''}.`)
       return
     }
     if (rate == null) {
@@ -2207,20 +2212,20 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
       return
     }
     if (!lastRow?.backendTariffId) {
-      setThresholdCreateError('Тариф электроэнергии не найден. Обновите страницу и повторите действие.')
+      setThresholdCreateError('Тариф не найден. Обновите страницу и повторите действие.')
       return
     }
 
     const nextRow: ContractorTariffRow = {
-      id: `electricity-tier-custom-${electricityThresholdRows.length}-${upperBound}`,
-      category: 'Электроэнергия',
+      id: `tariff-tier-custom-${lastRow.backendTariffId}-${electricityThresholdRows.length}-${upperBound}`,
+      category: thresholdCreateTarget.category,
       title: formatElectricityTierName(previousUpperBound, upperBound),
       threshold: 'x',
       amount: formatTariffDecimal(rate),
-      unit: 'руб.',
+      unit: lastRow.unit,
       byMeter: true,
       tiered: true,
-      calculationBase: 'meter_electricity',
+      calculationBase: thresholdCreateTarget.calculationBase,
       backendTariffId: lastRow.backendTariffId,
       effectiveFrom: lastRow.effectiveFrom,
       electricityUpperBound: upperBound,
@@ -2238,17 +2243,17 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
     }
   }
 
-  const lastElectricityThresholdRowId = [...tariffRows]
-    .reverse()
-    .find((row) => row.category === 'Электроэнергия' && row.threshold)?.id
-  const tieredElectricityCategories = new Set(tariffRows
-    .filter((row) => row.calculationBase === 'meter_electricity' && Boolean(row.group) && row.tiered)
-    .map((row) => row.category))
+  const tieredTariffIds = new Set(tariffRows
+    .filter((row) => row.calculationBase?.startsWith('meter_') && Boolean(row.group) && row.tiered && row.backendTariffId)
+    .map((row) => row.backendTariffId!))
   const archivedServiceCount = backendChargeServices.filter((setting) => setting.isArchived).length
   const visibleTariffRows = tariffRows.filter((row) => (
     row.serviceSettingKind !== 'overdue-days'
+    && row.serviceSettingKind !== 'due-date'
+    && row.serviceSettingKind !== 'start-date'
+    && row.serviceSettingKind !== 'periodicity'
     && row.title !== 'Перенос долга в просроченный'
-    && (!row.threshold || Boolean(row.group) || tieredElectricityCategories.has(row.category))
+    && (!row.threshold || Boolean(row.group) || Boolean(row.backendTariffId && tieredTariffIds.has(row.backendTariffId)))
     && (chargeServiceView === 'deleted'
       ? Boolean(row.backendServiceSettingId && row.isDeleted)
       : !row.isDeleted)
@@ -2347,37 +2352,19 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
                 ? backendChargeServices.find((setting) => setting.id === row.backendServiceSettingId) ?? null
                 : null
               const isServiceSaving = Boolean(serviceSetting && tariffSavingRowId === `charge-service-${serviceSetting.id}`)
-              const isRowDisabled = row.isDeleted || tariffSavingRowId === row.id || isServiceSaving
-              const isCustomThreshold = Boolean(row.threshold && row.isCustomThreshold)
-              const showsElectricityRange = Boolean(row.threshold && tieredElectricityCategories.has(row.category))
+              const isStandaloneSalaryTariff = row.category === 'Зарплатный фонд' && Boolean(row.backendTariffId) && !row.backendServiceSettingId
+              const isRowDisabled = row.isDeleted || tariffSavingRowId === row.id || isServiceSaving || isStandaloneSalaryTariff
+              const thresholdRowsForTariff = getElectricityThresholdRows(tariffRows, row)
+              const canDeleteThreshold = Boolean(row.threshold && thresholdRowsForTariff.length > 2)
+              const isLastThresholdRow = thresholdRowsForTariff.at(-1)?.id === row.id
+              const showsElectricityRange = Boolean(row.threshold && row.backendTariffId && tieredTariffIds.has(row.backendTariffId))
               const electricityLowerBound = showsElectricityRange ? getElectricityTierLowerBound(tariffRows, row.id) : 0
               const showsServiceCalculationFlags = row.serviceSettingKind === 'main' || Boolean(row.group)
-              const linkedTariff = row.backendTariffId
-                ? backendTariffs.find((tariff) => tariff.id === row.backendTariffId) ?? null
-                : null
-              const serviceIncomeType = serviceSetting?.incomeTypeId
-                ? backendIncomeTypes.find((incomeType) => incomeType.id === serviceSetting.incomeTypeId) ?? null
-                : null
-              const serviceIncomeCode = serviceIncomeType?.code?.trim().toLowerCase()
-              const configuredMeterTariff = serviceIncomeType
-                ? getCompatibleRegularTariffs(serviceIncomeType.id, backendIncomeTypes, backendTariffs).find((tariff) => isMeterTariff(tariff))
-                : null
-              const supportsMeterMode = serviceIncomeCode === 'water'
-                || serviceIncomeCode === 'electricity'
-                || linkedTariff?.calculationBase === 'meter_water'
-                || linkedTariff?.calculationBase === 'meter_electricity'
-                || Boolean(configuredMeterTariff)
-              const meterModeOptions = serviceSetting
-                ? yesNoOptions.filter((option) => option.value === 'Нет' || supportsMeterMode)
-                : yesNoOptions
+              const meterModeOptions = yesNoOptions
               const effectiveMeterModeOptions = meterModeOptions.some((option) => option.value === (row.byMeter ? 'Да' : 'Нет'))
                 ? meterModeOptions
                 : [...meterModeOptions, { value: row.byMeter ? 'Да' : 'Нет', label: row.byMeter ? 'Да' : 'Нет' }]
-              const tieredModeAvailable = row.byMeter
-                && (row.calculationBase === 'meter_electricity' || serviceIncomeCode === 'electricity')
-              const tieredModeOptions = tieredModeAvailable || row.tiered
-                ? yesNoOptions
-                : yesNoOptions.filter((option) => option.value === 'Нет')
+              const tieredModeOptions = yesNoOptions
               const showsOverdueGracePeriod = row.serviceSettingKind === 'main' || Boolean(row.group && row.calculationBase)
               const overdueRow = showsOverdueGracePeriod
                 ? tariffRows.find((candidate) => (
@@ -2387,6 +2374,15 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
                     candidate.title === 'Перенос долга в просроченный'
                     && candidate.category === row.category
                   )) ?? null
+                : null
+              const dueDateRow = row.serviceSettingKind === 'main'
+                ? tariffRows.find((candidate) => candidate.backendServiceSettingId === row.backendServiceSettingId && candidate.serviceSettingKind === 'due-date') ?? null
+                : null
+              const startDateRow = row.serviceSettingKind === 'main'
+                ? tariffRows.find((candidate) => candidate.backendServiceSettingId === row.backendServiceSettingId && candidate.serviceSettingKind === 'start-date') ?? null
+                : null
+              const periodicityRow = row.serviceSettingKind === 'main'
+                ? tariffRows.find((candidate) => candidate.backendServiceSettingId === row.backendServiceSettingId && candidate.serviceSettingKind === 'periodicity') ?? null
                 : null
 
               return (
@@ -2433,14 +2429,16 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
                             onKeyDown={(event) => handleEditableInputKeyDown(event, () => commitElectricityThresholdBound(row))}
                           />
                         )}
-                        <span className="tariffs-threshold-range__unit">кВт·ч</span>
+                        <span className="tariffs-threshold-range__unit">{row.unit}</span>
                         {thresholdRangeErrors[row.id] ? <small className="contractors-field-error" role="alert">{thresholdRangeErrors[row.id]}</small> : null}
                       </div>
                     ) : (
                       <span>{row.title}</span>
                     )}
+                    {isStandaloneSalaryTariff && row.group ? <small className="form-field-hint">Изменяется в разделе «Справочники → Тарифы»</small> : null}
                   </span>
                   <span role="cell">
+                    <div className="tariffs-cell-stack">
                     {row.dateDay === undefined && row.serviceSettingKind !== 'periodicity' ? (
                       row.serviceSettingKind === 'main' && row.calculationBase ? (
                         <SelectControl
@@ -2464,6 +2462,35 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
                         />
                       )
                     ) : null}
+                    {periodicityRow ? (
+                      <div className="tariffs-cell-stack">
+                        <small>Периодичность</small>
+                        <SelectControl
+                          aria-label={`${row.category}: периодичность`}
+                          value={normalizeRegularServicePeriodicity(tariffDrafts[periodicityRow.id]?.amount ?? periodicityRow.amount)}
+                          options={regularServicePeriodicityOptions}
+                          disabled={!canManageTariffs || isRowDisabled}
+                          onChange={(value) => commitTariffPeriodicityChange(periodicityRow, value)}
+                        />
+                      </div>
+                    ) : null}
+                    {startDateRow ? (
+                      <div className="tariffs-cell-stack">
+                        <small>Месяц начисления</small>
+                        <SelectControl
+                          aria-label={`${row.category}: месяц начисления`}
+                          className="contractors-editable-select-control--month"
+                          disabled={!canManageTariffs || isRowDisabled}
+                          value={tariffDrafts[startDateRow.id]?.dateMonth ?? startDateRow.dateMonth ?? contractorTariffMonthOptions[0].value}
+                          options={contractorTariffMonthOptions}
+                          onChange={(nextMonth) => {
+                            setTariffDrafts((drafts) => ({ ...drafts, [startDateRow.id]: { ...drafts[startDateRow.id], dateMonth: nextMonth } }))
+                            void commitTariffDateChange(startDateRow, nextMonth)
+                          }}
+                        />
+                      </div>
+                    ) : null}
+                    </div>
                   </span>
                   <span role="cell" className="contractors-value-cell">
                     {row.serviceSettingKind === 'periodicity' ? (
@@ -2544,25 +2571,75 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
                     )}
                   </span>
                   <span role="cell">
+                    <div className="tariffs-cell-stack">
                     {overdueRow ? (
-                      <input
-                        aria-label={`${overdueRow.category}: ${overdueRow.title}: значение`}
-                        className="contractors-editable-input contractors-editable-input--overdue-days"
-                        disabled={!canManageTariffs || isRowDisabled || tariffSavingRowId === overdueRow.id}
-                        inputMode="numeric"
-                        value={tariffDrafts[overdueRow.id]?.amount ?? ''}
-                        onChange={(event) => setTariffDrafts((drafts) => ({ ...drafts, [overdueRow.id]: { ...drafts[overdueRow.id], amount: event.target.value } }))}
-                        onBlur={(event) => {
-                          if (shouldCommitEditableInputOnBlur(event.currentTarget)) void commitTariffTextChange(overdueRow, 'amount')
-                        }}
-                        onKeyDown={(event) => handleEditableInputKeyDown(event, () => commitTariffTextChange(overdueRow, 'amount'))}
-                      />
+                      <div className="tariffs-cell-stack">
+                        <small>Просрочка, дней</small>
+                        <input
+                          aria-label={`${overdueRow.category}: ${overdueRow.title}: значение`}
+                          className="contractors-editable-input contractors-editable-input--overdue-days"
+                          disabled={!canManageTariffs || isRowDisabled || tariffSavingRowId === overdueRow.id}
+                          inputMode="numeric"
+                          value={tariffDrafts[overdueRow.id]?.amount ?? ''}
+                          onChange={(event) => setTariffDrafts((drafts) => ({ ...drafts, [overdueRow.id]: { ...drafts[overdueRow.id], amount: event.target.value } }))}
+                          onBlur={(event) => {
+                            if (shouldCommitEditableInputOnBlur(event.currentTarget)) void commitTariffTextChange(overdueRow, 'amount')
+                          }}
+                          onKeyDown={(event) => handleEditableInputKeyDown(event, () => commitTariffTextChange(overdueRow, 'amount'))}
+                        />
+                      </div>
                     ) : null}
+                    {dueDateRow ? (
+                      <div className="tariffs-cell-stack">
+                        <small>{dueDateRow.monthlyDue ? 'Оплата до' : 'Оплата за год до'}</small>
+                        <span className="contractors-date-value">
+                          <input
+                            aria-label={`${row.category}: оплата до: день`}
+                            aria-invalid={Boolean(tariffDateErrors[dueDateRow.id])}
+                            aria-describedby={tariffDateErrors[dueDateRow.id] ? `${dueDateRow.id}-date-error` : undefined}
+                            className="contractors-editable-input contractors-editable-input--day"
+                            disabled={!canManageTariffs || isRowDisabled}
+                            inputMode="numeric"
+                            maxLength={2}
+                            value={tariffDrafts[dueDateRow.id]?.dateDay ?? dueDateRow.dateDay ?? ''}
+                            onChange={(event) => {
+                              setTariffDateErrors((errors) => {
+                                const nextErrors = { ...errors }
+                                delete nextErrors[dueDateRow.id]
+                                return nextErrors
+                              })
+                              setTariffDrafts((drafts) => ({ ...drafts, [dueDateRow.id]: { ...drafts[dueDateRow.id], dateDay: event.target.value } }))
+                            }}
+                            onKeyDown={(event) => handleEditableInputKeyDown(event, () => commitTariffDateChange(dueDateRow))}
+                          />
+                          {!dueDateRow.monthlyDue ? (
+                            <SelectControl
+                              aria-label={`${row.category}: оплата до: месяц`}
+                              className="contractors-editable-select-control--month"
+                              disabled={!canManageTariffs || isRowDisabled}
+                              value={tariffDrafts[dueDateRow.id]?.dateMonth ?? dueDateRow.dateMonth ?? contractorTariffMonthOptions[0].value}
+                              options={contractorTariffMonthOptions}
+                              onChange={(nextMonth) => {
+                                setTariffDateErrors((errors) => {
+                                  const nextErrors = { ...errors }
+                                  delete nextErrors[dueDateRow.id]
+                                  return nextErrors
+                                })
+                                setTariffDrafts((drafts) => ({ ...drafts, [dueDateRow.id]: { ...drafts[dueDateRow.id], dateMonth: nextMonth } }))
+                                void commitTariffDateChange(dueDateRow, nextMonth)
+                              }}
+                            />
+                          ) : <span className="contractors-date-suffix">следующего месяца</span>}
+                        </span>
+                        {tariffDateErrors[dueDateRow.id] ? <small id={`${dueDateRow.id}-date-error`} className="contractors-field-error" role="alert">{tariffDateErrors[dueDateRow.id]}</small> : null}
+                      </div>
+                    ) : null}
+                    </div>
                   </span>
                   <span role="cell">
                     {showsServiceCalculationFlags ? (
                       <SelectControl
-                        aria-label={`${row.category}: ${row.title}: пороговая тарификация`}
+                        aria-label={`${row.category}: пороговая тарификация`}
                         disabled={!canManageTariffs || isRowDisabled || tieredModeOptions.length <= 1}
                         value={row.tiered ? 'Да' : 'Нет'}
                         options={tieredModeOptions}
@@ -2573,7 +2650,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
                   <span role="cell">
                     {showsServiceCalculationFlags ? (
                       <SelectControl
-                        aria-label={`${row.category}: ${row.title}: по счетчику`}
+                        aria-label={`${row.category}: по счетчику`}
                         disabled={!canManageTariffs || isRowDisabled || effectiveMeterModeOptions.length <= 1}
                         value={row.byMeter ? 'Да' : 'Нет'}
                         options={effectiveMeterModeOptions}
@@ -2583,40 +2660,6 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
                   </span>
                   <span role="cell" className="tariffs-row-actions-cell table-actions-column">
                     <span className="tariffs-row-actions">
-                      {row.category === 'Зарплатный фонд' && row.backendTariffId && !row.backendServiceSettingId ? (
-                        <>
-                          <button
-                            className="icon-button tariffs-row-action-button"
-                            type="button"
-                            aria-label={`Изменить тариф ${row.title}`}
-                            title="Изменить ставку"
-                            disabled={!canManageTariffs || isRowDisabled}
-                            onClick={() => {
-                              const input = document.getElementById(`tariff-value-${row.id}`)
-                              if (input instanceof HTMLInputElement) {
-                                input.focus()
-                                input.select()
-                              }
-                            }}
-                          >
-                            <Pencil size={16} aria-hidden="true" />
-                          </button>
-                          <button
-                            className="icon-button tariffs-row-action-button danger-icon-button"
-                            type="button"
-                            aria-label={`Убрать тариф ${row.title}`}
-                            title="Убрать из списка"
-                            disabled={!canManageTariffs || isRowDisabled}
-                            onClick={() => {
-                              setTariffPersistenceError(null)
-                              setChargeServiceArchiveReason('')
-                              setStandaloneTariffArchiveTarget(row)
-                            }}
-                          >
-                            <Trash2 size={16} aria-hidden="true" />
-                          </button>
-                        </>
-                      ) : null}
                       {row.serviceSettingKind === 'main' && serviceSetting && !row.isDeleted ? (
                         <>
                           <button
@@ -2663,7 +2706,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
                           <RotateCcw size={16} aria-hidden="true" />
                         </button>
                       ) : null}
-                      {isCustomThreshold ? (
+                      {canDeleteThreshold ? (
                         <button
                           className="icon-button tariffs-row-action-button danger-icon-button"
                           type="button"
@@ -2681,10 +2724,10 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
                     </span>
                   </span>
                 </div>
-                {row.id === lastElectricityThresholdRowId && tieredElectricityCategories.has(row.category) ? (
+                {isLastThresholdRow && Boolean(row.backendTariffId && tieredTariffIds.has(row.backendTariffId)) ? (
                   <div className="contractors-sheet-row contractors-sheet-action-row" role="row">
                     <span role="cell">
-                      <button className="link-button create-action-button create-action-button--subtle tariffs-add-threshold-button" type="button" onClick={addElectricityThreshold} disabled={!canManageTariffs}>
+                      <button className="link-button create-action-button create-action-button--subtle tariffs-add-threshold-button" type="button" onClick={() => addElectricityThreshold(row)} disabled={!canManageTariffs}>
                         <FileSpreadsheet size={15} aria-hidden="true" />
                         <span>Добавить порог</span>
                       </button>
@@ -2951,7 +2994,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
             <div className="detail-dialog-header">
               <div>
                 <p className="eyebrow">Новый порог</p>
-                <h3 id="threshold-create-title">Добавить порог электроэнергии</h3>
+                <h3 id="threshold-create-title">Добавить тарифный порог</h3>
                 <p>Новая ступень будет сохранена перед тарифом без верхней границы.</p>
               </div>
               <button className="icon-button" type="button" aria-label="Закрыть добавление порога" onClick={closeThresholdCreateDialog}>
@@ -2960,15 +3003,16 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
             </div>
             <form onSubmit={confirmThresholdCreate}>
               <div className="contractors-service-secondary-grid">
-                <FormField label="От, кВт·ч">
+                <FormField label={`От, ${thresholdCreateTarget?.unit ?? 'ед.'}`}>
                   <MeterReadingInput
                     aria-label="Нижняя граница нового порога"
                     disabled
-                    value={formatTariffNumber(getElectricityThresholdRows(tariffRows).map((row) => row.electricityUpperBound).filter((value): value is number => value != null).at(-1) ?? 0)}
+                    value={formatTariffNumber(getElectricityThresholdRows(tariffRows, thresholdCreateTarget ?? undefined).map((row) => row.electricityUpperBound).filter((value): value is number => value != null).at(-1) ?? 0)}
                   />
                 </FormField>
-                <FormField label="До, кВт·ч">
+                <FormField label={`До, ${thresholdCreateTarget?.unit ?? 'ед.'}`}>
                   <MeterReadingInput aria-label="Верхняя граница нового порога" value={thresholdCreateUpperBound} onChange={(event) => setThresholdCreateUpperBound(event.target.value)} />
+                  <small className="form-field-hint">Единица: {thresholdCreateTarget?.unit ?? 'по выбранному счетчику'}</small>
                 </FormField>
                 <FormField label="Ставка, руб.">
                   <MoneyTextInput aria-label="Ставка нового порога" value={thresholdCreateRate} onValueChange={setThresholdCreateRate} />

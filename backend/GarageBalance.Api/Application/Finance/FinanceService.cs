@@ -4750,9 +4750,8 @@ public sealed class FinanceService(
         {
             TariffCalculationBases.Fixed => AmountCalculationResult.Success(MoneyMath.RoundMoney(tariff.Rate)),
             TariffCalculationBases.People => AmountCalculationResult.Success(MoneyMath.RoundMoney(tariff.Rate * garage.PeopleCount)),
-            TariffCalculationBases.MeterWater => CalculateMeterAmount(meterReading, tariff.Rate),
-            TariffCalculationBases.MeterElectricity => useTieredElectricity
-                ? CalculateElectricityMeterAmount(meterReading, tariff)
+            TariffCalculationBases.MeterWater or TariffCalculationBases.MeterElectricity => useTieredElectricity
+                ? CalculateTieredMeterAmount(meterReading, tariff)
                 : CalculateMeterAmount(meterReading, tariff.Rate),
             _ => AmountCalculationResult.Failure($"неподдерживаемая база расчета {tariff.CalculationBase}.")
         };
@@ -5073,7 +5072,7 @@ public sealed class FinanceService(
             : AmountCalculationResult.Success(MoneyMath.RoundMoney(reading.Consumption * rate));
     }
 
-    private static AmountCalculationResult CalculateElectricityMeterAmount(MeterReading? reading, Tariff tariff)
+    private static AmountCalculationResult CalculateTieredMeterAmount(MeterReading? reading, Tariff tariff)
     {
         if (reading is null)
         {
@@ -5104,18 +5103,19 @@ public sealed class FinanceService(
         return AmountCalculationResult.Success(MoneyMath.RoundMoney(amount));
     }
 
-    private static string FormatTariffRateSnapshot(Tariff tariff, bool useTieredElectricity = true)
+    private static string FormatTariffRateSnapshot(Tariff tariff, bool useTieredTariff = true)
     {
-        var tiers = useTieredElectricity ? ReadElectricityTiers(tariff) : [];
+        var tiers = useTieredTariff ? ReadElectricityTiers(tariff) : [];
         if (tiers.Count == 0)
         {
             return $"ставка {MoneyFormatting.Format(tariff.Rate)}";
         }
 
+        var unitName = TariffCalculationBases.GetUnitName(tariff.CalculationBase);
         var details = string.Join(", ", tiers.Select(tier => tier.UpperBound.HasValue
-            ? $"до {tier.UpperBound.Value.ToString("0.####", RussianCulture)} кВт·ч по {MoneyFormatting.Format(tier.Rate)}"
+            ? $"до {tier.UpperBound.Value.ToString("0.####", RussianCulture)} {unitName} по {MoneyFormatting.Format(tier.Rate)}"
             : $"свыше по {MoneyFormatting.Format(tier.Rate)}"));
-        return $"пороги электроэнергии {details}";
+        return $"пороговый тариф {details}";
     }
 
     private async Task<IReadOnlyList<ChargeServiceSetting>> GetApplicableMeteredSettingsAsync(
@@ -5220,8 +5220,9 @@ public sealed class FinanceService(
 
     private static bool UsesTieredElectricitySnapshot(Accrual accrual)
     {
-        return accrual.Tariff?.CalculationBase == TariffCalculationBases.MeterElectricity
-            && accrual.Comment?.Contains("пороги электроэнергии", StringComparison.OrdinalIgnoreCase) == true;
+        return accrual.Tariff?.CalculationBase is TariffCalculationBases.MeterElectricity or TariffCalculationBases.MeterWater
+            && (accrual.Comment?.Contains("пороговый тариф", StringComparison.OrdinalIgnoreCase) == true
+                || accrual.Comment?.Contains("пороги электроэнергии", StringComparison.OrdinalIgnoreCase) == true);
     }
 
     private static IReadOnlyList<ElectricityTierSnapshot> ReadElectricityTiers(Tariff tariff)

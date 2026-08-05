@@ -206,7 +206,7 @@ const tariffCalculationUnitNames: Record<string, string[]> = {
   meter_electricity: ['кВт·ч'],
 }
 
-const electricityTierCalculationBase = 'meter_electricity'
+const tieredMeterCalculationBases = new Set(['meter_water', 'meter_electricity'])
 
 export function createEmptyOwnerForm(): DictionaryOwnerFormState {
   return {
@@ -359,7 +359,7 @@ export function normalizeTariffCalculationUnitName(calculationBase: string, unit
 }
 
 export function usesElectricityTariffTiers(calculationBase: string) {
-  return calculationBase === electricityTierCalculationBase
+  return tieredMeterCalculationBases.has(calculationBase)
 }
 
 export function getDictionaryRecordCells(section: DictionarySectionKey, item: DictionaryRecord): Array<string | number> {

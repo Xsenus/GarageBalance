@@ -3060,6 +3060,20 @@ h1 {
   padding-block: 5px;
 }
 
+.tariffs-page .contractors-sheet-row > span:nth-child(5) :is(.select-control, .select-control__trigger),
+.tariffs-page .contractors-sheet-row > span:nth-child(6) :is(.select-control, .select-control__trigger) {
+  width: 100%;
+}
+
+.tariffs-cell-stack {
+  display: grid;
+  gap: 7px;
+}
+
+.tariffs-page :is(.contractors-date-value .contractors-editable-input, .contractors-date-value .select-control__trigger, .contractors-editable-select-control--month .select-control__trigger, .tariffs-cell-stack > .select-control .select-control__trigger) {
+  height: 34px;
+}
+
 .tariffs-add-threshold-button {
   justify-self: start;
 }
