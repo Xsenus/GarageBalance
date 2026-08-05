@@ -90,6 +90,10 @@ public sealed class PostgreSqlTariffModeIntegrationTests
         var savedAudits = await verificationContext.AuditEvents
             .Where(item => item.EntityId == setting.Id.ToString() || item.EntityId == versionTariffId.ToString())
             .ToListAsync();
+        var savedVersions = await verificationContext.ChargeServiceTariffVersions
+            .Where(item => item.ChargeServiceSettingId == setting.Id)
+            .OrderBy(item => item.EffectiveFrom)
+            .ToListAsync();
 
         Assert.Equal(versionTariffId, savedService.TariffId);
         Assert.True(savedService.IsMetered);
@@ -101,6 +105,18 @@ public sealed class PostgreSqlTariffModeIntegrationTests
         Assert.Equal("meter_electricity", version.CalculationBase);
         Assert.Contains("1000", version.ElectricityTiersJson, StringComparison.Ordinal);
         Assert.Contains("1500", version.ElectricityTiersJson, StringComparison.Ordinal);
+        Assert.Collection(
+            savedVersions,
+            item =>
+            {
+                Assert.Equal(new DateOnly(2026, 1, 1), item.EffectiveFrom);
+                Assert.Equal(sourceTariff.Id, item.TariffId);
+            },
+            item =>
+            {
+                Assert.Equal(new DateOnly(2026, 8, 1), item.EffectiveFrom);
+                Assert.Equal(versionTariffId, item.TariffId);
+            });
         Assert.Equal(2, savedAudits.Count);
         Assert.Contains(savedAudits, item => item.Action == "dictionary.tariff_created");
         Assert.Contains(savedAudits, item => item.Action == "dictionary.charge_service_tariff_mode_changed");
@@ -158,7 +174,10 @@ public sealed class PostgreSqlTariffModeIntegrationTests
         await using var verificationContext = database.CreateContext();
         var savedService = await verificationContext.ChargeServiceSettings.SingleAsync(item => item.Id == setting.Id);
         var selectedTariff = await verificationContext.Tariffs.SingleAsync(item => item.Id == savedService.TariffId);
+        var effectiveVersion = await verificationContext.ChargeServiceTariffVersions
+            .SingleAsync(item => item.ChargeServiceSettingId == setting.Id && item.EffectiveFrom == new DateOnly(2026, 8, 1));
         Assert.Contains(savedService.TariffId!.Value, createdTariffIds);
+        Assert.Equal(savedService.TariffId, effectiveVersion.TariffId);
         if (selectedTariff.CalculationBase == "meter_electricity")
         {
             Assert.True(savedService.IsMetered);

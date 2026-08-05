@@ -2852,7 +2852,7 @@ public sealed class FinanceService(
                 tariff.Id,
                 cancellationToken),
             month);
-        var useTieredElectricity = matchingSetting?.HasTieredTariff ?? true;
+        var useTieredElectricity = matchingSetting?.HasTieredTariff ?? ReadElectricityTiers(tariff).Count >= 2;
         var dueDates = AccrualDueDates.ForIncomeType(month, incomeType.Code, matchingSetting);
         var accountingYear = AnnualAccrualPolicy.ResolveAccountingYear(incomeType.Code, month);
         await using var generationLock = await accrualPaymentAllocationRepository.AcquireRebuildLockAsync(
@@ -3011,7 +3011,7 @@ public sealed class FinanceService(
     public async Task<FinanceResult<RegularCatalogAccrualGenerationResultDto>> GenerateRegularCatalogAccrualsAsync(GenerateRegularCatalogAccrualsRequest request, Guid? actorUserId, CancellationToken cancellationToken)
     {
         var month = MonthPeriod.Normalize(request.AccountingMonth);
-        var settings = await chargeServiceSettingRepository.GetActiveRegularAsync(cancellationToken);
+        var settings = await chargeServiceSettingRepository.GetActiveRegularAsync(month, cancellationToken);
         if (settings.Count == 0)
         {
             return FinanceResult<RegularCatalogAccrualGenerationResultDto>.Failure(
@@ -3096,7 +3096,7 @@ public sealed class FinanceService(
         CancellationToken cancellationToken)
     {
         var month = MonthPeriod.Normalize(businessDate);
-        var regularServices = await chargeServiceSettingRepository.GetActiveRegularAsync(cancellationToken);
+        var regularServices = await chargeServiceSettingRepository.GetActiveRegularAsync(month, cancellationToken);
         var dueServices = regularServices.Where(setting => IsChargeServiceDueForMonth(setting, month)).ToList();
         var configuredDueServiceCount = dueServices.Count(setting => setting.IncomeTypeId.HasValue && setting.TariffId.HasValue);
         var feeCampaigns = await feeCampaignRepository.GetActiveAccrualCandidatesAsync(
@@ -5189,7 +5189,8 @@ public sealed class FinanceService(
                 continue;
             }
 
-            var calculation = CalculateRegularAccrualAmount(garage, tariff, reading, setting.HasTieredTariff);
+            var useTieredTariff = setting.HasTieredTariff;
+            var calculation = CalculateRegularAccrualAmount(garage, tariff, reading, useTieredTariff);
             if (!calculation.Succeeded || calculation.Value <= 0m)
             {
                 continue;
@@ -5212,7 +5213,7 @@ public sealed class FinanceService(
                 Comment = BuildRegularAccrualComment(
                     tariff,
                     $"Начисление по показанию {reading.MeterKind}: расход {reading.Consumption.ToString("0.###", RussianCulture)}",
-                    setting.HasTieredTariff)
+                    useTieredTariff)
             };
             accrualRepository.Add(accrual);
             AddAudit(

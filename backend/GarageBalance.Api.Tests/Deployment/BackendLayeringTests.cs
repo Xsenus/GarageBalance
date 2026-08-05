@@ -1577,7 +1577,7 @@ public sealed class BackendLayeringTests
         var service = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "Application", "Finance", "FinanceService.cs"));
         var implementation = File.ReadAllText(Path.Combine(repositoryRoot, "backend", "GarageBalance.Api", "Infrastructure", "Data", "EfChargeServiceSettingRepository.cs"));
         Assert.Contains("IChargeServiceSettingRepository chargeServiceSettingRepository", service, StringComparison.Ordinal);
-        Assert.Contains("chargeServiceSettingRepository.GetActiveRegularAsync(cancellationToken)", service, StringComparison.Ordinal);
+        Assert.Contains("chargeServiceSettingRepository.GetActiveRegularAsync(month, cancellationToken)", service, StringComparison.Ordinal);
         Assert.DoesNotContain("dbContext.ChargeServiceSettings", service, StringComparison.Ordinal);
         Assert.Contains("!setting.IsArchived && setting.IsRegular", implementation, StringComparison.Ordinal);
         Assert.Contains(".OrderBy(setting => setting.Name)", implementation, StringComparison.Ordinal);

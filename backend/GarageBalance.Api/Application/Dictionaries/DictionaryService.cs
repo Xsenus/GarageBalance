@@ -1788,6 +1788,21 @@ public sealed class DictionaryService(
             return DictionaryResult<TariffDto>.Success(ToTariffDto(tariff));
         }
 
+        var financialTermsChanged = !TariffMatches(
+            tariff,
+            tariff.Name,
+            calculationBase,
+            rate,
+            request.EffectiveFrom,
+            tariff.Comment,
+            electricityTiers.Value);
+        if (financialTermsChanged && await chargeServiceSettingRepository.HasTariffVersionAsync(tariff.Id, cancellationToken))
+        {
+            return DictionaryResult<TariffDto>.Failure(
+                "tariff_history_version_required",
+                "Этот тариф уже используется услугой. Измените ставку, режим или пороги в разделе «Тарифы и сборы» и укажите дату начала новой версии.");
+        }
+
         var oldElectricityTiers = ReadElectricityTiers(tariff);
         var oldValues = new Dictionary<string, object?>
         {
@@ -1858,11 +1873,12 @@ public sealed class DictionaryService(
             return DictionaryResult<TariffDto>.Failure("tariff_not_found", "Тариф не найден.");
         }
 
-        if (await tariffRepository.HasActiveServiceAssignmentsAsync(id, cancellationToken))
+        if (await tariffRepository.HasActiveServiceAssignmentsAsync(id, cancellationToken) ||
+            await chargeServiceSettingRepository.HasTariffVersionAsync(id, cancellationToken))
         {
             return DictionaryResult<TariffDto>.Failure(
                 "tariff_has_active_services",
-                "Сначала переведите на другой тариф или архивируйте все услуги с этим тарифом.");
+                "Тариф входит в историю услуги и нужен для расчётов прошлых периодов. Архивируйте саму услугу, если она больше не используется.");
         }
 
         tariff.IsArchived = true;
@@ -1976,6 +1992,7 @@ public sealed class DictionaryService(
 
         tariffRepository.Add(tariff);
         chargeServiceSettingRepository.Add(setting);
+        await chargeServiceSettingRepository.SetTariffVersionAsync(setting.Id, tariff.Id, tariff.EffectiveFrom, cancellationToken);
         AddAudit(actorUserId, "dictionary.tariff_created", "tariff", tariff.Id, $"Создан тариф {FormatTariffAuditDetails(tariff)} вместе с услугой {name}.");
         AddAudit(actorUserId, "dictionary.charge_service_created", "charge_service", setting.Id, $"Создана настройка услуги {setting.Name} со ставкой {tariff.Rate.ToString(CultureInfo.InvariantCulture)}.");
         await unitOfWork.SaveChangesAsync(cancellationToken);
@@ -2009,6 +2026,14 @@ public sealed class DictionaryService(
         ApplyChargeServiceSetting(setting, request);
 
         chargeServiceSettingRepository.Add(setting);
+        if (setting.TariffId.HasValue)
+        {
+            var linkedTariff = await tariffRepository.FindActiveAsync(setting.TariffId.Value, cancellationToken);
+            if (linkedTariff is not null)
+            {
+                await chargeServiceSettingRepository.SetTariffVersionAsync(setting.Id, linkedTariff.Id, linkedTariff.EffectiveFrom, cancellationToken);
+            }
+        }
         AddAudit(actorUserId, "dictionary.charge_service_created", "charge_service", setting.Id, $"Создана настройка услуги {setting.Name}.");
         await unitOfWork.SaveChangesAsync(cancellationToken);
         return DictionaryResult<ChargeServiceSettingDto>.Success(ToChargeServiceSettingDto(setting));
@@ -2048,10 +2073,20 @@ public sealed class DictionaryService(
             return DictionaryResult<ChargeServiceSettingDto>.Success(ToChargeServiceSettingDto(setting));
         }
 
+        var previousTariffId = setting.TariffId;
         var oldValues = ToChargeServiceAuditValues(setting);
         ApplyChargeServiceSetting(setting, request);
         setting.UpdatedAtUtc = DateTimeOffset.UtcNow;
         var newValues = ToChargeServiceAuditValues(setting);
+
+        if (setting.TariffId.HasValue && setting.TariffId != previousTariffId)
+        {
+            var linkedTariff = await tariffRepository.FindActiveAsync(setting.TariffId.Value, cancellationToken);
+            if (linkedTariff is not null)
+            {
+                await chargeServiceSettingRepository.SetTariffVersionAsync(setting.Id, linkedTariff.Id, linkedTariff.EffectiveFrom, cancellationToken);
+            }
+        }
 
         AddAudit(actorUserId, "dictionary.charge_service_updated", "charge_service", setting.Id, $"Изменена настройка услуги {setting.Name}.", oldValues: oldValues, newValues: newValues);
         await unitOfWork.SaveChangesAsync(cancellationToken);
@@ -2125,6 +2160,18 @@ public sealed class DictionaryService(
         OptimisticConcurrencyGuard.EnsureCurrent(request.TariffVersion, tariff);
 
         var roundedRate = MoneyMath.RoundRate(request.Rate);
+        if (tariff.Rate != roundedRate && request.EffectiveFrom.HasValue && request.EffectiveFrom.Value != tariff.EffectiveFrom)
+        {
+            return await CreateChargeServiceTariffRateVersionAsync(
+                setting,
+                tariff,
+                request,
+                name,
+                roundedRate,
+                actorUserId,
+                cancellationToken);
+        }
+
         var serviceChanged = !ChargeServiceSettingMatches(setting, request.Service);
         var tariffChanged = tariff.Rate != roundedRate;
         if (!serviceChanged && !tariffChanged)
@@ -2167,6 +2214,80 @@ public sealed class DictionaryService(
         }
 
         await unitOfWork.SaveChangesAsync(cancellationToken);
+        return DictionaryResult<UpdatedChargeServiceWithTariffDto>.Success(
+            new UpdatedChargeServiceWithTariffDto(ToChargeServiceSettingDto(setting), ToTariffDto(tariff)));
+    }
+
+    private async Task<DictionaryResult<UpdatedChargeServiceWithTariffDto>> CreateChargeServiceTariffRateVersionAsync(
+        ChargeServiceSetting setting,
+        Tariff sourceTariff,
+        UpdateChargeServiceWithTariffRequest request,
+        string serviceName,
+        decimal roundedRate,
+        Guid? actorUserId,
+        CancellationToken cancellationToken)
+    {
+        var effectiveFrom = request.EffectiveFrom!.Value;
+        var tariff = new Tariff
+        {
+            Name = CreateServiceTariffVersionName(
+                serviceName,
+                setting.HasTieredTariff ? "metered_tiered" : setting.IsMetered ? "metered" : "regular",
+                effectiveFrom),
+            CalculationBase = sourceTariff.CalculationBase,
+            Rate = roundedRate,
+            EffectiveFrom = effectiveFrom,
+            Comment = NormalizeOptional(request.ChangeReason) ?? $"Изменение ставки услуги «{serviceName}».",
+            ElectricityFirstThreshold = sourceTariff.ElectricityFirstThreshold,
+            ElectricitySecondThreshold = sourceTariff.ElectricitySecondThreshold,
+            ElectricityFirstTierName = sourceTariff.ElectricityFirstTierName,
+            ElectricitySecondTierName = sourceTariff.ElectricitySecondTierName,
+            ElectricityThirdTierName = sourceTariff.ElectricityThirdTierName,
+            ElectricityFirstRate = sourceTariff.ElectricityFirstRate,
+            ElectricitySecondRate = sourceTariff.ElectricitySecondRate,
+            ElectricityThirdRate = sourceTariff.ElectricityThirdRate,
+            ElectricityTiersJson = sourceTariff.ElectricityTiersJson
+        };
+        var targetServiceRequest = request.Service with { TariffId = tariff.Id };
+        var linkValidation = await ValidateChargeServiceAccountingLinksAsync(targetServiceRequest, cancellationToken, tariff);
+        if (!linkValidation.Succeeded)
+        {
+            return DictionaryResult<UpdatedChargeServiceWithTariffDto>.Failure(linkValidation.ErrorCode!, linkValidation.ErrorMessage!);
+        }
+
+        var becomesCurrent = effectiveFrom >= sourceTariff.EffectiveFrom;
+        var serviceRequest = becomesCurrent
+            ? targetServiceRequest
+            : request.Service with { TariffId = sourceTariff.Id };
+
+        var oldValues = ToChargeServiceAuditValues(setting);
+        ApplyChargeServiceSetting(setting, serviceRequest);
+        setting.UpdatedAtUtc = DateTimeOffset.UtcNow;
+        tariffRepository.Add(tariff);
+        await chargeServiceSettingRepository.SetTariffVersionAsync(
+            setting.Id,
+            sourceTariff.Id,
+            sourceTariff.EffectiveFrom,
+            cancellationToken);
+        await chargeServiceSettingRepository.SetTariffVersionAsync(setting.Id, tariff.Id, effectiveFrom, cancellationToken);
+        AddAudit(
+            actorUserId,
+            "dictionary.tariff_created",
+            "tariff",
+            tariff.Id,
+            $"Создана версия ставки {FormatTariffAuditDetails(tariff)} для услуги {serviceName}.",
+            NormalizeOptional(request.ChangeReason));
+        AddAudit(
+            actorUserId,
+            "dictionary.charge_service_tariff_version_changed",
+            "charge_service",
+            setting.Id,
+            $"Для услуги {serviceName} добавлена ставка {roundedRate.ToString(CultureInfo.InvariantCulture)} с {effectiveFrom:dd.MM.yyyy}.",
+            NormalizeOptional(request.ChangeReason),
+            oldValues,
+            ToChargeServiceAuditValues(setting));
+        await unitOfWork.SaveChangesAsync(cancellationToken);
+
         return DictionaryResult<UpdatedChargeServiceWithTariffDto>.Success(
             new UpdatedChargeServiceWithTariffDto(ToChargeServiceSettingDto(setting), ToTariffDto(tariff)));
     }
@@ -2271,23 +2392,41 @@ public sealed class DictionaryService(
         };
         ApplyElectricityTiers(tariff, tiersValidation.Value);
 
-        var serviceRequest = request.Service with
+        var targetServiceRequest = request.Service with
         {
             TariffId = tariff.Id,
             IsMetered = isMetered,
             HasTieredTariff = isTiered,
             UnitName = TariffCalculationBases.GetUnitName(targetCalculationBase)
         };
-        var linkValidation = await ValidateChargeServiceAccountingLinksAsync(serviceRequest, cancellationToken, tariff);
+        var linkValidation = await ValidateChargeServiceAccountingLinksAsync(targetServiceRequest, cancellationToken, tariff);
         if (!linkValidation.Succeeded)
         {
             return DictionaryResult<UpdatedChargeServiceWithTariffDto>.Failure(linkValidation.ErrorCode!, linkValidation.ErrorMessage!);
         }
 
+
+        var becomesCurrent = tariff.EffectiveFrom >= sourceTariff.EffectiveFrom;
+        var serviceRequest = becomesCurrent
+            ? targetServiceRequest
+            : request.Service with
+            {
+                TariffId = sourceTariff.Id,
+                IsMetered = setting.IsMetered,
+                HasTieredTariff = setting.HasTieredTariff,
+                UnitName = setting.UnitName
+            };
+
         var oldValues = ToChargeServiceAuditValues(setting);
         ApplyChargeServiceSetting(setting, serviceRequest);
         setting.UpdatedAtUtc = DateTimeOffset.UtcNow;
         tariffRepository.Add(tariff);
+        await chargeServiceSettingRepository.SetTariffVersionAsync(
+            setting.Id,
+            sourceTariff.Id,
+            sourceTariff.EffectiveFrom,
+            cancellationToken);
+        await chargeServiceSettingRepository.SetTariffVersionAsync(setting.Id, tariff.Id, tariff.EffectiveFrom, cancellationToken);
         AddAudit(
             actorUserId,
             "dictionary.tariff_created",

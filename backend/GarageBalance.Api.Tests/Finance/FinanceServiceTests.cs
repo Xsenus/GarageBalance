@@ -4349,6 +4349,72 @@ public sealed class FinanceServiceTests
     }
 
     [Fact]
+    public async Task GenerateRegularCatalogAccrualsAsync_SelectsServiceTariffVersionByAccountingMonth()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        fixtures.IncomeType.Code = "monthly_custom";
+        var oldTariff = new Tariff { Name = "Услуга до сентября", CalculationBase = "fixed", Rate = 300m, EffectiveFrom = new DateOnly(2026, 1, 1) };
+        var newTariff = new Tariff { Name = "Услуга с сентября", CalculationBase = "fixed", Rate = 450m, EffectiveFrom = new DateOnly(2026, 9, 1) };
+        var setting = new ChargeServiceSetting
+        {
+            Name = "Помесячная услуга",
+            IsRegular = true,
+            PeriodicityMonths = 1,
+            AccrualStartMonth = 1,
+            PaymentDueDay = 30,
+            OverdueGraceDays = 30,
+            IncomeTypeId = fixtures.IncomeType.Id,
+            TariffId = newTariff.Id,
+            Tariff = newTariff,
+            UnitName = "руб."
+        };
+        database.Context.AddRange(oldTariff, newTariff, setting);
+        database.Context.ChargeServiceTariffVersions.AddRange(
+            new ChargeServiceTariffVersion
+            {
+                ChargeServiceSettingId = setting.Id,
+                TariffId = oldTariff.Id,
+                EffectiveFrom = oldTariff.EffectiveFrom
+            },
+            new ChargeServiceTariffVersion
+            {
+                ChargeServiceSettingId = setting.Id,
+                TariffId = newTariff.Id,
+                EffectiveFrom = newTariff.EffectiveFrom
+            });
+        await database.Context.SaveChangesAsync();
+        var service = FinanceServiceTestFactory.Create(database.Context);
+
+        var july = await service.GenerateRegularCatalogAccrualsAsync(
+            new GenerateRegularCatalogAccrualsRequest(new DateOnly(2026, 7, 1), null),
+            Guid.NewGuid(),
+            CancellationToken.None);
+        var september = await service.GenerateRegularCatalogAccrualsAsync(
+            new GenerateRegularCatalogAccrualsRequest(new DateOnly(2026, 9, 1), null),
+            Guid.NewGuid(),
+            CancellationToken.None);
+
+        Assert.True(july.Succeeded, july.ErrorMessage);
+        Assert.True(september.Succeeded, september.ErrorMessage);
+        var accruals = await database.Context.Accruals.OrderBy(item => item.AccountingMonth).ToListAsync();
+        Assert.Collection(
+            accruals,
+            item =>
+            {
+                Assert.Equal(new DateOnly(2026, 7, 1), item.AccountingMonth);
+                Assert.Equal(oldTariff.Id, item.TariffId);
+                Assert.Equal(300m, item.Amount);
+            },
+            item =>
+            {
+                Assert.Equal(new DateOnly(2026, 9, 1), item.AccountingMonth);
+                Assert.Equal(newTariff.Id, item.TariffId);
+                Assert.Equal(450m, item.Amount);
+            });
+    }
+
+    [Fact]
     public async Task PreviewRegularAccrualAutomationAsync_ReturnsDueScopeWithoutWritingAccruals()
     {
         await using var database = await TestDatabase.CreateAsync();

@@ -19,11 +19,19 @@ public sealed class PostgreSqlTariffAndMeterPerformanceTests
         var activeService = CreateService("Вода performance", incomeType, activeTariff);
         var futureService = CreateService("Вода performance будущая", incomeType, futureTariff);
         var archivedTariffService = CreateService("Вода performance архивная", incomeType, archivedTariff);
+        var disabledMeterService = CreateService("Вода performance отключена", incomeType, activeTariff);
+        disabledMeterService.IsMetered = false;
 
         await using (var seedContext = database.CreateContext())
         {
             seedContext.AddRange(incomeType, activeTariff, futureTariff, archivedTariff);
-            seedContext.AddRange(activeService, futureService, archivedTariffService);
+            seedContext.AddRange(activeService, futureService, archivedTariffService, disabledMeterService);
+            seedContext.ChargeServiceTariffVersions.Add(new ChargeServiceTariffVersion
+            {
+                ChargeServiceSettingId = activeService.Id,
+                TariffId = activeTariff.Id,
+                EffectiveFrom = activeTariff.EffectiveFrom
+            });
             for (var index = 0; index < 250; index++)
             {
                 var tariff = CreateTariff(
@@ -53,6 +61,7 @@ public sealed class PostgreSqlTariffAndMeterPerformanceTests
             Assert.Equal(activeTariff.Id, service.TariffId);
             Assert.DoesNotContain(services, item => item.Id == futureService.Id);
             Assert.DoesNotContain(services, item => item.Id == archivedTariffService.Id);
+            Assert.DoesNotContain(services, item => item.Id == disabledMeterService.Id);
         }
 
         await using var connection = new NpgsqlConnection(database.ConnectionString);
@@ -60,6 +69,7 @@ public sealed class PostgreSqlTariffAndMeterPerformanceTests
         var indexes = await ReadIndexesAsync(connection);
         AssertIndex(indexes, "IX_tariffs_CalculationBase_EffectiveFrom", "\"IsArchived\" = false");
         AssertIndex(indexes, "IX_charge_service_settings_IsRegular_IsMetered_TariffId", "\"IsArchived\" = false");
+        AssertIndex(indexes, "PK_charge_service_tariff_versions", "\"ChargeServiceSettingId\", \"EffectiveFrom\"");
         AssertIndex(indexes, "IX_meter_readings_MeterKind_AccountingMonth_GarageId", "\"IsCanceled\" = false");
         AssertIndex(indexes, "IX_meter_readings_GarageId_MeterKind_AccountingMonth", "UNIQUE");
         AssertIndex(indexes, "IX_meter_readings_GarageId_MeterKind_AccountingMonth", "\"IsCanceled\" = false");
@@ -74,6 +84,19 @@ public sealed class PostgreSqlTariffAndMeterPerformanceTests
                 WHERE "IsArchived" = false
                   AND "CalculationBase" = 'meter_water'
                   AND "EffectiveFrom" <= DATE '2026-07-01';
+                """),
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "PK_charge_service_tariff_versions",
+            await ExplainAsync(
+                connection,
+                $"""
+                SELECT "TariffId"
+                FROM charge_service_tariff_versions
+                WHERE "ChargeServiceSettingId" = '{activeService.Id}'
+                  AND "EffectiveFrom" <= DATE '2026-07-01'
+                ORDER BY "EffectiveFrom" DESC
+                LIMIT 1;
                 """),
             StringComparison.Ordinal);
         var servicePlan = await ExplainAsync(
@@ -142,7 +165,7 @@ public sealed class PostgreSqlTariffAndMeterPerformanceTests
             SELECT indexname, indexdef
             FROM pg_indexes
             WHERE schemaname = 'public'
-              AND tablename IN ('tariffs', 'charge_service_settings', 'meter_readings');
+              AND tablename IN ('tariffs', 'charge_service_settings', 'charge_service_tariff_versions', 'meter_readings');
             """;
         await using var reader = await command.ExecuteReaderAsync();
         var indexes = new Dictionary<string, string>(StringComparer.Ordinal);

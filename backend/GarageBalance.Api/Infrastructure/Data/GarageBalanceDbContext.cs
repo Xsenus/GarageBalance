@@ -32,6 +32,7 @@ public sealed class GarageBalanceDbContext(DbContextOptions<GarageBalanceDbConte
     public DbSet<ExpenseType> ExpenseTypes => Set<ExpenseType>();
     public DbSet<Tariff> Tariffs => Set<Tariff>();
     public DbSet<ChargeServiceSetting> ChargeServiceSettings => Set<ChargeServiceSetting>();
+    public DbSet<ChargeServiceTariffVersion> ChargeServiceTariffVersions => Set<ChargeServiceTariffVersion>();
     public DbSet<IrregularPayment> IrregularPayments => Set<IrregularPayment>();
     public DbSet<FeeCampaign> FeeCampaigns => Set<FeeCampaign>();
     public DbSet<FeeCampaignGarage> FeeCampaignGarages => Set<FeeCampaignGarage>();
@@ -686,6 +687,21 @@ public sealed class GarageBalanceDbContext(DbContextOptions<GarageBalanceDbConte
             entity.HasOne(device => device.Garage)
                 .WithMany()
                 .HasForeignKey(device => device.GarageId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<ChargeServiceTariffVersion>(entity =>
+        {
+            entity.ToTable("charge_service_tariff_versions");
+            entity.HasKey(item => new { item.ChargeServiceSettingId, item.EffectiveFrom });
+            entity.HasIndex(item => item.TariffId);
+            entity.HasOne(item => item.ChargeServiceSetting)
+                .WithMany(setting => setting.TariffVersions)
+                .HasForeignKey(item => item.ChargeServiceSettingId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(item => item.Tariff)
+                .WithMany()
+                .HasForeignKey(item => item.TariffId)
                 .OnDelete(DeleteBehavior.Restrict);
         });
 

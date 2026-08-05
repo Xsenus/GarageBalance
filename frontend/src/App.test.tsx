@@ -1395,6 +1395,16 @@ describe('App', () => {
       getChargeServiceSettings: async () => [membershipSetting, electricitySetting],
       updateChargeServiceWithTariff: async (_token, id, request) => {
         electricitySettingRequests.push(request)
+        if (request.tariffMode === 'metered_tiered' && request.electricityTiers) {
+          thresholdUpdateRequests.push({
+            name: electricityTariff.name,
+            calculationBase: request.calculationBase ?? electricityTariff.calculationBase,
+            rate: request.rate,
+            effectiveFrom: request.effectiveFrom ?? '2026-06-30',
+            electricityTiers: request.electricityTiers,
+            electricityTierChangeReason: request.changeReason,
+          })
+        }
         const savedTiers = request.tariffMode === 'metered_tiered'
           ? request.electricityTiers?.map((tier, index) => ({
             id: tier.id ?? `55555555-5555-5555-5555-${String(index + 1).padStart(12, '0')}`,
@@ -4248,7 +4258,7 @@ describe('App', () => {
     const user = userEvent.setup()
     let createdServiceRequest: unknown = null
     let updatedServiceRequest: unknown = null
-    let updatedTariffRequest: UpsertTariffRequest | null = null
+    let updatedServiceTariffRequest: UpdateChargeServiceWithTariffRequest | null = null
     let unitUpdateAttempts = 0
     let serviceSettings: ChargeServiceSettingDto[] = []
     const serviceIncomeType = createAccountingType({
@@ -4302,7 +4312,6 @@ describe('App', () => {
         return { service: savedSetting, tariff: createdTariff }
       },
       updateTariff: async (_token, id, request) => {
-        updatedTariffRequest = request
         return createTariff({
           id,
           name: request.name,
@@ -4311,6 +4320,23 @@ describe('App', () => {
           effectiveFrom: request.effectiveFrom,
           comment: request.comment ?? null,
         })
+      },
+      updateChargeServiceWithTariff: async (_token, id, request) => {
+        updatedServiceTariffRequest = request
+        const savedTariff = createTariff({
+          id: request.service.tariffId ?? 'tariff-security-created',
+          name: 'Охрана — тариф',
+          calculationBase: request.calculationBase ?? 'fixed',
+          rate: request.rate,
+          effectiveFrom: request.effectiveFrom ?? '2026-06-30',
+        })
+        const savedSetting = createChargeServiceSetting({
+          id,
+          ...request.service,
+          tariffId: savedTariff.id,
+        })
+        serviceSettings = serviceSettings.map((setting) => (setting.id === id ? savedSetting : setting))
+        return { service: savedSetting, tariff: savedTariff }
       },
       updateChargeServiceSetting: async (_token, id, request) => {
         if (request.unitName === 'руб.' && request.periodicityMonths === 12 && unitUpdateAttempts++ === 0) {
@@ -4466,7 +4492,11 @@ describe('App', () => {
     const rateConfirmationDialog = await screen.findByRole('dialog', { name: 'Подтвердить изменение?' })
     expect(within(rateConfirmationDialog).getByText('Стоимость, руб.')).toBeInTheDocument()
     await user.click(within(rateConfirmationDialog).getByRole('button', { name: 'Сохранить' }))
-    await waitFor(() => expect(updatedTariffRequest).toMatchObject({ rate: 1800, calculationBase: 'fixed' }))
+    await waitFor(() => expect(updatedServiceTariffRequest).toMatchObject({
+      rate: 1800,
+      calculationBase: 'fixed',
+      effectiveFrom: '2026-06-30',
+    }))
     expect(savedServiceCostInput).toHaveValue('1 800.00')
 
     const periodicityControl = within(tariffsPanel).getByRole('combobox', { name: 'Охрана: периодичность' })
@@ -4636,6 +4666,7 @@ describe('App', () => {
     expect(within(editDialog).getByLabelText('Перенос долга в просроченный').closest('.contractors-service-secondary-grid')).toContainElement(within(editDialog).getByLabelText('Единица измерения'))
     const editTariffInput = within(editDialog).getByLabelText('Тариф регулярной услуги')
     expect(editTariffInput).toHaveValue('1 200.00')
+    expect(within(editDialog).getByLabelText('Ставка с')).toHaveValue('30.06.2026')
     await user.clear(editTariffInput)
     await user.type(editTariffInput, '1350.75')
     const editUnitControl = within(editDialog).getByRole('combobox', { name: 'Единица измерения' })
@@ -4682,6 +4713,7 @@ describe('App', () => {
         tariffId: serviceTariff.id,
       },
       rate: 1350.75,
+      effectiveFrom: '2026-06-30',
       tariffVersion: 'tariff-version',
     })
     expect(within(tariffsPanel).getByRole('button', { name: 'Изменить услугу Охрана территории' })).toBeInTheDocument()

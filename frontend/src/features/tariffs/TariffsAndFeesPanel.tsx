@@ -1218,6 +1218,21 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
     }
   }
 
+  function applyTariffRows(nextTariffs: TariffDto[], nextSettings = backendChargeServices) {
+    const nextRows = createTariffRowsFromBackend(nextTariffs, nextSettings)
+    setBackendTariffs(nextTariffs)
+    setBackendChargeServices(nextSettings)
+    setTariffRows(nextRows)
+    setTariffDrafts(createEditableDrafts(nextRows))
+  }
+
+  function applySavedServiceTariff(saved: { service: ChargeServiceSettingDto, tariff: TariffDto }) {
+    applyTariffRows(
+      [...backendTariffs.filter((tariff) => tariff.id !== saved.tariff.id), saved.tariff],
+      [...backendChargeServices.filter((setting) => setting.id !== saved.service.id), saved.service],
+    )
+  }
+
   async function persistServiceSettingRow(row: ContractorTariffRow, nextRows: ContractorTariffRow[]) {
     if (!canManageTariffs || row.isDeleted || !row.backendServiceSettingId) {
       return false
@@ -1234,10 +1249,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
       const request = buildChargeServiceRequest(serviceSetting, nextRows)
       const savedSetting = await dictionaryClient.updateChargeServiceSetting(auth.accessToken, serviceSetting.id, request)
       const nextSettings = backendChargeServices.map((setting) => (setting.id === savedSetting.id ? savedSetting : setting))
-      const mergedRows = createTariffRowsFromBackend(backendTariffs, nextSettings)
-      setBackendChargeServices(nextSettings)
-      setTariffRows(mergedRows)
-      setTariffDrafts(createEditableDrafts(mergedRows))
+      applyTariffRows(backendTariffs, nextSettings)
       return true
     } catch (caught) {
       setTariffPersistenceError(caught instanceof Error ? caught.message : 'Не удалось сохранить настройку услуги.')
@@ -1327,13 +1339,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
         calculationBase: targetCalculationBase,
         tariffVersion: sourceTariff.version,
       })
-      const nextTariffs = [...backendTariffs.filter((tariff) => tariff.id !== saved.tariff.id), saved.tariff]
-      const nextSettings = backendChargeServices.map((setting) => setting.id === saved.service.id ? saved.service : setting)
-      const mergedRows = createTariffRowsFromBackend(nextTariffs, nextSettings)
-      setBackendTariffs(nextTariffs)
-      setBackendChargeServices(nextSettings)
-      setTariffRows(mergedRows)
-      setTariffDrafts(createEditableDrafts(mergedRows))
+      applySavedServiceTariff(saved)
       return true
     } catch (caught) {
       setTariffPersistenceError(caught instanceof Error ? caught.message : 'Не удалось сменить режим тарифа.')
@@ -1402,16 +1408,35 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
     setTariffSavingRowId(targetRow.id)
     setTariffPersistenceError(null)
     try {
+      const linkedSetting = targetRow.backendServiceSettingId
+        ? backendChargeServices.find((setting) => setting.id === targetRow.backendServiceSettingId)
+        : null
+      if (linkedSetting && backendTariff) {
+        const tariffMode = linkedSetting.hasTieredTariff ? 'metered_tiered' : linkedSetting.isMetered ? 'metered' : 'regular'
+        const saved = await dictionaryClient.updateChargeServiceWithTariff(auth.accessToken, linkedSetting.id, {
+          service: {
+            ...buildChargeServiceRequest(linkedSetting, nextRows),
+            tariffId: backendTariff.id,
+          },
+          rate: request.rate,
+          tariffMode,
+          effectiveFrom: getLocalDateInputValue(),
+          electricityTiers: request.electricityTiers ?? null,
+          changeReason: electricityTierChangeReason,
+          calculationBase: request.calculationBase,
+          tariffVersion: backendTariff.version,
+        })
+        applySavedServiceTariff(saved)
+        return true
+      }
+
       const savedTariff = backendTariff
         ? await dictionaryClient.updateTariff(auth.accessToken, backendTariff.id, request)
         : await dictionaryClient.createTariff(auth.accessToken, request)
       const nextTariffs = backendTariffs.some((tariff) => tariff.id === savedTariff.id)
         ? backendTariffs.map((tariff) => (tariff.id === savedTariff.id ? savedTariff : tariff))
         : [...backendTariffs, savedTariff]
-      const mergedRows = createTariffRowsFromBackend(nextTariffs, backendChargeServices)
-      setBackendTariffs(nextTariffs)
-      setTariffRows(mergedRows)
-      setTariffDrafts(createEditableDrafts(mergedRows))
+      applyTariffRows(nextTariffs)
       return true
     } catch (caught) {
       setTariffPersistenceError(caught instanceof Error ? caught.message : 'Не удалось сохранить тариф.')
@@ -1834,14 +1859,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
     setTariffPersistenceError(null)
     try {
       const created = await dictionaryClient.createChargeServiceWithTariff(auth.accessToken, request)
-      const savedSetting = created.service
-      const nextTariffs = [...backendTariffs.filter((tariff) => tariff.id !== created.tariff.id), created.tariff]
-      const nextSettings = [...backendChargeServices.filter((setting) => setting.id !== savedSetting.id), savedSetting]
-      const nextRows = createTariffRowsFromBackend(nextTariffs, nextSettings)
-      setBackendTariffs(nextTariffs)
-      setBackendChargeServices(nextSettings)
-      setTariffRows(nextRows)
-      setTariffDrafts(createEditableDrafts(nextRows))
+      applySavedServiceTariff(created)
       setModal(null)
     } catch (caught) {
       setTariffPersistenceError(caught instanceof Error ? caught.message : 'Не удалось добавить услугу.')
@@ -1865,14 +1883,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
         service: { ...request.service, version: chargeServiceEditTarget.version },
         tariffVersion: currentTariff?.version,
       })
-      const savedSetting = saved.service
-      const nextTariffs = backendTariffs.map((tariff) => (tariff.id === saved.tariff.id ? saved.tariff : tariff))
-      const nextSettings = backendChargeServices.map((setting) => (setting.id === savedSetting.id ? savedSetting : setting))
-      const nextRows = createTariffRowsFromBackend(nextTariffs, nextSettings)
-      setBackendTariffs(nextTariffs)
-      setBackendChargeServices(nextSettings)
-      setTariffRows(nextRows)
-      setTariffDrafts(createEditableDrafts(nextRows))
+      applySavedServiceTariff(saved)
       setChargeServiceEditTarget(null)
     } catch (caught) {
       setTariffPersistenceError(caught instanceof Error ? caught.message : 'Не удалось изменить услугу.')
@@ -2080,10 +2091,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
     try {
       await dictionaryClient.archiveTariff(auth.accessToken, backendTariffId, chargeServiceArchiveReason.trim())
       const nextTariffs = backendTariffs.filter((tariff) => tariff.id !== backendTariffId)
-      const nextRows = createTariffRowsFromBackend(nextTariffs, backendChargeServices)
-      setBackendTariffs(nextTariffs)
-      setTariffRows(nextRows)
-      setTariffDrafts(createEditableDrafts(nextRows))
+      applyTariffRows(nextTariffs)
       setTariffPageNumber(1)
       closeChargeServiceArchiveDialog()
     } catch (caught) {
@@ -3447,6 +3455,7 @@ export function AddServicePrototypeDialog({
     const initialTariff = tariffs.find((tariff) => tariff.id === initialTariffId)
     return initialTariff ? formatTariffDecimal(initialTariff.rate) : ''
   })
+  const [tariffEffectiveFrom, setTariffEffectiveFrom] = useState(getLocalDateInputValue())
   const [error, setError] = useState<string | null>(null)
   const selectedIncomeType = incomeTypes.find((incomeType) => incomeType.id === incomeTypeId) ?? null
   const selectedIncomeFund = selectedIncomeType?.destinationFundId
@@ -3638,7 +3647,7 @@ export function AddServicePrototypeDialog({
         await onCreateWithTariff({
           service: serviceRequest,
           rate: parsedRegularRate!,
-          effectiveFrom: getLocalDateInputValue(),
+          effectiveFrom: tariffEffectiveFrom,
         })
       } else if (initialSetting && onUpdateWithTariff) {
         const tariffMode = isTiered ? 'metered_tiered' : isByMeter ? 'metered' : 'regular'
@@ -3646,9 +3655,9 @@ export function AddServicePrototypeDialog({
         await onUpdateWithTariff({
           service: serviceRequest,
           rate: parsedRegularRate!,
+          effectiveFrom: tariffEffectiveFrom,
           ...(modeChanged ? {
             tariffMode,
-            effectiveFrom: getLocalDateInputValue(),
             electricityTiers: isTiered && selectedTariffTiers.length >= 2
               ? selectedTariffTiers.map((tier) => ({
                 id: tier.id,
@@ -3798,6 +3807,14 @@ export function AddServicePrototypeDialog({
                     />
                     <span>{unitName ? `руб. / ${unitName}` : 'руб.'}</span>
                   </div>
+                </FormField>
+                <FormField label="Ставка с">
+                  <LocalizedDatePicker
+                    ariaLabel="Ставка с"
+                    mode="date"
+                    value={tariffEffectiveFrom}
+                    onChange={setTariffEffectiveFrom}
+                  />
                 </FormField>
               </div>
               <div className={`contractors-service-period-grid contractors-service-period-grid--schedule${isMonthly ? ' contractors-service-period-grid--schedule-monthly' : ''}`}>
