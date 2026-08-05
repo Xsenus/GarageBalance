@@ -1887,6 +1887,40 @@ public sealed class FinanceServiceTests
     }
 
     [Fact]
+    public async Task FinanceDefaults_UseConfiguredBusinessDateAcrossOperationalViews()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        var service = FinanceServiceTestFactory.Create(
+            database.Context,
+            new FixedTimeProvider(new DateTimeOffset(2031, 4, 15, 12, 0, 0, TimeSpan.Zero)));
+
+        var missingReadings = await service.GetMissingMeterReadingsAsync(
+            new MissingMeterReadingListRequest(null, MeterKinds.Water, null),
+            CancellationToken.None);
+        var balanceHistory = await service.GetGarageBalanceHistoryAsync(
+            fixtures.Garage.Id,
+            new GarageBalanceHistoryRequest(null, null),
+            CancellationToken.None);
+        var expenseWorksheet = await service.GetExpenseWorksheetAsync(
+            new ExpenseWorksheetRequest(null),
+            CancellationToken.None);
+        var supplierOpeningBalance = await service.GetSupplierOpeningBalanceAsync(
+            fixtures.Supplier.Id,
+            new SupplierOpeningBalanceRequest(null),
+            CancellationToken.None);
+
+        Assert.All(missingReadings, item => Assert.Equal(new DateOnly(2031, 4, 1), item.AccountingMonth));
+        Assert.True(balanceHistory.Succeeded);
+        Assert.Equal(new DateOnly(2030, 11, 1), balanceHistory.Value!.MonthFrom);
+        Assert.Equal(new DateOnly(2031, 4, 1), balanceHistory.Value.MonthTo);
+        Assert.True(expenseWorksheet.Succeeded);
+        Assert.Equal(new DateOnly(2031, 4, 1), expenseWorksheet.Value!.AccountingMonth);
+        Assert.True(supplierOpeningBalance.Succeeded);
+        Assert.Equal(new DateOnly(2031, 4, 1), supplierOpeningBalance.Value!.MonthFrom);
+    }
+
+    [Fact]
     public async Task GarageBalanceHistoryQuery_PropagatesCancellation()
     {
         await using var database = await TestDatabase.CreateAsync();

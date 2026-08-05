@@ -2,6 +2,7 @@ using GarageBalance.Api.Application.Audit;
 using GarageBalance.Api.Application.Common;
 using GarageBalance.Api.Application.Finance;
 using GarageBalance.Api.Application.Reports;
+using GarageBalance.Api.Application.Settings;
 using GarageBalance.Api.Tests.Common;
 using GarageBalance.Api.Domain.Dictionaries;
 using GarageBalance.Api.Domain.Finance;
@@ -3066,7 +3067,41 @@ public sealed class ReportServiceTests
             });
     }
 
-    private static ReportService CreateService(GarageBalanceDbContext context)
+    [Fact]
+    public async Task ReportsWithoutPeriod_UseConfiguredBusinessDateForRowsAndAudit()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var businessDate = new DateOnly(2031, 4, 15);
+        var actorUserId = Guid.NewGuid();
+        var service = CreateService(database.Context, new TestBusinessDateProvider(businessDate));
+
+        var consolidated = await service.GetConsolidatedReportAsync(
+            new ConsolidatedReportRequest(null, null, null, ActorUserId: actorUserId),
+            CancellationToken.None);
+        var income = await service.GetIncomeReportAsync(
+            new IncomeReportRequest(null, null, null, [], [], [], "all", ActorUserId: actorUserId),
+            CancellationToken.None);
+        var fees = await service.GetFeeReportAsync(
+            new FeeReportRequest(null, ActorUserId: actorUserId),
+            CancellationToken.None);
+
+        Assert.True(consolidated.Succeeded);
+        Assert.Equal(new DateOnly(2031, 4, 1), consolidated.Value!.PeriodFrom);
+        Assert.Equal(new DateOnly(2031, 4, 1), consolidated.Value.PeriodTo);
+        Assert.True(income.Succeeded);
+        Assert.Equal(new DateOnly(2031, 4, 1), income.Value!.DateFrom);
+        Assert.Equal(new DateOnly(2031, 4, 30), income.Value.DateTo);
+        Assert.True(fees.Succeeded);
+
+        var feeAudit = await database.Context.AuditEvents
+            .SingleAsync(item => item.Action == "reports.fees_generated");
+        Assert.Equal("2031-04", feeAudit.RelatedAccountingMonth);
+        Assert.Contains("2031-04-15", feeAudit.MetadataJson, StringComparison.Ordinal);
+    }
+
+    private static ReportService CreateService(
+        GarageBalanceDbContext context,
+        IBusinessDateProvider? businessDateProvider = null)
     {
         return new ReportService(
             new EfCashMovementReportQuery(context),
@@ -3078,7 +3113,8 @@ public sealed class ReportServiceTests
             new EfExpenseReportQuery(context),
             new EfIncomeReportQuery(context),
             new EfApplicationUnitOfWork(context),
-            new AuditEventWriter(context));
+            new AuditEventWriter(context),
+            businessDateProvider ?? TestBusinessDateProvider.From(null));
     }
 
     private sealed class TestDatabase : IAsyncDisposable

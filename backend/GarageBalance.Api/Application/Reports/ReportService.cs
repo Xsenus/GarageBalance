@@ -1,6 +1,7 @@
 using System.Globalization;
 using GarageBalance.Api.Application.Audit;
 using GarageBalance.Api.Application.Common;
+using GarageBalance.Api.Application.Settings;
 using GarageBalance.Api.Domain.Dictionaries;
 using GarageBalance.Api.Domain.Finance;
 
@@ -16,7 +17,8 @@ public sealed class ReportService(
     IExpenseReportQuery expenseReportQuery,
     IIncomeReportQuery incomeReportQuery,
     IApplicationUnitOfWork unitOfWork,
-    IAuditEventWriter auditEventWriter) : IReportService
+    IAuditEventWriter auditEventWriter,
+    IBusinessDateProvider businessDateProvider) : IReportService
 {
     private const string IncomeReportAllRows = "all";
     private const string IncomeReportAccrualRows = "accruals";
@@ -29,7 +31,7 @@ public sealed class ReportService(
 
     public async Task<ReportResult<ConsolidatedReportDto>> GetConsolidatedReportAsync(ConsolidatedReportRequest request, CancellationToken cancellationToken)
     {
-        var periodFrom = MonthPeriod.Normalize(request.MonthFrom ?? MonthPeriod.CurrentLocalMonth());
+        var periodFrom = MonthPeriod.Normalize(request.MonthFrom ?? businessDateProvider.Today);
         var periodTo = MonthPeriod.Normalize(request.MonthTo ?? periodFrom);
         var periodFailure = ValidateReportPeriod<ConsolidatedReportDto>(periodFrom, periodTo);
         if (periodFailure is not null)
@@ -178,7 +180,7 @@ public sealed class ReportService(
 
     private async Task<ReportResult<GarageDetailReportDto>> BuildGarageReportAsync(GarageReportRequest request, int? queryLimit, CancellationToken cancellationToken)
     {
-        var periodFrom = MonthPeriod.Normalize(request.MonthFrom ?? MonthPeriod.CurrentLocalMonth());
+        var periodFrom = MonthPeriod.Normalize(request.MonthFrom ?? businessDateProvider.Today);
         var periodTo = MonthPeriod.Normalize(request.MonthTo ?? periodFrom);
         var periodFailure = ValidateReportPeriod<GarageDetailReportDto>(periodFrom, periodTo);
         if (periodFailure is not null)
@@ -1590,7 +1592,7 @@ public sealed class ReportService(
 
     private async Task AddFeeReportAuditAsync(FeeReportRequest request, FeeReportDto report, CancellationToken cancellationToken)
     {
-        var today = DateOnly.FromDateTime(DateTime.Today);
+        var today = businessDateProvider.Today;
         await AddReportAuditAsync(
             request.ActorUserId,
             "reports.fees_generated",
@@ -1619,7 +1621,7 @@ public sealed class ReportService(
 
     private async Task AddFeeReportExportAuditAsync(FeeReportRequest request, FeeReportDto report, string format, string fileName, CancellationToken cancellationToken)
     {
-        var today = DateOnly.FromDateTime(DateTime.Today);
+        var today = businessDateProvider.Today;
         await AddReportAuditAsync(
             request.ActorUserId,
             "reports.fees_exported",
@@ -1665,9 +1667,9 @@ public sealed class ReportService(
         };
     }
 
-    private static (DateOnly DateFrom, DateOnly DateTo) NormalizeDateRange(DateOnly? dateFrom, DateOnly? dateTo)
+    private (DateOnly DateFrom, DateOnly DateTo) NormalizeDateRange(DateOnly? dateFrom, DateOnly? dateTo)
     {
-        var today = DateOnly.FromDateTime(DateTime.Today);
+        var today = businessDateProvider.Today;
         var start = dateFrom ?? MonthPeriod.Normalize(today);
         var end = dateTo ?? new DateOnly(today.Year, today.Month, DateTime.DaysInMonth(today.Year, today.Month));
         return (start, end);

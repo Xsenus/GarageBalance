@@ -251,7 +251,7 @@ public sealed class FinanceService(
 
     public async Task<IReadOnlyList<MissingMeterReadingDto>> GetMissingMeterReadingsAsync(MissingMeterReadingListRequest request, CancellationToken cancellationToken)
     {
-        var month = MonthPeriod.Normalize(request.AccountingMonth ?? MonthPeriod.CurrentLocalMonth());
+        var month = MonthPeriod.Normalize(request.AccountingMonth ?? businessDateProvider.Today);
         var meterKinds = NormalizeMeterKindFilter(request.MeterKind);
         var search = NormalizeSearch(request.Search);
         var limit = NormalizeListLimit(request.Limit);
@@ -264,7 +264,7 @@ public sealed class FinanceService(
 
     public async Task<FinanceResult<GarageBalanceHistoryDto>> GetGarageBalanceHistoryAsync(Guid garageId, GarageBalanceHistoryRequest request, CancellationToken cancellationToken)
     {
-        var defaultMonthTo = MonthPeriod.CurrentLocalMonth();
+        var defaultMonthTo = MonthPeriod.Normalize(businessDateProvider.Today);
         var monthTo = MonthPeriod.Normalize(request.MonthTo ?? defaultMonthTo);
         var monthFrom = MonthPeriod.Normalize(request.MonthFrom ?? monthTo.AddMonths(-5));
         if (monthFrom > monthTo)
@@ -591,7 +591,7 @@ public sealed class FinanceService(
 
     public async Task<FinanceResult<ExpenseWorksheetDto>> GetExpenseWorksheetAsync(ExpenseWorksheetRequest request, CancellationToken cancellationToken)
     {
-        var accountingMonth = MonthPeriod.Normalize(request.AccountingMonth ?? MonthPeriod.CurrentLocalMonth());
+        var accountingMonth = MonthPeriod.Normalize(request.AccountingMonth ?? businessDateProvider.Today);
 
         var worksheetData = await expenseWorksheetQuery.GetAsync(
             accountingMonth,
@@ -815,7 +815,7 @@ public sealed class FinanceService(
         SupplierOpeningBalanceRequest request,
         CancellationToken cancellationToken)
     {
-        var monthFrom = MonthPeriod.Normalize(request.MonthFrom ?? MonthPeriod.CurrentLocalMonth());
+        var monthFrom = MonthPeriod.Normalize(request.MonthFrom ?? businessDateProvider.Today);
         var data = await supplierRepository.GetOpeningBalanceAsync(supplierId, monthFrom, cancellationToken);
         if (data is null)
         {
