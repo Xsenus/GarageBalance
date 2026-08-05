@@ -87,35 +87,40 @@ describe('financeApi', () => {
     })
   })
 
-  it('posts opening debt payment to the debt payment endpoint', async () => {
-    const fetchMock = vi.fn().mockImplementation(() => Promise.resolve(new Response(JSON.stringify({
-      id: 'operation-debt-payment',
-      operationKind: 'income',
-      operationDate: '2026-06-19',
-      accountingMonth: '2026-06-01',
-      amount: 900,
-      paymentAllocations: [],
-      isCanceled: false,
-    }), { status: 201, headers: { 'Content-Type': 'application/json' } })))
+  it('posts all full payment lines in one atomic request', async () => {
+    const request = {
+      garageId: 'garage-88',
+      operationDate: '2026-07-12',
+      receiptBatchId: '0db0f150-3da1-4a07-8e02-9721a20a92cb',
+      lines: [
+        {
+          incomeTypeId: 'income-water',
+          accountingMonth: '2026-07-01',
+          amount: 700,
+          comment: 'Вода',
+          isOpeningDebt: false,
+        },
+        {
+          accountingMonth: '2026-06-01',
+          amount: 200,
+          comment: 'Входящий долг',
+          isOpeningDebt: true,
+        },
+      ],
+    }
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      receiptBatchId: request.receiptBatchId,
+      totalAmount: 900,
+      operations: [],
+    }), { status: 201, headers: { 'Content-Type': 'application/json' } }))
     vi.stubGlobal('fetch', fetchMock)
 
-    await financeApi.createGarageDebtPayment('token', {
-      garageId: 'garage-88',
-      operationDate: '2026-06-19',
-      accountingMonth: '2026-06-01',
-      amount: 900,
-      comment: 'Закрываем долг',
-    })
+    await financeApi.createFullGaragePayment('token', request)
 
-    expect(fetchMock).toHaveBeenCalledWith('/api/finance/income/debt-payment', {
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    expect(fetchMock).toHaveBeenCalledWith('/api/finance/income/full-payment', {
       method: 'POST',
-      body: JSON.stringify({
-        garageId: 'garage-88',
-        operationDate: '2026-06-19',
-        accountingMonth: '2026-06-01',
-        amount: 900,
-        comment: 'Закрываем долг',
-      }),
+      body: JSON.stringify(request),
       headers: {
         'Content-Type': 'application/json',
         Authorization: 'Bearer token',

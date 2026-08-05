@@ -56,6 +56,24 @@ public sealed record CreateIncomeOperationRequest(
     [MaxLength(1000)] string? Comment,
     Guid? ReceiptBatchId = null);
 
+public sealed record CreateFullGaragePaymentLineRequest(
+    Guid? IncomeTypeId,
+    DateOnly AccountingMonth,
+    [Range(0.01, 999999999)] decimal Amount,
+    [MaxLength(1000)] string? Comment,
+    bool IsOpeningDebt = false);
+
+public sealed record CreateFullGaragePaymentRequest(
+    Guid GarageId,
+    DateOnly OperationDate,
+    [MinLength(1), MaxLength(100)] IReadOnlyList<CreateFullGaragePaymentLineRequest> Lines,
+    Guid? ReceiptBatchId = null);
+
+public sealed record FullGaragePaymentDto(
+    Guid ReceiptBatchId,
+    decimal TotalAmount,
+    IReadOnlyList<FinancialOperationDto> Operations);
+
 public sealed record IncomePaymentWarningRequest(
     Guid GarageId,
     Guid IncomeTypeId,

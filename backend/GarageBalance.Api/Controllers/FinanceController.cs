@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using GarageBalance.Api.Application.Finance;
+using GarageBalance.Api.Domain.Finance;
 using GarageBalance.Api.Domain.Security;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -578,6 +579,22 @@ public sealed class FinanceController(IFinanceService financeService) : Controll
         var result = await financeService.CreateMeterReadingAsync(request, GetActorUserId(), cancellationToken);
         return result.Succeeded
             ? CreatedAtAction(nameof(GetMeterReadings), new { meterKind = result.Value!.MeterKind, search = result.Value.GarageNumber }, result.Value)
+            : ToError(result);
+    }
+
+    [Authorize(Policy = SystemPermissions.PaymentsWrite)]
+    [HttpPost("income/full-payment")]
+    [ProducesResponseType<FullGaragePaymentDto>(StatusCodes.Status201Created)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
+    public async Task<ActionResult<FullGaragePaymentDto>> CreateFullGaragePayment(
+        CreateFullGaragePaymentRequest request,
+        CancellationToken cancellationToken)
+    {
+        var result = await financeService.CreateFullGaragePaymentAsync(request, GetActorUserId(), cancellationToken);
+        return result.Succeeded
+            ? CreatedAtAction(nameof(GetOperations), new { operationKind = FinancialOperationKinds.Income }, result.Value)
             : ToError(result);
     }
 

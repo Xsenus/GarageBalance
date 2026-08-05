@@ -3057,6 +3057,7 @@ function PaymentsPrototypePanel({
   const [savingMeterRowId, setSavingMeterRowId] = useState<string | null>(null)
   const [fullPaymentDialogOpen, setFullPaymentDialogOpen] = useState(false)
   const fullPaymentTriggerRef = useRef<HTMLButtonElement | null>(null)
+  const fullPaymentReceiptBatchIdRef = useRef<string | null>(null)
   const [garageAccrualDialogOpen, setGarageAccrualDialogOpen] = useState(false)
   const garageAccrualTriggerRef = useRef<HTMLButtonElement | null>(null)
   const [penaltyAccrualDialogOpen, setPenaltyAccrualDialogOpen] = useState(false)
@@ -3301,6 +3302,7 @@ function PaymentsPrototypePanel({
     fullPaymentTriggerRef.current = event.currentTarget
     setPaymentError(null)
     if (await onEnsureReferences()) {
+      fullPaymentReceiptBatchIdRef.current = crypto.randomUUID()
       setFullPaymentDialogOpen(true)
     }
   }
@@ -3308,6 +3310,7 @@ function PaymentsPrototypePanel({
   function closeFullPaymentDialog() {
     const trigger = fullPaymentTriggerRef.current
     setFullPaymentDialogOpen(false)
+    fullPaymentReceiptBatchIdRef.current = null
     window.setTimeout(() => {
       if (trigger?.isConnected) {
         trigger.focus()
@@ -4082,43 +4085,42 @@ function PaymentsPrototypePanel({
       return 'Укажите сумму полной оплаты больше нуля.'
     }
 
-    const receiptBatchId = crypto.randomUUID()
-    const historyItems: Array<{ operation: FinancialOperationDto; purposeFallback: string; debtAfterFallback: number }> = []
+    const receiptBatchId = fullPaymentReceiptBatchIdRef.current ?? crypto.randomUUID()
+    fullPaymentReceiptBatchIdRef.current = receiptBatchId
+    const paymentPurposes: string[] = []
+    const lines = []
     if (openingDebtPaymentAmount > 0) {
-      const operation = await financeClient.createGarageDebtPayment(auth.accessToken, {
-        garageId: selectedGarage.id,
-        operationDate: getLocalDateInputValue(),
+      lines.push({
         accountingMonth: incomeWorksheetMonthFrom.length === 7 ? `${incomeWorksheetMonthFrom}-01` : incomeWorksheetMonthFrom,
         amount: openingDebtPaymentAmount,
         comment: request.comment.trim() || undefined,
-        receiptBatchId,
+        isOpeningDebt: true,
       })
-      historyItems.push({
-        operation,
-        purposeFallback: 'Оплата входящего долга',
-        debtAfterFallback: Math.max(totalDebtToPay - openingDebtPaymentAmount, 0),
-      })
+      paymentPurposes.push('Оплата входящего долга')
     }
 
     for (const item of paymentPlan) {
-      const accountingMonth = item.row.month.length === 7 ? `${item.row.month}-01` : item.row.month
-      const operation = await financeClient.createIncome(auth.accessToken, {
-        garageId: selectedGarage.id,
+      lines.push({
         incomeTypeId: item.incomeType.id,
-        operationDate: getLocalDateInputValue(),
-        accountingMonth,
+        accountingMonth: item.row.month.length === 7 ? `${item.row.month}-01` : item.row.month,
         amount: item.amount,
-        receiptBatchId,
         comment: request.comment.trim()
           ? `Полная оплата ${item.row.service} ${item.row.monthLabel}: ${request.comment.trim()}`
           : `Полная оплата ${item.row.service} ${item.row.monthLabel}`,
       })
-      historyItems.push({
-        operation,
-        purposeFallback: item.row.service,
-        debtAfterFallback: Math.max(item.row.debt - item.amount, 0),
-      })
+      paymentPurposes.push(item.row.service)
     }
+
+    const batch = await financeClient.createFullGaragePayment(auth.accessToken, {
+      garageId: selectedGarage.id,
+      operationDate: getLocalDateInputValue(),
+      receiptBatchId,
+      lines,
+    })
+    const historyItems = batch.operations.map((operation, index) => ({
+      operation,
+      purposeFallback: paymentPurposes[index]!,
+    }))
 
     const paidByRowId = new Map(paymentPlan.map((item) => [item.row.id, item.amount]))
     setGarageRows((currentRows) => currentRows.map((row) => {
@@ -4136,7 +4138,7 @@ function PaymentsPrototypePanel({
           time: formatOperationTime(operation.createdAtUtc) || paymentTime,
           amount: operation.amount,
           purpose: operation.incomeTypeName ?? item.purposeFallback,
-          debtAfter: operation.garageDebtAfter ?? item.debtAfterFallback,
+          debtAfter: operation.garageDebtAfter ?? 0,
         }
       }),
       ...currentRows,

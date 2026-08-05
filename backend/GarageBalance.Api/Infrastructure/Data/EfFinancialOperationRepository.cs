@@ -235,6 +235,14 @@ public sealed class EfFinancialOperationRepository(GarageBalanceDbContext dbCont
         Aggregate(dbContext.FinancialOperations)
             .SingleOrDefaultAsync(operation => operation.Id == id, cancellationToken);
 
+    public async Task<IReadOnlyList<FinancialOperation>> GetByReceiptBatchIdAsync(
+        Guid receiptBatchId,
+        CancellationToken cancellationToken) =>
+        await Aggregate(dbContext.FinancialOperations.AsNoTracking())
+            .Where(operation => operation.ReceiptBatchId == receiptBatchId)
+            .OrderBy(operation => operation.Id)
+            .ToListAsync(cancellationToken);
+
     public Task<bool> ActiveDocumentDuplicateExistsAsync(
         Guid? ignoredId,
         string operationKind,

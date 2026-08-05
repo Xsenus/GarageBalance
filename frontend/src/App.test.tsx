@@ -26,7 +26,7 @@ import type { AuthClient, AuthResponse } from './services/authApi'
 import { DictionaryApiError } from './services/dictionariesApi'
 import type { AccountingTypeDto, ChargeServiceSettingDto, CreateChargeServiceWithTariffRequest, DictionaryClient, FeeCampaignDto, GarageDto, IrregularPaymentDto, OwnerDto, PagedResult, StaffDepartmentDto, StaffMemberDto, SupplierContactDto, SupplierDto, SupplierGroupDto, TariffDto, UpdateChargeServiceWithTariffRequest, UpsertGarageRequest, UpsertIrregularPaymentRequest, UpsertStaffMemberRequest, UpsertSupplierRequest, UpsertTariffRequest } from './services/dictionariesApi'
 import { FinanceApiError } from './services/financeApi'
-import type { AccrualDto, CorrectHistoricalMeterReadingRequest, CreateAccrualRequest, CreateCashBankTransferRequest, CreateExpenseOperationRequest, CreateIncomeOperationRequest, CreateIrregularAccrualRequest, CreateMeterReadingRequest, CreateStaffPaymentRequest, CreateStaffSalaryAdjustmentRequest, CreateSupplierAccrualRequest, ExpenseWorksheetDto, FeeCampaignAccrualGenerationResultDto, FinanceClient, FinancePagedResult, FinancePageParams, FinanceSummaryDto, FinancialOperationDto, GarageBalanceHistoryDto, GarageIncomeWorksheetDto, GenerateFeeCampaignAccrualsRequest, GenerateSupplierGroupSalaryAccrualsRequest, MeterReadingDto, MeterReadingYearPageDto, MissingMeterReadingDto, RegularAccrualGenerationResultDto, RegularCatalogAccrualGenerationResultDto, SupplierAccrualDto, SupplierGroupSalaryAccrualGenerationResultDto } from './services/financeApi'
+import type { AccrualDto, CorrectHistoricalMeterReadingRequest, CreateAccrualRequest, CreateCashBankTransferRequest, CreateExpenseOperationRequest, CreateFullGaragePaymentRequest, CreateIncomeOperationRequest, CreateIrregularAccrualRequest, CreateMeterReadingRequest, CreateStaffPaymentRequest, CreateStaffSalaryAdjustmentRequest, CreateSupplierAccrualRequest, ExpenseWorksheetDto, FeeCampaignAccrualGenerationResultDto, FinanceClient, FinancePagedResult, FinancePageParams, FinanceSummaryDto, FinancialOperationDto, GarageBalanceHistoryDto, GarageIncomeWorksheetDto, GenerateFeeCampaignAccrualsRequest, GenerateSupplierGroupSalaryAccrualsRequest, MeterReadingDto, MeterReadingYearPageDto, MissingMeterReadingDto, RegularAccrualGenerationResultDto, RegularCatalogAccrualGenerationResultDto, SupplierAccrualDto, SupplierGroupSalaryAccrualGenerationResultDto } from './services/financeApi'
 import type { FundDto, FundOperationDto, FundOperationPageDto, FundsClient } from './services/fundsApi'
 import type { AccessImportCreatedRecordDto, AccessImportQuarantineItemDto, AccessImportReaderStatusDto, AccessImportRunDto, AccessImportRunLogEntryDto, ImportClient } from './services/importApi'
 import type { IntegrationClient, IntegrationSecretSettingDto, OneCFreshIntegrationStatusDto, OneCFreshSyncDto, OneCFreshSyncPreviewDto, OneCFreshSyncRequest, ReceiptPrintingActionDto, ReceiptPrintingActionRequest, ReceiptPrintingIntegrationStatusDto } from './services/integrationsApi'
@@ -5910,6 +5910,7 @@ describe('App', () => {
     const expenseTypes = [electricityExpenseType, advanceExpenseType, noReceiptExpenseType]
     let expenseWorksheetRequestCount = 0
     const savedIncomeRequests: CreateIncomeOperationRequest[] = []
+    const savedFullPaymentRequests: CreateFullGaragePaymentRequest[] = []
     const savedAccrualRequests: CreateIrregularAccrualRequest[] = []
     const savedPenaltyAccrualRequests: CreateAccrualRequest[] = []
     let penaltyAccrualAttemptCount = 0
@@ -5954,6 +5955,31 @@ describe('App', () => {
           garageDebtBefore: 5674,
           garageDebtAfter: 0,
         })
+      },
+      createFullGaragePayment: async (_token, request) => {
+        savedFullPaymentRequests.push(request)
+        return {
+          receiptBatchId: request.receiptBatchId ?? 'full-payment-batch',
+          totalAmount: request.lines.reduce((total, line) => total + line.amount, 0),
+          operations: request.lines.map((line, index) => {
+            const requestIncomeType = incomeTypes.find((item) => item.id === line.incomeTypeId) ?? otherPaymentsIncomeType
+            return createFinancialOperation({
+              id: `full-payment-${index + 1}`,
+              garageId: request.garageId,
+              garageNumber: garage.number,
+              ownerName: garage.ownerName,
+              incomeTypeId: line.incomeTypeId ?? 'income-debt-transfer',
+              incomeTypeName: line.isOpeningDebt ? 'Перенос задолженности' : requestIncomeType.name,
+              operationDate: request.operationDate,
+              accountingMonth: line.accountingMonth,
+              amount: line.amount,
+              comment: line.comment ?? null,
+              receiptBatchId: request.receiptBatchId ?? 'full-payment-batch',
+              garageDebtBefore: 5674,
+              garageDebtAfter: 0,
+            })
+          }),
+        }
       },
       createIrregularAccrual: async (_token, request) => {
         savedAccrualRequests.push(request)
@@ -6558,33 +6584,33 @@ describe('App', () => {
     expect(fullPaymentError).toHaveTextContent('Сумма оплаты не может превышать долг 7 415.75.')
     expect(fullPaymentError).toHaveClass('form-error')
     expect(savedIncomeRequests).toHaveLength(1)
+    expect(savedFullPaymentRequests).toHaveLength(0)
     await user.click(fullPaymentAmount)
     await user.clear(fullPaymentAmount)
     await user.type(fullPaymentAmount, '5000')
     await user.type(within(fullPaymentDialog).getByLabelText('Комментарий к полной оплате'), 'Оплата остатка')
     await user.click(within(fullPaymentDialog).getByRole('button', { name: 'Провести оплату' }))
-    await waitFor(() => expect(savedIncomeRequests).toHaveLength(3))
-    expect(savedIncomeRequests.slice(1)).toEqual(expect.arrayContaining([
+    await waitFor(() => expect(savedFullPaymentRequests).toHaveLength(1))
+    expect(savedIncomeRequests).toHaveLength(1)
+    expect(savedFullPaymentRequests[0]).toEqual(expect.objectContaining({
+      garageId: garage.id,
+      operationDate: '2026-06-30',
+      receiptBatchId: expect.stringMatching(/^[0-9a-f-]{36}$/),
+      lines: expect.arrayContaining([
       expect.objectContaining({
-        garageId: garage.id,
         incomeTypeId: waterIncomeType.id,
-        operationDate: '2026-06-30',
         accountingMonth: '2026-06-01',
         amount: 4500,
         comment: 'Полная оплата Водоснабжение июн.26: Оплата остатка',
       }),
       expect.objectContaining({
-        garageId: garage.id,
         incomeTypeId: otherPaymentsIncomeType.id,
-        operationDate: '2026-06-30',
         accountingMonth: '2026-06-01',
         amount: 500,
         comment: 'Полная оплата Карта доступа июн.26: Оплата остатка',
       }),
-    ]))
-    const fullPaymentReceiptBatchIds = savedIncomeRequests.slice(1).map((request) => request.receiptBatchId)
-    expect(fullPaymentReceiptBatchIds[0]).toMatch(/^[0-9a-f-]{36}$/)
-    expect(new Set(fullPaymentReceiptBatchIds).size).toBe(1)
+      ]),
+    }))
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Полная оплата' })).not.toBeInTheDocument())
     await waitFor(() => expect(fullPaymentButton).toHaveFocus())
 
@@ -8005,20 +8031,25 @@ describe('App', () => {
       closingDebt: 900,
       rows: [],
     }))
-    const createGarageDebtPayment = vi.fn(async (_token: string, request) => createFinancialOperation({
-      id: 'opening-debt-payment',
-      garageId: request.garageId,
-      garageNumber: '88',
-      ownerName: 'Смирнов Алексей',
-      incomeTypeName: 'Перенос задолженности',
-      operationDate: request.operationDate,
-      accountingMonth: request.accountingMonth,
-      amount: request.amount,
-      garageDebtBefore: 900,
-      garageDebtAfter: 200,
+    const createFullGaragePayment = vi.fn(async (_token: string, request: CreateFullGaragePaymentRequest) => ({
+      receiptBatchId: request.receiptBatchId!,
+      totalAmount: request.lines[0].amount,
+      operations: [createFinancialOperation({
+        id: 'opening-debt-payment',
+        garageId: request.garageId,
+        garageNumber: '88',
+        ownerName: 'Смирнов Алексей',
+        incomeTypeName: 'Перенос задолженности',
+        operationDate: request.operationDate,
+        accountingMonth: request.lines[0].accountingMonth,
+        amount: request.lines[0].amount,
+        receiptBatchId: request.receiptBatchId,
+        garageDebtBefore: 900,
+        garageDebtAfter: 200,
+      })],
     }))
     const createIncome = vi.fn(async () => createFinancialOperation({ id: 'unexpected-income' }))
-    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient({ getGarages: async () => [garageFromDictionary] })} financeClient={createFinanceClient({ getGarageIncomeWorksheet, createGarageDebtPayment, createIncome })} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient({ getGarages: async () => [garageFromDictionary] })} financeClient={createFinanceClient({ getGarageIncomeWorksheet, createFullGaragePayment, createIncome })} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
     await user.click(screen.getByRole('button', { name: 'Войти' }))
@@ -8049,15 +8080,80 @@ describe('App', () => {
     await user.type(within(fullPaymentDialog).getByLabelText('Комментарий к полной оплате'), 'Закрываем долг на начало')
     await user.click(within(fullPaymentDialog).getByRole('button', { name: 'Провести оплату' }))
 
-    await waitFor(() => expect(createGarageDebtPayment).toHaveBeenCalledWith('token', expect.objectContaining({
+    await waitFor(() => expect(createFullGaragePayment).toHaveBeenCalledWith('token', expect.objectContaining({
       garageId: 'garage-opening-debt',
-      accountingMonth: expect.stringMatching(/^\d{4}-\d{2}-01$/),
-      amount: 700,
-      comment: 'Закрываем долг на начало',
       receiptBatchId: expect.stringMatching(/^[0-9a-f-]{36}$/),
+      lines: [expect.objectContaining({
+        accountingMonth: expect.stringMatching(/^\d{4}-\d{2}-01$/),
+        amount: 700,
+        comment: 'Закрываем долг на начало',
+        isOpeningDebt: true,
+      })],
     })))
     expect(createIncome).not.toHaveBeenCalled()
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Полная оплата' })).not.toBeInTheDocument())
+  })
+
+  it('keeps the full payment dialog unchanged when the atomic request fails', async () => {
+    const user = userEvent.setup()
+    const garage = createGarage({ id: 'garage-full-payment-failure', number: '89', ownerName: 'Орлов Илья' })
+    const getGarageIncomeWorksheet = vi.fn(async () => createGarageIncomeWorksheet({
+      garageId: garage.id,
+      garageNumber: garage.number,
+      ownerName: garage.ownerName,
+      accrualTotal: 600,
+      incomeTotal: 0,
+      debtTotal: 600,
+      closingDebt: 600,
+      rows: [{
+        accountingMonth: '2026-06-01',
+        incomeTypeId: 'income-water-atomic-failure',
+        incomeTypeName: 'Вода',
+        meterKind: 'water',
+        meterValue: null,
+        meterConsumption: null,
+        accrualAmount: 600,
+        incomeAmount: 0,
+        debt: 600,
+      }],
+    }))
+    const createFullGaragePayment = vi.fn(async () => {
+      throw new FinanceApiError('income_destination_fund_not_found', 'Полная оплата не сохранена.', 409)
+    })
+    const createIncome = vi.fn()
+    render(<App
+      authClient={createAuthClient()}
+      dictionaryClient={createDictionaryClient({ getGarages: async () => [garage] })}
+      financeClient={createFinanceClient({ getGarageIncomeWorksheet, createFullGaragePayment, createIncome })}
+      importClient={createImportClient()}
+      reportClient={createReportClient()}
+      releaseClient={createReleaseClient()}
+      userClient={createUserClient()}
+    />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Платежи')
+    const prototype = within(await screen.findByRole('region', { name: 'Платежи' })).getByRole('region', { name: 'Форма платежей' })
+    await user.type(within(prototype).getByLabelText('Поиск номера гаража или ФИО владельца'), garage.number)
+    await user.click(await within(prototype).findByRole('option', { name: /Гараж\s*89\s*Орлов Илья/ }))
+    await user.click(within(prototype).getByRole('button', { name: 'Полная оплата' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Полная оплата' })
+    const amount = within(dialog).getByLabelText('Сумма полной оплаты')
+    expect(amount).toHaveValue('600.00')
+
+    await user.click(within(dialog).getByRole('button', { name: 'Провести оплату' }))
+
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent('Полная оплата не сохранена.')
+    expect(dialog).toBeInTheDocument()
+    expect(amount).toHaveValue('600.00')
+    expect(createFullGaragePayment).toHaveBeenCalledTimes(1)
+    expect(createIncome).not.toHaveBeenCalled()
+    expect(getGarageIncomeWorksheet).toHaveBeenCalledTimes(1)
+    const firstReceiptBatchId = createFullGaragePayment.mock.calls[0][1].receiptBatchId
+    await user.click(within(dialog).getByRole('button', { name: 'Провести оплату' }))
+    await waitFor(() => expect(createFullGaragePayment).toHaveBeenCalledTimes(2))
+    expect(createFullGaragePayment.mock.calls[1][1].receiptBatchId).toBe(firstReceiptBatchId)
   })
 
   it('keeps the payment overview empty until search when the display setting is disabled', async () => {
@@ -20078,7 +20174,21 @@ function createFinanceClient(overrides: Partial<FinanceClient> = {}): FinanceCli
       requiresConfirmation: false,
     }),
     createIncome: async () => operation,
-    createGarageDebtPayment: async () => createFinancialOperation({ id: 'operation-debt-payment', amount: 500, incomeTypeName: 'Перенос задолженности' }),
+    createFullGaragePayment: async (_token, request) => ({
+      receiptBatchId: request.receiptBatchId ?? 'full-payment-batch',
+      totalAmount: request.lines.reduce((total, line) => total + line.amount, 0),
+      operations: request.lines.map((line, index) => createFinancialOperation({
+        id: `operation-full-payment-${index + 1}`,
+        garageId: request.garageId,
+        incomeTypeId: line.incomeTypeId ?? 'income-type-debt-transfer',
+        incomeTypeName: line.isOpeningDebt ? 'Перенос задолженности' : 'Членский взнос',
+        operationDate: request.operationDate,
+        accountingMonth: line.accountingMonth,
+        amount: line.amount,
+        comment: line.comment ?? null,
+        receiptBatchId: request.receiptBatchId ?? 'full-payment-batch',
+      })),
+    }),
     updateIncome: async (_token, operationId) => ({ ...operation, id: operationId }),
     createExpense: async () => createFinancialOperation({ id: 'operation-2', operationKind: 'expense', amount: 500, supplierName: 'Водоканал', expenseTypeName: 'Вода' }),
     createStaffPayment: async () => createFinancialOperation({ id: 'operation-staff', operationKind: 'expense', amount: 500, staffMemberId: 'staff-1', staffMemberName: 'Петрова Ольга', staffDepartmentName: 'Бухгалтерия', expenseTypeName: 'Зарплата' }),

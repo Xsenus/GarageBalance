@@ -997,6 +997,249 @@ public sealed class FinanceService(
         return FinanceResult<FinancialOperationDto>.Success(await ToDtoAsync(operation, cancellationToken));
     }
 
+    public async Task<FinanceResult<FullGaragePaymentDto>> CreateFullGaragePaymentAsync(
+        CreateFullGaragePaymentRequest request,
+        Guid? actorUserId,
+        CancellationToken cancellationToken)
+    {
+        if (request.Lines is null || request.Lines.Count is < 1 or > 100)
+        {
+            return FinanceResult<FullGaragePaymentDto>.Failure(
+                "full_payment_lines_invalid",
+                "Полная оплата должна содержать от 1 до 100 строк.");
+        }
+
+        var normalizedLines = request.Lines
+            .Select(line => line with
+            {
+                AccountingMonth = MonthPeriod.Normalize(line.AccountingMonth),
+                Amount = MoneyMath.RoundMoney(line.Amount),
+                Comment = NormalizeOptional(line.Comment)
+            })
+            .ToList();
+        if (normalizedLines.Any(line => line.Amount <= 0))
+        {
+            return FinanceResult<FullGaragePaymentDto>.Failure(
+                "full_payment_amount_invalid",
+                "Сумма каждой строки полной оплаты должна быть больше нуля.");
+        }
+
+        if (normalizedLines.Any(line => line.IsOpeningDebt == line.IncomeTypeId.HasValue))
+        {
+            return FinanceResult<FullGaragePaymentDto>.Failure(
+                "full_payment_line_kind_invalid",
+                "Для обычной строки укажите вид поступления, а для входящего долга не указывайте его.");
+        }
+
+        if (normalizedLines.Count(line => line.IsOpeningDebt) > 1 ||
+            normalizedLines
+                .GroupBy(line => (line.IsOpeningDebt, line.IncomeTypeId, line.AccountingMonth))
+                .Any(group => group.Count() > 1))
+        {
+            return FinanceResult<FullGaragePaymentDto>.Failure(
+                "full_payment_line_duplicate",
+                "В полной оплате не должно быть повторяющихся строк одного вида и месяца.");
+        }
+
+        var garage = await garageRepository.FindActiveWithOwnerAsync(request.GarageId, cancellationToken);
+        if (garage is null)
+        {
+            return FinanceResult<FullGaragePaymentDto>.Failure("garage_not_found", "Гараж для поступления не найден.");
+        }
+
+        var incomeTypeIds = normalizedLines
+            .Where(line => line.IncomeTypeId.HasValue)
+            .Select(line => line.IncomeTypeId!.Value)
+            .Distinct()
+            .ToArray();
+        var incomeTypes = (await incomeTypeRepository.GetActiveByIdsAsync(incomeTypeIds, cancellationToken))
+            .ToDictionary(incomeType => incomeType.Id);
+        if (incomeTypes.Count != incomeTypeIds.Length)
+        {
+            return FinanceResult<FullGaragePaymentDto>.Failure(
+                "income_type_not_found",
+                "Один из видов поступления полной оплаты не найден или архивирован.");
+        }
+
+        await using var fundAssignmentLock = await incomeFundAssignmentService.AcquireUpdateLockAsync(cancellationToken);
+        await using var balanceLock = await financeAvailableBalanceQuery.AcquireUpdateLockAsync(
+            FinanceBalanceAccounts.Cash,
+            cancellationToken);
+
+        var receiptBatchId = request.ReceiptBatchId ?? Guid.NewGuid();
+        var existingBatch = await financialOperationRepository.GetByReceiptBatchIdAsync(
+            receiptBatchId,
+            cancellationToken);
+        if (existingBatch.Count > 0)
+        {
+            var orderedExistingBatch = MatchFullPaymentBatch(existingBatch, normalizedLines);
+            if (existingBatch.Any(operation =>
+                    operation.GarageId != garage.Id ||
+                    operation.OperationDate != request.OperationDate) ||
+                orderedExistingBatch is null)
+            {
+                return FinanceResult<FullGaragePaymentDto>.Failure(
+                    "receipt_batch_conflict",
+                    "Пакет единой квитанции уже связан с другой полной оплатой.");
+            }
+
+            var existingOperationDtos = await ToOperationDtosAsync(orderedExistingBatch, cancellationToken);
+            return FinanceResult<FullGaragePaymentDto>.Success(new FullGaragePaymentDto(
+                receiptBatchId,
+                MoneyMath.RoundMoney(orderedExistingBatch.Sum(operation => operation.Amount)),
+                existingOperationDtos));
+        }
+
+        if (await financialOperationRepository.ReceiptBatchConflictExistsAsync(
+            receiptBatchId,
+            garage.Id,
+            request.OperationDate,
+            cancellationToken))
+        {
+            return FinanceResult<FullGaragePaymentDto>.Failure(
+                "receipt_batch_conflict",
+                "Пакет единой квитанции уже связан с другим гаражом или датой платежа.");
+        }
+
+        IncomeType? openingDebtIncomeType = null;
+        var openingDebtLine = normalizedLines.SingleOrDefault(line => line.IsOpeningDebt);
+        if (openingDebtLine is not null)
+        {
+            var availableOpeningDebt = await CalculateAvailableOpeningDebtAsync(
+                garage,
+                openingDebtLine.AccountingMonth,
+                cancellationToken);
+            if (availableOpeningDebt <= 0)
+            {
+                return FinanceResult<FullGaragePaymentDto>.Failure(
+                    "debt_payment_opening_debt_not_found",
+                    "На начало выбранного периода нет входящего долга для оплаты.");
+            }
+
+            if (openingDebtLine.Amount > availableOpeningDebt)
+            {
+                return FinanceResult<FullGaragePaymentDto>.Failure(
+                    "debt_payment_amount_exceeds_opening_debt",
+                    $"Сумма оплаты входящего долга не может превышать {MoneyFormatting.Format(availableOpeningDebt)}.");
+            }
+
+            openingDebtIncomeType = await GetOrCreateDebtTransferIncomeTypeAsync(cancellationToken);
+        }
+
+        var operations = new List<FinancialOperation>(normalizedLines.Count);
+        foreach (var line in normalizedLines)
+        {
+            var incomeType = line.IsOpeningDebt ? openingDebtIncomeType! : incomeTypes[line.IncomeTypeId!.Value];
+            var comment = line.IsOpeningDebt
+                ? line.Comment is null
+                    ? "Оплата входящего долга периода"
+                    : $"Оплата входящего долга периода: {line.Comment}"
+                : line.Comment;
+            var operation = new FinancialOperation
+            {
+                OperationKind = FinancialOperationKinds.Income,
+                OperationDate = request.OperationDate,
+                AccountingMonth = line.AccountingMonth,
+                Amount = line.Amount,
+                ReceiptBatchId = receiptBatchId,
+                Comment = comment,
+                GarageId = garage.Id,
+                Garage = garage,
+                IncomeTypeId = incomeType.Id,
+                IncomeType = incomeType
+            };
+            financialOperationRepository.Add(operation);
+            operations.Add(operation);
+        }
+
+        var allocationKeys = operations
+            .Select(operation => new AccrualPaymentAllocationKey(operation.GarageId!.Value, operation.IncomeTypeId!.Value))
+            .Distinct()
+            .ToArray();
+        await using var allocationLock = await accrualPaymentAllocationRepository.AcquireRebuildLockAsync(
+            allocationKeys,
+            cancellationToken);
+        await RebuildPaymentAllocationsAsync(
+            allocationKeys,
+            actorUserId,
+            "Полная оплата гаража",
+            receiptBatchId,
+            cancellationToken);
+
+        foreach (var operation in operations)
+        {
+            AddAudit(actorUserId, "finance.income_created", operation, FormatIncomeCreatedAuditSummary(operation));
+            var assignmentResult = await incomeFundAssignmentService.CreateAsync(operation, actorUserId, cancellationToken);
+            if (!assignmentResult.Succeeded)
+            {
+                return FinanceResult<FullGaragePaymentDto>.Failure(
+                    assignmentResult.ErrorCode!,
+                    assignmentResult.ErrorMessage!);
+            }
+        }
+
+        var totalAmount = MoneyMath.RoundMoney(operations.Sum(operation => operation.Amount));
+        AddAudit(
+            actorUserId,
+            "finance.full_garage_payment_created",
+            "receipt_batch",
+            receiptBatchId,
+            $"Полная оплата гаража {garage.Number}: {operations.Count} строк на сумму {MoneyFormatting.Format(totalAmount)}.",
+            relatedDocumentId: receiptBatchId.ToString(),
+            relatedDocumentNumber: $"ПАКЕТ-{receiptBatchId:N}",
+            relatedGarageId: garage.Id.ToString(),
+            relatedGarageNumber: garage.Number,
+            metadata: new Dictionary<string, object?>
+            {
+                ["lineCount"] = operations.Count,
+                ["totalAmount"] = totalAmount
+            });
+        await unitOfWork.SaveChangesAsync(cancellationToken);
+
+        var operationDtos = await ToOperationDtosAsync(operations, cancellationToken);
+        return FinanceResult<FullGaragePaymentDto>.Success(new FullGaragePaymentDto(
+            receiptBatchId,
+            totalAmount,
+            operationDtos));
+    }
+
+    private static IReadOnlyList<FinancialOperation>? MatchFullPaymentBatch(
+        IReadOnlyList<FinancialOperation> existingBatch,
+        IReadOnlyList<CreateFullGaragePaymentLineRequest> requestedLines)
+    {
+        if (existingBatch.Count != requestedLines.Count || existingBatch.Any(operation => operation.IsCanceled))
+        {
+            return null;
+        }
+
+        var unmatched = existingBatch.ToList();
+        var orderedMatches = new List<FinancialOperation>(requestedLines.Count);
+        foreach (var line in requestedLines)
+        {
+            var expectedComment = line.IsOpeningDebt
+                ? line.Comment is null
+                    ? "Оплата входящего долга периода"
+                    : $"Оплата входящего долга периода: {line.Comment}"
+                : line.Comment;
+            var matchIndex = unmatched.FindIndex(operation =>
+                operation.AccountingMonth == line.AccountingMonth &&
+                operation.Amount == line.Amount &&
+                string.Equals(operation.Comment, expectedComment, StringComparison.Ordinal) &&
+                (line.IsOpeningDebt
+                    ? string.Equals(operation.IncomeType?.Code, DebtTransferIncomeTypeCode, StringComparison.OrdinalIgnoreCase)
+                    : operation.IncomeTypeId == line.IncomeTypeId));
+            if (matchIndex < 0)
+            {
+                return null;
+            }
+
+            orderedMatches.Add(unmatched[matchIndex]);
+            unmatched.RemoveAt(matchIndex);
+        }
+
+        return unmatched.Count == 0 ? orderedMatches : null;
+    }
+
     public async Task<FinanceResult<FinancialOperationDto>> CreateGarageDebtPaymentAsync(CreateGarageDebtPaymentRequest request, Guid? actorUserId, CancellationToken cancellationToken)
     {
         var amount = MoneyMath.RoundMoney(request.Amount);

@@ -28,6 +28,7 @@ public interface IFinancialOperationRepository
         CancellationToken cancellationToken);
 
     Task<FinancialOperation?> FindForUpdateAsync(Guid id, CancellationToken cancellationToken);
+    Task<IReadOnlyList<FinancialOperation>> GetByReceiptBatchIdAsync(Guid receiptBatchId, CancellationToken cancellationToken);
     Task<bool> ActiveDocumentDuplicateExistsAsync(Guid? ignoredId, string operationKind, DateOnly operationDate, string documentNumber, CancellationToken cancellationToken);
     Task<bool> ReceiptBatchConflictExistsAsync(Guid receiptBatchId, Guid garageId, DateOnly operationDate, CancellationToken cancellationToken);
     Task<decimal> GetIncomeTotalBeforeMonthAsync(Guid garageId, DateOnly accountingMonth, CancellationToken cancellationToken);

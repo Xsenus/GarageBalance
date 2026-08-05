@@ -15,6 +15,62 @@ public sealed class PostgreSqlIncomeFundAssignmentIntegrationTests
     private const string PreviousMigration = "20260718172521_RouteFeeCampaignAccrualsToOtherIncome";
 
     [PostgreSqlFact]
+    public async Task FullGaragePayment_IsAtomicAndIdempotentAcrossApplicationInstances()
+    {
+        await using var database = await PostgreSqlTestDatabase.CreateAsync();
+        Guid garageId;
+        Guid membershipIncomeTypeId;
+        Guid otherIncomeTypeId;
+        await using (var setupContext = database.CreateContext())
+        {
+            var garage = new Garage
+            {
+                Number = $"FULL-PAYMENT-PG-{Guid.NewGuid():N}",
+                PeopleCount = 1,
+                FloorCount = 1
+            };
+            var incomeTypes = await setupContext.IncomeTypes
+                .Where(item => item.Code == "membership" || item.Code == "other_income")
+                .ToDictionaryAsync(item => item.Code);
+            setupContext.Garages.Add(garage);
+            await setupContext.SaveChangesAsync();
+            garageId = garage.Id;
+            membershipIncomeTypeId = incomeTypes["membership"].Id;
+            otherIncomeTypeId = incomeTypes["other_income"].Id;
+        }
+
+        var receiptBatchId = Guid.NewGuid();
+        var request = new CreateFullGaragePaymentRequest(
+            garageId,
+            new DateOnly(2026, 7, 20),
+            [
+                new CreateFullGaragePaymentLineRequest(membershipIncomeTypeId, new DateOnly(2026, 7, 1), 250m, null),
+                new CreateFullGaragePaymentLineRequest(otherIncomeTypeId, new DateOnly(2026, 7, 1), 350m, null)
+            ],
+            receiptBatchId);
+        await using var firstContext = database.CreateContext();
+        await using var secondContext = database.CreateContext();
+
+        var results = await Task.WhenAll(
+            FinanceServiceTestFactory.Create(firstContext).CreateFullGaragePaymentAsync(request, null, CancellationToken.None),
+            FinanceServiceTestFactory.Create(secondContext).CreateFullGaragePaymentAsync(request, null, CancellationToken.None));
+
+        Assert.All(results, result => Assert.True(result.Succeeded, result.ErrorMessage));
+        Assert.All(results, result => Assert.Equal(600m, result.Value!.TotalAmount));
+        await using var verificationContext = database.CreateContext();
+        var operationIds = await verificationContext.FinancialOperations
+            .Where(item => item.ReceiptBatchId == receiptBatchId)
+            .Select(item => item.Id)
+            .ToListAsync();
+        Assert.Equal(2, operationIds.Count);
+        Assert.Equal(2, await verificationContext.FundOperations.CountAsync(item =>
+            item.SourceFinancialOperationId.HasValue && operationIds.Contains(item.SourceFinancialOperationId.Value)));
+        Assert.Equal(1, await verificationContext.AuditEvents.CountAsync(item =>
+            item.Action == "finance.full_garage_payment_created" &&
+            item.RelatedDocumentId == receiptBatchId.ToString()));
+    }
+
+    [PostgreSqlFact]
     public async Task RoutedIncomeCancellationAndRestorationStayAtomicOnPostgreSql()
     {
         await using var database = await PostgreSqlTestDatabase.CreateAsync();

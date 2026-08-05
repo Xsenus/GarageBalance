@@ -467,6 +467,159 @@ public sealed class FinanceServiceTests
     }
 
     [Fact]
+    public async Task CreateFullGaragePaymentAsync_CreatesOneReceiptBatchAndAssignsFunds()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        await RemoveSeededBankTransferAsync(database.Context);
+        var routedIncomeType = AddOtherIncomeDestination(database.Context);
+        await database.Context.SaveChangesAsync();
+        var service = FinanceServiceTestFactory.Create(database.Context);
+        var actorUserId = Guid.NewGuid();
+        var receiptBatchId = Guid.NewGuid();
+
+        var request = new CreateFullGaragePaymentRequest(
+                fixtures.Garage.Id,
+                new DateOnly(2026, 7, 12),
+                [
+                    new CreateFullGaragePaymentLineRequest(
+                        fixtures.IncomeType.Id,
+                        new DateOnly(2026, 6, 15),
+                        300m,
+                        "Членский взнос"),
+                    new CreateFullGaragePaymentLineRequest(
+                        routedIncomeType.Id,
+                        new DateOnly(2026, 7, 1),
+                        450m,
+                        "Прочие доходы")
+                ],
+                receiptBatchId);
+        var result = await service.CreateFullGaragePaymentAsync(
+            request,
+            actorUserId,
+            CancellationToken.None);
+        var retry = await service.CreateFullGaragePaymentAsync(request, actorUserId, CancellationToken.None);
+        var conflictingRetry = await service.CreateFullGaragePaymentAsync(
+            request with
+            {
+                Lines =
+                [
+                    request.Lines[0],
+                    request.Lines[1] with { Amount = 451m }
+                ]
+            },
+            actorUserId,
+            CancellationToken.None);
+
+        Assert.True(result.Succeeded, result.ErrorMessage);
+        Assert.True(retry.Succeeded, retry.ErrorMessage);
+        Assert.Equal(result.Value!.ReceiptBatchId, retry.Value!.ReceiptBatchId);
+        Assert.Equal(result.Value.TotalAmount, retry.Value.TotalAmount);
+        Assert.Equal(
+            result.Value.Operations.Select(operation => operation.Id).Order(),
+            retry.Value.Operations.Select(operation => operation.Id).Order());
+        Assert.False(conflictingRetry.Succeeded);
+        Assert.Equal("receipt_batch_conflict", conflictingRetry.ErrorCode);
+        Assert.Equal(receiptBatchId, result.Value.ReceiptBatchId);
+        Assert.Equal(750m, result.Value.TotalAmount);
+        Assert.Equal(2, result.Value.Operations.Count);
+        Assert.All(result.Value.Operations, operation => Assert.Equal(receiptBatchId, operation.ReceiptBatchId));
+        Assert.Equal(2, await database.Context.FinancialOperations.CountAsync(operation => operation.ReceiptBatchId == receiptBatchId));
+        var assignment = await database.Context.FundOperations
+            .SingleAsync(operation => operation.SourceFinancialOperationId != null);
+        Assert.Equal(routedIncomeType.DestinationFundId, assignment.FundId);
+        Assert.Equal(450m, assignment.Amount);
+        Assert.Equal(450m, routedIncomeType.DestinationFund!.Balance);
+        Assert.Equal(2, await database.Context.AuditEvents.CountAsync(item => item.Action == "finance.income_created"));
+        var batchAudit = await database.Context.AuditEvents
+            .SingleAsync(item => item.Action == "finance.full_garage_payment_created");
+        Assert.Equal(actorUserId, batchAudit.ActorUserId);
+        Assert.Equal(receiptBatchId.ToString(), batchAudit.RelatedDocumentId);
+    }
+
+    [Fact]
+    public async Task CreateFullGaragePaymentAsync_DoesNotPersistAnyLineWhenFundAssignmentFails()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        await RemoveSeededBankTransferAsync(database.Context);
+        var validIncomeType = AddOtherIncomeDestination(database.Context);
+        var archivedFund = new Fund
+        {
+            Name = "Архивный фонд",
+            NormalizedName = "АРХИВНЫЙ ФОНД",
+            IsArchived = true
+        };
+        var invalidIncomeType = new IncomeType
+        {
+            Name = "Поступление в архивный фонд",
+            Code = "archived_fund_income",
+            DestinationFund = archivedFund,
+            DestinationFundId = archivedFund.Id
+        };
+        database.Context.AddRange(archivedFund, invalidIncomeType);
+        await database.Context.SaveChangesAsync();
+        var baselineOperationCount = await database.Context.FinancialOperations.CountAsync();
+        var baselineFundOperationCount = await database.Context.FundOperations.CountAsync();
+        var baselineAuditCount = await database.Context.AuditEvents.CountAsync();
+        var receiptBatchId = Guid.NewGuid();
+
+        var result = await FinanceServiceTestFactory.Create(database.Context).CreateFullGaragePaymentAsync(
+            new CreateFullGaragePaymentRequest(
+                fixtures.Garage.Id,
+                new DateOnly(2026, 7, 12),
+                [
+                    new CreateFullGaragePaymentLineRequest(validIncomeType.Id, new DateOnly(2026, 7, 1), 200m, null),
+                    new CreateFullGaragePaymentLineRequest(invalidIncomeType.Id, new DateOnly(2026, 7, 1), 300m, null)
+                ],
+                receiptBatchId),
+            null,
+            CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Equal("income_destination_fund_not_found", result.ErrorCode);
+        database.Context.ChangeTracker.Clear();
+        Assert.Equal(baselineOperationCount, await database.Context.FinancialOperations.CountAsync());
+        Assert.Equal(baselineFundOperationCount, await database.Context.FundOperations.CountAsync());
+        Assert.Equal(baselineAuditCount, await database.Context.AuditEvents.CountAsync());
+        Assert.DoesNotContain(database.Context.FinancialOperations, operation => operation.ReceiptBatchId == receiptBatchId);
+        Assert.Equal(0m, await database.Context.Funds
+            .Where(fund => fund.Id == validIncomeType.DestinationFundId)
+            .Select(fund => fund.Balance)
+            .SingleAsync());
+    }
+
+    [Theory]
+    [InlineData(0, "full_payment_lines_invalid")]
+    [InlineData(1, "full_payment_amount_invalid")]
+    [InlineData(2, "full_payment_line_kind_invalid")]
+    [InlineData(3, "full_payment_line_duplicate")]
+    public async Task CreateFullGaragePaymentAsync_RejectsInvalidBatch(int scenario, string expectedCode)
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        IReadOnlyList<CreateFullGaragePaymentLineRequest> lines = scenario switch
+        {
+            0 => [],
+            1 => [new CreateFullGaragePaymentLineRequest(fixtures.IncomeType.Id, new DateOnly(2026, 7, 1), 0m, null)],
+            2 => [new CreateFullGaragePaymentLineRequest(null, new DateOnly(2026, 7, 1), 100m, null)],
+            _ =>
+            [
+                new CreateFullGaragePaymentLineRequest(fixtures.IncomeType.Id, new DateOnly(2026, 7, 1), 100m, null),
+                new CreateFullGaragePaymentLineRequest(fixtures.IncomeType.Id, new DateOnly(2026, 7, 1), 200m, null)
+            ]
+        };
+
+        var result = await FinanceServiceTestFactory.Create(database.Context).CreateFullGaragePaymentAsync(
+            new CreateFullGaragePaymentRequest(fixtures.Garage.Id, new DateOnly(2026, 7, 12), lines),
+            null,
+            CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Equal(expectedCode, result.ErrorCode);
+    }
+
+    [Fact]
     public async Task CreateIncomeAsync_AllowsOneReceiptBatchForSameGarageAndDateButRejectsReuse()
     {
         await using var database = await TestDatabase.CreateAsync();

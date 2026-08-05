@@ -533,6 +533,55 @@ public sealed class FinanceControllerTests
     }
 
     [Fact]
+    public async Task CreateFullGaragePayment_PassesActorAndWholeBatchToService()
+    {
+        var actorUserId = Guid.NewGuid();
+        var receiptBatchId = Guid.NewGuid();
+        var request = new CreateFullGaragePaymentRequest(
+            Guid.NewGuid(),
+            new DateOnly(2026, 7, 12),
+            [new CreateFullGaragePaymentLineRequest(Guid.NewGuid(), new DateOnly(2026, 7, 1), 900m, "Полная оплата")],
+            receiptBatchId);
+        var dto = new FullGaragePaymentDto(receiptBatchId, 900m, [CreateOperation("income")]);
+        var service = new FakeFinanceService
+        {
+            CreateFullGaragePaymentResult = FinanceResult<FullGaragePaymentDto>.Success(dto)
+        };
+
+        var result = await CreateController(service, actorUserId)
+            .CreateFullGaragePayment(request, CancellationToken.None);
+
+        var created = Assert.IsType<CreatedAtActionResult>(result.Result);
+        Assert.Same(dto, created.Value);
+        Assert.Equal(actorUserId, service.LastActorUserId);
+        Assert.Same(request, service.LastFullGaragePaymentRequest);
+    }
+
+    [Fact]
+    public async Task CreateFullGaragePayment_MapsValidationAndMissingIncomeTypeErrors()
+    {
+        var request = new CreateFullGaragePaymentRequest(
+            Guid.NewGuid(),
+            new DateOnly(2026, 7, 12),
+            [new CreateFullGaragePaymentLineRequest(Guid.NewGuid(), new DateOnly(2026, 7, 1), 900m, null)]);
+        var invalid = await CreateController(new FakeFinanceService
+        {
+            CreateFullGaragePaymentResult = FinanceResult<FullGaragePaymentDto>.Failure(
+                "full_payment_amount_invalid",
+                "Некорректная сумма.")
+        }).CreateFullGaragePayment(request, CancellationToken.None);
+        var missing = await CreateController(new FakeFinanceService
+        {
+            CreateFullGaragePaymentResult = FinanceResult<FullGaragePaymentDto>.Failure(
+                "income_type_not_found",
+                "Вид поступления не найден.")
+        }).CreateFullGaragePayment(request, CancellationToken.None);
+
+        Assert.IsType<BadRequestObjectResult>(invalid.Result);
+        Assert.IsType<NotFoundObjectResult>(missing.Result);
+    }
+
+    [Fact]
     public async Task CreateGarageDebtPayment_ReturnsConflictForDuplicateOperation()
     {
         var controller = CreateController(new FakeFinanceService
@@ -1898,6 +1947,7 @@ public sealed class FinanceControllerTests
         public FinancialReportPeriodRequest? LastFinancialReportPeriodRequest { get; private set; }
         public FinancialOperationListRequest? LastSummaryRequest { get; private set; }
         public CreateGarageDebtPaymentRequest? LastGarageDebtPaymentRequest { get; private set; }
+        public CreateFullGaragePaymentRequest? LastFullGaragePaymentRequest { get; private set; }
         public IncomePaymentWarningRequest? LastIncomePaymentWarningRequest { get; private set; }
         public GenerateRegularAccrualsRequest? LastRegularAccrualGenerationRequest { get; private set; }
         public GenerateRegularCatalogAccrualsRequest? LastRegularCatalogAccrualGenerationRequest { get; private set; }
@@ -1911,6 +1961,7 @@ public sealed class FinanceControllerTests
         public FinanceResult<SupplierOpeningBalanceDto> SupplierOpeningBalanceResult { get; init; } = FinanceResult<SupplierOpeningBalanceDto>.Failure("not_configured", "Not configured.");
         public FinanceResult<FinancialReportPeriodDto> FinancialReportPeriodResult { get; init; } = FinanceResult<FinancialReportPeriodDto>.Failure("not_configured", "Not configured.");
         public FinanceResult<FinancialOperationDto> CreateIncomeResult { get; init; } = FinanceResult<FinancialOperationDto>.Failure("not_configured", "Not configured.");
+        public FinanceResult<FullGaragePaymentDto> CreateFullGaragePaymentResult { get; init; } = FinanceResult<FullGaragePaymentDto>.Failure("not_configured", "Not configured.");
         public FinanceResult<IncomePaymentWarningDto> IncomePaymentWarningResult { get; init; } = FinanceResult<IncomePaymentWarningDto>.Failure("not_configured", "Not configured.");
         public FinanceResult<FinancialOperationDto> CreateGarageDebtPaymentResult { get; init; } = FinanceResult<FinancialOperationDto>.Failure("not_configured", "Not configured.");
         public FinanceResult<FinancialOperationDto> UpdateIncomeResult { get; init; } = FinanceResult<FinancialOperationDto>.Failure("not_configured", "Not configured.");
@@ -2072,6 +2123,13 @@ public sealed class FinanceControllerTests
         {
             LastActorUserId = actorUserId;
             return Task.FromResult(CreateIncomeResult);
+        }
+
+        public Task<FinanceResult<FullGaragePaymentDto>> CreateFullGaragePaymentAsync(CreateFullGaragePaymentRequest request, Guid? actorUserId, CancellationToken cancellationToken)
+        {
+            LastActorUserId = actorUserId;
+            LastFullGaragePaymentRequest = request;
+            return Task.FromResult(CreateFullGaragePaymentResult);
         }
 
         public Task<FinanceResult<FinancialOperationDto>> CreateGarageDebtPaymentAsync(CreateGarageDebtPaymentRequest request, Guid? actorUserId, CancellationToken cancellationToken)

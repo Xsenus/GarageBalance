@@ -366,6 +366,27 @@ export type CreateIncomeOperationRequest = {
   comment?: string
 }
 
+export type CreateFullGaragePaymentLineRequest = {
+  incomeTypeId?: string
+  accountingMonth: string
+  amount: number
+  comment?: string
+  isOpeningDebt?: boolean
+}
+
+export type CreateFullGaragePaymentRequest = {
+  garageId: string
+  operationDate: string
+  lines: CreateFullGaragePaymentLineRequest[]
+  receiptBatchId?: string
+}
+
+export type FullGaragePaymentDto = {
+  receiptBatchId: string
+  totalAmount: number
+  operations: FinancialOperationDto[]
+}
+
 export type IncomePaymentWarningRequest = {
   garageId: string
   incomeTypeId: string
@@ -378,15 +399,6 @@ export type IncomePaymentWarningDto = {
   previousPaymentDate: string | null
   daysSincePreviousPayment: number | null
   requiresConfirmation: boolean
-}
-
-export type CreateGarageDebtPaymentRequest = {
-  garageId: string
-  operationDate: string
-  accountingMonth: string
-  amount: number
-  comment?: string
-  receiptBatchId?: string
 }
 
 export type CreateExpenseOperationRequest = {
@@ -607,7 +619,7 @@ export type FinanceClient = {
   getSummary(accessToken: string, params?: FinancePageParams, signal?: AbortSignal): Promise<FinanceSummaryDto>
   getIncomePaymentWarning(accessToken: string, request: IncomePaymentWarningRequest): Promise<IncomePaymentWarningDto>
   createIncome(accessToken: string, request: CreateIncomeOperationRequest): Promise<FinancialOperationDto>
-  createGarageDebtPayment(accessToken: string, request: CreateGarageDebtPaymentRequest): Promise<FinancialOperationDto>
+  createFullGaragePayment(accessToken: string, request: CreateFullGaragePaymentRequest): Promise<FullGaragePaymentDto>
   updateIncome(accessToken: string, operationId: string, request: CreateIncomeOperationRequest): Promise<FinancialOperationDto>
   createExpense(accessToken: string, request: CreateExpenseOperationRequest): Promise<FinancialOperationDto>
   createStaffPayment(accessToken: string, request: CreateStaffPaymentRequest): Promise<FinancialOperationDto>
@@ -810,8 +822,8 @@ export const financeApi: FinanceClient = {
   createIncome(accessToken, request) {
     return requestJson(accessToken, '/api/finance/income', { method: 'POST', body: JSON.stringify(request) })
   },
-  createGarageDebtPayment(accessToken, request) {
-    return requestJson(accessToken, '/api/finance/income/debt-payment', { method: 'POST', body: JSON.stringify(request) })
+  createFullGaragePayment(accessToken, request) {
+    return requestJson(accessToken, '/api/finance/income/full-payment', { method: 'POST', body: JSON.stringify(request) })
   },
   updateIncome(accessToken, operationId, request) {
     return requestJson(accessToken, `/api/finance/operations/${operationId}/income`, { method: 'PUT', body: JSON.stringify(request) })
