@@ -4415,6 +4415,163 @@ public sealed class FinanceServiceTests
     }
 
     [Fact]
+    public async Task MeteredTariffHistory_AccruesAllocatesPaymentsAndRoutesIncomeToFund()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        fixtures.IncomeType.Code = MeterKinds.Electricity;
+        fixtures.IncomeType.IsSystem = true;
+        var destinationFund = new Fund
+        {
+            Name = "Электроэнергия",
+            NormalizedName = "ЭЛЕКТРОЭНЕРГИЯ"
+        };
+        fixtures.IncomeType.DestinationFund = destinationFund;
+        fixtures.IncomeType.DestinationFundId = destinationFund.Id;
+        var tieredTariff = new Tariff
+        {
+            Name = "Электроэнергия по порогам",
+            CalculationBase = TariffCalculationBases.MeterElectricity,
+            Rate = 2m,
+            ElectricityTiersJson = """
+                [
+                  {"Id":"11111111-1111-1111-1111-111111111111","Name":"До 50","UpperBound":50,"Rate":2,"IsCustom":false},
+                  {"Id":"22222222-2222-2222-2222-222222222222","Name":"До 100","UpperBound":100,"Rate":3,"IsCustom":false},
+                  {"Id":"33333333-3333-3333-3333-333333333333","Name":"Без границы","UpperBound":null,"Rate":5,"IsCustom":false}
+                ]
+                """,
+            EffectiveFrom = new DateOnly(2026, 6, 1)
+        };
+        var ordinaryTariff = new Tariff
+        {
+            Name = "Электроэнергия по одной ставке",
+            CalculationBase = TariffCalculationBases.MeterElectricity,
+            Rate = 4m,
+            EffectiveFrom = new DateOnly(2026, 7, 1)
+        };
+        var setting = new ChargeServiceSetting
+        {
+            Name = "Электроэнергия",
+            IsRegular = true,
+            PeriodicityMonths = 1,
+            AccrualStartMonth = 1,
+            OverdueGraceDays = 30,
+            IncomeType = fixtures.IncomeType,
+            IncomeTypeId = fixtures.IncomeType.Id,
+            Tariff = ordinaryTariff,
+            TariffId = ordinaryTariff.Id,
+            IsMetered = true,
+            HasTieredTariff = false,
+            UnitName = "кВт·ч"
+        };
+        database.Context.AddRange(destinationFund, tieredTariff, ordinaryTariff, setting);
+        database.Context.ChargeServiceTariffVersions.AddRange(
+            new ChargeServiceTariffVersion
+            {
+                ChargeServiceSetting = setting,
+                ChargeServiceSettingId = setting.Id,
+                Tariff = tieredTariff,
+                TariffId = tieredTariff.Id,
+                EffectiveFrom = tieredTariff.EffectiveFrom
+            },
+            new ChargeServiceTariffVersion
+            {
+                ChargeServiceSetting = setting,
+                ChargeServiceSettingId = setting.Id,
+                Tariff = ordinaryTariff,
+                TariffId = ordinaryTariff.Id,
+                EffectiveFrom = ordinaryTariff.EffectiveFrom
+            });
+        await database.Context.SaveChangesAsync();
+        var actorUserId = Guid.NewGuid();
+        var service = FinanceServiceTestFactory.Create(
+            database.Context,
+            new FixedTimeProvider(new DateTimeOffset(2026, 7, 20, 12, 0, 0, TimeSpan.Zero)));
+
+        var juneReading = await service.CreateMeterReadingAsync(
+            new CreateMeterReadingRequest(
+                fixtures.Garage.Id,
+                MeterKinds.Electricity,
+                new DateOnly(2026, 6, 1),
+                new DateOnly(2026, 6, 20),
+                230m,
+                null),
+            actorUserId,
+            CancellationToken.None);
+        var juneGeneration = await service.GenerateRegularCatalogAccrualsAsync(
+            new GenerateRegularCatalogAccrualsRequest(new DateOnly(2026, 6, 1), "Проверка исторического тарифа"),
+            actorUserId,
+            CancellationToken.None);
+        var junePayment = await service.CreateIncomeAsync(
+            new CreateIncomeOperationRequest(
+                fixtures.Garage.Id,
+                fixtures.IncomeType.Id,
+                new DateOnly(2026, 6, 21),
+                new DateOnly(2026, 6, 1),
+                400m,
+                "PKO-METER-JUNE",
+                null),
+            actorUserId,
+            CancellationToken.None);
+        var julyReading = await service.CreateMeterReadingAsync(
+            new CreateMeterReadingRequest(
+                fixtures.Garage.Id,
+                MeterKinds.Electricity,
+                new DateOnly(2026, 7, 1),
+                new DateOnly(2026, 7, 20),
+                260m,
+                null),
+            actorUserId,
+            CancellationToken.None);
+        var julyPayment = await service.CreateIncomeAsync(
+            new CreateIncomeOperationRequest(
+                fixtures.Garage.Id,
+                fixtures.IncomeType.Id,
+                new DateOnly(2026, 7, 21),
+                new DateOnly(2026, 7, 1),
+                120m,
+                "PKO-METER-JULY",
+                null),
+            actorUserId,
+            CancellationToken.None);
+
+        Assert.True(juneReading.Succeeded, juneReading.ErrorMessage);
+        Assert.True(juneGeneration.Succeeded, juneGeneration.ErrorMessage);
+        Assert.True(junePayment.Succeeded, junePayment.ErrorMessage);
+        Assert.True(julyReading.Succeeded, julyReading.ErrorMessage);
+        Assert.True(julyPayment.Succeeded, julyPayment.ErrorMessage);
+        var accruals = await database.Context.Accruals.OrderBy(item => item.AccountingMonth).ToListAsync();
+        Assert.Collection(
+            accruals,
+            item =>
+            {
+                Assert.Equal(tieredTariff.Id, item.TariffId);
+                Assert.Equal(400m, item.Amount);
+            },
+            item =>
+            {
+                Assert.Equal(ordinaryTariff.Id, item.TariffId);
+                Assert.Equal(120m, item.Amount);
+            });
+        var activeAllocations = await database.Context.AccrualPaymentAllocations
+            .Where(item => item.IsActive)
+            .OrderBy(item => item.Accrual.AccountingMonth)
+            .ToListAsync();
+        Assert.Collection(
+            activeAllocations,
+            item => Assert.Equal(400m, item.Amount),
+            item => Assert.Equal(120m, item.Amount));
+        var fundAssignments = await database.Context.FundOperations
+            .Where(item => item.SourceFinancialOperationId != null && !item.IsCanceled)
+            .ToListAsync();
+        Assert.Equal([120m, 400m], fundAssignments.Select(item => item.Amount).OrderBy(item => item));
+        Assert.All(fundAssignments, item => Assert.Equal(destinationFund.Id, item.FundId));
+        Assert.Contains(database.Context.AuditEvents, item => item.Action == "finance.metered_accrual_created_from_reading");
+        Assert.Contains(database.Context.AuditEvents, item => item.Action == "finance.payment_allocations_rebuilt");
+        Assert.Contains(database.Context.AuditEvents, item => item.Action == "fund.income_assignment_created");
+    }
+
+    [Fact]
     public async Task PreviewRegularAccrualAutomationAsync_ReturnsDueScopeWithoutWritingAccruals()
     {
         await using var database = await TestDatabase.CreateAsync();
