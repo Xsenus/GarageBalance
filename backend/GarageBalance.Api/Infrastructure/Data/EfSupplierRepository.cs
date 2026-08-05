@@ -87,6 +87,7 @@ public sealed class EfSupplierRepository(GarageBalanceDbContext dbContext) : ISu
     {
         return dbContext.Suppliers
             .Include(supplier => supplier.Group)
+            .Include(supplier => supplier.ExpenseFund)
             .Include(supplier => supplier.ChargeServiceSetting)
                 .ThenInclude(service => service!.ExpenseFund)
             .SingleOrDefaultAsync(supplier => supplier.Id == id && !supplier.IsArchived, cancellationToken);
@@ -96,6 +97,7 @@ public sealed class EfSupplierRepository(GarageBalanceDbContext dbContext) : ISu
     {
         return dbContext.Suppliers
             .Include(supplier => supplier.Group)
+            .Include(supplier => supplier.ExpenseFund)
             .Include(supplier => supplier.ChargeServiceSetting)
                 .ThenInclude(service => service!.ExpenseFund)
             .SingleOrDefaultAsync(supplier => supplier.Id == id && supplier.IsArchived, cancellationToken);
@@ -252,6 +254,7 @@ public sealed class EfSupplierRepository(GarageBalanceDbContext dbContext) : ISu
     {
         var query = dbContext.Suppliers.AsNoTracking()
             .Include(supplier => supplier.Group)
+            .Include(supplier => supplier.ExpenseFund)
             .Include(supplier => supplier.ChargeServiceSetting)
                 .ThenInclude(service => service!.ExpenseFund)
             .Where(supplier => includeArchived || !supplier.IsArchived);

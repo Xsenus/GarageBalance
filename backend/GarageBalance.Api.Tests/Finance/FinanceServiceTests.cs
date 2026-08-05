@@ -2855,6 +2855,48 @@ public sealed class FinanceServiceTests
     }
 
     [Fact]
+    public async Task SupplierManualExpenseFundOverride_DrivesAccrualPaymentAndWorksheet()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        var manualFund = new Fund
+        {
+            Name = "Ручной фонд поставщика",
+            NormalizedName = "РУЧНОЙ ФОНД ПОСТАВЩИКА",
+            Balance = 1000m
+        };
+        database.Context.Add(manualFund);
+        fixtures.Supplier.ExpenseFund = manualFund;
+        fixtures.Supplier.ExpenseFundId = manualFund.Id;
+        await database.Context.SaveChangesAsync();
+        var service = FinanceServiceTestFactory.Create(database.Context);
+        var month = new DateOnly(2026, 6, 1);
+
+        var accrual = await service.CreateSupplierAccrualAsync(
+            new CreateSupplierAccrualRequest(fixtures.Supplier.Id, fixtures.ExpenseType.Id, month, 400m, "manual", "INV-MANUAL-FUND", null),
+            null,
+            CancellationToken.None);
+        var payment = await service.CreateExpenseAsync(
+            new CreateExpenseOperationRequest(fixtures.Supplier.Id, fixtures.ExpenseType.Id, new DateOnly(2026, 6, 20), month, 250m, "RKO-MANUAL-FUND", null),
+            null,
+            CancellationToken.None);
+        Assert.True(accrual.Succeeded);
+        Assert.True(payment.Succeeded);
+        Assert.Equal(manualFund.Id, payment.Value!.ExpenseFundId);
+        Assert.Equal("Ручной фонд поставщика", payment.Value.ExpenseFundName);
+        Assert.Equal(750m, manualFund.Balance);
+        Assert.Equal(SeededBankAmount, fixtures.ExpenseFund.Balance);
+        database.Context.ChangeTracker.Clear();
+        var worksheet = await service.GetExpenseWorksheetAsync(new ExpenseWorksheetRequest(month), CancellationToken.None);
+        Assert.True(worksheet.Succeeded);
+        var row = Assert.Single(worksheet.Value!.Rows, item => item.SupplierId == fixtures.Supplier.Id && item.ExpenseTypeId == fixtures.ExpenseType.Id);
+        Assert.Equal(manualFund.Id, row.ExpenseFundId);
+        Assert.Equal("Ручной фонд поставщика", row.ExpenseFundName);
+        Assert.Equal(1000m, row.CollectedAmount);
+        Assert.Equal(750m, row.Difference);
+    }
+
+    [Fact]
     public async Task CreateExpenseAsync_AllowsReplacementAfterCancel()
     {
         await using var database = await TestDatabase.CreateAsync();

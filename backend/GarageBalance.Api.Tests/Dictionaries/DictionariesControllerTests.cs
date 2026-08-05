@@ -254,6 +254,28 @@ public sealed class DictionariesControllerTests
     }
 
     [Fact]
+    public async Task CreateSupplier_ReturnsNotFoundForMissingManualExpenseFund()
+    {
+        var actorUserId = Guid.NewGuid();
+        var groupId = Guid.NewGuid();
+        var expenseFundId = Guid.NewGuid();
+        var service = new FakeDictionaryService
+        {
+            CreateSupplierResult = DictionaryResult<SupplierDto>.Failure("supplier_expense_fund_not_found", "Фонд расходования поставщика не найден или недоступен.")
+        };
+        var controller = CreateController(service, actorUserId);
+
+        var result = await controller.CreateSupplier(
+            new UpsertSupplierRequest("Водоканал", groupId, null, null, null, null, null, 0, null, ExpenseFundId: expenseFundId),
+            CancellationToken.None);
+
+        var notFound = Assert.IsType<NotFoundObjectResult>(result.Result);
+        var problem = Assert.IsType<ProblemDetails>(notFound.Value);
+        Assert.Equal("supplier_expense_fund_not_found", problem.Title);
+        Assert.Equal(actorUserId, service.LastActorUserId);
+    }
+
+    [Fact]
     public async Task CreateSupplier_ReturnsConflictForDuplicateSupplier()
     {
         var actorUserId = Guid.NewGuid();

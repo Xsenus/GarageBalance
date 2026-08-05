@@ -1114,13 +1114,15 @@ public sealed class FinanceService(
         }
 
         var isCashExpense = expensePaymentSource == ExpensePaymentSources.Cash;
+        var configuredExpenseFundId = GetSupplierExpenseFundId(supplier);
+        var configuredExpenseFund = GetSupplierExpenseFund(supplier);
         Guid? expenseFundId;
         Fund? expenseFund;
         if (isCashExpense)
         {
-            expenseFundId = request.ExpenseFundId ?? supplier.ChargeServiceSetting?.ExpenseFundId;
-            expenseFund = expenseFundId == supplier.ChargeServiceSetting?.ExpenseFundId
-                ? supplier.ChargeServiceSetting?.ExpenseFund
+            expenseFundId = request.ExpenseFundId ?? configuredExpenseFundId;
+            expenseFund = expenseFundId == configuredExpenseFundId
+                ? configuredExpenseFund
                 : null;
             if (!expenseFundId.HasValue)
             {
@@ -1137,8 +1139,8 @@ public sealed class FinanceService(
                 return supplierExpenseTypeValidation;
             }
 
-            expenseFundId = supplier.ChargeServiceSetting!.ExpenseFundId;
-            expenseFund = supplier.ChargeServiceSetting.ExpenseFund;
+            expenseFundId = configuredExpenseFundId;
+            expenseFund = configuredExpenseFund;
             if (request.ExpenseFundId.HasValue && request.ExpenseFundId != expenseFundId)
             {
                 return FinanceResult<FinancialOperationDto>.Failure(
@@ -1645,13 +1647,15 @@ public sealed class FinanceService(
         }
 
         var isCashExpense = expensePaymentSource == ExpensePaymentSources.Cash;
+        var configuredExpenseFundId = GetSupplierExpenseFundId(supplier);
+        var configuredExpenseFund = GetSupplierExpenseFund(supplier);
         Guid? expenseFundId;
         Fund? expenseFund;
         if (isCashExpense)
         {
-            expenseFundId = request.ExpenseFundId ?? supplier.ChargeServiceSetting?.ExpenseFundId;
-            expenseFund = expenseFundId == supplier.ChargeServiceSetting?.ExpenseFundId
-                ? supplier.ChargeServiceSetting?.ExpenseFund
+            expenseFundId = request.ExpenseFundId ?? configuredExpenseFundId;
+            expenseFund = expenseFundId == configuredExpenseFundId
+                ? configuredExpenseFund
                 : null;
             if (!expenseFundId.HasValue)
             {
@@ -1668,8 +1672,8 @@ public sealed class FinanceService(
                 return supplierExpenseTypeValidation;
             }
 
-            expenseFundId = supplier.ChargeServiceSetting!.ExpenseFundId;
-            expenseFund = supplier.ChargeServiceSetting.ExpenseFund;
+            expenseFundId = configuredExpenseFundId;
+            expenseFund = configuredExpenseFund;
             if (request.ExpenseFundId.HasValue && request.ExpenseFundId != expenseFundId)
             {
                 return FinanceResult<FinancialOperationDto>.Failure(
@@ -5931,9 +5935,8 @@ public sealed class FinanceService(
                 $"Поставщику «{supplier.Name}» можно начислять только услугу «{supplier.ChargeServiceSetting.Name}».");
         }
 
-        if (!supplier.ChargeServiceSetting.ExpenseFundId.HasValue ||
-            supplier.ChargeServiceSetting.ExpenseFund is null ||
-            supplier.ChargeServiceSetting.ExpenseFund.IsArchived)
+        var expenseFund = GetSupplierExpenseFund(supplier);
+        if (expenseFund is null || expenseFund.IsArchived)
         {
             return FinanceResult<SupplierAccrualDto>.Failure(
                 "supplier_service_expense_fund_not_configured",
@@ -5966,9 +5969,8 @@ public sealed class FinanceService(
                 $"Поставщику «{supplier.Name}» можно провести выплату только по услуге «{supplier.ChargeServiceSetting.Name}».");
         }
 
-        if (!supplier.ChargeServiceSetting.ExpenseFundId.HasValue ||
-            supplier.ChargeServiceSetting.ExpenseFund is null ||
-            supplier.ChargeServiceSetting.ExpenseFund.IsArchived)
+        var expenseFund = GetSupplierExpenseFund(supplier);
+        if (expenseFund is null || expenseFund.IsArchived)
         {
             return FinanceResult<FinancialOperationDto>.Failure(
                 "supplier_service_expense_fund_not_configured",
@@ -5977,6 +5979,12 @@ public sealed class FinanceService(
 
         return null;
     }
+
+    private static Guid? GetSupplierExpenseFundId(Supplier supplier) =>
+        supplier.ExpenseFundId ?? supplier.ChargeServiceSetting?.ExpenseFundId;
+
+    private static Fund? GetSupplierExpenseFund(Supplier supplier) =>
+        supplier.ExpenseFund ?? supplier.ChargeServiceSetting?.ExpenseFund;
 
     private static string? NormalizeExpensePaymentType(string? value)
     {

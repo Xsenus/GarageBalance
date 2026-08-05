@@ -2219,12 +2219,6 @@ h1 {
   line-height: 1.45;
 }
 
-.contractors-supplier-fund-hint {
-  color: #667085;
-  font-size: 11px;
-  line-height: 1.35;
-}
-
 .contractors-supplier-lookup-grid {
   grid-template-columns: minmax(150px, 0.6fr) minmax(170px, 0.65fr) minmax(170px, 0.65fr) minmax(300px, 1.6fr);
   gap: 12px;

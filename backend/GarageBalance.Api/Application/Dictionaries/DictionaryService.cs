@@ -47,6 +47,7 @@ public sealed class DictionaryService(
         ["name"] = "Наименование",
         ["group"] = "Группа",
         ["service"] = "Услуга",
+        ["expenseFund"] = "Фонд расходования",
         ["inn"] = "ИНН",
         ["legalAddress"] = "Юр. адрес",
         ["contactPerson"] = "Контактное лицо",
@@ -686,6 +687,16 @@ public sealed class DictionaryService(
                 "Для выбранной услуги не настроен вид начисления поставщику.");
         }
 
+        var expenseFund = request.ExpenseFundId.HasValue
+            ? await fundRepository.FindFundForUpdateAsync(request.ExpenseFundId.Value, cancellationToken)
+            : null;
+        if (request.ExpenseFundId.HasValue && expenseFund is null)
+        {
+            return DictionaryResult<SupplierDto>.Failure(
+                "supplier_expense_fund_not_found",
+                "Фонд расходования поставщика не найден или недоступен.");
+        }
+
         var name = request.Name.Trim();
         if (await supplierRepository.ActiveDuplicateExistsAsync(null, group.Id, name, cancellationToken))
         {
@@ -699,6 +710,8 @@ public sealed class DictionaryService(
             Group = group,
             ChargeServiceSettingId = chargeService?.Id,
             ChargeServiceSetting = chargeService,
+            ExpenseFundId = expenseFund?.Id,
+            ExpenseFund = expenseFund,
             Inn = NormalizeOptional(request.Inn),
             LegalAddress = NormalizeOptional(request.LegalAddress),
             ContactPerson = NormalizeOptional(request.ContactPerson),
@@ -746,6 +759,18 @@ public sealed class DictionaryService(
                 "Для выбранной услуги не настроен вид начисления поставщику.");
         }
 
+        var expenseFund = request.ExpenseFundId == supplier.ExpenseFundId
+            ? supplier.ExpenseFund
+            : request.ExpenseFundId.HasValue
+                ? await fundRepository.FindFundForUpdateAsync(request.ExpenseFundId.Value, cancellationToken)
+                : null;
+        if (request.ExpenseFundId.HasValue && expenseFund is null)
+        {
+            return DictionaryResult<SupplierDto>.Failure(
+                "supplier_expense_fund_not_found",
+                "Фонд расходования поставщика не найден или недоступен.");
+        }
+
         var name = request.Name.Trim();
         var inn = NormalizeOptional(request.Inn);
         var legalAddress = NormalizeOptional(request.LegalAddress);
@@ -764,7 +789,7 @@ public sealed class DictionaryService(
                 "Стартовый баланс поставщика нельзя менять после появления начислений или выплат. Оформите отдельную финансовую корректировку.");
         }
 
-        if (SupplierMatches(supplier, name, group.Id, chargeService?.Id, inn, legalAddress, contactPerson, phone, email, startingBalance, comment))
+        if (SupplierMatches(supplier, name, group.Id, chargeService?.Id, expenseFund?.Id, inn, legalAddress, contactPerson, phone, email, startingBalance, comment))
         {
             return DictionaryResult<SupplierDto>.Success(await ToSupplierDtoWithDebtAsync(supplier, cancellationToken));
         }
@@ -779,6 +804,7 @@ public sealed class DictionaryService(
             ["name"] = supplier.Name,
             ["group"] = supplier.Group.Name,
             ["service"] = supplier.ChargeServiceSetting?.Name,
+            ["expenseFund"] = supplier.ExpenseFund?.Name,
             ["inn"] = supplier.Inn,
             ["legalAddress"] = supplier.LegalAddress,
             ["contactPerson"] = supplier.ContactPerson,
@@ -792,6 +818,7 @@ public sealed class DictionaryService(
             ["name"] = name,
             ["group"] = group.Name,
             ["service"] = chargeService?.Name,
+            ["expenseFund"] = expenseFund?.Name,
             ["inn"] = inn,
             ["legalAddress"] = legalAddress,
             ["contactPerson"] = contactPerson,
@@ -806,6 +833,8 @@ public sealed class DictionaryService(
         supplier.Group = group;
         supplier.ChargeServiceSettingId = chargeService?.Id;
         supplier.ChargeServiceSetting = chargeService;
+        supplier.ExpenseFundId = expenseFund?.Id;
+        supplier.ExpenseFund = expenseFund;
         supplier.Inn = inn;
         supplier.LegalAddress = legalAddress;
         supplier.ContactPerson = contactPerson;
@@ -3615,11 +3644,12 @@ public sealed class DictionaryService(
             StringEquals(garage.Comment, comment);
     }
 
-    private static bool SupplierMatches(Supplier supplier, string name, Guid groupId, Guid? chargeServiceSettingId, string? inn, string? legalAddress, string? contactPerson, string? phone, string? email, decimal startingBalance, string? comment)
+    private static bool SupplierMatches(Supplier supplier, string name, Guid groupId, Guid? chargeServiceSettingId, Guid? expenseFundId, string? inn, string? legalAddress, string? contactPerson, string? phone, string? email, decimal startingBalance, string? comment)
     {
         return StringEquals(supplier.Name, name) &&
             supplier.GroupId == groupId &&
             supplier.ChargeServiceSettingId == chargeServiceSettingId &&
+            supplier.ExpenseFundId == expenseFundId &&
             StringEquals(supplier.Inn, inn) &&
             StringEquals(supplier.LegalAddress, legalAddress) &&
             StringEquals(supplier.ContactPerson, contactPerson) &&
@@ -3771,6 +3801,7 @@ public sealed class DictionaryService(
 
     private static SupplierDto ToSupplierDto(Supplier supplier, decimal? debt = null)
     {
+        var effectiveFund = supplier.ExpenseFund ?? supplier.ChargeServiceSetting?.ExpenseFund;
         return new SupplierDto(
             supplier.Id,
             supplier.Name,
@@ -3788,10 +3819,12 @@ public sealed class DictionaryService(
             supplier.ChargeServiceSettingId,
             supplier.ChargeServiceSetting?.Name,
             supplier.ChargeServiceSetting?.ExpenseTypeId,
-            supplier.ChargeServiceSetting?.ExpenseFundId,
-            supplier.ChargeServiceSetting?.ExpenseFund?.Name,
-            supplier.ChargeServiceSetting?.ExpenseFund?.Balance,
-            supplier.Version);
+            effectiveFund?.Id,
+            effectiveFund?.Name,
+            effectiveFund?.Balance,
+            supplier.Version,
+            supplier.ExpenseFundId,
+            supplier.ExpenseFund?.Name);
     }
 
     private async Task<SupplierDto> ToSupplierDtoWithDebtAsync(Supplier supplier, CancellationToken cancellationToken)

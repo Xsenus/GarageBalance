@@ -1,4 +1,5 @@
 using GarageBalance.Api.Domain.Common;
+using GarageBalance.Api.Domain.Finance;
 
 namespace GarageBalance.Api.Domain.Dictionaries;
 
@@ -22,4 +23,6 @@ public sealed class Supplier : IOptimisticConcurrencyEntity
     public SupplierGroup Group { get; set; } = null!;
     public Guid? ChargeServiceSettingId { get; set; }
     public ChargeServiceSetting? ChargeServiceSetting { get; set; }
+    public Guid? ExpenseFundId { get; set; }
+    public Fund? ExpenseFund { get; set; }
 }

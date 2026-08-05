@@ -121,6 +121,7 @@ type ContractorSupplierRow = {
   name: string
   serviceId?: string | null
   service: string
+  expenseFundId?: string | null
   inn: string
   legalAddress: string
   contactPerson: string
@@ -590,6 +591,7 @@ function createSupplierRowFromDto(supplier: SupplierDto, contacts: SupplierConta
     name: supplier.name,
     serviceId: supplier.chargeServiceSettingId ?? null,
     service: supplier.chargeServiceSettingName ?? supplier.groupName,
+    expenseFundId: supplier.expenseFundId ?? null,
     inn: supplier.inn ?? '',
     legalAddress: supplier.legalAddress ?? '',
     contactPerson: supplier.contactPerson ?? '',
@@ -651,6 +653,7 @@ function createSupplierRequestFromRow(row: ContractorSupplierRow, groupId: strin
     startingBalance: parsePrototypeMoney(normalized.startingBalance),
     comment: normalized.comment.trim(),
     chargeServiceSettingId: normalized.serviceId,
+    expenseFundId: normalized.expenseFundId,
     version: normalized.version,
   }
 }
@@ -3006,6 +3009,7 @@ function createEmptySupplierPrototype(): ContractorSupplierRow {
     name: '',
     serviceId: null,
     service: '',
+    expenseFundId: null,
     inn: '',
     legalAddress: '',
     contactPerson: '',
@@ -3630,7 +3634,7 @@ function SupplierPrototypeDialog({ accessToken, canAdjustOpeningData, funds, int
 
   const availableServices = [...activeServices].sort((left, right) => left.name.localeCompare(right.name, 'ru'))
   const selectedService = availableServices.find((service) => service.id === form.serviceId) ?? null
-  const selectedFund = selectedService?.expenseFundId
+  const serviceFund = selectedService?.expenseFundId
     ? funds.find((fund) => fund.id === selectedService.expenseFundId) ?? null
     : null
 
@@ -3665,21 +3669,23 @@ function SupplierPrototypeDialog({ accessToken, canAdjustOpeningData, funds, int
                   options={[{ value: '', label: 'Выберите услугу' }, ...availableServices.map((service) => ({ value: service.id, label: service.name }))]}
                   onChange={(serviceId) => {
                     const service = availableServices.find((itemService) => itemService.id === serviceId)
-                    setForm({ ...form, serviceId: service?.id ?? null, service: service?.name ?? '' })
+                    setForm({ ...form, serviceId: service?.id ?? null, service: service?.name ?? '', expenseFundId: null })
                   }}
                 />
               </FormField>
               <FormField label="Фонд расходования">
                 <SelectControl
                   aria-label="Фонд расходования поставщика"
-                  value={selectedFund?.id ?? ''}
-                  options={selectedFund
-                    ? [{ value: selectedFund.id, label: selectedFund.name }]
-                    : [{ value: '', label: selectedService ? 'Не назначен' : 'Сначала выберите услугу' }]}
-                  disabled
-                  onChange={() => undefined}
+                  value={form.expenseFundId ?? ''}
+                  options={[
+                    {
+                      value: '',
+                      label: serviceFund ? `По услуге — ${serviceFund.name}` : 'Фонд по услуге не назначен',
+                    },
+                    ...funds.map((fund) => ({ value: fund.id, label: fund.name })),
+                  ]}
+                  onChange={(expenseFundId) => setForm({ ...form, expenseFundId: expenseFundId || null })}
                 />
-                <small className="contractors-supplier-fund-hint">Определяется выбранной услугой.</small>
               </FormField>
             </div>
             <div className="contractors-modal-grid contractors-supplier-lookup-grid">

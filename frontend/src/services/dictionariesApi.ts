@@ -64,6 +64,8 @@ export type SupplierDto = {
   chargeServiceExpenseFundId?: string | null
   chargeServiceExpenseFundName?: string | null
   chargeServiceExpenseFundBalance?: number | null
+  expenseFundId?: string | null
+  expenseFundName?: string | null
   comment: string | null
   isArchived: boolean
   version: string
@@ -225,6 +227,7 @@ export type UpsertSupplierRequest = {
   startingBalance: number
   comment?: string
   chargeServiceSettingId?: string | null
+  expenseFundId?: string | null
   version?: string
 }
 

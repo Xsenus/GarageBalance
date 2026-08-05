@@ -1258,6 +1258,97 @@ public sealed class DictionaryServiceTests
     }
 
     [Fact]
+    public async Task CreateAndUpdateSupplierAsync_AllowsManualExpenseFundOverrideAndServiceFallback()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = DictionaryServiceTestFactory.Create(database.Context);
+        var group = await service.CreateSupplierGroupAsync(new UpsertSupplierGroupRequest("Коммунальные услуги"), null, CancellationToken.None);
+        var serviceFund = new Fund { Name = "Фонд услуги", NormalizedName = "ФОНД УСЛУГИ" };
+        var manualFund = new Fund { Name = "Ручной фонд", NormalizedName = "РУЧНОЙ ФОНД" };
+        database.Context.AddRange(serviceFund, manualFund);
+        await database.Context.SaveChangesAsync();
+        var expenseType = await service.CreateExpenseTypeAsync(new UpsertAccountingTypeRequest("Водоснабжение", "water_supplier"), null, CancellationToken.None);
+        var chargeService = await service.CreateChargeServiceSettingAsync(
+            new UpsertChargeServiceSettingRequest("Вода", false, null, null, null, null, 0, false, false, "руб.", ExpenseTypeId: expenseType.Value!.Id, ExpenseFundId: serviceFund.Id),
+            null,
+            CancellationToken.None);
+
+        var created = await service.CreateSupplierAsync(
+            new UpsertSupplierRequest(
+                "Водоканал",
+                group.Value!.Id,
+                null,
+                null,
+                null,
+                null,
+                null,
+                0,
+                null,
+                ChargeServiceSettingId: chargeService.Value!.Id,
+                ExpenseFundId: manualFund.Id),
+            null,
+            CancellationToken.None);
+
+        Assert.True(created.Succeeded);
+        Assert.Equal(manualFund.Id, created.Value!.ExpenseFundId);
+        Assert.Equal(manualFund.Id, created.Value.ChargeServiceExpenseFundId);
+        Assert.Equal("Ручной фонд", created.Value.ChargeServiceExpenseFundName);
+
+        var updated = await service.UpdateSupplierAsync(
+            created.Value.Id,
+            new UpsertSupplierRequest(
+                created.Value.Name,
+                group.Value.Id,
+                null,
+                null,
+                null,
+                null,
+                null,
+                0,
+                null,
+                ChargeServiceSettingId: chargeService.Value.Id,
+                Version: created.Value.Version,
+                ExpenseFundId: null),
+            Guid.NewGuid(),
+            CancellationToken.None);
+
+        Assert.True(updated.Succeeded);
+        Assert.Null(updated.Value!.ExpenseFundId);
+        Assert.Equal(serviceFund.Id, updated.Value.ChargeServiceExpenseFundId);
+        Assert.Equal("Фонд услуги", updated.Value.ChargeServiceExpenseFundName);
+        var audit = Assert.Single(database.Context.AuditEvents, item => item.Action == "dictionary.supplier_updated");
+        using var metadata = JsonDocument.Parse(audit.MetadataJson!);
+        Assert.Equal("Фонд расходования", metadata.RootElement.GetProperty("fieldName").GetString());
+        Assert.Equal("Ручной фонд", metadata.RootElement.GetProperty("oldValue").GetString());
+    }
+
+    [Fact]
+    public async Task CreateSupplierAsync_RejectsMissingOrArchivedManualExpenseFund()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = DictionaryServiceTestFactory.Create(database.Context);
+        var group = await service.CreateSupplierGroupAsync(new UpsertSupplierGroupRequest("Коммунальные услуги"), null, CancellationToken.None);
+        var archivedFund = new Fund { Name = "Архивный фонд", NormalizedName = "АРХИВНЫЙ ФОНД", IsArchived = true };
+        database.Context.Add(archivedFund);
+        await database.Context.SaveChangesAsync();
+
+        var missing = await service.CreateSupplierAsync(
+            new UpsertSupplierRequest("Первый поставщик", group.Value!.Id, null, null, null, null, null, 0, null, ExpenseFundId: Guid.NewGuid()),
+            null,
+            CancellationToken.None);
+        var archived = await service.CreateSupplierAsync(
+            new UpsertSupplierRequest("Второй поставщик", group.Value.Id, null, null, null, null, null, 0, null, ExpenseFundId: archivedFund.Id),
+            null,
+            CancellationToken.None);
+
+        Assert.False(missing.Succeeded);
+        Assert.Equal("supplier_expense_fund_not_found", missing.ErrorCode);
+        Assert.False(archived.Succeeded);
+        Assert.Equal("supplier_expense_fund_not_found", archived.ErrorCode);
+        Assert.Empty(database.Context.Suppliers);
+    }
+
+    [Fact]
     public async Task CreateSupplierAsync_RejectsChargeServiceWithoutExpenseType()
     {
         await using var database = await TestDatabase.CreateAsync();

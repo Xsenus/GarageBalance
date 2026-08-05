@@ -6,6 +6,7 @@ using System.Text.Json;
 
 namespace GarageBalance.Api.Tests.Deployment;
 
+[Collection(ApiBenchmarkScriptCollection.Name)]
 public sealed class ApiBenchmarkScriptTests
 {
     [Fact]
@@ -258,4 +259,10 @@ public sealed class ApiBenchmarkScriptTests
             }
         }
     }
+}
+
+[CollectionDefinition(Name, DisableParallelization = true)]
+public sealed class ApiBenchmarkScriptCollection
+{
+    public const string Name = "API benchmark scripts";
 }

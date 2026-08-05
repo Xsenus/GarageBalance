@@ -2109,6 +2109,10 @@ describe('App', () => {
             chargeServiceSettingId: request.chargeServiceSettingId ?? null,
             chargeServiceSettingName: request.chargeServiceSettingId ? 'Уборка территории' : null,
             chargeServiceExpenseTypeId: request.chargeServiceSettingId ? 'expense-type-1' : null,
+            chargeServiceExpenseFundId: request.expenseFundId ?? (request.chargeServiceSettingId ? 'fund-electricity' : null),
+            chargeServiceExpenseFundName: request.expenseFundId === 'fund-water' ? 'Водоснабжение' : request.chargeServiceSettingId ? 'Электроэнергия' : null,
+            expenseFundId: request.expenseFundId ?? null,
+            expenseFundName: request.expenseFundId === 'fund-water' ? 'Водоснабжение' : null,
           inn: request.inn ?? null,
           legalAddress: request.legalAddress ?? null,
           contactPerson: request.contactPerson ?? null,
@@ -2127,6 +2131,10 @@ describe('App', () => {
           groupName: 'Коммунальные услуги',
           chargeServiceSettingId: request.chargeServiceSettingId ?? null,
           chargeServiceSettingName: request.chargeServiceSettingId ? 'Уборка территории' : null,
+          chargeServiceExpenseFundId: request.expenseFundId ?? (request.chargeServiceSettingId ? 'fund-electricity' : null),
+          chargeServiceExpenseFundName: request.expenseFundId === 'fund-water' ? 'Водоснабжение' : request.chargeServiceSettingId ? 'Электроэнергия' : null,
+          expenseFundId: request.expenseFundId ?? null,
+          expenseFundName: request.expenseFundId === 'fund-water' ? 'Водоснабжение' : null,
           inn: request.inn ?? null,
           legalAddress: request.legalAddress ?? null,
           contactPerson: request.contactPerson ?? null,
@@ -2548,9 +2556,11 @@ describe('App', () => {
     await user.click(supplierServiceControl)
     await user.click(within(within(supplierDialog).getByRole('listbox', { name: 'Услуга поставщика: варианты' })).getByRole('option', { name: 'Уборка территории' }))
     const supplierExpenseFundControl = within(supplierDialog).getByRole('combobox', { name: 'Фонд расходования поставщика' })
-    expect(supplierExpenseFundControl).toBeDisabled()
-    expect(supplierExpenseFundControl).toHaveTextContent('Электроэнергия')
-    expect(within(supplierDialog).getByText('Определяется выбранной услугой.')).toBeInTheDocument()
+    expect(supplierExpenseFundControl).toBeEnabled()
+    expect(supplierExpenseFundControl).toHaveTextContent('По услуге — Электроэнергия')
+    await user.click(supplierExpenseFundControl)
+    await user.click(within(supplierDialog).getByRole('option', { name: 'Водоснабжение' }))
+    expect(supplierExpenseFundControl).toHaveTextContent('Водоснабжение')
     expect(within(supplierDialog).getByLabelText('Телефон поставщика')).toHaveValue('')
     expect(within(supplierDialog).getByLabelText('Почта поставщика')).toHaveValue('')
     expect(within(supplierDialog).getByText('Телефон и почта берутся из первого действующего контакта. Изменение здесь сразу обновляет ту же строку в таблице контактов.')).toBeInTheDocument()
@@ -2579,6 +2589,7 @@ describe('App', () => {
     await waitFor(() => expect(within(within(contractorsPanel).getByRole('table', { name: 'Поставщики' })).getByText('Новый подрядчик')).toBeInTheDocument())
     expect(savedSupplierRequest).toMatchObject({
       chargeServiceSettingId: 'service-cleaning-created',
+      expenseFundId: 'fund-water',
       contactPerson: 'Смирнов С.С.',
       phone: '+7 (900) 111-22-33',
       email: 'guard@example.test',
@@ -2599,6 +2610,7 @@ describe('App', () => {
     const editSupplierDialog = await screen.findByRole('dialog', { name: 'Новый подрядчик' })
     expect(getContractorSupplierContacts).not.toHaveBeenCalled()
     expect(within(editSupplierDialog).getByLabelText('Услуга поставщика').tagName).toBe('BUTTON')
+    expect(within(editSupplierDialog).getByRole('combobox', { name: 'Фонд расходования поставщика' })).toHaveTextContent('Водоснабжение')
     expect(within(editSupplierDialog).getByLabelText('Наименование поставщика').closest('.contractors-supplier-primary-grid')).not.toBeNull()
     expect(within(editSupplierDialog).getByLabelText('Юридический адрес поставщика').closest('.contractors-supplier-lookup-grid')).not.toBeNull()
     expect(within(editSupplierDialog).getByLabelText('Комментарий поставщика').closest('.contractors-supplier-footer-grid')).not.toBeNull()
