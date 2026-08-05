@@ -37,6 +37,34 @@ public sealed class FundServiceTests
     }
 
     [Fact]
+    public async Task GetFundOptionsAsync_ReturnsOnlyActiveFundsInConfigurationOrder()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        database.Context.Funds.AddRange(
+            new Fund { Name = "Второй", NormalizedName = "ВТОРОЙ", SortOrder = 20, AllowOperations = true },
+            new Fund { Name = "Первый", NormalizedName = "ПЕРВЫЙ", SortOrder = 10, AllowOperations = false },
+            new Fund { Name = "Архивный", NormalizedName = "АРХИВНЫЙ", SortOrder = 1, AllowOperations = true, IsArchived = true });
+        await database.Context.SaveChangesAsync();
+        var service = CreateService(database.Context, seedSystemFunds: false);
+
+        var options = await service.GetFundOptionsAsync(CancellationToken.None);
+
+        Assert.Collection(
+            options,
+            option =>
+            {
+                Assert.Equal("Первый", option.Name);
+                Assert.False(option.AllowOperations);
+            },
+            option =>
+            {
+                Assert.Equal("Второй", option.Name);
+                Assert.True(option.AllowOperations);
+            });
+        Assert.DoesNotContain(options, option => option.Name == "Архивный");
+    }
+
+    [Fact]
     public async Task GetFundsAsync_ReturnsOnlyActiveServicesLinkedThroughExpenseFunds()
     {
         await using var database = await TestDatabase.CreateAsync();

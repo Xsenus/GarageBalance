@@ -7,15 +7,24 @@ using Microsoft.AspNetCore.Mvc;
 namespace GarageBalance.Api.Controllers;
 
 [ApiController]
-[Authorize(Policy = SystemPermissions.ReportsRead)]
+[Authorize]
 [Route("api/funds")]
 public sealed class FundsController(IFundService fundService) : ControllerBase
 {
+    [Authorize(Policy = SystemPermissions.ReportsRead)]
     [HttpGet]
     [ProducesResponseType<IReadOnlyList<FundDto>>(StatusCodes.Status200OK)]
     public async Task<ActionResult<IReadOnlyList<FundDto>>> GetFunds(CancellationToken cancellationToken)
     {
         return Ok(await fundService.GetFundsAsync(cancellationToken));
+    }
+
+    [Authorize(Policy = SystemPermissions.DictionariesRead)]
+    [HttpGet("options")]
+    [ProducesResponseType<IReadOnlyList<FundOptionDto>>(StatusCodes.Status200OK)]
+    public async Task<ActionResult<IReadOnlyList<FundOptionDto>>> GetFundOptions(CancellationToken cancellationToken)
+    {
+        return Ok(await fundService.GetFundOptionsAsync(cancellationToken));
     }
 
     [Authorize(Policy = SystemPermissions.PaymentsWrite)]
@@ -61,6 +70,7 @@ public sealed class FundsController(IFundService fundService) : ControllerBase
         return result.Succeeded ? NoContent() : ToError(result);
     }
 
+    [Authorize(Policy = SystemPermissions.ReportsRead)]
     [HttpGet("operations")]
     [ProducesResponseType<IReadOnlyList<FundOperationDto>>(StatusCodes.Status200OK)]
     public async Task<ActionResult<IReadOnlyList<FundOperationDto>>> GetOperations([FromQuery] int limit = 25, [FromQuery] bool includeCanceled = false, CancellationToken cancellationToken = default)
@@ -68,6 +78,7 @@ public sealed class FundsController(IFundService fundService) : ControllerBase
         return Ok(await fundService.GetOperationsAsync(limit, includeCanceled, cancellationToken));
     }
 
+    [Authorize(Policy = SystemPermissions.ReportsRead)]
     [HttpGet("operations/page")]
     [ProducesResponseType<FundOperationPageDto>(StatusCodes.Status200OK)]
     public async Task<ActionResult<FundOperationPageDto>> GetOperationsPage([FromQuery] int offset = 0, [FromQuery] int limit = 25, [FromQuery] bool includeCanceled = false, CancellationToken cancellationToken = default)

@@ -42,6 +42,13 @@ public sealed class RolePermissionServerEnforcementTests
             typeof(ReportsController),
             nameof(ReportsController.ExportGarageReportXlsx),
             SystemPermissions.ReportsRead
+        },
+        {
+            "dictionary_editor",
+            [SystemPermissions.DictionariesRead],
+            typeof(FundsController),
+            nameof(FundsController.GetFunds),
+            SystemPermissions.ReportsRead
         }
     };
 
@@ -64,6 +71,12 @@ public sealed class RolePermissionServerEnforcementTests
             SystemPermissions.ReportsViewer,
             typeof(ReportsController),
             nameof(ReportsController.ExportGarageReportXlsx)
+        },
+        {
+            "dictionary_editor",
+            [SystemPermissions.DictionariesRead],
+            typeof(FundsController),
+            nameof(FundsController.GetFundOptions)
         }
     };
 

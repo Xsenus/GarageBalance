@@ -12,6 +12,12 @@ export type FundDto = {
   version: string
 }
 
+export type FundOptionDto = {
+  id: string
+  name: string
+  allowOperations: boolean
+}
+
 export type FundLinkedServiceDto = {
   id: string
   name: string
@@ -64,6 +70,7 @@ export type CancelFundOperationRequest = {
 
 export type FundsClient = {
   getFunds(accessToken: string, signal?: AbortSignal): Promise<FundDto[]>
+  getFundOptions(accessToken: string, signal?: AbortSignal): Promise<FundOptionDto[]>
   createFund(accessToken: string, request: UpsertFundRequest): Promise<FundDto>
   updateFund(accessToken: string, fundId: string, request: UpsertFundRequest): Promise<FundDto>
   deleteFund(accessToken: string, fundId: string, request: DeleteFundRequest): Promise<void>
@@ -165,6 +172,9 @@ export const fundsApi: FundsClient = {
     return signal
       ? requestJson(accessToken, '/api/funds', { signal })
       : getCachedFunds(accessToken)
+  },
+  getFundOptions(accessToken, signal) {
+    return requestJson<FundOptionDto[]>(accessToken, '/api/funds/options', signal ? { signal } : undefined)
   },
   async createFund(accessToken, request) {
     const result = await requestJson<FundDto>(accessToken, '/api/funds', { method: 'POST', body: JSON.stringify(request) })

@@ -32,6 +32,20 @@ public sealed class FundsControllerTests
     }
 
     [Fact]
+    public async Task GetFundOptions_ReturnsConfigurationCatalogWithoutFinancialBalances()
+    {
+        var option = new FundOptionDto(Guid.NewGuid(), "Водоснабжение", true);
+        var service = new FakeFundService { FundOptions = [option] };
+        var controller = CreateController(service);
+
+        var result = await controller.GetFundOptions(CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var returned = Assert.IsAssignableFrom<IReadOnlyList<FundOptionDto>>(ok.Value);
+        Assert.Same(option, Assert.Single(returned));
+    }
+
+    [Fact]
     public async Task CreateFund_PassesActorAndReturnsCreatedFund()
     {
         var actorUserId = Guid.NewGuid();
@@ -367,6 +381,7 @@ public sealed class FundsControllerTests
         public CancelFundOperationRequest? LastCancelRequest { get; private set; }
         public IReadOnlyList<FundOperationDto> Operations { get; init; } = [];
         public IReadOnlyList<FundDto> Funds { get; init; } = [];
+        public IReadOnlyList<FundOptionDto> FundOptions { get; init; } = [];
         public FundOperationPageDto OperationsPage { get; init; } = new([], 0, 0, 25);
         public FundResult<FundDto> CreateFundResult { get; init; } = FundResult<FundDto>.Failure("not_configured", "Not configured.");
         public FundResult<FundDto> UpdateFundResult { get; init; } = FundResult<FundDto>.Failure("not_configured", "Not configured.");
@@ -378,6 +393,11 @@ public sealed class FundsControllerTests
         public Task<IReadOnlyList<FundDto>> GetFundsAsync(CancellationToken cancellationToken)
         {
             return Task.FromResult(Funds);
+        }
+
+        public Task<IReadOnlyList<FundOptionDto>> GetFundOptionsAsync(CancellationToken cancellationToken)
+        {
+            return Task.FromResult(FundOptions);
         }
 
         public Task<FundResult<FundDto>> CreateFundAsync(UpsertFundRequest request, Guid? actorUserId, CancellationToken cancellationToken)

@@ -13,6 +13,11 @@ public sealed record FundDto(
     IReadOnlyList<FundLinkedServiceDto> LinkedServices,
     Guid Version = default);
 
+public sealed record FundOptionDto(
+    Guid Id,
+    string Name,
+    bool AllowOperations);
+
 public sealed record FundLinkedServiceDto(
     Guid Id,
     string Name);

@@ -106,3 +106,48 @@ describe('fundsApi response cache', () => {
     expect(fetchMock).toHaveBeenCalledTimes(2)
   })
 })
+
+describe('fundsApi configuration options', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('loads the non-financial fund catalog from the dedicated endpoint', async () => {
+    const options = [{ id: 'fund-water', name: 'Водоснабжение', allowOperations: true }]
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify(options), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await expect(fundsApi.getFundOptions('token')).resolves.toEqual(options)
+
+    expect(fetchMock).toHaveBeenCalledWith('/api/funds/options', expect.objectContaining({
+      headers: expect.objectContaining({ Authorization: 'Bearer token' }),
+    }))
+  })
+
+  it('returns the server error for a retryable options load', async () => {
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({ detail: 'Каталог фондов временно недоступен.' }), { status: 503 }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await expect(fundsApi.getFundOptions('token')).rejects.toThrow('Каталог фондов временно недоступен.')
+  })
+
+  it('forwards caller cancellation to the options request', async () => {
+    const controller = new AbortController()
+    let receivedSignal: AbortSignal | null = null
+    const fetchMock = vi.fn((_input: RequestInfo | URL, init?: RequestInit) => new Promise<Response>((_resolve, reject) => {
+      receivedSignal = init?.signal ?? null
+      receivedSignal?.addEventListener('abort', () => reject(receivedSignal?.reason), { once: true })
+    }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const request = fundsApi.getFundOptions('token', controller.signal)
+    await vi.waitFor(() => expect(receivedSignal).toBeInstanceOf(AbortSignal))
+    controller.abort()
+
+    await expect(request).rejects.toMatchObject({ name: 'AbortError' })
+    expect(receivedSignal?.aborted).toBe(true)
+  })
+})

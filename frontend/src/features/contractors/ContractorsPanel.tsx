@@ -4,7 +4,7 @@ import { FileText, Gauge, LoaderCircle, Pencil, RotateCcw, Save, Search, Trash2,
 import type { AuthResponse } from '../../services/authApi'
 import type { AccountingTypeDto, ChargeServiceSettingDto, CreateChargeServiceWithTariffRequest, DictionaryClient, GarageColumnFilters, GarageDto, OwnerDto, StaffDepartmentDto, StaffMemberDto, SupplierContactDto, SupplierDto, SupplierGroupDto, TariffDto, UpsertGarageRequest, UpsertOwnerRequest, UpsertStaffMemberRequest, UpsertSupplierContactRequest, UpsertSupplierRequest } from '../../services/dictionariesApi'
 import type { FinanceClient, GarageBalanceHistoryDto } from '../../services/financeApi'
-import type { FundDto, FundsClient } from '../../services/fundsApi'
+import type { FundOptionDto, FundsClient } from '../../services/fundsApi'
 import type { DadataAddressSuggestionDto, DadataPartySuggestionDto, IntegrationClient } from '../../services/integrationsApi'
 import { hasPermission, isAdministrator, permissions } from '../../shared/accessControl'
 import { AsyncErrorState, LoadingSkeleton, TableLoadingState } from '../../shared/AsyncState'
@@ -804,7 +804,7 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
   const [chargeServices, setChargeServices] = useState<ChargeServiceSettingDto[]>([])
   const [serviceIncomeTypes, setServiceIncomeTypes] = useState<AccountingTypeDto[]>([])
   const [serviceExpenseTypes, setServiceExpenseTypes] = useState<AccountingTypeDto[]>([])
-  const [serviceFunds, setServiceFunds] = useState<FundDto[]>([])
+  const [serviceFunds, setServiceFunds] = useState<FundOptionDto[]>([])
   const [serviceTariffs, setServiceTariffs] = useState<TariffDto[]>([])
   const [serviceSaving, setServiceSaving] = useState(false)
   const [formStateError, setFormStateError] = useState<string | null>(null)
@@ -1034,7 +1034,7 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
             dictionaryClient.getIncomeTypes(auth.accessToken, undefined, contractorsDictionaryListLimit, true, controller.signal),
             dictionaryClient.getExpenseTypes(auth.accessToken, undefined, contractorsDictionaryListLimit, true, controller.signal),
             dictionaryClient.getTariffs(auth.accessToken, undefined, contractorsDictionaryListLimit, true, controller.signal),
-            fundsClient.getFunds(auth.accessToken).catch(() => []),
+            fundsClient.getFundOptions(auth.accessToken, controller.signal),
           ])
           if (!cancelled) {
             setSupplierGroups(groups)
@@ -3490,7 +3490,7 @@ function getDepartmentPrototypeChanges(previous: ContractorDepartmentRow, next: 
   ])
 }
 
-function SupplierPrototypeDialog({ accessToken, canAdjustOpeningData, funds, integrationClient, item, services, onAdjustOpeningBalance, onClose, onOpenFinancialReport, onSave }: { accessToken: string; canAdjustOpeningData: boolean; funds: FundDto[]; integrationClient: IntegrationClient; item?: ContractorSupplierRow; services: ChargeServiceSettingDto[]; onAdjustOpeningBalance: (item: ContractorSupplierRow) => void; onClose: () => void; onOpenFinancialReport: (item: ContractorSupplierRow) => void; onSave: (item: ContractorSupplierRow) => Promise<void> }) {
+function SupplierPrototypeDialog({ accessToken, canAdjustOpeningData, funds, integrationClient, item, services, onAdjustOpeningBalance, onClose, onOpenFinancialReport, onSave }: { accessToken: string; canAdjustOpeningData: boolean; funds: FundOptionDto[]; integrationClient: IntegrationClient; item?: ContractorSupplierRow; services: ChargeServiceSettingDto[]; onAdjustOpeningBalance: (item: ContractorSupplierRow) => void; onClose: () => void; onOpenFinancialReport: (item: ContractorSupplierRow) => void; onSave: (item: ContractorSupplierRow) => Promise<void> }) {
   const activeServices = services.filter((service) =>
     service.id === item?.serviceId || (!service.isArchived && Boolean(service.expenseTypeId)))
   const initialService = activeServices.find((service) => service.id === item?.serviceId) ?? activeServices.find((service) => service.name === item?.service) ?? activeServices[0] ?? null

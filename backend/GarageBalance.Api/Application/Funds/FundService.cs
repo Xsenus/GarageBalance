@@ -23,6 +23,15 @@ public sealed class FundService(
             .ToList();
     }
 
+    public async Task<IReadOnlyList<FundOptionDto>> GetFundOptionsAsync(CancellationToken cancellationToken)
+    {
+        return (await repository.GetFundsAsync(cancellationToken))
+            .OrderBy(fund => fund.SortOrder)
+            .ThenBy(fund => fund.Name)
+            .Select(fund => new FundOptionDto(fund.Id, fund.Name, fund.AllowOperations))
+            .ToList();
+    }
+
     public async Task<FundResult<FundDto>> CreateFundAsync(
         UpsertFundRequest request,
         Guid? actorUserId,

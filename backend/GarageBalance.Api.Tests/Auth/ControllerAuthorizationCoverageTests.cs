@@ -167,12 +167,12 @@ public sealed class ControllerAuthorizationCoverageTests
     }
 
     [Fact]
-    public void FundsActionsRequireReportsReadAndPaymentsWritePermissions()
+    public void FundsActionsRequirePurposeSpecificReadAndWritePermissions()
     {
-        var controllerPolicy = typeof(FundsController)
-            .GetCustomAttributes<AuthorizeAttribute>(inherit: true)
-            .SingleOrDefault(attribute => attribute.Policy == SystemPermissions.ReportsRead);
-        Assert.NotNull(controllerPolicy);
+        AssertActionRequiresPolicy(typeof(FundsController), nameof(FundsController.GetFunds), SystemPermissions.ReportsRead);
+        AssertActionRequiresPolicy(typeof(FundsController), nameof(FundsController.GetOperations), SystemPermissions.ReportsRead);
+        AssertActionRequiresPolicy(typeof(FundsController), nameof(FundsController.GetOperationsPage), SystemPermissions.ReportsRead);
+        AssertActionRequiresPolicy(typeof(FundsController), nameof(FundsController.GetFundOptions), SystemPermissions.DictionariesRead);
 
         var mutatingActionsWithoutWritePolicy = typeof(FundsController)
             .GetMethods(BindingFlags.Instance | BindingFlags.Public | BindingFlags.DeclaredOnly)
@@ -319,6 +319,15 @@ public sealed class ControllerAuthorizationCoverageTests
         var policy = action.GetCustomAttributes<AuthorizeAttribute>(inherit: true)
             .SingleOrDefault(attribute => attribute.Policy == expectedPolicy);
 
+        Assert.NotNull(policy);
+    }
+
+    private static void AssertActionRequiresPolicy(Type controllerType, string actionName, string expectedPolicy)
+    {
+        var action = controllerType.GetMethod(actionName);
+        Assert.NotNull(action);
+        var policy = action.GetCustomAttributes<AuthorizeAttribute>(inherit: true)
+            .SingleOrDefault(attribute => attribute.Policy == expectedPolicy);
         Assert.NotNull(policy);
     }
 

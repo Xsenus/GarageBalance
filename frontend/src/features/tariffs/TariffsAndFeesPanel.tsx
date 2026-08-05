@@ -5,7 +5,7 @@ import type { AuthResponse } from '../../services/authApi'
 import { DictionaryApiError } from '../../services/dictionariesApi'
 import type { AccountingTypeDto, ChargeServiceSettingDto, CreateChargeServiceWithTariffRequest, DictionaryClient, FeeCampaignDto, GarageDto, IrregularPaymentDto, TariffDto, UpdateChargeServiceWithTariffRequest, UpsertChargeServiceSettingRequest, UpsertFeeCampaignRequest, UpsertIrregularPaymentRequest, UpsertTariffRequest } from '../../services/dictionariesApi'
 import type { FinanceClient } from '../../services/financeApi'
-import type { FundDto, FundsClient } from '../../services/fundsApi'
+import type { FundOptionDto, FundsClient } from '../../services/fundsApi'
 import { hasPermission, permissions } from '../../shared/accessControl'
 import { AsyncErrorState, EmptyState, TableLoadingState } from '../../shared/AsyncState'
 import type { ChangePreview } from '../../shared/changePreview'
@@ -760,7 +760,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
   const [backendTariffs, setBackendTariffs] = useState<TariffDto[]>([])
   const [backendIncomeTypes, setBackendIncomeTypes] = useState<AccountingTypeDto[]>([])
   const [backendExpenseTypes, setBackendExpenseTypes] = useState<AccountingTypeDto[]>([])
-  const [backendFunds, setBackendFunds] = useState<FundDto[]>([])
+  const [backendFunds, setBackendFunds] = useState<FundOptionDto[]>([])
   const [backendChargeServices, setBackendChargeServices] = useState<ChargeServiceSettingDto[]>([])
   const [feeCampaignGarageOptions, setFeeCampaignGarageOptions] = useState<GarageDto[]>([])
   const [feeCampaignActiveGarageCount, setFeeCampaignActiveGarageCount] = useState(0)
@@ -899,7 +899,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
         const [loadedIncomeTypes, loadedExpenseTypes, loadedFunds] = await Promise.all([
           dictionaryClient.getIncomeTypes(auth.accessToken, undefined, dictionaryScreenRequestLimit),
           dictionaryClient.getExpenseTypes(auth.accessToken, undefined, dictionaryScreenRequestLimit),
-          fundsClient.getFunds(auth.accessToken).catch(() => []),
+          fundsClient.getFundOptions(auth.accessToken),
         ])
         if (!ignore) {
           setBackendIncomeTypes(loadedIncomeTypes)
@@ -3402,7 +3402,7 @@ export function AddServicePrototypeDialog({
   initialSetting?: ChargeServiceSettingDto
   isSaving: boolean
   expenseTypes: AccountingTypeDto[]
-  funds: FundDto[]
+  funds: FundOptionDto[]
   incomeTypes: AccountingTypeDto[]
   onClose: () => void
   onCreateWithTariff?: (request: CreateChargeServiceWithTariffRequest) => Promise<void>
@@ -3766,7 +3766,7 @@ export function AddServicePrototypeDialog({
                     value={expenseFundId}
                     options={[
                       { value: '', label: expenseTypeId ? 'Выберите фонд' : 'Сначала выберите начисление поставщику' },
-                      ...funds.map((fund) => ({ value: fund.id, label: `${fund.name} — ${formatMoney(fund.balance)}` })),
+                      ...funds.map((fund) => ({ value: fund.id, label: fund.name })),
                     ]}
                     disabled={!expenseTypeId}
                     onChange={(nextExpenseFundId) => {
