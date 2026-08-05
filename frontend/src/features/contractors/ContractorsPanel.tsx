@@ -3070,6 +3070,7 @@ function getSupplierPrototypeChanges(previous: ContractorSupplierRow, next: Cont
   return compactPrototypeChanges([
     createPrototypeChangeEntry('Наименование', previous.name, next.name),
     createPrototypeChangeEntry('Услуга', previous.service, next.service),
+    createPrototypeChangeEntry('Фонд расходования', previous.expenseFundId ?? '', next.expenseFundId ?? ''),
     createPrototypeChangeEntry('ИНН', previous.inn, next.inn),
     createPrototypeChangeEntry('Стартовый баланс', previous.startingBalance, next.startingBalance),
     createPrototypeChangeEntry('Задолженность', previous.debt, next.debt),

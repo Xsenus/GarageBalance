@@ -2711,14 +2711,25 @@ describe('App', () => {
     expect(within(reopenSupplierDialog).getByLabelText('Контакт 1: почта')).toHaveValue('updated@example.test')
     expect(within(reopenSupplierDialog).getByLabelText('Телефон поставщика')).toHaveValue('+7 (900) 111-22-44')
     expect(within(reopenSupplierDialog).getByLabelText('Почта поставщика')).toHaveValue('updated@example.test')
-    const reopenedSupplierContactRow = within(reopenSupplierDialog).getByLabelText('Контакт 1: ФИО').closest('[role="row"]')!
+    const reopenedSupplierFundControl = within(reopenSupplierDialog).getByRole('combobox', { name: 'Фонд расходования поставщика' })
+    await user.click(reopenedSupplierFundControl)
+    await user.click(within(reopenSupplierDialog).getByRole('option', { name: 'Вывоз мусора' }))
+    await user.click(within(reopenSupplierDialog).getByRole('button', { name: /Сохранить/i }))
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Новый подрядчик' })).not.toBeInTheDocument())
+    expect(updatedSupplierRequests.at(-1)).toMatchObject({ expenseFundId: 'fund-trash' })
+
+    supplierRow = within(suppliersTable).getByText('Новый подрядчик').closest('[role="row"]')!
+    await user.click(within(supplierRow as HTMLElement).getByRole('button', { name: 'Изменить поставщика Новый подрядчик' }))
+    const supplierDialogAfterFundChange = await screen.findByRole('dialog', { name: 'Новый подрядчик' })
+    expect(within(supplierDialogAfterFundChange).getByRole('combobox', { name: 'Фонд расходования поставщика' })).toHaveTextContent('Вывоз мусора')
+    const reopenedSupplierContactRow = within(supplierDialogAfterFundChange).getByLabelText('Контакт 1: ФИО').closest('[role="row"]')!
     await user.pointer({ keys: '[MouseRight]', target: reopenedSupplierContactRow as HTMLElement })
     const reopenedContactContextMenu = await screen.findByRole('menu', { name: 'Действия контакта Смирнов С.С.' })
     await user.click(within(reopenedContactContextMenu).getByRole('menuitem', { name: 'Удалить контакт' }))
     const reopenedDeleteContactDialog = await screen.findByRole('dialog', { name: 'Удалить контакт?' })
     await user.type(within(reopenedDeleteContactDialog).getByLabelText('Причина удаления контакта'), 'Контакт больше не работает')
     await user.click(within(reopenedDeleteContactDialog).getByRole('button', { name: 'Удалить' }))
-    await user.click(within(reopenSupplierDialog).getByRole('button', { name: /Сохранить/i }))
+    await user.click(within(supplierDialogAfterFundChange).getByRole('button', { name: /Сохранить/i }))
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Новый подрядчик' })).not.toBeInTheDocument())
     expect(screen.queryByRole('dialog', { name: 'Подтвердить изменения поставщика' })).not.toBeInTheDocument()
     expect(deletedSupplierContactReason).toBe('Контакт больше не работает')
