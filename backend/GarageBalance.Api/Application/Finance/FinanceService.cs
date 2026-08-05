@@ -2634,6 +2634,7 @@ public sealed class FinanceService(
         {
             return supplierExpenseTypeValidation;
         }
+        var expenseFund = GetSupplierExpenseFund(supplier)!;
 
         var month = MonthPeriod.Normalize(request.AccountingMonth);
         var documentNumber = NormalizeOptional(request.DocumentNumber);
@@ -2648,8 +2649,8 @@ public sealed class FinanceService(
             Supplier = supplier,
             ExpenseTypeId = expenseType.Id,
             ExpenseType = expenseType,
-            ExpenseFundId = supplier.ChargeServiceSetting!.ExpenseFundId,
-            ExpenseFund = supplier.ChargeServiceSetting.ExpenseFund,
+            ExpenseFundId = expenseFund.Id,
+            ExpenseFund = expenseFund,
             AccountingMonth = month,
             Amount = MoneyMath.RoundMoney(request.Amount),
             Source = source,
@@ -2703,6 +2704,7 @@ public sealed class FinanceService(
         {
             return supplierExpenseTypeValidation;
         }
+        var expenseFund = GetSupplierExpenseFund(supplier)!;
 
         var month = MonthPeriod.Normalize(request.AccountingMonth);
         var documentNumber = NormalizeOptional(request.DocumentNumber);
@@ -2723,6 +2725,7 @@ public sealed class FinanceService(
         {
             ["supplier"] = accrual.Supplier.Name,
             ["expenseType"] = accrual.ExpenseType.Name,
+            ["expenseFund"] = accrual.ExpenseFund?.Name,
             ["accountingMonth"] = accrual.AccountingMonth,
             ["amount"] = accrual.Amount,
             ["source"] = accrual.Source,
@@ -2733,6 +2736,7 @@ public sealed class FinanceService(
         {
             ["supplier"] = supplier.Name,
             ["expenseType"] = expenseType.Name,
+            ["expenseFund"] = expenseFund.Name,
             ["accountingMonth"] = month,
             ["amount"] = amount,
             ["source"] = source,
@@ -2744,8 +2748,8 @@ public sealed class FinanceService(
         accrual.Supplier = supplier;
         accrual.ExpenseTypeId = expenseType.Id;
         accrual.ExpenseType = expenseType;
-        accrual.ExpenseFundId = supplier.ChargeServiceSetting!.ExpenseFundId;
-        accrual.ExpenseFund = supplier.ChargeServiceSetting.ExpenseFund;
+        accrual.ExpenseFundId = expenseFund.Id;
+        accrual.ExpenseFund = expenseFund;
         accrual.AccountingMonth = month;
         accrual.Amount = amount;
         accrual.Source = source;

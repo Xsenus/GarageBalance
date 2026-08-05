@@ -2872,15 +2872,35 @@ public sealed class FinanceServiceTests
         var service = FinanceServiceTestFactory.Create(database.Context);
         var month = new DateOnly(2026, 6, 1);
 
+        var accrualRequest = new CreateSupplierAccrualRequest(
+            fixtures.Supplier.Id,
+            fixtures.ExpenseType.Id,
+            month,
+            400m,
+            "manual",
+            "INV-MANUAL-FUND",
+            null);
         var accrual = await service.CreateSupplierAccrualAsync(
-            new CreateSupplierAccrualRequest(fixtures.Supplier.Id, fixtures.ExpenseType.Id, month, 400m, "manual", "INV-MANUAL-FUND", null),
+            accrualRequest,
             null,
             CancellationToken.None);
+        Assert.True(accrual.Succeeded);
+        Assert.Equal(manualFund.Id, accrual.Value!.ExpenseFundId);
+        Assert.Equal("Ручной фонд поставщика", accrual.Value.ExpenseFundName);
+
+        var updatedAccrual = await service.UpdateSupplierAccrualAsync(
+            accrual.Value.Id,
+            accrualRequest with { Amount = 450m, Comment = "Уточненная сумма" },
+            null,
+            CancellationToken.None);
+        Assert.True(updatedAccrual.Succeeded);
+        Assert.Equal(manualFund.Id, updatedAccrual.Value!.ExpenseFundId);
+        Assert.Equal("Ручной фонд поставщика", updatedAccrual.Value.ExpenseFundName);
+
         var payment = await service.CreateExpenseAsync(
             new CreateExpenseOperationRequest(fixtures.Supplier.Id, fixtures.ExpenseType.Id, new DateOnly(2026, 6, 20), month, 250m, "RKO-MANUAL-FUND", null),
             null,
             CancellationToken.None);
-        Assert.True(accrual.Succeeded);
         Assert.True(payment.Succeeded);
         Assert.Equal(manualFund.Id, payment.Value!.ExpenseFundId);
         Assert.Equal("Ручной фонд поставщика", payment.Value.ExpenseFundName);
