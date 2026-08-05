@@ -8094,6 +8094,100 @@ describe('App', () => {
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Полная оплата' })).not.toBeInTheDocument())
   })
 
+  it('applies a partial full payment to the oldest debts before newer months', async () => {
+    const user = userEvent.setup()
+    const currentMonth = getTestCurrentMonthInputValue()
+    const previousMonth = addTestMonths(currentMonth, -1)
+    const garage = createGarage({ id: 'garage-full-payment-order', number: '88-А', ownerName: 'Смирнов Алексей' })
+    const getGarageIncomeWorksheet = vi.fn(async () => createGarageIncomeWorksheet({
+      garageId: garage.id,
+      garageNumber: garage.number,
+      ownerName: garage.ownerName,
+      monthFrom: `${previousMonth}-01`,
+      monthTo: `${currentMonth}-01`,
+      accrualTotal: 1000,
+      incomeTotal: 0,
+      debtTotal: 1000,
+      closingDebt: 1000,
+      rows: [
+        {
+          accountingMonth: `${currentMonth}-01`,
+          incomeTypeId: 'income-type-other-income',
+          incomeTypeName: 'Прочие доходы',
+          meterKind: null,
+          meterValue: null,
+          meterConsumption: null,
+          accrualAmount: 500,
+          incomeAmount: 0,
+          debt: 500,
+        },
+        {
+          accountingMonth: `${previousMonth}-01`,
+          incomeTypeId: 'income-type-1',
+          incomeTypeName: 'Членский взнос',
+          meterKind: null,
+          meterValue: null,
+          meterConsumption: null,
+          accrualAmount: 500,
+          incomeAmount: 0,
+          debt: 500,
+        },
+      ],
+    }))
+    const createFullGaragePayment = vi.fn(async (_token: string, request: CreateFullGaragePaymentRequest) => ({
+      receiptBatchId: request.receiptBatchId!,
+      totalAmount: request.lines.reduce((sum, line) => sum + line.amount, 0),
+      operations: request.lines.map((line, index) => createFinancialOperation({
+        id: `ordered-full-payment-${index + 1}`,
+        garageId: request.garageId,
+        garageNumber: garage.number,
+        ownerName: garage.ownerName,
+        incomeTypeId: line.incomeTypeId,
+        incomeTypeName: index === 0 ? 'Членский взнос' : 'Прочие доходы',
+        operationDate: request.operationDate,
+        accountingMonth: line.accountingMonth,
+        amount: line.amount,
+        receiptBatchId: request.receiptBatchId,
+      })),
+    }))
+    render(<App
+      authClient={createAuthClient()}
+      dictionaryClient={createDictionaryClient({ getGarages: async () => [garage] })}
+      financeClient={createFinanceClient({ getGarageIncomeWorksheet, createFullGaragePayment })}
+      importClient={createImportClient()}
+      reportClient={createReportClient()}
+      releaseClient={createReleaseClient()}
+      userClient={createUserClient()}
+    />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Платежи')
+    const prototype = within(await screen.findByRole('region', { name: 'Платежи' })).getByRole('region', { name: 'Форма платежей' })
+    await user.type(within(prototype).getByLabelText('Поиск номера гаража или ФИО владельца'), garage.number)
+    await user.click(await within(prototype).findByRole('option', { name: /Гараж\s*88-А\s*Смирнов Алексей/ }))
+    await user.click(within(prototype).getByRole('button', { name: 'Полная оплата' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Полная оплата' })
+    const amount = within(dialog).getByLabelText('Сумма полной оплаты')
+    await user.clear(amount)
+    await user.type(amount, '700')
+    await user.click(within(dialog).getByRole('button', { name: 'Провести оплату' }))
+
+    await waitFor(() => expect(createFullGaragePayment).toHaveBeenCalledTimes(1))
+    expect(createFullGaragePayment.mock.calls[0][1].lines).toEqual([
+      expect.objectContaining({
+        incomeTypeId: 'income-type-1',
+        accountingMonth: `${previousMonth}-01`,
+        amount: 500,
+      }),
+      expect.objectContaining({
+        incomeTypeId: 'income-type-other-income',
+        accountingMonth: `${currentMonth}-01`,
+        amount: 200,
+      }),
+    ])
+  })
+
   it('keeps the full payment dialog unchanged when the atomic request fails', async () => {
     const user = userEvent.setup()
     const garage = createGarage({ id: 'garage-full-payment-failure', number: '89', ownerName: 'Орлов Илья' })

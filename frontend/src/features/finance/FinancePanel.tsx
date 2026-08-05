@@ -4030,7 +4030,7 @@ function PaymentsPrototypePanel({
     }
 
     const seenAnnualAccruals = new Set<string>()
-    return rows.filter((row) => {
+    return rows.sort((left, right) => left.month > right.month ? 1 : left.month === right.month ? 0 : -1).filter((row) => {
       if (!row.annualAccrualId) {
         return true
       }

@@ -31,7 +31,7 @@ public sealed class PostgreSqlIncomeFundAssignmentIntegrationTests
             };
             var incomeTypes = await setupContext.IncomeTypes
                 .Where(item => item.Code == "membership" || item.Code == "other_income")
-                .ToDictionaryAsync(item => item.Code);
+                .ToDictionaryAsync(item => item.Code!);
             setupContext.Garages.Add(garage);
             await setupContext.SaveChangesAsync();
             garageId = garage.Id;
