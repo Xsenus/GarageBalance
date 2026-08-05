@@ -76,7 +76,8 @@ var dbConnectionString = NpgsqlConnectionStringFactory.Create(
         builder.Configuration.GetValue<int?>("DatabasePerformance:MinimumPoolSize") ?? 2,
         builder.Configuration.GetValue<int?>("DatabasePerformance:ConnectionIdleLifetimeSeconds") ?? 300,
         builder.Configuration.GetValue<int?>("DatabasePerformance:ConnectionPruningIntervalSeconds") ?? 10,
-        builder.Configuration.GetValue<int?>("DatabasePerformance:KeepAliveSeconds") ?? 0));
+        builder.Configuration.GetValue<int?>("DatabasePerformance:KeepAliveSeconds") ?? 0,
+        builder.Configuration.GetValue<int?>("DatabasePerformance:ConnectionTimeoutSeconds") ?? 3));
 builder.Services.AddHttpContextAccessor();
 builder.Services
     .AddOptions<DatabaseCommandPerformanceOptions>()

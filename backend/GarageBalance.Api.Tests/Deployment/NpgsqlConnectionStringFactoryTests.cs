@@ -10,7 +10,7 @@ public sealed class NpgsqlConnectionStringFactoryTests
     {
         var connectionString = NpgsqlConnectionStringFactory.Create(
             "Host=127.0.0.1;Port=5433;Database=garagebalance;Username=app;Password=secret",
-            new DatabaseConnectionPoolSettings(32, 2, 300, 10, 0));
+            new DatabaseConnectionPoolSettings(32, 2, 300, 10, 0, 3));
 
         var result = new NpgsqlConnectionStringBuilder(connectionString);
 
@@ -25,6 +25,7 @@ public sealed class NpgsqlConnectionStringFactoryTests
         Assert.Equal(300, result.ConnectionIdleLifetime);
         Assert.Equal(10, result.ConnectionPruningInterval);
         Assert.Equal(0, result.KeepAlive);
+        Assert.Equal(3, result.Timeout);
     }
 
     [Fact]
@@ -32,7 +33,7 @@ public sealed class NpgsqlConnectionStringFactoryTests
     {
         var connectionString = NpgsqlConnectionStringFactory.Create(
             "Host=localhost;Database=garagebalance;Username=app;Password=secret",
-            new DatabaseConnectionPoolSettings(500, 300, 5, 500, 900));
+            new DatabaseConnectionPoolSettings(500, 300, 5, 500, 900, 500));
 
         var result = new NpgsqlConnectionStringBuilder(connectionString);
 
@@ -41,6 +42,7 @@ public sealed class NpgsqlConnectionStringFactoryTests
         Assert.Equal(30, result.ConnectionIdleLifetime);
         Assert.Equal(30, result.ConnectionPruningInterval);
         Assert.Equal(300, result.KeepAlive);
+        Assert.Equal(30, result.Timeout);
     }
 
     [Fact]
@@ -48,7 +50,7 @@ public sealed class NpgsqlConnectionStringFactoryTests
     {
         var connectionString = NpgsqlConnectionStringFactory.Create(
             "Host=localhost;Database=garagebalance;Username=app;Password=secret",
-            new DatabaseConnectionPoolSettings(1, -10, 5000, 0, -1));
+            new DatabaseConnectionPoolSettings(1, -10, 5000, 0, -1, 0));
 
         var result = new NpgsqlConnectionStringBuilder(connectionString);
 
@@ -57,6 +59,7 @@ public sealed class NpgsqlConnectionStringFactoryTests
         Assert.Equal(1800, result.ConnectionIdleLifetime);
         Assert.Equal(1, result.ConnectionPruningInterval);
         Assert.Equal(0, result.KeepAlive);
+        Assert.Equal(1, result.Timeout);
     }
 
     [Theory]
@@ -67,7 +70,7 @@ public sealed class NpgsqlConnectionStringFactoryTests
     {
         var action = () => NpgsqlConnectionStringFactory.Create(
             connectionString,
-            new DatabaseConnectionPoolSettings(32, 2, 300, 10, 0));
+            new DatabaseConnectionPoolSettings(32, 2, 300, 10, 0, 3));
 
         var error = Assert.Throws<InvalidOperationException>(action);
         Assert.Contains("DefaultConnection", error.Message, StringComparison.Ordinal);

@@ -1095,6 +1095,7 @@ public sealed class BackendPerformanceGuardTests
         Assert.Contains("AddDbContextPool<GarageBalanceDbContext>", program, StringComparison.Ordinal);
         Assert.Contains("DatabasePerformance:DbContextPoolSize", program, StringComparison.Ordinal);
         Assert.Contains("DatabasePerformance:CommandTimeoutSeconds", program, StringComparison.Ordinal);
+        Assert.Contains("DatabasePerformance:ConnectionTimeoutSeconds", program, StringComparison.Ordinal);
         Assert.Contains("DatabasePerformance:MaximumPoolSize", program, StringComparison.Ordinal);
         Assert.Contains("NpgsqlConnectionStringFactory.Create(", program, StringComparison.Ordinal);
         Assert.Contains("Math.Min(configuredDbContextPoolSize, dbMaximumPoolSize)", program, StringComparison.Ordinal);

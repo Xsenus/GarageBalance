@@ -7,7 +7,8 @@ public sealed record DatabaseConnectionPoolSettings(
     int MinimumPoolSize,
     int ConnectionIdleLifetimeSeconds,
     int ConnectionPruningIntervalSeconds,
-    int KeepAliveSeconds);
+    int KeepAliveSeconds,
+    int ConnectionTimeoutSeconds);
 
 public static class NpgsqlConnectionStringFactory
 {
@@ -26,6 +27,7 @@ public static class NpgsqlConnectionStringFactory
             1,
             Math.Min(idleLifetimeSeconds, 60));
         var keepAliveSeconds = Math.Clamp(settings.KeepAliveSeconds, 0, 300);
+        var connectionTimeoutSeconds = Math.Clamp(settings.ConnectionTimeoutSeconds, 1, 30);
 
         var builder = new NpgsqlConnectionStringBuilder(connectionString)
         {
@@ -34,7 +36,8 @@ public static class NpgsqlConnectionStringFactory
             MinPoolSize = minimumPoolSize,
             ConnectionIdleLifetime = idleLifetimeSeconds,
             ConnectionPruningInterval = pruningIntervalSeconds,
-            KeepAlive = keepAliveSeconds
+            KeepAlive = keepAliveSeconds,
+            Timeout = connectionTimeoutSeconds
         };
 
         return builder.ConnectionString;
