@@ -1,6 +1,7 @@
 using System.Reflection;
 using System.Text.RegularExpressions;
 using GarageBalance.Api.Controllers;
+using GarageBalance.Api.Tests.Common;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Routing;
 
@@ -46,7 +47,7 @@ public sealed class RequestCancellationGuardTests
     [Fact]
     public void HeavyDatabaseReads_DoNotUseUncancellableEfAsyncOperators()
     {
-        var dataDirectory = FindProjectFile("Infrastructure/Data/GarageBalanceDbContext.cs").Directory!;
+        var dataDirectory = RepositoryPathLocator.FindApiFile("Infrastructure/Data/GarageBalanceDbContext.cs").Directory!;
         var guardedFiles = dataDirectory
             .EnumerateFiles("*.cs", SearchOption.TopDirectoryOnly)
             .Where(file =>
@@ -80,7 +81,7 @@ public sealed class RequestCancellationGuardTests
     [InlineData("Controllers/ImportController.cs", "importService")]
     public void ExportControllers_ForwardCancellationToken(string relativePath, string serviceName)
     {
-        var source = File.ReadAllText(FindProjectFile(relativePath).FullName);
+        var source = File.ReadAllText(RepositoryPathLocator.FindApiFile(relativePath).FullName);
         var awaitedCalls = Regex.Matches(
             source,
             $@"await\s+{Regex.Escape(serviceName)}\.\w*Export\w*Async\s*\(",
@@ -93,22 +94,5 @@ public sealed class RequestCancellationGuardTests
         Assert.NotEmpty(awaitedCalls);
         Assert.Equal(awaitedCalls.Count, forwardedCalls.Count);
         Assert.DoesNotContain("CancellationToken.None", source, StringComparison.Ordinal);
-    }
-
-    private static FileInfo FindProjectFile(string relativePath)
-    {
-        var directory = new DirectoryInfo(AppContext.BaseDirectory);
-        while (directory is not null)
-        {
-            var candidate = new FileInfo(Path.Combine(directory.FullName, "GarageBalance.Api", relativePath));
-            if (candidate.Exists)
-            {
-                return candidate;
-            }
-
-            directory = directory.Parent;
-        }
-
-        throw new FileNotFoundException($"Could not locate GarageBalance.Api/{relativePath}.");
     }
 }

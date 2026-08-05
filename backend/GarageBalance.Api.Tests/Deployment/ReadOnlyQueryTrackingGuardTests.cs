@@ -10,7 +10,7 @@ public sealed class ReadOnlyQueryTrackingGuardTests
     [Fact]
     public void InfrastructureQueryClasses_ExplicitlyDisableTracking()
     {
-        var dataDirectory = FindProjectFile("Infrastructure/Data/GarageBalanceDbContext.cs").Directory!;
+        var dataDirectory = RepositoryPathLocator.FindApiFile("Infrastructure/Data/GarageBalanceDbContext.cs").Directory!;
         var queryFiles = dataDirectory.EnumerateFiles("*Query.cs", SearchOption.TopDirectoryOnly).ToArray();
         var missingNoTracking = queryFiles
             .Where(file => !File.ReadAllText(file.FullName).Contains(".AsNoTracking()", StringComparison.Ordinal))
@@ -59,22 +59,5 @@ public sealed class ReadOnlyQueryTrackingGuardTests
         Assert.Single(roles);
         Assert.Equal(role.Id, roles[0].Id);
         Assert.Empty(database.Context.ChangeTracker.Entries());
-    }
-
-    private static FileInfo FindProjectFile(string relativePath)
-    {
-        var directory = new DirectoryInfo(AppContext.BaseDirectory);
-        while (directory is not null)
-        {
-            var candidate = new FileInfo(Path.Combine(directory.FullName, "GarageBalance.Api", relativePath));
-            if (candidate.Exists)
-            {
-                return candidate;
-            }
-
-            directory = directory.Parent;
-        }
-
-        throw new FileNotFoundException($"Could not locate GarageBalance.Api/{relativePath}.");
     }
 }
