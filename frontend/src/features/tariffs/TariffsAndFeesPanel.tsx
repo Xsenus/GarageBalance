@@ -1333,7 +1333,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
         },
         rate,
         tariffMode,
-        effectiveFrom: getLocalDateInputValue(),
+        effectiveFrom: sourceTariff.effectiveFrom,
         electricityTiers: electricityTiers && electricityTiers.length >= 2 ? electricityTiers : null,
         changeReason: 'Смена режима тарифа в таблице услуг.',
         calculationBase: targetCalculationBase,
@@ -1420,7 +1420,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
           },
           rate: request.rate,
           tariffMode,
-          effectiveFrom: getLocalDateInputValue(),
+          effectiveFrom: request.effectiveFrom,
           electricityTiers: request.electricityTiers ?? null,
           changeReason: electricityTierChangeReason,
           calculationBase: request.calculationBase,
@@ -3455,7 +3455,10 @@ export function AddServicePrototypeDialog({
     const initialTariff = tariffs.find((tariff) => tariff.id === initialTariffId)
     return initialTariff ? formatTariffDecimal(initialTariff.rate) : ''
   })
-  const [tariffEffectiveFrom, setTariffEffectiveFrom] = useState(getLocalDateInputValue())
+  const [tariffEffectiveFrom, setTariffEffectiveFrom] = useState(() => (
+    tariffs.find((tariff) => tariff.id === initialSetting?.tariffId)?.effectiveFrom
+    ?? getLocalDateInputValue()
+  ))
   const [error, setError] = useState<string | null>(null)
   const selectedIncomeType = incomeTypes.find((incomeType) => incomeType.id === incomeTypeId) ?? null
   const selectedIncomeFund = selectedIncomeType?.destinationFundId

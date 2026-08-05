@@ -1610,12 +1610,20 @@ describe('App', () => {
     const tieredControl = within(tariffsPanel).getByRole('combobox', { name: 'Электроэнергия: пороговая тарификация' })
     await user.click(tieredControl)
     await user.click(within(tariffsPanel).getByRole('option', { name: 'Нет' }))
-    await waitFor(() => expect(electricitySettingRequests.at(-1)).toMatchObject({ tariffMode: 'metered', service: { hasTieredTariff: false } }))
+    await waitFor(() => expect(electricitySettingRequests.at(-1)).toMatchObject({
+      tariffMode: 'metered',
+      effectiveFrom: '2026-07-01',
+      service: { hasTieredTariff: false },
+    }))
     expect(within(tariffsPanel).queryByRole('button', { name: 'Добавить порог' })).not.toBeInTheDocument()
     expect(within(tariffsPanel).queryByLabelText('Электроэнергия: 1.00–3.00: до')).not.toBeInTheDocument()
     await user.click(within(tariffsPanel).getByRole('combobox', { name: 'Электроэнергия: пороговая тарификация' }))
     await user.click(within(tariffsPanel).getByRole('option', { name: 'Да' }))
-    await waitFor(() => expect(electricitySettingRequests.at(-1)).toMatchObject({ tariffMode: 'metered_tiered', service: { hasTieredTariff: true } }))
+    await waitFor(() => expect(electricitySettingRequests.at(-1)).toMatchObject({
+      tariffMode: 'metered_tiered',
+      effectiveFrom: '2026-07-01',
+      service: { hasTieredTariff: true },
+    }))
     expect(await within(tariffsPanel).findByLabelText('Электроэнергия: 1.00–3.00: до')).toBeInTheDocument()
 
     expect(within(tariffsPanel).queryByLabelText(/наименование$/i)).not.toBeInTheDocument()
@@ -1625,7 +1633,12 @@ describe('App', () => {
     expect(await within(tariffsPanel).findByRole('alert')).toHaveTextContent('Значение «До» должно быть больше 1.00 кВт·ч.')
     await user.clear(secondTierUpperBound)
     await user.type(secondTierUpperBound, '4{Enter}')
-    await waitFor(() => expect(thresholdUpdateRequests.at(-1)?.electricityTiers?.[1]).toMatchObject({ name: '1.00–4.00', upperBound: 4, rate: 3 }))
+    await waitFor(() => expect(thresholdUpdateRequests.at(-1)).toMatchObject({
+      effectiveFrom: '2026-07-01',
+      electricityTiers: expect.arrayContaining([
+        expect.objectContaining({ name: '1.00–4.00', upperBound: 4, rate: 3 }),
+      ]),
+    }))
 
     const addThresholdButton = within(tariffsPanel).getByRole('button', { name: 'Добавить порог' })
     expect(addThresholdButton).toHaveClass('tariffs-add-threshold-button')
@@ -4666,7 +4679,10 @@ describe('App', () => {
     expect(within(editDialog).getByLabelText('Перенос долга в просроченный').closest('.contractors-service-secondary-grid')).toContainElement(within(editDialog).getByLabelText('Единица измерения'))
     const editTariffInput = within(editDialog).getByLabelText('Тариф регулярной услуги')
     expect(editTariffInput).toHaveValue('1 200.00')
-    expect(within(editDialog).getByLabelText('Ставка с')).toHaveValue('30.06.2026')
+    const effectiveFromInput = within(editDialog).getByLabelText('Ставка с')
+    expect(effectiveFromInput).toHaveValue('01.07.2026')
+    await user.clear(effectiveFromInput)
+    await user.type(effectiveFromInput, '15.09.2026')
     await user.clear(editTariffInput)
     await user.type(editTariffInput, '1350.75')
     const editUnitControl = within(editDialog).getByRole('combobox', { name: 'Единица измерения' })
@@ -4713,7 +4729,7 @@ describe('App', () => {
         tariffId: serviceTariff.id,
       },
       rate: 1350.75,
-      effectiveFrom: '2026-06-30',
+      effectiveFrom: '2026-09-15',
       tariffVersion: 'tariff-version',
     })
     expect(within(tariffsPanel).getByRole('button', { name: 'Изменить услугу Охрана территории' })).toBeInTheDocument()
