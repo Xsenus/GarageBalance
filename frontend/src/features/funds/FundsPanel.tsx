@@ -665,7 +665,7 @@ export function FundsPrototypePanel({ auth, fundsClient }: { auth: AuthResponse;
           <>
             <div className="funds-distribution-copy">
               <span>Общий нераспределенный пул</span>
-              <small>Членские и целевые взносы, а также поступления «Прочее» объединяются здесь до ручного распределения.</small>
+              <small>Здесь остаются только суммы без действующего назначения фонда и возвращённые остатки удалённых фондов.</small>
             </div>
             <strong>{availableToDistribute === null ? '—' : `${formatMoney(availableToDistribute)} руб.`}</strong>
           </>
@@ -678,7 +678,7 @@ export function FundsPrototypePanel({ auth, fundsClient }: { auth: AuthResponse;
         <div className="funds-sheet funds-operations-sheet">
         <header className="funds-operations-heading">
           <h2>Ручные перераспределения</h2>
-          <p>Автоматические поступления остаются в общем аудите и отчетах.</p>
+          <p>Автоматические поступления сразу увеличивают назначенный фонд и сохраняются в общем аудите и отчётах.</p>
         </header>
         {operationsLoading ? (
           <TableLoadingState label="Загружаем операции фондов" />

@@ -6626,10 +6626,10 @@ describe('App', () => {
     await user.click(episodicExpenseButton)
     const atomicExpenseDialog = await screen.findByRole('dialog', { name: 'Выплата эпизодическому поставщику' })
     expect(within(atomicExpenseDialog).getByText(/Источник выплаты:/)).toHaveTextContent('касса')
+    expect(within(atomicExpenseDialog).getByText('Кассовая выплата не использует и не требует фонд расходования.')).toBeInTheDocument()
     const atomicExpenseType = within(atomicExpenseDialog).getByRole('combobox', { name: 'Услуга или статья расхода выплаты' })
     expect(atomicExpenseType).not.toBeDisabled()
-    const atomicExpenseFund = within(atomicExpenseDialog).getByRole('combobox', { name: 'Фонд расходования эпизодической выплаты' })
-    expect(atomicExpenseFund).toHaveTextContent('Водоснабжение')
+    expect(within(atomicExpenseDialog).queryByRole('combobox', { name: 'Фонд расходования эпизодической выплаты' })).not.toBeInTheDocument()
     const atomicExpensePaymentType = within(atomicExpenseDialog).getByRole('combobox', { name: 'Тип выплаты' })
     await user.click(atomicExpensePaymentType)
     await user.click(within(atomicExpenseDialog).getByRole('option', { name: 'Без чека' }))
@@ -6642,7 +6642,7 @@ describe('App', () => {
       expenseTypeId: electricityExpenseType.id,
       expensePaymentType: 'without_receipt',
       expensePaymentSource: 'cash',
-      expenseFundId: 'fund-water',
+      expenseFundId: undefined,
       amount: 500,
       documentNumber: 'ADVANCE-ATOMIC',
     })
@@ -6650,6 +6650,8 @@ describe('App', () => {
     const staffPaymentButton = within(prototype).getByRole('button', { name: 'Оплатить сотрудника Петрова' })
     await user.click(staffPaymentButton)
     const staffPaymentDialog = await screen.findByRole('dialog', { name: 'Выплата сотруднику' })
+    expect(within(staffPaymentDialog).getByText(/Источник выплаты:/)).toHaveTextContent('касса')
+    expect(within(staffPaymentDialog).getByText(/Фонд расходования не требуется/)).toBeInTheDocument()
     const staffPaymentMember = within(staffPaymentDialog).getByRole('combobox', { name: 'Сотрудник выплаты' })
     expect(staffPaymentMember).toHaveClass('select-control__trigger')
     expect(staffPaymentMember).toHaveTextContent('Петрова Ольга · Бухгалтерия')
@@ -9368,7 +9370,7 @@ describe('App', () => {
 
     const fundsPanel = await screen.findByRole('region', { name: 'Управление фондами' })
     const pool = await within(fundsPanel).findByLabelText('Общий нераспределенный пул')
-    expect(pool).toHaveTextContent('Членские и целевые взносы, а также поступления «Прочее»')
+    expect(pool).toHaveTextContent('Здесь остаются только суммы без действующего назначения фонда')
     expect(pool).toHaveTextContent('25 000.00 руб.')
     expect(within(fundsPanel).getByRole('columnheader', { name: 'Распределено' })).toBeInTheDocument()
     expect(within(fundsPanel).getByRole('button', { name: 'Пополнить фонд Членские взносы' })).toBeInTheDocument()
@@ -9435,7 +9437,7 @@ describe('App', () => {
     const fundsPanel = await screen.findByRole('region', { name: 'Управление фондами' })
     const operationsTable = await within(fundsPanel).findByRole('table', { name: 'Операции фондов' })
     expect(within(fundsPanel).getByRole('heading', { name: 'Ручные перераспределения' })).toBeInTheDocument()
-    expect(within(fundsPanel).getByText('Автоматические поступления остаются в общем аудите и отчетах.')).toBeInTheDocument()
+    expect(within(fundsPanel).getByText('Автоматические поступления сразу увеличивают назначенный фонд и сохраняются в общем аудите и отчётах.')).toBeInTheDocument()
     expect(within(operationsTable).getByText('Электроэнергия')).toBeInTheDocument()
     expect(within(operationsTable).getByRole('button', { name: 'Изменить операцию фонда Электроэнергия' })).toBeInTheDocument()
     expect(within(operationsTable).getByRole('button', { name: 'Отменить операцию фонда Электроэнергия' })).toBeInTheDocument()

@@ -1120,16 +1120,8 @@ public sealed class FinanceService(
         Fund? expenseFund;
         if (isCashExpense)
         {
-            expenseFundId = request.ExpenseFundId ?? configuredExpenseFundId;
-            expenseFund = expenseFundId == configuredExpenseFundId
-                ? configuredExpenseFund
-                : null;
-            if (!expenseFundId.HasValue)
-            {
-                return FinanceResult<FinancialOperationDto>.Failure(
-                    "episodic_expense_fund_required",
-                    "Выберите фонд расходования для эпизодической выплаты.");
-            }
+            expenseFundId = null;
+            expenseFund = null;
         }
         else
         {
@@ -1149,7 +1141,9 @@ public sealed class FinanceService(
             }
         }
 
-        await using var fundDisbursementLock = await expenseFundDisbursementService.AcquireUpdateLockAsync(cancellationToken);
+        await using var fundDisbursementLock = isCashExpense
+            ? null
+            : await expenseFundDisbursementService.AcquireUpdateLockAsync(cancellationToken);
         await using var balanceLock = await financeAvailableBalanceQuery.AcquireUpdateLockAsync(
             isCashExpense ? FinanceBalanceAccounts.Cash : FinanceBalanceAccounts.Bank,
             cancellationToken);
@@ -1230,16 +1224,19 @@ public sealed class FinanceService(
             AddAudit(actorUserId, "finance.expense_created", operation, FormatExpenseCreatedAuditSummary(operation));
         }
 
-        var fundDisbursementResult = await expenseFundDisbursementService.CreateAsync(
-            operation,
-            supplier.Name,
-            actorUserId,
-            cancellationToken);
-        if (!fundDisbursementResult.Succeeded)
+        if (!isCashExpense)
         {
-            return FinanceResult<FinancialOperationDto>.Failure(
-                fundDisbursementResult.ErrorCode!,
-                fundDisbursementResult.ErrorMessage!);
+            var fundDisbursementResult = await expenseFundDisbursementService.CreateAsync(
+                operation,
+                supplier.Name,
+                actorUserId,
+                cancellationToken);
+            if (!fundDisbursementResult.Succeeded)
+            {
+                return FinanceResult<FinancialOperationDto>.Failure(
+                    fundDisbursementResult.ErrorCode!,
+                    fundDisbursementResult.ErrorMessage!);
+            }
         }
 
         await unitOfWork.SaveChangesAsync(cancellationToken);
@@ -1261,7 +1258,7 @@ public sealed class FinanceService(
         }
 
         await using var balanceLock = await financeAvailableBalanceQuery.AcquireUpdateLockAsync(
-            FinanceBalanceAccounts.Bank,
+            FinanceBalanceAccounts.Cash,
             cancellationToken);
 
         var duplicate = await HasDocumentDuplicateAsync(FinancialOperationKinds.Expense, request.DocumentNumber, request.OperationDate, cancellationToken);
@@ -1281,12 +1278,12 @@ public sealed class FinanceService(
             return FinanceResult<FinancialOperationDto>.Failure("staff_payment_amount_exceeds_available", $"Сумма выплаты превышает доступный остаток по сотруднику {MoneyFormatting.Format(availableAmount)}.");
         }
 
-        var availableBankAmount = await CalculateAvailableBankAmountAsync(cancellationToken);
-        if (amount > availableBankAmount)
+        var availableCashAmount = await CalculateAvailableCashAmountAsync(cancellationToken);
+        if (amount > availableCashAmount)
         {
             return FinanceResult<FinancialOperationDto>.Failure(
-                "bank_amount_insufficient",
-                $"Сумма выплаты превышает доступный остаток на банковском счете {MoneyFormatting.Format(availableBankAmount)}.");
+                "cash_amount_insufficient",
+                $"Сумма выплаты превышает доступный остаток в кассе {MoneyFormatting.Format(availableCashAmount)}.");
         }
 
         var operation = new FinancialOperation
@@ -1301,7 +1298,7 @@ public sealed class FinanceService(
             StaffMember = staffMember,
             ExpenseTypeId = salaryExpenseType.Id,
             ExpenseType = salaryExpenseType,
-            ExpensePaymentSource = ExpensePaymentSources.Bank
+            ExpensePaymentSource = ExpensePaymentSources.Cash
         };
 
         financialOperationRepository.Add(operation);
@@ -1653,16 +1650,8 @@ public sealed class FinanceService(
         Fund? expenseFund;
         if (isCashExpense)
         {
-            expenseFundId = request.ExpenseFundId ?? configuredExpenseFundId;
-            expenseFund = expenseFundId == configuredExpenseFundId
-                ? configuredExpenseFund
-                : null;
-            if (!expenseFundId.HasValue)
-            {
-                return FinanceResult<FinancialOperationDto>.Failure(
-                    "episodic_expense_fund_required",
-                    "Выберите фонд расходования для эпизодической выплаты.");
-            }
+            expenseFundId = null;
+            expenseFund = null;
         }
         else
         {
@@ -1682,7 +1671,7 @@ public sealed class FinanceService(
             }
         }
 
-        var resolvedExpenseFundId = expenseFundId.GetValueOrDefault();
+        var resolvedExpenseFundId = expenseFundId;
         if (await HasDocumentDuplicateAsync(FinancialOperationKinds.Expense, request.DocumentNumber, request.OperationDate, operation.Id, cancellationToken))
         {
             return FinanceResult<FinancialOperationDto>.Failure("operation_duplicate", "Операция с таким документом и датой уже внесена.");
@@ -1709,13 +1698,15 @@ public sealed class FinanceService(
         }
 
         var wasCashExpense = IsCashExpense(operation);
-        await using var fundDisbursementLock = await expenseFundDisbursementService.AcquireUpdateLockAsync(cancellationToken);
+        await using var fundDisbursementLock = wasCashExpense && isCashExpense
+            ? null
+            : await expenseFundDisbursementService.AcquireUpdateLockAsync(cancellationToken);
         var balanceAccounts = (wasCashExpense ? FinanceBalanceAccounts.Cash : FinanceBalanceAccounts.Bank) |
             (isCashExpense ? FinanceBalanceAccounts.Cash : FinanceBalanceAccounts.Bank);
         await using var balanceLock = await financeAvailableBalanceQuery.AcquireUpdateLockAsync(
             balanceAccounts,
             cancellationToken);
-        var linkedAtomicAccrual = wasCashExpense
+        var linkedAtomicAccrual = wasCashExpense || isCashExpense
             ? await supplierAccrualRepository.FindBySourceFinancialOperationForUpdateAsync(operation.Id, cancellationToken)
             : null;
         if (wasCashExpense && linkedAtomicAccrual is null)
@@ -1831,14 +1822,35 @@ public sealed class FinanceService(
             linkedAtomicAccrual.UpdatedAtUtc = DateTimeOffset.UtcNow;
         }
 
-        var fundDisbursementResult = await expenseFundDisbursementService.UpdateAsync(
-            operation,
-            resolvedExpenseFundId,
-            supplier.Name,
-            amount,
-            actorUserId,
-            cancellationToken);
-        if (!fundDisbursementResult.Succeeded)
+        ExpenseFundDisbursementResult? fundDisbursementResult = null;
+        if (!wasCashExpense && isCashExpense)
+        {
+            fundDisbursementResult = await expenseFundDisbursementService.CancelAsync(
+                operation,
+                "Источник выплаты изменен на кассу",
+                actorUserId,
+                cancellationToken);
+        }
+        else if (wasCashExpense && !isCashExpense)
+        {
+            fundDisbursementResult = await expenseFundDisbursementService.CreateAsync(
+                operation,
+                supplier.Name,
+                actorUserId,
+                cancellationToken);
+        }
+        else if (!isCashExpense)
+        {
+            fundDisbursementResult = await expenseFundDisbursementService.UpdateAsync(
+                operation,
+                resolvedExpenseFundId!.Value,
+                supplier.Name,
+                amount,
+                actorUserId,
+                cancellationToken);
+        }
+
+        if (fundDisbursementResult is { Succeeded: false })
         {
             return FinanceResult<FinancialOperationDto>.Failure(
                 fundDisbursementResult.ErrorCode!,
@@ -5570,7 +5582,7 @@ public sealed class FinanceService(
         Guid expenseTypeId,
         string expensePaymentType,
         string expensePaymentSource,
-        Guid expenseFundId)
+        Guid? expenseFundId)
     {
         return operation.OperationDate == operationDate &&
             operation.AccountingMonth == accountingMonth &&

@@ -458,9 +458,7 @@ public sealed class FundService(
         foreach (var operation in operations)
         {
             operation.BalanceBefore = balance;
-            if (operation.IsCanceled ||
-                (operation.SourceFinancialOperationId.HasValue &&
-                 operation.OperationKind == FundOperationKinds.Deposit))
+            if (operation.IsCanceled)
             {
                 operation.BalanceAfter = balance;
                 continue;

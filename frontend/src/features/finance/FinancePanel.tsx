@@ -3080,7 +3080,6 @@ function PaymentsPrototypePanel({
   const [receiptActionStatus, setReceiptActionStatus] = useState<string | null>(null)
   const [earlyElectricityPaymentConfirmation, setEarlyElectricityPaymentConfirmation] = useState<EarlyElectricityPaymentConfirmationState | null>(null)
   const earlyElectricityPaymentTriggerRef = useRef<HTMLElement | null>(null)
-  const expenseFundOptions = useMemo(() => getExpenseFundOptions(suppliers), [suppliers])
   const availableGarages = useMemo(() => {
     const uniqueGarages = new Map<string, GarageDto>()
     for (const garage of [...garages, ...garageSearchGarages]) {
@@ -4296,16 +4295,12 @@ function PaymentsPrototypePanel({
     if (request.expensePaymentSource === 'bank' && supplier.chargeServiceExpenseTypeId !== expenseType.id) {
       return `Поставщику «${supplier.name}» можно провести выплату только по настроенной услуге.`
     }
-    if (request.expensePaymentSource === 'cash' && !request.expenseFundId) {
-      return 'Выберите фонд расходования для эпизодической выплаты.'
-    }
-
     await financeClient.createExpense(auth.accessToken, {
       supplierId: supplier.id,
       expenseTypeId: expenseType.id,
       expensePaymentType: request.expensePaymentType,
       expensePaymentSource: request.expensePaymentSource,
-      expenseFundId: request.expenseFundId || undefined,
+      expenseFundId: request.expensePaymentSource === 'bank' ? request.expenseFundId || undefined : undefined,
       operationDate: request.operationDate,
       accountingMonth: request.accountingMonth,
       amount: request.amount,
@@ -5114,7 +5109,6 @@ function PaymentsPrototypePanel({
       ) : null}
       {expenseDialogPreset ? (
         <NewExpensePrototypeDialog
-          expenseFunds={expenseFundOptions}
           expenseTypes={expenseTypes.filter((expenseType) => !expenseType.isArchived)}
           preset={expenseDialogPreset}
           suppliers={suppliers.filter((supplier) => !supplier.isArchived)}
@@ -5580,14 +5574,12 @@ function BankDepositPrototypeDialog({
 }
 
 function NewExpensePrototypeDialog({
-  expenseFunds,
   expenseTypes,
   preset,
   suppliers,
   onClose,
   onSubmit,
 }: {
-  expenseFunds: ExpenseFundOption[]
   expenseTypes: AccountingTypeDto[]
   preset: ExpensePrototypeDialogPreset
   suppliers: SupplierDto[]
@@ -5611,9 +5603,7 @@ function NewExpensePrototypeDialog({
       ? presetExpenseType?.id ?? expenseTypes[0]?.id ?? ''
       : getSupplierAccrualExpenseType(initialSupplier, expenseTypes)?.id ?? '',
   )
-  const [expenseFundId, setExpenseFundId] = useState(
-    isCashExpense ? expenseFunds[0]?.id ?? '' : initialSupplier?.chargeServiceExpenseFundId ?? '',
-  )
+  const [expenseFundId, setExpenseFundId] = useState(initialSupplier?.chargeServiceExpenseFundId ?? '')
   const [expensePaymentType, setExpensePaymentType] = useState<ExpensePaymentType>('with_receipt')
   const [operationDate, setOperationDate] = useState(getLocalDateInputValue())
   const [accountingMonth, setAccountingMonth] = useState(getLocalDateInputValue().slice(0, 7))
@@ -5623,7 +5613,6 @@ function NewExpensePrototypeDialog({
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const selectedSupplier = suppliers.find((supplier) => supplier.id === supplierId)
-  const selectedFund = expenseFunds.find((fund) => fund.id === expenseFundId)
   useEscapeKey(true, onClose)
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -5641,10 +5630,6 @@ function NewExpensePrototypeDialog({
       setError('Для услуги поставщика должен быть настроен фонд расходования.')
       return
     }
-    if (isCashExpense && !expenseFundId) {
-      setError('Выберите фонд расходования для эпизодической выплаты.')
-      return
-    }
     if (!operationDate) {
       setError('Укажите дату выплаты.')
       return
@@ -5657,10 +5642,8 @@ function NewExpensePrototypeDialog({
       setError('Укажите сумму выплаты больше нуля.')
       return
     }
-    const availableFundBalance = isCashExpense
-      ? selectedFund?.balance ?? 0
-      : selectedSupplier?.chargeServiceExpenseFundBalance ?? 0
-    if (parsedAmount > availableFundBalance) {
+    const availableFundBalance = selectedSupplier?.chargeServiceExpenseFundBalance ?? 0
+    if (!isCashExpense && parsedAmount > availableFundBalance) {
       setError('В фонде расходования недостаточно средств для этой выплаты.')
       return
     }
@@ -5673,7 +5656,7 @@ function NewExpensePrototypeDialog({
         expenseTypeId,
         expensePaymentType,
         expensePaymentSource: preset.expensePaymentSource,
-        expenseFundId,
+        expenseFundId: isCashExpense ? '' : expenseFundId,
         operationDate,
         accountingMonth: `${accountingMonth}-01`,
         amount: parsedAmount,
@@ -5738,29 +5721,16 @@ function NewExpensePrototypeDialog({
               }}
               disabled={!isCashExpense || saving} />
           </FormField>
-          {isCashExpense ? (
-            <FormField label="Фонд расходования">
-              <SelectControl
-                aria-label="Фонд расходования эпизодической выплаты"
-                value={expenseFundId}
-                options={expenseFunds.length > 0
-                  ? expenseFunds.map((fund) => ({ value: fund.id, label: `${fund.name} · доступно ${formatMoney(fund.balance)}` }))
-                  : [{ value: '', label: 'Нет доступных фондов' }]}
-                disabled={saving}
-                onChange={(nextExpenseFundId) => {
-                  setExpenseFundId(nextExpenseFundId)
-                  setError(null)
-                }} />
-            </FormField>
-          ) : (
+          {!isCashExpense ? (
             <p className="form-hint">
               Фонд расходования: {selectedSupplier?.chargeServiceExpenseFundName ?? 'не настроен'}
               {selectedSupplier?.chargeServiceExpenseFundId
                 ? ` · доступно ${formatMoney(selectedSupplier.chargeServiceExpenseFundBalance ?? 0)}`
                 : ''}
             </p>
-          )}
+          ) : null}
           <p className="form-hint">Источник выплаты: <strong>{isCashExpense ? 'касса' : 'банковский счёт'}</strong>.</p>
+          {isCashExpense ? <p className="form-hint">Кассовая выплата не использует и не требует фонд расходования.</p> : null}
           {isCashExpense ? (
             <FormField label="Тип выплаты">
               <SelectControl
@@ -5892,6 +5862,7 @@ function StaffPaymentPrototypeDialog({
           </button>
         </div>
         <form className="dictionary-modal-form payments-prototype-modal-form" onSubmit={handleSubmit}>
+          <p className="form-hint">Источник выплаты: <strong>касса</strong>. Фонд расходования не требуется.</p>
           <FormField label="Сотрудник">
             <SelectControl
               aria-label="Сотрудник выплаты"

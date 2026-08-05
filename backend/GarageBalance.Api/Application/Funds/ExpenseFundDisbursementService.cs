@@ -219,8 +219,7 @@ public sealed class ExpenseFundDisbursementService(
         foreach (var operation in source.OrderBy(item => item.CreatedAtUtc).ThenBy(item => item.Id))
         {
             operation.BalanceBefore = balance;
-            if (operation.IsCanceled ||
-                (operation.SourceFinancialOperationId.HasValue && operation.OperationKind == FundOperationKinds.Deposit))
+            if (operation.IsCanceled)
             {
                 operation.BalanceAfter = balance;
                 continue;

@@ -11,7 +11,7 @@ public sealed class PostgreSqlFinanceBalanceConcurrencyIntegrationTests
     private static readonly DateOnly June = new(2026, 6, 1);
 
     [PostgreSqlFact]
-    public async Task StaffPayments_SerializeBankAndSalaryBalances()
+    public async Task StaffPayments_SerializeCashAndSalaryBalances()
     {
         await using var database = await PostgreSqlTestDatabase.CreateAsync();
         Guid staffMemberId;
@@ -29,7 +29,7 @@ public sealed class PostgreSqlFinanceBalanceConcurrencyIntegrationTests
             seedContext.AddRange(
                 department,
                 staffMember,
-                OpeningBalance(CashBankAccounts.Bank, 100m));
+                OpeningBalance(CashBankAccounts.Cash, 100m));
             await seedContext.SaveChangesAsync();
         }
 
@@ -50,7 +50,7 @@ public sealed class PostgreSqlFinanceBalanceConcurrencyIntegrationTests
 
         Assert.Single(results, result => result.Succeeded);
         var rejected = Assert.Single(results, result => !result.Succeeded);
-        Assert.Contains(rejected.ErrorCode, new[] { "staff_payment_amount_exceeds_available", "bank_amount_insufficient" });
+        Assert.Contains(rejected.ErrorCode, new[] { "staff_payment_amount_exceeds_available", "cash_amount_insufficient" });
 
         await using var assertionContext = database.CreateContext();
         Assert.Equal(70m, await assertionContext.FinancialOperations
@@ -120,7 +120,7 @@ public sealed class PostgreSqlFinanceBalanceConcurrencyIntegrationTests
     }
 
     [PostgreSqlFact]
-    public async Task RestoredStaffPayments_CannotOverdrawSharedBankBalance()
+    public async Task RestoredStaffPayments_CannotOverdrawSharedCashBalance()
     {
         await using var database = await PostgreSqlTestDatabase.CreateAsync();
         Guid firstOperationId;
@@ -141,7 +141,7 @@ public sealed class PostgreSqlFinanceBalanceConcurrencyIntegrationTests
                 secondStaff,
                 firstOperation,
                 secondOperation,
-                OpeningBalance(CashBankAccounts.Bank, 100m));
+                OpeningBalance(CashBankAccounts.Cash, 100m));
             await seedContext.SaveChangesAsync();
         }
 
@@ -152,7 +152,7 @@ public sealed class PostgreSqlFinanceBalanceConcurrencyIntegrationTests
             FinanceServiceTestFactory.Create(secondContext).RestoreOperationAsync(secondOperationId, Guid.NewGuid(), CancellationToken.None));
 
         Assert.Single(results, result => result.Succeeded);
-        Assert.Single(results, result => !result.Succeeded && result.ErrorCode == "bank_amount_insufficient");
+        Assert.Single(results, result => !result.Succeeded && result.ErrorCode == "cash_amount_insufficient");
 
         await using var assertionContext = database.CreateContext();
         Assert.Equal(70m, await assertionContext.FinancialOperations
@@ -212,7 +212,7 @@ public sealed class PostgreSqlFinanceBalanceConcurrencyIntegrationTests
             DocumentNumber = documentNumber,
             StaffMember = staffMember,
             ExpenseType = salaryType,
-            ExpensePaymentSource = ExpensePaymentSources.Bank,
+            ExpensePaymentSource = ExpensePaymentSources.Cash,
             IsCanceled = true
         };
 

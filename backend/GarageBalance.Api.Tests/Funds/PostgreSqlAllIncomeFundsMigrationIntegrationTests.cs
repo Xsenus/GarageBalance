@@ -93,9 +93,15 @@ public sealed class PostgreSqlAllIncomeFundsMigrationIntegrationTests
 
         var assignment = await verificationContext.FundOperations
             .SingleAsync(item => item.SourceFinancialOperationId == waterOperationId);
-        Assert.Equal(assignment.BalanceBefore, assignment.BalanceAfter);
+        Assert.Equal(assignment.BalanceBefore + assignment.Amount, assignment.BalanceAfter);
         Assert.Equal(
             Assert.Single(activeIncomeTypes, item => item.Code == "water").DestinationFundId,
             assignment.FundId);
+        Assert.Equal(
+            assignment.BalanceAfter,
+            await verificationContext.Funds
+                .Where(fund => fund.Id == assignment.FundId)
+                .Select(fund => fund.Balance)
+                .SingleAsync());
     }
 }
