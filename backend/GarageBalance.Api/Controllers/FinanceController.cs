@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using GarageBalance.Api.Application.Finance;
+using GarageBalance.Api.Application.Settings;
 using GarageBalance.Api.Domain.Finance;
 using GarageBalance.Api.Domain.Security;
 using Microsoft.AspNetCore.Authorization;
@@ -10,7 +11,9 @@ namespace GarageBalance.Api.Controllers;
 [ApiController]
 [Authorize(Policy = SystemPermissions.PaymentsRead)]
 [Route("api/finance")]
-public sealed class FinanceController(IFinanceService financeService) : ControllerBase
+public sealed class FinanceController(
+    IFinanceService financeService,
+    IBusinessDateProvider businessDateProvider) : ControllerBase
 {
     [HttpGet("operations")]
     [ProducesResponseType<IReadOnlyList<FinancialOperationDto>>(StatusCodes.Status200OK)]
@@ -599,7 +602,6 @@ public sealed class FinanceController(IFinanceService financeService) : Controll
     }
 
     [Authorize(Policy = SystemPermissions.PaymentsWrite)]
-    [Authorize(Policy = SystemPermissions.HistoricalMeterReadingsCorrect)]
     [HttpPost("meter-devices/replace")]
     [ProducesResponseType<MeterDeviceReplacementDto>(StatusCodes.Status200OK)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
@@ -609,6 +611,13 @@ public sealed class FinanceController(IFinanceService financeService) : Controll
         ReplaceMeterDeviceRequest request,
         CancellationToken cancellationToken)
     {
+        var currentMonth = new DateOnly(businessDateProvider.Today.Year, businessDateProvider.Today.Month, 1);
+        if (request.AccountingMonth < currentMonth &&
+            !User.HasClaim("permission", SystemPermissions.HistoricalMeterReadingsCorrect))
+        {
+            return Forbid();
+        }
+
         var result = await financeService.ReplaceMeterDeviceAsync(request, GetActorUserId(), cancellationToken);
         return result.Succeeded ? Ok(result.Value) : ToError(result);
     }

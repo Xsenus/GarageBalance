@@ -5565,6 +5565,13 @@ describe('App', () => {
 
   it('offers and saves a physical meter replacement when a reading becomes lower', async () => {
     const user = userEvent.setup()
+    const currentMonthOperator = createAuthResponse({
+      user: {
+        permissions: createAuthResponse().user.permissions.filter(
+          (permission) => permission !== 'payments.meter_readings.historical_correct',
+        ),
+      },
+    })
     let replacementAttempt = 0
     let releaseFirstReplacement!: () => void
     const firstReplacementGate = new Promise<void>((resolve) => { releaseFirstReplacement = resolve })
@@ -5588,14 +5595,14 @@ describe('App', () => {
     })
     const getMeterReadingYearPage = vi.fn(async () => ({
       garages: [{ id: 'garage-101', number: '101' }],
-      readings: [{ id: 'reading-january', garageId: 'garage-101', accountingMonth: '2026-01-01', currentValue: 17201, version: 'reading-january-version' }],
+      readings: [{ id: 'reading-may', garageId: 'garage-101', accountingMonth: '2026-05-01', currentValue: 17201, version: 'reading-may-version' }],
       totalCount: 1,
       offset: 0,
       limit: 25,
     }))
     const electricityTariff = createTariff({ id: 'replacement-electricity-tariff', calculationBase: 'meter_electricity' })
     render(<App
-      authClient={createAuthClient()}
+      authClient={createAuthClient({ login: async () => currentMonthOperator })}
       dictionaryClient={createDictionaryClient({
         getTariffs: async () => [electricityTariff],
         getChargeServiceSettings: async () => [createChargeServiceSetting({ isRegular: true, isMetered: true, tariffId: electricityTariff.id, tariffCalculationBase: 'meter_electricity' })],
@@ -5611,13 +5618,13 @@ describe('App', () => {
     await user.click(screen.getByRole('button', { name: 'Войти' }))
     await openSection(user, 'Показания')
     const readingsPanel = await screen.findByRole('region', { name: 'Показания' })
-    const februaryInput = await within(readingsPanel).findByLabelText('Гараж 101, Февраль, показание')
-    await user.type(februaryInput, '5{Enter}')
+    const juneInput = await within(readingsPanel).findByLabelText('Гараж 101, Июнь, показание')
+    await user.type(juneInput, '5{Enter}')
 
     const dialog = await screen.findByRole('dialog', { name: 'Оформить замену счетчика?' })
     expect(within(dialog).getByRole('status')).toHaveTextContent('Новое показание меньше предыдущего')
     const replacementDateInput = within(dialog).getByLabelText('Дата замены счетчика')
-    expect(replacementDateInput).toHaveValue('01.02.2026')
+    expect(replacementDateInput).toHaveValue('01.06.2026')
     expect(replacementDateInput.closest('.localized-date-picker')).not.toBeNull()
     await user.click(within(dialog).getByRole('button', { name: 'Сохранить' }))
     expect(await within(dialog).findByRole('alert')).toHaveTextContent('Заполните все поля замены счетчика.')
@@ -5643,7 +5650,7 @@ describe('App', () => {
     await user.click(within(dialog).getByRole('button', { name: 'Сохранить' }))
 
     await waitFor(() => expect(replaceMeterDevice).toHaveBeenLastCalledWith('token', expect.objectContaining({
-      garageId: 'garage-101', meterKind: 'electricity', accountingMonth: '2026-02-01', replacementDate: '2026-02-01', newSerialNumber: 'ЭЛ-2026-001',
+      garageId: 'garage-101', meterKind: 'electricity', accountingMonth: '2026-06-01', replacementDate: '2026-06-01', newSerialNumber: 'ЭЛ-2026-001',
       newInitialValue: 0, currentValue: 5, removedDeviceFinalValue: 17201, reason: 'Плановая замена',
     })))
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Оформить замену счетчика?' })).not.toBeInTheDocument())

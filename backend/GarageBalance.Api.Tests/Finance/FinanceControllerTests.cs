@@ -1,7 +1,9 @@
 using System.Security.Claims;
 using GarageBalance.Api.Application.Finance;
+using GarageBalance.Api.Application.Settings;
 using GarageBalance.Api.Controllers;
 using GarageBalance.Api.Domain.Finance;
+using GarageBalance.Api.Domain.Security;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 
@@ -279,6 +281,89 @@ public sealed class FinanceControllerTests
         Assert.Same(replacement, ok.Value);
         Assert.Same(request, service.LastReplaceMeterDeviceRequest);
         Assert.Equal(actorUserId, service.LastActorUserId);
+    }
+
+    [Fact]
+    public async Task ReplaceMeterDevice_AllowsCurrentMonthWithoutHistoricalPermission()
+    {
+        var request = new ReplaceMeterDeviceRequest(
+            Guid.NewGuid(),
+            MeterKinds.Electricity,
+            new DateOnly(2026, 2, 1),
+            new DateOnly(2026, 2, 14),
+            "Э-2",
+            0m,
+            4m,
+            900m,
+            "Плановая замена",
+            null,
+            null);
+        var service = new FakeFinanceService
+        {
+            ReplaceMeterDeviceResult = FinanceResult<MeterDeviceReplacementDto>.Success(
+                new MeterDeviceReplacementDto(CreateMeterDevice(), CreateMeterReading()))
+        };
+        var controller = CreateController(service, businessDate: new DateOnly(2026, 2, 20));
+
+        var result = await controller.ReplaceMeterDevice(request, CancellationToken.None);
+
+        Assert.IsType<OkObjectResult>(result.Result);
+        Assert.Same(request, service.LastReplaceMeterDeviceRequest);
+    }
+
+    [Fact]
+    public async Task ReplaceMeterDevice_RequiresHistoricalPermissionForPastMonth()
+    {
+        var request = new ReplaceMeterDeviceRequest(
+            Guid.NewGuid(),
+            MeterKinds.Water,
+            new DateOnly(2026, 1, 1),
+            new DateOnly(2026, 1, 14),
+            "В-2",
+            0m,
+            4m,
+            900m,
+            "Сверка архива",
+            null,
+            null);
+        var service = new FakeFinanceService();
+        var controller = CreateController(service, businessDate: new DateOnly(2026, 2, 20));
+
+        var result = await controller.ReplaceMeterDevice(request, CancellationToken.None);
+
+        Assert.IsType<ForbidResult>(result.Result);
+        Assert.Null(service.LastReplaceMeterDeviceRequest);
+    }
+
+    [Fact]
+    public async Task ReplaceMeterDevice_AllowsPastMonthWithHistoricalPermission()
+    {
+        var request = new ReplaceMeterDeviceRequest(
+            Guid.NewGuid(),
+            MeterKinds.Water,
+            new DateOnly(2026, 1, 1),
+            new DateOnly(2026, 1, 14),
+            "В-2",
+            0m,
+            4m,
+            900m,
+            "Сверка архива",
+            null,
+            null);
+        var service = new FakeFinanceService
+        {
+            ReplaceMeterDeviceResult = FinanceResult<MeterDeviceReplacementDto>.Success(
+                new MeterDeviceReplacementDto(CreateMeterDevice(), CreateMeterReading()))
+        };
+        var controller = CreateController(
+            service,
+            businessDate: new DateOnly(2026, 2, 20),
+            permissions: [SystemPermissions.HistoricalMeterReadingsCorrect]);
+
+        var result = await controller.ReplaceMeterDevice(request, CancellationToken.None);
+
+        Assert.IsType<OkObjectResult>(result.Result);
+        Assert.Same(request, service.LastReplaceMeterDeviceRequest);
     }
 
     [Fact]
@@ -1724,15 +1809,38 @@ public sealed class FinanceControllerTests
         Assert.Equal(meterReadingId, service.LastRestoredMeterReadingId);
     }
 
-    private static FinanceController CreateController(FakeFinanceService service, Guid? actorUserId = null)
+    private static FinanceController CreateController(
+        FakeFinanceService service,
+        Guid? actorUserId = null,
+        DateOnly? businessDate = null,
+        IReadOnlyCollection<string>? permissions = null)
     {
-        var controller = new FinanceController(service);
-        var claims = actorUserId is null ? [] : new[] { new Claim(ClaimTypes.NameIdentifier, actorUserId.Value.ToString()) };
+        var controller = new FinanceController(service, new FakeBusinessDateProvider(businessDate ?? new DateOnly(2026, 2, 20)));
+        var claims = new List<Claim>();
+        if (actorUserId.HasValue)
+        {
+            claims.Add(new Claim(ClaimTypes.NameIdentifier, actorUserId.Value.ToString()));
+        }
+
+        claims.AddRange((permissions ?? []).Select(permission => new Claim("permission", permission)));
         controller.ControllerContext.HttpContext = new DefaultHttpContext
         {
             User = new ClaimsPrincipal(new ClaimsIdentity(claims, "Test"))
         };
         return controller;
+    }
+
+    private sealed class FakeBusinessDateProvider(DateOnly today) : IBusinessDateProvider
+    {
+        public DateOnly Today { get; } = today;
+
+        public DateOnly SystemDate => Today;
+
+        public DateOnly? OverrideDate => null;
+
+        public void SetOverride(DateOnly? value)
+        {
+        }
     }
 
     private static void AssertCancelReasonBadRequest<T>(ActionResult<T> result, string errorCode)
@@ -1806,6 +1914,20 @@ public sealed class FinanceControllerTests
             false,
             null,
             isCanceled,
+            Guid.NewGuid());
+    }
+
+    private static MeterDeviceDto CreateMeterDevice()
+    {
+        return new MeterDeviceDto(
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            MeterKinds.Water,
+            "В-2",
+            new DateOnly(2026, 2, 14),
+            null,
+            0m,
+            null,
             Guid.NewGuid());
     }
 
