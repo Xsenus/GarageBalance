@@ -1612,7 +1612,7 @@ describe('App', () => {
     await user.click(within(tariffsPanel).getByRole('option', { name: 'Нет' }))
     await waitFor(() => expect(electricitySettingRequests.at(-1)).toMatchObject({
       tariffMode: 'metered',
-      effectiveFrom: '2026-07-01',
+      effectiveFrom: '2026-06-30',
       service: { hasTieredTariff: false },
     }))
     expect(within(tariffsPanel).queryByRole('button', { name: 'Добавить порог' })).not.toBeInTheDocument()
@@ -1621,7 +1621,7 @@ describe('App', () => {
     await user.click(within(tariffsPanel).getByRole('option', { name: 'Да' }))
     await waitFor(() => expect(electricitySettingRequests.at(-1)).toMatchObject({
       tariffMode: 'metered_tiered',
-      effectiveFrom: '2026-07-01',
+      effectiveFrom: '2026-06-30',
       service: { hasTieredTariff: true },
     }))
     expect(await within(tariffsPanel).findByLabelText('Электроэнергия: 1.00–3.00: до')).toBeInTheDocument()
@@ -4771,6 +4771,7 @@ describe('App', () => {
     await waitFor(() => expect(updateRequests).toHaveLength(4))
     expect(updateRequests[3]).toMatchObject({
       tariffMode: 'metered',
+      effectiveFrom: '2026-06-30',
       calculationBase: 'meter_water',
       service: {
         isMetered: true,

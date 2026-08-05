@@ -1333,7 +1333,9 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
         },
         rate,
         tariffMode,
-        effectiveFrom: sourceTariff.effectiveFrom,
+        // A mode switch is a new tariff version. Reusing the source version date
+        // would rewrite the calculation rules for already configured periods.
+        effectiveFrom: getLocalDateInputValue(),
         electricityTiers: electricityTiers && electricityTiers.length >= 2 ? electricityTiers : null,
         changeReason: 'Смена режима тарифа в таблице услуг.',
         calculationBase: targetCalculationBase,
