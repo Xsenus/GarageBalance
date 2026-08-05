@@ -228,9 +228,7 @@ describe('shared validation helpers', () => {
       'Укажите месяц выплаты.',
       'Сумма выплаты должна быть больше 0.',
     ])
-    expect(getExpenseValidationErrors({ supplierId: 'supplier', expenseTypeId: 'expense', expensePaymentType: 'with_receipt', expensePaymentSource: 'cash', expenseFundId: '', operationDate: '2026-06-25', accountingMonth: '2026-06-01', amount: 1, documentNumber: '', comment: '' })).toEqual([
-      'Выберите фонд расходования для эпизодической выплаты.',
-    ])
+    expect(getExpenseValidationErrors({ supplierId: 'supplier', expenseTypeId: 'expense', expensePaymentType: 'with_receipt', expensePaymentSource: 'cash', expenseFundId: '', operationDate: '2026-06-25', accountingMonth: '2026-06-01', amount: 1, documentNumber: '', comment: '' })).toEqual([])
     expect(getExpenseValidationErrors({ supplierId: 'supplier', expenseTypeId: 'expense', expensePaymentType: 'without_receipt', expensePaymentSource: 'cash', expenseFundId: 'fund', operationDate: '2026-06-25', accountingMonth: '2026-06-01', amount: 1, documentNumber: '', comment: '' })).toEqual([])
     expect(getExpenseValidationErrors({ supplierId: 'supplier', expenseTypeId: 'expense', expensePaymentType: 'with_receipt', expensePaymentSource: 'bank', expenseFundId: '', operationDate: '2026-06-25', accountingMonth: '2026-06-01', amount: 1, documentNumber: '', comment: '' })).toEqual([])
 

@@ -5329,7 +5329,7 @@ describe('App', () => {
     const readingsPanel = await screen.findByRole('region', { name: 'Показания' })
     expect(readingsPanel.closest('.workspace')).toHaveClass('workspace--meter-readings')
     expect(within(readingsPanel).getByRole('group', { name: 'Параметры показаний' })).toBeInTheDocument()
-    expect(within(readingsPanel).getByText('Показания будущих месяцев доступны только для просмотра и недоступны для ввода.')).toBeInTheDocument()
+    expect(within(readingsPanel).getByText('Другой месяц требует отдельного права и причины.')).toBeInTheDocument()
     await waitFor(() => expect(meterReadingYearPageRequests).toHaveLength(1))
     await act(async () => resolveMeterReadingYearPage({
       garages: [
@@ -5362,8 +5362,8 @@ describe('App', () => {
     expect(within(readingsPanel).queryByLabelText('Гараж 35, Декабрь, показание')).not.toBeInTheDocument()
     expect(within(readingsPanel).getByLabelText('Гараж 12, Июнь, показание')).toBeEnabled()
     const futureDecemberInput = within(readingsPanel).getByLabelText('Гараж 12, Декабрь, показание')
-    expect(futureDecemberInput).toBeDisabled()
-    expect(futureDecemberInput).toHaveAttribute('title', 'Показания будущего месяца недоступны')
+    expect(futureDecemberInput).toBeEnabled()
+    expect(futureDecemberInput).not.toHaveAttribute('title')
     expect(futureDecemberInput).toHaveValue('5000')
 
     const yearInput = within(readingsPanel).getByLabelText('Год показаний')
@@ -5378,9 +5378,16 @@ describe('App', () => {
     await user.type(yearInput, '2026')
     let januaryInput = within(readingsPanel).getByLabelText('Гараж 12, Январь, показание')
     await user.type(januaryInput, '4654{Enter}')
-    expect(screen.queryByRole('dialog', { name: 'Подтвердить показание?' })).not.toBeInTheDocument()
+    const createOutsidePeriodDialog = await screen.findByRole('dialog', { name: 'Сохранить показание за другой месяц?' })
+    await user.type(within(createOutsidePeriodDialog).getByLabelText('Причина изменения периода'), 'Ввод по бумажному журналу')
+    await user.click(within(createOutsidePeriodDialog).getByRole('button', { name: 'Сохранить' }))
     await waitFor(() => expect(createdMeterReadingRequest?.currentValue).toBe(4654))
-    expect(createdMeterReadingRequest).toMatchObject({ garageId: 'garage-12', meterKind: 'electricity', accountingMonth: '2026-01-01' })
+    expect(createdMeterReadingRequest).toMatchObject({
+      garageId: 'garage-12',
+      meterKind: 'electricity',
+      accountingMonth: '2026-01-01',
+      periodOverrideReason: 'Ввод по бумажному журналу',
+    })
     await waitFor(() => {
       januaryInput = within(readingsPanel).getByLabelText('Гараж 12, Январь, показание')
       expect(januaryInput).toHaveValue('4654')
@@ -5388,7 +5395,7 @@ describe('App', () => {
 
     await user.clear(januaryInput)
     await user.type(januaryInput, '4660{Enter}')
-    const readingConfirmDialog = await screen.findByRole('dialog', { name: 'Скорректировать историческое показание?' })
+    const readingConfirmDialog = await screen.findByRole('dialog', { name: 'Сохранить показание за другой месяц?' })
     expect(within(readingConfirmDialog).getByText('Гараж 12, Январь')).toBeInTheDocument()
     const readingChangeList = within(readingConfirmDialog).getByRole('list', { name: 'Изменяемые поля показания' })
     expect(within(readingChangeList).getByText('Показание')).toBeInTheDocument()
@@ -5397,7 +5404,7 @@ describe('App', () => {
     const readingCancelButton = within(readingConfirmDialog).getByRole('button', { name: 'Отмена' })
     const readingSaveButton = within(readingConfirmDialog).getByRole('button', { name: 'Сохранить' })
     const readingCloseButton = within(readingConfirmDialog).getByRole('button', { name: 'Закрыть подтверждение показания' })
-    const readingReasonInput = within(readingConfirmDialog).getByLabelText('Причина исторической корректировки')
+    const readingReasonInput = within(readingConfirmDialog).getByLabelText('Причина изменения периода')
     expect(Boolean(readingCancelButton.compareDocumentPosition(readingSaveButton) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true)
     await waitFor(() => expect(readingCancelButton).toHaveFocus())
     await user.keyboard('{Shift>}{Tab}{/Shift}')
@@ -5413,24 +5420,28 @@ describe('App', () => {
     await user.keyboard('{Tab}')
     expect(readingCancelButton).toHaveFocus()
     await user.keyboard('{Escape}')
-    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Скорректировать историческое показание?' })).not.toBeInTheDocument())
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Сохранить показание за другой месяц?' })).not.toBeInTheDocument())
     expect(januaryInput).toHaveFocus()
     expect(januaryInput).toHaveValue('4654')
 
     await user.clear(januaryInput)
     await user.type(januaryInput, '4660{Enter}')
-    const reopenedReadingConfirmDialog = await screen.findByRole('dialog', { name: 'Скорректировать историческое показание?' })
+    const reopenedReadingConfirmDialog = await screen.findByRole('dialog', { name: 'Сохранить показание за другой месяц?' })
     await user.click(within(reopenedReadingConfirmDialog).getByRole('button', { name: 'Сохранить' }))
-    expect(within(reopenedReadingConfirmDialog).getByRole('alert')).toHaveTextContent('Укажите причину исторической корректировки.')
-    await user.type(within(reopenedReadingConfirmDialog).getByLabelText('Причина исторической корректировки'), 'Сверка с бумажным журналом')
+    expect(within(reopenedReadingConfirmDialog).getByRole('alert')).toHaveTextContent('Укажите причину изменения периода.')
+    await user.type(within(reopenedReadingConfirmDialog).getByLabelText('Причина изменения периода'), 'Сверка с бумажным журналом')
     await user.click(within(reopenedReadingConfirmDialog).getByRole('button', { name: 'Сохранить' }))
     await waitFor(() => expect(correctedMeterReadingRequest?.currentValue).toBe(4660))
     expect(correctedMeterReadingId).toBe('meter-reading-jan')
     expect(correctedMeterReadingRequest).toMatchObject({ reason: 'Сверка с бумажным журналом', expectedVersion: expect.any(String) })
     await waitFor(() => expect(januaryInput).toHaveValue('4660'))
 
-    await user.type(futureDecemberInput, '5001{Enter}')
-    expect(futureDecemberInput).toHaveValue('5000')
+    const refreshedFutureDecemberInput = within(readingsPanel).getByLabelText('Гараж 12, Декабрь, показание')
+    await user.clear(refreshedFutureDecemberInput)
+    await user.type(refreshedFutureDecemberInput, '5001{Enter}')
+    const futurePeriodDialog = await screen.findByRole('dialog', { name: 'Сохранить показание за другой месяц?' })
+    await user.click(within(futurePeriodDialog).getByRole('button', { name: 'Отмена' }))
+    await waitFor(() => expect(refreshedFutureDecemberInput).toHaveValue('5000'))
     expect(createdMeterReadingRequest?.accountingMonth).toBe('2026-01-01')
 
     expect(within(readingsPanel).queryByRole('tab', { name: 'История изменений' })).not.toBeInTheDocument()
@@ -5658,7 +5669,7 @@ describe('App', () => {
     await waitFor(() => expect(getMeterReadingYearPage).toHaveBeenCalledTimes(2))
   })
 
-  it('blocks historical meter reading edits without the dedicated permission', async () => {
+  it('blocks meter reading work outside the current month without the dedicated permission', async () => {
     const user = userEvent.setup()
     const historicalReading = createMeterReading({
       id: 'historical-reading',
@@ -5677,13 +5688,22 @@ describe('App', () => {
     const financeClient = createFinanceClient({
       getMeterReadingYearPage: async () => ({
         garages: [{ id: 'garage-12', number: '12' }],
-        readings: [{
-          id: historicalReading.id,
-          garageId: historicalReading.garageId,
-          accountingMonth: historicalReading.accountingMonth,
-          currentValue: historicalReading.currentValue,
-          version: historicalReading.version,
-        }],
+        readings: [
+          {
+            id: historicalReading.id,
+            garageId: historicalReading.garageId,
+            accountingMonth: historicalReading.accountingMonth,
+            currentValue: historicalReading.currentValue,
+            version: historicalReading.version,
+          },
+          {
+            id: 'future-reading',
+            garageId: historicalReading.garageId,
+            accountingMonth: '2026-12-01',
+            currentValue: 5000,
+            version: 'future-reading-version',
+          },
+        ],
         totalCount: 1,
         offset: 0,
         limit: 25,
@@ -5707,9 +5727,11 @@ describe('App', () => {
     await user.clear(januaryInput)
     await user.type(januaryInput, '4660{Enter}')
 
-    expect(await within(readingsPanel).findByRole('alert')).toHaveTextContent('Для изменения показания прошлого месяца нужно право на историческую корректировку.')
+    expect(await within(readingsPanel).findByRole('alert')).toHaveTextContent('Нет права на показания вне текущего месяца.')
     expect(januaryInput).toHaveValue('4654')
-    expect(screen.queryByRole('dialog', { name: 'Скорректировать историческое показание?' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('dialog', { name: 'Сохранить показание за другой месяц?' })).not.toBeInTheDocument()
+    const decemberInput = within(readingsPanel).getByLabelText('Гараж 12, Декабрь, показание')
+    expect(decemberInput).toBeDisabled()
     expect(correctHistoricalMeterReading).not.toHaveBeenCalled()
   })
 
@@ -14302,6 +14324,14 @@ describe('App', () => {
     await user.keyboard(' ')
     const dialog = await screen.findByRole('dialog', { name: 'Новая выплата' })
     expect(within(dialog).getByText('Изменение')).toBeInTheDocument()
+    const expenseSource = within(dialog).getByRole('combobox', { name: 'Источник выплаты' })
+    expect(expenseSource).toHaveTextContent('Банк · регулярный поставщик')
+    await user.click(expenseSource)
+    await user.click(within(dialog).getByRole('option', { name: 'Касса · эпизодическая выплата' }))
+    expect(within(dialog).queryByRole('combobox', { name: /Фонд расходования/ })).not.toBeInTheDocument()
+    expect(within(dialog).getByText(/Эта операция уменьшает остаток наличных и не изменяет ни один фонд/)).toBeInTheDocument()
+    await user.click(expenseSource)
+    await user.click(within(dialog).getByRole('option', { name: 'Банк · регулярный поставщик' }))
 
     await user.clear(within(dialog).getByLabelText('Сумма выплаты'))
     await user.type(within(dialog).getByLabelText('Сумма выплаты'), '950')

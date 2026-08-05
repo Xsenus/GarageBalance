@@ -226,6 +226,7 @@ export type MeterReadingYearPageDto = {
   totalCount: number
   offset: number
   limit: number
+  currentAccountingMonth?: string
 }
 
 export type MissingMeterReadingDto = {
@@ -539,6 +540,7 @@ export type CreateMeterReadingRequest = {
   currentValue: number
   comment?: string
   expectedVersion?: string
+  periodOverrideReason?: string
 }
 
 export type CreateIrregularAccrualRequest = {

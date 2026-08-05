@@ -391,7 +391,8 @@ public sealed record MeterReadingYearPageDto(
     IReadOnlyList<MeterReadingYearValueDto> Readings,
     int TotalCount,
     int Offset,
-    int Limit);
+    int Limit,
+    DateOnly CurrentAccountingMonth = default);
 
 public sealed record MeterReadingYearRequest(
     int Year,
@@ -413,7 +414,8 @@ public sealed record CreateMeterReadingRequest(
     DateOnly ReadingDate,
     [Required, Range(0, 999999999)] decimal? CurrentValue,
     [MaxLength(1000)] string? Comment,
-    Guid? ExpectedVersion = null);
+    Guid? ExpectedVersion = null,
+    [MaxLength(1000)] string? PeriodOverrideReason = null);
 
 public sealed record SavePaymentFormMeterReadingRequest(
     Guid GarageId,
@@ -423,7 +425,8 @@ public sealed record SavePaymentFormMeterReadingRequest(
     [Required, Range(0, 999999999)] decimal? CurrentValue,
     [MaxLength(1000)] string? Comment,
     Guid? MeterReadingId = null,
-    Guid? ExpectedVersion = null);
+    Guid? ExpectedVersion = null,
+    [MaxLength(1000)] string? PeriodOverrideReason = null);
 
 public sealed record CorrectHistoricalMeterReadingRequest(
     DateOnly ReadingDate,

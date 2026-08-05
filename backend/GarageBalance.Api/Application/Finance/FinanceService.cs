@@ -245,7 +245,8 @@ public sealed class FinanceService(
             page.Readings.Select(reading => new MeterReadingYearValueDto(reading.Id, reading.GarageId, reading.AccountingMonth, reading.CurrentValue, reading.Version)).ToList(),
             page.TotalCount,
             normalizedOffset,
-            normalizedLimit);
+            normalizedLimit,
+            GetCurrentAccountingMonth());
         return FinanceResult<MeterReadingYearPageDto>.Success(result);
     }
 
@@ -3775,11 +3776,6 @@ public sealed class FinanceService(
         }
 
         var accountingMonth = MonthPeriod.Normalize(request.AccountingMonth);
-        if (accountingMonth > GetCurrentAccountingMonth())
-        {
-            return FinanceResult<MeterDeviceReplacementDto>.Failure("meter_reading_future_month_not_allowed", "Показание будущего учетного месяца вводить нельзя.");
-        }
-
         if (request.ReplacementDate.Year != accountingMonth.Year || request.ReplacementDate.Month != accountingMonth.Month)
         {
             return FinanceResult<MeterDeviceReplacementDto>.Failure("meter_device_replacement_date_month_mismatch", "Дата замены счетчика должна относиться к выбранному учетному месяцу.");
@@ -4065,10 +4061,7 @@ public sealed class FinanceService(
         }
 
         var month = MonthPeriod.Normalize(request.AccountingMonth);
-        if (month > GetCurrentAccountingMonth())
-        {
-            return FutureMeterReadingMonthNotAllowed();
-        }
+        var periodOverrideReason = NormalizeOptional(request.PeriodOverrideReason);
 
         var garage = await garageRepository.FindActiveWithOwnerAsync(request.GarageId, cancellationToken);
         if (garage is null)
@@ -4211,7 +4204,12 @@ public sealed class FinanceService(
                 $"Для гаража {garage.Number} зарегистрирован счетчик {meterKind} без указанного номера со стартовым значением {meterDevice.InitialValue:0.###}.");
         }
         meterReadingRepository.Add(reading);
-        AddAudit(actorUserId, "finance.meter_reading_created", reading, FormatMeterReadingCreatedAuditSummary(reading));
+        var createdSummary = FormatMeterReadingCreatedAuditSummary(reading);
+        if (periodOverrideReason is not null)
+        {
+            createdSummary = $"{createdSummary} Причина ввода вне текущего месяца: {periodOverrideReason}.";
+        }
+        AddAudit(actorUserId, "finance.meter_reading_created", reading, createdSummary);
         var createdAccrualKeys = await CreateMissingMeteredAccrualsAsync(
             garage,
             reading,
@@ -4257,7 +4255,8 @@ public sealed class FinanceService(
             request.ReadingDate,
             request.CurrentValue,
             request.Comment,
-            request.ExpectedVersion);
+            request.ExpectedVersion,
+            request.PeriodOverrideReason);
 
         if (!request.MeterReadingId.HasValue)
         {
@@ -4318,7 +4317,7 @@ public sealed class FinanceService(
         }
 
         var currentMonth = GetCurrentAccountingMonth();
-        if (reading.AccountingMonth >= currentMonth)
+        if (reading.AccountingMonth == currentMonth)
         {
             return HistoricalMeterReadingMonthRequired();
         }
@@ -4389,7 +4388,7 @@ public sealed class FinanceService(
                     "Обычное изменение показания разрешено только за текущий учетный месяц. Для прошлого месяца используйте историческую корректировку.");
             }
         }
-        else if (reading.AccountingMonth >= currentMonth || month != reading.AccountingMonth)
+        else if (reading.AccountingMonth == currentMonth || month != reading.AccountingMonth)
         {
             return HistoricalMeterReadingMonthRequired();
         }
@@ -4583,12 +4582,7 @@ public sealed class FinanceService(
     private static FinanceResult<MeterReadingDto> HistoricalMeterReadingMonthRequired() =>
         FinanceResult<MeterReadingDto>.Failure(
             "meter_reading_historical_month_required",
-            "Историческая корректировка разрешена только для учетного месяца раньше текущего.");
-
-    private static FinanceResult<MeterReadingDto> FutureMeterReadingMonthNotAllowed() =>
-        FinanceResult<MeterReadingDto>.Failure(
-            "meter_reading_future_month_not_allowed",
-            "Показание будущего учетного месяца вводить нельзя.");
+            "Корректировка другого периода применяется только к месяцу, отличному от текущего.");
 
     private static FinanceResult<MeterReadingDto> MeterReadingConflict() =>
         FinanceResult<MeterReadingDto>.Failure(
@@ -5385,11 +5379,6 @@ public sealed class FinanceService(
         MeterReading reading,
         CancellationToken cancellationToken)
     {
-        if (reading.AccountingMonth != GetCurrentAccountingMonth())
-        {
-            return [];
-        }
-
         var calculationBase = reading.MeterKind switch
         {
             MeterKinds.Water => TariffCalculationBases.MeterWater,
@@ -5598,7 +5587,7 @@ public sealed class FinanceService(
 
     private static string FormatHistoricalMeterReadingCorrectedAuditSummary(MeterReading reading)
     {
-        return $"Исторически скорректировано показание {reading.MeterKind} по гаражу {reading.Garage.Number} за {reading.AccountingMonth:MM.yyyy}; дата {reading.ReadingDate:dd.MM.yyyy}; предыдущее {reading.PreviousValue.ToString("0.###", RussianCulture)}, текущее {reading.CurrentValue.ToString("0.###", RussianCulture)}, расход {reading.Consumption.ToString("0.###", RussianCulture)}.";
+        return $"Скорректировано показание другого периода {reading.MeterKind} по гаражу {reading.Garage.Number} за {reading.AccountingMonth:MM.yyyy}; дата {reading.ReadingDate:dd.MM.yyyy}; предыдущее {reading.PreviousValue.ToString("0.###", RussianCulture)}, текущее {reading.CurrentValue.ToString("0.###", RussianCulture)}, расход {reading.Consumption.ToString("0.###", RussianCulture)}.";
     }
 
     private void AddAudit(

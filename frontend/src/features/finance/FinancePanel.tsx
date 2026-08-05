@@ -1170,7 +1170,7 @@ export function FinancePanel({
       expenseTypeId: expenseForm.expenseTypeId,
       expensePaymentType: expenseForm.expensePaymentType,
       expensePaymentSource: expenseForm.expensePaymentSource,
-      expenseFundId: expenseForm.expenseFundId || undefined,
+      expenseFundId: expenseForm.expensePaymentSource === 'bank' ? expenseForm.expenseFundId || undefined : undefined,
       operationDate: expenseForm.operationDate,
       accountingMonth: expenseForm.accountingMonth,
       amount: expenseForm.amount,
@@ -2069,7 +2069,7 @@ export function FinancePanel({
                     : expenseForm.expenseTypeId,
                   expenseFundId: expenseForm.expensePaymentSource === 'bank'
                     ? supplier?.chargeServiceExpenseFundId ?? ''
-                    : expenseForm.expenseFundId,
+                    : '',
                 })
               }} />
           ))}
@@ -2092,13 +2092,9 @@ export function FinancePanel({
               options={expensePaymentTypeOptions}
               onChange={(expensePaymentType) => setExpenseForm({ ...expenseForm, expensePaymentType: expensePaymentType as ExpensePaymentType })} />
           ))}
-          {expenseForm.expensePaymentSource === 'cash' ? financeField('expenseFund', (
-            <SelectControl
-              aria-label="Фонд расходования выплаты"
-              value={expenseForm.expenseFundId}
-              options={expenseFundOptions.map((fund) => ({ value: fund.id, label: `${fund.name} · ${formatMoney(fund.balance)}` }))}
-              onChange={(expenseFundId) => setExpenseForm({ ...expenseForm, expenseFundId })} />
-          )) : null}
+          {expenseForm.expensePaymentSource === 'cash' ? (
+            <p className="form-hint">Источник выплаты: <strong>касса</strong>. Эта операция уменьшает остаток наличных и не изменяет ни один фонд.</p>
+          ) : null}
           <div className="inline-fields">
             {financeField('expenseDate', <LocalizedDatePicker ariaLabel="Дата выплаты" mode="date" value={expenseForm.operationDate} onChange={(operationDate) => setExpenseForm({ ...expenseForm, operationDate })} required />)}
             {financeField('expenseMonth', <LocalizedDatePicker ariaLabel="Месяц выплаты" mode="month" value={expenseForm.accountingMonth.slice(0, 7)} onChange={(accountingMonth) => setExpenseForm({ ...expenseForm, accountingMonth: `${accountingMonth}-01` })} required />)}
@@ -2415,7 +2411,7 @@ export function FinancePanel({
                   : expenseForm.expenseTypeId,
                 expenseFundId: expenseForm.expensePaymentSource === 'bank'
                   ? supplier?.chargeServiceExpenseFundId ?? ''
-                  : expenseForm.expenseFundId,
+                  : '',
               })
             }} />
           <SelectControl
@@ -2434,11 +2430,7 @@ export function FinancePanel({
             options={expensePaymentTypeOptions}
             onChange={(expensePaymentType) => setExpenseForm({ ...expenseForm, expensePaymentType: expensePaymentType as ExpensePaymentType })} />
           {expenseForm.expensePaymentSource === 'cash' ? (
-            <SelectControl
-              aria-label="Фонд расходования выплаты"
-              value={expenseForm.expenseFundId}
-              options={expenseFundOptions.map((fund) => ({ value: fund.id, label: `${fund.name} · ${formatMoney(fund.balance)}` }))}
-              onChange={(expenseFundId) => setExpenseForm({ ...expenseForm, expenseFundId })} />
+            <p className="form-hint">Источник выплаты: <strong>касса</strong>. Эта операция уменьшает остаток наличных и не изменяет ни один фонд.</p>
           ) : null}
           <div className="inline-fields">
             <LocalizedDatePicker ariaLabel="Дата выплаты" mode="date" value={expenseForm.operationDate} onChange={(operationDate) => setExpenseForm({ ...expenseForm, operationDate })} required />

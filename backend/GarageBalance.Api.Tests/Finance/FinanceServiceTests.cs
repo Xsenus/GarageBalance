@@ -4749,10 +4749,6 @@ public sealed class FinanceServiceTests
                 null),
             actorUserId,
             CancellationToken.None);
-        var juneGeneration = await service.GenerateRegularCatalogAccrualsAsync(
-            new GenerateRegularCatalogAccrualsRequest(new DateOnly(2026, 6, 1), "Проверка исторического тарифа"),
-            actorUserId,
-            CancellationToken.None);
         var junePayment = await service.CreateIncomeAsync(
             new CreateIncomeOperationRequest(
                 fixtures.Garage.Id,
@@ -4787,7 +4783,6 @@ public sealed class FinanceServiceTests
             CancellationToken.None);
 
         Assert.True(juneReading.Succeeded, juneReading.ErrorMessage);
-        Assert.True(juneGeneration.Succeeded, juneGeneration.ErrorMessage);
         Assert.True(junePayment.Succeeded, junePayment.ErrorMessage);
         Assert.True(julyReading.Succeeded, julyReading.ErrorMessage);
         Assert.True(julyPayment.Succeeded, julyPayment.ErrorMessage);
@@ -6328,8 +6323,10 @@ public sealed class FinanceServiceTests
         Assert.Equal(75m, Assert.Single(database.Context.Accruals).Amount - allocation.Amount);
     }
 
-    [Fact]
-    public async Task CreateMeterReadingAsync_DoesNotBackfillPastReadingWithCurrentMeteredConfiguration()
+    [Theory]
+    [InlineData(5)]
+    [InlineData(8)]
+    public async Task CreateMeterReadingAsync_AppliesDatedMeteredConfigurationOutsideCurrentMonth(int monthNumber)
     {
         await using var database = await TestDatabase.CreateAsync();
         var fixtures = await database.SeedAsync();
@@ -6361,18 +6358,19 @@ public sealed class FinanceServiceTests
             new CreateMeterReadingRequest(
                 fixtures.Garage.Id,
                 MeterKinds.Water,
-                new DateOnly(2026, 5, 1),
-                new DateOnly(2026, 5, 20),
+                new DateOnly(2026, monthNumber, 1),
+                new DateOnly(2026, monthNumber, 20),
                 15.5m,
-                null),
+                null,
+                PeriodOverrideReason: "Ввод показания за выбранный период"),
             null,
             CancellationToken.None);
 
         Assert.True(result.Succeeded, result.ErrorMessage);
-        Assert.Empty(database.Context.Accruals);
-        Assert.DoesNotContain(
-            database.Context.AuditEvents,
-            item => item.Action == "finance.metered_accrual_created_from_reading");
+        var accrual = Assert.Single(database.Context.Accruals);
+        Assert.Equal(new DateOnly(2026, monthNumber, 1), accrual.AccountingMonth);
+        Assert.Equal(275m, accrual.Amount);
+        Assert.Single(database.Context.AuditEvents, item => item.Action == "finance.metered_accrual_created_from_reading");
     }
 
     [Fact]
@@ -6813,7 +6811,7 @@ public sealed class FinanceServiceTests
     }
 
     [Fact]
-    public async Task MeterReadingCreationCommands_RejectFutureAccountingMonthWithoutPersistenceOrAudit()
+    public async Task CreateMeterReadingAsync_AllowsAnotherAccountingMonthAndAuditsOverrideReason()
     {
         await using var database = await TestDatabase.CreateAsync();
         var fixtures = await database.SeedAsync();
@@ -6822,7 +6820,14 @@ public sealed class FinanceServiceTests
             new FixedTimeProvider(new DateTimeOffset(2026, 7, 17, 12, 0, 0, TimeSpan.Zero)));
 
         var result = await service.CreateMeterReadingAsync(
-            new CreateMeterReadingRequest(fixtures.Garage.Id, "water", new DateOnly(2026, 8, 1), new DateOnly(2026, 8, 20), 15.5m, null),
+            new CreateMeterReadingRequest(
+                fixtures.Garage.Id,
+                "water",
+                new DateOnly(2026, 8, 1),
+                new DateOnly(2026, 8, 20),
+                15.5m,
+                null,
+                PeriodOverrideReason: "Плановый ввод показания"),
             Guid.NewGuid(),
             CancellationToken.None);
         var paymentFormResult = await service.SavePaymentFormMeterReadingAsync(
@@ -6830,13 +6835,13 @@ public sealed class FinanceServiceTests
             Guid.NewGuid(),
             CancellationToken.None);
 
-        Assert.False(result.Succeeded);
-        Assert.Equal("meter_reading_future_month_not_allowed", result.ErrorCode);
-        Assert.Equal("Показание будущего учетного месяца вводить нельзя.", result.ErrorMessage);
+        Assert.True(result.Succeeded, result.ErrorMessage);
+        Assert.Equal(new DateOnly(2026, 8, 1), result.Value!.AccountingMonth);
         Assert.False(paymentFormResult.Succeeded);
-        Assert.Equal("meter_reading_future_month_not_allowed", paymentFormResult.ErrorCode);
-        Assert.Empty(database.Context.MeterReadings);
-        Assert.DoesNotContain(database.Context.AuditEvents, item => item.Action == "finance.meter_reading_created");
+        Assert.Equal("meter_reading_conflict", paymentFormResult.ErrorCode);
+        Assert.Single(database.Context.MeterReadings);
+        var audit = Assert.Single(database.Context.AuditEvents, item => item.Action == "finance.meter_reading_created");
+        Assert.Contains("Причина ввода вне текущего месяца: Плановый ввод показания", audit.Summary, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -7147,7 +7152,7 @@ public sealed class FinanceServiceTests
         var audit = Assert.Single(database.Context.AuditEvents, item => item.Action == "finance.meter_reading_historical_updated");
         Assert.Equal(actorUserId, audit.ActorUserId);
         Assert.Equal("update", audit.ActionKind);
-        Assert.Contains("Исторически скорректировано", audit.Summary, StringComparison.Ordinal);
+        Assert.Contains("Скорректировано показание другого периода", audit.Summary, StringComparison.Ordinal);
         Assert.Contains("Сверка с бумажным журналом", audit.Summary, StringComparison.Ordinal);
         using var metadata = JsonDocument.Parse(audit.MetadataJson!);
         Assert.Equal("Сверка с бумажным журналом", metadata.RootElement.GetProperty("reason").GetString());
@@ -7155,7 +7160,7 @@ public sealed class FinanceServiceTests
     }
 
     [Fact]
-    public async Task CorrectHistoricalMeterReadingAsync_RejectsCurrentAndFutureMonths()
+    public async Task CorrectHistoricalMeterReadingAsync_RejectsCurrentAndAllowsAnotherMonth()
     {
         await using var database = await TestDatabase.CreateAsync();
         var fixtures = await database.SeedAsync();
@@ -7186,11 +7191,11 @@ public sealed class FinanceServiceTests
 
         Assert.False(currentResult.Succeeded);
         Assert.Equal("meter_reading_historical_month_required", currentResult.ErrorCode);
-        Assert.False(futureResult.Succeeded);
-        Assert.Equal("meter_reading_historical_month_required", futureResult.ErrorCode);
+        Assert.True(futureResult.Succeeded, futureResult.ErrorMessage);
+        Assert.Equal(121m, futureResult.Value!.CurrentValue);
         Assert.Equal(110m, database.Context.MeterReadings.Single(item => item.Id == current.Value.Id).CurrentValue);
-        Assert.Equal(120m, database.Context.MeterReadings.Single(item => item.Id == future.Value.Id).CurrentValue);
-        Assert.DoesNotContain(database.Context.AuditEvents, item => item.Action == "finance.meter_reading_historical_updated");
+        Assert.Equal(121m, database.Context.MeterReadings.Single(item => item.Id == future.Value.Id).CurrentValue);
+        Assert.Single(database.Context.AuditEvents, item => item.Action == "finance.meter_reading_historical_updated");
     }
 
     [Fact]

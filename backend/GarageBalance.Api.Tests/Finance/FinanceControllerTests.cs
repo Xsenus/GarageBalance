@@ -1480,7 +1480,7 @@ public sealed class FinanceControllerTests
         var controller = CreateController(new FakeFinanceService
         {
             CreateMeterReadingResult = FinanceResult<MeterReadingDto>.Failure("meter_reading_duplicate", "Показание уже внесено.")
-        });
+        }, businessDate: new DateOnly(2026, 6, 20));
 
         var result = await controller.CreateMeterReading(
             new CreateMeterReadingRequest(Guid.NewGuid(), "water", new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 20), 10m, null),
@@ -1492,14 +1492,59 @@ public sealed class FinanceControllerTests
     }
 
     [Fact]
-    public async Task CreateMeterReading_ReturnsBadRequestForFutureMonth()
+    public async Task CreateMeterReading_ReturnsForbidForAnotherMonthWithoutDedicatedPermission()
     {
-        var controller = CreateController(new FakeFinanceService
+        var service = new FakeFinanceService
         {
-            CreateMeterReadingResult = FinanceResult<MeterReadingDto>.Failure(
-                "meter_reading_future_month_not_allowed",
-                "Показание будущего учетного месяца вводить нельзя.")
-        });
+            CreateMeterReadingResult = FinanceResult<MeterReadingDto>.Success(CreateMeterReading())
+        };
+        var controller = CreateController(service, businessDate: new DateOnly(2026, 7, 20));
+
+        var result = await controller.CreateMeterReading(
+            new CreateMeterReadingRequest(Guid.NewGuid(), "water", new DateOnly(2026, 8, 1), new DateOnly(2026, 8, 20), 10m, null),
+            CancellationToken.None);
+
+        Assert.IsType<ForbidResult>(result.Result);
+        Assert.Null(service.LastActorUserId);
+    }
+
+    [Fact]
+    public async Task CreateMeterReading_AllowsAnotherMonthWithDedicatedPermission()
+    {
+        var service = new FakeFinanceService
+        {
+            CreateMeterReadingResult = FinanceResult<MeterReadingDto>.Success(CreateMeterReading())
+        };
+        var controller = CreateController(
+            service,
+            businessDate: new DateOnly(2026, 7, 20),
+            permissions: [SystemPermissions.HistoricalMeterReadingsCorrect]);
+
+        var result = await controller.CreateMeterReading(
+            new CreateMeterReadingRequest(
+                Guid.NewGuid(),
+                "water",
+                new DateOnly(2026, 8, 1),
+                new DateOnly(2026, 8, 20),
+                10m,
+                null,
+                PeriodOverrideReason: "Плановый ввод"),
+            CancellationToken.None);
+
+        Assert.IsType<CreatedAtActionResult>(result.Result);
+    }
+
+    [Fact]
+    public async Task CreateMeterReading_RequiresReasonForAnotherMonth()
+    {
+        var service = new FakeFinanceService
+        {
+            CreateMeterReadingResult = FinanceResult<MeterReadingDto>.Success(CreateMeterReading())
+        };
+        var controller = CreateController(
+            service,
+            businessDate: new DateOnly(2026, 7, 20),
+            permissions: [SystemPermissions.HistoricalMeterReadingsCorrect]);
 
         var result = await controller.CreateMeterReading(
             new CreateMeterReadingRequest(Guid.NewGuid(), "water", new DateOnly(2026, 8, 1), new DateOnly(2026, 8, 20), 10m, null),
@@ -1507,7 +1552,8 @@ public sealed class FinanceControllerTests
 
         var badRequest = Assert.IsType<BadRequestObjectResult>(result.Result);
         var problem = Assert.IsType<ProblemDetails>(badRequest.Value);
-        Assert.Equal("meter_reading_future_month_not_allowed", problem.Title);
+        Assert.Equal("meter_reading_period_override_reason_required", problem.Title);
+        Assert.Null(service.LastActorUserId);
     }
 
     [Fact]
@@ -1518,7 +1564,7 @@ public sealed class FinanceControllerTests
         {
             CreateMeterReadingResult = FinanceResult<MeterReadingDto>.Success(CreateMeterReading())
         };
-        var controller = CreateController(service, actorUserId);
+        var controller = CreateController(service, actorUserId, new DateOnly(2026, 6, 20));
 
         var result = await controller.CreateMeterReading(
             new CreateMeterReadingRequest(Guid.NewGuid(), "water", new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 20), 10m, null),
@@ -1537,7 +1583,7 @@ public sealed class FinanceControllerTests
         {
             UpdateMeterReadingResult = FinanceResult<MeterReadingDto>.Success(CreateMeterReading(id: meterReadingId, currentValue: 18m, consumption: 3m))
         };
-        var controller = CreateController(service, actorUserId);
+        var controller = CreateController(service, actorUserId, new DateOnly(2026, 6, 20));
 
         var result = await controller.UpdateMeterReading(
             meterReadingId,
@@ -1550,6 +1596,32 @@ public sealed class FinanceControllerTests
         Assert.Equal(18m, dto.CurrentValue);
         Assert.Equal(actorUserId, service.LastActorUserId);
         Assert.Equal(meterReadingId, service.LastUpdatedMeterReadingId);
+    }
+
+    [Fact]
+    public async Task UpdateMeterReading_RequiresReasonForAnotherMonth()
+    {
+        var service = new FakeFinanceService();
+        var controller = CreateController(
+            service,
+            businessDate: new DateOnly(2026, 7, 17),
+            permissions: [SystemPermissions.HistoricalMeterReadingsCorrect]);
+
+        var result = await controller.UpdateMeterReading(
+            Guid.NewGuid(),
+            new CreateMeterReadingRequest(
+                Guid.NewGuid(),
+                MeterKinds.Water,
+                new DateOnly(2026, 6, 1),
+                new DateOnly(2026, 6, 30),
+                18m,
+                null),
+            CancellationToken.None);
+
+        var badRequest = Assert.IsType<BadRequestObjectResult>(result.Result);
+        var problem = Assert.IsType<ProblemDetails>(badRequest.Value);
+        Assert.Equal("meter_reading_period_override_reason_required", problem.Title);
+        Assert.Null(service.LastUpdatedMeterReadingId);
     }
 
     [Fact]
@@ -1623,13 +1695,37 @@ public sealed class FinanceControllerTests
             SavePaymentFormMeterReadingResult = FinanceResult<MeterReadingDto>.Success(
                 CreateMeterReading(id: meterReadingId, currentValue: 18m, consumption: 8m))
         };
-        var controller = CreateController(service, actorUserId);
+        var controller = CreateController(service, actorUserId, new DateOnly(2026, 6, 20));
 
         var result = await controller.SavePaymentFormMeterReading(request, CancellationToken.None);
 
         Assert.IsType<OkObjectResult>(result.Result);
         Assert.Equal(actorUserId, service.LastActorUserId);
         Assert.Equal(request, service.LastSavePaymentFormMeterReadingRequest);
+    }
+
+    [Fact]
+    public async Task SavePaymentFormMeterReading_RequiresReasonForAnotherMonth()
+    {
+        var service = new FakeFinanceService();
+        var controller = CreateController(
+            service,
+            businessDate: new DateOnly(2026, 7, 17),
+            permissions: [SystemPermissions.HistoricalMeterReadingsCorrect]);
+        var request = new SavePaymentFormMeterReadingRequest(
+            Guid.NewGuid(),
+            MeterKinds.Water,
+            new DateOnly(2026, 8, 1),
+            new DateOnly(2026, 8, 31),
+            18m,
+            null);
+
+        var result = await controller.SavePaymentFormMeterReading(request, CancellationToken.None);
+
+        var badRequest = Assert.IsType<BadRequestObjectResult>(result.Result);
+        var problem = Assert.IsType<ProblemDetails>(badRequest.Value);
+        Assert.Equal("meter_reading_period_override_reason_required", problem.Title);
+        Assert.Null(service.LastSavePaymentFormMeterReadingRequest);
     }
 
     [Fact]
@@ -1640,7 +1736,7 @@ public sealed class FinanceControllerTests
             SavePaymentFormMeterReadingResult = FinanceResult<MeterReadingDto>.Failure(
                 "meter_reading_conflict",
                 "Показание уже изменено другим пользователем.")
-        });
+        }, businessDate: new DateOnly(2026, 6, 20));
 
         var result = await controller.SavePaymentFormMeterReading(
             new SavePaymentFormMeterReadingRequest(
@@ -1666,7 +1762,7 @@ public sealed class FinanceControllerTests
                 "meter_reading_value_required",
                 "Введите показание счетчика вручную.")
         };
-        var controller = CreateController(service);
+        var controller = CreateController(service, businessDate: new DateOnly(2026, 7, 17));
         var request = new SavePaymentFormMeterReadingRequest(
             Guid.NewGuid(),
             MeterKinds.Water,
@@ -1691,7 +1787,7 @@ public sealed class FinanceControllerTests
             SavePaymentFormMeterReadingResult = FinanceResult<MeterReadingDto>.Failure(
                 "meter_reading_accrual_paid",
                 "Связанное начисление уже полностью или частично оплачено.")
-        });
+        }, businessDate: new DateOnly(2026, 6, 20));
 
         var result = await controller.SavePaymentFormMeterReading(
             new SavePaymentFormMeterReadingRequest(

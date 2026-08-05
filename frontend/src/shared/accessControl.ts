@@ -53,7 +53,7 @@ export const rolePermissionGroups: ReadonlyArray<{ label: string; permission: Pe
   { label: 'Справочники', permission: permissions.dictionariesWrite },
   { label: 'Тарифы и сборы', permission: permissions.tariffsManage },
   { label: 'Платежи', permission: permissions.paymentsWrite },
-  { label: 'Исторические показания', permission: permissions.historicalMeterReadingsCorrect },
+  { label: 'Показания вне текущего месяца', permission: permissions.historicalMeterReadingsCorrect },
   { label: 'Корректировка начальных данных', permission: permissions.openingDataAdjust },
   { label: 'Отчеты', permission: permissions.reportsRead },
   { label: 'Импорт', permission: permissions.importRun },
