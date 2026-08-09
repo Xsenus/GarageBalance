@@ -3638,6 +3638,7 @@ function SupplierPrototypeDialog({ accessToken, canAdjustOpeningData, funds, int
   const serviceFund = selectedService?.expenseFundId
     ? funds.find((fund) => fund.id === selectedService.expenseFundId) ?? null
     : null
+  const selectableExpenseFunds = funds.filter((fund) => fund.allowOperations || fund.id === form.expenseFundId)
 
   function selectPartySuggestion(suggestion: DadataPartySuggestionDto) {
     partyInputTouched.current = false
@@ -3674,7 +3675,10 @@ function SupplierPrototypeDialog({ accessToken, canAdjustOpeningData, funds, int
                   }}
                 />
               </FormField>
-              <FormField label="Фонд расходования">
+              <FormField
+                label="Фонд расходования"
+                help="По умолчанию используется фонд выбранной услуги. Администратор может закрепить за поставщиком другой действующий фонд; он будет применяться при начислениях и банковских выплатах этому поставщику."
+              >
                 <SelectControl
                   aria-label="Фонд расходования поставщика"
                   value={form.expenseFundId ?? ''}
@@ -3683,7 +3687,10 @@ function SupplierPrototypeDialog({ accessToken, canAdjustOpeningData, funds, int
                       value: '',
                       label: serviceFund ? `По услуге — ${serviceFund.name}` : 'Фонд по услуге не назначен',
                     },
-                    ...funds.map((fund) => ({ value: fund.id, label: fund.name })),
+                    ...selectableExpenseFunds.map((fund) => ({
+                      value: fund.id,
+                      label: fund.allowOperations ? fund.name : `${fund.name} — операции запрещены`,
+                    })),
                   ]}
                   onChange={(expenseFundId) => setForm({ ...form, expenseFundId: expenseFundId || null })}
                 />

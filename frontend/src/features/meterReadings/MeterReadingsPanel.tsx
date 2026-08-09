@@ -204,7 +204,9 @@ export function MeterReadingsPrototypePanel({ auth, dictionaryClient, financeCli
   const [reloadRevision, setReloadRevision] = useState(0)
   const [replacementForm, setReplacementForm] = useState(emptyMeterReplacementForm)
 
-  const selectedMeterType = meterReadingTypes.find((item) => item.id === meterType) ?? meterReadingTypes[0]
+  const selectedMeterType = availableMeterTypes?.find((item) => item.id === meterType)
+    ?? meterReadingTypes.find((item) => item.id === meterType)
+    ?? meterReadingTypes[0]
   const yearIsValid = isValidMeterReadingYear(yearDraft)
   const [currentMonth, setCurrentMonth] = useState(getLocalDateInputValue().slice(0, 7))
   const pendingReadingSaving = Boolean(pendingReadingChange && savingReadingKey === pendingReadingChange.cellKey)

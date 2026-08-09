@@ -2593,6 +2593,7 @@ describe('App', () => {
     const supplierExpenseFundControl = within(supplierDialog).getByRole('combobox', { name: 'Фонд расходования поставщика' })
     expect(supplierExpenseFundControl).toBeEnabled()
     expect(supplierExpenseFundControl).toHaveTextContent('По услуге — Электроэнергия')
+    expect(within(supplierDialog).getByLabelText('Справка: Фонд расходования')).toHaveAccessibleDescription(/Администратор может закрепить за поставщиком другой действующий фонд/)
     await user.click(supplierExpenseFundControl)
     await user.click(within(supplierDialog).getByRole('option', { name: 'Водоснабжение' }))
     expect(supplierExpenseFundControl).toHaveTextContent('Водоснабжение')
@@ -5239,8 +5240,8 @@ describe('App', () => {
       getGarages,
       getTariffs: async () => [electricityTariff, waterTariff],
       getChargeServiceSettings: async () => [
-        createChargeServiceSetting({ id: 'meter-electricity-setting', isRegular: true, isMetered: true, tariffId: electricityTariff.id, tariffCalculationBase: 'meter_electricity' }),
-        createChargeServiceSetting({ id: 'meter-water-setting', isRegular: true, isMetered: true, tariffId: waterTariff.id, tariffCalculationBase: 'meter_water' }),
+        createChargeServiceSetting({ id: 'meter-electricity-setting', isRegular: true, isMetered: true, tariffId: electricityTariff.id, tariffCalculationBase: 'meter_electricity', unitName: 'Вт·ч' }),
+        createChargeServiceSetting({ id: 'meter-water-setting', isRegular: true, isMetered: true, tariffId: waterTariff.id, tariffCalculationBase: 'meter_water', unitName: 'гал.' }),
       ],
     })
     const financeClient = createFinanceClient({
@@ -5357,9 +5358,9 @@ describe('App', () => {
     expect(screen.queryByText('Поиск по гаражу, владельцу или поставщику')).not.toBeInTheDocument()
     expect(within(readingsPanel).getByLabelText('Год показаний')).toHaveValue('2026')
     const meterTypeSelect = within(readingsPanel).getByRole('combobox', { name: 'Тип показаний' })
-    expect(meterTypeSelect).toHaveTextContent('Электроэнергия, кВт·ч')
+    expect(meterTypeSelect).toHaveTextContent('Электроэнергия, Вт·ч')
     expect(within(readingsPanel).getByRole('table', { name: 'Показания счетчиков за 2026 год' })).toBeInTheDocument()
-    expect(within(readingsPanel).getByRole('columnheader', { name: /ЯнварькВт·ч/i })).toBeInTheDocument()
+    expect(within(readingsPanel).getByRole('columnheader', { name: /ЯнварьВт·ч/i })).toBeInTheDocument()
     expect(await within(readingsPanel).findByLabelText('Гараж 12, Январь, показание')).toBeInTheDocument()
     await waitFor(() => expect(meterReadingYearPageRequests).toHaveLength(1))
     expect(meterReadingYearPageRequests[0]).toEqual({ year: 2026, meterKind: 'electricity', offset: 0, limit: 25 })
@@ -5456,9 +5457,9 @@ describe('App', () => {
     expect(within(readingsPanel).queryByRole('table', { name: 'История изменений показаний', hidden: true })).not.toBeInTheDocument()
 
     await user.click(meterTypeSelect)
-    await user.click(within(readingsPanel).getByRole('option', { name: 'Вода, м³' }))
+    await user.click(within(readingsPanel).getByRole('option', { name: 'Вода, гал.' }))
     await waitFor(() => expect(meterReadingYearPageRequests.at(-1)).toEqual({ year: 2026, meterKind: 'water', offset: 0, limit: 25 }))
-    expect(within(readingsPanel).getByRole('columnheader', { name: /Январьм³/i })).toBeInTheDocument()
+    expect(within(readingsPanel).getByRole('columnheader', { name: /Январьгал\./i })).toBeInTheDocument()
   })
 
   it('explains how to enable readings when there are no active metered services', async () => {
