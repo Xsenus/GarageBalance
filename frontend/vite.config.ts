@@ -9,6 +9,7 @@ export default defineConfig({
       output: {
         manualChunks(id) {
           if (id.includes('lucide-react')) return 'icons'
+          if (/[/\\]src[/\\]features[/\\](reports[/\\]ReportPanel|audit[/\\]AuditPanel)\./.test(id)) return 'reporting'
           if (/[/\\]src[/\\]shared[/\\](FormField|LocalizedDatePicker|MoneyInput|SelectControl|TablePagination|changePreview|dictionaryWorkbench|fileExports|MeterReadingInput|PhoneInput|prototypeEditing|reportFilters|ReportPeriodQuickSelect)\./.test(id)) return 'shared-ui'
           return undefined
         },

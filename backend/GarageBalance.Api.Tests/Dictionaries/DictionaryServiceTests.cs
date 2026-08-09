@@ -3382,6 +3382,53 @@ public sealed class DictionaryServiceTests
     }
 
     [Fact]
+    public async Task GetTariffsPageAsync_TemplatesOnly_HidesServiceTariffHistory()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = DictionaryServiceTestFactory.Create(database.Context);
+        var template = new Tariff
+        {
+            Name = "Вода",
+            CalculationBase = "meter_water",
+            Rate = 100.80m,
+            EffectiveFrom = new DateOnly(2026, 8, 1)
+        };
+        var serviceVersion = new Tariff
+        {
+            Name = "Вода — по счетчику, 05.08.2026, abcdef12",
+            CalculationBase = "meter_water",
+            Rate = 100.80m,
+            EffectiveFrom = new DateOnly(2026, 8, 5)
+        };
+        var setting = new ChargeServiceSetting
+        {
+            Name = "Вода",
+            IsRegular = true,
+            TariffId = serviceVersion.Id,
+            Tariff = serviceVersion
+        };
+        database.Context.Tariffs.AddRange(template, serviceVersion);
+        database.Context.ChargeServiceSettings.Add(setting);
+        database.Context.ChargeServiceTariffVersions.Add(new ChargeServiceTariffVersion
+        {
+            ChargeServiceSettingId = setting.Id,
+            ChargeServiceSetting = setting,
+            EffectiveFrom = serviceVersion.EffectiveFrom,
+            TariffId = serviceVersion.Id,
+            Tariff = serviceVersion
+        });
+        await database.Context.SaveChangesAsync();
+
+        var page = await service.GetTariffsPageAsync(null, 0, 25, CancellationToken.None, templatesOnly: true);
+        var completePage = await service.GetTariffsPageAsync(null, 0, 25, CancellationToken.None);
+
+        Assert.Single(page.Items);
+        Assert.Equal("Вода", page.Items[0].Name);
+        Assert.Equal(1, page.TotalCount);
+        Assert.Equal(2, completePage.TotalCount);
+    }
+
+    [Fact]
     public async Task IrregularPaymentAsync_SavesStatusAndBlocksArchiveWhenUsed()
     {
         await using var database = await TestDatabase.CreateAsync();

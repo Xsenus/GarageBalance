@@ -384,7 +384,15 @@ public sealed record MeterDeviceReplacementDto(MeterDeviceDto Device, MeterReadi
 
 public sealed record MeterReadingYearGarageDto(Guid Id, string Number);
 
-public sealed record MeterReadingYearValueDto(Guid Id, Guid GarageId, DateOnly AccountingMonth, decimal CurrentValue, Guid Version);
+public sealed record MeterReadingYearValueDto(
+    Guid Id,
+    Guid GarageId,
+    DateOnly AccountingMonth,
+    decimal CurrentValue,
+    Guid Version,
+    Guid? MeterDeviceId,
+    string? MeterDeviceSerialNumber,
+    bool IsMeterReplacement);
 
 public sealed record MeterReadingYearPageDto(
     IReadOnlyList<MeterReadingYearGarageDto> Garages,

@@ -56,6 +56,18 @@ describe('dictionariesApi response cache', () => {
     ]))
   })
 
+  it('requests only user-facing tariff templates for the tariff dictionary', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ items: [], totalCount: 0, offset: 0, limit: 25 }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await dictionariesApi.getTariffsPage('token', undefined, 0, 25, false, true)
+
+    expect(fetchMock).toHaveBeenCalledWith('/api/dictionaries/tariffs/page?offset=0&limit=25&templatesOnly=true', expect.any(Object))
+  })
+
   it('does not share responses between authenticated sessions', async () => {
     const fetchMock = vi.fn().mockImplementation(async () => new Response(JSON.stringify([]), {
       status: 200,

@@ -23,6 +23,11 @@ public sealed class ReportExportBuilderCancellationTests
         cancellation.Cancel();
 
         Assert.Throws<OperationCanceledException>(() =>
-            PdfReportDocumentBuilder.Build("Отчёт", ["Строка"], cancellation.Token));
+            TabularReportPdfDocumentBuilder.Build(
+                "Отчёт",
+                null,
+                [],
+                [new TabularPdfSection(null, [new TabularPdfColumn("Колонка")], [["Строка"]])],
+                cancellation.Token));
     }
 }

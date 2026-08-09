@@ -702,25 +702,39 @@ public sealed class ReportService(
         {
             return ExportLimitFailure();
         }
-        var lines = new List<string>
-        {
-            $"Period: {report.DateFrom:yyyy-MM-dd} - {report.DateTo:yyyy-MM-dd}",
-            $"Deposits: {FormatAmount(report.DepositTotal)} | Withdrawals: {FormatAmount(report.WithdrawalTotal)} | Rows: {report.RowCount}",
-            string.Empty,
-            "Фонд | Дата | Операция | Изменение, руб. | Сумма до | Сумма после | Пользователь | Комментарий"
-        };
-        lines.AddRange(report.Rows.Select(row =>
-            string.Join(" | ",
-                row.FundName,
-                row.Date.ToString("yyyy-MM-dd"),
-                row.ChangeName,
-                FormatAmount(row.Amount),
-                FormatAmount(row.BalanceBefore),
-                FormatAmount(row.BalanceAfter),
-                row.ActorDisplayName ?? string.Empty,
-                row.Reason)));
-
-        var content = PdfReportDocumentBuilder.Build("GarageBalance fund changes report", lines, cancellationToken);
+        var content = TabularReportPdfDocumentBuilder.Build(
+            "Отчёт по изменению фондов",
+            $"Период: {report.DateFrom:dd.MM.yyyy} — {report.DateTo:dd.MM.yyyy}",
+            [
+                new("Пополнено", $"{FormatAmount(report.DepositTotal)} руб."),
+                new("Изъято", $"{FormatAmount(report.WithdrawalTotal)} руб."),
+                new("Операций", report.RowCount.ToString())
+            ],
+            [
+                new(
+                    null,
+                    [
+                        new("Фонд", 1.5f),
+                        new("Дата", 0.8f),
+                        new("Операция", 1),
+                        new("Изменение, руб.", 1, true),
+                        new("Сумма до", 1, true),
+                        new("Сумма после", 1, true),
+                        new("Пользователь", 1.2f),
+                        new("Комментарий", 2)
+                    ],
+                    report.Rows.Select(row => (IReadOnlyList<string>)[
+                        row.FundName,
+                        row.Date.ToString("dd.MM.yyyy"),
+                        row.ChangeName,
+                        FormatAmount(row.Amount),
+                        FormatAmount(row.BalanceBefore),
+                        FormatAmount(row.BalanceAfter),
+                        row.ActorDisplayName ?? string.Empty,
+                        row.Reason
+                    ]).ToArray())
+            ],
+            cancellationToken);
         var file = new ReportExportFileDto(
             BuildExportFileName("fund-changes", report.DateFrom, report.DateTo, "pdf"),
             "application/pdf",
@@ -856,23 +870,32 @@ public sealed class ReportService(
         {
             return ExportLimitFailure();
         }
-        var lines = new List<string>
-        {
-            $"Period: {report.DateFrom:yyyy-MM-dd} - {report.DateTo:yyyy-MM-dd}",
-            $"Total: {FormatAmount(report.Total)} | Rows: {report.RowCount}",
-            string.Empty,
-            "Date | Amount | Receipt | Document | Purpose | Comment"
-        };
-        lines.AddRange(report.Rows.Select(row =>
-            string.Join(" | ",
-                row.Date.ToString("yyyy-MM-dd"),
-                FormatAmount(row.Amount),
-                row.HasReceipt ? "yes" : "no",
-                row.DocumentNumber ?? string.Empty,
-                row.Purpose,
-                row.Comment ?? string.Empty)));
-
-        var content = PdfReportDocumentBuilder.Build("GarageBalance cash payments report", lines, cancellationToken);
+        var content = TabularReportPdfDocumentBuilder.Build(
+            "Отчёт по оплатам из кассы",
+            $"Период: {report.DateFrom:dd.MM.yyyy} — {report.DateTo:dd.MM.yyyy}",
+            [new("Итого оплачено", $"{FormatAmount(report.Total)} руб."), new("Операций", report.RowCount.ToString())],
+            [
+                new(
+                    null,
+                    [
+                        new("Дата", 0.8f),
+                        new("Сумма, руб.", 0.9f, true),
+                        new("Чек", 0.55f),
+                        new("Документ", 1),
+                        new("Назначение", 2.2f),
+                        new("Комментарий", 1.8f)
+                    ],
+                    report.Rows.Select(row => (IReadOnlyList<string>)[
+                        row.Date.ToString("dd.MM.yyyy"),
+                        FormatAmount(row.Amount),
+                        row.HasReceipt ? "Да" : "Нет",
+                        row.DocumentNumber ?? string.Empty,
+                        row.Purpose,
+                        row.Comment ?? string.Empty
+                    ]).ToArray(),
+                    ["ИТОГО", FormatAmount(report.Total), string.Empty, string.Empty, string.Empty, FormatRussianCount(report.RowCount, "операция", "операции", "операций")])
+            ],
+            cancellationToken);
         var file = new ReportExportFileDto(
             BuildExportFileName("cash-payments", report.DateFrom, report.DateTo, "pdf"),
             "application/pdf",
@@ -998,20 +1021,22 @@ public sealed class ReportService(
         {
             return ExportLimitFailure();
         }
-        var lines = new List<string>
-        {
-            $"Period: {report.DateFrom:yyyy-MM-dd} - {report.DateTo:yyyy-MM-dd}",
-            $"Total: {FormatAmount(report.Total)} | Rows: {report.RowCount}",
-            string.Empty,
-            "Date | Amount | Fund | Comment"
-        };
-        lines.AddRange(report.Rows.Select(row =>
-            string.Join(" | ",
-                row.Date.ToString("yyyy-MM-dd"),
-                FormatAmount(row.Amount),
-                row.Comment ?? string.Empty)));
-
-        var content = PdfReportDocumentBuilder.Build("GarageBalance bank deposits report", lines, cancellationToken);
+        var content = TabularReportPdfDocumentBuilder.Build(
+            "Отчёт по сдаче кассы в банк",
+            $"Период: {report.DateFrom:dd.MM.yyyy} — {report.DateTo:dd.MM.yyyy}",
+            [new("Итого сдано", $"{FormatAmount(report.Total)} руб."), new("Операций", report.RowCount.ToString())],
+            [
+                new(
+                    null,
+                    [new("Дата", 1), new("Сумма, руб.", 1, true), new("Комментарий", 3)],
+                    report.Rows.Select(row => (IReadOnlyList<string>)[
+                        row.Date.ToString("dd.MM.yyyy"),
+                        FormatAmount(row.Amount),
+                        row.Comment ?? string.Empty
+                    ]).ToArray(),
+                    ["ИТОГО", FormatAmount(report.Total), FormatRussianCount(report.RowCount, "операция", "операции", "операций")])
+            ],
+            cancellationToken);
         var file = new ReportExportFileDto(
             BuildExportFileName("bank-deposits", report.DateFrom, report.DateTo, "pdf"),
             "application/pdf",
@@ -1236,45 +1261,51 @@ public sealed class ReportService(
         {
             return ExportLimitFailure();
         }
-        var lines = new List<string>
-        {
-            $"Variation: {report.Variation}",
-            $"Accrued: {FormatAmount(report.AccruedTotal)} | Collected: {FormatAmount(report.CollectedTotal)} | Debt: {FormatAmount(report.DebtTotal)} | Rows: {report.RowCount}",
-            string.Empty,
-            "Fees",
-            "Name | Goal | Accrued | Collected"
-        };
-        lines.AddRange(report.SummaryRows.Select(row =>
-            string.Join(" | ",
-                row.Name,
-                row.Goal,
-                FormatAmount(row.FeeAmount),
-                FormatAmount(row.Collected))));
-        lines.Add(string.Empty);
-        lines.Add("Garages");
-        lines.Add("Fee | Garage | Owner | Accrued | Paid | Payment date | Debt");
-        lines.AddRange(report.GarageRows.Select(row =>
-            string.Join(" | ",
-                row.FeeName,
-                row.GarageNumber,
-                row.OwnerName ?? string.Empty,
-                FormatAmount(row.Accrued),
-                FormatAmount(row.Paid),
-                row.LastPaymentDate?.ToString("yyyy-MM-dd") ?? string.Empty,
-                FormatAmount(row.Debt))));
-        lines.Add(string.Empty);
-        lines.Add("Debtors");
-        lines.Add("Fee | Garage | Owner | Paid | Payment date | Debt");
-        lines.AddRange(report.DebtorRows.Select(row =>
-            string.Join(" | ",
-                row.FeeName,
-                row.GarageNumber,
-                row.OwnerName ?? string.Empty,
-                FormatAmount(row.Paid),
-                row.LastPaymentDate?.ToString("yyyy-MM-dd") ?? string.Empty,
-                FormatAmount(row.Debt))));
-
-        var content = PdfReportDocumentBuilder.Build("GarageBalance fees report", lines, cancellationToken);
+        var content = TabularReportPdfDocumentBuilder.Build(
+            "Отчёт по сборам",
+            string.IsNullOrWhiteSpace(report.Variation) ? null : $"Вариация: {report.Variation}",
+            [
+                new("Начислено", $"{FormatAmount(report.AccruedTotal)} руб."),
+                new("Собрано", $"{FormatAmount(report.CollectedTotal)} руб."),
+                new("Задолженность", $"{FormatAmount(report.DebtTotal)} руб.")
+            ],
+            [
+                new(
+                    "Сборы",
+                    [new("Наименование", 1.6f), new("Цель", 2), new("Начислено", 1, true), new("Собрано", 1, true)],
+                    report.SummaryRows.Select(row => (IReadOnlyList<string>)[row.Name, row.Goal, FormatAmount(row.FeeAmount), FormatAmount(row.Collected)]).ToArray(),
+                    ["ИТОГО", string.Empty, FormatAmount(report.AccruedTotal), FormatAmount(report.CollectedTotal)]),
+                new(
+                    "Гаражи",
+                    [
+                        new("Сбор", 1.4f), new("Гараж", 0.6f), new("Владелец", 1.6f),
+                        new("Начислено", 0.9f, true), new("Оплачено", 0.9f, true), new("Дата оплаты", 0.9f), new("Долг", 0.9f, true)
+                    ],
+                    report.GarageRows.Select(row => (IReadOnlyList<string>)[
+                        row.FeeName,
+                        row.GarageNumber,
+                        row.OwnerName ?? string.Empty,
+                        FormatAmount(row.Accrued),
+                        FormatAmount(row.Paid),
+                        row.LastPaymentDate?.ToString("dd.MM.yyyy") ?? string.Empty,
+                        FormatAmount(row.Debt)
+                    ]).ToArray()),
+                new(
+                    "Должники",
+                    [
+                        new("Сбор", 1.4f), new("Гараж", 0.6f), new("Владелец", 1.6f),
+                        new("Оплачено", 0.9f, true), new("Дата оплаты", 0.9f), new("Долг", 0.9f, true)
+                    ],
+                    report.DebtorRows.Select(row => (IReadOnlyList<string>)[
+                        row.FeeName,
+                        row.GarageNumber,
+                        row.OwnerName ?? string.Empty,
+                        FormatAmount(row.Paid),
+                        row.LastPaymentDate?.ToString("dd.MM.yyyy") ?? string.Empty,
+                        FormatAmount(row.Debt)
+                    ]).ToArray())
+            ],
+            cancellationToken);
         var file = new ReportExportFileDto(
             BuildSnapshotExportFileName("fees", "pdf"),
             "application/pdf",
@@ -1358,23 +1389,40 @@ public sealed class ReportService(
         {
             return ExportLimitFailure();
         }
-        var lines = new List<string>
-        {
-            $"Period: {report.DateFrom:yyyy-MM-dd} - {report.DateTo:yyyy-MM-dd}",
-            $"Accrued: {FormatAmount(report.AccrualTotal)} | Paid: {FormatAmount(report.IncomeTotal)} | Difference: {FormatAmount(report.Debt)} | Rows: {report.RowCount}",
-            string.Empty,
-            "Date | Garage | Paid | Debt after payment | Document | Income type"
-        };
-        lines.AddRange(report.Rows.Select(row =>
-            string.Join(" | ",
-                row.Date.ToString("yyyy-MM-dd"),
-                row.GarageNumber,
-                FormatAmount(row.IncomeAmount),
-                row.DebtAfterPayment.HasValue ? FormatAmount(row.DebtAfterPayment.Value) : string.Empty,
-                row.DocumentNumber ?? string.Empty,
-                row.IncomeTypeName)));
-
-        var content = PdfReportDocumentBuilder.Build("GarageBalance income report", lines, cancellationToken);
+        var content = TabularReportPdfDocumentBuilder.Build(
+            "Отчёт по поступлениям",
+            $"Период: {report.DateFrom:dd.MM.yyyy} — {report.DateTo:dd.MM.yyyy}",
+            [
+                new("Начислено", $"{FormatAmount(report.AccrualTotal)} руб."),
+                new("Поступило", $"{FormatAmount(report.IncomeTotal)} руб."),
+                new("Разница", $"{FormatAmount(report.Debt)} руб.")
+            ],
+            [
+                new(
+                    null,
+                    [
+                        new("Тип", 0.8f), new("Дата", 0.8f), new("Месяц", 0.7f), new("Гараж", 0.6f),
+                        new("Владелец", 1.4f), new("Вид поступления", 1.3f), new("Начислено", 0.8f, true),
+                        new("Оплачено", 0.8f, true), new("Разница", 0.8f, true), new("Долг после оплаты", 0.9f, true),
+                        new("Документ", 0.9f), new("Комментарий", 1.3f)
+                    ],
+                    report.Rows.Select(row => (IReadOnlyList<string>)[
+                        FormatIncomeRowType(row.RowType),
+                        row.Date.ToString("dd.MM.yyyy"),
+                        row.AccountingMonth.ToString("MM.yyyy"),
+                        row.GarageNumber,
+                        row.OwnerName ?? string.Empty,
+                        row.IncomeTypeName,
+                        FormatAmount(row.AccrualAmount),
+                        FormatAmount(row.IncomeAmount),
+                        FormatAmount(row.Debt),
+                        row.DebtAfterPayment.HasValue ? FormatAmount(row.DebtAfterPayment.Value) : string.Empty,
+                        row.DocumentNumber ?? string.Empty,
+                        row.Comment ?? string.Empty
+                    ]).ToArray(),
+                    ["ИТОГО", string.Empty, string.Empty, string.Empty, string.Empty, string.Empty, FormatAmount(report.AccrualTotal), FormatAmount(report.IncomeTotal), FormatAmount(report.Debt), string.Empty, string.Empty, FormatRussianCount(report.RowCount, "строка", "строки", "строк")])
+            ],
+            cancellationToken);
         var file = new ReportExportFileDto(
             BuildExportFileName("income", report.DateFrom, report.DateTo, "pdf"),
             "application/pdf",
@@ -1456,26 +1504,37 @@ public sealed class ReportService(
         {
             return ExportLimitFailure();
         }
-        var lines = new List<string>
-        {
-            $"Period: {report.DateFrom:yyyy-MM-dd} - {report.DateTo:yyyy-MM-dd}",
-            $"Accrued: {FormatAmount(report.AccrualTotal)} | Paid: {FormatAmount(report.ExpenseTotal)} | Difference: {FormatAmount(report.Difference)} | Rows: {report.RowCount}",
-            string.Empty,
-            "Type | Date | Month | Supplier or employee | Expense type | Accrued | Paid | Difference | Document"
-        };
-        lines.AddRange(report.Rows.Select(row =>
-            string.Join(" | ",
-                FormatExpenseRowType(row.RowType),
-                row.Date.ToString("yyyy-MM-dd"),
-                row.AccountingMonth.ToString("yyyy-MM"),
-                row.SupplierName,
-                row.ExpenseTypeName,
-                FormatAmount(row.AccrualAmount),
-                FormatAmount(row.ExpenseAmount),
-                FormatAmount(row.Difference),
-                row.DocumentNumber ?? string.Empty)));
-
-        var content = PdfReportDocumentBuilder.Build("GarageBalance expense report", lines, cancellationToken);
+        var content = TabularReportPdfDocumentBuilder.Build(
+            "Отчёт по выплатам",
+            $"Период: {report.DateFrom:dd.MM.yyyy} — {report.DateTo:dd.MM.yyyy}",
+            [
+                new("Начислено", $"{FormatAmount(report.AccrualTotal)} руб."),
+                new("Выплачено", $"{FormatAmount(report.ExpenseTotal)} руб."),
+                new("Разница", $"{FormatAmount(report.Difference)} руб.")
+            ],
+            [
+                new(
+                    null,
+                    [
+                        new("Тип", 0.8f), new("Дата", 0.8f), new("Месяц", 0.7f), new("Поставщик / сотрудник", 1.7f),
+                        new("Услуга / статья", 1.5f), new("Начислено", 0.9f, true), new("Выплачено", 0.9f, true),
+                        new("Разница", 0.9f, true), new("Документ", 1), new("Комментарий", 1.5f)
+                    ],
+                    report.Rows.Select(row => (IReadOnlyList<string>)[
+                        FormatExpenseRowType(row.RowType),
+                        row.Date.ToString("dd.MM.yyyy"),
+                        row.AccountingMonth.ToString("MM.yyyy"),
+                        row.SupplierName,
+                        row.ExpenseTypeName,
+                        FormatAmount(row.AccrualAmount),
+                        FormatAmount(row.ExpenseAmount),
+                        FormatAmount(row.Difference),
+                        row.DocumentNumber ?? string.Empty,
+                        row.Comment ?? string.Empty
+                    ]).ToArray(),
+                    ["ИТОГО", string.Empty, string.Empty, string.Empty, string.Empty, FormatAmount(report.AccrualTotal), FormatAmount(report.ExpenseTotal), FormatAmount(report.Difference), string.Empty, FormatRussianCount(report.RowCount, "строка", "строки", "строк")])
+            ],
+            cancellationToken);
         var file = new ReportExportFileDto(
             BuildExportFileName("expense", report.DateFrom, report.DateTo, "pdf"),
             "application/pdf",
@@ -1776,6 +1835,21 @@ public sealed class ReportService(
 
     private static string FormatAmount(decimal value) => MoneyFormatting.Format(value);
 
+    private static string FormatRussianCount(int value, string singular, string few, string many)
+    {
+        var absolute = Math.Abs(value);
+        var lastTwoDigits = absolute % 100;
+        var word = lastTwoDigits is >= 11 and <= 14
+            ? many
+            : (absolute % 10) switch
+            {
+                1 => singular,
+                2 or 3 or 4 => few,
+                _ => many
+            };
+        return $"{value} {word}";
+    }
+
     private static string? FormatOwnerName(string? lastName, string? firstName, string? middleName)
     {
         var fullName = string.Join(' ', new[] { lastName, firstName, middleName }.Where(part => !string.IsNullOrWhiteSpace(part)));
@@ -1786,6 +1860,7 @@ public sealed class ReportService(
     {
         return rowType switch
         {
+            IncomeReportAllRows => "Операция",
             StartingBalanceRows => "Стартовый баланс",
             IncomeReportAccrualRows => "Начисление",
             IncomeReportPaymentRows => "Оплата",
@@ -1797,6 +1872,7 @@ public sealed class ReportService(
     {
         return rowType switch
         {
+            ExpenseReportAllRows => "Операция",
             StartingBalanceRows => "Стартовый баланс",
             ExpenseReportAccrualRows => "Начисление",
             ExpenseReportPaymentRows => "Выплата",

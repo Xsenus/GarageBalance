@@ -1027,7 +1027,7 @@ public sealed class BackendPerformanceGuardTests
             StringComparison.Ordinal);
         Assert.Contains(".Take(limit)", staffMemberRepositorySource, StringComparison.Ordinal);
         Assert.Contains(
-            "tariffRepository.GetListAsync(normalizedSearch, includeArchived, NormalizeListLimit(limit)",
+            "tariffRepository.GetListAsync(normalizedSearch, includeArchived, templatesOnly, NormalizeListLimit(limit)",
             source,
             StringComparison.Ordinal);
         Assert.Contains(".Take(limit)", tariffRepositorySource, StringComparison.Ordinal);

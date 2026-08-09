@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { FormEvent, MouseEvent, ReactNode } from 'react'
-import { CircleHelp, FileText, RotateCcw, Save, Search, Trash2, X } from 'lucide-react'
+import { FileText, RotateCcw, Save, Search, Trash2, X } from 'lucide-react'
 import type { AuthResponse } from '../../services/authApi'
 import { profileCatalogEntries, type CatalogWorkspaceSection } from '../../shared/catalogCoverage'
 import { DictionaryApiError } from '../../services/dictionariesApi'
@@ -63,18 +63,6 @@ function getDictionaryRestoreErrorMessage(section: DictionarySectionKey, caught:
 type DictionaryEditorState = { section: DictionarySectionKey; mode: 'create' | 'edit'; item?: DictionaryRecord }
 
 type DictionaryChangePreview = ChangePreview
-
-function FieldHelpLabel({ id, label, help }: { id: string; label: string; help: string }) {
-  return (
-    <span className="field-label-with-help">
-      <span>{label}</span>
-      <span className="field-help" tabIndex={0} aria-label={`Справка: ${label}`} aria-describedby={id}>
-        <CircleHelp size={15} aria-hidden="true" />
-        <span className="field-help__tooltip" id={id} role="tooltip">{help}</span>
-      </span>
-    </span>
-  )
-}
 
 export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, integrationClient, initialSection, onOpenWorkspaceSection }: { auth: AuthResponse; dictionaryClient: DictionaryClient; financeClient: FinanceClient; integrationClient: IntegrationClient; initialSection: DictionarySectionKey; onOpenWorkspaceSection?: (section: Exclude<CatalogWorkspaceSection, 'dictionaries'>) => void }) {
   const [activeSection, setActiveSection] = useState<DictionarySectionKey>(initialSection)
@@ -329,8 +317,8 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, integ
           : createFallbackPage<DictionaryRecord>(await dictionaryClient.getExpenseTypes(auth.accessToken, query, 500, showArchived, signal), offset, limit)
       } else {
         page = dictionaryClient.getTariffsPage
-          ? await dictionaryClient.getTariffsPage(auth.accessToken, query, offset, limit, showArchived, signal)
-          : createFallbackPage<DictionaryRecord>(await dictionaryClient.getTariffs(auth.accessToken, query, 500, showArchived, signal), offset, limit)
+          ? await dictionaryClient.getTariffsPage(auth.accessToken, query, offset, limit, showArchived, true, signal)
+          : createFallbackPage<DictionaryRecord>(await dictionaryClient.getTariffs(auth.accessToken, query, 500, showArchived, true, signal), offset, limit)
       }
 
       if (requestSequence !== pageRequestSequence.current) {
@@ -1025,8 +1013,7 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, integ
     const fieldMeta = getDictionaryEditorFieldMeta
     const dictionaryField = (key: DictionaryEditorFieldKey, children: ReactNode, options?: { className?: string; help?: string }) => {
       const meta = fieldMeta(key)
-      const label = options?.help ? <FieldHelpLabel id={`${key}-help`} label={meta.label} help={options.help} /> : meta.label
-      return <FormField className={options?.className} label={label} hint={options?.help ? undefined : meta.hint}>{children}</FormField>
+      return <FormField className={options?.className} label={meta.label} help={options?.help ?? meta.hint}>{children}</FormField>
     }
 
     if (section === 'owners') {
@@ -1234,7 +1221,6 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, integ
       ) : null}
       {!canWriteDictionaries ? <p className="form-hint">Режим просмотра: для добавления, изменения и удаления справочников нужно право dictionaries.write.</p> : null}
       {!canManageTariffs ? <p className="form-hint">Режим просмотра тарифов: для изменения тарифов нужно право tariffs.manage.</p> : null}
-
       <div className="dictionary-workbench">
         <nav className="dictionary-subnav" aria-label="Подгруппы справочников">
           {dictionarySectionGroups.map((group) => (
@@ -1671,7 +1657,7 @@ export function DictionaryPanel({ auth, dictionaryClient }: { auth: AuthResponse
           dictionaryClient.getSuppliers(auth.accessToken, undefined, undefined, dictionaryScreenRequestLimit, false, controller.signal),
           dictionaryClient.getIncomeTypes(auth.accessToken, undefined, dictionaryScreenRequestLimit, false, controller.signal),
           dictionaryClient.getExpenseTypes(auth.accessToken, undefined, dictionaryScreenRequestLimit, false, controller.signal),
-          dictionaryClient.getTariffs(auth.accessToken, undefined, dictionaryScreenRequestLimit, false, controller.signal),
+          dictionaryClient.getTariffs(auth.accessToken, undefined, dictionaryScreenRequestLimit, false, false, controller.signal),
         ])
         if (!ignore) {
           setOwners(loadedOwners)

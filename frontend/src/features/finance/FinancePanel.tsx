@@ -3109,7 +3109,7 @@ function PaymentsPrototypePanel({
   const normalizedSearch = garageSearch.trim().toLowerCase()
   const garageSearchResults = rankGarageSearchResults(garageOptions, normalizedSearch)
     .slice(0, 20)
-  const shouldShowGarageResults = garageSearchOpen && garageSearch.trim().length > 0
+  const shouldShowGarageResults = garageSearchOpen
   const garageSearchListId = useId()
   const incomeWorksheetMonthOptions = useMemo(
     () => createPaymentPrototypeMonthOptions(
@@ -3124,7 +3124,7 @@ function PaymentsPrototypePanel({
   useEffect(() => {
     const query = garageSearch.trim()
     const requestSequence = ++garageSearchRequestSequenceRef.current
-    if (!query) {
+    if (!query && !garageSearchOpen) {
       setGarageSearchGarages([])
       setGarageSearchLoading(false)
       setGarageSearchError(null)
@@ -3180,7 +3180,7 @@ function PaymentsPrototypePanel({
         garageSearchRequestSequenceRef.current += 1
       }
     }
-  }, [auth.accessToken, dictionaryClient, garageSearch])
+  }, [auth.accessToken, dictionaryClient, garageSearch, garageSearchOpen])
 
   useEffect(() => {
     if (!selectedGarageId || selectedGarageOverdueDebt <= 0) {
@@ -4502,10 +4502,10 @@ function PaymentsPrototypePanel({
               aria-controls={garageSearchListId}
               placeholder="Введите номер гаража или ФИО владельца"
               value={garageSearch}
-              onFocus={() => setGarageSearchOpen(garageSearch.trim().length > 0)}
+              onFocus={() => setGarageSearchOpen(true)}
               onChange={(event) => {
                 setGarageSearch(event.target.value)
-                setGarageSearchOpen(event.target.value.trim().length > 0)
+                setGarageSearchOpen(true)
               }}
               onKeyDown={(event) => {
                 if (event.key === 'Escape') {
@@ -4633,7 +4633,10 @@ function PaymentsPrototypePanel({
               <details className="payments-prototype-overdue-details" open>
                 <summary>
                   <span>Расшифровка просроченной задолженности</span>
-                  <strong>{formatPaymentPrototypeValue(overdueDebtDetails?.total ?? selectedGarage.overdueDebt)}</strong>
+                  <span>
+                    <strong>{formatPaymentPrototypeValue(overdueDebtDetails?.total ?? selectedGarage.overdueDebt)}</strong>
+                    {' · Скрыть / Показать'}
+                  </span>
                 </summary>
                 {overdueDebtLoading ? (
                   <LoadingSkeleton label="Загрузка расшифровки просроченной задолженности" rows={3} columns={4} />

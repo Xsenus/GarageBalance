@@ -49,7 +49,15 @@ public sealed record MeterReadingPageData(IReadOnlyList<MeterReading> Items, int
 
 public sealed record MeterReadingYearGarageData(Guid Id, string Number);
 
-public sealed record MeterReadingYearValueData(Guid Id, Guid GarageId, DateOnly AccountingMonth, decimal CurrentValue, Guid Version);
+public sealed record MeterReadingYearValueData(
+    Guid Id,
+    Guid GarageId,
+    DateOnly AccountingMonth,
+    decimal CurrentValue,
+    Guid Version,
+    Guid? MeterDeviceId,
+    string? MeterDeviceSerialNumber,
+    bool IsMeterReplacement);
 
 public sealed record MeterReadingYearPageData(
     IReadOnlyList<MeterReadingYearGarageData> Garages,

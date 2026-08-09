@@ -10,9 +10,10 @@ public sealed class EfTariffRepository(GarageBalanceDbContext dbContext) : ITari
     public async Task<IReadOnlyList<Tariff>> GetListAsync(
         string? normalizedSearch,
         bool includeArchived,
+        bool templatesOnly,
         int limit,
         CancellationToken cancellationToken) =>
-        await ApplyFilters(normalizedSearch, includeArchived)
+        await ApplyFilters(normalizedSearch, includeArchived, templatesOnly)
             .OrderByDescending(item => item.EffectiveFrom)
             .ThenBy(item => item.Name)
             .Take(limit)
@@ -21,11 +22,12 @@ public sealed class EfTariffRepository(GarageBalanceDbContext dbContext) : ITari
     public async Task<TariffPageData> GetPageAsync(
         string? normalizedSearch,
         bool includeArchived,
+        bool templatesOnly,
         int offset,
         int limit,
         CancellationToken cancellationToken)
     {
-        var query = ApplyFilters(normalizedSearch, includeArchived);
+        var query = ApplyFilters(normalizedSearch, includeArchived, templatesOnly);
         var totalCount = await query.CountAsync(cancellationToken);
         var items = await query
             .OrderByDescending(item => item.EffectiveFrom)
@@ -62,9 +64,15 @@ public sealed class EfTariffRepository(GarageBalanceDbContext dbContext) : ITari
 
     public void Add(Tariff tariff) => dbContext.Tariffs.Add(tariff);
 
-    private IQueryable<Tariff> ApplyFilters(string? normalizedSearch, bool includeArchived)
+    private IQueryable<Tariff> ApplyFilters(string? normalizedSearch, bool includeArchived, bool templatesOnly)
     {
         var query = dbContext.Tariffs.AsNoTracking().Where(item => includeArchived || !item.IsArchived);
+        if (templatesOnly)
+        {
+            query = query.Where(item =>
+                !dbContext.ChargeServiceTariffVersions.Any(version => version.TariffId == item.Id) &&
+                !dbContext.ChargeServiceSettings.Any(setting => setting.TariffId == item.Id));
+        }
         if (normalizedSearch is not null)
         {
             query = query.Where(item =>

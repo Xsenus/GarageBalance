@@ -193,6 +193,9 @@ describe('accessible dynamic messages', () => {
     expect(reportPanelSource).toContain('aria-controls="garage-report-personal-filters"')
     expect(reportPanelSource).toContain('role="region" aria-label="Гаражи и личные фильтры отчёта"')
     expect(reportPanelSource).toContain('className="localized-date-picker__popover report-garage-filter-panel"')
+    expect(normalizedAppCss).toMatch(/\.report-garage-filter-panel \{[^}]*overflow-x: hidden;/u)
+    expect(normalizedAppCss).toMatch(/\.report-garage-filter-panel \.payments-prototype-search-results \{[^}]*grid-template-columns: minmax\(0, 1fr\);[^}]*width: 100%;/u)
+    expect(normalizedAppCss).toMatch(/\.payments-prototype-search > svg \{[^}]*flex: none;[^}]*align-self: center;/u)
     expect(normalizedAppCss).toMatch(/@media \(max-width: 720px\) \{[\s\S]*?\.report-garage-filter-panel \{[\s\S]*?position: static;/u)
   })
 

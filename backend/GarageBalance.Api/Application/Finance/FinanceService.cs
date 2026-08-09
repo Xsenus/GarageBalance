@@ -242,7 +242,15 @@ public sealed class FinanceService(
             cancellationToken);
         var result = new MeterReadingYearPageDto(
             page.Garages.Select(garage => new MeterReadingYearGarageDto(garage.Id, garage.Number)).ToList(),
-            page.Readings.Select(reading => new MeterReadingYearValueDto(reading.Id, reading.GarageId, reading.AccountingMonth, reading.CurrentValue, reading.Version)).ToList(),
+            page.Readings.Select(reading => new MeterReadingYearValueDto(
+                reading.Id,
+                reading.GarageId,
+                reading.AccountingMonth,
+                reading.CurrentValue,
+                reading.Version,
+                reading.MeterDeviceId,
+                reading.MeterDeviceSerialNumber,
+                reading.IsMeterReplacement)).ToList(),
             page.TotalCount,
             normalizedOffset,
             normalizedLimit,

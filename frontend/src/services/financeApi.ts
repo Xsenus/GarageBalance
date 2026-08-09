@@ -202,6 +202,9 @@ export type MeterReadingYearValueDto = {
   accountingMonth: string
   currentValue: number
   version: string
+  meterDeviceId?: string | null
+  meterDeviceSerialNumber?: string | null
+  isMeterReplacement?: boolean
 }
 
 export type SupplierOpeningBalanceDto = {

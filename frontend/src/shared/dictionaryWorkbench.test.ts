@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { describe, expect, it } from 'vitest'
 import type { AccountingTypeDto, GarageDto, OwnerDto, SupplierDto, SupplierGroupDto, TariffDto } from '../services/dictionariesApi'
-import { canWriteDictionarySection, createAccountingTypeFormFromDto, createEmptyAccountingTypeForm, createEmptyGarageForm, createEmptyOwnerForm, createEmptyOwnerGarageLinkForm, createEmptySupplierForm, createEmptyTariffForm, createGarageFormFromDto, createOwnerFormFromDto, createSupplierFormFromDto, dictionarySectionGroups, dictionarySectionOptions, getDictionaryEditorFieldMeta, getDictionaryRecordCells, getDictionaryRecordTitle, getDictionarySearchPlaceholder, getDictionarySectionOption, getDictionaryTableHeaders, getOwnerGarageOptions, getTariffCalculationBaseOptions, getTariffCalculationUnitName, getTariffCalculationUnitOptions, normalizeTariffCalculationUnitName, supportsDictionarySearch, usesElectricityTariffTiers } from './dictionaryWorkbench'
+import { canWriteDictionarySection, createAccountingTypeFormFromDto, createEmptyAccountingTypeForm, createEmptyGarageForm, createEmptyOwnerForm, createEmptyOwnerGarageLinkForm, createEmptySupplierForm, createEmptyTariffForm, createGarageFormFromDto, createOwnerFormFromDto, createSupplierFormFromDto, dictionarySectionGroups, dictionarySectionOptions, getDictionaryEditorFieldMeta, getDictionaryRecordCells, getDictionaryRecordTitle, getDictionarySearchPlaceholder, getDictionarySectionOption, getDictionaryTableHeaders, getOwnerGarageOptions, getTariffCalculationBaseLabel, getTariffCalculationBaseOptions, getTariffCalculationUnitName, getTariffCalculationUnitOptions, normalizeTariffCalculationUnitName, supportsDictionarySearch, usesElectricityTariffTiers } from './dictionaryWorkbench'
 
 describe('dictionary workbench metadata', () => {
   it('keeps dictionary groups in the expected order', () => {
@@ -231,7 +231,8 @@ describe('dictionary workbench metadata', () => {
     expect(getDictionaryRecordCells('suppliers', createSupplier())).toEqual(['БАНК 12', 'Банковские услуги', 'не указан', '0.00'])
     expect(getDictionaryRecordCells('incomeTypes', createAccountingType({ code: 'MEMBER_FEE', isSystem: true }))).toEqual(['Членский взнос', 'MEMBER_FEE', 'Системный'])
     expect(getDictionaryRecordCells('expenseTypes', createAccountingType({ name: 'Вывоз мусора' }))).toEqual(['Вывоз мусора', 'не указан', 'Пользовательский'])
-    expect(getDictionaryRecordCells('tariffs', createTariff())).toEqual(['Тариф на воду', 'water', '1.00', '01.07.2026'])
+    expect(getDictionaryRecordCells('tariffs', createTariff())).toEqual(['Тариф на воду', 'По счетчику воды', '1.00', '01.07.2026'])
+    expect(getDictionaryRecordCells('tariffs', createTariff({ calculationBase: 'fixed' }))).toEqual(['Тариф на воду', 'Фиксированно', '1.00', '01.07.2026'])
   })
 
   it('returns editor field metadata used by dictionary CRUD modals', () => {
@@ -254,6 +255,7 @@ describe('dictionary workbench metadata', () => {
       { value: 'meter_water', label: 'По счетчику воды' },
       { value: 'meter_electricity', label: 'По счетчику электричества' },
     ])
+    expect(getTariffCalculationBaseLabel('meter_electricity')).toBe('По счетчику электричества')
   })
 
   it('detects when any meter tariff editor should show tier fields', () => {
@@ -369,7 +371,7 @@ function createAccountingType(overrides: Partial<AccountingTypeDto> = {}): Accou
   }
 }
 
-function createTariff(): TariffDto {
+function createTariff(overrides: Partial<TariffDto> = {}): TariffDto {
   return {
     id: 'tariff-1',
     name: 'Тариф на воду',
@@ -383,5 +385,6 @@ function createTariff(): TariffDto {
     effectiveFrom: '2026-07-01',
     comment: null,
     isArchived: false,
+    ...overrides,
   }
 }

@@ -2691,7 +2691,7 @@ h1 {
 }
 
 .meter-readings-controls .form-field:last-child {
-  width: 226px;
+  width: min(360px, 32vw);
 }
 
 .meter-readings-control {
@@ -2792,7 +2792,7 @@ h1 {
 
 .meter-readings-month-row span {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 32px;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   min-height: 32px;
   padding: 5px;
@@ -2832,6 +2832,22 @@ h1 {
 .meter-readings-data-row > span:not(:first-child) {
   display: block;
   min-height: 32px;
+}
+
+.meter-readings-value-cell {
+  position: relative;
+}
+
+.meter-readings-value-cell--replacement input {
+  padding-left: 25px;
+}
+
+.meter-readings-replacement-marker {
+  position: absolute;
+  z-index: 1;
+  top: 9px;
+  left: 6px;
+  color: #175cd3;
 }
 
 .meter-readings-data-row input {
@@ -7002,7 +7018,25 @@ button.operation-row:focus-visible {
   width: min(620px, calc(100vw - 64px));
   max-height: min(70vh, 620px);
   gap: 14px;
-  overflow: auto;
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+.report-garage-filter-panel .payments-prototype-search-results {
+  grid-template-columns: minmax(0, 1fr);
+  width: 100%;
+}
+
+.report-garage-filter-panel .payments-prototype-search-option {
+  min-width: 0;
+  border-right: 0;
+}
+
+.report-garage-filter-panel .payments-prototype-search-option span,
+.report-garage-filter-panel .payments-prototype-search-option strong,
+.report-garage-filter-panel .payments-prototype-search-option small {
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .report-garage-quick-lists {
@@ -7080,6 +7114,11 @@ button.operation-row:focus-visible {
   box-shadow: none;
 }
 
+.payments-prototype-search > svg {
+  flex: none;
+  align-self: center;
+}
+
 .report-checkbox-picker .payments-prototype-search:hover {
   border-color: #98a2b3;
 }
@@ -7096,6 +7135,7 @@ button.operation-row:focus-visible {
   box-shadow: none;
   font-size: 14px;
   font-weight: 500;
+  line-height: 1.35;
 }
 
 .report-workbook-filter .report-checkbox-picker .payments-prototype-search input::placeholder {

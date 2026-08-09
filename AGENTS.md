@@ -164,6 +164,8 @@ Use one shared interaction pattern for prominent creation buttons such as `До�
 
 Use one shared visual pattern for all single-value comboboxes/selects. Controls must have the same height, border, radius, typography, spacing, chevron, hover/focus, error and disabled states as the rest of the form; a later CSS rule must not reset the shared chevron or other select styling. Every combobox must have an accessible label and keyboard-friendly native or shared accessible behavior. Do not introduce an isolated browser-default or one-off combobox style in a feature form.
 
+Explanations for individual form fields must use the shared keyboard-focusable help icon beside the field label and an accessible tooltip. Do not place routine field instructions as permanently visible paragraphs beneath controls: reserve persistent text below a field for validation, a current status, or an essential warning that the user must see without opening help.
+
 Use the shared localized date control for visible date and month filters instead of an isolated browser-default picker. Show Russian values as `дд.мм.гггг` and `мм.гггг`, keep ISO values only at API/state boundaries, and give the calendar, month selection, clearing action, keyboard path, focus state, and narrow-screen popover the same accessible styling as other form controls.
 
 For important flows, design loading, empty, error, validation, and permission-denied states from the start.

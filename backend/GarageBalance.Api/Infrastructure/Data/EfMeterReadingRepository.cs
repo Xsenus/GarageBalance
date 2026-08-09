@@ -208,7 +208,18 @@ public sealed class EfMeterReadingRepository(GarageBalanceDbContext dbContext) :
                 reading.GarageId,
                 reading.AccountingMonth,
                 reading.CurrentValue,
-                reading.Version))
+                reading.Version,
+                reading.MeterDeviceId,
+                reading.MeterDevice != null ? reading.MeterDevice.SerialNumber : null,
+                reading.MeterDeviceId != null &&
+                reading.MeterDevice != null &&
+                reading.MeterDevice.InstalledOn.Year == reading.AccountingMonth.Year &&
+                reading.MeterDevice.InstalledOn.Month == reading.AccountingMonth.Month &&
+                dbContext.MeterDevices.Any(device =>
+                    device.GarageId == reading.GarageId &&
+                    device.MeterKind == reading.MeterKind &&
+                    device.Id != reading.MeterDeviceId &&
+                    device.InstalledOn < reading.MeterDevice.InstalledOn)))
             .ToListAsync(cancellationToken);
 
         return new MeterReadingYearPageData(garages, readings, totalCount);
@@ -246,6 +257,18 @@ public sealed class EfMeterReadingRepository(GarageBalanceDbContext dbContext) :
                 reading."AccountingMonth",
                 reading."CurrentValue",
                 reading."Version",
+                reading."MeterDeviceId",
+                meter_device."SerialNumber" AS "MeterDeviceSerialNumber",
+                CASE WHEN reading."MeterDeviceId" IS NOT NULL
+                    AND date_trunc('month', meter_device."InstalledOn")::date = reading."AccountingMonth"
+                    AND EXISTS (
+                    SELECT 1
+                    FROM meter_devices AS other_device
+                    WHERE other_device."GarageId" = reading."GarageId"
+                      AND other_device."MeterKind" = reading."MeterKind"
+                      AND other_device."Id" <> reading."MeterDeviceId"
+                      AND other_device."InstalledOn" < meter_device."InstalledOn"
+                ) THEN TRUE ELSE FALSE END AS "IsMeterReplacement",
                 paged_garage."TotalCount"
             FROM paged_garages AS paged_garage
             LEFT JOIN meter_readings AS reading
@@ -254,6 +277,8 @@ public sealed class EfMeterReadingRepository(GarageBalanceDbContext dbContext) :
                AND reading."MeterKind" = {{meterKind}}
                AND reading."AccountingMonth" >= {{monthFrom}}
                AND reading."AccountingMonth" <= {{monthTo}}
+            LEFT JOIN meter_devices AS meter_device
+                ON meter_device."Id" = reading."MeterDeviceId"
 
             UNION ALL
 
@@ -266,6 +291,9 @@ public sealed class EfMeterReadingRepository(GarageBalanceDbContext dbContext) :
                 NULL::date AS "AccountingMonth",
                 NULL::numeric AS "CurrentValue",
                 NULL::uuid AS "Version",
+                NULL::uuid AS "MeterDeviceId",
+                NULL::text AS "MeterDeviceSerialNumber",
+                FALSE AS "IsMeterReplacement",
                 (SELECT COUNT(*) FROM garages AS garage WHERE garage."IsArchived" = FALSE) AS "TotalCount"
             WHERE NOT EXISTS (SELECT 1 FROM paged_garages)
             ORDER BY "Category", "GarageOrdinal", "AccountingMonth", "ReadingId"
@@ -287,7 +315,10 @@ public sealed class EfMeterReadingRepository(GarageBalanceDbContext dbContext) :
                 row.GarageId!.Value,
                 row.AccountingMonth!.Value,
                 row.CurrentValue!.Value,
-                row.Version!.Value))
+                row.Version!.Value,
+                row.MeterDeviceId,
+                row.MeterDeviceSerialNumber,
+                row.IsMeterReplacement))
             .ToList();
         return new MeterReadingYearPageData(garages, readings, totalCount);
     }
@@ -302,6 +333,9 @@ public sealed class EfMeterReadingRepository(GarageBalanceDbContext dbContext) :
         public DateOnly? AccountingMonth { get; set; }
         public decimal? CurrentValue { get; set; }
         public Guid? Version { get; set; }
+        public Guid? MeterDeviceId { get; set; }
+        public string? MeterDeviceSerialNumber { get; set; }
+        public bool IsMeterReplacement { get; set; }
         public long TotalCount { get; set; }
     }
 

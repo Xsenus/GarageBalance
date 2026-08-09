@@ -4682,6 +4682,10 @@ describe('App', () => {
     expect(within(editDialog).getByLabelText('Регулярные платежи')).toBeDisabled()
     expect(within(editDialog).getByLabelText('Наименование услуги').closest('.contractors-service-heading-grid')).toContainElement(within(editDialog).getByLabelText('Регулярные платежи'))
     expect(within(editDialog).getByText('Тип услуги нельзя менять после создания. Остальные параметры доступны для редактирования.')).toBeInTheDocument()
+    const incomeTypeHelp = within(editDialog).getByLabelText('Справка: Вид поступления')
+    expect(incomeTypeHelp).toHaveAttribute('tabindex', '0')
+    expect(incomeTypeHelp).toHaveAccessibleDescription('Определяет, к какому виду будут относиться начисления и платежи по услуге.')
+    expect(within(editDialog).getByLabelText('Справка: Единица измерения')).toHaveAccessibleDescription('Можно выбрать только обозначение, совместимое со способом расчёта тарифа.')
     expect(within(editDialog).getByRole('combobox', { name: 'Периодичность регулярной услуги' })).toHaveTextContent('Ежегодно')
     expect(within(editDialog).getByRole('combobox', { name: 'Месяц начисления ежегодной услуги' })).toHaveTextContent('Март')
     expect(within(editDialog).getByLabelText('День оплаты')).toHaveValue('25')
@@ -5342,6 +5346,9 @@ describe('App', () => {
         accountingMonth: '2026-12-01',
         currentValue: 5000,
         version: 'future-meter-reading-version',
+        meterDeviceId: 'new-device',
+        meterDeviceSerialNumber: 'ЭЛ-2026-12',
+        isMeterReplacement: true,
       }],
       totalCount: 2,
       offset: 0,
@@ -5365,6 +5372,7 @@ describe('App', () => {
     expect(futureDecemberInput).toBeEnabled()
     expect(futureDecemberInput).not.toHaveAttribute('title')
     expect(futureDecemberInput).toHaveValue('5000')
+    expect(within(readingsPanel).getByRole('img', { name: 'С этого месяца установлен новый счетчик ЭЛ-2026-12' })).toHaveAttribute('title', 'Замена счетчика. Новый номер: ЭЛ-2026-12')
 
     const yearInput = within(readingsPanel).getByLabelText('Год показаний')
     await user.clear(yearInput)
@@ -5448,9 +5456,9 @@ describe('App', () => {
     expect(within(readingsPanel).queryByRole('table', { name: 'История изменений показаний', hidden: true })).not.toBeInTheDocument()
 
     await user.click(meterTypeSelect)
-    await user.click(within(readingsPanel).getByRole('option', { name: 'Вода, м3' }))
+    await user.click(within(readingsPanel).getByRole('option', { name: 'Вода, м³' }))
     await waitFor(() => expect(meterReadingYearPageRequests.at(-1)).toEqual({ year: 2026, meterKind: 'water', offset: 0, limit: 25 }))
-    expect(within(readingsPanel).getByRole('columnheader', { name: /Январьм3/i })).toBeInTheDocument()
+    expect(within(readingsPanel).getByRole('columnheader', { name: /Январьм³/i })).toBeInTheDocument()
   })
 
   it('explains how to enable readings when there are no active metered services', async () => {
@@ -6397,6 +6405,11 @@ describe('App', () => {
     expect(within(prototype).queryByRole('table', { name: /Поступления гаража/ })).not.toBeInTheDocument()
     await waitFor(() => expect(within(prototype).getByRole('status')).toHaveTextContent('Выберите гараж через поиск'))
 
+    await user.click(garageSearchInput)
+    const initialGarageResults = within(prototype).getByRole('listbox', { name: 'Найденные гаражи' })
+    expect(within(initialGarageResults).getByRole('option', { name: /Гараж\s*1\s*Иванов Иван/ })).toBeInTheDocument()
+    await user.keyboard('{Escape}')
+
     await user.type(garageSearchInput, 'Иванов')
     await waitFor(() => expect(searchGaragesPage).toHaveBeenCalledWith('token', 'Иванов', 0, 20, false, undefined, undefined, false, {}, expect.any(AbortSignal)))
     const garageOption = await within(prototype).findByRole('option', { name: /Гараж\s*1\s*Иванов Иван/ })
@@ -6442,7 +6455,14 @@ describe('App', () => {
     const overdueDebtSummaryValue = within(financesGroup).getByText('Просроченная задолженность').parentElement?.querySelector('dd')
     expect(overdueDebtSummaryValue).toHaveClass('money-expense')
     const overdueDebtTable = await within(prototype).findByRole('table', { name: 'Расшифровка просроченной задолженности' })
-    expect(overdueDebtTable.closest('details')).toHaveAttribute('open')
+    const overdueDebtDisclosure = overdueDebtTable.closest('details')
+    expect(overdueDebtDisclosure).toHaveAttribute('open')
+    const overdueDebtToggle = within(overdueDebtDisclosure as HTMLElement).getByText('Расшифровка просроченной задолженности').closest('summary')
+    expect(overdueDebtToggle).toHaveTextContent('Скрыть')
+    await user.click(overdueDebtToggle as HTMLElement)
+    expect(overdueDebtDisclosure).not.toHaveAttribute('open')
+    expect(overdueDebtToggle).toHaveTextContent('Показать')
+    await user.click(overdueDebtToggle as HTMLElement)
     expect(within(overdueDebtTable).getByRole('columnheader', { name: 'Услуга' })).toBeInTheDocument()
     expect(within(overdueDebtTable).getByText('Членский взнос')).toBeInTheDocument()
     expect(within(overdueDebtTable).getByText('05.2026')).toBeInTheDocument()

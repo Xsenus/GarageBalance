@@ -1,5 +1,5 @@
 import { memo, useCallback, useEffect, useState } from 'react'
-import { LoaderCircle, Save, X } from 'lucide-react'
+import { LoaderCircle, RefreshCw, Save, X } from 'lucide-react'
 import type { AuthResponse } from '../../services/authApi'
 import type { DictionaryClient } from '../../services/dictionariesApi'
 import type { CreateMeterReadingRequest, FinanceClient, MeterReadingYearGarageDto } from '../../services/financeApi'
@@ -29,15 +29,16 @@ const meterReadingMonths = [
   { key: '12', label: 'Декабрь' },
 ]
 
-const meterReadingTypes = [
+type MeterReadingTypeId = 'electricity' | 'water'
+type MeterReadingTypeOption = { id: MeterReadingTypeId; label: string; unit: string }
+
+const meterReadingTypes: MeterReadingTypeOption[] = [
   { id: 'electricity', label: 'Электроэнергия', unit: 'кВт·ч' },
-  { id: 'water', label: 'Вода', unit: 'м3' },
-] as const
+  { id: 'water', label: 'Вода', unit: 'м³' },
+]
 
 const defaultMeterReadingPageSize = 25
 const emptyMeterReplacementForm = { serial: '', initialValue: '0', finalValue: '', reason: '', date: '' }
-
-type MeterReadingTypeId = typeof meterReadingTypes[number]['id']
 
 function createMeterReadingCellKey(year: string, meterType: MeterReadingTypeId, garageId: string, monthKey: string) {
   return `${year}:${meterType}:${garageId}:${monthKey}`
@@ -91,6 +92,7 @@ type MeterReadingsTableProps = {
   onCommitReading: (garage: MeterReadingYearGarageDto, month: MeterReadingMonth) => void
   onDraftReadingChange: (cellKey: string, value: string) => void
   savedReadings: Record<string, string>
+  savedReadingReplacements: Record<string, string>
   savingReadingKey: string | null
   selectedMeterType: typeof meterReadingTypes[number]
   yearIsValid: boolean
@@ -107,6 +109,7 @@ const MeterReadingsTable = memo(function MeterReadingsTable({
   onCommitReading,
   onDraftReadingChange,
   savedReadings,
+  savedReadingReplacements,
   savingReadingKey,
   selectedMeterType,
   yearIsValid,
@@ -138,9 +141,20 @@ const MeterReadingsTable = memo(function MeterReadingsTable({
             <span role="rowheader">Гараж {garage.number}</span>
             {meterReadingMonths.map((month) => {
               const cellKey = createMeterReadingCellKey(appliedYear, meterType, garage.id, month.key)
-            const futureMonth = `${appliedYear}-${month.key}` > currentMonth
+              const futureMonth = `${appliedYear}-${month.key}` > currentMonth
+              const replacementSerial = savedReadingReplacements[cellKey]
               return (
-                <span role="cell" key={cellKey}>
+                <span className={replacementSerial ? 'meter-readings-value-cell meter-readings-value-cell--replacement' : 'meter-readings-value-cell'} role="cell" key={cellKey}>
+                  {replacementSerial ? (
+                    <span
+                      className="meter-readings-replacement-marker"
+                      role="img"
+                      aria-label={`С этого месяца установлен новый счетчик ${replacementSerial}`}
+                      title={`Замена счетчика. Новый номер: ${replacementSerial}`}
+                    >
+                      <RefreshCw size={13} aria-hidden="true" />
+                    </span>
+                  ) : null}
                   <MeterReadingInput
                     aria-label={`Гараж ${garage.number}, ${month.label}, показание`}
                     disabled={!yearIsValid || (futureMonth && !canEditOutsideCurrentMonth) || savingReadingKey === cellKey}
@@ -179,12 +193,13 @@ export function MeterReadingsPrototypePanel({ auth, dictionaryClient, financeCli
   const [draftReadings, setDraftReadings] = useState<Record<string, string>>({})
   const [savedReadingIds, setSavedReadingIds] = useState<Record<string, string>>({})
   const [savedReadingVersions, setSavedReadingVersions] = useState<Record<string, string>>({})
+  const [savedReadingReplacements, setSavedReadingReplacements] = useState<Record<string, string>>({})
   const [savingReadingKey, setSavingReadingKey] = useState<string | null>(null)
   const [pendingReadingChange, setPendingReadingChange] = useState<MeterReadingPrototypePendingChange | null>(null)
   const [readingChangeError, setReadingChangeError] = useState<string | null>(null)
   const [historicalCorrectionReason, setHistoricalCorrectionReason] = useState('')
   const [historicalCorrectionReasonError, setHistoricalCorrectionReasonError] = useState<string | null>(null)
-  const [availableMeterTypes, setAvailableMeterTypes] = useState<Array<typeof meterReadingTypes[number]> | null>(null)
+  const [availableMeterTypes, setAvailableMeterTypes] = useState<MeterReadingTypeOption[] | null>(null)
   const [meterType, setMeterType] = useState<MeterReadingTypeId>('electricity')
   const [reloadRevision, setReloadRevision] = useState(0)
   const [replacementForm, setReplacementForm] = useState(emptyMeterReplacementForm)
@@ -305,12 +320,16 @@ export function MeterReadingsPrototypePanel({ auth, dictionaryClient, financeCli
           return
         }
 
-        const nextTypes = meterReadingTypes.filter((item) => settings.some((setting) => (
-          setting.isRegular
-          && setting.isMetered
-          && !setting.isArchived
-          && setting.tariffCalculationBase === `meter_${item.id}`
-        )))
+        const nextTypes = meterReadingTypes.flatMap((item) => {
+          const setting = settings.find((candidate) => (
+            candidate.isRegular
+            && candidate.isMetered
+            && !candidate.isArchived
+            && candidate.tariffCalculationBase === `meter_${item.id}`
+          ))
+          const unit = setting?.unitName?.trim()
+          return setting ? [{ ...item, unit: unit && !unit.startsWith('руб') ? unit : item.unit }] : []
+        })
         setAvailableMeterTypes(nextTypes)
         setMeterType((currentType) => nextTypes.some((item) => item.id === currentType)
           ? currentType
@@ -356,12 +375,16 @@ export function MeterReadingsPrototypePanel({ auth, dictionaryClient, financeCli
         const nextSavedReadings: Record<string, string> = {}
         const nextSavedReadingIds: Record<string, string> = {}
         const nextSavedReadingVersions: Record<string, string> = {}
+        const nextSavedReadingReplacements: Record<string, string> = {}
         yearPage.readings.forEach((reading) => {
           const monthKey = reading.accountingMonth.slice(5, 7)
           const cellKey = createMeterReadingCellKey(appliedYear, meterType, reading.garageId, monthKey)
           nextSavedReadings[cellKey] = formatMeterReadingInputValue(reading.currentValue)
           nextSavedReadingIds[cellKey] = reading.id
           nextSavedReadingVersions[cellKey] = reading.version
+          if (reading.isMeterReplacement) {
+            nextSavedReadingReplacements[cellKey] = reading.meterDeviceSerialNumber?.trim() || 'номер не указан'
+          }
         })
 
         setGarages(yearPage.garages)
@@ -373,6 +396,7 @@ export function MeterReadingsPrototypePanel({ auth, dictionaryClient, financeCli
         setDraftReadings(nextSavedReadings)
         setSavedReadingIds(nextSavedReadingIds)
         setSavedReadingVersions(nextSavedReadingVersions)
+        setSavedReadingReplacements(nextSavedReadingReplacements)
         setLoading(false)
       } catch (loadError) {
         if (!isMounted) {
@@ -599,6 +623,7 @@ export function MeterReadingsPrototypePanel({ auth, dictionaryClient, financeCli
         onCommitReading={commitReading}
         onDraftReadingChange={changeDraftReading}
         savedReadings={savedReadings}
+        savedReadingReplacements={savedReadingReplacements}
         savingReadingKey={savingReadingKey}
         selectedMeterType={selectedMeterType}
         yearIsValid={yearIsValid}

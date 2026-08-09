@@ -341,6 +341,14 @@ export function getTariffCalculationBaseOptions() {
   return tariffCalculationBaseOptions
 }
 
+export function getTariffCalculationBaseLabel(calculationBase: string) {
+  if (calculationBase === 'water') {
+    return 'По счетчику воды'
+  }
+
+  return tariffCalculationBaseOptions.find((option) => option.value === calculationBase)?.label ?? calculationBase
+}
+
 export function getTariffCalculationUnitName(calculationBase: string) {
   return tariffCalculationUnitNames[calculationBase]?.[0] ?? ''
 }
@@ -385,7 +393,7 @@ export function getDictionaryRecordCells(section: DictionarySectionKey, item: Di
 
   if (section === 'tariffs') {
     const tariff = item as TariffDto
-    return [tariff.name, tariff.calculationBase, formatTariffRateSummary(tariff), formatDateOnly(tariff.effectiveFrom)]
+    return [tariff.name, getTariffCalculationBaseLabel(tariff.calculationBase), formatTariffRateSummary(tariff), formatDateOnly(tariff.effectiveFrom)]
   }
 
   const type = item as AccountingTypeDto

@@ -59,7 +59,8 @@ public sealed class DictionariesControllerTests
         await controller.GetSuppliersPage(groupId, "water", 25, 10, "debt", "desc", true, CancellationToken.None);
         await controller.GetIncomeTypes("income", 44, true, CancellationToken.None);
         await controller.GetExpenseTypes("expense", 45, true, CancellationToken.None);
-        await controller.GetTariffs("meter", 46, true, CancellationToken.None);
+        await controller.GetTariffs("meter", 46, true, true, CancellationToken.None);
+        await controller.GetTariffsPage("meter", 20, 15, true, true, CancellationToken.None);
         await controller.GetIrregularPayments("fine", 47, true, CancellationToken.None);
         await controller.GetFeeCampaigns("gate", 48, true, CancellationToken.None);
 
@@ -71,7 +72,8 @@ public sealed class DictionariesControllerTests
         Assert.Equal((groupId, "water", 25, 10, "debt", "desc", true), service.LastSupplierPageRequest);
         Assert.Equal(("income", 44, true), service.LastIncomeTypeListRequest);
         Assert.Equal(("expense", 45, true), service.LastExpenseTypeListRequest);
-        Assert.Equal(("meter", 46, true), service.LastTariffListRequest);
+        Assert.Equal(("meter", 46, true, true), service.LastTariffListRequest);
+        Assert.Equal(("meter", 20, 15, true, true), service.LastTariffPageRequest);
         Assert.Equal(("fine", 47, true), service.LastIrregularPaymentListRequest);
         Assert.Equal(("gate", 48, true), service.LastFeeCampaignListRequest);
     }
@@ -1886,7 +1888,8 @@ public sealed class DictionariesControllerTests
         public (Guid? DepartmentId, string? Search, int? Offset, int? Limit, string? SortBy, string? SortDirection, bool IncludeArchived) LastStaffMemberPageRequest { get; private set; }
         public (string? Search, int? Limit, bool IncludeArchived) LastIncomeTypeListRequest { get; private set; }
         public (string? Search, int? Limit, bool IncludeArchived) LastExpenseTypeListRequest { get; private set; }
-        public (string? Search, int? Limit, bool IncludeArchived) LastTariffListRequest { get; private set; }
+        public (string? Search, int? Limit, bool IncludeArchived, bool TemplatesOnly) LastTariffListRequest { get; private set; }
+        public (string? Search, int? Offset, int? Limit, bool IncludeArchived, bool TemplatesOnly) LastTariffPageRequest { get; private set; }
         public (string? Search, int? Limit, bool IncludeArchived) LastChargeServiceListRequest { get; private set; }
         public (string? Search, int? Limit, bool IncludeArchived) LastIrregularPaymentListRequest { get; private set; }
         public (string? Search, int? Limit, bool IncludeArchived) LastFeeCampaignListRequest { get; private set; }
@@ -2316,14 +2319,15 @@ public sealed class DictionariesControllerTests
             return Task.FromResult(RestoreExpenseTypeResult);
         }
 
-        public Task<IReadOnlyList<TariffDto>> GetTariffsAsync(string? search, CancellationToken cancellationToken, int? limit = null, bool includeArchived = false)
+        public Task<IReadOnlyList<TariffDto>> GetTariffsAsync(string? search, CancellationToken cancellationToken, int? limit = null, bool includeArchived = false, bool templatesOnly = false)
         {
-            LastTariffListRequest = (search, limit, includeArchived);
+            LastTariffListRequest = (search, limit, includeArchived, templatesOnly);
             return Task.FromResult<IReadOnlyList<TariffDto>>([]);
         }
 
-        public Task<PagedResult<TariffDto>> GetTariffsPageAsync(string? search, int? offset, int? limit, CancellationToken cancellationToken, bool includeArchived = false)
+        public Task<PagedResult<TariffDto>> GetTariffsPageAsync(string? search, int? offset, int? limit, CancellationToken cancellationToken, bool includeArchived = false, bool templatesOnly = false)
         {
+            LastTariffPageRequest = (search, offset, limit, includeArchived, templatesOnly);
             return Task.FromResult(new PagedResult<TariffDto>([], 0, offset ?? 0, limit ?? 100));
         }
 

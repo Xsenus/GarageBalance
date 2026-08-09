@@ -14,7 +14,6 @@ using Microsoft.EntityFrameworkCore.Diagnostics;
 using System.Data.Common;
 using System.Globalization;
 using System.IO.Compression;
-using System.Text;
 using UglyToad.PdfPig;
 using UglyToad.PdfPig.DocumentLayoutAnalysis.TextExtractor;
 
@@ -2078,10 +2077,12 @@ public sealed class ReportServiceTests
         Assert.True(result.Succeeded);
         Assert.Equal("garagebalance-fund-changes-20260601-20260630.pdf", result.Value!.FileName);
         Assert.Equal("application/pdf", result.Value.ContentType);
-        AssertPdfContains(result.Value.Content, "GarageBalance fund changes report");
-        AssertPdfContains(result.Value.Content, "Izmenenie, rub.");
-        AssertPdfContains(result.Value.Content, "2026-06-10");
-        AssertPdfContains(result.Value.Content, "1 500.00");
+        var pdfText = ReadPdfText(result.Value.Content);
+        Assert.Contains("Отчёт по изменению фондов", pdfText);
+        Assert.Contains("Изменение, руб.", pdfText);
+        Assert.Contains("10.06.2026", pdfText);
+        Assert.Contains("1 500.00", pdfText);
+        AssertPdfIsLandscape(result.Value.Content);
         Assert.Contains(database.Context.AuditEvents, auditEvent =>
             auditEvent.Action == "reports.fund_changes_exported" &&
             auditEvent.ActorUserId == actorUserId &&
@@ -2689,8 +2690,10 @@ public sealed class ReportServiceTests
         Assert.Equal("PKO-SINGLE", workbookRows[2][10]);
         Assert.True(pdf.Succeeded, pdf.ErrorMessage);
         var pdfText = ReadPdfText(pdf.Value!.Content);
-        Assert.Contains("Rows: 2", pdfText);
-        Assert.Contains("PKO-GROUP-1, PKO-GROUP-2", pdfText);
+        var compactPdfText = string.Concat(pdfText.Where(character => !char.IsWhiteSpace(character)));
+        Assert.Contains("2 строки", pdfText);
+        Assert.Contains("PKO-GROUP-1", compactPdfText);
+        Assert.Contains("PKO-GROUP-2", compactPdfText);
         Assert.Contains("1 000.00", pdfText);
     }
 
@@ -2749,8 +2752,10 @@ public sealed class ReportServiceTests
         Assert.Equal("PKO-LEGACY-EXPORT-1, PKO-LEGACY-EXPORT-2", workbookRows[1][10]);
         Assert.True(pdf.Succeeded, pdf.ErrorMessage);
         var pdfText = ReadPdfText(pdf.Value!.Content);
-        Assert.Contains("Rows: 1", pdfText);
-        Assert.Contains("PKO-LEGACY-EXPORT-1, PKO-LEGACY-EXPORT-2", pdfText);
+        var compactPdfText = string.Concat(pdfText.Where(character => !char.IsWhiteSpace(character)));
+        Assert.Contains("1 строка", pdfText);
+        Assert.Contains("PKO-LEGACY-EXPORT-1", compactPdfText);
+        Assert.Contains("PKO-LEGACY-EXPORT-2", compactPdfText);
         Assert.Contains("1 000.00", pdfText);
     }
 
@@ -2789,8 +2794,11 @@ public sealed class ReportServiceTests
         Assert.True(result.Succeeded);
         Assert.Equal("garagebalance-income-20260601-20260630.pdf", result.Value!.FileName);
         Assert.Equal("application/pdf", result.Value.ContentType);
-        AssertPdfContains(result.Value.Content, "GarageBalance income report");
-        AssertPdfContains(result.Value.Content, "PKO-1");
+        var pdfText = ReadPdfText(result.Value.Content);
+        Assert.Contains("Отчёт по поступлениям", pdfText);
+        Assert.Contains("PKO-1", pdfText);
+        Assert.Contains("Вид поступления", pdfText);
+        AssertPdfIsLandscape(result.Value.Content);
     }
 
     [Fact]
@@ -2809,8 +2817,11 @@ public sealed class ReportServiceTests
         Assert.True(result.Succeeded);
         Assert.Equal("garagebalance-expense-20260601-20260630.pdf", result.Value!.FileName);
         Assert.Equal("application/pdf", result.Value.ContentType);
-        AssertPdfContains(result.Value.Content, "GarageBalance expense report");
-        AssertPdfContains(result.Value.Content, "RKO-1");
+        var pdfText = ReadPdfText(result.Value.Content);
+        Assert.Contains("Отчёт по выплатам", pdfText);
+        Assert.Contains("RKO-1", pdfText);
+        Assert.Contains("Поставщик / сотрудник", pdfText);
+        AssertPdfIsLandscape(result.Value.Content);
     }
 
     [Fact]
@@ -2858,8 +2869,11 @@ public sealed class ReportServiceTests
         Assert.True(result.Succeeded);
         Assert.Equal("garagebalance-cash-payments-20260601-20260630.pdf", result.Value!.FileName);
         Assert.Equal("application/pdf", result.Value.ContentType);
-        AssertPdfContains(result.Value.Content, "GarageBalance cash payments report");
-        AssertPdfContains(result.Value.Content, "RKO-1");
+        var pdfText = ReadPdfText(result.Value.Content);
+        Assert.Contains("Отчёт по оплатам из кассы", pdfText);
+        Assert.Contains("RKO-1", pdfText);
+        Assert.Contains("Назначение", pdfText);
+        AssertPdfIsLandscape(result.Value.Content);
     }
 
     [Fact]
@@ -2931,8 +2945,10 @@ public sealed class ReportServiceTests
         Assert.True(result.Succeeded);
         Assert.Equal("garagebalance-bank-deposits-20260601-20260630.pdf", result.Value!.FileName);
         Assert.Equal("application/pdf", result.Value.ContentType);
-        AssertPdfContains(result.Value.Content, "GarageBalance bank deposits report");
-        AssertPdfContains(result.Value.Content, "2026-06-15");
+        var pdfText = ReadPdfText(result.Value.Content);
+        Assert.Contains("Отчёт по сдаче кассы в банк", pdfText);
+        Assert.Contains("15.06.2026", pdfText);
+        AssertPdfIsLandscape(result.Value.Content);
     }
 
     [Fact]
@@ -2984,9 +3000,14 @@ public sealed class ReportServiceTests
         Assert.True(result.Succeeded);
         Assert.Equal("garagebalance-fees.pdf", result.Value!.FileName);
         Assert.Equal("application/pdf", result.Value.ContentType);
-        AssertPdfContains(result.Value.Content, "GarageBalance fees report");
-        AssertPdfContains(result.Value.Content, "500.00");
-        AssertPdfContains(result.Value.Content, "300.00");
+        var pdfText = ReadPdfText(result.Value.Content);
+        Assert.Contains("Отчёт по сборам", pdfText);
+        Assert.Contains("Сборы", pdfText);
+        Assert.Contains("Гаражи", pdfText);
+        Assert.Contains("Должники", pdfText);
+        Assert.Contains("500.00", pdfText);
+        Assert.Contains("300.00", pdfText);
+        AssertPdfIsLandscape(result.Value.Content);
     }
 
     [Fact]
@@ -3228,6 +3249,7 @@ public sealed class ReportServiceTests
         Assert.True(xlsx.Succeeded, xlsx.ErrorMessage);
         Assert.True(pdf.Succeeded, pdf.ErrorMessage);
         AssertWorkbookContains(xlsx.Value!.Content, rowMarker);
+        AssertWorkbookPresentation(xlsx.Value.Content);
         var pdfText = ReadPdfText(pdf.Value!.Content);
         Assert.Contains(rowMarker, pdfText);
 
@@ -3236,6 +3258,23 @@ public sealed class ReportServiceTests
             AssertWorkbookContainsNumber(xlsx.Value.Content, total);
             Assert.Contains(MoneyFormatting.Format(total), pdfText);
         }
+    }
+
+    private static void AssertWorkbookPresentation(byte[] content)
+    {
+        using var stream = new MemoryStream(content);
+        using var archive = new ZipArchive(stream, ZipArchiveMode.Read);
+        var styles = System.Xml.Linq.XDocument.Parse(ReadEntry(archive.GetEntry("xl/styles.xml")!));
+        var worksheet = System.Xml.Linq.XDocument.Parse(ReadEntry(archive.GetEntry("xl/worksheets/sheet1.xml")!));
+        Assert.Equal("2", styles.Descendants().Single(element => element.Name.LocalName == "fonts").Attribute("count")?.Value);
+        Assert.Equal("5", styles.Descendants().Single(element => element.Name.LocalName == "cellXfs").Attribute("count")?.Value);
+        Assert.Contains(worksheet.Descendants(), element => element.Name.LocalName == "pane" && element.Attribute("state")?.Value == "frozen" && element.Attribute("topLeftCell")?.Value == "A2");
+        Assert.Contains(worksheet.Descendants(), element => element.Name.LocalName == "autoFilter");
+        Assert.Contains(worksheet.Descendants(), element => element.Name.LocalName == "pageSetup" && element.Attribute("orientation")?.Value == "landscape" && element.Attribute("fitToWidth")?.Value == "1");
+        Assert.All(
+            worksheet.Descendants().First(element => element.Name.LocalName == "row").Elements().Where(element => element.Name.LocalName == "c"),
+            cell => Assert.Equal("1", cell.Attribute("s")?.Value));
+        Assert.Contains(worksheet.Descendants(), element => element.Name.LocalName == "col" && element.Attribute("customWidth")?.Value == "1");
     }
 
     private static void AssertWorkbookContainsNumber(byte[] content, decimal expected)
@@ -3296,7 +3335,7 @@ public sealed class ReportServiceTests
         using var archive = new ZipArchive(stream, ZipArchiveMode.Read);
         Assert.NotNull(archive.GetEntry("xl/workbook.xml"));
         Assert.NotNull(archive.GetEntry("xl/worksheets/sheet1.xml"));
-        var text = string.Join('\n', archive.Entries.Select(ReadEntry));
+        var text = GetWorkbookSearchText(archive);
         Assert.Contains(expected, text);
     }
 
@@ -3304,22 +3343,24 @@ public sealed class ReportServiceTests
     {
         using var stream = new MemoryStream(content);
         using var archive = new ZipArchive(stream, ZipArchiveMode.Read);
-        var text = string.Join('\n', archive.Entries.Select(ReadEntry));
+        var text = GetWorkbookSearchText(archive);
         Assert.DoesNotContain(unexpected, text);
     }
 
-    private static void AssertPdfContains(byte[] content, string expected)
+    private static string GetWorkbookSearchText(ZipArchive archive)
     {
-        var text = Encoding.ASCII.GetString(content);
-        Assert.StartsWith("%PDF-1.4", text);
-        Assert.Contains(expected, text);
-        Assert.Contains("%%EOF", text);
-    }
-
-    private static void AssertPdfDoesNotContain(byte[] content, string unexpected)
-    {
-        var text = Encoding.ASCII.GetString(content);
-        Assert.DoesNotContain(unexpected, text);
+        var workbook = System.Xml.Linq.XDocument.Parse(ReadEntry(archive.GetEntry("xl/workbook.xml")!));
+        var worksheetValues = archive.Entries
+            .Where(entry => entry.FullName.StartsWith("xl/worksheets/", StringComparison.Ordinal) && entry.FullName.EndsWith(".xml", StringComparison.Ordinal))
+            .SelectMany(entry => System.Xml.Linq.XDocument.Parse(ReadEntry(entry)).Descendants()
+                .Where(element => element.Name.LocalName is "t" or "v")
+                .Select(element => element.Value));
+        return string.Join(
+            '\n',
+            workbook.Descendants()
+                .Where(element => element.Name.LocalName == "sheet")
+                .Select(element => element.Attribute("name")?.Value ?? string.Empty)
+                .Concat(worksheetValues));
     }
 
     private static string ReadEntry(ZipArchiveEntry entry)

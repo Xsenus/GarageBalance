@@ -3256,7 +3256,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
               </button>
             </div>
             <p className="confirmation-text" id="fee-campaign-close-description">После закрытия новые начисления по сбору не создаются. Уже созданные начисления, оплаты и отчёты сохраняются. Если план ещё не оплачен полностью, комментарий обязателен и закрытие будет отмечено как досрочное.</p>
-            <FormField label="Комментарий к закрытию" hint="Необязательно при полном выполнении плана; обязательно для досрочного закрытия.">
+            <FormField label="Комментарий к закрытию" help="Необязательно при полном выполнении плана; обязательно для досрочного закрытия.">
               <textarea
                 aria-label="Комментарий к закрытию сбора"
                 maxLength={1000}
@@ -3326,7 +3326,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
                 disabled={feeCampaignSavingId === feeCampaignGenerateTarget.id}
                 onChange={setFeeCampaignGenerateMonth} />
             </FormField>
-            <FormField label="Комментарий к ручному начислению" hint="Необязательно. Укажите причину, если начисления дозаполняются вручную.">
+            <FormField label="Комментарий к ручному начислению" help="Необязательно. Укажите причину, если начисления дозаполняются вручную.">
               <textarea aria-label="Комментарий к ручному начислению сбора" value={feeCampaignGenerateComment} onChange={(event) => setFeeCampaignGenerateComment(event.target.value)} placeholder="Например: дозаполнение после уточнения участников" />
             </FormField>
             <div className="detail-dialog-actions contractors-dialog-actions">
@@ -3724,7 +3724,7 @@ export function AddServicePrototypeDialog({
           {isRegular ? (
             <>
               <div className="contractors-service-period-grid contractors-service-period-grid--catalogs">
-                <FormField label="Вид поступления" hint="Определяет, к какому виду будут относиться начисления и платежи по услуге.">
+                <FormField label="Вид поступления" help="Определяет, к какому виду будут относиться начисления и платежи по услуге.">
                   <SelectControl
                     aria-label="Вид поступления регулярной услуги"
                     value={incomeTypeId}
@@ -3744,7 +3744,7 @@ export function AddServicePrototypeDialog({
                     }}
                   />
                 </FormField>
-                <FormField label="Фонд поступления" hint="Подставляется по виду поступления; оплаты и автосозданные начисления направляются в этот фонд.">
+                <FormField label="Фонд поступления" help="Подставляется по виду поступления; оплаты и автосозданные начисления направляются в этот фонд.">
                   <SelectControl
                     aria-label="Фонд поступления регулярной услуги"
                     value={selectedIncomeFundId}
@@ -3755,7 +3755,7 @@ export function AddServicePrototypeDialog({
                     onChange={() => undefined}
                   />
                 </FormField>
-                <FormField label="Начисление поставщику" hint="Фиксирует допустимую связку услуги и контрагента в ведомости выплат.">
+                <FormField label="Начисление поставщику" help="Фиксирует допустимую связку услуги и контрагента в ведомости выплат.">
                   <SelectControl
                     aria-label="Вид начисления поставщику для услуги"
                     value={expenseTypeId}
@@ -3774,7 +3774,7 @@ export function AddServicePrototypeDialog({
                     }}
                   />
                 </FormField>
-                <FormField label="Фонд расходования" hint="Начисления и выплаты по услуге сохраняют этот фонд; выплата уменьшает его доступный остаток.">
+                <FormField label="Фонд расходования" help="Начисления и выплаты по услуге сохраняют этот фонд; выплата уменьшает его доступный остаток.">
                   <SelectControl
                     aria-label="Фонд расходования услуги поставщика"
                     value={expenseFundId}
@@ -3789,7 +3789,7 @@ export function AddServicePrototypeDialog({
                     }}
                   />
                 </FormField>
-                <FormField label="Способ расчёта" hint="Определяется выбранным тарифом и показывает, как рассчитывается сумма.">
+                <FormField label="Способ расчёта" help="Определяется выбранным тарифом и показывает, как рассчитывается сумма.">
                   <SelectControl
                     aria-label="Способ расчёта регулярной услуги"
                     value={effectiveCalculationBase ?? ''}
@@ -3800,7 +3800,7 @@ export function AddServicePrototypeDialog({
                     onChange={() => undefined}
                   />
                 </FormField>
-                <FormField label="Тариф" hint="Конкретная ставка, которая применяется при начислении услуги.">
+                <FormField label="Тариф" help="Конкретная ставка, которая применяется при начислении услуги.">
                   <div className="contractors-inline-field contractors-inline-field--tariff">
                     <MoneyTextInput
                       aria-label="Тариф регулярной услуги"
@@ -3823,13 +3823,13 @@ export function AddServicePrototypeDialog({
                 </FormField>
               </div>
               <div className={`contractors-service-period-grid contractors-service-period-grid--schedule${isMonthly ? ' contractors-service-period-grid--schedule-monthly' : ''}`}>
-                <FormField label="Периодичность" hint={isMonthly ? 'Начисление создаётся каждый месяц.' : 'Начисление создаётся один раз в год.'}>
+                <FormField label="Периодичность" help={isMonthly ? 'Начисление создаётся каждый месяц.' : 'Начисление создаётся один раз в год.'}>
                   <SelectControl aria-label="Периодичность регулярной услуги" value={periodicityMonths} options={regularServicePeriodicityOptions} onChange={setPeriodicityMonths} />
                 </FormField>
-                {!isMonthly ? <FormField label="Месяц начисления" hint="В этом месяце ежегодная услуга попадёт в начисления.">
+                {!isMonthly ? <FormField label="Месяц начисления" help="В этом месяце ежегодная услуга попадёт в начисления.">
                   <SelectControl aria-label="Месяц начисления ежегодной услуги" value={accrualStartMonth} options={contractorTariffMonthOptions} onChange={setAccrualStartMonth} />
                 </FormField> : null}
-                <FormField label="Оплатить до" hint={isMonthly ? 'Выбранного числа месяца, следующего за месяцем начисления.' : 'Выбранной календарной даты после ежегодного начисления.'}>
+                <FormField label="Оплатить до" help={isMonthly ? 'Выбранного числа месяца, следующего за месяцем начисления.' : 'Выбранной календарной даты после ежегодного начисления.'}>
                   <div className="contractors-inline-field contractors-inline-field--date">
                     <input aria-label="День оплаты" inputMode="numeric" maxLength={2} value={paymentDueDay} onChange={(event) => setPaymentDueDay(event.target.value)} />
                     {!isMonthly
@@ -3839,13 +3839,13 @@ export function AddServicePrototypeDialog({
                 </FormField>
               </div>
               <div className="contractors-service-secondary-grid">
-                <FormField label="Перенос долга в просроченный" hint="Количество дней после срока оплаты до переноса задолженности в просроченную.">
+                <FormField label="Перенос долга в просроченный" help="Количество дней после срока оплаты до переноса задолженности в просроченную.">
                   <div className="contractors-inline-field">
                     <input aria-label="Перенос долга в просроченный" inputMode="numeric" value={overdueGraceDays} onChange={(event) => setOverdueGraceDays(event.target.value)} />
                     <span>дн.</span>
                   </div>
                 </FormField>
-                <FormField label="Единица измерения" hint="Можно выбрать только обозначение, совместимое со способом расчёта тарифа.">
+                <FormField label="Единица измерения" help="Можно выбрать только обозначение, совместимое со способом расчёта тарифа.">
                   <SelectControl
                     aria-label="Единица измерения"
                     value={unitName}

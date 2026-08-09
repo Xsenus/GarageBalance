@@ -1033,7 +1033,7 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
             dictionaryClient.getChargeServiceSettings(auth.accessToken, undefined, contractorsDictionaryListLimit, true),
             dictionaryClient.getIncomeTypes(auth.accessToken, undefined, contractorsDictionaryListLimit, true, controller.signal),
             dictionaryClient.getExpenseTypes(auth.accessToken, undefined, contractorsDictionaryListLimit, true, controller.signal),
-            dictionaryClient.getTariffs(auth.accessToken, undefined, contractorsDictionaryListLimit, true, controller.signal),
+            dictionaryClient.getTariffs(auth.accessToken, undefined, contractorsDictionaryListLimit, true, false, controller.signal),
             fundsClient.getFundOptions(auth.accessToken, controller.signal),
           ])
           if (!cancelled) {

@@ -1094,8 +1094,11 @@ public sealed class FinanceServiceTests
         var secondGarage = new Garage { Number = "20", PeopleCount = 1, FloorCount = 1 };
         var archivedGarage = new Garage { Number = "30", PeopleCount = 1, FloorCount = 1, IsArchived = true };
         database.Context.Garages.AddRange(secondGarage, archivedGarage);
+        var previousDevice = new MeterDevice { GarageId = secondGarage.Id, Garage = secondGarage, MeterKind = "electricity", SerialNumber = "OLD-20", InstalledOn = new DateOnly(2025, 1, 1), RemovedOn = new DateOnly(2026, 2, 10), InitialValue = 0m, FinalValue = 120m };
+        var replacementDevice = new MeterDevice { GarageId = secondGarage.Id, Garage = secondGarage, MeterKind = "electricity", SerialNumber = "NEW-20", InstalledOn = new DateOnly(2026, 2, 10), InitialValue = 0m };
+        database.Context.MeterDevices.AddRange(previousDevice, replacementDevice);
         database.Context.MeterReadings.AddRange(
-            new MeterReading { GarageId = secondGarage.Id, MeterKind = "electricity", AccountingMonth = new DateOnly(2026, 2, 1), ReadingDate = new DateOnly(2026, 2, 20), CurrentValue = 125m },
+            new MeterReading { GarageId = secondGarage.Id, MeterKind = "electricity", AccountingMonth = new DateOnly(2026, 2, 1), ReadingDate = new DateOnly(2026, 2, 20), CurrentValue = 125m, MeterDeviceId = replacementDevice.Id, MeterDevice = replacementDevice },
             new MeterReading { GarageId = secondGarage.Id, MeterKind = "water", AccountingMonth = new DateOnly(2026, 2, 1), ReadingDate = new DateOnly(2026, 2, 20), CurrentValue = 25m },
             new MeterReading { GarageId = secondGarage.Id, MeterKind = "electricity", AccountingMonth = new DateOnly(2025, 12, 1), ReadingDate = new DateOnly(2025, 12, 20), CurrentValue = 100m },
             new MeterReading { GarageId = archivedGarage.Id, MeterKind = "electricity", AccountingMonth = new DateOnly(2026, 2, 1), ReadingDate = new DateOnly(2026, 2, 20), CurrentValue = 500m });
@@ -1117,6 +1120,9 @@ public sealed class FinanceServiceTests
         Assert.Equal(new DateOnly(2026, 2, 1), reading.AccountingMonth);
         Assert.Equal(125m, reading.CurrentValue);
         Assert.NotEqual(Guid.Empty, reading.Version);
+        Assert.Equal(replacementDevice.Id, reading.MeterDeviceId);
+        Assert.Equal("NEW-20", reading.MeterDeviceSerialNumber);
+        Assert.True(reading.IsMeterReplacement);
         Assert.DoesNotContain(result.Value.Garages, item => item.Id == fixtures.Garage.Id);
     }
 

@@ -1675,19 +1675,19 @@ public sealed class DictionaryService(
         return DictionaryResult<AccountingTypeDto>.Success(new AccountingTypeDto(expenseType.Id, expenseType.Name, expenseType.Code, expenseType.IsSystem, expenseType.IsArchived));
     }
 
-    public async Task<IReadOnlyList<TariffDto>> GetTariffsAsync(string? search, CancellationToken cancellationToken, int? limit = null, bool includeArchived = false)
+    public async Task<IReadOnlyList<TariffDto>> GetTariffsAsync(string? search, CancellationToken cancellationToken, int? limit = null, bool includeArchived = false, bool templatesOnly = false)
     {
         var normalizedSearch = NormalizeSearch(search);
-        var tariffs = await tariffRepository.GetListAsync(normalizedSearch, includeArchived, NormalizeListLimit(limit), cancellationToken);
+        var tariffs = await tariffRepository.GetListAsync(normalizedSearch, includeArchived, templatesOnly, NormalizeListLimit(limit), cancellationToken);
         return tariffs.Select(ToTariffDto).ToList();
     }
 
-    public async Task<PagedResult<TariffDto>> GetTariffsPageAsync(string? search, int? offset, int? limit, CancellationToken cancellationToken, bool includeArchived = false)
+    public async Task<PagedResult<TariffDto>> GetTariffsPageAsync(string? search, int? offset, int? limit, CancellationToken cancellationToken, bool includeArchived = false, bool templatesOnly = false)
     {
         var normalizedSearch = NormalizeSearch(search);
         var normalizedOffset = NormalizeListOffset(offset);
         var normalizedLimit = NormalizeListLimit(limit);
-        var page = await tariffRepository.GetPageAsync(normalizedSearch, includeArchived, normalizedOffset, normalizedLimit, cancellationToken);
+        var page = await tariffRepository.GetPageAsync(normalizedSearch, includeArchived, templatesOnly, normalizedOffset, normalizedLimit, cancellationToken);
         return new PagedResult<TariffDto>(page.Items.Select(ToTariffDto).ToList(), page.TotalCount, normalizedOffset, normalizedLimit);
     }
 
