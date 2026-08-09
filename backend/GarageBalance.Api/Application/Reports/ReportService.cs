@@ -656,7 +656,7 @@ public sealed class ReportService(
                     report.Rows.Select(row => (IReadOnlyList<XlsxCell>)
                     [
                         XlsxCell.Text(row.FundName),
-                        XlsxCell.Text(row.Date.ToString("yyyy-MM-dd")),
+                        XlsxCell.Text(row.Date.ToString("dd.MM.yyyy")),
                         XlsxCell.Text(row.ChangeName),
                         XlsxCell.Number(row.Amount),
                         XlsxCell.Number(row.BalanceBefore),
@@ -669,8 +669,8 @@ public sealed class ReportService(
                     ["Период с", "Период по", "Пополнено", "Изъято", "Строк"],
                     [
                         [
-                            XlsxCell.Text(report.DateFrom.ToString("yyyy-MM-dd")),
-                            XlsxCell.Text(report.DateTo.ToString("yyyy-MM-dd")),
+                            XlsxCell.Text(report.DateFrom.ToString("dd.MM.yyyy")),
+                            XlsxCell.Text(report.DateTo.ToString("dd.MM.yyyy")),
                             XlsxCell.Number(report.DepositTotal),
                             XlsxCell.Number(report.WithdrawalTotal),
                             XlsxCell.Number(report.RowCount)
@@ -824,7 +824,7 @@ public sealed class ReportService(
                     ["Дата", "Сумма", "Наличие чека", "Назначение", "Поставщик", "Услуга", "Документ", "Комментарий"],
                     report.Rows.Select(row => (IReadOnlyList<XlsxCell>)
                     [
-                        XlsxCell.Text(row.Date.ToString("yyyy-MM-dd")),
+                        XlsxCell.Text(row.Date.ToString("dd.MM.yyyy")),
                         XlsxCell.Number(row.Amount),
                         XlsxCell.Text(row.HasReceipt ? "Да" : "Нет"),
                         XlsxCell.Text(row.Purpose),
@@ -838,8 +838,8 @@ public sealed class ReportService(
                     ["Период с", "Период по", "Сумма", "Строк"],
                     [
                         [
-                            XlsxCell.Text(report.DateFrom.ToString("yyyy-MM-dd")),
-                            XlsxCell.Text(report.DateTo.ToString("yyyy-MM-dd")),
+                            XlsxCell.Text(report.DateFrom.ToString("dd.MM.yyyy")),
+                            XlsxCell.Text(report.DateTo.ToString("dd.MM.yyyy")),
                             XlsxCell.Number(report.Total),
                             XlsxCell.Number(report.RowCount)
                         ]
@@ -980,7 +980,7 @@ public sealed class ReportService(
                     ["Дата", "Сумма", "Комментарий"],
                     report.Rows.Select(row => (IReadOnlyList<XlsxCell>)
                     [
-                        XlsxCell.Text(row.Date.ToString("yyyy-MM-dd")),
+                        XlsxCell.Text(row.Date.ToString("dd.MM.yyyy")),
                         XlsxCell.Number(row.Amount),
                         XlsxCell.Text(row.Comment)
                     ]).ToArray()),
@@ -989,8 +989,8 @@ public sealed class ReportService(
                     ["Период с", "Период по", "Сумма", "Строк"],
                     [
                         [
-                            XlsxCell.Text(report.DateFrom.ToString("yyyy-MM-dd")),
-                            XlsxCell.Text(report.DateTo.ToString("yyyy-MM-dd")),
+                            XlsxCell.Text(report.DateFrom.ToString("dd.MM.yyyy")),
+                            XlsxCell.Text(report.DateTo.ToString("dd.MM.yyyy")),
                             XlsxCell.Number(report.Total),
                             XlsxCell.Number(report.RowCount)
                         ]
@@ -1208,7 +1208,7 @@ public sealed class ReportService(
                         XlsxCell.Text(row.OwnerName),
                         XlsxCell.Number(row.Accrued),
                         XlsxCell.Number(row.Paid),
-                        XlsxCell.Text(row.LastPaymentDate?.ToString("yyyy-MM-dd") ?? string.Empty),
+                        XlsxCell.Text(row.LastPaymentDate?.ToString("dd.MM.yyyy") ?? string.Empty),
                         XlsxCell.Number(row.Debt)
                     ]).ToArray()),
                 new XlsxSheet(
@@ -1220,7 +1220,7 @@ public sealed class ReportService(
                         XlsxCell.Text(row.GarageNumber),
                         XlsxCell.Text(row.OwnerName),
                         XlsxCell.Number(row.Paid),
-                        XlsxCell.Text(row.LastPaymentDate?.ToString("yyyy-MM-dd") ?? string.Empty),
+                        XlsxCell.Text(row.LastPaymentDate?.ToString("dd.MM.yyyy") ?? string.Empty),
                         XlsxCell.Number(row.Debt)
                     ]).ToArray()),
                 new XlsxSheet(
@@ -1338,7 +1338,7 @@ public sealed class ReportService(
                     report.Rows.Select(row => (IReadOnlyList<XlsxCell>)
                     [
                         XlsxCell.Text(FormatIncomeRowType(row.RowType)),
-                        XlsxCell.Text(row.Date.ToString("yyyy-MM-dd")),
+                        XlsxCell.Text(row.Date.ToString("dd.MM.yyyy")),
                         XlsxCell.Text(row.AccountingMonth.ToString("yyyy-MM")),
                         XlsxCell.Text(row.GarageNumber),
                         XlsxCell.Text(row.OwnerName),
@@ -1355,8 +1355,8 @@ public sealed class ReportService(
                     ["Период с", "Период по", "Начислено", "Оплачено", "Разница", "Строк"],
                     [
                         [
-                            XlsxCell.Text(report.DateFrom.ToString("yyyy-MM-dd")),
-                            XlsxCell.Text(report.DateTo.ToString("yyyy-MM-dd")),
+                            XlsxCell.Text(report.DateFrom.ToString("dd.MM.yyyy")),
+                            XlsxCell.Text(report.DateTo.ToString("dd.MM.yyyy")),
                             XlsxCell.Number(report.AccrualTotal),
                             XlsxCell.Number(report.IncomeTotal),
                             XlsxCell.Number(report.Debt),
@@ -1455,7 +1455,7 @@ public sealed class ReportService(
                     report.Rows.Select(row => (IReadOnlyList<XlsxCell>)
                     [
                         XlsxCell.Text(FormatExpenseRowType(row.RowType)),
-                        XlsxCell.Text(row.Date.ToString("yyyy-MM-dd")),
+                        XlsxCell.Text(row.Date.ToString("dd.MM.yyyy")),
                         XlsxCell.Text(row.AccountingMonth.ToString("yyyy-MM")),
                         XlsxCell.Text(row.SupplierName),
                         XlsxCell.Text(row.ExpenseTypeName),
@@ -1470,8 +1470,8 @@ public sealed class ReportService(
                     ["Период с", "Период по", "Начислено", "Выплачено", "Разница", "Строк"],
                     [
                         [
-                            XlsxCell.Text(report.DateFrom.ToString("yyyy-MM-dd")),
-                            XlsxCell.Text(report.DateTo.ToString("yyyy-MM-dd")),
+                            XlsxCell.Text(report.DateFrom.ToString("dd.MM.yyyy")),
+                            XlsxCell.Text(report.DateTo.ToString("dd.MM.yyyy")),
                             XlsxCell.Number(report.AccrualTotal),
                             XlsxCell.Number(report.ExpenseTotal),
                             XlsxCell.Number(report.Difference),

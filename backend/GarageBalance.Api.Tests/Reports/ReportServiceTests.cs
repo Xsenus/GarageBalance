@@ -2041,6 +2041,8 @@ public sealed class ReportServiceTests
         AssertWorkbookContains(result.Value.Content, "Пополнение");
         AssertWorkbookContains(result.Value.Content, "Изъятие");
         AssertWorkbookContains(result.Value.Content, "Распределение средств");
+        AssertWorkbookContains(result.Value.Content, "10.06.2026");
+        AssertWorkbookDoesNotContain(result.Value.Content, "2026-06-10");
         AssertWorkbookDoesNotContain(result.Value.Content, "Вне периода");
         Assert.Contains(database.Context.AuditEvents, auditEvent =>
             auditEvent.Action == "reports.fund_changes_exported" &&
@@ -2619,6 +2621,8 @@ public sealed class ReportServiceTests
         Assert.Equal("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", result.Value.ContentType);
         AssertWorkbookContains(result.Value.Content, "PKO-1");
         AssertWorkbookContains(result.Value.Content, "Поступления");
+        AssertWorkbookContains(result.Value.Content, "10.06.2026");
+        AssertWorkbookDoesNotContain(result.Value.Content, "2026-06-10");
     }
 
     [Fact]
@@ -2776,6 +2780,8 @@ public sealed class ReportServiceTests
         Assert.Equal("garagebalance-expense-20260601-20260630.xlsx", result.Value!.FileName);
         AssertWorkbookContains(result.Value.Content, "RKO-1");
         AssertWorkbookContains(result.Value.Content, "Выплаты");
+        AssertWorkbookContains(result.Value.Content, "12.06.2026");
+        AssertWorkbookDoesNotContain(result.Value.Content, "2026-06-12");
     }
 
     [Fact]
@@ -2845,6 +2851,8 @@ public sealed class ReportServiceTests
         AssertWorkbookContains(result.Value.Content, "Оплаты из кассы");
         AssertWorkbookContains(result.Value.Content, "RKO-1");
         AssertWorkbookContains(result.Value.Content, "Оплата воды");
+        AssertWorkbookContains(result.Value.Content, "12.06.2026");
+        AssertWorkbookDoesNotContain(result.Value.Content, "2026-06-12");
         AssertWorkbookDoesNotContain(result.Value.Content, "RKO-2");
         Assert.Contains(database.Context.AuditEvents, auditEvent =>
             auditEvent.Action == "reports.cash_payments_exported" &&
@@ -2912,6 +2920,8 @@ public sealed class ReportServiceTests
         Assert.Equal("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", result.Value.ContentType);
         AssertWorkbookContains(result.Value.Content, "Сдача кассы в банк");
         AssertWorkbookContains(result.Value.Content, "Сдача наличных в банк");
+        AssertWorkbookContains(result.Value.Content, "15.06.2026");
+        AssertWorkbookDoesNotContain(result.Value.Content, "2026-06-15");
         AssertWorkbookDoesNotContain(result.Value.Content, "Вне периода");
         Assert.Contains(database.Context.AuditEvents, auditEvent =>
             auditEvent.Action == "reports.bank_deposits_exported" &&
@@ -2976,6 +2986,8 @@ public sealed class ReportServiceTests
         AssertWorkbookContains(result.Value.Content, "Должники");
         AssertWorkbookContains(result.Value.Content, "Иванов Иван");
         AssertWorkbookContains(result.Value.Content, "Петров Петр");
+        AssertWorkbookContains(result.Value.Content, "10.06.2026");
+        AssertWorkbookDoesNotContain(result.Value.Content, "2026-06-10");
         Assert.Contains(database.Context.AuditEvents, auditEvent =>
             auditEvent.Action == "reports.fees_exported" &&
             auditEvent.ActorUserId == actorUserId &&

@@ -8,7 +8,7 @@ import { AsyncErrorState, EmptyState, TableLoadingState } from '../../shared/Asy
 import { buildReportFileName, buildSnapshotReportFileName, downloadBlob } from '../../shared/fileExports'
 import { FormError } from '../../shared/formFeedback'
 import { useEscapeKey, useFocusOnOpen, useFocusTrap } from '../../shared/focusHooks'
-import { formatMoney, formatMonth, formatOperationTime, getCurrentMonthInputValue, getLocalDateInputValue } from '../../shared/formatters'
+import { formatDateOnly, formatMoney, formatMonth, formatOperationTime, getCurrentMonthInputValue, getLocalDateInputValue } from '../../shared/formatters'
 import { LocalizedDatePicker } from '../../shared/LocalizedDatePicker'
 import { ReportPeriodQuickSelect } from '../../shared/ReportPeriodQuickSelect'
 import { filterAndRankReportOptions } from '../../shared/reportFilters'
@@ -33,6 +33,20 @@ type ReportDateRange = {
 
 const reportFullViewLimit = 5000
 const reportDictionarySearchLimit = 20
+
+function formatReportOperationCount(count: number) {
+  const absoluteCount = Math.abs(count)
+  const lastTwoDigits = absoluteCount % 100
+  const lastDigit = absoluteCount % 10
+  const suffix = lastTwoDigits >= 11 && lastTwoDigits <= 14
+    ? 'операций'
+    : lastDigit === 1
+      ? 'операция'
+      : lastDigit >= 2 && lastDigit <= 4
+        ? 'операции'
+        : 'операций'
+  return `${count} ${suffix}`
+}
 
 type ReportFilterOption = RankableReportFilterOption
 
@@ -1453,9 +1467,9 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
           {garageReportLoading ? <TableLoadingState label="Загружаем отчет по гаражам..." /> : null}
           {garageReportError ? <AsyncErrorState message={garageReportError} onRetry={() => setReportReloadRevision((value) => value + 1)} retrying={garageReportLoading} /> : null}
           <div className="report-workbook-summary-row">
-            <strong>ИТОГО начислений</strong>
-            <strong>ИТОГО поступлений</strong>
-            <strong>Разница</strong>
+            <span><strong>ИТОГО начислений</strong><b>{garageReportLoading || !garageReport ? '—' : formatMoney(garageReport.accrualTotal)}</b></span>
+            <span><strong>ИТОГО поступлений</strong><b>{garageReportLoading || !garageReport ? '—' : formatMoney(garageReport.incomeTotal)}</b></span>
+            <span><strong>Разница</strong><b>{garageReportLoading || !garageReport ? '—' : formatMoney(garageReport.difference)}</b></span>
           </div>
           {renderReportTable(
             'Отчет по гаражам',
@@ -1503,9 +1517,9 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
           {payoutReportLoading ? <TableLoadingState label="Загружаем выплаты..." /> : null}
           {payoutReportError ? <AsyncErrorState message={payoutReportError} onRetry={() => setReportReloadRevision((value) => value + 1)} retrying={payoutReportLoading} /> : null}
           <div className="report-workbook-summary-row">
-            <strong>ИТОГО начислений</strong>
-            <strong>ИТОГО выплат</strong>
-            <strong>Разница</strong>
+            <span><strong>ИТОГО начислений</strong><b>{payoutReportLoading || !payoutReport ? '—' : formatMoney(payoutReport.accrualTotal)}</b></span>
+            <span><strong>ИТОГО выплат</strong><b>{payoutReportLoading || !payoutReport ? '—' : formatMoney(payoutReport.expenseTotal)}</b></span>
+            <span><strong>Разница</strong><b>{payoutReportLoading || !payoutReport ? '—' : formatMoney(payoutReport.difference)}</b></span>
           </div>
           {renderReportTable(
             'Отчет по выплатам',
@@ -1522,7 +1536,7 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
     if (activeReportTab === 'income') {
       const incomeRows = incomeReport?.rows.filter((row) => row.rowType === 'payments').map((row) => [
         row.garageNumber,
-        row.date,
+        formatDateOnly(row.date),
         formatOperationTime(row.createdAtUtc),
         formatMoney(row.incomeAmount),
         row.incomeTypeName,
@@ -1571,7 +1585,9 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
           </p>
           {incomeReportLoading ? <TableLoadingState label="Загружаем поступления..." /> : null}
           {incomeReportError ? <AsyncErrorState message={incomeReportError} onRetry={() => setReportReloadRevision((value) => value + 1)} retrying={incomeReportLoading} /> : null}
-          <div className="report-workbook-summary-row report-workbook-summary-row--single"><strong>ИТОГО</strong></div>
+          <div className="report-workbook-summary-row report-workbook-summary-row--single">
+            <span><strong>ИТОГО поступлений</strong><b>{incomeReportLoading || !incomeReport ? '—' : formatMoney(incomeReport.incomeTotal)}</b></span>
+          </div>
           {renderReportTable(
             'Отчет по поступлениям',
             [{ label: 'Гараж', sortField: 'garageNumber' }, { label: 'Дата', sortField: 'date' }, 'Время', { label: 'Сумма платежа', sortField: 'incomeAmount' }, { label: 'Назначение платежа', sortField: 'incomeTypeName' }, { label: 'Остаток долга после платежа', sortField: 'debt' }],
@@ -1586,7 +1602,7 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
 
     if (activeReportTab === 'cashPayments') {
       const cashRows = cashPaymentReport?.rows.map((row) => [
-        row.date,
+        formatDateOnly(row.date),
         formatMoney(row.amount),
         row.hasReceipt ? 'Да' : 'Нет',
         row.purpose,
@@ -1597,12 +1613,14 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
           {renderDateFilter('cashPayments', { from: 'С', to: 'По', actions: <>{renderReportExportButton('xlsx', 'cashPayments-xlsx', () => void downloadCashOrBankReport('cashPayments', 'xlsx'))}{renderReportExportButton('pdf', 'cashPayments-pdf', () => void downloadCashOrBankReport('cashPayments', 'pdf'))}</> })}
           {cashPaymentReportLoading ? <TableLoadingState label="Загружаем оплаты из кассы..." /> : null}
           {cashPaymentReportError ? <AsyncErrorState message={cashPaymentReportError} onRetry={() => setReportReloadRevision((value) => value + 1)} retrying={cashPaymentReportLoading} /> : null}
-          <div className="report-workbook-summary-row report-workbook-summary-row--single"><strong>ИТОГО</strong></div>
+          <div className="report-workbook-summary-row report-workbook-summary-row--single">
+            <span><strong>ИТОГО оплачено</strong><b>{cashPaymentReportLoading || !cashPaymentReport ? '—' : formatMoney(cashPaymentReport.total)}</b></span>
+          </div>
           {renderReportTable(
             'Отчет по оплатам из кассы',
             [{ label: 'Дата', sortField: 'date' }, { label: 'Сумма', sortField: 'amount' }, { label: 'Наличие чека', sortField: 'hasReceipt' }, { label: 'Назначение', sortField: 'purpose' }, 'Комментарий'],
             cashPaymentReportLoading ? [] : cashRows,
-            !cashPaymentReportLoading && cashPaymentReport ? ['ИТОГО', formatMoney(cashPaymentReport.total), '', '', `${cashPaymentReport.rowCount} операций`] : undefined,
+            !cashPaymentReportLoading && cashPaymentReport ? ['ИТОГО', formatMoney(cashPaymentReport.total), '', '', formatReportOperationCount(cashPaymentReport.rowCount)] : undefined,
             { tab: 'cashPayments', disabled: cashPaymentReportLoading, totalCount: cashPaymentReport?.rowCount },
             cashPaymentReportLoading || cashPaymentReportError ? undefined : 'Операций за период нет',
           )}
@@ -1612,7 +1630,7 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
 
     if (activeReportTab === 'bankDeposits') {
       const bankRows = bankDepositReport?.rows.map((row) => [
-        row.date,
+        formatDateOnly(row.date),
         formatMoney(row.amount),
         row.comment || '',
       ]) ?? []
@@ -1621,12 +1639,14 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
           {renderDateFilter('bankDeposits', { from: 'С', to: 'По', actions: <>{renderReportExportButton('xlsx', 'bankDeposits-xlsx', () => void downloadCashOrBankReport('bankDeposits', 'xlsx'))}{renderReportExportButton('pdf', 'bankDeposits-pdf', () => void downloadCashOrBankReport('bankDeposits', 'pdf'))}</> })}
           {bankDepositReportLoading ? <TableLoadingState label="Загружаем сдачу кассы в банк..." /> : null}
           {bankDepositReportError ? <AsyncErrorState message={bankDepositReportError} onRetry={() => setReportReloadRevision((value) => value + 1)} retrying={bankDepositReportLoading} /> : null}
-          <div className="report-workbook-summary-row report-workbook-summary-row--single"><strong>ИТОГО</strong></div>
+          <div className="report-workbook-summary-row report-workbook-summary-row--single">
+            <span><strong>ИТОГО сдано в банк</strong><b>{bankDepositReportLoading || !bankDepositReport ? '—' : formatMoney(bankDepositReport.total)}</b></span>
+          </div>
           {renderReportTable(
             'Отчет по сдаче кассы в банк',
             [{ label: 'Дата', sortField: 'date' }, { label: 'Сумма', sortField: 'amount' }, { label: 'Комментарий', sortField: 'comment' }],
             bankDepositReportLoading ? [] : bankRows,
-            !bankDepositReportLoading && bankDepositReport ? ['ИТОГО', formatMoney(bankDepositReport.total), `${bankDepositReport.rowCount} операций`] : undefined,
+            !bankDepositReportLoading && bankDepositReport ? ['ИТОГО', formatMoney(bankDepositReport.total), formatReportOperationCount(bankDepositReport.rowCount)] : undefined,
             { tab: 'bankDeposits', disabled: bankDepositReportLoading, totalCount: bankDepositReport?.rowCount },
             bankDepositReportLoading || bankDepositReportError ? undefined : 'Операций за период нет',
           )}
@@ -1661,7 +1681,7 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
         row.ownerName ?? '',
         formatMoney(row.accrued),
         formatMoney(row.paid),
-        row.lastPaymentDate ?? '',
+        row.lastPaymentDate ? formatDateOnly(row.lastPaymentDate) : '',
         formatMoney(row.debt),
       ])
       const feeDetailTableName = feeDetailMode === 'debtors' ? 'Должники по сбору' : 'Гаражи по сбору'
@@ -1720,7 +1740,15 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
                     [{ label: 'Гараж', sortField: 'garageNumber' }, { label: 'Владелец', sortField: 'ownerName' }, { label: 'Начислено', sortField: 'accrued' }, { label: 'Оплачено', sortField: 'paid' }, { label: 'Дата', sortField: 'lastPaymentDate' }, { label: 'Задолженность', sortField: 'debt' }],
                     feeDetailTableRows,
                     undefined,
-                    { tab: 'fees', disabled: feeReportLoading, totalCount: feeReport?.rowCount },
+                    {
+                      tab: 'fees',
+                      disabled: feeReportLoading,
+                      totalCount: feeReport
+                        ? feeDetailMode === 'debtors'
+                          ? feeDetailTableRows.length
+                          : Math.max(feeDetailTableRows.length, feeReport.rowCount - feeReport.summaryRows.length)
+                        : undefined,
+                    },
                     feeReportLoading || feeReportError ? undefined : feeDetailMode === 'debtors' ? 'Должников нет' : 'Данных по гаражам нет',
                   )}
                 </div>
@@ -1733,7 +1761,7 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
 
     const fundRows = fundChangeReport?.rows.map((row) => [
       row.fundName,
-      row.date,
+      formatDateOnly(row.date),
       row.changeName,
       formatMoney(row.amount),
       formatMoney(row.balanceBefore),
