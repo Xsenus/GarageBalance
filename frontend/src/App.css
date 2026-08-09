@@ -3024,8 +3024,8 @@ h1 {
     minmax(120px, 0.55fr)
     minmax(160px, 0.8fr)
     minmax(120px, 0.7fr)
-    84px;
-  min-width: 980px;
+    104px;
+  min-width: 1000px;
 }
 
 .tariffs-page .contractors-sheet-header span,

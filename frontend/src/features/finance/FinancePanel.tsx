@@ -442,6 +442,7 @@ export function FinancePanel({
   const financeReferenceBundleLoadedRef = useRef(false)
   const financeReferenceBundleGenerationRef = useRef(0)
   const [paymentsPrototypeDialog, setPaymentsPrototypeDialog] = useState<PaymentsPrototypeDialogKey | null>(null)
+  const [paymentsPrototypeRefreshRevision, setPaymentsPrototypeRefreshRevision] = useState(0)
   const paymentsPrototypeTriggerRef = useRef<HTMLButtonElement | null>(null)
   const [financeEditorCloseConfirmation, setFinanceEditorCloseConfirmation] = useState(false)
   const [cancelFinanceTarget, setCancelFinanceTarget] = useState<CancelFinanceTarget | null>(null)
@@ -2251,6 +2252,7 @@ export function FinancePanel({
         )}
         onEnsureReferences={ensureFinanceReferenceBundle}
         onOpenDialog={openPaymentsPrototypeDialog}
+        refreshRevision={paymentsPrototypeRefreshRevision}
       />
 
       <div className="summary-strip" aria-label={getFinancePanelLabel('summary')}>
@@ -2903,7 +2905,17 @@ export function FinancePanel({
           </section>
         </div>
       ) : null}
-      {paymentsPrototypeDialog === 'bank' ? <BankDepositPrototypeDialog auth={auth} financeClient={financeClient} onClose={closePaymentsPrototypeDialog} /> : null}
+      {paymentsPrototypeDialog === 'bank' ? (
+        <BankDepositPrototypeDialog
+          auth={auth}
+          financeClient={financeClient}
+          onClose={closePaymentsPrototypeDialog}
+          onSaved={() => {
+            setPaymentsPrototypeRefreshRevision((value) => value + 1)
+            closePaymentsPrototypeDialog()
+          }}
+        />
+      ) : null}
     </section>
   )
 }
@@ -2993,6 +3005,7 @@ function PaymentsPrototypePanel({
   headingNotices,
   onEnsureReferences,
   onOpenDialog,
+  refreshRevision,
 }: {
   auth: AuthResponse
   canWritePayments: boolean
@@ -3010,6 +3023,7 @@ function PaymentsPrototypePanel({
   headingNotices: ReactNode
   onEnsureReferences: () => Promise<boolean>
   onOpenDialog: (dialog: PaymentsPrototypeDialogKey, trigger?: HTMLButtonElement | null) => void
+  refreshRevision: number
 }) {
   const [activeTab, setActiveTab] = useState<'income' | 'expense'>('income')
   const [garageSearch, setGarageSearch] = useState('')
@@ -3265,7 +3279,7 @@ function PaymentsPrototypePanel({
     return () => {
       cancelled = true
     }
-  }, [activeTab, auth.accessToken, expenseWorksheetMonth, financeClient])
+  }, [activeTab, auth.accessToken, expenseWorksheetMonth, financeClient, refreshRevision])
 
   function activateExpenseTab() {
     if (activeTab !== 'expense') {
@@ -3420,6 +3434,8 @@ function PaymentsPrototypePanel({
       if (!incomeWorksheetRequests.isLatest(requestId) || selectedGarageIdRef.current !== garage.id) {
         return
       }
+
+      setPaymentError(null)
 
       if (resolveAvailablePeriod) {
         setIncomeWorksheetAvailableMonthFrom(resolvedAvailableMonthFrom)
@@ -4136,10 +4152,37 @@ function PaymentsPrototypePanel({
       ...currentRows,
     ])
 
+    const optimisticGarageDebtAfter = batch.operations.at(-1)?.garageDebtAfter
+      ?? Math.max(selectedGarage.balance - request.amount, 0)
+    setSelectedGarage((currentGarage) => currentGarage?.id === selectedGarage.id
+      ? { ...currentGarage, balance: optimisticGarageDebtAfter }
+      : currentGarage)
+
+    let overdueRefreshFailed = false
+    const overdueRefresh = financeClient.getGarageOverdueDebt(auth.accessToken, selectedGarage.id)
+      .then((details) => {
+        if (selectedGarageIdRef.current !== selectedGarage.id) {
+          return
+        }
+
+        setSelectedGarage((currentGarage) => currentGarage?.id === selectedGarage.id
+          ? { ...currentGarage, balance: optimisticGarageDebtAfter, overdueDebt: details.total }
+          : currentGarage)
+        setOverdueDebtDetails(details.total > 0 ? details : null)
+        setOverdueDebtError(null)
+      })
+      .catch(() => {
+        overdueRefreshFailed = true
+      })
+
     await Promise.all([
+      overdueRefresh,
       loadGarageIncomeWorksheet(selectedGarage),
       paymentHistoryOpen ? loadGaragePaymentHistory(selectedGarage) : Promise.resolve(),
     ])
+    if (overdueRefreshFailed && selectedGarageIdRef.current === selectedGarage.id) {
+      setPaymentError('Полная оплата сохранена, но не удалось обновить просроченную задолженность. Обновите страницу.')
+    }
 
     return null
   }
@@ -5487,10 +5530,12 @@ function BankDepositPrototypeDialog({
   auth,
   financeClient,
   onClose,
+  onSaved,
 }: {
   auth: AuthResponse
   financeClient: FinanceClient
   onClose: () => void
+  onSaved: () => void
 }) {
   const dialogRef = useFocusTrap<HTMLElement>(true)
   const cancelRef = useFocusOnOpen<HTMLButtonElement>(true)
@@ -5520,7 +5565,7 @@ function BankDepositPrototypeDialog({
         amount: parsedAmount,
         comment: comment.trim() || undefined,
       })
-      onClose()
+      onSaved()
     } catch (submitError) {
       setError(submitError instanceof Error ? submitError.message : 'Не удалось сохранить сдачу кассы в банк.')
     } finally {

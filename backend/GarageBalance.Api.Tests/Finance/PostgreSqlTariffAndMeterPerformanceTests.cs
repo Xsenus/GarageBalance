@@ -74,17 +74,19 @@ public sealed class PostgreSqlTariffAndMeterPerformanceTests
         AssertIndex(indexes, "IX_meter_readings_GarageId_MeterKind_AccountingMonth", "UNIQUE");
         AssertIndex(indexes, "IX_meter_readings_GarageId_MeterKind_AccountingMonth", "\"IsCanceled\" = false");
 
+        var tariffPlan = await ExplainAsync(
+            connection,
+            """
+            SELECT "Id"
+            FROM tariffs
+            WHERE "IsArchived" = false
+              AND "CalculationBase" = 'meter_water'
+              AND "EffectiveFrom" <= DATE '2026-07-01'
+            ORDER BY "EffectiveFrom";
+            """);
         Assert.Contains(
             "IX_tariffs_CalculationBase_EffectiveFrom",
-            await ExplainAsync(
-                connection,
-                """
-                SELECT "Id"
-                FROM tariffs
-                WHERE "IsArchived" = false
-                  AND "CalculationBase" = 'meter_water'
-                  AND "EffectiveFrom" <= DATE '2026-07-01';
-                """),
+            tariffPlan,
             StringComparison.Ordinal);
         Assert.Contains(
             "PK_charge_service_tariff_versions",

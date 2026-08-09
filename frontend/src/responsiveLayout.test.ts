@@ -146,6 +146,11 @@ describe('responsive layout styles', () => {
     expect(normalizedAppCss).toContain('.tariffs-add-threshold-button {\n  justify-self: start;')
   })
 
+  it('reserves enough room for both tariff row actions without overlapping the meter control', () => {
+    expect(normalizedAppCss).toContain('minmax(120px, 0.7fr)\n    104px;\n  min-width: 1000px;')
+    expect(normalizedAppCss).toContain('.tariffs-row-actions {\n  display: flex;\n  min-height: 34px;')
+  })
+
   it('keeps audit controls and event details readable at every supported width', () => {
     expect(normalizedAppCss).toContain('.select-control__trigger,\n.localized-date-picker input {\n  width: 100%;')
     expect(normalizedAppCss).toContain('.select-control__list {\n  position: absolute;')

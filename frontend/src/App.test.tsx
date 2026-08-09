@@ -6222,6 +6222,7 @@ describe('App', () => {
       },
       getExpenseWorksheet: async (_token, params) => {
         expenseWorksheetRequestCount += 1
+        const transferredAmount = savedCashBankTransferRequests.reduce((total, request) => total + request.amount, 0)
         const bonusAmount = savedStaffSalaryAdjustmentRequests
           .filter((request) => request.adjustmentType === 'bonus')
           .reduce((total, request) => total + request.amount, 0)
@@ -6235,8 +6236,8 @@ describe('App', () => {
         balanceTotal: 0,
         collectedTotal: 257100,
         differenceTotal: 61300,
-        bankAmount: 234000,
-        cashAmount: 201600,
+        bankAmount: 234000 + transferredAmount,
+        cashAmount: 201600 - transferredAmount,
         rows: [
           {
             rowKind: 'supplier',
@@ -6914,6 +6915,8 @@ describe('App', () => {
     })
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Учет суммы на счете в банке' })).not.toBeInTheDocument())
     expect(bankButton).toHaveFocus()
+    await waitFor(() => expect(within(prototype).getByText('Сумма в банке').closest('div')).toHaveTextContent('246 300.00'))
+    expect(within(prototype).getByText('Касса').closest('div')).toHaveTextContent('189 300.00')
   }, 180000)
 
   it('does not submit a penalty when the system income type is unavailable', async () => {
@@ -7270,6 +7273,55 @@ describe('App', () => {
     expect(await within(prototype).findByRole('alert')).toHaveTextContent('Не удалось определить финансовую историю гаража')
     expect(getGarageIncomeWorksheet).not.toHaveBeenCalled()
     expect(within(prototype).getByRole('table', { name: 'Поступления гаража 76' })).toHaveTextContent('Начислений и поступлений за выбранный период пока нет.')
+  })
+
+  it('clears a stale income worksheet period error after the user restores a valid range', async () => {
+    const user = userEvent.setup()
+    const garage = createGarage({ id: 'garage-period-recovery', number: '761', ownerName: 'Орлова Ирина' })
+    const getGarageIncomeWorksheet = vi.fn(async (_token: string, garageId: string, params: { monthFrom: string; monthTo: string }) => {
+      if (params.monthFrom > params.monthTo) {
+        throw new Error('Дата начала формы поступлений не может быть позже даты окончания.')
+      }
+
+      return createGarageIncomeWorksheet({ garageId, garageNumber: garage.number, ownerName: garage.ownerName, rows: [] })
+    })
+    render(<App
+      authClient={createAuthClient()}
+      dictionaryClient={createDictionaryClient({ getGarages: async () => [garage] })}
+      financeClient={createFinanceClient({
+        getFinancialReportPeriod: async () => ({
+          monthFrom: '2026-06-01',
+          monthTo: '2026-07-01',
+          defaultMonthFrom: '2026-06-01',
+          defaultMonthTo: '2026-07-01',
+        }),
+        getGarageIncomeWorksheet,
+      })}
+      importClient={createImportClient()}
+      reportClient={createReportClient()}
+      releaseClient={createReleaseClient()}
+      userClient={createUserClient()}
+    />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Платежи')
+    const prototype = within(await screen.findByRole('region', { name: 'Платежи' })).getByRole('region', { name: 'Форма платежей' })
+    await user.type(within(prototype).getByLabelText('Поиск номера гаража или ФИО владельца'), '761')
+    await user.click(await within(prototype).findByRole('option', { name: /Гараж\s*761\s*Орлова Ирина/ }))
+    await waitFor(() => expect(getGarageIncomeWorksheet).toHaveBeenCalled())
+
+    const monthFrom = within(prototype).getByRole('combobox', { name: 'Месяц поступлений с' })
+    const monthTo = within(prototype).getByRole('combobox', { name: 'Месяц поступлений по' })
+    await user.click(monthFrom)
+    await user.click(within(prototype).getByRole('option', { name: '07.2026' }))
+    await user.click(monthTo)
+    await user.click(within(prototype).getByRole('option', { name: '06.2026' }))
+    expect(await within(prototype).findByRole('alert')).toHaveTextContent('Дата начала формы поступлений не может быть позже даты окончания.')
+
+    await user.click(monthFrom)
+    await user.click(within(prototype).getByRole('option', { name: '06.2026' }))
+    await waitFor(() => expect(within(prototype).queryByRole('alert')).not.toBeInTheDocument())
   })
 
   it('ignores a stale financial period when another garage is selected', async () => {
@@ -8143,6 +8195,7 @@ describe('App', () => {
     })))
     expect(createIncome).not.toHaveBeenCalled()
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Полная оплата' })).not.toBeInTheDocument())
+    await waitFor(() => expect(within(prototype).getByLabelText('Выбранный гараж')).toHaveTextContent('Баланс-200.00'))
   })
 
   it('applies a partial full payment to the oldest debts before newer months', async () => {
