@@ -39,6 +39,6 @@ public static partial class AuditTextMasker
     [GeneratedRegex("(?<!\\d)\\d{4}[\\s-]?\\d{6}(?!\\d)", RegexOptions.CultureInvariant)]
     private static partial Regex PassportRegex();
 
-    [GeneratedRegex("(?<!\\d)\\d{12,}(?!\\d)", RegexOptions.CultureInvariant)]
+    [GeneratedRegex("(?<![A-Fa-f0-9-])\\d{12,}(?![A-Fa-f0-9-])", RegexOptions.CultureInvariant)]
     private static partial Regex LongNumberRegex();
 }

@@ -63,7 +63,7 @@ public sealed class ReceiptPrintingServiceTests
     public async Task RegisterActionAsync_PrintBuildsOneReceiptForPaymentBatchAndItsAllocations()
     {
         await using var database = await TestDatabase.CreateAsync();
-        var batchId = Guid.NewGuid();
+        var batchId = Guid.Parse("9de21caf-ccf5-4e70-99eb-621034599377");
         var firstOperation = await SeedIncomeOperationAsync(database.Context);
         firstOperation.ReceiptBatchId = batchId;
         var waterIncomeType = new IncomeType { Name = "Водоснабжение", Code = "water" };

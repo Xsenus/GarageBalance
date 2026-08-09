@@ -37,4 +37,13 @@ public sealed class AuditTextMaskerTests
 
         Assert.Equal("Создано поступление 1 250,50 по гаражу 12.", masked);
     }
+
+    [Fact]
+    public void Mask_KeepsTechnicalUuidWithLongNumericTail()
+    {
+        const string uuid = "9de21caf-ccf5-4e70-99eb-621034599377";
+
+        Assert.Equal(uuid, AuditTextMasker.Mask(uuid));
+        Assert.Equal($"Пакет {uuid}", AuditTextMasker.Mask($"Пакет {uuid}"));
+    }
 }
