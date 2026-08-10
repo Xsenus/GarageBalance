@@ -914,8 +914,17 @@ h1 {
   min-width: 0;
 }
 
+.settings-section-content > .password-panel {
+  width: 100%;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.settings-section-content > .password-panel > * {
+  min-width: 0;
+}
+
 .settings-card {
-  width: min(980px, 100%);
+  width: 100%;
   box-sizing: border-box;
 }
 
@@ -1070,7 +1079,7 @@ h1 {
 }
 
 .settings-card-intro {
-  align-self: center;
+  align-self: start;
 }
 
 .settings-card-intro h2 {
