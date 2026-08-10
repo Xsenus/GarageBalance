@@ -32,7 +32,7 @@ public sealed class PostgreSqlTariffTemplateMigrationIntegrationTests
 
         await using (var migrateContext = database.CreateContext())
         {
-            await migrateContext.Database.MigrateAsync();
+            await migrateContext.GetService<IMigrator>().MigrateAsync(CleanupPreviousMigration);
         }
 
         await using var verificationContext = database.CreateContext();
@@ -85,7 +85,7 @@ public sealed class PostgreSqlTariffTemplateMigrationIntegrationTests
         };
         var service = new ChargeServiceSetting
         {
-            Name = "Вода",
+            Name = "Тестовая услуга очистки версий тарифа",
             IsRegular = true,
             PeriodicityMonths = 1,
             AccrualStartMonth = 1,
