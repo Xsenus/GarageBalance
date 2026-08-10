@@ -543,7 +543,7 @@ describe('App', () => {
       expect(within(serviceDialog).getByRole('combobox', { name: comboboxName })).toHaveClass('select-control__trigger')
     }
     expect(within(serviceDialog).getByLabelText('Тариф регулярной услуги')).toHaveAttribute('inputmode', 'decimal')
-    expect(within(serviceDialog).getByRole('combobox', { name: 'Способ расчёта регулярной услуги' })).toBeDisabled()
+    expect(within(serviceDialog).getByRole('combobox', { name: 'Способ расчёта регулярной услуги' })).toBeEnabled()
     const accrualStartMonthControl = within(serviceDialog).getByRole('combobox', { name: 'Месяц начисления ежегодной услуги' })
     expect(accrualStartMonthControl).toHaveTextContent('Январь')
     expect(within(serviceDialog).getByLabelText('День оплаты')).toHaveValue('30')
@@ -554,14 +554,14 @@ describe('App', () => {
     await user.click(within(monthOptions).getByRole('option', { name: 'Декабрь' }))
     expect(accrualStartMonthControl).toHaveTextContent('Декабрь')
     expect(within(serviceDialog).getByLabelText('Перенос долга в просроченный')).toHaveValue('30')
-    expect(within(serviceDialog).getByLabelText('Перенос долга в просроченный').closest('.contractors-service-secondary-grid')).toContainElement(within(serviceDialog).getByLabelText('Единица измерения'))
+    expect(within(serviceDialog).getByLabelText('Перенос долга в просроченный').closest('.contractors-service-period-grid--single-row')).toContainElement(within(serviceDialog).getByLabelText('Единица измерения'))
     expect(within(serviceDialog).getByLabelText('По счетчику')).not.toBeChecked()
     expect(within(serviceDialog).getByLabelText('Пороговая тарификация')).not.toBeChecked()
     expect(within(serviceDialog).getByLabelText('Пороговая тарификация')).toBeDisabled()
     expect(within(serviceDialog).queryByRole('status')).not.toBeInTheDocument()
-    expect(within(serviceDialog).getByRole('combobox', { name: 'Единица измерения' })).toHaveTextContent('Сначала выберите тариф')
-    expect(within(serviceDialog).getByRole('combobox', { name: 'Единица измерения' })).toBeDisabled()
-    expect(within(serviceDialog).getByText('Можно выбрать только обозначение, совместимое со способом расчёта тарифа.')).toBeInTheDocument()
+    expect(within(serviceDialog).getByRole('combobox', { name: 'Единица измерения' })).toHaveTextContent('руб.')
+    expect(within(serviceDialog).getByRole('combobox', { name: 'Единица измерения' })).toBeEnabled()
+    expect(within(serviceDialog).getByLabelText('Справка: Единица измерения')).toHaveAccessibleDescription('Можно выбрать только обозначение, совместимое со способом расчёта тарифа.')
     expect(within(serviceDialog).getByLabelText('По счетчику').closest('.contractors-service-flags')).toContainElement(within(serviceDialog).getByLabelText('Пороговая тарификация'))
     await user.click(within(serviceDialog).getByLabelText('Пороговая тарификация'))
     expect(within(serviceDialog).queryByRole('status')).not.toBeInTheDocument()
@@ -4454,18 +4454,19 @@ describe('App', () => {
     expect(incomeTypeControl).toHaveTextContent(serviceIncomeType.name)
     const incomeFundControl = within(serviceDialog).getByRole('combobox', { name: 'Фонд поступления регулярной услуги' })
     expect(incomeFundControl).toHaveTextContent('Членские взносы')
-    expect(incomeFundControl).toBeDisabled()
+    expect(incomeFundControl).toBeEnabled()
     expect(calculationBaseControl).toHaveTextContent('Фиксированно')
-    expect(calculationBaseControl).toBeDisabled()
+    expect(calculationBaseControl).toBeEnabled()
     expect(tariffInput).toHaveValue('1 200.00')
     expect(tariffInput).toHaveAttribute('inputmode', 'decimal')
-    expect(within(serviceDialog).getByText('Определяет, к какому виду будут относиться начисления и платежи по услуге.')).toBeInTheDocument()
-    expect(within(serviceDialog).getByText('Определяется выбранным тарифом и показывает, как рассчитывается сумма.')).toBeInTheDocument()
-    expect(within(serviceDialog).getByText('Конкретная ставка, которая применяется при начислении услуги.')).toBeInTheDocument()
+    expect(within(serviceDialog).getByLabelText('Справка: Вид поступления')).toHaveAccessibleDescription('Определяет, к какому виду будут относиться начисления и платежи по услуге.')
+    expect(within(serviceDialog).getByLabelText('Справка: Фонд поступления')).toHaveAccessibleDescription(/куда поступают оплаты.*фонд расходования используется отдельно/)
+    expect(within(serviceDialog).getByLabelText('Справка: Способ расчёта')).toHaveAccessibleDescription(/Формула начисления.*Ставка с/)
+    expect(within(serviceDialog).getByLabelText('Справка: Тариф')).toHaveAccessibleDescription('Ставка начисления.')
     const createPeriodicityControl = within(serviceDialog).getByRole('combobox', { name: 'Периодичность регулярной услуги' })
     expect(createPeriodicityControl).toHaveTextContent('Ежемесячно')
     expect(within(serviceDialog).queryByRole('combobox', { name: 'Месяц оплаты' })).not.toBeInTheDocument()
-    expect(within(serviceDialog).getByText('Выбранного числа месяца, следующего за месяцем начисления.')).toBeInTheDocument()
+    expect(within(serviceDialog).getByLabelText('Справка: Оплатить до')).toHaveAccessibleDescription('Выбранного числа месяца, следующего за месяцем начисления.')
     await user.clear(within(serviceDialog).getByLabelText('День оплаты'))
     await user.type(within(serviceDialog).getByLabelText('День оплаты'), '32')
     await user.click(within(serviceDialog).getByRole('button', { name: 'Сохранить' }))
@@ -4530,6 +4531,9 @@ describe('App', () => {
       },
       rate: 1750,
       effectiveFrom: expect.any(String),
+      incomeFundId: serviceIncomeType.destinationFundId,
+      tariffMode: 'regular',
+      calculationBase: 'fixed',
     }))
     await waitFor(() => expect(within(tariffsPanel).getAllByText('Охрана').length).toBeGreaterThan(0))
     const savedServiceCostInput = within(tariffsPanel).getByLabelText('Охрана: Охрана — тариф: значение')
@@ -4569,7 +4573,7 @@ describe('App', () => {
     await waitFor(() => expect(updatedServiceTariffRequest).toMatchObject({
       rate: 1800,
       calculationBase: 'fixed',
-      effectiveFrom: '2026-06-30',
+      effectiveFrom: '2026-07-01',
     }))
     expect(savedServiceCostInput).toHaveValue('1 800.00')
 
@@ -4731,7 +4735,7 @@ describe('App', () => {
     expect(within(editDialog).getByLabelText('Регулярные платежи')).toBeChecked()
     expect(within(editDialog).getByLabelText('Регулярные платежи')).toBeDisabled()
     expect(within(editDialog).getByLabelText('Наименование услуги').closest('.contractors-service-heading-grid')).toContainElement(within(editDialog).getByLabelText('Регулярные платежи'))
-    expect(within(editDialog).getByText('Тип услуги нельзя менять после создания. Остальные параметры доступны для редактирования.')).toBeInTheDocument()
+    expect(within(editDialog).queryByText('Тип услуги нельзя менять после создания. Остальные параметры доступны для редактирования.')).not.toBeInTheDocument()
     const incomeTypeHelp = within(editDialog).getByLabelText('Справка: Вид поступления')
     expect(incomeTypeHelp).toHaveAttribute('tabindex', '0')
     expect(incomeTypeHelp).toHaveAccessibleDescription('Определяет, к какому виду будут относиться начисления и платежи по услуге.')
@@ -4741,7 +4745,7 @@ describe('App', () => {
     expect(within(editDialog).getByLabelText('День оплаты')).toHaveValue('25')
     expect(within(editDialog).getByRole('combobox', { name: 'Месяц оплаты' })).toHaveTextContent('Апрель')
     expect(within(editDialog).getByLabelText('Перенос долга в просроченный')).toHaveValue('20')
-    expect(within(editDialog).getByLabelText('Перенос долга в просроченный').closest('.contractors-service-secondary-grid')).toContainElement(within(editDialog).getByLabelText('Единица измерения'))
+    expect(within(editDialog).getByLabelText('Перенос долга в просроченный').closest('.contractors-service-period-grid--single-row')).toContainElement(within(editDialog).getByLabelText('Единица измерения'))
     const editTariffInput = within(editDialog).getByLabelText('Тариф регулярной услуги')
     expect(editTariffInput).toHaveValue('1 200.00')
     const effectiveFromInput = within(editDialog).getByLabelText('Ставка с')
@@ -4796,6 +4800,7 @@ describe('App', () => {
       rate: 1350.75,
       effectiveFrom: '2026-09-15',
       tariffVersion: 'tariff-version',
+      incomeFundId: serviceIncomeType.destinationFundId,
     })
     expect(within(tariffsPanel).getByRole('button', { name: 'Изменить услугу Охрана территории' })).toBeInTheDocument()
     expect(within(tariffsPanel).getByRole('combobox', { name: 'Охрана территории: периодичность' })).toHaveTextContent('Ежемесячно')
@@ -4886,7 +4891,7 @@ describe('App', () => {
     await user.click(await within(tariffsPanel).findByRole('button', { name: 'Изменить услугу Вода' }))
     const editDialog = await screen.findByRole('dialog', { name: 'Изменить услугу' })
 
-    expect(within(editDialog).getByRole('combobox', { name: 'Фонд поступления регулярной услуги' })).toHaveTextContent('Фонд не назначен')
+    expect(within(editDialog).getByRole('combobox', { name: 'Фонд поступления регулярной услуги' })).toHaveTextContent('Выберите фонд поступления')
     await user.click(within(editDialog).getByRole('button', { name: 'Сохранить изменения' }))
 
     expect(within(editDialog).getByText('Для выбранного вида поступления не назначен действующий фонд.')).toBeInTheDocument()
@@ -5017,13 +5022,20 @@ describe('App', () => {
     await user.click(tieredCheckbox)
 
     const thresholds = within(editDialog).getByRole('group', { name: 'Пороги тарификации выбранного тарифа' })
-    expect(within(thresholds).getByLabelText('Льготный порог: верхняя граница')).toHaveValue('100.00')
+    expect(within(thresholds).getByLabelText('Льготный порог: верхняя граница')).toHaveValue('100')
     expect(within(thresholds).getByLabelText('Льготный порог: цена за единицу')).toHaveValue('2.50')
-    expect(within(thresholds).getByLabelText('Основной порог: верхняя граница')).toHaveValue('250.00')
-    expect(within(thresholds).getByLabelText('Сверх порога: верхняя граница')).toHaveValue('Без границы')
+    expect(within(thresholds).getByLabelText('Основной порог: верхняя граница')).toHaveValue('250')
+    expect(within(thresholds).getByLabelText('Сверх порога: верхняя граница')).toHaveValue('')
     expect(within(thresholds).getByLabelText('Сверх порога: цена за единицу')).toHaveValue('5.00')
     expect(within(thresholds).getAllByRole('textbox')).toHaveLength(6)
-    within(thresholds).getAllByRole('textbox').forEach((input) => expect(input).toHaveAttribute('readonly'))
+    expect(within(thresholds).getByLabelText('Льготный порог: верхняя граница')).toBeEnabled()
+    expect(within(thresholds).getByLabelText('Сверх порога: верхняя граница')).toBeDisabled()
+    await user.clear(within(thresholds).getByLabelText('Льготный порог: верхняя граница'))
+    await user.type(within(thresholds).getByLabelText('Льготный порог: верхняя граница'), '125')
+    expect(within(thresholds).getByLabelText('Льготный порог: верхняя граница')).toHaveValue('125')
+    await user.clear(within(thresholds).getByLabelText('Льготный порог: цена за единицу'))
+    await user.type(within(thresholds).getByLabelText('Льготный порог: цена за единицу'), '3.25')
+    expect(within(thresholds).getByLabelText('Льготный порог: цена за единицу')).toHaveValue('3.25')
 
     await user.click(tieredCheckbox)
     expect(within(editDialog).queryByRole('group', { name: 'Пороги тарификации выбранного тарифа' })).not.toBeInTheDocument()

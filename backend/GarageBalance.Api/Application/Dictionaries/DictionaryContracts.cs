@@ -256,7 +256,11 @@ public sealed record UpsertChargeServiceSettingRequest(
 public sealed record CreateChargeServiceWithTariffRequest(
     [Required] UpsertChargeServiceSettingRequest Service,
     [Range(0.0001, 999999999)] decimal Rate,
-    DateOnly EffectiveFrom);
+    DateOnly EffectiveFrom,
+    Guid? IncomeFundId = null,
+    [MaxLength(40)] string? TariffMode = null,
+    IReadOnlyList<UpsertElectricityTariffTierRequest>? ElectricityTiers = null,
+    [MaxLength(80)] string? CalculationBase = null);
 
 public sealed record CreatedChargeServiceWithTariffDto(
     ChargeServiceSettingDto Service,
@@ -270,7 +274,8 @@ public sealed record UpdateChargeServiceWithTariffRequest(
     IReadOnlyList<UpsertElectricityTariffTierRequest>? ElectricityTiers = null,
     [MaxLength(1000)] string? ChangeReason = null,
     [MaxLength(80)] string? CalculationBase = null,
-    Guid? TariffVersion = null);
+    Guid? TariffVersion = null,
+    Guid? IncomeFundId = null);
 
 public sealed record UpdatedChargeServiceWithTariffDto(
     ChargeServiceSettingDto Service,

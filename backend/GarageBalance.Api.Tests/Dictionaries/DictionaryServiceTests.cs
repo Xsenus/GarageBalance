@@ -2760,6 +2760,79 @@ public sealed class DictionaryServiceTests
     }
 
     [Fact]
+    public async Task CreateChargeServiceWithTariffAsync_SavesSelectedIncomeFundCalculationUnitAndCustomTiers()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var previousFund = CreateFund("Прежний фонд электроэнергии", 10);
+        var selectedFund = CreateFund("Новый фонд электроэнергии", 20);
+        var incomeType = new IncomeType
+        {
+            Name = "Электроэнергия",
+            Code = "electricity",
+            DestinationFundId = previousFund.Id
+        };
+        var templateTariff = new Tariff
+        {
+            Name = "Шаблон электроэнергии",
+            CalculationBase = "fixed",
+            Rate = 7m,
+            EffectiveFrom = new DateOnly(2026, 1, 1)
+        };
+        database.Context.AddRange(previousFund, selectedFund, incomeType, templateTariff);
+        await database.Context.SaveChangesAsync();
+        var actorUserId = Guid.NewGuid();
+
+        var result = await DictionaryServiceTestFactory.Create(database.Context).CreateChargeServiceWithTariffAsync(
+            new CreateChargeServiceWithTariffRequest(
+                new UpsertChargeServiceSettingRequest(
+                    "Электроэнергия по зонам",
+                    true,
+                    1,
+                    1,
+                    25,
+                    null,
+                    20,
+                    true,
+                    true,
+                    "кВт·ч",
+                    incomeType.Id,
+                    templateTariff.Id),
+                3.25m,
+                new DateOnly(2026, 8, 1),
+                selectedFund.Id,
+                "metered_tiered",
+                [
+                    new(null, "До 125", 125m, 3.25m),
+                    new(null, "Свыше 125", null, 4.75m)
+                ],
+                "meter_electricity"),
+            actorUserId,
+            CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+        Assert.Equal(selectedFund.Id, incomeType.DestinationFundId);
+        Assert.Equal("meter_electricity", result.Value!.Tariff.CalculationBase);
+        Assert.Equal("кВт·ч", result.Value.Service.UnitName);
+        Assert.True(result.Value.Service.IsMetered);
+        Assert.True(result.Value.Service.HasTieredTariff);
+        Assert.Collection(
+            result.Value.Tariff.ElectricityTiers!,
+            tier =>
+            {
+                Assert.Equal(125m, tier.UpperBound);
+                Assert.Equal(3.25m, tier.Rate);
+            },
+            tier =>
+            {
+                Assert.Null(tier.UpperBound);
+                Assert.Equal(4.75m, tier.Rate);
+            });
+        Assert.Contains(
+            database.Context.AuditEvents,
+            item => item.Action == "dictionary.income_type_destination_fund_updated" && item.ActorUserId == actorUserId);
+    }
+
+    [Fact]
     public async Task CreateChargeServiceWithTariffAsync_RejectsInvalidModeAndRateWithoutAddingRecords()
     {
         await using var database = await TestDatabase.CreateAsync();
@@ -3991,6 +4064,7 @@ public sealed class DictionaryServiceTests
     {
         await using var database = await TestDatabase.CreateAsync();
         var fund = CreateFund("Электроэнергия", 10);
+        var selectedFund = CreateFund("Электроэнергия нового периода", 20);
         var incomeType = new IncomeType { Name = "Электроэнергия", Code = "electricity", DestinationFundId = fund.Id };
         var sourceTariff = new Tariff { Name = "Электроэнергия — обычный", CalculationBase = "fixed", Rate = 7.47m, EffectiveFrom = new DateOnly(2026, 1, 1) };
         var setting = new ChargeServiceSetting
@@ -4007,7 +4081,7 @@ public sealed class DictionaryServiceTests
             HasTieredTariff = false,
             UnitName = "руб."
         };
-        database.Context.AddRange(fund, incomeType, sourceTariff, setting);
+        database.Context.AddRange(fund, selectedFund, incomeType, sourceTariff, setting);
         await database.Context.SaveChangesAsync();
         var service = DictionaryServiceTestFactory.Create(database.Context);
 
@@ -4030,7 +4104,8 @@ public sealed class DictionaryServiceTests
                 7.47m,
                 "metered_tiered",
                 new DateOnly(2026, 8, 1),
-                ChangeReason: "Переход на счетчик"),
+                ChangeReason: "Переход на счетчик",
+                IncomeFundId: selectedFund.Id),
             Guid.NewGuid(),
             CancellationToken.None);
 
@@ -4044,6 +4119,7 @@ public sealed class DictionaryServiceTests
         Assert.True(tiered.Value.Service.IsMetered);
         Assert.True(tiered.Value.Service.HasTieredTariff);
         Assert.Equal("кВт·ч", tiered.Value.Service.UnitName);
+        Assert.Equal(selectedFund.Id, incomeType.DestinationFundId);
         Assert.Equal("fixed", sourceTariff.CalculationBase);
         Assert.Equal(2, database.Context.Tariffs.Count());
 
@@ -4077,8 +4153,9 @@ public sealed class DictionaryServiceTests
         Assert.Equal("руб.", regular.Value.Service.UnitName);
         Assert.Equal(3, database.Context.Tariffs.Count());
         Assert.Equal(3, database.Context.ChargeServiceTariffVersions.Count(item => item.ChargeServiceSettingId == setting.Id));
-        Assert.Equal(4, database.Context.AuditEvents.Count());
+        Assert.Equal(5, database.Context.AuditEvents.Count());
         Assert.Contains(database.Context.AuditEvents, item => item.Action == "dictionary.charge_service_tariff_mode_changed");
+        Assert.Contains(database.Context.AuditEvents, item => item.Action == "dictionary.income_type_destination_fund_updated");
 
         var repository = new EfChargeServiceSettingRepository(database.Context);
         var july = Assert.Single(await repository.GetActiveRegularAsync(new DateOnly(2026, 7, 1), CancellationToken.None));

@@ -318,6 +318,10 @@ export type CreateChargeServiceWithTariffRequest = {
   service: UpsertChargeServiceSettingRequest
   rate: number
   effectiveFrom: string
+  incomeFundId?: string | null
+  tariffMode?: string | null
+  electricityTiers?: UpsertElectricityTariffTierRequest[] | null
+  calculationBase?: string | null
 }
 
 export type CreatedChargeServiceWithTariffDto = {
@@ -334,6 +338,7 @@ export type UpdateChargeServiceWithTariffRequest = {
   changeReason?: string | null
   calculationBase?: string | null
   tariffVersion?: string
+  incomeFundId?: string | null
 }
 
 export type UpdatedChargeServiceWithTariffDto = {

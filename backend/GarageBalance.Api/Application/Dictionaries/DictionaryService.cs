@@ -1943,10 +1943,14 @@ public sealed class DictionaryService(
         }
 
         await using var fundAllocationLock = await fundRepository.AcquireAllocationLockAsync(cancellationToken);
-        var linkValidation = await ValidateChargeServiceAccountingLinksAsync(request.Service, cancellationToken);
-        if (!linkValidation.Succeeded)
+        var incomeFundUpdate = await ApplyRequestedIncomeFundAsync(
+            request.Service.IncomeTypeId,
+            request.IncomeFundId,
+            actorUserId,
+            cancellationToken);
+        if (!incomeFundUpdate.Succeeded)
         {
-            return DictionaryResult<CreatedChargeServiceWithTariffDto>.Failure(linkValidation.ErrorCode!, linkValidation.ErrorMessage!);
+            return DictionaryResult<CreatedChargeServiceWithTariffDto>.Failure(incomeFundUpdate.ErrorCode!, incomeFundUpdate.ErrorMessage!);
         }
 
         var name = request.Service.Name.Trim();
@@ -1969,24 +1973,59 @@ public sealed class DictionaryService(
                 "Тариф для услуги с такой датой действия уже существует.");
         }
 
+        var requestedMode = NormalizeOptional(request.TariffMode)
+            ?? (request.Service.HasTieredTariff ? "metered_tiered" : request.Service.IsMetered ? "metered" : "regular");
+        requestedMode = requestedMode.ToLowerInvariant();
+        if (requestedMode is not "regular" and not "metered" and not "metered_tiered")
+        {
+            return DictionaryResult<CreatedChargeServiceWithTariffDto>.Failure(
+                "charge_service_tariff_mode_invalid",
+                "Режим тарифа должен быть обычным, по счетчику или по счетчику с порогами.");
+        }
+
+        var targetCalculationBase = ResolveTariffModeCalculationBase(
+            requestedMode,
+            (await incomeTypeRepository.FindActiveAsync(request.Service.IncomeTypeId!.Value, cancellationToken))?.Code,
+            templateTariff.CalculationBase,
+            NormalizeOptional(request.CalculationBase));
+        if (targetCalculationBase is null)
+        {
+            return DictionaryResult<CreatedChargeServiceWithTariffDto>.Failure(
+                "charge_service_meter_kind_required",
+                "Для расчета по счетчику выберите вид поступления «Вода» или «Электроэнергия».");
+        }
+
+        var requestedTiers = requestedMode == "metered_tiered"
+            ? BuildTariffModeElectricityTiers(request.ElectricityTiers, templateTariff, MoneyMath.RoundRate(request.Rate))
+            : null;
+        var tariffValidationRequest = new UpsertTariffRequest(
+            tariffName,
+            targetCalculationBase,
+            MoneyMath.RoundRate(request.Rate),
+            request.EffectiveFrom,
+            null,
+            ElectricityTiers: requestedTiers);
+        var tiersValidation = ValidateElectricityTiers(targetCalculationBase, tariffValidationRequest);
+        if (!tiersValidation.Succeeded)
+        {
+            return DictionaryResult<CreatedChargeServiceWithTariffDto>.Failure(tiersValidation.ErrorCode!, tiersValidation.ErrorMessage!);
+        }
+
         var tariff = new Tariff
         {
             Name = tariffName,
-            CalculationBase = templateTariff.CalculationBase,
+            CalculationBase = targetCalculationBase,
             Rate = MoneyMath.RoundRate(request.Rate),
             EffectiveFrom = request.EffectiveFrom,
-            Comment = $"Создан вместе с услугой «{name}».",
-            ElectricityFirstThreshold = templateTariff.ElectricityFirstThreshold,
-            ElectricitySecondThreshold = templateTariff.ElectricitySecondThreshold,
-            ElectricityFirstTierName = templateTariff.ElectricityFirstTierName,
-            ElectricitySecondTierName = templateTariff.ElectricitySecondTierName,
-            ElectricityThirdTierName = templateTariff.ElectricityThirdTierName,
-            ElectricityFirstRate = templateTariff.ElectricityFirstRate,
-            ElectricitySecondRate = templateTariff.ElectricitySecondRate,
-            ElectricityThirdRate = templateTariff.ElectricityThirdRate,
-            ElectricityTiersJson = templateTariff.ElectricityTiersJson
+            Comment = $"Создан вместе с услугой «{name}»."
         };
+        ApplyElectricityTiers(tariff, tiersValidation.Value);
         var serviceRequest = request.Service with { TariffId = tariff.Id };
+        var targetLinkValidation = await ValidateChargeServiceAccountingLinksAsync(serviceRequest, cancellationToken, tariff);
+        if (!targetLinkValidation.Succeeded)
+        {
+            return DictionaryResult<CreatedChargeServiceWithTariffDto>.Failure(targetLinkValidation.ErrorCode!, targetLinkValidation.ErrorMessage!);
+        }
         var setting = new ChargeServiceSetting { Name = name };
         ApplyChargeServiceSetting(setting, serviceRequest);
 
@@ -2138,6 +2177,16 @@ public sealed class DictionaryService(
                 "Услуга с таким наименованием уже существует.");
         }
 
+        var incomeFundUpdate = await ApplyRequestedIncomeFundAsync(
+            request.Service.IncomeTypeId,
+            request.IncomeFundId,
+            actorUserId,
+            cancellationToken);
+        if (!incomeFundUpdate.Succeeded)
+        {
+            return DictionaryResult<UpdatedChargeServiceWithTariffDto>.Failure(incomeFundUpdate.ErrorCode!, incomeFundUpdate.ErrorMessage!);
+        }
+
         if (!string.IsNullOrWhiteSpace(request.TariffMode))
         {
             return await ChangeChargeServiceTariffModeAsync(setting, request, name, actorUserId, cancellationToken);
@@ -2176,6 +2225,10 @@ public sealed class DictionaryService(
         var tariffChanged = tariff.Rate != roundedRate;
         if (!serviceChanged && !tariffChanged)
         {
+            if (incomeFundUpdate.Value == true)
+            {
+                await unitOfWork.SaveChangesAsync(cancellationToken);
+            }
             return DictionaryResult<UpdatedChargeServiceWithTariffDto>.Success(
                 new UpdatedChargeServiceWithTariffDto(ToChargeServiceSettingDto(setting), ToTariffDto(tariff)));
         }
@@ -2397,7 +2450,7 @@ public sealed class DictionaryService(
             TariffId = tariff.Id,
             IsMetered = isMetered,
             HasTieredTariff = isTiered,
-            UnitName = TariffCalculationBases.GetUnitName(targetCalculationBase)
+            UnitName = request.Service.UnitName
         };
         var linkValidation = await ValidateChargeServiceAccountingLinksAsync(targetServiceRequest, cancellationToken, tariff);
         if (!linkValidation.Succeeded)
@@ -3406,6 +3459,58 @@ public sealed class DictionaryService(
         }
 
         return DictionaryResult<object>.Success(new object());
+    }
+
+    private async Task<DictionaryResult<bool>> ApplyRequestedIncomeFundAsync(
+        Guid? incomeTypeId,
+        Guid? requestedFundId,
+        Guid? actorUserId,
+        CancellationToken cancellationToken)
+    {
+        if (!requestedFundId.HasValue)
+        {
+            return DictionaryResult<bool>.Success(false);
+        }
+
+        if (!incomeTypeId.HasValue)
+        {
+            return DictionaryResult<bool>.Failure(
+                "charge_service_income_type_required",
+                "Сначала выберите вид поступления услуги.");
+        }
+
+        if (!await fundRepository.ActiveFundExistsAsync(requestedFundId.Value, cancellationToken))
+        {
+            return DictionaryResult<bool>.Failure(
+                "charge_service_fund_not_found",
+                "Выбранный фонд поступления удалён. Выберите действующий фонд.");
+        }
+
+        var incomeType = await incomeTypeRepository.FindActiveAsync(incomeTypeId.Value, cancellationToken);
+        if (incomeType is null)
+        {
+            return DictionaryResult<bool>.Failure(
+                "charge_service_income_type_not_found",
+                "Вид поступления для услуги не найден.");
+        }
+
+        if (incomeType.DestinationFundId == requestedFundId)
+        {
+            return DictionaryResult<bool>.Success(false);
+        }
+
+        var previousFundId = incomeType.DestinationFundId;
+        incomeType.DestinationFundId = requestedFundId;
+        incomeType.UpdatedAtUtc = DateTimeOffset.UtcNow;
+        AddAudit(
+            actorUserId,
+            "dictionary.income_type_destination_fund_updated",
+            "income_type",
+            incomeType.Id,
+            $"Для вида поступления {incomeType.Name} изменён фонд поступления.",
+            oldValues: new Dictionary<string, object?> { ["destinationFundId"] = previousFundId },
+            newValues: new Dictionary<string, object?> { ["destinationFundId"] = requestedFundId });
+        return DictionaryResult<bool>.Success(true);
     }
 
     private async Task<DictionaryResult<object>> ValidateChargeServiceExpenseFundAsync(

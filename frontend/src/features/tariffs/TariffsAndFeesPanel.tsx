@@ -17,12 +17,12 @@ import { formatDateOnly, formatMoney, getCurrentMonthInputValue, getLocalDateInp
 import { useEscapeKey, useFocusOnOpen, useFocusTrap, useRestoreFocusOnClose } from '../../shared/focusHooks'
 import { LocalizedDatePicker } from '../../shared/LocalizedDatePicker'
 import { MeterReadingInput } from '../../shared/MeterReadingInput'
-import { MoneyTextInput } from '../../shared/MoneyInput'
+import { MoneyInput, MoneyTextInput } from '../../shared/MoneyInput'
 import { formatPrototypeChangeValue, handleEditableInputKeyDown, shouldCommitEditableInputOnBlur } from '../../shared/prototypeEditing'
 import { createClientPage } from '../../shared/pagination'
 import { SelectControl } from '../../shared/SelectControl'
 import { TablePagination } from '../../shared/TablePagination'
-import { chooseRegularTariffId, chooseRegularTariffIdForMeterMode, getCompatibleRegularTariffs, getRegularIncomeTypeCalculationBase, isMeterTariff } from '../../shared/validation'
+import { chooseRegularTariffId, getCompatibleRegularTariffs, getRegularIncomeTypeCalculationBase, isMeterTariff } from '../../shared/validation'
 import { formatTariffDecimal } from './tariffFormatting'
 
 const dictionaryScreenRequestLimit = 100
@@ -3422,26 +3422,22 @@ export function AddServicePrototypeDialog({
   title?: string
 }) {
   const initialIncomeTypeId = initialSetting?.incomeTypeId ?? incomeTypes[0]?.id ?? ''
+  const initialTariffId = initialSetting?.tariffId ?? chooseRegularTariffId(initialIncomeTypeId, '', incomeTypes, tariffs)
+  const initialTariff = tariffs.find((tariff) => tariff.id === initialTariffId) ?? null
   const [name, setName] = useState(initialSetting?.name ?? '')
   const [isRegular, setIsRegular] = useState(initialSetting?.isRegular ?? regularOnly)
   const [incomeTypeId, setIncomeTypeId] = useState(initialIncomeTypeId)
+  const [incomeFundId, setIncomeFundId] = useState(() => (
+    incomeTypes.find((incomeType) => incomeType.id === initialIncomeTypeId)?.destinationFundId ?? ''
+  ))
   const [expenseTypeId, setExpenseTypeId] = useState(initialSetting?.expenseTypeId ?? '')
   const [expenseFundId, setExpenseFundId] = useState(initialSetting?.expenseFundId ?? '')
-  const [tariffId, setTariffId] = useState(() => initialSetting?.tariffId ?? chooseRegularTariffId(initialIncomeTypeId, '', incomeTypes, tariffs))
-  const [unitName, setUnitName] = useState(() => {
-    const initialTariffId = initialSetting?.tariffId ?? chooseRegularTariffId(initialIncomeTypeId, '', incomeTypes, tariffs)
-    const initialTariff = tariffs.find((tariff) => tariff.id === initialTariffId)
-    return initialTariff
-      ? normalizeTariffCalculationUnitName(initialTariff.calculationBase, initialSetting?.unitName)
-      : initialSetting?.unitName ?? ''
-  })
-  const [isByMeter, setIsByMeter] = useState(() => {
-    if (initialSetting) {
-      return initialSetting.isMetered
-    }
-    const initialTariffId = chooseRegularTariffId(initialIncomeTypeId, '', incomeTypes, tariffs)
-    return isMeterTariff(tariffs.find((tariff) => tariff.id === initialTariffId))
-  })
+  const [tariffId, setTariffId] = useState(initialTariffId)
+  const [calculationBase, setCalculationBase] = useState(initialTariff?.calculationBase ?? 'fixed')
+  const [unitName, setUnitName] = useState(initialTariff
+    ? normalizeTariffCalculationUnitName(initialTariff.calculationBase, initialSetting?.unitName)
+    : initialSetting?.unitName ?? '')
+  const [isByMeter, setIsByMeter] = useState(initialSetting?.isMetered ?? isMeterTariff(initialTariff ?? undefined))
   const [isTiered, setIsTiered] = useState(initialSetting?.hasTieredTariff ?? false)
   const [periodicityMonths, setPeriodicityMonths] = useState(() => normalizeRegularServicePeriodicity(initialSetting?.periodicityMonths ?? 1))
   const [accrualStartMonth, setAccrualStartMonth] = useState(() => getContractorTariffMonthValue(initialSetting?.accrualStartMonth ?? 1))
@@ -3449,51 +3445,21 @@ export function AddServicePrototypeDialog({
   const [paymentDueMonth, setPaymentDueMonth] = useState(() => getContractorTariffMonthValue(initialSetting?.paymentDueMonth ?? 7))
   const [overdueGraceDays, setOverdueGraceDays] = useState(String(initialSetting?.overdueGraceDays ?? 30))
   const [cost, setCost] = useState('')
-  const [regularRate, setRegularRate] = useState(() => {
-    const initialTariffId = initialSetting?.tariffId ?? chooseRegularTariffId(initialIncomeTypeId, '', incomeTypes, tariffs)
-    const initialTariff = tariffs.find((tariff) => tariff.id === initialTariffId)
-    return initialTariff ? formatTariffDecimal(initialTariff.rate) : ''
-  })
-  const [tariffEffectiveFrom, setTariffEffectiveFrom] = useState(() => (
-    tariffs.find((tariff) => tariff.id === initialSetting?.tariffId)?.effectiveFrom
-    ?? getLocalDateInputValue()
-  ))
+  const [regularRate, setRegularRate] = useState(initialTariff ? formatTariffDecimal(initialTariff.rate) : '')
+  const [tariffTiers, setTariffTiers] = useState(() => getElectricityTariffTiers(initialTariff))
+  const [tariffEffectiveFrom, setTariffEffectiveFrom] = useState(initialTariff?.effectiveFrom ?? getLocalDateInputValue())
   const [error, setError] = useState<string | null>(null)
   const selectedIncomeType = incomeTypes.find((incomeType) => incomeType.id === incomeTypeId) ?? null
-  const selectedIncomeFund = selectedIncomeType?.destinationFundId
-    ? funds.find((fund) => fund.id === selectedIncomeType.destinationFundId) ?? null
-    : null
-  const selectedIncomeFundId = selectedIncomeFund?.id ?? ''
-  const selectedIncomeFundName = selectedIncomeFund?.name ?? selectedIncomeType?.destinationFundName ?? ''
   const compatibleTariffs = getCompatibleRegularTariffs(incomeTypeId, incomeTypes, tariffs)
   const selectedTariff = compatibleTariffs.find((tariff) => tariff.id === tariffId) ?? null
-  const selectedTariffTiers = getElectricityTariffTiers(selectedTariff)
   const selectedIncomeCode = selectedIncomeType?.code?.trim().toLowerCase()
-  const configuredMeterTariff = compatibleTariffs.find((tariff) => isMeterTariff(tariff))
   const supportedMeterCalculationBase = selectedIncomeCode === 'water'
     ? 'meter_water'
-    : selectedIncomeCode === 'electricity'
-      ? 'meter_electricity'
-      : selectedTariff?.calculationBase === 'meter_water' || selectedTariff?.calculationBase === 'meter_electricity'
-        ? selectedTariff.calculationBase
-        : configuredMeterTariff?.calculationBase ?? null
-  const hasCompatibleMeterTariff = Boolean(chooseRegularTariffIdForMeterMode(incomeTypeId, tariffId, true, incomeTypes, tariffs))
-  const hasCompatibleNonMeterTariff = Boolean(chooseRegularTariffIdForMeterMode(incomeTypeId, tariffId, false, incomeTypes, tariffs))
-  const canChangeMeterMode = initialSetting
-    ? isByMeter || Boolean(supportedMeterCalculationBase)
-    : hasCompatibleMeterTariff && hasCompatibleNonMeterTariff
-  const effectiveCalculationBase = initialSetting
-    ? isByMeter
-      ? supportedMeterCalculationBase ?? selectedTariff?.calculationBase
-      : selectedTariff?.calculationBase === 'people' ? 'people' : 'fixed'
-    : selectedTariff?.calculationBase
+    : 'meter_electricity'
+  const effectiveCalculationBase = calculationBase
   const canUseTieredTariff = isByMeter
     && effectiveCalculationBase === 'meter_electricity'
   const unitNameOptions = effectiveCalculationBase ? getTariffCalculationUnitOptions(effectiveCalculationBase) : []
-  const calculationBaseOptions = getTariffCalculationBaseOptions()
-  const calculationBaseOption = effectiveCalculationBase
-    ? calculationBaseOptions.find((option) => option.value === effectiveCalculationBase)
-    : null
   const isMonthly = periodicityMonths === '1'
   useRestoreFocusOnClose(true)
   const dialogRef = useFocusTrap<HTMLElement>(true)
@@ -3504,6 +3470,8 @@ export function AddServicePrototypeDialog({
     const nextIsMetered = isMeterTariff(nextTariff)
     setTariffId(nextTariffId)
     setRegularRate(nextTariff ? formatTariffDecimal(nextTariff.rate) : '')
+    setCalculationBase(nextTariff?.calculationBase ?? 'fixed')
+    setTariffTiers(getElectricityTariffTiers(nextTariff ?? null))
     setUnitName((currentUnitName) => (
       nextTariff ? normalizeTariffCalculationUnitName(nextTariff.calculationBase, currentUnitName) : ''
     ))
@@ -3515,35 +3483,14 @@ export function AddServicePrototypeDialog({
   }
 
   function changeMeterMode(nextIsMetered: boolean) {
-    if (initialSetting) {
-      const nextCalculationBase = nextIsMetered
-        ? supportedMeterCalculationBase
-        : selectedTariff?.calculationBase === 'people' ? 'people' : 'fixed'
-      if (!nextCalculationBase) {
-        setError('Для расчета по счетчику выберите вид поступления «Вода» или «Электроэнергия».')
-        return
-      }
-
-      setIsByMeter(nextIsMetered)
-      setIsTiered((currentValue) => nextIsMetered && nextCalculationBase === 'meter_electricity' ? currentValue : false)
-      setUnitName(getTariffCalculationUnitName(nextCalculationBase))
-      setError(null)
-      return
-    }
-
-    const nextTariffId = chooseRegularTariffIdForMeterMode(
-      incomeTypeId,
-      tariffId,
-      nextIsMetered,
-      incomeTypes,
-      tariffs,
-    )
-    if (!nextTariffId) {
-      setError('Для услуги нет совместимого тарифа.')
-      return
-    }
-
-    applyTariffSelection(nextTariffId)
+    const nextCalculationBase = nextIsMetered
+      ? supportedMeterCalculationBase
+      : selectedTariff?.calculationBase === 'people' ? 'people' : 'fixed'
+    setIsByMeter(nextIsMetered)
+    setIsTiered((currentValue) => nextIsMetered && nextCalculationBase === 'meter_electricity' ? currentValue : false)
+    setCalculationBase(nextCalculationBase)
+    setUnitName(getTariffCalculationUnitName(nextCalculationBase))
+    setError(null)
   }
 
   async function submitService(event: FormEvent<HTMLFormElement>) {
@@ -3567,7 +3514,7 @@ export function AddServicePrototypeDialog({
         setError('Выберите вид поступления для регулярной услуги.')
         return
       }
-      if (!selectedIncomeFundId) {
+      if (!incomeFundId) {
         setError('Для выбранного вида поступления не назначен действующий фонд.')
         return
       }
@@ -3588,6 +3535,13 @@ export function AddServicePrototypeDialog({
       if (parsedRegularRate == null || parsedRegularRate <= 0 || parsedRegularRate > 999999999) {
         setError('Укажите корректный тариф услуги.')
         return
+      }
+
+      if (isTiered) {
+        if (tariffTiers.length < 2) {
+          setError('Для пороговой тарификации укажите минимум один порог и последнюю ступень без верхней границы.')
+          return
+        }
       }
 
       if (parsedPeriodicity !== 1 && parsedPeriodicity !== 12) {
@@ -3650,25 +3604,31 @@ export function AddServicePrototypeDialog({
           service: serviceRequest,
           rate: parsedRegularRate!,
           effectiveFrom: tariffEffectiveFrom,
+          incomeFundId,
+          tariffMode: isTiered ? 'metered_tiered' : isByMeter ? 'metered' : 'regular',
+          calculationBase: effectiveCalculationBase,
+          electricityTiers: isTiered && tariffTiers.length >= 2
+            ? tariffTiers.map(({ id, name, upperBound, rate }) => ({ id, name, upperBound: upperBound ?? undefined, rate }))
+            : null,
         })
       } else if (initialSetting && onUpdateWithTariff) {
         const tariffMode = isTiered ? 'metered_tiered' : isByMeter ? 'metered' : 'regular'
         const modeChanged = initialSetting.isMetered !== isByMeter || initialSetting.hasTieredTariff !== isTiered
+        const calculationChanged = selectedTariff?.calculationBase !== effectiveCalculationBase
+        const tiersChanged = JSON.stringify(getElectricityTariffTiers(selectedTariff)) !== JSON.stringify(tariffTiers)
+        const tariffStructureChanged = modeChanged || calculationChanged || (isTiered && tiersChanged)
         await onUpdateWithTariff({
           service: serviceRequest,
           rate: parsedRegularRate!,
           effectiveFrom: tariffEffectiveFrom,
-          ...(modeChanged ? {
+          incomeFundId,
+          tariffVersion: selectedTariff?.version,
+          ...(tariffStructureChanged ? {
             tariffMode,
-            electricityTiers: isTiered && selectedTariffTiers.length >= 2
-              ? selectedTariffTiers.map((tier) => ({
-                id: tier.id,
-                name: tier.name,
-                upperBound: tier.upperBound ?? undefined,
-                rate: tier.rate,
-              }))
+            electricityTiers: isTiered && tariffTiers.length >= 2
+              ? tariffTiers.map(({ id, name, upperBound, rate }) => ({ id, name, upperBound: upperBound ?? undefined, rate }))
               : null,
-            changeReason: 'Изменение режима в карточке услуги.',
+            changeReason: 'Изменение параметров тарифа в карточке услуги.',
             calculationBase: effectiveCalculationBase,
           } : {}),
         })
@@ -3697,7 +3657,7 @@ export function AddServicePrototypeDialog({
               <input aria-label="Наименование услуги" value={name} onChange={(event) => setName(event.target.value)} />
             </FormField>
             {!regularOnly ? (
-              <label className="contractors-switch-row contractors-switch-row--compact">
+              <label className="contractors-switch-row">
                 <span>Регулярные платежи</span>
                 <span className="contractors-switch-control">
                   <input
@@ -3717,7 +3677,6 @@ export function AddServicePrototypeDialog({
               </label>
             ) : null}
           </div>
-          {initialSetting ? <p className="form-hint">Тип услуги нельзя менять после создания. Остальные параметры доступны для редактирования.</p> : null}
           {isRegular ? (
             <>
               <div className="contractors-service-period-grid contractors-service-period-grid--catalogs">
@@ -3737,19 +3696,23 @@ export function AddServicePrototypeDialog({
                           .find((tariff) => tariff.calculationBase === expectedCalculationBase)?.id ?? ''
                       const nextTariffId = chooseRegularTariffId(nextIncomeTypeId, preferredTariffId, incomeTypes, tariffs)
                       setIncomeTypeId(nextIncomeTypeId)
+                      setIncomeFundId(nextIncomeType?.destinationFundId ?? '')
                       applyTariffSelection(nextTariffId)
                     }}
                   />
                 </FormField>
-                <FormField label="Фонд поступления" help="Подставляется по виду поступления; оплаты и автосозданные начисления направляются в этот фонд.">
+                <FormField label="Фонд поступления" help="Фонд, куда поступают оплаты. Он общий для выбранного вида поступления; фонд расходования используется отдельно для выплат поставщикам.">
                   <SelectControl
                     aria-label="Фонд поступления регулярной услуги"
-                    value={selectedIncomeFundId}
-                    options={selectedIncomeFundId
-                      ? [{ value: selectedIncomeFundId, label: selectedIncomeFundName || 'Назначенный фонд' }]
-                      : [{ value: '', label: 'Фонд не назначен' }]}
-                    disabled
-                    onChange={() => undefined}
+                    value={incomeFundId}
+                    options={[
+                      { value: '', label: 'Выберите фонд поступления' },
+                      ...funds.map((fund) => ({ value: fund.id, label: fund.name })),
+                    ]}
+                    onChange={(nextIncomeFundId) => {
+                      setIncomeFundId(nextIncomeFundId)
+                      setError(null)
+                    }}
                   />
                 </FormField>
                 <FormField label="Начисление поставщику" help="Фиксирует допустимую связку услуги и контрагента в ведомости выплат.">
@@ -3771,7 +3734,7 @@ export function AddServicePrototypeDialog({
                     }}
                   />
                 </FormField>
-                <FormField label="Фонд расходования" help="Начисления и выплаты по услуге сохраняют этот фонд; выплата уменьшает его доступный остаток.">
+                <FormField label="Фонд расходования" help="Фонд для выплат поставщикам. Он может отличаться от фонда поступления.">
                   <SelectControl
                     aria-label="Фонд расходования услуги поставщика"
                     value={expenseFundId}
@@ -3786,40 +3749,43 @@ export function AddServicePrototypeDialog({
                     }}
                   />
                 </FormField>
-                <FormField label="Способ расчёта" help="Определяется выбранным тарифом и показывает, как рассчитывается сумма.">
+                <FormField label="Способ расчёта" help="Формула начисления. Изменение создаёт новую версию тарифа с даты «Ставка с».">
                   <SelectControl
                     aria-label="Способ расчёта регулярной услуги"
-                    value={effectiveCalculationBase ?? ''}
-                    options={calculationBaseOption
-                      ? [{ value: calculationBaseOption.value, label: calculationBaseOption.label }]
-                      : [{ value: '', label: 'Сначала выберите тариф' }]}
-                    disabled
-                    onChange={() => undefined}
+                    value={effectiveCalculationBase}
+                    options={getTariffCalculationBaseOptions()}
+                    onChange={(nextCalculationBase) => {
+                      const nextIsMetered = nextCalculationBase.startsWith('meter_')
+                      setCalculationBase(nextCalculationBase)
+                      setIsByMeter(nextIsMetered)
+                      setIsTiered((currentValue) => nextIsMetered ? currentValue : false)
+                      setUnitName(normalizeTariffCalculationUnitName(nextCalculationBase, unitName))
+                      if (nextIsMetered && tariffTiers.length < 2) {
+                        const rate = parsePrototypeAmount(regularRate) ?? 1
+                        setTariffTiers([
+                          { id: 'draft-tier-1', name: 'Ступень 1', upperBound: 1100, rate, isCustom: true },
+                          { id: 'draft-tier-2', name: 'Ступень 2', upperBound: null, rate, isCustom: true },
+                        ])
+                      }
+                      setError(null)
+                    }}
                   />
                 </FormField>
-                <FormField label="Тариф" help="Конкретная ставка, которая применяется при начислении услуги.">
-                  <div className="contractors-inline-field contractors-inline-field--tariff">
-                    <MoneyTextInput
-                      aria-label="Тариф регулярной услуги"
-                      value={regularRate}
-                      onValueChange={(nextRate) => {
-                        setRegularRate(nextRate)
-                        setError(null)
-                      }}
-                    />
-                    <span>{unitName ? `руб. / ${unitName}` : 'руб.'}</span>
-                  </div>
-                </FormField>
-                <FormField label="Ставка с">
-                  <LocalizedDatePicker
-                    ariaLabel="Ставка с"
-                    mode="date"
-                    value={tariffEffectiveFrom}
-                    onChange={setTariffEffectiveFrom}
+                <FormField label="Тариф" help="Ставка начисления.">
+                  <MoneyTextInput
+                    aria-label="Тариф регулярной услуги"
+                    value={regularRate}
+                    onValueChange={(nextRate) => {
+                      setRegularRate(nextRate)
+                      setError(null)
+                    }}
                   />
                 </FormField>
               </div>
-              <div className={`contractors-service-period-grid contractors-service-period-grid--schedule${isMonthly ? ' contractors-service-period-grid--schedule-monthly' : ''}`}>
+              <div className="contractors-service-period-grid contractors-service-period-grid--single-row">
+                <FormField label="Ставка с">
+                  <LocalizedDatePicker ariaLabel="Ставка с" mode="date" value={tariffEffectiveFrom} onChange={setTariffEffectiveFrom} />
+                </FormField>
                 <FormField label="Периодичность" help={isMonthly ? 'Начисление создаётся каждый месяц.' : 'Начисление создаётся один раз в год.'}>
                   <SelectControl aria-label="Периодичность регулярной услуги" value={periodicityMonths} options={regularServicePeriodicityOptions} onChange={setPeriodicityMonths} />
                 </FormField>
@@ -3834,8 +3800,6 @@ export function AddServicePrototypeDialog({
                       : <span className="contractors-date-suffix">числа следующего месяца</span>}
                   </div>
                 </FormField>
-              </div>
-              <div className="contractors-service-secondary-grid">
                 <FormField label="Перенос долга в просроченный" help="Количество дней после срока оплаты до переноса задолженности в просроченную.">
                   <div className="contractors-inline-field">
                     <input aria-label="Перенос долга в просроченный" inputMode="numeric" value={overdueGraceDays} onChange={(event) => setOverdueGraceDays(event.target.value)} />
@@ -3861,32 +3825,95 @@ export function AddServicePrototypeDialog({
                     type="checkbox"
                     aria-label="По счетчику"
                     checked={isByMeter}
-                    disabled={!canChangeMeterMode}
                     onChange={(event) => changeMeterMode(event.target.checked)}
                   />
                   <span>По счетчику</span>
                 </label>
                 <label className="contractors-check-row">
-                  <input type="checkbox" aria-label="Пороговая тарификация" checked={isTiered} disabled={!canUseTieredTariff} onChange={(event) => setIsTiered(event.target.checked)} />
+                  <input
+                    type="checkbox"
+                    aria-label="Пороговая тарификация"
+                    checked={isTiered}
+                    disabled={!canUseTieredTariff}
+                    onChange={(event) => {
+                      const nextTiered = event.target.checked
+                      setIsTiered(nextTiered)
+                      if (nextTiered && tariffTiers.length < 2) {
+                        const rate = parsePrototypeAmount(regularRate) ?? 1
+                        setTariffTiers([
+                          { id: 'draft-tier-1', name: 'Ступень 1', upperBound: 1100, rate, isCustom: true },
+                          { id: 'draft-tier-2', name: 'Ступень 2', upperBound: null, rate, isCustom: true },
+                        ])
+                      }
+                    }}
+                  />
                   <span>Пороговая тарификация</span>
                 </label>
               </div>
               {isTiered ? (
-                <div role="status" aria-live="polite">
-                  {selectedTariffTiers.length > 0 ? (
+                <div>
+                  {tariffTiers.length > 0 ? (
                     <div className="contractors-threshold-grid" role="group" aria-label="Пороги тарификации выбранного тарифа">
-                      {selectedTariffTiers.map((tier) => (
+                      {tariffTiers.map((tier, index) => (
                         <Fragment key={tier.id}>
-                          <span>{tier.name}</span>
-                          <input aria-label={`${tier.name}: верхняя граница`} value={tier.upperBound == null ? 'Без границы' : formatTariffDecimal(tier.upperBound)} readOnly />
-                          <span>кВт·ч</span>
-                          <span>Цена за ед.</span>
-                          <input aria-label={`${tier.name}: цена за единицу`} value={formatTariffDecimal(tier.rate)} readOnly />
+                          <MeterReadingInput
+                            aria-label={`${tier.name}: верхняя граница`}
+                            value={tier.upperBound ?? ''}
+                            placeholder="Без верхней границы"
+                            disabled={index === tariffTiers.length - 1}
+                            onChange={(event) => {
+                              const nextValue = event.target.value === '' ? null : Number(event.target.value)
+                              setTariffTiers((current) => current.map((item) => item.id === tier.id
+                                ? { ...item, upperBound: Number.isFinite(nextValue) ? nextValue : null }
+                                : item))
+                            }}
+                          />
+                          <span className="contractors-date-suffix">{unitName}</span>
+                          <MoneyInput
+                            aria-label={`${tier.name}: цена за единицу`}
+                            value={tier.rate}
+                            onValueChange={(parsedRate) => {
+                              setTariffTiers((current) => current.map((item) => item.id === tier.id
+                                ? { ...item, rate: parsedRate }
+                                : item))
+                            }}
+                          />
+                          <span className="contractors-date-suffix">руб.</span>
+                          <button
+                            className="icon-button danger-icon-button contractors-threshold-delete"
+                            type="button"
+                            aria-label={`Удалить порог ${index + 1}`}
+                            disabled={tariffTiers.length <= 2}
+                            onClick={() => setTariffTiers((current) => current.filter((item) => item.id !== tier.id))}
+                          >
+                            <Trash2 size={16} />
+                          </button>
                         </Fragment>
                       ))}
+                      <button
+                        className="ghost-button contractors-threshold-add"
+                        type="button"
+                        disabled={tariffTiers.length >= 20}
+                        onClick={() => {
+                          const baseRate = parsePrototypeAmount(regularRate) ?? 1
+                          setTariffTiers((current) => {
+                            const last = current.at(-1)
+                            const previous = current.at(-2)
+                            const nextUpperBound = (previous?.upperBound ?? 0) + 100
+                            const nextTier = {
+                              id: `draft-tier-${Date.now()}`,
+                              name: `Ступень ${current.length}`,
+                              upperBound: nextUpperBound,
+                              rate: last?.rate ?? baseRate,
+                              isCustom: true,
+                            }
+                            return last ? [...current.slice(0, -1), nextTier, last] : [...current, nextTier]
+                          })
+                        }}
+                      >Добавить порог</button>
                     </div>
                   ) : (
-                    <p className="form-hint">После сохранения система создаст числовые диапазоны 0–1100, 1100–1700 и свыше 1700 кВт·ч. Их можно сразу изменить в таблице тарифов.</p>
+                    <p className="form-hint">Добавьте минимум один порог и последнюю ступень без верхней границы.</p>
                   )}
                 </div>
               ) : null}

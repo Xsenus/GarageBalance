@@ -1952,7 +1952,7 @@ h1 {
 }
 
 .detail-dialog.contractors-tariff-dialog {
-  width: min(1120px, calc(100vw - 48px));
+  width: min(1480px, calc(100vw - 32px));
 }
 
 .detail-dialog.contractors-fee-dialog {
@@ -1980,6 +1980,10 @@ h1 {
   grid-template-columns: minmax(180px, 0.7fr) minmax(360px, 1.3fr);
 }
 
+.contractors-tariff-dialog .contractors-service-period-grid--single-row {
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+}
+
 .contractors-tariff-dialog .contractors-inline-field--date .select-control {
   flex: 1 1 auto;
 }
@@ -1993,23 +1997,6 @@ h1 {
 
 .contractors-service-heading-grid--name-only {
   grid-template-columns: 1fr;
-}
-
-.contractors-switch-row--compact {
-  align-self: end;
-  max-width: 100%;
-}
-
-.contractors-inline-field--tariff input {
-  min-width: 0;
-  text-align: right;
-  font-variant-numeric: tabular-nums;
-}
-
-.contractors-inline-field--tariff > span {
-  flex: 0 0 auto;
-  color: #667085;
-  white-space: nowrap;
 }
 
 .contractors-fee-two-column-grid,
@@ -2654,11 +2641,16 @@ h1 {
 
 .contractors-threshold-grid {
   display: grid;
-  grid-template-columns: minmax(72px, 0.7fr) minmax(86px, 1fr) 20px minmax(96px, 1fr) minmax(86px, 1fr);
+  grid-template-columns: minmax(190px, 1fr) max-content minmax(190px, 1fr) max-content 40px;
   gap: 8px;
   align-items: center;
   color: #475467;
   font-size: 13px;
+  text-align: center;
+}
+
+.contractors-threshold-grid > .contractors-date-suffix {
+  white-space: nowrap;
 }
 
 .link-button {
@@ -2728,6 +2720,11 @@ h1 {
 
 .meter-readings-controls .form-field:last-child {
   width: min(360px, 32vw);
+}
+
+.contractors-threshold-add {
+  grid-column: 1 / -1;
+  justify-self: start;
 }
 
 .meter-readings-control {
@@ -8658,11 +8655,12 @@ button.operation-row:focus-visible {
   }
 
   .contractors-threshold-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr) max-content 40px;
   }
 
   .contractors-tariff-dialog .contractors-service-period-grid--catalogs,
   .contractors-tariff-dialog .contractors-service-period-grid--schedule,
+  .contractors-tariff-dialog .contractors-service-period-grid--single-row,
   .contractors-service-heading-grid,
   .contractors-service-secondary-grid,
   .contractors-fee-two-column-grid,
@@ -8671,6 +8669,10 @@ button.operation-row:focus-visible {
   .contractors-service-flags,
   .contractors-service-cost-grid {
     grid-template-columns: 1fr;
+  }
+
+  .contractors-threshold-grid > :nth-child(5n + 3) {
+    grid-column: 1;
   }
 
   .contractors-service-cost-field {
