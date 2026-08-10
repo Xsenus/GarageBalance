@@ -105,6 +105,8 @@ export type ApplicationSettingsClient = {
   createCashBankBalanceAdjustment(accessToken: string, request: { account: 'cash' | 'bank'; direction: 'increase' | 'decrease'; operationDate: string; amount: number; reason: string }): Promise<CashBankBalanceSettingsDto>
   getDatabaseBackups(accessToken: string): Promise<DatabaseBackupStatusDto>
   createDatabaseBackup(accessToken: string, request: { reason: string }): Promise<DatabaseBackupFileDto>
+  downloadDatabaseBackup(accessToken: string, fileName: string): Promise<Blob>
+  deleteDatabaseBackup(accessToken: string, fileName: string, request: { reason: string }): Promise<DatabaseBackupFileDto>
   getDiagnosticLogStatus(accessToken: string): Promise<DiagnosticLogStatusDto>
   createDiagnosticPackage(accessToken: string): Promise<Blob>
 }
@@ -129,14 +131,19 @@ async function requestJson<TResponse>(accessToken: string, path: string, init?: 
   return response.json()
 }
 
-async function requestBlob(accessToken: string, path: string, init?: RequestInit): Promise<Blob> {
+async function requestBlob(
+  accessToken: string,
+  path: string,
+  init?: RequestInit,
+  fallbackMessage = 'Не удалось сформировать диагностический пакет.',
+): Promise<Blob> {
   const response = await apiFetch(`${apiBaseUrl}${path}`, {
     ...init,
     headers: { Authorization: `Bearer ${accessToken}`, ...init?.headers },
   })
   if (!response.ok) {
     const problem = await response.json().catch(() => null)
-    throw new Error(problem?.detail ?? 'Не удалось сформировать диагностический пакет.')
+    throw new Error(problem?.detail ?? fallbackMessage)
   }
   return response.blob()
 }
@@ -177,6 +184,17 @@ export const settingsApi: ApplicationSettingsClient = {
   },
   createDatabaseBackup(accessToken, request) {
     return requestJson(accessToken, '/api/settings/backups', { method: 'POST', body: JSON.stringify(request) })
+  },
+  downloadDatabaseBackup(accessToken, fileName) {
+    return requestBlob(
+      accessToken,
+      `/api/settings/backups/${encodeURIComponent(fileName)}/download`,
+      undefined,
+      'Не удалось скачать резервную копию.',
+    )
+  },
+  deleteDatabaseBackup(accessToken, fileName, request) {
+    return requestJson(accessToken, `/api/settings/backups/${encodeURIComponent(fileName)}`, { method: 'DELETE', body: JSON.stringify(request) })
   },
   getDiagnosticLogStatus(accessToken) {
     return requestJson(accessToken, '/api/diagnostics/status')

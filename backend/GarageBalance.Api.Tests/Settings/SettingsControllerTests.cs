@@ -21,6 +21,8 @@ public sealed class SettingsControllerTests
         var updateAction = typeof(SettingsController).GetMethod(nameof(SettingsController.UpdatePaymentDisplaySettings));
         var backupStatusAction = typeof(SettingsController).GetMethod(nameof(SettingsController.GetDatabaseBackups));
         var backupCreateAction = typeof(SettingsController).GetMethod(nameof(SettingsController.CreateDatabaseBackup));
+        var backupDownloadAction = typeof(SettingsController).GetMethod(nameof(SettingsController.DownloadDatabaseBackup));
+        var backupDeleteAction = typeof(SettingsController).GetMethod(nameof(SettingsController.DeleteDatabaseBackup));
         var getBusinessDateAction = typeof(SettingsController).GetMethod(nameof(SettingsController.GetBusinessDateSettings));
         var previewBusinessDateAction = typeof(SettingsController).GetMethod(nameof(SettingsController.PreviewBusinessDateChange));
         var updateBusinessDateAction = typeof(SettingsController).GetMethod(nameof(SettingsController.UpdateBusinessDateSettings));
@@ -34,6 +36,8 @@ public sealed class SettingsControllerTests
         Assert.Equal(SystemPermissions.UsersManage, Assert.Single(updateAction!.GetCustomAttributes<AuthorizeAttribute>()).Policy);
         Assert.Equal(SystemPermissions.UsersManage, Assert.Single(backupStatusAction!.GetCustomAttributes<AuthorizeAttribute>()).Policy);
         Assert.Equal(SystemPermissions.UsersManage, Assert.Single(backupCreateAction!.GetCustomAttributes<AuthorizeAttribute>()).Policy);
+        Assert.Equal(SystemPermissions.UsersManage, Assert.Single(backupDownloadAction!.GetCustomAttributes<AuthorizeAttribute>()).Policy);
+        Assert.Equal(SystemPermissions.UsersManage, Assert.Single(backupDeleteAction!.GetCustomAttributes<AuthorizeAttribute>()).Policy);
         Assert.Equal(SystemRoles.Administrator, Assert.Single(getBusinessDateAction!.GetCustomAttributes<AuthorizeAttribute>()).Roles);
         Assert.Equal(SystemRoles.Administrator, Assert.Single(previewBusinessDateAction!.GetCustomAttributes<AuthorizeAttribute>()).Roles);
         Assert.Equal(SystemRoles.Administrator, Assert.Single(updateBusinessDateAction!.GetCustomAttributes<AuthorizeAttribute>()).Roles);
@@ -230,6 +234,90 @@ public sealed class SettingsControllerTests
     }
 
     [Fact]
+    public async Task DownloadDatabaseBackup_ReturnsProtectedStreamAndPassesActor()
+    {
+        var actorUserId = Guid.NewGuid();
+        var backupService = new FakeBackupService();
+        var controller = CreateController(backupService: backupService);
+        controller.ControllerContext = new ControllerContext
+        {
+            HttpContext = new DefaultHttpContext
+            {
+                User = new ClaimsPrincipal(new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, actorUserId.ToString())], "Test"))
+            }
+        };
+
+        var result = await controller.DownloadDatabaseBackup(backupService.CreatedFile.FileName, CancellationToken.None);
+
+        var file = Assert.IsType<FileStreamResult>(result);
+        Assert.Equal("application/octet-stream", file.ContentType);
+        Assert.Equal(backupService.CreatedFile.FileName, file.FileDownloadName);
+        Assert.True(file.EnableRangeProcessing);
+        Assert.Equal(actorUserId, backupService.ReceivedActorUserId);
+        Assert.Equal(backupService.CreatedFile.FileName, backupService.ReceivedFileName);
+        await file.FileStream.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task DeleteDatabaseBackup_PassesReasonAndReturnsDeletedFile()
+    {
+        var backupService = new FakeBackupService();
+        var controller = CreateController(backupService: backupService);
+
+        var result = await controller.DeleteDatabaseBackup(
+            backupService.CreatedFile.FileName,
+            new DeleteDatabaseBackupRequest("Копия больше не нужна"),
+            CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        Assert.Same(backupService.CreatedFile, ok.Value);
+        Assert.Equal(backupService.CreatedFile.FileName, backupService.ReceivedFileName);
+        Assert.Equal("Копия больше не нужна", backupService.ReceivedReason);
+    }
+
+    [Theory]
+    [InlineData("database_backup_file_invalid", StatusCodes.Status400BadRequest)]
+    [InlineData("database_backup_not_found", StatusCodes.Status404NotFound)]
+    [InlineData("database_backup_in_progress", StatusCodes.Status409Conflict)]
+    [InlineData("database_backup_delete_failed", StatusCodes.Status503ServiceUnavailable)]
+    public async Task BackupFileActions_MapServiceFailures(string errorCode, int expectedStatus)
+    {
+        var backupService = new FakeBackupService
+        {
+            FileResult = DatabaseBackupResult<DatabaseBackupFileDto>.Failure(errorCode, "Безопасное сообщение.")
+        };
+        var controller = CreateController(backupService: backupService);
+
+        var delete = await controller.DeleteDatabaseBackup(
+            backupService.CreatedFile.FileName,
+            new DeleteDatabaseBackupRequest("Причина удаления"),
+            CancellationToken.None);
+
+        var problem = Assert.IsType<ObjectResult>(delete.Result);
+        Assert.Equal(expectedStatus, problem.StatusCode);
+        Assert.Equal(errorCode, Assert.IsType<ProblemDetails>(problem.Value).Title);
+    }
+
+    [Theory]
+    [InlineData("database_backup_file_invalid", StatusCodes.Status400BadRequest)]
+    [InlineData("database_backup_not_found", StatusCodes.Status404NotFound)]
+    [InlineData("database_backup_download_failed", StatusCodes.Status503ServiceUnavailable)]
+    public async Task DownloadDatabaseBackup_MapsServiceFailures(string errorCode, int expectedStatus)
+    {
+        var backupService = new FakeBackupService
+        {
+            FileResult = DatabaseBackupResult<DatabaseBackupFileDto>.Failure(errorCode, "Безопасное сообщение.")
+        };
+        var controller = CreateController(backupService: backupService);
+
+        var result = await controller.DownloadDatabaseBackup(backupService.CreatedFile.FileName, CancellationToken.None);
+
+        var problem = Assert.IsType<ObjectResult>(result);
+        Assert.Equal(expectedStatus, problem.StatusCode);
+        Assert.Equal(errorCode, Assert.IsType<ProblemDetails>(problem.Value).Title);
+    }
+
+    [Fact]
     public async Task CreateCashBankBalanceAdjustment_PassesActorAndReturnsCreatedValue()
     {
         var actorUserId = Guid.NewGuid();
@@ -377,9 +465,11 @@ public sealed class SettingsControllerTests
         public DatabaseBackupFileDto CreatedFile { get; } = new("garagebalance_manual_20260715_120000_000.pgdump", 1024, DateTimeOffset.UtcNow, "manual");
         public DatabaseBackupStatusDto Status { get; } = new(true, true, 24, 30, "/backups", false, null, null, []);
         public DatabaseBackupResult<DatabaseBackupFileDto>? CreateResult { get; set; }
+        public DatabaseBackupResult<DatabaseBackupFileDto>? FileResult { get; set; }
         public DatabaseBackupKind? ReceivedKind { get; private set; }
         public string? ReceivedReason { get; private set; }
         public Guid? ReceivedActorUserId { get; private set; }
+        public string? ReceivedFileName { get; private set; }
 
         public Task<DatabaseBackupStatusDto> GetStatusAsync(CancellationToken cancellationToken) => Task.FromResult(Status);
 
@@ -392,6 +482,27 @@ public sealed class SettingsControllerTests
             ReceivedReason = reason;
             ReceivedActorUserId = actorUserId;
             return Task.FromResult(CreateResult ?? DatabaseBackupResult<DatabaseBackupFileDto>.Success(CreatedFile));
+        }
+
+        public Task<DatabaseBackupResult<DatabaseBackupDownloadDto>> OpenDownloadAsync(string fileName, Guid? actorUserId, CancellationToken cancellationToken)
+        {
+            ReceivedFileName = fileName;
+            ReceivedActorUserId = actorUserId;
+            if (FileResult is { Succeeded: false })
+            {
+                return Task.FromResult(DatabaseBackupResult<DatabaseBackupDownloadDto>.Failure(FileResult.ErrorCode!, FileResult.ErrorMessage!));
+            }
+
+            return Task.FromResult(DatabaseBackupResult<DatabaseBackupDownloadDto>.Success(
+                new DatabaseBackupDownloadDto(fileName, CreatedFile.SizeBytes, new MemoryStream([1, 2, 3]))));
+        }
+
+        public Task<DatabaseBackupResult<DatabaseBackupFileDto>> DeleteAsync(string fileName, string? reason, Guid? actorUserId, CancellationToken cancellationToken)
+        {
+            ReceivedFileName = fileName;
+            ReceivedReason = reason;
+            ReceivedActorUserId = actorUserId;
+            return Task.FromResult(FileResult ?? DatabaseBackupResult<DatabaseBackupFileDto>.Success(CreatedFile));
         }
     }
 

@@ -201,10 +201,67 @@ public sealed class SettingsController(
         return Problem(statusCode: statusCode, title: result.ErrorCode, detail: result.ErrorMessage);
     }
 
+    [HttpGet("backups/{fileName}/download")]
+    [Authorize(Policy = SystemPermissions.UsersManage)]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status503ServiceUnavailable)]
+    public async Task<IActionResult> DownloadDatabaseBackup(
+        string fileName,
+        CancellationToken cancellationToken)
+    {
+        var result = await databaseBackupService.OpenDownloadAsync(fileName, GetActorUserId(), cancellationToken);
+        if (result.Succeeded && result.Value is not null)
+        {
+            return File(
+                result.Value.Content,
+                "application/octet-stream",
+                result.Value.FileName,
+                enableRangeProcessing: true);
+        }
+
+        return ToDatabaseBackupProblem(result.ErrorCode, result.ErrorMessage);
+    }
+
+    [HttpDelete("backups/{fileName}")]
+    [Authorize(Policy = SystemPermissions.UsersManage)]
+    [ProducesResponseType<DatabaseBackupFileDto>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status503ServiceUnavailable)]
+    public async Task<ActionResult<DatabaseBackupFileDto>> DeleteDatabaseBackup(
+        string fileName,
+        [FromBody] DeleteDatabaseBackupRequest request,
+        CancellationToken cancellationToken)
+    {
+        var result = await databaseBackupService.DeleteAsync(
+            fileName,
+            request.Reason,
+            GetActorUserId(),
+            cancellationToken);
+        return result.Succeeded
+            ? Ok(result.Value)
+            : ToDatabaseBackupProblem(result.ErrorCode, result.ErrorMessage);
+    }
+
     private Guid? GetActorUserId()
     {
         var principal = ControllerContext.HttpContext?.User;
         return principal is not null && Guid.TryParse(principal.FindFirstValue(ClaimTypes.NameIdentifier), out var userId) ? userId : null;
+    }
+
+    private ObjectResult ToDatabaseBackupProblem(string? errorCode, string? errorMessage)
+    {
+        var statusCode = errorCode switch
+        {
+            "database_backup_not_found" => StatusCodes.Status404NotFound,
+            "database_backup_in_progress" => StatusCodes.Status409Conflict,
+            "database_backup_download_failed" or "database_backup_delete_failed" => StatusCodes.Status503ServiceUnavailable,
+            _ => StatusCodes.Status400BadRequest
+        };
+        return Problem(statusCode: statusCode, title: errorCode, detail: errorMessage);
     }
 
     private ActionResult<CashBankBalanceSettingsDto> ToCashBankBalanceActionResult(

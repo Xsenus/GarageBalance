@@ -13,10 +13,6 @@
   grid-template-columns: 280px 1fr;
 }
 
-.app-shell--no-sidebar {
-  grid-template-columns: 1fr;
-}
-
 .sidebar {
   display: flex;
   min-width: 0;
@@ -246,11 +242,6 @@
   min-height: calc(100vh - 48px);
   align-items: center;
   justify-content: center;
-}
-
-.auth-copy {
-  max-width: 720px;
-  padding: 22px;
 }
 
 .auth-card {
@@ -504,22 +495,12 @@
   opacity: 0.48;
 }
 
-.hero-panel,
 .password-panel,
-.release-panel,
-.work-card {
+.release-panel {
   border: 1px solid #dce3ee;
   border-radius: 8px;
   background: #ffffff;
   box-shadow: 0 10px 25px rgba(15, 23, 42, 0.04);
-}
-
-.hero-panel {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 280px;
-  gap: 18px;
-  align-items: center;
-  padding: 22px;
 }
 
 .password-panel {
@@ -564,29 +545,6 @@ h1 {
   margin-top: 12px;
   color: #475467;
   font-size: 16px;
-}
-
-.status-stack {
-  display: grid;
-  gap: 8px;
-}
-
-.status-stack div {
-  border-radius: 8px;
-  background: #f2f4f7;
-  padding: 12px;
-}
-
-.status-stack span {
-  display: block;
-  color: #667085;
-  font-size: 12px;
-}
-
-.status-stack strong {
-  display: block;
-  margin-top: 3px;
-  font-size: 14px;
 }
 
 .dashboard-home {
@@ -1127,6 +1085,47 @@ h1 {
   min-width: 0;
 }
 
+.settings-backup-table-shell {
+  overflow-x: auto;
+}
+
+.settings-backup-table {
+  min-width: 760px;
+  table-layout: fixed;
+}
+
+.settings-backup-table td {
+  vertical-align: middle;
+}
+
+.settings-backup-table th:nth-child(1),
+.settings-backup-table td:nth-child(1) {
+  width: 180px;
+}
+
+.settings-backup-date,
+.settings-backup-size {
+  color: #475467;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.settings-backup-kind {
+  text-align: center;
+}
+
+.settings-backup-file {
+  overflow: hidden;
+  color: #101828;
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.settings-backup-table .dictionary-row-actions {
+  justify-content: center;
+}
+
 .settings-card--security .settings-card-form > button,
 .settings-display-form > button {
   width: min(280px, 100%);
@@ -1239,10 +1238,6 @@ h1 {
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.6);
   cursor: pointer;
   text-align-last: center;
-}
-
-.contractors-editable-select--month {
-  min-width: 118px;
 }
 
 .contractors-editable-select-control--month {
@@ -2933,23 +2928,6 @@ h1 {
   padding: 14px 16px;
 }
 
-.roadmap-grid {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 12px;
-  margin-top: 12px;
-}
-
-.work-card {
-  min-height: 166px;
-  padding: 16px;
-}
-
-.work-card svg {
-  color: #1d4ed8;
-}
-
-.work-card h2,
 .release-panel h2 {
   margin-top: 12px;
   color: #101828;
@@ -2957,15 +2935,10 @@ h1 {
   line-height: 1.25;
 }
 
-.work-card p,
 .release-panel li {
   color: #475467;
   font-size: 14px;
   line-height: 1.45;
-}
-
-.work-card p {
-  margin-top: 8px;
 }
 
 .release-panel {
@@ -3712,13 +3685,6 @@ h1 {
   justify-content: flex-start;
 }
 
-.payments-prototype-main-grid {
-  display: grid;
-  grid-template-columns: minmax(280px, 0.9fr) minmax(420px, 1.4fr);
-  gap: 14px;
-  align-items: stretch;
-}
-
 .payments-prototype-workspace-header {
   display: grid;
   gap: 10px;
@@ -3779,28 +3745,6 @@ h1 {
   overflow-x: auto;
   overflow-y: hidden;
   overscroll-behavior: contain;
-}
-
-.payments-prototype-garage-line {
-  display: grid;
-  grid-template-columns: minmax(90px, 1fr) minmax(80px, 0.8fr) minmax(150px, 1.2fr) minmax(90px, 0.8fr);
-  gap: 8px;
-  align-items: center;
-}
-
-.payments-prototype-garage-line span {
-  color: #475467;
-  font-size: 13px;
-  font-weight: 700;
-}
-
-.payments-prototype-garage-line strong {
-  min-height: 34px;
-  border: 1px solid #d0d5dd;
-  border-radius: 8px;
-  background: #ffffff;
-  padding: 7px 10px;
-  text-align: right;
 }
 
 .payments-prototype-mini-table {
@@ -4146,13 +4090,6 @@ h1 {
 .payments-prototype-table td:last-child,
 .payments-prototype-table th:last-child {
   border-right: 0;
-}
-
-.payments-prototype-merged-total {
-  background: #f8fafc;
-  color: #101828;
-  font-weight: 750;
-  text-align: center !important;
 }
 
 .payments-prototype-total-row td {
@@ -4545,14 +4482,6 @@ h1 {
   }
 }
 
-.funds-table-skeleton {
-  width: 100%;
-}
-
-.funds-operations-skeleton {
-  min-width: 980px;
-}
-
 .funds-table {
   width: 100%;
   border-collapse: separate;
@@ -4916,35 +4845,6 @@ h1 {
   color: #101828;
   font-size: 18px;
   text-align: center;
-}
-
-.subsection-heading {
-  display: flex;
-  gap: 12px;
-  align-items: flex-start;
-  justify-content: space-between;
-  margin-top: 18px;
-  padding-top: 16px;
-  border-top: 1px solid #eaecf0;
-}
-
-.subsection-heading h3 {
-  margin: 0;
-  color: #101828;
-  font-size: 17px;
-}
-
-.subsection-heading p,
-.subsection-heading span {
-  margin-top: 4px;
-  color: #667085;
-  font-size: 13px;
-}
-
-.user-management-grid {
-  display: grid;
-  grid-template-columns: 320px minmax(0, 1fr);
-  gap: 12px;
 }
 
 .dictionary-form {
@@ -5626,10 +5526,6 @@ h1 {
 .loading-skeleton--compact .loading-skeleton-row {
   min-height: 39px;
   padding-block: 8px;
-}
-
-.loading-skeleton--table-row {
-  grid-column: 1 / -1;
 }
 
 .table-loading-state {
@@ -6403,13 +6299,6 @@ h1 {
   padding: 12px 14px;
 }
 
-.user-table {
-  overflow: hidden;
-  border: 1px solid #e4e7ec;
-  border-radius: 8px;
-  background: #fcfcfd;
-}
-
 .role-matrix {
   display: grid;
   gap: 12px;
@@ -6576,10 +6465,6 @@ h1 {
 .audit-detail-metadata dt {
   color: #667085;
   font-weight: 700;
-}
-
-.audit-pagination {
-  margin-top: 12px;
 }
 
 .operation-row {
@@ -8218,7 +8103,6 @@ button.operation-row:focus-visible {
     display: none;
   }
 
-  .hero-panel,
   .password-panel {
     grid-template-columns: 1fr;
   }
@@ -8260,10 +8144,6 @@ button.operation-row:focus-visible {
     grid-template-columns: 1fr;
   }
 
-  .roadmap-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
   .dashboard-tile-grid {
     grid-template-columns: repeat(3, 190px);
     gap: 28px;
@@ -8282,7 +8162,6 @@ button.operation-row:focus-visible {
   .dictionary-grid,
   .finance-settings-grid,
   .finance-grid,
-  .contractors-directory-grid,
   .contractors-bottom-grid,
   .payments-prototype-footer,
   .summary-strip {
@@ -8293,20 +8172,12 @@ button.operation-row:focus-visible {
     flex-direction: column;
   }
 
-  .payments-prototype-main-grid {
-    grid-template-columns: 1fr;
-  }
-
   .payments-prototype-topline {
     grid-template-columns: 1fr;
   }
 
   .payments-prototype-garage-summary {
     justify-self: stretch;
-  }
-
-  .payments-prototype-garage-line {
-    grid-template-columns: minmax(90px, 1fr) minmax(80px, 1fr);
   }
 
   .payments-prototype-actions {
@@ -8385,10 +8256,6 @@ button.operation-row:focus-visible {
 
   .audit-filter-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .user-management-grid {
-    grid-template-columns: 1fr;
   }
 
   .user-table-row,
@@ -8588,10 +8455,6 @@ button.operation-row:focus-visible {
     grid-column: 1;
   }
 
-  .roadmap-grid {
-    grid-template-columns: 1fr;
-  }
-
   .dashboard-home {
     min-height: auto;
     padding: 14px 0 22px;
@@ -8693,10 +8556,6 @@ button.operation-row:focus-visible {
 
   .report-actions .secondary-button {
     width: 100%;
-  }
-
-  .report-table {
-    overflow-x: auto;
   }
 
   .import-table {

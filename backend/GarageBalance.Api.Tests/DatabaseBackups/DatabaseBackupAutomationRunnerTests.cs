@@ -190,6 +190,12 @@ public sealed class DatabaseBackupAutomationRunnerTests
             return Task.FromResult(CreateResult ?? DatabaseBackupResult<DatabaseBackupFileDto>.Success(
                 new DatabaseBackupFileDto("garagebalance_automatic.pgdump", 1, Now, "automatic")));
         }
+
+        public Task<DatabaseBackupResult<DatabaseBackupDownloadDto>> OpenDownloadAsync(string fileName, Guid? actorUserId, CancellationToken cancellationToken) =>
+            Task.FromResult(DatabaseBackupResult<DatabaseBackupDownloadDto>.Failure("not_supported", "Not supported."));
+
+        public Task<DatabaseBackupResult<DatabaseBackupFileDto>> DeleteAsync(string fileName, string? reason, Guid? actorUserId, CancellationToken cancellationToken) =>
+            Task.FromResult(DatabaseBackupResult<DatabaseBackupFileDto>.Failure("not_supported", "Not supported."));
     }
 
     private sealed class FixedTimeProvider(DateTimeOffset utcNow) : TimeProvider

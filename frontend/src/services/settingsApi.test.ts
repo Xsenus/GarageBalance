@@ -98,7 +98,7 @@ describe('settingsApi', () => {
     }))
   })
 
-  it('loads backup status and creates a manual backup with an audit reason', async () => {
+  it('loads, creates, downloads, and deletes a backup through protected endpoints', async () => {
     const status = {
       enabled: true,
       automaticEnabled: true,
@@ -119,10 +119,15 @@ describe('settingsApi', () => {
     const fetchMock = vi.fn()
       .mockResolvedValueOnce(new Response(JSON.stringify(status), { status: 200, headers: { 'Content-Type': 'application/json' } }))
       .mockResolvedValueOnce(new Response(JSON.stringify(created), { status: 201, headers: { 'Content-Type': 'application/json' } }))
+      .mockResolvedValueOnce(new Response('dump', { status: 200, headers: { 'Content-Type': 'application/octet-stream' } }))
+      .mockResolvedValueOnce(new Response(JSON.stringify(created), { status: 200, headers: { 'Content-Type': 'application/json' } }))
     vi.stubGlobal('fetch', fetchMock)
 
     await expect(settingsApi.getDatabaseBackups('token')).resolves.toEqual(status)
     await expect(settingsApi.createDatabaseBackup('token', { reason: 'Перед обновлением' })).resolves.toEqual(created)
+    const download = await settingsApi.downloadDatabaseBackup('token', created.fileName)
+    expect(await download.text()).toBe('dump')
+    await expect(settingsApi.deleteDatabaseBackup('token', created.fileName, { reason: 'Копия больше не нужна' })).resolves.toEqual(created)
 
     expect(fetchMock).toHaveBeenNthCalledWith(1, '/api/settings/backups', expect.objectContaining({
       headers: expect.objectContaining({ Authorization: 'Bearer token' }),
@@ -130,6 +135,14 @@ describe('settingsApi', () => {
     expect(fetchMock).toHaveBeenNthCalledWith(2, '/api/settings/backups', expect.objectContaining({
       method: 'POST',
       body: JSON.stringify({ reason: 'Перед обновлением' }),
+      headers: expect.objectContaining({ Authorization: 'Bearer token' }),
+    }))
+    expect(fetchMock).toHaveBeenNthCalledWith(3, `/api/settings/backups/${created.fileName}/download`, {
+      headers: { Authorization: 'Bearer token' },
+    })
+    expect(fetchMock).toHaveBeenNthCalledWith(4, `/api/settings/backups/${created.fileName}`, expect.objectContaining({
+      method: 'DELETE',
+      body: JSON.stringify({ reason: 'Копия больше не нужна' }),
       headers: expect.objectContaining({ Authorization: 'Bearer token' }),
     }))
   })

@@ -230,6 +230,94 @@ public sealed class PostgresDatabaseBackupServiceTests : IDisposable
         Assert.True(firstResult.Succeeded);
     }
 
+    [Fact]
+    public async Task OpenDownload_ReturnsManagedStreamAndAuditsExport()
+    {
+        Directory.CreateDirectory(_directory);
+        const string fileName = "garagebalance_manual_20260715_093000_000.pgdump";
+        await File.WriteAllBytesAsync(Path.Combine(_directory, fileName), [1, 2, 3, 4]);
+        var audit = new CaptureAuditWriter();
+        var unitOfWork = new CaptureUnitOfWork();
+        var actorUserId = Guid.NewGuid();
+        var service = CreateService(new FakeCommandRunner(), audit, unitOfWork);
+
+        var result = await service.OpenDownloadAsync(fileName, actorUserId, CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+        Assert.NotNull(result.Value);
+        await using (result.Value.Content)
+        {
+            using var copy = new MemoryStream();
+            await result.Value.Content.CopyToAsync(copy);
+            Assert.Equal([1, 2, 3, 4], copy.ToArray());
+        }
+        Assert.Equal(fileName, result.Value.FileName);
+        Assert.Equal(4, result.Value.SizeBytes);
+        var auditRequest = Assert.Single(audit.Requests);
+        Assert.Equal("database.backup_downloaded", auditRequest.Action);
+        Assert.Equal(actorUserId, auditRequest.ActorUserId);
+        Assert.Equal("export", auditRequest.ActionKind);
+        Assert.Equal(1, unitOfWork.SaveCount);
+    }
+
+    [Theory]
+    [InlineData("../customer-copy.pgdump", "database_backup_file_invalid")]
+    [InlineData("customer-copy.pgdump", "database_backup_file_invalid")]
+    [InlineData("garagebalance_manual_20260715_093000_000.pgdump", "database_backup_not_found")]
+    public async Task ManagedFileOperations_RejectInvalidOrMissingFiles(string fileName, string expectedCode)
+    {
+        var service = CreateService(new FakeCommandRunner());
+
+        var download = await service.OpenDownloadAsync(fileName, null, CancellationToken.None);
+        var deletion = await service.DeleteAsync(fileName, "Копия больше не нужна", null, CancellationToken.None);
+
+        Assert.Equal(expectedCode, download.ErrorCode);
+        Assert.Equal(expectedCode, deletion.ErrorCode);
+    }
+
+    [Fact]
+    public async Task DeleteBackup_RequiresReasonDeletesOnlyRequestedFileAndAuditsAction()
+    {
+        Directory.CreateDirectory(_directory);
+        const string fileName = "garagebalance_automatic_20260715_093000_000.pgdump";
+        var path = Path.Combine(_directory, fileName);
+        await File.WriteAllBytesAsync(path, [1, 2, 3]);
+        var audit = new CaptureAuditWriter();
+        var unitOfWork = new CaptureUnitOfWork();
+        var actorUserId = Guid.NewGuid();
+        var service = CreateService(new FakeCommandRunner(), audit, unitOfWork);
+
+        var missingReason = await service.DeleteAsync(fileName, " ", actorUserId, CancellationToken.None);
+        var shortReason = await service.DeleteAsync(fileName, "ab", actorUserId, CancellationToken.None);
+        var longReason = await service.DeleteAsync(fileName, new string('a', 501), actorUserId, CancellationToken.None);
+        var deleted = await service.DeleteAsync(fileName, "Истек установленный срок хранения", actorUserId, CancellationToken.None);
+
+        Assert.Equal("database_backup_delete_reason_required", missingReason.ErrorCode);
+        Assert.Equal("database_backup_delete_reason_invalid", shortReason.ErrorCode);
+        Assert.Equal("database_backup_delete_reason_invalid", longReason.ErrorCode);
+        Assert.True(deleted.Succeeded);
+        Assert.False(File.Exists(path));
+        var auditRequest = Assert.Single(audit.Requests);
+        Assert.Equal("database.backup_deleted", auditRequest.Action);
+        Assert.Equal(actorUserId, auditRequest.ActorUserId);
+        Assert.Equal("delete", auditRequest.ActionKind);
+        Assert.Equal("Истек установленный срок хранения", auditRequest.Reason);
+        Assert.Equal(1, unitOfWork.SaveCount);
+    }
+
+    [Fact]
+    public async Task OpenDownload_HonorsAnAlreadyCancelledRequest()
+    {
+        var service = CreateService(new FakeCommandRunner());
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+
+        await Assert.ThrowsAsync<OperationCanceledException>(() => service.OpenDownloadAsync(
+            "garagebalance_manual_20260715_093000_000.pgdump",
+            null,
+            cancellation.Token));
+    }
+
     private PostgresDatabaseBackupService CreateService(
         FakeCommandRunner runner,
         CaptureAuditWriter? audit = null,

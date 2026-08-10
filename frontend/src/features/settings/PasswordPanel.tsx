@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
-import { ArrowDownCircle, ArrowUpCircle, Banknote, CalendarClock, DatabaseBackup, Download, Eye, FileWarning, KeyRound, Landmark, PlugZap, RefreshCw, ShieldCheck, SlidersHorizontal, X } from 'lucide-react'
+import { ArrowDownCircle, ArrowUpCircle, Banknote, CalendarClock, DatabaseBackup, Eye, FileWarning, KeyRound, Landmark, PlugZap, RefreshCw, ShieldCheck, SlidersHorizontal, X } from 'lucide-react'
 import type { AuthClient, AuthResponse } from '../../services/authApi'
 import type { IntegrationClient, OneCFreshIntegrationStatusDto, OneCFreshSyncDto, OneCFreshSyncPreviewDto, ReceiptPrintingIntegrationStatusDto } from '../../services/integrationsApi'
-import type { ApplicationSettingsClient, BusinessDateChangePreviewDto, BusinessDateSettingsDto, CashBankBalanceSettingsDto, DatabaseBackupStatusDto, DiagnosticLogStatusDto, SalaryAccrualSettingsDto } from '../../services/settingsApi'
+import type { ApplicationSettingsClient, BusinessDateChangePreviewDto, BusinessDateSettingsDto, CashBankBalanceSettingsDto, DatabaseBackupFileDto, DatabaseBackupStatusDto, DiagnosticLogStatusDto, SalaryAccrualSettingsDto } from '../../services/settingsApi'
 import { hasPermission, isAdministrator, permissions } from '../../shared/accessControl'
 import { AsyncErrorState, EmptyState, LoadingSkeleton } from '../../shared/AsyncState'
 import { LocalizedDatePicker } from '../../shared/LocalizedDatePicker'
@@ -63,7 +63,9 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
   const [backupMessage, setBackupMessage] = useState<string | null>(null)
   const [backupReloadToken, setBackupReloadToken] = useState(0)
   const [backupConfirmation, setBackupConfirmation] = useState<{ reason: string; error: string | null } | null>(null)
-  const backupTriggerRef = useRef<HTMLButtonElement | null>(null)
+  const [backupDeleteConfirmation, setBackupDeleteConfirmation] = useState<{ backup: DatabaseBackupFileDto; reason: string; error: string | null } | null>(null)
+  const [backupDownloadingFileName, setBackupDownloadingFileName] = useState<string | null>(null)
+  const [backupDeleting, setBackupDeleting] = useState(false)
   const [diagnosticStatus, setDiagnosticStatus] = useState<DiagnosticLogStatusDto | null>(null)
   const [diagnosticLoading, setDiagnosticLoading] = useState(false)
   const [diagnosticExporting, setDiagnosticExporting] = useState(false)
@@ -106,12 +108,8 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
   const confirmationDialogRef = useFocusTrap<HTMLElement>(Boolean(pendingPasswordChange))
   const oneCFreshSyncCancelRef = useFocusOnOpen<HTMLButtonElement>(Boolean(oneCFreshSyncConfirmation))
   const oneCFreshSyncDialogRef = useFocusTrap<HTMLElement>(Boolean(oneCFreshSyncConfirmation))
-  useRestoreFocusOnClose(Boolean(backupConfirmation))
-  const backupConfirmationCancelRef = useFocusOnOpen<HTMLButtonElement>(Boolean(backupConfirmation))
-  const backupConfirmationDialogRef = useFocusTrap<HTMLElement>(Boolean(backupConfirmation))
   useEscapeKey(Boolean(pendingPasswordChange) && !saving, () => setPendingPasswordChange(null))
   useEscapeKey(Boolean(oneCFreshSyncConfirmation) && !oneCFreshSyncSaving, () => closeOneCFreshSyncConfirmation())
-  useEscapeKey(Boolean(backupConfirmation) && !backupCreating, () => setBackupConfirmation(null))
   useEscapeKey(Boolean(businessDateConfirmation) && !businessDateSaving, () => setBusinessDateConfirmation(null))
 
   useEffect(() => {
@@ -323,6 +321,57 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
       setPaymentDisplaySettingsError(caught instanceof Error ? caught.message : 'Не удалось сохранить настройку отображения платежей.')
     } finally {
       setPaymentDisplaySettingsSaving(false)
+    }
+  }
+
+  async function downloadDatabaseBackup(backup: DatabaseBackupFileDto) {
+    setBackupDownloadingFileName(backup.fileName)
+    setBackupError(null)
+    setBackupMessage(null)
+    try {
+      const blob = await settingsClient.downloadDatabaseBackup(auth.accessToken, backup.fileName)
+      downloadBlob(blob, backup.fileName)
+      setBackupMessage(`Резервная копия ${backup.fileName} скачана.`)
+    } catch (caught) {
+      setBackupError(caught instanceof Error ? caught.message : 'Не удалось скачать резервную копию.')
+    } finally {
+      setBackupDownloadingFileName(null)
+    }
+  }
+
+  async function deleteDatabaseBackup() {
+    if (!backupDeleteConfirmation) return
+    const reason = backupDeleteConfirmation.reason.trim()
+    if (reason.length < 3 || reason.length > 500) {
+      setBackupDeleteConfirmation({
+        ...backupDeleteConfirmation,
+        error: 'Укажите причину длиной от 3 до 500 символов.',
+      })
+      return
+    }
+
+    setBackupDeleting(true)
+    setBackupError(null)
+    setBackupMessage(null)
+    try {
+      const deleted = await settingsClient.deleteDatabaseBackup(
+        auth.accessToken,
+        backupDeleteConfirmation.backup.fileName,
+        { reason },
+      )
+      setBackupStatus((current) => current ? {
+        ...current,
+        backups: current.backups.filter((backup) => backup.fileName !== deleted.fileName),
+      } : current)
+      setBackupDeleteConfirmation(null)
+      setBackupMessage(`Резервная копия ${deleted.fileName} удалена. Действие записано в историю изменений.`)
+    } catch (caught) {
+      setBackupDeleteConfirmation((current) => current ? {
+        ...current,
+        error: caught instanceof Error ? caught.message : 'Не удалось удалить резервную копию.',
+      } : current)
+    } finally {
+      setBackupDeleting(false)
     }
   }
 
@@ -1164,7 +1213,6 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
             <p className="form-hint">Папка хранения: {backupStatus.directory}. При обычном запуске система выбирает постоянный локальный каталог автоматически; путь можно переопределить параметром DatabaseBackup__Directory. В Docker используется BACKUP_HOST_PATH.</p>
             {backupStatus.lastError ? <FormError>{backupStatus.lastError}</FormError> : null}
             <button
-              ref={backupTriggerRef}
               className="secondary-button create-action-button"
               type="button"
               disabled={!backupStatus.enabled || backupStatus.isRunning || backupCreating}
@@ -1176,28 +1224,56 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
               <DatabaseBackup size={17} aria-hidden="true" />
               <span>{backupStatus.isRunning ? 'Копия создается...' : 'Создать резервную копию'}</span>
             </button>
-            <div className="table-shell settings-backup-table-shell">
-              <table aria-label="Последние резервные копии">
+            <div className="dictionary-table-scroll settings-backup-table-shell" aria-busy={backupDeleting || backupDownloadingFileName !== null}>
+              <table className="dictionary-data-table settings-backup-table" aria-label="Резервные копии базы данных">
                 <thead>
                   <tr>
                     <th>Дата</th>
                     <th>Тип</th>
                     <th>Файл</th>
                     <th>Размер</th>
+                    <th className="table-actions-column">Действия</th>
                   </tr>
                 </thead>
                 <tbody>
                   {backupStatus.backups.map((backup) => (
                     <tr key={backup.fileName}>
-                      <td>{formatDateTime(backup.createdAtUtc)}</td>
-                      <td>{formatBackupKind(backup.kind)}</td>
-                      <td>{backup.fileName}</td>
-                      <td>{formatFileSize(backup.sizeBytes)}</td>
+                      <td className="settings-backup-date">{formatDateTime(backup.createdAtUtc)}</td>
+                      <td className="settings-backup-kind"><span className="dictionary-status-pill dictionary-status-pill-archived">{formatBackupKind(backup.kind)}</span></td>
+                      <td className="settings-backup-file" title={backup.fileName}>{backup.fileName}</td>
+                      <td className="settings-backup-size">{formatFileSize(backup.sizeBytes)}</td>
+                      <td className="table-actions-column">
+                        <div className="dictionary-row-actions">
+                          <button
+                            className="icon-button dictionary-row-action"
+                            type="button"
+                            aria-label={`Скачать резервную копию ${backup.fileName}`}
+                            title="Скачать резервную копию"
+                            disabled={backupDeleting || backupDownloadingFileName !== null}
+                            onClick={() => void downloadDatabaseBackup(backup)}
+                          >
+                            <ArrowDownCircle size={16} aria-hidden="true" />
+                          </button>
+                          <button
+                            className="icon-button dictionary-row-action danger-icon-button"
+                            type="button"
+                            aria-label={`Удалить резервную копию ${backup.fileName}`}
+                            title="Удалить резервную копию"
+                            disabled={backupDeleting || backupDownloadingFileName !== null}
+                            onClick={() => {
+                              setBackupMessage(null)
+                              setBackupDeleteConfirmation({ backup, reason: '', error: null })
+                            }}
+                          >
+                            <X size={16} aria-hidden="true" />
+                          </button>
+                        </div>
+                      </td>
                     </tr>
                   ))}
                   {backupStatus.backups.length === 0 ? (
                     <tr>
-                      <td colSpan={4}><EmptyState>Резервные копии еще не создавались.</EmptyState></td>
+                      <td colSpan={5}><EmptyState>Резервные копии еще не создавались.</EmptyState></td>
                     </tr>
                   ) : null}
                 </tbody>
@@ -1250,7 +1326,7 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
             <p className="form-hint">В пакет попадут журналы максимум за {diagnosticStatus.packageDays} дн. общим объемом до {diagnosticStatus.packageMaxSizeMb} МБ. Выгрузка доступна только администратору и фиксируется в истории изменений.</p>
             {diagnosticStatus.lastWriteError ? <FormError>{diagnosticStatus.lastWriteError}</FormError> : null}
             <button className="secondary-button" type="button" disabled={!diagnosticStatus.enabled || diagnosticExporting} onClick={() => void exportDiagnosticPackage()}>
-              <Download size={17} aria-hidden="true" />
+              <ArrowDownCircle size={17} aria-hidden="true" />
               <span>{diagnosticExporting ? 'Формируем пакет...' : 'Скачать диагностический пакет'}</span>
             </button>
           </>
@@ -1483,38 +1559,25 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
         </div>
       ) : null}
       {backupConfirmation ? (
-        <div className="modal-backdrop" role="presentation" onMouseDown={() => !backupCreating && setBackupConfirmation(null)}>
-          <section ref={backupConfirmationDialogRef} className="detail-dialog dictionary-confirmation-dialog" role="dialog" aria-modal="true" aria-labelledby="database-backup-confirmation-title" aria-describedby="database-backup-confirmation-description" onMouseDown={(event) => event.stopPropagation()}>
-            <div className="dialog-heading">
-              <div>
-                <p className="eyebrow">Резервные копии</p>
-                <h3 id="database-backup-confirmation-title">Создать резервную копию базы?</h3>
-              </div>
-              <button className="icon-button" type="button" aria-label="Закрыть создание резервной копии" onClick={() => setBackupConfirmation(null)} disabled={backupCreating}>
-                <X size={18} aria-hidden="true" />
-              </button>
-            </div>
-            <p className="confirmation-text" id="database-backup-confirmation-description">Система создаст PostgreSQL backup в отдельной папке, проверит его через pg_restore и запишет действие в историю изменений.</p>
-            <FormField label="Причина создания копии">
-              <textarea
-                aria-label="Причина создания резервной копии"
-                rows={3}
-                value={backupConfirmation.reason}
-                onChange={(event) => setBackupConfirmation({ reason: event.target.value, error: null })}
-                placeholder="Например: перед обновлением программы"
-                disabled={backupCreating}
-              />
-            </FormField>
-            {backupConfirmation.error ? <FormError>{backupConfirmation.error}</FormError> : null}
-            <div className="dialog-actions">
-              <button ref={backupConfirmationCancelRef} className="ghost-button" type="button" onClick={() => setBackupConfirmation(null)} disabled={backupCreating}>Отмена</button>
-              <button className="secondary-button" type="button" onClick={() => void createDatabaseBackup()} disabled={backupCreating}>
-                <DatabaseBackup size={16} aria-hidden="true" />
-                <span>{backupCreating ? 'Создаем и проверяем...' : 'Создать копию'}</span>
-              </button>
-            </div>
-          </section>
-        </div>
+        <BackupReasonDialog
+          reason={backupConfirmation.reason}
+          error={backupConfirmation.error}
+          busy={backupCreating}
+          onReasonChange={(reason) => setBackupConfirmation({ reason, error: null })}
+          onCancel={() => setBackupConfirmation(null)}
+          onSubmit={() => void createDatabaseBackup()}
+        />
+      ) : null}
+      {backupDeleteConfirmation ? (
+        <BackupReasonDialog
+          fileName={backupDeleteConfirmation.backup.fileName}
+          reason={backupDeleteConfirmation.reason}
+          error={backupDeleteConfirmation.error}
+          busy={backupDeleting}
+          onReasonChange={(reason) => setBackupDeleteConfirmation({ ...backupDeleteConfirmation, reason, error: null })}
+          onCancel={() => setBackupDeleteConfirmation(null)}
+          onSubmit={() => void deleteDatabaseBackup()}
+        />
       ) : null}
       {pendingPasswordChange ? (
         <div className="modal-backdrop" role="presentation" onMouseDown={() => !saving && setPendingPasswordChange(null)}>
@@ -1593,6 +1656,65 @@ function getOneCFreshSyncConfirmationTitle(mode: 'preview' | 'start' | 'retry') 
   return mode === 'retry'
     ? 'Повторить запрос синхронизации 1C Fresh?'
     : 'Запустить синхронизацию 1C Fresh?'
+}
+
+function BackupReasonDialog({ fileName, reason, error, busy, onReasonChange, onCancel, onSubmit }: {
+  fileName?: string
+  reason: string
+  error: string | null
+  busy: boolean
+  onReasonChange: (reason: string) => void
+  onCancel: () => void
+  onSubmit: () => void
+}) {
+  const deleting = Boolean(fileName)
+  useRestoreFocusOnClose(true)
+  const cancelRef = useFocusOnOpen<HTMLButtonElement>(true)
+  const dialogRef = useFocusTrap<HTMLElement>(true)
+  useEscapeKey(!busy, onCancel)
+
+  const action = deleting ? 'удаления' : 'создания'
+  const titleId = `database-backup-${deleting ? 'delete-' : ''}title`
+  const descriptionId = `database-backup-${deleting ? 'delete-' : ''}description`
+
+  return (
+    <div className="modal-backdrop" role="presentation" onMouseDown={() => !busy && onCancel()}>
+      <section ref={dialogRef} className="detail-dialog dictionary-confirmation-dialog" role="dialog" aria-modal="true" aria-labelledby={titleId} aria-describedby={descriptionId} onMouseDown={(event) => event.stopPropagation()}>
+        <div className="dialog-heading">
+          <div>
+            <p className="eyebrow">{deleting ? 'Удаление резервной копии' : 'Резервные копии'}</p>
+            <h3 id={titleId}>{deleting ? 'Удалить выбранную копию?' : 'Создать резервную копию базы?'}</h3>
+          </div>
+          <button className="icon-button" type="button" aria-label={`Закрыть ${action} резервной копии`} onClick={onCancel} disabled={busy}>
+            <X size={18} aria-hidden="true" />
+          </button>
+        </div>
+        <p className="confirmation-text" id={descriptionId}>
+          {deleting
+            ? <>Файл <strong>{fileName}</strong> будет удален без возможности восстановления. Остальные копии не изменятся.</>
+            : 'Система создаст PostgreSQL backup в отдельной папке, проверит его через pg_restore и запишет действие в историю изменений.'}
+        </p>
+        <FormField label={`Причина ${action}`}>
+          <textarea
+            aria-label={`Причина ${action} резервной копии`}
+            rows={3}
+            value={reason}
+            onChange={(event) => onReasonChange(event.target.value)}
+            placeholder={deleting ? 'Например: копия больше не нужна после успешного обновления' : 'Например: перед обновлением программы'}
+            disabled={busy}
+          />
+        </FormField>
+        {error ? <FormError>{error}</FormError> : null}
+        <div className="dialog-actions">
+          <button ref={cancelRef} className="ghost-button" type="button" onClick={onCancel} disabled={busy}>Отмена</button>
+          <button className={deleting ? 'danger-button' : 'secondary-button'} type="button" onClick={onSubmit} disabled={busy}>
+            {deleting ? <X size={16} aria-hidden="true" /> : <DatabaseBackup size={16} aria-hidden="true" />}
+            <span>{busy ? (deleting ? 'Удаляем...' : 'Создаем и проверяем...') : (deleting ? 'Удалить копию' : 'Создать копию')}</span>
+          </button>
+        </div>
+      </section>
+    </div>
+  )
 }
 
 function formatBackupKind(kind: string) {

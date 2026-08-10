@@ -10602,7 +10602,7 @@ describe('App', () => {
 
     const backupsPanel = await within(settings).findByRole('region', { name: 'Резервное копирование базы данных' })
     const backupSummary = await within(backupsPanel).findByLabelText('Состояние резервного копирования')
-    const backupTable = within(backupsPanel).getByRole('table', { name: 'Последние резервные копии' })
+    const backupTable = within(backupsPanel).getByRole('table', { name: 'Резервные копии базы данных' })
     expect(backupSummary).toHaveTextContent('каждые 24 ч.')
     expect(backupSummary.parentElement).toHaveClass('settings-card-body')
     expect(backupTable.closest('.settings-card-body')).toBe(backupSummary.parentElement)
@@ -10625,8 +10625,71 @@ describe('App', () => {
 
     await waitFor(() => expect(createDatabaseBackup).toHaveBeenCalledWith('token', { reason: 'Перед обновлением Docker' }))
     expect(await within(backupsPanel).findByText(`Резервная копия ${createdBackup.fileName} создана и проверена.`)).toHaveAttribute('role', 'status')
-    expect(within(backupsPanel).getByRole('table', { name: 'Последние резервные копии' })).toHaveTextContent(createdBackup.fileName)
+    expect(within(backupsPanel).getByRole('table', { name: 'Резервные копии базы данных' })).toHaveTextContent(createdBackup.fileName)
     expect(within(backupsPanel).getByText('1.0 МБ')).toBeInTheDocument()
+  })
+
+  it('downloads and deletes a selected backup from the backup table with an audited reason', async () => {
+    const user = userEvent.setup()
+    const backup = {
+      fileName: 'garagebalance_automatic_20260714_020000_000.pgdump',
+      sizeBytes: 2048,
+      createdAtUtc: '2026-07-14T02:00:00Z',
+      kind: 'automatic' as const,
+    }
+    let deleted = false
+    const getDatabaseBackups = vi.fn(async () => ({
+      enabled: true,
+      automaticEnabled: true,
+      intervalHours: 24,
+      retentionCount: 30,
+      directory: '/backups',
+      isRunning: false,
+      lastSuccessfulBackupAtUtc: backup.createdAtUtc,
+      lastError: null,
+      backups: deleted ? [] : [backup],
+    }))
+    const downloadDatabaseBackup = vi.fn(async () => new Blob(['backup'], { type: 'application/octet-stream' }))
+    const deleteDatabaseBackup = vi.fn(async () => {
+      deleted = true
+      return backup
+    })
+    const createObjectUrl = vi.fn(() => 'blob:database-backup')
+    const revokeObjectUrl = vi.fn()
+    Object.defineProperty(URL, 'createObjectURL', { configurable: true, value: createObjectUrl })
+    Object.defineProperty(URL, 'revokeObjectURL', { configurable: true, value: revokeObjectUrl })
+    const linkClick = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => undefined)
+    const settingsClient = createSettingsClient({ getDatabaseBackups, downloadDatabaseBackup, deleteDatabaseBackup })
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} integrationClient={createIntegrationClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} settingsClient={settingsClient} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Настройки')
+    const settings = await screen.findByRole('region', { name: 'Настройки' })
+    await user.click(within(settings).getByRole('tab', { name: 'Резервные копии' }))
+    const backupsPanel = await within(settings).findByRole('region', { name: 'Резервное копирование базы данных' })
+    const backupTable = await within(backupsPanel).findByRole('table', { name: 'Резервные копии базы данных' })
+
+    expect(within(backupTable).getAllByRole('columnheader').map((cell) => cell.textContent)).toEqual(['Дата', 'Тип', 'Файл', 'Размер', 'Действия'])
+    await user.click(within(backupTable).getByRole('button', { name: `Скачать резервную копию ${backup.fileName}` }))
+    await waitFor(() => expect(downloadDatabaseBackup).toHaveBeenCalledWith('token', backup.fileName))
+    expect(createObjectUrl).toHaveBeenCalledWith(expect.any(Blob))
+    expect(revokeObjectUrl).toHaveBeenCalledWith('blob:database-backup')
+    expect(await within(backupsPanel).findByRole('status')).toHaveTextContent(`Резервная копия ${backup.fileName} скачана.`)
+
+    await user.click(within(backupTable).getByRole('button', { name: `Удалить резервную копию ${backup.fileName}` }))
+    const confirmation = await screen.findByRole('dialog', { name: 'Удалить выбранную копию?' })
+    await user.click(within(confirmation).getByRole('button', { name: 'Удалить копию' }))
+    expect(await within(confirmation).findByRole('alert')).toHaveTextContent('Укажите причину длиной от 3 до 500 символов.')
+    expect(deleteDatabaseBackup).not.toHaveBeenCalled()
+
+    await user.type(within(confirmation).getByLabelText('Причина удаления резервной копии'), 'Удаление устаревшей тестовой копии')
+    await user.click(within(confirmation).getByRole('button', { name: 'Удалить копию' }))
+    await waitFor(() => expect(deleteDatabaseBackup).toHaveBeenCalledWith('token', backup.fileName, { reason: 'Удаление устаревшей тестовой копии' }))
+    expect(screen.queryByRole('dialog', { name: 'Удалить выбранную копию?' })).not.toBeInTheDocument()
+    expect(await within(backupsPanel).findByText('Резервные копии еще не создавались.')).toBeInTheDocument()
+    expect(within(backupsPanel).queryByText(backup.fileName)).not.toBeInTheDocument()
+    linkClick.mockRestore()
   })
 
   it('recovers backup status loading and keeps a failed manual backup inside its confirmation dialog', async () => {
@@ -19734,6 +19797,13 @@ function createSettingsClient(overrides: Partial<ApplicationSettingsClient> = {}
     }),
     createDatabaseBackup: async () => ({
       fileName: 'garagebalance_manual_20260715_120000_000.pgdump',
+      sizeBytes: 1024,
+      createdAtUtc: '2026-07-15T12:00:00Z',
+      kind: 'manual',
+    }),
+    downloadDatabaseBackup: async () => new Blob(['backup'], { type: 'application/octet-stream' }),
+    deleteDatabaseBackup: async (_accessToken, fileName) => ({
+      fileName,
       sizeBytes: 1024,
       createdAtUtc: '2026-07-15T12:00:00Z',
       kind: 'manual',

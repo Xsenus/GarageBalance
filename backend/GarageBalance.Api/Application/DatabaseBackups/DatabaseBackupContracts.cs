@@ -47,6 +47,11 @@ public sealed record DatabaseBackupFileDto(
     DateTimeOffset CreatedAtUtc,
     string Kind);
 
+public sealed record DatabaseBackupDownloadDto(
+    string FileName,
+    long SizeBytes,
+    Stream Content);
+
 public sealed record DatabaseBackupStatusDto(
     bool Enabled,
     bool AutomaticEnabled,
@@ -70,6 +75,15 @@ public interface IDatabaseBackupService
     Task<DateTimeOffset?> GetLastSuccessfulAutomaticBackupAtUtcAsync(CancellationToken cancellationToken);
     Task<DatabaseBackupResult<DatabaseBackupFileDto>> CreateAsync(
         DatabaseBackupKind kind,
+        string? reason,
+        Guid? actorUserId,
+        CancellationToken cancellationToken);
+    Task<DatabaseBackupResult<DatabaseBackupDownloadDto>> OpenDownloadAsync(
+        string fileName,
+        Guid? actorUserId,
+        CancellationToken cancellationToken);
+    Task<DatabaseBackupResult<DatabaseBackupFileDto>> DeleteAsync(
+        string fileName,
         string? reason,
         Guid? actorUserId,
         CancellationToken cancellationToken);

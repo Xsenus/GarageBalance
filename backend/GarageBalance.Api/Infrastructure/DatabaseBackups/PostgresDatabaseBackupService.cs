@@ -189,6 +189,151 @@ public sealed partial class PostgresDatabaseBackupService(
         }
     }
 
+    public async Task<DatabaseBackupResult<DatabaseBackupDownloadDto>> OpenDownloadAsync(
+        string fileName,
+        Guid? actorUserId,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        var backup = FindManagedBackup(fileName);
+        if (!backup.Succeeded || backup.Value is null)
+        {
+            return DatabaseBackupResult<DatabaseBackupDownloadDto>.Failure(
+                backup.ErrorCode!,
+                backup.ErrorMessage!);
+        }
+
+        FileStream? stream = null;
+        try
+        {
+            var path = Path.Combine(_directory, backup.Value.FileName);
+            stream = new FileStream(
+                path,
+                FileMode.Open,
+                FileAccess.Read,
+                FileShare.Read,
+                bufferSize: 64 * 1024,
+                FileOptions.Asynchronous | FileOptions.SequentialScan);
+
+            auditEventWriter.Add(new AuditEventWriteRequest(
+                actorUserId,
+                "database.backup_downloaded",
+                "database_backup",
+                backup.Value.FileName,
+                Summary: "Администратор скачал резервную копию базы данных.",
+                Section: "settings",
+                ActionKind: "export",
+                EntityDisplayName: backup.Value.FileName,
+                Metadata: new Dictionary<string, object?>
+                {
+                    ["kind"] = backup.Value.Kind,
+                    ["sizeBytes"] = backup.Value.SizeBytes
+                }));
+            await unitOfWork.SaveChangesAsync(cancellationToken);
+            var result = DatabaseBackupResult<DatabaseBackupDownloadDto>.Success(
+                new DatabaseBackupDownloadDto(backup.Value.FileName, backup.Value.SizeBytes, stream));
+            stream = null;
+            return result;
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception exception)
+        {
+            logger.LogError(
+                "Database backup download failed. ExceptionType={ExceptionType}; Diagnostic={Diagnostic}",
+                exception.GetType().Name,
+                DiagnosticLogSanitizer.SanitizeException(exception));
+            return DatabaseBackupResult<DatabaseBackupDownloadDto>.Failure(
+                "database_backup_download_failed",
+                "Не удалось подготовить резервную копию к скачиванию.");
+        }
+        finally
+        {
+            if (stream is not null)
+            {
+                await stream.DisposeAsync();
+            }
+        }
+    }
+
+    public async Task<DatabaseBackupResult<DatabaseBackupFileDto>> DeleteAsync(
+        string fileName,
+        string? reason,
+        Guid? actorUserId,
+        CancellationToken cancellationToken)
+    {
+        reason = reason?.Trim();
+        if (string.IsNullOrWhiteSpace(reason))
+        {
+            return DatabaseBackupResult<DatabaseBackupFileDto>.Failure(
+                "database_backup_delete_reason_required",
+                "Укажите причину удаления резервной копии.");
+        }
+
+        if (reason.Length is < 3 or > 500)
+        {
+            return DatabaseBackupResult<DatabaseBackupFileDto>.Failure(
+                "database_backup_delete_reason_invalid",
+                "Причина должна содержать от 3 до 500 символов.");
+        }
+
+        var backup = FindManagedBackup(fileName);
+        if (!backup.Succeeded || backup.Value is null)
+        {
+            return backup;
+        }
+
+        if (!await OperationLock.WaitAsync(0, cancellationToken))
+        {
+            return DatabaseBackupResult<DatabaseBackupFileDto>.Failure(
+                "database_backup_in_progress",
+                "Сейчас создается резервная копия. Дождитесь завершения операции.");
+        }
+
+        try
+        {
+            File.Delete(Path.Combine(_directory, backup.Value.FileName));
+            auditEventWriter.Add(new AuditEventWriteRequest(
+                actorUserId,
+                "database.backup_deleted",
+                "database_backup",
+                backup.Value.FileName,
+                Summary: "Администратор удалил резервную копию базы данных.",
+                Section: "settings",
+                ActionKind: "delete",
+                EntityDisplayName: backup.Value.FileName,
+                Reason: reason,
+                Metadata: new Dictionary<string, object?>
+                {
+                    ["kind"] = backup.Value.Kind,
+                    ["sizeBytes"] = backup.Value.SizeBytes
+                }));
+            await unitOfWork.SaveChangesAsync(cancellationToken);
+            logger.LogInformation("Database backup {BackupFileName} was deleted.", backup.Value.FileName);
+            return DatabaseBackupResult<DatabaseBackupFileDto>.Success(backup.Value);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception exception)
+        {
+            logger.LogError(
+                "Database backup deletion failed. ExceptionType={ExceptionType}; Diagnostic={Diagnostic}",
+                exception.GetType().Name,
+                DiagnosticLogSanitizer.SanitizeException(exception));
+            return DatabaseBackupResult<DatabaseBackupFileDto>.Failure(
+                "database_backup_delete_failed",
+                "Не удалось удалить резервную копию.");
+        }
+        finally
+        {
+            OperationLock.Release();
+        }
+    }
+
     private NpgsqlConnectionStringBuilder BuildConnectionSettings()
     {
         var connectionString = configuration.GetConnectionString("DefaultConnection");
@@ -243,6 +388,25 @@ public sealed partial class PostgresDatabaseBackupService(
                 new DateTimeOffset(file.LastWriteTimeUtc, TimeSpan.Zero),
                 ParseKind(file.Name)))
             .ToArray();
+    }
+
+    private DatabaseBackupResult<DatabaseBackupFileDto> FindManagedBackup(string fileName)
+    {
+        fileName = fileName?.Trim() ?? string.Empty;
+        if (!ManagedBackupName().IsMatch(fileName) || !string.Equals(Path.GetFileName(fileName), fileName, StringComparison.Ordinal))
+        {
+            return DatabaseBackupResult<DatabaseBackupFileDto>.Failure(
+                "database_backup_file_invalid",
+                "Указано недопустимое имя резервной копии.");
+        }
+
+        var backup = EnumerateBackups(int.MaxValue)
+            .FirstOrDefault(item => string.Equals(item.FileName, fileName, StringComparison.Ordinal));
+        return backup is null
+            ? DatabaseBackupResult<DatabaseBackupFileDto>.Failure(
+                "database_backup_not_found",
+                "Резервная копия не найдена или уже удалена.")
+            : DatabaseBackupResult<DatabaseBackupFileDto>.Success(backup);
     }
 
     private void DeleteExpiredBackups()
