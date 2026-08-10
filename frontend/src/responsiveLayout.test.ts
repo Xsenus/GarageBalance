@@ -330,6 +330,16 @@ describe('responsive layout styles', () => {
     expect(normalizedAppCss).toContain('.settings-card-body > .summary-strip {\n    grid-template-columns: 1fr;')
   })
 
+  it('stretches and centers cash and bank balance groups', () => {
+    expect(normalizedAppCss).toContain('.summary-strip.cash-bank-summary {\n  width: 100%;\n  grid-template-columns: repeat(4, minmax(0, 1fr));')
+    expect(normalizedAppCss).toContain('.summary-strip.cash-bank-summary strong {\n  white-space: nowrap;\n  font-variant-numeric: tabular-nums;')
+    expect(normalizedAppCss).toContain('.cash-bank-action-card {\n  display: grid;\n  gap: 12px;\n  align-content: start;\n  justify-items: stretch;')
+    expect(normalizedAppCss).toContain('.cash-bank-action-card > div:first-child {\n  display: flex;\n  align-items: center;\n  justify-content: center;')
+    expect(normalizedAppCss).toContain('.cash-bank-action-card > .dialog-actions {\n  display: grid;\n  width: 100%;\n  grid-template-columns: repeat(2, minmax(0, 1fr));')
+    expect(normalizedAppCss).toContain('.cash-bank-action-card > .dialog-actions > button {\n  width: 100%;\n  min-width: 0;\n  justify-content: center;')
+    expect(normalizedAppCss).toContain('.summary-strip.cash-bank-summary,\n  .cash-bank-opening-grid,\n  .cash-bank-adjustment-grid,\n  .cash-bank-action-groups {\n    grid-template-columns: 1fr;')
+  })
+
   it('keeps the garage editor wide, compact and responsive', () => {
     expect(normalizedAppCss).toContain('.detail-dialog.contractors-dialog--garage {\n  width: min(1120px, calc(100vw - 48px));')
     expect(normalizedAppCss).toContain('.contractors-dialog--garage .contractors-modal-form {\n  gap: 10px;')

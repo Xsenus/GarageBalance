@@ -963,8 +963,18 @@ h1 {
   gap: 16px;
 }
 
-.cash-bank-summary {
-  grid-template-columns: repeat(2, minmax(140px, 1fr));
+.summary-strip.cash-bank-summary {
+  width: 100%;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.summary-strip.cash-bank-summary > div {
+  min-width: 0;
+}
+
+.summary-strip.cash-bank-summary strong {
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
 }
 
 .cash-bank-opening-form,
@@ -998,17 +1008,34 @@ h1 {
 .cash-bank-action-card {
   display: grid;
   gap: 12px;
+  align-content: start;
+  justify-items: stretch;
   padding: 14px;
   border: 1px solid #dce3ee;
   border-radius: 8px;
   background: #fff;
+  text-align: center;
 }
 
 .cash-bank-action-card > div:first-child {
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 8px;
   color: #344054;
+}
+
+.cash-bank-action-card > .dialog-actions {
+  display: grid;
+  width: 100%;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.cash-bank-action-card > .dialog-actions > button {
+  width: 100%;
+  min-width: 0;
+  justify-content: center;
 }
 
 .settings-card-intro--compact {
@@ -8392,7 +8419,7 @@ button.operation-row:focus-visible {
     grid-template-columns: 1fr;
   }
 
-  .cash-bank-summary,
+  .summary-strip.cash-bank-summary,
   .cash-bank-opening-grid,
   .cash-bank-adjustment-grid,
   .cash-bank-action-groups {
