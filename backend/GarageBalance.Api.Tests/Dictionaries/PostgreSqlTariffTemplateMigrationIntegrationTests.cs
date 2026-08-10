@@ -1,4 +1,5 @@
 using GarageBalance.Api.Infrastructure.Data;
+using GarageBalance.Api.Domain.Dictionaries;
 using GarageBalance.Api.Tests.Common;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
@@ -9,6 +10,7 @@ namespace GarageBalance.Api.Tests.Dictionaries;
 public sealed class PostgreSqlTariffTemplateMigrationIntegrationTests
 {
     private const string PreviousMigration = "20260805065345_ApplyAutomaticIncomeFundBalances";
+    private const string CleanupPreviousMigration = "20260810103955_DistinguishTariffTemplates";
 
     [PostgreSqlFact]
     public async Task Migration_SeparatesDictionaryTemplatesFromGeneratedServiceVersions()
@@ -43,5 +45,91 @@ public sealed class PostgreSqlTariffTemplateMigrationIntegrationTests
             .ToArrayAsync();
 
         Assert.Equal(new[] { false, true, false }, classifications);
+    }
+
+    [PostgreSqlFact]
+    public async Task Migration_RemovesOnlyUnreferencedGeneratedTariffVersions()
+    {
+        await using var database = await PostgreSqlTestDatabase.CreateAsync();
+        var orphan = new Tariff
+        {
+            Name = "Вода — по счетчику, 10.08.2026, 1234abcd",
+            CalculationBase = "meter_water",
+            Rate = 100.80m,
+            EffectiveFrom = new DateOnly(2026, 8, 10),
+            IsTemplate = false
+        };
+        var current = new Tariff
+        {
+            Name = "Вода — по счетчику",
+            CalculationBase = "meter_water",
+            Rate = 100.80m,
+            EffectiveFrom = new DateOnly(2026, 8, 10),
+            IsTemplate = false
+        };
+        var historical = new Tariff
+        {
+            Name = "Вода — обычный",
+            CalculationBase = "fixed",
+            Rate = 100.80m,
+            EffectiveFrom = new DateOnly(2026, 1, 1),
+            IsTemplate = false
+        };
+        var template = new Tariff
+        {
+            Name = "Шаблон воды",
+            CalculationBase = "meter_water",
+            Rate = 100.80m,
+            EffectiveFrom = new DateOnly(2026, 1, 1),
+            IsTemplate = true
+        };
+        var service = new ChargeServiceSetting
+        {
+            Name = "Вода",
+            IsRegular = true,
+            PeriodicityMonths = 1,
+            AccrualStartMonth = 1,
+            PaymentDueDay = 30,
+            OverdueGraceDays = 30,
+            TariffId = current.Id,
+            IsMetered = true,
+            UnitName = "м³"
+        };
+
+        await using (var setupContext = database.CreateContext())
+        {
+            await setupContext.GetService<IMigrator>().MigrateAsync(CleanupPreviousMigration);
+            setupContext.AddRange(orphan, current, historical, template, service);
+            setupContext.ChargeServiceTariffVersions.AddRange(
+                new ChargeServiceTariffVersion
+                {
+                    ChargeServiceSettingId = service.Id,
+                    TariffId = historical.Id,
+                    EffectiveFrom = historical.EffectiveFrom
+                },
+                new ChargeServiceTariffVersion
+                {
+                    ChargeServiceSettingId = service.Id,
+                    TariffId = current.Id,
+                    EffectiveFrom = current.EffectiveFrom
+                });
+            await setupContext.SaveChangesAsync();
+        }
+
+        await using (var migrateContext = database.CreateContext())
+        {
+            await migrateContext.Database.MigrateAsync();
+        }
+
+        await using var verificationContext = database.CreateContext();
+        var retainedIds = await verificationContext.Tariffs
+            .Where(item => item.Id == orphan.Id || item.Id == current.Id || item.Id == historical.Id || item.Id == template.Id)
+            .Select(item => item.Id)
+            .ToArrayAsync();
+
+        Assert.DoesNotContain(orphan.Id, retainedIds);
+        Assert.Contains(current.Id, retainedIds);
+        Assert.Contains(historical.Id, retainedIds);
+        Assert.Contains(template.Id, retainedIds);
     }
 }

@@ -2283,12 +2283,16 @@ public sealed class DictionaryService(
         CancellationToken cancellationToken)
     {
         var effectiveFrom = request.EffectiveFrom!.Value;
-        var tariff = new Tariff
+        var tariff = await chargeServiceSettingRepository.FindTariffVersionAsync(
+            setting.Id,
+            effectiveFrom,
+            cancellationToken);
+        var createdTariff = tariff is null;
+        tariff ??= new Tariff
         {
             Name = CreateServiceTariffVersionName(
                 serviceName,
-                setting.HasTieredTariff ? "metered_tiered" : setting.IsMetered ? "metered" : "regular",
-                effectiveFrom),
+                setting.HasTieredTariff ? "metered_tiered" : setting.IsMetered ? "metered" : "regular"),
             CalculationBase = sourceTariff.CalculationBase,
             Rate = roundedRate,
             EffectiveFrom = effectiveFrom,
@@ -2304,6 +2308,15 @@ public sealed class DictionaryService(
             ElectricityTiersJson = sourceTariff.ElectricityTiersJson,
             IsTemplate = false
         };
+        CopyTariffVersionTerms(
+            tariff,
+            sourceTariff,
+            serviceName,
+            setting.HasTieredTariff ? "metered_tiered" : setting.IsMetered ? "metered" : "regular",
+            roundedRate,
+            effectiveFrom,
+            NormalizeOptional(request.ChangeReason));
+
         var targetServiceRequest = request.Service with { TariffId = tariff.Id };
         var linkValidation = await ValidateChargeServiceAccountingLinksAsync(targetServiceRequest, cancellationToken, tariff);
         if (!linkValidation.Succeeded)
@@ -2319,7 +2332,10 @@ public sealed class DictionaryService(
         var oldValues = ToChargeServiceAuditValues(setting);
         ApplyChargeServiceSetting(setting, serviceRequest);
         setting.UpdatedAtUtc = DateTimeOffset.UtcNow;
-        tariffRepository.Add(tariff);
+        if (createdTariff)
+        {
+            tariffRepository.Add(tariff);
+        }
         await chargeServiceSettingRepository.SetTariffVersionAsync(
             setting.Id,
             sourceTariff.Id,
@@ -2328,10 +2344,12 @@ public sealed class DictionaryService(
         await chargeServiceSettingRepository.SetTariffVersionAsync(setting.Id, tariff.Id, effectiveFrom, cancellationToken);
         AddAudit(
             actorUserId,
-            "dictionary.tariff_created",
+            createdTariff ? "dictionary.tariff_created" : "dictionary.tariff_updated",
             "tariff",
             tariff.Id,
-            $"Создана версия ставки {FormatTariffAuditDetails(tariff)} для услуги {serviceName}.",
+            createdTariff
+                ? $"Создана версия ставки {FormatTariffAuditDetails(tariff)} для услуги {serviceName}."
+                : $"Обновлена версия ставки {FormatTariffAuditDetails(tariff)} для услуги {serviceName}.",
             NormalizeOptional(request.ChangeReason));
         AddAudit(
             actorUserId,
@@ -2438,15 +2456,27 @@ public sealed class DictionaryService(
             return DictionaryResult<UpdatedChargeServiceWithTariffDto>.Failure(tiersValidation.ErrorCode!, tiersValidation.ErrorMessage!);
         }
 
-        var tariff = new Tariff
+        var tariff = await chargeServiceSettingRepository.FindTariffVersionAsync(
+            setting.Id,
+            request.EffectiveFrom.Value,
+            cancellationToken);
+        var createdTariff = tariff is null;
+        tariff ??= new Tariff
         {
-            Name = CreateServiceTariffVersionName(serviceName, mode, request.EffectiveFrom.Value),
+            Name = CreateServiceTariffVersionName(serviceName, mode),
             CalculationBase = targetCalculationBase,
             Rate = roundedRate,
             EffectiveFrom = request.EffectiveFrom.Value,
             Comment = NormalizeOptional(request.ChangeReason) ?? $"Новая версия режима услуги «{serviceName}».",
             IsTemplate = false
         };
+        tariff.Name = CreateServiceTariffVersionName(serviceName, mode);
+        tariff.CalculationBase = targetCalculationBase;
+        tariff.Rate = roundedRate;
+        tariff.Comment = NormalizeOptional(request.ChangeReason) ?? tariff.Comment;
+        tariff.IsTemplate = false;
+        tariff.IsArchived = false;
+        tariff.UpdatedAtUtc = DateTimeOffset.UtcNow;
         ApplyElectricityTiers(tariff, tiersValidation.Value);
 
         var targetServiceRequest = request.Service with
@@ -2477,7 +2507,10 @@ public sealed class DictionaryService(
         var oldValues = ToChargeServiceAuditValues(setting);
         ApplyChargeServiceSetting(setting, serviceRequest);
         setting.UpdatedAtUtc = DateTimeOffset.UtcNow;
-        tariffRepository.Add(tariff);
+        if (createdTariff)
+        {
+            tariffRepository.Add(tariff);
+        }
         await chargeServiceSettingRepository.SetTariffVersionAsync(
             setting.Id,
             sourceTariff.Id,
@@ -2486,10 +2519,12 @@ public sealed class DictionaryService(
         await chargeServiceSettingRepository.SetTariffVersionAsync(setting.Id, tariff.Id, tariff.EffectiveFrom, cancellationToken);
         AddAudit(
             actorUserId,
-            "dictionary.tariff_created",
+            createdTariff ? "dictionary.tariff_created" : "dictionary.tariff_updated",
             "tariff",
             tariff.Id,
-            $"Создана версия тарифа {FormatTariffAuditDetails(tariff)} при смене режима услуги {serviceName}.",
+            createdTariff
+                ? $"Создана версия тарифа {FormatTariffAuditDetails(tariff)} при смене режима услуги {serviceName}."
+                : $"Обновлена версия тарифа {FormatTariffAuditDetails(tariff)} при смене режима услуги {serviceName}.",
             NormalizeOptional(request.ChangeReason));
         AddAudit(
             actorUserId,
@@ -3250,6 +3285,34 @@ public sealed class DictionaryService(
         tariff.ElectricityThirdRate = tiers?.ThirdRate;
     }
 
+    private static void CopyTariffVersionTerms(
+        Tariff target,
+        Tariff source,
+        string serviceName,
+        string mode,
+        decimal rate,
+        DateOnly effectiveFrom,
+        string? changeReason)
+    {
+        target.Name = CreateServiceTariffVersionName(serviceName, mode);
+        target.CalculationBase = source.CalculationBase;
+        target.Rate = rate;
+        target.EffectiveFrom = effectiveFrom;
+        target.Comment = changeReason ?? $"Изменение ставки услуги «{serviceName}».";
+        target.ElectricityFirstThreshold = source.ElectricityFirstThreshold;
+        target.ElectricitySecondThreshold = source.ElectricitySecondThreshold;
+        target.ElectricityFirstTierName = source.ElectricityFirstTierName;
+        target.ElectricitySecondTierName = source.ElectricitySecondTierName;
+        target.ElectricityThirdTierName = source.ElectricityThirdTierName;
+        target.ElectricityFirstRate = source.ElectricityFirstRate;
+        target.ElectricitySecondRate = source.ElectricitySecondRate;
+        target.ElectricityThirdRate = source.ElectricityThirdRate;
+        target.ElectricityTiersJson = source.ElectricityTiersJson;
+        target.IsTemplate = false;
+        target.IsArchived = false;
+        target.UpdatedAtUtc = DateTimeOffset.UtcNow;
+    }
+
     private static IReadOnlyList<ElectricityTierConfigItem> ReadElectricityTiers(Tariff tariff)
     {
         if (!string.IsNullOrWhiteSpace(tariff.ElectricityTiersJson))
@@ -3590,10 +3653,9 @@ public sealed class DictionaryService(
         return $"{serviceName[..Math.Min(serviceName.Length, maxServiceNameLength)]}{suffix}";
     }
 
-    private static string CreateServiceTariffVersionName(string serviceName, string mode, DateOnly effectiveFrom)
+    private static string CreateServiceTariffVersionName(string serviceName, string mode)
     {
-        var versionToken = Guid.NewGuid().ToString("N", CultureInfo.InvariantCulture)[..8];
-        var suffix = $" — {FormatTariffMode(mode)}, {effectiveFrom:dd.MM.yyyy}, {versionToken}";
+        var suffix = $" — {FormatTariffMode(mode)}";
         var maxServiceNameLength = 200 - suffix.Length;
         return $"{serviceName[..Math.Min(serviceName.Length, maxServiceNameLength)]}{suffix}";
     }

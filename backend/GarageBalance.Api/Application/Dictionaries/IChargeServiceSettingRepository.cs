@@ -15,6 +15,7 @@ public interface IChargeServiceSettingRepository
     Task<ChargeServiceSetting?> FindActiveAsync(Guid id, CancellationToken cancellationToken);
     Task<ChargeServiceSetting?> FindArchivedAsync(Guid id, CancellationToken cancellationToken);
     Task<bool> ActiveDuplicateExistsAsync(Guid? ignoredId, string name, CancellationToken cancellationToken);
+    Task<Tariff?> FindTariffVersionAsync(Guid serviceId, DateOnly effectiveFrom, CancellationToken cancellationToken);
     Task SetTariffVersionAsync(Guid serviceId, Guid tariffId, DateOnly effectiveFrom, CancellationToken cancellationToken);
     Task<bool> HasTariffVersionAsync(Guid tariffId, CancellationToken cancellationToken);
     void Add(ChargeServiceSetting setting);

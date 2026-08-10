@@ -169,7 +169,7 @@ public sealed class PostgreSqlTariffModeIntegrationTests
 
         Assert.All(results, result => Assert.True(result.Succeeded));
         var createdTariffIds = results.Select(result => result.Value!.Tariff.Id).ToHashSet();
-        Assert.Equal(2, createdTariffIds.Count);
+        Assert.Single(createdTariffIds);
 
         await using var verificationContext = database.CreateContext();
         var savedService = await verificationContext.ChargeServiceSettings.SingleAsync(item => item.Id == setting.Id);

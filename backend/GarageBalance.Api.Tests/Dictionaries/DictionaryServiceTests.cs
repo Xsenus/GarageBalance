@@ -4198,6 +4198,38 @@ public sealed class DictionaryServiceTests
         Assert.Equal("meter_electricity", firstAugust.Tariff!.CalculationBase);
         Assert.Equal(regular.Value.Tariff.Id, secondAugust.TariffId);
         Assert.Equal("fixed", secondAugust.Tariff!.CalculationBase);
+
+        var repeatedSameDate = await service.UpdateChargeServiceWithTariffAsync(
+            setting.Id,
+            new UpdateChargeServiceWithTariffRequest(
+                new UpsertChargeServiceSettingRequest(
+                    setting.Name,
+                    true,
+                    1,
+                    1,
+                    30,
+                    null,
+                    30,
+                    true,
+                    false,
+                    "кВт·ч",
+                    incomeType.Id,
+                    regular.Value.Tariff.Id),
+                8.25m,
+                "metered",
+                new DateOnly(2026, 8, 2),
+                ChangeReason: "Повторная настройка на ту же дату",
+                CalculationBase: "meter_electricity"),
+            Guid.NewGuid(),
+            CancellationToken.None);
+
+        Assert.True(repeatedSameDate.Succeeded, repeatedSameDate.ErrorMessage);
+        Assert.Equal(regular.Value.Tariff.Id, repeatedSameDate.Value!.Tariff.Id);
+        Assert.Equal("meter_electricity", repeatedSameDate.Value.Tariff.CalculationBase);
+        Assert.Equal(8.25m, repeatedSameDate.Value.Tariff.Rate);
+        Assert.Equal(3, database.Context.Tariffs.Count());
+        Assert.Equal(3, database.Context.ChargeServiceTariffVersions.Count(item => item.ChargeServiceSettingId == setting.Id));
+        Assert.Contains(database.Context.AuditEvents, item => item.Action == "dictionary.tariff_updated");
     }
 
     [Fact]
@@ -4257,6 +4289,62 @@ public sealed class DictionaryServiceTests
         Assert.Equal(500m, august.Tariff!.Rate);
         Assert.Equal(result.Value.Tariff.Id, september.TariffId);
         Assert.Equal(650m, september.Tariff!.Rate);
+
+        var octoberResult = await DictionaryServiceTestFactory.Create(database.Context).UpdateChargeServiceWithTariffAsync(
+            setting.Id,
+            new UpdateChargeServiceWithTariffRequest(
+                new UpsertChargeServiceSettingRequest(
+                    setting.Name,
+                    true,
+                    1,
+                    1,
+                    30,
+                    null,
+                    30,
+                    false,
+                    false,
+                    "руб.",
+                    incomeType.Id,
+                    result.Value.Tariff.Id),
+                700m,
+                EffectiveFrom: new DateOnly(2026, 10, 1),
+                ChangeReason: "Новая ставка с октября"),
+            Guid.NewGuid(),
+            CancellationToken.None);
+
+        Assert.True(octoberResult.Succeeded, octoberResult.ErrorMessage);
+        var tariffCountBeforeCorrection = database.Context.Tariffs.Count();
+
+        var correctedSeptember = await DictionaryServiceTestFactory.Create(database.Context).UpdateChargeServiceWithTariffAsync(
+            setting.Id,
+            new UpdateChargeServiceWithTariffRequest(
+                new UpsertChargeServiceSettingRequest(
+                    setting.Name,
+                    true,
+                    1,
+                    1,
+                    30,
+                    null,
+                    30,
+                    false,
+                    false,
+                    "руб.",
+                    incomeType.Id,
+                    octoberResult.Value!.Tariff.Id),
+                675m,
+                EffectiveFrom: new DateOnly(2026, 9, 1),
+                ChangeReason: "Исправленная ставка с сентября"),
+            Guid.NewGuid(),
+            CancellationToken.None);
+
+        Assert.True(correctedSeptember.Succeeded, correctedSeptember.ErrorMessage);
+        Assert.Equal(result.Value.Tariff.Id, correctedSeptember.Value!.Tariff.Id);
+        Assert.Equal(675m, correctedSeptember.Value.Tariff.Rate);
+        Assert.Equal(tariffCountBeforeCorrection, database.Context.Tariffs.Count());
+        Assert.Equal(octoberResult.Value.Tariff.Id, setting.TariffId);
+        Assert.Equal(
+            3,
+            database.Context.ChargeServiceTariffVersions.Count(item => item.ChargeServiceSettingId == setting.Id));
     }
 
     [Fact]
