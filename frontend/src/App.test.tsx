@@ -5422,7 +5422,9 @@ describe('App', () => {
     expect(futureDecemberInput).toBeEnabled()
     expect(futureDecemberInput).not.toHaveAttribute('title')
     expect(futureDecemberInput).toHaveValue('5000')
-    expect(within(readingsPanel).getByRole('img', { name: 'С этого месяца установлен новый счетчик ЭЛ-2026-12' })).toHaveAttribute('title', 'Замена счетчика. Новый номер: ЭЛ-2026-12')
+    const replacementMarker = within(readingsPanel).getByRole('img', { name: 'С этого месяца установлен новый счетчик ЭЛ-2026-12' })
+    expect(replacementMarker).toHaveAttribute('title', 'Замена счетчика. Новый номер: ЭЛ-2026-12')
+    expect(replacementMarker).toHaveClass('meter-readings-replacement-marker')
 
     const yearInput = within(readingsPanel).getByLabelText('Год показаний')
     await user.clear(yearInput)
@@ -14643,7 +14645,10 @@ describe('App', () => {
     await openSection(user, 'Платежи')
     const financePanel = await screen.findByRole('region', { name: 'Платежи' })
 
-    fireEvent.contextMenu(within(financePanel).getAllByText('Членский взнос')[0].closest('tr')!)
+    const paymentTable = within(financePanel).getAllByRole('table').find((table) => table.tagName === 'TABLE')
+    expect(paymentTable).toBeDefined()
+    const paymentName = await within(paymentTable!).findByText('Членский взнос')
+    fireEvent.contextMenu(paymentName.closest('tr')!)
     const menu = await screen.findByRole('menu', { name: 'Операции с платежами' })
     await user.click(within(menu).getByRole('menuitem', { name: 'Добавить' }))
     const dialog = await screen.findByRole('dialog', { name: 'Новое поступление' })
@@ -14999,7 +15004,10 @@ describe('App', () => {
     await openSection(user, 'Платежи')
     const financePanel = await screen.findByRole('region', { name: 'Платежи' })
 
-    fireEvent.contextMenu(within(financePanel).getAllByText('Членский взнос')[0].closest('tr')!)
+    const paymentTable = within(financePanel).getAllByRole('table').find((table) => table.tagName === 'TABLE')
+    expect(paymentTable).toBeDefined()
+    const paymentName = await within(paymentTable!).findByText('Членский взнос')
+    fireEvent.contextMenu(paymentName.closest('tr')!)
     const menu = await screen.findByRole('menu', { name: 'Операции с платежами' })
     expect(within(menu).getByRole('menuitem', { name: 'Удалить' })).toBeEnabled()
 

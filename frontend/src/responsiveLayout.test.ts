@@ -276,6 +276,7 @@ describe('responsive layout styles', () => {
     expect(normalizedAppCss).toContain('.meter-readings-title-row,\n.meter-readings-month-row,\n.meter-readings-data-row {\n  display: grid;\n  grid-template-columns: 96px repeat(12, minmax(106px, 1fr));')
     expect(normalizedAppCss).toContain('.meter-readings-month-row span {\n  display: grid;\n  grid-template-columns: minmax(0, 1fr) auto;')
     expect(normalizedAppCss).toContain('.meter-readings-data-row input {\n  box-sizing: border-box;\n  width: 100%;')
+    expect(normalizedAppCss).toContain('.meter-readings-replacement-marker {\n  position: absolute;\n  z-index: 1;\n  top: 50%;\n  left: 4px;\n  display: grid;\n  width: 17px;\n  height: 17px;\n  place-items: center;\n  line-height: 0;\n  transform: translateY(-50%);')
     expect(normalizedAppCss).toContain('.meter-readings-controls .form-field {\n  display: flex;\n  align-items: center;')
     expect(normalizedAppCss).toContain('.meter-readings-data-row > span:not(:first-child) {\n  display: block;\n  min-height: 32px;')
   })

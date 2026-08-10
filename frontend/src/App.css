@@ -2845,8 +2845,14 @@ h1 {
 .meter-readings-replacement-marker {
   position: absolute;
   z-index: 1;
-  top: 9px;
-  left: 6px;
+  top: 50%;
+  left: 4px;
+  display: grid;
+  width: 17px;
+  height: 17px;
+  place-items: center;
+  line-height: 0;
+  transform: translateY(-50%);
   color: #175cd3;
 }
 
