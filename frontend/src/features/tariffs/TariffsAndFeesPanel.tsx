@@ -2349,8 +2349,10 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
         <div className="contractors-sheet" role="table" aria-label={tariffTableLabel}>
             <div className="contractors-sheet-header" role="row">
               <span role="columnheader">Основание</span>
-              <span role="columnheader" aria-label="Единица измерения">Ед.</span>
               <span role="columnheader">Значение / ставка</span>
+              <span role="columnheader" aria-label="Единица измерения">Ед.</span>
+              <span role="columnheader">Месяц начисления</span>
+              <span role="columnheader">Оплата до</span>
               <span role="columnheader" aria-label="Перенос долга в просроченный, дней">Просрочка, дн.</span>
               <span role="columnheader">Пороговая тарификация</span>
               <span role="columnheader">По счетчику</span>
@@ -2362,8 +2364,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
                 ? backendChargeServices.find((setting) => setting.id === row.backendServiceSettingId) ?? null
                 : null
               const isServiceSaving = Boolean(serviceSetting && tariffSavingRowId === `charge-service-${serviceSetting.id}`)
-              const isStandaloneSalaryTariff = row.category === 'Зарплатный фонд' && Boolean(row.backendTariffId) && !row.backendServiceSettingId
-              const isRowDisabled = row.isDeleted || tariffSavingRowId === row.id || isServiceSaving || isStandaloneSalaryTariff
+              const isRowDisabled = row.isDeleted || tariffSavingRowId === row.id || isServiceSaving
               const thresholdRowsForTariff = getElectricityThresholdRows(tariffRows, row)
               const canDeleteThreshold = Boolean(row.threshold && thresholdRowsForTariff.length > 2)
               const isLastThresholdRow = thresholdRowsForTariff.at(-1)?.id === row.id
@@ -2445,62 +2446,6 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
                     ) : (
                       <span>{row.title}</span>
                     )}
-                    {isStandaloneSalaryTariff && row.group ? <small className="form-field-hint">Изменяется в разделе «Справочники → Тарифы»</small> : null}
-                  </span>
-                  <span role="cell">
-                    <div className="tariffs-cell-stack">
-                    {row.dateDay === undefined && row.serviceSettingKind !== 'periodicity' ? (
-                      row.serviceSettingKind === 'main' && row.calculationBase ? (
-                        <SelectControl
-                          aria-label={`${row.category}: ${row.title}: единица`}
-                          value={normalizeTariffCalculationUnitName(row.calculationBase, tariffDrafts[row.id]?.unit ?? row.unit)}
-                          options={getTariffCalculationUnitOptions(row.calculationBase)}
-                          disabled={!canManageTariffs || isRowDisabled}
-                          onChange={(nextUnitName) => {
-                            setTariffDrafts((drafts) => ({ ...drafts, [row.id]: { ...drafts[row.id], unit: nextUnitName } }))
-                            void commitTariffTextChange(row, 'unit', nextUnitName)
-                          }}
-                        />
-                      ) : (
-                        <input
-                          aria-label={`${row.category}: ${row.title}: единица`}
-                          className="contractors-editable-input contractors-editable-input--unit"
-                          disabled={!canManageTariffs || isRowDisabled || Boolean(row.calculationBase || row.serviceSettingKind === 'main')}
-                          value={tariffDrafts[row.id]?.unit ?? ''}
-                          onChange={(event) => setTariffDrafts((drafts) => ({ ...drafts, [row.id]: { ...drafts[row.id], unit: event.target.value } }))}
-                          onKeyDown={(event) => handleEditableInputKeyDown(event, () => commitTariffTextChange(row, 'unit'))}
-                        />
-                      )
-                    ) : null}
-                    {periodicityRow ? (
-                      <div className="tariffs-cell-stack">
-                        <small>Периодичность</small>
-                        <SelectControl
-                          aria-label={`${row.category}: периодичность`}
-                          value={normalizeRegularServicePeriodicity(tariffDrafts[periodicityRow.id]?.amount ?? periodicityRow.amount)}
-                          options={regularServicePeriodicityOptions}
-                          disabled={!canManageTariffs || isRowDisabled}
-                          onChange={(value) => commitTariffPeriodicityChange(periodicityRow, value)}
-                        />
-                      </div>
-                    ) : null}
-                    {startDateRow ? (
-                      <div className="tariffs-cell-stack">
-                        <small>Месяц начисления</small>
-                        <SelectControl
-                          aria-label={`${row.category}: месяц начисления`}
-                          className="contractors-editable-select-control--month"
-                          disabled={!canManageTariffs || isRowDisabled}
-                          value={tariffDrafts[startDateRow.id]?.dateMonth ?? startDateRow.dateMonth ?? contractorTariffMonthOptions[0].value}
-                          options={contractorTariffMonthOptions}
-                          onChange={(nextMonth) => {
-                            setTariffDrafts((drafts) => ({ ...drafts, [startDateRow.id]: { ...drafts[startDateRow.id], dateMonth: nextMonth } }))
-                            void commitTariffDateChange(startDateRow, nextMonth)
-                          }}
-                        />
-                      </div>
-                    ) : null}
-                    </div>
                   </span>
                   <span role="cell" className="contractors-value-cell">
                     {row.serviceSettingKind === 'periodicity' ? (
@@ -2581,27 +2526,62 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
                     )}
                   </span>
                   <span role="cell">
-                    <div className="tariffs-cell-stack">
-                    {overdueRow ? (
-                      <div className="tariffs-cell-stack">
-                        <small>Просрочка, дней</small>
-                        <input
-                          aria-label={`${overdueRow.category}: ${overdueRow.title}: значение`}
-                          className="contractors-editable-input contractors-editable-input--overdue-days"
-                          disabled={!canManageTariffs || isRowDisabled || tariffSavingRowId === overdueRow.id}
-                          inputMode="numeric"
-                          value={tariffDrafts[overdueRow.id]?.amount ?? ''}
-                          onChange={(event) => setTariffDrafts((drafts) => ({ ...drafts, [overdueRow.id]: { ...drafts[overdueRow.id], amount: event.target.value } }))}
-                          onBlur={(event) => {
-                            if (shouldCommitEditableInputOnBlur(event.currentTarget)) void commitTariffTextChange(overdueRow, 'amount')
+                    {row.dateDay === undefined && row.serviceSettingKind !== 'periodicity' ? (
+                      row.serviceSettingKind === 'main' && row.calculationBase ? (
+                        <SelectControl
+                          aria-label={`${row.category}: ${row.title}: единица`}
+                          value={normalizeTariffCalculationUnitName(row.calculationBase, tariffDrafts[row.id]?.unit ?? row.unit)}
+                          options={getTariffCalculationUnitOptions(row.calculationBase)}
+                          disabled={!canManageTariffs || isRowDisabled}
+                          onChange={(nextUnitName) => {
+                            setTariffDrafts((drafts) => ({ ...drafts, [row.id]: { ...drafts[row.id], unit: nextUnitName } }))
+                            void commitTariffTextChange(row, 'unit', nextUnitName)
                           }}
-                          onKeyDown={(event) => handleEditableInputKeyDown(event, () => commitTariffTextChange(overdueRow, 'amount'))}
                         />
-                      </div>
+                      ) : (
+                        <input
+                          aria-label={`${row.category}: ${row.title}: единица`}
+                          className="contractors-editable-input contractors-editable-input--unit"
+                          disabled={!canManageTariffs || isRowDisabled || Boolean(row.calculationBase || row.serviceSettingKind === 'main')}
+                          value={tariffDrafts[row.id]?.unit ?? ''}
+                          onChange={(event) => setTariffDrafts((drafts) => ({ ...drafts, [row.id]: { ...drafts[row.id], unit: event.target.value } }))}
+                          onKeyDown={(event) => handleEditableInputKeyDown(event, () => commitTariffTextChange(row, 'unit'))}
+                        />
+                      )
                     ) : null}
+                  </span>
+                  <span role="cell" className="tariffs-schedule-cell">
+                    <div className="tariffs-cell-stack">
+                      {periodicityRow ? (
+                        <div className="tariffs-cell-stack">
+                          <small>Периодичность</small>
+                          <SelectControl
+                            aria-label={`${row.category}: периодичность`}
+                            value={normalizeRegularServicePeriodicity(tariffDrafts[periodicityRow.id]?.amount ?? periodicityRow.amount)}
+                            options={regularServicePeriodicityOptions}
+                            disabled={!canManageTariffs || isRowDisabled}
+                            onChange={(value) => commitTariffPeriodicityChange(periodicityRow, value)}
+                          />
+                        </div>
+                      ) : null}
+                      {startDateRow ? (
+                        <SelectControl
+                          aria-label={`${row.category}: месяц начисления`}
+                          className="contractors-editable-select-control--month"
+                          disabled={!canManageTariffs || isRowDisabled}
+                          value={tariffDrafts[startDateRow.id]?.dateMonth ?? startDateRow.dateMonth ?? contractorTariffMonthOptions[0].value}
+                          options={contractorTariffMonthOptions}
+                          onChange={(nextMonth) => {
+                            setTariffDrafts((drafts) => ({ ...drafts, [startDateRow.id]: { ...drafts[startDateRow.id], dateMonth: nextMonth } }))
+                            void commitTariffDateChange(startDateRow, nextMonth)
+                          }}
+                        />
+                      ) : null}
+                    </div>
+                  </span>
+                  <span role="cell" className="tariffs-due-date-cell">
                     {dueDateRow ? (
                       <div className="tariffs-cell-stack">
-                        <small>{dueDateRow.monthlyDue ? 'Оплата до' : 'Оплата за год до'}</small>
                         <span className="contractors-date-value">
                           <input
                             aria-label={`${row.category}: оплата до: день`}
@@ -2644,7 +2624,22 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
                         {tariffDateErrors[dueDateRow.id] ? <small id={`${dueDateRow.id}-date-error`} className="contractors-field-error" role="alert">{tariffDateErrors[dueDateRow.id]}</small> : null}
                       </div>
                     ) : null}
-                    </div>
+                  </span>
+                  <span role="cell" className="tariffs-overdue-cell">
+                    {overdueRow ? (
+                      <input
+                        aria-label={`${overdueRow.category}: ${overdueRow.title}: значение`}
+                        className="contractors-editable-input contractors-editable-input--overdue-days"
+                        disabled={!canManageTariffs || isRowDisabled || tariffSavingRowId === overdueRow.id}
+                        inputMode="numeric"
+                        value={tariffDrafts[overdueRow.id]?.amount ?? ''}
+                        onChange={(event) => setTariffDrafts((drafts) => ({ ...drafts, [overdueRow.id]: { ...drafts[overdueRow.id], amount: event.target.value } }))}
+                        onBlur={(event) => {
+                          if (shouldCommitEditableInputOnBlur(event.currentTarget)) void commitTariffTextChange(overdueRow, 'amount')
+                        }}
+                        onKeyDown={(event) => handleEditableInputKeyDown(event, () => commitTariffTextChange(overdueRow, 'amount'))}
+                      />
+                    ) : null}
                   </span>
                   <span role="cell">
                     {showsServiceCalculationFlags ? (
@@ -2742,6 +2737,8 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
                         <span>Добавить порог</span>
                       </button>
                     </span>
+                    <span role="cell" />
+                    <span role="cell" />
                     <span role="cell" />
                     <span role="cell" />
                     <span role="cell" />

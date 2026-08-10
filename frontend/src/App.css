@@ -3018,14 +3018,16 @@ h1 {
 .tariffs-page .contractors-sheet-header,
 .tariffs-page .contractors-sheet-row {
   grid-template-columns:
-    minmax(230px, 1.55fr)
-    minmax(70px, 0.4fr)
-    minmax(120px, 0.7fr)
-    minmax(120px, 0.55fr)
-    minmax(160px, 0.8fr)
-    minmax(120px, 0.7fr)
-    104px;
-  min-width: 1000px;
+    minmax(250px, 1.5fr)
+    minmax(130px, 0.75fr)
+    minmax(78px, 0.42fr)
+    minmax(130px, 0.65fr)
+    minmax(190px, 0.95fr)
+    minmax(92px, 0.48fr)
+    minmax(125px, 0.62fr)
+    minmax(100px, 0.52fr)
+    146px;
+  min-width: 1240px;
 }
 
 .tariffs-page .contractors-sheet-header span,
@@ -3070,8 +3072,8 @@ h1 {
   padding-block: 5px;
 }
 
-.tariffs-page .contractors-sheet-row > span:nth-child(5) :is(.select-control, .select-control__trigger),
-.tariffs-page .contractors-sheet-row > span:nth-child(6) :is(.select-control, .select-control__trigger) {
+.tariffs-page .contractors-sheet-row > span:nth-child(7) :is(.select-control, .select-control__trigger),
+.tariffs-page .contractors-sheet-row > span:nth-child(8) :is(.select-control, .select-control__trigger) {
   width: 100%;
 }
 
@@ -3081,7 +3083,23 @@ h1 {
 }
 
 .tariffs-page :is(.contractors-date-value .contractors-editable-input, .contractors-date-value .select-control__trigger, .contractors-editable-select-control--month .select-control__trigger, .tariffs-cell-stack > .select-control .select-control__trigger) {
-  height: 34px;
+  height: 36px;
+  min-height: 36px;
+  box-sizing: border-box;
+}
+
+.tariffs-schedule-cell > .tariffs-cell-stack,
+.tariffs-due-date-cell > .tariffs-cell-stack {
+  width: 100%;
+}
+
+.tariffs-due-date-cell .contractors-date-value {
+  grid-template-columns: minmax(52px, 64px) minmax(112px, 1fr);
+  align-items: center;
+}
+
+.tariffs-overdue-cell .contractors-editable-input--overdue-days {
+  max-width: 86px;
 }
 
 .tariffs-add-threshold-button {

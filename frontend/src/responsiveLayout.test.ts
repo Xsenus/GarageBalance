@@ -146,9 +146,11 @@ describe('responsive layout styles', () => {
     expect(normalizedAppCss).toContain('.tariffs-add-threshold-button {\n  justify-self: start;')
   })
 
-  it('reserves enough room for both tariff row actions without overlapping the meter control', () => {
-    expect(normalizedAppCss).toContain('minmax(120px, 0.7fr)\n    104px;\n  min-width: 1000px;')
+  it('reserves separate tariff schedule columns and enough room for all row actions', () => {
+    expect(normalizedAppCss).toContain('minmax(190px, 0.95fr)\n    minmax(92px, 0.48fr)\n    minmax(125px, 0.62fr)\n    minmax(100px, 0.52fr)\n    146px;\n  min-width: 1240px;')
     expect(normalizedAppCss).toContain('.tariffs-row-actions {\n  display: flex;\n  min-height: 34px;')
+    expect(normalizedAppCss).toContain('.tariffs-due-date-cell .contractors-date-value {\n  grid-template-columns: minmax(52px, 64px) minmax(112px, 1fr);\n  align-items: center;')
+    expect(normalizedAppCss).toContain('height: 36px;\n  min-height: 36px;\n  box-sizing: border-box;')
   })
 
   it('keeps audit controls and event details readable at every supported width', () => {

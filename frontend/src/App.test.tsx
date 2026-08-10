@@ -447,8 +447,10 @@ describe('App', () => {
     const tariffTable = within(tariffsPanel).getByRole('table', { name: 'Тарифы и сборы' })
     expect(within(tariffTable).getAllByRole('columnheader').map((header) => header.getAttribute('aria-label') ?? header.textContent)).toEqual([
       'Основание',
-      'Единица измерения',
       'Значение / ставка',
+      'Единица измерения',
+      'Месяц начисления',
+      'Оплата до',
       'Перенос долга в просроченный, дней',
       'Пороговая тарификация',
       'По счетчику',
@@ -458,7 +460,7 @@ describe('App', () => {
     const valueInput = within(tariffsPanel).getByLabelText('Вода: Быстрый тариф воды: значение')
     expect(unitInput).toHaveValue('м³')
     expect(unitInput).toBeDisabled()
-    expect(Boolean(unitInput.closest('[role="cell"]')?.compareDocumentPosition(valueInput.closest('[role="cell"]') as Node) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true)
+    expect(Boolean(valueInput.closest('[role="cell"]')?.compareDocumentPosition(unitInput.closest('[role="cell"]') as Node) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true)
     const waterRow = within(tariffTable).getByText('Быстрый тариф воды').closest('[role="row"]')
     const overdueInput = within(tariffTable).getByLabelText('Вода: Перенос долга в просроченный: значение')
     expect(waterRow).toContainElement(overdueInput)
@@ -1536,6 +1538,18 @@ describe('App', () => {
     await user.click(within(dashboardTiles).getByRole('button', { name: /Тарифы\s+и\s+сборы/i }))
 
     const tariffsPanel = await screen.findByRole('region', { name: 'Тарифы и сборы' })
+    const tariffsTable = within(tariffsPanel).getByRole('table', { name: 'Тарифы и сборы' })
+    expect(within(tariffsTable).getAllByRole('columnheader').map((header) => header.textContent)).toEqual([
+      'Основание',
+      'Значение / ставка',
+      'Ед.',
+      'Месяц начисления',
+      'Оплата до',
+      'Просрочка, дн.',
+      'Пороговая тарификация',
+      'По счетчику',
+      'Действия',
+    ])
     const waterRateInput = await within(tariffsPanel).findByLabelText('Вода: Тариф на воду: значение')
     expect(waterRateInput).toHaveValue('1 250.00')
     expect(within(tariffsPanel).getByLabelText('Наружное освещение: Наружное освещение: значение')).toHaveValue('300.00')
@@ -1590,6 +1604,21 @@ describe('App', () => {
 
     const membershipDueDayInput = within(tariffsPanel).getByLabelText('Членский взнос: оплата до: день')
     const membershipDueMonthSelect = within(tariffsPanel).getByLabelText('Членский взнос: оплата до: месяц')
+    const membershipAccrualMonth = within(tariffsPanel).getByLabelText('Членский взнос: месяц начисления')
+    const membershipOverdueDays = within(tariffsPanel).getByLabelText('Членский взнос: Перенос долга в просроченный: значение')
+    const membershipRow = membershipDueDayInput.closest('[role="row"]')
+    expect(membershipRow).not.toBeNull()
+    const membershipCells = within(membershipRow!).getAllByRole('cell')
+    const membershipAmountInput = within(membershipCells[1]).getByRole('textbox')
+    const membershipUnitControl = within(membershipCells[2]).getByRole('textbox')
+    expect(membershipCells).toHaveLength(9)
+    expect(membershipCells[1]).toContainElement(membershipAmountInput)
+    expect(membershipCells[2]).toContainElement(membershipUnitControl)
+    expect(membershipCells[3]).toContainElement(membershipAccrualMonth)
+    expect(membershipCells[4]).toContainElement(membershipDueDayInput)
+    expect(membershipCells[4]).toContainElement(membershipDueMonthSelect)
+    expect(membershipCells[5]).toContainElement(membershipOverdueDays)
+    expect(within(membershipCells[5]).queryByText('Просрочка, дней')).not.toBeInTheDocument()
     expect(membershipDueDayInput).toHaveValue('30')
     expect(membershipDueMonthSelect).toHaveTextContent('Июнь')
     await user.click(membershipDueMonthSelect)
@@ -1779,14 +1808,21 @@ describe('App', () => {
     expect(within(tariffsPanel).queryByRole('table', { name: 'История изменений тарифов и сборов', hidden: true })).not.toBeInTheDocument()
   }, 180000)
 
-  it('keeps salary fund tariff rows read-only and routes editing to dictionaries', async () => {
+  it('edits salary fund tariff rows directly in tariffs and fees', async () => {
     const user = userEvent.setup()
     const salaryTariffs = [
       createTariff({ id: 'salary-electricians', name: 'Электрики', calculationBase: 'fixed', rate: 500 }),
       createTariff({ id: 'salary-accounting', name: 'Бухгалтерия', calculationBase: 'fixed', rate: 700 }),
       createTariff({ id: 'salary-management', name: 'Руководство', calculationBase: 'fixed', rate: 900 }),
     ]
-    const updateTariff = vi.fn()
+    const updateTariff = vi.fn(async (_token: string, id: string, request: UpsertTariffRequest) => createTariff({
+      id,
+      name: request.name,
+      calculationBase: request.calculationBase,
+      rate: request.rate,
+      effectiveFrom: request.effectiveFrom,
+      comment: request.comment ?? null,
+    }))
     const archiveTariff = vi.fn()
     const dictionaryClient = createDictionaryClient({
       getTariffs: async () => salaryTariffs,
@@ -1802,13 +1838,26 @@ describe('App', () => {
     const panel = await screen.findByRole('region', { name: 'Тарифы и сборы' })
 
     const electriciansInput = await within(panel).findByLabelText('Зарплатный фонд: Электрики: значение')
-    expect(electriciansInput).toBeDisabled()
-    expect(within(panel).getByLabelText('Зарплатный фонд: Бухгалтерия: значение')).toBeDisabled()
-    expect(within(panel).getByLabelText('Зарплатный фонд: Руководство: значение')).toBeDisabled()
-    expect(within(panel).getByText('Изменяется в разделе «Справочники → Тарифы»')).toBeInTheDocument()
+    expect(electriciansInput).toBeEnabled()
+    expect(within(panel).getByLabelText('Зарплатный фонд: Бухгалтерия: значение')).toBeEnabled()
+    expect(within(panel).getByLabelText('Зарплатный фонд: Руководство: значение')).toBeEnabled()
+    expect(within(panel).queryByText('Изменяется в разделе «Справочники → Тарифы»')).not.toBeInTheDocument()
     expect(within(panel).queryByRole('button', { name: 'Изменить тариф Электрики' })).not.toBeInTheDocument()
     expect(within(panel).queryByRole('button', { name: 'Убрать тариф Бухгалтерия' })).not.toBeInTheDocument()
-    expect(updateTariff).not.toHaveBeenCalled()
+
+    await user.clear(electriciansInput)
+    await user.type(electriciansInput, '550{Enter}')
+    const confirmDialog = await screen.findByRole('dialog', { name: 'Подтвердить изменение?' })
+    expect(within(confirmDialog).getByText('Зарплатный фонд: Электрики')).toBeInTheDocument()
+    expect(within(confirmDialog).getByText('500.00')).toBeInTheDocument()
+    expect(within(confirmDialog).getByText('550.00')).toBeInTheDocument()
+    await user.click(within(confirmDialog).getByRole('button', { name: 'Сохранить' }))
+    await waitFor(() => expect(updateTariff).toHaveBeenCalledWith(
+      expect.any(String),
+      'salary-electricians',
+      expect.objectContaining({ name: 'Электрики', calculationBase: 'fixed', rate: 550 }),
+    ))
+    expect(electriciansInput).toHaveValue('550.00')
     expect(archiveTariff).not.toHaveBeenCalled()
   })
 
