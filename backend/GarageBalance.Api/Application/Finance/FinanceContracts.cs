@@ -546,7 +546,9 @@ public sealed record CreateGarageDebtPaymentRequest(
     Guid? ReceiptBatchId = null);
 
 public sealed record ExpenseWorksheetRequest(
-    DateOnly? AccountingMonth);
+    DateOnly? AccountingMonth,
+    DateOnly? MonthFrom = null,
+    DateOnly? MonthTo = null);
 
 public sealed record SupplierOpeningBalanceRequest(
     DateOnly? MonthFrom);
@@ -615,6 +617,10 @@ public sealed record ExpenseWorksheetDto(
     decimal CashAmount,
     IReadOnlyList<ExpenseWorksheetRowDto> Rows)
 {
+    public DateOnly MonthFrom { get; init; }
+
+    public DateOnly MonthTo { get; init; }
+
     public decimal OpeningBalanceTotal { get; init; }
 
     public decimal OpeningDebtTotal { get; init; }

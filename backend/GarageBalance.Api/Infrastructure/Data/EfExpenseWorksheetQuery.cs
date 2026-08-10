@@ -26,9 +26,18 @@ public sealed class EfExpenseWorksheetQuery(
     private const int StaffOpeningPenaltyCategory = 15;
     private const int BalanceAdjustmentCategory = 16;
     private const int SupplierFundCategory = 17;
+    private const int SalaryConfigurationCategory = 18;
+
+    public Task<ExpenseWorksheetData> GetAsync(
+        DateOnly accountingMonth,
+        string[] cashExpenseTypeCodes,
+        string[] cashExpenseTypeNames,
+        CancellationToken cancellationToken) =>
+        GetAsync(accountingMonth, accountingMonth, cashExpenseTypeCodes, cashExpenseTypeNames, cancellationToken);
 
     public async Task<ExpenseWorksheetData> GetAsync(
-        DateOnly accountingMonth,
+        DateOnly monthFrom,
+        DateOnly monthTo,
         string[] cashExpenseTypeCodes,
         string[] cashExpenseTypeNames,
         CancellationToken cancellationToken)
@@ -43,7 +52,7 @@ public sealed class EfExpenseWorksheetQuery(
             : new DateOnly(businessDate.Value.Year, businessDate.Value.Month, 1);
 
         var supplierAccruals = dbContext.SupplierAccruals.AsNoTracking()
-            .Where(accrual => !accrual.IsCanceled && accrual.AccountingMonth == accountingMonth)
+            .Where(accrual => !accrual.IsCanceled && accrual.AccountingMonth >= monthFrom && accrual.AccountingMonth <= monthTo)
             .GroupBy(accrual => new
             {
                 accrual.SupplierId,
@@ -74,7 +83,7 @@ public sealed class EfExpenseWorksheetQuery(
             .Where(operation =>
                 !operation.IsCanceled &&
                 operation.OperationKind == FinancialOperationKinds.Expense &&
-                operation.AccountingMonth == accountingMonth &&
+                operation.AccountingMonth >= monthFrom && operation.AccountingMonth <= monthTo &&
                 operation.SupplierId != null &&
                 operation.ExpenseTypeId != null)
             .GroupBy(operation => new
@@ -118,8 +127,8 @@ public sealed class EfExpenseWorksheetQuery(
                     TypeName = (string?)expenseType.Name,
                     TypeCode = expenseType.Code,
                     Amount = businessDate == null ||
-                        accountingMonth < businessMonth!.Value ||
-                        (accountingMonth == businessMonth.Value &&
+                        monthFrom < businessMonth!.Value ||
+                        (monthFrom == businessMonth.Value &&
                             businessDate.Value.Day >= (configuredSalaryAccrualDay.FirstOrDefault() ?? ApplicationSettingsService.DefaultSalaryAccrualDay))
                             ? member.Rate
                             : 0m,
@@ -135,7 +144,7 @@ public sealed class EfExpenseWorksheetQuery(
             .Where(operation =>
                 !operation.IsCanceled &&
                 operation.OperationKind == FinancialOperationKinds.Expense &&
-                operation.AccountingMonth == accountingMonth &&
+                operation.AccountingMonth >= monthFrom && operation.AccountingMonth <= monthTo &&
                 operation.StaffMemberId != null &&
                 operation.ExpenseTypeId != null)
             .GroupBy(operation => new
@@ -167,7 +176,7 @@ public sealed class EfExpenseWorksheetQuery(
             .Where(operation =>
                 !operation.IsCanceled &&
                 operation.OperationKind == FinancialOperationKinds.Income &&
-                operation.AccountingMonth == accountingMonth &&
+                operation.AccountingMonth >= monthFrom && operation.AccountingMonth <= monthTo &&
                 operation.IncomeTypeId != null)
             .GroupBy(operation => new
             {
@@ -196,7 +205,7 @@ public sealed class EfExpenseWorksheetQuery(
             .Where(operation =>
                 !operation.IsCanceled &&
                 operation.OperationKind == FinancialOperationKinds.Income &&
-                operation.AccountingMonth < accountingMonth &&
+                operation.AccountingMonth < monthFrom &&
                 operation.IncomeTypeId != null)
             .GroupBy(operation => new
             {
@@ -222,7 +231,7 @@ public sealed class EfExpenseWorksheetQuery(
             });
 
         var supplierOpeningAccruals = dbContext.SupplierAccruals.AsNoTracking()
-            .Where(accrual => !accrual.IsCanceled && accrual.AccountingMonth < accountingMonth)
+            .Where(accrual => !accrual.IsCanceled && accrual.AccountingMonth < monthFrom)
             .GroupBy(accrual => new
             {
                 accrual.SupplierId,
@@ -253,7 +262,7 @@ public sealed class EfExpenseWorksheetQuery(
             .Where(operation =>
                 !operation.IsCanceled &&
                 operation.OperationKind == FinancialOperationKinds.Expense &&
-                operation.AccountingMonth < accountingMonth &&
+                operation.AccountingMonth < monthFrom &&
                 operation.SupplierId != null &&
                 operation.ExpenseTypeId != null)
             .GroupBy(operation => new
@@ -286,7 +295,7 @@ public sealed class EfExpenseWorksheetQuery(
             .Where(operation =>
                 !operation.IsCanceled &&
                 operation.OperationKind == FinancialOperationKinds.Expense &&
-                operation.AccountingMonth < accountingMonth &&
+                operation.AccountingMonth < monthFrom &&
                 operation.StaffMemberId != null &&
                 operation.ExpenseTypeId != null)
             .GroupBy(operation => new
@@ -317,7 +326,7 @@ public sealed class EfExpenseWorksheetQuery(
         var staffBonuses = dbContext.StaffSalaryAdjustments.AsNoTracking()
             .Where(adjustment =>
                 adjustment.AdjustmentType == StaffSalaryAdjustmentTypes.Bonus &&
-                adjustment.AccountingMonth == accountingMonth)
+                adjustment.AccountingMonth >= monthFrom && adjustment.AccountingMonth <= monthTo)
             .GroupBy(adjustment => adjustment.StaffMemberId)
             .Select(group => new
             {
@@ -339,7 +348,7 @@ public sealed class EfExpenseWorksheetQuery(
         var staffPenalties = dbContext.StaffSalaryAdjustments.AsNoTracking()
             .Where(adjustment =>
                 adjustment.AdjustmentType == StaffSalaryAdjustmentTypes.Penalty &&
-                adjustment.AccountingMonth == accountingMonth)
+                adjustment.AccountingMonth >= monthFrom && adjustment.AccountingMonth <= monthTo)
             .GroupBy(adjustment => adjustment.StaffMemberId)
             .Select(group => new
             {
@@ -361,7 +370,7 @@ public sealed class EfExpenseWorksheetQuery(
         var staffOpeningBonuses = dbContext.StaffSalaryAdjustments.AsNoTracking()
             .Where(adjustment =>
                 adjustment.AdjustmentType == StaffSalaryAdjustmentTypes.Bonus &&
-                adjustment.AccountingMonth < accountingMonth)
+                adjustment.AccountingMonth < monthFrom)
             .GroupBy(adjustment => adjustment.StaffMemberId)
             .Select(group => new
             {
@@ -383,7 +392,7 @@ public sealed class EfExpenseWorksheetQuery(
         var staffOpeningPenalties = dbContext.StaffSalaryAdjustments.AsNoTracking()
             .Where(adjustment =>
                 adjustment.AdjustmentType == StaffSalaryAdjustmentTypes.Penalty &&
-                adjustment.AccountingMonth < accountingMonth)
+                adjustment.AccountingMonth < monthFrom)
             .GroupBy(adjustment => adjustment.StaffMemberId)
             .Select(group => new
             {
@@ -526,6 +535,27 @@ public sealed class EfExpenseWorksheetQuery(
                 StaffCreatedAtUtc = (DateTimeOffset?)null
             });
 
+        var salaryConfiguration = dbContext.ApplicationSettings
+            .AsNoTracking()
+            .Where(setting => setting.Key == ApplicationSettingsService.SalaryAccrualDayKey)
+            .Select(setting => new
+            {
+                Category = SalaryConfigurationCategory,
+                SupplierId = (Guid?)null,
+                StaffMemberId = (Guid?)null,
+                CounterpartyName = (string?)null,
+                TypeId = (Guid?)null,
+                TypeName = (string?)null,
+                TypeCode = (string?)null,
+                Amount = (decimal)(setting.IntegerValue ?? ApplicationSettingsService.DefaultSalaryAccrualDay),
+                IncomeTotal = 0m,
+                BankDepositTotal = 0m,
+                CashExpenseTotal = 0m,
+                BankExpenseTotal = 0m,
+                HistoryStartMonth = (DateOnly?)null,
+                StaffCreatedAtUtc = (DateTimeOffset?)null
+            });
+
         var rows = await supplierAccruals
             .Concat(supplierExpenses)
             .Concat(staffMembers)
@@ -543,7 +573,24 @@ public sealed class EfExpenseWorksheetQuery(
             .Concat(bankDeposits)
             .Concat(balanceAdjustments)
             .Concat(supplierFunds)
+            .Concat(salaryConfiguration)
             .ToListAsync(cancellationToken);
+
+        var salaryAccrualMonthTo = monthTo;
+        if (businessDate is { } currentBusinessDate)
+        {
+            var currentBusinessMonth = new DateOnly(currentBusinessDate.Year, currentBusinessDate.Month, 1);
+            var salaryAccrualDay = (int)(rows.FirstOrDefault(row => row.Category == SalaryConfigurationCategory)?.Amount
+                ?? ApplicationSettingsService.DefaultSalaryAccrualDay);
+            if (monthTo >= currentBusinessMonth && (monthFrom > currentBusinessMonth || currentBusinessDate.Day < salaryAccrualDay))
+            {
+                salaryAccrualMonthTo = currentBusinessMonth.AddMonths(-1);
+            }
+            else if (monthTo > currentBusinessMonth)
+            {
+                salaryAccrualMonthTo = currentBusinessMonth;
+            }
+        }
 
         return new ExpenseWorksheetData(
             rows.Where(row => row.Category == SupplierAccrualCategory)
@@ -638,7 +685,8 @@ public sealed class EfExpenseWorksheetQuery(
                 .ToList(),
             StaffOpeningPenalties = rows.Where(row => row.Category == StaffOpeningPenaltyCategory)
                 .Select(row => new ExpenseWorksheetStaffAdjustmentData(row.StaffMemberId!.Value, row.Amount))
-                .ToList()
+                .ToList(),
+            SalaryAccrualMonthTo = salaryAccrualMonthTo >= monthFrom ? salaryAccrualMonthTo : null
         };
     }
 

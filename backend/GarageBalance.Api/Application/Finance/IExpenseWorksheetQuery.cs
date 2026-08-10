@@ -3,7 +3,8 @@ namespace GarageBalance.Api.Application.Finance;
 public interface IExpenseWorksheetQuery
 {
     Task<ExpenseWorksheetData> GetAsync(
-        DateOnly accountingMonth,
+        DateOnly monthFrom,
+        DateOnly monthTo,
         string[] cashExpenseTypeCodes,
         string[] cashExpenseTypeNames,
         CancellationToken cancellationToken);
@@ -33,6 +34,8 @@ public sealed record ExpenseWorksheetData(
     public IReadOnlyList<ExpenseWorksheetStaffAdjustmentData> StaffOpeningBonuses { get; init; } = [];
 
     public IReadOnlyList<ExpenseWorksheetStaffAdjustmentData> StaffOpeningPenalties { get; init; } = [];
+
+    public DateOnly? SalaryAccrualMonthTo { get; init; }
 }
 
 public sealed record ExpenseWorksheetSupplierData(

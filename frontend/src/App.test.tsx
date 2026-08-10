@@ -7295,6 +7295,13 @@ describe('App', () => {
     expect(within(incomeTable).getByRole('columnheader', { name: 'Баланс' })).toBeInTheDocument()
     expect(within(incomeTable).queryByRole('columnheader', { name: 'Аванс' })).not.toBeInTheDocument()
     expect(within(incomeTable).queryByRole('columnheader', { name: 'Задолженность' })).not.toBeInTheDocument()
+
+    const quickPeriods = within(prototype).getByRole('group', { name: 'Быстрый выбор периода' })
+    await user.click(within(quickPeriods).getByRole('button', { name: 'Текущий год' }))
+    await waitFor(() => expect(getGarageIncomeWorksheet).toHaveBeenLastCalledWith('token', 'garage-77', {
+      monthFrom: `${currentMonth.slice(0, 4)}-01-01`,
+      monthTo: `${currentMonth.slice(0, 4)}-12-01`,
+    }))
   })
 
   it('shows an error when the garage financial period is unavailable without requesting a partial worksheet', async () => {
@@ -8832,24 +8839,35 @@ describe('App', () => {
     expect(within(prototype).queryByLabelText('Выбранные гаражи')).not.toBeInTheDocument()
     await waitFor(() => expect(getExpenseWorksheet).toHaveBeenCalledWith('token', { accountingMonth: '2027-10-01' }))
     expect(within(prototype).getByRole('table', { name: 'Форма выплат за октябрь 2027' })).toBeInTheDocument()
-    const monthInput = within(prototype).getByLabelText('Месяц выплат')
+    const monthInput = within(prototype).getByLabelText('Месяц выплат с')
+    const monthToInput = within(prototype).getByLabelText('Месяц выплат по')
     expect(monthInput).toHaveValue('10.2027')
+    expect(monthToInput).toHaveValue('10.2027')
     expect(monthInput.closest('.localized-date-picker')).not.toBeNull()
-    await user.click(within(prototype).getByRole('button', { name: 'Открыть календарь: Месяц выплат' }))
-    const monthCalendar = within(prototype).getByRole('dialog', { name: 'Месяц выплат: календарь' })
+    await user.click(within(prototype).getByRole('button', { name: 'Открыть календарь: Месяц выплат с' }))
+    const monthCalendar = within(prototype).getByRole('dialog', { name: 'Месяц выплат с: календарь' })
     expect(monthCalendar.closest('.payments-prototype-period-row')).not.toBeNull()
     expect(within(monthCalendar).getByRole('button', { name: 'Янв' })).toBeVisible()
     expect(within(monthCalendar).getByRole('button', { name: 'Апр' })).toBeVisible()
     expect(within(monthCalendar).getByRole('button', { name: 'Июл' })).toBeVisible()
     expect(within(monthCalendar).getByRole('button', { name: 'Окт' })).toBeVisible()
     expect(within(monthCalendar).getByRole('button', { name: 'Очистить' })).toBeVisible()
-    await user.click(within(prototype).getByRole('button', { name: 'Открыть календарь: Месяц выплат' }))
+    await user.click(within(prototype).getByRole('button', { name: 'Открыть календарь: Месяц выплат с' }))
 
     await user.clear(monthInput)
     await user.type(monthInput, '02.2029')
 
     await waitFor(() => expect(getExpenseWorksheet).toHaveBeenCalledWith('token', { accountingMonth: '2029-02-01' }))
     expect(within(prototype).getByRole('table', { name: 'Форма выплат за февраль 2029' })).toBeInTheDocument()
+
+    const quickPeriods = within(prototype).getByRole('group', { name: 'Быстрый выбор периода' })
+    await user.click(within(quickPeriods).getByRole('button', { name: 'Предыдущий год' }))
+    await waitFor(() => expect(getExpenseWorksheet).toHaveBeenLastCalledWith('token', {
+      monthFrom: '2026-01-01',
+      monthTo: '2026-12-01',
+    }))
+    expect(within(prototype).getByRole('table', { name: 'Форма выплат за 01.2026 — 12.2026' })).toBeInTheDocument()
+    expect(within(prototype).queryByRole('button', { name: 'Оплатить Водоснабжение' })).not.toBeInTheDocument()
 
     await user.click(within(prototype).getByRole('tab', { name: 'Поступления' }))
     expect(within(prototype).getByLabelText('Поиск номера гаража или ФИО владельца')).toHaveValue('12')
@@ -8881,7 +8899,7 @@ describe('App', () => {
     expect(within(julyTable).getByRole('columnheader', { name: 'Действие' })).toBeInTheDocument()
     expect(await within(julyTable).findByRole('button', { name: 'Оплатить Водоснабжение' })).toBeInTheDocument()
 
-    const monthInput = within(prototype).getByLabelText('Месяц выплат')
+    const monthInput = within(prototype).getByLabelText('Месяц выплат с')
     await user.clear(monthInput)
     await user.type(monthInput, '06.2026')
     const juneTable = await within(prototype).findByRole('table', { name: 'Форма выплат за июнь 2026' })
@@ -8897,7 +8915,7 @@ describe('App', () => {
     await user.clear(monthInput)
     await user.type(monthInput, '04.2026')
     const aprilTable = await within(prototype).findByRole('table', { name: 'Форма выплат за апрель 2026' })
-    const emptyCell = (await within(aprilTable).findByText('Начислений и выплат за выбранный месяц пока нет.')).closest('td')
+    const emptyCell = (await within(aprilTable).findByText('Начислений и выплат за выбранный период пока нет.')).closest('td')
     expect(emptyCell).toHaveAttribute('colspan', '6')
 
     await user.clear(monthInput)
@@ -9073,7 +9091,7 @@ describe('App', () => {
     expect(juneRow).not.toBeNull()
     expect(within(juneRow!).getAllByText('9 243.81')).toHaveLength(2)
 
-    const monthInput = within(prototype).getByLabelText('Месяц выплат')
+    const monthInput = within(prototype).getByLabelText('Месяц выплат с')
     await user.clear(monthInput)
     await user.type(monthInput, '07.2026')
     const julyTable = await within(prototype).findByRole('table', { name: 'Форма выплат за июль 2026' })
@@ -9106,7 +9124,7 @@ describe('App', () => {
 
     expect(await within(prototype).findByText('Серверная форма выплат недоступна')).toBeInTheDocument()
     const expenseTable = within(prototype).getByRole('table', { name: 'Форма выплат за июнь 2026' })
-    expect(within(expenseTable).getByText('Начислений и выплат за выбранный месяц пока нет.')).toBeInTheDocument()
+    expect(within(expenseTable).getByText('Начислений и выплат за выбранный период пока нет.')).toBeInTheDocument()
     expect(within(expenseTable).queryByText('Электроэнергия')).not.toBeInTheDocument()
     expect(within(expenseTable).queryByText('257 100')).not.toBeInTheDocument()
     expect(within(prototype).getByText('Сумма в банке').closest('div')).toHaveTextContent('0')

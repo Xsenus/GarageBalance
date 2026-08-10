@@ -563,6 +563,28 @@ public sealed class FinanceControllerTests
     }
 
     [Fact]
+    public async Task GetExpenseWorksheet_PassesSelectedPeriodToService()
+    {
+        var worksheet = new ExpenseWorksheetDto(
+            new DateOnly(2026, 12, 1), 0m, 0m, 0m, 0m, 0m, 0m, 0m, []);
+        var service = new FakeFinanceService
+        {
+            ExpenseWorksheetResult = FinanceResult<ExpenseWorksheetDto>.Success(worksheet)
+        };
+        var controller = CreateController(service);
+
+        var result = await controller.GetExpenseWorksheet(
+            null,
+            CancellationToken.None,
+            new DateOnly(2026, 1, 1),
+            new DateOnly(2026, 12, 1));
+
+        Assert.IsType<OkObjectResult>(result.Result);
+        Assert.Equal(new DateOnly(2026, 1, 1), service.LastExpenseWorksheetRequest?.MonthFrom);
+        Assert.Equal(new DateOnly(2026, 12, 1), service.LastExpenseWorksheetRequest?.MonthTo);
+    }
+
+    [Fact]
     public async Task CreateIncome_PassesActorUserIdToService()
     {
         var actorUserId = Guid.NewGuid();

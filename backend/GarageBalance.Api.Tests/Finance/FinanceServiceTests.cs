@@ -8808,6 +8808,54 @@ public sealed class FinanceServiceTests
     }
 
     [Fact]
+    public async Task GetExpenseWorksheetAsync_AggregatesSelectedMonthRangeInOneSelect()
+    {
+        var commandCounter = new SelectCommandCounter();
+        await using var database = await TestDatabase.CreateAsync(commandCounter);
+        var fixtures = await database.SeedAsync();
+        var service = FinanceServiceTestFactory.Create(database.Context);
+        var june = new DateOnly(2026, 6, 1);
+        var july = new DateOnly(2026, 7, 1);
+
+        Assert.True((await service.CreateSupplierAccrualAsync(
+            new CreateSupplierAccrualRequest(fixtures.Supplier.Id, fixtures.ExpenseType.Id, june, 100m, "manual", "RANGE-06", null),
+            null,
+            CancellationToken.None)).Succeeded);
+        Assert.True((await service.CreateSupplierAccrualAsync(
+            new CreateSupplierAccrualRequest(fixtures.Supplier.Id, fixtures.ExpenseType.Id, july, 250m, "manual", "RANGE-07", null),
+            null,
+            CancellationToken.None)).Succeeded);
+        commandCounter.Reset();
+
+        var result = await service.GetExpenseWorksheetAsync(
+            new ExpenseWorksheetRequest(null, june, july),
+            CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+        Assert.Equal(1, commandCounter.Count);
+        Assert.Equal(june, result.Value!.MonthFrom);
+        Assert.Equal(july, result.Value.MonthTo);
+        Assert.Equal(350m, Assert.Single(result.Value.Rows, row => row.SupplierId == fixtures.Supplier.Id).AccrualAmount);
+    }
+
+    [Fact]
+    public async Task GetExpenseWorksheetAsync_RejectsReversedPeriodWithoutQuery()
+    {
+        var commandCounter = new SelectCommandCounter();
+        await using var database = await TestDatabase.CreateAsync(commandCounter);
+        var service = FinanceServiceTestFactory.Create(database.Context);
+        commandCounter.Reset();
+
+        var result = await service.GetExpenseWorksheetAsync(
+            new ExpenseWorksheetRequest(null, new DateOnly(2026, 8, 1), new DateOnly(2026, 7, 1)),
+            CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Equal("expense_worksheet_period_invalid", result.ErrorCode);
+        Assert.Equal(0, commandCounter.Count);
+    }
+
+    [Fact]
     public async Task GetExpenseWorksheetAsync_CalculatesOpeningBalancesForEachSupplierAndStaffExpenseTypePair()
     {
         var commandCounter = new SelectCommandCounter();

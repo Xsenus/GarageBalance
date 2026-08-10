@@ -600,10 +600,23 @@ public sealed class FinanceService(
 
     public async Task<FinanceResult<ExpenseWorksheetDto>> GetExpenseWorksheetAsync(ExpenseWorksheetRequest request, CancellationToken cancellationToken)
     {
-        var accountingMonth = MonthPeriod.Normalize(request.AccountingMonth ?? businessDateProvider.Today);
+        var defaultMonth = MonthPeriod.Normalize(request.AccountingMonth ?? businessDateProvider.Today);
+        var monthFrom = MonthPeriod.Normalize(request.MonthFrom ?? defaultMonth);
+        var monthTo = MonthPeriod.Normalize(request.MonthTo ?? request.MonthFrom ?? defaultMonth);
+        if (monthFrom > monthTo)
+        {
+            return FinanceResult<ExpenseWorksheetDto>.Failure("expense_worksheet_period_invalid", "Дата начала формы выплат не может быть позже даты окончания.");
+        }
+
+        var monthCount = ((monthTo.Year - monthFrom.Year) * 12) + monthTo.Month - monthFrom.Month + 1;
+        if (monthCount > MaxBalanceHistoryMonths)
+        {
+            return FinanceResult<ExpenseWorksheetDto>.Failure("expense_worksheet_period_too_large", $"Форму выплат можно построить максимум за {MaxBalanceHistoryMonths} месяцев.");
+        }
 
         var worksheetData = await expenseWorksheetQuery.GetAsync(
-            accountingMonth,
+            monthFrom,
+            monthTo,
             CashExpenseTypeCodes,
             CashExpenseTypeNames,
             cancellationToken);
@@ -689,18 +702,23 @@ public sealed class FinanceService(
             staffPenalties.TryGetValue(staffMember.StaffMemberId, out var penaltyAmount);
             staffOpeningBonuses.TryGetValue(staffMember.StaffMemberId, out var openingBonusAmount);
             staffOpeningPenalties.TryGetValue(staffMember.StaffMemberId, out var openingPenaltyAmount);
-            var accrualAmount = MoneyMath.RoundMoney(staffMember.Rate + bonusAmount - penaltyAmount);
-            var expenseAmount = MoneyMath.RoundMoney(staffExpenseAmount);
             var staffCreatedMonth = new DateOnly(
                 staffMember.CreatedAtUtc.UtcDateTime.Year,
                 staffMember.CreatedAtUtc.UtcDateTime.Month,
                 1);
+            var salaryStartMonth = staffCreatedMonth > monthFrom ? staffCreatedMonth : monthFrom;
+            var salaryMonthCount = worksheetData.SalaryAccrualMonthTo is { } salaryMonthTo && salaryMonthTo >= salaryStartMonth
+                ? ((salaryMonthTo.Year - salaryStartMonth.Year) * 12) + salaryMonthTo.Month - salaryStartMonth.Month + 1
+                : 0;
+            var baseAccrualAmount = MoneyMath.RoundMoney(staffMember.Rate * salaryMonthCount);
+            var accrualAmount = MoneyMath.RoundMoney(baseAccrualAmount + bonusAmount - penaltyAmount);
+            var expenseAmount = MoneyMath.RoundMoney(staffExpenseAmount);
             var historyStartMonth = staffOpeningExpense?.FirstAccountingMonth is { } firstExpenseMonth && firstExpenseMonth < staffCreatedMonth
                 ? firstExpenseMonth
                 : staffCreatedMonth;
             var historyMonthCount = Math.Max(
                 0,
-                ((accountingMonth.Year - historyStartMonth.Year) * 12) + accountingMonth.Month - historyStartMonth.Month);
+                ((monthFrom.Year - historyStartMonth.Year) * 12) + monthFrom.Month - historyStartMonth.Month);
             var openingBalance = MoneyMath.RoundMoney(
                 (staffMember.Rate * historyMonthCount) +
                 openingBonusAmount -
@@ -720,7 +738,7 @@ public sealed class FinanceService(
                 null,
                 null)
             {
-                BaseAccrualAmount = MoneyMath.RoundMoney(staffMember.Rate),
+                BaseAccrualAmount = baseAccrualAmount,
                 BonusAmount = MoneyMath.RoundMoney(bonusAmount),
                 PenaltyAmount = MoneyMath.RoundMoney(penaltyAmount),
                 OpeningBalance = openingBalance,
@@ -764,7 +782,7 @@ public sealed class FinanceService(
         var availableAmounts = CalculateAvailableAmounts(worksheetData.AvailableBalance);
 
         return FinanceResult<ExpenseWorksheetDto>.Success(new ExpenseWorksheetDto(
-            accountingMonth,
+            monthTo,
             accrualTotal,
             expenseTotal,
             balanceTotal,
@@ -774,6 +792,8 @@ public sealed class FinanceService(
             availableAmounts.CashAmount,
             rows)
         {
+            MonthFrom = monthFrom,
+            MonthTo = monthTo,
             OpeningBalanceTotal = openingBalanceTotal,
             OpeningDebtTotal = openingDebtTotal,
             OpeningAdvanceTotal = openingAdvanceTotal,

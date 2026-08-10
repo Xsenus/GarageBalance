@@ -21,6 +21,7 @@ import { LocalizedDatePicker } from '../../shared/LocalizedDatePicker'
 import { MoneyInput, MoneyTextInput } from '../../shared/MoneyInput'
 import { MeterReadingInput } from '../../shared/MeterReadingInput'
 import { SelectControl } from '../../shared/SelectControl'
+import { ReportPeriodQuickSelect } from '../../shared/ReportPeriodQuickSelect'
 import { TablePagination } from '../../shared/TablePagination'
 import { getAccrualValidationErrors, getExpenseValidationErrors, getIncomeValidationErrors, getMeterReadingValidationErrors, getSupplierAccrualValidationErrors, getSupplierGroupSalaryValidationErrors } from '../../shared/validation'
 import { formatPaymentMoney, parsePaymentMoney } from './paymentMoneyFormatting'
@@ -3048,7 +3049,8 @@ function PaymentsPrototypePanel({
   const [garageRows, setGarageRows] = useState<GarageIncomePrototypeRow[]>([])
   const [garageWorksheetSummary, setGarageWorksheetSummary] = useState<GarageIncomeWorksheetPeriodSummary | null>(null)
   const [expenseRows, setExpenseRows] = useState<PaymentPrototypeRow[]>([])
-  const [expenseWorksheetMonth, setExpenseWorksheetMonth] = useState(() => getCurrentMonthInputValue())
+  const [expenseWorksheetMonthFrom, setExpenseWorksheetMonthFrom] = useState(() => getCurrentMonthInputValue())
+  const [expenseWorksheetMonthTo, setExpenseWorksheetMonthTo] = useState(() => getCurrentMonthInputValue())
   const [expenseBankAmount, setExpenseBankAmount] = useState(0)
   const [expenseCashAmount, setExpenseCashAmount] = useState(0)
   const [historyRows, setHistoryRows] = useState<GaragePaymentHistoryPrototypeRow[]>([])
@@ -3250,13 +3252,25 @@ function PaymentsPrototypePanel({
       return
     }
 
+    if (expenseWorksheetMonthFrom > expenseWorksheetMonthTo) {
+      setExpenseRows([])
+      setExpenseWorksheetLoading(false)
+      setPaymentError('Месяц начала формы выплат не может быть позже месяца окончания.')
+      return
+    }
+
     let cancelled = false
     setExpenseWorksheetLoading(true)
     setExpenseRows([])
     setExpenseBankAmount(0)
     setPaymentError(null)
     financeClient
-      .getExpenseWorksheet(auth.accessToken, { accountingMonth: `${expenseWorksheetMonth}-01` })
+      .getExpenseWorksheet(auth.accessToken, expenseWorksheetMonthFrom === expenseWorksheetMonthTo
+        ? { accountingMonth: `${expenseWorksheetMonthTo}-01` }
+        : {
+            monthFrom: `${expenseWorksheetMonthFrom}-01`,
+            monthTo: `${expenseWorksheetMonthTo}-01`,
+          })
       .then((worksheet) => {
         if (!cancelled) {
           setExpenseRows(createExpenseRowsFromWorksheet(worksheet))
@@ -3279,7 +3293,7 @@ function PaymentsPrototypePanel({
     return () => {
       cancelled = true
     }
-  }, [activeTab, auth.accessToken, expenseWorksheetMonth, financeClient, refreshRevision])
+  }, [activeTab, auth.accessToken, expenseWorksheetMonthFrom, expenseWorksheetMonthTo, financeClient, refreshRevision])
 
   function activateExpenseTab() {
     if (activeTab !== 'expense') {
@@ -3290,13 +3304,28 @@ function PaymentsPrototypePanel({
     setActiveTab('expense')
   }
 
-  function handleExpenseWorksheetMonthChange(value: string) {
+  function handleExpenseWorksheetMonthFromChange(value: string) {
     if (!/^\d{4}-\d{2}$/.test(value)) {
       return
     }
 
     setExpenseWorksheetLoading(true)
-    setExpenseWorksheetMonth(value)
+    if (expenseWorksheetMonthFrom === expenseWorksheetMonthTo) {
+      setExpenseWorksheetMonthTo(value)
+    }
+    setExpenseWorksheetMonthFrom(value)
+  }
+
+  function handleExpenseWorksheetMonthToChange(value: string) {
+    if (!/^\d{4}-\d{2}$/.test(value)) {
+      return
+    }
+
+    setExpenseWorksheetLoading(true)
+    if (expenseWorksheetMonthFrom === expenseWorksheetMonthTo) {
+      setExpenseWorksheetMonthFrom(value)
+    }
+    setExpenseWorksheetMonthTo(value)
   }
 
   function openDialogFromButton(event: MouseEvent<HTMLButtonElement>, dialog: PaymentsPrototypeDialogKey) {
@@ -3476,7 +3505,7 @@ function PaymentsPrototypePanel({
     staffSalaryAdjustmentTriggerRef.current = event.currentTarget
     setPaymentError(null)
     if (await onEnsureReferences()) {
-      setStaffSalaryAdjustmentDialogPreset({ adjustmentType, accountingMonth: expenseWorksheetMonth })
+      setStaffSalaryAdjustmentDialogPreset({ adjustmentType, accountingMonth: expenseWorksheetMonthTo })
     }
   }
 
@@ -3742,12 +3771,11 @@ function PaymentsPrototypePanel({
     }
   }
 
-  function setCurrentIncomeWorksheetMonth() {
-    const currentMonth = getCurrentMonthInputValue()
-    setIncomeWorksheetMonthFrom(currentMonth)
-    setIncomeWorksheetMonthTo(currentMonth)
+  function setIncomeWorksheetPeriod(monthFrom: string, monthTo: string) {
+    setIncomeWorksheetMonthFrom(monthFrom)
+    setIncomeWorksheetMonthTo(monthTo)
     if (selectedGarage) {
-      void loadGarageIncomeWorksheet(selectedGarage, currentMonth, currentMonth)
+      void loadGarageIncomeWorksheet(selectedGarage, monthFrom, monthTo)
     }
   }
 
@@ -4404,14 +4432,16 @@ function PaymentsPrototypePanel({
     })
 
     const requestedMonth = request.accountingMonth.slice(0, 7)
-    if (requestedMonth !== expenseWorksheetMonth) {
+    if (requestedMonth !== expenseWorksheetMonthFrom || requestedMonth !== expenseWorksheetMonthTo) {
       setExpenseWorksheetLoading(true)
-      setExpenseWorksheetMonth(requestedMonth)
+      setExpenseWorksheetMonthFrom(requestedMonth)
+      setExpenseWorksheetMonthTo(requestedMonth)
       return null
     }
 
     const worksheet = await financeClient.getExpenseWorksheet(auth.accessToken, {
-      accountingMonth: request.accountingMonth,
+      monthFrom: request.accountingMonth,
+      monthTo: request.accountingMonth,
     })
     setExpenseRows(createExpenseRowsFromWorksheet(worksheet))
     setExpenseBankAmount(worksheet.bankAmount)
@@ -4517,10 +4547,14 @@ function PaymentsPrototypePanel({
   const expenseClosingBalanceTotal = toSignedExpenseWorksheetBalance(expenseClosingDebtTotal, expenseClosingAdvanceTotal)
   const expenseCollectedTotal = expenseRows.reduce((sum, row) => sum + (typeof row.collected === 'number' ? row.collected : 0), 0)
   const expenseDifferenceTotal = expenseRows.reduce((sum, row) => sum + (typeof row.difference === 'number' ? row.difference : 0), 0)
-  const isArchivedExpenseWorksheetMonth = expenseWorksheetMonth < getCurrentMonthInputValue()
-  const expenseMonthLabel = new Intl.DateTimeFormat('ru-RU', { month: 'long', year: 'numeric', timeZone: 'UTC' })
-    .format(new Date(`${expenseWorksheetMonth}-01T00:00:00Z`))
-    .replace(/\s+г\.$/u, '')
+  const isEditableExpenseWorksheetPeriod = expenseWorksheetMonthFrom === expenseWorksheetMonthTo
+    && expenseWorksheetMonthTo >= getCurrentMonthInputValue()
+  const expensePeriodLabel = expenseWorksheetMonthFrom === expenseWorksheetMonthTo
+    ? new Intl.DateTimeFormat('ru-RU', { month: 'long', year: 'numeric', timeZone: 'UTC' })
+        .format(new Date(`${expenseWorksheetMonthFrom}-01T00:00:00Z`))
+        .replace(/\s+г\.$/u, '')
+    : `${formatMonth(`${expenseWorksheetMonthFrom}-01`)} — ${formatMonth(`${expenseWorksheetMonthTo}-01`)}`
+  const expenseWorksheetTableLabel = `Форма выплат за ${expensePeriodLabel}`
 
   return (
     <section className="payments-prototype" aria-label="Форма платежей">
@@ -4813,7 +4847,12 @@ function PaymentsPrototypePanel({
                 <span>Месяц по</span>
                 <SelectControl aria-label="Месяц поступлений по" value={incomeWorksheetMonthTo} options={incomeWorksheetMonthOptions} onChange={handleIncomeWorksheetMonthToChange} />
               </label>
-              <button className="link-button" type="button" onClick={setCurrentIncomeWorksheetMonth}>Текущий</button>
+              <ReportPeriodQuickSelect
+                mode="month"
+                valueFrom={incomeWorksheetMonthFrom}
+                valueTo={incomeWorksheetMonthTo}
+                onSelect={(range) => setIncomeWorksheetPeriod(range.monthFrom, range.monthTo)}
+              />
             </div>
             {garageWorksheetSummary ? (
               <div className="payments-prototype-period-summary" aria-label="Итоги периода поступлений">
@@ -5010,17 +5049,35 @@ function PaymentsPrototypePanel({
           <div className="payments-prototype-sheet">
             <div className="payments-prototype-period-row">
               <label>
-                <span>Месяц</span>
+                <span>Месяц с</span>
                 <LocalizedDatePicker
-                  ariaLabel="Месяц выплат"
+                  ariaLabel="Месяц выплат с"
                   mode="month"
-                  value={expenseWorksheetMonth}
-                  onChange={handleExpenseWorksheetMonthChange}
+                  value={expenseWorksheetMonthFrom}
+                  onChange={handleExpenseWorksheetMonthFromChange}
                 />
               </label>
+              <label>
+                <span>Месяц по</span>
+                <LocalizedDatePicker
+                  ariaLabel="Месяц выплат по"
+                  mode="month"
+                  value={expenseWorksheetMonthTo}
+                  onChange={handleExpenseWorksheetMonthToChange}
+                />
+              </label>
+              <ReportPeriodQuickSelect
+                mode="month"
+                valueFrom={expenseWorksheetMonthFrom}
+                valueTo={expenseWorksheetMonthTo}
+                onSelect={({ monthFrom, monthTo }) => {
+                  setExpenseWorksheetMonthFrom(monthFrom)
+                  setExpenseWorksheetMonthTo(monthTo)
+                }}
+              />
             </div>
             <div className="payments-prototype-table-scroll">
-              <table className="payments-prototype-table" aria-label={`Форма выплат за ${expenseMonthLabel}`}>
+              <table className="payments-prototype-table" aria-label={expenseWorksheetTableLabel}>
                 <thead>
                   <tr>
                     <th scope="col">Поставщик</th>
@@ -5029,7 +5086,7 @@ function PaymentsPrototypePanel({
                     <th scope="col">Стоимость</th>
                     <th scope="col">Оплачено</th>
                     <th scope="col">Исходящий баланс</th>
-                    {!isArchivedExpenseWorksheetMonth ? (
+                    {isEditableExpenseWorksheetPeriod ? (
                       <>
                         <th scope="col">Собрано</th>
                         <th scope="col">Разница</th>
@@ -5066,7 +5123,7 @@ function PaymentsPrototypePanel({
                         <td>{formatPaymentMoney(row.cost)}</td>
                         <td>{formatPaymentMoney(row.paid)}</td>
                         <td>{formatPaymentMoney(closingBalance)}</td>
-                        {!isArchivedExpenseWorksheetMonth ? (
+                        {isEditableExpenseWorksheetPeriod ? (
                           <>
                             <td className={collectedClassName}>{formatPaymentMoney(row.collected)}</td>
                             <td>{formatPaymentMoney(row.difference)}</td>
@@ -5091,7 +5148,7 @@ function PaymentsPrototypePanel({
                   })}
                   {expenseRows.length === 0 ? (
                     <tr>
-                      <td colSpan={isArchivedExpenseWorksheetMonth ? 6 : 9}>{expenseWorksheetLoading ? <TableLoadingState label="Загружаем форму выплат" /> : 'Начислений и выплат за выбранный месяц пока нет.'}</td>
+                      <td colSpan={isEditableExpenseWorksheetPeriod ? 9 : 6}>{expenseWorksheetLoading ? <TableLoadingState label="Загружаем форму выплат" /> : 'Начислений и выплат за выбранный период пока нет.'}</td>
                     </tr>
                   ) : null}
                   <tr className="payments-prototype-total-row">
@@ -5101,7 +5158,7 @@ function PaymentsPrototypePanel({
                     <td>{formatPaymentMoney(expenseAccrualTotal)}</td>
                     <td>{formatPaymentMoney(expensePaidTotal)}</td>
                     <td>{formatPaymentMoney(expenseClosingBalanceTotal)}</td>
-                    {!isArchivedExpenseWorksheetMonth ? (
+                    {isEditableExpenseWorksheetPeriod ? (
                       <>
                         <td className={getExpenseWorksheetCollectedClassName(expenseCollectedTotal, expenseAccrualTotal)}>{formatPaymentMoney(expenseCollectedTotal)}</td>
                         <td>{formatPaymentMoney(expenseDifferenceTotal)}</td>

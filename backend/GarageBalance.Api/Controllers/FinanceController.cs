@@ -221,9 +221,13 @@ public sealed class FinanceController(
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<ExpenseWorksheetDto>> GetExpenseWorksheet(
         [FromQuery] DateOnly? accountingMonth,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        [FromQuery] DateOnly? monthFrom = null,
+        [FromQuery] DateOnly? monthTo = null)
     {
-        var result = await financeService.GetExpenseWorksheetAsync(new ExpenseWorksheetRequest(accountingMonth), cancellationToken);
+        var result = await financeService.GetExpenseWorksheetAsync(
+            new ExpenseWorksheetRequest(accountingMonth, monthFrom, monthTo),
+            cancellationToken);
         return result.Succeeded ? Ok(result.Value) : ToError(result);
     }
 
