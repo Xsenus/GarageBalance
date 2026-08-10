@@ -2571,6 +2571,70 @@ public sealed class ReportServiceTests
         Assert.Contains(result.Value.GarageRows, row => row.IncomeTypeId == secondCampaign.Id && row.Paid == 300m && row.Debt == 400m);
     }
 
+    [Fact]
+    public async Task GetFeeReportAsync_FiltersSeveralSelectedCampaignsById()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        var firstCampaign = new FeeCampaign
+        {
+            Name = "Сбор на ворота",
+            IncomeTypeId = fixtures.IncomeType.Id,
+            IncomeType = fixtures.IncomeType,
+            Goal = "Ворота",
+            ContributionAmount = 500m,
+            TargetAmount = 5000m,
+            StartsOn = new DateOnly(2026, 1, 1),
+            AppliesToAllGarages = true,
+            OverdueGraceDays = 30
+        };
+        var secondCampaign = new FeeCampaign
+        {
+            Name = "Сбор на камеры",
+            IncomeTypeId = fixtures.IncomeType.Id,
+            IncomeType = fixtures.IncomeType,
+            Goal = "Камеры",
+            ContributionAmount = 700m,
+            TargetAmount = 7000m,
+            StartsOn = new DateOnly(2026, 1, 1),
+            AppliesToAllGarages = true,
+            OverdueGraceDays = 30
+        };
+        var excludedCampaign = new FeeCampaign
+        {
+            Name = "Сбор на освещение",
+            IncomeTypeId = fixtures.IncomeType.Id,
+            IncomeType = fixtures.IncomeType,
+            Goal = "Освещение",
+            ContributionAmount = 300m,
+            TargetAmount = 3000m,
+            StartsOn = new DateOnly(2026, 1, 1),
+            AppliesToAllGarages = true,
+            OverdueGraceDays = 30
+        };
+        database.Context.AddRange(
+            firstCampaign,
+            secondCampaign,
+            excludedCampaign,
+            CreateFeeAccrual(firstCampaign, fixtures.FirstGarage, fixtures.IncomeType, 500m),
+            CreateFeeAccrual(secondCampaign, fixtures.FirstGarage, fixtures.IncomeType, 700m),
+            CreateFeeAccrual(excludedCampaign, fixtures.FirstGarage, fixtures.IncomeType, 300m));
+        await database.Context.SaveChangesAsync();
+
+        var result = await CreateService(database.Context).GetFeeReportAsync(
+            new FeeReportRequest(null, 25, FeeEntryIds: [firstCampaign.Id, secondCampaign.Id]),
+            CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+        Assert.Equal("Выбрано сборов: 2", result.Value!.Variation);
+        Assert.Equal(12000m, result.Value.AccruedTotal);
+        Assert.Equal(2, result.Value.SummaryRows.Count);
+        Assert.Contains(result.Value.SummaryRows, row => row.IncomeTypeId == firstCampaign.Id);
+        Assert.Contains(result.Value.SummaryRows, row => row.IncomeTypeId == secondCampaign.Id);
+        Assert.DoesNotContain(result.Value.SummaryRows, row => row.IncomeTypeId == excludedCampaign.Id);
+        Assert.DoesNotContain(result.Value.GarageRows, row => row.IncomeTypeId == excludedCampaign.Id);
+    }
+
     private static Accrual CreateFeeAccrual(FeeCampaign campaign, Garage garage, IncomeType incomeType, decimal amount) =>
         new()
         {

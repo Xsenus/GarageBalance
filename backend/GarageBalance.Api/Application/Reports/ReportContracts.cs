@@ -89,7 +89,8 @@ public sealed record FeeReportRequest(
     Guid? ActorUserId = null,
     int? Offset = null,
     string? SortBy = null,
-    string? SortDirection = null);
+    string? SortDirection = null,
+    IReadOnlyList<Guid>? FeeEntryIds = null);
 
 public sealed record ConsolidatedReportDto(
     DateOnly PeriodFrom,

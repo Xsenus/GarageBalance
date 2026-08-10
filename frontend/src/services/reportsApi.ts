@@ -450,6 +450,7 @@ export type ReportClient = {
     accessToken: string,
     params?: {
       variation?: string
+      feeEntryIds?: string[]
       limit?: number
       offset?: number
       sortBy?: string
@@ -461,6 +462,7 @@ export type ReportClient = {
     accessToken: string,
     params?: {
       variation?: string
+      feeEntryIds?: string[]
       sortBy?: string
       sortDirection?: string
     },
@@ -469,6 +471,7 @@ export type ReportClient = {
     accessToken: string,
     params?: {
       variation?: string
+      feeEntryIds?: string[]
       sortBy?: string
       sortDirection?: string
     },
@@ -740,6 +743,7 @@ function buildFeeReportQuery(params: Parameters<ReportClient['getFeeReport']>[1]
   if (params.variation) {
     searchParams.set('variation', params.variation)
   }
+  params.feeEntryIds?.forEach((feeEntryId) => searchParams.append('feeEntryIds', feeEntryId))
   if (params.limit) {
     searchParams.set('limit', String(params.limit))
   }

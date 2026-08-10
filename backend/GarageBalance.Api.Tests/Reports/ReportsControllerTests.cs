@@ -552,6 +552,23 @@ public sealed class ReportsControllerTests
     }
 
     [Fact]
+    public async Task GetFeeReport_ForwardsSeveralFeeEntryIds()
+    {
+        var firstFeeId = Guid.NewGuid();
+        var secondFeeId = Guid.NewGuid();
+        var service = new FakeReportService
+        {
+            FeeResult = ReportResult<FeeReportDto>.Success(CreateFeeReport())
+        };
+        var controller = new ReportsController(service);
+
+        var result = await controller.GetFeeReport(null, 25, CancellationToken.None, feeEntryIds: [firstFeeId, secondFeeId]);
+
+        Assert.IsType<OkObjectResult>(result.Result);
+        Assert.Equal([firstFeeId, secondFeeId], service.FeeRequest?.FeeEntryIds);
+    }
+
+    [Fact]
     public async Task ExportFeeReportXlsx_ReturnsFile()
     {
         var content = new byte[] { 19, 20, 21 };
@@ -565,13 +582,15 @@ public sealed class ReportsControllerTests
         };
         var controller = new ReportsController(service);
 
-        var result = await controller.ExportFeeReportXlsx("ворота", CancellationToken.None);
+        var feeIds = new[] { Guid.NewGuid(), Guid.NewGuid() };
+        var result = await controller.ExportFeeReportXlsx("ворота", CancellationToken.None, feeEntryIds: feeIds);
 
         var file = Assert.IsType<FileContentResult>(result);
         Assert.Equal(export.FileName, file.FileDownloadName);
         Assert.Equal(export.ContentType, file.ContentType);
         Assert.Same(content, file.FileContents);
         Assert.Equal("ворота", service.FeeRequest?.Variation);
+        Assert.Equal(feeIds, service.FeeRequest?.FeeEntryIds);
     }
 
     [Fact]

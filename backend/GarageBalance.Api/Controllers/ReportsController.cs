@@ -480,10 +480,11 @@ public sealed class ReportsController(IReportService reportService) : Controller
         CancellationToken cancellationToken,
         [FromQuery] int? offset = null,
         [FromQuery] string? sortBy = null,
-        [FromQuery] string? sortDirection = null)
+        [FromQuery] string? sortDirection = null,
+        [FromQuery] Guid[]? feeEntryIds = null)
     {
         var result = await reportService.GetFeeReportAsync(
-            new FeeReportRequest(variation, limit, GetActorUserId(), offset, sortBy, sortDirection),
+            new FeeReportRequest(variation, limit, GetActorUserId(), offset, sortBy, sortDirection, feeEntryIds),
             cancellationToken);
 
         return result.Succeeded
@@ -498,10 +499,11 @@ public sealed class ReportsController(IReportService reportService) : Controller
         [FromQuery] string? variation,
         CancellationToken cancellationToken,
         [FromQuery] string? sortBy = null,
-        [FromQuery] string? sortDirection = null)
+        [FromQuery] string? sortDirection = null,
+        [FromQuery] Guid[]? feeEntryIds = null)
     {
         var result = await reportService.ExportFeeReportXlsxAsync(
-            new FeeReportRequest(variation, ActorUserId: GetActorUserId(), SortBy: sortBy, SortDirection: sortDirection),
+            new FeeReportRequest(variation, ActorUserId: GetActorUserId(), SortBy: sortBy, SortDirection: sortDirection, FeeEntryIds: feeEntryIds),
             cancellationToken);
 
         return result.Succeeded
@@ -516,10 +518,11 @@ public sealed class ReportsController(IReportService reportService) : Controller
         [FromQuery] string? variation,
         CancellationToken cancellationToken,
         [FromQuery] string? sortBy = null,
-        [FromQuery] string? sortDirection = null)
+        [FromQuery] string? sortDirection = null,
+        [FromQuery] Guid[]? feeEntryIds = null)
     {
         var result = await reportService.ExportFeeReportPdfAsync(
-            new FeeReportRequest(variation, ActorUserId: GetActorUserId(), SortBy: sortBy, SortDirection: sortDirection),
+            new FeeReportRequest(variation, ActorUserId: GetActorUserId(), SortBy: sortBy, SortDirection: sortDirection, FeeEntryIds: feeEntryIds),
             cancellationToken);
 
         return result.Succeeded

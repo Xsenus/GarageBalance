@@ -275,7 +275,6 @@ function getReportMonthEnd(monthValue: string) {
 export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: AuthResponse; dictionaryClient: DictionaryClient; reportClient: ReportClient }) {
   const today = getLocalDateInputValue()
   const currentMonth = getCurrentMonthInputValue(today)
-  const feeOptionsId = useId()
   const [activeReportTab, setActiveReportTab] = useState<ReportWorkbookTab>('consolidated')
   const [reportSorts, setReportSorts] = useState<Partial<Record<ReportWorkbookTab, ReportSort>>>({})
   const [monthlyFilters, setMonthlyFilters] = useState<Record<ReportMonthlyFilterKey, ReportMonthRange>>({
@@ -309,8 +308,8 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
   const [garageQuickListSaving, setGarageQuickListSaving] = useState(false)
   const [selectedCounterpartyKeys, setSelectedCounterpartyKeys] = useState<string[]>([])
   const [selectedIncomeGarageIds, setSelectedIncomeGarageIds] = useState<string[]>([])
-  const [feeVariationFilter, setFeeVariationFilter] = useState('')
-  const [appliedFeeVariationFilter, setAppliedFeeVariationFilter] = useState('')
+  const [selectedFeeEntryIds, setSelectedFeeEntryIds] = useState<string[]>([])
+  const [feeFilterOptions, setFeeFilterOptions] = useState<ReportFilterOption[]>([])
   const [garageFilterOptions, setGarageFilterOptions] = useState<ReportFilterOption[]>([])
   const [counterpartyFilterOptions, setCounterpartyFilterOptions] = useState<ReportFilterOption[]>([])
   const [consolidatedReport, setConsolidatedReport] = useState<ConsolidatedReportDto | null>(null)
@@ -384,16 +383,6 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
     }
     return options
   }, [auth.accessToken, dictionaryClient])
-
-  useEffect(() => {
-    if (feeVariationFilter === appliedFeeVariationFilter) {
-      return undefined
-    }
-    const handle = window.setTimeout(() => {
-      setAppliedFeeVariationFilter(feeVariationFilter)
-    }, 350)
-    return () => window.clearTimeout(handle)
-  }, [appliedFeeVariationFilter, feeVariationFilter])
 
   useEffect(() => {
     if (activeReportTab !== 'garages') {
@@ -490,7 +479,7 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
       try {
         const sort = reportSorts.fees
         const report = await reportClient.getFeeReport(auth.accessToken, {
-          variation: appliedFeeVariationFilter.trim() || undefined,
+          feeEntryIds: selectedFeeEntryIds.length > 0 ? selectedFeeEntryIds : undefined,
           offset: 0,
           limit: reportFullViewLimit,
           sortBy: sort?.field,
@@ -498,6 +487,10 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
         }, controller.signal)
         if (!ignore) {
           setFeeReport(report)
+          setFeeFilterOptions((current) => Array.from(new Map([
+            ...current,
+            ...report.summaryRows.map((row) => ({ value: row.incomeTypeId, label: row.name, description: row.goal })),
+          ].map((option) => [option.value, option])).values()))
         }
       } catch (caught) {
         if (!ignore) {
@@ -515,7 +508,7 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
       ignore = true
       controller.abort()
     }
-  }, [activeReportTab, appliedFeeVariationFilter, auth.accessToken, reportClient, reportReloadRevision, reportSorts.fees])
+  }, [activeReportTab, auth.accessToken, reportClient, reportReloadRevision, reportSorts.fees, selectedFeeEntryIds])
 
   useEffect(() => {
     if (activeReportTab !== 'garages') {
@@ -797,14 +790,7 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
   }, [activeReportTab, auth.accessToken, dateFilters.funds, reportClient, reportReloadRevision, reportSorts.funds])
 
   const selectedTab = reportWorkbookTabs.find((tab) => tab.key === activeReportTab) ?? reportWorkbookTabs[0]
-  const feeVariationLabel = feeVariationFilter.trim() || 'Все сборы'
-  const feeOptions = Array.from(new Set([
-    'Сбор на ворота',
-    'Членский взнос',
-    'Вступительный взнос',
-    'Целевой взнос',
-    ...(feeReport?.summaryRows.map((row) => row.name) ?? []),
-  ]))
+  const feeVariationLabel = selectedFeeEntryIds.length === 0 ? 'Все сборы' : `Выбрано сборов: ${selectedFeeEntryIds.length}`
 
   function updateMonthlyFilter(key: ReportMonthlyFilterKey, field: keyof ReportMonthRange, value: string) {
     setMonthlyFilters((current) => ({
@@ -1091,8 +1077,7 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
 
   async function downloadFeeReport(extension: 'xlsx' | 'pdf') {
     const exportKey = `fees-${extension}`
-    const variation = appliedFeeVariationFilter.trim() || undefined
-    const params = { variation, sortBy: reportSorts.fees?.field, sortDirection: reportSorts.fees?.direction }
+    const params = { feeEntryIds: selectedFeeEntryIds.length > 0 ? selectedFeeEntryIds : undefined, sortBy: reportSorts.fees?.field, sortDirection: reportSorts.fees?.direction }
     setReportExporting(exportKey)
     setReportExportMessage(null)
     setReportDataError(null)
@@ -1687,8 +1672,7 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
           type="button"
           aria-label={`Открыть детализацию сбора ${row.name}`}
           onClick={() => {
-            setFeeVariationFilter(row.name)
-            setAppliedFeeVariationFilter(row.name)
+            setSelectedFeeEntryIds([row.incomeTypeId])
             setFeeDebtorsVisible(true)
             setFeeDetailMode('all')
           }}
@@ -1717,10 +1701,19 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
           {feeReportError ? <AsyncErrorState message={feeReportError} onRetry={() => setReportReloadRevision((value) => value + 1)} retrying={feeReportLoading} /> : null}
           <div className="report-workbook-filter report-workbook-filter--single" aria-label="Фильтры отчета по сборам">
             <div className="report-workbook-filter__fields">
-              <label className="report-workbook-filter-wide">
-                <span>Вариация сбора</span>
-                <input aria-label="Вариация сбора" list={feeOptionsId} value={feeVariationFilter} onChange={(event) => setFeeVariationFilter(event.target.value)} placeholder="Название сбора" />
-              </label>
+              <ReportCheckboxMultiSelect
+                key="fee-report-filter"
+                label="Вариации сборов"
+                ariaLabel="Вариации сборов"
+                allLabel="Все сборы"
+                placeholder="Выберите один или несколько сборов"
+                resultsAriaLabel="Доступные вариации сборов"
+                selectedAriaLabel="Выбранные вариации сборов"
+                options={feeFilterOptions}
+                selectedValues={selectedFeeEntryIds}
+                openOnFocus
+                onChange={setSelectedFeeEntryIds}
+              />
             </div>
             <div className="report-workbook-filter__actions" role="group" aria-label="Действия с отчетом">
               {renderReportExportButton('xlsx', 'fees-xlsx', () => void downloadFeeReport('xlsx'))}
@@ -1832,9 +1825,6 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
       {reportDataError ? <FormError>{reportDataError}</FormError> : null}
       {reportExportMessage ? <p className="form-success">{reportExportMessage}</p> : null}
 
-      <datalist id={feeOptionsId}>
-        {feeOptions.map((item) => <option value={item} key={item} />)}
-      </datalist>
 
       <div className="report-tabs report-tabs--workbook" role="tablist" aria-label="Разделы отчетов">
         {reportWorkbookTabs.map((tab) => (

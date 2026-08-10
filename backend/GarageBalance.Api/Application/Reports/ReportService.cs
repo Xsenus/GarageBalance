@@ -1049,10 +1049,17 @@ public sealed class ReportService(
         }
 
         var variation = request.Variation?.Trim();
+        var selectedFeeEntryIds = request.FeeEntryIds?
+            .Distinct()
+            .ToHashSet() ?? [];
         var campaigns = (await feeReportQuery.GetActiveCampaignsAsync(cancellationToken)).ToList();
         var hasFeeCampaigns = campaigns.Count > 0;
 
-        if (hasFeeCampaigns && !string.IsNullOrWhiteSpace(variation))
+        if (hasFeeCampaigns && selectedFeeEntryIds.Count > 0)
+        {
+            campaigns = campaigns.Where(campaign => selectedFeeEntryIds.Contains(campaign.Id)).ToList();
+        }
+        else if (hasFeeCampaigns && !string.IsNullOrWhiteSpace(variation))
         {
             var normalizedVariation = variation.ToUpperInvariant();
             campaigns = campaigns
@@ -1067,7 +1074,11 @@ public sealed class ReportService(
             ? new List<IncomeType>()
             : (await feeReportQuery.GetActiveIncomeTypesAsync(cancellationToken)).ToList();
 
-        if (!hasFeeCampaigns && !string.IsNullOrWhiteSpace(variation))
+        if (!hasFeeCampaigns && selectedFeeEntryIds.Count > 0)
+        {
+            incomeTypes = incomeTypes.Where(incomeType => selectedFeeEntryIds.Contains(incomeType.Id)).ToList();
+        }
+        else if (!hasFeeCampaigns && !string.IsNullOrWhiteSpace(variation))
         {
             var normalizedVariation = variation.ToUpperInvariant();
             incomeTypes = incomeTypes
@@ -1095,7 +1106,7 @@ public sealed class ReportService(
 
         if (feeEntries.Count == 0)
         {
-            var emptyReport = new FeeReportDto(variation ?? "Все сборы", 0m, 0m, 0m, 0, [], [], []);
+            var emptyReport = new FeeReportDto(BuildFeeSelectionLabel(variation, selectedFeeEntryIds.Count, []), 0m, 0m, 0m, 0, [], [], []);
             await AddFeeReportAuditAsync(request, emptyReport, cancellationToken);
             return ReportResult<FeeReportDto>.Success(emptyReport);
         }
@@ -1151,7 +1162,7 @@ public sealed class ReportService(
 
         var rowCount = summaryRows.Count + feeData.GarageRowCount;
         var report = new FeeReportDto(
-            variation ?? "Все сборы",
+            BuildFeeSelectionLabel(variation, selectedFeeEntryIds.Count, feeEntries.Select(entry => entry.Name).ToList()),
             summaryRows.Sum(row => row.FeeAmount),
             summaryRows.Sum(row => row.Collected),
             feeData.DebtTotal,
@@ -1163,6 +1174,21 @@ public sealed class ReportService(
         await AddFeeReportAuditAsync(request, report, cancellationToken);
 
         return ReportResult<FeeReportDto>.Success(report);
+    }
+
+    private static string BuildFeeSelectionLabel(string? variation, int selectedCount, IReadOnlyList<string> selectedNames)
+    {
+        if (selectedCount == 1 && selectedNames.Count == 1)
+        {
+            return selectedNames[0];
+        }
+
+        if (selectedCount > 1)
+        {
+            return $"Выбрано сборов: {selectedNames.Count}";
+        }
+
+        return variation ?? "Все сборы";
     }
 
     public async Task<ReportResult<ReportExportFileDto>> ExportFeeReportXlsxAsync(FeeReportRequest request, CancellationToken cancellationToken)
@@ -1665,6 +1691,7 @@ public sealed class ReportService(
                 ["collectedTotal"] = report.CollectedTotal,
                 ["debtTotal"] = report.DebtTotal,
                 ["variation"] = report.Variation,
+                ["feeEntryFilterCount"] = request.FeeEntryIds?.Distinct().Count() ?? 0,
                 ["limit"] = request.Limit,
                 ["offset"] = request.Offset,
                 ["sortBy"] = request.SortBy,
@@ -1697,6 +1724,7 @@ public sealed class ReportService(
                 ["collectedTotal"] = report.CollectedTotal,
                 ["debtTotal"] = report.DebtTotal,
                 ["variation"] = report.Variation,
+                ["feeEntryFilterCount"] = request.FeeEntryIds?.Distinct().Count() ?? 0,
                 ["limit"] = request.Limit,
                 ["offset"] = request.Offset,
                 ["sortBy"] = request.SortBy,

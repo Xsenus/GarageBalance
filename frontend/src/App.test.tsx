@@ -18421,16 +18421,15 @@ describe('App', () => {
 
     await openReportTab(user, reportsPanel, 'Сборы')
     expect(within(reportsPanel).getByText('Отчёт по сборам')).toBeInTheDocument()
-    const feeFilter = within(reportsPanel).getByLabelText('Вариация сбора') as HTMLInputElement
-    await waitFor(() => expect(reportsPanel.querySelector('datalist option[value="Членский взнос"]')).not.toBeNull())
-    await user.clear(feeFilter)
-    await user.type(feeFilter, 'Членский взнос')
+    const feeFilter = within(reportsPanel).getByRole('combobox', { name: 'Вариации сборов' })
+    await user.click(feeFilter)
+    await user.click(await within(reportsPanel).findByRole('checkbox', { name: /Выбрать членский взнос/ }))
     const feeSummaryTable = within(reportsPanel).getByRole('table', { name: 'Отчет по сборам' })
     await waitFor(() => expect(feeSummaryTable).toHaveTextContent('Членский взнос'))
     const feeXlsxButton = within(reportsPanel).getByRole('button', { name: 'Скачать XLSX' })
     expect(feeXlsxButton.querySelector('svg')).toHaveAttribute('aria-hidden', 'true')
     await user.click(feeXlsxButton)
-    await waitFor(() => expect(exportFeeReportXlsx).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ variation: 'Членский взнос' })))
+    await waitFor(() => expect(exportFeeReportXlsx).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ feeEntryIds: ['income-type-membership'] })))
     expect(within(reportsPanel).queryByRole('table', { name: 'Должники по сбору' })).not.toBeInTheDocument()
     const showFeeDebtorsButton = within(reportsPanel).getByRole('button', { name: 'Показать должников' })
     await user.click(within(feeSummaryTable).getByRole('button', { name: 'Открыть детализацию сбора Членский взнос' }))
@@ -18480,9 +18479,24 @@ describe('App', () => {
 
   it('shows every newly added fee campaign when the fee report is opened', async () => {
     const user = userEvent.setup()
+    const summaryRows = [
+      ...createFeeReport().summaryRows,
+      {
+        incomeTypeId: 'fee-campaign-cameras',
+        name: 'Сбор на камеры',
+        goal: 'Установка камер',
+        feeAmount: 0,
+        collected: 0,
+      },
+    ]
     const getFeeReport = vi.fn(async (_token: string, params?: Parameters<ReportClient['getFeeReport']>[1]) => {
-      if (params?.variation) {
-        return createFeeReport({ variation: params.variation })
+      if (params?.feeEntryIds?.length) {
+        return createFeeReport({
+          variation: params.feeEntryIds.length === 1
+            ? summaryRows.find((row) => row.incomeTypeId === params.feeEntryIds?.[0])?.name ?? 'Выбранный сбор'
+            : `Выбрано сборов: ${params.feeEntryIds.length}`,
+          summaryRows: summaryRows.filter((row) => params.feeEntryIds?.includes(row.incomeTypeId)),
+        })
       }
 
       return createFeeReport({
@@ -18491,19 +18505,11 @@ describe('App', () => {
         collectedTotal: 200,
         debtTotal: 300,
         rowCount: 2,
-        summaryRows: [
-          ...createFeeReport().summaryRows,
-          {
-            incomeTypeId: 'fee-campaign-cameras',
-            name: 'Сбор на камеры',
-            goal: 'Установка камер',
-            feeAmount: 0,
-            collected: 0,
-          },
-        ],
+        summaryRows,
       })
     })
-    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient({ getFeeReport })} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+    const exportFeeReportPdf = vi.fn(async () => new Blob(['fees pdf'], { type: 'application/pdf' }))
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient({ getFeeReport, exportFeeReportPdf })} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
     await user.click(screen.getByRole('button', { name: 'Войти' }))
@@ -18513,14 +18519,29 @@ describe('App', () => {
 
     await waitFor(() => expect(getFeeReport).toHaveBeenCalledWith(
       expect.any(String),
-      expect.objectContaining({ variation: undefined }),
+      expect.objectContaining({ feeEntryIds: undefined }),
       expect.any(AbortSignal),
     ))
-    expect(within(reportsPanel).getByLabelText('Вариация сбора')).toHaveValue('')
+    expect(within(reportsPanel).getByRole('combobox', { name: 'Вариации сборов' })).toHaveValue('')
     const feeSummaryTable = within(reportsPanel).getByRole('table', { name: 'Отчет по сборам' })
     expect(await within(feeSummaryTable).findByText('Сбор на камеры')).toBeInTheDocument()
     expect(feeSummaryTable).toHaveTextContent('Установка камер')
-    expect(reportsPanel.querySelector('datalist option[value="Сбор на камеры"]')).not.toBeNull()
+    await user.click(within(reportsPanel).getByRole('combobox', { name: 'Вариации сборов' }))
+    const cameraCheckbox = within(reportsPanel).getByRole('checkbox', { name: /Выбрать сбор на камеры/ })
+    const gateCheckbox = within(reportsPanel).getByRole('checkbox', { name: /Выбрать сбор на ворота/ })
+    await user.click(cameraCheckbox)
+    await user.click(gateCheckbox)
+    await waitFor(() => expect(getFeeReport).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({ feeEntryIds: ['fee-campaign-cameras', 'income-type-fee'] }),
+      expect.any(AbortSignal),
+    ))
+    expect(within(reportsPanel).getByRole('status')).toHaveTextContent('Выбрано: 2')
+    await user.click(within(reportsPanel).getByRole('button', { name: 'Скачать PDF' }))
+    await waitFor(() => expect(exportFeeReportPdf).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({ feeEntryIds: ['fee-campaign-cameras', 'income-type-fee'] }),
+    ))
   })
 
   it('loads the garage report in one bounded request and supports grouping', async () => {
@@ -18884,14 +18905,14 @@ describe('App', () => {
     await waitFor(() => expect(exportBankDepositReportXlsx).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ sortBy: 'comment', sortDirection: 'asc' })))
 
     await openReportTab(user, reportsPanel, 'Сборы')
-    const feeFilter = within(reportsPanel).getByLabelText('Вариация сбора')
-    await user.clear(feeFilter)
-    await user.type(feeFilter, 'Членский взнос')
+    const feeFilter = within(reportsPanel).getByRole('combobox', { name: 'Вариации сборов' })
+    await user.click(feeFilter)
+    await user.click(await within(reportsPanel).findByRole('checkbox', { name: /Выбрать членский взнос/ }))
     await waitFor(() => expect(within(reportsPanel).getByRole('table', { name: 'Отчет по сборам' })).toHaveTextContent('Членский взнос'))
     await user.click(within(reportsPanel).getByRole('button', { name: 'Показать должников' }))
     await user.click(within(reportsPanel).getByRole('button', { name: /Сортировать Задолженность/ }))
     await exportXlsx()
-    await waitFor(() => expect(exportFeeReportXlsx).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ variation: 'Членский взнос', sortBy: 'debt', sortDirection: 'asc' })))
+    await waitFor(() => expect(exportFeeReportXlsx).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ feeEntryIds: ['income-type-membership'], sortBy: 'debt', sortDirection: 'asc' })))
 
     await openReportTab(user, reportsPanel, 'Изменение фондов')
     await user.click(within(reportsPanel).getByRole('button', { name: /Сортировать Пользователь/ }))
@@ -20830,10 +20851,24 @@ function createReportClient(overrides: Partial<ReportClient> = {}): ReportClient
     exportFeeReportXlsx: async () => new Blob(['fees xlsx'], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }),
     exportFeeReportPdf: async () => new Blob(['fees pdf'], { type: 'application/pdf' }),
     getFeeReport: async (_token, params) => {
-      const variation = params?.variation ?? 'Сбор на ворота'
-      return variation.toLowerCase().includes('член')
+      const selectedFeeIds = params?.feeEntryIds ?? []
+      if (selectedFeeIds.length === 0) {
+        return createFeeReport({
+          variation: 'Все сборы',
+          accruedTotal: 1500,
+          collectedTotal: 400,
+          debtTotal: 1100,
+          rowCount: 4,
+          summaryRows: [
+            ...createFeeReport().summaryRows,
+            { incomeTypeId: 'income-type-membership', name: 'Членский взнос', goal: 'Членский взнос', feeAmount: 1000, collected: 200 },
+          ],
+        })
+      }
+
+      return selectedFeeIds.includes('income-type-membership')
         ? createFeeReport({
-            variation,
+            variation: selectedFeeIds.length === 1 ? 'Членский взнос' : `Выбрано сборов: ${selectedFeeIds.length}`,
             accruedTotal: 1000,
             collectedTotal: 200,
             debtTotal: 800,
@@ -20841,7 +20876,7 @@ function createReportClient(overrides: Partial<ReportClient> = {}): ReportClient
             garageRows: [{ garageId: 'garage-12', garageNumber: '12', ownerName: 'Иванов Иван', incomeTypeId: 'income-type-membership', feeName: 'Членский взнос', accrued: 1000, paid: 200, lastPaymentDate: '2026-06-10', debt: 800 }],
             debtorRows: [{ garageId: 'garage-12', garageNumber: '12', ownerName: 'Иванов Иван', incomeTypeId: 'income-type-membership', feeName: 'Членский взнос', paid: 200, lastPaymentDate: '2026-06-10', debt: 800 }],
           })
-        : createFeeReport({ variation })
+        : createFeeReport({ variation: selectedFeeIds.length === 1 ? 'Сбор на ворота' : `Выбрано сборов: ${selectedFeeIds.length}` })
     },
     ...overrides,
   }

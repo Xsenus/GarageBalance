@@ -99,7 +99,7 @@ describe('accessible dynamic messages', () => {
 
   it('keeps every report multi-selection on the shared searchable checkbox pattern', () => {
     expect(reportPanelSource).toContain('function ReportCheckboxMultiSelect({')
-    expect(reportPanelSource.match(/<ReportCheckboxMultiSelect\b/g)).toHaveLength(3)
+    expect(reportPanelSource.match(/<ReportCheckboxMultiSelect\b/g)).toHaveLength(4)
     expect(reportPanelSource).toContain('type="checkbox"')
     expect(reportPanelSource).toContain('role="listbox"')
     expect(reportPanelSource).toContain('aria-selected={selectedValues.includes(option.value)}')
