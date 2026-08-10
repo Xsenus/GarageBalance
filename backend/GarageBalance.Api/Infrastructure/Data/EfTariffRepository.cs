@@ -69,9 +69,7 @@ public sealed class EfTariffRepository(GarageBalanceDbContext dbContext) : ITari
         var query = dbContext.Tariffs.AsNoTracking().Where(item => includeArchived || !item.IsArchived);
         if (templatesOnly)
         {
-            query = query.Where(item =>
-                !dbContext.ChargeServiceTariffVersions.Any(version => version.TariffId == item.Id) &&
-                !dbContext.ChargeServiceSettings.Any(setting => setting.TariffId == item.Id));
+            query = query.Where(item => item.IsTemplate);
         }
         if (normalizedSearch is not null)
         {

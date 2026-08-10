@@ -3464,7 +3464,8 @@ public sealed class DictionaryServiceTests
             Name = "Вода",
             CalculationBase = "meter_water",
             Rate = 100.80m,
-            EffectiveFrom = new DateOnly(2026, 8, 1)
+            EffectiveFrom = new DateOnly(2026, 8, 1),
+            IsTemplate = true
         };
         var serviceVersion = new Tariff
         {
@@ -3499,6 +3500,36 @@ public sealed class DictionaryServiceTests
         Assert.Equal("Вода", page.Items[0].Name);
         Assert.Equal(1, page.TotalCount);
         Assert.Equal(2, completePage.TotalCount);
+    }
+
+    [Fact]
+    public async Task GetTariffsPageAsync_TemplatesOnly_HidesUnlinkedServiceTariffVersion()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = DictionaryServiceTestFactory.Create(database.Context);
+        var template = new Tariff
+        {
+            Name = "Шаблон тарифа воды",
+            CalculationBase = "meter_water",
+            Rate = 100.80m,
+            EffectiveFrom = new DateOnly(2026, 8, 1),
+            IsTemplate = true
+        };
+        var displacedServiceVersion = new Tariff
+        {
+            Name = "Вода — по счетчику, 05.08.2026, abcdef12",
+            CalculationBase = "meter_water",
+            Rate = 100.80m,
+            EffectiveFrom = new DateOnly(2026, 8, 5),
+            IsTemplate = false
+        };
+        database.Context.Tariffs.AddRange(template, displacedServiceVersion);
+        await database.Context.SaveChangesAsync();
+
+        var page = await service.GetTariffsPageAsync(null, 0, 25, CancellationToken.None, templatesOnly: true);
+
+        Assert.Single(page.Items);
+        Assert.Equal(template.Id, page.Items[0].Id);
     }
 
     [Fact]

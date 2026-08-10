@@ -1732,7 +1732,8 @@ public sealed class DictionaryService(
             CalculationBase = calculationBase,
             Rate = MoneyMath.RoundRate(request.Rate),
             EffectiveFrom = request.EffectiveFrom,
-            Comment = NormalizeOptional(request.Comment)
+            Comment = NormalizeOptional(request.Comment),
+            IsTemplate = true
         };
         ApplyElectricityTiers(tariff, electricityTiers.Value);
 
@@ -2017,7 +2018,8 @@ public sealed class DictionaryService(
             CalculationBase = targetCalculationBase,
             Rate = MoneyMath.RoundRate(request.Rate),
             EffectiveFrom = request.EffectiveFrom,
-            Comment = $"Создан вместе с услугой «{name}»."
+            Comment = $"Создан вместе с услугой «{name}».",
+            IsTemplate = false
         };
         ApplyElectricityTiers(tariff, tiersValidation.Value);
         var serviceRequest = request.Service with { TariffId = tariff.Id };
@@ -2299,7 +2301,8 @@ public sealed class DictionaryService(
             ElectricityFirstRate = sourceTariff.ElectricityFirstRate,
             ElectricitySecondRate = sourceTariff.ElectricitySecondRate,
             ElectricityThirdRate = sourceTariff.ElectricityThirdRate,
-            ElectricityTiersJson = sourceTariff.ElectricityTiersJson
+            ElectricityTiersJson = sourceTariff.ElectricityTiersJson,
+            IsTemplate = false
         };
         var targetServiceRequest = request.Service with { TariffId = tariff.Id };
         var linkValidation = await ValidateChargeServiceAccountingLinksAsync(targetServiceRequest, cancellationToken, tariff);
@@ -2441,7 +2444,8 @@ public sealed class DictionaryService(
             CalculationBase = targetCalculationBase,
             Rate = roundedRate,
             EffectiveFrom = request.EffectiveFrom.Value,
-            Comment = NormalizeOptional(request.ChangeReason) ?? $"Новая версия режима услуги «{serviceName}»."
+            Comment = NormalizeOptional(request.ChangeReason) ?? $"Новая версия режима услуги «{serviceName}».",
+            IsTemplate = false
         };
         ApplyElectricityTiers(tariff, tiersValidation.Value);
 
