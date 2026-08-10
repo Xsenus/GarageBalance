@@ -411,6 +411,15 @@ describe('responsive layout styles', () => {
     expect(normalizedAppCss).toContain('.funds-table-row-actions {\n  display: inline-flex;\n  align-items: center;')
   })
 
+  it('keeps the access matrix in one horizontally scrollable table', () => {
+    expect(normalizedAppCss).toContain('.role-matrix-table-scroll {\n  overflow-x: auto;')
+    expect(normalizedAppCss).toContain('.role-matrix-table {\n  width: max-content;\n  min-width: 100%;')
+    expect(normalizedAppCss).toContain('.role-matrix-table thead th {')
+    expect(normalizedAppCss).toContain('white-space: nowrap;')
+    expect(normalizedAppCss).toContain('.role-matrix-table th:first-child,\n.role-matrix-table td:first-child {\n  position: sticky;\n  left: 0;')
+    expect(normalizedAppCss).not.toContain('.role-matrix-row {')
+  })
+
   it('lays out release notes as an adaptive card grid', () => {
     expect(normalizedAppCss).toContain('.release-list {\n  display: grid;\n  grid-template-columns: repeat(3, minmax(0, 1fr));')
     expect(normalizedAppCss).toContain('@media (max-width: 1280px) {\n  .release-list {\n    grid-template-columns: repeat(2, minmax(0, 1fr));')

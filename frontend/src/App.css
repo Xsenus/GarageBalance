@@ -6309,23 +6309,85 @@ h1 {
   align-items: end;
 }
 
-.role-matrix-table {
+.role-matrix-table-scroll {
   overflow-x: auto;
   border: 1px solid #e4e7ec;
   border-radius: 8px;
   background: #fcfcfd;
+  scrollbar-gutter: stable;
 }
 
-.role-matrix-row {
-  display: grid;
-  grid-template-columns: minmax(170px, 1.2fr) repeat(8, minmax(96px, 1fr)) minmax(72px, 0.5fr);
-  min-width: 1020px;
-  gap: 8px;
-  align-items: center;
-  border-top: 1px solid #e4e7ec;
-  padding: 10px 12px;
+.role-matrix-table-scroll:focus-visible {
+  border-color: #2e90fa;
+  outline: 3px solid rgba(46, 144, 250, 0.16);
+}
+
+.role-matrix-table {
+  width: max-content;
+  min-width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
   color: #344054;
   font-size: 13px;
+}
+
+.role-matrix-table th,
+.role-matrix-table td {
+  min-width: 150px;
+  border-top: 1px solid #e4e7ec;
+  padding: 10px 8px;
+  text-align: center;
+  vertical-align: middle;
+}
+
+.role-matrix-table th:first-child,
+.role-matrix-table td:first-child {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  min-width: 185px;
+  background: #fcfcfd;
+  box-shadow: 1px 0 0 #e4e7ec;
+  text-align: left;
+}
+
+.role-matrix-table th:last-child,
+.role-matrix-table td:last-child {
+  min-width: 82px;
+  width: 82px;
+}
+
+.role-matrix-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  border-top: 0;
+  background: #f2f4f7;
+  color: #667085;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.role-matrix-table thead th:first-child {
+  z-index: 3;
+  background: #f2f4f7;
+}
+
+.role-matrix-table tbody tr:hover th,
+.role-matrix-table tbody tr:hover td {
+  background: #f9fafb;
+}
+
+.role-matrix-table .status-active,
+.role-matrix-table .status-disabled {
+  display: block;
+  min-width: 92px;
+}
+
+.role-matrix-actions .icon-button {
+  margin-inline: auto;
 }
 
 .user-table-row,
@@ -7587,7 +7649,6 @@ button.operation-row:focus-visible {
   padding: 10px 12px;
 }
 
-.role-matrix-row.header,
 .user-table-row.header,
 .operation-row.header {
   position: sticky;
@@ -7601,8 +7662,8 @@ button.operation-row:focus-visible {
   text-transform: uppercase;
 }
 
-.role-matrix-row strong,
-.role-matrix-row small,
+.role-matrix-table strong,
+.role-matrix-table small,
 .user-table-row strong,
 .user-table-row small,
 .operation-row strong,
@@ -7610,7 +7671,7 @@ button.operation-row:focus-visible {
   display: block;
 }
 
-.role-matrix-row small,
+.role-matrix-table small,
 .user-table-row small,
 .operation-row small {
   margin-top: 3px;

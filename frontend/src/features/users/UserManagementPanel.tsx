@@ -840,36 +840,46 @@ function RolePermissionMatrix({ roles, onEditRole }: { roles: ManagedRoleDto[]; 
         <span>{roles.length} ролей</span>
       </div>
 
-      <div className="role-matrix-table" role="table" aria-label="Матрица ролей и прав">
-        <div className="role-matrix-row header" role="row">
-          <span role="columnheader">Роль</span>
-          {rolePermissionGroups.map((group) => (
-            <span role="columnheader" key={group.permission}>{group.label}</span>
-          ))}
-          <span role="columnheader">Действия</span>
-        </div>
-        {roles.length === 0 ? <p className="empty-state" role="status" aria-live="polite">Роли пока не загружены</p> : null}
-        {roles.map((role) => (
-          <div className="role-matrix-row" role="row" key={role.code}>
-            <span role="cell">
-              <strong>{role.name}</strong>
-              <small>{role.code}</small>
-            </span>
-            {rolePermissionGroups.map((group) => {
-              const allowed = role.permissions.includes(group.permission)
-              return (
-                <span role="cell" aria-label={`${role.name}: ${group.label} - ${allowed ? 'разрешено' : 'нет доступа'}`} className={allowed ? 'status-active' : 'status-disabled'} key={group.permission}>
-                  {allowed ? 'Да' : 'Нет'}
-                </span>
-              )
-            })}
-            <span role="cell">
-              <button className="icon-button" type="button" aria-label={`Изменить права роли ${role.name}`} title={`Изменить права роли ${role.name}`} onClick={() => onEditRole(role)}>
-                <ShieldCheck size={16} />
-              </button>
-            </span>
-          </div>
-        ))}
+      <div className="role-matrix-table-scroll" tabIndex={0} role="region" aria-label="Прокручиваемая матрица ролей и прав">
+        <table className="role-matrix-table" aria-label="Матрица ролей и прав">
+          <thead>
+            <tr>
+              <th scope="col">Роль</th>
+              {rolePermissionGroups.map((group) => (
+                <th scope="col" key={group.permission}>{group.label}</th>
+              ))}
+              <th scope="col">Действия</th>
+            </tr>
+          </thead>
+          <tbody>
+            {roles.length === 0 ? (
+              <tr>
+                <td colSpan={rolePermissionGroups.length + 2}><p className="empty-state" role="status" aria-live="polite">Роли пока не загружены</p></td>
+              </tr>
+            ) : null}
+            {roles.map((role) => (
+              <tr key={role.code}>
+                <th scope="row">
+                  <strong>{role.name}</strong>
+                  <small>{role.code}</small>
+                </th>
+                {rolePermissionGroups.map((group) => {
+                  const allowed = role.permissions.includes(group.permission)
+                  return (
+                    <td aria-label={`${role.name}: ${group.label} - ${allowed ? 'разрешено' : 'нет доступа'}`} key={group.permission}>
+                      <span className={allowed ? 'status-active' : 'status-disabled'}>{allowed ? 'Да' : 'Нет'}</span>
+                    </td>
+                  )
+                })}
+                <td className="role-matrix-actions">
+                  <button className="icon-button" type="button" aria-label={`Изменить права роли ${role.name}`} title={`Изменить права роли ${role.name}`} onClick={() => onEditRole(role)}>
+                    <ShieldCheck size={16} />
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
     </section>
   )
