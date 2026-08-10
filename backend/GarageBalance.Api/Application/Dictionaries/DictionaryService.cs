@@ -3490,12 +3490,18 @@ public sealed class DictionaryService(
                     : "Для тарифа воды или электроэнергии включите расчет по счетчику.");
         }
 
-        var compatibleUnitNames = TariffCalculationBases.GetUnitNames(tariff.CalculationBase);
-        if (!TariffCalculationBases.IsCompatibleUnitName(tariff.CalculationBase, request.UnitName))
+        if (string.IsNullOrWhiteSpace(request.UnitName))
         {
             return DictionaryResult<object>.Failure(
-                "charge_service_unit_mismatch",
-                $"Выберите совместимую единицу измерения: {string.Join(" или ", compatibleUnitNames.Select(unitName => $"«{unitName}»"))}.");
+                "charge_service_unit_required",
+                "Укажите единицу измерения услуги.");
+        }
+
+        if (request.UnitName.Trim().Length > 40)
+        {
+            return DictionaryResult<object>.Failure(
+                "charge_service_unit_too_long",
+                "Единица измерения должна содержать не более 40 символов.");
         }
 
         return DictionaryResult<object>.Success(new object());

@@ -2531,7 +2531,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
                         <SelectControl
                           aria-label={`${row.category}: ${row.title}: единица`}
                           value={normalizeTariffCalculationUnitName(row.calculationBase, tariffDrafts[row.id]?.unit ?? row.unit)}
-                          options={getTariffCalculationUnitOptions(row.calculationBase)}
+                          options={getTariffCalculationUnitOptions(row.calculationBase, tariffDrafts[row.id]?.unit ?? row.unit)}
                           disabled={!canManageTariffs || isRowDisabled}
                           onChange={(nextUnitName) => {
                             setTariffDrafts((drafts) => ({ ...drafts, [row.id]: { ...drafts[row.id], unit: nextUnitName } }))
@@ -3436,7 +3436,7 @@ export function AddServicePrototypeDialog({
   const [calculationBase, setCalculationBase] = useState(initialTariff?.calculationBase ?? 'fixed')
   const [unitName, setUnitName] = useState(initialTariff
     ? normalizeTariffCalculationUnitName(initialTariff.calculationBase, initialSetting?.unitName)
-    : initialSetting?.unitName ?? '')
+    : normalizeTariffCalculationUnitName('fixed', initialSetting?.unitName))
   const [isByMeter, setIsByMeter] = useState(initialSetting?.isMetered ?? isMeterTariff(initialTariff ?? undefined))
   const [isTiered, setIsTiered] = useState(initialSetting?.hasTieredTariff ?? false)
   const [periodicityMonths, setPeriodicityMonths] = useState(() => normalizeRegularServicePeriodicity(initialSetting?.periodicityMonths ?? 1))
@@ -3459,7 +3459,6 @@ export function AddServicePrototypeDialog({
   const effectiveCalculationBase = calculationBase
   const canUseTieredTariff = isByMeter
     && effectiveCalculationBase === 'meter_electricity'
-  const unitNameOptions = effectiveCalculationBase ? getTariffCalculationUnitOptions(effectiveCalculationBase) : []
   const isMonthly = periodicityMonths === '1'
   useRestoreFocusOnClose(true)
   const dialogRef = useFocusTrap<HTMLElement>(true)
@@ -3506,6 +3505,11 @@ export function AddServicePrototypeDialog({
 
     if (!trimmedName) {
       setError('Укажите наименование услуги.')
+      return
+    }
+
+    if (!unitName.trim()) {
+      setError('Укажите единицу измерения услуги.')
       return
     }
 
@@ -3642,7 +3646,7 @@ export function AddServicePrototypeDialog({
 
   return (
     <div className="modal-backdrop" role="presentation" onMouseDown={onClose}>
-      <section ref={dialogRef} className="detail-dialog contractors-dialog contractors-tariff-dialog" role="dialog" aria-modal="true" aria-labelledby="contractor-service-title" onMouseDown={(event) => event.stopPropagation()}>
+      <section ref={dialogRef} className="detail-dialog contractors-dialog contractors-tariff-dialog contractors-service-dialog" role="dialog" aria-modal="true" aria-labelledby="contractor-service-title" onMouseDown={(event) => event.stopPropagation()}>
         <div className="detail-dialog-header">
           <h3 id="contractor-service-title">{title}</h3>
           <button className="icon-button" type="button" aria-label="Закрыть форму услуги" onClick={onClose}>
@@ -3806,14 +3810,13 @@ export function AddServicePrototypeDialog({
                     <span>дн.</span>
                   </div>
                 </FormField>
-                <FormField label="Единица измерения" help="Можно выбрать только обозначение, совместимое со способом расчёта тарифа.">
-                  <SelectControl
+                <FormField label="Единица измерения" help="Это обозначение показывается в тарифах, начислениях и показаниях.">
+                  <input
                     aria-label="Единица измерения"
+                    maxLength={40}
                     value={unitName}
-                    options={unitNameOptions.length > 0 ? unitNameOptions : [{ value: '', label: 'Сначала выберите тариф' }]}
-                    disabled={unitNameOptions.length === 0}
-                    onChange={(nextUnitName) => {
-                      setUnitName(nextUnitName)
+                    onChange={(event) => {
+                      setUnitName(event.target.value)
                       setError(null)
                     }}
                   />

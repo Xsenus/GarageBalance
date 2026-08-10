@@ -44,7 +44,13 @@ describe('dictionary workbench metadata', () => {
     expect(getTariffCalculationUnitOptions('unknown')).toEqual([])
     expect(normalizeTariffCalculationUnitName('fixed', ' РУБ./ГАРАЖ ')).toBe('руб./гараж')
     expect(normalizeTariffCalculationUnitName('meter_water', 'руб.')).toBe('м³')
+    expect(normalizeTariffCalculationUnitName('meter_water', ' гал. ')).toBe('гал.')
     expect(normalizeTariffCalculationUnitName('unknown', 'руб.')).toBe('')
+    expect(getTariffCalculationUnitOptions('meter_water', ' гал. ')).toEqual([
+      { value: 'м³', label: 'м³' },
+      { value: 'куб. м', label: 'куб. м' },
+      { value: 'гал.', label: 'гал.' },
+    ])
   })
 
   it('returns section options and write access based on section permission', () => {

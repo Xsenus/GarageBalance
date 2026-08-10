@@ -353,17 +353,29 @@ export function getTariffCalculationUnitName(calculationBase: string) {
   return tariffCalculationUnitNames[calculationBase]?.[0] ?? ''
 }
 
-export function getTariffCalculationUnitOptions(calculationBase: string) {
-  return (tariffCalculationUnitNames[calculationBase] ?? [])
-    .map((unitName) => ({ value: unitName, label: unitName }))
+export function getTariffCalculationUnitOptions(calculationBase: string, currentUnitName?: string | null) {
+  const unitNames = [...(tariffCalculationUnitNames[calculationBase] ?? [])]
+  const trimmedCurrentUnitName = currentUnitName?.trim() ?? ''
+  if (trimmedCurrentUnitName && !unitNames.some((unitName) => unitName.toLocaleLowerCase('ru') === trimmedCurrentUnitName.toLocaleLowerCase('ru'))) {
+    unitNames.push(trimmedCurrentUnitName)
+  }
+
+  return unitNames.map((unitName) => ({ value: unitName, label: unitName }))
 }
 
 export function normalizeTariffCalculationUnitName(calculationBase: string, unitName?: string | null) {
   const compatibleUnitNames = tariffCalculationUnitNames[calculationBase] ?? []
-  const normalizedUnitName = unitName?.trim().toLocaleLowerCase('ru') ?? ''
-  return compatibleUnitNames.find((candidate) => candidate.toLocaleLowerCase('ru') === normalizedUnitName)
-    ?? compatibleUnitNames[0]
-    ?? ''
+  const trimmedUnitName = unitName?.trim() ?? ''
+  const normalizedUnitName = trimmedUnitName.toLocaleLowerCase('ru')
+  const matchingUnitName = compatibleUnitNames.find((candidate) => candidate.toLocaleLowerCase('ru') === normalizedUnitName)
+  if (matchingUnitName) return matchingUnitName
+
+  const isKnownForAnotherCalculationBase = Object.values(tariffCalculationUnitNames)
+    .flat()
+    .some((candidate) => candidate.toLocaleLowerCase('ru') === normalizedUnitName)
+  if (trimmedUnitName && !isKnownForAnotherCalculationBase) return trimmedUnitName
+
+  return compatibleUnitNames[0] ?? ''
 }
 
 export function usesElectricityTariffTiers(calculationBase: string) {

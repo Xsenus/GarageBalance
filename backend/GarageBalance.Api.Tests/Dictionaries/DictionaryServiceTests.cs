@@ -2886,7 +2886,7 @@ public sealed class DictionaryServiceTests
     }
 
     [Fact]
-    public async Task CreateChargeServiceSettingAsync_SavesAccountingLinksAndRejectsMismatch()
+    public async Task CreateChargeServiceSettingAsync_SavesAccountingLinksAndCustomUnit()
     {
         await using var database = await TestDatabase.CreateAsync();
         var fund = CreateFund("Фонд членских взносов", 10);
@@ -2915,12 +2915,20 @@ public sealed class DictionaryServiceTests
             new UpsertChargeServiceSettingRequest("Несуществующий вид поступления", true, 1, 1, 30, 6, 30, false, false, "руб.", Guid.NewGuid(), tariff.Id),
             null,
             CancellationToken.None);
-        var wrongUnit = await service.CreateChargeServiceSettingAsync(
-            new UpsertChargeServiceSettingRequest("Членский взнос с кубометрами", true, 1, 1, 30, null, 30, false, false, "м³", incomeType.Id, tariff.Id),
+        var customUnit = await service.CreateChargeServiceSettingAsync(
+            new UpsertChargeServiceSettingRequest("Членский взнос в упаковках", true, 1, 1, 30, null, 30, false, false, " упаковка ", incomeType.Id, tariff.Id),
             null,
             CancellationToken.None);
         var compatibleUnit = await service.CreateChargeServiceSettingAsync(
             new UpsertChargeServiceSettingRequest("Членский взнос на гараж", true, 1, 1, 30, null, 30, false, false, "руб./гараж", incomeType.Id, tariff.Id),
+            null,
+            CancellationToken.None);
+        var emptyUnit = await service.CreateChargeServiceSettingAsync(
+            new UpsertChargeServiceSettingRequest("Членский взнос без единицы", true, 1, 1, 30, null, 30, false, false, " ", incomeType.Id, tariff.Id),
+            null,
+            CancellationToken.None);
+        var longUnit = await service.CreateChargeServiceSettingAsync(
+            new UpsertChargeServiceSettingRequest("Членский взнос с длинной единицей", true, 1, 1, 30, null, 30, false, false, new string('а', 41), incomeType.Id, tariff.Id),
             null,
             CancellationToken.None);
 
@@ -2936,13 +2944,18 @@ public sealed class DictionaryServiceTests
         Assert.False(missingIncomeType.Succeeded);
         Assert.Equal("charge_service_income_type_not_found", missingIncomeType.ErrorCode);
         Assert.Equal("Вид поступления для услуги не найден.", missingIncomeType.ErrorMessage);
-        Assert.False(wrongUnit.Succeeded);
-        Assert.Equal("charge_service_unit_mismatch", wrongUnit.ErrorCode);
-        Assert.Equal("Выберите совместимую единицу измерения: «руб.» или «руб./гараж».", wrongUnit.ErrorMessage);
+        Assert.True(customUnit.Succeeded);
+        Assert.Equal("упаковка", customUnit.Value!.UnitName);
         Assert.True(compatibleUnit.Succeeded);
         Assert.Equal("руб./гараж", compatibleUnit.Value!.UnitName);
-        Assert.Equal(3, database.Context.ChargeServiceSettings.Count());
-        Assert.Equal(3, database.Context.AuditEvents.Count(item => item.Action == "dictionary.charge_service_created"));
+        Assert.False(emptyUnit.Succeeded);
+        Assert.Equal("charge_service_unit_required", emptyUnit.ErrorCode);
+        Assert.Equal("Укажите единицу измерения услуги.", emptyUnit.ErrorMessage);
+        Assert.False(longUnit.Succeeded);
+        Assert.Equal("charge_service_unit_too_long", longUnit.ErrorCode);
+        Assert.Equal("Единица измерения должна содержать не более 40 символов.", longUnit.ErrorMessage);
+        Assert.Equal(4, database.Context.ChargeServiceSettings.Count());
+        Assert.Equal(4, database.Context.AuditEvents.Count(item => item.Action == "dictionary.charge_service_created"));
     }
 
     [Fact]

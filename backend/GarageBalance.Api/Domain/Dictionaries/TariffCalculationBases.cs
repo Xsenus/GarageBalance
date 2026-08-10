@@ -54,4 +54,24 @@ public static class TariffCalculationBases
         return GetUnitNames(calculationBase)
             .Any(candidate => string.Equals(candidate, unitName.Trim(), StringComparison.OrdinalIgnoreCase));
     }
+
+    public static string NormalizeUnitName(string calculationBase, string? unitName)
+    {
+        var compatibleUnitNames = GetUnitNames(calculationBase);
+        var trimmedUnitName = unitName?.Trim() ?? string.Empty;
+        var compatibleUnitName = compatibleUnitNames.FirstOrDefault(
+            candidate => string.Equals(candidate, trimmedUnitName, StringComparison.OrdinalIgnoreCase));
+        if (compatibleUnitName is not null)
+        {
+            return compatibleUnitName;
+        }
+
+        var isKnownForAnotherCalculationBase = CompatibleUnitNames.Values
+            .SelectMany(unitNames => unitNames)
+            .Any(candidate => string.Equals(candidate, trimmedUnitName, StringComparison.OrdinalIgnoreCase));
+
+        return !string.IsNullOrWhiteSpace(trimmedUnitName) && !isKnownForAnotherCalculationBase
+            ? trimmedUnitName
+            : compatibleUnitNames[0];
+    }
 }

@@ -227,6 +227,6 @@ public sealed class EfChargeServiceSettingRepository(GarageBalanceDbContext dbCo
         setting.HasTieredTariff = setting.IsMetered &&
             (!string.IsNullOrWhiteSpace(tariff.ElectricityTiersJson) ||
              tariff.ElectricityFirstRate.HasValue && tariff.ElectricitySecondRate.HasValue);
-        setting.UnitName = TariffCalculationBases.GetUnitName(tariff.CalculationBase);
+        setting.UnitName = TariffCalculationBases.NormalizeUnitName(tariff.CalculationBase, setting.UnitName);
     }
 }

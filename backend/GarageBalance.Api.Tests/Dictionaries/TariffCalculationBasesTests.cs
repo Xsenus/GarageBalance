@@ -41,4 +41,17 @@ public sealed class TariffCalculationBasesTests
     {
         Assert.Equal(["м³", "куб. м"], TariffCalculationBases.GetUnitNames(TariffCalculationBases.MeterWater));
     }
+
+    [Theory]
+    [InlineData(TariffCalculationBases.Fixed, " РУБ./ГАРАЖ ", "руб./гараж")]
+    [InlineData(TariffCalculationBases.MeterWater, "руб.", "м³")]
+    [InlineData(TariffCalculationBases.MeterWater, " гал. ", "гал.")]
+    [InlineData(TariffCalculationBases.MeterElectricity, null, "кВт·ч")]
+    public void NormalizeUnitName_CanonicalizesKnownUnitsAndPreservesCustomValues(
+        string calculationBase,
+        string? unitName,
+        string expected)
+    {
+        Assert.Equal(expected, TariffCalculationBases.NormalizeUnitName(calculationBase, unitName));
+    }
 }

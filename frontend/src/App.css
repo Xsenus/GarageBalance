@@ -1946,8 +1946,9 @@ h1 {
   font-variant-numeric: tabular-nums;
 }
 
-.detail-dialog.contractors-tariff-dialog {
-  width: min(1480px, calc(100vw - 32px));
+.detail-dialog.contractors-service-dialog {
+  width: min(1280px, calc(100vw - 48px));
+  min-height: min(640px, calc(100dvh - 48px));
 }
 
 .detail-dialog.contractors-fee-dialog {

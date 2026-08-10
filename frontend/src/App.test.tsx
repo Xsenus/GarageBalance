@@ -563,9 +563,9 @@ describe('App', () => {
     expect(within(serviceDialog).getByLabelText('Пороговая тарификация')).not.toBeChecked()
     expect(within(serviceDialog).getByLabelText('Пороговая тарификация')).toBeDisabled()
     expect(within(serviceDialog).queryByRole('status')).not.toBeInTheDocument()
-    expect(within(serviceDialog).getByRole('combobox', { name: 'Единица измерения' })).toHaveTextContent('руб.')
-    expect(within(serviceDialog).getByRole('combobox', { name: 'Единица измерения' })).toBeEnabled()
-    expect(within(serviceDialog).getByLabelText('Справка: Единица измерения')).toHaveAccessibleDescription('Можно выбрать только обозначение, совместимое со способом расчёта тарифа.')
+    expect(within(serviceDialog).getByRole('textbox', { name: 'Единица измерения' })).toHaveValue('руб.')
+    expect(within(serviceDialog).getByRole('textbox', { name: 'Единица измерения' })).toBeEnabled()
+    expect(within(serviceDialog).getByLabelText('Справка: Единица измерения')).toHaveAccessibleDescription('Это обозначение показывается в тарифах, начислениях и показаниях.')
     expect(within(serviceDialog).getByLabelText('По счетчику').closest('.contractors-service-flags')).toContainElement(within(serviceDialog).getByLabelText('Пороговая тарификация'))
     await user.click(within(serviceDialog).getByLabelText('Пороговая тарификация'))
     expect(within(serviceDialog).queryByRole('status')).not.toBeInTheDocument()
@@ -4485,7 +4485,7 @@ describe('App', () => {
     expect(calculationBaseControl).toHaveTextContent('По счетчику воды')
     expect(within(serviceDialog).getByLabelText('По счетчику')).toBeChecked()
     expect(within(serviceDialog).queryByLabelText('Ставка счётчикового тарифа')).not.toBeInTheDocument()
-    expect(within(serviceDialog).getByRole('combobox', { name: 'Единица измерения' })).toHaveTextContent('м³')
+    expect(within(serviceDialog).getByRole('textbox', { name: 'Единица измерения' })).toHaveValue('м³')
     await user.click(incomeTypeControl)
     await user.click(within(serviceDialog).getByRole('option', { name: serviceIncomeType.name }))
     expect(incomeFundControl).toHaveTextContent('Членские взносы')
@@ -4493,11 +4493,11 @@ describe('App', () => {
     expect(calculationBaseControl).toHaveTextContent('Фиксированно')
     expect(within(serviceDialog).getByLabelText('По счетчику')).not.toBeChecked()
     expect(within(serviceDialog).queryByLabelText('Ставка счётчикового тарифа')).not.toBeInTheDocument()
-    const createUnitControl = within(serviceDialog).getByRole('combobox', { name: 'Единица измерения' })
-    expect(createUnitControl).toHaveTextContent('руб.')
-    await user.click(createUnitControl)
-    await user.click(within(serviceDialog).getByRole('option', { name: 'руб./гараж' }))
-    expect(createUnitControl).toHaveTextContent('руб./гараж')
+    const createUnitControl = within(serviceDialog).getByRole('textbox', { name: 'Единица измерения' })
+    expect(createUnitControl).toHaveValue('руб.')
+    await user.clear(createUnitControl)
+    await user.type(createUnitControl, 'упаковка')
+    expect(createUnitControl).toHaveValue('упаковка')
     await user.clear(tariffInput)
     await user.type(tariffInput, '0')
     await user.click(within(serviceDialog).getByRole('button', { name: 'Сохранить' }))
@@ -4531,7 +4531,7 @@ describe('App', () => {
         tariffId: serviceTariff.id,
         isMetered: false,
         hasTieredTariff: false,
-        unitName: 'руб./гараж',
+        unitName: 'упаковка',
       },
       rate: 1750,
       effectiveFrom: expect.any(String),
@@ -4543,7 +4543,7 @@ describe('App', () => {
     const savedServiceCostInput = within(tariffsPanel).getByLabelText('Охрана: Охрана — тариф: значение')
     expect(savedServiceCostInput).toHaveValue('1 750.00')
     const savedServiceUnitControl = within(tariffsPanel).getByRole('combobox', { name: 'Охрана: Охрана — тариф: единица' })
-    expect(savedServiceUnitControl).toHaveTextContent('руб./гараж')
+    expect(savedServiceUnitControl).toHaveTextContent('упаковка')
     expect(within(tariffsPanel).getByRole('combobox', { name: 'Охрана: по счетчику' })).toHaveTextContent('Нет')
     expect(within(tariffsPanel).getByRole('combobox', { name: 'Охрана: периодичность' })).toHaveTextContent('Ежегодно')
     expect(within(tariffsPanel).getByLabelText('Охрана: оплата до: день')).toHaveValue('28')
@@ -4555,10 +4555,10 @@ describe('App', () => {
     await user.click(within(tariffsPanel).getByRole('option', { name: 'руб.' }))
     const unitConfirmationDialog = await screen.findByRole('dialog', { name: 'Подтвердить изменение?' })
     expect(within(unitConfirmationDialog).getByText('Единица')).toBeInTheDocument()
-    expect(within(unitConfirmationDialog).getByText('руб./гараж')).toBeInTheDocument()
+    expect(within(unitConfirmationDialog).getByText('упаковка')).toBeInTheDocument()
     await user.click(within(unitConfirmationDialog).getByRole('button', { name: 'Сохранить' }))
     expect(await within(tariffsPanel).findByRole('alert')).toHaveTextContent('Единицу временно не удалось сохранить.')
-    expect(savedServiceUnitControl).toHaveTextContent('руб./гараж')
+    expect(savedServiceUnitControl).toHaveTextContent('упаковка')
     expect(updatedServiceRequest).toBeNull()
 
     await user.click(savedServiceUnitControl)
@@ -4743,7 +4743,7 @@ describe('App', () => {
     const incomeTypeHelp = within(editDialog).getByLabelText('Справка: Вид поступления')
     expect(incomeTypeHelp).toHaveAttribute('tabindex', '0')
     expect(incomeTypeHelp).toHaveAccessibleDescription('Определяет, к какому виду будут относиться начисления и платежи по услуге.')
-    expect(within(editDialog).getByLabelText('Справка: Единица измерения')).toHaveAccessibleDescription('Можно выбрать только обозначение, совместимое со способом расчёта тарифа.')
+    expect(within(editDialog).getByLabelText('Справка: Единица измерения')).toHaveAccessibleDescription('Это обозначение показывается в тарифах, начислениях и показаниях.')
     expect(within(editDialog).getByRole('combobox', { name: 'Периодичность регулярной услуги' })).toHaveTextContent('Ежегодно')
     expect(within(editDialog).getByRole('combobox', { name: 'Месяц начисления ежегодной услуги' })).toHaveTextContent('Март')
     expect(within(editDialog).getByLabelText('День оплаты')).toHaveValue('25')
@@ -4758,11 +4758,11 @@ describe('App', () => {
     await user.type(effectiveFromInput, '15.09.2026')
     await user.clear(editTariffInput)
     await user.type(editTariffInput, '1350.75')
-    const editUnitControl = within(editDialog).getByRole('combobox', { name: 'Единица измерения' })
-    expect(editUnitControl).toHaveTextContent('руб.')
-    await user.click(editUnitControl)
-    await user.click(within(editDialog).getByRole('option', { name: 'руб./гараж' }))
-    expect(editUnitControl).toHaveTextContent('руб./гараж')
+    const editUnitControl = within(editDialog).getByRole('textbox', { name: 'Единица измерения' })
+    expect(editUnitControl).toHaveValue('руб.')
+    await user.clear(editUnitControl)
+    await user.type(editUnitControl, 'комплект')
+    expect(editUnitControl).toHaveValue('комплект')
     expect(within(editDialog).getByLabelText('По счетчику')).not.toBeChecked()
     expect(within(editDialog).getByLabelText('Пороговая тарификация')).not.toBeChecked()
     expect(within(editDialog).getByLabelText('Пороговая тарификация')).toBeDisabled()
@@ -4795,7 +4795,7 @@ describe('App', () => {
         overdueGraceDays: 10,
         isMetered: false,
         hasTieredTariff: false,
-        unitName: 'руб./гараж',
+        unitName: 'комплект',
         incomeTypeId: serviceIncomeType.id,
         expenseTypeId: 'expense-security',
         expenseFundId: 'fund-security',
@@ -4814,7 +4814,7 @@ describe('App', () => {
     expect(within(tariffsPanel).getByRole('combobox', { name: 'Охрана территории: по счетчику' })).toHaveTextContent('Нет')
     expect(within(tariffsPanel).getByRole('combobox', { name: 'Охрана территории: пороговая тарификация' })).toHaveTextContent('Нет')
     expect(within(tariffsPanel).getByLabelText('Охрана территории: Тариф охраны: значение')).toHaveValue('1 350.75')
-    expect(within(tariffsPanel).getByRole('combobox', { name: 'Охрана территории: Тариф охраны: единица' })).toHaveTextContent('руб./гараж')
+    expect(within(tariffsPanel).getByRole('combobox', { name: 'Охрана территории: Тариф охраны: единица' })).toHaveTextContent('комплект')
     expect(within(tariffsPanel).queryByRole('combobox', { name: 'Охрана территории: Периодичность: по счетчику' })).not.toBeInTheDocument()
     expect(within(tariffsPanel).queryByRole('combobox', { name: 'Охрана территории: Оплата до: пороговая тарификация' })).not.toBeInTheDocument()
 
