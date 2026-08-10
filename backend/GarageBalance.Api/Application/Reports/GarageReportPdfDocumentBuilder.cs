@@ -90,6 +90,7 @@ internal static class GarageReportPdfDocumentBuilder
                                 {
                                     header.Cell()
                                         .Element(HeaderCell)
+                                        .AlignCenter()
                                         .Text(value)
                                         .Bold();
                                 }
@@ -98,19 +99,17 @@ internal static class GarageReportPdfDocumentBuilder
                             foreach (var row in layout.Rows)
                             {
                                 cancellationToken.ThrowIfCancellationRequested();
-                                foreach (var cell in row)
+                                for (var index = 0; index < row.Count; index++)
                                 {
-                                    table.Cell()
-                                        .Element(BodyCell)
-                                        .Text(FormatCell(cell));
+                                    AlignCell(table.Cell().Element(BodyCell), row[index], layout.Headers[index])
+                                        .Text(FormatCell(row[index]));
                                 }
                             }
 
-                            foreach (var cell in layout.Footer)
+                            for (var index = 0; index < layout.Footer.Count; index++)
                             {
-                                table.Cell()
-                                    .Element(FooterCell)
-                                    .Text(FormatCell(cell))
+                                AlignCell(table.Cell().Element(FooterCell), layout.Footer[index], layout.Headers[index])
+                                    .Text(FormatCell(layout.Footer[index]))
                                     .Bold();
                             }
                         });
@@ -154,32 +153,47 @@ internal static class GarageReportPdfDocumentBuilder
             : cell.Value;
     }
 
+    private static IContainer AlignCell(IContainer container, XlsxCell cell, string header)
+    {
+        if (cell.IsNumber)
+        {
+            return container.AlignRight();
+        }
+
+        return header is "Месяц" or "Дата" or "Гараж"
+            ? container.AlignCenter()
+            : container;
+    }
+
     private static IContainer HeaderCell(IContainer container)
     {
         return container
             .Background(HeaderBackground)
-            .BorderBottom(1)
+            .Border(0.75f)
             .BorderColor(BorderColor)
             .PaddingHorizontal(5)
-            .PaddingVertical(6);
+            .PaddingVertical(6)
+            .AlignMiddle();
     }
 
     private static IContainer BodyCell(IContainer container)
     {
         return container
-            .BorderBottom(0.5f)
+            .Border(0.5f)
             .BorderColor(BorderColor)
             .PaddingHorizontal(5)
-            .PaddingVertical(5);
+            .PaddingVertical(5)
+            .AlignMiddle();
     }
 
     private static IContainer FooterCell(IContainer container)
     {
         return container
             .Background("#EFF6FF")
-            .BorderTop(1)
+            .Border(0.75f)
             .BorderColor(AccentColor)
             .PaddingHorizontal(5)
-            .PaddingVertical(6);
+            .PaddingVertical(6)
+            .AlignMiddle();
     }
 }

@@ -182,18 +182,24 @@ internal static class ConsolidatedReportPdfDocumentBuilder
     {
         return container
             .Background(MonthHeaderColor)
+            .Border(0.75f)
+            .BorderColor(BorderColor)
             .PaddingHorizontal(7)
-            .PaddingVertical(6);
+            .PaddingVertical(6)
+            .AlignMiddle()
+            .AlignCenter();
     }
 
     private static IContainer HeaderCell(IContainer container)
     {
         return container
             .Background(HeaderBackground)
-            .BorderBottom(1)
+            .Border(0.75f)
             .BorderColor(BorderColor)
             .PaddingHorizontal(5)
-            .PaddingVertical(5);
+            .PaddingVertical(5)
+            .AlignMiddle()
+            .AlignCenter();
     }
 
     private static IContainer BodyCell(IContainer container)
@@ -201,10 +207,11 @@ internal static class ConsolidatedReportPdfDocumentBuilder
         return container
             .ShowEntire()
             .MinHeight(22)
-            .BorderBottom(0.5f)
+            .Border(0.5f)
             .BorderColor(BorderColor)
             .PaddingHorizontal(5)
-            .PaddingVertical(4);
+            .PaddingVertical(4)
+            .AlignMiddle();
     }
 
     private static IContainer TotalCell(IContainer container)
@@ -212,10 +219,11 @@ internal static class ConsolidatedReportPdfDocumentBuilder
         return container
             .ShowEntire()
             .Background("#EFF6FF")
-            .BorderTop(1)
+            .Border(0.75f)
             .BorderColor(AccentColor)
             .PaddingHorizontal(5)
-            .PaddingVertical(5);
+            .PaddingVertical(5)
+            .AlignMiddle();
     }
 
     private static IContainer SummaryCell(IContainer container)
@@ -223,9 +231,10 @@ internal static class ConsolidatedReportPdfDocumentBuilder
         return container
             .ShowEntire()
             .Background("#F8FAFC")
-            .BorderBottom(1)
+            .Border(0.75f)
             .BorderColor(BorderColor)
             .PaddingHorizontal(7)
-            .PaddingVertical(6);
+            .PaddingVertical(6)
+            .AlignMiddle();
     }
 }

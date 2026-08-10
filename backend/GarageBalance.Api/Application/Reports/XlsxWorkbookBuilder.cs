@@ -119,25 +119,26 @@ internal static class XlsxWorkbookBuilder
                         BuildBorderSide("bottom"),
                         new XElement(Spreadsheet + "diagonal"))),
                 new XElement(Spreadsheet + "cellStyleXfs", new XAttribute("count", 1), new XElement(Spreadsheet + "xf")),
-                new XElement(Spreadsheet + "cellXfs", new XAttribute("count", 5),
+                new XElement(Spreadsheet + "cellXfs", new XAttribute("count", 6),
                     new XElement(Spreadsheet + "xf", new XAttribute("xfId", 0)),
                     new XElement(Spreadsheet + "xf", new XAttribute("xfId", 0), new XAttribute("fontId", 1), new XAttribute("fillId", 2), new XAttribute("borderId", 1), new XAttribute("applyFont", 1), new XAttribute("applyFill", 1), new XAttribute("applyBorder", 1), new XAttribute("applyAlignment", 1), new XElement(Spreadsheet + "alignment", new XAttribute("horizontal", "center"), new XAttribute("vertical", "center"), new XAttribute("wrapText", 1))),
-                    new XElement(Spreadsheet + "xf", new XAttribute("xfId", 0), new XAttribute("borderId", 1), new XAttribute("numFmtId", 4), new XAttribute("applyBorder", 1), new XAttribute("applyNumberFormat", 1), new XAttribute("applyAlignment", 1), new XElement(Spreadsheet + "alignment", new XAttribute("horizontal", "right"), new XAttribute("vertical", "top"))),
-                    new XElement(Spreadsheet + "xf", new XAttribute("xfId", 0), new XAttribute("borderId", 1), new XAttribute("numFmtId", 3), new XAttribute("applyBorder", 1), new XAttribute("applyNumberFormat", 1), new XAttribute("applyAlignment", 1), new XElement(Spreadsheet + "alignment", new XAttribute("horizontal", "right"), new XAttribute("vertical", "top"))),
-                    new XElement(Spreadsheet + "xf", new XAttribute("xfId", 0), new XAttribute("borderId", 1), new XAttribute("applyBorder", 1), new XAttribute("applyAlignment", 1), new XElement(Spreadsheet + "alignment", new XAttribute("vertical", "top"), new XAttribute("wrapText", 1)))),
+                    new XElement(Spreadsheet + "xf", new XAttribute("xfId", 0), new XAttribute("borderId", 1), new XAttribute("numFmtId", 4), new XAttribute("applyBorder", 1), new XAttribute("applyNumberFormat", 1), new XAttribute("applyAlignment", 1), new XElement(Spreadsheet + "alignment", new XAttribute("horizontal", "right"), new XAttribute("vertical", "center"))),
+                    new XElement(Spreadsheet + "xf", new XAttribute("xfId", 0), new XAttribute("borderId", 1), new XAttribute("numFmtId", 3), new XAttribute("applyBorder", 1), new XAttribute("applyNumberFormat", 1), new XAttribute("applyAlignment", 1), new XElement(Spreadsheet + "alignment", new XAttribute("horizontal", "right"), new XAttribute("vertical", "center"))),
+                    new XElement(Spreadsheet + "xf", new XAttribute("xfId", 0), new XAttribute("borderId", 1), new XAttribute("applyBorder", 1), new XAttribute("applyAlignment", 1), new XElement(Spreadsheet + "alignment", new XAttribute("vertical", "center"), new XAttribute("wrapText", 1))),
+                    new XElement(Spreadsheet + "xf", new XAttribute("xfId", 0), new XAttribute("borderId", 1), new XAttribute("applyBorder", 1), new XAttribute("applyAlignment", 1), new XElement(Spreadsheet + "alignment", new XAttribute("horizontal", "center"), new XAttribute("vertical", "center"), new XAttribute("wrapText", 1)))),
                 new XElement(Spreadsheet + "cellStyles", new XAttribute("count", 1), new XElement(Spreadsheet + "cellStyle", new XAttribute("name", "Normal"), new XAttribute("xfId", 0), new XAttribute("builtinId", 0)))));
     }
 
     private static XElement BuildBorderSide(string name) =>
         new(Spreadsheet + name,
             new XAttribute("style", "thin"),
-            new XElement(Spreadsheet + "color", new XAttribute("rgb", "FFD0D5DD")));
+            new XElement(Spreadsheet + "color", new XAttribute("rgb", "FF94A3B8")));
 
     private static XDocument BuildWorksheet(XlsxSheet sheet, CancellationToken cancellationToken)
     {
         var rows = new List<XElement>
         {
-            BuildRow(1, sheet.Headers.Select(header => XlsxCell.Text(header)).ToArray())
+            BuildRow(1, sheet.Headers.Select(header => XlsxCell.Text(header)).ToArray(), sheet.Headers)
         };
 
         for (var index = 0; index < sheet.Rows.Count; index++)
@@ -147,21 +148,30 @@ internal static class XlsxWorkbookBuilder
                 cancellationToken.ThrowIfCancellationRequested();
             }
 
-            rows.Add(BuildRow(index + 2, sheet.Rows[index]));
+            rows.Add(BuildRow(index + 2, sheet.Rows[index], sheet.Headers));
         }
 
         var lastColumn = ColumnName(Math.Max(1, sheet.Headers.Count));
+        var lastDataRow = Math.Max(1, rows.Count);
+        if (!string.IsNullOrWhiteSpace(sheet.Note))
+        {
+            rows.Add(BuildNoteRow(rows.Count + 1, sheet.Note));
+        }
+
         var lastRow = Math.Max(1, rows.Count);
         return new XDocument(
             new XElement(Spreadsheet + "worksheet",
                 new XElement(Spreadsheet + "sheetPr", new XElement(Spreadsheet + "pageSetUpPr", new XAttribute("fitToPage", 1))),
                 new XElement(Spreadsheet + "dimension", new XAttribute("ref", $"A1:{lastColumn}{lastRow}")),
                 new XElement(Spreadsheet + "sheetViews",
-                    new XElement(Spreadsheet + "sheetView", new XAttribute("workbookViewId", 0),
+                    new XElement(Spreadsheet + "sheetView", new XAttribute("workbookViewId", 0), new XAttribute("showGridLines", 0),
                         new XElement(Spreadsheet + "pane", new XAttribute("ySplit", 1), new XAttribute("topLeftCell", "A2"), new XAttribute("activePane", "bottomLeft"), new XAttribute("state", "frozen")))),
                 BuildColumns(sheet),
                 new XElement(Spreadsheet + "sheetData", rows),
-                new XElement(Spreadsheet + "autoFilter", new XAttribute("ref", $"A1:{lastColumn}{lastRow}")),
+                new XElement(Spreadsheet + "autoFilter", new XAttribute("ref", $"A1:{lastColumn}{lastDataRow}")),
+                string.IsNullOrWhiteSpace(sheet.Note)
+                    ? null
+                    : new XElement(Spreadsheet + "mergeCells", new XAttribute("count", 1), new XElement(Spreadsheet + "mergeCell", new XAttribute("ref", $"A{lastRow}:{lastColumn}{lastRow}"))),
                 new XElement(Spreadsheet + "pageMargins", new XAttribute("left", 0.3), new XAttribute("right", 0.3), new XAttribute("top", 0.5), new XAttribute("bottom", 0.5), new XAttribute("header", 0.2), new XAttribute("footer", 0.2)),
                 new XElement(Spreadsheet + "pageSetup", new XAttribute("orientation", "landscape"), new XAttribute("fitToWidth", 1), new XAttribute("fitToHeight", 0), new XAttribute("paperSize", 9))));
     }
@@ -173,7 +183,7 @@ internal static class XlsxWorkbookBuilder
             var contentWidth = sheet.Rows.Count == 0
                 ? 0
                 : sheet.Rows.Max(row => index < row.Count ? row[index].DisplayLength : 0);
-            var width = Math.Clamp(Math.Max(header.Length, contentWidth) + 2, 11, 42);
+            var width = ResolveColumnWidth(header, contentWidth);
             return new XElement(Spreadsheet + "col",
                 new XAttribute("min", index + 1),
                 new XAttribute("max", index + 1),
@@ -183,16 +193,72 @@ internal static class XlsxWorkbookBuilder
         return new XElement(Spreadsheet + "cols", columns);
     }
 
-    private static XElement BuildRow(int rowIndex, IReadOnlyList<XlsxCell> cells)
+    private static double ResolveColumnWidth(string header, int contentWidth)
+    {
+        var normalized = header.Trim().ToUpperInvariant();
+        if (IsMonthColumn(normalized))
+        {
+            return 13;
+        }
+
+        if (IsDateColumn(normalized))
+        {
+            return 14;
+        }
+
+        if (normalized.Contains("ГОД", StringComparison.Ordinal))
+        {
+            return 11;
+        }
+
+        var preferredWidth = normalized switch
+        {
+            "ГАРАЖ" or "ТИП" or "СТРОК" => 13,
+            "НАЛИЧИЕ ЧЕКА" => 18,
+            "ОПЕРАЦИЯ" or "ВАРИАЦИЯ" => 19,
+            "ФОНД" or "ДОКУМЕНТ" => 22,
+            "ПОЛЬЗОВАТЕЛЬ" => 25,
+            "ВЛАДЕЛЕЦ" => 31,
+            "ПОСТАВЩИК" or "ПОСТАВЩИК ИЛИ СОТРУДНИК" => 34,
+            "НАЗНАЧЕНИЕ" or "ЦЕЛЬ" or "ВИД ПОСТУПЛЕНИЯ" or "УСЛУГА / СТАТЬЯ РАСХОДА" => 30,
+            "НАИМЕНОВАНИЕ" or "НАИМЕНОВАНИЕ ПОСТУПЛЕНИЯ" or "НАИМЕНОВАНИЕ ВЫПЛАТЫ" => 30,
+            "КОММЕНТАРИЙ" => 42,
+            _ when normalized.Contains("ОСТАТОК ПО СЧЁТУ", StringComparison.Ordinal) => 37,
+            _ when normalized.Contains("СУММА", StringComparison.Ordinal)
+                || normalized.Contains("НАЧИСЛЕНО", StringComparison.Ordinal)
+                || normalized.Contains("ОПЛАЧЕНО", StringComparison.Ordinal)
+                || normalized.Contains("ВЫПЛАЧЕНО", StringComparison.Ordinal)
+                || normalized.Contains("ПОСТУПЛЕНИЯ", StringComparison.Ordinal)
+                || normalized.Contains("ВЫПЛАТЫ", StringComparison.Ordinal)
+                || normalized.Contains("РАЗНИЦА", StringComparison.Ordinal)
+                || normalized.Contains("ЗАДОЛЖЕННОСТЬ", StringComparison.Ordinal)
+                || normalized.Contains("ИЗМЕНЕНИЕ", StringComparison.Ordinal) => 18,
+            _ => Math.Clamp(Math.Max(header.Length + 4, contentWidth + 2), 13, 34)
+        };
+
+        return Math.Max(preferredWidth, Math.Min(header.Length + 4, 42));
+    }
+
+    private static bool IsDateColumn(string normalizedHeader) =>
+        normalizedHeader == "ДАТА"
+        || normalizedHeader.StartsWith("ДАТА ", StringComparison.Ordinal)
+        || normalizedHeader.StartsWith("ПЕРИОД С", StringComparison.Ordinal)
+        || normalizedHeader.StartsWith("ПЕРИОД ПО", StringComparison.Ordinal);
+
+    private static bool IsMonthColumn(string normalizedHeader) =>
+        normalizedHeader == "МЕСЯЦ"
+        || normalizedHeader.StartsWith("МЕСЯЦ ", StringComparison.Ordinal);
+
+    private static XElement BuildRow(int rowIndex, IReadOnlyList<XlsxCell> cells, IReadOnlyList<string> headers)
     {
         return new XElement(Spreadsheet + "row",
             new XAttribute("r", rowIndex),
-            rowIndex == 1 ? new XAttribute("ht", 30) : null,
+            rowIndex == 1 ? new XAttribute("ht", 36) : null,
             rowIndex == 1 ? new XAttribute("customHeight", 1) : null,
-            cells.Select((cell, index) => BuildCell(rowIndex, index, cell)));
+            cells.Select((cell, index) => BuildCell(rowIndex, index, cell, index < headers.Count ? headers[index] : string.Empty)));
     }
 
-    private static XElement BuildCell(int rowIndex, int columnIndex, XlsxCell cell)
+    private static XElement BuildCell(int rowIndex, int columnIndex, XlsxCell cell, string header)
     {
         var reference = $"{ColumnName(columnIndex + 1)}{rowIndex}";
         if (cell.Kind is XlsxCellKind.Decimal or XlsxCellKind.Integer)
@@ -203,11 +269,26 @@ internal static class XlsxWorkbookBuilder
                 new XElement(Spreadsheet + "v", cell.Value));
         }
 
+        var normalizedHeader = header.Trim().ToUpperInvariant();
+        var style = rowIndex == 1
+            ? 1
+            : IsDateColumn(normalizedHeader) || IsMonthColumn(normalizedHeader) || normalizedHeader.Contains("ГОД", StringComparison.Ordinal)
+                ? 5
+                : 4;
         return new XElement(Spreadsheet + "c",
             new XAttribute("r", reference),
-            new XAttribute("s", rowIndex == 1 ? 1 : 4),
+            new XAttribute("s", style),
             new XAttribute("t", "inlineStr"),
             new XElement(Spreadsheet + "is", new XElement(Spreadsheet + "t", cell.Value)));
+    }
+
+    private static XElement BuildNoteRow(int rowIndex, string note)
+    {
+        return new XElement(Spreadsheet + "row",
+            new XAttribute("r", rowIndex),
+            new XAttribute("ht", 42),
+            new XAttribute("customHeight", 1),
+            BuildCell(rowIndex, 0, XlsxCell.Text(note), string.Empty));
     }
 
     private static void WriteEntry(ZipArchive archive, string path, XDocument document)
@@ -240,7 +321,11 @@ internal static class XlsxWorkbookBuilder
     }
 }
 
-internal sealed record XlsxSheet(string Name, IReadOnlyList<string> Headers, IReadOnlyList<IReadOnlyList<XlsxCell>> Rows);
+internal sealed record XlsxSheet(
+    string Name,
+    IReadOnlyList<string> Headers,
+    IReadOnlyList<IReadOnlyList<XlsxCell>> Rows,
+    string? Note = null);
 
 internal enum XlsxCellKind
 {

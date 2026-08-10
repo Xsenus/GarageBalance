@@ -770,8 +770,7 @@ public sealed class ReportServiceTests
         Assert.Equal("06.2026", workbookRows[2][0]);
         Assert.Equal(fixtures.FirstGarage.Number, workbookRows[2][1]);
         Assert.Equal(["ИТОГО", "", "2000.0", "0.0", "2000.0"], workbookRows[3]);
-        Assert.Empty(workbookRows[4]);
-        Assert.StartsWith("Начисления и поступления сопоставлены", workbookRows[5][0]);
+        Assert.StartsWith("Начисления и поступления сопоставлены", workbookRows[4][0]);
         AssertWorkbookDoesNotContain(xlsx.Value.Content, "Владелец");
         AssertWorkbookDoesNotContain(xlsx.Value.Content, "Итоги");
         Assert.True(pdf.Succeeded);
@@ -850,8 +849,7 @@ public sealed class ReportServiceTests
         var workbookRows = ReadFirstWorksheetRows(xlsx.Value!.Content);
         Assert.Equal(["Месяц", "Гараж", "Услуга", "Начисления", "Поступления", "Разница"], workbookRows[0]);
         Assert.Equal(["ИТОГО", "", "", "0", "0", "0"], workbookRows[1]);
-        Assert.Empty(workbookRows[2]);
-        Assert.StartsWith("Начисления и поступления сопоставлены", workbookRows[3][0]);
+        Assert.StartsWith("Начисления и поступления сопоставлены", workbookRows[2][0]);
         Assert.True(pdf.Succeeded, pdf.ErrorMessage);
         var pdfText = ReadPdfText(pdf.Value!.Content);
         Assert.Contains("Период: 01.2027 - 01.2027", pdfText);
@@ -3260,6 +3258,8 @@ public sealed class ReportServiceTests
         var pdf = await pdfTask;
         Assert.True(xlsx.Succeeded, xlsx.ErrorMessage);
         Assert.True(pdf.Succeeded, pdf.ErrorMessage);
+        WriteReportQaArtifactIfRequested(xlsx.Value!);
+        WriteReportQaArtifactIfRequested(pdf.Value!);
         AssertWorkbookContains(xlsx.Value!.Content, rowMarker);
         AssertWorkbookPresentation(xlsx.Value.Content);
         var pdfText = ReadPdfText(pdf.Value!.Content);
@@ -3272,6 +3272,18 @@ public sealed class ReportServiceTests
         }
     }
 
+    private static void WriteReportQaArtifactIfRequested(ReportExportFileDto export)
+    {
+        var outputDirectory = Environment.GetEnvironmentVariable("GARAGEBALANCE_REPORT_EXPORT_QA_DIR");
+        if (string.IsNullOrWhiteSpace(outputDirectory))
+        {
+            return;
+        }
+
+        Directory.CreateDirectory(outputDirectory);
+        File.WriteAllBytes(Path.Combine(outputDirectory, export.FileName), export.Content);
+    }
+
     private static void AssertWorkbookPresentation(byte[] content)
     {
         using var stream = new MemoryStream(content);
@@ -3279,10 +3291,12 @@ public sealed class ReportServiceTests
         var styles = System.Xml.Linq.XDocument.Parse(ReadEntry(archive.GetEntry("xl/styles.xml")!));
         var worksheet = System.Xml.Linq.XDocument.Parse(ReadEntry(archive.GetEntry("xl/worksheets/sheet1.xml")!));
         Assert.Equal("2", styles.Descendants().Single(element => element.Name.LocalName == "fonts").Attribute("count")?.Value);
-        Assert.Equal("5", styles.Descendants().Single(element => element.Name.LocalName == "cellXfs").Attribute("count")?.Value);
+        Assert.Equal("6", styles.Descendants().Single(element => element.Name.LocalName == "cellXfs").Attribute("count")?.Value);
         Assert.Contains(worksheet.Descendants(), element => element.Name.LocalName == "pane" && element.Attribute("state")?.Value == "frozen" && element.Attribute("topLeftCell")?.Value == "A2");
         Assert.Contains(worksheet.Descendants(), element => element.Name.LocalName == "autoFilter");
         Assert.Contains(worksheet.Descendants(), element => element.Name.LocalName == "pageSetup" && element.Attribute("orientation")?.Value == "landscape" && element.Attribute("fitToWidth")?.Value == "1");
+        Assert.Contains(worksheet.Descendants(), element => element.Name.LocalName == "sheetView" && element.Attribute("showGridLines")?.Value == "0");
+        Assert.Contains(worksheet.Descendants(), element => element.Name.LocalName == "row" && element.Attribute("r")?.Value == "1" && element.Attribute("ht")?.Value == "36");
         Assert.All(
             worksheet.Descendants().First(element => element.Name.LocalName == "row").Elements().Where(element => element.Name.LocalName == "c"),
             cell => Assert.Equal("1", cell.Attribute("s")?.Value));

@@ -270,15 +270,10 @@ public sealed class ReportService(
         var layout = BuildGarageReportExportLayout(report, request.GroupAccruals);
         var rows = layout.Rows
             .Concat([layout.Footer])
-            .Concat(
-            [
-                Array.Empty<XlsxCell>(),
-                [XlsxCell.Text(GarageReportComment)]
-            ])
             .ToArray();
         var content = XlsxWorkbookBuilder.Build(
             [
-                new XlsxSheet("Гаражи", layout.Headers, rows)
+                new XlsxSheet("Гаражи", layout.Headers, rows, GarageReportComment)
             ], cancellationToken);
         var file = new ReportExportFileDto(
             BuildExportFileName("garages", report.PeriodFrom, report.PeriodTo, "xlsx"),
@@ -715,7 +710,7 @@ public sealed class ReportService(
                     null,
                     [
                         new("Фонд", 1.5f),
-                        new("Дата", 0.8f),
+                        new("Дата", 0.8f, false, true),
                         new("Операция", 1),
                         new("Изменение, руб.", 1, true),
                         new("Сумма до", 1, true),
@@ -878,7 +873,7 @@ public sealed class ReportService(
                 new(
                     null,
                     [
-                        new("Дата", 0.8f),
+                        new("Дата", 0.8f, false, true),
                         new("Сумма, руб.", 0.9f, true),
                         new("Чек", 0.55f),
                         new("Документ", 1),
@@ -1028,7 +1023,7 @@ public sealed class ReportService(
             [
                 new(
                     null,
-                    [new("Дата", 1), new("Сумма, руб.", 1, true), new("Комментарий", 3)],
+                    [new("Дата", 1, false, true), new("Сумма, руб.", 1, true), new("Комментарий", 3)],
                     report.Rows.Select(row => (IReadOnlyList<string>)[
                         row.Date.ToString("dd.MM.yyyy"),
                         FormatAmount(row.Amount),
@@ -1279,7 +1274,7 @@ public sealed class ReportService(
                     "Гаражи",
                     [
                         new("Сбор", 1.4f), new("Гараж", 0.6f), new("Владелец", 1.6f),
-                        new("Начислено", 0.9f, true), new("Оплачено", 0.9f, true), new("Дата оплаты", 0.9f), new("Долг", 0.9f, true)
+                        new("Начислено", 0.9f, true), new("Оплачено", 0.9f, true), new("Дата оплаты", 0.9f, false, true), new("Долг", 0.9f, true)
                     ],
                     report.GarageRows.Select(row => (IReadOnlyList<string>)[
                         row.FeeName,
@@ -1294,7 +1289,7 @@ public sealed class ReportService(
                     "Должники",
                     [
                         new("Сбор", 1.4f), new("Гараж", 0.6f), new("Владелец", 1.6f),
-                        new("Оплачено", 0.9f, true), new("Дата оплаты", 0.9f), new("Долг", 0.9f, true)
+                        new("Оплачено", 0.9f, true), new("Дата оплаты", 0.9f, false, true), new("Долг", 0.9f, true)
                     ],
                     report.DebtorRows.Select(row => (IReadOnlyList<string>)[
                         row.FeeName,
@@ -1401,7 +1396,7 @@ public sealed class ReportService(
                 new(
                     null,
                     [
-                        new("Тип", 0.8f), new("Дата", 0.8f), new("Месяц", 0.7f), new("Гараж", 0.6f),
+                        new("Тип", 0.8f), new("Дата", 0.8f, false, true), new("Месяц", 0.7f, false, true), new("Гараж", 0.6f, false, true),
                         new("Владелец", 1.4f), new("Вид поступления", 1.3f), new("Начислено", 0.8f, true),
                         new("Оплачено", 0.8f, true), new("Разница", 0.8f, true), new("Долг после оплаты", 0.9f, true),
                         new("Документ", 0.9f), new("Комментарий", 1.3f)
@@ -1516,7 +1511,7 @@ public sealed class ReportService(
                 new(
                     null,
                     [
-                        new("Тип", 0.8f), new("Дата", 0.8f), new("Месяц", 0.7f), new("Поставщик / сотрудник", 1.7f),
+                        new("Тип", 0.8f), new("Дата", 0.8f, false, true), new("Месяц", 0.7f, false, true), new("Поставщик / сотрудник", 1.7f),
                         new("Услуга / статья", 1.5f), new("Начислено", 0.9f, true), new("Выплачено", 0.9f, true),
                         new("Разница", 0.9f, true), new("Документ", 1), new("Комментарий", 1.5f)
                     ],

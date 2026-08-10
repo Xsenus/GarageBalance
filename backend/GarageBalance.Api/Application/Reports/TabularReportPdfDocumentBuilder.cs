@@ -6,7 +6,11 @@ namespace GarageBalance.Api.Application.Reports;
 
 internal sealed record TabularPdfSummary(string Label, string Value);
 
-internal sealed record TabularPdfColumn(string Header, float RelativeWidth = 1, bool AlignRight = false);
+internal sealed record TabularPdfColumn(
+    string Header,
+    float RelativeWidth = 1,
+    bool AlignRight = false,
+    bool AlignCenter = false);
 
 internal sealed record TabularPdfSection(
     string? Title,
@@ -114,13 +118,7 @@ internal static class TabularReportPdfDocumentBuilder
         {
             foreach (var column in section.Columns)
             {
-                var cell = header.Cell().Element(HeaderCell);
-                if (column.AlignRight)
-                {
-                    cell = cell.AlignRight();
-                }
-
-                cell.Text(column.Header).Bold();
+                header.Cell().Element(HeaderCell).AlignCenter().Text(column.Header).Bold();
             }
         });
 
@@ -136,10 +134,7 @@ internal static class TabularReportPdfDocumentBuilder
                 for (var index = 0; index < section.Columns.Count; index++)
                 {
                     var cell = table.Cell().Element(BodyCell);
-                    if (section.Columns[index].AlignRight)
-                    {
-                        cell = cell.AlignRight();
-                    }
+                    cell = AlignCell(cell, section.Columns[index]);
 
                     cell.Text(index < row.Count ? row[index] : string.Empty);
                 }
@@ -151,40 +146,51 @@ internal static class TabularReportPdfDocumentBuilder
             for (var index = 0; index < section.Columns.Count; index++)
             {
                 var cell = table.Cell().Element(FooterCell);
-                if (section.Columns[index].AlignRight)
-                {
-                    cell = cell.AlignRight();
-                }
+                cell = AlignCell(cell, section.Columns[index]);
 
                 cell.Text(index < section.Footer.Count ? section.Footer[index] : string.Empty).Bold();
             }
         }
     }
 
+    private static IContainer AlignCell(IContainer container, TabularPdfColumn column)
+    {
+        if (column.AlignRight)
+        {
+            return container.AlignRight();
+        }
+
+        return column.AlignCenter ? container.AlignCenter() : container;
+    }
+
     private static IContainer HeaderCell(IContainer container) => container
         .Background(HeaderBackground)
-        .BorderBottom(1)
+        .Border(0.75f)
         .BorderColor(BorderColor)
         .PaddingHorizontal(4)
-        .PaddingVertical(5);
+        .PaddingVertical(5)
+        .AlignMiddle();
 
     private static IContainer BodyCell(IContainer container) => container
         .MinHeight(21)
-        .BorderBottom(0.5f)
+        .Border(0.5f)
         .BorderColor(BorderColor)
         .PaddingHorizontal(4)
-        .PaddingVertical(4);
+        .PaddingVertical(4)
+        .AlignMiddle();
 
     private static IContainer EmptyCell(IContainer container) => container
         .MinHeight(42)
-        .BorderBottom(0.5f)
+        .Border(0.5f)
         .BorderColor(BorderColor)
-        .Padding(10);
+        .Padding(10)
+        .AlignMiddle();
 
     private static IContainer FooterCell(IContainer container) => container
         .Background("#EFF6FF")
-        .BorderTop(1)
+        .Border(0.75f)
         .BorderColor(AccentColor)
         .PaddingHorizontal(4)
-        .PaddingVertical(5);
+        .PaddingVertical(5)
+        .AlignMiddle();
 }
