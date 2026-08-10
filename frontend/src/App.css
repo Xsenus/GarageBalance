@@ -7040,15 +7040,18 @@ button.operation-row:focus-visible {
 .report-garage-filter-panel {
   left: 0;
   display: grid;
-  width: min(620px, calc(100vw - 64px));
-  max-height: min(70vh, 620px);
+  width: min(var(--report-garage-filter-panel-width, 760px), calc(100vw - 48px));
+  height: min(var(--report-garage-filter-panel-height, 480px), 78vh);
+  max-width: calc(100vw - 48px);
+  max-height: 78vh;
   gap: 14px;
-  overflow-x: hidden;
-  overflow-y: auto;
+  overflow: auto;
+  resize: both;
 }
 
 .report-garage-filter-panel .payments-prototype-search-results {
-  grid-template-columns: minmax(0, 1fr);
+  position: static;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
   width: 100%;
 }
 
@@ -7130,6 +7133,8 @@ button.operation-row:focus-visible {
 }
 
 .report-checkbox-picker .payments-prototype-search {
+  display: flex;
+  align-items: center;
   width: 100%;
   min-height: 38px;
   gap: 8px;
@@ -7364,8 +7369,10 @@ button.operation-row:focus-visible {
   .report-garage-filter-panel {
     position: static;
     width: 100%;
+    height: auto;
     max-height: none;
     margin-top: 8px;
+    resize: none;
     box-shadow: none;
   }
 

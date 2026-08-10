@@ -214,7 +214,7 @@ describe('responsive layout styles', () => {
 
   it('keeps report checkbox filters aligned with the shared responsive search layout', () => {
     expect(normalizedAppCss).toContain('.report-checkbox-picker {\n  display: grid;\n  gap: 6px;')
-    expect(normalizedAppCss).toContain('.report-checkbox-picker .payments-prototype-search {\n  width: 100%;\n  min-height: 38px;')
+    expect(normalizedAppCss).toContain('.report-checkbox-picker .payments-prototype-search {\n  display: flex;\n  align-items: center;\n  width: 100%;\n  min-height: 38px;')
     expect(normalizedAppCss).toContain('.report-checkbox-picker-selected-item {\n  display: grid;\n  min-width: 210px;\n  max-width: 320px;')
     expect(normalizedAppCss).toContain('.payments-prototype-search-results {\n    grid-template-columns: minmax(0, 1fr);\n    width: calc(100vw - 32px);')
   })

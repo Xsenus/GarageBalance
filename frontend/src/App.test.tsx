@@ -17969,6 +17969,49 @@ describe('App', () => {
     expect(within(reportsPanel).getByRole('button', { name: 'Все' })).toHaveAttribute('aria-pressed', 'true')
   })
 
+  it('restores and saves the resizable garage filter panel and loads the full browse list on focus', async () => {
+    const user = userEvent.setup()
+    const baseDictionaryClient = createDictionaryClient()
+    const getGaragesPage = vi.fn(baseDictionaryClient.getGaragesPage)
+    const userId = createAuthResponse().user.id
+    const storageKey = `garagebalance.reports.garageFilterPanelSize.${userId}`
+    window.localStorage.setItem(storageKey, JSON.stringify({ width: 820, height: 540 }))
+
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient({ getGaragesPage })} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Отчеты')
+    const reportsPanel = await screen.findByRole('region', { name: 'Отчеты' })
+    await openReportTab(user, reportsPanel, 'По гаражам')
+    await user.click(within(reportsPanel).getByRole('button', { name: /Гаражи и личные фильтры/ }))
+
+    const garageFiltersRegion = within(reportsPanel).getByRole('region', { name: 'Гаражи и личные фильтры отчёта' })
+    expect(garageFiltersRegion.style.getPropertyValue('--report-garage-filter-panel-width')).toBe('820px')
+    expect(garageFiltersRegion.style.getPropertyValue('--report-garage-filter-panel-height')).toBe('540px')
+
+    Object.defineProperties(garageFiltersRegion, { offsetWidth: { value: 844 }, offsetHeight: { value: 588 } })
+    fireEvent.pointerUp(garageFiltersRegion)
+    expect(JSON.parse(window.localStorage.getItem(storageKey) ?? '{}')).toEqual({ width: 844, height: 588 })
+
+    const garageSearch = within(garageFiltersRegion).getByRole('combobox', { name: 'Гаражи' })
+    await user.click(garageSearch)
+    await waitFor(() => expect(getGaragesPage).toHaveBeenCalledWith(
+      expect.any(String),
+      undefined,
+      0,
+      100,
+      false,
+      'number',
+      'asc',
+      false,
+      {},
+      expect.any(AbortSignal),
+    ))
+    const garageResults = await within(garageFiltersRegion).findByRole('listbox', { name: 'Найденные гаражи отчёта' })
+    expect(garageResults).toHaveClass('payments-prototype-search-results')
+  })
+
   it('loads only the active report and does not repeat the consolidated request after tab switches', async () => {
     const user = userEvent.setup()
     const baseReportClient = createReportClient()

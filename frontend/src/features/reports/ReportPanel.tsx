@@ -33,6 +33,10 @@ type ReportDateRange = {
 
 const reportFullViewLimit = 5000
 const reportDictionarySearchLimit = 20
+const reportGarageBrowseLimit = 100
+const reportGarageFilterPanelDefaultSize = { width: 760, height: 480 }
+
+type ReportGarageFilterPanelSize = typeof reportGarageFilterPanelDefaultSize
 
 function formatReportOperationCount(count: number) {
   const absoluteCount = Math.abs(count)
@@ -286,6 +290,14 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
     funds: { dateFrom: today, dateTo: today },
   })
   const [selectedGarageIds, setSelectedGarageIds] = useState<string[]>([])
+  const garageFilterPanelStorageKey = `garagebalance.reports.garageFilterPanelSize.${auth.user.id}`
+  const [garageFilterPanelSize] = useState<ReportGarageFilterPanelSize>(() => {
+    try {
+      return { ...reportGarageFilterPanelDefaultSize, ...JSON.parse(window.localStorage.getItem(garageFilterPanelStorageKey) ?? '{}') }
+    } catch {
+      return reportGarageFilterPanelDefaultSize
+    }
+  })
   const [garageQuickLists, setGarageQuickLists] = useState<GarageReportQuickListDto[]>([])
   const [selectedGarageQuickListId, setSelectedGarageQuickListId] = useState('')
   const [garageQuickListsLoading, setGarageQuickListsLoading] = useState(false)
@@ -337,14 +349,14 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
   const garageQuickListNameRef = useFocusOnOpen<HTMLInputElement>(garageQuickListEditor !== null)
   const garageQuickListDeleteDialogRef = useFocusTrap<HTMLElement>(garageQuickListDeleteTarget !== null)
   const garageQuickListDeleteCancelRef = useFocusOnOpen<HTMLButtonElement>(garageQuickListDeleteTarget !== null)
-
   useEscapeKey(garageQuickListEditor !== null && !garageQuickListSaving, () => setGarageQuickListEditor(null))
   useEscapeKey(garageQuickListDeleteTarget !== null && !garageQuickListSaving, () => setGarageQuickListDeleteTarget(null))
 
   const loadGarageFilterOptions = useCallback(async (search: string, signal: AbortSignal) => {
+    const resultLimit = search ? reportDictionarySearchLimit : reportGarageBrowseLimit
     const garages = dictionaryClient.getGaragesPage
-      ? (await dictionaryClient.getGaragesPage(auth.accessToken, search || undefined, 0, reportDictionarySearchLimit, false, 'number', 'asc', false, {}, signal)).items
-      : await dictionaryClient.getGarages(auth.accessToken, search || undefined, reportDictionarySearchLimit, false, signal)
+      ? (await dictionaryClient.getGaragesPage(auth.accessToken, search || undefined, 0, resultLimit, false, 'number', 'asc', false, {}, signal)).items
+      : await dictionaryClient.getGarages(auth.accessToken, search || undefined, resultLimit, false, signal)
     const options = garages
       .filter((garage) => !garage.isArchived)
       .map((garage) => ({ value: garage.id, label: `Гараж ${garage.number}`, description: garage.ownerName ?? 'Без владельца', rankingValue: garage.number }))
@@ -1371,7 +1383,21 @@ export function ReportPanel({ auth, dictionaryClient, reportClient }: { auth: Au
                 >
                   Гаражи и личные фильтры
                 </summary>
-                <div id="garage-report-personal-filters" className="localized-date-picker__popover report-garage-filter-panel" role="region" aria-label="Гаражи и личные фильтры отчёта">
+                <div
+                  id="garage-report-personal-filters"
+                  className="localized-date-picker__popover report-garage-filter-panel"
+                  role="region"
+                  aria-label="Гаражи и личные фильтры отчёта"
+                  onPointerUp={({ currentTarget }) => {
+                    try {
+                      window.localStorage.setItem(garageFilterPanelStorageKey, JSON.stringify({ width: currentTarget.offsetWidth, height: currentTarget.offsetHeight }))
+                    } catch { /* Локальная настройка не влияет на отчёт. */ }
+                  }}
+                  style={{
+                    '--report-garage-filter-panel-width': `${garageFilterPanelSize.width}px`,
+                    '--report-garage-filter-panel-height': `${garageFilterPanelSize.height}px`,
+                  } as CSSProperties}
+                >
                     <div className="report-garage-quick-lists" aria-label="Быстрые списки гаражей">
                       <label>
                         <span>Личный список</span>
