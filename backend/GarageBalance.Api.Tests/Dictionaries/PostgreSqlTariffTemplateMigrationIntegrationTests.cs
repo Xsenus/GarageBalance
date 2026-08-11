@@ -99,6 +99,7 @@ public sealed class PostgreSqlTariffTemplateMigrationIntegrationTests
         await using (var setupContext = database.CreateContext())
         {
             await setupContext.GetService<IMigrator>().MigrateAsync(CleanupPreviousMigration);
+            await PostgreSqlLegacyModelCompatibility.AddCurrentVersionColumnsAsync(setupContext);
             setupContext.AddRange(orphan, current, historical, template, service);
             setupContext.ChargeServiceTariffVersions.AddRange(
                 new ChargeServiceTariffVersion
@@ -118,6 +119,7 @@ public sealed class PostgreSqlTariffTemplateMigrationIntegrationTests
 
         await using (var migrateContext = database.CreateContext())
         {
+            await PostgreSqlLegacyModelCompatibility.RemoveCurrentVersionColumnsAsync(migrateContext);
             await migrateContext.Database.MigrateAsync();
         }
 

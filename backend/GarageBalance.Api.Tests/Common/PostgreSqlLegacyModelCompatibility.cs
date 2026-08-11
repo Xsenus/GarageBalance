@@ -5,7 +5,7 @@ namespace GarageBalance.Api.Tests.Common;
 
 internal static class PostgreSqlLegacyModelCompatibility
 {
-    private static readonly (string Add, string Remove)[] VersionColumnStatements =
+    private static readonly (string Add, string Remove)[] CurrentModelColumnStatements =
     [
         ("ALTER TABLE IF EXISTS tariffs ADD COLUMN IF NOT EXISTS \"Version\" uuid NOT NULL DEFAULT gen_random_uuid()", "ALTER TABLE IF EXISTS tariffs DROP COLUMN IF EXISTS \"Version\""),
         ("ALTER TABLE IF EXISTS suppliers ADD COLUMN IF NOT EXISTS \"Version\" uuid NOT NULL DEFAULT gen_random_uuid()", "ALTER TABLE IF EXISTS suppliers DROP COLUMN IF EXISTS \"Version\""),
@@ -13,12 +13,15 @@ internal static class PostgreSqlLegacyModelCompatibility
         ("ALTER TABLE IF EXISTS funds ADD COLUMN IF NOT EXISTS \"Version\" uuid NOT NULL DEFAULT gen_random_uuid()", "ALTER TABLE IF EXISTS funds DROP COLUMN IF EXISTS \"Version\""),
         ("ALTER TABLE IF EXISTS charge_service_settings ADD COLUMN IF NOT EXISTS \"Version\" uuid NOT NULL DEFAULT gen_random_uuid()", "ALTER TABLE IF EXISTS charge_service_settings DROP COLUMN IF EXISTS \"Version\""),
         ("ALTER TABLE IF EXISTS application_settings ADD COLUMN IF NOT EXISTS \"Version\" uuid NOT NULL DEFAULT gen_random_uuid()", "ALTER TABLE IF EXISTS application_settings DROP COLUMN IF EXISTS \"Version\""),
-        ("ALTER TABLE IF EXISTS app_users ADD COLUMN IF NOT EXISTS \"Version\" uuid NOT NULL DEFAULT gen_random_uuid()", "ALTER TABLE IF EXISTS app_users DROP COLUMN IF EXISTS \"Version\"")
+        ("ALTER TABLE IF EXISTS app_users ADD COLUMN IF NOT EXISTS \"Version\" uuid NOT NULL DEFAULT gen_random_uuid()", "ALTER TABLE IF EXISTS app_users DROP COLUMN IF EXISTS \"Version\""),
+        ("ALTER TABLE IF EXISTS financial_operations ADD COLUMN IF NOT EXISTS \"FeeCampaignId\" uuid NULL", "ALTER TABLE IF EXISTS financial_operations DROP COLUMN IF EXISTS \"FeeCampaignId\""),
+        ("ALTER TABLE IF EXISTS financial_operations ADD COLUMN IF NOT EXISTS \"IrregularPaymentId\" uuid NULL", "ALTER TABLE IF EXISTS financial_operations DROP COLUMN IF EXISTS \"IrregularPaymentId\""),
+        ("ALTER TABLE IF EXISTS charge_service_settings ADD COLUMN IF NOT EXISTS \"MeterKind\" character varying(40) NULL", "ALTER TABLE IF EXISTS charge_service_settings DROP COLUMN IF EXISTS \"MeterKind\"")
     ];
 
     public static async Task AddCurrentVersionColumnsAsync(GarageBalanceDbContext context)
     {
-        foreach (var statement in VersionColumnStatements)
+        foreach (var statement in CurrentModelColumnStatements)
         {
             await context.Database.ExecuteSqlRawAsync(statement.Add);
         }
@@ -26,7 +29,7 @@ internal static class PostgreSqlLegacyModelCompatibility
 
     public static async Task RemoveCurrentVersionColumnsAsync(GarageBalanceDbContext context)
     {
-        foreach (var statement in VersionColumnStatements)
+        foreach (var statement in CurrentModelColumnStatements)
         {
             await context.Database.ExecuteSqlRawAsync(statement.Remove);
         }

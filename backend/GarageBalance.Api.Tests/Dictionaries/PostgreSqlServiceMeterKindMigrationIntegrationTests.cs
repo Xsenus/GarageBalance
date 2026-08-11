@@ -27,7 +27,7 @@ public sealed class PostgreSqlServiceMeterKindMigrationIntegrationTests
                 INSERT INTO income_types (
                     "Id", "Name", "Code", "IsSystem", "IsArchived", "CreatedAtUtc", "UpdatedAtUtc")
                 VALUES
-                    ({waterIncomeTypeId}, 'Вода', 'water', FALSE, FALSE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+                    ({waterIncomeTypeId}, 'Вода', 'water', TRUE, FALSE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
                     ({customIncomeTypeId}, 'Охрана', 'custom_security', FALSE, FALSE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
 
                 INSERT INTO charge_service_settings (
