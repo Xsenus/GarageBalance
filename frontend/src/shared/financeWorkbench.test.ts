@@ -228,6 +228,7 @@ describe('finance workbench metadata', () => {
     expect(formatFinanceGarageLabel(null)).toBe('Гараж ')
     expect(getFinanceMeterKindLabel('water')).toBe('Вода')
     expect(getFinanceMeterKindLabel('electricity')).toBe('Электричество')
+    expect(getFinanceMeterKindLabel('service_123456781234123412341234567890ab')).toBe('Услуга по счётчику')
   })
 
   it('returns toolbar labels for payment filters and pagination', () => {

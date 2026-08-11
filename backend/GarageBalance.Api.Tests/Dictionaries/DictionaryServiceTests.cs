@@ -4586,6 +4586,7 @@ public sealed class DictionaryServiceTests
         Assert.True(result.Value.Service.IsMetered);
         Assert.True(result.Value.Service.HasTieredTariff);
         Assert.Equal("м³", result.Value.Service.UnitName);
+        Assert.Equal(MeterKinds.ForService(result.Value.Service.Id), result.Value.Service.MeterKind);
     }
 
     [Fact]

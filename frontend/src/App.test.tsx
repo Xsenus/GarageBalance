@@ -5236,12 +5236,14 @@ describe('App', () => {
     const getGarages = vi.fn(async () => [createGarage({ id: 'unused-garage', number: '99' })])
     const electricityTariff = createTariff({ id: 'meter-electricity-tariff', calculationBase: 'meter_electricity' })
     const waterTariff = createTariff({ id: 'meter-water-tariff', calculationBase: 'meter_water' })
+    const securityMeterKind = 'service_123456781234123412341234567890ab'
     const dictionaryClient = createDictionaryClient({
       getGarages,
       getTariffs: async () => [electricityTariff, waterTariff],
       getChargeServiceSettings: async () => [
         createChargeServiceSetting({ id: 'meter-electricity-setting', isRegular: true, isMetered: true, tariffId: electricityTariff.id, tariffCalculationBase: 'meter_electricity', unitName: 'Вт·ч' }),
         createChargeServiceSetting({ id: 'meter-water-setting', isRegular: true, isMetered: true, tariffId: waterTariff.id, tariffCalculationBase: 'meter_water', unitName: 'гал.' }),
+        createChargeServiceSetting({ id: 'meter-security-setting', name: 'Охрана', isRegular: true, isMetered: true, tariffId: electricityTariff.id, tariffCalculationBase: 'meter_electricity', meterKind: securityMeterKind, unitName: 'ч' }),
       ],
     })
     const financeClient = createFinanceClient({
@@ -5457,6 +5459,10 @@ describe('App', () => {
 
     expect(within(readingsPanel).queryByRole('tab', { name: 'История изменений' })).not.toBeInTheDocument()
     expect(within(readingsPanel).queryByRole('table', { name: 'История изменений показаний', hidden: true })).not.toBeInTheDocument()
+
+    await user.click(meterTypeSelect)
+    await user.click(within(readingsPanel).getByRole('option', { name: 'Охрана, ч' }))
+    await waitFor(() => expect(meterReadingYearPageRequests.at(-1)).toEqual({ year: 2026, meterKind: securityMeterKind, offset: 0, limit: 25 }))
 
     await user.click(meterTypeSelect)
     await user.click(within(readingsPanel).getByRole('option', { name: 'Вода, гал.' }))

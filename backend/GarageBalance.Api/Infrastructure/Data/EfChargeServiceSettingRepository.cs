@@ -1,5 +1,6 @@
 using GarageBalance.Api.Application.Dictionaries;
 using GarageBalance.Api.Domain.Dictionaries;
+using GarageBalance.Api.Domain.Finance;
 using Microsoft.EntityFrameworkCore;
 
 namespace GarageBalance.Api.Infrastructure.Data;
@@ -42,14 +43,21 @@ public sealed class EfChargeServiceSettingRepository(GarageBalanceDbContext dbCo
     }
 
     public async Task<IReadOnlyList<ChargeServiceSetting>> GetActiveRegularMeteredAsync(
+        DateOnly accountingMonth,
+        int limit,
+        CancellationToken cancellationToken) =>
+        await GetActiveRegularMeteredCoreAsync(accountingMonth, limit, cancellationToken);
+
+    public async Task<IReadOnlyList<ChargeServiceSetting>> GetActiveRegularMeteredAsync(
         string calculationBase,
         DateOnly accountingMonth,
         int limit,
         CancellationToken cancellationToken) =>
-        await GetActiveRegularMeteredCoreAsync(calculationBase, accountingMonth, limit, cancellationToken);
+        (await GetActiveRegularMeteredCoreAsync(accountingMonth, limit, cancellationToken))
+            .Where(setting => setting.Tariff?.CalculationBase == calculationBase)
+            .ToList();
 
     private async Task<IReadOnlyList<ChargeServiceSetting>> GetActiveRegularMeteredCoreAsync(
-        string calculationBase,
         DateOnly accountingMonth,
         int limit,
         CancellationToken cancellationToken)
@@ -62,14 +70,6 @@ public sealed class EfChargeServiceSettingRepository(GarageBalanceDbContext dbCo
                 setting.IsRegular &&
                 setting.IncomeType != null &&
                 !setting.IncomeType.IsArchived &&
-                (setting.IsMetered ||
-                 dbContext.ChargeServiceTariffVersions.Any(version =>
-                     version.ChargeServiceSettingId == setting.Id && version.EffectiveFrom <= accountingMonth) &&
-                 dbContext.ChargeServiceTariffVersions
-                     .Where(version => version.ChargeServiceSettingId == setting.Id && version.EffectiveFrom <= accountingMonth)
-                     .OrderByDescending(version => version.EffectiveFrom)
-                     .Select(version => (Guid?)version.TariffId)
-                     .FirstOrDefault() != setting.TariffId) &&
                 (dbContext.ChargeServiceTariffVersions
                     .Where(version =>
                         version.ChargeServiceSettingId == setting.Id &&
@@ -77,18 +77,31 @@ public sealed class EfChargeServiceSettingRepository(GarageBalanceDbContext dbCo
                         !version.Tariff.IsArchived)
                     .OrderByDescending(version => version.EffectiveFrom)
                     .Select(version => version.Tariff.CalculationBase)
-                    .FirstOrDefault() == calculationBase ||
-                 (!dbContext.ChargeServiceTariffVersions.Any(version => version.ChargeServiceSettingId == setting.Id) &&
-                  setting.Tariff != null &&
-                  !setting.Tariff.IsArchived &&
-                  setting.Tariff.CalculationBase == calculationBase &&
-                  setting.Tariff.EffectiveFrom <= accountingMonth)))
+                    .Take(1)
+                    .Any(calculationBase =>
+                        calculationBase == TariffCalculationBases.MeterWater ||
+                        calculationBase == TariffCalculationBases.MeterElectricity) ||
+                 !dbContext.ChargeServiceTariffVersions.Any(version => version.ChargeServiceSettingId == setting.Id) &&
+                 setting.IsMetered &&
+                 setting.Tariff != null &&
+                 !setting.Tariff.IsArchived &&
+                 setting.Tariff.EffectiveFrom <= accountingMonth))
             .OrderBy(setting => setting.Name)
             .Take(limit)
             .ToListAsync(cancellationToken);
 
         await ApplyTariffsForMonthAsync(settings, accountingMonth, cancellationToken);
-        return settings.Where(setting => setting.IsMetered && setting.Tariff?.CalculationBase == calculationBase).ToList();
+        foreach (var setting in settings)
+        {
+            setting.MeterKind ??= setting.IncomeType?.Code switch
+            {
+                MeterKinds.Water => MeterKinds.Water,
+                MeterKinds.Electricity => MeterKinds.Electricity,
+                _ => MeterKinds.ForService(setting.Id)
+            };
+        }
+
+        return settings.Where(setting => setting.IsMetered && setting.Tariff is not null).ToList();
     }
 
     public async Task<IReadOnlyList<ChargeServiceSetting>> GetActiveRegularForDueDatesAsync(

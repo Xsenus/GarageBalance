@@ -147,7 +147,7 @@ export type MeterReadingDto = {
   garageId: string
   garageNumber: string
   ownerName: string | null
-  meterKind: 'water' | 'electricity'
+  meterKind: string
   accountingMonth: string
   readingDate: string
   currentValue: number
@@ -165,7 +165,7 @@ export type MeterReadingDto = {
 
 export type ReplaceMeterDeviceRequest = {
   garageId: string
-  meterKind: 'water' | 'electricity'
+  meterKind: string
   accountingMonth: string
   replacementDate: string
   newSerialNumber: string
@@ -180,7 +180,7 @@ export type ReplaceMeterDeviceRequest = {
 export type MeterDeviceDto = {
   id: string
   garageId: string
-  meterKind: 'water' | 'electricity'
+  meterKind: string
   serialNumber: string
   installedOn: string
   removedOn: string | null
@@ -236,7 +236,7 @@ export type MissingMeterReadingDto = {
   garageId: string
   garageNumber: string
   ownerName: string | null
-  meterKind: 'water' | 'electricity'
+  meterKind: string
   accountingMonth: string
 }
 
@@ -287,7 +287,7 @@ export type GarageIncomeWorksheetRowDto = {
   incomeTypeId: string | null
   incomeTypeName: string
   annualAccrualId?: string | null
-  meterKind: 'water' | 'electricity' | null
+  meterKind: string | null
   meterReadingId?: string | null
   meterReadingVersion?: string | null
   meterReadingDate?: string | null
@@ -547,7 +547,7 @@ export type FeeCampaignAccrualGenerationResultDto = {
 
 export type CreateMeterReadingRequest = {
   garageId: string
-  meterKind: 'water' | 'electricity'
+  meterKind: string
   accountingMonth: string
   readingDate: string
   currentValue: number
@@ -624,9 +624,9 @@ export type FinanceClient = {
   getSupplierOpeningBalance(accessToken: string, supplierId: string, monthFrom: string): Promise<SupplierOpeningBalanceDto>
   getFinancialReportPeriod(accessToken: string, params: { garageId?: string; supplierId?: string; staffMemberId?: string }): Promise<FinancialReportPeriodDto>
   getMeterReadings(accessToken: string, limit?: number): Promise<MeterReadingDto[]>
-  getMeterReadingsPage(accessToken: string, params?: FinancePageParams & { meterKind?: 'water' | 'electricity' }, signal?: AbortSignal): Promise<FinancePagedResult<MeterReadingDto>>
-  getMeterReadingYearPage(accessToken: string, params: { year: number; meterKind: 'water' | 'electricity'; offset?: number; limit?: number }, signal?: AbortSignal): Promise<MeterReadingYearPageDto>
-  getMissingMeterReadings(accessToken: string, params?: { accountingMonth?: string; meterKind?: 'water' | 'electricity'; search?: string; limit?: number }, signal?: AbortSignal): Promise<MissingMeterReadingDto[]>
+  getMeterReadingsPage(accessToken: string, params?: FinancePageParams & { meterKind?: string }, signal?: AbortSignal): Promise<FinancePagedResult<MeterReadingDto>>
+  getMeterReadingYearPage(accessToken: string, params: { year: number; meterKind: string; offset?: number; limit?: number }, signal?: AbortSignal): Promise<MeterReadingYearPageDto>
+  getMissingMeterReadings(accessToken: string, params?: { accountingMonth?: string; meterKind?: string; search?: string; limit?: number }, signal?: AbortSignal): Promise<MissingMeterReadingDto[]>
   getGarageBalanceHistory(accessToken: string, garageId: string, params?: { monthFrom?: string; monthTo?: string }): Promise<GarageBalanceHistoryDto>
   getGarageOverdueDebt(accessToken: string, garageId: string): Promise<GarageOverdueDebtDto>
   getGarageIncomeWorksheet(accessToken: string, garageId: string, params?: { monthFrom?: string; monthTo?: string }): Promise<GarageIncomeWorksheetDto>

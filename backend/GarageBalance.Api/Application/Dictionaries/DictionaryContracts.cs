@@ -238,7 +238,8 @@ public sealed record ChargeServiceSettingDto(
     Guid? ExpenseTypeId = null,
     Guid? ExpenseFundId = null,
     string? TariffCalculationBase = null,
-    Guid Version = default);
+    Guid Version = default,
+    string? MeterKind = null);
 
 public sealed record UpsertChargeServiceSettingRequest(
     [Required, MaxLength(200)] string Name,

@@ -338,7 +338,9 @@ export function formatFinanceGarageLabel(garageNumber: string | number | null | 
 }
 
 export function getFinanceMeterKindLabel(kind: string) {
-  return kind === 'water' ? 'Вода' : 'Электричество'
+  if (kind === 'water') return 'Вода'
+  if (kind === 'electricity') return 'Электричество'
+  return 'Услуга по счётчику'
 }
 
 export function getFinanceToolbarLabel(key: FinanceToolbarLabelKey) {

@@ -172,6 +172,7 @@ export type ChargeServiceSettingDto = {
   unitName: string | null
   isArchived: boolean
   tariffCalculationBase?: string | null
+  meterKind?: string | null
   version: string
 }
 

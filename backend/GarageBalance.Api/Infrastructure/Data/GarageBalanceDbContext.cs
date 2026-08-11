@@ -419,10 +419,12 @@ public sealed class GarageBalanceDbContext(DbContextOptions<GarageBalanceDbConte
             entity.HasKey(item => item.Id);
             entity.Property(item => item.Name).HasMaxLength(200).IsRequired();
             entity.Property(item => item.UnitName).HasMaxLength(40);
+            entity.Property(item => item.MeterKind).HasMaxLength(40);
             entity.Property(item => item.Version).HasDefaultValueSql("gen_random_uuid()").IsConcurrencyToken();
             entity.HasIndex(item => item.Name).IsUnique().HasFilter("\"IsArchived\" = false");
             entity.HasIndex(item => item.IsRegular);
             entity.HasIndex(item => item.IsMetered);
+            entity.HasIndex(item => item.MeterKind);
             entity.HasIndex(item => item.HasTieredTariff);
             entity.HasIndex(item => item.IncomeTypeId);
             entity.HasIndex(item => item.ExpenseTypeId);

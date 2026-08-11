@@ -88,7 +88,7 @@ export function formatAccrualSource(source: string): string {
 export function formatMissingMeterReadings(items: MissingMeterReadingDto[]): string {
   const visibleItems = items.slice(0, 6)
   const suffix = items.length > visibleItems.length ? ` и еще ${items.length - visibleItems.length}` : ''
-  return `${visibleItems.map((item) => `Гараж ${item.garageNumber} - ${item.meterKind === 'water' ? 'Вода' : 'Электричество'}`).join(', ')}${suffix}`
+  return `${visibleItems.map((item) => `Гараж ${item.garageNumber} - ${item.meterKind === 'water' ? 'Вода' : item.meterKind === 'electricity' ? 'Электричество' : 'услуга по счётчику'}`).join(', ')}${suffix}`
 }
 
 export function formatImportRunStatus(status: AccessImportRunDto['status']): string {

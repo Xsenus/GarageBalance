@@ -44,7 +44,7 @@ public sealed class FinanceService(
     IBusinessDateProvider businessDateProvider) : IFinanceService
 {
     private const int MaxAutomaticFeeCampaigns = 500;
-    private const int MaxAutomaticMeteredServices = 20;
+    private const int MaxAutomaticMeteredServices = 500;
     private const int MaxBalanceHistoryMonths = 600;
     private const int EarlyElectricityPaymentWarningDays = 30;
     private const string DebtTransferIncomeTypeCode = "debt_transfer";
@@ -227,16 +227,16 @@ public sealed class FinanceService(
         }
 
         var meterKind = request.MeterKind?.Trim().ToLowerInvariant();
-        if (meterKind is not ("water" or "electricity"))
+        if (!MeterKinds.IsValid(meterKind))
         {
-            return FinanceResult<MeterReadingYearPageDto>.Failure("meter_kind_invalid", "Тип счетчика должен быть water или electricity.");
+            return FinanceResult<MeterReadingYearPageDto>.Failure("meter_kind_invalid", "Выберите действующую услугу по счётчику.");
         }
 
         var normalizedOffset = NormalizeListOffset(request.Offset);
         var normalizedLimit = NormalizeListLimit(request.Limit);
         var page = await meterReadingRepository.GetYearPageAsync(
             request.Year,
-            meterKind,
+            meterKind!,
             normalizedOffset,
             normalizedLimit,
             cancellationToken);
@@ -444,6 +444,9 @@ public sealed class FinanceService(
                     .OrderByDescending(reading => reading.ReadingDate)
                     .ThenByDescending(reading => reading.UpdatedAtUtc)
                     .First());
+        var meterKindByIncomeTypeId = worksheetData.MeterIncomeTypes
+            .GroupBy(item => item.IncomeTypeId)
+            .ToDictionary(group => group.Key, group => group.First().MeterKind);
 
         var accrualLookup = worksheetData.AccrualBuckets.ToDictionary(
             bucket => (bucket.AccountingMonth, bucket.IncomeTypeId, bucket.IncomeTypeName));
@@ -510,7 +513,8 @@ public sealed class FinanceService(
                 ? advanceLookup.GetValueOrDefault((key.AccountingMonth, key.IncomeTypeId))
                 : 0m;
             var debt = MoneyMath.RoundMoney(Math.Max(accrualAmount - incomeAmount, 0m));
-            var meterKind = InferMeterKind(key.IncomeTypeName, key.IncomeTypeCode);
+            var meterKind = meterKindByIncomeTypeId.GetValueOrDefault(key.IncomeTypeId)
+                ?? InferMeterKind(key.IncomeTypeName, key.IncomeTypeCode);
             meterReadingByMonthKind.TryGetValue((key.AccountingMonth, meterKind ?? string.Empty), out var reading);
             return new GarageIncomeWorksheetRowDto(
                 key.AccountingMonth,
@@ -3413,12 +3417,14 @@ public sealed class FinanceService(
             .Where(garage => !existingGarageIds.Contains(garage.Id))
             .Select(garage => garage.Id)
             .ToArray();
-        var meterKind = tariff.CalculationBase switch
-        {
-            TariffCalculationBases.MeterWater => MeterKinds.Water,
-            TariffCalculationBases.MeterElectricity => MeterKinds.Electricity,
-            _ => null
-        };
+        var meterKind = matchingSetting is { IsMetered: true } && MeterKinds.IsValid(matchingSetting.MeterKind)
+            ? matchingSetting.MeterKind
+            : tariff.CalculationBase switch
+            {
+                TariffCalculationBases.MeterWater => MeterKinds.Water,
+                TariffCalculationBases.MeterElectricity => MeterKinds.Electricity,
+                _ => null
+            };
         var meterReadings = meterKind is null
             ? new Dictionary<Guid, MeterReading>()
             : await meterReadingRepository.GetActiveByGarageIdsAsync(pendingGarageIds, meterKind, month, cancellationToken);
@@ -3998,7 +4004,7 @@ public sealed class FinanceService(
         CancellationToken cancellationToken)
     {
         var normalizedKind = meterKind.Trim();
-        if (normalizedKind is not MeterKinds.Water and not MeterKinds.Electricity)
+        if (!MeterKinds.IsValid(normalizedKind))
         {
             return [];
         }
@@ -4013,9 +4019,9 @@ public sealed class FinanceService(
         CancellationToken cancellationToken)
     {
         var meterKind = request.MeterKind.Trim();
-        if (meterKind is not MeterKinds.Water and not MeterKinds.Electricity)
+        if (!MeterKinds.IsValid(meterKind))
         {
-            return FinanceResult<MeterDeviceReplacementDto>.Failure("meter_kind_invalid", "Тип счетчика должен быть water или electricity.");
+            return FinanceResult<MeterDeviceReplacementDto>.Failure("meter_kind_invalid", "Выберите действующую услугу по счётчику.");
         }
 
         var serialNumber = NormalizeOptional(request.NewSerialNumber);
@@ -4310,9 +4316,9 @@ public sealed class FinanceService(
     public async Task<FinanceResult<MeterReadingDto>> CreateMeterReadingAsync(CreateMeterReadingRequest request, Guid? actorUserId, CancellationToken cancellationToken)
     {
         var meterKind = request.MeterKind.Trim();
-        if (meterKind is not MeterKinds.Water and not MeterKinds.Electricity)
+        if (!MeterKinds.IsValid(meterKind))
         {
-            return FinanceResult<MeterReadingDto>.Failure("meter_kind_invalid", "Тип счетчика должен быть water или electricity.");
+            return FinanceResult<MeterReadingDto>.Failure("meter_kind_invalid", "Выберите действующую услугу по счётчику.");
         }
 
         if (!request.CurrentValue.HasValue)
@@ -4492,9 +4498,9 @@ public sealed class FinanceService(
         CancellationToken cancellationToken)
     {
         var meterKind = request.MeterKind.Trim();
-        if (meterKind is not MeterKinds.Water and not MeterKinds.Electricity)
+        if (!MeterKinds.IsValid(meterKind))
         {
-            return FinanceResult<MeterReadingDto>.Failure("meter_kind_invalid", "Тип счетчика должен быть water или electricity.");
+            return FinanceResult<MeterReadingDto>.Failure("meter_kind_invalid", "Выберите действующую услугу по счётчику.");
         }
 
         if (!request.CurrentValue.HasValue)
@@ -4601,9 +4607,9 @@ public sealed class FinanceService(
         CancellationToken cancellationToken)
     {
         var meterKind = request.MeterKind.Trim();
-        if (meterKind is not MeterKinds.Water and not MeterKinds.Electricity)
+        if (!MeterKinds.IsValid(meterKind))
         {
-            return FinanceResult<MeterReadingDto>.Failure("meter_kind_invalid", "Тип счетчика должен быть water или electricity.");
+            return FinanceResult<MeterReadingDto>.Failure("meter_kind_invalid", "Выберите действующую услугу по счётчику.");
         }
 
         if (!request.CurrentValue.HasValue)
@@ -5064,7 +5070,12 @@ public sealed class FinanceService(
     }
 
     private static AccrualPaymentAllocationKey GetMeterChainLockKey(Guid garageId, string meterKind) =>
-        new(garageId, meterKind == MeterKinds.Water ? WaterMeterChainLockId : ElectricityMeterChainLockId);
+        new(garageId, meterKind switch
+        {
+            MeterKinds.Water => WaterMeterChainLockId,
+            MeterKinds.Electricity => ElectricityMeterChainLockId,
+            _ => MeterKinds.GetLockId(meterKind)
+        });
 
     private static FinanceResult<IReadOnlyList<MeterReadingChainChange>> PlanMeterReadingChain(
         Garage garage,
@@ -5637,25 +5648,22 @@ public sealed class FinanceService(
 
     private async Task<IReadOnlyList<ChargeServiceSetting>> GetApplicableMeteredSettingsAsync(
         MeterReading reading,
+        CancellationToken cancellationToken) =>
+        await GetApplicableMeteredSettingsAsync(reading.MeterKind, reading.AccountingMonth, cancellationToken);
+
+    private async Task<IReadOnlyList<ChargeServiceSetting>> GetApplicableMeteredSettingsAsync(
+        string meterKind,
+        DateOnly accountingMonth,
         CancellationToken cancellationToken)
     {
-        var calculationBase = reading.MeterKind switch
-        {
-            MeterKinds.Water => TariffCalculationBases.MeterWater,
-            MeterKinds.Electricity => TariffCalculationBases.MeterElectricity,
-            _ => null
-        };
-        if (calculationBase is null)
-        {
-            return [];
-        }
-
         var settings = await chargeServiceSettingRepository.GetActiveRegularMeteredAsync(
-            calculationBase,
-            reading.AccountingMonth,
+            accountingMonth,
             MaxAutomaticMeteredServices,
             cancellationToken);
-        return settings.Where(setting => IsChargeServiceDueForMonth(setting, reading.AccountingMonth)).ToArray();
+        return settings
+            .Where(setting => string.Equals(setting.MeterKind, meterKind, StringComparison.Ordinal) &&
+                IsChargeServiceDueForMonth(setting, accountingMonth))
+            .ToArray();
     }
 
     private async Task<IReadOnlyList<AccrualPaymentAllocationKey>> CreateMissingMeteredAccrualsAsync(
@@ -5774,13 +5782,13 @@ public sealed class FinanceService(
 
     private static string[] NormalizeMeterKindFilter(string? meterKind)
     {
-        if (string.IsNullOrWhiteSpace(meterKind))
+        if (!string.IsNullOrWhiteSpace(meterKind))
         {
-            return [MeterKinds.Water, MeterKinds.Electricity];
+            var normalized = meterKind.Trim().ToLowerInvariant();
+            return MeterKinds.IsValid(normalized) ? [normalized] : [];
         }
 
-        var normalized = meterKind.Trim();
-        return normalized is MeterKinds.Water or MeterKinds.Electricity ? [normalized] : [];
+        return [MeterKinds.Water, MeterKinds.Electricity];
     }
 
     private static string? NormalizeSearch(string? search)
@@ -6147,12 +6155,17 @@ public sealed class FinanceService(
 
     private static decimal? GetInitialMeterValue(GarageBalance.Api.Domain.Dictionaries.Garage garage, string meterKind)
     {
-        return meterKind == MeterKinds.Water ? garage.InitialWaterMeterValue : garage.InitialElectricityMeterValue;
+        return meterKind switch
+        {
+            MeterKinds.Water => garage.InitialWaterMeterValue,
+            MeterKinds.Electricity => garage.InitialElectricityMeterValue,
+            _ => 0m
+        };
     }
 
     private static bool HasGapWarning(string meterKind, DateOnly month, MeterReading? previousReading)
     {
-        return meterKind == MeterKinds.Electricity && (previousReading is null || previousReading.AccountingMonth < month.AddMonths(-1));
+        return meterKind != MeterKinds.Water && (previousReading is null || previousReading.AccountingMonth < month.AddMonths(-1));
     }
 
     private async Task<IReadOnlyList<FinancialOperationDto>> ToOperationDtosAsync(IReadOnlyList<FinancialOperation> operations, CancellationToken cancellationToken)

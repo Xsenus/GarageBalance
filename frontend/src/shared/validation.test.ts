@@ -285,6 +285,14 @@ describe('shared validation helpers', () => {
       'Укажите дату показания.',
       'Новое показание должно быть 0 или больше.',
     ])
+    expect(getMeterReadingValidationErrors({
+      garageId: 'garage-1',
+      meterKind: 'service_123456781234123412341234567890ab',
+      accountingMonth: '2026-08-01',
+      readingDate: '2026-08-20',
+      currentValue: 15,
+      comment: '',
+    }, '2026-08')).toEqual([])
     expect(getMeterReadingValidationErrors({ garageId: 'garage-1', meterKind: 'water', accountingMonth: '2026-08-01', readingDate: '2026-07-20', currentValue: 15, comment: '' }, '2026-07')).toEqual([
       'Показание будущего учетного месяца вводить нельзя.',
     ])

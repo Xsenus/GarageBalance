@@ -36,7 +36,8 @@ public sealed record GarageIncomeWorksheetBucketData(
 public sealed record GarageIncomeWorksheetMeterTypeData(
     Guid IncomeTypeId,
     string IncomeTypeName,
-    string IncomeTypeCode);
+    string IncomeTypeCode,
+    string MeterKind);
 
 public sealed record GarageIncomeWorksheetMeterData(
     Guid Id,

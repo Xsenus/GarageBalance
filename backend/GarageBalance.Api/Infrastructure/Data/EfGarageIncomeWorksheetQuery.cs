@@ -230,7 +230,40 @@ public sealed class EfGarageIncomeWorksheetQuery(GarageBalanceDbContext dbContex
                 Consumption = (decimal?)reading.Consumption,
                 UpdatedAtUtc = (DateTimeOffset?)reading.UpdatedAtUtc
             });
-        var meterIncomeTypeQuery = dbContext.IncomeTypes.AsNoTracking()
+        var configuredMeterIncomeTypeQuery = dbContext.ChargeServiceSettings.AsNoTracking()
+            .Where(setting =>
+                !setting.IsArchived &&
+                setting.IsRegular &&
+                setting.IsMetered &&
+                setting.IncomeType != null &&
+                !setting.IncomeType.IsArchived)
+            .Select(setting => new
+            {
+                Category = MeterIncomeTypeCategory,
+                GarageId = (Guid?)null,
+                GarageNumber = (string?)null,
+                OwnerLastName = (string?)null,
+                OwnerFirstName = (string?)null,
+                OwnerMiddleName = (string?)null,
+                AccountingMonth = (DateOnly?)null,
+                IncomeTypeId = setting.IncomeTypeId,
+                IncomeTypeName = (string?)setting.IncomeType!.Name,
+                IncomeTypeCode = setting.IncomeType.Code,
+                IrregularPaymentId = (Guid?)null,
+                IrregularPaymentIsAvailable = true,
+                AccrualId = (Guid?)null,
+                AccountingYear = (int?)null,
+                Amount = 0m,
+                PaymentAccountingMonth = (DateOnly?)null,
+                MeterReadingId = (Guid?)null,
+                MeterReadingVersion = (Guid?)null,
+                MeterKind = setting.MeterKind ?? setting.IncomeType.Code,
+                ReadingDate = (DateOnly?)null,
+                CurrentValue = (decimal?)null,
+                Consumption = (decimal?)null,
+                UpdatedAtUtc = (DateTimeOffset?)null
+            });
+        var legacyMeterIncomeTypeQuery = dbContext.IncomeTypes.AsNoTracking()
             .Where(incomeType =>
                 !incomeType.IsArchived &&
                 (incomeType.Code == MeterKinds.Water || incomeType.Code == MeterKinds.Electricity))
@@ -254,12 +287,13 @@ public sealed class EfGarageIncomeWorksheetQuery(GarageBalanceDbContext dbContex
                 PaymentAccountingMonth = (DateOnly?)null,
                 MeterReadingId = (Guid?)null,
                 MeterReadingVersion = (Guid?)null,
-                MeterKind = (string?)null,
+                MeterKind = (string?)incomeType.Code,
                 ReadingDate = (DateOnly?)null,
                 CurrentValue = (decimal?)null,
                 Consumption = (decimal?)null,
                 UpdatedAtUtc = (DateTimeOffset?)null
             });
+        var meterIncomeTypeQuery = configuredMeterIncomeTypeQuery.Union(legacyMeterIncomeTypeQuery);
         var annualAccrualQuery = dbContext.Accruals.AsNoTracking()
             .Where(accrual =>
                 !accrual.IsCanceled &&
@@ -438,7 +472,8 @@ public sealed class EfGarageIncomeWorksheetQuery(GarageBalanceDbContext dbContex
                 .Select(row => new GarageIncomeWorksheetMeterTypeData(
                     row.IncomeTypeId!.Value,
                     row.IncomeTypeName!,
-                    row.IncomeTypeCode!))
+                    row.IncomeTypeCode!,
+                    row.MeterKind!))
                 .ToList(),
             rows.Where(row => row.Category == MeterReadingCategory)
                 .Select(row => new GarageIncomeWorksheetMeterData(

@@ -364,7 +364,7 @@ export function FinancePanel({
   const [supplierAccrualForm, setSupplierAccrualForm] = useState({ supplierId: '', expenseTypeId: '', accountingMonth: month, amount: 0, source: 'manual' as 'manual' | 'regular', documentNumber: '', comment: '' })
   const [salaryForm, setSalaryForm] = useState({ supplierGroupId: '', accountingMonth: month, amount: 0, documentNumber: '', comment: '' })
   const [salaryStatus, setSalaryStatus] = useState<string | null>(null)
-  const [meterForm, setMeterForm] = useState({ garageId: '', meterKind: 'water' as 'water' | 'electricity', accountingMonth: month, readingDate: today, currentValue: 0, comment: '' })
+  const [meterForm, setMeterForm] = useState({ garageId: '', meterKind: 'water', accountingMonth: month, readingDate: today, currentValue: 0, comment: '' })
   const [incomeGarageSearch, setIncomeGarageSearch] = useState('')
   const [incomeGarageSearchStatus, setIncomeGarageSearchStatus] = useState<string | null>(null)
   const [activeFinanceSection, setActiveFinanceSection] = useState<FinanceSectionKey>('income')
@@ -2150,7 +2150,7 @@ export function FinancePanel({
           <SelectControl aria-label="Тип счетчика" value={meterForm.meterKind} options={[
             { value: 'water', label: 'Вода' },
             { value: 'electricity', label: 'Электричество' },
-          ]} onChange={(meterKind) => setMeterForm({ ...meterForm, meterKind: meterKind as 'water' | 'electricity' })} />
+          ]} onChange={(meterKind) => setMeterForm({ ...meterForm, meterKind })} />
         ))}
         <div className="inline-fields">
           {financeField('meterMonth', <LocalizedDatePicker ariaLabel="Месяц показания" mode="month" value={meterForm.accountingMonth.slice(0, 7)} onChange={(accountingMonth) => setMeterForm({ ...meterForm, accountingMonth: `${accountingMonth}-01` })} required />)}
@@ -2453,7 +2453,7 @@ export function FinancePanel({
           <SelectControl aria-label="Тип счетчика" value={meterForm.meterKind} options={[
             { value: 'water', label: 'Вода' },
             { value: 'electricity', label: 'Электричество' },
-          ]} onChange={(meterKind) => setMeterForm({ ...meterForm, meterKind: meterKind as 'water' | 'electricity' })} />
+          ]} onChange={(meterKind) => setMeterForm({ ...meterForm, meterKind })} />
           <div className="inline-fields">
             <LocalizedDatePicker ariaLabel="Месяц показания" mode="month" value={meterForm.accountingMonth.slice(0, 7)} onChange={(accountingMonth) => setMeterForm({ ...meterForm, accountingMonth: `${accountingMonth}-01` })} required />
             <LocalizedDatePicker ariaLabel="Дата показания" mode="date" value={meterForm.readingDate} onChange={(readingDate) => setMeterForm({ ...meterForm, readingDate })} required />
@@ -2572,7 +2572,7 @@ export function FinancePanel({
             <div className="operation-row" role="row" key={reading.id}>
               <span role="cell">{formatMonth(reading.accountingMonth)}</span>
               <span role="cell">
-                <strong>{reading.meterKind === 'water' ? 'Вода' : 'Электричество'}</strong>
+                <strong>{getFinanceMeterKindLabel(reading.meterKind)}</strong>
                 <small>
                   Гараж {reading.garageNumber}: {reading.previousValue} → {reading.currentValue}
                 </small>

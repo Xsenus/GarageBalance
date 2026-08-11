@@ -6258,6 +6258,67 @@ public sealed class FinanceServiceTests
     }
 
     [Fact]
+    public async Task CreateMeterReadingAsync_UsesIndependentMeterForArbitraryRegularService()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        fixtures.IncomeType.Code = "custom_metered_service";
+        fixtures.IncomeType.Name = "Охрана по счётчику";
+        var tariff = new Tariff
+        {
+            Name = "Тариф охраны по показанию",
+            CalculationBase = TariffCalculationBases.MeterElectricity,
+            Rate = 12.5m,
+            EffectiveFrom = new DateOnly(2026, 1, 1)
+        };
+        var setting = new ChargeServiceSetting
+        {
+            Name = "Охрана по счётчику",
+            IsRegular = true,
+            PeriodicityMonths = 1,
+            AccrualStartMonth = 1,
+            OverdueGraceDays = 30,
+            IncomeType = fixtures.IncomeType,
+            Tariff = tariff,
+            IsMetered = true,
+            MeterKind = MeterKinds.ForService(Guid.NewGuid()),
+            UnitName = "ед."
+        };
+        database.Context.ChargeServiceSettings.Add(setting);
+        await database.Context.SaveChangesAsync();
+        var service = FinanceServiceTestFactory.Create(
+            database.Context,
+            new FixedTimeProvider(new DateTimeOffset(2026, 6, 20, 12, 0, 0, TimeSpan.Zero)));
+
+        var result = await service.CreateMeterReadingAsync(
+            new CreateMeterReadingRequest(
+                fixtures.Garage.Id,
+                setting.MeterKind,
+                new DateOnly(2026, 6, 1),
+                new DateOnly(2026, 6, 20),
+                8m,
+                null),
+            Guid.NewGuid(),
+            CancellationToken.None);
+
+        Assert.True(result.Succeeded, result.ErrorMessage);
+        Assert.Equal(setting.MeterKind, result.Value!.MeterKind);
+        Assert.Equal(8m, result.Value.Consumption);
+        var accrual = Assert.Single(database.Context.Accruals);
+        Assert.Equal(100m, accrual.Amount);
+        Assert.Equal(fixtures.IncomeType.Id, accrual.IncomeTypeId);
+        var worksheet = await service.GetGarageIncomeWorksheetAsync(
+            fixtures.Garage.Id,
+            new GarageIncomeWorksheetRequest(new DateOnly(2026, 6, 1), new DateOnly(2026, 6, 1)),
+            CancellationToken.None);
+        Assert.True(worksheet.Succeeded, worksheet.ErrorMessage);
+        var row = Assert.Single(worksheet.Value!.Rows, item => item.IncomeTypeId == fixtures.IncomeType.Id);
+        Assert.Equal(setting.MeterKind, row.MeterKind);
+        Assert.Equal(8m, row.MeterConsumption);
+        Assert.Equal(100m, row.PayableAmount);
+    }
+
+    [Fact]
     public async Task SavePaymentFormMeterReadingAsync_AppliesActiveTieredElectricityRatesImmediately()
     {
         await using var database = await TestDatabase.CreateAsync();

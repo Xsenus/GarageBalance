@@ -571,7 +571,7 @@ export function getMeterReadingValidationErrors(form: CreateMeterReadingRequest,
     errors.push('Выберите гараж для счетчика.')
   }
 
-  if (!['water', 'electricity'].includes(form.meterKind)) {
+  if (!/^(water|electricity|service_[0-9a-f]{32})$/.test(form.meterKind)) {
     errors.push('Выберите тип счетчика.')
   }
 

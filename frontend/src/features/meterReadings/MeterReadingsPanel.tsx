@@ -29,7 +29,7 @@ const meterReadingMonths = [
   { key: '12', label: 'Декабрь' },
 ]
 
-type MeterReadingTypeId = 'electricity' | 'water'
+type MeterReadingTypeId = string
 type MeterReadingTypeOption = { id: MeterReadingTypeId; label: string; unit: string }
 
 const meterReadingTypes: MeterReadingTypeOption[] = [
@@ -322,16 +322,20 @@ export function MeterReadingsPrototypePanel({ auth, dictionaryClient, financeCli
           return
         }
 
-        const nextTypes = meterReadingTypes.flatMap((item) => {
-          const setting = settings.find((candidate) => (
-            candidate.isRegular
-            && candidate.isMetered
-            && !candidate.isArchived
-            && candidate.tariffCalculationBase === `meter_${item.id}`
-          ))
-          const unit = setting?.unitName?.trim()
-          return setting ? [{ ...item, unit: unit && !unit.startsWith('руб') ? unit : item.unit }] : []
-        })
+        const nextTypes = settings
+          .filter((setting) => setting.isRegular && setting.isMetered && !setting.isArchived)
+          .map((setting) => {
+            const legacyType = meterReadingTypes.find((item) =>
+              setting.meterKind === item.id || (!setting.meterKind && setting.tariffCalculationBase === `meter_${item.id}`))
+            const id = setting.meterKind?.trim() || legacyType?.id
+            const unit = setting.unitName?.trim()
+            return id ? {
+              id,
+              label: legacyType?.label ?? setting.name,
+              unit: unit && !unit.startsWith('руб') ? unit : legacyType?.unit ?? unit ?? '',
+            } : null
+          })
+          .filter((item): item is MeterReadingTypeOption => item !== null)
         setAvailableMeterTypes(nextTypes)
         setMeterType((currentType) => nextTypes.some((item) => item.id === currentType)
           ? currentType

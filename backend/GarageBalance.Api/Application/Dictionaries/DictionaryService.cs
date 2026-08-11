@@ -3783,6 +3783,7 @@ public sealed class DictionaryService(
 
     private static void ApplyChargeServiceSetting(ChargeServiceSetting setting, UpsertChargeServiceSettingRequest request)
     {
+        setting.MeterKind ??= MeterKinds.ForService(setting.Id);
         setting.Name = request.Name.Trim();
         setting.IsRegular = request.IsRegular;
         setting.PeriodicityMonths = request.IsRegular ? request.PeriodicityMonths : null;
@@ -3928,6 +3929,7 @@ public sealed class DictionaryService(
             ["expenseFundId"] = setting.ExpenseFundId,
             ["tariffId"] = setting.TariffId,
             ["isMetered"] = setting.IsMetered,
+            ["meterKind"] = setting.MeterKind,
             ["hasTieredTariff"] = setting.HasTieredTariff,
             ["unitName"] = setting.UnitName
         };
@@ -4373,7 +4375,8 @@ public sealed class DictionaryService(
             setting.ExpenseTypeId,
             setting.ExpenseFundId,
             setting.Tariff?.CalculationBase,
-            setting.Version);
+            setting.Version,
+            setting.MeterKind);
     }
 
     private async Task<IReadOnlyList<IrregularPaymentDto>> ToIrregularPaymentDtosAsync(IReadOnlyList<IrregularPayment> payments, CancellationToken cancellationToken)

@@ -19,6 +19,37 @@ public sealed class EfMissingMeterReadingQuery(GarageBalanceDbContext dbContext)
             return [];
         }
 
+        var serviceMeterKinds = meterKinds
+            .Where(kind => kind is not MeterKinds.Water and not MeterKinds.Electricity)
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+        if (serviceMeterKinds.Length > 0)
+        {
+            var legacyKinds = meterKinds
+                .Where(kind => kind is MeterKinds.Water or MeterKinds.Electricity)
+                .Distinct(StringComparer.Ordinal)
+                .ToArray();
+            var result = legacyKinds.Length == 0
+                ? new List<MissingMeterReadingData>()
+                : (await GetMissingAsync(accountingMonth, legacyKinds, normalizedSearch, limit, cancellationToken)).ToList();
+            foreach (var serviceMeterKind in serviceMeterKinds)
+            {
+                if (result.Count >= limit)
+                {
+                    break;
+                }
+
+                result.AddRange(await GetMissingServiceMeterAsync(
+                    accountingMonth,
+                    serviceMeterKind,
+                    normalizedSearch,
+                    limit - result.Count,
+                    cancellationToken));
+            }
+
+            return result;
+        }
+
         var includeWater = meterKinds.Contains(MeterKinds.Water, StringComparer.Ordinal);
         var includeElectricity = meterKinds.Contains(MeterKinds.Electricity, StringComparer.Ordinal);
         IReadOnlyList<MissingMeterCandidate> candidates;
@@ -81,6 +112,52 @@ public sealed class EfMissingMeterReadingQuery(GarageBalanceDbContext dbContext)
                     meterKind)))
             .Take(limit)
             .ToList();
+    }
+
+    private async Task<IReadOnlyList<MissingMeterReadingData>> GetMissingServiceMeterAsync(
+        DateOnly accountingMonth,
+        string meterKind,
+        string? normalizedSearch,
+        int limit,
+        CancellationToken cancellationToken)
+    {
+        var query = dbContext.Garages.AsNoTracking()
+            .Where(garage => !garage.IsArchived)
+            .Where(garage => !dbContext.MeterReadings.Any(reading =>
+                !reading.IsCanceled &&
+                reading.GarageId == garage.Id &&
+                reading.AccountingMonth == accountingMonth &&
+                reading.MeterKind == meterKind));
+        if (normalizedSearch is not null)
+        {
+            query = query.Where(garage =>
+                garage.Number.ToLower().Contains(normalizedSearch) ||
+                garage.Owner != null && (
+                    garage.Owner.LastName.ToLower().Contains(normalizedSearch) ||
+                    garage.Owner.FirstName.ToLower().Contains(normalizedSearch) ||
+                    garage.Owner.MiddleName != null && garage.Owner.MiddleName.ToLower().Contains(normalizedSearch)));
+        }
+
+        var rows = await query
+            .OrderBy(garage => garage.Number)
+            .Take(limit)
+            .Select(garage => new
+            {
+                garage.Id,
+                garage.Number,
+                OwnerLastName = garage.Owner == null ? null : garage.Owner.LastName,
+                OwnerFirstName = garage.Owner == null ? null : garage.Owner.FirstName,
+                OwnerMiddleName = garage.Owner == null ? null : garage.Owner.MiddleName
+            })
+            .ToListAsync(cancellationToken);
+        return rows.Select(row => new MissingMeterReadingData(
+            row.Id,
+            row.Number,
+            row.OwnerLastName is null || row.OwnerFirstName is null
+                ? null
+                : string.Join(' ', new[] { row.OwnerLastName, row.OwnerFirstName, row.OwnerMiddleName }
+                    .Where(part => !string.IsNullOrWhiteSpace(part))),
+            meterKind)).ToArray();
     }
 
     private async Task<IReadOnlyList<MissingMeterCandidate>> GetPostgreSqlCandidatesAsync(

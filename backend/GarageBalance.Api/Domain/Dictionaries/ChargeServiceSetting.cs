@@ -23,6 +23,7 @@ public sealed class ChargeServiceSetting : IOptimisticConcurrencyEntity
     public Tariff? Tariff { get; set; }
     public ICollection<ChargeServiceTariffVersion> TariffVersions { get; set; } = new List<ChargeServiceTariffVersion>();
     public bool IsMetered { get; set; }
+    public string? MeterKind { get; set; }
     public bool HasTieredTariff { get; set; }
     public string? UnitName { get; set; }
     public bool IsArchived { get; set; }

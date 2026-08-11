@@ -11,7 +11,7 @@ export type GarageIncomePrototypeRow = {
   feeCampaignRemainingAmount?: number | null
   irregularPaymentId?: string | null
   irregularPaymentRemainingAmount?: number | null
-  meterKind: 'water' | 'electricity' | null
+  meterKind: string | null
   meterReadingId: string | null
   meterReadingVersion: string | null
   meterReadingDate: string | null
