@@ -103,7 +103,7 @@ public sealed class EfAccrualPaymentAllocationRepository(GarageBalanceDbContext 
                 rows
                     .Where(row => row.Kind == AccrualRowKind && row.Key == key && !row.IsCanceled)
                     .Select(row => new AccrualPaymentAllocationAccrual(
-                        row.Id, row.SortDate, row.AccountingMonth, row.Amount, row.CreatedAtUtc, row.FeeCampaignId)),
+                        row.Id, row.SortDate, row.AccountingMonth, row.Amount, row.CreatedAtUtc, row.FeeCampaignId, row.IrregularPaymentId)),
                 rows
                     .Where(row =>
                         row.Kind == PaymentRowKind &&
@@ -111,7 +111,7 @@ public sealed class EfAccrualPaymentAllocationRepository(GarageBalanceDbContext 
                         !row.IsCanceled &&
                         row.OperationKind == FinancialOperationKinds.Income)
                     .Select(row => new AccrualPaymentAllocationPayment(
-                        row.Id, row.SortDate, row.Amount, row.CreatedAtUtc, row.FeeCampaignId)));
+                        row.Id, row.SortDate, row.Amount, row.CreatedAtUtc, row.FeeCampaignId, row.IrregularPaymentId)));
 
             dbContext.AccrualPaymentAllocations.AddRange(plan.Select(item => new AccrualPaymentAllocation
             {
@@ -167,7 +167,8 @@ public sealed class EfAccrualPaymentAllocationRepository(GarageBalanceDbContext 
                 item.CreatedAtUtc,
                 item.IsCanceled,
                 OperationKind = string.Empty,
-                item.FeeCampaignId
+                item.FeeCampaignId,
+                item.IrregularPaymentId
             });
         var paymentRows = dbContext.FinancialOperations.AsNoTracking()
             .Where(item =>
@@ -191,7 +192,8 @@ public sealed class EfAccrualPaymentAllocationRepository(GarageBalanceDbContext 
                 item.CreatedAtUtc,
                 item.IsCanceled,
                 item.OperationKind,
-                item.FeeCampaignId
+                item.FeeCampaignId,
+                item.IrregularPaymentId
             });
         var allocationRows = dbContext.AccrualPaymentAllocations.AsNoTracking()
             .Where(item =>
@@ -214,7 +216,8 @@ public sealed class EfAccrualPaymentAllocationRepository(GarageBalanceDbContext 
                 item.CreatedAtUtc,
                 IsCanceled = false,
                 OperationKind = string.Empty,
-                item.Accrual.FeeCampaignId
+                item.Accrual.FeeCampaignId,
+                item.Accrual.IrregularPaymentId
             });
 
         var rows = accrualRows
@@ -231,7 +234,8 @@ public sealed class EfAccrualPaymentAllocationRepository(GarageBalanceDbContext 
                 row.CreatedAtUtc,
                 row.IsCanceled,
                 row.OperationKind,
-                row.FeeCampaignId));
+                row.FeeCampaignId,
+                row.IrregularPaymentId));
         return rows;
     }
 
@@ -366,7 +370,8 @@ public sealed class EfAccrualPaymentAllocationRepository(GarageBalanceDbContext 
                     accrual.CreatedAtUtc,
                     accrual.IsCanceled,
                     string.Empty,
-                    accrual.FeeCampaignId));
+                    accrual.FeeCampaignId,
+                    accrual.IrregularPaymentId));
             }
         }
     }
@@ -395,7 +400,8 @@ public sealed class EfAccrualPaymentAllocationRepository(GarageBalanceDbContext 
                     payment.CreatedAtUtc,
                     payment.IsCanceled,
                     payment.OperationKind,
-                    payment.FeeCampaignId));
+                    payment.FeeCampaignId,
+                    payment.IrregularPaymentId));
             }
         }
     }
@@ -411,7 +417,8 @@ public sealed class EfAccrualPaymentAllocationRepository(GarageBalanceDbContext 
         DateTimeOffset CreatedAtUtc,
         bool IsCanceled,
         string OperationKind,
-        Guid? FeeCampaignId)
+        Guid? FeeCampaignId,
+        Guid? IrregularPaymentId)
     {
         public AccrualPaymentAllocationKey Key => new(GarageId, IncomeTypeId);
     }

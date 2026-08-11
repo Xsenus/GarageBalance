@@ -489,7 +489,12 @@ public sealed class FinanceService(
             .Concat(incomeBucketsWithAdvance)
             .Concat(requiredMeterBuckets)
             .Where(bucket => !annualObligationKeys.Contains((bucket.AccountingMonth.Year, bucket.IncomeTypeId)))
-            .GroupBy(bucket => (bucket.AccountingMonth, bucket.IncomeTypeId, bucket.IncomeTypeName))
+            .GroupBy(bucket => (
+                bucket.AccountingMonth,
+                bucket.IncomeTypeId,
+                bucket.IncomeTypeName,
+                bucket.IrregularPaymentId,
+                bucket.IrregularPaymentIsAvailable))
             .Select(group => group.First())
             .OrderByDescending(bucket => bucket.AccountingMonth)
             .ThenBy(bucket => bucket.IncomeTypeName, StringComparer.OrdinalIgnoreCase)
@@ -522,7 +527,9 @@ public sealed class FinanceService(
                 accrualAmount,
                 incomeAmount,
                 advanceAmount,
-                debt);
+                debt,
+                IrregularPaymentId: key.IrregularPaymentId,
+                IrregularPaymentRemainingAmount: key.IrregularPaymentId.HasValue ? debt : null);
         }).ToList();
 
         foreach (var annualAccrual in worksheetData.AnnualAccruals)
@@ -587,6 +594,13 @@ public sealed class FinanceService(
                     };
             })
             .Where(row => !row.FeeCampaignId.HasValue || row.FeeCampaignRemainingAmount > 0m)
+            .Where(row => !row.IrregularPaymentId.HasValue ||
+                (worksheetData.AccrualBuckets.Any(bucket =>
+                     bucket.AccountingMonth == row.AccountingMonth &&
+                     bucket.IncomeTypeId == row.IncomeTypeId &&
+                     bucket.IrregularPaymentId == row.IrregularPaymentId &&
+                     bucket.IrregularPaymentIsAvailable) &&
+                 row.IrregularPaymentRemainingAmount > 0m))
             .OrderByDescending(row => row.AccountingMonth)
             .ThenBy(row => row.IncomeTypeName, StringComparer.OrdinalIgnoreCase)
             .ToList();
@@ -971,6 +985,13 @@ public sealed class FinanceService(
 
     public async Task<FinanceResult<FinancialOperationDto>> CreateIncomeAsync(CreateIncomeOperationRequest request, Guid? actorUserId, CancellationToken cancellationToken)
     {
+        if (request.FeeCampaignId.HasValue && request.IrregularPaymentId.HasValue)
+        {
+            return FinanceResult<FinancialOperationDto>.Failure(
+                "income_payment_target_conflict",
+                "Платёж не может одновременно относиться к сбору и нерегулярному начислению.");
+        }
+
         var garage = await garageRepository.FindActiveWithOwnerAsync(request.GarageId, cancellationToken);
         if (garage is null)
         {
@@ -981,6 +1002,25 @@ public sealed class FinanceService(
         if (incomeType is null)
         {
             return FinanceResult<FinancialOperationDto>.Failure("income_type_not_found", "Вид поступления не найден.");
+        }
+
+        IrregularPayment? irregularPayment = null;
+        if (request.IrregularPaymentId.HasValue)
+        {
+            irregularPayment = await irregularPaymentRepository.FindActiveAsync(request.IrregularPaymentId.Value, cancellationToken);
+            if (irregularPayment is null || !irregularPayment.IsActive)
+            {
+                return FinanceResult<FinancialOperationDto>.Failure(
+                    "irregular_payment_inactive",
+                    "Нерегулярный платёж деактивирован. Обновите расчёт платежей.");
+            }
+
+            if (!string.Equals(incomeType.Code, OtherPaymentsIncomeTypeCode, StringComparison.OrdinalIgnoreCase))
+            {
+                return FinanceResult<FinancialOperationDto>.Failure(
+                    "irregular_payment_income_type_invalid",
+                    "Нерегулярное начисление не связано с выбранным видом поступления.");
+            }
         }
 
         await using var campaignLock = request.FeeCampaignId.HasValue
@@ -1045,6 +1085,32 @@ public sealed class FinanceService(
         await using var balanceLock = await financeAvailableBalanceQuery.AcquireUpdateLockAsync(
             FinanceBalanceAccounts.Cash,
             cancellationToken);
+        await using var allocationLock = await accrualPaymentAllocationRepository.AcquireRebuildLockAsync(
+            [new AccrualPaymentAllocationKey(garage.Id, incomeType.Id)],
+            cancellationToken);
+
+        if (irregularPayment is not null)
+        {
+            var state = await accrualRepository.GetIrregularPaymentStateAsync(
+                garage.Id,
+                irregularPayment.Id,
+                MonthPeriod.Normalize(request.AccountingMonth),
+                cancellationToken);
+            if (state is null || !state.IsAvailable)
+            {
+                return FinanceResult<FinancialOperationDto>.Failure(
+                    "irregular_payment_accrual_not_found",
+                    "Нерегулярное начисление недоступно для выбранного гаража и месяца.");
+            }
+
+            var remaining = MoneyMath.RoundMoney(state.OutstandingAmount);
+            if (remaining <= 0m || MoneyMath.RoundMoney(request.Amount) > remaining)
+            {
+                return FinanceResult<FinancialOperationDto>.Failure(
+                    "irregular_payment_amount_exceeds_remaining",
+                    $"По нерегулярному начислению осталось оплатить не более {MoneyFormatting.Format(remaining)}.");
+            }
+        }
 
         var duplicate = await HasDocumentDuplicateAsync(FinancialOperationKinds.Income, request.DocumentNumber, request.OperationDate, cancellationToken);
         if (duplicate)
@@ -1078,13 +1144,12 @@ public sealed class FinanceService(
             IncomeTypeId = incomeType.Id,
             IncomeType = incomeType,
             FeeCampaignId = feeCampaign?.Id,
-            FeeCampaign = feeCampaign
+            FeeCampaign = feeCampaign,
+            IrregularPaymentId = irregularPayment?.Id,
+            IrregularPayment = irregularPayment
         };
 
         financialOperationRepository.Add(operation);
-        await using var allocationLock = await accrualPaymentAllocationRepository.AcquireRebuildLockAsync(
-            [new AccrualPaymentAllocationKey(operation.GarageId!.Value, operation.IncomeTypeId!.Value)],
-            cancellationToken);
         await RebuildPaymentAllocationsAsync(
             [new AccrualPaymentAllocationKey(operation.GarageId!.Value, operation.IncomeTypeId!.Value)],
             actorUserId,
@@ -1159,6 +1224,13 @@ public sealed class FinanceService(
                 "Сумма каждой строки полной оплаты должна быть больше нуля.");
         }
 
+        if (normalizedLines.Any(line => line.FeeCampaignId.HasValue && line.IrregularPaymentId.HasValue))
+        {
+            return FinanceResult<FullGaragePaymentDto>.Failure(
+                "income_payment_target_conflict",
+                "Строка полной оплаты не может одновременно относиться к сбору и нерегулярному начислению.");
+        }
+
         if (normalizedLines.Any(line => line.IsOpeningDebt == line.IncomeTypeId.HasValue))
         {
             return FinanceResult<FullGaragePaymentDto>.Failure(
@@ -1168,7 +1240,12 @@ public sealed class FinanceService(
 
         if (normalizedLines.Count(line => line.IsOpeningDebt) > 1 ||
             normalizedLines
-                .GroupBy(line => (line.IsOpeningDebt, line.IncomeTypeId, line.AccountingMonth))
+                .GroupBy(line => (
+                    line.IsOpeningDebt,
+                    line.IncomeTypeId,
+                    line.AccountingMonth,
+                    line.FeeCampaignId,
+                    line.IrregularPaymentId))
                 .Any(group => group.Count() > 1))
         {
             return FinanceResult<FullGaragePaymentDto>.Failure(
@@ -1200,6 +1277,47 @@ public sealed class FinanceService(
         await using var balanceLock = await financeAvailableBalanceQuery.AcquireUpdateLockAsync(
             FinanceBalanceAccounts.Cash,
             cancellationToken);
+
+        var shouldValidateIrregularPayments = !request.ReceiptBatchId.HasValue ||
+            (await financialOperationRepository.GetByReceiptBatchIdAsync(request.ReceiptBatchId.Value, cancellationToken)).Count == 0;
+        var irregularPayments = new Dictionary<Guid, IrregularPayment>();
+        foreach (var line in normalizedLines.Where(item =>
+                     item.IrregularPaymentId.HasValue && shouldValidateIrregularPayments))
+        {
+            var irregularPaymentId = line.IrregularPaymentId!.Value;
+            if (!irregularPayments.TryGetValue(irregularPaymentId, out var irregularPayment))
+            {
+                irregularPayment = await irregularPaymentRepository.FindActiveAsync(irregularPaymentId, cancellationToken);
+                if (irregularPayment is null || !irregularPayment.IsActive)
+                {
+                    return FinanceResult<FullGaragePaymentDto>.Failure(
+                        "irregular_payment_inactive",
+                        "Одно из нерегулярных начислений деактивировано. Обновите расчёт платежей.");
+                }
+                irregularPayments.Add(irregularPaymentId, irregularPayment);
+            }
+
+            var incomeType = incomeTypes[line.IncomeTypeId!.Value];
+            var state = await accrualRepository.GetIrregularPaymentStateAsync(
+                garage.Id,
+                irregularPaymentId,
+                line.AccountingMonth,
+                cancellationToken);
+            if (!string.Equals(incomeType.Code, OtherPaymentsIncomeTypeCode, StringComparison.OrdinalIgnoreCase) ||
+                state is null || !state.IsAvailable)
+            {
+                return FinanceResult<FullGaragePaymentDto>.Failure(
+                    "irregular_payment_accrual_not_found",
+                    "Одно из нерегулярных начислений недоступно для выбранного гаража и месяца.");
+            }
+            var remaining = MoneyMath.RoundMoney(state.OutstandingAmount);
+            if (remaining <= 0m || line.Amount > remaining)
+            {
+                return FinanceResult<FullGaragePaymentDto>.Failure(
+                    "irregular_payment_amount_exceeds_remaining",
+                    $"По нерегулярному начислению осталось оплатить не более {MoneyFormatting.Format(remaining)}.");
+            }
+        }
 
         var receiptBatchId = request.ReceiptBatchId ?? Guid.NewGuid();
         var existingBatch = await financialOperationRepository.GetByReceiptBatchIdAsync(
@@ -1281,7 +1399,12 @@ public sealed class FinanceService(
                 GarageId = garage.Id,
                 Garage = garage,
                 IncomeTypeId = incomeType.Id,
-                IncomeType = incomeType
+                IncomeType = incomeType,
+                FeeCampaignId = line.FeeCampaignId,
+                IrregularPaymentId = line.IrregularPaymentId,
+                IrregularPayment = line.IrregularPaymentId.HasValue && irregularPayments.TryGetValue(line.IrregularPaymentId.Value, out var irregularPayment)
+                    ? irregularPayment
+                    : null
             };
             financialOperationRepository.Add(operation);
             operations.Add(operation);
@@ -1360,6 +1483,8 @@ public sealed class FinanceService(
                 operation.AccountingMonth == line.AccountingMonth &&
                 operation.Amount == line.Amount &&
                 string.Equals(operation.Comment, expectedComment, StringComparison.Ordinal) &&
+                operation.FeeCampaignId == line.FeeCampaignId &&
+                operation.IrregularPaymentId == line.IrregularPaymentId &&
                 (line.IsOpeningDebt
                     ? string.Equals(operation.IncomeType?.Code, DebtTransferIncomeTypeCode, StringComparison.OrdinalIgnoreCase)
                     : operation.IncomeTypeId == line.IncomeTypeId));

@@ -45,6 +45,11 @@ public interface IAccrualRepository
     Task<bool> ActiveDuplicateExistsAsync(Guid? ignoredId, Guid garageId, Guid incomeTypeId, DateOnly accountingMonth, int? accountingYear, string source, CancellationToken cancellationToken);
     Task<bool> ActiveIrregularDuplicateExistsAsync(Guid? ignoredId, Guid garageId, Guid irregularPaymentId, DateOnly accountingMonth, CancellationToken cancellationToken);
     Task<bool> ActiveFeeCampaignDuplicateExistsAsync(Guid? ignoredId, Guid garageId, Guid feeCampaignId, DateOnly accountingMonth, CancellationToken cancellationToken);
+    Task<IrregularAccrualPaymentState?> GetIrregularPaymentStateAsync(
+        Guid garageId,
+        Guid irregularPaymentId,
+        DateOnly accountingMonth,
+        CancellationToken cancellationToken);
     Task<decimal> GetTotalThroughMonthAsync(Guid garageId, DateOnly accountingMonth, CancellationToken cancellationToken);
     void Add(Accrual accrual);
 }
@@ -58,6 +63,11 @@ public sealed record OverdueAccrualDebtData(
     DateOnly AccountingMonth,
     DateOnly DueDate,
     DateOnly OverdueFromDate,
+    decimal Amount,
+    decimal PaidAmount,
+    decimal OutstandingAmount);
+public sealed record IrregularAccrualPaymentState(
+    bool IsAvailable,
     decimal Amount,
     decimal PaidAmount,
     decimal OutstandingAmount);

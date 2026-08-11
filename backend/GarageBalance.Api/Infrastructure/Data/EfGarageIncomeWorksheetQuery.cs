@@ -37,6 +37,8 @@ public sealed class EfGarageIncomeWorksheetQuery(GarageBalanceDbContext dbContex
                 IncomeTypeId = (Guid?)null,
                 IncomeTypeName = (string?)null,
                 IncomeTypeCode = (string?)null,
+                IrregularPaymentId = (Guid?)null,
+                IrregularPaymentIsAvailable = true,
                 AccrualId = (Guid?)null,
                 AccountingYear = (int?)null,
                 Amount = garage.StartingBalance,
@@ -64,6 +66,8 @@ public sealed class EfGarageIncomeWorksheetQuery(GarageBalanceDbContext dbContex
                 IncomeTypeId = (Guid?)null,
                 IncomeTypeName = (string?)null,
                 IncomeTypeCode = (string?)null,
+                IrregularPaymentId = (Guid?)null,
+                IrregularPaymentIsAvailable = true,
                 AccrualId = (Guid?)null,
                 AccountingYear = (int?)null,
                 Amount = group.Sum(accrual => accrual.Amount),
@@ -95,6 +99,8 @@ public sealed class EfGarageIncomeWorksheetQuery(GarageBalanceDbContext dbContex
                 IncomeTypeId = (Guid?)null,
                 IncomeTypeName = (string?)null,
                 IncomeTypeCode = (string?)null,
+                IrregularPaymentId = (Guid?)null,
+                IrregularPaymentIsAvailable = true,
                 AccrualId = (Guid?)null,
                 AccountingYear = (int?)null,
                 Amount = group.Sum(operation => operation.Amount),
@@ -119,7 +125,10 @@ public sealed class EfGarageIncomeWorksheetQuery(GarageBalanceDbContext dbContex
                 accrual.IncomeTypeId,
                 accrual.IncomeType.Name,
                 accrual.IncomeType.Code,
-                accrual.Basis
+                accrual.Basis,
+                accrual.IrregularPaymentId,
+                IrregularPaymentIsAvailable = accrual.IrregularPayment == null ||
+                    (accrual.IrregularPayment.IsActive && !accrual.IrregularPayment.IsArchived)
             })
             .Select(group => new
             {
@@ -133,6 +142,8 @@ public sealed class EfGarageIncomeWorksheetQuery(GarageBalanceDbContext dbContex
                 IncomeTypeId = (Guid?)group.Key.IncomeTypeId,
                 IncomeTypeName = (string?)(group.Key.Basis ?? group.Key.Name),
                 IncomeTypeCode = group.Key.Code,
+                group.Key.IrregularPaymentId,
+                group.Key.IrregularPaymentIsAvailable,
                 AccrualId = (Guid?)null,
                 AccountingYear = (int?)null,
                 Amount = group.Sum(accrual => accrual.Amount),
@@ -173,6 +184,8 @@ public sealed class EfGarageIncomeWorksheetQuery(GarageBalanceDbContext dbContex
                 IncomeTypeId = group.Key.IncomeTypeId,
                 IncomeTypeName = (string?)group.Key.Name,
                 IncomeTypeCode = group.Key.Code,
+                IrregularPaymentId = (Guid?)null,
+                IrregularPaymentIsAvailable = true,
                 AccrualId = (Guid?)null,
                 AccountingYear = (int?)null,
                 Amount = group.Sum(operation => operation.Amount),
@@ -203,6 +216,8 @@ public sealed class EfGarageIncomeWorksheetQuery(GarageBalanceDbContext dbContex
                 IncomeTypeId = (Guid?)null,
                 IncomeTypeName = (string?)null,
                 IncomeTypeCode = (string?)null,
+                IrregularPaymentId = (Guid?)null,
+                IrregularPaymentIsAvailable = true,
                 AccrualId = (Guid?)null,
                 AccountingYear = (int?)null,
                 Amount = 0m,
@@ -231,6 +246,8 @@ public sealed class EfGarageIncomeWorksheetQuery(GarageBalanceDbContext dbContex
                 IncomeTypeId = (Guid?)incomeType.Id,
                 IncomeTypeName = (string?)incomeType.Name,
                 IncomeTypeCode = incomeType.Code,
+                IrregularPaymentId = (Guid?)null,
+                IrregularPaymentIsAvailable = true,
                 AccrualId = (Guid?)null,
                 AccountingYear = (int?)null,
                 Amount = 0m,
@@ -264,6 +281,8 @@ public sealed class EfGarageIncomeWorksheetQuery(GarageBalanceDbContext dbContex
                 IncomeTypeId = (Guid?)accrual.IncomeTypeId,
                 IncomeTypeName = (string?)accrual.IncomeType.Name,
                 IncomeTypeCode = accrual.IncomeType.Code,
+                IrregularPaymentId = (Guid?)null,
+                IrregularPaymentIsAvailable = true,
                 AccrualId = (Guid?)accrual.Id,
                 AccountingYear = accrual.AccountingYear,
                 Amount = accrual.Amount,
@@ -303,6 +322,9 @@ public sealed class EfGarageIncomeWorksheetQuery(GarageBalanceDbContext dbContex
                 IncomeTypeId = (Guid?)allocation.Accrual.IncomeTypeId,
                 IncomeTypeName = (string?)(allocation.Accrual.Basis ?? allocation.Accrual.IncomeType.Name),
                 IncomeTypeCode = allocation.Accrual.IncomeType.Code,
+                allocation.Accrual.IrregularPaymentId,
+                IrregularPaymentIsAvailable = allocation.Accrual.IrregularPayment == null ||
+                    (allocation.Accrual.IrregularPayment.IsActive && !allocation.Accrual.IrregularPayment.IsArchived),
                 AccrualId = (Guid?)allocation.AccrualId,
                 AccountingYear = allocation.Accrual.AccountingYear,
                 Amount = allocation.Amount,
@@ -334,6 +356,8 @@ public sealed class EfGarageIncomeWorksheetQuery(GarageBalanceDbContext dbContex
                 IncomeTypeId = (Guid?)incomeType.Id,
                 IncomeTypeName = (string?)null,
                 IncomeTypeCode = (string?)null,
+                IrregularPaymentId = (Guid?)null,
+                IrregularPaymentIsAvailable = true,
                 AccrualId = (Guid?)null,
                 AccountingYear = (int?)null,
                 Amount =
@@ -398,7 +422,9 @@ public sealed class EfGarageIncomeWorksheetQuery(GarageBalanceDbContext dbContex
                     row.IncomeTypeId!.Value,
                     row.IncomeTypeName!,
                     row.IncomeTypeCode,
-                    row.Amount))
+                    row.Amount,
+                    row.IrregularPaymentId,
+                    row.IrregularPaymentIsAvailable))
                 .ToList(),
             rows.Where(row => row.Category == IncomeBucketCategory)
                 .Select(row => new GarageIncomeWorksheetBucketData(
@@ -442,7 +468,8 @@ public sealed class EfGarageIncomeWorksheetQuery(GarageBalanceDbContext dbContex
                     row.IncomeTypeId!.Value,
                     row.IncomeTypeName!,
                     row.PaymentAccountingMonth!.Value,
-                    row.Amount))
+                    row.Amount,
+                    row.IrregularPaymentId))
                 .ToList(),
             rows.Where(row => row.Category == AdvanceCategory)
                 .Select(row => new GarageIncomeWorksheetAdvanceData(

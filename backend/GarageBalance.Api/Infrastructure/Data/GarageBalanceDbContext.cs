@@ -529,6 +529,7 @@ public sealed class GarageBalanceDbContext(DbContextOptions<GarageBalanceDbConte
             entity.HasIndex(operation => operation.StaffMemberId);
             entity.HasIndex(operation => operation.ExpenseFundId);
             entity.HasIndex(operation => operation.FeeCampaignId);
+            entity.HasIndex(operation => operation.IrregularPaymentId);
             entity.HasOne(operation => operation.Garage)
                 .WithMany()
                 .HasForeignKey(operation => operation.GarageId)
@@ -552,6 +553,10 @@ public sealed class GarageBalanceDbContext(DbContextOptions<GarageBalanceDbConte
             entity.HasOne(operation => operation.FeeCampaign)
                 .WithMany()
                 .HasForeignKey(operation => operation.FeeCampaignId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(operation => operation.IrregularPayment)
+                .WithMany()
+                .HasForeignKey(operation => operation.IrregularPaymentId)
                 .OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(operation => operation.ExpenseFund)
                 .WithMany()

@@ -7,6 +7,41 @@ namespace GarageBalance.Api.Infrastructure.Data;
 
 public sealed class EfAccrualRepository(GarageBalanceDbContext dbContext) : IAccrualRepository
 {
+    public async Task<IrregularAccrualPaymentState?> GetIrregularPaymentStateAsync(
+        Guid garageId,
+        Guid irregularPaymentId,
+        DateOnly accountingMonth,
+        CancellationToken cancellationToken)
+    {
+        var row = await dbContext.Accruals.AsNoTracking()
+            .Where(accrual =>
+                !accrual.IsCanceled &&
+                accrual.GarageId == garageId &&
+                accrual.IrregularPaymentId == irregularPaymentId &&
+                accrual.AccountingMonth == accountingMonth)
+            .Select(accrual => new
+            {
+                IsAvailable = accrual.IrregularPayment != null &&
+                    accrual.IrregularPayment.IsActive &&
+                    !accrual.IrregularPayment.IsArchived,
+                accrual.Amount,
+                PaidAmount = dbContext.AccrualPaymentAllocations
+                    .Where(allocation =>
+                        allocation.IsActive &&
+                        allocation.AccrualId == accrual.Id &&
+                        !allocation.FinancialOperation.IsCanceled)
+                    .Sum(allocation => (decimal?)allocation.Amount) ?? 0m
+            })
+            .SingleOrDefaultAsync(cancellationToken);
+        return row is null
+            ? null
+            : new IrregularAccrualPaymentState(
+                row.IsAvailable,
+                row.Amount,
+                row.PaidAmount,
+                Math.Max(row.Amount - row.PaidAmount, 0m));
+    }
+
     public async Task<IReadOnlyList<Accrual>> GetListAsync(
         DateOnly? monthFrom,
         DateOnly? monthTo,

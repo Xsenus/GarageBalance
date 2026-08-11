@@ -29,7 +29,9 @@ public static class AccrualPaymentAllocator
             foreach (var accrual in orderedAccruals.Where(accrual =>
                          payment.FeeCampaignId.HasValue
                              ? accrual.FeeCampaignId == payment.FeeCampaignId
-                             : true))
+                             : payment.IrregularPaymentId.HasValue
+                                 ? accrual.IrregularPaymentId == payment.IrregularPaymentId
+                                 : true))
             {
                 if (paymentRemainder <= 0m)
                 {
@@ -59,14 +61,16 @@ public sealed record AccrualPaymentAllocationAccrual(
     DateOnly AccountingMonth,
     decimal Amount,
     DateTimeOffset CreatedAtUtc,
-    Guid? FeeCampaignId = null);
+    Guid? FeeCampaignId = null,
+    Guid? IrregularPaymentId = null);
 
 public sealed record AccrualPaymentAllocationPayment(
     Guid Id,
     DateOnly OperationDate,
     decimal Amount,
     DateTimeOffset CreatedAtUtc,
-    Guid? FeeCampaignId = null);
+    Guid? FeeCampaignId = null,
+    Guid? IrregularPaymentId = null);
 
 public sealed record AccrualPaymentAllocationPlanItem(
     Guid FinancialOperationId,

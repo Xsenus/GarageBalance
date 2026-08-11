@@ -55,7 +55,8 @@ public sealed record CreateIncomeOperationRequest(
     [MaxLength(120)] string? DocumentNumber,
     [MaxLength(1000)] string? Comment,
     Guid? ReceiptBatchId = null,
-    Guid? FeeCampaignId = null);
+    Guid? FeeCampaignId = null,
+    Guid? IrregularPaymentId = null);
 
 public sealed record CreateFullGaragePaymentLineRequest(
     Guid? IncomeTypeId,
@@ -63,7 +64,8 @@ public sealed record CreateFullGaragePaymentLineRequest(
     [Range(0.01, 999999999)] decimal Amount,
     [MaxLength(1000)] string? Comment,
     bool IsOpeningDebt = false,
-    Guid? FeeCampaignId = null);
+    Guid? FeeCampaignId = null,
+    Guid? IrregularPaymentId = null);
 
 public sealed record CreateFullGaragePaymentRequest(
     Guid GarageId,
@@ -522,7 +524,9 @@ public sealed record GarageIncomeWorksheetRowDto(
     decimal AdvanceAmount,
     decimal Debt,
     Guid? FeeCampaignId = null,
-    decimal? FeeCampaignRemainingAmount = null);
+    decimal? FeeCampaignRemainingAmount = null,
+    Guid? IrregularPaymentId = null,
+    decimal? IrregularPaymentRemainingAmount = null);
 
 public sealed record GarageIncomeWorksheetDto(
     Guid GarageId,

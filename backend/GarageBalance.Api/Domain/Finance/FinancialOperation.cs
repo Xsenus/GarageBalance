@@ -20,6 +20,8 @@ public sealed class FinancialOperation
     public IncomeType? IncomeType { get; set; }
     public Guid? FeeCampaignId { get; set; }
     public FeeCampaign? FeeCampaign { get; set; }
+    public Guid? IrregularPaymentId { get; set; }
+    public IrregularPayment? IrregularPayment { get; set; }
     public Guid? SupplierId { get; set; }
     public Supplier? Supplier { get; set; }
     public Guid? StaffMemberId { get; set; }

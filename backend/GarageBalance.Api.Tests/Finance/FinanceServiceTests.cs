@@ -3614,6 +3614,111 @@ public sealed class FinanceServiceTests
     }
 
     [Fact]
+    public async Task IrregularPayment_AppearsUntilFullyPaidAndDisappearsWhenInactive()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        var destinationFund = new Fund { Name = "Other", NormalizedName = "OTHER" };
+        var otherPayments = new IncomeType
+        {
+            Name = "Other payments",
+            Code = "other_payments",
+            IsSystem = true,
+            DestinationFund = destinationFund
+        };
+        var template = new IrregularPayment { Name = "Access card", Amount = 1_000m };
+        database.Context.AddRange(destinationFund, otherPayments, template);
+        await database.Context.SaveChangesAsync();
+        var service = FinanceServiceTestFactory.Create(database.Context);
+        var month = new DateOnly(2026, 8, 1);
+
+        var accrual = await service.CreateIrregularAccrualAsync(
+            new CreateIrregularAccrualRequest(fixtures.Garage.Id, template.Id, template.Name, template.Amount, month, null),
+            null,
+            CancellationToken.None);
+        Assert.True(accrual.Succeeded);
+
+        var initialWorksheet = await service.GetGarageIncomeWorksheetAsync(
+            fixtures.Garage.Id,
+            new GarageIncomeWorksheetRequest(month, month),
+            CancellationToken.None);
+        var initialRow = Assert.Single(initialWorksheet.Value!.Rows, row => row.IrregularPaymentId == template.Id);
+        Assert.Equal((1_000m, 1_000m), (initialRow.Debt, initialRow.IrregularPaymentRemainingAmount));
+
+        var partialPayment = await service.CreateIncomeAsync(
+            new CreateIncomeOperationRequest(
+                fixtures.Garage.Id,
+                otherPayments.Id,
+                new DateOnly(2026, 8, 11),
+                month,
+                400m,
+                null,
+                null,
+                IrregularPaymentId: template.Id),
+            null,
+            CancellationToken.None);
+        Assert.True(partialPayment.Succeeded);
+        Assert.Equal(template.Id, await database.Context.FinancialOperations
+            .Where(operation => operation.Id == partialPayment.Value!.Id)
+            .Select(operation => operation.IrregularPaymentId)
+            .SingleAsync());
+
+        var partialWorksheet = await service.GetGarageIncomeWorksheetAsync(
+            fixtures.Garage.Id,
+            new GarageIncomeWorksheetRequest(month, month),
+            CancellationToken.None);
+        var partialRow = Assert.Single(partialWorksheet.Value!.Rows, row => row.IrregularPaymentId == template.Id);
+        Assert.Equal((400m, 600m, 600m),
+            (partialRow.IncomeAmount, partialRow.Debt, partialRow.IrregularPaymentRemainingAmount));
+
+        var overpayment = await service.CreateIncomeAsync(
+            new CreateIncomeOperationRequest(
+                fixtures.Garage.Id,
+                otherPayments.Id,
+                new DateOnly(2026, 8, 11),
+                month,
+                600.01m,
+                null,
+                null,
+                IrregularPaymentId: template.Id),
+            null,
+            CancellationToken.None);
+        Assert.False(overpayment.Succeeded);
+        Assert.Equal("irregular_payment_amount_exceeds_remaining", overpayment.ErrorCode);
+
+        template.IsActive = false;
+        await database.Context.SaveChangesAsync();
+        var inactiveWorksheet = await service.GetGarageIncomeWorksheetAsync(
+            fixtures.Garage.Id,
+            new GarageIncomeWorksheetRequest(month, month),
+            CancellationToken.None);
+        Assert.DoesNotContain(inactiveWorksheet.Value!.Rows, row => row.IrregularPaymentId == template.Id);
+
+        template.IsActive = true;
+        await database.Context.SaveChangesAsync();
+        var fullPayment = await service.CreateFullGaragePaymentAsync(
+            new CreateFullGaragePaymentRequest(
+                fixtures.Garage.Id,
+                new DateOnly(2026, 8, 11),
+                [new CreateFullGaragePaymentLineRequest(otherPayments.Id, month, 600m, null, IrregularPaymentId: template.Id)]),
+            null,
+            CancellationToken.None);
+        Assert.True(fullPayment.Succeeded);
+        Assert.Single(fullPayment.Value!.Operations);
+        var storedFullPaymentTarget = await database.Context.FinancialOperations
+            .Where(operation => operation.ReceiptBatchId == fullPayment.Value.ReceiptBatchId)
+            .Select(operation => operation.IrregularPaymentId)
+            .SingleAsync();
+        Assert.Equal(template.Id, storedFullPaymentTarget);
+
+        var paidWorksheet = await service.GetGarageIncomeWorksheetAsync(
+            fixtures.Garage.Id,
+            new GarageIncomeWorksheetRequest(month, month),
+            CancellationToken.None);
+        Assert.DoesNotContain(paidWorksheet.Value!.Rows, row => row.IrregularPaymentId == template.Id);
+    }
+
+    [Fact]
     public async Task CreateIrregularAccrualAsync_AcceptsCustomBasisAndAmount()
     {
         await using var database = await TestDatabase.CreateAsync();

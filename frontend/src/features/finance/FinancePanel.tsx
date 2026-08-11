@@ -3,7 +3,7 @@ import type { FormEvent, KeyboardEvent, MouseEvent, ReactNode } from 'react'
 import { Award, Banknote, Building2, FileText, Gavel, History, LoaderCircle, Pencil, RotateCcw, Save, Search, Trash2, UserRound, WalletCards, X } from 'lucide-react'
 import type { AuthResponse } from '../../services/authApi'
 import type { AccountingTypeDto, DictionaryClient, GarageDto, IrregularPaymentDto, StaffMemberDto, SupplierDto, SupplierGroupDto } from '../../services/dictionariesApi'
-import type { AccrualDto, CreateAccrualRequest, CreateExpenseOperationRequest, CreateIncomeOperationRequest, CreateMeterReadingRequest, CreateSupplierAccrualRequest, ExpensePaymentSource, ExpensePaymentType, ExpenseWorksheetDto, FinanceClient, FinancePagedResult, FinanceSummaryDto, FinancialOperationDto, GarageIncomeWorksheetDto, GarageOverdueDebtDto, GenerateSupplierGroupSalaryAccrualsRequest, MeterReadingDto, MissingMeterReadingDto, StaffSalaryAdjustmentType, SupplierAccrualDto } from '../../services/financeApi'
+import type { AccrualDto, CreateAccrualRequest, CreateExpenseOperationRequest, CreateIncomeOperationRequest, CreateMeterReadingRequest, CreateSupplierAccrualRequest, ExpensePaymentSource, ExpensePaymentType, ExpenseWorksheetDto, FinanceClient, FinancePagedResult, FinanceSummaryDto, FinancialOperationDto, GarageOverdueDebtDto, GenerateSupplierGroupSalaryAccrualsRequest, MeterReadingDto, MissingMeterReadingDto, StaffSalaryAdjustmentType, SupplierAccrualDto } from '../../services/financeApi'
 import { FinanceApiError } from '../../services/financeApi'
 import type { IntegrationClient, ReceiptPrintingActionKind } from '../../services/integrationsApi'
 import type { ApplicationSettingsClient } from '../../services/settingsApi'
@@ -29,6 +29,8 @@ import { calculateExpenseWorksheetClosingBalance, getExpenseWorksheetCollectedCl
 import { expensePaymentTypeOptions, formatExpensePaymentSource, formatExpensePaymentType } from './expensePaymentTypes'
 import { rankGarageSearchResults } from './garageSearchRanking'
 import { getGarageBalancePresentation, toSignedGarageNetBalance, toSignedGarageSplitBalance } from './garageBalancePresentation'
+import { createGarageIncomeRowsFromWorksheet } from './garageIncomeWorksheetRows'
+import type { GarageIncomePrototypeRow } from './garageIncomeWorksheetRows'
 import { getFirstLinkedSupplier, getSupplierAccrualExpenseType } from './supplierAccrualLink'
 
 type AccrualBreakdown =
@@ -106,31 +108,6 @@ type PaymentsPrototypeGarage = {
   floorCount: number
   balance: number
   overdueDebt: number
-}
-
-type GarageIncomePrototypeRow = {
-  id: string
-  incomeTypeId: string | null
-  month: string
-  monthLabel: string
-  service: string
-  annualAccrualId: string | null
-  feeCampaignId?: string | null
-  feeCampaignRemainingAmount?: number | null
-  meterKind: 'water' | 'electricity' | null
-  meterReadingId: string | null
-  meterReadingVersion: string | null
-  meterReadingDate: string | null
-  meter: number | null
-  meterDraft: string
-  meterError: string | null
-  difference: number | null
-  payable: number
-  paymentDraft: string
-  paid: number
-  advance: number
-  debt: number
-  meterRequired?: boolean
 }
 
 type GarageIncomeWorksheetPeriodSummary = {
@@ -313,37 +290,6 @@ type SupplierAccrualPrototypeSubmitRequest = {
   amount: number
   documentNumber: string
   comment: string
-}
-
-function createGarageIncomeRowsFromWorksheet(worksheet: GarageIncomeWorksheetDto): GarageIncomePrototypeRow[] {
-  return worksheet.rows.map((row) => {
-    const month = row.accountingMonth.slice(0, 7)
-    const rowKey = row.feeCampaignId ?? row.incomeTypeId ?? row.incomeTypeName.toLocaleLowerCase('ru-RU').replace(/\s+/g, '-')
-    return {
-      id: `garage-${worksheet.garageId}-${month}-${rowKey}`,
-      incomeTypeId: row.incomeTypeId,
-      month,
-      monthLabel: formatPaymentPrototypeMonthLabel(row.accountingMonth),
-      service: row.incomeTypeName,
-      annualAccrualId: row.annualAccrualId ?? null,
-      feeCampaignId: row.feeCampaignId ?? null,
-      feeCampaignRemainingAmount: row.feeCampaignRemainingAmount ?? null,
-      meterKind: row.meterKind,
-      meterReadingId: row.meterReadingId ?? null,
-      meterReadingVersion: row.meterReadingVersion ?? null,
-      meterReadingDate: row.meterReadingDate ?? null,
-      meter: row.meterValue,
-      meterDraft: row.meterValue === null ? '' : String(row.meterValue),
-      meterError: null,
-      difference: row.meterConsumption,
-      payable: row.payableAmount ?? row.accrualAmount,
-      paymentDraft: '',
-      paid: row.incomeAmount,
-      advance: row.advanceAmount ?? 0,
-      debt: row.debt,
-      meterRequired: row.meterKind !== null && row.meterValue === null,
-    }
-  })
 }
 
 function createExpenseRowsFromWorksheet(worksheet: ExpenseWorksheetDto): PaymentPrototypeRow[] {
@@ -3965,6 +3911,7 @@ function PaymentsPrototypePanel({
         accountingMonth,
         amount,
         feeCampaignId: row.feeCampaignId ?? undefined,
+        irregularPaymentId: row.irregularPaymentId ?? undefined,
         comment: `Платеж из формы поступлений: ${row.service} ${row.monthLabel}`,
       })
       const paymentTime = new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })
@@ -4146,6 +4093,7 @@ function PaymentsPrototypePanel({
         accountingMonth: item.row.month.length === 7 ? `${item.row.month}-01` : item.row.month,
         amount: item.amount,
         feeCampaignId: item.row.feeCampaignId ?? undefined,
+        irregularPaymentId: item.row.irregularPaymentId ?? undefined,
         comment: request.comment.trim()
           ? `Полная оплата ${item.row.service} ${item.row.monthLabel}: ${request.comment.trim()}`
           : `Полная оплата ${item.row.service} ${item.row.monthLabel}`,

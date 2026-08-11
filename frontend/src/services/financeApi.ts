@@ -300,6 +300,8 @@ export type GarageIncomeWorksheetRowDto = {
   debt: number
   feeCampaignId?: string | null
   feeCampaignRemainingAmount?: number | null
+  irregularPaymentId?: string | null
+  irregularPaymentRemainingAmount?: number | null
 }
 
 export type GarageIncomeWorksheetDto = {
@@ -373,6 +375,7 @@ export type CreateIncomeOperationRequest = {
   documentNumber?: string
   comment?: string
   feeCampaignId?: string
+  irregularPaymentId?: string
 }
 
 export type CreateFullGaragePaymentLineRequest = {
@@ -382,6 +385,7 @@ export type CreateFullGaragePaymentLineRequest = {
   comment?: string
   isOpeningDebt?: boolean
   feeCampaignId?: string
+  irregularPaymentId?: string
 }
 
 export type CreateFullGaragePaymentRequest = {
