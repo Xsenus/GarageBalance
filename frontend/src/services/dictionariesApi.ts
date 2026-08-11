@@ -426,8 +426,8 @@ export type DictionaryClient = {
   updateMeasurementUnit(accessToken: string, id: string, request: UpsertMeasurementUnitRequest): Promise<MeasurementUnitDto>
   archiveMeasurementUnit(accessToken: string, id: string, reason: string): Promise<void>
   restoreMeasurementUnit(accessToken: string, id: string): Promise<MeasurementUnitDto>
-  getTariffs(accessToken: string, search?: string, limit?: number, includeArchived?: boolean, templatesOnly?: boolean, signal?: AbortSignal): Promise<TariffDto[]>
-  getTariffsPage?(accessToken: string, search?: string, offset?: number, limit?: number, includeArchived?: boolean, templatesOnly?: boolean, signal?: AbortSignal): Promise<PagedResult<TariffDto>>
+  getTariffs(accessToken: string, search?: string, limit?: number, includeArchived?: boolean, signal?: AbortSignal): Promise<TariffDto[]>
+  getTariffsPage?(accessToken: string, search?: string, offset?: number, limit?: number, includeArchived?: boolean, signal?: AbortSignal): Promise<PagedResult<TariffDto>>
   createTariff(accessToken: string, request: UpsertTariffRequest): Promise<TariffDto>
   updateTariff(accessToken: string, id: string, request: UpsertTariffRequest): Promise<TariffDto>
   archiveTariff(accessToken: string, id: string, reason: string): Promise<void>
@@ -778,11 +778,11 @@ export const dictionariesApi: DictionaryClient = {
   restoreMeasurementUnit(accessToken, id) {
     return requestJson(accessToken, `/api/dictionaries/measurement-units/${id}/restore`, { method: 'POST' })
   },
-  getTariffs(accessToken, search, limit = defaultDictionaryListLimit, includeArchived = false, templatesOnly = false, signal) {
-    return requestJson(accessToken, withQuery('/api/dictionaries/tariffs', { search, limit, includeArchived: includeArchived || undefined, templatesOnly: templatesOnly || undefined }), { signal })
+  getTariffs(accessToken, search, limit = defaultDictionaryListLimit, includeArchived = false, signal) {
+    return requestJson(accessToken, withQuery('/api/dictionaries/tariffs', { search, limit, includeArchived: includeArchived || undefined }), { signal })
   },
-  getTariffsPage(accessToken, search, offset = 0, limit = defaultDictionaryListLimit, includeArchived = false, templatesOnly = false, signal) {
-    return requestJson(accessToken, withQuery('/api/dictionaries/tariffs/page', { search, offset, limit, includeArchived: includeArchived || undefined, templatesOnly: templatesOnly || undefined }), { signal })
+  getTariffsPage(accessToken, search, offset = 0, limit = defaultDictionaryListLimit, includeArchived = false, signal) {
+    return requestJson(accessToken, withQuery('/api/dictionaries/tariffs/page', { search, offset, limit, includeArchived: includeArchived || undefined }), { signal })
   },
   createTariff(accessToken, request) {
     return requestJson(accessToken, '/api/dictionaries/tariffs', { method: 'POST', body: JSON.stringify(request) })

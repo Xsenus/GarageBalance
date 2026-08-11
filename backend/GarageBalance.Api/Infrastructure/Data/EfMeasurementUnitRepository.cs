@@ -28,7 +28,17 @@ public sealed class EfMeasurementUnitRepository(GarageBalanceDbContext dbContext
 
     public Task<MeasurementUnit?> FindActiveByNameAsync(string name, CancellationToken cancellationToken)
     {
-        var normalizedName = name.Trim().ToLower();
+        var trimmedName = name.Trim();
+        if (dbContext.Database.IsNpgsql())
+        {
+            return dbContext.MeasurementUnits.FirstOrDefaultAsync(
+                item => !item.IsArchived && EF.Functions.ILike(
+                    item.Name,
+                    EF.Functions.Collate(trimmedName, PostgresLikeSearch.UnicodeCollation)),
+                cancellationToken);
+        }
+
+        var normalizedName = trimmedName.ToLower();
         return dbContext.MeasurementUnits.FirstOrDefaultAsync(
             item => !item.IsArchived && item.Name.ToLower() == normalizedName,
             cancellationToken);
@@ -36,7 +46,17 @@ public sealed class EfMeasurementUnitRepository(GarageBalanceDbContext dbContext
 
     public Task<bool> ActiveDuplicateExistsAsync(Guid? ignoredId, string name, CancellationToken cancellationToken)
     {
-        var normalizedName = name.Trim().ToLower();
+        var trimmedName = name.Trim();
+        if (dbContext.Database.IsNpgsql())
+        {
+            return dbContext.MeasurementUnits.AsNoTracking().AnyAsync(
+                item => !item.IsArchived &&
+                    EF.Functions.ILike(item.Name, EF.Functions.Collate(trimmedName, PostgresLikeSearch.UnicodeCollation)) &&
+                    (!ignoredId.HasValue || item.Id != ignoredId.Value),
+                cancellationToken);
+        }
+
+        var normalizedName = trimmedName.ToLower();
         return dbContext.MeasurementUnits.AsNoTracking().AnyAsync(
             item => !item.IsArchived && item.Name.ToLower() == normalizedName && (!ignoredId.HasValue || item.Id != ignoredId.Value),
             cancellationToken);
@@ -44,7 +64,16 @@ public sealed class EfMeasurementUnitRepository(GarageBalanceDbContext dbContext
 
     public Task<bool> HasActiveServiceAssignmentsAsync(string name, CancellationToken cancellationToken)
     {
-        var normalizedName = name.Trim().ToLower();
+        var trimmedName = name.Trim();
+        if (dbContext.Database.IsNpgsql())
+        {
+            return dbContext.ChargeServiceSettings.AsNoTracking().AnyAsync(
+                item => !item.IsArchived && item.UnitName != null &&
+                    EF.Functions.ILike(item.UnitName, EF.Functions.Collate(trimmedName, PostgresLikeSearch.UnicodeCollation)),
+                cancellationToken);
+        }
+
+        var normalizedName = trimmedName.ToLower();
         return dbContext.ChargeServiceSettings.AsNoTracking().AnyAsync(
             item => !item.IsArchived && item.UnitName != null && item.UnitName.ToLower() == normalizedName,
             cancellationToken);
@@ -52,10 +81,15 @@ public sealed class EfMeasurementUnitRepository(GarageBalanceDbContext dbContext
 
     public async Task RenameServiceAssignmentsAsync(string previousName, string newName, CancellationToken cancellationToken)
     {
-        var normalizedPreviousName = previousName.Trim().ToLower();
-        var settings = await dbContext.ChargeServiceSettings
-            .Where(item => item.UnitName != null && item.UnitName.ToLower() == normalizedPreviousName)
-            .ToListAsync(cancellationToken);
+        var trimmedPreviousName = previousName.Trim();
+        var query = dbContext.ChargeServiceSettings.Where(item => item.UnitName != null);
+        var settings = dbContext.Database.IsNpgsql()
+            ? await query.Where(item => EF.Functions.ILike(
+                    item.UnitName!,
+                    EF.Functions.Collate(trimmedPreviousName, PostgresLikeSearch.UnicodeCollation)))
+                .ToListAsync(cancellationToken)
+            : await query.Where(item => item.UnitName!.ToLower() == trimmedPreviousName.ToLower())
+                .ToListAsync(cancellationToken);
         foreach (var setting in settings)
         {
             setting.UnitName = newName;

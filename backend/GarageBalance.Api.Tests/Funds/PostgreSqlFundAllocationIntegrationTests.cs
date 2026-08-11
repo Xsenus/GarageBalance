@@ -277,18 +277,22 @@ public sealed class PostgreSqlFundAllocationIntegrationTests
         var storedIncomeType = await verificationContext.IncomeTypes.SingleAsync(item => item.Id == incomeTypeId);
         var storedService = await verificationContext.ChargeServiceSettings
             .SingleOrDefaultAsync(item => item.Name == "Охрана территории");
+        var storedSupplier = await verificationContext.Suppliers
+            .SingleOrDefaultAsync(item => item.ChargeServiceSettingId == serviceId);
+        Assert.NotNull(storedService);
         if (storedFund.IsArchived)
         {
             Assert.True(deleteResult.Succeeded);
             Assert.Null(storedIncomeType.DestinationFundId);
-            Assert.Null(storedService);
+            Assert.Null(storedSupplier);
         }
         else
         {
             Assert.True(createResult.Succeeded);
             Assert.Equal("fund_has_linked_services", deleteResult.ErrorCode);
             Assert.Equal(fundId, storedIncomeType.DestinationFundId);
-            Assert.NotNull(storedService);
+            Assert.NotNull(storedSupplier);
+            Assert.Equal(fundId, storedSupplier.ExpenseFundId);
         }
     }
 

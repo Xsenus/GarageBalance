@@ -3586,17 +3586,16 @@ public sealed class DictionaryServiceTests
     }
 
     [Fact]
-    public async Task GetTariffsPageAsync_TemplatesOnly_HidesServiceTariffHistory()
+    public async Task GetTariffsPageAsync_ReturnsCurrentAndHistoricalServiceTariffs()
     {
         await using var database = await TestDatabase.CreateAsync();
         var service = DictionaryServiceTestFactory.Create(database.Context);
-        var template = new Tariff
+        var legacyUnlinkedTariff = new Tariff
         {
             Name = "Вода",
             CalculationBase = "meter_water",
             Rate = 100.80m,
-            EffectiveFrom = new DateOnly(2026, 8, 1),
-            IsTemplate = true
+            EffectiveFrom = new DateOnly(2026, 8, 1)
         };
         var serviceVersion = new Tariff
         {
@@ -3612,7 +3611,7 @@ public sealed class DictionaryServiceTests
             TariffId = serviceVersion.Id,
             Tariff = serviceVersion
         };
-        database.Context.Tariffs.AddRange(template, serviceVersion);
+        database.Context.Tariffs.AddRange(legacyUnlinkedTariff, serviceVersion);
         database.Context.ChargeServiceSettings.Add(setting);
         database.Context.ChargeServiceTariffVersions.Add(new ChargeServiceTariffVersion
         {
@@ -3624,43 +3623,40 @@ public sealed class DictionaryServiceTests
         });
         await database.Context.SaveChangesAsync();
 
-        var page = await service.GetTariffsPageAsync(null, 0, 25, CancellationToken.None, templatesOnly: true);
-        var completePage = await service.GetTariffsPageAsync(null, 0, 25, CancellationToken.None);
+        var page = await service.GetTariffsPageAsync(null, 0, 25, CancellationToken.None);
 
-        Assert.Single(page.Items);
-        Assert.Equal("Вода", page.Items[0].Name);
-        Assert.Equal(1, page.TotalCount);
-        Assert.Equal(2, completePage.TotalCount);
+        Assert.Equal(2, page.TotalCount);
+        Assert.Contains(page.Items, tariff => tariff.Id == legacyUnlinkedTariff.Id);
+        Assert.Contains(page.Items, tariff => tariff.Id == serviceVersion.Id);
     }
 
     [Fact]
-    public async Task GetTariffsPageAsync_TemplatesOnly_HidesUnlinkedServiceTariffVersion()
+    public async Task GetTariffsPageAsync_DoesNotHideUnlinkedHistoricalTariff()
     {
         await using var database = await TestDatabase.CreateAsync();
         var service = DictionaryServiceTestFactory.Create(database.Context);
-        var template = new Tariff
+        var legacyTariff = new Tariff
         {
             Name = "Шаблон тарифа воды",
             CalculationBase = "meter_water",
             Rate = 100.80m,
-            EffectiveFrom = new DateOnly(2026, 8, 1),
-            IsTemplate = true
+            EffectiveFrom = new DateOnly(2026, 8, 1)
         };
         var displacedServiceVersion = new Tariff
         {
             Name = "Вода — по счетчику, 05.08.2026, abcdef12",
             CalculationBase = "meter_water",
             Rate = 100.80m,
-            EffectiveFrom = new DateOnly(2026, 8, 5),
-            IsTemplate = false
+            EffectiveFrom = new DateOnly(2026, 8, 5)
         };
-        database.Context.Tariffs.AddRange(template, displacedServiceVersion);
+        database.Context.Tariffs.AddRange(legacyTariff, displacedServiceVersion);
         await database.Context.SaveChangesAsync();
 
-        var page = await service.GetTariffsPageAsync(null, 0, 25, CancellationToken.None, templatesOnly: true);
+        var page = await service.GetTariffsPageAsync(null, 0, 25, CancellationToken.None);
 
-        Assert.Single(page.Items);
-        Assert.Equal(template.Id, page.Items[0].Id);
+        Assert.Equal(2, page.TotalCount);
+        Assert.Contains(page.Items, tariff => tariff.Id == legacyTariff.Id);
+        Assert.Contains(page.Items, tariff => tariff.Id == displacedServiceVersion.Id);
     }
 
     [Fact]

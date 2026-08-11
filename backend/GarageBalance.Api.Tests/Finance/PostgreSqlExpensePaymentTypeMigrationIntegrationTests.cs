@@ -23,6 +23,7 @@ public sealed class PostgreSqlExpensePaymentTypeMigrationIntegrationTests
                 """
                 ALTER TABLE charge_service_settings ADD COLUMN "ExpenseFundId" uuid NULL;
                 ALTER TABLE suppliers ADD COLUMN "ExpenseFundId" uuid NULL;
+                ALTER TABLE suppliers ADD COLUMN "ExpenseTypeId" uuid NULL;
                 """);
             await PostgreSqlLegacyModelCompatibility.AddCurrentVersionColumnsAsync(downgradeContext);
         }
@@ -80,6 +81,7 @@ public sealed class PostgreSqlExpensePaymentTypeMigrationIntegrationTests
                 """
                 ALTER TABLE charge_service_settings DROP COLUMN "ExpenseFundId";
                 ALTER TABLE suppliers DROP COLUMN "ExpenseFundId";
+                ALTER TABLE suppliers DROP COLUMN "ExpenseTypeId";
                 """);
             await migrateContext.Database.MigrateAsync();
         }

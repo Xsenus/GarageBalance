@@ -1,4 +1,6 @@
 using GarageBalance.Api.Tests.Common;
+using GarageBalance.Api.Domain.Dictionaries;
+using GarageBalance.Api.Domain.Finance;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
@@ -20,24 +22,43 @@ public sealed class PostgreSqlChargeServiceExpenseTypeMigrationIntegrationTests
 
         await using (var initialContext = database.CreateContext())
         {
-            var source = await initialContext.Suppliers
-                .AsNoTracking()
-                .Where(supplier =>
-                    supplier.ChargeServiceSettingId != null &&
-                    supplier.ExpenseTypeId != null &&
-                    supplier.ExpenseFundId != null)
-                .Select(supplier => new
-                {
-                    supplier.Id,
-                    ServiceId = supplier.ChargeServiceSettingId!.Value,
-                    ExpenseTypeId = supplier.ExpenseTypeId!.Value,
-                    ExpenseFundId = supplier.ExpenseFundId!.Value
-                })
-                .FirstAsync();
-            supplierId = source.Id;
-            serviceId = source.ServiceId;
-            expenseTypeId = source.ExpenseTypeId;
-            expenseFundId = source.ExpenseFundId;
+            var fund = new Fund
+            {
+                Name = "Миграционный фонд",
+                NormalizedName = "МИГРАЦИОННЫЙ ФОНД",
+                IsSystem = false
+            };
+            var expenseType = new ExpenseType { Name = "Миграционная статья расходов" };
+            var group = new SupplierGroup { Name = "Миграционные поставщики" };
+            var incomeType = new IncomeType { Name = "Миграционные поступления" };
+            var tariff = new Tariff
+            {
+                Name = "Миграционный тариф",
+                CalculationBase = "fixed",
+                Rate = 100m,
+                EffectiveFrom = new DateOnly(2026, 8, 1)
+            };
+            var service = new ChargeServiceSetting
+            {
+                Name = "Миграционная услуга",
+                IncomeType = incomeType,
+                Tariff = tariff,
+                IsRegular = true
+            };
+            var supplier = new Supplier
+            {
+                Name = "Миграционный поставщик",
+                Group = group,
+                ChargeServiceSetting = service,
+                ExpenseType = expenseType,
+                ExpenseFund = fund
+            };
+            initialContext.AddRange(fund, expenseType, group, incomeType, tariff, service, supplier);
+            await initialContext.SaveChangesAsync();
+            supplierId = supplier.Id;
+            serviceId = service.Id;
+            expenseTypeId = expenseType.Id;
+            expenseFundId = fund.Id;
 
             await initialContext.GetService<IMigrator>().MigrateAsync(PreviousMigration);
             await initialContext.Database.ExecuteSqlInterpolatedAsync($"""

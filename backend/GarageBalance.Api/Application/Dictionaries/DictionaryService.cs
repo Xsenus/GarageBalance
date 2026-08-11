@@ -669,6 +669,8 @@ public sealed class DictionaryService(
             return InvalidPhone<SupplierDto>();
         }
 
+        await using var allocationLock = await fundRepository.AcquireAllocationLockAsync(cancellationToken);
+
         var group = await supplierGroupRepository.FindActiveAsync(request.GroupId, cancellationToken);
         if (group is null)
         {
@@ -1824,19 +1826,19 @@ public sealed class DictionaryService(
         return DictionaryResult<MeasurementUnitDto>.Success(ToMeasurementUnitDto(unit));
     }
 
-    public async Task<IReadOnlyList<TariffDto>> GetTariffsAsync(string? search, CancellationToken cancellationToken, int? limit = null, bool includeArchived = false, bool templatesOnly = false)
+    public async Task<IReadOnlyList<TariffDto>> GetTariffsAsync(string? search, CancellationToken cancellationToken, int? limit = null, bool includeArchived = false)
     {
         var normalizedSearch = NormalizeSearch(search);
-        var tariffs = await tariffRepository.GetListAsync(normalizedSearch, includeArchived, templatesOnly, NormalizeListLimit(limit), cancellationToken);
+        var tariffs = await tariffRepository.GetListAsync(normalizedSearch, includeArchived, NormalizeListLimit(limit), cancellationToken);
         return tariffs.Select(ToTariffDto).ToList();
     }
 
-    public async Task<PagedResult<TariffDto>> GetTariffsPageAsync(string? search, int? offset, int? limit, CancellationToken cancellationToken, bool includeArchived = false, bool templatesOnly = false)
+    public async Task<PagedResult<TariffDto>> GetTariffsPageAsync(string? search, int? offset, int? limit, CancellationToken cancellationToken, bool includeArchived = false)
     {
         var normalizedSearch = NormalizeSearch(search);
         var normalizedOffset = NormalizeListOffset(offset);
         var normalizedLimit = NormalizeListLimit(limit);
-        var page = await tariffRepository.GetPageAsync(normalizedSearch, includeArchived, templatesOnly, normalizedOffset, normalizedLimit, cancellationToken);
+        var page = await tariffRepository.GetPageAsync(normalizedSearch, includeArchived, normalizedOffset, normalizedLimit, cancellationToken);
         return new PagedResult<TariffDto>(page.Items.Select(ToTariffDto).ToList(), page.TotalCount, normalizedOffset, normalizedLimit);
     }
 
@@ -1882,7 +1884,6 @@ public sealed class DictionaryService(
             Rate = MoneyMath.RoundRate(request.Rate),
             EffectiveFrom = request.EffectiveFrom,
             Comment = NormalizeOptional(request.Comment),
-            IsTemplate = true
         };
         ApplyElectricityTiers(tariff, electricityTiers.Value);
 
@@ -2202,7 +2203,6 @@ public sealed class DictionaryService(
             Rate = MoneyMath.RoundRate(request.Rate),
             EffectiveFrom = request.EffectiveFrom,
             Comment = $"Создан вместе с услугой «{name}».",
-            IsTemplate = false
         };
         ApplyElectricityTiers(tariff, tiersValidation.Value);
         var canonicalUnitName = await EnsureMeasurementUnitExistsAsync(serviceRequest.UnitName, actorUserId, cancellationToken);
@@ -2510,7 +2510,6 @@ public sealed class DictionaryService(
             ElectricitySecondRate = sourceTariff.ElectricitySecondRate,
             ElectricityThirdRate = sourceTariff.ElectricityThirdRate,
             ElectricityTiersJson = sourceTariff.ElectricityTiersJson,
-            IsTemplate = false
         };
         CopyTariffVersionTerms(
             tariff,
@@ -2672,13 +2671,11 @@ public sealed class DictionaryService(
             Rate = roundedRate,
             EffectiveFrom = request.EffectiveFrom.Value,
             Comment = NormalizeOptional(request.ChangeReason) ?? $"Новая версия режима услуги «{serviceName}».",
-            IsTemplate = false
         };
         tariff.Name = CreateServiceTariffVersionName(serviceName, mode);
         tariff.CalculationBase = targetCalculationBase;
         tariff.Rate = roundedRate;
         tariff.Comment = NormalizeOptional(request.ChangeReason) ?? tariff.Comment;
-        tariff.IsTemplate = false;
         tariff.IsArchived = false;
         tariff.UpdatedAtUtc = DateTimeOffset.UtcNow;
         ApplyElectricityTiers(tariff, tiersValidation.Value);
@@ -3503,7 +3500,6 @@ public sealed class DictionaryService(
         target.ElectricitySecondRate = source.ElectricitySecondRate;
         target.ElectricityThirdRate = source.ElectricityThirdRate;
         target.ElectricityTiersJson = source.ElectricityTiersJson;
-        target.IsTemplate = false;
         target.IsArchived = false;
         target.UpdatedAtUtc = DateTimeOffset.UtcNow;
     }

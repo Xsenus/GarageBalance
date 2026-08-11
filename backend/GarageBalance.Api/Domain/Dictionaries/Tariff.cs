@@ -19,7 +19,6 @@ public sealed class Tariff : IOptimisticConcurrencyEntity
     public string? ElectricityTiersJson { get; set; }
     public DateOnly EffectiveFrom { get; set; }
     public string? Comment { get; set; }
-    public bool IsTemplate { get; set; }
     public bool IsArchived { get; set; }
     public DateTimeOffset CreatedAtUtc { get; set; } = DateTimeOffset.UtcNow;
     public DateTimeOffset UpdatedAtUtc { get; set; } = DateTimeOffset.UtcNow;

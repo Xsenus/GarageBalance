@@ -4,8 +4,8 @@ namespace GarageBalance.Api.Application.Dictionaries;
 
 public interface ITariffRepository
 {
-    Task<IReadOnlyList<Tariff>> GetListAsync(string? normalizedSearch, bool includeArchived, bool templatesOnly, int limit, CancellationToken cancellationToken);
-    Task<TariffPageData> GetPageAsync(string? normalizedSearch, bool includeArchived, bool templatesOnly, int offset, int limit, CancellationToken cancellationToken);
+    Task<IReadOnlyList<Tariff>> GetListAsync(string? normalizedSearch, bool includeArchived, int limit, CancellationToken cancellationToken);
+    Task<TariffPageData> GetPageAsync(string? normalizedSearch, bool includeArchived, int offset, int limit, CancellationToken cancellationToken);
     Task<Tariff?> FindActiveAsync(Guid id, CancellationToken cancellationToken);
     Task<Tariff?> FindArchivedAsync(Guid id, CancellationToken cancellationToken);
     Task<bool> ActiveDuplicateExistsAsync(Guid? ignoredId, string name, DateOnly effectiveFrom, CancellationToken cancellationToken);
