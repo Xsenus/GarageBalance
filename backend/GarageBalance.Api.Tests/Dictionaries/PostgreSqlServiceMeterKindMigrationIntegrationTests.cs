@@ -15,20 +15,24 @@ public sealed class PostgreSqlServiceMeterKindMigrationIntegrationTests
     public async Task Migration_PreservesLegacyKindsAndAssignsIndependentKindToArbitraryService()
     {
         await using var database = await PostgreSqlTestDatabase.CreateAsync();
-        var waterIncomeTypeId = Guid.NewGuid();
         var customIncomeTypeId = Guid.NewGuid();
+        var customIncomeTypeCode = $"custom_security_{Guid.NewGuid():N}";
+        var customIncomeTypeName = $"Охрана {Guid.NewGuid():N}";
         var waterServiceId = Guid.NewGuid();
         var customServiceId = Guid.NewGuid();
 
         await using (var setupContext = database.CreateContext())
         {
             await setupContext.GetService<IMigrator>().MigrateAsync(PreviousMigration);
+            var waterIncomeTypeId = await setupContext.IncomeTypes
+                .Where(item => item.Code == "water")
+                .Select(item => item.Id)
+                .SingleAsync();
             await setupContext.Database.ExecuteSqlInterpolatedAsync($"""
                 INSERT INTO income_types (
                     "Id", "Name", "Code", "IsSystem", "IsArchived", "CreatedAtUtc", "UpdatedAtUtc")
                 VALUES
-                    ({waterIncomeTypeId}, 'Вода', 'water', TRUE, FALSE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
-                    ({customIncomeTypeId}, 'Охрана', 'custom_security', FALSE, FALSE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
+                    ({customIncomeTypeId}, {customIncomeTypeName}, {customIncomeTypeCode}, FALSE, FALSE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
 
                 INSERT INTO charge_service_settings (
                     "Id", "Name", "IsRegular", "OverdueGraceDays", "IncomeTypeId", "IsMetered",
