@@ -68,6 +68,13 @@ public interface IDictionaryService
     Task<DictionaryResult<AccountingTypeDto>> ArchiveExpenseTypeAsync(Guid id, string reason, Guid? actorUserId, CancellationToken cancellationToken);
     Task<DictionaryResult<AccountingTypeDto>> RestoreExpenseTypeAsync(Guid id, Guid? actorUserId, CancellationToken cancellationToken);
 
+    Task<IReadOnlyList<MeasurementUnitDto>> GetMeasurementUnitsAsync(string? search, CancellationToken cancellationToken, int? limit = null, bool includeArchived = false);
+    Task<PagedResult<MeasurementUnitDto>> GetMeasurementUnitsPageAsync(string? search, int? offset, int? limit, CancellationToken cancellationToken, bool includeArchived = false);
+    Task<DictionaryResult<MeasurementUnitDto>> CreateMeasurementUnitAsync(UpsertMeasurementUnitRequest request, Guid? actorUserId, CancellationToken cancellationToken);
+    Task<DictionaryResult<MeasurementUnitDto>> UpdateMeasurementUnitAsync(Guid id, UpsertMeasurementUnitRequest request, Guid? actorUserId, CancellationToken cancellationToken);
+    Task<DictionaryResult<MeasurementUnitDto>> ArchiveMeasurementUnitAsync(Guid id, string reason, Guid? actorUserId, CancellationToken cancellationToken);
+    Task<DictionaryResult<MeasurementUnitDto>> RestoreMeasurementUnitAsync(Guid id, Guid? actorUserId, CancellationToken cancellationToken);
+
     Task<IReadOnlyList<TariffDto>> GetTariffsAsync(string? search, CancellationToken cancellationToken, int? limit = null, bool includeArchived = false, bool templatesOnly = false);
     Task<PagedResult<TariffDto>> GetTariffsPageAsync(string? search, int? offset, int? limit, CancellationToken cancellationToken, bool includeArchived = false, bool templatesOnly = false);
     Task<DictionaryResult<TariffDto>> CreateTariffAsync(UpsertTariffRequest request, Guid? actorUserId, CancellationToken cancellationToken);

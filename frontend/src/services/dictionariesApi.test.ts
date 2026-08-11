@@ -38,6 +38,7 @@ describe('dictionariesApi response cache', () => {
       dictionariesApi.getChargeServiceSettings('token'),
       dictionariesApi.getIncomeTypes('token'),
       dictionariesApi.getExpenseTypes('token'),
+      dictionariesApi.getMeasurementUnitsPage('token'),
       dictionariesApi.getIrregularPayments('token'),
       dictionariesApi.getFeeCampaigns('token'),
     ])
@@ -45,15 +46,41 @@ describe('dictionariesApi response cache', () => {
     await Promise.all([loadTariffReferences(), loadTariffReferences()])
     await loadTariffReferences()
 
-    expect(fetchMock).toHaveBeenCalledTimes(6)
+    expect(fetchMock).toHaveBeenCalledTimes(7)
     expect(fetchMock.mock.calls.map(([path]) => path)).toEqual(expect.arrayContaining([
       '/api/dictionaries/tariffs?limit=100',
       '/api/dictionaries/charge-services?limit=100',
       '/api/dictionaries/income-types?limit=100',
       '/api/dictionaries/expense-types?limit=100',
+      '/api/dictionaries/measurement-units/page?offset=0&limit=100',
       '/api/dictionaries/irregular-payments?limit=100',
       '/api/dictionaries/fee-campaigns?limit=100',
     ]))
+  })
+
+  it('loads and mutates the measurement-unit dictionary through its dedicated endpoints', async () => {
+    const unit = { id: 'unit-1', name: 'комплект', isArchived: false }
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ items: [unit], totalCount: 1, offset: 0, limit: 100 }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify(unit), { status: 201 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ ...unit, name: 'упаковка' }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(null, { status: 204 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify(unit), { status: 200 }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await dictionariesApi.getMeasurementUnitsPage('token')
+    await dictionariesApi.createMeasurementUnit('token', { name: 'комплект' })
+    await dictionariesApi.updateMeasurementUnit('token', unit.id, { name: 'упаковка' })
+    await dictionariesApi.archiveMeasurementUnit('token', unit.id, 'Дубликат')
+    await dictionariesApi.restoreMeasurementUnit('token', unit.id)
+
+    expect(fetchMock.mock.calls.map(([path]) => path)).toEqual([
+      '/api/dictionaries/measurement-units/page?offset=0&limit=100',
+      '/api/dictionaries/measurement-units',
+      '/api/dictionaries/measurement-units/unit-1',
+      '/api/dictionaries/measurement-units/unit-1',
+      '/api/dictionaries/measurement-units/unit-1/restore',
+    ])
   })
 
   it('requests only user-facing tariff templates for the tariff dictionary', async () => {

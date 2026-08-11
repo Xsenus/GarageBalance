@@ -166,6 +166,10 @@ public sealed record UpsertAccountingTypeRequest(
     [Required, MaxLength(200)] string Name,
     [MaxLength(80)] string? Code);
 
+public sealed record MeasurementUnitDto(Guid Id, string Name, bool IsArchived);
+
+public sealed record UpsertMeasurementUnitRequest([Required, MaxLength(40)] string Name);
+
 public sealed record TariffDto(
     Guid Id,
     string Name,

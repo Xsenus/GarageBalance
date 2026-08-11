@@ -1,11 +1,11 @@
-import type { AccountingTypeDto, GarageDto, OwnerDto, SupplierDto, SupplierGroupDto, TariffDto, UpsertTariffRequest } from '../services/dictionariesApi'
+import type { AccountingTypeDto, GarageDto, MeasurementUnitDto, OwnerDto, SupplierDto, SupplierGroupDto, TariffDto, UpsertTariffRequest } from '../services/dictionariesApi'
 import { formatDateOnly, formatMoney, formatTariffRateSummary } from './formatters'
 import type { OwnerGarageLinkForm } from './validation'
 
-export type DictionarySectionKey = 'owners' | 'garages' | 'supplierGroups' | 'suppliers' | 'incomeTypes' | 'expenseTypes' | 'tariffs'
+export type DictionarySectionKey = 'owners' | 'garages' | 'supplierGroups' | 'suppliers' | 'incomeTypes' | 'expenseTypes' | 'measurementUnits' | 'tariffs'
 export type DictionarySectionGroupKey = 'counterparties' | 'operations' | 'tariffs'
 export type DictionaryWritePermission = 'dictionaries' | 'tariffs'
-export type DictionaryRecord = OwnerDto | GarageDto | SupplierGroupDto | SupplierDto | AccountingTypeDto | TariffDto
+export type DictionaryRecord = OwnerDto | GarageDto | SupplierGroupDto | SupplierDto | AccountingTypeDto | MeasurementUnitDto | TariffDto
 
 export type DictionarySectionOption = {
   key: DictionarySectionKey
@@ -93,6 +93,7 @@ export type DictionaryEditorFieldKey =
   | 'supplierComment'
   | 'accountingTypeName'
   | 'accountingTypeCode'
+  | 'measurementUnitName'
   | 'tariffName'
   | 'tariffCalculationBase'
   | 'tariffRate'
@@ -122,6 +123,7 @@ export const dictionarySectionOptions: DictionarySectionOption[] = [
   { key: 'suppliers', label: 'Поставщики и персонал', group: 'counterparties', writePermission: 'dictionaries' },
   { key: 'incomeTypes', label: 'Виды поступлений', group: 'operations', writePermission: 'dictionaries' },
   { key: 'expenseTypes', label: 'Статьи расходов', group: 'operations', writePermission: 'dictionaries' },
+  { key: 'measurementUnits', label: 'Единицы измерения', group: 'tariffs', writePermission: 'dictionaries' },
   { key: 'tariffs', label: 'Тарифы', group: 'tariffs', writePermission: 'tariffs' },
 ]
 
@@ -132,6 +134,7 @@ const dictionarySearchPlaceholders: Record<DictionarySectionKey, string> = {
   suppliers: 'Название, ИНН или контакт',
   incomeTypes: 'Название или код поступления',
   expenseTypes: 'Название или код выплаты',
+  measurementUnits: 'Обозначение единицы измерения',
   tariffs: 'Название или база расчета',
 }
 
@@ -142,6 +145,7 @@ const dictionaryTableHeaders: Record<DictionarySectionKey, string[]> = {
   suppliers: ['Название', 'Группа', 'ИНН', 'Стартовый баланс'],
   incomeTypes: ['Название', 'Код', 'Тип'],
   expenseTypes: ['Название', 'Код', 'Тип'],
+  measurementUnits: ['Обозначение'],
   tariffs: ['Название', 'База', 'Ставка', 'Дата начала'],
 }
 
@@ -180,6 +184,7 @@ const dictionaryEditorFieldMeta: Record<DictionaryEditorFieldKey, DictionaryEdit
   supplierComment: { label: 'Комментарий', ariaLabel: 'Комментарий поставщика', placeholder: 'Договор, условия оплаты или заметки' },
   accountingTypeName: { label: 'Название', ariaLabel: 'Название вида операции', placeholder: 'Например, Членский взнос' },
   accountingTypeCode: { label: 'Код', ariaLabel: 'Код вида операции', placeholder: 'Например, security_2026' },
+  measurementUnitName: { label: 'Обозначение', ariaLabel: 'Обозначение единицы измерения', placeholder: 'Например, м³' },
   tariffName: { label: 'Название тарифа', ariaLabel: 'Название тарифа', placeholder: 'Например, Электроэнергия' },
   tariffCalculationBase: { label: 'База расчета', ariaLabel: 'База расчета тарифа' },
   tariffRate: { label: 'Ставка', ariaLabel: 'Ставка тарифа' },
@@ -353,16 +358,6 @@ export function getTariffCalculationUnitName(calculationBase: string) {
   return tariffCalculationUnitNames[calculationBase]?.[0] ?? ''
 }
 
-export function getTariffCalculationUnitOptions(calculationBase: string, currentUnitName?: string | null) {
-  const unitNames = [...(tariffCalculationUnitNames[calculationBase] ?? [])]
-  const trimmedCurrentUnitName = currentUnitName?.trim() ?? ''
-  if (trimmedCurrentUnitName && !unitNames.some((unitName) => unitName.toLocaleLowerCase('ru') === trimmedCurrentUnitName.toLocaleLowerCase('ru'))) {
-    unitNames.push(trimmedCurrentUnitName)
-  }
-
-  return unitNames.map((unitName) => ({ value: unitName, label: unitName }))
-}
-
 export function normalizeTariffCalculationUnitName(calculationBase: string, unitName?: string | null) {
   const compatibleUnitNames = tariffCalculationUnitNames[calculationBase] ?? []
   const trimmedUnitName = unitName?.trim() ?? ''
@@ -370,10 +365,10 @@ export function normalizeTariffCalculationUnitName(calculationBase: string, unit
   const matchingUnitName = compatibleUnitNames.find((candidate) => candidate.toLocaleLowerCase('ru') === normalizedUnitName)
   if (matchingUnitName) return matchingUnitName
 
-  const isKnownForAnotherCalculationBase = Object.values(tariffCalculationUnitNames)
+  const knownForAnotherBase = Object.values(tariffCalculationUnitNames)
     .flat()
     .some((candidate) => candidate.toLocaleLowerCase('ru') === normalizedUnitName)
-  if (trimmedUnitName && !isKnownForAnotherCalculationBase) return trimmedUnitName
+  if (trimmedUnitName && !knownForAnotherBase) return trimmedUnitName
 
   return compatibleUnitNames[0] ?? ''
 }
@@ -408,6 +403,10 @@ export function getDictionaryRecordCells(section: DictionarySectionKey, item: Di
     return [tariff.name, getTariffCalculationBaseLabel(tariff.calculationBase), formatTariffRateSummary(tariff), formatDateOnly(tariff.effectiveFrom)]
   }
 
+  if (section === 'measurementUnits') {
+    return [(item as MeasurementUnitDto).name]
+  }
+
   const type = item as AccountingTypeDto
   return [type.name, type.code ?? 'не указан', type.isSystem ? 'Системный' : 'Пользовательский']
 }
@@ -427,6 +426,10 @@ export function getDictionaryRecordTitle(section: DictionarySectionKey, item: Di
 
   if (section === 'garages') {
     return `Гараж ${(item as GarageDto).number}`
+  }
+
+  if (section === 'measurementUnits') {
+    return (item as MeasurementUnitDto).name
   }
 
   if (section === 'supplierGroups') {

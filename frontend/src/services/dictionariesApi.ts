@@ -109,6 +109,16 @@ export type AccountingTypeDto = {
   destinationFundName?: string | null
 }
 
+export type MeasurementUnitDto = {
+  id: string
+  name: string
+  isArchived: boolean
+}
+
+export type UpsertMeasurementUnitRequest = {
+  name: string
+}
+
 export type CreateOpeningBalanceAdjustmentRequest = {
   effectiveDate: string
   newAmount: number
@@ -414,6 +424,11 @@ export type DictionaryClient = {
   updateExpenseType(accessToken: string, id: string, request: UpsertAccountingTypeRequest): Promise<AccountingTypeDto>
   archiveExpenseType(accessToken: string, id: string, reason: string): Promise<void>
   restoreExpenseType(accessToken: string, id: string): Promise<AccountingTypeDto>
+  getMeasurementUnitsPage(accessToken: string, search?: string, offset?: number, limit?: number, includeArchived?: boolean, signal?: AbortSignal): Promise<PagedResult<MeasurementUnitDto>>
+  createMeasurementUnit(accessToken: string, request: UpsertMeasurementUnitRequest): Promise<MeasurementUnitDto>
+  updateMeasurementUnit(accessToken: string, id: string, request: UpsertMeasurementUnitRequest): Promise<MeasurementUnitDto>
+  archiveMeasurementUnit(accessToken: string, id: string, reason: string): Promise<void>
+  restoreMeasurementUnit(accessToken: string, id: string): Promise<MeasurementUnitDto>
   getTariffs(accessToken: string, search?: string, limit?: number, includeArchived?: boolean, templatesOnly?: boolean, signal?: AbortSignal): Promise<TariffDto[]>
   getTariffsPage?(accessToken: string, search?: string, offset?: number, limit?: number, includeArchived?: boolean, templatesOnly?: boolean, signal?: AbortSignal): Promise<PagedResult<TariffDto>>
   createTariff(accessToken: string, request: UpsertTariffRequest): Promise<TariffDto>
@@ -465,8 +480,9 @@ const dictionaryCacheDependencies: Record<string, string[]> = {
   'staff-members': ['staff-members'],
   'income-types': ['income-types', 'charge-services', 'fee-campaigns'],
   'expense-types': ['expense-types', 'charge-services', 'suppliers'],
+  'measurement-units': ['measurement-units', 'charge-services'],
   tariffs: ['tariffs', 'charge-services'],
-  'charge-services': ['charge-services', 'tariffs', 'suppliers'],
+  'charge-services': ['charge-services', 'tariffs', 'suppliers', 'measurement-units'],
   'fee-campaigns': ['fee-campaigns'],
   'irregular-payments': ['irregular-payments'],
 }
@@ -749,6 +765,21 @@ export const dictionariesApi: DictionaryClient = {
   },
   restoreExpenseType(accessToken, id) {
     return requestJson(accessToken, `/api/dictionaries/expense-types/${id}/restore`, { method: 'POST' })
+  },
+  getMeasurementUnitsPage(accessToken, search, offset = 0, limit = defaultDictionaryListLimit, includeArchived = false, signal) {
+    return requestJson(accessToken, withQuery('/api/dictionaries/measurement-units/page', { search, offset, limit, includeArchived: includeArchived || undefined }), { signal })
+  },
+  createMeasurementUnit(accessToken, request) {
+    return requestJson(accessToken, '/api/dictionaries/measurement-units', { method: 'POST', body: JSON.stringify(request) })
+  },
+  updateMeasurementUnit(accessToken, id, request) {
+    return requestJson(accessToken, `/api/dictionaries/measurement-units/${id}`, { method: 'PUT', body: JSON.stringify(request) })
+  },
+  archiveMeasurementUnit(accessToken, id, reason) {
+    return requestJson(accessToken, `/api/dictionaries/measurement-units/${id}`, { method: 'DELETE', body: JSON.stringify({ reason }) })
+  },
+  restoreMeasurementUnit(accessToken, id) {
+    return requestJson(accessToken, `/api/dictionaries/measurement-units/${id}/restore`, { method: 'POST' })
   },
   getTariffs(accessToken, search, limit = defaultDictionaryListLimit, includeArchived = false, templatesOnly = false, signal) {
     return requestJson(accessToken, withQuery('/api/dictionaries/tariffs', { search, limit, includeArchived: includeArchived || undefined, templatesOnly: templatesOnly || undefined }), { signal })

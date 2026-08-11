@@ -31,6 +31,7 @@ public sealed class GarageBalanceDbContext(DbContextOptions<GarageBalanceDbConte
     public DbSet<IncomeType> IncomeTypes => Set<IncomeType>();
     public DbSet<ExpenseType> ExpenseTypes => Set<ExpenseType>();
     public DbSet<Tariff> Tariffs => Set<Tariff>();
+    public DbSet<MeasurementUnit> MeasurementUnits => Set<MeasurementUnit>();
     public DbSet<ChargeServiceSetting> ChargeServiceSettings => Set<ChargeServiceSetting>();
     public DbSet<ChargeServiceTariffVersion> ChargeServiceTariffVersions => Set<ChargeServiceTariffVersion>();
     public DbSet<IrregularPayment> IrregularPayments => Set<IrregularPayment>();
@@ -610,6 +611,14 @@ public sealed class GarageBalanceDbContext(DbContextOptions<GarageBalanceDbConte
                 .WithMany()
                 .HasForeignKey(accrual => accrual.TariffId)
                 .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<MeasurementUnit>(entity =>
+        {
+            entity.ToTable("measurement_units");
+            entity.HasKey(item => item.Id);
+            entity.Property(item => item.Name).HasMaxLength(40).IsRequired();
+            entity.HasIndex(item => item.Name).HasFilter("\"IsArchived\" = false");
         });
 
         modelBuilder.Entity<AccrualPaymentAllocation>(entity =>

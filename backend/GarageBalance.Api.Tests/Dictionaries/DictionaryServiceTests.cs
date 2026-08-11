@@ -15,6 +15,52 @@ namespace GarageBalance.Api.Tests.Dictionaries;
 public sealed class DictionaryServiceTests
 {
     [Fact]
+    public async Task MeasurementUnits_RejectDuplicatesRenameAssignedServicesAndProtectUsedEntries()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = DictionaryServiceTestFactory.Create(database.Context);
+        var actorUserId = Guid.NewGuid();
+
+        var created = await service.CreateMeasurementUnitAsync(
+            new UpsertMeasurementUnitRequest(" упаковка "),
+            actorUserId,
+            CancellationToken.None);
+        var duplicate = await service.CreateMeasurementUnitAsync(
+            new UpsertMeasurementUnitRequest("УПАКОВКА"),
+            actorUserId,
+            CancellationToken.None);
+        database.Context.ChargeServiceSettings.Add(new ChargeServiceSetting
+        {
+            Name = "Выдача комплектов",
+            UnitName = "упаковка"
+        });
+        await database.Context.SaveChangesAsync();
+
+        var updated = await service.UpdateMeasurementUnitAsync(
+            created.Value!.Id,
+            new UpsertMeasurementUnitRequest("комплект"),
+            actorUserId,
+            CancellationToken.None);
+        var archive = await service.ArchiveMeasurementUnitAsync(
+            created.Value.Id,
+            "Больше не используется",
+            actorUserId,
+            CancellationToken.None);
+        var page = await service.GetMeasurementUnitsPageAsync("КОМП", 0, 25, CancellationToken.None);
+
+        Assert.True(created.Succeeded);
+        Assert.False(duplicate.Succeeded);
+        Assert.Equal("measurement_unit_duplicate", duplicate.ErrorCode);
+        Assert.True(updated.Succeeded);
+        Assert.Equal("комплект", database.Context.ChargeServiceSettings.Single().UnitName);
+        Assert.False(archive.Succeeded);
+        Assert.Equal("measurement_unit_in_use", archive.ErrorCode);
+        Assert.Single(page.Items);
+        Assert.Equal("комплект", page.Items[0].Name);
+        Assert.Contains(database.Context.AuditEvents, item => item.Action == "dictionary.measurement_unit_updated" && item.ActorUserId == actorUserId);
+    }
+
+    [Fact]
     public async Task CreateOwnerAsync_TrimsFieldsAndWritesAudit()
     {
         await using var database = await TestDatabase.CreateAsync();
@@ -2755,7 +2801,8 @@ public sealed class DictionaryServiceTests
         Assert.Equal(new DateOnly(2026, 7, 23), result.Value.Tariff.EffectiveFrom);
         Assert.Equal(2, await database.Context.Tariffs.CountAsync());
         Assert.Single(database.Context.ChargeServiceSettings);
-        Assert.Equal(2, database.Context.AuditEvents.Count());
+        Assert.Equal(3, database.Context.AuditEvents.Count());
+        Assert.Contains(database.Context.AuditEvents, audit => audit.Action == "dictionary.measurement_unit_created");
         Assert.All(database.Context.AuditEvents, audit => Assert.Equal(actorUserId, audit.ActorUserId));
     }
 
@@ -2882,6 +2929,7 @@ public sealed class DictionaryServiceTests
         database.Context.ChangeTracker.Clear();
         Assert.Single(await database.Context.Tariffs.AsNoTracking().ToListAsync());
         Assert.Empty(await database.Context.ChargeServiceSettings.AsNoTracking().ToListAsync());
+        Assert.Empty(await database.Context.MeasurementUnits.AsNoTracking().ToListAsync());
         Assert.Empty(await database.Context.AuditEvents.AsNoTracking().ToListAsync());
     }
 
@@ -2955,6 +3003,8 @@ public sealed class DictionaryServiceTests
         Assert.Equal("charge_service_unit_too_long", longUnit.ErrorCode);
         Assert.Equal("Единица измерения должна содержать не более 40 символов.", longUnit.ErrorMessage);
         Assert.Equal(4, database.Context.ChargeServiceSettings.Count());
+        Assert.Equal(4, database.Context.MeasurementUnits.Count());
+        Assert.Contains(database.Context.MeasurementUnits, unit => unit.Name == "упаковка");
         Assert.Equal(4, database.Context.AuditEvents.Count(item => item.Action == "dictionary.charge_service_created"));
     }
 
@@ -4022,7 +4072,8 @@ public sealed class DictionaryServiceTests
         Assert.Equal(meterTariff.Id, validMeter.Value!.TariffId);
         Assert.True(validMeter.Value.IsMetered);
         Assert.Single(database.Context.ChargeServiceSettings);
-        Assert.Single(database.Context.AuditEvents);
+        Assert.Equal(2, database.Context.AuditEvents.Count());
+        Assert.Contains(database.Context.AuditEvents, audit => audit.Action == "dictionary.measurement_unit_created");
     }
 
     [Fact]
@@ -4075,7 +4126,8 @@ public sealed class DictionaryServiceTests
         Assert.Equal(25, result.Value.Service.PaymentDueDay);
         Assert.Equal(101.2346m, result.Value.Tariff.Rate);
         Assert.Equal(101.2346m, tariff.Rate);
-        Assert.Equal(2, database.Context.AuditEvents.Count());
+        Assert.Equal(3, database.Context.AuditEvents.Count());
+        Assert.Contains(database.Context.AuditEvents, item => item.Action == "dictionary.measurement_unit_created" && item.ActorUserId == actorUserId);
         Assert.Contains(database.Context.AuditEvents, item => item.Action == "dictionary.charge_service_updated" && item.ActorUserId == actorUserId);
         Assert.Contains(database.Context.AuditEvents, item => item.Action == "dictionary.tariff_updated" && item.ActorUserId == actorUserId);
 
@@ -4100,7 +4152,7 @@ public sealed class DictionaryServiceTests
             CancellationToken.None);
 
         Assert.True(noOp.Succeeded);
-        Assert.Equal(2, database.Context.AuditEvents.Count());
+        Assert.Equal(3, database.Context.AuditEvents.Count());
     }
 
     [Fact]
@@ -4197,7 +4249,8 @@ public sealed class DictionaryServiceTests
         Assert.Equal("руб.", regular.Value.Service.UnitName);
         Assert.Equal(3, database.Context.Tariffs.Count());
         Assert.Equal(3, database.Context.ChargeServiceTariffVersions.Count(item => item.ChargeServiceSettingId == setting.Id));
-        Assert.Equal(5, database.Context.AuditEvents.Count());
+        Assert.Equal(7, database.Context.AuditEvents.Count());
+        Assert.Equal(2, database.Context.AuditEvents.Count(item => item.Action == "dictionary.measurement_unit_created"));
         Assert.Contains(database.Context.AuditEvents, item => item.Action == "dictionary.charge_service_tariff_mode_changed");
         Assert.Contains(database.Context.AuditEvents, item => item.Action == "dictionary.income_type_destination_fund_updated");
 

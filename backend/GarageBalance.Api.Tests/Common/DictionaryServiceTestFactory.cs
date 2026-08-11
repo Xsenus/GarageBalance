@@ -17,6 +17,7 @@ internal static class DictionaryServiceTestFactory
             new EfStaffMemberRepository(dbContext),
             new EfIncomeTypeRepository(dbContext),
             new EfExpenseTypeRepository(dbContext),
+            new EfMeasurementUnitRepository(dbContext),
             new EfTariffRepository(dbContext),
             new EfIrregularPaymentRepository(dbContext),
             new EfChargeServiceSettingRepository(dbContext),

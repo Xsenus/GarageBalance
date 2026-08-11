@@ -2,9 +2,10 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import type { FormEvent, MouseEvent, ReactNode } from 'react'
 import { FileText, RotateCcw, Save, Search, Trash2, X } from 'lucide-react'
 import type { AuthResponse } from '../../services/authApi'
-import { profileCatalogEntries, type CatalogWorkspaceSection } from '../../shared/catalogCoverage'
+import type { CatalogWorkspaceSection } from '../../shared/catalogCoverage'
+import { profileCatalogEntries } from '../../shared/profileCatalogCoverage'
 import { DictionaryApiError } from '../../services/dictionariesApi'
-import type { AccountingTypeDto, DictionaryClient, GarageDto, OwnerDto, PagedResult, SupplierGroupDto, SupplierDto, TariffDto, UpsertGarageRequest, UpsertOwnerRequest, UpsertSupplierRequest, UpsertTariffRequest } from '../../services/dictionariesApi'
+import type { AccountingTypeDto, DictionaryClient, GarageDto, MeasurementUnitDto, OwnerDto, PagedResult, SupplierGroupDto, SupplierDto, TariffDto, UpsertGarageRequest, UpsertOwnerRequest, UpsertSupplierRequest, UpsertTariffRequest } from '../../services/dictionariesApi'
 import type { FinanceClient, GarageBalanceHistoryDto } from '../../services/financeApi'
 import type { DadataAddressSuggestionDto, IntegrationClient } from '../../services/integrationsApi'
 import { hasPermission, permissions } from '../../shared/accessControl'
@@ -72,6 +73,7 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, integ
   const [suppliers, setSuppliers] = useState<SupplierDto[]>([])
   const [incomeTypes, setIncomeTypes] = useState<AccountingTypeDto[]>([])
   const [expenseTypes, setExpenseTypes] = useState<AccountingTypeDto[]>([])
+  const [measurementUnits, setMeasurementUnits] = useState<MeasurementUnitDto[]>([])
   const [tariffs, setTariffs] = useState<TariffDto[]>([])
   const [ownerOptions, setOwnerOptions] = useState<OwnerDto[]>([])
   const [garageOptions, setGarageOptions] = useState<GarageDto[]>([])
@@ -86,6 +88,7 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, integ
     suppliers: createEmptyPage<DictionaryRecord>(),
     incomeTypes: createEmptyPage<DictionaryRecord>(),
     expenseTypes: createEmptyPage<DictionaryRecord>(),
+    measurementUnits: createEmptyPage<DictionaryRecord>(),
     tariffs: createEmptyPage<DictionaryRecord>(),
   })
   const [search, setSearch] = useState('')
@@ -119,6 +122,7 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, integ
   const [supplierGroupName, setSupplierGroupName] = useState('')
   const [supplierForm, setSupplierForm] = useState(createEmptySupplierForm())
   const [accountingTypeForm, setAccountingTypeForm] = useState(createEmptyAccountingTypeForm())
+  const [measurementUnitName, setMeasurementUnitName] = useState('')
   const [tariffForm, setTariffForm] = useState<UpsertTariffRequest>(createEmptyTariffForm())
   const [validationErrors, setValidationErrors] = useState<string[]>([])
   useRestoreFocusOnClose(Boolean(editor))
@@ -315,6 +319,8 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, integ
         page = dictionaryClient.getExpenseTypesPage
           ? await dictionaryClient.getExpenseTypesPage(auth.accessToken, query, offset, limit, showArchived, signal)
           : createFallbackPage<DictionaryRecord>(await dictionaryClient.getExpenseTypes(auth.accessToken, query, 500, showArchived, signal), offset, limit)
+      } else if (section === 'measurementUnits') {
+        page = await dictionaryClient.getMeasurementUnitsPage(auth.accessToken, query, offset, limit, showArchived, signal)
       } else {
         page = dictionaryClient.getTariffsPage
           ? await dictionaryClient.getTariffsPage(auth.accessToken, query, offset, limit, showArchived, true, signal)
@@ -331,6 +337,7 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, integ
       else if (section === 'suppliers') setSuppliers(page.items as SupplierDto[])
       else if (section === 'incomeTypes') setIncomeTypes(page.items as AccountingTypeDto[])
       else if (section === 'expenseTypes') setExpenseTypes(page.items as AccountingTypeDto[])
+      else if (section === 'measurementUnits') setMeasurementUnits(page.items as MeasurementUnitDto[])
       else setTariffs(page.items as TariffDto[])
 
       setPages((current) => ({ ...current, [section]: page }))
@@ -476,6 +483,8 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, integ
       } else if (section === 'incomeTypes' || section === 'expenseTypes') {
         const type = item as AccountingTypeDto
         setAccountingTypeForm(createAccountingTypeFormFromDto(type))
+      } else if (section === 'measurementUnits') {
+        setMeasurementUnitName((item as MeasurementUnitDto).name)
       } else {
         const tariff = item as TariffDto
         setTariffForm(createTariffFormFromDto(tariff))
@@ -487,6 +496,7 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, integ
       setSupplierGroupName('')
       setSupplierForm(createEmptySupplierForm(groupOptions[0]?.id ?? ''))
       setAccountingTypeForm(createEmptyAccountingTypeForm())
+      setMeasurementUnitName('')
       setTariffForm(createEmptyTariffForm())
     }
 
@@ -610,6 +620,12 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, integ
       return getAccountingTypeValidationErrors(accountingTypeForm, 'вида выплаты')
     }
 
+    if (currentEditor.section === 'measurementUnits') {
+      if (!measurementUnitName.trim()) return ['Укажите обозначение единицы измерения.']
+      if (measurementUnitName.trim().length > 40) return ['Обозначение единицы измерения должно содержать не более 40 символов.']
+      return []
+    }
+
     return getTariffValidationErrors(tariffForm)
   }
 
@@ -679,6 +695,13 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, integ
         await dictionaryClient.updateExpenseType(auth.accessToken, (currentEditor.item as AccountingTypeDto).id, accountingTypeForm)
       } else {
         await dictionaryClient.createExpenseType(auth.accessToken, accountingTypeForm)
+      }
+    } else if (currentEditor.section === 'measurementUnits') {
+      const request = { name: measurementUnitName.trim() }
+      if (currentEditor.mode === 'edit' && currentEditor.item) {
+        await dictionaryClient.updateMeasurementUnit(auth.accessToken, (currentEditor.item as MeasurementUnitDto).id, request)
+      } else {
+        await dictionaryClient.createMeasurementUnit(auth.accessToken, request)
       }
     } else {
       if (currentEditor.mode === 'edit' && currentEditor.item) {
@@ -790,6 +813,8 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, integ
         await dictionaryClient.archiveIncomeType(auth.accessToken, (archiveTarget.item as AccountingTypeDto).id, reason)
       } else if (archiveTarget.section === 'expenseTypes') {
         await dictionaryClient.archiveExpenseType(auth.accessToken, (archiveTarget.item as AccountingTypeDto).id, reason)
+      } else if (archiveTarget.section === 'measurementUnits') {
+        await dictionaryClient.archiveMeasurementUnit(auth.accessToken, (archiveTarget.item as MeasurementUnitDto).id, reason)
       } else {
         await dictionaryClient.archiveTariff(auth.accessToken, (archiveTarget.item as TariffDto).id, reason)
       }
@@ -836,6 +861,8 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, integ
         await dictionaryClient.restoreIncomeType(auth.accessToken, (restoreTarget.item as AccountingTypeDto).id)
       } else if (restoreTarget.section === 'expenseTypes') {
         await dictionaryClient.restoreExpenseType(auth.accessToken, (restoreTarget.item as AccountingTypeDto).id)
+      } else if (restoreTarget.section === 'measurementUnits') {
+        await dictionaryClient.restoreMeasurementUnit(auth.accessToken, (restoreTarget.item as MeasurementUnitDto).id)
       } else {
         await dictionaryClient.restoreTariff(auth.accessToken, (restoreTarget.item as TariffDto).id)
       }
@@ -865,6 +892,7 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, integ
     if (activeSection === 'suppliers') return suppliers
     if (activeSection === 'incomeTypes') return incomeTypes
     if (activeSection === 'expenseTypes') return expenseTypes
+    if (activeSection === 'measurementUnits') return measurementUnits
     return tariffs
   }
 
@@ -992,6 +1020,11 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, integ
       const type = item as AccountingTypeDto
       addDictionaryChange(changes, 'Название', formatChangeText(type.name), formatChangeText(accountingTypeForm.name))
       addDictionaryChange(changes, 'Код', formatChangeText(type.code), formatChangeText(accountingTypeForm.code))
+      return changes
+    }
+
+    if (section === 'measurementUnits') {
+      addDictionaryChange(changes, 'Обозначение', formatChangeText((item as MeasurementUnitDto).name), formatChangeText(measurementUnitName))
       return changes
     }
 
@@ -1179,6 +1212,9 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, integ
           {dictionaryField('accountingTypeCode', <input aria-label={fieldMeta('accountingTypeCode').ariaLabel} placeholder={fieldMeta('accountingTypeCode').placeholder} value={accountingTypeForm.code} onChange={(event) => setAccountingTypeForm({ ...accountingTypeForm, code: event.target.value })} maxLength={80} autoCapitalize="none" spellCheck={false} />, { help: 'Код хранится строчными латинскими буквами. Системные коды зарезервированы.' })}
         </>
       )
+    }
+    if (section === 'measurementUnits') {
+      return dictionaryField('measurementUnitName', <input aria-label={fieldMeta('measurementUnitName').ariaLabel} placeholder={fieldMeta('measurementUnitName').placeholder} value={measurementUnitName} onChange={(event) => setMeasurementUnitName(event.target.value)} maxLength={40} required />)
     }
     return (
       <>

@@ -1049,6 +1049,35 @@ public sealed class DictionariesControllerTests
     }
 
     [Fact]
+    public async Task MeasurementUnitEndpoints_ReturnExpectedResultsAndDuplicateConflict()
+    {
+        var actorUserId = Guid.NewGuid();
+        var unitId = Guid.NewGuid();
+        var service = new FakeDictionaryService
+        {
+            MeasurementUnitMutationResult = DictionaryResult<MeasurementUnitDto>.Failure(
+                "measurement_unit_duplicate",
+                "Единица измерения с таким обозначением уже существует.")
+        };
+        var controller = CreateController(service, actorUserId);
+
+        var list = await controller.GetMeasurementUnits("руб", 25, true, CancellationToken.None);
+        var page = await controller.GetMeasurementUnitsPage("руб", 0, 25, true, CancellationToken.None);
+        var create = await controller.CreateMeasurementUnit(new UpsertMeasurementUnitRequest("руб."), CancellationToken.None);
+        var update = await controller.UpdateMeasurementUnit(unitId, new UpsertMeasurementUnitRequest("рубль"), CancellationToken.None);
+        var archive = await controller.ArchiveMeasurementUnit(unitId, new ArchiveDictionaryEntryRequest("Замена обозначения"), CancellationToken.None);
+        var restore = await controller.RestoreMeasurementUnit(unitId, CancellationToken.None);
+
+        Assert.IsType<OkObjectResult>(list.Result);
+        Assert.IsType<OkObjectResult>(page.Result);
+        Assert.IsType<ConflictObjectResult>(create.Result);
+        Assert.IsType<ConflictObjectResult>(update.Result);
+        Assert.IsType<ConflictObjectResult>(archive);
+        Assert.IsType<ConflictObjectResult>(restore.Result);
+        Assert.Equal(actorUserId, service.LastActorUserId);
+    }
+
+    [Fact]
     public async Task CreateChargeServiceWithTariff_ReturnsCreatedCompositeAndPassesActorUserId()
     {
         var actorUserId = Guid.NewGuid();
@@ -1937,6 +1966,7 @@ public sealed class DictionariesControllerTests
         public DictionaryResult<AccountingTypeDto> ArchiveIncomeTypeResult { get; init; } = DictionaryResult<AccountingTypeDto>.Failure("not_configured", "Not configured.");
         public DictionaryResult<AccountingTypeDto> RestoreIncomeTypeResult { get; init; } = DictionaryResult<AccountingTypeDto>.Failure("not_configured", "Not configured.");
         public DictionaryResult<AccountingTypeDto> RestoreExpenseTypeResult { get; init; } = DictionaryResult<AccountingTypeDto>.Failure("not_configured", "Not configured.");
+        public DictionaryResult<MeasurementUnitDto> MeasurementUnitMutationResult { get; init; } = DictionaryResult<MeasurementUnitDto>.Success(new MeasurementUnitDto(Guid.NewGuid(), "ед.", false));
         public DictionaryResult<TariffDto> CreateTariffResult { get; init; } = DictionaryResult<TariffDto>.Failure("not_configured", "Not configured.");
         public DictionaryResult<TariffDto> UpdateTariffResult { get; init; } = DictionaryResult<TariffDto>.Failure("not_configured", "Not configured.");
         public DictionaryResult<TariffDto> RestoreTariffResult { get; init; } = DictionaryResult<TariffDto>.Failure("not_configured", "Not configured.");
@@ -2317,6 +2347,31 @@ public sealed class DictionariesControllerTests
             LastRestoreId = id;
             LastActorUserId = actorUserId;
             return Task.FromResult(RestoreExpenseTypeResult);
+        }
+
+        public Task<IReadOnlyList<MeasurementUnitDto>> GetMeasurementUnitsAsync(string? search, CancellationToken cancellationToken, int? limit = null, bool includeArchived = false) =>
+            Task.FromResult<IReadOnlyList<MeasurementUnitDto>>([]);
+
+        public Task<PagedResult<MeasurementUnitDto>> GetMeasurementUnitsPageAsync(string? search, int? offset, int? limit, CancellationToken cancellationToken, bool includeArchived = false) =>
+            Task.FromResult(new PagedResult<MeasurementUnitDto>([], 0, offset ?? 0, limit ?? 100));
+
+        public Task<DictionaryResult<MeasurementUnitDto>> CreateMeasurementUnitAsync(UpsertMeasurementUnitRequest request, Guid? actorUserId, CancellationToken cancellationToken) =>
+            TrackMeasurementUnitMutation(actorUserId);
+
+        public Task<DictionaryResult<MeasurementUnitDto>> UpdateMeasurementUnitAsync(Guid id, UpsertMeasurementUnitRequest request, Guid? actorUserId, CancellationToken cancellationToken) =>
+            TrackMeasurementUnitMutation(actorUserId);
+
+        public Task<DictionaryResult<MeasurementUnitDto>> ArchiveMeasurementUnitAsync(Guid id, string reason, Guid? actorUserId, CancellationToken cancellationToken) =>
+            TrackMeasurementUnitMutation(actorUserId, reason);
+
+        public Task<DictionaryResult<MeasurementUnitDto>> RestoreMeasurementUnitAsync(Guid id, Guid? actorUserId, CancellationToken cancellationToken) =>
+            TrackMeasurementUnitMutation(actorUserId);
+
+        private Task<DictionaryResult<MeasurementUnitDto>> TrackMeasurementUnitMutation(Guid? actorUserId, string? reason = null)
+        {
+            LastActorUserId = actorUserId;
+            LastArchiveReason = reason;
+            return Task.FromResult(MeasurementUnitMutationResult);
         }
 
         public Task<IReadOnlyList<TariffDto>> GetTariffsAsync(string? search, CancellationToken cancellationToken, int? limit = null, bool includeArchived = false, bool templatesOnly = false)

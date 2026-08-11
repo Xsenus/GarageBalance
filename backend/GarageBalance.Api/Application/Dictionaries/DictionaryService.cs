@@ -18,6 +18,7 @@ public sealed class DictionaryService(
     IStaffMemberRepository staffMemberRepository,
     IIncomeTypeRepository incomeTypeRepository,
     IExpenseTypeRepository expenseTypeRepository,
+    IMeasurementUnitRepository measurementUnitRepository,
     ITariffRepository tariffRepository,
     IIrregularPaymentRepository irregularPaymentRepository,
     IChargeServiceSettingRepository chargeServiceSettingRepository,
@@ -1675,6 +1676,127 @@ public sealed class DictionaryService(
         return DictionaryResult<AccountingTypeDto>.Success(new AccountingTypeDto(expenseType.Id, expenseType.Name, expenseType.Code, expenseType.IsSystem, expenseType.IsArchived));
     }
 
+    public async Task<IReadOnlyList<MeasurementUnitDto>> GetMeasurementUnitsAsync(string? search, CancellationToken cancellationToken, int? limit = null, bool includeArchived = false)
+    {
+        var units = await measurementUnitRepository.GetListAsync(NormalizeSearch(search), includeArchived, NormalizeListLimit(limit), cancellationToken);
+        return units.Select(ToMeasurementUnitDto).ToList();
+    }
+
+    public async Task<PagedResult<MeasurementUnitDto>> GetMeasurementUnitsPageAsync(string? search, int? offset, int? limit, CancellationToken cancellationToken, bool includeArchived = false)
+    {
+        var normalizedOffset = NormalizeListOffset(offset);
+        var normalizedLimit = NormalizeListLimit(limit);
+        var page = await measurementUnitRepository.GetPageAsync(NormalizeSearch(search), includeArchived, normalizedOffset, normalizedLimit, cancellationToken);
+        return new PagedResult<MeasurementUnitDto>(page.Items.Select(ToMeasurementUnitDto).ToList(), page.TotalCount, normalizedOffset, normalizedLimit);
+    }
+
+    public async Task<DictionaryResult<MeasurementUnitDto>> CreateMeasurementUnitAsync(UpsertMeasurementUnitRequest request, Guid? actorUserId, CancellationToken cancellationToken)
+    {
+        var nameValidation = ValidateMeasurementUnitName(request.Name);
+        if (!nameValidation.Succeeded)
+        {
+            return DictionaryResult<MeasurementUnitDto>.Failure(nameValidation.ErrorCode!, nameValidation.ErrorMessage!);
+        }
+
+        var name = nameValidation.Value!;
+        if (await measurementUnitRepository.ActiveDuplicateExistsAsync(null, name, cancellationToken))
+        {
+            return DictionaryResult<MeasurementUnitDto>.Failure("measurement_unit_duplicate", "Единица измерения с таким обозначением уже существует.");
+        }
+
+        var unit = new MeasurementUnit { Name = name };
+        measurementUnitRepository.Add(unit);
+        AddAudit(actorUserId, "dictionary.measurement_unit_created", "measurement_unit", unit.Id, $"Создана единица измерения {unit.Name}.");
+        await unitOfWork.SaveChangesAsync(cancellationToken);
+        return DictionaryResult<MeasurementUnitDto>.Success(ToMeasurementUnitDto(unit));
+    }
+
+    public async Task<DictionaryResult<MeasurementUnitDto>> UpdateMeasurementUnitAsync(Guid id, UpsertMeasurementUnitRequest request, Guid? actorUserId, CancellationToken cancellationToken)
+    {
+        var unit = await measurementUnitRepository.FindActiveAsync(id, cancellationToken);
+        if (unit is null)
+        {
+            return DictionaryResult<MeasurementUnitDto>.Failure("measurement_unit_not_found", "Единица измерения не найдена.");
+        }
+
+        var nameValidation = ValidateMeasurementUnitName(request.Name);
+        if (!nameValidation.Succeeded)
+        {
+            return DictionaryResult<MeasurementUnitDto>.Failure(nameValidation.ErrorCode!, nameValidation.ErrorMessage!);
+        }
+
+        var name = nameValidation.Value!;
+        if (await measurementUnitRepository.ActiveDuplicateExistsAsync(id, name, cancellationToken))
+        {
+            return DictionaryResult<MeasurementUnitDto>.Failure("measurement_unit_duplicate", "Единица измерения с таким обозначением уже существует.");
+        }
+
+        if (string.Equals(unit.Name, name, StringComparison.Ordinal))
+        {
+            return DictionaryResult<MeasurementUnitDto>.Success(ToMeasurementUnitDto(unit));
+        }
+
+        var previousName = unit.Name;
+        await measurementUnitRepository.RenameServiceAssignmentsAsync(previousName, name, cancellationToken);
+        unit.Name = name;
+        unit.UpdatedAtUtc = DateTimeOffset.UtcNow;
+        AddAudit(
+            actorUserId,
+            "dictionary.measurement_unit_updated",
+            "measurement_unit",
+            unit.Id,
+            $"Изменена единица измерения {unit.Name}.",
+            oldValues: new Dictionary<string, object?> { ["name"] = previousName },
+            newValues: new Dictionary<string, object?> { ["name"] = name });
+        await unitOfWork.SaveChangesAsync(cancellationToken);
+        return DictionaryResult<MeasurementUnitDto>.Success(ToMeasurementUnitDto(unit));
+    }
+
+    public async Task<DictionaryResult<MeasurementUnitDto>> ArchiveMeasurementUnitAsync(Guid id, string reason, Guid? actorUserId, CancellationToken cancellationToken)
+    {
+        if (ValidateArchiveReason<MeasurementUnitDto>(reason, out var archiveReason) is { } reasonError)
+        {
+            return reasonError;
+        }
+
+        var unit = await measurementUnitRepository.FindActiveAsync(id, cancellationToken);
+        if (unit is null)
+        {
+            return DictionaryResult<MeasurementUnitDto>.Failure("measurement_unit_not_found", "Единица измерения не найдена.");
+        }
+
+        if (await measurementUnitRepository.HasActiveServiceAssignmentsAsync(unit.Name, cancellationToken))
+        {
+            return DictionaryResult<MeasurementUnitDto>.Failure("measurement_unit_in_use", "Единица используется действующими услугами. Сначала выберите для них другое обозначение.");
+        }
+
+        unit.IsArchived = true;
+        unit.UpdatedAtUtc = DateTimeOffset.UtcNow;
+        AddAudit(actorUserId, "dictionary.measurement_unit_archived", "measurement_unit", unit.Id, $"Архивирована единица измерения {unit.Name}.", archiveReason);
+        await unitOfWork.SaveChangesAsync(cancellationToken);
+        return DictionaryResult<MeasurementUnitDto>.Success(ToMeasurementUnitDto(unit));
+    }
+
+    public async Task<DictionaryResult<MeasurementUnitDto>> RestoreMeasurementUnitAsync(Guid id, Guid? actorUserId, CancellationToken cancellationToken)
+    {
+        var unit = await measurementUnitRepository.FindArchivedAsync(id, cancellationToken);
+        if (unit is null)
+        {
+            return DictionaryResult<MeasurementUnitDto>.Failure("measurement_unit_not_found", "Единица измерения не найдена в архиве.");
+        }
+
+        if (await measurementUnitRepository.ActiveDuplicateExistsAsync(id, unit.Name, cancellationToken))
+        {
+            return DictionaryResult<MeasurementUnitDto>.Failure("measurement_unit_duplicate", "Единица измерения с таким обозначением уже существует.");
+        }
+
+        unit.IsArchived = false;
+        unit.UpdatedAtUtc = DateTimeOffset.UtcNow;
+        AddAudit(actorUserId, "dictionary.measurement_unit_restored", "measurement_unit", unit.Id, $"Восстановлена единица измерения {unit.Name}.");
+        await unitOfWork.SaveChangesAsync(cancellationToken);
+        return DictionaryResult<MeasurementUnitDto>.Success(ToMeasurementUnitDto(unit));
+    }
+
     public async Task<IReadOnlyList<TariffDto>> GetTariffsAsync(string? search, CancellationToken cancellationToken, int? limit = null, bool includeArchived = false, bool templatesOnly = false)
     {
         var normalizedSearch = NormalizeSearch(search);
@@ -2022,7 +2144,8 @@ public sealed class DictionaryService(
             IsTemplate = false
         };
         ApplyElectricityTiers(tariff, tiersValidation.Value);
-        var serviceRequest = request.Service with { TariffId = tariff.Id };
+        var canonicalUnitName = await EnsureMeasurementUnitExistsAsync(request.Service.UnitName, actorUserId, cancellationToken);
+        var serviceRequest = request.Service with { TariffId = tariff.Id, UnitName = canonicalUnitName };
         var targetLinkValidation = await ValidateChargeServiceAccountingLinksAsync(serviceRequest, cancellationToken, tariff);
         if (!targetLinkValidation.Succeeded)
         {
@@ -2063,6 +2186,7 @@ public sealed class DictionaryService(
             return DictionaryResult<ChargeServiceSettingDto>.Failure("charge_service_duplicate", "Услуга с таким наименованием уже существует.");
         }
 
+        request = request with { UnitName = await EnsureMeasurementUnitExistsAsync(request.UnitName, actorUserId, cancellationToken) };
         var setting = new ChargeServiceSetting { Name = name };
         ApplyChargeServiceSetting(setting, request);
 
@@ -2109,6 +2233,7 @@ public sealed class DictionaryService(
             return DictionaryResult<ChargeServiceSettingDto>.Failure("charge_service_duplicate", "Услуга с таким наименованием уже существует.");
         }
 
+        request = request with { UnitName = await EnsureMeasurementUnitExistsAsync(request.UnitName, actorUserId, cancellationToken) };
         if (ChargeServiceSettingMatches(setting, request))
         {
             return DictionaryResult<ChargeServiceSettingDto>.Success(ToChargeServiceSettingDto(setting));
@@ -2188,6 +2313,14 @@ public sealed class DictionaryService(
         {
             return DictionaryResult<UpdatedChargeServiceWithTariffDto>.Failure(incomeFundUpdate.ErrorCode!, incomeFundUpdate.ErrorMessage!);
         }
+
+        request = request with
+        {
+            Service = request.Service with
+            {
+                UnitName = await EnsureMeasurementUnitExistsAsync(request.Service.UnitName, actorUserId, cancellationToken)
+            }
+        };
 
         if (!string.IsNullOrWhiteSpace(request.TariffMode))
         {
@@ -3067,6 +3200,8 @@ public sealed class DictionaryService(
         adjustment.CreatedByUserId,
         adjustment.CreatedAtUtc);
 
+    private static MeasurementUnitDto ToMeasurementUnitDto(MeasurementUnit unit) => new(unit.Id, unit.Name, unit.IsArchived);
+
     private void AddAudit(
         Guid? actorUserId,
         string action,
@@ -3505,6 +3640,39 @@ public sealed class DictionaryService(
         }
 
         return DictionaryResult<object>.Success(new object());
+    }
+
+    private static DictionaryResult<string> ValidateMeasurementUnitName(string? value)
+    {
+        var name = value?.Trim() ?? string.Empty;
+        if (name.Length == 0)
+        {
+            return DictionaryResult<string>.Failure("measurement_unit_name_required", "Укажите обозначение единицы измерения.");
+        }
+
+        return name.Length > 40
+            ? DictionaryResult<string>.Failure("measurement_unit_name_too_long", "Обозначение единицы измерения должно содержать не более 40 символов.")
+            : DictionaryResult<string>.Success(name);
+    }
+
+    private async Task<string?> EnsureMeasurementUnitExistsAsync(string? requestedName, Guid? actorUserId, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(requestedName))
+        {
+            return null;
+        }
+
+        var name = requestedName.Trim();
+        var existing = await measurementUnitRepository.FindActiveByNameAsync(name, cancellationToken);
+        if (existing is not null)
+        {
+            return existing.Name;
+        }
+
+        var unit = new MeasurementUnit { Name = name };
+        measurementUnitRepository.Add(unit);
+        AddAudit(actorUserId, "dictionary.measurement_unit_created", "measurement_unit", unit.Id, $"Создана единица измерения {unit.Name} из формы услуги.");
+        return unit.Name;
     }
 
     private async Task<DictionaryResult<object>> ValidateChargeServiceFundAsync(

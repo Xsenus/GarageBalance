@@ -3032,8 +3032,8 @@ h1 {
 .tariffs-page .contractors-sheet-row {
   grid-template-columns:
     minmax(250px, 1.5fr)
-    minmax(130px, 0.75fr)
     minmax(78px, 0.42fr)
+    minmax(130px, 0.75fr)
     minmax(130px, 0.65fr)
     minmax(190px, 0.95fr)
     minmax(92px, 0.48fr)

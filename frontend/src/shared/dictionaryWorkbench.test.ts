@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { describe, expect, it } from 'vitest'
-import type { AccountingTypeDto, GarageDto, OwnerDto, SupplierDto, SupplierGroupDto, TariffDto } from '../services/dictionariesApi'
-import { canWriteDictionarySection, createAccountingTypeFormFromDto, createEmptyAccountingTypeForm, createEmptyGarageForm, createEmptyOwnerForm, createEmptyOwnerGarageLinkForm, createEmptySupplierForm, createEmptyTariffForm, createGarageFormFromDto, createOwnerFormFromDto, createSupplierFormFromDto, dictionarySectionGroups, dictionarySectionOptions, getDictionaryEditorFieldMeta, getDictionaryRecordCells, getDictionaryRecordTitle, getDictionarySearchPlaceholder, getDictionarySectionOption, getDictionaryTableHeaders, getOwnerGarageOptions, getTariffCalculationBaseLabel, getTariffCalculationBaseOptions, getTariffCalculationUnitName, getTariffCalculationUnitOptions, normalizeTariffCalculationUnitName, supportsDictionarySearch, usesElectricityTariffTiers } from './dictionaryWorkbench'
+import type { AccountingTypeDto, GarageDto, MeasurementUnitDto, OwnerDto, SupplierDto, SupplierGroupDto, TariffDto } from '../services/dictionariesApi'
+import { canWriteDictionarySection, createAccountingTypeFormFromDto, createEmptyAccountingTypeForm, createEmptyGarageForm, createEmptyOwnerForm, createEmptyOwnerGarageLinkForm, createEmptySupplierForm, createEmptyTariffForm, createGarageFormFromDto, createOwnerFormFromDto, createSupplierFormFromDto, dictionarySectionGroups, dictionarySectionOptions, getDictionaryEditorFieldMeta, getDictionaryRecordCells, getDictionaryRecordTitle, getDictionarySearchPlaceholder, getDictionarySectionOption, getDictionaryTableHeaders, getOwnerGarageOptions, getTariffCalculationBaseLabel, getTariffCalculationBaseOptions, getTariffCalculationUnitName, normalizeTariffCalculationUnitName, supportsDictionarySearch, usesElectricityTariffTiers } from './dictionaryWorkbench'
 
 describe('dictionary workbench metadata', () => {
   it('keeps dictionary groups in the expected order', () => {
@@ -20,6 +20,7 @@ describe('dictionary workbench metadata', () => {
       { key: 'suppliers', label: 'Поставщики и персонал', group: 'counterparties', writePermission: 'dictionaries' },
       { key: 'incomeTypes', label: 'Виды поступлений', group: 'operations', writePermission: 'dictionaries' },
       { key: 'expenseTypes', label: 'Статьи расходов', group: 'operations', writePermission: 'dictionaries' },
+      { key: 'measurementUnits', label: 'Единицы измерения', group: 'tariffs', writePermission: 'dictionaries' },
       { key: 'tariffs', label: 'Тарифы', group: 'tariffs', writePermission: 'tariffs' },
     ])
   })
@@ -30,27 +31,10 @@ describe('dictionary workbench metadata', () => {
     expect(getTariffCalculationUnitName('meter_water')).toBe('м³')
     expect(getTariffCalculationUnitName('meter_electricity')).toBe('кВт·ч')
     expect(getTariffCalculationUnitName('unknown')).toBe('')
-    expect(getTariffCalculationUnitOptions('fixed')).toEqual([
-      { value: 'руб.', label: 'руб.' },
-      { value: 'руб./гараж', label: 'руб./гараж' },
-    ])
-    expect(getTariffCalculationUnitOptions('meter_water')).toEqual([
-      { value: 'м³', label: 'м³' },
-      { value: 'куб. м', label: 'куб. м' },
-    ])
-    expect(getTariffCalculationUnitOptions('meter_electricity')).toEqual([
-      { value: 'кВт·ч', label: 'кВт·ч' },
-    ])
-    expect(getTariffCalculationUnitOptions('unknown')).toEqual([])
     expect(normalizeTariffCalculationUnitName('fixed', ' РУБ./ГАРАЖ ')).toBe('руб./гараж')
     expect(normalizeTariffCalculationUnitName('meter_water', 'руб.')).toBe('м³')
     expect(normalizeTariffCalculationUnitName('meter_water', ' гал. ')).toBe('гал.')
     expect(normalizeTariffCalculationUnitName('unknown', 'руб.')).toBe('')
-    expect(getTariffCalculationUnitOptions('meter_water', ' гал. ')).toEqual([
-      { value: 'м³', label: 'м³' },
-      { value: 'куб. м', label: 'куб. м' },
-      { value: 'гал.', label: 'гал.' },
-    ])
   })
 
   it('returns section options and write access based on section permission', () => {
@@ -198,6 +182,7 @@ describe('dictionary workbench metadata', () => {
       suppliers: true,
       incomeTypes: true,
       expenseTypes: true,
+      measurementUnits: true,
       tariffs: true,
     })
   })
@@ -210,6 +195,7 @@ describe('dictionary workbench metadata', () => {
       suppliers: 'Название, ИНН или контакт',
       incomeTypes: 'Название или код поступления',
       expenseTypes: 'Название или код выплаты',
+      measurementUnits: 'Обозначение единицы измерения',
       tariffs: 'Название или база расчета',
     })
   })
@@ -222,6 +208,7 @@ describe('dictionary workbench metadata', () => {
       suppliers: ['Название', 'Группа', 'ИНН', 'Стартовый баланс'],
       incomeTypes: ['Название', 'Код', 'Тип'],
       expenseTypes: ['Название', 'Код', 'Тип'],
+      measurementUnits: ['Обозначение'],
       tariffs: ['Название', 'База', 'Ставка', 'Дата начала'],
     })
   })
@@ -237,6 +224,7 @@ describe('dictionary workbench metadata', () => {
     expect(getDictionaryRecordCells('suppliers', createSupplier())).toEqual(['БАНК 12', 'Банковские услуги', 'не указан', '0.00'])
     expect(getDictionaryRecordCells('incomeTypes', createAccountingType({ code: 'MEMBER_FEE', isSystem: true }))).toEqual(['Членский взнос', 'MEMBER_FEE', 'Системный'])
     expect(getDictionaryRecordCells('expenseTypes', createAccountingType({ name: 'Вывоз мусора' }))).toEqual(['Вывоз мусора', 'не указан', 'Пользовательский'])
+    expect(getDictionaryRecordCells('measurementUnits', createMeasurementUnit())).toEqual(['м³'])
     expect(getDictionaryRecordCells('tariffs', createTariff())).toEqual(['Тариф на воду', 'По счетчику воды', '1.00', '01.07.2026'])
     expect(getDictionaryRecordCells('tariffs', createTariff({ calculationBase: 'fixed' }))).toEqual(['Тариф на воду', 'Фиксированно', '1.00', '01.07.2026'])
   })
@@ -249,6 +237,7 @@ describe('dictionary workbench metadata', () => {
     expect(getDictionaryEditorFieldMeta('supplierGroupName')).toMatchObject({ label: 'Название группы', ariaLabel: 'Группа поставщиков' })
     expect(getDictionaryEditorFieldMeta('supplierLegalAddress')).toMatchObject({ label: 'Юридический адрес', ariaLabel: 'Юридический адрес поставщика' })
     expect(getDictionaryEditorFieldMeta('accountingTypeCode')).toMatchObject({ label: 'Код', ariaLabel: 'Код вида операции' })
+    expect(getDictionaryEditorFieldMeta('measurementUnitName')).toMatchObject({ label: 'Обозначение', ariaLabel: 'Обозначение единицы измерения' })
     expect(getDictionaryEditorFieldMeta('tariffCalculationBase')).toMatchObject({ label: 'База расчета', ariaLabel: 'База расчета тарифа' })
     expect(getDictionaryEditorFieldMeta('tariffElectricitySecondThreshold')).toMatchObject({ label: 'Порог 2, кВт·ч', ariaLabel: 'Второй порог электроэнергии' })
     expect(getDictionaryEditorFieldMeta('tariffComment')).toMatchObject({ label: 'Комментарий', ariaLabel: 'Комментарий тарифа' })
@@ -281,6 +270,7 @@ describe('dictionary workbench metadata', () => {
     expect(getDictionaryRecordTitle('suppliers', createSupplier())).toBe('БАНК 12')
     expect(getDictionaryRecordTitle('incomeTypes', createAccountingType())).toBe('Членский взнос')
     expect(getDictionaryRecordTitle('expenseTypes', createAccountingType({ name: 'Вывоз мусора' }))).toBe('Вывоз мусора')
+    expect(getDictionaryRecordTitle('measurementUnits', createMeasurementUnit())).toBe('м³')
     expect(getDictionaryRecordTitle('tariffs', createTariff())).toBe('Тариф на воду')
   })
 
@@ -390,6 +380,15 @@ function createTariff(overrides: Partial<TariffDto> = {}): TariffDto {
     electricityThirdRate: null,
     effectiveFrom: '2026-07-01',
     comment: null,
+    isArchived: false,
+    ...overrides,
+  }
+}
+
+function createMeasurementUnit(overrides: Partial<MeasurementUnitDto> = {}): MeasurementUnitDto {
+  return {
+    id: 'unit-1',
+    name: 'м³',
     isArchived: false,
     ...overrides,
   }

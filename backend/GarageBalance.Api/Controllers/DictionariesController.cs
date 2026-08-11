@@ -654,6 +654,67 @@ public sealed class DictionariesController(IDictionaryService dictionaryService)
         return result.Succeeded ? Ok(result.Value) : ToError(result);
     }
 
+    [HttpGet("measurement-units")]
+    [ProducesResponseType<IReadOnlyList<MeasurementUnitDto>>(StatusCodes.Status200OK)]
+    public async Task<ActionResult<IReadOnlyList<MeasurementUnitDto>>> GetMeasurementUnits([FromQuery] string? search, [FromQuery] int? limit, [FromQuery] bool includeArchived, CancellationToken cancellationToken)
+    {
+        return Ok(await dictionaryService.GetMeasurementUnitsAsync(search, cancellationToken, limit, includeArchived));
+    }
+
+    [HttpGet("measurement-units/page")]
+    [ProducesResponseType<PagedResult<MeasurementUnitDto>>(StatusCodes.Status200OK)]
+    public async Task<ActionResult<PagedResult<MeasurementUnitDto>>> GetMeasurementUnitsPage([FromQuery] string? search, [FromQuery] int? offset, [FromQuery] int? limit, [FromQuery] bool includeArchived, CancellationToken cancellationToken)
+    {
+        return Ok(await dictionaryService.GetMeasurementUnitsPageAsync(search, offset, limit, cancellationToken, includeArchived));
+    }
+
+    [Authorize(Policy = SystemPermissions.DictionariesWrite)]
+    [HttpPost("measurement-units")]
+    [ProducesResponseType<MeasurementUnitDto>(StatusCodes.Status201Created)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
+    public async Task<ActionResult<MeasurementUnitDto>> CreateMeasurementUnit(UpsertMeasurementUnitRequest request, CancellationToken cancellationToken)
+    {
+        var result = await dictionaryService.CreateMeasurementUnitAsync(request, GetActorUserId(), cancellationToken);
+        return result.Succeeded
+            ? CreatedAtAction(nameof(GetMeasurementUnits), new { search = result.Value!.Name }, result.Value)
+            : ToError(result);
+    }
+
+    [Authorize(Policy = SystemPermissions.DictionariesWrite)]
+    [HttpPut("measurement-units/{id:guid}")]
+    [ProducesResponseType<MeasurementUnitDto>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
+    public async Task<ActionResult<MeasurementUnitDto>> UpdateMeasurementUnit(Guid id, UpsertMeasurementUnitRequest request, CancellationToken cancellationToken)
+    {
+        var result = await dictionaryService.UpdateMeasurementUnitAsync(id, request, GetActorUserId(), cancellationToken);
+        return result.Succeeded ? Ok(result.Value) : ToError(result);
+    }
+
+    [Authorize(Policy = SystemPermissions.DictionariesWrite)]
+    [HttpDelete("measurement-units/{id:guid}")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> ArchiveMeasurementUnit(Guid id, [FromBody] ArchiveDictionaryEntryRequest? request, CancellationToken cancellationToken)
+    {
+        if (ValidateArchiveRequest(request) is { } validationError)
+        {
+            return validationError;
+        }
+
+        var result = await dictionaryService.ArchiveMeasurementUnitAsync(id, request!.Reason, GetActorUserId(), cancellationToken);
+        return result.Succeeded ? NoContent() : ToError(result).Result!;
+    }
+
+    [Authorize(Policy = SystemPermissions.DictionariesWrite)]
+    [HttpPost("measurement-units/{id:guid}/restore")]
+    [ProducesResponseType<MeasurementUnitDto>(StatusCodes.Status200OK)]
+    public async Task<ActionResult<MeasurementUnitDto>> RestoreMeasurementUnit(Guid id, CancellationToken cancellationToken)
+    {
+        var result = await dictionaryService.RestoreMeasurementUnitAsync(id, GetActorUserId(), cancellationToken);
+        return result.Succeeded ? Ok(result.Value) : ToError(result);
+    }
+
     [HttpGet("tariffs")]
     [ProducesResponseType<IReadOnlyList<TariffDto>>(StatusCodes.Status200OK)]
     public async Task<ActionResult<IReadOnlyList<TariffDto>>> GetTariffs([FromQuery] string? search, [FromQuery] int? limit, [FromQuery] bool includeArchived, [FromQuery] bool templatesOnly, CancellationToken cancellationToken)
@@ -982,7 +1043,7 @@ public sealed class DictionariesController(IDictionaryService dictionaryService)
         return result.ErrorCode switch
         {
             "owner_not_found" or "garage_not_found" or "supplier_group_not_found" or "supplier_not_found" or "supplier_expense_fund_not_found" or "supplier_contact_not_found" or "staff_department_not_found" or "staff_member_not_found" or "income_type_not_found" or "expense_type_not_found" or "tariff_not_found" or "charge_service_not_found" or "irregular_payment_not_found" or "fee_campaign_not_found" => NotFound(ApiProblemDetails.Create(result.ErrorCode, result.ErrorMessage, StatusCodes.Status404NotFound)),
-            "garage_number_duplicate" or "owner_has_active_garages" or "supplier_group_duplicate" or "supplier_group_has_active_suppliers" or "supplier_duplicate" or "supplier_has_active_contacts" or "supplier_group_system" or "staff_department_duplicate" or "staff_department_used" or "income_type_duplicate" or "income_type_code_duplicate" or "income_type_code_reserved" or "income_type_has_active_services" or "income_type_system" or "expense_type_duplicate" or "expense_type_code_duplicate" or "expense_type_code_reserved" or "expense_type_has_active_services" or "expense_type_system" or "tariff_duplicate" or "tariff_has_active_services" or "tariff_effective_from_after_accrual" or "charge_service_duplicate" or "charge_service_has_active_suppliers" or "irregular_payment_duplicate" or "irregular_payment_used" or "fee_campaign_duplicate" or "fee_campaign_participants_locked" or "fee_campaign_closed" or "fee_campaign_already_closed" => Conflict(ApiProblemDetails.Create(result.ErrorCode, result.ErrorMessage, StatusCodes.Status409Conflict)),
+            "garage_number_duplicate" or "owner_has_active_garages" or "supplier_group_duplicate" or "supplier_group_has_active_suppliers" or "supplier_duplicate" or "supplier_has_active_contacts" or "supplier_group_system" or "staff_department_duplicate" or "staff_department_used" or "income_type_duplicate" or "income_type_code_duplicate" or "income_type_code_reserved" or "income_type_has_active_services" or "income_type_system" or "expense_type_duplicate" or "expense_type_code_duplicate" or "expense_type_code_reserved" or "expense_type_has_active_services" or "expense_type_system" or "measurement_unit_duplicate" or "measurement_unit_in_use" or "tariff_duplicate" or "tariff_has_active_services" or "tariff_effective_from_after_accrual" or "charge_service_duplicate" or "charge_service_has_active_suppliers" or "irregular_payment_duplicate" or "irregular_payment_used" or "fee_campaign_duplicate" or "fee_campaign_participants_locked" or "fee_campaign_closed" or "fee_campaign_already_closed" => Conflict(ApiProblemDetails.Create(result.ErrorCode, result.ErrorMessage, StatusCodes.Status409Conflict)),
             _ => BadRequest(ApiProblemDetails.Create(result.ErrorCode, result.ErrorMessage, StatusCodes.Status400BadRequest))
         };
     }

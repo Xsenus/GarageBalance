@@ -3,7 +3,7 @@ import type { FormEvent, MouseEvent } from 'react'
 import { CircleCheck, FileSpreadsheet, FileText, Pencil, PowerOff, RotateCcw, Save, Trash2, X } from 'lucide-react'
 import type { AuthResponse } from '../../services/authApi'
 import { DictionaryApiError } from '../../services/dictionariesApi'
-import type { AccountingTypeDto, ChargeServiceSettingDto, CreateChargeServiceWithTariffRequest, DictionaryClient, FeeCampaignDto, GarageDto, IrregularPaymentDto, TariffDto, UpdateChargeServiceWithTariffRequest, UpsertChargeServiceSettingRequest, UpsertFeeCampaignRequest, UpsertIrregularPaymentRequest, UpsertTariffRequest } from '../../services/dictionariesApi'
+import type { AccountingTypeDto, ChargeServiceSettingDto, CreateChargeServiceWithTariffRequest, DictionaryClient, FeeCampaignDto, GarageDto, IrregularPaymentDto, MeasurementUnitDto, TariffDto, UpdateChargeServiceWithTariffRequest, UpsertChargeServiceSettingRequest, UpsertFeeCampaignRequest, UpsertIrregularPaymentRequest, UpsertTariffRequest } from '../../services/dictionariesApi'
 import type { FinanceClient } from '../../services/financeApi'
 import type { FundOptionDto, FundsClient } from '../../services/fundsApi'
 import { hasPermission, permissions } from '../../shared/accessControl'
@@ -12,7 +12,7 @@ import type { ChangePreview } from '../../shared/changePreview'
 import { appendChangePreview, formatChangeDate, formatChangeNumber, formatChangeText } from '../../shared/changePreview'
 import { FormError } from '../../shared/formFeedback'
 import { FormField } from '../../shared/FormField'
-import { getTariffCalculationBaseOptions, getTariffCalculationUnitName, getTariffCalculationUnitOptions, normalizeTariffCalculationUnitName } from '../../shared/dictionaryWorkbench'
+import { getTariffCalculationBaseOptions, getTariffCalculationUnitName, normalizeTariffCalculationUnitName } from '../../shared/dictionaryWorkbench'
 import { formatDateOnly, formatMoney, getCurrentMonthInputValue, getLocalDateInputValue } from '../../shared/formatters'
 import { useEscapeKey, useFocusOnOpen, useFocusTrap, useRestoreFocusOnClose } from '../../shared/focusHooks'
 import { LocalizedDatePicker } from '../../shared/LocalizedDatePicker'
@@ -92,7 +92,6 @@ type ContractorOneTimeRow = {
 type ContractorTariffDraft = {
   title: string
   amount: string
-  unit: string
   dateDay: string
   dateMonth: string
   electricityUpperBoundText: string
@@ -136,7 +135,6 @@ function createEditableDrafts(rows: Array<{ id: string; title?: string; amount?:
     drafts[row.id] = {
       title: row.title ?? '',
       amount: row.amount ?? '',
-      unit: row.unit ?? '',
       dateDay: row.dateDay ?? '',
       dateMonth: row.dateMonth ?? '',
       electricityUpperBoundText: row.electricityUpperBound == null ? '' : formatTariffNumber(row.electricityUpperBound),
@@ -301,7 +299,7 @@ function isTariffMoneyAmount(row: ContractorTariffRow) {
   return Boolean(row.calculationBase) || unit.startsWith('руб')
 }
 
-function normalizeTariffDraftValue(row: ContractorTariffRow, field: 'title' | 'amount' | 'unit', value: string) {
+function normalizeTariffDraftValue(row: ContractorTariffRow, field: 'title' | 'amount', value: string) {
   return field === 'amount' && isTariffMoneyAmount(row) ? formatTariffDecimal(value) : value
 }
 
@@ -642,7 +640,7 @@ type TariffPrototypePendingChange = (
   | {
     kind: 'tariff-text'
     rowId: string
-    field: 'title' | 'amount' | 'unit'
+    field: 'title' | 'amount'
     objectName: string
     fieldLabel: string
     previousValue: string
@@ -679,13 +677,9 @@ type TariffPrototypePendingChange = (
   nextDisplayValue?: string
 }
 
-function getTariffTextFieldLabel(row: ContractorTariffRow, field: 'title' | 'amount' | 'unit') {
+function getTariffTextFieldLabel(row: ContractorTariffRow, field: 'title' | 'amount') {
   if (field === 'title') {
     return 'Наименование порога'
-  }
-
-  if (field === 'unit') {
-    return 'Единица'
   }
 
   if (row.serviceSettingKind === 'main') {
@@ -760,6 +754,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
   const [backendTariffs, setBackendTariffs] = useState<TariffDto[]>([])
   const [backendIncomeTypes, setBackendIncomeTypes] = useState<AccountingTypeDto[]>([])
   const [backendExpenseTypes, setBackendExpenseTypes] = useState<AccountingTypeDto[]>([])
+  const [backendMeasurementUnits, setBackendMeasurementUnits] = useState<MeasurementUnitDto[]>([])
   const [backendFunds, setBackendFunds] = useState<FundOptionDto[]>([])
   const [backendChargeServices, setBackendChargeServices] = useState<ChargeServiceSettingDto[]>([])
   const [feeCampaignGarageOptions, setFeeCampaignGarageOptions] = useState<GarageDto[]>([])
@@ -896,14 +891,16 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
     async function loadTariffReferences() {
       setTariffReferencesLoading(true)
       try {
-        const [loadedIncomeTypes, loadedExpenseTypes, loadedFunds] = await Promise.all([
+        const [loadedIncomeTypes, loadedExpenseTypes, loadedMeasurementUnits, loadedFunds] = await Promise.all([
           dictionaryClient.getIncomeTypes(auth.accessToken, undefined, dictionaryScreenRequestLimit),
           dictionaryClient.getExpenseTypes(auth.accessToken, undefined, dictionaryScreenRequestLimit),
+          dictionaryClient.getMeasurementUnitsPage(auth.accessToken, undefined, 0, dictionaryScreenRequestLimit),
           fundsClient.getFundOptions(auth.accessToken),
         ])
         if (!ignore) {
           setBackendIncomeTypes(loadedIncomeTypes)
           setBackendExpenseTypes(loadedExpenseTypes)
+          setBackendMeasurementUnits(loadedMeasurementUnits.items)
           setBackendFunds(loadedFunds)
         }
       } catch (caught: unknown) {
@@ -1073,28 +1070,9 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
       const nextRows = tariffRows.map((currentRow) => (
         currentRow.id === pendingChange.rowId ? { ...currentRow, [pendingChange.field]: pendingChange.nextValue } : currentRow
       ))
-      const isServiceUnitChange = Boolean(
-        sourceRow?.backendServiceSettingId
-        && pendingChange.field === 'unit',
-      )
-      if (!isServiceUnitChange) {
-        setTariffRows(nextRows)
-      }
-      if (sourceRow && (sourceRow.backendServiceSettingId || pendingChange.field !== 'unit')) {
-        if (isServiceUnitChange) {
-          const saved = await persistServiceSettingRow(sourceRow, nextRows)
-          if (!saved) {
-            setTariffDrafts((drafts) => ({
-              ...drafts,
-              [sourceRow.id]: {
-                ...drafts[sourceRow.id],
-                unit: pendingChange.previousValue,
-              },
-            }))
-          }
-        } else {
-          await persistTariffRow(sourceRow, nextRows)
-        }
+      setTariffRows(nextRows)
+      if (sourceRow) {
+        await persistTariffRow(sourceRow, nextRows)
       }
     } else if (pendingChange.kind === 'tariff-date') {
       const sourceRow = tariffRows.find((currentRow) => currentRow.id === pendingChange.rowId)
@@ -1537,7 +1515,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
     }
   }
 
-  const commitTariffTextChange = async (row: ContractorTariffRow, field: 'title' | 'amount' | 'unit', selectedValue?: string) => {
+  const commitTariffTextChange = async (row: ContractorTariffRow, field: 'title' | 'amount', selectedValue?: string) => {
     const draftValue = (selectedValue ?? tariffDrafts[row.id]?.[field] ?? '').trim()
     const nextValue = normalizeTariffDraftValue(row, field, draftValue)
     const previousValue = row[field] ?? ''
@@ -1567,9 +1545,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
           [field]: nextValue,
         },
       }))
-      if (row.backendServiceSettingId || field !== 'unit') {
-        await persistTariffRow(row, nextRows)
-      }
+      await persistTariffRow(row, nextRows)
       return
     }
 
@@ -1610,7 +1586,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
   }
 
   const commitTariffDateChange = async (row: ContractorTariffRow, selectedMonth?: string) => {
-    const draft = tariffDrafts[row.id] ?? { title: row.title, amount: '', unit: '', dateDay: '', dateMonth: row.dateMonth ?? '' }
+    const draft = tariffDrafts[row.id] ?? { title: row.title, amount: '', dateDay: '', dateMonth: row.dateMonth ?? '' }
     const nextDay = (draft.dateDay ?? '').trim().padStart(2, '0')
     const nextMonth = row.monthlyDue ? '' : (selectedMonth || draft.dateMonth || row.dateMonth || contractorTariffMonthOptions[0].value)
     const dateError = getContractorTariffDateError(nextDay, nextMonth, row.monthlyDue)
@@ -2349,8 +2325,8 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
         <div className="contractors-sheet" role="table" aria-label={tariffTableLabel}>
             <div className="contractors-sheet-header" role="row">
               <span role="columnheader">Основание</span>
-              <span role="columnheader">Значение / ставка</span>
               <span role="columnheader" aria-label="Единица измерения">Ед.</span>
+              <span role="columnheader">Значение / ставка</span>
               <span role="columnheader">Месяц начисления</span>
               <span role="columnheader">Оплата до</span>
               <span role="columnheader" aria-label="Перенос долга в просроченный, дней">Просрочка, дн.</span>
@@ -2447,6 +2423,9 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
                       <span>{row.title}</span>
                     )}
                   </span>
+                  <span role="cell" aria-label={`${row.category}: ${row.title}: единица`}>
+                    {row.dateDay === undefined && row.serviceSettingKind !== 'periodicity' ? row.unit : null}
+                  </span>
                   <span role="cell" className="contractors-value-cell">
                     {row.serviceSettingKind === 'periodicity' ? (
                       <SelectControl
@@ -2524,31 +2503,6 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
                         onKeyDown={(event) => handleEditableInputKeyDown(event, () => commitTariffTextChange(row, 'amount'))}
                       />
                     )}
-                  </span>
-                  <span role="cell">
-                    {row.dateDay === undefined && row.serviceSettingKind !== 'periodicity' ? (
-                      row.serviceSettingKind === 'main' && row.calculationBase ? (
-                        <SelectControl
-                          aria-label={`${row.category}: ${row.title}: единица`}
-                          value={normalizeTariffCalculationUnitName(row.calculationBase, tariffDrafts[row.id]?.unit ?? row.unit)}
-                          options={getTariffCalculationUnitOptions(row.calculationBase, tariffDrafts[row.id]?.unit ?? row.unit)}
-                          disabled={!canManageTariffs || isRowDisabled}
-                          onChange={(nextUnitName) => {
-                            setTariffDrafts((drafts) => ({ ...drafts, [row.id]: { ...drafts[row.id], unit: nextUnitName } }))
-                            void commitTariffTextChange(row, 'unit', nextUnitName)
-                          }}
-                        />
-                      ) : (
-                        <input
-                          aria-label={`${row.category}: ${row.title}: единица`}
-                          className="contractors-editable-input contractors-editable-input--unit"
-                          disabled={!canManageTariffs || isRowDisabled || Boolean(row.calculationBase || row.serviceSettingKind === 'main')}
-                          value={tariffDrafts[row.id]?.unit ?? ''}
-                          onChange={(event) => setTariffDrafts((drafts) => ({ ...drafts, [row.id]: { ...drafts[row.id], unit: event.target.value } }))}
-                          onKeyDown={(event) => handleEditableInputKeyDown(event, () => commitTariffTextChange(row, 'unit'))}
-                        />
-                      )
-                    ) : null}
                   </span>
                   <span role="cell" className="tariffs-schedule-cell">
                     <div className="tariffs-cell-stack">
@@ -3343,6 +3297,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
           expenseTypes={backendExpenseTypes.filter((expenseType) => !expenseType.isArchived)}
           funds={backendFunds.filter((fund) => fund.allowOperations)}
           incomeTypes={backendIncomeTypes.filter((incomeType) => !incomeType.isArchived)}
+          measurementUnits={backendMeasurementUnits.filter((unit) => !unit.isArchived)}
           onClose={() => setModal(null)}
           onCreateWithTariff={createServiceWithTariff}
           onSaveIrregular={createIrregularService}
@@ -3356,6 +3311,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
           expenseTypes={backendExpenseTypes.filter((expenseType) => !expenseType.isArchived)}
           funds={backendFunds.filter((fund) => fund.allowOperations)}
           incomeTypes={backendIncomeTypes.filter((incomeType) => !incomeType.isArchived)}
+          measurementUnits={backendMeasurementUnits.filter((unit) => !unit.isArchived)}
           onClose={() => setChargeServiceEditTarget(null)}
           onUpdateWithTariff={updateServiceSettingWithTariff}
           submitLabel="Сохранить изменения"
@@ -3396,6 +3352,7 @@ export function AddServicePrototypeDialog({
   initialSetting,
   isSaving,
   incomeTypes,
+  measurementUnits = [],
   onClose,
   onCreateWithTariff,
   onSaveIrregular,
@@ -3411,6 +3368,7 @@ export function AddServicePrototypeDialog({
   expenseTypes: AccountingTypeDto[]
   funds: FundOptionDto[]
   incomeTypes: AccountingTypeDto[]
+  measurementUnits?: MeasurementUnitDto[]
   onClose: () => void
   onCreateWithTariff?: (request: CreateChargeServiceWithTariffRequest) => Promise<void>
   onSaveIrregular?: (request: UpsertIrregularPaymentRequest) => Promise<void>
@@ -3813,6 +3771,7 @@ export function AddServicePrototypeDialog({
                 <FormField label="Единица измерения" help="Это обозначение показывается в тарифах, начислениях и показаниях.">
                   <input
                     aria-label="Единица измерения"
+                    list="unit-options"
                     maxLength={40}
                     value={unitName}
                     onChange={(event) => {
@@ -3820,6 +3779,9 @@ export function AddServicePrototypeDialog({
                       setError(null)
                     }}
                   />
+                  <datalist id="unit-options">
+                    {measurementUnits.map((unit) => <option value={unit.name} key={unit.id} />)}
+                  </datalist>
                 </FormField>
               </div>
               <div className="contractors-service-flags">
