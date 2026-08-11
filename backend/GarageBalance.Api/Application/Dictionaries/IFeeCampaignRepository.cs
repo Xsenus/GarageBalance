@@ -1,4 +1,5 @@
 using GarageBalance.Api.Domain.Dictionaries;
+using GarageBalance.Api.Domain.Finance;
 
 namespace GarageBalance.Api.Application.Dictionaries;
 
@@ -12,5 +13,11 @@ public interface IFeeCampaignRepository
     Task<bool> ActiveDuplicateExistsAsync(Guid? ignoredId, string name, CancellationToken cancellationToken);
     Task<bool> HasAccrualsAsync(Guid id, CancellationToken cancellationToken);
     Task<decimal> GetCollectedAmountAsync(Guid id, CancellationToken cancellationToken);
+    Task<IReadOnlyList<FeeCampaignPaymentOption>> GetPaymentOptionsForGarageAsync(Guid garageId, DateOnly monthFrom, DateOnly monthTo, CancellationToken cancellationToken);
+    Task<IAsyncDisposable> AcquirePaymentLockAsync(Guid id, CancellationToken cancellationToken);
+    Task<IReadOnlyList<Accrual>> GetAccrualsForSettlementAsync(Guid id, CancellationToken cancellationToken);
+    Task<IReadOnlyDictionary<Guid, decimal>> GetPaidAmountsByGarageAsync(Guid id, CancellationToken cancellationToken);
     void Add(FeeCampaign campaign);
 }
+
+public sealed record FeeCampaignPaymentOption(FeeCampaign Campaign, Accrual? Accrual, decimal PaidAmount, decimal CollectedAmount);

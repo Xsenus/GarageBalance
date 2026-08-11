@@ -5227,7 +5227,7 @@ public sealed class FinanceServiceTests
             CancellationToken.None);
         Assert.True(secondWorksheet.Succeeded, secondWorksheet.ErrorMessage);
         Assert.Equal(500m, Assert.Single(secondWorksheet.Value!.Rows, row => row.IncomeTypeId == fixtures.IncomeType.Id).AccrualAmount);
-        Assert.Equal(1000m, Assert.Single(secondWorksheet.Value.Rows, row => row.IncomeTypeId == otherIncome.Id).AccrualAmount);
+        Assert.Equal(700m, secondWorksheet.Value.Rows.Where(row => row.IncomeTypeId == otherIncome.Id).Sum(row => row.AccrualAmount));
         Assert.Contains(
             database.Context.AuditEvents,
             item => item.Action == "finance.regular_catalog_accruals_generated" && item.ActorUserId == null);
@@ -5519,6 +5519,126 @@ public sealed class FinanceServiceTests
         Assert.False(result.Succeeded);
         Assert.Equal("fee_campaign_closed", result.ErrorCode);
         Assert.Empty(database.Context.Accruals.Where(item => item.FeeCampaignId == campaign.Id));
+    }
+
+    [Fact]
+    public async Task FeeCampaignPayment_UsesGlobalRemainderAndClosesCampaignWithoutStaleWorksheetRows()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        var otherIncome = AddOtherIncomeDestination(database.Context);
+        var secondGarage = new Garage
+        {
+            Number = "FEE-SECOND",
+            PeopleCount = 1,
+            FloorCount = 1,
+            Owner = fixtures.Garage.Owner
+        };
+        var campaign = new FeeCampaign
+        {
+            Name = "Сбор на общую сумму",
+            IncomeTypeId = otherIncome.Id,
+            IncomeType = otherIncome,
+            ContributionAmount = 10m,
+            TargetAmount = 1000m,
+            StartsOn = new DateOnly(2026, 8, 1),
+            EndsOn = new DateOnly(2026, 8, 31),
+            AppliesToAllGarages = true,
+            OverdueGraceDays = 30
+        };
+        database.Context.AddRange(secondGarage, campaign);
+        await database.Context.SaveChangesAsync();
+        var service = FinanceServiceTestFactory.Create(database.Context);
+        var period = new GarageIncomeWorksheetRequest(new DateOnly(2026, 8, 1), new DateOnly(2026, 8, 1));
+
+        var firstWorksheet = await service.GetGarageIncomeWorksheetAsync(fixtures.Garage.Id, period, CancellationToken.None);
+        var firstFee = Assert.Single(firstWorksheet.Value!.Rows, row => row.FeeCampaignId == campaign.Id);
+        Assert.Equal(10m, firstFee.Debt);
+        Assert.Equal(1000m, firstFee.FeeCampaignRemainingAmount);
+
+        var largePayment = await service.CreateIncomeAsync(
+            new CreateIncomeOperationRequest(
+                fixtures.Garage.Id,
+                otherIncome.Id,
+                new DateOnly(2026, 8, 11),
+                new DateOnly(2026, 8, 1),
+                995m,
+                "FEE-995",
+                null,
+                null,
+                campaign.Id),
+            null,
+            CancellationToken.None);
+        Assert.True(largePayment.Succeeded, largePayment.ErrorMessage);
+        Assert.Null(campaign.ClosedAtUtc);
+
+        var secondWorksheet = await service.GetGarageIncomeWorksheetAsync(secondGarage.Id, period, CancellationToken.None);
+        var remainder = Assert.Single(secondWorksheet.Value!.Rows, row => row.FeeCampaignId == campaign.Id);
+        Assert.Equal(5m, remainder.Debt);
+        Assert.Equal(5m, remainder.FeeCampaignRemainingAmount);
+
+        var finalPayment = await service.CreateIncomeAsync(
+            new CreateIncomeOperationRequest(
+                secondGarage.Id,
+                otherIncome.Id,
+                new DateOnly(2026, 8, 11),
+                new DateOnly(2026, 8, 1),
+                5m,
+                "FEE-5",
+                null,
+                null,
+                campaign.Id),
+            null,
+            CancellationToken.None);
+        Assert.True(finalPayment.Succeeded, finalPayment.ErrorMessage);
+        Assert.NotNull(campaign.ClosedAtUtc);
+        Assert.False(campaign.IsClosedEarly);
+
+        var reopenedWorksheet = await service.GetGarageIncomeWorksheetAsync(fixtures.Garage.Id, period, CancellationToken.None);
+        Assert.DoesNotContain(reopenedWorksheet.Value!.Rows, row => row.FeeCampaignId == campaign.Id);
+        Assert.Equal(1000m, await database.Context.FinancialOperations
+            .Where(item => item.FeeCampaignId == campaign.Id && !item.IsCanceled)
+            .SumAsync(item => item.Amount));
+    }
+
+    [Fact]
+    public async Task FeeCampaignPayment_RejectsAmountAboveCurrentGlobalRemainder()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        var otherIncome = AddOtherIncomeDestination(database.Context);
+        var campaign = new FeeCampaign
+        {
+            Name = "Сбор с ограничением остатка",
+            IncomeTypeId = otherIncome.Id,
+            IncomeType = otherIncome,
+            ContributionAmount = 10m,
+            TargetAmount = 5m,
+            StartsOn = new DateOnly(2026, 8, 1),
+            AppliesToAllGarages = true,
+            OverdueGraceDays = 30
+        };
+        database.Context.FeeCampaigns.Add(campaign);
+        await database.Context.SaveChangesAsync();
+        var service = FinanceServiceTestFactory.Create(database.Context);
+
+        var result = await service.CreateIncomeAsync(
+            new CreateIncomeOperationRequest(
+                fixtures.Garage.Id,
+                otherIncome.Id,
+                new DateOnly(2026, 8, 11),
+                new DateOnly(2026, 8, 1),
+                6m,
+                null,
+                null,
+                null,
+                campaign.Id),
+            null,
+            CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Equal("fee_campaign_amount_exceeds_remaining", result.ErrorCode);
+        Assert.Empty(database.Context.FinancialOperations.Where(item => item.FeeCampaignId == campaign.Id));
     }
 
     [Fact]
@@ -8384,7 +8504,7 @@ public sealed class FinanceServiceTests
     }
 
     [Fact]
-    public async Task GetGarageIncomeWorksheetAsync_UsesOneSelectForGarageAndCombinedWorksheetData()
+    public async Task GetGarageIncomeWorksheetAsync_UsesTwoBoundedSelectsForCampaignsAndCombinedWorksheetData()
     {
         var commandCounter = new SelectCommandCounter();
         await using var database = await TestDatabase.CreateAsync(commandCounter);
@@ -8450,7 +8570,7 @@ public sealed class FinanceServiceTests
             CancellationToken.None);
 
         Assert.True(result.Succeeded);
-        Assert.Equal(1, commandCounter.Count);
+        Assert.Equal(2, commandCounter.Count);
         Assert.Equal(fixtures.Garage.Number, result.Value!.GarageNumber);
         Assert.Equal(fixtures.Garage.Owner?.FullName, result.Value.OwnerName);
         Assert.Equal(200m, result.Value!.OpeningDebt);
@@ -8468,7 +8588,7 @@ public sealed class FinanceServiceTests
     }
 
     [Fact]
-    public async Task GetGarageIncomeWorksheetAsync_ReturnsEmptyPeriodInOneSelect()
+    public async Task GetGarageIncomeWorksheetAsync_ReturnsEmptyPeriodInTwoBoundedSelects()
     {
         var commandCounter = new SelectCommandCounter();
         await using var database = await TestDatabase.CreateAsync(commandCounter);
@@ -8484,7 +8604,7 @@ public sealed class FinanceServiceTests
             CancellationToken.None);
 
         Assert.True(result.Succeeded);
-        Assert.Equal(1, commandCounter.Count);
+        Assert.Equal(2, commandCounter.Count);
         Assert.Equal(0m, result.Value!.OpeningDebt);
         Assert.Equal(0m, result.Value.AccrualTotal);
         Assert.Equal(0m, result.Value.IncomeTotal);
@@ -8493,7 +8613,7 @@ public sealed class FinanceServiceTests
     }
 
     [Fact]
-    public async Task GetGarageIncomeWorksheetAsync_ReturnsFailureForMissingGarageInOneSelect()
+    public async Task GetGarageIncomeWorksheetAsync_ReturnsFailureForMissingGarageInTwoBoundedSelects()
     {
         var commandCounter = new SelectCommandCounter();
         await using var database = await TestDatabase.CreateAsync(commandCounter);
@@ -8507,11 +8627,11 @@ public sealed class FinanceServiceTests
 
         Assert.False(result.Succeeded);
         Assert.Equal("garage_not_found", result.ErrorCode);
-        Assert.Equal(1, commandCounter.Count);
+        Assert.Equal(2, commandCounter.Count);
     }
 
     [Fact]
-    public async Task GetGarageIncomeWorksheetAsync_ReturnsFailureForArchivedGarageInOneSelect()
+    public async Task GetGarageIncomeWorksheetAsync_ReturnsFailureForArchivedGarageInTwoBoundedSelects()
     {
         var commandCounter = new SelectCommandCounter();
         await using var database = await TestDatabase.CreateAsync(commandCounter);
@@ -8528,7 +8648,7 @@ public sealed class FinanceServiceTests
 
         Assert.False(result.Succeeded);
         Assert.Equal("garage_not_found", result.ErrorCode);
-        Assert.Equal(1, commandCounter.Count);
+        Assert.Equal(2, commandCounter.Count);
     }
 
     [Theory]

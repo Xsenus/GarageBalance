@@ -945,73 +945,27 @@ describe('App', () => {
     expect(within(reopenedEditDialog).getByLabelText('Гараж 27')).toBeChecked()
   })
 
-  it('explains and performs manual fee campaign completion from tariffs page', async () => {
+  it('removes manual fee completion and hides closing after the campaign end date', async () => {
     const user = userEvent.setup()
     const targetIncomeType = createAccountingType({ id: 'income-type-other-income', name: 'Прочие доходы', code: 'other_income', isSystem: true })
-    const campaign = createFeeCampaign({ id: 'fee-campaign-active', name: 'Сбор на ворота', incomeTypeId: targetIncomeType.id, incomeTypeName: targetIncomeType.name })
-    const generateRequests: GenerateFeeCampaignAccrualsRequest[] = []
+    const endedCampaign = createFeeCampaign({ id: 'fee-campaign-ended', name: 'Завершённый сбор', incomeTypeId: targetIncomeType.id, incomeTypeName: targetIncomeType.name, endsOn: '2026-05-31' })
+    const activeCampaign = createFeeCampaign({ id: 'fee-campaign-active', name: 'Действующий сбор', incomeTypeId: targetIncomeType.id, incomeTypeName: targetIncomeType.name, endsOn: '2099-12-31' })
     const dictionaryClient = createDictionaryClient({
       getGarages: async () => [],
       getIncomeTypes: async () => [targetIncomeType],
-      getFeeCampaigns: async () => [campaign],
-    })
-    const financeClient = createFinanceClient({
-      generateFeeCampaignAccruals: async (_token, request) => {
-        generateRequests.push(request)
-        return createFeeCampaignAccrualGenerationResult({
-          accountingMonth: request.accountingMonth,
-          feeCampaignId: campaign.id,
-          feeCampaignName: campaign.name,
-          incomeTypeId: targetIncomeType.id,
-          incomeTypeName: targetIncomeType.name,
-          contributionAmount: 500,
-          createdCount: 3,
-          skippedCount: 1,
-          totalAmount: 1500,
-          createdAccruals: [createAccrual({ id: 'fee-accrual-1', amount: 500, source: 'fee_campaign' })],
-          skippedGarages: ['12'],
-        })
-      },
+      getFeeCampaigns: async () => [endedCampaign, activeCampaign],
     })
 
-    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={financeClient} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
     await user.click(screen.getByRole('button', { name: 'Войти' }))
     await openSection(user, 'Тарифы и сборы')
     const tariffsPanel = await screen.findByRole('region', { name: 'Тарифы и сборы' })
     const feeCampaignsSection = within(tariffsPanel).getByLabelText('Объявленные сборы')
-    expect(await within(feeCampaignsSection).findByText(campaign.name)).toBeInTheDocument()
-
-    await user.click(within(feeCampaignsSection).getByRole('button', { name: 'Доначислить сбор Сбор на ворота' }))
-    const generateDialog = await screen.findByRole('dialog', { name: 'Доначислить сбор' })
-    expect(within(generateDialog).getByText(/Действующие сборы начисляются автоматически за рабочий месяц/)).toBeInTheDocument()
-    expect(within(generateDialog).getByText(/в следующие месяцы — только те, кто ещё не полностью оплатил предыдущие начисления/)).toBeInTheDocument()
-    expect(within(generateDialog).getByText(/Участник с частичной оплатой остаётся в начислении до полной оплаты или закрытия сбора/)).toBeInTheDocument()
-    expect(within(generateDialog).getByText(/дубликаты не создаются/)).toBeInTheDocument()
-    expect(within(generateDialog).getByText('Необязательно. Укажите причину, если начисления дозаполняются вручную.')).toBeInTheDocument()
-    const feeCampaignMonth = within(generateDialog).getByLabelText('Месяц начисления сбора')
-    expect(feeCampaignMonth).toHaveValue('06.2026')
-    expect(feeCampaignMonth.closest('.localized-date-picker')).not.toBeNull()
-    const generateCancelButton = within(generateDialog).getByRole('button', { name: 'Отмена' })
-    const generateConfirmButton = within(generateDialog).getByRole('button', { name: 'Доначислить' })
-    expect(Boolean(generateCancelButton.compareDocumentPosition(generateConfirmButton) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true)
-    await waitFor(() => expect(generateCancelButton).toHaveFocus())
-    await user.keyboard('{Escape}')
-    expect(screen.queryByRole('dialog', { name: 'Доначислить сбор' })).not.toBeInTheDocument()
-    expect(generateRequests).toHaveLength(0)
-
-    await user.click(within(feeCampaignsSection).getByRole('button', { name: 'Доначислить сбор Сбор на ворота' }))
-    const reopenedGenerateDialog = await screen.findByRole('dialog', { name: 'Доначислить сбор' })
-    expect(within(reopenedGenerateDialog).getByLabelText('Месяц начисления сбора')).toHaveValue('06.2026')
-    await user.type(within(reopenedGenerateDialog).getByLabelText('Комментарий к ручному начислению сбора'), 'Решение правления')
-    await user.click(within(reopenedGenerateDialog).getByRole('button', { name: 'Доначислить' }))
-    await waitFor(() => expect(generateRequests).toHaveLength(1))
-    expect(generateRequests[0]).toMatchObject({
-      accountingMonth: '2026-06-01',
-      comment: 'Решение правления',
-    })
-    expect(await within(feeCampaignsSection).findByText(/Доначислено: 3/)).toBeInTheDocument()
-    expect(within(feeCampaignsSection).getByText(/пропущено: 1/)).toBeInTheDocument()
+    expect(await within(feeCampaignsSection).findByText(endedCampaign.name)).toBeInTheDocument()
+    expect(within(feeCampaignsSection).queryByRole('button', { name: /Доначислить сбор/ })).not.toBeInTheDocument()
+    expect(within(feeCampaignsSection).queryByRole('button', { name: `Закрыть сбор ${endedCampaign.name}` })).not.toBeInTheDocument()
+    expect(within(feeCampaignsSection).getByRole('button', { name: `Закрыть сбор ${activeCampaign.name}` })).toBeInTheDocument()
   })
 
   it('archives and restores announced fee campaigns from tariffs page', async () => {
@@ -7645,6 +7599,8 @@ describe('App', () => {
         payableAmount: 360,
         incomeAmount: paymentSaved ? 360 : 0,
         debt: paymentSaved ? 0 : 360,
+        feeCampaignId: 'fee-campaign-trash',
+        feeCampaignRemainingAmount: paymentSaved ? 0 : 360,
       }],
     }))
     const getGarageOverdueDebt = vi.fn(async () => ({
@@ -7718,6 +7674,7 @@ describe('App', () => {
       incomeTypeId: trashIncomeType.id,
       accountingMonth: '2026-04-01',
       amount: 360,
+      feeCampaignId: 'fee-campaign-trash',
     })))
     await waitFor(() => {
       expect(finances).toHaveTextContent('Баланс0.00')

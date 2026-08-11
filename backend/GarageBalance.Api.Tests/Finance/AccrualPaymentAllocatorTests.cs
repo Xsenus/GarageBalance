@@ -47,6 +47,21 @@ public sealed class AccrualPaymentAllocatorTests
             item => Assert.Equal((newerPayment.Id, 300m), (item.FinancialOperationId, item.Amount)));
     }
 
+    [Fact]
+    public void Allocate_TargetedFeePaymentDoesNotPayAnotherCampaignWithSameIncomeType()
+    {
+        var firstCampaignId = Guid.NewGuid();
+        var secondCampaignId = Guid.NewGuid();
+        var first = Accrual(new DateOnly(2026, 8, 10), 10m, 1) with { FeeCampaignId = firstCampaignId };
+        var second = Accrual(new DateOnly(2026, 8, 20), 10m, 2) with { FeeCampaignId = secondCampaignId };
+        var payment = Payment(new DateOnly(2026, 8, 11), 10m, 3) with { FeeCampaignId = secondCampaignId };
+
+        var allocation = Assert.Single(AccrualPaymentAllocator.Allocate([first, second], [payment]));
+
+        Assert.Equal(second.Id, allocation.AccrualId);
+        Assert.Equal(10m, allocation.Amount);
+    }
+
     private static AccrualPaymentAllocationAccrual Accrual(DateOnly dueDate, decimal amount, byte id) =>
         new(new Guid(id, 0, 0, new byte[8]), dueDate, new DateOnly(dueDate.Year, dueDate.Month, 1), amount, DateTimeOffset.UnixEpoch);
 

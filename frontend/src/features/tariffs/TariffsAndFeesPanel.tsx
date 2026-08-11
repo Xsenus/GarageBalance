@@ -13,7 +13,7 @@ import { appendChangePreview, formatChangeDate, formatChangeNumber, formatChange
 import { FormError } from '../../shared/formFeedback'
 import { FormField } from '../../shared/FormField'
 import { getTariffCalculationBaseOptions, getTariffCalculationUnitName, normalizeTariffCalculationUnitName } from '../../shared/dictionaryWorkbench'
-import { formatDateOnly, formatMoney, getCurrentMonthInputValue, getLocalDateInputValue } from '../../shared/formatters'
+import { formatDateOnly, getLocalDateInputValue } from '../../shared/formatters'
 import { useEscapeKey, useFocusOnOpen, useFocusTrap, useRestoreFocusOnClose } from '../../shared/focusHooks'
 import { LocalizedDatePicker } from '../../shared/LocalizedDatePicker'
 import { MeterReadingInput } from '../../shared/MeterReadingInput'
@@ -745,7 +745,7 @@ function mergeFeeCampaignSnapshots(currentCampaigns: FeeCampaignDto[], loadedCam
   ]
 }
 
-export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeClient, fundsClient }: { auth: AuthResponse; dictionaryClient: DictionaryClient; financeClient: FinanceClient; fundsClient: FundsClient }) {
+export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClient }: { auth: AuthResponse; dictionaryClient: DictionaryClient; financeClient: FinanceClient; fundsClient: FundsClient }) {
   const [modal, setModal] = useState<'service' | 'fee' | null>(null)
   const [tariffRows, setTariffRows] = useState<ContractorTariffRow[]>([])
   const [tariffPageNumber, setTariffPageNumber] = useState(1)
@@ -772,9 +772,6 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
   const [feeCampaignCloseTarget, setFeeCampaignCloseTarget] = useState<FeeCampaignDto | null>(null)
   const [feeCampaignClosureComment, setFeeCampaignClosureComment] = useState('')
   const [feeCampaignRestoreTarget, setFeeCampaignRestoreTarget] = useState<FeeCampaignDto | null>(null)
-  const [feeCampaignGenerateTarget, setFeeCampaignGenerateTarget] = useState<FeeCampaignDto | null>(null)
-  const [feeCampaignGenerateMonth, setFeeCampaignGenerateMonth] = useState(getCurrentMonthInputValue())
-  const [feeCampaignGenerateComment, setFeeCampaignGenerateComment] = useState('')
   const [feeCampaignActionMessage, setFeeCampaignActionMessage] = useState<string | null>(null)
   const [chargeServiceEditTarget, setChargeServiceEditTarget] = useState<ChargeServiceSettingDto | null>(null)
   const [chargeServiceArchiveTarget, setChargeServiceArchiveTarget] = useState<ChargeServiceSettingDto | null>(null)
@@ -1022,12 +1019,6 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
     setThresholdCreateError(null)
   }
 
-  function closeFeeCampaignGenerateDialog() {
-    setFeeCampaignGenerateTarget(null)
-    setFeeCampaignGenerateMonth(getCurrentMonthInputValue())
-    setFeeCampaignGenerateComment('')
-  }
-
   function cancelPendingChange() {
     if (pendingChange?.kind === 'tariff-text') {
       setTariffDrafts((drafts) => ({
@@ -1137,9 +1128,6 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
   useRestoreFocusOnClose(thresholdCreateOpen)
   const thresholdCreateDialogRef = useFocusTrap<HTMLElement>(thresholdCreateOpen)
   const thresholdCreateCancelRef = useFocusOnOpen<HTMLButtonElement>(thresholdCreateOpen)
-  useRestoreFocusOnClose(Boolean(feeCampaignGenerateTarget))
-  const feeCampaignGenerateDialogRef = useFocusTrap<HTMLElement>(Boolean(feeCampaignGenerateTarget))
-  const feeCampaignGenerateCancelRef = useFocusOnOpen<HTMLButtonElement>(Boolean(feeCampaignGenerateTarget))
   useEscapeKey(Boolean(pendingChange), () => cancelPendingChange())
   useEscapeKey(Boolean(oneTimeDeleteTarget), () => closeOneTimeDeleteDialog())
   useEscapeKey(Boolean(oneTimeRestoreTarget), () => closeOneTimeRestoreDialog())
@@ -1150,7 +1138,6 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
   useEscapeKey(Boolean(chargeServiceRestoreTarget), () => closeChargeServiceRestoreDialog())
   useEscapeKey(Boolean(thresholdDeleteTarget), () => closeThresholdDeleteDialog())
   useEscapeKey(thresholdCreateOpen, () => closeThresholdCreateDialog())
-  useEscapeKey(Boolean(feeCampaignGenerateTarget), () => closeFeeCampaignGenerateDialog())
   useEscapeKey(Boolean(oneTimeContextMenu), () => setOneTimeContextMenu(null))
 
   function buildChargeServiceRequest(setting: ChargeServiceSettingDto, nextRows: ContractorTariffRow[]): UpsertChargeServiceSettingRequest {
@@ -2116,28 +2103,6 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
     }
   }
 
-  async function generateFeeCampaignAccruals() {
-    if (!feeCampaignGenerateTarget) {
-      return
-    }
-
-    setFeeCampaignSavingId(feeCampaignGenerateTarget.id)
-    setFeeCampaignActionMessage(null)
-    try {
-      const result = await financeClient.generateFeeCampaignAccruals(auth.accessToken, {
-        feeCampaignId: feeCampaignGenerateTarget.id,
-        accountingMonth: `${feeCampaignGenerateMonth}-01`,
-        comment: feeCampaignGenerateComment.trim() || undefined,
-      })
-      setFeeCampaignActionMessage(`Доначислено: ${result.createdCount}; сумма: ${formatMoney(result.totalAmount)} руб.; пропущено: ${result.skippedCount}.`)
-      closeFeeCampaignGenerateDialog()
-    } catch (caught) {
-      setFeeCampaignActionMessage(caught instanceof Error ? caught.message : 'Не удалось начислить сбор.')
-    } finally {
-      setFeeCampaignSavingId(null)
-    }
-  }
-
   const addElectricityThreshold = (targetRow: ContractorTariffRow) => {
     const electricityThresholdRows = getElectricityThresholdRows(tariffRows, targetRow)
     if (electricityThresholdRows.length >= 20) {
@@ -2840,23 +2805,17 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
                       </button>
                     ) : (
                       <>
-                        <button className="ghost-button" type="button" aria-label={`Доначислить сбор ${campaign.name}`} title="Ручное дозаполнение начислений" disabled={!canManageTariffs || feeCampaignSavingId === campaign.id} onClick={() => {
-                          setFeeCampaignGenerateTarget(campaign)
-                          setFeeCampaignGenerateMonth(getCurrentMonthInputValue())
-                          setFeeCampaignGenerateComment('')
-                        }}>
-                          <FileText size={16} aria-hidden="true" />
-                          <span>Доначислить</span>
-                        </button>
                         <button className="icon-button" type="button" aria-label={`Изменить сбор ${campaign.name}`} disabled={!canManageTariffs || feeCampaignSavingId === campaign.id || feeCampaignGarageOptionsLoading} onClick={() => void openFeeCampaignEditDialog(campaign)}>
                           <Pencil size={16} />
                         </button>
-                        <button className="icon-button" type="button" aria-label={`Закрыть сбор ${campaign.name}`} disabled={!canManageTariffs || feeCampaignSavingId === campaign.id} onClick={() => {
-                          setFeeCampaignCloseTarget(campaign)
-                          setFeeCampaignClosureComment('')
-                        }}>
-                          <CircleCheck size={16} />
-                        </button>
+                        {!campaign.endsOn || campaign.endsOn > getLocalDateInputValue() ? (
+                          <button className="icon-button" type="button" aria-label={`Закрыть сбор ${campaign.name}`} disabled={!canManageTariffs || feeCampaignSavingId === campaign.id} onClick={() => {
+                            setFeeCampaignCloseTarget(campaign)
+                            setFeeCampaignClosureComment('')
+                          }}>
+                            <CircleCheck size={16} />
+                          </button>
+                        ) : null}
                         <button className="icon-button danger-icon-button" type="button" aria-label={`Архивировать сбор ${campaign.name}`} disabled={!canManageTariffs || feeCampaignSavingId === campaign.id} onClick={() => {
                           setFeeCampaignArchiveTarget(campaign)
                           setFeeCampaignArchiveReason('')
@@ -3249,42 +3208,6 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, financeCl
               <button className="secondary-button" type="button" onClick={restoreFeeCampaign} disabled={feeCampaignSavingId === feeCampaignRestoreTarget.id}>
                 <RotateCcw size={16} />
                 <span>Вернуть</span>
-              </button>
-            </div>
-          </section>
-        </div>
-      ) : null}
-
-      {feeCampaignGenerateTarget ? (
-        <div className="modal-backdrop" role="presentation" onMouseDown={closeFeeCampaignGenerateDialog}>
-          <section ref={feeCampaignGenerateDialogRef} className="detail-dialog contractors-dialog" role="dialog" aria-modal="true" aria-labelledby="fee-campaign-generate-title" aria-describedby="fee-campaign-generate-description" onMouseDown={(event) => event.stopPropagation()}>
-            <div className="detail-dialog-header">
-              <div>
-                <p className="eyebrow">Ручное дозаполнение</p>
-                <h3 id="fee-campaign-generate-title">Доначислить сбор</h3>
-                <p>{feeCampaignGenerateTarget.name}</p>
-              </div>
-              <button className="icon-button" type="button" aria-label="Закрыть форму начисления сбора" onClick={closeFeeCampaignGenerateDialog}>
-                <X size={18} />
-              </button>
-            </div>
-            <p className="confirmation-text" id="fee-campaign-generate-description">Действующие сборы начисляются автоматически за рабочий месяц. В первый месяц начисление получают выбранные участники, а в следующие месяцы — только те, кто ещё не полностью оплатил предыдущие начисления. Участник с частичной оплатой остаётся в начислении до полной оплаты или закрытия сбора. Эта форма нужна для ручного дозаполнения выбранного месяца; дубликаты не создаются, действие записывается в историю изменений.</p>
-            <FormField label="Месяц начисления">
-              <LocalizedDatePicker
-                ariaLabel="Месяц начисления сбора"
-                mode="month"
-                value={feeCampaignGenerateMonth}
-                disabled={feeCampaignSavingId === feeCampaignGenerateTarget.id}
-                onChange={setFeeCampaignGenerateMonth} />
-            </FormField>
-            <FormField label="Комментарий к ручному начислению" help="Необязательно. Укажите причину, если начисления дозаполняются вручную.">
-              <textarea aria-label="Комментарий к ручному начислению сбора" value={feeCampaignGenerateComment} onChange={(event) => setFeeCampaignGenerateComment(event.target.value)} placeholder="Например: дозаполнение после уточнения участников" />
-            </FormField>
-            <div className="detail-dialog-actions contractors-dialog-actions">
-              <button ref={feeCampaignGenerateCancelRef} className="ghost-button" type="button" onClick={closeFeeCampaignGenerateDialog}>Отмена</button>
-              <button className="secondary-button" type="button" onClick={generateFeeCampaignAccruals} disabled={!feeCampaignGenerateMonth || feeCampaignSavingId === feeCampaignGenerateTarget.id}>
-                <Save size={16} />
-                <span>Доначислить</span>
               </button>
             </div>
           </section>

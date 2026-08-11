@@ -115,6 +115,8 @@ type GarageIncomePrototypeRow = {
   monthLabel: string
   service: string
   annualAccrualId: string | null
+  feeCampaignId?: string | null
+  feeCampaignRemainingAmount?: number | null
   meterKind: 'water' | 'electricity' | null
   meterReadingId: string | null
   meterReadingVersion: string | null
@@ -316,7 +318,7 @@ type SupplierAccrualPrototypeSubmitRequest = {
 function createGarageIncomeRowsFromWorksheet(worksheet: GarageIncomeWorksheetDto): GarageIncomePrototypeRow[] {
   return worksheet.rows.map((row) => {
     const month = row.accountingMonth.slice(0, 7)
-    const rowKey = row.incomeTypeId ?? row.incomeTypeName.toLocaleLowerCase('ru-RU').replace(/\s+/g, '-')
+    const rowKey = row.feeCampaignId ?? row.incomeTypeId ?? row.incomeTypeName.toLocaleLowerCase('ru-RU').replace(/\s+/g, '-')
     return {
       id: `garage-${worksheet.garageId}-${month}-${rowKey}`,
       incomeTypeId: row.incomeTypeId,
@@ -324,6 +326,8 @@ function createGarageIncomeRowsFromWorksheet(worksheet: GarageIncomeWorksheetDto
       monthLabel: formatPaymentPrototypeMonthLabel(row.accountingMonth),
       service: row.incomeTypeName,
       annualAccrualId: row.annualAccrualId ?? null,
+      feeCampaignId: row.feeCampaignId ?? null,
+      feeCampaignRemainingAmount: row.feeCampaignRemainingAmount ?? null,
       meterKind: row.meterKind,
       meterReadingId: row.meterReadingId ?? null,
       meterReadingVersion: row.meterReadingVersion ?? null,
@@ -3960,6 +3964,7 @@ function PaymentsPrototypePanel({
         operationDate: getLocalDateInputValue(),
         accountingMonth,
         amount,
+        feeCampaignId: row.feeCampaignId ?? undefined,
         comment: `Платеж из формы поступлений: ${row.service} ${row.monthLabel}`,
       })
       const paymentTime = new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })
@@ -4060,7 +4065,7 @@ function PaymentsPrototypePanel({
   }
 
   function getRowsForFullPayment(period: string) {
-    const rows = garageRows.filter((row) => row.debt > 0 && (period === 'full' || row.month === period))
+    const rows = garageRows.filter((row) => !row.feeCampaignId && row.debt > 0 && (period === 'full' || row.month === period))
     if (period !== 'full') {
       return rows
     }
@@ -4140,6 +4145,7 @@ function PaymentsPrototypePanel({
         incomeTypeId: item.incomeType.id,
         accountingMonth: item.row.month.length === 7 ? `${item.row.month}-01` : item.row.month,
         amount: item.amount,
+        feeCampaignId: item.row.feeCampaignId ?? undefined,
         comment: request.comment.trim()
           ? `Полная оплата ${item.row.service} ${item.row.monthLabel}: ${request.comment.trim()}`
           : `Полная оплата ${item.row.service} ${item.row.monthLabel}`,

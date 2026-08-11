@@ -133,7 +133,8 @@ public sealed class FrontendFeatureModuleTests
         Assert.Contains("dictionaryClient.createChargeServiceWithTariff", featureText, StringComparison.Ordinal);
         Assert.Contains("dictionaryClient.updateChargeServiceSetting", featureText, StringComparison.Ordinal);
         Assert.Contains("dictionaryClient.createFeeCampaign", featureText, StringComparison.Ordinal);
-        Assert.Contains("financeClient.generateFeeCampaignAccruals", featureText, StringComparison.Ordinal);
+        Assert.DoesNotContain("financeClient.generateFeeCampaignAccruals", featureText, StringComparison.Ordinal);
+        Assert.DoesNotContain("Доначислить", featureText, StringComparison.Ordinal);
         Assert.Contains("frontend/src/features/tariffs/TariffsAndFeesPanel.tsx", File.ReadAllText(Path.Combine(repositoryRoot, "docs", "development-guide.md")), StringComparison.Ordinal);
     }
 

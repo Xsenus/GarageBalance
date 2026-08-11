@@ -18,6 +18,8 @@ public sealed class FinancialOperation
     public Garage? Garage { get; set; }
     public Guid? IncomeTypeId { get; set; }
     public IncomeType? IncomeType { get; set; }
+    public Guid? FeeCampaignId { get; set; }
+    public FeeCampaign? FeeCampaign { get; set; }
     public Guid? SupplierId { get; set; }
     public Supplier? Supplier { get; set; }
     public Guid? StaffMemberId { get; set; }

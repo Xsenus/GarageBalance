@@ -26,7 +26,10 @@ public static class AccrualPaymentAllocator
                      .ThenBy(item => item.Id))
         {
             var paymentRemainder = payment.Amount;
-            foreach (var accrual in orderedAccruals)
+            foreach (var accrual in orderedAccruals.Where(accrual =>
+                         payment.FeeCampaignId.HasValue
+                             ? accrual.FeeCampaignId == payment.FeeCampaignId
+                             : true))
             {
                 if (paymentRemainder <= 0m)
                 {
@@ -55,13 +58,15 @@ public sealed record AccrualPaymentAllocationAccrual(
     DateOnly DueDate,
     DateOnly AccountingMonth,
     decimal Amount,
-    DateTimeOffset CreatedAtUtc);
+    DateTimeOffset CreatedAtUtc,
+    Guid? FeeCampaignId = null);
 
 public sealed record AccrualPaymentAllocationPayment(
     Guid Id,
     DateOnly OperationDate,
     decimal Amount,
-    DateTimeOffset CreatedAtUtc);
+    DateTimeOffset CreatedAtUtc,
+    Guid? FeeCampaignId = null);
 
 public sealed record AccrualPaymentAllocationPlanItem(
     Guid FinancialOperationId,
