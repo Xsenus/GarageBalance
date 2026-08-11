@@ -17,12 +17,9 @@ export type CatalogCoverageEntry = {
 const dictionaryCatalogEntries: CatalogCoverageEntry[] = [
   { apiRoute: 'owners', label: 'Владельцы', kind: 'master-data', workspaceSection: 'dictionaries', workspaceLabel: 'Справочники', dictionarySection: 'owners' },
   { apiRoute: 'garages', label: 'Гаражи', kind: 'master-data', workspaceSection: 'dictionaries', workspaceLabel: 'Справочники', dictionarySection: 'garages' },
-  { apiRoute: 'supplier-groups', label: 'Группы поставщиков и персонала', kind: 'master-data', workspaceSection: 'dictionaries', workspaceLabel: 'Справочники', dictionarySection: 'supplierGroups' },
-  { apiRoute: 'suppliers', label: 'Поставщики', kind: 'master-data', workspaceSection: 'dictionaries', workspaceLabel: 'Справочники', dictionarySection: 'suppliers' },
   { apiRoute: 'income-types', label: 'Виды поступлений', kind: 'master-data', workspaceSection: 'dictionaries', workspaceLabel: 'Справочники', dictionarySection: 'incomeTypes' },
   { apiRoute: 'expense-types', label: 'Статьи расходов', kind: 'master-data', workspaceSection: 'dictionaries', workspaceLabel: 'Справочники', dictionarySection: 'expenseTypes' },
   { apiRoute: 'measurement-units', label: 'Единицы измерения', kind: 'master-data', workspaceSection: 'dictionaries', workspaceLabel: 'Справочники', dictionarySection: 'measurementUnits' },
-  { apiRoute: 'tariffs', label: 'Тарифы', kind: 'master-data', workspaceSection: 'dictionaries', workspaceLabel: 'Справочники', dictionarySection: 'tariffs' },
 ]
 
 export { profileCatalogEntries } from './profileCatalogCoverage'

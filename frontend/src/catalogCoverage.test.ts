@@ -37,9 +37,12 @@ describe('dictionary API interface coverage', () => {
 
     expect(masterDataEntries.every((entry) => entry.workspaceSection !== 'dictionaries' || Boolean(entry.dictionarySection))).toBe(true)
     expect(profileCatalogEntries.map((entry) => entry.apiRoute)).toEqual([
+      'supplier-groups',
+      'suppliers',
       'supplier-contacts',
       'staff-departments',
       'staff-members',
+      'tariffs',
       'charge-services',
       'irregular-payments',
     ])

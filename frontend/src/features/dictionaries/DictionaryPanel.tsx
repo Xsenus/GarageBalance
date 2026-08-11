@@ -1,23 +1,22 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { FormEvent, MouseEvent, ReactNode } from 'react'
 import { FileText, RotateCcw, Save, Search, Trash2, X } from 'lucide-react'
 import type { AuthResponse } from '../../services/authApi'
 import type { CatalogWorkspaceSection } from '../../shared/catalogCoverage'
 import { profileCatalogEntries } from '../../shared/profileCatalogCoverage'
 import { DictionaryApiError } from '../../services/dictionariesApi'
-import type { AccountingTypeDto, DictionaryClient, GarageDto, MeasurementUnitDto, OwnerDto, PagedResult, SupplierGroupDto, SupplierDto, TariffDto, UpsertGarageRequest, UpsertOwnerRequest, UpsertSupplierRequest, UpsertTariffRequest } from '../../services/dictionariesApi'
+import type { AccountingTypeDto, DictionaryClient, GarageDto, MeasurementUnitDto, OwnerDto, PagedResult, UpsertGarageRequest, UpsertOwnerRequest } from '../../services/dictionariesApi'
 import type { FinanceClient, GarageBalanceHistoryDto } from '../../services/financeApi'
 import type { DadataAddressSuggestionDto, IntegrationClient } from '../../services/integrationsApi'
 import { hasPermission, permissions } from '../../shared/accessControl'
 import { AsyncErrorState, EmptyState, TableLoadingState } from '../../shared/AsyncState'
 import type { DictionaryEditorFieldKey, DictionaryRecord, DictionarySectionKey } from '../../shared/dictionaryWorkbench'
-import { canWriteDictionarySection, createAccountingTypeFormFromDto, createEmptyAccountingTypeForm, createEmptyGarageForm, createEmptyOwnerForm, createEmptyOwnerGarageLinkForm, createEmptySupplierForm, createEmptyTariffForm, createGarageFormFromDto, createOwnerFormFromDto, createSupplierFormFromDto, dictionarySectionGroups, dictionarySectionOptions, getDictionaryEditorFieldMeta, getDictionaryRecordCells, getDictionaryRecordTitle, getDictionarySearchPlaceholder, getDictionarySectionOption, getDictionaryTableHeaders, getOwnerGarageOptions, getTariffCalculationBaseOptions, supportsDictionarySearch, usesElectricityTariffTiers } from '../../shared/dictionaryWorkbench'
+import { canWriteDictionarySection, createAccountingTypeFormFromDto, createEmptyAccountingTypeForm, createEmptyGarageForm, createEmptyOwnerForm, createEmptyOwnerGarageLinkForm, createGarageFormFromDto, createOwnerFormFromDto, dictionarySectionGroups, dictionarySectionOptions, getDictionaryEditorFieldMeta, getDictionaryRecordCells, getDictionaryRecordTitle, getDictionarySearchPlaceholder, getDictionarySectionOption, getDictionaryTableHeaders, getOwnerGarageOptions, supportsDictionarySearch } from '../../shared/dictionaryWorkbench'
 import type { ChangePreview } from '../../shared/changePreview'
-import { appendChangePreview, formatChangeDate, formatChangeMoney, formatChangeNumber, formatChangeText } from '../../shared/changePreview'
-import { DictionaryList } from '../../shared/DictionaryList'
+import { appendChangePreview, formatChangeMoney, formatChangeNumber, formatChangeText } from '../../shared/changePreview'
 import { FormError, FormValidationSummary } from '../../shared/formFeedback'
 import { FormField } from '../../shared/FormField'
-import { formatDateOnly, formatDebtAmount, formatDebtLabel, formatMoney, formatMonth, formatNullableNumber, formatTariffRateSummary, getDebtClassName } from '../../shared/formatters'
+import { formatDebtAmount, formatDebtLabel, formatMoney, formatMonth, getDebtClassName } from '../../shared/formatters'
 import { useEscapeKey, useFocusOnOpen, useFocusTrap, useRestoreFocusOnClose } from '../../shared/focusHooks'
 import { LocalizedDatePicker } from '../../shared/LocalizedDatePicker'
 import { MoneyInput } from '../../shared/MoneyInput'
@@ -29,22 +28,12 @@ import { useToast } from '../../shared/useToast'
 import { createDefaultGarageBalanceHistoryFilters, createFullFinancialReportFilters } from '../../shared/reportFilters'
 import { SelectControl } from '../../shared/SelectControl'
 import type { OwnerGarageLinkForm } from '../../shared/validation'
-import { createTariffFormFromDto, getAccountingTypeValidationErrors, getGarageValidationErrors, getOwnerGarageLinkValidationErrors, getOwnerValidationErrors, getSupplierGroupValidationErrors, getSupplierValidationErrors, getTariffValidationErrors, parseOptionalNumberInput, updateTariffCalculationBase, withoutElectricityTierFields } from '../../shared/validation'
+import { getAccountingTypeValidationErrors, getGarageValidationErrors, getOwnerGarageLinkValidationErrors, getOwnerValidationErrors } from '../../shared/validation'
 
-const dictionaryScreenRequestLimit = 100
-
-function getDictionaryRestoreErrorMessage(section: DictionarySectionKey, caught: unknown) {
+function getDictionaryRestoreErrorMessage(caught: unknown) {
   if (caught instanceof DictionaryApiError) {
     if (caught.code === 'garage_number_duplicate') {
       return 'Гараж нельзя восстановить: активный гараж с таким номером уже есть. Проверьте рабочий список и архив.'
-    }
-
-    if (caught.code === 'supplier_group_duplicate') {
-      return 'Группу поставщиков нельзя восстановить: активная группа с таким названием уже есть.'
-    }
-
-    if (caught.code === 'supplier_group_not_found' && section === 'suppliers') {
-      return 'Поставщика нельзя восстановить: сначала верните его группу поставщиков.'
     }
 
     if (caught.code === 'income_type_duplicate') {
@@ -55,9 +44,6 @@ function getDictionaryRestoreErrorMessage(section: DictionarySectionKey, caught:
       return 'Статью расхода нельзя восстановить: активная статья с таким названием уже есть.'
     }
 
-    if (caught.code === 'tariff_duplicate') {
-      return 'Тариф нельзя восстановить: активный тариф с таким названием и датой начала уже есть.'
-    }
   }
 
   return caught instanceof Error ? caught.message : 'Не удалось восстановить запись.'
@@ -71,27 +57,20 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, integ
   const [activeSection, setActiveSection] = useState<DictionarySectionKey>(initialSection)
   const [owners, setOwners] = useState<OwnerDto[]>([])
   const [garages, setGarages] = useState<GarageDto[]>([])
-  const [groups, setGroups] = useState<SupplierGroupDto[]>([])
-  const [suppliers, setSuppliers] = useState<SupplierDto[]>([])
   const [incomeTypes, setIncomeTypes] = useState<AccountingTypeDto[]>([])
   const [expenseTypes, setExpenseTypes] = useState<AccountingTypeDto[]>([])
   const [measurementUnits, setMeasurementUnits] = useState<MeasurementUnitDto[]>([])
-  const [tariffs, setTariffs] = useState<TariffDto[]>([])
   const [ownerOptions, setOwnerOptions] = useState<OwnerDto[]>([])
   const [garageOptions, setGarageOptions] = useState<GarageDto[]>([])
-  const [groupOptions, setGroupOptions] = useState<SupplierGroupDto[]>([])
-  const loadedEditorReferences = useRef({ owners: false, garages: false, suppliers: false })
+  const loadedEditorReferences = useRef({ owners: false, garages: false })
   const pageRequestSequence = useRef(0)
   const [editorReferencesLoading, setEditorReferencesLoading] = useState(false)
   const [pages, setPages] = useState<Record<DictionarySectionKey, PagedResult<DictionaryRecord>>>({
     owners: createEmptyPage<DictionaryRecord>(),
     garages: createEmptyPage<DictionaryRecord>(),
-    supplierGroups: createEmptyPage<DictionaryRecord>(),
-    suppliers: createEmptyPage<DictionaryRecord>(),
     incomeTypes: createEmptyPage<DictionaryRecord>(),
     expenseTypes: createEmptyPage<DictionaryRecord>(),
     measurementUnits: createEmptyPage<DictionaryRecord>(),
-    tariffs: createEmptyPage<DictionaryRecord>(),
   })
   const [search, setSearch] = useState('')
   const [showArchived, setShowArchived] = useState(false)
@@ -121,11 +100,8 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, integ
   const ownerAddressRequestSequence = useRef(0)
   const ownerAddressInputTouched = useRef(false)
   const [garageForm, setGarageForm] = useState(createEmptyGarageForm())
-  const [supplierGroupName, setSupplierGroupName] = useState('')
-  const [supplierForm, setSupplierForm] = useState(createEmptySupplierForm())
   const [accountingTypeForm, setAccountingTypeForm] = useState(createEmptyAccountingTypeForm())
   const [measurementUnitName, setMeasurementUnitName] = useState('')
-  const [tariffForm, setTariffForm] = useState<UpsertTariffRequest>(createEmptyTariffForm())
   const [validationErrors, setValidationErrors] = useState<string[]>([])
   useRestoreFocusOnClose(Boolean(editor))
   const editorCloseRef = useFocusOnOpen<HTMLButtonElement>(Boolean(editor))
@@ -143,10 +119,9 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, integ
   const balanceHistoryCloseRef = useFocusOnOpen<HTMLButtonElement>(Boolean(balanceHistoryGarage))
   const balanceHistoryDialogRef = useFocusTrap<HTMLElement>(Boolean(balanceHistoryGarage))
   const canWriteDictionaries = hasPermission(auth, permissions.dictionariesWrite)
-  const canManageTariffs = hasPermission(auth, permissions.tariffsManage)
   const activePage = pages[activeSection]
   const activeOption = getDictionarySectionOption(activeSection)
-  const canWriteActiveSection = canWriteDictionarySection(activeSection, canWriteDictionaries, canManageTariffs)
+  const canWriteActiveSection = canWriteDictionarySection(activeSection, canWriteDictionaries)
   const supportsSearch = supportsDictionarySearch(activeSection)
   const searchPlaceholder = getDictionarySearchPlaceholder(activeSection)
   const ownerGarageOptions = getOwnerGarageOptions(garageOptions, editor?.section === 'owners' && editor.item ? editor.item as OwnerDto : undefined)
@@ -211,7 +186,7 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, integ
         return
       }
 
-      const referenceSection = activeSection === 'owners' || activeSection === 'garages' || activeSection === 'suppliers'
+      const referenceSection = activeSection === 'owners' || activeSection === 'garages'
         ? activeSection
         : null
       if (!referenceSection || loadedEditorReferences.current[referenceSection]) {
@@ -230,11 +205,6 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, integ
           const loadedOwners = await dictionaryClient.getOwners(auth.accessToken, undefined, 500)
           if (!ignore) {
             setOwnerOptions(loadedOwners)
-          }
-        } else {
-          const loadedGroups = await dictionaryClient.getSupplierGroups(auth.accessToken, undefined, 500)
-          if (!ignore) {
-            setGroupOptions(loadedGroups)
           }
         }
         if (!ignore) {
@@ -296,14 +266,6 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, integ
         page = dictionaryClient.getGaragesPage
           ? await dictionaryClient.getGaragesPage(auth.accessToken, query, offset, limit, showArchived, undefined, undefined, false, {}, signal)
           : createFallbackPage<DictionaryRecord>(await dictionaryClient.getGarages(auth.accessToken, query, 500, showArchived, signal), offset, limit)
-      } else if (section === 'supplierGroups') {
-        page = dictionaryClient.getSupplierGroupsPage
-          ? await dictionaryClient.getSupplierGroupsPage(auth.accessToken, query, offset, limit, showArchived, signal)
-          : createFallbackPage<DictionaryRecord>(await dictionaryClient.getSupplierGroups(auth.accessToken, query, 500, showArchived, signal), offset, limit)
-      } else if (section === 'suppliers') {
-        page = dictionaryClient.getSuppliersPage
-          ? await dictionaryClient.getSuppliersPage(auth.accessToken, undefined, query, offset, limit, showArchived, undefined, undefined, signal)
-          : createFallbackPage<DictionaryRecord>(await dictionaryClient.getSuppliers(auth.accessToken, undefined, query, 500, showArchived, signal), offset, limit)
       } else if (section === 'incomeTypes') {
         page = dictionaryClient.getIncomeTypesPage
           ? await dictionaryClient.getIncomeTypesPage(auth.accessToken, query, offset, limit, showArchived, signal)
@@ -312,12 +274,8 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, integ
         page = dictionaryClient.getExpenseTypesPage
           ? await dictionaryClient.getExpenseTypesPage(auth.accessToken, query, offset, limit, showArchived, signal)
           : createFallbackPage<DictionaryRecord>(await dictionaryClient.getExpenseTypes(auth.accessToken, query, 500, showArchived, signal), offset, limit)
-      } else if (section === 'measurementUnits') {
-        page = await dictionaryClient.getMeasurementUnitsPage(auth.accessToken, query, offset, limit, showArchived, signal)
       } else {
-        page = dictionaryClient.getTariffsPage
-          ? await dictionaryClient.getTariffsPage(auth.accessToken, query, offset, limit, showArchived, true, signal)
-          : createFallbackPage<DictionaryRecord>(await dictionaryClient.getTariffs(auth.accessToken, query, 500, showArchived, true, signal), offset, limit)
+        page = await dictionaryClient.getMeasurementUnitsPage(auth.accessToken, query, offset, limit, showArchived, signal)
       }
 
       if (requestSequence !== pageRequestSequence.current) {
@@ -326,12 +284,9 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, integ
 
       if (section === 'owners') setOwners(page.items as OwnerDto[])
       else if (section === 'garages') setGarages(page.items as GarageDto[])
-      else if (section === 'supplierGroups') setGroups(page.items as SupplierGroupDto[])
-      else if (section === 'suppliers') setSuppliers(page.items as SupplierDto[])
       else if (section === 'incomeTypes') setIncomeTypes(page.items as AccountingTypeDto[])
       else if (section === 'expenseTypes') setExpenseTypes(page.items as AccountingTypeDto[])
-      else if (section === 'measurementUnits') setMeasurementUnits(page.items as MeasurementUnitDto[])
-      else setTariffs(page.items as TariffDto[])
+      else setMeasurementUnits(page.items as MeasurementUnitDto[])
 
       setPages((current) => ({ ...current, [section]: page }))
     } catch (caught) {
@@ -449,7 +404,7 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, integ
   }
 
   function openEditor(section: DictionarySectionKey, mode: 'create' | 'edit', item?: DictionaryRecord) {
-    if (editorReferencesLoading && (section === 'owners' || section === 'garages' || section === 'suppliers')) {
+    if (editorReferencesLoading && (section === 'owners' || section === 'garages')) {
       return
     }
     setValidationErrors([])
@@ -464,29 +419,18 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, integ
       } else if (section === 'garages') {
         const garage = item as GarageDto
         setGarageForm(createGarageFormFromDto(garage))
-      } else if (section === 'supplierGroups') {
-        setSupplierGroupName((item as SupplierGroupDto).name)
-      } else if (section === 'suppliers') {
-        const supplier = item as SupplierDto
-        setSupplierForm(createSupplierFormFromDto(supplier))
       } else if (section === 'incomeTypes' || section === 'expenseTypes') {
         const type = item as AccountingTypeDto
         setAccountingTypeForm(createAccountingTypeFormFromDto(type))
-      } else if (section === 'measurementUnits') {
-        setMeasurementUnitName((item as MeasurementUnitDto).name)
       } else {
-        const tariff = item as TariffDto
-        setTariffForm(createTariffFormFromDto(tariff))
+        setMeasurementUnitName((item as MeasurementUnitDto).name)
       }
     } else {
       setOwnerForm(createEmptyOwnerForm())
       setOwnerGarageLinkForm(createEmptyOwnerGarageLinkForm())
       setGarageForm(createEmptyGarageForm())
-      setSupplierGroupName('')
-      setSupplierForm(createEmptySupplierForm(groupOptions[0]?.id ?? ''))
       setAccountingTypeForm(createEmptyAccountingTypeForm())
       setMeasurementUnitName('')
-      setTariffForm(createEmptyTariffForm())
     }
 
     setEditor({ section, mode, item })
@@ -523,12 +467,7 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, integ
       return
     }
 
-    if (editor.section === 'tariffs' && !canManageTariffs) {
-      setError('Для изменения тарифов нужно право tariffs.manage.')
-      return
-    }
-
-    if (editor.section !== 'tariffs' && !canWriteDictionaries) {
+    if (!canWriteDictionaries) {
       setError('Для изменения справочников нужно право dictionaries.write.')
       return
     }
@@ -593,14 +532,6 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, integ
       return getGarageValidationErrors(createGarageRequestFromForm())
     }
 
-    if (currentEditor.section === 'supplierGroups') {
-      return getSupplierGroupValidationErrors({ name: supplierGroupName })
-    }
-
-    if (currentEditor.section === 'suppliers') {
-      return getSupplierValidationErrors(createSupplierRequestFromForm())
-    }
-
     if (currentEditor.section === 'incomeTypes') {
       return getAccountingTypeValidationErrors(accountingTypeForm, 'вида поступления')
     }
@@ -609,13 +540,9 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, integ
       return getAccountingTypeValidationErrors(accountingTypeForm, 'вида выплаты')
     }
 
-    if (currentEditor.section === 'measurementUnits') {
-      if (!measurementUnitName.trim()) return ['Укажите обозначение единицы измерения.']
-      if (measurementUnitName.trim().length > 40) return ['Обозначение единицы измерения должно содержать не более 40 символов.']
-      return []
-    }
-
-    return getTariffValidationErrors(tariffForm)
+    if (!measurementUnitName.trim()) return ['Укажите обозначение единицы измерения.']
+    if (measurementUnitName.trim().length > 40) return ['Обозначение единицы измерения должно содержать не более 40 символов.']
+    return []
   }
 
   function createGarageRequestFromForm(): UpsertGarageRequest {
@@ -629,10 +556,6 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, integ
       initialElectricityMeterValue: garageForm.initialElectricityMeterValue === '' ? null : Number(garageForm.initialElectricityMeterValue),
       comment: garageForm.comment.trim() || undefined,
     }
-  }
-
-  function createSupplierRequestFromForm(): UpsertSupplierRequest {
-    return { ...supplierForm, groupId: supplierForm.groupId || groupOptions[0]?.id || '' }
   }
 
   async function saveEditorRequest(currentEditor: DictionaryEditorState) {
@@ -658,21 +581,6 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, integ
       } else {
         await dictionaryClient.createGarage(auth.accessToken, request)
       }
-    } else if (currentEditor.section === 'supplierGroups') {
-      const request = { name: supplierGroupName }
-      if (currentEditor.mode === 'edit' && currentEditor.item) {
-        await dictionaryClient.updateSupplierGroup(auth.accessToken, (currentEditor.item as SupplierGroupDto).id, request)
-      } else {
-        await dictionaryClient.createSupplierGroup(auth.accessToken, request)
-      }
-    } else if (currentEditor.section === 'suppliers') {
-      const request = createSupplierRequestFromForm()
-      if (currentEditor.mode === 'edit' && currentEditor.item) {
-        const supplier = currentEditor.item as SupplierDto
-        await dictionaryClient.updateSupplier(auth.accessToken, supplier.id, { ...request, version: supplier.version })
-      } else {
-        await dictionaryClient.createSupplier(auth.accessToken, request)
-      }
     } else if (currentEditor.section === 'incomeTypes') {
       if (currentEditor.mode === 'edit' && currentEditor.item) {
         await dictionaryClient.updateIncomeType(auth.accessToken, (currentEditor.item as AccountingTypeDto).id, accountingTypeForm)
@@ -685,19 +593,12 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, integ
       } else {
         await dictionaryClient.createExpenseType(auth.accessToken, accountingTypeForm)
       }
-    } else if (currentEditor.section === 'measurementUnits') {
+    } else {
       const request = { name: measurementUnitName.trim() }
       if (currentEditor.mode === 'edit' && currentEditor.item) {
         await dictionaryClient.updateMeasurementUnit(auth.accessToken, (currentEditor.item as MeasurementUnitDto).id, request)
       } else {
         await dictionaryClient.createMeasurementUnit(auth.accessToken, request)
-      }
-    } else {
-      if (currentEditor.mode === 'edit' && currentEditor.item) {
-        const tariff = currentEditor.item as TariffDto
-        await dictionaryClient.updateTariff(auth.accessToken, tariff.id, { ...tariffForm, version: tariff.version })
-      } else {
-        await dictionaryClient.createTariff(auth.accessToken, tariffForm)
       }
     }
 
@@ -759,10 +660,6 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, integ
       setGarageOptions(loadedGarages)
       loadedEditorReferences.current.garages = true
     }
-    if (section === 'supplierGroups') {
-      setGroupOptions(await dictionaryClient.getSupplierGroups(auth.accessToken, undefined, 500))
-      loadedEditorReferences.current.suppliers = true
-    }
   }
 
   async function confirmArchive() {
@@ -770,12 +667,7 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, integ
       return
     }
 
-    if (archiveTarget.section === 'tariffs' && !canManageTariffs) {
-      setError('Для удаления тарифов нужно право tariffs.manage.')
-      return
-    }
-
-    if (archiveTarget.section !== 'tariffs' && !canWriteDictionaries) {
+    if (!canWriteDictionaries) {
       setError('Для удаления справочников нужно право dictionaries.write.')
       return
     }
@@ -794,18 +686,12 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, integ
         await dictionaryClient.archiveOwner(auth.accessToken, (archiveTarget.item as OwnerDto).id, reason)
       } else if (archiveTarget.section === 'garages') {
         await dictionaryClient.archiveGarage(auth.accessToken, (archiveTarget.item as GarageDto).id, reason)
-      } else if (archiveTarget.section === 'supplierGroups') {
-        await dictionaryClient.archiveSupplierGroup(auth.accessToken, (archiveTarget.item as SupplierGroupDto).id, reason)
-      } else if (archiveTarget.section === 'suppliers') {
-        await dictionaryClient.archiveSupplier(auth.accessToken, (archiveTarget.item as SupplierDto).id, reason)
       } else if (archiveTarget.section === 'incomeTypes') {
         await dictionaryClient.archiveIncomeType(auth.accessToken, (archiveTarget.item as AccountingTypeDto).id, reason)
       } else if (archiveTarget.section === 'expenseTypes') {
         await dictionaryClient.archiveExpenseType(auth.accessToken, (archiveTarget.item as AccountingTypeDto).id, reason)
-      } else if (archiveTarget.section === 'measurementUnits') {
-        await dictionaryClient.archiveMeasurementUnit(auth.accessToken, (archiveTarget.item as MeasurementUnitDto).id, reason)
       } else {
-        await dictionaryClient.archiveTariff(auth.accessToken, (archiveTarget.item as TariffDto).id, reason)
+        await dictionaryClient.archiveMeasurementUnit(auth.accessToken, (archiveTarget.item as MeasurementUnitDto).id, reason)
       }
 
       const section = archiveTarget.section
@@ -825,12 +711,7 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, integ
       return
     }
 
-    if (restoreTarget.section === 'tariffs' && !canManageTariffs) {
-      setError('Для восстановления тарифов нужно право tariffs.manage.')
-      return
-    }
-
-    if (restoreTarget.section !== 'tariffs' && !canWriteDictionaries) {
+    if (!canWriteDictionaries) {
       setError('Для восстановления справочников нужно право dictionaries.write.')
       return
     }
@@ -842,18 +723,12 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, integ
         await dictionaryClient.restoreOwner(auth.accessToken, (restoreTarget.item as OwnerDto).id)
       } else if (restoreTarget.section === 'garages') {
         await dictionaryClient.restoreGarage(auth.accessToken, (restoreTarget.item as GarageDto).id)
-      } else if (restoreTarget.section === 'supplierGroups') {
-        await dictionaryClient.restoreSupplierGroup(auth.accessToken, (restoreTarget.item as SupplierGroupDto).id)
-      } else if (restoreTarget.section === 'suppliers') {
-        await dictionaryClient.restoreSupplier(auth.accessToken, (restoreTarget.item as SupplierDto).id)
       } else if (restoreTarget.section === 'incomeTypes') {
         await dictionaryClient.restoreIncomeType(auth.accessToken, (restoreTarget.item as AccountingTypeDto).id)
       } else if (restoreTarget.section === 'expenseTypes') {
         await dictionaryClient.restoreExpenseType(auth.accessToken, (restoreTarget.item as AccountingTypeDto).id)
-      } else if (restoreTarget.section === 'measurementUnits') {
-        await dictionaryClient.restoreMeasurementUnit(auth.accessToken, (restoreTarget.item as MeasurementUnitDto).id)
       } else {
-        await dictionaryClient.restoreTariff(auth.accessToken, (restoreTarget.item as TariffDto).id)
+        await dictionaryClient.restoreMeasurementUnit(auth.accessToken, (restoreTarget.item as MeasurementUnitDto).id)
       }
 
       const section = restoreTarget.section
@@ -861,7 +736,7 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, integ
       await refreshAfterMutation(section)
       showToast('Запись восстановлена и снова доступна в рабочих списках.')
     } catch (caught) {
-      const message = getDictionaryRestoreErrorMessage(restoreTarget.section, caught)
+      const message = getDictionaryRestoreErrorMessage(caught)
       setError(message)
     } finally {
       setSaving(null)
@@ -877,12 +752,9 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, integ
   function getRows(): DictionaryRecord[] {
     if (activeSection === 'owners') return owners
     if (activeSection === 'garages') return garages
-    if (activeSection === 'supplierGroups') return groups
-    if (activeSection === 'suppliers') return suppliers
     if (activeSection === 'incomeTypes') return incomeTypes
     if (activeSection === 'expenseTypes') return expenseTypes
-    if (activeSection === 'measurementUnits') return measurementUnits
-    return tariffs
+    return measurementUnits
   }
 
   function renderHeaders() {
@@ -935,18 +807,6 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, integ
     return garage ? `Гараж ${garage.number}` : `ID ${garageId}`
   }
 
-  function formatSupplierGroupLabel(groupId: string | null | undefined) {
-    if (!groupId) {
-      return 'Без группы'
-    }
-
-    return groupOptions.find((group) => group.id === groupId)?.name ?? `ID ${groupId}`
-  }
-
-  function formatCalculationBaseLabel(value: string) {
-    return getTariffCalculationBaseOptions().find((option) => option.value === value)?.label ?? value
-  }
-
   function getDictionaryEditorChanges(section: DictionarySectionKey, item: DictionaryRecord): DictionaryChangePreview[] {
     const changes: DictionaryChangePreview[] = []
 
@@ -984,27 +844,6 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, integ
       return changes
     }
 
-    if (section === 'supplierGroups') {
-      addDictionaryChange(changes, 'Название', formatChangeText((item as SupplierGroupDto).name), formatChangeText(supplierGroupName))
-      return changes
-    }
-
-    if (section === 'suppliers') {
-      const supplier = item as SupplierDto
-      const request = createSupplierRequestFromForm()
-
-      addDictionaryChange(changes, 'Наименование', formatChangeText(supplier.name), formatChangeText(request.name))
-      addDictionaryChange(changes, 'Группа', formatSupplierGroupLabel(supplier.groupId), formatSupplierGroupLabel(request.groupId))
-      addDictionaryChange(changes, 'ИНН', formatChangeText(supplier.inn), formatChangeText(request.inn))
-      addDictionaryChange(changes, 'Юридический адрес', formatChangeText(supplier.legalAddress), formatChangeText(request.legalAddress))
-      addDictionaryChange(changes, 'Контактное лицо', formatChangeText(supplier.contactPerson), formatChangeText(request.contactPerson))
-      addDictionaryChange(changes, 'Телефон', formatChangeText(supplier.phone), formatChangeText(request.phone))
-      addDictionaryChange(changes, 'Почта', formatChangeText(supplier.email), formatChangeText(request.email))
-      addDictionaryChange(changes, 'Стартовый баланс', formatChangeMoney(supplier.startingBalance), formatChangeMoney(request.startingBalance))
-      addDictionaryChange(changes, 'Комментарий', formatChangeText(supplier.comment), formatChangeText(request.comment))
-      return changes
-    }
-
     if (section === 'incomeTypes' || section === 'expenseTypes') {
       const type = item as AccountingTypeDto
       addDictionaryChange(changes, 'Название', formatChangeText(type.name), formatChangeText(accountingTypeForm.name))
@@ -1012,22 +851,7 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, integ
       return changes
     }
 
-    if (section === 'measurementUnits') {
-      addDictionaryChange(changes, 'Обозначение', formatChangeText((item as MeasurementUnitDto).name), formatChangeText(measurementUnitName))
-      return changes
-    }
-
-    const tariff = item as TariffDto
-    addDictionaryChange(changes, 'Название', formatChangeText(tariff.name), formatChangeText(tariffForm.name))
-    addDictionaryChange(changes, 'База расчета', formatCalculationBaseLabel(tariff.calculationBase), formatCalculationBaseLabel(tariffForm.calculationBase))
-    addDictionaryChange(changes, 'Ставка', formatChangeNumber(tariff.rate), formatChangeNumber(tariffForm.rate))
-    addDictionaryChange(changes, 'Дата начала', formatChangeDate(tariff.effectiveFrom), formatChangeDate(tariffForm.effectiveFrom))
-    addDictionaryChange(changes, 'Первый порог электроэнергии', formatChangeNumber(tariff.electricityFirstThreshold), formatChangeNumber(tariffForm.electricityFirstThreshold))
-    addDictionaryChange(changes, 'Второй порог электроэнергии', formatChangeNumber(tariff.electricitySecondThreshold), formatChangeNumber(tariffForm.electricitySecondThreshold))
-    addDictionaryChange(changes, 'Первая ставка электроэнергии', formatChangeNumber(tariff.electricityFirstRate), formatChangeNumber(tariffForm.electricityFirstRate))
-    addDictionaryChange(changes, 'Вторая ставка электроэнергии', formatChangeNumber(tariff.electricitySecondRate), formatChangeNumber(tariffForm.electricitySecondRate))
-    addDictionaryChange(changes, 'Третья ставка электроэнергии', formatChangeNumber(tariff.electricityThirdRate), formatChangeNumber(tariffForm.electricityThirdRate))
-    addDictionaryChange(changes, 'Комментарий', formatChangeText(tariff.comment), formatChangeText(tariffForm.comment))
+    addDictionaryChange(changes, 'Обозначение', formatChangeText((item as MeasurementUnitDto).name), formatChangeText(measurementUnitName))
     return changes
   }
 
@@ -1168,32 +992,6 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, integ
         </>
       )
     }
-    if (section === 'supplierGroups') {
-      return dictionaryField('supplierGroupName', <input aria-label={fieldMeta('supplierGroupName').ariaLabel} placeholder={fieldMeta('supplierGroupName').placeholder} value={supplierGroupName} onChange={(event) => setSupplierGroupName(event.target.value)} required />)
-    }
-    if (section === 'suppliers') {
-      return (
-        <>
-          {dictionaryField('supplierName', <input aria-label={fieldMeta('supplierName').ariaLabel} placeholder={fieldMeta('supplierName').placeholder} value={supplierForm.name} onChange={(event) => setSupplierForm({ ...supplierForm, name: event.target.value })} required />)}
-          {dictionaryField('supplierGroup', (
-            <SelectControl
-              aria-label={fieldMeta('supplierGroup').ariaLabel}
-              value={supplierForm.groupId}
-              options={groupOptions.length > 0 ? groupOptions.map((group) => ({ value: group.id, label: group.name })) : [{ value: '', label: 'Группы пока не добавлены' }]}
-              disabled={groupOptions.length === 0}
-              onChange={(value) => setSupplierForm({ ...supplierForm, groupId: value })}
-            />
-          ))}
-          {dictionaryField('supplierInn', <input aria-label={fieldMeta('supplierInn').ariaLabel} placeholder={fieldMeta('supplierInn').placeholder} value={supplierForm.inn} onChange={(event) => setSupplierForm({ ...supplierForm, inn: event.target.value })} />)}
-          {dictionaryField('supplierLegalAddress', <input aria-label={fieldMeta('supplierLegalAddress').ariaLabel} placeholder={fieldMeta('supplierLegalAddress').placeholder} value={supplierForm.legalAddress} onChange={(event) => setSupplierForm({ ...supplierForm, legalAddress: event.target.value })} />)}
-          {dictionaryField('supplierContactPerson', <input aria-label={fieldMeta('supplierContactPerson').ariaLabel} placeholder={fieldMeta('supplierContactPerson').placeholder} value={supplierForm.contactPerson} onChange={(event) => setSupplierForm({ ...supplierForm, contactPerson: event.target.value })} />)}
-          {dictionaryField('supplierPhone', <PhoneInput aria-label={fieldMeta('supplierPhone').ariaLabel} value={supplierForm.phone} onValueChange={(phone) => setSupplierForm({ ...supplierForm, phone })} />)}
-          {dictionaryField('supplierEmail', <input aria-label={fieldMeta('supplierEmail').ariaLabel} placeholder={fieldMeta('supplierEmail').placeholder} value={supplierForm.email} onChange={(event) => setSupplierForm({ ...supplierForm, email: event.target.value })} />)}
-          {dictionaryField('supplierStartingBalance', <MoneyInput aria-label={fieldMeta('supplierStartingBalance').ariaLabel} value={supplierForm.startingBalance} onValueChange={(startingBalance) => setSupplierForm({ ...supplierForm, startingBalance })} />, { help: 'Наша задолженность поставщику на начало учета указывается положительным числом, аванс — отрицательным.' })}
-          {dictionaryField('supplierComment', <textarea aria-label={fieldMeta('supplierComment').ariaLabel} placeholder={fieldMeta('supplierComment').placeholder} value={supplierForm.comment} onChange={(event) => setSupplierForm({ ...supplierForm, comment: event.target.value })} />)}
-        </>
-      )
-    }
     if (section === 'incomeTypes' || section === 'expenseTypes') {
       return (
         <>
@@ -1202,31 +1000,7 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, integ
         </>
       )
     }
-    if (section === 'measurementUnits') {
-      return dictionaryField('measurementUnitName', <input aria-label={fieldMeta('measurementUnitName').ariaLabel} placeholder={fieldMeta('measurementUnitName').placeholder} value={measurementUnitName} onChange={(event) => setMeasurementUnitName(event.target.value)} maxLength={40} required />)
-    }
-    return (
-      <>
-        {dictionaryField('tariffName', <input aria-label={fieldMeta('tariffName').ariaLabel} placeholder={fieldMeta('tariffName').placeholder} value={tariffForm.name} onChange={(event) => setTariffForm({ ...tariffForm, name: event.target.value })} required />)}
-        {dictionaryField('tariffCalculationBase', (
-          <SelectControl aria-label={fieldMeta('tariffCalculationBase').ariaLabel} value={tariffForm.calculationBase} options={getTariffCalculationBaseOptions()} onChange={(value) => setTariffForm(updateTariffCalculationBase(tariffForm, value))} />
-        ))}
-        <div className="inline-fields">
-          {dictionaryField('tariffRate', <MoneyInput aria-label={fieldMeta('tariffRate').ariaLabel} value={tariffForm.rate} onValueChange={(rate) => setTariffForm({ ...tariffForm, rate })} />)}
-          {dictionaryField('tariffEffectiveFrom', <LocalizedDatePicker ariaLabel={fieldMeta('tariffEffectiveFrom').ariaLabel} mode="date" value={tariffForm.effectiveFrom} onChange={(value) => setTariffForm({ ...tariffForm, effectiveFrom: value })} />)}
-        </div>
-        {usesElectricityTariffTiers(tariffForm.calculationBase) ? (
-          <div className="inline-fields tariff-tier-fields">
-            {dictionaryField('tariffElectricityFirstThreshold', <input aria-label={fieldMeta('tariffElectricityFirstThreshold').ariaLabel} placeholder={fieldMeta('tariffElectricityFirstThreshold').placeholder} type="number" min="0.0001" step="0.0001" value={tariffForm.electricityFirstThreshold ?? ''} onChange={(event) => setTariffForm({ ...tariffForm, electricityFirstThreshold: parseOptionalNumberInput(event.target.value) })} />)}
-            {dictionaryField('tariffElectricitySecondThreshold', <input aria-label={fieldMeta('tariffElectricitySecondThreshold').ariaLabel} placeholder={fieldMeta('tariffElectricitySecondThreshold').placeholder} type="number" min="0.0001" step="0.0001" value={tariffForm.electricitySecondThreshold ?? ''} onChange={(event) => setTariffForm({ ...tariffForm, electricitySecondThreshold: parseOptionalNumberInput(event.target.value) })} />)}
-            {dictionaryField('tariffElectricityFirstRate', <MoneyInput aria-label={fieldMeta('tariffElectricityFirstRate').ariaLabel} value={tariffForm.electricityFirstRate ?? Number.NaN} onValueChange={(electricityFirstRate) => setTariffForm({ ...tariffForm, electricityFirstRate: Number.isFinite(electricityFirstRate) ? electricityFirstRate : undefined })} />)}
-            {dictionaryField('tariffElectricitySecondRate', <MoneyInput aria-label={fieldMeta('tariffElectricitySecondRate').ariaLabel} value={tariffForm.electricitySecondRate ?? Number.NaN} onValueChange={(electricitySecondRate) => setTariffForm({ ...tariffForm, electricitySecondRate: Number.isFinite(electricitySecondRate) ? electricitySecondRate : undefined })} />)}
-            {dictionaryField('tariffElectricityThirdRate', <MoneyInput aria-label={fieldMeta('tariffElectricityThirdRate').ariaLabel} value={tariffForm.electricityThirdRate ?? Number.NaN} onValueChange={(electricityThirdRate) => setTariffForm({ ...tariffForm, electricityThirdRate: Number.isFinite(electricityThirdRate) ? electricityThirdRate : undefined })} />)}
-          </div>
-        ) : null}
-        {dictionaryField('tariffComment', <textarea aria-label={fieldMeta('tariffComment').ariaLabel} placeholder={fieldMeta('tariffComment').placeholder} value={tariffForm.comment ?? ''} onChange={(event) => setTariffForm({ ...tariffForm, comment: event.target.value })} />)}
-      </>
-    )
+    return dictionaryField('measurementUnitName', <input aria-label={fieldMeta('measurementUnitName').ariaLabel} placeholder={fieldMeta('measurementUnitName').placeholder} value={measurementUnitName} onChange={(event) => setMeasurementUnitName(event.target.value)} maxLength={40} required />)
   }
 
   const rows = getRows()
@@ -1245,7 +1019,6 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, integ
         <AsyncErrorState message={error} onRetry={() => void retryActivePage()} retrying={loading} />
       ) : null}
       {!canWriteDictionaries ? <p className="form-hint">Режим просмотра: для добавления, изменения и удаления справочников нужно право dictionaries.write.</p> : null}
-      {!canManageTariffs ? <p className="form-hint">Режим просмотра тарифов: для изменения тарифов нужно право tariffs.manage.</p> : null}
       <div className="dictionary-workbench">
         <nav className="dictionary-subnav" aria-label="Подгруппы справочников">
           {dictionarySectionGroups.map((group) => (
@@ -1256,7 +1029,7 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, integ
                   setSearch('')
                   if (section.key !== activeSection) {
                     setLoading(true)
-                    if (section.key !== 'owners' && section.key !== 'garages' && section.key !== 'suppliers') {
+                    if (section.key !== 'owners' && section.key !== 'garages') {
                       setEditorReferencesLoading(false)
                     }
                   }
@@ -1611,806 +1384,6 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, integ
       ) : null}
 
       <ToastViewport toast={toast} onDismiss={dismissToast} />
-    </section>
-  )
-}
-export function DictionaryPanel({ auth, dictionaryClient }: { auth: AuthResponse; dictionaryClient: DictionaryClient }) {
-  const [owners, setOwners] = useState<OwnerDto[]>([])
-  const [garages, setGarages] = useState<GarageDto[]>([])
-  const [groups, setGroups] = useState<SupplierGroupDto[]>([])
-  const [suppliers, setSuppliers] = useState<SupplierDto[]>([])
-  const [incomeTypes, setIncomeTypes] = useState<AccountingTypeDto[]>([])
-  const [expenseTypes, setExpenseTypes] = useState<AccountingTypeDto[]>([])
-  const [tariffs, setTariffs] = useState<TariffDto[]>([])
-  const [ownerForm, setOwnerForm] = useState({ lastName: '', firstName: '', phone: '' })
-  const [garageForm, setGarageForm] = useState({ number: '', peopleCount: 1, floorCount: 1, ownerId: '', startingBalance: 0, initialWaterMeterValue: '', initialElectricityMeterValue: '', comment: '' })
-  const [garageSearch, setGarageSearch] = useState('')
-  const [garageSearchStatus, setGarageSearchStatus] = useState<string | null>(null)
-  const garageSearchInitialized = useRef(false)
-  const [selectedGarage, setSelectedGarage] = useState<GarageDto | null>(null)
-  const [supplierGroupName, setSupplierGroupName] = useState('')
-  const [supplierForm, setSupplierForm] = useState({ name: '', groupId: '', inn: '', startingBalance: 0 })
-  const [supplierSearch, setSupplierSearch] = useState('')
-  const [supplierSearchStatus, setSupplierSearchStatus] = useState<string | null>(null)
-  const supplierSearchInitialized = useRef(false)
-  const [incomeTypeForm, setIncomeTypeForm] = useState({ name: '', code: '' })
-  const [expenseTypeForm, setExpenseTypeForm] = useState({ name: '', code: '' })
-  const [tariffForm, setTariffForm] = useState<UpsertTariffRequest>({ name: '', calculationBase: 'fixed', rate: 1, effectiveFrom: '2026-07-01', comment: '' })
-  const [editingTariffId, setEditingTariffId] = useState<string | null>(null)
-  const [editingTariffBaseline, setEditingTariffBaseline] = useState<typeof tariffForm | null>(null)
-  const [tariffDraftConfirmation, setTariffDraftConfirmation] = useState<{
-    title: string
-    description: string
-    confirmLabel: string
-    action: () => void
-  } | null>(null)
-  const [ownerValidationErrors, setOwnerValidationErrors] = useState<string[]>([])
-  const [garageValidationErrors, setGarageValidationErrors] = useState<string[]>([])
-  const [supplierGroupValidationErrors, setSupplierGroupValidationErrors] = useState<string[]>([])
-  const [supplierValidationErrors, setSupplierValidationErrors] = useState<string[]>([])
-  const [incomeTypeValidationErrors, setIncomeTypeValidationErrors] = useState<string[]>([])
-  const [expenseTypeValidationErrors, setExpenseTypeValidationErrors] = useState<string[]>([])
-  const [tariffValidationErrors, setTariffValidationErrors] = useState<string[]>([])
-  const [loading, setLoading] = useState(true)
-  const [saving, setSaving] = useState<string | null>(null)
-  const [error, setError] = useState<string | null>(null)
-  useRestoreFocusOnClose(Boolean(selectedGarage))
-  useRestoreFocusOnClose(Boolean(tariffDraftConfirmation))
-  const selectedGarageCloseButtonRef = useFocusOnOpen<HTMLButtonElement>(Boolean(selectedGarage))
-  const selectedGarageDialogRef = useFocusTrap<HTMLElement>(Boolean(selectedGarage))
-  const tariffDraftConfirmationCancelRef = useFocusOnOpen<HTMLButtonElement>(Boolean(tariffDraftConfirmation))
-  const tariffDraftConfirmationDialogRef = useFocusTrap<HTMLElement>(Boolean(tariffDraftConfirmation))
-
-  useEscapeKey(Boolean(selectedGarage), () => setSelectedGarage(null))
-  useEscapeKey(Boolean(tariffDraftConfirmation), () => setTariffDraftConfirmation(null))
-  const canWriteDictionaries = hasPermission(auth, permissions.dictionariesWrite)
-  const canManageTariffs = hasPermission(auth, permissions.tariffsManage)
-
-  const defaultGroupId = useMemo(() => supplierForm.groupId || groups[0]?.id || '', [groups, supplierForm.groupId])
-
-  useEffect(() => {
-    let ignore = false
-    const controller = new AbortController()
-    async function load() {
-      setLoading(true)
-      setError(null)
-      try {
-        const [loadedOwners, loadedGarages, loadedGroups, loadedSuppliers, loadedIncomeTypes, loadedExpenseTypes, loadedTariffs] = await Promise.all([
-          dictionaryClient.getOwners(auth.accessToken, undefined, dictionaryScreenRequestLimit, false, controller.signal),
-          dictionaryClient.getGarages(auth.accessToken, undefined, dictionaryScreenRequestLimit, false, controller.signal),
-          dictionaryClient.getSupplierGroups(auth.accessToken, undefined, dictionaryScreenRequestLimit, false, controller.signal),
-          dictionaryClient.getSuppliers(auth.accessToken, undefined, undefined, dictionaryScreenRequestLimit, false, controller.signal),
-          dictionaryClient.getIncomeTypes(auth.accessToken, undefined, dictionaryScreenRequestLimit, false, controller.signal),
-          dictionaryClient.getExpenseTypes(auth.accessToken, undefined, dictionaryScreenRequestLimit, false, controller.signal),
-          dictionaryClient.getTariffs(auth.accessToken, undefined, dictionaryScreenRequestLimit, false, false, controller.signal),
-        ])
-        if (!ignore) {
-          setOwners(loadedOwners)
-          setGarages(loadedGarages)
-          setGroups(loadedGroups)
-          setSuppliers(loadedSuppliers)
-          setIncomeTypes(loadedIncomeTypes)
-          setExpenseTypes(loadedExpenseTypes)
-          setTariffs(loadedTariffs)
-        }
-      } catch (caught) {
-        if (!ignore) {
-          setError(caught instanceof Error ? caught.message : 'Не удалось загрузить справочники.')
-        }
-      } finally {
-        if (!ignore) {
-          setLoading(false)
-        }
-      }
-    }
-
-    void load()
-    return () => {
-      ignore = true
-      controller.abort()
-    }
-  }, [auth.accessToken, dictionaryClient])
-
-  useEffect(() => {
-    const query = garageSearch.trim()
-    if (!garageSearchInitialized.current) {
-      garageSearchInitialized.current = true
-      return
-    }
-
-    let ignore = false
-    const controller = new AbortController()
-    const timeoutId = window.setTimeout(() => {
-      setError(null)
-      dictionaryClient
-        .getGarages(auth.accessToken, query || undefined, dictionaryScreenRequestLimit, false, controller.signal)
-        .then((result) => {
-          if (!ignore) {
-            setGarages(result)
-            setGarageSearchStatus(query ? `Найдено гаражей: ${result.length}` : 'Показаны все гаражи')
-          }
-        })
-        .catch((caught) => {
-          if (!ignore) {
-            setError(caught instanceof Error ? caught.message : 'Не удалось выполнить поиск гаражей.')
-          }
-        })
-    }, 350)
-
-    return () => {
-      ignore = true
-      window.clearTimeout(timeoutId)
-      controller.abort()
-    }
-  }, [auth.accessToken, dictionaryClient, garageSearch])
-
-  useEffect(() => {
-    const query = supplierSearch.trim()
-    if (!supplierSearchInitialized.current) {
-      supplierSearchInitialized.current = true
-      return
-    }
-
-    let ignore = false
-    const controller = new AbortController()
-    const timeoutId = window.setTimeout(() => {
-      setError(null)
-      dictionaryClient
-        .getSuppliers(auth.accessToken, undefined, query || undefined, dictionaryScreenRequestLimit, false, controller.signal)
-        .then((result) => {
-          if (!ignore) {
-            setSuppliers(result)
-            setSupplierSearchStatus(query ? `Найдено поставщиков: ${result.length}` : 'Показаны все поставщики')
-          }
-        })
-        .catch((caught) => {
-          if (!ignore) {
-            setError(caught instanceof Error ? caught.message : 'Не удалось выполнить поиск поставщиков.')
-          }
-        })
-    }, 350)
-
-    return () => {
-      ignore = true
-      window.clearTimeout(timeoutId)
-      controller.abort()
-    }
-  }, [auth.accessToken, dictionaryClient, supplierSearch])
-
-  async function saveOwner(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    if (!canWriteDictionaries) {
-      setError('Для изменения справочников нужно право dictionaries.write.')
-      return
-    }
-
-    const errors = getOwnerValidationErrors(ownerForm)
-    if (errors.length > 0) {
-      setError(null)
-      setOwnerValidationErrors(errors)
-      return
-    }
-
-    setOwnerValidationErrors([])
-    await runSaving('owner', async () => {
-      const owner = await dictionaryClient.createOwner(auth.accessToken, ownerForm)
-      setOwners((items) => [owner, ...items])
-      setOwnerForm({ lastName: '', firstName: '', phone: '' })
-    })
-  }
-
-  async function saveGarage(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    if (!canWriteDictionaries) {
-      setError('Для изменения справочников нужно право dictionaries.write.')
-      return
-    }
-
-    const request: UpsertGarageRequest = {
-      number: garageForm.number,
-      peopleCount: garageForm.peopleCount,
-      floorCount: garageForm.floorCount,
-      ownerId: garageForm.ownerId || null,
-      startingBalance: garageForm.startingBalance,
-      initialWaterMeterValue: garageForm.initialWaterMeterValue === '' ? null : Number(garageForm.initialWaterMeterValue),
-      initialElectricityMeterValue: garageForm.initialElectricityMeterValue === '' ? null : Number(garageForm.initialElectricityMeterValue),
-      comment: garageForm.comment.trim() || undefined,
-    }
-    const errors = getGarageValidationErrors(request)
-    if (errors.length > 0) {
-      setError(null)
-      setGarageValidationErrors(errors)
-      return
-    }
-
-    setGarageValidationErrors([])
-    await runSaving('garage', async () => {
-      const garage = await dictionaryClient.createGarage(auth.accessToken, request)
-      setGarages((items) => [garage, ...items])
-      setGarageForm({ number: '', peopleCount: 1, floorCount: 1, ownerId: '', startingBalance: 0, initialWaterMeterValue: '', initialElectricityMeterValue: '', comment: '' })
-    })
-  }
-
-  async function searchGarages() {
-    setSaving('garage-search')
-    setError(null)
-    setGarageSearchStatus(null)
-    try {
-      const result = await dictionaryClient.getGarages(auth.accessToken, garageSearch, dictionaryScreenRequestLimit)
-      setGarages(result)
-      const query = garageSearch.trim()
-      setGarageSearchStatus(query ? `Найдено гаражей: ${result.length}` : 'Показаны все гаражи')
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : 'Не удалось выполнить поиск гаражей.')
-    } finally {
-      setSaving(null)
-    }
-  }
-
-  async function saveSupplierGroup(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    if (!canWriteDictionaries) {
-      setError('Для изменения справочников нужно право dictionaries.write.')
-      return
-    }
-
-    const errors = getSupplierGroupValidationErrors({ name: supplierGroupName })
-    if (errors.length > 0) {
-      setError(null)
-      setSupplierGroupValidationErrors(errors)
-      return
-    }
-
-    setSupplierGroupValidationErrors([])
-    await runSaving('group', async () => {
-      const group = await dictionaryClient.createSupplierGroup(auth.accessToken, { name: supplierGroupName })
-      setGroups((items) => [...items, group])
-      setSupplierGroupName('')
-      setSupplierForm((value) => ({ ...value, groupId: group.id }))
-    })
-  }
-
-  async function saveSupplier(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    if (!canWriteDictionaries) {
-      setError('Для изменения справочников нужно право dictionaries.write.')
-      return
-    }
-
-    const request: UpsertSupplierRequest = {
-      name: supplierForm.name,
-      groupId: defaultGroupId,
-      inn: supplierForm.inn,
-      startingBalance: supplierForm.startingBalance,
-    }
-    const errors = getSupplierValidationErrors(request)
-    if (errors.length > 0) {
-      setError(null)
-      setSupplierValidationErrors(errors)
-      return
-    }
-
-    setSupplierValidationErrors([])
-    await runSaving('supplier', async () => {
-      const supplier = await dictionaryClient.createSupplier(auth.accessToken, request)
-      setSuppliers((items) => [supplier, ...items])
-      setSupplierForm({ name: '', groupId: defaultGroupId, inn: '', startingBalance: 0 })
-    })
-  }
-
-  async function searchSuppliers() {
-    setSaving('supplier-search')
-    setError(null)
-    setSupplierSearchStatus(null)
-    try {
-      const result = await dictionaryClient.getSuppliers(auth.accessToken, undefined, supplierSearch, dictionaryScreenRequestLimit)
-      setSuppliers(result)
-      const query = supplierSearch.trim()
-      setSupplierSearchStatus(query ? `Найдено поставщиков: ${result.length}` : 'Показаны все поставщики')
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : 'Не удалось выполнить поиск поставщиков.')
-    } finally {
-      setSaving(null)
-    }
-  }
-
-  async function saveIncomeType(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    if (!canWriteDictionaries) {
-      setError('Для изменения справочников нужно право dictionaries.write.')
-      return
-    }
-
-    const errors = getAccountingTypeValidationErrors(incomeTypeForm, 'вида поступления')
-    if (errors.length > 0) {
-      setError(null)
-      setIncomeTypeValidationErrors(errors)
-      return
-    }
-
-    setIncomeTypeValidationErrors([])
-    await runSaving('income-type', async () => {
-      const incomeType = await dictionaryClient.createIncomeType(auth.accessToken, incomeTypeForm)
-      setIncomeTypes((items) => [incomeType, ...items])
-      setIncomeTypeForm({ name: '', code: '' })
-    })
-  }
-
-  async function saveExpenseType(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    if (!canWriteDictionaries) {
-      setError('Для изменения справочников нужно право dictionaries.write.')
-      return
-    }
-
-    const errors = getAccountingTypeValidationErrors(expenseTypeForm, 'вида выплаты')
-    if (errors.length > 0) {
-      setError(null)
-      setExpenseTypeValidationErrors(errors)
-      return
-    }
-
-    setExpenseTypeValidationErrors([])
-    await runSaving('expense-type', async () => {
-      const expenseType = await dictionaryClient.createExpenseType(auth.accessToken, expenseTypeForm)
-      setExpenseTypes((items) => [expenseType, ...items])
-      setExpenseTypeForm({ name: '', code: '' })
-    })
-  }
-
-  async function saveTariff(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    if (!canManageTariffs) {
-      setError('Для изменения тарифов нужно право tariffs.manage.')
-      return
-    }
-
-    const errors = getTariffValidationErrors(tariffForm)
-    if (errors.length > 0) {
-      setError(null)
-      setTariffValidationErrors(errors)
-      return
-    }
-
-    setTariffValidationErrors([])
-    await runSaving('tariff', async () => {
-      if (editingTariffId) {
-        const tariff = await dictionaryClient.updateTariff(auth.accessToken, editingTariffId, tariffForm)
-        setTariffs((items) => items.map((item) => (item.id === tariff.id ? tariff : item)))
-        setEditingTariffId(null)
-        setEditingTariffBaseline(null)
-      } else {
-        const tariff = await dictionaryClient.createTariff(auth.accessToken, tariffForm)
-        setTariffs((items) => [tariff, ...items])
-      }
-
-      setTariffForm((value) => withoutElectricityTierFields({ ...value, name: '', rate: 1, comment: '' }))
-    })
-  }
-
-  function applyEditTariff(tariff: TariffDto) {
-    const nextForm = createTariffFormFromDto(tariff)
-
-    setEditingTariffId(tariff.id)
-    setTariffValidationErrors([])
-    setTariffForm(nextForm)
-    setEditingTariffBaseline(nextForm)
-  }
-
-  function editTariff(tariff: TariffDto) {
-    if (editingTariffId === tariff.id) {
-      return
-    }
-
-    if (editingTariffId && hasUnsavedTariffChanges()) {
-      setTariffDraftConfirmation({
-        title: 'Перейти к другому тарифу?',
-        description: 'Несохраненные изменения текущего тарифа будут потеряны.',
-        confirmLabel: 'Перейти без сохранения',
-        action: () => applyEditTariff(tariff),
-      })
-      return
-    }
-
-    applyEditTariff(tariff)
-  }
-
-  function hasUnsavedTariffChanges() {
-    return Boolean(
-      editingTariffBaseline
-      && (
-        tariffForm.name !== editingTariffBaseline.name
-        || tariffForm.calculationBase !== editingTariffBaseline.calculationBase
-        || tariffForm.rate !== editingTariffBaseline.rate
-        || tariffForm.effectiveFrom !== editingTariffBaseline.effectiveFrom
-        || tariffForm.comment !== editingTariffBaseline.comment
-        || tariffForm.electricityFirstThreshold !== editingTariffBaseline.electricityFirstThreshold
-        || tariffForm.electricitySecondThreshold !== editingTariffBaseline.electricitySecondThreshold
-        || tariffForm.electricityFirstRate !== editingTariffBaseline.electricityFirstRate
-        || tariffForm.electricitySecondRate !== editingTariffBaseline.electricitySecondRate
-        || tariffForm.electricityThirdRate !== editingTariffBaseline.electricityThirdRate
-      ),
-    )
-  }
-
-  function resetTariffForm(options?: { skipConfirmation?: boolean }) {
-    if (editingTariffId && !options?.skipConfirmation && hasUnsavedTariffChanges()) {
-      setTariffDraftConfirmation({
-        title: 'Отменить редактирование тарифа?',
-        description: 'Несохраненные изменения текущего тарифа будут потеряны.',
-        confirmLabel: 'Отменить без сохранения',
-        action: () => resetTariffForm({ skipConfirmation: true }),
-      })
-      return
-    }
-
-    setTariffDraftConfirmation(null)
-    setEditingTariffId(null)
-    setEditingTariffBaseline(null)
-    setTariffValidationErrors([])
-    setTariffForm((value) => withoutElectricityTierFields({ ...value, name: '', rate: 1, comment: '' }))
-  }
-
-  function confirmTariffDraftAction() {
-    if (!tariffDraftConfirmation) {
-      return
-    }
-
-    const action = tariffDraftConfirmation.action
-    setTariffDraftConfirmation(null)
-    action()
-  }
-
-  async function archiveDictionaryItem(scope: string, reason: string, action: (reason: string) => Promise<void>) {
-    if (scope === 'tariff' && !canManageTariffs) {
-      setError('Для архивирования тарифов нужно право tariffs.manage.')
-      return
-    }
-
-    if (scope !== 'tariff' && !canWriteDictionaries) {
-      setError('Для архивирования справочников нужно право dictionaries.write.')
-      return
-    }
-
-    await runSaving(`archive-${scope}`, () => action(reason))
-  }
-
-  async function runSaving(scope: string, action: () => Promise<void>) {
-    setSaving(scope)
-    setError(null)
-    try {
-      await action()
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : 'Не удалось сохранить запись.')
-    } finally {
-      setSaving(null)
-    }
-  }
-
-  return (
-    <section className="dictionary-panel" aria-label="Справочники">
-      <div className="section-heading">
-        <div>
-          <p className="eyebrow">Справочники</p>
-          <h2>База для импорта, начислений и отчетов</h2>
-        </div>
-        {!loading ? <span>{owners.length + garages.length + suppliers.length} записей</span> : null}
-      </div>
-
-      {error ? <FormError>{error}</FormError> : null}
-      {!canWriteDictionaries ? <p className="form-hint">Режим просмотра: для добавления и архивирования справочников нужно право dictionaries.write.</p> : null}
-      {!canManageTariffs ? <p className="form-hint">Режим просмотра тарифов: для добавления и архивирования тарифов нужно право tariffs.manage.</p> : null}
-
-      <div className="dictionary-grid">
-        <form className="dictionary-form" onSubmit={saveOwner}>
-          <h3>Владельцы</h3>
-          <input aria-label="Фамилия владельца" placeholder="Фамилия" value={ownerForm.lastName} onChange={(event) => setOwnerForm({ ...ownerForm, lastName: event.target.value })} required />
-          <input aria-label="Имя владельца" placeholder="Имя" value={ownerForm.firstName} onChange={(event) => setOwnerForm({ ...ownerForm, firstName: event.target.value })} required />
-          <PhoneInput aria-label="Телефон владельца" value={ownerForm.phone} onValueChange={(phone) => setOwnerForm({ ...ownerForm, phone })} />
-          <FormValidationSummary title="Проверьте владельца" items={ownerValidationErrors} />
-          <button className="secondary-button create-action-button" type="submit" disabled={!canWriteDictionaries || saving === 'owner'}>
-            <FileText size={16} aria-hidden="true" />
-            <span>Добавить</span>
-          </button>
-          <DictionaryList
-            items={owners.map((owner) => ({
-              id: owner.id,
-              title: owner.fullName,
-              meta: owner.phone ?? 'телефон не указан',
-              archiveLabel: canWriteDictionaries ? `Архивировать владельца ${owner.fullName}` : undefined,
-              onArchive: canWriteDictionaries ? (reason) => archiveDictionaryItem('owner', reason, async (archiveReason) => {
-                await dictionaryClient.archiveOwner(auth.accessToken, owner.id, archiveReason)
-                setOwners((items) => items.filter((item) => item.id !== owner.id))
-              }) : undefined,
-            }))}
-            emptyText="Владельцев пока нет"
-          />
-        </form>
-
-        <form className="dictionary-form" onSubmit={saveGarage}>
-          <h3>Гаражи</h3>
-          <div className="compact-form">
-            <input
-              aria-label="Поиск гаража или владельца"
-              placeholder="Номер или ФИО владельца"
-              value={garageSearch}
-              onChange={(event) => setGarageSearch(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === 'Enter') {
-                  event.preventDefault()
-                  void searchGarages()
-                }
-              }}
-            />
-            <button className="icon-button" type="button" aria-label="Найти гараж" disabled={saving === 'garage-search'} onClick={() => void searchGarages()}>
-              <Search size={17} />
-            </button>
-          </div>
-          {garageSearchStatus ? <p className="form-hint" role="status" aria-live="polite">{garageSearchStatus}</p> : null}
-          <input aria-label="Номер гаража" placeholder="Номер" value={garageForm.number} onChange={(event) => setGarageForm({ ...garageForm, number: event.target.value })} required />
-          <div className="inline-fields">
-            <input aria-label="Количество людей" type="number" min="0" value={garageForm.peopleCount} onChange={(event) => setGarageForm({ ...garageForm, peopleCount: Number(event.target.value) })} />
-            <input aria-label="Количество этажей" type="number" min="0" value={garageForm.floorCount} onChange={(event) => setGarageForm({ ...garageForm, floorCount: Number(event.target.value) })} />
-          </div>
-          <MoneyInput aria-label="Стартовый баланс гаража" value={garageForm.startingBalance} onValueChange={(startingBalance) => setGarageForm({ ...garageForm, startingBalance })} />
-          <div className="inline-fields">
-            <input aria-label="Стартовый счетчик воды" type="number" min="0" step="0.001" value={garageForm.initialWaterMeterValue} onChange={(event) => setGarageForm({ ...garageForm, initialWaterMeterValue: event.target.value })} />
-            <input aria-label="Стартовый счетчик электричества" type="number" min="0" step="0.001" value={garageForm.initialElectricityMeterValue} onChange={(event) => setGarageForm({ ...garageForm, initialElectricityMeterValue: event.target.value })} />
-          </div>
-          <textarea aria-label="Комментарий по гаражу" placeholder="Комментарий по счетчикам, особенностям начислений или импорта" value={garageForm.comment} onChange={(event) => setGarageForm({ ...garageForm, comment: event.target.value })} />
-          <SelectControl aria-label="Владелец гаража" value={garageForm.ownerId} options={[{ value: '', label: 'Без владельца' }, ...owners.map((owner) => ({ value: owner.id, label: owner.fullName }))]} onChange={(value) => setGarageForm({ ...garageForm, ownerId: value })} />
-          <FormValidationSummary title="Проверьте гараж" items={garageValidationErrors} />
-          <button className="secondary-button create-action-button" type="submit" disabled={!canWriteDictionaries || saving === 'garage'}>
-            <FileText size={16} aria-hidden="true" />
-            <span>Добавить</span>
-          </button>
-          <DictionaryList
-            items={garages.map((garage) => ({
-              id: garage.id,
-              title: `Гараж ${garage.number}`,
-              meta: `${garage.ownerName ?? 'владелец не указан'} · старт ${formatMoney(garage.startingBalance)}`,
-              openLabel: `Открыть карточку гаража ${garage.number}`,
-              onOpen: () => setSelectedGarage(garage),
-              archiveLabel: canWriteDictionaries ? `Архивировать гараж ${garage.number}` : undefined,
-              onArchive: canWriteDictionaries ? (reason) => archiveDictionaryItem('garage', reason, async (archiveReason) => {
-                await dictionaryClient.archiveGarage(auth.accessToken, garage.id, archiveReason)
-                setGarages((items) => items.filter((item) => item.id !== garage.id))
-              }) : undefined,
-            }))}
-            emptyText="Гаражей пока нет"
-          />
-        </form>
-
-        <div className="dictionary-form">
-          <h3>Поставщики</h3>
-          <div className="compact-form">
-            <input
-              aria-label="Поиск поставщика"
-              placeholder="Название, ИНН или контакт"
-              value={supplierSearch}
-              onChange={(event) => setSupplierSearch(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === 'Enter') {
-                  event.preventDefault()
-                  void searchSuppliers()
-                }
-              }}
-            />
-            <button className="icon-button" type="button" aria-label="Найти поставщика" disabled={saving === 'supplier-search'} onClick={() => void searchSuppliers()}>
-              <Search size={17} />
-            </button>
-          </div>
-          {supplierSearchStatus ? <p className="form-hint" role="status" aria-live="polite">{supplierSearchStatus}</p> : null}
-          <form className="compact-form" onSubmit={saveSupplierGroup}>
-            <input aria-label="Группа поставщиков" placeholder="Группа" value={supplierGroupName} onChange={(event) => setSupplierGroupName(event.target.value)} required />
-            <button className="icon-button" type="submit" aria-label="Добавить группу" disabled={!canWriteDictionaries || saving === 'group'}>
-              <FileText size={17} aria-hidden="true" />
-            </button>
-          </form>
-          <FormValidationSummary title="Проверьте группу поставщиков" items={supplierGroupValidationErrors} />
-          <form className="compact-stack" onSubmit={saveSupplier}>
-            <input aria-label="Название поставщика" placeholder="Название" value={supplierForm.name} onChange={(event) => setSupplierForm({ ...supplierForm, name: event.target.value })} required />
-            <SelectControl aria-label="Группа для поставщика" value={defaultGroupId} options={groups.length > 0 ? groups.map((group) => ({ value: group.id, label: group.name })) : [{ value: '', label: 'Группы пока не добавлены' }]} disabled={groups.length === 0} onChange={(value) => setSupplierForm({ ...supplierForm, groupId: value })} />
-            <input aria-label="ИНН поставщика" placeholder="ИНН" value={supplierForm.inn} onChange={(event) => setSupplierForm({ ...supplierForm, inn: event.target.value })} />
-            <MoneyInput aria-label="Стартовый баланс поставщика" value={supplierForm.startingBalance} onValueChange={(startingBalance) => setSupplierForm({ ...supplierForm, startingBalance })} />
-            <FormValidationSummary title="Проверьте поставщика" items={supplierValidationErrors} />
-            <button className="secondary-button create-action-button" type="submit" disabled={!canWriteDictionaries || !defaultGroupId || saving === 'supplier'}>
-              <FileText size={16} aria-hidden="true" />
-              <span>Добавить</span>
-            </button>
-          </form>
-          <DictionaryList
-            items={suppliers.map((supplier) => ({
-              id: supplier.id,
-              title: supplier.name,
-              meta: `${supplier.groupName}${supplier.inn ? `, ИНН ${supplier.inn}` : ''} · старт ${formatMoney(supplier.startingBalance)}`,
-              archiveLabel: canWriteDictionaries ? `Архивировать поставщика ${supplier.name}` : undefined,
-              onArchive: canWriteDictionaries ? (reason) => archiveDictionaryItem('supplier', reason, async (archiveReason) => {
-                await dictionaryClient.archiveSupplier(auth.accessToken, supplier.id, archiveReason)
-                setSuppliers((items) => items.filter((item) => item.id !== supplier.id))
-              }) : undefined,
-            }))}
-            emptyText="Поставщиков пока нет"
-          />
-        </div>
-      </div>
-
-      <div className="finance-settings-grid" aria-label="Финансовые настройки">
-        <form className="dictionary-form" onSubmit={saveIncomeType}>
-          <h3>Виды поступлений</h3>
-          <input aria-label="Название вида поступления" placeholder="Членский взнос" value={incomeTypeForm.name} onChange={(event) => setIncomeTypeForm({ ...incomeTypeForm, name: event.target.value })} required />
-          <input aria-label="Код вида поступления" placeholder="Например, security_2026" value={incomeTypeForm.code} onChange={(event) => setIncomeTypeForm({ ...incomeTypeForm, code: event.target.value })} maxLength={80} autoCapitalize="none" spellCheck={false} />
-          <small className="form-field-hint">Код хранится строчными латинскими буквами. Системные коды зарезервированы.</small>
-          <FormValidationSummary title="Проверьте вид поступления" items={incomeTypeValidationErrors} />
-          <button className="secondary-button create-action-button" type="submit" disabled={!canWriteDictionaries || saving === 'income-type'}>
-            <FileText size={16} aria-hidden="true" />
-            <span>Добавить</span>
-          </button>
-          <DictionaryList
-            items={incomeTypes.map((item) => ({
-              id: item.id,
-              title: item.name,
-              meta: item.code ?? 'код не указан',
-              archiveLabel: canWriteDictionaries ? `Архивировать вид поступления ${item.name}` : undefined,
-              onArchive: canWriteDictionaries ? (reason) => archiveDictionaryItem('income-type', reason, async (archiveReason) => {
-                await dictionaryClient.archiveIncomeType(auth.accessToken, item.id, archiveReason)
-                setIncomeTypes((items) => items.filter((incomeType) => incomeType.id !== item.id))
-              }) : undefined,
-            }))}
-            emptyText="Видов поступлений пока нет"
-          />
-        </form>
-
-        <form className="dictionary-form" onSubmit={saveExpenseType}>
-          <h3>Статьи расходов</h3>
-          <input aria-label="Название вида выплаты" placeholder="Электроэнергия" value={expenseTypeForm.name} onChange={(event) => setExpenseTypeForm({ ...expenseTypeForm, name: event.target.value })} required />
-          <input aria-label="Код вида выплаты" placeholder="Например, repair_2026" value={expenseTypeForm.code} onChange={(event) => setExpenseTypeForm({ ...expenseTypeForm, code: event.target.value })} maxLength={80} autoCapitalize="none" spellCheck={false} />
-          <small className="form-field-hint">Код хранится строчными латинскими буквами. Системные коды зарезервированы.</small>
-          <FormValidationSummary title="Проверьте статью расхода" items={expenseTypeValidationErrors} />
-          <button className="secondary-button create-action-button" type="submit" disabled={!canWriteDictionaries || saving === 'expense-type'}>
-            <FileText size={16} aria-hidden="true" />
-            <span>Добавить</span>
-          </button>
-          <DictionaryList
-            items={expenseTypes.map((item) => ({
-              id: item.id,
-              title: item.name,
-              meta: item.code ?? 'код не указан',
-              archiveLabel: canWriteDictionaries ? `Архивировать статью расхода ${item.name}` : undefined,
-              onArchive: canWriteDictionaries ? (reason) => archiveDictionaryItem('expense-type', reason, async (archiveReason) => {
-                await dictionaryClient.archiveExpenseType(auth.accessToken, item.id, archiveReason)
-                setExpenseTypes((items) => items.filter((expenseType) => expenseType.id !== item.id))
-              }) : undefined,
-            }))}
-            emptyText="Видов выплат пока нет"
-          />
-        </form>
-
-        <form className="dictionary-form" onSubmit={saveTariff}>
-          <h3>{editingTariffId ? 'Изменение тарифа' : 'Тарифы'}</h3>
-          <input aria-label="Название тарифа" placeholder="Вода" value={tariffForm.name} onChange={(event) => setTariffForm({ ...tariffForm, name: event.target.value })} required />
-          <SelectControl aria-label="База расчета тарифа" value={tariffForm.calculationBase} options={getTariffCalculationBaseOptions()} onChange={(value) => setTariffForm(updateTariffCalculationBase(tariffForm, value))} />
-          <div className="inline-fields">
-            <MoneyInput aria-label="Ставка тарифа" value={tariffForm.rate} onValueChange={(rate) => setTariffForm({ ...tariffForm, rate })} />
-            <LocalizedDatePicker ariaLabel="Дата начала тарифа" mode="date" value={tariffForm.effectiveFrom} onChange={(value) => setTariffForm({ ...tariffForm, effectiveFrom: value })} />
-          </div>
-          {usesElectricityTariffTiers(tariffForm.calculationBase) ? (
-            <div className="inline-fields tariff-tier-fields">
-              <input aria-label="Первый порог электроэнергии" placeholder="Порог 1, кВт·ч" type="number" min="0.0001" step="0.0001" value={tariffForm.electricityFirstThreshold ?? ''} onChange={(event) => setTariffForm({ ...tariffForm, electricityFirstThreshold: parseOptionalNumberInput(event.target.value) })} />
-              <input aria-label="Второй порог электроэнергии" placeholder="Порог 2, кВт·ч" type="number" min="0.0001" step="0.0001" value={tariffForm.electricitySecondThreshold ?? ''} onChange={(event) => setTariffForm({ ...tariffForm, electricitySecondThreshold: parseOptionalNumberInput(event.target.value) })} />
-              <MoneyInput aria-label="Первая ставка электроэнергии" value={tariffForm.electricityFirstRate ?? Number.NaN} onValueChange={(electricityFirstRate) => setTariffForm({ ...tariffForm, electricityFirstRate: Number.isFinite(electricityFirstRate) ? electricityFirstRate : undefined })} />
-              <MoneyInput aria-label="Вторая ставка электроэнергии" value={tariffForm.electricitySecondRate ?? Number.NaN} onValueChange={(electricitySecondRate) => setTariffForm({ ...tariffForm, electricitySecondRate: Number.isFinite(electricitySecondRate) ? electricitySecondRate : undefined })} />
-              <MoneyInput aria-label="Третья ставка электроэнергии" value={tariffForm.electricityThirdRate ?? Number.NaN} onValueChange={(electricityThirdRate) => setTariffForm({ ...tariffForm, electricityThirdRate: Number.isFinite(electricityThirdRate) ? electricityThirdRate : undefined })} />
-            </div>
-          ) : null}
-          <textarea aria-label="Комментарий тарифа" placeholder="Комментарий" value={tariffForm.comment ?? ''} onChange={(event) => setTariffForm({ ...tariffForm, comment: event.target.value })} />
-          {editingTariffId && hasUnsavedTariffChanges() ? <p className="form-hint" role="status" aria-live="polite">Есть несохраненные изменения тарифа.</p> : null}
-          <FormValidationSummary title="Проверьте тариф" items={tariffValidationErrors} />
-          <div className="inline-actions">
-            <button className={editingTariffId ? 'secondary-button' : 'secondary-button create-action-button'} type="submit" disabled={!canManageTariffs || saving === 'tariff'}>
-              {editingTariffId ? <Save size={16} /> : <FileText size={16} aria-hidden="true" />}
-              <span>{editingTariffId ? 'Сохранить' : 'Добавить'}</span>
-            </button>
-            {editingTariffId ? (
-              <button className="ghost-button" type="button" onClick={() => resetTariffForm()}>
-                Отменить
-              </button>
-            ) : null}
-          </div>
-          <DictionaryList
-            items={tariffs.map((item) => ({
-              id: item.id,
-              title: item.name,
-              meta: `${formatTariffRateSummary(item)} с ${formatDateOnly(item.effectiveFrom)}${item.comment ? ` · ${item.comment}` : ''}`,
-              isActive: editingTariffId === item.id,
-              activeLabel: 'Редактируется',
-              openLabel: canManageTariffs ? `Изменить тариф ${item.name}` : undefined,
-              onOpen: canManageTariffs ? () => editTariff(item) : undefined,
-              archiveLabel: canManageTariffs ? `Архивировать тариф ${item.name}` : undefined,
-              onArchive: canManageTariffs ? (reason) => archiveDictionaryItem('tariff', reason, async (archiveReason) => {
-                await dictionaryClient.archiveTariff(auth.accessToken, item.id, archiveReason)
-                setTariffs((items) => items.filter((tariff) => tariff.id !== item.id))
-                if (editingTariffId === item.id) {
-                  resetTariffForm({ skipConfirmation: true })
-                }
-              }) : undefined,
-            }))}
-            emptyText="Тарифов пока нет"
-          />
-        </form>
-      </div>
-      {tariffDraftConfirmation ? (
-        <div className="modal-backdrop" role="presentation" onMouseDown={() => setTariffDraftConfirmation(null)}>
-          <section ref={tariffDraftConfirmationDialogRef} className="detail-dialog" role="dialog" aria-modal="true" aria-labelledby="tariff-draft-confirmation-title" aria-describedby="tariff-draft-confirmation-description" onMouseDown={(event) => event.stopPropagation()}>
-            <div className="detail-dialog-header">
-              <div>
-                <p className="eyebrow">Черновик тарифа</p>
-                <h3 id="tariff-draft-confirmation-title">{tariffDraftConfirmation.title}</h3>
-                <p>{editingTariffBaseline?.name || 'Тариф'}</p>
-              </div>
-              <button className="icon-button" type="button" aria-label="Остаться в редактировании тарифа" onClick={() => setTariffDraftConfirmation(null)}>
-                <X size={18} />
-              </button>
-            </div>
-            <p className="confirmation-text" id="tariff-draft-confirmation-description">{tariffDraftConfirmation.description}</p>
-            <div className="detail-dialog-actions">
-              <button ref={tariffDraftConfirmationCancelRef} className="ghost-button" type="button" onClick={() => setTariffDraftConfirmation(null)}>
-                Остаться
-              </button>
-              <button className="secondary-button danger-button" type="button" onClick={confirmTariffDraftAction}>
-                <X size={16} />
-                <span>{tariffDraftConfirmation.confirmLabel}</span>
-              </button>
-            </div>
-          </section>
-        </div>
-      ) : null}
-      {selectedGarage ? (
-        <div className="modal-backdrop" role="presentation" onMouseDown={() => setSelectedGarage(null)}>
-          <section ref={selectedGarageDialogRef} className="detail-dialog" role="dialog" aria-modal="true" aria-labelledby="garage-card-title" aria-describedby="garage-card-owner" onMouseDown={(event) => event.stopPropagation()}>
-            <div className="detail-dialog-header">
-              <div>
-                <p className="eyebrow">Карточка гаража</p>
-                <h3 id="garage-card-title">Гараж {selectedGarage.number}</h3>
-                <p id="garage-card-owner">{selectedGarage.ownerName ?? 'Владелец не указан'}</p>
-              </div>
-              <button ref={selectedGarageCloseButtonRef} className="icon-button" type="button" aria-label="Закрыть карточку гаража" onClick={() => setSelectedGarage(null)}>
-                <X size={18} />
-              </button>
-            </div>
-            <dl className="detail-grid">
-              <div>
-                <dt>Владелец</dt>
-                <dd>{selectedGarage.ownerName ?? 'Не указан'}</dd>
-              </div>
-              <div>
-                <dt>Людей</dt>
-                <dd>{selectedGarage.peopleCount}</dd>
-              </div>
-              <div>
-                <dt>Этажей</dt>
-                <dd>{selectedGarage.floorCount}</dd>
-              </div>
-              <div>
-                <dt>Стартовый баланс</dt>
-                <dd>{formatMoney(selectedGarage.startingBalance)}</dd>
-              </div>
-              <div>
-                <dt>Старт воды</dt>
-                <dd>{formatNullableNumber(selectedGarage.initialWaterMeterValue)}</dd>
-              </div>
-              <div>
-                <dt>Старт электричества</dt>
-                <dd>{formatNullableNumber(selectedGarage.initialElectricityMeterValue)}</dd>
-              </div>
-              <div>
-                <dt>Комментарий</dt>
-                <dd>{selectedGarage.comment || 'Нет комментария'}</dd>
-              </div>
-            </dl>
-          </section>
-        </div>
-      ) : null}
     </section>
   )
 }

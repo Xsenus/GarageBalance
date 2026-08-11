@@ -18,14 +18,13 @@ describe('accessible dynamic messages', () => {
   const auditPanelSource = readFileSync(resolve(process.cwd(), 'src', 'features', 'audit', 'AuditPanel.tsx'), 'utf8')
   const reportPanelSource = readFileSync(resolve(process.cwd(), 'src', 'features', 'reports', 'ReportPanel.tsx'), 'utf8')
   const userManagementPanelSource = readFileSync(resolve(process.cwd(), 'src', 'features', 'users', 'UserManagementPanel.tsx'), 'utf8')
-  const dictionaryListSource = readFileSync(resolve(process.cwd(), 'src', 'shared', 'DictionaryList.tsx'), 'utf8')
   const dictionaryPanelSource = readFileSync(resolve(process.cwd(), 'src', 'features', 'dictionaries', 'DictionaryPanel.tsx'), 'utf8')
   const tariffsPanelSource = readFileSync(resolve(process.cwd(), 'src', 'features', 'tariffs', 'TariffsAndFeesPanel.tsx'), 'utf8')
   const contractorsPanelSource = readFileSync(resolve(process.cwd(), 'src', 'features', 'contractors', 'ContractorsPanel.tsx'), 'utf8')
   const financePanelSource = readFileSync(resolve(process.cwd(), 'src', 'features', 'finance', 'FinancePanel.tsx'), 'utf8')
   const workspacePanelSource = readFileSync(resolve(process.cwd(), 'src', 'features', 'workspace', 'Workspace.tsx'), 'utf8')
   const appShellSource = readFileSync(resolve(process.cwd(), 'src', 'features', 'workspace', 'AppShell.tsx'), 'utf8')
-  const workspaceSource = [appSource, authGateSource, releasePanelSource, settingsPanelSource, fundsPanelSource, importPanelSource, meterReadingsPanelSource, auditPanelSource, reportPanelSource, userManagementPanelSource, dictionaryListSource, dictionaryPanelSource, tariffsPanelSource, contractorsPanelSource, financePanelSource, workspacePanelSource, appShellSource].join('\n')
+  const workspaceSource = [appSource, authGateSource, releasePanelSource, settingsPanelSource, fundsPanelSource, importPanelSource, meterReadingsPanelSource, auditPanelSource, reportPanelSource, userManagementPanelSource, dictionaryPanelSource, tariffsPanelSource, contractorsPanelSource, financePanelSource, workspacePanelSource, appShellSource].join('\n')
 
   it('keeps polite live regions exposed as statuses in the main workspace', () => {
     const liveRegionLines = workspaceSource
@@ -69,19 +68,6 @@ describe('accessible dynamic messages', () => {
     expect(dialogLines.filter(({ line }) => !line.includes('aria-modal="true"'))).toEqual([])
     expect(dialogLines.filter(({ line }) => !line.includes('aria-labelledby='))).toEqual([])
     expect(dialogLines.filter(({ line }) => !line.includes('aria-describedby='))).toEqual([])
-  })
-
-  it('keeps dictionary disclosure controls linked to their list', () => {
-    expect(dictionaryListSource).toContain('<ul className="dictionary-list" id={listId}>')
-
-    const disclosureControlLines = dictionaryListSource
-      .split(/\r?\n/)
-      .map((line, index) => ({ index: index + 1, line: line.trim() }))
-      .filter(({ line }) => line.includes('setShowAllItems((value) => !value)'))
-
-    expect(disclosureControlLines.length).toBeGreaterThan(0)
-    expect(disclosureControlLines.filter(({ line }) => !line.includes('aria-controls={listId}'))).toEqual([])
-    expect(disclosureControlLines.filter(({ line }) => !line.includes('aria-expanded={showAllItems}'))).toEqual([])
   })
 
   it('keeps report workbook period filters typed and quickly adjustable', () => {
@@ -158,7 +144,7 @@ describe('accessible dynamic messages', () => {
     expect(dictionaryPanelSource).not.toContain('<select')
     expect(dictionaryPanelSource).not.toContain('type="date"')
     expect(dictionaryPanelSource).not.toContain('type="month"')
-    expect(dictionaryPanelSource.match(/<SelectControl\b/g)?.length).toBeGreaterThanOrEqual(7)
+    expect(dictionaryPanelSource.match(/<SelectControl\b/g)?.length).toBeGreaterThanOrEqual(2)
     expect(dictionaryPanelSource.match(/<LocalizedDatePicker\b/g)?.length).toBeGreaterThanOrEqual(2)
     expect(financePanelSource).toContain('aria-label="Гараж для поступления"')
     expect(financePanelSource).toContain('aria-label="Услуга или статья расхода выплаты"')

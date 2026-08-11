@@ -149,6 +149,8 @@ public sealed class FrontendFeatureModuleTests
         var repositoryRoot = FindRepositoryRoot();
         var appText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "App.tsx")) + File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "features", "workspace", "Workspace.tsx"));
         var dictionaryPanelText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "features", "dictionaries", "DictionaryPanel.tsx"));
+        var contractorsPanelText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "features", "contractors", "ContractorsPanel.tsx"));
+        var tariffsPanelText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "features", "tariffs", "TariffsAndFeesPanel.tsx"));
         var roadmapLine = File
             .ReadLines(Path.Combine(repositoryRoot, "docs", "development-guide.md"))
             .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
@@ -162,36 +164,26 @@ public sealed class FrontendFeatureModuleTests
 
         Assert.Contains("export function DictionaryPanelV2(", dictionaryPanelText, StringComparison.Ordinal);
         Assert.Contains("dictionaryClient.createGarage", dictionaryPanelText, StringComparison.Ordinal);
-        Assert.Contains("dictionaryClient.updateSupplier", dictionaryPanelText, StringComparison.Ordinal);
-        Assert.Contains("dictionaryClient.archiveTariff", dictionaryPanelText, StringComparison.Ordinal);
         Assert.Contains("dictionaryClient.restoreGarage", dictionaryPanelText, StringComparison.Ordinal);
         Assert.Contains("financeClient.getGarageBalanceHistory", dictionaryPanelText, StringComparison.Ordinal);
+        Assert.DoesNotContain("dictionaryClient.updateSupplier", dictionaryPanelText, StringComparison.Ordinal);
+        Assert.DoesNotContain("dictionaryClient.archiveTariff", dictionaryPanelText, StringComparison.Ordinal);
+        Assert.Contains("dictionaryClient.updateSupplier", contractorsPanelText, StringComparison.Ordinal);
+        Assert.Contains("dictionaryClient.archiveTariff", tariffsPanelText, StringComparison.Ordinal);
         Assert.Contains("frontend/src/features/dictionaries/DictionaryPanel.tsx", roadmapLine, StringComparison.Ordinal);
     }
 
     [Fact]
-    public void DictionaryListRemainsInSharedUi()
+    public void RemovedLegacyDictionaryListDoesNotReturnToSharedUi()
     {
         var repositoryRoot = FindRepositoryRoot();
-        var appText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "App.tsx")) + File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "features", "workspace", "Workspace.tsx"));
-        var dictionaryListText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "shared", "DictionaryList.tsx"));
         var dictionaryPanelText = File.ReadAllText(Path.Combine(repositoryRoot, "frontend", "src", "features", "dictionaries", "DictionaryPanel.tsx"));
-        var roadmapLine = File
-            .ReadLines(Path.Combine(repositoryRoot, "docs", "development-guide.md"))
-            .TakeWhile(line => !string.Equals(line, "## История выполнения", StringComparison.Ordinal))
-            .Single(line => line.Contains("Frontend разделять на feature-модули", StringComparison.Ordinal));
+        var dictionaryListPath = Path.Combine(repositoryRoot, "frontend", "src", "shared", "DictionaryList.tsx");
+        var dictionaryListTestPath = Path.Combine(repositoryRoot, "frontend", "src", "shared", "DictionaryList.test.tsx");
 
-        Assert.Contains("import { DictionaryList } from '../../shared/DictionaryList'", dictionaryPanelText, StringComparison.Ordinal);
-        Assert.Contains("<DictionaryList", dictionaryPanelText, StringComparison.Ordinal);
-        Assert.DoesNotContain("function DictionaryList(", appText, StringComparison.Ordinal);
-        Assert.DoesNotContain("type DictionaryListItem", appText, StringComparison.Ordinal);
-
-        Assert.Contains("export function DictionaryList(", dictionaryListText, StringComparison.Ordinal);
-        Assert.Contains("aria-controls={listId}", dictionaryListText, StringComparison.Ordinal);
-        Assert.Contains("aria-expanded={showAllItems}", dictionaryListText, StringComparison.Ordinal);
-        Assert.Contains("pendingArchive.onArchive(reason)", dictionaryListText, StringComparison.Ordinal);
-        Assert.Contains("useFocusTrap<HTMLElement>", dictionaryListText, StringComparison.Ordinal);
-        Assert.Contains("frontend/src/shared/DictionaryList.tsx", roadmapLine, StringComparison.Ordinal);
+        Assert.False(File.Exists(dictionaryListPath));
+        Assert.False(File.Exists(dictionaryListTestPath));
+        Assert.DoesNotContain("DictionaryList", dictionaryPanelText, StringComparison.Ordinal);
     }
 
     [Fact]
