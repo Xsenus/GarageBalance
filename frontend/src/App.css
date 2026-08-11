@@ -1383,7 +1383,23 @@ h1 {
 
 .contractors-mini-header--fees,
 .contractors-mini-row--fees {
-  grid-template-columns: minmax(180px, 1.35fr) minmax(84px, 0.55fr) minmax(84px, 0.55fr) minmax(130px, 0.75fr) minmax(140px, 0.9fr) minmax(190px, auto);
+  min-width: 820px;
+  grid-template-columns: minmax(210px, 1.5fr) minmax(86px, 0.55fr) minmax(86px, 0.55fr) minmax(130px, 0.8fr) minmax(150px, 0.9fr) 150px;
+}
+
+.fee-campaign-table-scroll {
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-gutter: stable;
+}
+
+.contractors-mini-header--fees > span,
+.contractors-mini-row--fees > span {
+  min-width: 0;
+}
+
+.contractors-mini-row--fees > span {
+  line-height: 1.35;
 }
 
 .contractors-mini-header--fees > span:nth-child(2),
@@ -1391,6 +1407,16 @@ h1 {
 .contractors-mini-row--fees > .contractors-fee-money-cell {
   text-align: right;
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.contractors-fee-name-cell,
+.contractors-fee-participants-cell {
+  overflow-wrap: anywhere;
+}
+
+.contractors-fee-period-cell time {
+  white-space: nowrap;
 }
 
 .contractors-mini-header {
@@ -1434,7 +1460,7 @@ h1 {
   align-items: center;
   justify-content: flex-end;
   gap: 8px;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
 }
 
 .contractors-mini-actions .ghost-button,

@@ -2758,39 +2758,43 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
             <section className="contractors-mini-table tariffs-summary-card" aria-label="Объявленные сборы">
               <div className="contractors-mini-title">Объявленные сборы</div>
               {feeCampaignActionMessage ? <p className="contractors-action-message" role="alert">{feeCampaignActionMessage}</p> : null}
-              <div className="contractors-mini-header contractors-mini-header--fees">
-                <span>Наименование</span>
-                <span>Взнос</span>
-                <span>План</span>
-                <span>Участники</span>
-                <span>Период</span>
-                <span>Действия</span>
-              </div>
-              {feeCampaignsLoading ? <TableLoadingState className="table-loading-state--compact" label="Загружаем объявленные сборы" /> : null}
-              {!feeCampaignsLoading ? feeCampaignPage.items.map((campaign) => (
-                <div
-                  aria-label={`Объявленный сбор ${campaign.name}`}
-                  className={[
-                    'contractors-mini-row contractors-mini-row--fees',
-                    campaign.isArchived ? 'contractors-mini-row--deleted' : '',
-                  ].filter(Boolean).join(' ')}
-                  key={campaign.id}
-                >
-                  <span>
-                    <strong>{campaign.name}</strong>
-                    <small>{campaign.incomeTypeName}{campaign.goal ? ` · ${campaign.goal}` : ''}</small>
-                    {campaign.closedAtUtc ? (
-                      <small>
-                        {campaign.isClosedEarly ? 'Закрыт досрочно' : 'Закрыт после выполнения плана'}
-                        {campaign.closureComment ? ` · ${campaign.closureComment}` : ''}
-                      </small>
-                    ) : null}
-                  </span>
-                  <span className="contractors-fee-money-cell">{formatTariffDecimal(campaign.contributionAmount)}</span>
-                  <span className="contractors-fee-money-cell">{formatTariffDecimal(campaign.targetAmount)}</span>
-                  <span>{formatFeeCampaignParticipantSummary(campaign)}</span>
-                  <span>{formatDateOnly(campaign.startsOn)}{campaign.endsOn ? ` - ${formatDateOnly(campaign.endsOn)}` : ''}</span>
-                  <span className="contractors-mini-actions">
+              <div className="fee-campaign-table-scroll">
+                <div className="contractors-mini-header contractors-mini-header--fees">
+                  <span>Наименование</span>
+                  <span>Взнос</span>
+                  <span>План</span>
+                  <span>Участники</span>
+                  <span>Период</span>
+                  <span>Действия</span>
+                </div>
+                {feeCampaignsLoading ? <TableLoadingState className="table-loading-state--compact" label="Загружаем объявленные сборы" /> : null}
+                {!feeCampaignsLoading ? feeCampaignPage.items.map((campaign) => (
+                  <div
+                    aria-label={`Объявленный сбор ${campaign.name}`}
+                    className={[
+                      'contractors-mini-row contractors-mini-row--fees',
+                      campaign.isArchived ? 'contractors-mini-row--deleted' : '',
+                    ].filter(Boolean).join(' ')}
+                    key={campaign.id}
+                  >
+                    <span className="contractors-fee-name-cell">
+                      <strong>{campaign.name}</strong>
+                      <small>{campaign.incomeTypeName}{campaign.goal ? ` · ${campaign.goal}` : ''}</small>
+                      {campaign.closedAtUtc ? (
+                        <small>
+                          {campaign.isClosedEarly ? 'Закрыт досрочно' : 'Закрыт после выполнения плана'}
+                          {campaign.closureComment ? ` · ${campaign.closureComment}` : ''}
+                        </small>
+                      ) : null}
+                    </span>
+                    <span className="contractors-fee-money-cell">{formatTariffDecimal(campaign.contributionAmount)}</span>
+                    <span className="contractors-fee-money-cell">{formatTariffDecimal(campaign.targetAmount)}</span>
+                    <span className="contractors-fee-participants-cell">{formatFeeCampaignParticipantSummary(campaign)}</span>
+                    <span className="contractors-fee-period-cell">
+                      <time dateTime={campaign.startsOn}>{formatDateOnly(campaign.startsOn)}</time>
+                      {campaign.endsOn ? <><span aria-hidden="true"> — </span><time dateTime={campaign.endsOn}>{formatDateOnly(campaign.endsOn)}</time></> : null}
+                    </span>
+                    <span className="contractors-mini-actions">
                     {campaign.isArchived ? (
                       <button className="ghost-button" type="button" disabled={!canManageTariffs || feeCampaignSavingId === campaign.id} onClick={() => setFeeCampaignRestoreTarget(campaign)}>
                         <RotateCcw size={16} />
@@ -2824,10 +2828,11 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
                         </button>
                       </>
                     )}
-                  </span>
-                </div>
-              )) : null}
-              {feeCampaigns.length === 0 && !feeCampaignsLoading ? <EmptyState>Объявленные сборы пока не настроены.</EmptyState> : null}
+                    </span>
+                  </div>
+                )) : null}
+                {feeCampaigns.length === 0 && !feeCampaignsLoading ? <EmptyState>Объявленные сборы пока не настроены.</EmptyState> : null}
+              </div>
               <TablePagination
                 ariaLabel="Пагинация объявленных сборов"
                 totalCount={feeCampaignPage.totalCount}
