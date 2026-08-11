@@ -12,9 +12,11 @@ import { parseMoneyInput } from '../../shared/moneyInputFormatting'
 import { formatSensitiveChange } from '../../shared/changePreview'
 import { FormField } from '../../shared/FormField'
 import { FormError, FormValidationSummary } from '../../shared/formFeedback'
-import { formatDateOnly, formatDateTime, formatMoney, getLocalDateInputValue } from '../../shared/formatters'
+import { formatDateOnly, formatDateTime, formatMoney, formatOperationTime, getLocalDateInputValue } from '../../shared/formatters'
 import { downloadBlob } from '../../shared/fileExports'
 import { useEscapeKey, useFocusOnOpen, useFocusTrap, useRestoreFocusOnClose } from '../../shared/focusHooks'
+import { ToastViewport } from '../../shared/Toast'
+import { useToast } from '../../shared/useToast'
 import { getPasswordChangeValidationErrors } from '../../shared/validation'
 
 export function PasswordPanel({ auth, authClient, integrationClient, settingsClient, onSessionRevoked }: { auth: AuthResponse; authClient: AuthClient; integrationClient: IntegrationClient; settingsClient: ApplicationSettingsClient; onSessionRevoked: () => void }) {
@@ -87,9 +89,8 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
   const [cashBankLoading, setCashBankLoading] = useState(false)
   const [cashBankSaving, setCashBankSaving] = useState(false)
   const [cashBankError, setCashBankError] = useState<string | null>(null)
-  const [cashBankMessage, setCashBankMessage] = useState<string | null>(null)
+  const { toast, showToast, dismissToast } = useToast()
   const [settingsReloadRevision, setSettingsReloadRevision] = useState(0)
-  const [openingBalanceDraft, setOpeningBalanceDraft] = useState({ cash: '', bank: '', reason: '' })
   const [balanceAdjustmentDraft, setBalanceAdjustmentDraft] = useState<{
     account: 'cash' | 'bank'
     direction: 'increase' | 'decrease'
@@ -108,9 +109,13 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
   const confirmationDialogRef = useFocusTrap<HTMLElement>(Boolean(pendingPasswordChange))
   const oneCFreshSyncCancelRef = useFocusOnOpen<HTMLButtonElement>(Boolean(oneCFreshSyncConfirmation))
   const oneCFreshSyncDialogRef = useFocusTrap<HTMLElement>(Boolean(oneCFreshSyncConfirmation))
+  useRestoreFocusOnClose(Boolean(balanceAdjustmentDraft))
+  const balanceAdjustmentCloseRef = useFocusOnOpen<HTMLButtonElement>(Boolean(balanceAdjustmentDraft))
+  const balanceAdjustmentDialogRef = useFocusTrap<HTMLElement>(Boolean(balanceAdjustmentDraft))
   useEscapeKey(Boolean(pendingPasswordChange) && !saving, () => setPendingPasswordChange(null))
   useEscapeKey(Boolean(oneCFreshSyncConfirmation) && !oneCFreshSyncSaving, () => closeOneCFreshSyncConfirmation())
   useEscapeKey(Boolean(businessDateConfirmation) && !businessDateSaving, () => setBusinessDateConfirmation(null))
+  useEscapeKey(Boolean(balanceAdjustmentDraft) && !cashBankSaving, () => closeBalanceAdjustment())
 
   useEffect(() => {
     if (!canManageBusinessDate || activeSettingsTab !== 'business-date') return
@@ -146,11 +151,6 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
       .then((settings) => {
         if (ignore) return
         setCashBankSettings(settings)
-        setOpeningBalanceDraft({
-          cash: String(settings.cashOpeningBalance),
-          bank: String(settings.bankOpeningBalance),
-          reason: '',
-        })
       })
       .catch((caught: unknown) => {
         if (!ignore) setCashBankError(caught instanceof Error ? caught.message : 'Не удалось загрузить остатки кассы и банковского счёта.')
@@ -441,43 +441,6 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
     }
   }
 
-  async function saveOpeningBalances(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    const cashOpeningBalance = parseMoneyDraft(openingBalanceDraft.cash)
-    const bankOpeningBalance = parseMoneyDraft(openingBalanceDraft.bank)
-    const reason = openingBalanceDraft.reason.trim()
-    if (cashOpeningBalance === null || bankOpeningBalance === null || cashOpeningBalance < 0 || bankOpeningBalance < 0) {
-      setCashBankError('Стартовые остатки должны быть неотрицательными числами.')
-      return
-    }
-    if (reason.length < 3) {
-      setCashBankError('Укажите причину изменения длиной не менее 3 символов.')
-      return
-    }
-
-    setCashBankSaving(true)
-    setCashBankError(null)
-    setCashBankMessage(null)
-    try {
-      const settings = await settingsClient.updateCashBankOpeningBalances(auth.accessToken, {
-        cashOpeningBalance,
-        bankOpeningBalance,
-        reason,
-      })
-      setCashBankSettings(settings)
-      setOpeningBalanceDraft({
-        cash: String(settings.cashOpeningBalance),
-        bank: String(settings.bankOpeningBalance),
-        reason: '',
-      })
-      setCashBankMessage('Стартовые остатки сохранены, изменение записано в историю.')
-    } catch (caught) {
-      setCashBankError(caught instanceof Error ? caught.message : 'Не удалось сохранить стартовые остатки.')
-    } finally {
-      setCashBankSaving(false)
-    }
-  }
-
   async function saveBalanceAdjustment(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (!balanceAdjustmentDraft) return
@@ -498,8 +461,8 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
 
     setCashBankSaving(true)
     setCashBankError(null)
-    setCashBankMessage(null)
     try {
+      const completedOperation = balanceAdjustmentDraft
       const settings = await settingsClient.createCashBankBalanceAdjustment(auth.accessToken, {
         ...balanceAdjustmentDraft,
         amount,
@@ -507,7 +470,9 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
       })
       setCashBankSettings(settings)
       setBalanceAdjustmentDraft(null)
-      setCashBankMessage('Операция проведена и записана в историю изменений.')
+      const accountName = completedOperation.account === 'cash' ? 'кассы' : 'банковского счёта'
+      const operationName = completedOperation.direction === 'increase' ? 'Пополнение' : 'Списание'
+      showToast('Операция проведена и записана в историю изменений.', 'success', `${operationName} ${accountName} выполнено`)
     } catch (caught) {
       setCashBankError(caught instanceof Error ? caught.message : 'Не удалось провести операцию.')
     } finally {
@@ -520,7 +485,6 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
     direction: 'increase' | 'decrease',
   ) {
     setCashBankError(null)
-    setCashBankMessage(null)
     setBalanceAdjustmentDraft({
       account,
       direction,
@@ -528,6 +492,12 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
       amount: '',
       reason: '',
     })
+  }
+
+  function closeBalanceAdjustment() {
+    if (cashBankSaving) return
+    setBalanceAdjustmentDraft(null)
+    setCashBankError(null)
   }
 
   useEffect(() => {
@@ -965,7 +935,7 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
         <div className="settings-card-intro">
           <p className="eyebrow">Финансовые настройки</p>
           <h2>Касса и банковский счёт</h2>
-          <p>Стартовые остатки входят в доступные суммы. Пополнения и списания проводятся отдельными операциями с датой и причиной; прежние записи не перезаписываются.</p>
+          <p>Текущие остатки изменяются отдельными операциями пополнения и списания. Каждая операция сохраняет дату, время и причину в истории.</p>
         </div>
         <div className="dictionary-form settings-card-form cash-bank-settings">
           {cashBankLoading ? <LoadingSkeleton className="loading-skeleton--compact" label="Загружаем остатки кассы и банковского счёта" rows={3} columns={4} /> : null}
@@ -980,52 +950,7 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
                   <span>Счёт сейчас</span>
                   <strong>{formatMoney(cashBankSettings.bankCurrentBalance)} ₽</strong>
                 </div>
-                <div>
-                  <span>Старт кассы</span>
-                  <strong>{formatMoney(cashBankSettings.cashOpeningBalance)} ₽</strong>
-                </div>
-                <div>
-                  <span>Старт счёта</span>
-                  <strong>{formatMoney(cashBankSettings.bankOpeningBalance)} ₽</strong>
-                </div>
               </div>
-
-              <form className="cash-bank-opening-form" onSubmit={(event) => void saveOpeningBalances(event)}>
-                <div className="dictionary-form-grid cash-bank-opening-grid">
-                  <FormField label="Стартовый остаток кассы, ₽">
-                    <MoneyTextInput
-                      aria-label="Стартовый остаток кассы"
-                      value={openingBalanceDraft.cash}
-                      disabled={cashBankSaving}
-                      onValueChange={(cash) => setOpeningBalanceDraft({ ...openingBalanceDraft, cash })}
-                      required
-                    />
-                  </FormField>
-                  <FormField label="Стартовый остаток банковского счёта, ₽">
-                    <MoneyTextInput
-                      aria-label="Стартовый остаток банковского счёта"
-                      value={openingBalanceDraft.bank}
-                      disabled={cashBankSaving}
-                      onValueChange={(bank) => setOpeningBalanceDraft({ ...openingBalanceDraft, bank })}
-                      required
-                    />
-                  </FormField>
-                  <FormField label="Причина изменения">
-                    <input
-                      aria-label="Причина изменения стартовых остатков"
-                      value={openingBalanceDraft.reason}
-                      disabled={cashBankSaving}
-                      maxLength={1000}
-                      onChange={(event) => setOpeningBalanceDraft({ ...openingBalanceDraft, reason: event.target.value })}
-                      required
-                    />
-                  </FormField>
-                </div>
-                <button className="secondary-button" type="submit" disabled={cashBankSaving}>
-                  <ShieldCheck size={16} aria-hidden="true" />
-                  <span>{cashBankSaving ? 'Сохраняем...' : 'Сохранить стартовые остатки'}</span>
-                </button>
-              </form>
 
               <div className="cash-bank-action-groups" aria-label="Операции с остатками">
                 {(['cash', 'bank'] as const).map((account) => (
@@ -1048,55 +973,8 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
                 ))}
               </div>
 
-              {balanceAdjustmentDraft ? (
-                <form className="cash-bank-adjustment-form" aria-label={balanceAdjustmentDraft.direction === 'increase' ? 'Пополнение остатка' : 'Списание остатка'} onSubmit={(event) => void saveBalanceAdjustment(event)}>
-                  <div className="settings-card-intro settings-card-intro--compact">
-                    <p className="eyebrow">{balanceAdjustmentDraft.account === 'cash' ? 'Касса' : 'Банковский счёт'}</p>
-                    <h3>{balanceAdjustmentDraft.direction === 'increase' ? 'Пополнение' : 'Списание'}</h3>
-                  </div>
-                  <div className="dictionary-form-grid cash-bank-adjustment-grid">
-                    <FormField label="Дата операции">
-                      <LocalizedDatePicker
-                        ariaLabel="Дата операции"
-                        mode="date"
-                        value={balanceAdjustmentDraft.operationDate}
-                        disabled={cashBankSaving}
-                        onChange={(value) => setBalanceAdjustmentDraft({ ...balanceAdjustmentDraft, operationDate: value })}
-                        required
-                      />
-                    </FormField>
-                    <FormField label="Сумма, ₽">
-                      <MoneyTextInput
-                        aria-label="Сумма операции"
-                        value={balanceAdjustmentDraft.amount}
-                        disabled={cashBankSaving}
-                        onValueChange={(amount) => setBalanceAdjustmentDraft({ ...balanceAdjustmentDraft, amount })}
-                        required
-                      />
-                    </FormField>
-                    <FormField label="Причина">
-                      <textarea
-                        aria-label="Причина операции"
-                        value={balanceAdjustmentDraft.reason}
-                        disabled={cashBankSaving}
-                        maxLength={1000}
-                        onChange={(event) => setBalanceAdjustmentDraft({ ...balanceAdjustmentDraft, reason: event.target.value })}
-                        required
-                      />
-                    </FormField>
-                  </div>
-                  <div className="dialog-actions dialog-actions--start">
-                    <button className="secondary-button" type="submit" disabled={cashBankSaving}>
-                      {balanceAdjustmentDraft.direction === 'increase' ? <ArrowUpCircle size={17} aria-hidden="true" /> : <ArrowDownCircle size={17} aria-hidden="true" />}
-                      <span>{cashBankSaving ? 'Проводим...' : 'Провести операцию'}</span>
-                    </button>
-                    <button className="ghost-button" type="button" disabled={cashBankSaving} onClick={() => setBalanceAdjustmentDraft(null)}>Отмена</button>
-                  </div>
-                </form>
-              ) : null}
-
               <div className="table-shell cash-bank-history-shell">
-                <table aria-label="Последние операции с кассой и банковским счётом">
+                <table className="cash-bank-history-table" aria-label="Последние операции с кассой и банковским счётом">
                   <thead>
                     <tr>
                       <th>Дата</th>
@@ -1109,7 +987,7 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
                   <tbody>
                     {cashBankSettings.recentOperations.map((operation) => (
                       <tr key={operation.id}>
-                        <td>{formatDateOnly(operation.operationDate)}</td>
+                        <td><time dateTime={operation.createdAtUtc}>{formatDateOnly(operation.operationDate)}, {formatOperationTime(operation.createdAtUtc)}</time></td>
                         <td>{operation.account === 'cash' ? 'Касса' : 'Банковский счёт'}</td>
                         <td>{formatCashBankOperation(operation.operationKind, operation.direction)}</td>
                         <td className={operation.direction === 'increase' ? 'money-overpayment' : 'money-accrual'}>
@@ -1128,10 +1006,65 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
           ) : null}
           {cashBankError && !cashBankSettings ? (
             <AsyncErrorState message={cashBankError} onRetry={() => setSettingsReloadRevision((value) => value + 1)} retrying={cashBankLoading} />
-          ) : cashBankError ? <FormError>{cashBankError}</FormError> : null}
-          {cashBankMessage ? <div className="form-success" role="status" aria-live="polite">{cashBankMessage}</div> : null}
+          ) : cashBankError && !balanceAdjustmentDraft ? <FormError>{cashBankError}</FormError> : null}
         </div>
       </section>
+      ) : null}
+      {balanceAdjustmentDraft ? (
+        <div className="modal-backdrop" role="presentation" onMouseDown={closeBalanceAdjustment}>
+          <section ref={balanceAdjustmentDialogRef} className="detail-dialog cash-bank-adjustment-dialog" role="dialog" aria-modal="true" aria-labelledby="cash-bank-adjustment-title" onMouseDown={(event) => event.stopPropagation()}>
+            <div className="detail-dialog-header">
+              <div>
+                <p className="eyebrow">{balanceAdjustmentDraft.account === 'cash' ? 'Касса' : 'Банковский счёт'}</p>
+                <h3 id="cash-bank-adjustment-title">{balanceAdjustmentDraft.direction === 'increase' ? 'Пополнение' : 'Списание'} {balanceAdjustmentDraft.account === 'cash' ? 'кассы' : 'банковского счёта'}</h3>
+              </div>
+              <button ref={balanceAdjustmentCloseRef} className="icon-button" type="button" aria-label="Закрыть окно операции" disabled={cashBankSaving} onClick={closeBalanceAdjustment}>
+                <X size={18} aria-hidden="true" />
+              </button>
+            </div>
+            <form className="cash-bank-adjustment-form" aria-label={balanceAdjustmentDraft.direction === 'increase' ? 'Пополнение остатка' : 'Списание остатка'} onSubmit={(event) => void saveBalanceAdjustment(event)}>
+              <div className="dictionary-form-grid cash-bank-adjustment-grid">
+                <FormField label="Дата операции">
+                  <LocalizedDatePicker
+                    ariaLabel="Дата операции"
+                    mode="date"
+                    value={balanceAdjustmentDraft.operationDate}
+                    disabled={cashBankSaving}
+                    onChange={(value) => setBalanceAdjustmentDraft({ ...balanceAdjustmentDraft, operationDate: value })}
+                    required
+                  />
+                </FormField>
+                <FormField label="Сумма, ₽">
+                  <MoneyTextInput
+                    aria-label="Сумма операции"
+                    value={balanceAdjustmentDraft.amount}
+                    disabled={cashBankSaving}
+                    onValueChange={(amount) => setBalanceAdjustmentDraft({ ...balanceAdjustmentDraft, amount })}
+                    required
+                  />
+                </FormField>
+                <FormField label="Причина">
+                  <textarea
+                    aria-label="Причина операции"
+                    value={balanceAdjustmentDraft.reason}
+                    disabled={cashBankSaving}
+                    maxLength={1000}
+                    onChange={(event) => setBalanceAdjustmentDraft({ ...balanceAdjustmentDraft, reason: event.target.value })}
+                    required
+                  />
+                </FormField>
+              </div>
+              {cashBankError ? <FormError>{cashBankError}</FormError> : null}
+              <div className="detail-dialog-actions">
+                <button className="ghost-button" type="button" disabled={cashBankSaving} onClick={closeBalanceAdjustment}>Отмена</button>
+                <button className="secondary-button" type="submit" disabled={cashBankSaving}>
+                  {balanceAdjustmentDraft.direction === 'increase' ? <ArrowUpCircle size={17} aria-hidden="true" /> : <ArrowDownCircle size={17} aria-hidden="true" />}
+                  <span>{cashBankSaving ? 'Проводим...' : 'Провести операцию'}</span>
+                </button>
+              </div>
+            </form>
+          </section>
+        </div>
       ) : null}
       {canManageApplicationSettings && activeSettingsTab === 'display' ? (
       <section className="password-panel settings-card settings-card--display" aria-label="Настройки отображения платежей">
@@ -1579,6 +1512,7 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
           onSubmit={() => void deleteDatabaseBackup()}
         />
       ) : null}
+      <ToastViewport toast={toast} onDismiss={dismissToast} />
       {pendingPasswordChange ? (
         <div className="modal-backdrop" role="presentation" onMouseDown={() => !saving && setPendingPasswordChange(null)}>
           <section ref={confirmationDialogRef} className="detail-dialog dictionary-confirmation-dialog" role="dialog" aria-modal="true" aria-labelledby="password-change-confirmation-title" aria-describedby="password-change-confirmation-description" onMouseDown={(event) => event.stopPropagation()}>

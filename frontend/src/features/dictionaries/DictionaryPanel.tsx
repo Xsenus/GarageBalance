@@ -24,6 +24,8 @@ import { MoneyInput } from '../../shared/MoneyInput'
 import { PhoneInput } from '../../shared/PhoneInput'
 import { createEmptyPage, createFallbackPage } from '../../shared/pagination'
 import { TablePagination } from '../../shared/TablePagination'
+import { ToastViewport } from '../../shared/Toast'
+import { useToast } from '../../shared/useToast'
 import { createDefaultGarageBalanceHistoryFilters, createFullFinancialReportFilters } from '../../shared/reportFilters'
 import { SelectControl } from '../../shared/SelectControl'
 import type { OwnerGarageLinkForm } from '../../shared/validation'
@@ -96,7 +98,7 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, integ
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [toast, setToast] = useState<{ id: number; text: string; kind: 'success' | 'error' } | null>(null)
+  const { toast, showToast, dismissToast } = useToast(3200)
   const [contextMenu, setContextMenu] = useState<{ section: DictionarySectionKey; item: DictionaryRecord; x: number; y: number } | null>(null)
   const [editor, setEditor] = useState<DictionaryEditorState | null>(null)
   const [pendingEditorConfirmation, setPendingEditorConfirmation] = useState<{ editor: DictionaryEditorState; changes: DictionaryChangePreview[] } | null>(null)
@@ -156,15 +158,6 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, integ
   useEscapeKey(Boolean(archiveTarget) && saving !== 'dictionary-archive', () => closeArchiveTarget())
   useEscapeKey(Boolean(restoreTarget) && saving !== 'dictionary-restore', () => closeRestoreTarget())
   useEscapeKey(Boolean(balanceHistoryGarage), () => closeBalanceHistory())
-
-  useEffect(() => {
-    if (!toast) {
-      return undefined
-    }
-
-    const timeoutId = window.setTimeout(() => setToast(null), 3200)
-    return () => window.clearTimeout(timeoutId)
-  }, [toast])
 
   useEffect(() => {
     const query = ownerForm.address?.trim() ?? ''
@@ -352,10 +345,6 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, integ
         setLoading(false)
       }
     }
-  }
-
-  function showToast(text: string, kind: 'success' | 'error' = 'success') {
-    setToast({ id: Date.now(), text, kind })
   }
 
   function reportPageLoadError(caught: unknown) {
@@ -1621,7 +1610,7 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, integ
         </div>
       ) : null}
 
-      {toast ? <div className={`toast-message toast-message--${toast.kind}`} role="status" aria-live="polite">{toast.text}</div> : null}
+      <ToastViewport toast={toast} onDismiss={dismissToast} />
     </section>
   )
 }

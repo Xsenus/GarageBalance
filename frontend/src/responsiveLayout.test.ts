@@ -334,13 +334,15 @@ describe('responsive layout styles', () => {
   })
 
   it('stretches and centers cash and bank balance groups', () => {
-    expect(normalizedAppCss).toContain('.summary-strip.cash-bank-summary {\n  width: 100%;\n  grid-template-columns: repeat(4, minmax(0, 1fr));')
+    expect(normalizedAppCss).toContain('.summary-strip.cash-bank-summary {\n  width: 100%;\n  grid-template-columns: repeat(2, minmax(0, 1fr));')
     expect(normalizedAppCss).toContain('.summary-strip.cash-bank-summary strong {\n  white-space: nowrap;\n  font-variant-numeric: tabular-nums;')
     expect(normalizedAppCss).toContain('.cash-bank-action-card {\n  display: grid;\n  gap: 12px;\n  align-content: start;\n  justify-items: stretch;')
     expect(normalizedAppCss).toContain('.cash-bank-action-card > div:first-child {\n  display: flex;\n  align-items: center;\n  justify-content: center;')
     expect(normalizedAppCss).toContain('.cash-bank-action-card > .dialog-actions {\n  display: grid;\n  width: 100%;\n  grid-template-columns: repeat(2, minmax(0, 1fr));')
     expect(normalizedAppCss).toContain('.cash-bank-action-card > .dialog-actions > button {\n  width: 100%;\n  min-width: 0;\n  justify-content: center;')
-    expect(normalizedAppCss).toContain('.summary-strip.cash-bank-summary,\n  .cash-bank-opening-grid,\n  .cash-bank-adjustment-grid,\n  .cash-bank-action-groups {\n    grid-template-columns: 1fr;')
+    expect(normalizedAppCss).toContain('.summary-strip.cash-bank-summary,\n  .cash-bank-adjustment-grid,\n  .cash-bank-action-groups {\n    grid-template-columns: 1fr;')
+    expect(normalizedAppCss).toContain('.cash-bank-history-table th,\n.cash-bank-history-table td {\n  padding: 12px 16px;')
+    expect(normalizedAppCss).toContain('.toast-viewport {\n  position: fixed;\n  right: 22px;\n  bottom: 22px;')
   })
 
   it('keeps the garage editor wide, compact and responsive', () => {

@@ -12,6 +12,8 @@ import { useEscapeKey, useFocusOnOpen, useFocusTrap, useRestoreFocusOnClose } fr
 import { createEmptyPage } from '../../shared/pagination'
 import { SelectControl } from '../../shared/SelectControl'
 import { TablePagination } from '../../shared/TablePagination'
+import { ToastViewport } from '../../shared/Toast'
+import { useToast } from '../../shared/useToast'
 import type { UserFormState } from '../../shared/userManagement'
 import { getInitialRoleCodes, getRoleLabel, getUserEditorChanges, getUserEditorValidationErrors } from '../../shared/userManagement'
 
@@ -30,7 +32,7 @@ export function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; 
   const [saving, setSaving] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [validationErrors, setValidationErrors] = useState<string[]>([])
-  const [toast, setToast] = useState<string | null>(null)
+  const { toast, showToast, dismissToast } = useToast(3200)
   const [contextMenu, setContextMenu] = useState<{ user: ManagedUserDto; x: number; y: number } | null>(null)
   const [editor, setEditor] = useState<UserEditorState | null>(null)
   const [deactivationConfirmation, setDeactivationConfirmation] = useState<UserDeactivationConfirmationState | null>(null)
@@ -65,15 +67,6 @@ export function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; 
   useEscapeKey(Boolean(roleEditor) && saving !== 'role', () => closeRoleEditor())
   useEscapeKey(Boolean(deleteTarget) && saving !== 'delete', () => closeDeleteDialog())
   useEscapeKey(Boolean(restoreTarget) && saving !== 'restore', () => closeRestoreDialog())
-
-  useEffect(() => {
-    if (!toast) {
-      return undefined
-    }
-
-    const timeoutId = window.setTimeout(() => setToast(null), 3200)
-    return () => window.clearTimeout(timeoutId)
-  }, [toast])
 
   const getRolesOnce = useCallback(() => {
     const cached = rolesRequestRef.current
@@ -233,7 +226,7 @@ export function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; 
 
       closeEditor()
       await refreshUsers()
-      setToast('Пользователь добавлен.')
+      showToast('Пользователь добавлен.')
     } catch (caught) {
       const message = caught instanceof Error ? caught.message : 'Не удалось сохранить пользователя.'
       setError(message)
@@ -249,7 +242,7 @@ export function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; 
       await userClient.updateUser(auth.accessToken, user.id, request)
       closeEditor()
       await refreshUsers()
-      setToast(user.isActive && !request.isActive ? 'Пользователь отключен.' : 'Пользователь изменен.')
+      showToast(user.isActive && !request.isActive ? 'Пользователь отключен.' : 'Пользователь изменен.')
     } catch (caught) {
       const message = caught instanceof Error ? caught.message : 'Не удалось сохранить пользователя.'
       setError(message)
@@ -308,7 +301,7 @@ export function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; 
       })
       closeDeleteDialog()
       await refreshUsers()
-      setToast('Пользователь отключен.')
+      showToast('Пользователь отключен.')
     } catch (caught) {
       const message = caught instanceof Error ? caught.message : 'Не удалось отключить пользователя.'
       setError(message)
@@ -328,7 +321,7 @@ export function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; 
       await userClient.restoreUser(auth.accessToken, restoreTarget.id)
       closeRestoreDialog()
       await refreshUsers()
-      setToast('Пользователь восстановлен.')
+      showToast('Пользователь восстановлен.')
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Не удалось восстановить пользователя.')
     } finally {
@@ -402,7 +395,7 @@ export function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; 
       setRoles((current) => current.map((role) => (role.code === updatedRole.code ? updatedRole : role)))
       closeRoleEditor()
       await refreshUsers()
-      setToast('Права роли изменены.')
+      showToast('Права роли изменены.')
     } catch (caught) {
       const message = caught instanceof Error ? caught.message : 'Не удалось сохранить права роли.'
       setError(message)
@@ -820,7 +813,7 @@ export function UserManagementPanel({ auth, userClient }: { auth: AuthResponse; 
         </div>
       ) : null}
 
-      {toast ? <div className="toast-message" role="status" aria-live="polite">{toast}</div> : null}
+      <ToastViewport toast={toast} onDismiss={dismissToast} />
     </section>
   )
 }

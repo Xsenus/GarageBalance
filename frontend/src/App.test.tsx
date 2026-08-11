@@ -10371,15 +10371,8 @@ describe('App', () => {
     expect(await within(displayPanel).findByText('Настройка отображения платежей сохранена.')).toHaveAttribute('role', 'status')
   })
 
-  it('lets an administrator set opening balances and record a cash replenishment', async () => {
+  it('hides opening balance editing and records a cash replenishment in a modal', async () => {
     const user = userEvent.setup()
-    const updateCashBankOpeningBalances = vi.fn(async (_accessToken: string, request: { cashOpeningBalance: number; bankOpeningBalance: number; reason: string }) => ({
-      cashOpeningBalance: request.cashOpeningBalance,
-      bankOpeningBalance: request.bankOpeningBalance,
-      cashCurrentBalance: request.cashOpeningBalance,
-      bankCurrentBalance: request.bankOpeningBalance,
-      recentOperations: [],
-    }))
     const createCashBankBalanceAdjustment = vi.fn(async (_accessToken: string, request: { account: 'cash' | 'bank'; direction: 'increase' | 'decrease'; operationDate: string; amount: number; reason: string }) => ({
       cashOpeningBalance: 1500,
       bankOpeningBalance: 7000,
@@ -10396,10 +10389,7 @@ describe('App', () => {
         createdAtUtc: '2026-07-27T08:00:00Z',
       }],
     }))
-    const settingsClient = createSettingsClient({
-      updateCashBankOpeningBalances,
-      createCashBankBalanceAdjustment,
-    })
+    const settingsClient = createSettingsClient({ createCashBankBalanceAdjustment })
     render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} integrationClient={createIntegrationClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} settingsClient={settingsClient} userClient={createUserClient()} />)
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
@@ -10410,22 +10400,16 @@ describe('App', () => {
     const panel = await within(settings).findByRole('region', { name: 'Остатки кассы и банковского счёта' })
     expect(await within(panel).findByLabelText('Текущие остатки')).toHaveTextContent('1 200.00 ₽')
 
-    const cashOpeningInput = within(panel).getByLabelText('Стартовый остаток кассы')
-    const bankOpeningInput = within(panel).getByLabelText('Стартовый остаток банковского счёта')
-    await user.clear(cashOpeningInput)
-    await user.type(cashOpeningInput, '1500')
-    await user.clear(bankOpeningInput)
-    await user.type(bankOpeningInput, '7000')
-    await user.type(within(panel).getByLabelText('Причина изменения стартовых остатков'), 'Остатки на дату запуска')
-    await user.click(within(panel).getByRole('button', { name: 'Сохранить стартовые остатки' }))
-    await waitFor(() => expect(updateCashBankOpeningBalances).toHaveBeenCalledWith('token', {
-      cashOpeningBalance: 1500,
-      bankOpeningBalance: 7000,
-      reason: 'Остатки на дату запуска',
-    }))
+    expect(within(panel).queryByLabelText('Стартовый остаток кассы')).not.toBeInTheDocument()
+    expect(within(panel).queryByLabelText('Стартовый остаток банковского счёта')).not.toBeInTheDocument()
+    expect(within(panel).queryByLabelText('Причина изменения стартовых остатков')).not.toBeInTheDocument()
+    expect(within(panel).queryByRole('button', { name: 'Сохранить стартовые остатки' })).not.toBeInTheDocument()
 
-    await user.click(within(panel).getAllByRole('button', { name: 'Пополнить' })[0])
-    const adjustmentForm = within(panel).getByRole('form', { name: 'Пополнение остатка' })
+    const replenishButton = within(panel).getAllByRole('button', { name: 'Пополнить' })[0]
+    await user.click(replenishButton)
+    const adjustmentDialog = screen.getByRole('dialog', { name: 'Пополнение кассы' })
+    expect(panel).not.toContainElement(adjustmentDialog)
+    const adjustmentForm = within(adjustmentDialog).getByRole('form', { name: 'Пополнение остатка' })
     await user.type(within(adjustmentForm).getByLabelText('Сумма операции'), '250')
     await user.type(within(adjustmentForm).getByLabelText('Причина операции'), 'Размен кассы')
     await user.click(within(adjustmentForm).getByRole('button', { name: 'Провести операцию' }))
@@ -10436,8 +10420,14 @@ describe('App', () => {
       amount: 250,
       reason: 'Размен кассы',
     })))
-    expect(await within(panel).findByText('Операция проведена и записана в историю изменений.')).toHaveAttribute('role', 'status')
-    expect(within(panel).getByRole('table', { name: 'Последние операции с кассой и банковским счётом' })).toHaveTextContent('Размен кассы')
+    expect(screen.queryByRole('dialog', { name: 'Пополнение кассы' })).not.toBeInTheDocument()
+    const toast = await screen.findByRole('status')
+    expect(toast).toHaveTextContent('Пополнение кассы выполнено')
+    expect(toast).toHaveTextContent('Операция проведена и записана в историю изменений.')
+    const historyTable = within(panel).getByRole('table', { name: 'Последние операции с кассой и банковским счётом' })
+    expect(historyTable).toHaveTextContent('Размен кассы')
+    expect(historyTable).toHaveTextContent(/\d{2}\.\d{2}\.\d{4}, \d{2}:\d{2}/)
+    expect(replenishButton).toHaveFocus()
   })
 
   it('validates a cash write-off before sending it to the API', async () => {
@@ -10452,14 +10442,19 @@ describe('App', () => {
     await user.click(within(settings).getByRole('tab', { name: 'Касса и счёт' }))
     const panel = await within(settings).findByRole('region', { name: 'Остатки кассы и банковского счёта' })
     await within(panel).findByLabelText('Текущие остатки')
-    await user.click(within(panel).getAllByRole('button', { name: 'Списать' })[0])
-    const adjustmentForm = within(panel).getByRole('form', { name: 'Списание остатка' })
+    const writeOffButton = within(panel).getAllByRole('button', { name: 'Списать' })[0]
+    await user.click(writeOffButton)
+    const adjustmentDialog = screen.getByRole('dialog', { name: 'Списание кассы' })
+    const adjustmentForm = within(adjustmentDialog).getByRole('form', { name: 'Списание остатка' })
     await user.type(within(adjustmentForm).getByLabelText('Сумма операции'), '0')
     await user.type(within(adjustmentForm).getByLabelText('Причина операции'), 'Проверка списания')
     await user.click(within(adjustmentForm).getByRole('button', { name: 'Провести операцию' }))
 
-    expect(await within(panel).findByRole('alert')).toHaveTextContent('Сумма операции должна быть больше нуля.')
+    expect(await within(adjustmentDialog).findByRole('alert')).toHaveTextContent('Сумма операции должна быть больше нуля.')
     expect(createCashBankBalanceAdjustment).not.toHaveBeenCalled()
+    await user.keyboard('{Escape}')
+    expect(screen.queryByRole('dialog', { name: 'Списание кассы' })).not.toBeInTheDocument()
+    expect(writeOffButton).toHaveFocus()
   })
 
   it('lets only the administrator confirm a business date and starts automatic accruals', async () => {
@@ -11336,7 +11331,7 @@ describe('App', () => {
     expect(within(usersPanel).getByText('operator@example.com')).toBeInTheDocument()
     expect(within(usersPanel).getByText('Оператор, Просмотр отчетов')).toBeInTheDocument()
     expect(within(usersPanel).getByText('Активен')).toBeInTheDocument()
-    expect(await screen.findByText('Пользователь добавлен.')).toHaveAttribute('role', 'status')
+    expect((await screen.findByText('Пользователь добавлен.')).closest('[role="status"]')).toBeInTheDocument()
     await waitFor(() => expect(addUserButton).toHaveFocus())
   })
 
@@ -11562,7 +11557,7 @@ describe('App', () => {
     expect(lastUpdateRequest?.newPassword).toBeNull()
     expect(lastUpdateRequest?.version).toBe('user-version')
     expect(screen.queryByRole('dialog', { name: 'Подтвердите изменения пользователя' })).not.toBeInTheDocument()
-    expect(await screen.findByText('Пользователь изменен.')).toHaveAttribute('role', 'status')
+    expect((await screen.findByText('Пользователь изменен.')).closest('[role="status"]')).toBeInTheDocument()
 
     fireEvent.contextMenu(within(usersPanel).getByText('operator@example.com').closest('tr')!)
     await user.click(await screen.findByRole('menuitem', { name: 'Удалить' }))
@@ -11614,7 +11609,7 @@ describe('App', () => {
 
     expect(await within(usersPanel).findByText('Отключен')).toBeInTheDocument()
     expect(deactivationReason).toBe('Access no longer needed')
-    expect(await screen.findByText('Пользователь отключен.')).toHaveAttribute('role', 'status')
+    expect((await screen.findByText('Пользователь отключен.')).closest('[role="status"]')).toBeInTheDocument()
 
     fireEvent.contextMenu(within(usersPanel).getByText('operator@example.com').closest('tr')!)
     await user.click(await screen.findByRole('menuitem', { name: 'Вернуть' }))
@@ -11640,7 +11635,7 @@ describe('App', () => {
     await act(async () => rejectRestore?.(new Error('Не удалось восстановить пользователя.')))
     expect(await within(restoreDialog).findByRole('alert')).toHaveTextContent('Не удалось восстановить пользователя.')
     await user.click(restoreConfirmButton)
-    expect(await screen.findByText('Пользователь восстановлен.')).toHaveAttribute('role', 'status')
+    expect((await screen.findByText('Пользователь восстановлен.')).closest('[role="status"]')).toBeInTheDocument()
     expect(await within(usersPanel).findByText('Активен')).toBeInTheDocument()
 
     fireEvent.contextMenu(within(usersPanel).getByText('operator@example.com').closest('tr')!)
