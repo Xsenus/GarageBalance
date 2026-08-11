@@ -6443,14 +6443,14 @@ public sealed class FinanceService(
                 $"Для поставщика «{supplier.Name}» не настроена действующая услуга.");
         }
 
-        if (!supplier.ChargeServiceSetting.ExpenseTypeId.HasValue)
+        if (!supplier.ExpenseTypeId.HasValue)
         {
             return FinanceResult<SupplierAccrualDto>.Failure(
                 "supplier_service_expense_type_not_configured",
-                $"Для услуги «{supplier.ChargeServiceSetting.Name}» не настроен вид начисления поставщику.");
+                $"Для поставщика «{supplier.Name}» не настроена статья расхода.");
         }
 
-        if (supplier.ChargeServiceSetting.ExpenseTypeId.Value != expenseType.Id)
+        if (supplier.ExpenseTypeId.Value != expenseType.Id)
         {
             return FinanceResult<SupplierAccrualDto>.Failure(
                 "supplier_expense_type_mismatch",
@@ -6477,14 +6477,14 @@ public sealed class FinanceService(
                 $"Для поставщика «{supplier.Name}» не настроена действующая услуга.");
         }
 
-        if (!supplier.ChargeServiceSetting.ExpenseTypeId.HasValue)
+        if (!supplier.ExpenseTypeId.HasValue)
         {
             return FinanceResult<FinancialOperationDto>.Failure(
                 "supplier_service_expense_type_not_configured",
-                $"Для услуги «{supplier.ChargeServiceSetting.Name}» не настроена статья расхода.");
+                $"Для поставщика «{supplier.Name}» не настроена статья расхода.");
         }
 
-        if (supplier.ChargeServiceSetting.ExpenseTypeId.Value != expenseType.Id)
+        if (supplier.ExpenseTypeId.Value != expenseType.Id)
         {
             return FinanceResult<FinancialOperationDto>.Failure(
                 "supplier_expense_type_mismatch",
@@ -6593,11 +6593,9 @@ public sealed class FinanceService(
         return options;
     }
 
-    private static Guid? GetSupplierExpenseFundId(Supplier supplier) =>
-        supplier.ExpenseFundId ?? supplier.ChargeServiceSetting?.ExpenseFundId;
+    private static Guid? GetSupplierExpenseFundId(Supplier supplier) => supplier.ExpenseFundId;
 
-    private static Fund? GetSupplierExpenseFund(Supplier supplier) =>
-        supplier.ExpenseFund ?? supplier.ChargeServiceSetting?.ExpenseFund;
+    private static Fund? GetSupplierExpenseFund(Supplier supplier) => supplier.ExpenseFund;
 
     private static string? NormalizeExpensePaymentType(string? value)
     {

@@ -26,7 +26,7 @@ function createSupplier(overrides: Partial<SupplierDto> = {}): SupplierDto {
     debt: 0,
     chargeServiceSettingId: 'service-electricity',
     chargeServiceSettingName: 'Электроэнергия',
-    chargeServiceExpenseTypeId: electricity.id,
+    expenseTypeId: electricity.id,
     comment: null,
     isArchived: false,
     ...overrides,
@@ -36,14 +36,14 @@ function createSupplier(overrides: Partial<SupplierDto> = {}): SupplierDto {
 describe('supplier accrual service link', () => {
   it('returns only the active expense type explicitly linked through the supplier service', () => {
     expect(getSupplierAccrualExpenseType(createSupplier(), [electricity])).toEqual(electricity)
-    expect(getSupplierAccrualExpenseType(createSupplier({ chargeServiceExpenseTypeId: null }), [electricity])).toBeUndefined()
+    expect(getSupplierAccrualExpenseType(createSupplier({ expenseTypeId: null }), [electricity])).toBeUndefined()
     expect(getSupplierAccrualExpenseType(createSupplier(), [{ ...electricity, isArchived: true }])).toBeUndefined()
-    expect(getSupplierAccrualExpenseType(createSupplier({ chargeServiceExpenseTypeId: 'missing' }), [electricity])).toBeUndefined()
+    expect(getSupplierAccrualExpenseType(createSupplier({ expenseTypeId: 'missing' }), [electricity])).toBeUndefined()
     expect(getSupplierAccrualExpenseType(undefined, [electricity])).toBeUndefined()
   })
 
   it('chooses the first supplier with a complete active service link', () => {
-    const unlinked = createSupplier({ id: 'unlinked', chargeServiceExpenseTypeId: null })
+    const unlinked = createSupplier({ id: 'unlinked', expenseTypeId: null })
     const linked = createSupplier({ id: 'linked' })
     expect(getFirstLinkedSupplier([unlinked, linked], [electricity])).toEqual(linked)
     expect(getFirstLinkedSupplier([unlinked], [electricity])).toBeUndefined()

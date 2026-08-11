@@ -73,8 +73,8 @@ public sealed class EfExpenseTypeRepository(GarageBalanceDbContext dbContext) : 
             cancellationToken);
 
     public Task<bool> HasActiveServiceAssignmentsAsync(Guid id, CancellationToken cancellationToken) =>
-        dbContext.ChargeServiceSettings.AsNoTracking()
-            .AnyAsync(setting => setting.ExpenseTypeId == id && !setting.IsArchived, cancellationToken);
+        dbContext.Suppliers.AsNoTracking()
+            .AnyAsync(supplier => supplier.ExpenseTypeId == id && !supplier.IsArchived, cancellationToken);
 
     public void Add(ExpenseType expenseType) => dbContext.ExpenseTypes.Add(expenseType);
 

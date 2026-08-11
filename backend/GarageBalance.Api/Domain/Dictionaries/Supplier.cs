@@ -23,6 +23,8 @@ public sealed class Supplier : IOptimisticConcurrencyEntity
     public SupplierGroup Group { get; set; } = null!;
     public Guid? ChargeServiceSettingId { get; set; }
     public ChargeServiceSetting? ChargeServiceSetting { get; set; }
+    public Guid? ExpenseTypeId { get; set; }
+    public ExpenseType? ExpenseType { get; set; }
     public Guid? ExpenseFundId { get; set; }
     public Fund? ExpenseFund { get; set; }
 }

@@ -58,8 +58,6 @@ public sealed class PostgreSqlAccountingLifecycleIntegrationTests
         };
         var expenseType = await context.ExpenseTypes.SingleAsync(item => item.Code == "electricity");
         var serviceSetting = await context.ChargeServiceSettings.SingleAsync(item => item.IncomeTypeId == electricityIncome.Id);
-        serviceSetting.ExpenseType = expenseType;
-        serviceSetting.ExpenseFund = electricityFund;
         serviceSetting.Tariff = tariff;
         serviceSetting.HasTieredTariff = true;
         serviceSetting.UnitName = "кВт·ч";
@@ -75,6 +73,7 @@ public sealed class PostgreSqlAccountingLifecycleIntegrationTests
             Name = $"{marker}-Энергосбыт",
             Group = supplierGroup,
             ChargeServiceSetting = serviceSetting,
+            ExpenseType = expenseType,
             ExpenseFund = electricityFund
         };
         var department = new StaffDepartment { Name = $"{marker}-Бухгалтерия" };

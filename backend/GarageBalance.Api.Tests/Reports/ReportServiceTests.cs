@@ -1265,8 +1265,8 @@ public sealed class ReportServiceTests
         await using var database = await TestDatabase.CreateAsync();
         var fixtures = await database.SeedAsync();
         var secondExpenseType = new ExpenseType { Name = "Связь", Code = "internet" };
-        var secondService = new ChargeServiceSetting { Name = "Связь", ExpenseType = secondExpenseType, ExpenseFund = fixtures.ExpenseFund };
-        var secondSupplier = new Supplier { Name = "Siberia Online", GroupId = fixtures.Supplier.GroupId, ChargeServiceSetting = secondService };
+        var secondService = new ChargeServiceSetting { Name = "Связь" };
+        var secondSupplier = new Supplier { Name = "Siberia Online", GroupId = fixtures.Supplier.GroupId, ChargeServiceSetting = secondService, ExpenseType = secondExpenseType, ExpenseFund = fixtures.ExpenseFund };
         database.Context.AddRange(secondExpenseType, secondService, secondSupplier);
         await database.Context.SaveChangesAsync();
         var finance = FinanceServiceTestFactory.Create(database.Context);
@@ -3267,8 +3267,8 @@ public sealed class ReportServiceTests
                 Reason = "Тестовый остаток фонда",
                 CreatedAtUtc = new DateTimeOffset(2000, 1, 1, 0, 0, 0, TimeSpan.Zero)
             };
-            var chargeService = new ChargeServiceSetting { Name = "Вода", ExpenseType = expenseType, ExpenseFund = expenseFund };
-            var supplier = new Supplier { Name = "Vodokanal", Group = group, ChargeServiceSetting = chargeService };
+            var chargeService = new ChargeServiceSetting { Name = "Вода" };
+            var supplier = new Supplier { Name = "Vodokanal", Group = group, ChargeServiceSetting = chargeService, ExpenseType = expenseType, ExpenseFund = expenseFund };
             var bankDeposit = new CashBankTransfer
             {
                 TransferDate = new DateOnly(2000, 1, 1),
