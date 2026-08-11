@@ -18,7 +18,7 @@ public sealed class PostgreSqlServiceMeterKindMigrationIntegrationTests
         var customIncomeTypeId = Guid.NewGuid();
         var customIncomeTypeCode = $"custom_security_{Guid.NewGuid():N}";
         var customIncomeTypeName = $"Охрана {Guid.NewGuid():N}";
-        var waterServiceId = Guid.NewGuid();
+        Guid waterServiceId;
         var customServiceId = Guid.NewGuid();
 
         await using (var setupContext = database.CreateContext())
@@ -26,6 +26,10 @@ public sealed class PostgreSqlServiceMeterKindMigrationIntegrationTests
             await setupContext.GetService<IMigrator>().MigrateAsync(PreviousMigration);
             var waterIncomeTypeId = await setupContext.IncomeTypes
                 .Where(item => item.Code == "water")
+                .Select(item => item.Id)
+                .SingleAsync();
+            waterServiceId = await setupContext.ChargeServiceSettings
+                .Where(item => item.IncomeTypeId == waterIncomeTypeId)
                 .Select(item => item.Id)
                 .SingleAsync();
             await setupContext.Database.ExecuteSqlInterpolatedAsync($"""
@@ -38,8 +42,7 @@ public sealed class PostgreSqlServiceMeterKindMigrationIntegrationTests
                     "Id", "Name", "IsRegular", "OverdueGraceDays", "IncomeTypeId", "IsMetered",
                     "HasTieredTariff", "IsArchived", "CreatedAtUtc", "UpdatedAtUtc", "Version")
                 VALUES
-                    ({waterServiceId}, 'Вода', TRUE, 30, {waterIncomeTypeId}, TRUE, FALSE, FALSE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, gen_random_uuid()),
-                    ({customServiceId}, 'Охрана', TRUE, 30, {customIncomeTypeId}, TRUE, FALSE, FALSE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, gen_random_uuid());
+                    ({customServiceId}, {customIncomeTypeName}, TRUE, 30, {customIncomeTypeId}, TRUE, FALSE, FALSE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, gen_random_uuid());
                 """);
 
             await setupContext.Database.MigrateAsync();
