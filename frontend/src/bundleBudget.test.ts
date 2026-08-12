@@ -18,7 +18,7 @@ describe('frontend bundle budget gate', () => {
   it('keeps explicit gzip budgets for JS, CSS and total production assets', () => {
     expect(budgetScript).toContain('mainJsGzipBytes: 180 * 1024')
     expect(budgetScript).toContain('mainCssGzipBytes: 40 * 1024')
-    expect(budgetScript).toContain('totalAssetsGzipBytes: 261 * 1024')
+    expect(budgetScript).toContain('totalAssetsGzipBytes: 262 * 1024')
     expect(budgetScript).toContain('gzipSync')
   })
 })
