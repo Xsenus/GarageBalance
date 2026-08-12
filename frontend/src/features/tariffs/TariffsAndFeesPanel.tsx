@@ -3372,7 +3372,6 @@ export function AddServicePrototypeDialog({
   const [error, setError] = useState<string | null>(null)
   const [scheduleDraft, setScheduleDraft] = useState<Array<ChargeServiceTariffPeriodDto & { key: string; rateText: string }>>(() =>
     (tariffSchedule ?? []).map((period) => ({ ...period, rateText: formatTariffDecimal(period.rate), key: `${period.tariffId}-${period.effectiveFrom ?? 'all'}-${period.effectiveTo ?? 'all'}` })))
-  const [allowScheduleGaps, setAllowScheduleGaps] = useState(false)
   const [scheduleMessage, setScheduleMessage] = useState<string | null>(null)
   const [scheduleSaving, setScheduleSaving] = useState(false)
   const selectedTariff = initialTariff
@@ -3418,32 +3417,17 @@ export function AddServicePrototypeDialog({
       }
     }
 
-    const hasGaps = Boolean(ordered[0].effectiveFrom || ordered.at(-1)?.effectiveTo)
-      || ordered.some((period, index) => {
-        if (index === 0) return false
-        const previousEnd = ordered[index - 1].effectiveTo
-        if (!previousEnd || !period.effectiveFrom) return true
-        const expected = new Date(`${previousEnd}T00:00:00`)
-        expected.setDate(expected.getDate() + 1)
-        return period.effectiveFrom !== getLocalDateInputValue(expected)
-      })
-    if (hasGaps && !allowScheduleGaps) {
-      setScheduleMessage('В сетке есть период без тарифа. Заполните его или подтвердите сохранение с разрывами.')
-      return
-    }
-
     setScheduleSaving(true)
     setScheduleMessage(null)
     try {
       const saved = await onUpdateTariffSchedule({
         periods: ordered.map(({ tariffId, tariffVersion, effectiveFrom, effectiveTo, rateText }) => ({ tariffId, tariffVersion, effectiveFrom, effectiveTo, rate: parsePrototypeAmount(rateText)! })),
-        allowGaps: allowScheduleGaps,
+        allowGaps: true,
         changeReason: 'Изменение тарифной сетки в карточке услуги.',
         serviceVersion: initialSetting.version,
       })
       setScheduleDraft(saved.map((period) => ({ ...period, rateText: formatTariffDecimal(period.rate), key: `${period.tariffId}-${period.effectiveFrom ?? 'all'}-${period.effectiveTo ?? 'all'}` })))
       setScheduleMessage('Тарифная сетка сохранена.')
-      setAllowScheduleGaps(false)
     } catch (caught) {
       setScheduleMessage(caught instanceof Error ? caught.message : 'Не удалось сохранить тарифную сетку.')
     } finally {
@@ -3605,7 +3589,7 @@ export function AddServicePrototypeDialog({
           </button>
         </div>
 
-        <form className={`dictionary-modal-form contractors-modal-form${initialSetting && isRegular ? ' contractors-modal-form--service-edit' : ''}`} onSubmit={submitService}>
+        <form className={`dictionary-modal-form contractors-modal-form${initialSetting && isRegular ? ` contractors-modal-form--service-edit${isTiered ? ' contractors-modal-form--service-edit-tiered' : ''}` : ''}`} onSubmit={submitService}>
           {error ? <FormError>{error}</FormError> : null}
           {initialSetting && isRegular ? <h4 className="contractors-service-section-title contractors-service-section-title--settings">Настройки услуги</h4> : null}
           <div className={`contractors-service-heading-grid${regularOnly || initialSetting ? ' contractors-service-heading-grid--name-only' : ''}`}>
@@ -3661,7 +3645,7 @@ export function AddServicePrototypeDialog({
                   />
                 </FormField> : null}
               </div>
-              {initialSetting ? (
+              {initialSetting && !isTiered ? (
                 <section className="tariff-schedule-editor" aria-labelledby="tariff-schedule-title">
                   <div className="tariff-schedule-heading">
                     <div>
@@ -3753,11 +3737,7 @@ export function AddServicePrototypeDialog({
                     </div>
                   )}
                   {scheduleMessage ? <p className="tariff-schedule-message" role="status">{scheduleMessage}</p> : null}
-                  <div className="tariff-schedule-footer">
-                    <label className="contractors-check-row">
-                      <input aria-label="Разрешить периоды без тарифа" type="checkbox" checked={allowScheduleGaps} onChange={(event) => setAllowScheduleGaps(event.target.checked)} />
-                      <span>Разрешить периоды без тарифа</span>
-                    </label>
+                  <div className="tariff-schedule-footer tariff-schedule-footer--actions-only">
                     <button className="secondary-button" type="button" disabled={scheduleSaving || tariffScheduleLoading} onClick={() => void saveTariffSchedule()}>
                       <Save size={16} aria-hidden="true" />
                       <span>{scheduleSaving ? 'Сохраняем…' : 'Сохранить тарифную сетку'}</span>

@@ -2050,8 +2050,8 @@ h1 {
   grid-template-columns: 1fr;
 }
 
-.contractors-modal-form--service-edit {
-  grid-template-columns: minmax(300px, 0.72fr) minmax(560px, 1.45fr);
+.contractors-modal-form.contractors-modal-form--service-edit {
+  grid-template-columns: minmax(400px, 0.9fr) minmax(540px, 1.35fr);
   grid-template-areas:
     "feedback feedback"
     "settings-title schedule"
@@ -2062,8 +2062,7 @@ h1 {
     "flags schedule"
     ". tiers"
     "actions actions";
-  column-gap: 14px;
-  row-gap: 0;
+  gap: 0 14px;
   align-items: start;
 }
 
@@ -2100,7 +2099,7 @@ h1 {
   border-right: 1px solid #dce3ee;
   border-left: 1px solid #dce3ee;
   background: #f8fafc;
-  padding: 0 14px 10px;
+  padding: 0 14px;
 }
 
 .contractors-modal-form--service-edit > .contractors-service-period-grid--catalogs {
@@ -2110,7 +2109,7 @@ h1 {
   border-top: 0;
   border-radius: 0 0 12px 12px;
   background: #f8fafc;
-  padding: 0 14px 14px;
+  padding: 10px 14px 14px;
 }
 
 .contractors-modal-form--service-edit > .tariff-schedule-editor {
@@ -2127,7 +2126,7 @@ h1 {
   border-right: 1px solid #dce3ee;
   border-left: 1px solid #dce3ee;
   background: #f8fafc;
-  padding: 0 14px 10px;
+  padding: 0 14px;
 }
 
 .contractors-modal-form--service-edit > .contractors-service-flags {
@@ -2137,12 +2136,17 @@ h1 {
   border-top: 0;
   border-radius: 0 0 12px 12px;
   background: #f8fafc;
-  padding: 0 14px 14px;
+  padding: 10px 14px 14px;
 }
 
 .contractors-modal-form--service-edit > .contractors-tier-editor {
   grid-area: tiers;
   margin-top: 12px;
+}
+
+.contractors-modal-form--service-edit-tiered > .contractors-tier-editor {
+  grid-area: schedule;
+  margin-top: 0;
 }
 
 .contractors-modal-form--service-edit > .detail-dialog-actions {
@@ -2757,19 +2761,24 @@ h1 {
 }
 
 .tariff-schedule-table {
-  overflow: hidden;
+  overflow: visible;
   border: 1px solid #dce3ee;
   border-radius: 10px;
   background: #ffffff;
 }
 
 .tariff-schedule-row {
+  position: relative;
   display: grid;
   grid-template-columns: minmax(180px, 1fr) minmax(180px, 1fr) minmax(160px, .8fr) 72px;
   align-items: center;
   gap: 12px;
   padding: 9px 12px;
   border-top: 1px solid #dce3ee;
+}
+
+.tariff-schedule-row:focus-within {
+  z-index: 40;
 }
 
 .tariff-schedule-row:first-child {
@@ -2781,6 +2790,26 @@ h1 {
   background: #f8fafc;
   font-size: 12px;
   font-weight: 700;
+}
+
+.tariff-schedule-row--header > span,
+.tariff-schedule-row > [role='cell']:nth-child(1),
+.tariff-schedule-row > [role='cell']:nth-child(2) {
+  text-align: center;
+}
+
+.tariff-schedule-row > [role='cell']:nth-child(1) input,
+.tariff-schedule-row > [role='cell']:nth-child(2) input {
+  text-align: center;
+}
+
+.tariff-schedule-row > [role='cell']:nth-child(3) input {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.tariff-schedule-footer--actions-only {
+  justify-content: flex-end;
 }
 
 .tariff-schedule-actions {
@@ -2889,6 +2918,11 @@ h1 {
   text-align: center;
 }
 
+.contractors-threshold-grid > :nth-child(5n + 3) {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
 .contractors-tier-editor {
   display: grid;
   gap: 12px;
@@ -2921,7 +2955,7 @@ h1 {
 }
 
 @media (max-width: 1100px) {
-  .contractors-modal-form--service-edit {
+  .contractors-modal-form.contractors-modal-form--service-edit {
     grid-template-columns: minmax(0, 1fr);
     grid-template-areas:
       "feedback"
