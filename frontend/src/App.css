@@ -4332,13 +4332,25 @@ h1 {
   position: relative;
   display: grid;
   grid-template-columns: 28px minmax(0, 1fr);
+  gap: 8px;
   align-items: center;
   font-variant-numeric: tabular-nums;
 }
 
-.payments-prototype-payable > span {
+.payments-prototype-payable > .field-help {
+  grid-column: 1;
+  justify-self: start;
+}
+
+.payments-prototype-payable-amount {
   grid-column: 2;
   justify-self: end;
+}
+
+.field-help__tooltip.payments-prototype-calculation-tooltip {
+  width: max-content;
+  max-width: min(420px, calc(100vw - 48px));
+  white-space: nowrap;
 }
 
 .payments-prototype-calculation-toggle {
@@ -4612,6 +4624,10 @@ h1 {
 
 .payments-prototype-dialog--wide {
   width: min(720px, 100%);
+}
+
+.detail-dialog.payments-prototype-calculation-dialog {
+  width: min(920px, 100%);
 }
 
 .full-payment-dialog {

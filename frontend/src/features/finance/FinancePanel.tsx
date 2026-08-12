@@ -4941,10 +4941,10 @@ function PaymentsPrototypePanel({
                                     >
                                       <CircleHelp size={15} aria-hidden="true" />
                                     </button>
-                                    <span className="field-help__tooltip">{row.calculationDetails.lines[0]?.formula}</span>
+                                    <span className="field-help__tooltip payments-prototype-calculation-tooltip">{row.calculationDetails.lines[0]?.formula}</span>
                                   </span>
                                 ) : null}
-                                <span>{formatPaymentMoney(row.payable)}</span>
+                                <span className="payments-prototype-payable-amount">{formatPaymentMoney(row.payable)}</span>
                               </div>
                             </td>
                             <td>
@@ -5189,7 +5189,7 @@ function PaymentsPrototypePanel({
         <div className="modal-backdrop" role="presentation" onMouseDown={() => setCalculationDialogRow(null)}>
           <section
             ref={calculationDialogRef}
-            className="detail-dialog payments-prototype-dialog--wide"
+            className="detail-dialog payments-prototype-calculation-dialog"
             role="dialog"
             aria-modal="true"
             aria-label={`Расчёт суммы: ${calculationDialogRow.service}, ${calculationDialogRow.monthLabel}`}
