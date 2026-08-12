@@ -362,6 +362,8 @@ describe('responsive layout styles', () => {
     expect(normalizedAppCss).toContain('.contractors-service-cost-grid {\n  display: grid;\n  grid-template-columns: repeat(3, minmax(0, 1fr));')
     expect(normalizedAppCss).toContain('.contractors-service-secondary-grid {\n  display: grid;\n  grid-template-columns: repeat(2, minmax(0, 1fr));\n  gap: 12px;\n  align-items: end;')
     expect(normalizedAppCss).toContain('.contractors-service-heading-grid {\n  display: grid;\n  grid-template-columns: minmax(0, 3fr) minmax(220px, 1fr);')
+    expect(normalizedAppCss).toContain('.editable-combobox .editable-combobox__input {\n  padding-right: 40px;')
+    expect(normalizedAppCss).toContain('.editable-combobox__list {\n  width: 100%;\n  max-height: 294px;\n  scrollbar-gutter: stable;\n  overscroll-behavior: contain;')
     expect(normalizedAppCss).toContain('.contractors-service-cost-field {\n  grid-column: 3;')
     expect(normalizedAppCss).toContain('.contractors-tariff-dialog .contractors-service-period-grid--catalogs,\n  .contractors-tariff-dialog .contractors-service-period-grid--schedule,\n  .contractors-tariff-dialog .contractors-service-period-grid--single-row,\n  .contractors-service-heading-grid,\n  .contractors-service-secondary-grid,\n  .contractors-fee-two-column-grid,\n  .contractors-fee-date-grid,\n  .contractors-service-period-grid,\n  .contractors-service-flags,\n  .contractors-service-cost-grid {\n    grid-template-columns: 1fr;')
     expect(normalizedAppCss).toContain('.contractors-service-cost-field {\n    grid-column: 1;')

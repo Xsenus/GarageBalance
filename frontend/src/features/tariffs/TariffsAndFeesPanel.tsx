@@ -12,7 +12,8 @@ import type { ChangePreview } from '../../shared/changePreview'
 import { appendChangePreview, formatChangeDate, formatChangeNumber, formatChangeText } from '../../shared/changePreview'
 import { FormError } from '../../shared/formFeedback'
 import { FormField } from '../../shared/FormField'
-import { getTariffCalculationUnitName, normalizeTariffCalculationUnitName } from '../../shared/dictionaryWorkbench'
+import { EditableCombobox } from '../../shared/EditableCombobox'
+import { getTariffCalculationUnitName } from '../../shared/dictionaryWorkbench'
 import { formatDateOnly, getLocalDateInputValue } from '../../shared/formatters'
 import { useEscapeKey, useFocusOnOpen, useFocusTrap, useRestoreFocusOnClose } from '../../shared/focusHooks'
 import { LocalizedDatePicker } from '../../shared/LocalizedDatePicker'
@@ -452,9 +453,8 @@ function createChargeServiceRows(setting: ChargeServiceSettingDto, tariffs: Tari
   const periodicityMonths = normalizeRegularServicePeriodicity(setting.periodicityMonths)
   const isMonthly = periodicityMonths === '1'
   const linkedTariff = tariffs.find((tariff) => tariff.id === setting.tariffId)
-  const unitName = linkedTariff
-    ? normalizeTariffCalculationUnitName(linkedTariff.calculationBase, setting.unitName)
-    : setting.unitName ?? 'руб.'
+  const unitName = setting.unitName?.trim()
+    || (linkedTariff ? getTariffCalculationUnitName(linkedTariff.calculationBase) : 'руб.')
   const rows: ContractorTariffRow[] = [
     {
       id: `charge-service-${setting.id}-main`,
@@ -547,8 +547,8 @@ function mergeChargeServicesIntoPrototypeRows(rows: ContractorTariffRow[], setti
     const linkedTariff = tariffs.find((tariff) => tariff.id === setting.tariffId)
     const common = {
       ...row,
-      unit: (row.serviceSettingKind === 'main' || row.calculationBase) && linkedTariff
-        ? normalizeTariffCalculationUnitName(linkedTariff.calculationBase, setting.unitName)
+      unit: (row.serviceSettingKind === 'main' || row.calculationBase)
+        ? setting.unitName?.trim() || row.unit
         : row.unit,
       byMeter: setting.isMetered,
       tiered: setting.hasTieredTariff,
@@ -586,7 +586,7 @@ function mergeChargeServicesIntoPrototypeRows(rows: ContractorTariffRow[], setti
         category: setting.name,
         title: getServiceTariffDisplayName(linkedTariff?.name, setting.name),
         amount: linkedTariff ? formatPrototypeAmount(linkedTariff.rate) : row.amount,
-        unit: linkedTariff ? normalizeTariffCalculationUnitName(linkedTariff.calculationBase, setting.unitName) : setting.unitName ?? row.unit,
+        unit: setting.unitName?.trim() || row.unit || (linkedTariff ? getTariffCalculationUnitName(linkedTariff.calculationBase) : undefined),
         calculationBase: linkedTariff?.calculationBase ?? row.calculationBase,
         backendTariffId: linkedTariff?.id,
         effectiveFrom: linkedTariff?.effectiveFrom,
@@ -1159,7 +1159,8 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
     const linkedTariffId = mainRow?.backendTariffId ?? setting.tariffId
     const linkedTariff = linkedTariffId ? backendTariffs.find((tariff) => tariff.id === linkedTariffId) : null
     const unitName = mainRow?.unit
-      ?? (linkedTariff ? normalizeTariffCalculationUnitName(linkedTariff.calculationBase, setting.unitName) : setting.unitName)
+      ?? setting.unitName
+      ?? (linkedTariff ? getTariffCalculationUnitName(linkedTariff.calculationBase) : null)
 
     return {
       name: (mainRow?.category ?? setting.name).trim() || setting.name,
@@ -1249,7 +1250,9 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
     }
 
     const tariffMode = nextTiered ? 'metered_tiered' : nextMetered ? 'metered' : 'regular'
-    const targetUnit = getTariffCalculationUnitName(targetCalculationBase)
+    const targetUnit = row.unit?.trim()
+      || serviceSetting.unitName?.trim()
+      || getTariffCalculationUnitName(targetCalculationBase)
     const nextRows = tariffRows.map((currentRow) => currentRow.id === row.id
       ? {
         ...currentRow,
@@ -3298,9 +3301,10 @@ export function AddServicePrototypeDialog({
       ?? (initialSetting ? '' : funds[0]?.id ?? '')
   ))
   const [calculationBase, setCalculationBase] = useState(initialTariff?.calculationBase ?? 'fixed')
-  const [unitName, setUnitName] = useState(initialTariff
-    ? normalizeTariffCalculationUnitName(initialTariff.calculationBase, initialSetting?.unitName)
-    : normalizeTariffCalculationUnitName('fixed', initialSetting?.unitName))
+  const [unitName, setUnitName] = useState(
+    initialSetting?.unitName?.trim()
+      || getTariffCalculationUnitName(initialTariff?.calculationBase ?? 'fixed'),
+  )
   const [isByMeter, setIsByMeter] = useState(initialSetting?.isMetered ?? isMeterTariff(initialTariff ?? undefined))
   const [isTiered, setIsTiered] = useState(initialSetting?.hasTieredTariff ?? false)
   const [periodicityMonths, setPeriodicityMonths] = useState(() => normalizeRegularServicePeriodicity(initialSetting?.periodicityMonths ?? 1))
@@ -3319,7 +3323,7 @@ export function AddServicePrototypeDialog({
     : 'meter_electricity'
   const effectiveCalculationBase = calculationBase
   const canUseTieredTariff = isByMeter
-    && effectiveCalculationBase === 'meter_electricity'
+    && (effectiveCalculationBase === 'meter_water' || effectiveCalculationBase === 'meter_electricity')
   const isMonthly = periodicityMonths === '1'
   useRestoreFocusOnClose(true)
   const dialogRef = useFocusTrap<HTMLElement>(true)
@@ -3330,9 +3334,8 @@ export function AddServicePrototypeDialog({
       ? supportedMeterCalculationBase
       : selectedTariff?.calculationBase === 'people' ? 'people' : 'fixed'
     setIsByMeter(nextIsMetered)
-    setIsTiered((currentValue) => nextIsMetered && nextCalculationBase === 'meter_electricity' ? currentValue : false)
+    setIsTiered((currentValue) => nextIsMetered ? currentValue : false)
     setCalculationBase(nextCalculationBase)
-    setUnitName(getTariffCalculationUnitName(nextCalculationBase))
     setError(null)
   }
 
@@ -3560,19 +3563,16 @@ export function AddServicePrototypeDialog({
                   </div>
                 </FormField>
                 <FormField label="Единица измерения" help="Это обозначение показывается в тарифах, начислениях и показаниях.">
-                  <input
+                  <EditableCombobox
                     aria-label="Единица измерения"
-                    list="unit-options"
                     maxLength={40}
                     value={unitName}
-                    onChange={(event) => {
-                      setUnitName(event.target.value)
+                    options={measurementUnits.map((unit) => ({ value: unit.name, label: unit.name }))}
+                    onChange={(nextUnitName) => {
+                      setUnitName(nextUnitName)
                       setError(null)
                     }}
                   />
-                  <datalist id="unit-options">
-                    {measurementUnits.map((unit) => <option value={unit.name} key={unit.id} />)}
-                  </datalist>
                 </FormField>
               </div>
               <div className="contractors-service-flags">

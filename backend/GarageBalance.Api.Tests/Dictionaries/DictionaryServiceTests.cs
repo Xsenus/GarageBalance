@@ -4258,7 +4258,7 @@ public sealed class DictionaryServiceTests
                     30,
                     true,
                     true,
-                    "кВт·ч",
+                    "руб.",
                     incomeType.Id,
                     sourceTariff.Id),
                 7.47m,
@@ -4278,7 +4278,7 @@ public sealed class DictionaryServiceTests
         Assert.Null(tiered.Value.Tariff.ElectricityTiers[2].UpperBound);
         Assert.True(tiered.Value.Service.IsMetered);
         Assert.True(tiered.Value.Service.HasTieredTariff);
-        Assert.Equal("кВт·ч", tiered.Value.Service.UnitName);
+        Assert.Equal("руб.", tiered.Value.Service.UnitName);
         Assert.Equal(selectedFund.Id, incomeType.DestinationFundId);
         Assert.Equal("fixed", sourceTariff.CalculationBase);
         Assert.Equal(2, database.Context.Tariffs.Count());
@@ -4313,21 +4313,27 @@ public sealed class DictionaryServiceTests
         Assert.Equal("руб.", regular.Value.Service.UnitName);
         Assert.Equal(3, database.Context.Tariffs.Count());
         Assert.Equal(3, database.Context.ChargeServiceTariffVersions.Count(item => item.ChargeServiceSettingId == setting.Id));
-        Assert.Equal(7, database.Context.AuditEvents.Count());
-        Assert.Equal(2, database.Context.AuditEvents.Count(item => item.Action == "dictionary.measurement_unit_created"));
+        Assert.Equal(6, database.Context.AuditEvents.Count());
+        Assert.Equal(1, database.Context.AuditEvents.Count(item => item.Action == "dictionary.measurement_unit_created"));
         Assert.Contains(database.Context.AuditEvents, item => item.Action == "dictionary.charge_service_tariff_mode_changed");
         Assert.Contains(database.Context.AuditEvents, item => item.Action == "dictionary.income_type_destination_fund_updated");
 
         var repository = new EfChargeServiceSettingRepository(database.Context);
         var july = Assert.Single(await repository.GetActiveRegularAsync(new DateOnly(2026, 7, 1), CancellationToken.None));
-        var firstAugust = Assert.Single(await repository.GetActiveRegularAsync(new DateOnly(2026, 8, 1), CancellationToken.None));
-        var secondAugust = Assert.Single(await repository.GetActiveRegularAsync(new DateOnly(2026, 8, 2), CancellationToken.None));
         Assert.Equal(sourceTariff.Id, july.TariffId);
         Assert.Equal("fixed", july.Tariff!.CalculationBase);
+        Assert.Equal("руб.", july.UnitName);
+        database.Context.ChangeTracker.Clear();
+        var firstAugust = Assert.Single(await repository.GetActiveRegularAsync(new DateOnly(2026, 8, 1), CancellationToken.None));
         Assert.Equal(tiered.Value.Tariff.Id, firstAugust.TariffId);
         Assert.Equal("meter_electricity", firstAugust.Tariff!.CalculationBase);
+        Assert.Equal("руб.", firstAugust.UnitName);
+        database.Context.ChangeTracker.Clear();
+        var secondAugust = Assert.Single(await repository.GetActiveRegularAsync(new DateOnly(2026, 8, 2), CancellationToken.None));
         Assert.Equal(regular.Value.Tariff.Id, secondAugust.TariffId);
         Assert.Equal("fixed", secondAugust.Tariff!.CalculationBase);
+        Assert.Equal("руб.", secondAugust.UnitName);
+        database.Context.ChangeTracker.Clear();
 
         var repeatedSameDate = await service.UpdateChargeServiceWithTariffAsync(
             setting.Id,
