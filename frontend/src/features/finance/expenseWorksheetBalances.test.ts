@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { describe, expect, it } from 'vitest'
-import { calculateExpenseWorksheetClosingBalance, getExpenseWorksheetCollectedClassName, splitExpenseWorksheetBalance, toSignedExpenseWorksheetBalance } from './expenseWorksheetBalances'
+import { calculateCashAndBankTotal, calculateExpenseWorksheetClosingBalance, getExpenseWorksheetCollectedClassName, splitExpenseWorksheetBalance, toSignedExpenseWorksheetBalance } from './expenseWorksheetBalances'
 
 describe('expense worksheet balances', () => {
   it('separates debt, advance and zero without ambiguous negative values', () => {
@@ -31,6 +31,11 @@ describe('expense worksheet balances', () => {
     expect(getExpenseWorksheetCollectedClassName(100, null)).toBeUndefined()
     expect(getExpenseWorksheetCollectedClassName('', 100)).toBeUndefined()
     expect(getExpenseWorksheetCollectedClassName(100, '')).toBeUndefined()
+  })
+
+  it('calculates the actual money total from bank and cash balances', () => {
+    expect(calculateCashAndBankTotal(123, 1_960_500.37)).toBe(1_960_623.37)
+    expect(calculateCashAndBankTotal(0.1, 0.2)).toBe(0.3)
   })
 
 })

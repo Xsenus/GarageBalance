@@ -80,7 +80,7 @@ export type TariffCalculationBaseOption = {
 
 export const dictionarySectionGroups: Array<{ key: DictionarySectionGroupKey; label: string }> = [
   { key: 'counterparties', label: 'Контрагенты' },
-  { key: 'operations', label: 'Операции' },
+  { key: 'operations', label: 'Финансовые статьи' },
   { key: 'tariffs', label: 'Тарифы' },
 ]
 

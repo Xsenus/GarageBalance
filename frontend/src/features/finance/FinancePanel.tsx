@@ -25,7 +25,7 @@ import { ReportPeriodQuickSelect } from '../../shared/ReportPeriodQuickSelect'
 import { TablePagination } from '../../shared/TablePagination'
 import { getAccrualValidationErrors, getExpenseValidationErrors, getIncomeValidationErrors, getMeterReadingValidationErrors, getSupplierAccrualValidationErrors, getSupplierGroupSalaryValidationErrors } from '../../shared/validation'
 import { formatPaymentMoney, parsePaymentMoney } from './paymentMoneyFormatting'
-import { calculateExpenseWorksheetClosingBalance, getExpenseWorksheetCollectedClassName, toSignedExpenseWorksheetBalance } from './expenseWorksheetBalances'
+import { calculateCashAndBankTotal, calculateExpenseWorksheetClosingBalance, getExpenseWorksheetCollectedClassName, toSignedExpenseWorksheetBalance } from './expenseWorksheetBalances'
 import { expensePaymentTypeOptions, formatExpensePaymentSource, formatExpensePaymentType } from './expensePaymentTypes'
 import { rankGarageSearchResults } from './garageSearchRanking'
 import { getGarageBalancePresentation, toSignedGarageNetBalance, toSignedGarageSplitBalance } from './garageBalancePresentation'
@@ -4508,6 +4508,7 @@ function PaymentsPrototypePanel({
   const expenseClosingBalanceTotal = toSignedExpenseWorksheetBalance(expenseClosingDebtTotal, expenseClosingAdvanceTotal)
   const expenseCollectedTotal = expenseRows.reduce((sum, row) => sum + (typeof row.collected === 'number' ? row.collected : 0), 0)
   const expenseDifferenceTotal = expenseRows.reduce((sum, row) => sum + (typeof row.difference === 'number' ? row.difference : 0), 0)
+  const expenseCashAndBankTotal = calculateCashAndBankTotal(expenseBankAmount, expenseCashAmount)
   const isEditableExpenseWorksheetPeriod = expenseWorksheetMonthFrom === expenseWorksheetMonthTo
     && expenseWorksheetMonthTo >= getCurrentMonthInputValue()
   const expensePeriodLabel = expenseWorksheetMonthFrom === expenseWorksheetMonthTo
@@ -5083,8 +5084,8 @@ function PaymentsPrototypePanel({
                     <th scope="col">Исходящий баланс</th>
                     {isEditableExpenseWorksheetPeriod ? (
                       <>
-                        <th scope="col">Собрано</th>
-                        <th scope="col">Разница</th>
+                        <th scope="col">Средства фонда до выплат</th>
+                        <th scope="col">Остаток фонда после выплат</th>
                         <th scope="col">Действие</th>
                       </>
                     ) : null}
@@ -5176,8 +5177,8 @@ function PaymentsPrototypePanel({
               <strong>{formatPaymentPrototypeValue(expenseCashAmount)}</strong>
             </div>
             <div>
-              <span>ИТОГО</span>
-              <strong>{formatPaymentPrototypeValue(expenseCollectedTotal)}</strong>
+              <span>Касса + банк</span>
+              <strong>{formatPaymentPrototypeValue(expenseCashAndBankTotal)}</strong>
             </div>
             <button className="secondary-button" type="button" onClick={(event) => openDialogFromButton(event, 'bank')}>
               Сдать кассу в банк

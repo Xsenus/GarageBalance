@@ -36,3 +36,7 @@ export function calculateExpenseWorksheetClosingBalance(
 ): ExpenseWorksheetBalanceSplit {
   return splitExpenseWorksheetBalance(openingDebt - openingAdvance + cost - paid)
 }
+
+export function calculateCashAndBankTotal(bankAmount: number, cashAmount: number): number {
+  return Math.round((bankAmount + cashAmount) * 100) / 100
+}

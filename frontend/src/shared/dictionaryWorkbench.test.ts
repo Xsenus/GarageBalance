@@ -7,7 +7,7 @@ describe('dictionary workbench metadata', () => {
   it('keeps dictionary groups in the expected order', () => {
     expect(dictionarySectionGroups).toEqual([
       { key: 'counterparties', label: 'Контрагенты' },
-      { key: 'operations', label: 'Операции' },
+      { key: 'operations', label: 'Финансовые статьи' },
       { key: 'tariffs', label: 'Тарифы' },
     ])
   })

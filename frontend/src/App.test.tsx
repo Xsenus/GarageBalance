@@ -8921,8 +8921,8 @@ describe('App', () => {
 
     const julyTable = await within(prototype).findByRole('table', { name: 'Форма выплат за июль 2026' })
     expect(within(julyTable).getAllByRole('columnheader')).toHaveLength(9)
-    expect(within(julyTable).getByRole('columnheader', { name: 'Собрано' })).toBeInTheDocument()
-    expect(within(julyTable).getByRole('columnheader', { name: 'Разница' })).toBeInTheDocument()
+    expect(within(julyTable).getByRole('columnheader', { name: 'Средства фонда до выплат' })).toBeInTheDocument()
+    expect(within(julyTable).getByRole('columnheader', { name: 'Остаток фонда после выплат' })).toBeInTheDocument()
     expect(within(julyTable).getByRole('columnheader', { name: 'Действие' })).toBeInTheDocument()
     expect(await within(julyTable).findByRole('button', { name: 'Оплатить Водоснабжение' })).toBeInTheDocument()
 
@@ -8932,8 +8932,8 @@ describe('App', () => {
     const juneTable = await within(prototype).findByRole('table', { name: 'Форма выплат за июнь 2026' })
     expect(await within(juneTable).findByText('Водоканал')).toBeInTheDocument()
     expect(within(juneTable).getAllByRole('columnheader')).toHaveLength(6)
-    expect(within(juneTable).queryByRole('columnheader', { name: 'Собрано' })).not.toBeInTheDocument()
-    expect(within(juneTable).queryByRole('columnheader', { name: 'Разница' })).not.toBeInTheDocument()
+    expect(within(juneTable).queryByRole('columnheader', { name: 'Средства фонда до выплат' })).not.toBeInTheDocument()
+    expect(within(juneTable).queryByRole('columnheader', { name: 'Остаток фонда после выплат' })).not.toBeInTheDocument()
     expect(within(juneTable).queryByRole('columnheader', { name: 'Действие' })).not.toBeInTheDocument()
     expect(within(juneTable).queryByRole('button', { name: 'Оплатить Водоснабжение' })).not.toBeInTheDocument()
     expect(within(juneTable).getByText('Водоканал').closest('tr')?.children).toHaveLength(6)
@@ -9066,6 +9066,8 @@ describe('App', () => {
     expect(within(expenseDialog).getByLabelText('Сумма выплаты')).toHaveValue('29 500.00')
     expect(within(prototype).getAllByText('12 000.00').length).toBeGreaterThan(0)
     expect(within(prototype).getByText('4 000.00')).toBeInTheDocument()
+    const cashAndBankSummary = within(prototype).getByLabelText('Итоги кассы и банка')
+    expect(within(cashAndBankSummary).getByText('Касса + банк').closest('div')).toHaveTextContent('16 000.00')
   })
 
   it('shows unused service collections in each following expense month until they are paid', async () => {
