@@ -42,9 +42,10 @@ namespace GarageBalance.Api.Infrastructure.Data.Migrations
                 """);
 
             migrationBuilder.CreateIndex(
-                name: "IX_charge_service_tariff_versions_ChargeServiceSettingId_Effec~",
+                name: "IX_charge_service_tariff_versions_active_period",
                 table: "charge_service_tariff_versions",
-                columns: new[] { "ChargeServiceSettingId", "EffectiveFrom", "EffectiveTo" });
+                columns: new[] { "ChargeServiceSettingId", "EffectiveFrom", "EffectiveTo" },
+                filter: "\"IsArchived\" = false");
 
             migrationBuilder.CreateIndex(
                 name: "IX_charge_service_tariff_versions_IsArchived",
@@ -56,7 +57,7 @@ namespace GarageBalance.Api.Infrastructure.Data.Migrations
         protected override void Down(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.DropIndex(
-                name: "IX_charge_service_tariff_versions_ChargeServiceSettingId_Effec~",
+                name: "IX_charge_service_tariff_versions_active_period",
                 table: "charge_service_tariff_versions");
 
             migrationBuilder.DropIndex(

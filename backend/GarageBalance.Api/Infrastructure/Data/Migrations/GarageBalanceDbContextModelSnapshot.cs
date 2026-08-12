@@ -247,7 +247,9 @@ namespace GarageBalance.Api.Infrastructure.Data.Migrations
 
                     b.HasIndex("TariffId");
 
-                    b.HasIndex("ChargeServiceSettingId", "EffectiveFrom", "EffectiveTo");
+                    b.HasIndex("ChargeServiceSettingId", "EffectiveFrom", "EffectiveTo")
+                        .HasDatabaseName("IX_charge_service_tariff_versions_active_period")
+                        .HasFilter("\"IsArchived\" = false");
 
                     b.ToTable("charge_service_tariff_versions", (string)null);
                 });

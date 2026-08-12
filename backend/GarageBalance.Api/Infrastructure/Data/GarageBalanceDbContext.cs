@@ -709,7 +709,9 @@ public sealed class GarageBalanceDbContext(DbContextOptions<GarageBalanceDbConte
             entity.HasKey(item => new { item.ChargeServiceSettingId, item.EffectiveFrom });
             entity.HasIndex(item => item.TariffId);
             entity.HasIndex(item => item.IsArchived);
-            entity.HasIndex(item => new { item.ChargeServiceSettingId, item.EffectiveFrom, item.EffectiveTo });
+            entity.HasIndex(item => new { item.ChargeServiceSettingId, item.EffectiveFrom, item.EffectiveTo })
+                .HasDatabaseName("IX_charge_service_tariff_versions_active_period")
+                .HasFilter("\"IsArchived\" = false");
             entity.HasOne(item => item.ChargeServiceSetting)
                 .WithMany(setting => setting.TariffVersions)
                 .HasForeignKey(item => item.ChargeServiceSettingId)

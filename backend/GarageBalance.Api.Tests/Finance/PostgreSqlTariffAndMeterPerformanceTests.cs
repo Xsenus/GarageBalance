@@ -70,6 +70,7 @@ public sealed class PostgreSqlTariffAndMeterPerformanceTests
         AssertIndex(indexes, "IX_tariffs_CalculationBase_EffectiveFrom", "\"IsArchived\" = false");
         AssertIndex(indexes, "IX_charge_service_settings_IsRegular_IsMetered_TariffId", "\"IsArchived\" = false");
         AssertIndex(indexes, "PK_charge_service_tariff_versions", "\"ChargeServiceSettingId\", \"EffectiveFrom\"");
+        AssertIndex(indexes, "IX_charge_service_tariff_versions_active_period", "\"IsArchived\" = false");
         AssertIndex(indexes, "IX_meter_readings_MeterKind_AccountingMonth_GarageId", "\"IsCanceled\" = false");
         AssertIndex(indexes, "IX_meter_readings_GarageId_MeterKind_AccountingMonth", "UNIQUE");
         AssertIndex(indexes, "IX_meter_readings_GarageId_MeterKind_AccountingMonth", "\"IsCanceled\" = false");
@@ -89,14 +90,16 @@ public sealed class PostgreSqlTariffAndMeterPerformanceTests
             tariffPlan,
             StringComparison.Ordinal);
         Assert.Contains(
-            "PK_charge_service_tariff_versions",
+            "IX_charge_service_tariff_versions_active_period",
             await ExplainAsync(
                 connection,
                 $"""
                 SELECT "TariffId"
                 FROM charge_service_tariff_versions
                 WHERE "ChargeServiceSettingId" = '{activeService.Id}'
+                  AND "IsArchived" = false
                   AND "EffectiveFrom" <= DATE '2026-07-01'
+                  AND ("EffectiveTo" IS NULL OR "EffectiveTo" >= DATE '2026-07-01')
                 ORDER BY "EffectiveFrom" DESC
                 LIMIT 1;
                 """),
