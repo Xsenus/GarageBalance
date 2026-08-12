@@ -3960,21 +3960,14 @@ h1 {
   font-variant-numeric: tabular-nums;
 }
 
-.payments-prototype-overdue-details > summary {
+.payments-prototype-overdue-heading {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  cursor: pointer;
   padding: 12px 0;
   color: #912018;
   font-weight: 750;
-}
-
-.payments-prototype-overdue-details > summary:focus-visible {
-  outline: 3px solid rgba(217, 45, 32, 0.22);
-  outline-offset: 4px;
-  border-radius: 4px;
 }
 
 .payments-prototype-overdue-details table {
@@ -4310,28 +4303,24 @@ h1 {
 }
 
 .payments-prototype-payable {
-  display: inline-flex;
+  position: relative;
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr);
   align-items: center;
-  justify-content: flex-end;
-  gap: 6px;
-  width: 100%;
   font-variant-numeric: tabular-nums;
 }
 
+.payments-prototype-payable > span {
+  grid-column: 2;
+  justify-self: end;
+}
+
 .payments-prototype-calculation-toggle {
-  flex: 0 0 auto;
   width: 28px;
   min-height: 28px;
   border-color: #b2ccff;
   background: #eff4ff;
   color: #175cd3;
-}
-
-.payments-prototype-calculation-row > td {
-  height: auto;
-  background: #f8fbff !important;
-  padding: 0 !important;
-  text-align: left !important;
 }
 
 .payments-prototype-calculation {

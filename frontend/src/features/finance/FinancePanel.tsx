@@ -32,6 +32,7 @@ import { getGarageBalancePresentation, toSignedGarageNetBalance, toSignedGarageS
 import { createGarageIncomeRowsFromWorksheet } from './garageIncomeWorksheetRows'
 import type { GarageIncomePrototypeRow } from './garageIncomeWorksheetRows'
 import { getFirstLinkedSupplier, getSupplierAccrualExpenseType } from './supplierAccrualLink'
+import { overdueDebtDetailsPreference } from './financeDisplayPreferences'
 
 type AccrualBreakdown =
   | { kind: 'garage'; accrual: AccrualDto }
@@ -2997,7 +2998,12 @@ function PaymentsPrototypePanel({
   const [incomeWorksheetAvailableMonthFrom, setIncomeWorksheetAvailableMonthFrom] = useState(() => getPreviousMonthInputValue(getCurrentMonthInputValue()))
   const [incomeWorksheetAvailableMonthTo, setIncomeWorksheetAvailableMonthTo] = useState(() => getCurrentMonthInputValue())
   const [garageRows, setGarageRows] = useState<GarageIncomePrototypeRow[]>([])
-  const [expandedCalculationRowIds, setExpandedCalculationRowIds] = useState<Set<string>>(() => new Set())
+  const [calculationDialogRow, setCalculationDialogRow] = useState<GarageIncomePrototypeRow | null>(null)
+  const calculationDialogRef = useFocusTrap<HTMLElement>(Boolean(calculationDialogRow))
+  useEscapeKey(Boolean(calculationDialogRow), () => setCalculationDialogRow(null))
+  useRestoreFocusOnClose(Boolean(calculationDialogRow))
+  const calculationDialogInitialFocusRef = useFocusOnOpen<HTMLButtonElement>(Boolean(calculationDialogRow))
+  const [overdueDebtDetailsExpanded, setOverdueDebtDetailsExpanded] = useState(() => overdueDebtDetailsPreference(auth.user.id))
   const [garageWorksheetSummary, setGarageWorksheetSummary] = useState<GarageIncomeWorksheetPeriodSummary | null>(null)
   const [expenseRows, setExpenseRows] = useState<PaymentPrototypeRow[]>([])
   const [expenseWorksheetMonthFrom, setExpenseWorksheetMonthFrom] = useState(() => getCurrentMonthInputValue())
@@ -4662,15 +4668,28 @@ function PaymentsPrototypePanel({
                     ? <>Весь общий долг <strong>{formatPaymentPrototypeValue(Math.abs(selectedGarageBalance.amount))}</strong> уже просрочен.</>
                     : <>{selectedGarageBalance.label} <strong>{formatPaymentPrototypeValue(selectedGarageBalance.amount)}</strong> и просрочка <strong>{formatPaymentPrototypeValue(selectedGarage.overdueDebt)}</strong> относятся к разным услугам. Ниже показано, по каким услугам остался просроченный долг.</>}
               </p>
-              <details className="payments-prototype-overdue-details" open>
-                <summary>
+              <section className="payments-prototype-overdue-details" aria-label="Расшифровка просроченной задолженности">
+                <div className="payments-prototype-overdue-heading">
                   <span>Расшифровка просроченной задолженности</span>
                   <span>
                     <strong>{formatPaymentPrototypeValue(overdueDebtDetails?.total ?? selectedGarage.overdueDebt)}</strong>
-                    {' · Скрыть / Показать'}
+                    <button
+                      type="button"
+                      className="icon-button"
+                      aria-label={`${overdueDebtDetailsExpanded ? 'Скрыть' : 'Показать'} расшифровку просроченной задолженности`}
+                      onClick={() => setOverdueDebtDetailsExpanded((current) => {
+                        const next = !current
+                        overdueDebtDetailsPreference(auth.user.id, next)
+                        return next
+                      })}
+                    >
+                      {overdueDebtDetailsExpanded
+                        ? <X size={17} aria-hidden="true" />
+                        : <CircleHelp size={17} aria-hidden="true" />}
+                    </button>
                   </span>
-                </summary>
-                {overdueDebtLoading ? (
+                </div>
+                {overdueDebtDetailsExpanded && (overdueDebtLoading ? (
                   <LoadingSkeleton label="Загрузка расшифровки просроченной задолженности" rows={3} columns={4} />
                 ) : overdueDebtError ? (
                   <div className="form-error payments-prototype-overdue-error" role="alert">
@@ -4714,8 +4733,8 @@ function PaymentsPrototypePanel({
                   </div>
                 ) : (
                   <p className="empty-state empty-state--spacious" role="status" aria-live="polite">Просроченных начислений не найдено.</p>
-                )}
-              </details>
+                ))}
+              </section>
             </>
           ) : null}
         </section>
@@ -4863,8 +4882,6 @@ function PaymentsPrototypePanel({
                           <td className={groupBalance < 0 ? 'money-expense' : groupBalance > 0 ? 'money-income' : undefined}>{formatPaymentMoney(groupBalance)}</td>
                         </tr>
                         {group.rows.map((row) => {
-                          const calculationExpanded = expandedCalculationRowIds.has(row.id)
-                          const calculationPanelId = `calculation-${row.id}`
                           return (
                           <Fragment key={row.id}>
                           <tr>
@@ -4915,22 +4932,17 @@ function PaymentsPrototypePanel({
                             <td>
                               <div className="payments-prototype-payable">
                                 {row.calculationDetails ? (
-                                  <button
-                                    type="button"
-                                    className="icon-button payments-prototype-calculation-toggle"
-                                    aria-label={`${calculationExpanded ? 'Скрыть' : 'Показать'} расчёт суммы ${row.service} ${row.monthLabel}`}
-                                    aria-expanded={calculationExpanded}
-                                    aria-controls={calculationPanelId}
-                                    title="Как рассчитана сумма"
-                                    onClick={() => setExpandedCalculationRowIds((current) => {
-                                      const next = new Set(current)
-                                      if (next.has(row.id)) next.delete(row.id)
-                                      else next.add(row.id)
-                                      return next
-                                    })}
-                                  >
-                                    <CircleHelp size={15} aria-hidden="true" />
-                                  </button>
+                                  <span className="field-help">
+                                    <button
+                                      type="button"
+                                      className="icon-button payments-prototype-calculation-toggle"
+                                      aria-label={`Показать расчёт суммы ${row.service} ${row.monthLabel}`}
+                                      onClick={() => setCalculationDialogRow(row)}
+                                    >
+                                      <CircleHelp size={15} aria-hidden="true" />
+                                    </button>
+                                    <span className="field-help__tooltip">{row.calculationDetails.lines[0]?.formula}</span>
+                                  </span>
                                 ) : null}
                                 <span>{formatPaymentMoney(row.payable)}</span>
                               </div>
@@ -4974,39 +4986,6 @@ function PaymentsPrototypePanel({
                               return <td className={balance < 0 ? 'money-expense' : balance > 0 ? 'money-income' : undefined}>{formatPaymentMoney(balance)}</td>
                             })()}
                           </tr>
-                          {row.calculationDetails && calculationExpanded ? (
-                            <tr className="payments-prototype-calculation-row">
-                              <td colSpan={8}>
-                                <section id={calculationPanelId} className="payments-prototype-calculation" aria-label={`Расчёт суммы ${row.service} ${row.monthLabel}`}>
-                                  <div className="payments-prototype-calculation-heading">
-                                    <strong>Как рассчитано {formatPaymentMoney(row.calculationDetails.totalAmount)}</strong>
-                                    {row.calculationDetails.requiresMeter ? (
-                                      <span>Показания: {row.calculationDetails.previousMeterValue?.toLocaleString('ru-RU') ?? '—'} → {row.calculationDetails.currentMeterValue?.toLocaleString('ru-RU') ?? '—'}; расход {row.calculationDetails.meterConsumption?.toLocaleString('ru-RU') ?? '—'}</span>
-                                    ) : null}
-                                  </div>
-                                  {row.calculationDetails.volumeAllocationRule ? <p>{row.calculationDetails.volumeAllocationRule}</p> : null}
-                                  <div className="payments-prototype-calculation-lines">
-                                    {row.calculationDetails.lines.map((line, lineIndex) => (
-                                      <div className="payments-prototype-calculation-line" key={`${line.effectiveFrom}-${line.effectiveTo}-${lineIndex}`}>
-                                        <span>{formatDateOnly(line.effectiveFrom)}–{formatDateOnly(line.effectiveTo)}</span>
-                                        <span>{line.calculationMode === 'fixed' ? 'Фиксированный' : line.calculationMode === 'people' ? 'По количеству людей' : line.calculationMode === 'metered' ? 'По счётчику' : line.calculationMode === 'metered_tiered' ? 'По счётчику, пороги' : 'Без тарифа'}</span>
-                                        <span>{line.formula}</span>
-                                        {line.tiers.length > 0 ? (
-                                          <ul>
-                                            {line.tiers.map((tier, tierIndex) => (
-                                              <li key={`${tier.from}-${tier.to ?? 'max'}-${tierIndex}`}>
-                                                {tier.from.toLocaleString('ru-RU')}–{tier.to?.toLocaleString('ru-RU') ?? 'без верхней границы'} {line.unitName}: {tier.quantity.toLocaleString('ru-RU')} × {formatPaymentMoney(tier.rate)} = {formatPaymentMoney(tier.amount)}
-                                              </li>
-                                            ))}
-                                          </ul>
-                                        ) : null}
-                                      </div>
-                                    ))}
-                                  </div>
-                                </section>
-                              </td>
-                            </tr>
-                          ) : null}
                           </Fragment>
                           )
                         })}
@@ -5206,6 +5185,52 @@ function PaymentsPrototypePanel({
           </div>
         </>
       )}
+      {calculationDialogRow?.calculationDetails ? (
+        <div className="modal-backdrop" role="presentation" onMouseDown={() => setCalculationDialogRow(null)}>
+          <section
+            ref={calculationDialogRef}
+            className="detail-dialog payments-prototype-dialog--wide"
+            role="dialog"
+            aria-modal="true"
+            aria-label={`Расчёт суммы: ${calculationDialogRow.service}, ${calculationDialogRow.monthLabel}`}
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            <div className="detail-dialog-header">
+              <h3>Расчёт суммы: {calculationDialogRow.service}, {calculationDialogRow.monthLabel}</h3>
+              <button ref={calculationDialogInitialFocusRef} className="icon-button" type="button" aria-label="Закрыть расчёт суммы" onClick={() => setCalculationDialogRow(null)}>
+                <X size={18} aria-hidden="true" />
+              </button>
+            </div>
+            <div className="payments-prototype-calculation">
+              <div className="payments-prototype-calculation-heading">
+                <strong>Как рассчитано {formatPaymentMoney(calculationDialogRow.calculationDetails.totalAmount)}</strong>
+                {calculationDialogRow.calculationDetails.requiresMeter ? (
+                  <span>Показания: {calculationDialogRow.calculationDetails.previousMeterValue?.toLocaleString('ru-RU') ?? '—'} → {calculationDialogRow.calculationDetails.currentMeterValue?.toLocaleString('ru-RU') ?? '—'}; расход {calculationDialogRow.calculationDetails.meterConsumption?.toLocaleString('ru-RU') ?? '—'}</span>
+                ) : null}
+              </div>
+              {calculationDialogRow.calculationDetails.volumeAllocationRule ? <p>{calculationDialogRow.calculationDetails.volumeAllocationRule}</p> : null}
+              <div className="payments-prototype-calculation-lines">
+                {calculationDialogRow.calculationDetails.lines.map((line, lineIndex) => (
+                  <div className="payments-prototype-calculation-line" key={`${line.effectiveFrom}-${line.effectiveTo}-${lineIndex}`}>
+                    <span>{formatDateOnly(line.effectiveFrom)}–{formatDateOnly(line.effectiveTo)}</span>
+                    <span>{line.calculationMode === 'fixed' ? 'Фиксированный' : line.calculationMode === 'people' ? 'По количеству людей' : line.calculationMode === 'metered' ? 'По счётчику' : line.calculationMode === 'metered_tiered' ? 'По счётчику, пороги' : 'Без тарифа'}</span>
+                    <span>{line.formula}</span>
+                    {line.tiers.length > 0 ? (
+                      <ul>
+                        {line.tiers.map((tier, tierIndex) => (
+                          <li key={`${tier.from}-${tier.to ?? 'max'}-${tierIndex}`}>
+                            {tier.from.toLocaleString('ru-RU')}–{tier.to?.toLocaleString('ru-RU') ?? 'без верхней границы'} {line.unitName}: {tier.quantity.toLocaleString('ru-RU')} × {formatPaymentMoney(tier.rate)} = {formatPaymentMoney(tier.amount)}
+                          </li>
+                        ))}
+                      </ul>
+                    ) : null}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </section>
+        </div>
+      ) : null}
       {fullPaymentDialogOpen ? (
         <FullPaymentPrototypeDialog
           periodOptions={fullPaymentPeriodOptions}
