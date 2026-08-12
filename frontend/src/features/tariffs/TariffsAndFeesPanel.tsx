@@ -3385,6 +3385,7 @@ export function AddServicePrototypeDialog({
   const canUseTieredTariff = isByMeter
     && (effectiveCalculationBase === 'meter_water' || effectiveCalculationBase === 'meter_electricity')
   const isMonthly = periodicityMonths === '1'
+  const canChooseRegularity = !regularOnly && !initialSetting
   useRestoreFocusOnClose(true)
   const dialogRef = useFocusTrap<HTMLElement>(true)
   useEscapeKey(true, onClose)
@@ -3445,6 +3446,14 @@ export function AddServicePrototypeDialog({
     setIsByMeter(nextIsMetered)
     setIsTiered((currentValue) => nextIsMetered ? currentValue : false)
     setCalculationBase(nextCalculationBase)
+    setError(null)
+  }
+
+  function changeRegularity(nextIsRegular: boolean) {
+    setIsRegular(nextIsRegular)
+    if (nextIsRegular && !regularRate && selectedTariff) {
+      setRegularRate(formatTariffDecimal(selectedTariff.rate))
+    }
     setError(null)
   }
 
@@ -3592,41 +3601,43 @@ export function AddServicePrototypeDialog({
 
   return (
     <div className="modal-backdrop" role="presentation" onMouseDown={onClose}>
-      <section ref={dialogRef} className="detail-dialog contractors-dialog contractors-tariff-dialog contractors-service-dialog" role="dialog" aria-modal="true" aria-labelledby="contractor-service-title" onMouseDown={(event) => event.stopPropagation()}>
-        <div className="detail-dialog-header">
+      <section
+        ref={dialogRef}
+        className={`detail-dialog contractors-dialog contractors-tariff-dialog contractors-service-dialog ${isRegular ? 'contractors-service-dialog--regular' : 'contractors-service-dialog--compact'}`}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="contractor-service-title"
+        onMouseDown={(event) => event.stopPropagation()}
+      >
+        <div className={`detail-dialog-header${canChooseRegularity ? ' contractors-service-dialog-header' : ''}`}>
           <h3 id="contractor-service-title">{title}</h3>
-          <button className="icon-button" type="button" aria-label="Закрыть форму услуги" onClick={onClose}>
-            <X size={18} />
-          </button>
-        </div>
-
-        <form className={`dictionary-modal-form contractors-modal-form${isRegular ? ` contractors-modal-form--service-edit${isTiered ? ' contractors-modal-form--service-edit-tiered' : ''}` : ''}`} onSubmit={submitService}>
-          {error ? <FormError>{error}</FormError> : null}
-          {isRegular ? <h4 className="contractors-service-section-title contractors-service-section-title--settings">Настройки услуги</h4> : null}
-          <div className={`contractors-service-heading-grid${regularOnly || initialSetting ? ' contractors-service-heading-grid--name-only' : ''}`}>
-            <FormField label="Наименование услуги">
-              <input aria-label="Наименование услуги" value={name} onChange={(event) => setName(event.target.value)} />
-            </FormField>
-            {!regularOnly && !initialSetting ? (
-              <label className="contractors-switch-row">
+          <div className="contractors-service-header-actions">
+            {canChooseRegularity ? (
+              <label className="contractors-service-regular-toggle">
                 <span>Регулярные платежи</span>
                 <span className="contractors-switch-control">
                   <input
                     type="checkbox"
                     aria-label="Регулярные платежи"
                     checked={isRegular}
-                    disabled={Boolean(initialSetting)}
-                    onChange={(event) => {
-                      setIsRegular(event.target.checked)
-                      if (event.target.checked && !regularRate && selectedTariff) {
-                        setRegularRate(formatTariffDecimal(selectedTariff.rate))
-                      }
-                      setError(null)
-                    }}
+                    onChange={(event) => changeRegularity(event.target.checked)}
                   />
                 </span>
               </label>
             ) : null}
+            <button className="icon-button" type="button" aria-label="Закрыть форму услуги" onClick={onClose}>
+              <X size={18} />
+            </button>
+          </div>
+        </div>
+
+        <form className={`dictionary-modal-form contractors-modal-form${isRegular ? ` contractors-modal-form--service-edit${isTiered ? ' contractors-modal-form--service-edit-tiered' : ''}` : ''}`} onSubmit={submitService}>
+          {error ? <FormError>{error}</FormError> : null}
+          {isRegular ? <h4 className="contractors-service-section-title contractors-service-section-title--settings">Настройки услуги</h4> : null}
+          <div className="contractors-service-heading-grid contractors-service-heading-grid--name-only">
+            <FormField label="Наименование услуги">
+              <input aria-label="Наименование услуги" value={name} onChange={(event) => setName(event.target.value)} />
+            </FormField>
           </div>
           {isRegular ? (
             <>

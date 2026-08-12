@@ -5,6 +5,38 @@ import { describe, expect, it, vi } from 'vitest'
 import { AddServicePrototypeDialog } from './TariffsAndFeesPanel'
 
 describe('редактор тарифной сетки услуги', () => {
+  it('keeps a new irregular service compact and places the regularity switch in the header', () => {
+    render(<AddServicePrototypeDialog
+      isSaving={false}
+      funds={[{ id: 'fund-1', name: 'Водоснабжение', allowOperations: true }]}
+      incomeTypes={[]}
+      measurementUnits={[]}
+      tariffs={[]}
+      onClose={vi.fn()}
+      onSaveIrregular={vi.fn()}
+    />)
+
+    const dialog = screen.getByRole('dialog', { name: 'Добавить услугу' })
+    const regularitySwitch = screen.getByRole('checkbox', { name: 'Регулярные платежи' })
+    const closeButton = screen.getByRole('button', { name: 'Закрыть форму услуги' })
+
+    expect(dialog).toHaveClass('contractors-service-dialog--compact')
+    expect(regularitySwitch.closest('.detail-dialog-header')).toBe(closeButton.closest('.detail-dialog-header'))
+    expect(regularitySwitch.closest('.contractors-service-header-actions')).toContainElement(closeButton)
+    expect(screen.getByLabelText('Наименование услуги').closest('.contractors-service-heading-grid')).not.toContainElement(regularitySwitch)
+
+    fireEvent.click(regularitySwitch)
+
+    expect(dialog).toHaveClass('contractors-service-dialog--regular')
+    expect(dialog).not.toHaveClass('contractors-service-dialog--compact')
+    expect(screen.getByRole('heading', { name: 'Начальный тариф' })).toBeInTheDocument()
+
+    fireEvent.click(regularitySwitch)
+
+    expect(dialog).toHaveClass('contractors-service-dialog--compact')
+    expect(screen.queryByRole('heading', { name: 'Начальный тариф' })).not.toBeInTheDocument()
+  })
+
   it('uses the two-column tariff layout when a regular service is created', () => {
     render(<AddServicePrototypeDialog
       isSaving={false}

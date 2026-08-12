@@ -373,8 +373,14 @@ describe('responsive layout styles', () => {
     expect(normalizedAppCss).toContain('.contractors-garage-form-columns,\n  .contractors-garage-form-details,\n  .contractors-garage-form-notes {\n    grid-template-columns: 1fr;')
   })
 
-  it('keeps the tariff service dialog compact, taller and uses shared combobox layout', () => {
-    expect(normalizedAppCss).toContain('.detail-dialog.contractors-service-dialog {\n  width: min(1280px, calc(100vw - 48px));\n  min-height: min(640px, calc(100dvh - 48px));\n}')
+  it('adapts the tariff service dialog to irregular and regular creation modes', () => {
+    expect(normalizedAppCss).toContain('.detail-dialog.contractors-service-dialog {\n  overflow-x: hidden;\n  transition: width 240ms ease, min-height 240ms ease;')
+    expect(normalizedAppCss).toContain('.detail-dialog.contractors-service-dialog--compact {\n  width: min(680px, calc(100vw - 48px));\n  min-height: 0;')
+    expect(normalizedAppCss).toContain('.detail-dialog.contractors-service-dialog--regular {\n  width: min(1280px, calc(100vw - 48px));\n  min-height: min(640px, calc(100dvh - 48px));')
+    expect(normalizedAppCss).toContain('.contractors-service-dialog-header {\n  display: grid;\n  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);')
+    expect(normalizedAppCss).toContain('.contractors-service-header-actions {\n  display: inline-flex;\n  grid-column: 3;')
+    expect(normalizedAppCss).toContain('@media (prefers-reduced-motion: reduce) {\n  .detail-dialog.contractors-service-dialog {\n    transition: none;')
+    expect(normalizedAppCss).toContain('@media (max-width: 680px) {\n  .contractors-service-dialog-header {\n    grid-template-columns: minmax(0, 1fr);')
     expect(normalizedAppCss).toContain('.contractors-tariff-dialog .contractors-service-period-grid--catalogs {\n  grid-template-columns: repeat(3, minmax(0, 1fr));')
     expect(normalizedAppCss).toContain('.contractors-tariff-dialog .contractors-service-period-grid--schedule {\n  grid-template-columns: minmax(140px, 0.55fr) minmax(220px, 1fr) minmax(300px, 1.25fr);')
     expect(normalizedAppCss).toContain('.contractors-tariff-dialog .contractors-service-period-grid--schedule-monthly {\n  grid-template-columns: minmax(180px, 0.7fr) minmax(360px, 1.3fr);')

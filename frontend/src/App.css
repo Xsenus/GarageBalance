@@ -2002,6 +2002,16 @@ h1 {
 }
 
 .detail-dialog.contractors-service-dialog {
+  overflow-x: hidden;
+  transition: width 240ms ease, min-height 240ms ease;
+}
+
+.detail-dialog.contractors-service-dialog--compact {
+  width: min(680px, calc(100vw - 48px));
+  min-height: 0;
+}
+
+.detail-dialog.contractors-service-dialog--regular {
   width: min(1280px, calc(100vw - 48px));
   min-height: min(640px, calc(100dvh - 48px));
 }
@@ -2013,6 +2023,36 @@ h1 {
 .contractors-tariff-dialog .detail-dialog-header h3 {
   flex: 1;
   text-align: center;
+}
+
+.contractors-service-dialog-header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+}
+
+.contractors-service-dialog-header h3 {
+  grid-column: 2;
+}
+
+.contractors-service-header-actions {
+  display: inline-flex;
+  grid-column: 3;
+  align-items: center;
+  justify-self: end;
+  gap: 12px;
+}
+
+.contractors-service-regular-toggle {
+  display: inline-flex;
+  min-height: 40px;
+  align-items: center;
+  gap: 10px;
+  color: #344054;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 700;
+  white-space: nowrap;
 }
 
 .contractors-modal-form {
@@ -2371,6 +2411,30 @@ h1 {
 .contractors-switch-row:hover {
   border-color: #b2ccff;
   background: #f8fbff;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .detail-dialog.contractors-service-dialog {
+    transition: none;
+  }
+}
+
+@media (max-width: 680px) {
+  .contractors-service-dialog-header {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 12px;
+  }
+
+  .contractors-service-dialog-header h3 {
+    grid-column: 1;
+    width: 100%;
+    text-align: center;
+  }
+
+  .contractors-service-header-actions {
+    grid-column: 1;
+    justify-self: end;
+  }
 }
 
 .contractors-contacts-preview--editable {
