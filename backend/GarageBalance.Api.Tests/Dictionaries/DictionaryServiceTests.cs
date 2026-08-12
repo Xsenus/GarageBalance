@@ -375,12 +375,13 @@ public sealed class DictionaryServiceTests
     }
 
     [Fact]
-    public async Task ArchiveExpenseTypeAsync_RejectsTypeAssignedToActiveService()
+    public async Task ArchiveExpenseTypeAsync_RejectsTypeAssignedToActiveSupplier()
     {
         await using var database = await TestDatabase.CreateAsync();
         var service = DictionaryServiceTestFactory.Create(database.Context);
         var expenseType = await service.CreateExpenseTypeAsync(new UpsertAccountingTypeRequest("Дополнительный расход", "additional_expense"), null, CancellationToken.None);
-        database.Context.ChargeServiceSettings.Add(new ChargeServiceSetting { Name = "Дополнительная услуга", ExpenseTypeId = expenseType.Value!.Id });
+        var group = new SupplierGroup { Name = "Дополнительные поставщики" };
+        database.Context.Suppliers.Add(new Supplier { Name = "Дополнительный поставщик", Group = group, ExpenseTypeId = expenseType.Value!.Id });
         await database.Context.SaveChangesAsync();
 
         var result = await service.ArchiveExpenseTypeAsync(expenseType.Value.Id, "Статья больше не используется", null, CancellationToken.None);
@@ -1259,21 +1260,21 @@ public sealed class DictionaryServiceTests
         var waterExpense = await service.CreateExpenseTypeAsync(new UpsertAccountingTypeRequest("Водоснабжение", "water_supply_custom"), null, CancellationToken.None);
         var electricityExpense = await service.CreateExpenseTypeAsync(new UpsertAccountingTypeRequest("Электроэнергия", "electricity_custom"), null, CancellationToken.None);
         var water = await service.CreateChargeServiceSettingAsync(
-            new UpsertChargeServiceSettingRequest("Вода", false, null, null, null, null, 0, false, false, "руб.", ExpenseTypeId: waterExpense.Value!.Id, ExpenseFundId: expenseFund.Id),
+            new UpsertChargeServiceSettingRequest("Вода", false, null, null, null, null, 0, false, false, "руб."),
             null,
             CancellationToken.None);
         var electricity = await service.CreateChargeServiceSettingAsync(
-            new UpsertChargeServiceSettingRequest("Электроэнергия", false, null, null, null, null, 0, false, false, "руб.", ExpenseTypeId: electricityExpense.Value!.Id, ExpenseFundId: expenseFund.Id),
+            new UpsertChargeServiceSettingRequest("Электроэнергия", false, null, null, null, null, 0, false, false, "руб."),
             null,
             CancellationToken.None);
 
         var created = await service.CreateSupplierAsync(
-            new UpsertSupplierRequest("Ресурсоснабжающая организация", group.Value!.Id, null, null, null, null, null, 0, null, water.Value!.Id),
+            new UpsertSupplierRequest("Ресурсоснабжающая организация", group.Value!.Id, null, null, null, null, null, 0, null, water.Value!.Id, ExpenseTypeId: waterExpense.Value!.Id, ExpenseFundId: expenseFund.Id),
             null,
             CancellationToken.None);
         var updated = await service.UpdateSupplierAsync(
             created.Value!.Id,
-            new UpsertSupplierRequest(created.Value.Name, group.Value.Id, null, null, null, null, null, 0, null, electricity.Value!.Id),
+            new UpsertSupplierRequest(created.Value.Name, group.Value.Id, null, null, null, null, null, 0, null, electricity.Value!.Id, ExpenseTypeId: electricityExpense.Value!.Id, ExpenseFundId: expenseFund.Id),
             Guid.NewGuid(),
             CancellationToken.None);
         var serviceSortedPage = await service.GetSuppliersPageAsync(
@@ -1288,23 +1289,23 @@ public sealed class DictionaryServiceTests
         Assert.True(created.Succeeded);
         Assert.Equal(water.Value.Id, created.Value.ChargeServiceSettingId);
         Assert.Equal("Вода", created.Value.ChargeServiceSettingName);
-        Assert.Equal(waterExpense.Value.Id, created.Value.ChargeServiceExpenseTypeId);
-        Assert.Equal(expenseFund.Id, created.Value.ChargeServiceExpenseFundId);
+        Assert.Equal(waterExpense.Value.Id, created.Value.ExpenseTypeId);
+        Assert.Equal(expenseFund.Id, created.Value.ExpenseFundId);
         Assert.True(updated.Succeeded);
         Assert.Equal(electricity.Value.Id, updated.Value!.ChargeServiceSettingId);
         Assert.Equal("Электроэнергия", updated.Value.ChargeServiceSettingName);
-        Assert.Equal(electricityExpense.Value.Id, updated.Value.ChargeServiceExpenseTypeId);
-        Assert.Equal(expenseFund.Id, updated.Value.ChargeServiceExpenseFundId);
+        Assert.Equal(electricityExpense.Value.Id, updated.Value.ExpenseTypeId);
+        Assert.Equal(expenseFund.Id, updated.Value.ExpenseFundId);
         var listedSupplier = Assert.Single(serviceSortedPage.Items);
         Assert.Equal(created.Value.Id, listedSupplier.Id);
         Assert.Equal(electricity.Value.Id, listedSupplier.ChargeServiceSettingId);
         Assert.Equal("Электроэнергия", listedSupplier.ChargeServiceSettingName);
-        Assert.Equal(electricityExpense.Value.Id, listedSupplier.ChargeServiceExpenseTypeId);
+        Assert.Equal(electricityExpense.Value.Id, listedSupplier.ExpenseTypeId);
         Assert.Contains(database.Context.AuditEvents, item => item.Action == "dictionary.supplier_updated");
     }
 
     [Fact]
-    public async Task CreateAndUpdateSupplierAsync_AllowsManualExpenseFundOverrideAndServiceFallback()
+    public async Task CreateAndUpdateSupplierAsync_StoresExpenseConfigurationDirectly()
     {
         await using var database = await TestDatabase.CreateAsync();
         var service = DictionaryServiceTestFactory.Create(database.Context);
@@ -1315,7 +1316,7 @@ public sealed class DictionaryServiceTests
         await database.Context.SaveChangesAsync();
         var expenseType = await service.CreateExpenseTypeAsync(new UpsertAccountingTypeRequest("Водоснабжение", "water_supplier"), null, CancellationToken.None);
         var chargeService = await service.CreateChargeServiceSettingAsync(
-            new UpsertChargeServiceSettingRequest("Вода", false, null, null, null, null, 0, false, false, "руб.", ExpenseTypeId: expenseType.Value!.Id, ExpenseFundId: serviceFund.Id),
+            new UpsertChargeServiceSettingRequest("Вода", false, null, null, null, null, 0, false, false, "руб."),
             null,
             CancellationToken.None);
 
@@ -1331,14 +1332,15 @@ public sealed class DictionaryServiceTests
                 0,
                 null,
                 ChargeServiceSettingId: chargeService.Value!.Id,
+                ExpenseTypeId: expenseType.Value!.Id,
                 ExpenseFundId: manualFund.Id),
             null,
             CancellationToken.None);
 
         Assert.True(created.Succeeded);
         Assert.Equal(manualFund.Id, created.Value!.ExpenseFundId);
-        Assert.Equal(manualFund.Id, created.Value.ChargeServiceExpenseFundId);
-        Assert.Equal("Ручной фонд", created.Value.ChargeServiceExpenseFundName);
+        Assert.Equal(manualFund.Id, created.Value.ExpenseFundId);
+        Assert.Equal("Ручной фонд", created.Value.ExpenseFundName);
 
         var updated = await service.UpdateSupplierAsync(
             created.Value.Id,
@@ -1354,14 +1356,14 @@ public sealed class DictionaryServiceTests
                 null,
                 ChargeServiceSettingId: chargeService.Value.Id,
                 Version: created.Value.Version,
-                ExpenseFundId: null),
+                ExpenseTypeId: expenseType.Value.Id,
+                ExpenseFundId: serviceFund.Id),
             Guid.NewGuid(),
             CancellationToken.None);
 
         Assert.True(updated.Succeeded);
-        Assert.Null(updated.Value!.ExpenseFundId);
-        Assert.Equal(serviceFund.Id, updated.Value.ChargeServiceExpenseFundId);
-        Assert.Equal("Фонд услуги", updated.Value.ChargeServiceExpenseFundName);
+        Assert.Equal(serviceFund.Id, updated.Value!.ExpenseFundId);
+        Assert.Equal("Фонд услуги", updated.Value.ExpenseFundName);
         var audit = Assert.Single(database.Context.AuditEvents, item => item.Action == "dictionary.supplier_updated");
         using var metadata = JsonDocument.Parse(audit.MetadataJson!);
         Assert.Equal("Фонд расходования", metadata.RootElement.GetProperty("fieldName").GetString());
@@ -1411,24 +1413,29 @@ public sealed class DictionaryServiceTests
             CancellationToken.None);
 
         Assert.False(result.Succeeded);
-        Assert.Equal("supplier_service_expense_type_required", result.ErrorCode);
+        Assert.Equal("supplier_expense_configuration_required", result.ErrorCode);
         Assert.Empty(database.Context.Suppliers);
     }
 
     [Fact]
-    public async Task CreateChargeServiceSettingAsync_RejectsMissingExpenseType()
+    public async Task CreateSupplierAsync_RejectsMissingExpenseType()
     {
         await using var database = await TestDatabase.CreateAsync();
         var service = DictionaryServiceTestFactory.Create(database.Context);
 
-        var result = await service.CreateChargeServiceSettingAsync(
-            new UpsertChargeServiceSettingRequest("Услуга", false, null, null, null, null, 0, false, false, "руб.", ExpenseTypeId: Guid.NewGuid()),
+        var group = await service.CreateSupplierGroupAsync(new UpsertSupplierGroupRequest("Поставщики"), null, CancellationToken.None);
+        var chargeService = await service.CreateChargeServiceSettingAsync(
+            new UpsertChargeServiceSettingRequest("Услуга", false, null, null, null, null, 0, false, false, "руб."),
+            null,
+            CancellationToken.None);
+        var result = await service.CreateSupplierAsync(
+            new UpsertSupplierRequest("Поставщик", group.Value!.Id, null, null, null, null, null, 0, null, chargeService.Value!.Id, ExpenseTypeId: Guid.NewGuid(), ExpenseFundId: Guid.NewGuid()),
             null,
             CancellationToken.None);
 
         Assert.False(result.Succeeded);
-        Assert.Equal("charge_service_expense_type_not_found", result.ErrorCode);
-        Assert.Empty(database.Context.ChargeServiceSettings);
+        Assert.Equal("supplier_expense_type_not_found", result.ErrorCode);
+        Assert.Empty(database.Context.Suppliers);
     }
 
     [Fact]
@@ -1442,11 +1449,11 @@ public sealed class DictionaryServiceTests
         await database.Context.SaveChangesAsync();
         var expenseType = await service.CreateExpenseTypeAsync(new UpsertAccountingTypeRequest("Архивная услуга", "archived_service"), null, CancellationToken.None);
         var archived = await service.CreateChargeServiceSettingAsync(
-            new UpsertChargeServiceSettingRequest("Архивная услуга", false, null, null, null, null, 0, false, false, null, ExpenseTypeId: expenseType.Value!.Id, ExpenseFundId: expenseFund.Id),
+            new UpsertChargeServiceSettingRequest("Архивная услуга", false, null, null, null, null, 0, false, false, null),
             null,
             CancellationToken.None);
         var existingSupplier = await service.CreateSupplierAsync(
-            new UpsertSupplierRequest("Существующий поставщик", group.Value!.Id, null, null, null, null, null, 0, null, archived.Value!.Id),
+            new UpsertSupplierRequest("Существующий поставщик", group.Value!.Id, null, null, null, null, null, 0, null, archived.Value!.Id, ExpenseTypeId: expenseType.Value!.Id, ExpenseFundId: expenseFund.Id),
             null,
             CancellationToken.None);
         var blockedArchive = await service.ArchiveChargeServiceSettingAsync(archived.Value!.Id, "Услуга больше не используется", null, CancellationToken.None);
@@ -2880,6 +2887,69 @@ public sealed class DictionaryServiceTests
     }
 
     [Fact]
+    public async Task RegularService_CanBeCreatedWithoutTechnicalDictionariesAndConvertedToCustomMeter()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fund = CreateFund("Фонд охраны", 10);
+        database.Context.Funds.Add(fund);
+        await database.Context.SaveChangesAsync();
+        var service = DictionaryServiceTestFactory.Create(database.Context);
+
+        var created = await service.CreateChargeServiceWithTariffAsync(
+            new CreateChargeServiceWithTariffRequest(
+                new UpsertChargeServiceSettingRequest("Охрана", true, 1, 1, 30, null, 30, false, false, "руб."),
+                500m,
+                new DateOnly(2026, 8, 1),
+                fund.Id,
+                "regular",
+                CalculationBase: TariffCalculationBases.Fixed),
+            Guid.NewGuid(),
+            CancellationToken.None);
+
+        Assert.True(created.Succeeded, created.ErrorMessage);
+        Assert.NotNull(created.Value!.Service.IncomeTypeId);
+        Assert.NotNull(created.Value.Service.TariffId);
+        var managedIncomeType = await database.Context.IncomeTypes.SingleAsync();
+        Assert.True(managedIncomeType.IsSystem);
+        Assert.StartsWith("service_", managedIncomeType.Code, StringComparison.Ordinal);
+        Assert.Equal(fund.Id, managedIncomeType.DestinationFundId);
+
+        var converted = await service.UpdateChargeServiceWithTariffAsync(
+            created.Value.Service.Id,
+            new UpdateChargeServiceWithTariffRequest(
+                new UpsertChargeServiceSettingRequest(
+                    "Охрана",
+                    true,
+                    1,
+                    1,
+                    30,
+                    null,
+                    30,
+                    true,
+                    false,
+                    "ч",
+                    created.Value.Service.IncomeTypeId,
+                    created.Value.Service.TariffId,
+                    created.Value.Service.Version),
+                12.5m,
+                "metered",
+                new DateOnly(2026, 8, 2),
+                ChangeReason: "Переход на расчёт по счётчику",
+                IncomeFundId: fund.Id,
+                CalculationBase: TariffCalculationBases.MeterElectricity),
+            Guid.NewGuid(),
+            CancellationToken.None);
+
+        Assert.True(converted.Succeeded, converted.ErrorMessage);
+        Assert.True(converted.Value!.Service.IsMetered);
+        Assert.False(converted.Value.Service.HasTieredTariff);
+        Assert.Equal(TariffCalculationBases.MeterElectricity, converted.Value.Tariff.CalculationBase);
+        Assert.Equal(12.5m, converted.Value.Tariff.Rate);
+        Assert.Equal(MeterKinds.ForService(converted.Value.Service.Id), converted.Value.Service.MeterKind);
+        Assert.StartsWith("service_", converted.Value.Service.MeterKind, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task CreateChargeServiceWithTariffAsync_RejectsInvalidModeAndRateWithoutAddingRecords()
     {
         await using var database = await TestDatabase.CreateAsync();
@@ -3026,7 +3096,7 @@ public sealed class DictionaryServiceTests
         await database.Context.SaveChangesAsync();
         var service = DictionaryServiceTestFactory.Create(database.Context);
         var created = await service.CreateChargeServiceSettingAsync(
-            new UpsertChargeServiceSettingRequest("Вода", true, 1, 1, 30, 6, 30, true, false, "м³", firstIncomeType.Id, firstTariff.Id, expenseType.Id, firstFund.Id),
+            new UpsertChargeServiceSettingRequest("Вода", true, 1, 1, 30, 6, 30, true, false, "м³", firstIncomeType.Id, firstTariff.Id),
             null,
             CancellationToken.None);
         database.Context.AuditEvents.RemoveRange(database.Context.AuditEvents);
@@ -3035,7 +3105,7 @@ public sealed class DictionaryServiceTests
         var actorUserId = Guid.NewGuid();
         var result = await service.UpdateChargeServiceSettingAsync(
             created.Value!.Id,
-            new UpsertChargeServiceSettingRequest("Водоснабжение", true, 12, 2, 31, 12, 45, true, false, "м³", secondIncomeType.Id, secondTariff.Id, expenseType.Id, firstFund.Id),
+            new UpsertChargeServiceSettingRequest("Водоснабжение", true, 12, 2, 31, 12, 45, true, false, "м³", secondIncomeType.Id, secondTariff.Id),
             actorUserId,
             CancellationToken.None);
 
@@ -3043,8 +3113,6 @@ public sealed class DictionaryServiceTests
         Assert.Equal("Водоснабжение", result.Value!.Name);
         Assert.Equal(12, result.Value.PeriodicityMonths);
         Assert.Equal(31, result.Value.PaymentDueDay);
-        Assert.Equal(expenseType.Id, result.Value.ExpenseTypeId);
-        Assert.Equal(firstFund.Id, result.Value.ExpenseFundId);
         var audit = Assert.Single(database.Context.AuditEvents, item => item.Action == "dictionary.charge_service_updated");
         Assert.Equal(actorUserId, audit.ActorUserId);
         using var metadata = JsonDocument.Parse(audit.MetadataJson!);
@@ -3057,7 +3125,7 @@ public sealed class DictionaryServiceTests
 
         var noOp = await service.UpdateChargeServiceSettingAsync(
             created.Value.Id,
-            new UpsertChargeServiceSettingRequest("Водоснабжение", true, 12, 2, 31, 12, 45, true, false, "м³", secondIncomeType.Id, secondTariff.Id, expenseType.Id, firstFund.Id),
+            new UpsertChargeServiceSettingRequest("Водоснабжение", true, 12, 2, 31, 12, 45, true, false, "м³", secondIncomeType.Id, secondTariff.Id),
             actorUserId,
             CancellationToken.None);
 
@@ -3518,17 +3586,16 @@ public sealed class DictionaryServiceTests
     }
 
     [Fact]
-    public async Task GetTariffsPageAsync_TemplatesOnly_HidesServiceTariffHistory()
+    public async Task GetTariffsPageAsync_ReturnsCurrentAndHistoricalServiceTariffs()
     {
         await using var database = await TestDatabase.CreateAsync();
         var service = DictionaryServiceTestFactory.Create(database.Context);
-        var template = new Tariff
+        var legacyUnlinkedTariff = new Tariff
         {
             Name = "Вода",
             CalculationBase = "meter_water",
             Rate = 100.80m,
-            EffectiveFrom = new DateOnly(2026, 8, 1),
-            IsTemplate = true
+            EffectiveFrom = new DateOnly(2026, 8, 1)
         };
         var serviceVersion = new Tariff
         {
@@ -3544,7 +3611,7 @@ public sealed class DictionaryServiceTests
             TariffId = serviceVersion.Id,
             Tariff = serviceVersion
         };
-        database.Context.Tariffs.AddRange(template, serviceVersion);
+        database.Context.Tariffs.AddRange(legacyUnlinkedTariff, serviceVersion);
         database.Context.ChargeServiceSettings.Add(setting);
         database.Context.ChargeServiceTariffVersions.Add(new ChargeServiceTariffVersion
         {
@@ -3556,43 +3623,40 @@ public sealed class DictionaryServiceTests
         });
         await database.Context.SaveChangesAsync();
 
-        var page = await service.GetTariffsPageAsync(null, 0, 25, CancellationToken.None, templatesOnly: true);
-        var completePage = await service.GetTariffsPageAsync(null, 0, 25, CancellationToken.None);
+        var page = await service.GetTariffsPageAsync(null, 0, 25, CancellationToken.None);
 
-        Assert.Single(page.Items);
-        Assert.Equal("Вода", page.Items[0].Name);
-        Assert.Equal(1, page.TotalCount);
-        Assert.Equal(2, completePage.TotalCount);
+        Assert.Equal(2, page.TotalCount);
+        Assert.Contains(page.Items, tariff => tariff.Id == legacyUnlinkedTariff.Id);
+        Assert.Contains(page.Items, tariff => tariff.Id == serviceVersion.Id);
     }
 
     [Fact]
-    public async Task GetTariffsPageAsync_TemplatesOnly_HidesUnlinkedServiceTariffVersion()
+    public async Task GetTariffsPageAsync_DoesNotHideUnlinkedHistoricalTariff()
     {
         await using var database = await TestDatabase.CreateAsync();
         var service = DictionaryServiceTestFactory.Create(database.Context);
-        var template = new Tariff
+        var legacyTariff = new Tariff
         {
             Name = "Шаблон тарифа воды",
             CalculationBase = "meter_water",
             Rate = 100.80m,
-            EffectiveFrom = new DateOnly(2026, 8, 1),
-            IsTemplate = true
+            EffectiveFrom = new DateOnly(2026, 8, 1)
         };
         var displacedServiceVersion = new Tariff
         {
             Name = "Вода — по счетчику, 05.08.2026, abcdef12",
             CalculationBase = "meter_water",
             Rate = 100.80m,
-            EffectiveFrom = new DateOnly(2026, 8, 5),
-            IsTemplate = false
+            EffectiveFrom = new DateOnly(2026, 8, 5)
         };
-        database.Context.Tariffs.AddRange(template, displacedServiceVersion);
+        database.Context.Tariffs.AddRange(legacyTariff, displacedServiceVersion);
         await database.Context.SaveChangesAsync();
 
-        var page = await service.GetTariffsPageAsync(null, 0, 25, CancellationToken.None, templatesOnly: true);
+        var page = await service.GetTariffsPageAsync(null, 0, 25, CancellationToken.None);
 
-        Assert.Single(page.Items);
-        Assert.Equal(template.Id, page.Items[0].Id);
+        Assert.Equal(2, page.TotalCount);
+        Assert.Contains(page.Items, tariff => tariff.Id == legacyTariff.Id);
+        Assert.Contains(page.Items, tariff => tariff.Id == displacedServiceVersion.Id);
     }
 
     [Fact]

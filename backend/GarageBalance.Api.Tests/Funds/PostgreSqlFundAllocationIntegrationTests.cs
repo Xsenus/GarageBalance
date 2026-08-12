@@ -88,15 +88,13 @@ public sealed class PostgreSqlFundAllocationIntegrationTests
             };
             var expenseType = await writeContext.ExpenseTypes
                 .SingleAsync(item => item.Name == "Электроэнергия");
+            var chargeService = new ChargeServiceSetting { Name = "Электроэнергия по счётчику", IncomeType = incomeType };
+            var supplierGroup = new SupplierGroup { Name = "Энергоснабжение" };
             writeContext.AddRange(
                 incomeType,
-                new ChargeServiceSetting
-                {
-                    Name = "Электроэнергия по счётчику",
-                    IncomeType = incomeType,
-                    ExpenseType = expenseType,
-                    ExpenseFundId = renamedFundId
-                });
+                chargeService,
+                supplierGroup,
+                new Supplier { Name = "Энергосбыт", Group = supplierGroup, ChargeServiceSetting = chargeService, ExpenseType = expenseType, ExpenseFundId = renamedFundId });
             await writeContext.SaveChangesAsync();
 
             var created = await service.CreateFundAsync(
@@ -195,7 +193,8 @@ public sealed class PostgreSqlFundAllocationIntegrationTests
         Guid fundId;
         Guid incomeTypeId;
         Guid expenseTypeId;
-        Guid tariffId;
+        Guid serviceId;
+        Guid supplierGroupId;
         await using (var setupContext = database.CreateContext())
         {
             var fundService = CreateService(setupContext);
@@ -220,11 +219,14 @@ public sealed class PostgreSqlFundAllocationIntegrationTests
                 EffectiveFrom = new DateOnly(2026, 7, 1)
             };
             var expenseType = new ExpenseType { Name = "Охрана территории" };
-            setupContext.AddRange(incomeType, expenseType, tariff);
+            var chargeService = new ChargeServiceSetting { Name = "Охрана территории", IncomeType = incomeType, Tariff = tariff, IsRegular = true };
+            var supplierGroup = new SupplierGroup { Name = "Охрана" };
+            setupContext.AddRange(incomeType, expenseType, tariff, chargeService, supplierGroup);
             await setupContext.SaveChangesAsync();
             incomeTypeId = incomeType.Id;
             expenseTypeId = expenseType.Id;
-            tariffId = tariff.Id;
+            serviceId = chargeService.Id;
+            supplierGroupId = supplierGroup.Id;
         }
 
         await using var blockerConnection = new NpgsqlConnection(database.ConnectionString);
@@ -238,22 +240,20 @@ public sealed class PostgreSqlFundAllocationIntegrationTests
             new DeleteFundRequest("Услуги отсутствуют"),
             null,
             CancellationToken.None);
-        var createTask = DictionaryServiceTestFactory.Create(createContext).CreateChargeServiceSettingAsync(
-            new UpsertChargeServiceSettingRequest(
-                "Охрана территории",
-                true,
-                1,
-                1,
-                30,
+        var createTask = DictionaryServiceTestFactory.Create(createContext).CreateSupplierAsync(
+            new UpsertSupplierRequest(
+                "Охранная организация",
+                supplierGroupId,
                 null,
-                30,
-                false,
-                false,
-                "руб.",
-                incomeTypeId,
-                tariffId,
-                expenseTypeId,
-                fundId),
+                null,
+                null,
+                null,
+                null,
+                0m,
+                null,
+                serviceId,
+                ExpenseTypeId: expenseTypeId,
+                ExpenseFundId: fundId),
             null,
             CancellationToken.None);
 
@@ -277,18 +277,22 @@ public sealed class PostgreSqlFundAllocationIntegrationTests
         var storedIncomeType = await verificationContext.IncomeTypes.SingleAsync(item => item.Id == incomeTypeId);
         var storedService = await verificationContext.ChargeServiceSettings
             .SingleOrDefaultAsync(item => item.Name == "Охрана территории");
+        var storedSupplier = await verificationContext.Suppliers
+            .SingleOrDefaultAsync(item => item.ChargeServiceSettingId == serviceId);
+        Assert.NotNull(storedService);
         if (storedFund.IsArchived)
         {
             Assert.True(deleteResult.Succeeded);
             Assert.Null(storedIncomeType.DestinationFundId);
-            Assert.Null(storedService);
+            Assert.Null(storedSupplier);
         }
         else
         {
             Assert.True(createResult.Succeeded);
             Assert.Equal("fund_has_linked_services", deleteResult.ErrorCode);
             Assert.Equal(fundId, storedIncomeType.DestinationFundId);
-            Assert.NotNull(storedService);
+            Assert.NotNull(storedSupplier);
+            Assert.Equal(fundId, storedSupplier.ExpenseFundId);
         }
     }
 

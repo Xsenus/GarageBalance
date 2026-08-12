@@ -15,10 +15,6 @@ public sealed class ChargeServiceSetting : IOptimisticConcurrencyEntity
     public int OverdueGraceDays { get; set; }
     public Guid? IncomeTypeId { get; set; }
     public IncomeType? IncomeType { get; set; }
-    public Guid? ExpenseTypeId { get; set; }
-    public ExpenseType? ExpenseType { get; set; }
-    public Guid? ExpenseFundId { get; set; }
-    public Fund? ExpenseFund { get; set; }
     public Guid? TariffId { get; set; }
     public Tariff? Tariff { get; set; }
     public ICollection<ChargeServiceTariffVersion> TariffVersions { get; set; } = new List<ChargeServiceTariffVersion>();

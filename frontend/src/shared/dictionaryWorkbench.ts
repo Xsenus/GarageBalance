@@ -1,11 +1,11 @@
-import type { AccountingTypeDto, GarageDto, MeasurementUnitDto, OwnerDto, SupplierDto, SupplierGroupDto, TariffDto, UpsertTariffRequest } from '../services/dictionariesApi'
-import { formatDateOnly, formatMoney, formatTariffRateSummary } from './formatters'
+import type { AccountingTypeDto, GarageDto, MeasurementUnitDto, OwnerDto } from '../services/dictionariesApi'
+import { formatMoney } from './formatters'
 import type { OwnerGarageLinkForm } from './validation'
 
-export type DictionarySectionKey = 'owners' | 'garages' | 'supplierGroups' | 'suppliers' | 'incomeTypes' | 'expenseTypes' | 'measurementUnits' | 'tariffs'
+export type DictionarySectionKey = 'owners' | 'garages' | 'incomeTypes' | 'expenseTypes' | 'measurementUnits'
 export type DictionarySectionGroupKey = 'counterparties' | 'operations' | 'tariffs'
-export type DictionaryWritePermission = 'dictionaries' | 'tariffs'
-export type DictionaryRecord = OwnerDto | GarageDto | SupplierGroupDto | SupplierDto | AccountingTypeDto | MeasurementUnitDto | TariffDto
+export type DictionaryWritePermission = 'dictionaries'
+export type DictionaryRecord = OwnerDto | GarageDto | AccountingTypeDto | MeasurementUnitDto
 
 export type DictionarySectionOption = {
   key: DictionarySectionKey
@@ -31,18 +31,6 @@ export type DictionaryGarageFormState = {
   startingBalance: number
   initialWaterMeterValue: string
   initialElectricityMeterValue: string
-  comment: string
-}
-
-export type DictionarySupplierFormState = {
-  name: string
-  groupId: string
-  inn: string
-  legalAddress: string
-  contactPerson: string
-  phone: string
-  email: string
-  startingBalance: number
   comment: string
 }
 
@@ -81,29 +69,9 @@ export type DictionaryEditorFieldKey =
   | 'garageInitialWaterMeterValue'
   | 'garageInitialElectricityMeterValue'
   | 'garageComment'
-  | 'supplierGroupName'
-  | 'supplierName'
-  | 'supplierGroup'
-  | 'supplierInn'
-  | 'supplierLegalAddress'
-  | 'supplierContactPerson'
-  | 'supplierPhone'
-  | 'supplierEmail'
-  | 'supplierStartingBalance'
-  | 'supplierComment'
   | 'accountingTypeName'
   | 'accountingTypeCode'
   | 'measurementUnitName'
-  | 'tariffName'
-  | 'tariffCalculationBase'
-  | 'tariffRate'
-  | 'tariffEffectiveFrom'
-  | 'tariffElectricityFirstThreshold'
-  | 'tariffElectricitySecondThreshold'
-  | 'tariffElectricityFirstRate'
-  | 'tariffElectricitySecondRate'
-  | 'tariffElectricityThirdRate'
-  | 'tariffComment'
 
 export type TariffCalculationBaseOption = {
   value: string
@@ -119,34 +87,25 @@ export const dictionarySectionGroups: Array<{ key: DictionarySectionGroupKey; la
 export const dictionarySectionOptions: DictionarySectionOption[] = [
   { key: 'owners', label: 'Владельцы', group: 'counterparties', writePermission: 'dictionaries' },
   { key: 'garages', label: 'Гаражи', group: 'counterparties', writePermission: 'dictionaries' },
-  { key: 'supplierGroups', label: 'Группы поставщиков и персонала', group: 'counterparties', writePermission: 'dictionaries' },
-  { key: 'suppliers', label: 'Поставщики и персонал', group: 'counterparties', writePermission: 'dictionaries' },
   { key: 'incomeTypes', label: 'Виды поступлений', group: 'operations', writePermission: 'dictionaries' },
   { key: 'expenseTypes', label: 'Статьи расходов', group: 'operations', writePermission: 'dictionaries' },
   { key: 'measurementUnits', label: 'Единицы измерения', group: 'tariffs', writePermission: 'dictionaries' },
-  { key: 'tariffs', label: 'Тарифы', group: 'tariffs', writePermission: 'tariffs' },
 ]
 
 const dictionarySearchPlaceholders: Record<DictionarySectionKey, string> = {
   owners: 'ФИО или телефон',
   garages: 'Номер гаража или ФИО владельца',
-  supplierGroups: 'Название группы',
-  suppliers: 'Название, ИНН или контакт',
   incomeTypes: 'Название или код поступления',
   expenseTypes: 'Название или код выплаты',
   measurementUnits: 'Обозначение единицы измерения',
-  tariffs: 'Название или база расчета',
 }
 
 const dictionaryTableHeaders: Record<DictionarySectionKey, string[]> = {
   owners: ['ФИО', 'Гаражи', 'Телефон', 'Адрес'],
   garages: ['Номер', 'Владелец', 'Людей', 'Этажей', 'Стартовый баланс'],
-  supplierGroups: ['Название', 'Тип'],
-  suppliers: ['Название', 'Группа', 'ИНН', 'Стартовый баланс'],
   incomeTypes: ['Название', 'Код', 'Тип'],
   expenseTypes: ['Название', 'Код', 'Тип'],
   measurementUnits: ['Обозначение'],
-  tariffs: ['Название', 'База', 'Ставка', 'Дата начала'],
 }
 
 const dictionaryEditorFieldMeta: Record<DictionaryEditorFieldKey, DictionaryEditorFieldMeta> = {
@@ -172,29 +131,9 @@ const dictionaryEditorFieldMeta: Record<DictionaryEditorFieldKey, DictionaryEdit
   garageInitialWaterMeterValue: { label: 'Старт воды', ariaLabel: 'Стартовый счетчик воды' },
   garageInitialElectricityMeterValue: { label: 'Старт электричества', ariaLabel: 'Стартовый счетчик электричества' },
   garageComment: { label: 'Комментарий', ariaLabel: 'Комментарий по гаражу', placeholder: 'Особенности гаража, начислений или импорта' },
-  supplierGroupName: { label: 'Название группы', ariaLabel: 'Группа поставщиков', placeholder: 'Например, Коммунальные услуги' },
-  supplierName: { label: 'Название', ariaLabel: 'Название поставщика', placeholder: 'Название организации или сотрудника' },
-  supplierGroup: { label: 'Группа', ariaLabel: 'Группа для поставщика' },
-  supplierInn: { label: 'ИНН', ariaLabel: 'ИНН поставщика', placeholder: 'ИНН' },
-  supplierLegalAddress: { label: 'Юридический адрес', ariaLabel: 'Юридический адрес поставщика', placeholder: 'Адрес из документов' },
-  supplierContactPerson: { label: 'Контактное лицо', ariaLabel: 'Контактное лицо поставщика', placeholder: 'ФИО или должность' },
-  supplierPhone: { label: 'Телефон', ariaLabel: 'Телефон поставщика', placeholder: '+7...' },
-  supplierEmail: { label: 'Email', ariaLabel: 'Email поставщика', placeholder: 'mail@example.ru' },
-  supplierStartingBalance: { label: 'Стартовый баланс', ariaLabel: 'Стартовый баланс поставщика', hint: 'Наша задолженность поставщику на начало учета.' },
-  supplierComment: { label: 'Комментарий', ariaLabel: 'Комментарий поставщика', placeholder: 'Договор, условия оплаты или заметки' },
   accountingTypeName: { label: 'Название', ariaLabel: 'Название вида операции', placeholder: 'Например, Членский взнос' },
   accountingTypeCode: { label: 'Код', ariaLabel: 'Код вида операции', placeholder: 'Например, security_2026' },
   measurementUnitName: { label: 'Обозначение', ariaLabel: 'Обозначение единицы измерения', placeholder: 'Например, м³' },
-  tariffName: { label: 'Название тарифа', ariaLabel: 'Название тарифа', placeholder: 'Например, Электроэнергия' },
-  tariffCalculationBase: { label: 'База расчета', ariaLabel: 'База расчета тарифа' },
-  tariffRate: { label: 'Ставка', ariaLabel: 'Ставка тарифа' },
-  tariffEffectiveFrom: { label: 'Дата начала', ariaLabel: 'Дата начала тарифа' },
-  tariffElectricityFirstThreshold: { label: 'Порог 1, кВт·ч', ariaLabel: 'Первый порог электроэнергии', placeholder: 'Порог 1, кВт·ч' },
-  tariffElectricitySecondThreshold: { label: 'Порог 2, кВт·ч', ariaLabel: 'Второй порог электроэнергии', placeholder: 'Порог 2, кВт·ч' },
-  tariffElectricityFirstRate: { label: 'Ставка 1', ariaLabel: 'Первая ставка электроэнергии', placeholder: 'Ставка 1' },
-  tariffElectricitySecondRate: { label: 'Ставка 2', ariaLabel: 'Вторая ставка электроэнергии', placeholder: 'Ставка 2' },
-  tariffElectricityThirdRate: { label: 'Ставка 3', ariaLabel: 'Третья ставка электроэнергии', placeholder: 'Ставка 3' },
-  tariffComment: { label: 'Комментарий', ariaLabel: 'Комментарий тарифа', placeholder: 'Когда и почему действует тариф' },
 }
 
 const tariffCalculationBaseOptions: TariffCalculationBaseOption[] = [
@@ -261,34 +200,6 @@ export function createGarageFormFromDto(garage: GarageDto): DictionaryGarageForm
   }
 }
 
-export function createEmptySupplierForm(groupId = ''): DictionarySupplierFormState {
-  return {
-    name: '',
-    groupId,
-    inn: '',
-    legalAddress: '',
-    contactPerson: '',
-    phone: '',
-    email: '',
-    startingBalance: 0,
-    comment: '',
-  }
-}
-
-export function createSupplierFormFromDto(supplier: SupplierDto): DictionarySupplierFormState {
-  return {
-    name: supplier.name,
-    groupId: supplier.groupId,
-    inn: supplier.inn ?? '',
-    legalAddress: supplier.legalAddress ?? '',
-    contactPerson: supplier.contactPerson ?? '',
-    phone: supplier.phone ?? '',
-    email: supplier.email ?? '',
-    startingBalance: supplier.startingBalance,
-    comment: supplier.comment ?? '',
-  }
-}
-
 export function createEmptyAccountingTypeForm(): DictionaryAccountingTypeFormState {
   return {
     name: '',
@@ -300,16 +211,6 @@ export function createAccountingTypeFormFromDto(type: AccountingTypeDto): Dictio
   return {
     name: type.name,
     code: type.code ?? '',
-  }
-}
-
-export function createEmptyTariffForm(effectiveFrom = '2026-07-01'): UpsertTariffRequest {
-  return {
-    name: '',
-    calculationBase: 'fixed',
-    rate: 1,
-    effectiveFrom,
-    comment: '',
   }
 }
 
@@ -388,21 +289,6 @@ export function getDictionaryRecordCells(section: DictionarySectionKey, item: Di
     return [garage.number, garage.ownerName ?? 'без владельца', garage.peopleCount, garage.floorCount, formatMoney(garage.startingBalance)]
   }
 
-  if (section === 'supplierGroups') {
-    const group = item as SupplierGroupDto
-    return [group.name, group.isSystem ? 'Системная' : 'Пользовательская']
-  }
-
-  if (section === 'suppliers') {
-    const supplier = item as SupplierDto
-    return [supplier.name, supplier.groupName, supplier.inn ?? 'не указан', formatMoney(supplier.startingBalance)]
-  }
-
-  if (section === 'tariffs') {
-    const tariff = item as TariffDto
-    return [tariff.name, getTariffCalculationBaseLabel(tariff.calculationBase), formatTariffRateSummary(tariff), formatDateOnly(tariff.effectiveFrom)]
-  }
-
   if (section === 'measurementUnits') {
     return [(item as MeasurementUnitDto).name]
   }
@@ -415,8 +301,13 @@ export function getDictionarySectionOption(section: DictionarySectionKey) {
   return dictionarySectionOptions.find((item) => item.key === section) ?? dictionarySectionOptions[0]
 }
 
-export function canWriteDictionarySection(section: DictionarySectionKey, canWriteDictionaries: boolean, canManageTariffs: boolean) {
-  return getDictionarySectionOption(section).writePermission === 'tariffs' ? canManageTariffs : canWriteDictionaries
+export function canWriteDictionarySection(section: DictionarySectionKey, canWriteDictionaries: boolean) {
+  const option = dictionarySectionOptions.find((item) => item.key === section)
+  if (!option) {
+    return false
+  }
+
+  return canWriteDictionaries
 }
 
 export function getDictionaryRecordTitle(section: DictionarySectionKey, item: DictionaryRecord) {
@@ -430,18 +321,6 @@ export function getDictionaryRecordTitle(section: DictionarySectionKey, item: Di
 
   if (section === 'measurementUnits') {
     return (item as MeasurementUnitDto).name
-  }
-
-  if (section === 'supplierGroups') {
-    return (item as SupplierGroupDto).name
-  }
-
-  if (section === 'suppliers') {
-    return (item as SupplierDto).name
-  }
-
-  if (section === 'tariffs') {
-    return (item as TariffDto).name
   }
 
   return (item as AccountingTypeDto).name

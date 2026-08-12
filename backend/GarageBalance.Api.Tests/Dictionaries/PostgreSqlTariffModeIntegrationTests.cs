@@ -1,5 +1,6 @@
 using GarageBalance.Api.Application.Dictionaries;
 using GarageBalance.Api.Domain.Dictionaries;
+using GarageBalance.Api.Infrastructure.Data;
 using GarageBalance.Api.Tests.Common;
 using Microsoft.EntityFrameworkCore;
 
@@ -79,6 +80,16 @@ public sealed class PostgreSqlTariffModeIntegrationTests
             Assert.True(result.Succeeded);
             versionTariffId = result.Value!.Tariff.Id;
             Assert.NotEqual(sourceTariff.Id, versionTariffId);
+
+            var measurementUnits = new EfMeasurementUnitRepository(commandContext);
+            Assert.NotNull(await measurementUnits.FindActiveByNameAsync("КВТ·Ч", CancellationToken.None));
+            Assert.True(await measurementUnits.ActiveDuplicateExistsAsync(null, "КВТ·Ч", CancellationToken.None));
+            Assert.True(await measurementUnits.HasActiveServiceAssignmentsAsync("КВТ·Ч", CancellationToken.None));
+            await measurementUnits.RenameServiceAssignmentsAsync("КВТ·Ч", "кВтч", CancellationToken.None);
+            await commandContext.SaveChangesAsync();
+            Assert.Equal("кВтч", (await commandContext.ChargeServiceSettings.SingleAsync(item => item.Id == setting.Id)).UnitName);
+            await measurementUnits.RenameServiceAssignmentsAsync("КВТЧ", "кВт·ч", CancellationToken.None);
+            await commandContext.SaveChangesAsync();
         }
 
         await using var verificationContext = database.CreateContext();

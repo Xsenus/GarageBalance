@@ -253,11 +253,11 @@ type ExpenseFundOption = {
 function getExpenseFundOptions(suppliers: SupplierDto[]): ExpenseFundOption[] {
   const funds = new Map<string, ExpenseFundOption>()
   suppliers.forEach((supplier) => {
-    if (supplier.chargeServiceExpenseFundId && supplier.chargeServiceExpenseFundName) {
-      funds.set(supplier.chargeServiceExpenseFundId, {
-        id: supplier.chargeServiceExpenseFundId,
-        name: supplier.chargeServiceExpenseFundName,
-        balance: supplier.chargeServiceExpenseFundBalance ?? 0,
+    if (supplier.expenseFundId && supplier.expenseFundName) {
+      funds.set(supplier.expenseFundId, {
+        id: supplier.expenseFundId,
+        name: supplier.expenseFundName,
+        balance: supplier.expenseFundBalance ?? 0,
       })
     }
   })
@@ -2002,7 +2002,7 @@ export function FinancePanel({
                   ...expenseForm,
                   expensePaymentSource: source,
                   expenseTypeId: source === 'bank' ? getSupplierAccrualExpenseType(supplier, expenseTypes)?.id ?? '' : '',
-                  expenseFundId: source === 'bank' ? supplier?.chargeServiceExpenseFundId ?? '' : '',
+                  expenseFundId: source === 'bank' ? supplier?.expenseFundId ?? '' : '',
                 })
               }} />
           ))}
@@ -2020,7 +2020,7 @@ export function FinancePanel({
                     ? getSupplierAccrualExpenseType(supplier, expenseTypes)?.id ?? ''
                     : expenseForm.expenseTypeId,
                   expenseFundId: expenseForm.expensePaymentSource === 'bank'
-                    ? supplier?.chargeServiceExpenseFundId ?? ''
+                    ? supplier?.expenseFundId ?? ''
                     : '',
                 })
               }} />
@@ -2347,7 +2347,7 @@ export function FinancePanel({
                 ...expenseForm,
                 expensePaymentSource: source,
                 expenseTypeId: source === 'bank' ? getSupplierAccrualExpenseType(supplier, expenseTypes)?.id ?? '' : '',
-                expenseFundId: source === 'bank' ? supplier?.chargeServiceExpenseFundId ?? '' : '',
+                expenseFundId: source === 'bank' ? supplier?.expenseFundId ?? '' : '',
               })
             }} />
           <SelectControl
@@ -2363,7 +2363,7 @@ export function FinancePanel({
                   ? getSupplierAccrualExpenseType(supplier, expenseTypes)?.id ?? ''
                   : expenseForm.expenseTypeId,
                 expenseFundId: expenseForm.expensePaymentSource === 'bank'
-                  ? supplier?.chargeServiceExpenseFundId ?? ''
+                  ? supplier?.expenseFundId ?? ''
                   : '',
               })
             }} />
@@ -4311,7 +4311,7 @@ function PaymentsPrototypePanel({
     if (!expenseType) {
       return 'Для поставщика должна быть настроена услуга или статья расхода.'
     }
-    if (request.expensePaymentSource === 'bank' && supplier.chargeServiceExpenseTypeId !== expenseType.id) {
+    if (request.expensePaymentSource === 'bank' && supplier.expenseTypeId !== expenseType.id) {
       return `Поставщику «${supplier.name}» можно провести выплату только по настроенной услуге.`
     }
     await financeClient.createExpense(auth.accessToken, {
@@ -5647,8 +5647,8 @@ function NewExpensePrototypeDialog({
   const isCashExpense = preset.expensePaymentSource === 'cash'
   const availableSuppliers = isCashExpense
     ? suppliers
-    : suppliers.filter((supplier) => Boolean(getSupplierAccrualExpenseType(supplier, expenseTypes) && supplier.chargeServiceExpenseFundId))
-  const initialSupplier = availableSuppliers.find((supplier) => supplier.chargeServiceExpenseTypeId === presetExpenseType?.id)
+    : suppliers.filter((supplier) => Boolean(getSupplierAccrualExpenseType(supplier, expenseTypes) && supplier.expenseFundId))
+  const initialSupplier = availableSuppliers.find((supplier) => supplier.expenseTypeId === presetExpenseType?.id)
     ?? (isCashExpense ? availableSuppliers[0] : getFirstLinkedSupplier(availableSuppliers, expenseTypes))
   const [supplierId, setSupplierId] = useState(initialSupplier?.id ?? '')
   const [expenseTypeId, setExpenseTypeId] = useState(
@@ -5656,7 +5656,7 @@ function NewExpensePrototypeDialog({
       ? presetExpenseType?.id ?? expenseTypes[0]?.id ?? ''
       : getSupplierAccrualExpenseType(initialSupplier, expenseTypes)?.id ?? '',
   )
-  const [expenseFundId, setExpenseFundId] = useState(initialSupplier?.chargeServiceExpenseFundId ?? '')
+  const [expenseFundId, setExpenseFundId] = useState(initialSupplier?.expenseFundId ?? '')
   const [expensePaymentType, setExpensePaymentType] = useState<ExpensePaymentType>('with_receipt')
   const [operationDate, setOperationDate] = useState(getLocalDateInputValue())
   const [accountingMonth, setAccountingMonth] = useState(getLocalDateInputValue().slice(0, 7))
@@ -5679,7 +5679,7 @@ function NewExpensePrototypeDialog({
       setError('Для поставщика должна быть настроена услуга или статья расхода.')
       return
     }
-    if (!isCashExpense && !selectedSupplier?.chargeServiceExpenseFundId) {
+    if (!isCashExpense && !selectedSupplier?.expenseFundId) {
       setError('Для услуги поставщика должен быть настроен фонд расходования.')
       return
     }
@@ -5695,7 +5695,7 @@ function NewExpensePrototypeDialog({
       setError('Укажите сумму выплаты больше нуля.')
       return
     }
-    const availableFundBalance = selectedSupplier?.chargeServiceExpenseFundBalance ?? 0
+    const availableFundBalance = selectedSupplier?.expenseFundBalance ?? 0
     if (!isCashExpense && parsedAmount > availableFundBalance) {
       setError('В фонде расходования недостаточно средств для этой выплаты.')
       return
@@ -5754,7 +5754,7 @@ function NewExpensePrototypeDialog({
                 const nextSupplier = suppliers.find((supplier) => supplier.id === nextSupplierId)
                 if (!isCashExpense) {
                   setExpenseTypeId(getSupplierAccrualExpenseType(nextSupplier, expenseTypes)?.id ?? '')
-                  setExpenseFundId(nextSupplier?.chargeServiceExpenseFundId ?? '')
+                  setExpenseFundId(nextSupplier?.expenseFundId ?? '')
                 }
                 setError(null)
               }} />
@@ -5776,9 +5776,9 @@ function NewExpensePrototypeDialog({
           </FormField>
           {!isCashExpense ? (
             <p className="form-hint">
-              Фонд расходования: {selectedSupplier?.chargeServiceExpenseFundName ?? 'не настроен'}
-              {selectedSupplier?.chargeServiceExpenseFundId
-                ? ` · доступно ${formatMoney(selectedSupplier.chargeServiceExpenseFundBalance ?? 0)}`
+              Фонд расходования: {selectedSupplier?.expenseFundName ?? 'не настроен'}
+              {selectedSupplier?.expenseFundId
+                ? ` · доступно ${formatMoney(selectedSupplier.expenseFundBalance ?? 0)}`
                 : ''}
             </p>
           ) : null}
@@ -6128,7 +6128,7 @@ function NewAccrualPrototypeDialog({
       setError('Для выбранного поставщика не настроена услуга начисления.')
       return
     }
-    if (!selectedSupplier?.chargeServiceExpenseFundId) {
+    if (!selectedSupplier?.expenseFundId) {
       setError('Для услуги поставщика должен быть настроен фонд расходования.')
       return
     }
@@ -6195,7 +6195,7 @@ function NewAccrualPrototypeDialog({
           </FormField>
           <FormField
             label="Услуга"
-            hint={`Фонд расходования: ${selectedSupplier?.chargeServiceExpenseFundName ?? 'не настроен'}`}>
+            hint={`Фонд расходования: ${selectedSupplier?.expenseFundName ?? 'не настроен'}`}>
             <SelectControl
               aria-label="Услуга начисления поставщику"
               value={expenseTypeId}

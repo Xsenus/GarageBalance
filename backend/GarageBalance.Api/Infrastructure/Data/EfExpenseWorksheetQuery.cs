@@ -508,25 +508,19 @@ public sealed class EfExpenseWorksheetQuery(
                 !supplier.IsArchived &&
                 supplier.ChargeServiceSetting != null &&
                 !supplier.ChargeServiceSetting.IsArchived &&
-                supplier.ChargeServiceSetting.ExpenseTypeId != null &&
-                ((supplier.ExpenseFundId != null && !supplier.ExpenseFund!.IsArchived) ||
-                    (supplier.ExpenseFundId == null &&
-                        supplier.ChargeServiceSetting.ExpenseFundId != null &&
-                        !supplier.ChargeServiceSetting.ExpenseFund!.IsArchived)))
+                supplier.ExpenseTypeId != null &&
+                supplier.ExpenseFundId != null &&
+                !supplier.ExpenseFund!.IsArchived)
             .Select(supplier => new
             {
                 Category = SupplierFundCategory,
                 SupplierId = (Guid?)supplier.Id,
-                StaffMemberId = (Guid?)(supplier.ExpenseFundId ?? supplier.ChargeServiceSetting!.ExpenseFundId),
-                CounterpartyName = (string?)(supplier.ExpenseFundId != null
-                    ? supplier.ExpenseFund!.Name
-                    : supplier.ChargeServiceSetting!.ExpenseFund!.Name),
-                TypeId = supplier.ChargeServiceSetting!.ExpenseTypeId,
+                StaffMemberId = (Guid?)supplier.ExpenseFundId,
+                CounterpartyName = (string?)supplier.ExpenseFund!.Name,
+                TypeId = supplier.ExpenseTypeId,
                 TypeName = (string?)null,
                 TypeCode = (string?)null,
-                Amount = supplier.ExpenseFundId != null
-                    ? supplier.ExpenseFund!.Balance
-                    : supplier.ChargeServiceSetting!.ExpenseFund!.Balance,
+                Amount = supplier.ExpenseFund!.Balance,
                 IncomeTotal = 0m,
                 BankDepositTotal = 0m,
                 CashExpenseTotal = 0m,

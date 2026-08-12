@@ -121,6 +121,7 @@ type ContractorSupplierRow = {
   name: string
   serviceId?: string | null
   service: string
+  expenseTypeId?: string | null
   expenseFundId?: string | null
   inn: string
   legalAddress: string
@@ -591,6 +592,7 @@ function createSupplierRowFromDto(supplier: SupplierDto, contacts: SupplierConta
     name: supplier.name,
     serviceId: supplier.chargeServiceSettingId ?? null,
     service: supplier.chargeServiceSettingName ?? supplier.groupName,
+    expenseTypeId: supplier.expenseTypeId ?? null,
     expenseFundId: supplier.expenseFundId ?? null,
     inn: supplier.inn ?? '',
     legalAddress: supplier.legalAddress ?? '',
@@ -653,6 +655,7 @@ function createSupplierRequestFromRow(row: ContractorSupplierRow, groupId: strin
     startingBalance: parsePrototypeMoney(normalized.startingBalance),
     comment: normalized.comment.trim(),
     chargeServiceSettingId: normalized.serviceId,
+    expenseTypeId: normalized.expenseTypeId,
     expenseFundId: normalized.expenseFundId,
     version: normalized.version,
   }
@@ -1033,7 +1036,7 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
             dictionaryClient.getChargeServiceSettings(auth.accessToken, undefined, contractorsDictionaryListLimit, true),
             dictionaryClient.getIncomeTypes(auth.accessToken, undefined, contractorsDictionaryListLimit, true, controller.signal),
             dictionaryClient.getExpenseTypes(auth.accessToken, undefined, contractorsDictionaryListLimit, true, controller.signal),
-            dictionaryClient.getTariffs(auth.accessToken, undefined, contractorsDictionaryListLimit, true, false, controller.signal),
+            dictionaryClient.getTariffs(auth.accessToken, undefined, contractorsDictionaryListLimit, true, controller.signal),
             fundsClient.getFundOptions(auth.accessToken, controller.signal),
           ])
           if (!cancelled) {
@@ -2586,8 +2589,8 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
       ) : null}
 
       {modal?.type === 'garage' ? <GaragePrototypeDialog accessToken={auth.accessToken} canAdjustOpeningData={canAdjustOpeningData} integrationClient={integrationClient} item={modal.item} onAdjustOpeningBalance={openGarageOpeningBalanceAdjustment} onClose={() => setModal(null)} onSave={saveGarage} onOpenFinancialReport={openGarageFinancialReport} /> : null}
-      {modal?.type === 'supplier' ? <SupplierPrototypeDialog accessToken={auth.accessToken} canAdjustOpeningData={canAdjustOpeningData} funds={serviceFunds} integrationClient={integrationClient} item={modal.item} services={chargeServices} onAdjustOpeningBalance={openSupplierOpeningBalanceAdjustment} onClose={() => setModal(null)} onOpenFinancialReport={openSupplierFinancialReport} onSave={saveSupplier} /> : null}
-      {modal?.type === 'service' ? <AddServicePrototypeDialog expenseTypes={serviceExpenseTypes.filter((item) => !item.isArchived)} funds={serviceFunds.filter((fund) => fund.allowOperations)} isSaving={serviceSaving} incomeTypes={serviceIncomeTypes.filter((item) => !item.isArchived)} onClose={() => setModal(null)} onCreateWithTariff={saveServiceWithTariff} regularOnly tariffs={serviceTariffs.filter((item) => !item.isArchived)} /> : null}
+      {modal?.type === 'supplier' ? <SupplierPrototypeDialog accessToken={auth.accessToken} canAdjustOpeningData={canAdjustOpeningData} expenseTypes={serviceExpenseTypes.filter((item) => !item.isArchived)} funds={serviceFunds} integrationClient={integrationClient} item={modal.item} services={chargeServices} onAdjustOpeningBalance={openSupplierOpeningBalanceAdjustment} onClose={() => setModal(null)} onOpenFinancialReport={openSupplierFinancialReport} onSave={saveSupplier} /> : null}
+      {modal?.type === 'service' ? <AddServicePrototypeDialog funds={serviceFunds.filter((fund) => fund.allowOperations)} isSaving={serviceSaving} incomeTypes={serviceIncomeTypes.filter((item) => !item.isArchived)} onClose={() => setModal(null)} onCreateWithTariff={saveServiceWithTariff} regularOnly tariffs={serviceTariffs.filter((item) => !item.isArchived)} /> : null}
       {modal?.type === 'employee' ? <EmployeePrototypeDialog departments={departments} item={modal.item} onClose={() => setModal(null)} onOpenFinancialReport={openEmployeeFinancialReport} onSave={saveEmployee} /> : null}
       {modal?.type === 'department' ? <DepartmentPrototypeDialog item={modal.item} onClose={() => setModal(null)} onSave={saveDepartment} /> : null}
 
@@ -3009,6 +3012,7 @@ function createEmptySupplierPrototype(): ContractorSupplierRow {
     name: '',
     serviceId: null,
     service: '',
+    expenseTypeId: null,
     expenseFundId: null,
     inn: '',
     legalAddress: '',
@@ -3070,6 +3074,7 @@ function getSupplierPrototypeChanges(previous: ContractorSupplierRow, next: Cont
   return compactPrototypeChanges([
     createPrototypeChangeEntry('Наименование', previous.name, next.name),
     createPrototypeChangeEntry('Услуга', previous.service, next.service),
+    createPrototypeChangeEntry('Статья расхода', previous.expenseTypeId ?? '', next.expenseTypeId ?? ''),
     createPrototypeChangeEntry('Фонд расходования', previous.expenseFundId ?? '', next.expenseFundId ?? ''),
     createPrototypeChangeEntry('ИНН', previous.inn, next.inn),
     createPrototypeChangeEntry('Стартовый баланс', previous.startingBalance, next.startingBalance),
@@ -3491,9 +3496,9 @@ function getDepartmentPrototypeChanges(previous: ContractorDepartmentRow, next: 
   ])
 }
 
-function SupplierPrototypeDialog({ accessToken, canAdjustOpeningData, funds, integrationClient, item, services, onAdjustOpeningBalance, onClose, onOpenFinancialReport, onSave }: { accessToken: string; canAdjustOpeningData: boolean; funds: FundOptionDto[]; integrationClient: IntegrationClient; item?: ContractorSupplierRow; services: ChargeServiceSettingDto[]; onAdjustOpeningBalance: (item: ContractorSupplierRow) => void; onClose: () => void; onOpenFinancialReport: (item: ContractorSupplierRow) => void; onSave: (item: ContractorSupplierRow) => Promise<void> }) {
+function SupplierPrototypeDialog({ accessToken, canAdjustOpeningData, expenseTypes, funds, integrationClient, item, services, onAdjustOpeningBalance, onClose, onOpenFinancialReport, onSave }: { accessToken: string; canAdjustOpeningData: boolean; expenseTypes: AccountingTypeDto[]; funds: FundOptionDto[]; integrationClient: IntegrationClient; item?: ContractorSupplierRow; services: ChargeServiceSettingDto[]; onAdjustOpeningBalance: (item: ContractorSupplierRow) => void; onClose: () => void; onOpenFinancialReport: (item: ContractorSupplierRow) => void; onSave: (item: ContractorSupplierRow) => Promise<void> }) {
   const activeServices = services.filter((service) =>
-    service.id === item?.serviceId || (!service.isArchived && Boolean(service.expenseTypeId)))
+    service.id === item?.serviceId || (!service.isArchived && service.isRegular))
   const initialService = activeServices.find((service) => service.id === item?.serviceId) ?? activeServices.find((service) => service.name === item?.service) ?? activeServices[0] ?? null
   const [form, setForm] = useState<ContractorSupplierRow>(item
     ? { ...item, serviceId: initialService?.id ?? item.serviceId, service: initialService?.name ?? item.service }
@@ -3567,6 +3572,11 @@ function SupplierPrototypeDialog({ accessToken, canAdjustOpeningData, funds, int
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
 
+    if (form.serviceId && (!form.expenseTypeId || !form.expenseFundId)) {
+      setSaveError('Для поставщика с услугой выберите статью расхода и фонд расходования.')
+      return
+    }
+
     if (item && getSupplierPrototypeChanges(item, form).length === 0) {
       onClose()
       return
@@ -3634,10 +3644,6 @@ function SupplierPrototypeDialog({ accessToken, canAdjustOpeningData, funds, int
   }
 
   const availableServices = [...activeServices].sort((left, right) => left.name.localeCompare(right.name, 'ru'))
-  const selectedService = availableServices.find((service) => service.id === form.serviceId) ?? null
-  const serviceFund = selectedService?.expenseFundId
-    ? funds.find((fund) => fund.id === selectedService.expenseFundId) ?? null
-    : null
   const selectableExpenseFunds = funds.filter((fund) => fund.allowOperations || fund.id === form.expenseFundId)
 
   function selectPartySuggestion(suggestion: DadataPartySuggestionDto) {
@@ -3671,13 +3677,21 @@ function SupplierPrototypeDialog({ accessToken, canAdjustOpeningData, funds, int
                   options={[{ value: '', label: 'Выберите услугу' }, ...availableServices.map((service) => ({ value: service.id, label: service.name }))]}
                   onChange={(serviceId) => {
                     const service = availableServices.find((itemService) => itemService.id === serviceId)
-                    setForm({ ...form, serviceId: service?.id ?? null, service: service?.name ?? '', expenseFundId: null })
+                    setForm({ ...form, serviceId: service?.id ?? null, service: service?.name ?? '', expenseTypeId: null, expenseFundId: null })
                   }}
+                />
+              </FormField>
+              <FormField label="Статья расхода" help="Определяет, по какой статье поставщику создаются начисления и выплаты.">
+                <SelectControl
+                  aria-label="Статья расхода поставщика"
+                  value={form.expenseTypeId ?? ''}
+                  options={[{ value: '', label: 'Выберите статью расхода' }, ...expenseTypes.map((expenseType) => ({ value: expenseType.id, label: expenseType.name }))]}
+                  onChange={(expenseTypeId) => setForm({ ...form, expenseTypeId: expenseTypeId || null })}
                 />
               </FormField>
               <FormField
                 label="Фонд расходования"
-                help="По умолчанию используется фонд выбранной услуги. Администратор может закрепить за поставщиком другой действующий фонд; он будет применяться при начислениях и банковских выплатах этому поставщику."
+                help="Фонд применяется при начислениях и банковских выплатах этому поставщику."
               >
                 <SelectControl
                   aria-label="Фонд расходования поставщика"
@@ -3685,7 +3699,7 @@ function SupplierPrototypeDialog({ accessToken, canAdjustOpeningData, funds, int
                   options={[
                     {
                       value: '',
-                      label: serviceFund ? `По услуге — ${serviceFund.name}` : 'Фонд по услуге не назначен',
+                      label: 'Выберите фонд расходования',
                     },
                     ...selectableExpenseFunds.map((fund) => ({
                       value: fund.id,

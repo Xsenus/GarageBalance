@@ -23,6 +23,7 @@ public sealed class PostgreSqlExpensePaymentTypeMigrationIntegrationTests
                 """
                 ALTER TABLE charge_service_settings ADD COLUMN "ExpenseFundId" uuid NULL;
                 ALTER TABLE suppliers ADD COLUMN "ExpenseFundId" uuid NULL;
+                ALTER TABLE suppliers ADD COLUMN "ExpenseTypeId" uuid NULL;
                 """);
             await PostgreSqlLegacyModelCompatibility.AddCurrentVersionColumnsAsync(downgradeContext);
         }
@@ -39,10 +40,10 @@ public sealed class PostgreSqlExpensePaymentTypeMigrationIntegrationTests
                 Name = $"Водоснабжение миграция {Guid.NewGuid():N}",
                 Code = $"water_{Guid.NewGuid():N}"
             };
-            var cashService = new ChargeServiceSetting { Name = "Кассовая статья", ExpenseType = cashArticle };
-            var ordinaryService = new ChargeServiceSetting { Name = "Водоснабжение", ExpenseType = ordinaryArticle };
-            var cashSupplier = new Supplier { Name = $"Кассовый поставщик {Guid.NewGuid():N}", Group = group, ChargeServiceSetting = cashService };
-            var ordinarySupplier = new Supplier { Name = $"Обычный поставщик {Guid.NewGuid():N}", Group = group, ChargeServiceSetting = ordinaryService };
+            var cashService = new ChargeServiceSetting { Name = "Кассовая статья" };
+            var ordinaryService = new ChargeServiceSetting { Name = "Водоснабжение" };
+            var cashSupplier = new Supplier { Name = $"Кассовый поставщик {Guid.NewGuid():N}", Group = group, ChargeServiceSetting = cashService, ExpenseType = cashArticle };
+            var ordinarySupplier = new Supplier { Name = $"Обычный поставщик {Guid.NewGuid():N}", Group = group, ChargeServiceSetting = ordinaryService, ExpenseType = ordinaryArticle };
             legacyContext.AddRange(group, cashArticle, ordinaryArticle, cashService, ordinaryService, cashSupplier, ordinarySupplier);
             await legacyContext.SaveChangesAsync();
 
@@ -80,6 +81,7 @@ public sealed class PostgreSqlExpensePaymentTypeMigrationIntegrationTests
                 """
                 ALTER TABLE charge_service_settings DROP COLUMN "ExpenseFundId";
                 ALTER TABLE suppliers DROP COLUMN "ExpenseFundId";
+                ALTER TABLE suppliers DROP COLUMN "ExpenseTypeId";
                 """);
             await migrateContext.Database.MigrateAsync();
         }

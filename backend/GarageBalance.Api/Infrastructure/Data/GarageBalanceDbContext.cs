@@ -260,6 +260,7 @@ public sealed class GarageBalanceDbContext(DbContextOptions<GarageBalanceDbConte
             entity.HasIndex(supplier => supplier.ContactPerson);
             entity.HasIndex(supplier => supplier.GroupId);
             entity.HasIndex(supplier => supplier.ChargeServiceSettingId);
+            entity.HasIndex(supplier => supplier.ExpenseTypeId);
             entity.HasIndex(supplier => supplier.ExpenseFundId);
             entity.HasOne(supplier => supplier.Group)
                 .WithMany(group => group.Suppliers)
@@ -269,6 +270,10 @@ public sealed class GarageBalanceDbContext(DbContextOptions<GarageBalanceDbConte
                 .WithMany()
                 .HasForeignKey(supplier => supplier.ChargeServiceSettingId)
                 .OnDelete(DeleteBehavior.SetNull);
+            entity.HasOne(supplier => supplier.ExpenseType)
+                .WithMany()
+                .HasForeignKey(supplier => supplier.ExpenseTypeId)
+                .OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(supplier => supplier.ExpenseFund)
                 .WithMany()
                 .HasForeignKey(supplier => supplier.ExpenseFundId)
@@ -400,10 +405,8 @@ public sealed class GarageBalanceDbContext(DbContextOptions<GarageBalanceDbConte
             entity.Property(item => item.ElectricityThirdRate).HasPrecision(18, 4);
             entity.Property(item => item.ElectricityTiersJson).HasColumnType("jsonb");
             entity.Property(item => item.Comment).HasMaxLength(1000);
-            entity.Property(item => item.IsTemplate).HasDefaultValue(false);
             entity.Property(item => item.Version).HasDefaultValueSql("gen_random_uuid()").IsConcurrencyToken();
             entity.HasIndex(item => new { item.Name, item.EffectiveFrom }).IsUnique().HasFilter("\"IsArchived\" = false");
-            entity.HasIndex(item => new { item.IsTemplate, item.IsArchived, item.EffectiveFrom });
             entity.HasIndex(item => item.CalculationBase);
             entity.HasIndex(item => item.EffectiveFrom);
             entity.HasIndex(item => new { item.CalculationBase, item.EffectiveFrom })
@@ -413,9 +416,6 @@ public sealed class GarageBalanceDbContext(DbContextOptions<GarageBalanceDbConte
         modelBuilder.Entity<ChargeServiceSetting>(entity =>
         {
             entity.ToTable("charge_service_settings");
-            entity.ToTable(table => table.HasCheckConstraint(
-                "CK_charge_service_settings_ExpenseFundLink",
-                "\"ExpenseFundId\" IS NULL OR \"ExpenseTypeId\" IS NOT NULL"));
             entity.HasKey(item => item.Id);
             entity.Property(item => item.Name).HasMaxLength(200).IsRequired();
             entity.Property(item => item.UnitName).HasMaxLength(40);
@@ -427,22 +427,12 @@ public sealed class GarageBalanceDbContext(DbContextOptions<GarageBalanceDbConte
             entity.HasIndex(item => item.MeterKind);
             entity.HasIndex(item => item.HasTieredTariff);
             entity.HasIndex(item => item.IncomeTypeId);
-            entity.HasIndex(item => item.ExpenseTypeId);
-            entity.HasIndex(item => item.ExpenseFundId);
             entity.HasIndex(item => item.TariffId);
             entity.HasIndex(item => new { item.IsRegular, item.IsMetered, item.TariffId })
                 .HasFilter("\"IsArchived\" = false");
             entity.HasOne(item => item.IncomeType)
                 .WithMany()
                 .HasForeignKey(item => item.IncomeTypeId)
-                .OnDelete(DeleteBehavior.Restrict);
-            entity.HasOne(item => item.ExpenseType)
-                .WithMany()
-                .HasForeignKey(item => item.ExpenseTypeId)
-                .OnDelete(DeleteBehavior.Restrict);
-            entity.HasOne(item => item.ExpenseFund)
-                .WithMany()
-                .HasForeignKey(item => item.ExpenseFundId)
                 .OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(item => item.Tariff)
                 .WithMany()

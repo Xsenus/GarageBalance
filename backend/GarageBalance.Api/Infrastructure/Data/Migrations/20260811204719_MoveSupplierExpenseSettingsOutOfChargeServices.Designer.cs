@@ -3,6 +3,7 @@ using System;
 using GarageBalance.Api.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace GarageBalance.Api.Infrastructure.Data.Migrations
 {
     [DbContext(typeof(GarageBalanceDbContext))]
-    partial class GarageBalanceDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260811204719_MoveSupplierExpenseSettingsOutOfChargeServices")]
+    partial class MoveSupplierExpenseSettingsOutOfChargeServices
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -911,6 +914,11 @@ namespace GarageBalance.Api.Infrastructure.Data.Migrations
                     b.Property<bool>("IsArchived")
                         .HasColumnType("boolean");
 
+                    b.Property<bool>("IsTemplate")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false);
+
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(200)
@@ -941,6 +949,8 @@ namespace GarageBalance.Api.Infrastructure.Data.Migrations
                     b.HasIndex("Name", "EffectiveFrom")
                         .IsUnique()
                         .HasFilter("\"IsArchived\" = false");
+
+                    b.HasIndex("IsTemplate", "IsArchived", "EffectiveFrom");
 
                     b.ToTable("tariffs", (string)null);
                 });

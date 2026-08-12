@@ -4,7 +4,7 @@ export function getSupplierAccrualExpenseType(
   supplier: SupplierDto | undefined,
   expenseTypes: AccountingTypeDto[],
 ): AccountingTypeDto | undefined {
-  const expenseTypeId = supplier?.chargeServiceExpenseTypeId
+  const expenseTypeId = supplier?.expenseTypeId
   if (!expenseTypeId) {
     return undefined
   }
