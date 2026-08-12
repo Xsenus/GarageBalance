@@ -1,4 +1,5 @@
 import type { GarageIncomeWorksheetDto } from '../../services/financeApi'
+import type { AccrualCalculationDetailsDto } from '../../services/financeApi'
 
 export type GarageIncomePrototypeRow = {
   id: string
@@ -25,6 +26,7 @@ export type GarageIncomePrototypeRow = {
   advance: number
   debt: number
   meterRequired?: boolean
+  calculationDetails?: AccrualCalculationDetailsDto | null
 }
 
 export function createGarageIncomeRowsFromWorksheet(worksheet: GarageIncomeWorksheetDto): GarageIncomePrototypeRow[] {
@@ -56,6 +58,7 @@ export function createGarageIncomeRowsFromWorksheet(worksheet: GarageIncomeWorks
       advance: row.advanceAmount ?? 0,
       debt: row.debt,
       meterRequired: row.meterKind !== null && row.meterValue === null,
+      calculationDetails: row.calculationDetails ?? null,
     }
   })
 }

@@ -361,8 +361,8 @@ public sealed class EfAccrualRepository(GarageBalanceDbContext dbContext) : IAcc
                 accrual.GarageId == garageId &&
                 accrual.AccountingMonth == accountingMonth &&
                 accrual.Source == AccrualSources.Regular &&
-                accrual.Tariff != null &&
-                accrual.Tariff.CalculationBase == calculationBase)
+                ((accrual.RequiresMeterReading && accrual.CalculationMeterKind == meterKind) ||
+                 (!accrual.RequiresMeterReading && accrual.Tariff != null && accrual.Tariff.CalculationBase == calculationBase)))
             .OrderBy(accrual => accrual.IncomeTypeId)
             .ThenBy(accrual => accrual.Id)
             .ToListAsync(cancellationToken);
@@ -392,8 +392,8 @@ public sealed class EfAccrualRepository(GarageBalanceDbContext dbContext) : IAcc
                 accrual.GarageId == garageId &&
                 accrual.AccountingMonth >= accountingMonth &&
                 accrual.Source == AccrualSources.Regular &&
-                accrual.Tariff != null &&
-                accrual.Tariff.CalculationBase == calculationBase)
+                ((accrual.RequiresMeterReading && accrual.CalculationMeterKind == meterKind) ||
+                 (!accrual.RequiresMeterReading && accrual.Tariff != null && accrual.Tariff.CalculationBase == calculationBase)))
             .OrderBy(accrual => accrual.AccountingMonth)
             .ThenBy(accrual => accrual.IncomeTypeId)
             .ThenBy(accrual => accrual.Id)

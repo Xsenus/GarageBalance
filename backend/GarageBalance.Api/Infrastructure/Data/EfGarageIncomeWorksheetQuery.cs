@@ -23,6 +23,12 @@ public sealed class EfGarageIncomeWorksheetQuery(GarageBalanceDbContext dbContex
         DateOnly monthTo,
         CancellationToken cancellationToken)
     {
+        // Every UNION branch must expose the same PostgreSQL store type. A CLR string null is
+        // translated as text, while Accrual.CalculationDetailsJson is jsonb. This empty scalar
+        // subquery gives non-accrual branches a typed jsonb NULL without adding another command.
+        var calculationDetailsJsonNull = dbContext.Accruals.AsNoTracking()
+            .Where(_ => false)
+            .Select(accrual => accrual.CalculationDetailsJson);
         var garageQuery = dbContext.Garages.AsNoTracking()
             .Where(garage => garage.Id == garageId && !garage.IsArchived)
             .Select(garage => new
@@ -49,6 +55,7 @@ public sealed class EfGarageIncomeWorksheetQuery(GarageBalanceDbContext dbContex
                 ReadingDate = (DateOnly?)null,
                 CurrentValue = (decimal?)null,
                 Consumption = (decimal?)null,
+                CalculationDetailsJson = calculationDetailsJsonNull.FirstOrDefault(),
                 UpdatedAtUtc = (DateTimeOffset?)null
             });
         var previousAccrualQuery = dbContext.Accruals.AsNoTracking()
@@ -78,6 +85,7 @@ public sealed class EfGarageIncomeWorksheetQuery(GarageBalanceDbContext dbContex
                 ReadingDate = (DateOnly?)null,
                 CurrentValue = (decimal?)null,
                 Consumption = (decimal?)null,
+                CalculationDetailsJson = calculationDetailsJsonNull.FirstOrDefault(),
                 UpdatedAtUtc = (DateTimeOffset?)null
             });
         var previousIncomeQuery = dbContext.FinancialOperations.AsNoTracking()
@@ -111,6 +119,7 @@ public sealed class EfGarageIncomeWorksheetQuery(GarageBalanceDbContext dbContex
                 ReadingDate = (DateOnly?)null,
                 CurrentValue = (decimal?)null,
                 Consumption = (decimal?)null,
+                CalculationDetailsJson = calculationDetailsJsonNull.FirstOrDefault(),
                 UpdatedAtUtc = (DateTimeOffset?)null
             });
         var accrualBucketQuery = dbContext.Accruals.AsNoTracking()
@@ -126,6 +135,7 @@ public sealed class EfGarageIncomeWorksheetQuery(GarageBalanceDbContext dbContex
                 accrual.IncomeType.Name,
                 accrual.IncomeType.Code,
                 accrual.Basis,
+                accrual.CalculationDetailsJson,
                 accrual.IrregularPaymentId,
                 IrregularPaymentIsAvailable = accrual.IrregularPayment == null ||
                     (accrual.IrregularPayment.IsActive && !accrual.IrregularPayment.IsArchived)
@@ -154,6 +164,7 @@ public sealed class EfGarageIncomeWorksheetQuery(GarageBalanceDbContext dbContex
                 ReadingDate = (DateOnly?)null,
                 CurrentValue = (decimal?)null,
                 Consumption = (decimal?)null,
+                group.Key.CalculationDetailsJson,
                 UpdatedAtUtc = (DateTimeOffset?)null
             });
         var incomeBucketQuery = dbContext.FinancialOperations.AsNoTracking()
@@ -196,6 +207,7 @@ public sealed class EfGarageIncomeWorksheetQuery(GarageBalanceDbContext dbContex
                 ReadingDate = (DateOnly?)null,
                 CurrentValue = (decimal?)null,
                 Consumption = (decimal?)null,
+                CalculationDetailsJson = calculationDetailsJsonNull.FirstOrDefault(),
                 UpdatedAtUtc = (DateTimeOffset?)null
             });
         var meterReadingQuery = dbContext.MeterReadings.AsNoTracking()
@@ -228,6 +240,7 @@ public sealed class EfGarageIncomeWorksheetQuery(GarageBalanceDbContext dbContex
                 ReadingDate = (DateOnly?)reading.ReadingDate,
                 CurrentValue = (decimal?)reading.CurrentValue,
                 Consumption = (decimal?)reading.Consumption,
+                CalculationDetailsJson = calculationDetailsJsonNull.FirstOrDefault(),
                 UpdatedAtUtc = (DateTimeOffset?)reading.UpdatedAtUtc
             });
         var configuredMeterIncomeTypeQuery = dbContext.ChargeServiceSettings.AsNoTracking()
@@ -261,6 +274,7 @@ public sealed class EfGarageIncomeWorksheetQuery(GarageBalanceDbContext dbContex
                 ReadingDate = (DateOnly?)null,
                 CurrentValue = (decimal?)null,
                 Consumption = (decimal?)null,
+                CalculationDetailsJson = calculationDetailsJsonNull.FirstOrDefault(),
                 UpdatedAtUtc = (DateTimeOffset?)null
             });
         var legacyMeterIncomeTypeQuery = dbContext.IncomeTypes.AsNoTracking()
@@ -291,6 +305,7 @@ public sealed class EfGarageIncomeWorksheetQuery(GarageBalanceDbContext dbContex
                 ReadingDate = (DateOnly?)null,
                 CurrentValue = (decimal?)null,
                 Consumption = (decimal?)null,
+                CalculationDetailsJson = calculationDetailsJsonNull.FirstOrDefault(),
                 UpdatedAtUtc = (DateTimeOffset?)null
             });
         var meterIncomeTypeQuery = configuredMeterIncomeTypeQuery.Union(legacyMeterIncomeTypeQuery);
@@ -327,6 +342,7 @@ public sealed class EfGarageIncomeWorksheetQuery(GarageBalanceDbContext dbContex
                 ReadingDate = (DateOnly?)null,
                 CurrentValue = (decimal?)null,
                 Consumption = (decimal?)null,
+                CalculationDetailsJson = calculationDetailsJsonNull.FirstOrDefault(),
                 UpdatedAtUtc = (DateTimeOffset?)null
             });
         var allocationQuery = dbContext.AccrualPaymentAllocations.AsNoTracking()
@@ -369,6 +385,7 @@ public sealed class EfGarageIncomeWorksheetQuery(GarageBalanceDbContext dbContex
                 ReadingDate = (DateOnly?)null,
                 CurrentValue = (decimal?)null,
                 Consumption = (decimal?)null,
+                CalculationDetailsJson = calculationDetailsJsonNull.FirstOrDefault(),
                 UpdatedAtUtc = (DateTimeOffset?)null
             });
         var advanceQuery = dbContext.IncomeTypes.AsNoTracking()
@@ -420,6 +437,7 @@ public sealed class EfGarageIncomeWorksheetQuery(GarageBalanceDbContext dbContex
                 ReadingDate = (DateOnly?)null,
                 CurrentValue = (decimal?)null,
                 Consumption = (decimal?)null,
+                CalculationDetailsJson = calculationDetailsJsonNull.FirstOrDefault(),
                 UpdatedAtUtc = (DateTimeOffset?)null
             });
 
@@ -510,6 +528,13 @@ public sealed class EfGarageIncomeWorksheetQuery(GarageBalanceDbContext dbContex
                 .Select(row => new GarageIncomeWorksheetAdvanceData(
                     row.IncomeTypeId!.Value,
                     row.Amount))
+                .ToList(),
+            rows.Where(row => row.Category == AccrualBucketCategory && row.CalculationDetailsJson != null)
+                .Select(row => new GarageIncomeWorksheetCalculationData(
+                    row.AccountingMonth!.Value,
+                    row.IncomeTypeId!.Value,
+                    row.IncomeTypeName!,
+                    row.CalculationDetailsJson!))
                 .ToList());
     }
 }

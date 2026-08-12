@@ -1608,7 +1608,7 @@ describe('App', () => {
       service: { hasTieredTariff: false },
     }))
     expect(within(tariffsPanel).queryByRole('button', { name: 'Добавить порог' })).not.toBeInTheDocument()
-    expect(within(tariffsPanel).queryByLabelText('Электроэнергия: 1.00–3.00: до')).not.toBeInTheDocument()
+    expect(within(tariffsPanel).queryByLabelText('Электроэнергия: 2.00–3.00: до')).not.toBeInTheDocument()
     await user.click(within(tariffsPanel).getByRole('combobox', { name: 'Электроэнергия: пороговая тарификация' }))
     await user.click(within(tariffsPanel).getByRole('option', { name: 'Да' }))
     await waitFor(() => expect(electricitySettingRequests.at(-1)).toMatchObject({
@@ -1616,19 +1616,19 @@ describe('App', () => {
       effectiveFrom: '2026-06-30',
       service: { hasTieredTariff: true },
     }))
-    expect(await within(tariffsPanel).findByLabelText('Электроэнергия: 1.00–3.00: до')).toBeInTheDocument()
+    expect(await within(tariffsPanel).findByLabelText('Электроэнергия: 2.00–3.00: до')).toBeInTheDocument()
 
     expect(within(tariffsPanel).queryByLabelText(/наименование$/i)).not.toBeInTheDocument()
-    const secondTierUpperBound = within(tariffsPanel).getByLabelText('Электроэнергия: 1.00–3.00: до')
+    const secondTierUpperBound = within(tariffsPanel).getByLabelText('Электроэнергия: 2.00–3.00: до')
     await user.clear(secondTierUpperBound)
     await user.type(secondTierUpperBound, '0.5{Enter}')
-    expect(await within(tariffsPanel).findByRole('alert')).toHaveTextContent('Значение «До» должно быть больше 1.00 кВт·ч.')
+    expect(await within(tariffsPanel).findByRole('alert')).toHaveTextContent('Значение «До» должно быть не меньше 2.00 кВт·ч.')
     await user.clear(secondTierUpperBound)
     await user.type(secondTierUpperBound, '4{Enter}')
     await waitFor(() => expect(thresholdUpdateRequests.at(-1)).toMatchObject({
       effectiveFrom: '2026-07-01',
       electricityTiers: expect.arrayContaining([
-        expect.objectContaining({ name: '1.00–4.00', upperBound: 4, rate: 3 }),
+        expect.objectContaining({ name: '2.00–4.00', upperBound: 4, rate: 3 }),
       ]),
     }))
 
@@ -1637,20 +1637,20 @@ describe('App', () => {
     await user.click(addThresholdButton)
     const createThresholdDialog = await screen.findByRole('dialog', { name: 'Добавить тарифный порог' })
     expect(within(createThresholdDialog).queryByLabelText('Название нового порога')).not.toBeInTheDocument()
-    expect(within(createThresholdDialog).getByLabelText('Нижняя граница нового порога')).toHaveValue('4.00')
+    expect(within(createThresholdDialog).getByLabelText('Нижняя граница нового порога')).toHaveValue('5.00')
     await user.type(within(createThresholdDialog).getByLabelText('Верхняя граница нового порога'), '2')
     await user.click(within(createThresholdDialog).getByRole('button', { name: 'Добавить' }))
-    expect(within(createThresholdDialog).getByRole('alert')).toHaveTextContent('Верхняя граница должна быть больше 4.00 кВт·ч.')
+    expect(within(createThresholdDialog).getByRole('alert')).toHaveTextContent('Верхняя граница должна быть не меньше 5.00 кВт·ч.')
     await user.clear(within(createThresholdDialog).getByLabelText('Верхняя граница нового порога'))
     await user.type(within(createThresholdDialog).getByLabelText('Верхняя граница нового порога'), '5')
     await user.clear(within(createThresholdDialog).getByLabelText('Ставка нового порога'))
     await user.type(within(createThresholdDialog).getByLabelText('Ставка нового порога'), '7.5')
     await user.click(within(createThresholdDialog).getByRole('button', { name: 'Добавить' }))
-    const electricityThresholdInput = await within(tariffsPanel).findByLabelText('Электроэнергия: 4.00–5.00: значение')
+    const electricityThresholdInput = await within(tariffsPanel).findByLabelText('Электроэнергия: 5.00–5.00: значение')
     expect(electricityThresholdInput).toHaveValue('7.50')
     expect(thresholdUpdateRequests.at(-1)?.electricityTiers).toHaveLength(4)
-    expect(thresholdUpdateRequests.at(-1)?.electricityTiers?.[2]).toMatchObject({ name: '4.00–5.00', upperBound: 5, rate: 7.5 })
-    const deleteThresholdButton = within(tariffsPanel).getByRole('button', { name: 'Удалить порог 4.00–5.00' })
+    expect(thresholdUpdateRequests.at(-1)?.electricityTiers?.[2]).toMatchObject({ name: '5.00–5.00', upperBound: 5, rate: 7.5 })
+    const deleteThresholdButton = within(tariffsPanel).getByRole('button', { name: 'Удалить порог 5.00–5.00' })
     await user.click(deleteThresholdButton)
     const thresholdDeleteDialog = await screen.findByRole('dialog', { name: 'Удалить порог тарификации?' })
     const thresholdDeleteCancelButton = within(thresholdDeleteDialog).getByRole('button', { name: 'Отмена' })
@@ -1660,13 +1660,13 @@ describe('App', () => {
     await user.keyboard('{Escape}')
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Удалить порог тарификации?' })).not.toBeInTheDocument())
     expect(deleteThresholdButton).toHaveFocus()
-    expect(within(tariffsPanel).getByLabelText('Электроэнергия: 4.00–5.00: значение')).toHaveValue('7.50')
+    expect(within(tariffsPanel).getByLabelText('Электроэнергия: 5.00–5.00: значение')).toHaveValue('7.50')
 
     await user.click(deleteThresholdButton)
     const reopenedThresholdDeleteDialog = await screen.findByRole('dialog', { name: 'Удалить порог тарификации?' })
     await user.type(within(reopenedThresholdDeleteDialog).getByLabelText('Причина удаления порога'), 'Лишний порог добавлен ошибочно')
     await user.click(within(reopenedThresholdDeleteDialog).getByRole('button', { name: 'Удалить' }))
-    await waitFor(() => expect(within(tariffsPanel).queryByLabelText('Электроэнергия: 4.00–5.00: значение')).not.toBeInTheDocument())
+    await waitFor(() => expect(within(tariffsPanel).queryByLabelText('Электроэнергия: 5.00–5.00: значение')).not.toBeInTheDocument())
     expect(thresholdUpdateRequests.at(-1)?.electricityTiers).toHaveLength(3)
     expect(thresholdUpdateRequests.at(-1)?.electricityTierChangeReason).toBe('Лишний порог добавлен ошибочно')
 
@@ -4223,8 +4223,8 @@ describe('App', () => {
       calculationBase: 'meter_electricity',
       electricityTiers: [
         expect.objectContaining({ name: '0.00–2.00', upperBound: 2, rate: 2 }),
-        expect.objectContaining({ name: '2.00–3.00', upperBound: 3, rate: 3 }),
-        expect.objectContaining({ name: '3.00 и выше', rate: 5 }),
+        expect.objectContaining({ name: '3.00–3.00', upperBound: 3, rate: 3 }),
+        expect.objectContaining({ name: '4.00 и выше', rate: 5 }),
       ],
     }))
   })
@@ -4969,20 +4969,28 @@ describe('App', () => {
     await user.click(tieredCheckbox)
 
     const thresholds = within(editDialog).getByRole('group', { name: 'Пороги тарификации выбранного тарифа' })
+    expect(within(thresholds).getByLabelText('Льготный порог: нижняя граница')).toHaveValue('0')
     expect(within(thresholds).getByLabelText('Льготный порог: верхняя граница')).toHaveValue('100')
     expect(within(thresholds).getByLabelText('Льготный порог: цена за единицу')).toHaveValue('2.50')
     expect(within(thresholds).getByLabelText('Основной порог: верхняя граница')).toHaveValue('250')
+    expect(within(thresholds).getByLabelText('Основной порог: нижняя граница')).toHaveValue('101')
     expect(within(thresholds).getByLabelText('Сверх порога: верхняя граница')).toHaveValue('')
+    expect(within(thresholds).getByLabelText('Сверх порога: нижняя граница')).toHaveValue('251')
     expect(within(thresholds).getByLabelText('Сверх порога: цена за единицу')).toHaveValue('5.00')
-    expect(within(thresholds).getAllByRole('textbox')).toHaveLength(6)
+    expect(within(thresholds).getAllByRole('textbox')).toHaveLength(9)
     expect(within(thresholds).getByLabelText('Льготный порог: верхняя граница')).toBeEnabled()
     expect(within(thresholds).getByLabelText('Сверх порога: верхняя граница')).toBeDisabled()
     await user.clear(within(thresholds).getByLabelText('Льготный порог: верхняя граница'))
     await user.type(within(thresholds).getByLabelText('Льготный порог: верхняя граница'), '125')
     expect(within(thresholds).getByLabelText('Льготный порог: верхняя граница')).toHaveValue('125')
+    expect(within(thresholds).getByLabelText('Основной порог: нижняя граница')).toHaveValue('126')
     await user.clear(within(thresholds).getByLabelText('Льготный порог: цена за единицу'))
     await user.type(within(thresholds).getByLabelText('Льготный порог: цена за единицу'), '3.25')
     expect(within(thresholds).getByLabelText('Льготный порог: цена за единицу')).toHaveValue('3.25')
+    await user.click(within(thresholds).getByRole('button', { name: 'Добавить порог' }))
+    expect(within(thresholds).getByLabelText('Ступень 3: нижняя граница')).toHaveValue('251')
+    expect(within(thresholds).getByLabelText('Ступень 3: верхняя граница')).toHaveValue('350')
+    expect(within(thresholds).getByLabelText('Сверх порога: нижняя граница')).toHaveValue('351')
 
     await user.click(tieredCheckbox)
     expect(within(editDialog).queryByRole('group', { name: 'Пороги тарификации выбранного тарифа' })).not.toBeInTheDocument()
@@ -7207,6 +7215,31 @@ describe('App', () => {
           accrualAmount: 5674,
           incomeAmount: 1000,
           debt: 4674,
+          calculationDetails: {
+            version: 1,
+            accountingMonth: '2026-06-01',
+            previousMeterValue: 68,
+            currentMeterValue: 86,
+            meterConsumption: 18,
+            requiresMeter: true,
+            volumeAllocationRule: 'Расход распределён пропорционально календарным дням.',
+            totalAmount: 5674,
+            lines: [{
+              effectiveFrom: '2026-06-01',
+              effectiveTo: '2026-06-15',
+              days: 15,
+              monthDays: 30,
+              calculationBase: 'meter_electricity',
+              calculationMode: 'metered',
+              unitName: 'кВт·ч',
+              rate: 630.4444,
+              quantity: 9,
+              amount: 5674,
+              tiers: [],
+              formula: '9 × 630,4444 = 5 674,00',
+              hasTariff: true,
+            }],
+          },
         },
       ],
     }))
@@ -7247,6 +7280,16 @@ describe('App', () => {
     expect(within(incomeTable).getByLabelText('Платеж Серверная электроэнергия июн.26')).toHaveValue('')
     expect(within(incomeTable).getByText('86')).toBeInTheDocument()
     expect(within(incomeTable).getByText('18.00')).toBeInTheDocument()
+    const calculationButton = within(incomeTable).getByRole('button', { name: 'Показать расчёт суммы Серверная электроэнергия июн.26' })
+    expect(calculationButton).toHaveAttribute('aria-expanded', 'false')
+    await user.click(calculationButton)
+    expect(calculationButton).toHaveAttribute('aria-expanded', 'true')
+    const calculation = within(incomeTable).getByRole('region', { name: 'Расчёт суммы Серверная электроэнергия июн.26' })
+    expect(calculation).toHaveTextContent('Показания: 68 → 86; расход 18')
+    expect(calculation).toHaveTextContent('01.06.2026–15.06.2026')
+    expect(calculation).toHaveTextContent('9 × 630,4444 = 5 674,00')
+    await user.click(calculationButton)
+    expect(within(incomeTable).queryByRole('region', { name: 'Расчёт суммы Серверная электроэнергия июн.26' })).not.toBeInTheDocument()
     expect(within(incomeTable).getAllByText('-4 674.00').length).toBeGreaterThan(0)
     const periodSummary = within(prototype).getByLabelText('Итоги периода поступлений')
     expect(periodSummary).toHaveTextContent('Баланс на начало')

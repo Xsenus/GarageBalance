@@ -4782,6 +4782,185 @@ public sealed class FinanceServiceTests
     }
 
     [Fact]
+    public async Task GenerateRegularCatalogAccrualsAsync_ProreratesFixedToMeteredTransitionAndExposesDetails()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        fixtures.IncomeType.Code = "mixed_service";
+        var fixedTariff = new Tariff
+        {
+            Name = "Охрана фиксированная",
+            CalculationBase = TariffCalculationBases.Fixed,
+            Rate = 310m,
+            EffectiveFrom = new DateOnly(2026, 8, 1)
+        };
+        var meteredTariff = new Tariff
+        {
+            Name = "Охрана по счётчику",
+            CalculationBase = TariffCalculationBases.MeterWater,
+            Rate = 10m,
+            EffectiveFrom = new DateOnly(2026, 8, 16)
+        };
+        var setting = new ChargeServiceSetting
+        {
+            Name = "Охрана",
+            IsRegular = true,
+            PeriodicityMonths = 1,
+            AccrualStartMonth = 1,
+            PaymentDueDay = 30,
+            OverdueGraceDays = 30,
+            IncomeType = fixtures.IncomeType,
+            IncomeTypeId = fixtures.IncomeType.Id,
+            Tariff = meteredTariff,
+            TariffId = meteredTariff.Id,
+            IsMetered = true,
+            MeterKind = MeterKinds.Water,
+            UnitName = "м³"
+        };
+        var reading = new MeterReading
+        {
+            Garage = fixtures.Garage,
+            GarageId = fixtures.Garage.Id,
+            MeterKind = MeterKinds.Water,
+            AccountingMonth = new DateOnly(2026, 8, 1),
+            ReadingDate = new DateOnly(2026, 8, 31),
+            PreviousValue = 100m,
+            CurrentValue = 131m,
+            Consumption = 31m
+        };
+        database.Context.AddRange(fixedTariff, meteredTariff, setting, reading);
+        database.Context.ChargeServiceTariffVersions.AddRange(
+            new ChargeServiceTariffVersion
+            {
+                ChargeServiceSetting = setting,
+                Tariff = fixedTariff,
+                EffectiveFrom = new DateOnly(2026, 8, 1),
+                EffectiveTo = new DateOnly(2026, 8, 15)
+            },
+            new ChargeServiceTariffVersion
+            {
+                ChargeServiceSetting = setting,
+                Tariff = meteredTariff,
+                EffectiveFrom = new DateOnly(2026, 8, 16)
+            });
+        await database.Context.SaveChangesAsync();
+        var service = FinanceServiceTestFactory.Create(database.Context);
+
+        var generated = await service.GenerateRegularCatalogAccrualsAsync(
+            new GenerateRegularCatalogAccrualsRequest(new DateOnly(2026, 8, 1), null),
+            Guid.NewGuid(),
+            CancellationToken.None);
+        var worksheet = await service.GetGarageIncomeWorksheetAsync(
+            fixtures.Garage.Id,
+            new GarageIncomeWorksheetRequest(new DateOnly(2026, 8, 1), new DateOnly(2026, 8, 1)),
+            CancellationToken.None);
+
+        Assert.True(generated.Succeeded, generated.ErrorMessage);
+        var accrual = Assert.Single(database.Context.Accruals);
+        Assert.Equal(310m, accrual.Amount);
+        Assert.True(accrual.RequiresMeterReading);
+        Assert.Equal(MeterKinds.Water, accrual.CalculationMeterKind);
+        Assert.NotNull(accrual.CalculationDetailsJson);
+        Assert.True(worksheet.Succeeded, worksheet.ErrorMessage);
+        var row = Assert.Single(worksheet.Value!.Rows);
+        Assert.Equal(310m, row.PayableAmount);
+        Assert.NotNull(row.CalculationDetails);
+        Assert.Collection(
+            row.CalculationDetails!.Lines,
+            line =>
+            {
+                Assert.Equal("fixed", line.CalculationMode);
+                Assert.Equal(150m, line.Amount);
+            },
+            line =>
+            {
+                Assert.Equal("metered", line.CalculationMode);
+                Assert.Equal(16m, line.Quantity);
+                Assert.Equal(160m, line.Amount);
+            });
+    }
+
+    [Fact]
+    public async Task GenerateRegularCatalogAccrualsAsync_CreatesPartialAccrualWhenFirstTariffStartsMidMonth()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        fixtures.IncomeType.Code = "partial_metered_service";
+        var meteredTariff = new Tariff
+        {
+            Name = "Счётчик со второй половины месяца",
+            CalculationBase = TariffCalculationBases.MeterWater,
+            Rate = 10m,
+            EffectiveFrom = new DateOnly(2026, 8, 16)
+        };
+        var setting = new ChargeServiceSetting
+        {
+            Name = "Частичная услуга",
+            IsRegular = true,
+            PeriodicityMonths = 1,
+            AccrualStartMonth = 1,
+            PaymentDueDay = 30,
+            OverdueGraceDays = 30,
+            IncomeType = fixtures.IncomeType,
+            IncomeTypeId = fixtures.IncomeType.Id,
+            IsMetered = true,
+            MeterKind = MeterKinds.Water,
+            UnitName = "м³"
+        };
+        database.Context.AddRange(
+            meteredTariff,
+            setting,
+            new MeterReading
+            {
+                Garage = fixtures.Garage,
+                GarageId = fixtures.Garage.Id,
+                MeterKind = MeterKinds.Water,
+                AccountingMonth = new DateOnly(2026, 8, 1),
+                ReadingDate = new DateOnly(2026, 8, 31),
+                PreviousValue = 50m,
+                CurrentValue = 81m,
+                Consumption = 31m
+            });
+        database.Context.ChargeServiceTariffVersions.Add(
+            new ChargeServiceTariffVersion
+            {
+                ChargeServiceSetting = setting,
+                Tariff = meteredTariff,
+                EffectiveFrom = new DateOnly(2026, 8, 16)
+            });
+        await database.Context.SaveChangesAsync();
+        var service = FinanceServiceTestFactory.Create(database.Context);
+
+        var generated = await service.GenerateRegularCatalogAccrualsAsync(
+            new GenerateRegularCatalogAccrualsRequest(new DateOnly(2026, 8, 1), null),
+            Guid.NewGuid(),
+            CancellationToken.None);
+
+        Assert.True(generated.Succeeded, generated.ErrorMessage);
+        var accrual = Assert.Single(database.Context.Accruals);
+        Assert.Equal(160m, accrual.Amount);
+        var details = RegularAccrualCalculator.Deserialize(accrual.CalculationDetailsJson);
+        Assert.NotNull(details);
+        Assert.Collection(
+            details!.Lines,
+            line =>
+            {
+                Assert.False(line.HasTariff);
+                Assert.Equal(new DateOnly(2026, 8, 1), line.EffectiveFrom);
+                Assert.Equal(new DateOnly(2026, 8, 15), line.EffectiveTo);
+                Assert.Equal(0m, line.Amount);
+            },
+            line =>
+            {
+                Assert.True(line.HasTariff);
+                Assert.Equal(new DateOnly(2026, 8, 16), line.EffectiveFrom);
+                Assert.Equal(new DateOnly(2026, 8, 31), line.EffectiveTo);
+                Assert.Equal(16m, line.Quantity);
+                Assert.Equal(160m, line.Amount);
+            });
+    }
+
+    [Fact]
     public async Task MeteredTariffHistory_AccruesAllocatesPaymentsAndRoutesIncomeToFund()
     {
         await using var database = await TestDatabase.CreateAsync();

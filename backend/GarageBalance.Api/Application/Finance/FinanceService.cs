@@ -450,6 +450,11 @@ public sealed class FinanceService(
 
         var accrualLookup = worksheetData.AccrualBuckets.ToDictionary(
             bucket => (bucket.AccountingMonth, bucket.IncomeTypeId, bucket.IncomeTypeName));
+        var calculationLookup = (worksheetData.Calculations ?? [])
+            .GroupBy(item => (item.AccountingMonth, item.IncomeTypeId, item.IncomeTypeName))
+            .ToDictionary(
+                group => group.Key,
+                group => RegularAccrualCalculator.Deserialize(group.First().CalculationDetailsJson));
         var appliedIncomeLookup = worksheetData.Allocations
             .Where(allocation =>
                 !annualAccrualIds.Contains(allocation.AccrualId) &&
@@ -533,7 +538,8 @@ public sealed class FinanceService(
                 advanceAmount,
                 debt,
                 IrregularPaymentId: key.IrregularPaymentId,
-                IrregularPaymentRemainingAmount: key.IrregularPaymentId.HasValue ? debt : null);
+                IrregularPaymentRemainingAmount: key.IrregularPaymentId.HasValue ? debt : null,
+                CalculationDetails: calculationLookup.GetValueOrDefault((key.AccountingMonth, key.IncomeTypeId, key.IncomeTypeName)));
         }).ToList();
 
         foreach (var annualAccrual in worksheetData.AnnualAccruals)
@@ -3353,16 +3359,9 @@ public sealed class FinanceService(
             return FinanceResult<RegularAccrualGenerationResultDto>.Failure("tariff_not_found", "Тариф для регулярного начисления не найден.");
         }
 
-        if (tariff.EffectiveFrom > month)
+        if (tariff.EffectiveFrom > month.AddMonths(1).AddDays(-1))
         {
             return FinanceResult<RegularAccrualGenerationResultDto>.Failure("tariff_not_effective", "Тариф еще не действует в выбранном месяце.");
-        }
-
-        if (!IsIncomeTypeCompatibleWithTariff(incomeType.Code, tariff.CalculationBase))
-        {
-            return FinanceResult<RegularAccrualGenerationResultDto>.Failure(
-                "regular_accrual_tariff_mismatch",
-                "Выбранный тариф не подходит для этого вида регулярного начисления.");
         }
 
         var matchingSetting = SelectChargeServiceSettingForDueDates(
@@ -3371,7 +3370,15 @@ public sealed class FinanceService(
                 tariff.Id,
                 cancellationToken),
             month);
-        var useTieredElectricity = matchingSetting?.HasTieredTariff ?? ReadElectricityTiers(tariff).Count >= 2;
+        if (matchingSetting is null && !IsIncomeTypeCompatibleWithTariff(incomeType.Code, tariff.CalculationBase))
+        {
+            return FinanceResult<RegularAccrualGenerationResultDto>.Failure(
+                "regular_accrual_tariff_mismatch",
+                "Выбранный тариф не подходит для этого вида регулярного начисления.");
+        }
+
+        var calculationSegments = BuildRegularAccrualSegments(month, matchingSetting, tariff);
+        var useTieredElectricity = calculationSegments.Any(segment => segment.Tiers.Count > 0);
         var dueDates = AccrualDueDates.ForIncomeType(month, incomeType.Code, matchingSetting);
         var accountingYear = AnnualAccrualPolicy.ResolveAccountingYear(incomeType.Code, month);
         await using var generationLock = await accrualPaymentAllocationRepository.AcquireRebuildLockAsync(
@@ -3417,9 +3424,12 @@ public sealed class FinanceService(
             .Where(garage => !existingGarageIds.Contains(garage.Id))
             .Select(garage => garage.Id)
             .ToArray();
-        var meterKind = matchingSetting is { IsMetered: true } && MeterKinds.IsValid(matchingSetting.MeterKind)
-            ? matchingSetting.MeterKind
-            : tariff.CalculationBase switch
+        var meteredCalculationBase = calculationSegments
+            .Select(segment => segment.CalculationBase)
+            .FirstOrDefault(calculationBase => calculationBase is TariffCalculationBases.MeterWater or TariffCalculationBases.MeterElectricity);
+        var meterKind = meteredCalculationBase is not null && MeterKinds.IsValid(matchingSetting?.MeterKind)
+            ? matchingSetting!.MeterKind!
+            : meteredCalculationBase switch
             {
                 TariffCalculationBases.MeterWater => MeterKinds.Water,
                 TariffCalculationBases.MeterElectricity => MeterKinds.Electricity,
@@ -3441,14 +3451,14 @@ public sealed class FinanceService(
             }
 
             meterReadings.TryGetValue(garage.Id, out var meterReading);
-            var amountResult = CalculateRegularAccrualAmount(garage, tariff, meterReading, useTieredElectricity);
+            var amountResult = RegularAccrualCalculator.Calculate(garage, month, meterReading, calculationSegments);
             if (!amountResult.Succeeded)
             {
                 skipped.Add($"Гараж {garage.Number}: {amountResult.ErrorMessage}");
                 continue;
             }
 
-            var amount = amountResult.Value;
+            var amount = amountResult.Amount;
             if (amount <= 0)
             {
                 skipped.Add($"Гараж {garage.Number}: сумма начисления равна нулю.");
@@ -3468,6 +3478,9 @@ public sealed class FinanceService(
                 DueDate = dueDates.DueDate,
                 OverdueFromDate = dueDates.OverdueFromDate,
                 Amount = amount,
+                RequiresMeterReading = amountResult.Details!.RequiresMeter,
+                CalculationMeterKind = amountResult.Details.RequiresMeter ? meterKind : null,
+                CalculationDetailsJson = RegularAccrualCalculator.Serialize(amountResult.Details),
                 Source = AccrualSources.Regular,
                 Comment = BuildRegularAccrualComment(tariff, request.Comment, useTieredElectricity)
             };
@@ -3550,7 +3563,8 @@ public sealed class FinanceService(
                 continue;
             }
 
-            if (!setting.IncomeTypeId.HasValue || !setting.TariffId.HasValue)
+            var tariff = SelectTariffForMonth(setting, month);
+            if (!setting.IncomeTypeId.HasValue || tariff is null)
             {
                 skippedServices.Add($"{setting.Name}: не указан вид начисления или тариф.");
                 continue;
@@ -3558,7 +3572,7 @@ public sealed class FinanceService(
 
             var comment = BuildRegularCatalogAccrualComment(setting.Name, request.Comment);
             var serviceResult = await GenerateRegularAccrualsAsync(
-                new GenerateRegularAccrualsRequest(setting.IncomeTypeId.Value, setting.TariffId.Value, month, comment),
+                new GenerateRegularAccrualsRequest(setting.IncomeTypeId.Value, tariff.Id, month, comment),
                 actorUserId,
                 cancellationToken);
             if (!serviceResult.Succeeded)
@@ -5172,6 +5186,7 @@ public sealed class FinanceService(
         foreach (var accrual in accruals)
         {
             decimal? newAmount = null;
+            AccrualCalculationDetailsDto? newDetails = null;
             if (missingReadingMonth.HasValue && accrual.AccountingMonth == missingReadingMonth.Value)
             {
                 newAmount = 0m;
@@ -5190,20 +5205,24 @@ public sealed class FinanceService(
                     Consumption = change.Consumption,
                     HasGapWarning = change.HasGapWarning
                 };
-                var calculation = CalculateRegularAccrualAmount(
-                    change.Reading.Garage,
-                    accrual.Tariff!,
-                    prospectiveReading,
-                    UsesTieredElectricitySnapshot(accrual));
+                var previousDetails = RegularAccrualCalculator.Deserialize(accrual.CalculationDetailsJson);
+                var calculation = previousDetails is null
+                    ? CalculateLegacyRegularAccrual(change.Reading.Garage, accrual, prospectiveReading)
+                    : RegularAccrualCalculator.Calculate(
+                        change.Reading.Garage,
+                        accrual.AccountingMonth,
+                        prospectiveReading,
+                        RegularAccrualCalculator.FromSnapshot(previousDetails));
                 if (calculation.Succeeded)
                 {
-                    newAmount = calculation.Value;
+                    newAmount = calculation.Amount;
+                    newDetails = calculation.Details;
                 }
             }
 
-            if (newAmount.HasValue && accrual.Amount != newAmount.Value)
+            if (newAmount.HasValue && (accrual.Amount != newAmount.Value || newDetails is not null))
             {
-                recalculations.Add(new MeteredAccrualRecalculation(accrual, newAmount.Value));
+                recalculations.Add(new MeteredAccrualRecalculation(accrual, newAmount.Value, newDetails));
             }
         }
 
@@ -5257,6 +5276,11 @@ public sealed class FinanceService(
             var before = AccrualAuditSnapshot.From(accrual);
             var oldAmount = accrual.Amount;
             accrual.Amount = recalculation.NewAmount;
+            if (recalculation.Details is not null)
+            {
+                accrual.CalculationDetailsJson = RegularAccrualCalculator.Serialize(recalculation.Details);
+                accrual.RequiresMeterReading = recalculation.Details.RequiresMeter;
+            }
             accrual.UpdatedAtUtc = timeProvider.GetUtcNow();
             AddAudit(
                 actorUserId,
@@ -5284,6 +5308,145 @@ public sealed class FinanceService(
             _ => AmountCalculationResult.Failure($"неподдерживаемая база расчета {tariff.CalculationBase}.")
         };
     }
+
+    private static RegularAccrualCalculationResult CalculateLegacyRegularAccrual(
+        Garage garage,
+        Accrual accrual,
+        MeterReading meterReading)
+    {
+        var tariff = accrual.Tariff!;
+        var segment = CreateTariffSegment(
+            accrual.AccountingMonth,
+            accrual.AccountingMonth.AddMonths(1).AddDays(-1),
+            tariff,
+            TariffCalculationBases.GetUnitName(tariff.CalculationBase),
+            UsesTieredElectricitySnapshot(accrual));
+
+        return RegularAccrualCalculator.Calculate(garage, accrual.AccountingMonth, meterReading, [segment]);
+    }
+
+    private static IReadOnlyList<RegularAccrualSegmentDefinition> BuildRegularAccrualSegments(
+        DateOnly accountingMonth,
+        ChargeServiceSetting? setting,
+        Tariff fallbackTariff)
+    {
+        var month = MonthPeriod.Normalize(accountingMonth);
+        var monthEnd = month.AddMonths(1).AddDays(-1);
+        var versions = setting?.TariffVersions
+            .Where(version =>
+                !version.IsArchived &&
+                !version.Tariff.IsArchived &&
+                version.EffectiveFrom <= monthEnd &&
+                (!version.EffectiveTo.HasValue || version.EffectiveTo.Value >= month))
+            .OrderBy(version => version.EffectiveFrom)
+            .ToList() ?? [];
+        if (versions.Count == 0)
+        {
+            var effectiveFrom = fallbackTariff.EffectiveFrom > month ? fallbackTariff.EffectiveFrom : month;
+            if (effectiveFrom > monthEnd)
+            {
+                return [CreateMissingTariffSegment(month, monthEnd, setting?.UnitName)];
+            }
+
+            var result = new List<RegularAccrualSegmentDefinition>();
+            if (effectiveFrom > month)
+            {
+                result.Add(CreateMissingTariffSegment(month, effectiveFrom.AddDays(-1), setting?.UnitName));
+            }
+
+            result.Add(CreateTariffSegment(
+                effectiveFrom,
+                monthEnd,
+                fallbackTariff,
+                setting?.UnitName,
+                setting?.HasTieredTariff ?? ReadElectricityTiers(fallbackTariff).Count >= 2));
+            return result;
+        }
+
+        var segments = new List<RegularAccrualSegmentDefinition>();
+        var cursor = month;
+        for (var index = 0; index < versions.Count; index++)
+        {
+            var version = versions[index];
+            var nextVersionStart = index + 1 < versions.Count ? versions[index + 1].EffectiveFrom : (DateOnly?)null;
+            var from = version.EffectiveFrom < month ? month : version.EffectiveFrom;
+            var implicitTo = nextVersionStart?.AddDays(-1);
+            var configuredTo = version.EffectiveTo;
+            var to = configuredTo.HasValue && implicitTo.HasValue
+                ? (configuredTo.Value < implicitTo.Value ? configuredTo.Value : implicitTo.Value)
+                : configuredTo ?? implicitTo ?? monthEnd;
+            if (to > monthEnd)
+            {
+                to = monthEnd;
+            }
+            if (from > cursor)
+            {
+                segments.Add(CreateMissingTariffSegment(cursor, from.AddDays(-1), setting?.UnitName));
+            }
+
+            if (to >= cursor)
+            {
+                var effectiveSegmentFrom = from < cursor ? cursor : from;
+                segments.Add(CreateTariffSegment(
+                    effectiveSegmentFrom,
+                    to,
+                    version.Tariff,
+                    setting?.UnitName,
+                    version.Tariff.Id == setting?.TariffId
+                        ? setting.HasTieredTariff
+                        : ReadElectricityTiers(version.Tariff).Count >= 2));
+                cursor = to.AddDays(1);
+            }
+        }
+
+        if (cursor <= monthEnd)
+        {
+            segments.Add(CreateMissingTariffSegment(cursor, monthEnd, setting?.UnitName));
+        }
+
+        return segments;
+    }
+
+    private static Tariff? SelectTariffForMonth(ChargeServiceSetting setting, DateOnly accountingMonth)
+    {
+        var month = MonthPeriod.Normalize(accountingMonth);
+        var monthEnd = month.AddMonths(1).AddDays(-1);
+        return setting.Tariff
+            ?? setting.TariffVersions
+                .Where(version =>
+                    !version.IsArchived &&
+                    !version.Tariff.IsArchived &&
+                    version.EffectiveFrom <= monthEnd &&
+                    (!version.EffectiveTo.HasValue || version.EffectiveTo.Value >= month))
+                .OrderBy(version => version.EffectiveFrom)
+                .Select(version => version.Tariff)
+                .FirstOrDefault();
+    }
+
+    private static RegularAccrualSegmentDefinition CreateTariffSegment(
+        DateOnly from,
+        DateOnly to,
+        Tariff tariff,
+        string? configuredUnitName,
+        bool includeTiers)
+    {
+        var tiers = ReadElectricityTiers(tariff)
+            .Select(tier => new RegularAccrualTariffTier(tier.UpperBound, tier.Rate))
+            .ToArray();
+        return new RegularAccrualSegmentDefinition(
+            from,
+            to,
+            tariff.CalculationBase,
+            tariff.Rate,
+            NormalizeOptional(configuredUnitName) ?? TariffCalculationBases.GetUnitName(tariff.CalculationBase),
+            includeTiers && tiers.Length >= 2 ? tiers : []);
+    }
+
+    private static RegularAccrualSegmentDefinition CreateMissingTariffSegment(
+        DateOnly from,
+        DateOnly to,
+        string? configuredUnitName) =>
+        new(from, to, null, 0m, NormalizeOptional(configuredUnitName) ?? string.Empty, []);
 
     private static string BuildRegularAccrualComment(Tariff tariff, string? comment, bool useTieredElectricity = true)
     {
@@ -5678,8 +5841,8 @@ public sealed class FinanceService(
         foreach (var setting in settings)
         {
             var incomeType = setting.IncomeType;
-            var tariff = setting.Tariff;
-            if (incomeType is null || tariff is null || !setting.IncomeTypeId.HasValue || !setting.TariffId.HasValue)
+            var tariff = SelectTariffForMonth(setting, reading.AccountingMonth);
+            if (incomeType is null || tariff is null || !setting.IncomeTypeId.HasValue)
             {
                 continue;
             }
@@ -5701,9 +5864,14 @@ public sealed class FinanceService(
                 continue;
             }
 
-            var useTieredTariff = setting.HasTieredTariff;
-            var calculation = CalculateRegularAccrualAmount(garage, tariff, reading, useTieredTariff);
-            if (!calculation.Succeeded || calculation.Value <= 0m)
+            var calculationSegments = BuildRegularAccrualSegments(reading.AccountingMonth, setting, tariff);
+            var useTieredTariff = calculationSegments.Any(segment => segment.Tiers.Count > 0);
+            var calculation = RegularAccrualCalculator.Calculate(
+                garage,
+                reading.AccountingMonth,
+                reading,
+                calculationSegments);
+            if (!calculation.Succeeded || calculation.Amount <= 0m)
             {
                 continue;
             }
@@ -5720,7 +5888,10 @@ public sealed class FinanceService(
                 AccountingMonth = reading.AccountingMonth,
                 DueDate = dueDates.DueDate,
                 OverdueFromDate = dueDates.OverdueFromDate,
-                Amount = calculation.Value,
+                Amount = calculation.Amount,
+                RequiresMeterReading = calculation.Details!.RequiresMeter,
+                CalculationMeterKind = calculation.Details.RequiresMeter ? reading.MeterKind : null,
+                CalculationDetailsJson = RegularAccrualCalculator.Serialize(calculation.Details),
                 Source = AccrualSources.Regular,
                 Comment = BuildRegularAccrualComment(
                     tariff,
@@ -6658,7 +6829,10 @@ public sealed class FinanceService(
         bool HasGapWarning,
         bool Changed);
 
-    private sealed record MeteredAccrualRecalculation(Accrual Accrual, decimal NewAmount);
+    private sealed record MeteredAccrualRecalculation(
+        Accrual Accrual,
+        decimal NewAmount,
+        AccrualCalculationDetailsDto? Details);
 
     private sealed record AccrualAuditSnapshot(
         string GarageNumber,

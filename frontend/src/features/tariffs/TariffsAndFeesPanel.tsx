@@ -192,7 +192,7 @@ function getElectricityTierLowerBound(rows: ContractorTariffRow[], rowId: string
   const sourceRow = rows.find((row) => row.id === rowId)
   const thresholdRows = getElectricityThresholdRows(rows, sourceRow)
   const rowIndex = thresholdRows.findIndex((row) => row.id === rowId)
-  return rowIndex <= 0 ? 0 : thresholdRows[rowIndex - 1].electricityUpperBound ?? 0
+  return rowIndex <= 0 ? 0 : (thresholdRows[rowIndex - 1].electricityUpperBound ?? -1) + 1
 }
 
 function formatElectricityTierName(lowerBound: number, upperBound: number | null | undefined) {
@@ -210,7 +210,7 @@ function normalizeElectricityTierNames(rows: ContractorTariffRow[]) {
     groups.set(key, [...(groups.get(key) ?? []), row])
   })
   groups.forEach((thresholdRows) => thresholdRows.forEach((row, index) => {
-    lowerBounds.set(row.id, index === 0 ? 0 : thresholdRows[index - 1].electricityUpperBound ?? 0)
+    lowerBounds.set(row.id, index === 0 ? 0 : (thresholdRows[index - 1].electricityUpperBound ?? -1) + 1)
   }))
   return rows.map((row) => row.threshold
     ? { ...row, title: formatElectricityTierName(lowerBounds.get(row.id) ?? 0, row.electricityUpperBound) }
@@ -2103,11 +2103,11 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
 
     const thresholdRows = getElectricityThresholdRows(tariffRows, row)
     const rowIndex = thresholdRows.findIndex((candidate) => candidate.id === row.id)
-    const lowerBound = rowIndex <= 0 ? 0 : thresholdRows[rowIndex - 1].electricityUpperBound ?? 0
+    const lowerBound = getElectricityTierLowerBound(tariffRows, row.id)
     const nextUpperBound = parseTariffAmount(tariffDrafts[row.id]?.electricityUpperBoundText ?? '')
     const followingUpperBound = thresholdRows[rowIndex + 1]?.electricityUpperBound
-    const error = nextUpperBound == null || nextUpperBound <= lowerBound
-      ? `Значение «До» должно быть больше ${formatTariffDecimal(lowerBound)} ${row.unit}.`
+    const error = nextUpperBound == null || nextUpperBound < lowerBound
+      ? `Значение «До» должно быть не меньше ${formatTariffDecimal(lowerBound)} ${row.unit}.`
       : followingUpperBound != null && nextUpperBound >= followingUpperBound
         ? `Значение «До» должно быть меньше ${formatTariffDecimal(followingUpperBound)} ${row.unit}.`
         : null
@@ -2186,8 +2186,11 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
       .map((row) => row.electricityUpperBound)
       .filter((value): value is number => value != null)
       .at(-1) ?? 0
-    if (upperBound == null || upperBound <= previousUpperBound) {
-      setThresholdCreateError(`Верхняя граница должна быть больше ${formatTariffDecimal(previousUpperBound)} ${thresholdCreateTarget.unit ?? ''}.`)
+    const nextLowerBound = electricityThresholdRows.some((row) => row.electricityUpperBound != null)
+      ? previousUpperBound + 1
+      : 0
+    if (upperBound == null || upperBound < nextLowerBound) {
+      setThresholdCreateError(`Верхняя граница должна быть не меньше ${formatTariffDecimal(nextLowerBound)} ${thresholdCreateTarget.unit ?? ''}.`)
       return
     }
     if (rate == null) {
@@ -2202,7 +2205,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
     const nextRow: ContractorTariffRow = {
       id: `tariff-tier-custom-${lastRow.backendTariffId}-${electricityThresholdRows.length}-${upperBound}`,
       category: thresholdCreateTarget.category,
-      title: formatElectricityTierName(previousUpperBound, upperBound),
+      title: formatElectricityTierName(nextLowerBound, upperBound),
       threshold: 'x',
       amount: formatTariffDecimal(rate),
       unit: lastRow.unit,
@@ -2963,7 +2966,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
                   <MeterReadingInput
                     aria-label="Нижняя граница нового порога"
                     disabled
-                    value={formatTariffNumber(getElectricityThresholdRows(tariffRows, thresholdCreateTarget ?? undefined).map((row) => row.electricityUpperBound).filter((value): value is number => value != null).at(-1) ?? 0)}
+                    value={formatTariffNumber((getElectricityThresholdRows(tariffRows, thresholdCreateTarget ?? undefined).map((row) => row.electricityUpperBound).filter((value): value is number => value != null).at(-1) ?? -1) + 1)}
                   />
                 </FormField>
                 <FormField label={`До, ${thresholdCreateTarget?.unit ?? 'ед.'}`}>
@@ -3483,6 +3486,14 @@ export function AddServicePrototypeDialog({
           setError('Для пороговой тарификации укажите минимум один порог и последнюю ступень без верхней границы.')
           return
         }
+        for (let index = 0; index < tariffTiers.length - 1; index += 1) {
+          const upperBound = tariffTiers[index].upperBound
+          const lowerBound = index === 0 ? 0 : (tariffTiers[index - 1].upperBound ?? -1) + 1
+          if (upperBound == null || !Number.isFinite(upperBound) || upperBound < lowerBound) {
+            setError(`В ступени ${index + 1} укажите верхнюю границу не меньше ${lowerBound}.`)
+            return
+          }
+        }
       }
 
       if (parsedPeriodicity !== 1 && parsedPeriodicity !== 12) {
@@ -3822,31 +3833,51 @@ export function AddServicePrototypeDialog({
                   </div>
                   {tariffTiers.length > 0 ? (
                     <div className="contractors-threshold-grid" role="group" aria-label="Пороги тарификации выбранного тарифа">
-                      {tariffTiers.map((tier, index) => (
-                        <Fragment key={tier.id}>
-                          <MeterReadingInput
-                            aria-label={`${tier.name}: верхняя граница`}
-                            value={tier.upperBound ?? ''}
-                            placeholder="Без верхней границы"
-                            disabled={index === tariffTiers.length - 1}
-                            onChange={(event) => {
-                              const nextValue = event.target.value === '' ? null : Number(event.target.value)
-                              setTariffTiers((current) => current.map((item) => item.id === tier.id
-                                ? { ...item, upperBound: Number.isFinite(nextValue) ? nextValue : null }
-                                : item))
-                            }}
-                          />
-                          <span className="contractors-date-suffix">{unitName}</span>
-                          <MoneyInput
-                            aria-label={`${tier.name}: цена за единицу`}
-                            value={tier.rate}
-                            onValueChange={(parsedRate) => {
-                              setTariffTiers((current) => current.map((item) => item.id === tier.id
-                                ? { ...item, rate: parsedRate }
-                                : item))
-                            }}
-                          />
-                          <span className="contractors-date-suffix">руб.</span>
+                      {tariffTiers.map((tier, index) => {
+                        const lowerBound = index === 0 ? 0 : (tariffTiers[index - 1]?.upperBound ?? 0) + 1
+                        return (
+                        <div className="contractors-threshold-row" key={tier.id}>
+                          <label>
+                            <span>От</span>
+                            <MeterReadingInput
+                              aria-label={`${tier.name}: нижняя граница`}
+                              value={lowerBound}
+                              disabled
+                            />
+                          </label>
+                          <label>
+                            <span>До</span>
+                            <div className="contractors-threshold-with-unit">
+                              <MeterReadingInput
+                                aria-label={`${tier.name}: верхняя граница`}
+                                value={tier.upperBound ?? ''}
+                                placeholder="Без верхней границы"
+                                disabled={index === tariffTiers.length - 1}
+                                onChange={(event) => {
+                                  const nextValue = event.target.value === '' ? null : Number(event.target.value)
+                                  setTariffTiers((current) => current.map((item) => item.id === tier.id
+                                    ? { ...item, upperBound: Number.isFinite(nextValue) ? nextValue : null }
+                                    : item))
+                                }}
+                              />
+                              <span>{unitName}</span>
+                            </div>
+                          </label>
+                          <label>
+                            <span>Тариф</span>
+                            <div className="contractors-threshold-with-unit">
+                              <MoneyInput
+                                aria-label={`${tier.name}: цена за единицу`}
+                                value={tier.rate}
+                                onValueChange={(parsedRate) => {
+                                  setTariffTiers((current) => current.map((item) => item.id === tier.id
+                                    ? { ...item, rate: parsedRate }
+                                    : item))
+                                }}
+                              />
+                              <span>руб.</span>
+                            </div>
+                          </label>
                           <button
                             className="icon-button danger-icon-button contractors-threshold-delete"
                             type="button"
@@ -3856,8 +3887,9 @@ export function AddServicePrototypeDialog({
                           >
                             <Trash2 size={16} />
                           </button>
-                        </Fragment>
-                      ))}
+                        </div>
+                        )
+                      })}
                       <button
                         className="ghost-button contractors-threshold-add"
                         type="button"

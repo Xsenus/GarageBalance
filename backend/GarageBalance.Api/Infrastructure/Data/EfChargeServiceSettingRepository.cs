@@ -34,6 +34,8 @@ public sealed class EfChargeServiceSettingRepository(GarageBalanceDbContext dbCo
     {
         var settings = await dbContext.ChargeServiceSettings.AsNoTracking()
             .Include(setting => setting.Tariff)
+            .Include(setting => setting.TariffVersions.Where(version => !version.IsArchived))
+                .ThenInclude(version => version.Tariff)
             .Where(setting => !setting.IsArchived && setting.IsRegular)
             .OrderBy(setting => setting.Name)
             .ToListAsync(cancellationToken);
@@ -65,6 +67,8 @@ public sealed class EfChargeServiceSettingRepository(GarageBalanceDbContext dbCo
         var settings = await dbContext.ChargeServiceSettings
             .Include(setting => setting.IncomeType)
             .Include(setting => setting.Tariff)
+            .Include(setting => setting.TariffVersions.Where(version => !version.IsArchived))
+                .ThenInclude(version => version.Tariff)
             .Where(setting =>
                 !setting.IsArchived &&
                 setting.IsRegular &&
@@ -74,7 +78,7 @@ public sealed class EfChargeServiceSettingRepository(GarageBalanceDbContext dbCo
                     .Where(version =>
                         version.ChargeServiceSettingId == setting.Id &&
                         !version.IsArchived &&
-                        version.EffectiveFrom <= accountingMonth &&
+                        version.EffectiveFrom <= accountingMonth.AddMonths(1).AddDays(-1) &&
                         (!version.EffectiveTo.HasValue || version.EffectiveTo.Value >= accountingMonth) &&
                         !version.Tariff.IsArchived)
                     .OrderByDescending(version => version.EffectiveFrom)
@@ -103,7 +107,15 @@ public sealed class EfChargeServiceSettingRepository(GarageBalanceDbContext dbCo
             };
         }
 
-        return settings.Where(setting => setting.IsMetered && setting.Tariff is not null).ToList();
+        var monthEnd = accountingMonth.AddMonths(1).AddDays(-1);
+        return settings.Where(setting =>
+            setting.TariffVersions.Any(version =>
+                !version.IsArchived &&
+                !version.Tariff.IsArchived &&
+                version.EffectiveFrom <= monthEnd &&
+                (!version.EffectiveTo.HasValue || version.EffectiveTo.Value >= accountingMonth) &&
+                version.Tariff.CalculationBase is TariffCalculationBases.MeterWater or TariffCalculationBases.MeterElectricity) ||
+            setting.TariffVersions.Count == 0 && setting.IsMetered && setting.Tariff is not null).ToList();
     }
 
     public async Task<IReadOnlyList<ChargeServiceSetting>> GetActiveRegularForDueDatesAsync(
@@ -112,6 +124,8 @@ public sealed class EfChargeServiceSettingRepository(GarageBalanceDbContext dbCo
         CancellationToken cancellationToken)
     {
         var settings = await dbContext.ChargeServiceSettings.AsNoTracking()
+            .Include(setting => setting.TariffVersions.Where(version => !version.IsArchived))
+                .ThenInclude(version => version.Tariff)
             .Where(setting =>
                 !setting.IsArchived &&
                 setting.IsRegular &&

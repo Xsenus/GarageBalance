@@ -23,6 +23,9 @@ public sealed class Accrual
     public bool DueDateNeedsReview { get; set; }
     public string? DueDateReviewReason { get; set; }
     public decimal Amount { get; set; }
+    public bool RequiresMeterReading { get; set; }
+    public string? CalculationMeterKind { get; set; }
+    public string? CalculationDetailsJson { get; set; }
     public required string Source { get; set; }
     public string? Comment { get; set; }
     public bool IsCanceled { get; set; }

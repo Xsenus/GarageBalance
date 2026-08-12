@@ -302,6 +302,43 @@ export type GarageIncomeWorksheetRowDto = {
   feeCampaignRemainingAmount?: number | null
   irregularPaymentId?: string | null
   irregularPaymentRemainingAmount?: number | null
+  calculationDetails?: AccrualCalculationDetailsDto | null
+}
+
+export type AccrualCalculationTierDto = {
+  from: number
+  to: number | null
+  quantity: number
+  rate: number
+  amount: number
+}
+
+export type AccrualCalculationLineDto = {
+  effectiveFrom: string
+  effectiveTo: string
+  days: number
+  monthDays: number
+  calculationBase: string | null
+  calculationMode: 'fixed' | 'people' | 'metered' | 'metered_tiered' | 'no_tariff' | string
+  unitName: string
+  rate: number
+  quantity: number
+  amount: number
+  tiers: AccrualCalculationTierDto[]
+  formula: string
+  hasTariff: boolean
+}
+
+export type AccrualCalculationDetailsDto = {
+  version: number
+  accountingMonth: string
+  previousMeterValue: number | null
+  currentMeterValue: number | null
+  meterConsumption: number | null
+  requiresMeter: boolean
+  volumeAllocationRule: string | null
+  lines: AccrualCalculationLineDto[]
+  totalAmount: number
 }
 
 export type GarageIncomeWorksheetDto = {

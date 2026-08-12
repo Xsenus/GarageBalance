@@ -568,6 +568,8 @@ public sealed class GarageBalanceDbContext(DbContextOptions<GarageBalanceDbConte
             entity.Property(accrual => accrual.Source).HasMaxLength(40).IsRequired();
             entity.Property(accrual => accrual.Basis).HasMaxLength(200);
             entity.Property(accrual => accrual.Comment).HasMaxLength(1000);
+            entity.Property(accrual => accrual.CalculationDetailsJson).HasColumnType("jsonb");
+            entity.Property(accrual => accrual.CalculationMeterKind).HasMaxLength(80);
             entity.HasIndex(accrual => accrual.AccountingMonth);
             entity.HasIndex(accrual => accrual.DueDate);
             entity.HasIndex(accrual => accrual.OverdueFromDate);
@@ -578,6 +580,7 @@ public sealed class GarageBalanceDbContext(DbContextOptions<GarageBalanceDbConte
             entity.HasIndex(accrual => accrual.IrregularPaymentId);
             entity.HasIndex(accrual => accrual.FeeCampaignId);
             entity.HasIndex(accrual => accrual.TariffId);
+            entity.HasIndex(accrual => new { accrual.GarageId, accrual.AccountingMonth, accrual.RequiresMeterReading });
             entity.HasIndex(accrual => new { accrual.GarageId, accrual.IncomeTypeId, accrual.AccountingYear, accrual.IsCanceled });
             entity.HasIndex(accrual => new { accrual.GarageId, accrual.IncomeTypeId, accrual.DueDate, accrual.CreatedAtUtc })
                 .HasFilter("\"IsCanceled\" = false AND \"DueDateNeedsReview\" = false");

@@ -1,6 +1,6 @@
 import { Fragment, useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
 import type { FormEvent, KeyboardEvent, MouseEvent, ReactNode } from 'react'
-import { Award, Banknote, Building2, FileText, Gavel, History, LoaderCircle, Pencil, RotateCcw, Save, Search, Trash2, UserRound, WalletCards, X } from 'lucide-react'
+import { Award, Banknote, Building2, CircleHelp, FileText, Gavel, History, LoaderCircle, Pencil, RotateCcw, Save, Search, Trash2, UserRound, WalletCards, X } from 'lucide-react'
 import type { AuthResponse } from '../../services/authApi'
 import type { AccountingTypeDto, DictionaryClient, GarageDto, IrregularPaymentDto, StaffMemberDto, SupplierDto, SupplierGroupDto } from '../../services/dictionariesApi'
 import type { AccrualDto, CreateAccrualRequest, CreateExpenseOperationRequest, CreateIncomeOperationRequest, CreateMeterReadingRequest, CreateSupplierAccrualRequest, ExpensePaymentSource, ExpensePaymentType, ExpenseWorksheetDto, FinanceClient, FinancePagedResult, FinanceSummaryDto, FinancialOperationDto, GarageOverdueDebtDto, GenerateSupplierGroupSalaryAccrualsRequest, MeterReadingDto, MissingMeterReadingDto, StaffSalaryAdjustmentType, SupplierAccrualDto } from '../../services/financeApi'
@@ -2997,6 +2997,7 @@ function PaymentsPrototypePanel({
   const [incomeWorksheetAvailableMonthFrom, setIncomeWorksheetAvailableMonthFrom] = useState(() => getPreviousMonthInputValue(getCurrentMonthInputValue()))
   const [incomeWorksheetAvailableMonthTo, setIncomeWorksheetAvailableMonthTo] = useState(() => getCurrentMonthInputValue())
   const [garageRows, setGarageRows] = useState<GarageIncomePrototypeRow[]>([])
+  const [expandedCalculationRowIds, setExpandedCalculationRowIds] = useState<Set<string>>(() => new Set())
   const [garageWorksheetSummary, setGarageWorksheetSummary] = useState<GarageIncomeWorksheetPeriodSummary | null>(null)
   const [expenseRows, setExpenseRows] = useState<PaymentPrototypeRow[]>([])
   const [expenseWorksheetMonthFrom, setExpenseWorksheetMonthFrom] = useState(() => getCurrentMonthInputValue())
@@ -4861,8 +4862,12 @@ function PaymentsPrototypePanel({
                           <td>{formatPaymentMoney(groupPaid)}</td>
                           <td className={groupBalance < 0 ? 'money-expense' : groupBalance > 0 ? 'money-income' : undefined}>{formatPaymentMoney(groupBalance)}</td>
                         </tr>
-                        {group.rows.map((row) => (
-                          <tr key={row.id}>
+                        {group.rows.map((row) => {
+                          const calculationExpanded = expandedCalculationRowIds.has(row.id)
+                          const calculationPanelId = `calculation-${row.id}`
+                          return (
+                          <Fragment key={row.id}>
+                          <tr>
                             <td />
                             <td>{row.service}</td>
                             <td className={row.meterRequired && row.meter === null ? 'payments-prototype-required-cell' : undefined}>
@@ -4907,7 +4912,29 @@ function PaymentsPrototypePanel({
                               ) : null}
                             </td>
                             <td>{formatPaymentMoney(row.difference ?? '')}</td>
-                            <td>{formatPaymentMoney(row.payable)}</td>
+                            <td>
+                              <div className="payments-prototype-payable">
+                                {row.calculationDetails ? (
+                                  <button
+                                    type="button"
+                                    className="icon-button payments-prototype-calculation-toggle"
+                                    aria-label={`${calculationExpanded ? 'Скрыть' : 'Показать'} расчёт суммы ${row.service} ${row.monthLabel}`}
+                                    aria-expanded={calculationExpanded}
+                                    aria-controls={calculationPanelId}
+                                    title="Как рассчитана сумма"
+                                    onClick={() => setExpandedCalculationRowIds((current) => {
+                                      const next = new Set(current)
+                                      if (next.has(row.id)) next.delete(row.id)
+                                      else next.add(row.id)
+                                      return next
+                                    })}
+                                  >
+                                    <CircleHelp size={15} aria-hidden="true" />
+                                  </button>
+                                ) : null}
+                                <span>{formatPaymentMoney(row.payable)}</span>
+                              </div>
+                            </td>
                             <td>
                               <div className="payments-prototype-payment-editor">
                                 <MoneyTextInput
@@ -4947,7 +4974,42 @@ function PaymentsPrototypePanel({
                               return <td className={balance < 0 ? 'money-expense' : balance > 0 ? 'money-income' : undefined}>{formatPaymentMoney(balance)}</td>
                             })()}
                           </tr>
-                        ))}
+                          {row.calculationDetails && calculationExpanded ? (
+                            <tr className="payments-prototype-calculation-row">
+                              <td colSpan={8}>
+                                <section id={calculationPanelId} className="payments-prototype-calculation" aria-label={`Расчёт суммы ${row.service} ${row.monthLabel}`}>
+                                  <div className="payments-prototype-calculation-heading">
+                                    <strong>Как рассчитано {formatPaymentMoney(row.calculationDetails.totalAmount)}</strong>
+                                    {row.calculationDetails.requiresMeter ? (
+                                      <span>Показания: {row.calculationDetails.previousMeterValue?.toLocaleString('ru-RU') ?? '—'} → {row.calculationDetails.currentMeterValue?.toLocaleString('ru-RU') ?? '—'}; расход {row.calculationDetails.meterConsumption?.toLocaleString('ru-RU') ?? '—'}</span>
+                                    ) : null}
+                                  </div>
+                                  {row.calculationDetails.volumeAllocationRule ? <p>{row.calculationDetails.volumeAllocationRule}</p> : null}
+                                  <div className="payments-prototype-calculation-lines">
+                                    {row.calculationDetails.lines.map((line, lineIndex) => (
+                                      <div className="payments-prototype-calculation-line" key={`${line.effectiveFrom}-${line.effectiveTo}-${lineIndex}`}>
+                                        <span>{formatDateOnly(line.effectiveFrom)}–{formatDateOnly(line.effectiveTo)}</span>
+                                        <span>{line.calculationMode === 'fixed' ? 'Фиксированный' : line.calculationMode === 'people' ? 'По количеству людей' : line.calculationMode === 'metered' ? 'По счётчику' : line.calculationMode === 'metered_tiered' ? 'По счётчику, пороги' : 'Без тарифа'}</span>
+                                        <span>{line.formula}</span>
+                                        {line.tiers.length > 0 ? (
+                                          <ul>
+                                            {line.tiers.map((tier, tierIndex) => (
+                                              <li key={`${tier.from}-${tier.to ?? 'max'}-${tierIndex}`}>
+                                                {tier.from.toLocaleString('ru-RU')}–{tier.to?.toLocaleString('ru-RU') ?? 'без верхней границы'} {line.unitName}: {tier.quantity.toLocaleString('ru-RU')} × {formatPaymentMoney(tier.rate)} = {formatPaymentMoney(tier.amount)}
+                                              </li>
+                                            ))}
+                                          </ul>
+                                        ) : null}
+                                      </div>
+                                    ))}
+                                  </div>
+                                </section>
+                              </td>
+                            </tr>
+                          ) : null}
+                          </Fragment>
+                          )
+                        })}
                       </Fragment>
                     )
                   })}
