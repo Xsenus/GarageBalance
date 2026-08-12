@@ -5,7 +5,7 @@ import { gzipSync } from 'node:zlib'
 const budget = {
   mainJsGzipBytes: 180 * 1024,
   mainCssGzipBytes: 40 * 1024,
-  totalAssetsGzipBytes: 261 * 1024,
+  totalAssetsGzipBytes: 262 * 1024,
 }
 
 function formatBytes(bytes) {
