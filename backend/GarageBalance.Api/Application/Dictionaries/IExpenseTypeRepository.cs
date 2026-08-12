@@ -8,6 +8,7 @@ public interface IExpenseTypeRepository
     Task<ExpenseTypePageData> GetPageAsync(string? normalizedSearch, bool includeArchived, int offset, int limit, CancellationToken cancellationToken);
     Task<ExpenseType?> FindActiveAsync(Guid id, CancellationToken cancellationToken);
     Task<ExpenseType?> FindActiveByCodeAsync(string code, CancellationToken cancellationToken);
+    Task<ExpenseType?> FindActiveByNameAsync(string name, CancellationToken cancellationToken);
     Task<ExpenseType?> FindArchivedAsync(Guid id, CancellationToken cancellationToken);
     Task<bool> ActiveDuplicateExistsAsync(Guid? ignoredId, string name, CancellationToken cancellationToken);
     Task<bool> ActiveCodeExistsAsync(Guid? ignoredId, string normalizedCode, CancellationToken cancellationToken);

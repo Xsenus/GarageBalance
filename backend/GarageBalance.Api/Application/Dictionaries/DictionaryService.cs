@@ -32,6 +32,7 @@ public sealed class DictionaryService(
 {
     private const string OtherIncomeIncomeTypeCode = "other_income";
     private const string ServiceIncomeTypeCodePrefix = "service_";
+    private const string SupplierServiceExpenseTypeCodePrefix = "supplier_service_";
     private static readonly DateOnly OpenTariffScheduleStart = new(1900, 1, 1);
     private static readonly IReadOnlyDictionary<string, string> DictionaryFieldLabels = new Dictionary<string, string>(StringComparer.Ordinal)
     {
@@ -687,16 +688,6 @@ public sealed class DictionaryService(
         {
             return DictionaryResult<SupplierDto>.Failure("charge_service_not_found", "Услуга из раздела тарифов не найдена.");
         }
-        var expenseType = request.ExpenseTypeId.HasValue
-            ? await expenseTypeRepository.FindActiveAsync(request.ExpenseTypeId.Value, cancellationToken)
-            : null;
-        if (request.ExpenseTypeId.HasValue && expenseType is null)
-        {
-            return DictionaryResult<SupplierDto>.Failure(
-                "supplier_expense_type_not_found",
-                "Статья расхода поставщика не найдена.");
-        }
-
         var expenseFund = request.ExpenseFundId.HasValue
             ? await fundRepository.FindFundForUpdateAsync(request.ExpenseFundId.Value, cancellationToken)
             : null;
@@ -706,11 +697,11 @@ public sealed class DictionaryService(
                 "supplier_expense_fund_not_found",
                 "Фонд расходования поставщика не найден или недоступен.");
         }
-        if (chargeService is not null && (expenseType is null || expenseFund is null))
+        if (chargeService is not null && expenseFund is null)
         {
             return DictionaryResult<SupplierDto>.Failure(
                 "supplier_expense_configuration_required",
-                "Для поставщика с услугой выберите статью расхода и фонд расходования.");
+                "Для поставщика с услугой выберите фонд расходования.");
         }
 
         var name = request.Name.Trim();
@@ -718,6 +709,18 @@ public sealed class DictionaryService(
         {
             return DictionaryResult<SupplierDto>.Failure("supplier_duplicate", "Активный поставщик с таким названием уже существует в выбранной группе.");
         }
+
+        var expenseTypeResult = await ResolveSupplierExpenseTypeAsync(
+            chargeService,
+            request.ExpenseTypeId,
+            currentExpenseType: null,
+            actorUserId,
+            cancellationToken);
+        if (!expenseTypeResult.Succeeded)
+        {
+            return DictionaryResult<SupplierDto>.Failure(expenseTypeResult.ErrorCode!, expenseTypeResult.ErrorMessage!);
+        }
+        var expenseType = expenseTypeResult.Value;
 
         var supplier = new Supplier
         {
@@ -770,18 +773,6 @@ public sealed class DictionaryService(
         {
             return DictionaryResult<SupplierDto>.Failure("charge_service_not_found", "Услуга из раздела тарифов не найдена.");
         }
-        var expenseType = request.ExpenseTypeId == supplier.ExpenseTypeId
-            ? supplier.ExpenseType
-            : request.ExpenseTypeId.HasValue
-                ? await expenseTypeRepository.FindActiveAsync(request.ExpenseTypeId.Value, cancellationToken)
-                : null;
-        if (request.ExpenseTypeId.HasValue && expenseType is null)
-        {
-            return DictionaryResult<SupplierDto>.Failure(
-                "supplier_expense_type_not_found",
-                "Статья расхода поставщика не найдена.");
-        }
-
         var expenseFund = request.ExpenseFundId == supplier.ExpenseFundId
             ? supplier.ExpenseFund
             : request.ExpenseFundId.HasValue
@@ -793,11 +784,11 @@ public sealed class DictionaryService(
                 "supplier_expense_fund_not_found",
                 "Фонд расходования поставщика не найден или недоступен.");
         }
-        if (chargeService is not null && (expenseType is null || expenseFund is null))
+        if (chargeService is not null && expenseFund is null)
         {
             return DictionaryResult<SupplierDto>.Failure(
                 "supplier_expense_configuration_required",
-                "Для поставщика с услугой выберите статью расхода и фонд расходования.");
+                "Для поставщика с услугой выберите фонд расходования.");
         }
 
         var name = request.Name.Trim();
@@ -818,14 +809,26 @@ public sealed class DictionaryService(
                 "Стартовый баланс поставщика нельзя менять после появления начислений или выплат. Оформите отдельную финансовую корректировку.");
         }
 
-        if (SupplierMatches(supplier, name, group.Id, chargeService?.Id, expenseType?.Id, expenseFund?.Id, inn, legalAddress, contactPerson, phone, email, startingBalance, comment))
-        {
-            return DictionaryResult<SupplierDto>.Success(await ToSupplierDtoWithDebtAsync(supplier, cancellationToken));
-        }
-
         if (await supplierRepository.ActiveDuplicateExistsAsync(id, group.Id, name, cancellationToken))
         {
             return DictionaryResult<SupplierDto>.Failure("supplier_duplicate", "Активный поставщик с таким названием уже существует в выбранной группе.");
+        }
+
+        var expenseTypeResult = await ResolveSupplierExpenseTypeAsync(
+            chargeService,
+            request.ExpenseTypeId,
+            supplier.ChargeServiceSettingId == chargeService?.Id ? supplier.ExpenseType : null,
+            actorUserId,
+            cancellationToken);
+        if (!expenseTypeResult.Succeeded)
+        {
+            return DictionaryResult<SupplierDto>.Failure(expenseTypeResult.ErrorCode!, expenseTypeResult.ErrorMessage!);
+        }
+        var expenseType = expenseTypeResult.Value;
+
+        if (SupplierMatches(supplier, name, group.Id, chargeService?.Id, expenseType?.Id, expenseFund?.Id, inn, legalAddress, contactPerson, phone, email, startingBalance, comment))
+        {
+            return DictionaryResult<SupplierDto>.Success(await ToSupplierDtoWithDebtAsync(supplier, cancellationToken));
         }
 
         var oldValues = new Dictionary<string, object?>
@@ -4416,6 +4419,58 @@ public sealed class DictionaryService(
             garage.InitialWaterMeterValue == initialWaterMeterValue &&
             garage.InitialElectricityMeterValue == initialElectricityMeterValue &&
             StringEquals(garage.Comment, comment);
+    }
+
+    private async Task<DictionaryResult<ExpenseType?>> ResolveSupplierExpenseTypeAsync(
+        ChargeServiceSetting? chargeService,
+        Guid? requestedExpenseTypeId,
+        ExpenseType? currentExpenseType,
+        Guid? actorUserId,
+        CancellationToken cancellationToken)
+    {
+        if (chargeService is null)
+        {
+            return DictionaryResult<ExpenseType?>.Success(null);
+        }
+
+        if (currentExpenseType is { IsArchived: false } &&
+            (!requestedExpenseTypeId.HasValue || requestedExpenseTypeId == currentExpenseType.Id))
+        {
+            return DictionaryResult<ExpenseType?>.Success(currentExpenseType);
+        }
+
+        if (requestedExpenseTypeId.HasValue)
+        {
+            var requested = await expenseTypeRepository.FindActiveAsync(requestedExpenseTypeId.Value, cancellationToken);
+            return requested is null
+                ? DictionaryResult<ExpenseType?>.Failure(
+                    "supplier_expense_type_not_found",
+                    "Внутренняя категория расхода поставщика не найдена.")
+                : DictionaryResult<ExpenseType?>.Success(requested);
+        }
+
+        var managedCode = $"{SupplierServiceExpenseTypeCodePrefix}{chargeService.Id:N}";
+        var existing = await expenseTypeRepository.FindActiveByCodeAsync(managedCode, cancellationToken)
+            ?? await expenseTypeRepository.FindActiveByNameAsync(chargeService.Name, cancellationToken);
+        if (existing is not null)
+        {
+            return DictionaryResult<ExpenseType?>.Success(existing);
+        }
+
+        var created = new ExpenseType
+        {
+            Name = chargeService.Name,
+            Code = managedCode,
+            IsSystem = true
+        };
+        expenseTypeRepository.Add(created);
+        AddAudit(
+            actorUserId,
+            "dictionary.supplier_expense_type_created",
+            "expense_type",
+            created.Id,
+            $"Для услуги {chargeService.Name} создана внутренняя категория расходов поставщиков.");
+        return DictionaryResult<ExpenseType?>.Success(created);
     }
 
     private static bool SupplierMatches(Supplier supplier, string name, Guid groupId, Guid? chargeServiceSettingId, Guid? expenseTypeId, Guid? expenseFundId, string? inn, string? legalAddress, string? contactPerson, string? phone, string? email, decimal startingBalance, string? comment)

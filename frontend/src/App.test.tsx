@@ -2139,11 +2139,11 @@ describe('App', () => {
           name: request.name,
           groupId: request.groupId,
           groupName: 'Коммунальные услуги',
-            chargeServiceSettingId: request.chargeServiceSettingId ?? null,
-            chargeServiceSettingName: request.chargeServiceSettingId ? 'Уборка территории' : null,
-            expenseTypeId: request.expenseTypeId ?? null,
-            expenseFundId: request.expenseFundId ?? null,
-            expenseFundName: request.expenseFundId === 'fund-water' ? 'Водоснабжение' : null,
+          chargeServiceSettingId: request.chargeServiceSettingId ?? null,
+          chargeServiceSettingName: request.chargeServiceSettingId ? 'Уборка территории' : null,
+          expenseTypeId: request.expenseTypeId ?? (request.chargeServiceSettingId ? 'expense-type-managed' : null),
+          expenseFundId: request.expenseFundId ?? null,
+          expenseFundName: request.expenseFundId === 'fund-water' ? 'Водоснабжение' : null,
           inn: request.inn ?? null,
           legalAddress: request.legalAddress ?? null,
           contactPerson: request.contactPerson ?? null,
@@ -2162,7 +2162,7 @@ describe('App', () => {
           groupName: 'Коммунальные услуги',
           chargeServiceSettingId: request.chargeServiceSettingId ?? null,
           chargeServiceSettingName: request.chargeServiceSettingId ? 'Уборка территории' : null,
-          expenseTypeId: request.expenseTypeId ?? null,
+          expenseTypeId: request.expenseTypeId ?? (request.chargeServiceSettingId ? 'expense-type-managed' : null),
           expenseFundId: request.expenseFundId ?? null,
           expenseFundName: request.expenseFundId === 'fund-water' ? 'Водоснабжение' : null,
           inn: request.inn ?? null,
@@ -2593,13 +2593,13 @@ describe('App', () => {
     expect(supplierServiceControl).toHaveClass('select-control__trigger')
     await user.click(supplierServiceControl)
     await user.click(within(within(supplierDialog).getByRole('listbox', { name: 'Услуга поставщика: варианты' })).getByRole('option', { name: 'Уборка территории' }))
-    const supplierExpenseTypeControl = within(supplierDialog).getByRole('combobox', { name: 'Статья расхода поставщика' })
-    await user.click(supplierExpenseTypeControl)
-    await user.click(within(supplierDialog).getByRole('option', { name: 'Электроэнергия' }))
+    expect(within(supplierDialog).queryByRole('combobox', { name: 'Статья расхода поставщика' })).not.toBeInTheDocument()
     const supplierExpenseFundControl = within(supplierDialog).getByRole('combobox', { name: 'Фонд расходования поставщика' })
     expect(supplierExpenseFundControl).toBeEnabled()
     expect(supplierExpenseFundControl).toHaveTextContent('Выберите фонд расходования')
     expect(within(supplierDialog).getByLabelText('Справка: Фонд расходования')).toHaveAccessibleDescription(/начислениях и банковских выплатах/i)
+    await user.click(within(supplierDialog).getByRole('button', { name: /Сохранить/i }))
+    expect(within(supplierDialog).getByRole('alert')).toHaveTextContent('Для поставщика с услугой выберите фонд расходования.')
     await user.click(supplierExpenseFundControl)
     await user.click(within(supplierDialog).getByRole('option', { name: 'Водоснабжение' }))
     expect(supplierExpenseFundControl).toHaveTextContent('Водоснабжение')
@@ -2631,7 +2631,7 @@ describe('App', () => {
     await waitFor(() => expect(within(within(contractorsPanel).getByRole('table', { name: 'Поставщики' })).getByText('Новый подрядчик')).toBeInTheDocument())
     expect(savedSupplierRequest).toMatchObject({
       chargeServiceSettingId: 'service-cleaning-created',
-      expenseTypeId: 'expense-type-1',
+      expenseTypeId: null,
       expenseFundId: 'fund-water',
       contactPerson: 'Смирнов С.С.',
       phone: '+7 (900) 111-22-33',

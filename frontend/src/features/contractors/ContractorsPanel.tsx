@@ -806,7 +806,6 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
   const [supplierGroups, setSupplierGroups] = useState<SupplierGroupDto[]>([])
   const [chargeServices, setChargeServices] = useState<ChargeServiceSettingDto[]>([])
   const [serviceIncomeTypes, setServiceIncomeTypes] = useState<AccountingTypeDto[]>([])
-  const [serviceExpenseTypes, setServiceExpenseTypes] = useState<AccountingTypeDto[]>([])
   const [serviceFunds, setServiceFunds] = useState<FundOptionDto[]>([])
   const [serviceTariffs, setServiceTariffs] = useState<TariffDto[]>([])
   const [serviceSaving, setServiceSaving] = useState(false)
@@ -1031,11 +1030,10 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
             }))
           }
         } else {
-          const [groups, loadedChargeServices, loadedIncomeTypes, loadedExpenseTypes, loadedTariffs, loadedFunds] = await Promise.all([
+          const [groups, loadedChargeServices, loadedIncomeTypes, loadedTariffs, loadedFunds] = await Promise.all([
             dictionaryClient.getSupplierGroups(auth.accessToken, undefined, contractorsDictionaryListLimit, true, controller.signal),
             dictionaryClient.getChargeServiceSettings(auth.accessToken, undefined, contractorsDictionaryListLimit, true),
             dictionaryClient.getIncomeTypes(auth.accessToken, undefined, contractorsDictionaryListLimit, true, controller.signal),
-            dictionaryClient.getExpenseTypes(auth.accessToken, undefined, contractorsDictionaryListLimit, true, controller.signal),
             dictionaryClient.getTariffs(auth.accessToken, undefined, contractorsDictionaryListLimit, true, controller.signal),
             fundsClient.getFundOptions(auth.accessToken, controller.signal),
           ])
@@ -1043,7 +1041,6 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
             setSupplierGroups(groups)
             setChargeServices(loadedChargeServices)
             setServiceIncomeTypes(loadedIncomeTypes)
-            setServiceExpenseTypes(loadedExpenseTypes)
             setServiceTariffs(loadedTariffs)
             setServiceFunds(loadedFunds)
           }
@@ -2589,7 +2586,7 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
       ) : null}
 
       {modal?.type === 'garage' ? <GaragePrototypeDialog accessToken={auth.accessToken} canAdjustOpeningData={canAdjustOpeningData} integrationClient={integrationClient} item={modal.item} onAdjustOpeningBalance={openGarageOpeningBalanceAdjustment} onClose={() => setModal(null)} onSave={saveGarage} onOpenFinancialReport={openGarageFinancialReport} /> : null}
-      {modal?.type === 'supplier' ? <SupplierPrototypeDialog accessToken={auth.accessToken} canAdjustOpeningData={canAdjustOpeningData} expenseTypes={serviceExpenseTypes.filter((item) => !item.isArchived)} funds={serviceFunds} integrationClient={integrationClient} item={modal.item} services={chargeServices} onAdjustOpeningBalance={openSupplierOpeningBalanceAdjustment} onClose={() => setModal(null)} onOpenFinancialReport={openSupplierFinancialReport} onSave={saveSupplier} /> : null}
+      {modal?.type === 'supplier' ? <SupplierPrototypeDialog accessToken={auth.accessToken} canAdjustOpeningData={canAdjustOpeningData} funds={serviceFunds} integrationClient={integrationClient} item={modal.item} services={chargeServices} onAdjustOpeningBalance={openSupplierOpeningBalanceAdjustment} onClose={() => setModal(null)} onOpenFinancialReport={openSupplierFinancialReport} onSave={saveSupplier} /> : null}
       {modal?.type === 'service' ? <AddServicePrototypeDialog funds={serviceFunds.filter((fund) => fund.allowOperations)} isSaving={serviceSaving} incomeTypes={serviceIncomeTypes.filter((item) => !item.isArchived)} onClose={() => setModal(null)} onCreateWithTariff={saveServiceWithTariff} regularOnly tariffs={serviceTariffs.filter((item) => !item.isArchived)} /> : null}
       {modal?.type === 'employee' ? <EmployeePrototypeDialog departments={departments} item={modal.item} onClose={() => setModal(null)} onOpenFinancialReport={openEmployeeFinancialReport} onSave={saveEmployee} /> : null}
       {modal?.type === 'department' ? <DepartmentPrototypeDialog item={modal.item} onClose={() => setModal(null)} onSave={saveDepartment} /> : null}
@@ -3074,7 +3071,6 @@ function getSupplierPrototypeChanges(previous: ContractorSupplierRow, next: Cont
   return compactPrototypeChanges([
     createPrototypeChangeEntry('Наименование', previous.name, next.name),
     createPrototypeChangeEntry('Услуга', previous.service, next.service),
-    createPrototypeChangeEntry('Статья расхода', previous.expenseTypeId ?? '', next.expenseTypeId ?? ''),
     createPrototypeChangeEntry('Фонд расходования', previous.expenseFundId ?? '', next.expenseFundId ?? ''),
     createPrototypeChangeEntry('ИНН', previous.inn, next.inn),
     createPrototypeChangeEntry('Стартовый баланс', previous.startingBalance, next.startingBalance),
@@ -3496,7 +3492,7 @@ function getDepartmentPrototypeChanges(previous: ContractorDepartmentRow, next: 
   ])
 }
 
-function SupplierPrototypeDialog({ accessToken, canAdjustOpeningData, expenseTypes, funds, integrationClient, item, services, onAdjustOpeningBalance, onClose, onOpenFinancialReport, onSave }: { accessToken: string; canAdjustOpeningData: boolean; expenseTypes: AccountingTypeDto[]; funds: FundOptionDto[]; integrationClient: IntegrationClient; item?: ContractorSupplierRow; services: ChargeServiceSettingDto[]; onAdjustOpeningBalance: (item: ContractorSupplierRow) => void; onClose: () => void; onOpenFinancialReport: (item: ContractorSupplierRow) => void; onSave: (item: ContractorSupplierRow) => Promise<void> }) {
+function SupplierPrototypeDialog({ accessToken, canAdjustOpeningData, funds, integrationClient, item, services, onAdjustOpeningBalance, onClose, onOpenFinancialReport, onSave }: { accessToken: string; canAdjustOpeningData: boolean; funds: FundOptionDto[]; integrationClient: IntegrationClient; item?: ContractorSupplierRow; services: ChargeServiceSettingDto[]; onAdjustOpeningBalance: (item: ContractorSupplierRow) => void; onClose: () => void; onOpenFinancialReport: (item: ContractorSupplierRow) => void; onSave: (item: ContractorSupplierRow) => Promise<void> }) {
   const activeServices = services.filter((service) =>
     service.id === item?.serviceId || (!service.isArchived && service.isRegular))
   const initialService = activeServices.find((service) => service.id === item?.serviceId) ?? activeServices.find((service) => service.name === item?.service) ?? activeServices[0] ?? null
@@ -3572,8 +3568,8 @@ function SupplierPrototypeDialog({ accessToken, canAdjustOpeningData, expenseTyp
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
 
-    if (form.serviceId && (!form.expenseTypeId || !form.expenseFundId)) {
-      setSaveError('Для поставщика с услугой выберите статью расхода и фонд расходования.')
+    if (form.serviceId && !form.expenseFundId) {
+      setSaveError('Для поставщика с услугой выберите фонд расходования.')
       return
     }
 
@@ -3677,16 +3673,8 @@ function SupplierPrototypeDialog({ accessToken, canAdjustOpeningData, expenseTyp
                   options={[{ value: '', label: 'Выберите услугу' }, ...availableServices.map((service) => ({ value: service.id, label: service.name }))]}
                   onChange={(serviceId) => {
                     const service = availableServices.find((itemService) => itemService.id === serviceId)
-                    setForm({ ...form, serviceId: service?.id ?? null, service: service?.name ?? '', expenseTypeId: null, expenseFundId: null })
+                    setForm({ ...form, serviceId: service?.id ?? null, service: service?.name ?? '', expenseTypeId: null })
                   }}
-                />
-              </FormField>
-              <FormField label="Статья расхода" help="Определяет, по какой статье поставщику создаются начисления и выплаты.">
-                <SelectControl
-                  aria-label="Статья расхода поставщика"
-                  value={form.expenseTypeId ?? ''}
-                  options={[{ value: '', label: 'Выберите статью расхода' }, ...expenseTypes.map((expenseType) => ({ value: expenseType.id, label: expenseType.name }))]}
-                  onChange={(expenseTypeId) => setForm({ ...form, expenseTypeId: expenseTypeId || null })}
                 />
               </FormField>
               <FormField

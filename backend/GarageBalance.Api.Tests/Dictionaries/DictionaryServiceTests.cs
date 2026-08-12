@@ -1257,8 +1257,7 @@ public sealed class DictionaryServiceTests
         var expenseFund = new Fund { Name = "Коммунальные расходы", NormalizedName = "КОММУНАЛЬНЫЕ РАСХОДЫ" };
         database.Context.Add(expenseFund);
         await database.Context.SaveChangesAsync();
-        var waterExpense = await service.CreateExpenseTypeAsync(new UpsertAccountingTypeRequest("Водоснабжение", "water_supply_custom"), null, CancellationToken.None);
-        var electricityExpense = await service.CreateExpenseTypeAsync(new UpsertAccountingTypeRequest("Электроэнергия", "electricity_custom"), null, CancellationToken.None);
+        var existingWaterExpense = await service.CreateExpenseTypeAsync(new UpsertAccountingTypeRequest("Вода", "water_expense"), null, CancellationToken.None);
         var water = await service.CreateChargeServiceSettingAsync(
             new UpsertChargeServiceSettingRequest("Вода", false, null, null, null, null, 0, false, false, "руб."),
             null,
@@ -1269,12 +1268,12 @@ public sealed class DictionaryServiceTests
             CancellationToken.None);
 
         var created = await service.CreateSupplierAsync(
-            new UpsertSupplierRequest("Ресурсоснабжающая организация", group.Value!.Id, null, null, null, null, null, 0, null, water.Value!.Id, ExpenseTypeId: waterExpense.Value!.Id, ExpenseFundId: expenseFund.Id),
+            new UpsertSupplierRequest("Ресурсоснабжающая организация", group.Value!.Id, null, null, null, null, null, 0, null, water.Value!.Id, ExpenseFundId: expenseFund.Id),
             null,
             CancellationToken.None);
         var updated = await service.UpdateSupplierAsync(
             created.Value!.Id,
-            new UpsertSupplierRequest(created.Value.Name, group.Value.Id, null, null, null, null, null, 0, null, electricity.Value!.Id, ExpenseTypeId: electricityExpense.Value!.Id, ExpenseFundId: expenseFund.Id),
+            new UpsertSupplierRequest(created.Value.Name, group.Value.Id, null, null, null, null, null, 0, null, electricity.Value!.Id, ExpenseFundId: expenseFund.Id),
             Guid.NewGuid(),
             CancellationToken.None);
         var serviceSortedPage = await service.GetSuppliersPageAsync(
@@ -1289,18 +1288,23 @@ public sealed class DictionaryServiceTests
         Assert.True(created.Succeeded);
         Assert.Equal(water.Value.Id, created.Value.ChargeServiceSettingId);
         Assert.Equal("Вода", created.Value.ChargeServiceSettingName);
-        Assert.Equal(waterExpense.Value.Id, created.Value.ExpenseTypeId);
+        Assert.Equal(existingWaterExpense.Value!.Id, created.Value.ExpenseTypeId);
+        Assert.Equal("Вода", created.Value.ExpenseTypeName);
         Assert.Equal(expenseFund.Id, created.Value.ExpenseFundId);
         Assert.True(updated.Succeeded);
         Assert.Equal(electricity.Value.Id, updated.Value!.ChargeServiceSettingId);
         Assert.Equal("Электроэнергия", updated.Value.ChargeServiceSettingName);
-        Assert.Equal(electricityExpense.Value.Id, updated.Value.ExpenseTypeId);
+        Assert.NotNull(updated.Value.ExpenseTypeId);
+        Assert.NotEqual(created.Value.ExpenseTypeId, updated.Value.ExpenseTypeId);
+        Assert.Equal("Электроэнергия", updated.Value.ExpenseTypeName);
         Assert.Equal(expenseFund.Id, updated.Value.ExpenseFundId);
         var listedSupplier = Assert.Single(serviceSortedPage.Items);
         Assert.Equal(created.Value.Id, listedSupplier.Id);
         Assert.Equal(electricity.Value.Id, listedSupplier.ChargeServiceSettingId);
         Assert.Equal("Электроэнергия", listedSupplier.ChargeServiceSettingName);
-        Assert.Equal(electricityExpense.Value.Id, listedSupplier.ExpenseTypeId);
+        Assert.Equal(updated.Value.ExpenseTypeId, listedSupplier.ExpenseTypeId);
+        Assert.Single(database.Context.ExpenseTypes.Where(item => item.IsSystem));
+        Assert.Single(database.Context.AuditEvents.Where(item => item.Action == "dictionary.supplier_expense_type_created"));
         Assert.Contains(database.Context.AuditEvents, item => item.Action == "dictionary.supplier_updated");
     }
 
@@ -1397,7 +1401,7 @@ public sealed class DictionaryServiceTests
     }
 
     [Fact]
-    public async Task CreateSupplierAsync_RejectsChargeServiceWithoutExpenseType()
+    public async Task CreateSupplierAsync_RequiresOnlyExpenseFundAndCreatesInternalExpenseType()
     {
         await using var database = await TestDatabase.CreateAsync();
         var service = DictionaryServiceTestFactory.Create(database.Context);
@@ -1406,15 +1410,50 @@ public sealed class DictionaryServiceTests
             new UpsertChargeServiceSettingRequest("Не настроенная услуга", false, null, null, null, null, 0, false, false, "руб."),
             null,
             CancellationToken.None);
+        var expenseFund = new Fund { Name = "Фонд расходов", NormalizedName = "ФОНД РАСХОДОВ" };
+        database.Context.Add(expenseFund);
+        await database.Context.SaveChangesAsync();
 
         var result = await service.CreateSupplierAsync(
-            new UpsertSupplierRequest("Поставщик без вида начисления", group.Value!.Id, null, null, null, null, null, 0, null, serviceWithoutExpenseType.Value!.Id),
+            new UpsertSupplierRequest("Поставщик без вида начисления", group.Value!.Id, null, null, null, null, null, 0, null, serviceWithoutExpenseType.Value!.Id, ExpenseFundId: expenseFund.Id),
+            null,
+            CancellationToken.None);
+        var secondResult = await service.CreateSupplierAsync(
+            new UpsertSupplierRequest("Второй поставщик", group.Value.Id, null, null, null, null, null, 0, null, serviceWithoutExpenseType.Value.Id, ExpenseFundId: expenseFund.Id),
+            null,
+            CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+        Assert.Equal(expenseFund.Id, result.Value!.ExpenseFundId);
+        Assert.Equal("Не настроенная услуга", result.Value.ExpenseTypeName);
+        Assert.True(secondResult.Succeeded);
+        Assert.Equal(result.Value.ExpenseTypeId, secondResult.Value!.ExpenseTypeId);
+        var internalExpenseType = Assert.Single(database.Context.ExpenseTypes);
+        Assert.True(internalExpenseType.IsSystem);
+        Assert.StartsWith("supplier_service_", internalExpenseType.Code, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task CreateSupplierAsync_RequiresExpenseFundForChargeService()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = DictionaryServiceTestFactory.Create(database.Context);
+        var group = await service.CreateSupplierGroupAsync(new UpsertSupplierGroupRequest("Коммунальные услуги"), null, CancellationToken.None);
+        var chargeService = await service.CreateChargeServiceSettingAsync(
+            new UpsertChargeServiceSettingRequest("Вода", false, null, null, null, null, 0, false, false, "руб."),
+            null,
+            CancellationToken.None);
+
+        var result = await service.CreateSupplierAsync(
+            new UpsertSupplierRequest("Водоканал", group.Value!.Id, null, null, null, null, null, 0, null, chargeService.Value!.Id),
             null,
             CancellationToken.None);
 
         Assert.False(result.Succeeded);
         Assert.Equal("supplier_expense_configuration_required", result.ErrorCode);
+        Assert.Equal("Для поставщика с услугой выберите фонд расходования.", result.ErrorMessage);
         Assert.Empty(database.Context.Suppliers);
+        Assert.Empty(database.Context.ExpenseTypes);
     }
 
     [Fact]
@@ -1428,8 +1467,11 @@ public sealed class DictionaryServiceTests
             new UpsertChargeServiceSettingRequest("Услуга", false, null, null, null, null, 0, false, false, "руб."),
             null,
             CancellationToken.None);
+        var expenseFund = new Fund { Name = "Фонд услуги", NormalizedName = "ФОНД УСЛУГИ" };
+        database.Context.Add(expenseFund);
+        await database.Context.SaveChangesAsync();
         var result = await service.CreateSupplierAsync(
-            new UpsertSupplierRequest("Поставщик", group.Value!.Id, null, null, null, null, null, 0, null, chargeService.Value!.Id, ExpenseTypeId: Guid.NewGuid(), ExpenseFundId: Guid.NewGuid()),
+            new UpsertSupplierRequest("Поставщик", group.Value!.Id, null, null, null, null, null, 0, null, chargeService.Value!.Id, ExpenseTypeId: Guid.NewGuid(), ExpenseFundId: expenseFund.Id),
             null,
             CancellationToken.None);
 
