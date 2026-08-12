@@ -4,7 +4,12 @@ namespace GarageBalance.Api.Application.Dictionaries;
 
 public interface IChargeServiceSettingRepository
 {
-    Task<IReadOnlyList<ChargeServiceSetting>> GetListAsync(string? normalizedSearch, bool includeArchived, int limit, CancellationToken cancellationToken);
+    Task<IReadOnlyList<ChargeServiceSetting>> GetListAsync(
+        string? normalizedSearch,
+        bool includeArchived,
+        int limit,
+        DateOnly businessDate,
+        CancellationToken cancellationToken);
     Task<IReadOnlyList<ChargeServiceSetting>> GetActiveRegularAsync(DateOnly accountingMonth, CancellationToken cancellationToken);
     Task<IReadOnlyList<ChargeServiceSetting>> GetActiveRegularMeteredAsync(
         DateOnly accountingMonth,

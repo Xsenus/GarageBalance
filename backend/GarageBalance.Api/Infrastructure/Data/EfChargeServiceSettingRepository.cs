@@ -11,6 +11,7 @@ public sealed class EfChargeServiceSettingRepository(GarageBalanceDbContext dbCo
         string? normalizedSearch,
         bool includeArchived,
         int limit,
+        DateOnly businessDate,
         CancellationToken cancellationToken)
     {
         var query = dbContext.ChargeServiceSettings
@@ -22,10 +23,12 @@ public sealed class EfChargeServiceSettingRepository(GarageBalanceDbContext dbCo
             query = query.Where(item => item.Name.ToLower().Contains(normalizedSearch));
         }
 
-        return await query
+        var settings = await query
             .OrderBy(item => item.Name)
             .Take(limit)
             .ToListAsync(cancellationToken);
+        await ApplyTariffsForMonthAsync(settings, businessDate, cancellationToken);
+        return settings;
     }
 
     public async Task<IReadOnlyList<ChargeServiceSetting>> GetActiveRegularAsync(

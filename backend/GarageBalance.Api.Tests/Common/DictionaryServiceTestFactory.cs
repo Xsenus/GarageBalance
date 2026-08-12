@@ -1,12 +1,15 @@
 using GarageBalance.Api.Application.Audit;
 using GarageBalance.Api.Application.Dictionaries;
+using GarageBalance.Api.Application.Settings;
 using GarageBalance.Api.Infrastructure.Data;
 
 namespace GarageBalance.Api.Tests.Common;
 
 internal static class DictionaryServiceTestFactory
 {
-    public static DictionaryService Create(GarageBalanceDbContext dbContext) =>
+    private static readonly DateOnly DefaultBusinessDate = new(2026, 8, 12);
+
+    public static DictionaryService Create(GarageBalanceDbContext dbContext, DateOnly? businessDate = null) =>
         new(
             new EfOwnerRepository(dbContext),
             new EfGarageRepository(dbContext),
@@ -25,5 +28,6 @@ internal static class DictionaryServiceTestFactory
             new EfFundRepository(dbContext),
             new EfOpeningBalanceAdjustmentRepository(dbContext),
             new EfApplicationUnitOfWork(dbContext),
-            new AuditEventWriter(dbContext));
+            new AuditEventWriter(dbContext),
+            new TestBusinessDateProvider(businessDate ?? DefaultBusinessDate));
 }

@@ -4568,11 +4568,18 @@ public sealed class DictionaryServiceTests
         Assert.Equal(2, result.Value!.Periods.Count);
         Assert.Null(result.Value.Periods[0].EffectiveFrom);
         Assert.Null(result.Value.Periods[1].EffectiveTo);
-        Assert.Equal(125m, result.Value.Tariff.Rate);
+        Assert.Equal(100m, result.Value.Tariff.Rate);
+        Assert.Equal(result.Value.Periods[0].TariffId, result.Value.Service.TariffId);
 
         var repository = new EfChargeServiceSettingRepository(database.Context);
         Assert.Equal(100m, (await repository.GetActiveRegularAsync(new DateOnly(2026, 8, 1), CancellationToken.None)).Single().Tariff!.Rate);
         Assert.Equal(125m, (await repository.GetActiveRegularAsync(new DateOnly(2026, 9, 1), CancellationToken.None)).Single().Tariff!.Rate);
+        var listedInAugust = Assert.Single(await DictionaryServiceTestFactory.Create(database.Context, new DateOnly(2026, 8, 12))
+            .GetChargeServiceSettingsAsync(null, CancellationToken.None));
+        var listedInSeptember = Assert.Single(await DictionaryServiceTestFactory.Create(database.Context, new DateOnly(2026, 9, 12))
+            .GetChargeServiceSettingsAsync(null, CancellationToken.None));
+        Assert.Equal(result.Value.Periods[0].TariffId, listedInAugust.TariffId);
+        Assert.Equal(result.Value.Periods[1].TariffId, listedInSeptember.TariffId);
         Assert.Contains(database.Context.AuditEvents, item => item.Action == "dictionary.charge_service_tariff_schedule_updated");
     }
 

@@ -1037,7 +1037,7 @@ public sealed class BackendPerformanceGuardTests
             StringComparison.Ordinal);
         Assert.Contains(".Take(limit)", irregularPaymentRepositorySource, StringComparison.Ordinal);
         Assert.Contains(
-            "chargeServiceSettingRepository.GetListAsync(normalizedSearch, includeArchived, NormalizeListLimit(limit)",
+            "chargeServiceSettingRepository.GetListAsync(\n            normalizedSearch,\n            includeArchived,\n            NormalizeListLimit(limit),\n            businessDateProvider.Today",
             source,
             StringComparison.Ordinal);
         Assert.Contains(".Take(limit)", chargeServiceSettingRepositorySource, StringComparison.Ordinal);

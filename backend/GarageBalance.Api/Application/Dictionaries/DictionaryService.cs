@@ -3,6 +3,7 @@ using System.Text.Json;
 using GarageBalance.Api.Application.Audit;
 using GarageBalance.Api.Application.Common;
 using GarageBalance.Api.Application.Funds;
+using GarageBalance.Api.Application.Settings;
 using GarageBalance.Api.Domain.Dictionaries;
 using GarageBalance.Api.Domain.Finance;
 
@@ -26,7 +27,8 @@ public sealed class DictionaryService(
     IFundRepository fundRepository,
     IOpeningBalanceAdjustmentRepository openingBalanceAdjustmentRepository,
     IApplicationUnitOfWork unitOfWork,
-    IAuditEventWriter auditEventWriter) : IDictionaryService
+    IAuditEventWriter auditEventWriter,
+    IBusinessDateProvider businessDateProvider) : IDictionaryService
 {
     private const string OtherIncomeIncomeTypeCode = "other_income";
     private const string ServiceIncomeTypeCodePrefix = "service_";
@@ -2065,7 +2067,12 @@ public sealed class DictionaryService(
     public async Task<IReadOnlyList<ChargeServiceSettingDto>> GetChargeServiceSettingsAsync(string? search, CancellationToken cancellationToken, int? limit = null, bool includeArchived = false)
     {
         var normalizedSearch = NormalizeSearch(search);
-        var settings = await chargeServiceSettingRepository.GetListAsync(normalizedSearch, includeArchived, NormalizeListLimit(limit), cancellationToken);
+        var settings = await chargeServiceSettingRepository.GetListAsync(
+            normalizedSearch,
+            includeArchived,
+            NormalizeListLimit(limit),
+            businessDateProvider.Today,
+            cancellationToken);
         return settings.Select(ToChargeServiceSettingDto).ToList();
     }
 
@@ -2569,7 +2576,15 @@ public sealed class DictionaryService(
         }
 
         chargeServiceSettingRepository.ReplaceTariffPeriods(id, allExisting, replacements);
-        var current = replacements[^1].Tariff;
+        var businessDate = businessDateProvider.Today;
+        var currentPeriod = replacements
+            .Where(item => item.EffectiveFrom <= businessDate && (!item.EffectiveTo.HasValue || item.EffectiveTo.Value >= businessDate))
+            .OrderByDescending(item => item.EffectiveFrom)
+            .FirstOrDefault();
+        // If the user explicitly saved a gap covering the working date, keep the
+        // latest configured tariff as the service fallback. Date-aware accrual
+        // and list queries still correctly return no tariff for that gap.
+        var current = (currentPeriod ?? replacements[^1]).Tariff;
         setting.TariffId = current.Id;
         setting.Tariff = current;
         setting.IsMetered = current.CalculationBase is TariffCalculationBases.MeterWater or TariffCalculationBases.MeterElectricity;
