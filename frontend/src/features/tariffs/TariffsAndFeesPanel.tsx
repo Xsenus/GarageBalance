@@ -3605,13 +3605,14 @@ export function AddServicePrototypeDialog({
           </button>
         </div>
 
-        <form className="dictionary-modal-form contractors-modal-form" onSubmit={submitService}>
+        <form className={`dictionary-modal-form contractors-modal-form${initialSetting && isRegular ? ' contractors-modal-form--service-edit' : ''}`} onSubmit={submitService}>
           {error ? <FormError>{error}</FormError> : null}
-          <div className={`contractors-service-heading-grid${regularOnly ? ' contractors-service-heading-grid--name-only' : ''}`}>
+          {initialSetting && isRegular ? <h4 className="contractors-service-section-title contractors-service-section-title--settings">Настройки услуги</h4> : null}
+          <div className={`contractors-service-heading-grid${regularOnly || initialSetting ? ' contractors-service-heading-grid--name-only' : ''}`}>
             <FormField label="Наименование услуги">
               <input aria-label="Наименование услуги" value={name} onChange={(event) => setName(event.target.value)} />
             </FormField>
-            {!regularOnly ? (
+            {!regularOnly && !initialSetting ? (
               <label className="contractors-switch-row">
                 <span>Регулярные платежи</span>
                 <span className="contractors-switch-control">
@@ -3764,6 +3765,7 @@ export function AddServicePrototypeDialog({
                   </div>
                 </section>
               ) : null}
+              {initialSetting ? <h4 className="contractors-service-section-title contractors-service-section-title--parameters">Параметры начисления</h4> : null}
               <div className="contractors-service-period-grid contractors-service-period-grid--single-row">
                 {!initialSetting ? <FormField label="Ставка с">
                   <LocalizedDatePicker ariaLabel="Ставка с" mode="date" value={tariffEffectiveFrom} onChange={setTariffEffectiveFrom} />
@@ -3833,7 +3835,11 @@ export function AddServicePrototypeDialog({
                 </label>
               </div>
               {isTiered ? (
-                <div>
+                <section className="contractors-tier-editor" aria-labelledby="contractors-tier-editor-title">
+                  <div className="contractors-tier-editor-heading">
+                    <h4 id="contractors-tier-editor-title">Пороги и тарифы</h4>
+                    <span>{tariffTiers.length} {tariffTiers.length === 1 ? 'порог' : tariffTiers.length < 5 ? 'порога' : 'порогов'}</span>
+                  </div>
                   {tariffTiers.length > 0 ? (
                     <div className="contractors-threshold-grid" role="group" aria-label="Пороги тарификации выбранного тарифа">
                       {tariffTiers.map((tier, index) => (
@@ -3897,7 +3903,7 @@ export function AddServicePrototypeDialog({
                   ) : (
                     <p className="form-hint">Добавьте минимум один порог и последнюю ступень без верхней границы.</p>
                   )}
-                </div>
+                </section>
               ) : null}
             </>
           ) : (

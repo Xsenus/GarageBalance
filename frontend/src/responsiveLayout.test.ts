@@ -80,6 +80,13 @@ describe('responsive layout styles', () => {
     expect(normalizedAppCss).toContain('.dictionary-toolbar .dictionary-archive-toggle,\n  .dictionary-toolbar .create-action-button {\n    width: 100%;')
   })
 
+  it('keeps the service settings beside tariff periods and stacks them on narrower screens', () => {
+    expect(normalizedAppCss).toContain('.contractors-modal-form--service-edit {\n  grid-template-columns: minmax(300px, 0.72fr) minmax(560px, 1.45fr);')
+    expect(normalizedAppCss).toContain('"settings-title schedule"\n    "heading schedule"\n    "catalogs schedule"')
+    expect(normalizedAppCss).toContain('@media (max-width: 1100px) {\n  .contractors-modal-form--service-edit {\n    grid-template-columns: minmax(0, 1fr);')
+    expect(normalizedAppCss).toContain('"flags"\n      "schedule"\n      "tiers"\n      "actions";')
+  })
+
   it('keeps row actions visible at the right edge of wide mobile tables', () => {
     expect(normalizedAppCss).toContain('@media (max-width: 900px) {\n  .dictionary-data-table th.table-actions-column,')
     expect(normalizedAppCss).toContain('.contractors-directory-row > .table-actions-column,\n  .tariffs-page .contractors-sheet-header > .table-actions-column,')

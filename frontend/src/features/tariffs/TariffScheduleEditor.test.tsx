@@ -36,6 +36,10 @@ describe('редактор тарифной сетки услуги', () => {
 
     expect(screen.getByRole('heading', { name: 'Изменение тарифов по периодам' })).toBeInTheDocument()
     expect(screen.getByRole('table', { name: 'Тарифная сетка услуги' })).toBeInTheDocument()
+    expect(screen.queryByRole('checkbox', { name: 'Регулярные платежи' })).not.toBeInTheDocument()
+    expect(screen.getByLabelText('Наименование услуги').closest('form')).toHaveClass('contractors-modal-form--service-edit')
+    expect(screen.getByRole('heading', { name: 'Настройки услуги' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Параметры начисления' })).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Сохранить тарифную сетку' }))
 
     await waitFor(() => expect(onUpdateTariffSchedule).toHaveBeenCalledWith(expect.objectContaining({

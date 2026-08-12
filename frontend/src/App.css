@@ -2050,6 +2050,107 @@ h1 {
   grid-template-columns: 1fr;
 }
 
+.contractors-modal-form--service-edit {
+  grid-template-columns: minmax(300px, 0.72fr) minmax(560px, 1.45fr);
+  grid-template-areas:
+    "feedback feedback"
+    "settings-title schedule"
+    "heading schedule"
+    "catalogs schedule"
+    "parameters-title schedule"
+    "parameters schedule"
+    "flags schedule"
+    ". tiers"
+    "actions actions";
+  column-gap: 14px;
+  row-gap: 0;
+  align-items: start;
+}
+
+.contractors-modal-form--service-edit > .form-error {
+  grid-area: feedback;
+  width: 100%;
+  box-sizing: border-box;
+  margin: 0 0 12px;
+}
+
+.contractors-service-section-title {
+  margin: 0;
+  border: 1px solid #dce3ee;
+  border-bottom: 0;
+  border-radius: 12px 12px 0 0;
+  background: #f8fafc;
+  padding: 12px 14px 7px;
+  color: #101828;
+  font-size: 14px;
+  line-height: 1.35;
+}
+
+.contractors-service-section-title--settings {
+  grid-area: settings-title;
+}
+
+.contractors-service-section-title--parameters {
+  grid-area: parameters-title;
+  margin-top: 12px;
+}
+
+.contractors-modal-form--service-edit > .contractors-service-heading-grid {
+  grid-area: heading;
+  border-right: 1px solid #dce3ee;
+  border-left: 1px solid #dce3ee;
+  background: #f8fafc;
+  padding: 0 14px 10px;
+}
+
+.contractors-modal-form--service-edit > .contractors-service-period-grid--catalogs {
+  grid-area: catalogs;
+  grid-template-columns: 1fr;
+  border: 1px solid #dce3ee;
+  border-top: 0;
+  border-radius: 0 0 12px 12px;
+  background: #f8fafc;
+  padding: 0 14px 14px;
+}
+
+.contractors-modal-form--service-edit > .tariff-schedule-editor {
+  grid-area: schedule;
+  align-self: start;
+  width: 100%;
+  box-sizing: border-box;
+  background: #ffffff;
+}
+
+.contractors-modal-form--service-edit > .contractors-service-period-grid--single-row {
+  grid-area: parameters;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  border-right: 1px solid #dce3ee;
+  border-left: 1px solid #dce3ee;
+  background: #f8fafc;
+  padding: 0 14px 10px;
+}
+
+.contractors-modal-form--service-edit > .contractors-service-flags {
+  grid-area: flags;
+  grid-template-columns: 1fr;
+  border: 1px solid #dce3ee;
+  border-top: 0;
+  border-radius: 0 0 12px 12px;
+  background: #f8fafc;
+  padding: 0 14px 14px;
+}
+
+.contractors-modal-form--service-edit > .contractors-tier-editor {
+  grid-area: tiers;
+  margin-top: 12px;
+}
+
+.contractors-modal-form--service-edit > .detail-dialog-actions {
+  grid-area: actions;
+  width: auto;
+  margin-top: 14px;
+}
+
 .contractors-fee-two-column-grid,
 .contractors-fee-date-grid {
   display: grid;
@@ -2788,8 +2889,56 @@ h1 {
   text-align: center;
 }
 
+.contractors-tier-editor {
+  display: grid;
+  gap: 12px;
+  border: 1px solid #dce3ee;
+  border-radius: 12px;
+  background: #ffffff;
+  padding: 14px;
+}
+
+.contractors-tier-editor-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.contractors-tier-editor-heading h4 {
+  margin: 0;
+  color: #101828;
+  font-size: 14px;
+}
+
+.contractors-tier-editor-heading span {
+  color: #667085;
+  font-size: 12px;
+}
+
 .contractors-threshold-grid > .contractors-date-suffix {
   white-space: nowrap;
+}
+
+@media (max-width: 1100px) {
+  .contractors-modal-form--service-edit {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas:
+      "feedback"
+      "settings-title"
+      "heading"
+      "catalogs"
+      "parameters-title"
+      "parameters"
+      "flags"
+      "schedule"
+      "tiers"
+      "actions";
+  }
+
+  .contractors-modal-form--service-edit > .tariff-schedule-editor {
+    margin-top: 12px;
+  }
 }
 
 .link-button {
