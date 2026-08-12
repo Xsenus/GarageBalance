@@ -282,6 +282,31 @@ public sealed record UpdatedChargeServiceWithTariffDto(
     ChargeServiceSettingDto Service,
     TariffDto Tariff);
 
+public sealed record ChargeServiceTariffPeriodDto(
+    Guid TariffId,
+    DateOnly? EffectiveFrom,
+    DateOnly? EffectiveTo,
+    decimal Rate,
+    Guid TariffVersion);
+
+public sealed record UpsertChargeServiceTariffPeriodRequest(
+    Guid? TariffId,
+    DateOnly? EffectiveFrom,
+    DateOnly? EffectiveTo,
+    [Range(0.0001, 999999999)] decimal Rate,
+    Guid? TariffVersion = null);
+
+public sealed record UpsertChargeServiceTariffScheduleRequest(
+    [Required, MinLength(1), MaxLength(120)] IReadOnlyList<UpsertChargeServiceTariffPeriodRequest> Periods,
+    bool AllowGaps,
+    [MaxLength(1000)] string? ChangeReason,
+    Guid ServiceVersion);
+
+public sealed record UpdatedChargeServiceTariffScheduleDto(
+    ChargeServiceSettingDto Service,
+    TariffDto Tariff,
+    IReadOnlyList<ChargeServiceTariffPeriodDto> Periods);
+
 public sealed record IrregularPaymentDto(
     Guid Id,
     string Name,

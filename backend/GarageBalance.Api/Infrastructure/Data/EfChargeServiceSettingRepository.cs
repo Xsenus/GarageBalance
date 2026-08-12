@@ -73,7 +73,9 @@ public sealed class EfChargeServiceSettingRepository(GarageBalanceDbContext dbCo
                 (dbContext.ChargeServiceTariffVersions
                     .Where(version =>
                         version.ChargeServiceSettingId == setting.Id &&
+                        !version.IsArchived &&
                         version.EffectiveFrom <= accountingMonth &&
+                        (!version.EffectiveTo.HasValue || version.EffectiveTo.Value >= accountingMonth) &&
                         !version.Tariff.IsArchived)
                     .OrderByDescending(version => version.EffectiveFrom)
                     .Select(version => version.Tariff.CalculationBase)
@@ -117,7 +119,7 @@ public sealed class EfChargeServiceSettingRepository(GarageBalanceDbContext dbCo
                 (!tariffId.HasValue ||
                  setting.TariffId == tariffId.Value ||
                  dbContext.ChargeServiceTariffVersions.Any(version =>
-                     version.ChargeServiceSettingId == setting.Id && version.TariffId == tariffId.Value)))
+                     version.ChargeServiceSettingId == setting.Id && !version.IsArchived && version.TariffId == tariffId.Value)))
             .OrderBy(setting => setting.Name)
             .Take(2)
             .ToListAsync(cancellationToken);
@@ -166,8 +168,21 @@ public sealed class EfChargeServiceSettingRepository(GarageBalanceDbContext dbCo
         Guid serviceId,
         Guid tariffId,
         DateOnly effectiveFrom,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        DateOnly? effectiveTo = null)
     {
+        var adjacent = await dbContext.ChargeServiceTariffVersions
+            .Where(item => item.ChargeServiceSettingId == serviceId && !item.IsArchived && item.EffectiveFrom != effectiveFrom)
+            .OrderBy(item => item.EffectiveFrom)
+            .ToListAsync(cancellationToken);
+        var previous = adjacent.LastOrDefault(item => item.EffectiveFrom < effectiveFrom);
+        var next = adjacent.FirstOrDefault(item => item.EffectiveFrom > effectiveFrom);
+        if (previous is not null)
+        {
+            previous.EffectiveTo = effectiveFrom.AddDays(-1);
+        }
+
+        effectiveTo ??= next?.EffectiveFrom.AddDays(-1);
         var existing = await dbContext.ChargeServiceTariffVersions.SingleOrDefaultAsync(
             item => item.ChargeServiceSettingId == serviceId && item.EffectiveFrom == effectiveFrom,
             cancellationToken);
@@ -177,12 +192,58 @@ public sealed class EfChargeServiceSettingRepository(GarageBalanceDbContext dbCo
             {
                 ChargeServiceSettingId = serviceId,
                 TariffId = tariffId,
-                EffectiveFrom = effectiveFrom
+                EffectiveFrom = effectiveFrom,
+                EffectiveTo = effectiveTo
             });
             return;
         }
 
         existing.TariffId = tariffId;
+        existing.EffectiveTo = effectiveTo;
+        existing.IsArchived = false;
+    }
+
+    public async Task<IReadOnlyList<ChargeServiceTariffVersion>> GetTariffPeriodsAsync(
+        Guid serviceId,
+        bool tracked,
+        CancellationToken cancellationToken)
+    {
+        var query = dbContext.ChargeServiceTariffVersions
+            .Include(item => item.Tariff)
+            .Where(item => item.ChargeServiceSettingId == serviceId && (tracked || !item.IsArchived));
+        if (!tracked)
+        {
+            query = query.AsNoTracking();
+        }
+
+        return await query.OrderBy(item => item.EffectiveFrom).ToListAsync(cancellationToken);
+    }
+
+    public void ReplaceTariffPeriods(
+        Guid serviceId,
+        IReadOnlyCollection<ChargeServiceTariffVersion> existing,
+        IReadOnlyCollection<ChargeServiceTariffVersion> replacements)
+    {
+        var requested = replacements.Where(item => item.ChargeServiceSettingId == serviceId).ToList();
+        var requestedStarts = requested.Select(item => item.EffectiveFrom).ToHashSet();
+        foreach (var obsolete in existing.Where(item => !requestedStarts.Contains(item.EffectiveFrom)))
+        {
+            obsolete.IsArchived = true;
+        }
+        foreach (var replacement in requested)
+        {
+            var current = existing.SingleOrDefault(item => item.EffectiveFrom == replacement.EffectiveFrom);
+            if (current is null)
+            {
+                dbContext.ChargeServiceTariffVersions.Add(replacement);
+                continue;
+            }
+
+            current.TariffId = replacement.TariffId;
+            current.EffectiveTo = replacement.EffectiveTo;
+            current.Tariff = replacement.Tariff;
+            current.IsArchived = false;
+        }
     }
 
     public Task<bool> HasTariffVersionAsync(Guid tariffId, CancellationToken cancellationToken) =>
@@ -206,13 +267,17 @@ public sealed class EfChargeServiceSettingRepository(GarageBalanceDbContext dbCo
             .Include(version => version.Tariff)
             .Where(version =>
                 serviceIds.Contains(version.ChargeServiceSettingId) &&
-                version.EffectiveFrom <= accountingMonth &&
+                !version.IsArchived &&
                 !version.Tariff.IsArchived)
             .OrderByDescending(version => version.EffectiveFrom)
             .ToListAsync(cancellationToken);
         var applicable = versions
+            .Where(version =>
+                version.EffectiveFrom <= accountingMonth &&
+                (!version.EffectiveTo.HasValue || version.EffectiveTo.Value >= accountingMonth))
             .GroupBy(version => version.ChargeServiceSettingId)
             .ToDictionary(group => group.Key, group => group.First().Tariff);
+        var servicesWithVersions = versions.Select(version => version.ChargeServiceSettingId).ToHashSet();
 
         foreach (var setting in settings)
         {
@@ -226,7 +291,7 @@ public sealed class EfChargeServiceSettingRepository(GarageBalanceDbContext dbCo
                     ApplyTariffMode(setting, tariff);
                 }
             }
-            else if (setting.Tariff?.EffectiveFrom > accountingMonth)
+            else if (servicesWithVersions.Contains(setting.Id) || setting.Tariff?.EffectiveFrom > accountingMonth)
             {
                 setting.TariffId = null;
                 setting.Tariff = null;

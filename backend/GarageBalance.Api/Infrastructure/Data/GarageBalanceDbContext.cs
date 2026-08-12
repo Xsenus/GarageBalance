@@ -708,6 +708,8 @@ public sealed class GarageBalanceDbContext(DbContextOptions<GarageBalanceDbConte
             entity.ToTable("charge_service_tariff_versions");
             entity.HasKey(item => new { item.ChargeServiceSettingId, item.EffectiveFrom });
             entity.HasIndex(item => item.TariffId);
+            entity.HasIndex(item => item.IsArchived);
+            entity.HasIndex(item => new { item.ChargeServiceSettingId, item.EffectiveFrom, item.EffectiveTo });
             entity.HasOne(item => item.ChargeServiceSetting)
                 .WithMany(setting => setting.TariffVersions)
                 .HasForeignKey(item => item.ChargeServiceSettingId)

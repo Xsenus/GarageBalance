@@ -1,0 +1,48 @@
+// @vitest-environment jsdom
+import '@testing-library/jest-dom/vitest'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { describe, expect, it, vi } from 'vitest'
+import { AddServicePrototypeDialog } from './TariffsAndFeesPanel'
+
+describe('редактор тарифной сетки услуги', () => {
+  it('показывает интервалы и сохраняет непрерывную сетку', async () => {
+    const onUpdateTariffSchedule = vi.fn().mockResolvedValue([
+      { tariffId: 'tariff-1', effectiveFrom: null, effectiveTo: null, rate: 101, tariffVersion: 'tariff-version-1' },
+    ])
+
+    render(<AddServicePrototypeDialog
+      initialSetting={{
+        id: 'service-1', name: 'Вода', isRegular: true, periodicityMonths: 1, accrualStartMonth: 1,
+        paymentDueDay: 30, paymentDueMonth: null, overdueGraceDays: 30, incomeTypeId: 'income-1',
+        tariffId: 'tariff-1', isMetered: true, hasTieredTariff: false, unitName: 'м³', isArchived: false,
+        version: 'service-version-1',
+      }}
+      isSaving={false}
+      funds={[{ id: 'fund-1', name: 'Водоснабжение', allowOperations: true }]}
+      incomeTypes={[{ id: 'income-1', name: 'Вода', code: 'water', isArchived: false, destinationFundId: 'fund-1', destinationFundName: 'Водоснабжение' }]}
+      measurementUnits={[]}
+      tariffs={[{
+        id: 'tariff-1', name: 'Вода', calculationBase: 'meter_water', rate: 101,
+        electricityFirstThreshold: null, electricitySecondThreshold: null, electricityFirstTierName: null,
+        electricitySecondTierName: null, electricityThirdTierName: null, electricityFirstRate: null,
+        electricitySecondRate: null, electricityThirdRate: null, effectiveFrom: '2026-01-01', comment: null,
+        isArchived: false, version: 'tariff-version-1',
+      }]}
+      tariffSchedule={[{ tariffId: 'tariff-1', effectiveFrom: null, effectiveTo: null, rate: 101, tariffVersion: 'tariff-version-1' }]}
+      onClose={vi.fn()}
+      onUpdateWithTariff={vi.fn()}
+      onUpdateTariffSchedule={onUpdateTariffSchedule}
+    />)
+
+    expect(screen.getByRole('heading', { name: 'Изменение тарифов по периодам' })).toBeInTheDocument()
+    expect(screen.getByRole('table', { name: 'Тарифная сетка услуги' })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Сохранить тарифную сетку' }))
+
+    await waitFor(() => expect(onUpdateTariffSchedule).toHaveBeenCalledWith(expect.objectContaining({
+      allowGaps: false,
+      serviceVersion: 'service-version-1',
+      periods: [expect.objectContaining({ effectiveFrom: null, effectiveTo: null, rate: 101 })],
+    })))
+    expect(await screen.findByText('Тарифная сетка сохранена.')).toBeInTheDocument()
+  })
+})

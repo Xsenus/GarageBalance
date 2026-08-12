@@ -353,6 +353,31 @@ export type UpdatedChargeServiceWithTariffDto = {
   tariff: TariffDto
 }
 
+export type ChargeServiceTariffPeriodDto = {
+  tariffId: string
+  effectiveFrom: string | null
+  effectiveTo: string | null
+  rate: number
+  tariffVersion: string
+}
+
+export type UpsertChargeServiceTariffScheduleRequest = {
+  periods: Array<{
+    tariffId?: string | null
+    effectiveFrom?: string | null
+    effectiveTo?: string | null
+    rate: number
+    tariffVersion?: string | null
+  }>
+  allowGaps: boolean
+  changeReason?: string | null
+  serviceVersion: string
+}
+
+export type UpdatedChargeServiceTariffScheduleDto = UpdatedChargeServiceWithTariffDto & {
+  periods: ChargeServiceTariffPeriodDto[]
+}
+
 export type UpsertFeeCampaignRequest = {
   name: string
   incomeTypeId: string
@@ -437,6 +462,8 @@ export type DictionaryClient = {
   createChargeServiceSetting(accessToken: string, request: UpsertChargeServiceSettingRequest): Promise<ChargeServiceSettingDto>
   updateChargeServiceSetting(accessToken: string, id: string, request: UpsertChargeServiceSettingRequest): Promise<ChargeServiceSettingDto>
   updateChargeServiceWithTariff(accessToken: string, id: string, request: UpdateChargeServiceWithTariffRequest): Promise<UpdatedChargeServiceWithTariffDto>
+  getChargeServiceTariffSchedule?(accessToken: string, id: string): Promise<ChargeServiceTariffPeriodDto[]>
+  updateChargeServiceTariffSchedule?(accessToken: string, id: string, request: UpsertChargeServiceTariffScheduleRequest): Promise<UpdatedChargeServiceTariffScheduleDto>
   archiveChargeServiceSetting(accessToken: string, id: string, reason: string): Promise<void>
   restoreChargeServiceSetting(accessToken: string, id: string): Promise<ChargeServiceSettingDto>
   getFeeCampaigns(accessToken: string, search?: string, limit?: number, includeArchived?: boolean): Promise<FeeCampaignDto[]>
@@ -810,6 +837,12 @@ export const dictionariesApi: DictionaryClient = {
   },
   updateChargeServiceWithTariff(accessToken, id, request) {
     return requestJson(accessToken, `/api/dictionaries/charge-services/${id}/with-tariff`, { method: 'PUT', body: JSON.stringify(request) })
+  },
+  getChargeServiceTariffSchedule(accessToken, id) {
+    return requestJson(accessToken, `/api/dictionaries/charge-services/${id}/tariff-schedule`)
+  },
+  updateChargeServiceTariffSchedule(accessToken, id, request) {
+    return requestJson(accessToken, `/api/dictionaries/charge-services/${id}/tariff-schedule`, { method: 'PUT', body: JSON.stringify(request) })
   },
   archiveChargeServiceSetting(accessToken, id, reason) {
     return requestJson(accessToken, `/api/dictionaries/charge-services/${id}`, { method: 'DELETE', body: JSON.stringify({ reason }) })

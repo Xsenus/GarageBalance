@@ -848,6 +848,31 @@ public sealed class DictionariesController(IDictionaryService dictionaryService)
         return result.Succeeded ? Ok(result.Value) : ToError(result);
     }
 
+    [HttpGet("charge-services/{id:guid}/tariff-schedule")]
+    [ProducesResponseType<IReadOnlyList<ChargeServiceTariffPeriodDto>>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<IReadOnlyList<ChargeServiceTariffPeriodDto>>> GetChargeServiceTariffSchedule(Guid id, CancellationToken cancellationToken)
+    {
+        var result = await dictionaryService.GetChargeServiceTariffScheduleAsync(id, cancellationToken);
+        return result.Succeeded ? Ok(result.Value) : ToError(result);
+    }
+
+    [Authorize(Policy = SystemPermissions.TariffsManage)]
+    [HttpPut("charge-services/{id:guid}/tariff-schedule")]
+    [RequireConcurrencyVersion("request.ServiceVersion")]
+    [ProducesResponseType<UpdatedChargeServiceTariffScheduleDto>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
+    public async Task<ActionResult<UpdatedChargeServiceTariffScheduleDto>> UpdateChargeServiceTariffSchedule(
+        Guid id,
+        UpsertChargeServiceTariffScheduleRequest request,
+        CancellationToken cancellationToken)
+    {
+        var result = await dictionaryService.UpdateChargeServiceTariffScheduleAsync(id, request, GetActorUserId(), cancellationToken);
+        return result.Succeeded ? Ok(result.Value) : ToError(result);
+    }
+
     [Authorize(Policy = SystemPermissions.TariffsManage)]
     [HttpDelete("charge-services/{id:guid}")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]

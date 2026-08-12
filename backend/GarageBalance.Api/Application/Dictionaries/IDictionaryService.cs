@@ -87,6 +87,8 @@ public interface IDictionaryService
     Task<DictionaryResult<ChargeServiceSettingDto>> CreateChargeServiceSettingAsync(UpsertChargeServiceSettingRequest request, Guid? actorUserId, CancellationToken cancellationToken);
     Task<DictionaryResult<ChargeServiceSettingDto>> UpdateChargeServiceSettingAsync(Guid id, UpsertChargeServiceSettingRequest request, Guid? actorUserId, CancellationToken cancellationToken);
     Task<DictionaryResult<UpdatedChargeServiceWithTariffDto>> UpdateChargeServiceWithTariffAsync(Guid id, UpdateChargeServiceWithTariffRequest request, Guid? actorUserId, CancellationToken cancellationToken);
+    Task<DictionaryResult<IReadOnlyList<ChargeServiceTariffPeriodDto>>> GetChargeServiceTariffScheduleAsync(Guid id, CancellationToken cancellationToken);
+    Task<DictionaryResult<UpdatedChargeServiceTariffScheduleDto>> UpdateChargeServiceTariffScheduleAsync(Guid id, UpsertChargeServiceTariffScheduleRequest request, Guid? actorUserId, CancellationToken cancellationToken);
     Task<DictionaryResult<ChargeServiceSettingDto>> ArchiveChargeServiceSettingAsync(Guid id, string reason, Guid? actorUserId, CancellationToken cancellationToken);
     Task<DictionaryResult<ChargeServiceSettingDto>> RestoreChargeServiceSettingAsync(Guid id, Guid? actorUserId, CancellationToken cancellationToken);
 

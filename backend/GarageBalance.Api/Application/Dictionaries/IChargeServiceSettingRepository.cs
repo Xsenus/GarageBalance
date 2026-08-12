@@ -20,7 +20,9 @@ public interface IChargeServiceSettingRepository
     Task<ChargeServiceSetting?> FindArchivedAsync(Guid id, CancellationToken cancellationToken);
     Task<bool> ActiveDuplicateExistsAsync(Guid? ignoredId, string name, CancellationToken cancellationToken);
     Task<Tariff?> FindTariffVersionAsync(Guid serviceId, DateOnly effectiveFrom, CancellationToken cancellationToken);
-    Task SetTariffVersionAsync(Guid serviceId, Guid tariffId, DateOnly effectiveFrom, CancellationToken cancellationToken);
+    Task<IReadOnlyList<ChargeServiceTariffVersion>> GetTariffPeriodsAsync(Guid serviceId, bool tracked, CancellationToken cancellationToken);
+    Task SetTariffVersionAsync(Guid serviceId, Guid tariffId, DateOnly effectiveFrom, CancellationToken cancellationToken, DateOnly? effectiveTo = null);
+    void ReplaceTariffPeriods(Guid serviceId, IReadOnlyCollection<ChargeServiceTariffVersion> existing, IReadOnlyCollection<ChargeServiceTariffVersion> replacements);
     Task<bool> HasTariffVersionAsync(Guid tariffId, CancellationToken cancellationToken);
     void Add(ChargeServiceSetting setting);
 }

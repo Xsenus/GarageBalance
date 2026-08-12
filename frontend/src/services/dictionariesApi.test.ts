@@ -303,6 +303,31 @@ describe('dictionariesApi response cache', () => {
     )
   })
 
+  it('loads and atomically saves a charge service tariff schedule', async () => {
+    const periods = [
+      { tariffId: 'tariff-1', effectiveFrom: null, effectiveTo: '2026-08-31', rate: 100, tariffVersion: 'v1' },
+      { tariffId: 'tariff-2', effectiveFrom: '2026-09-01', effectiveTo: null, rate: 125, tariffVersion: 'v2' },
+    ]
+    const response = { service: { id: 'service-1' }, tariff: { id: 'tariff-2' }, periods }
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify(periods), { status: 200, headers: { 'Content-Type': 'application/json' } }))
+      .mockResolvedValueOnce(new Response(JSON.stringify(response), { status: 200, headers: { 'Content-Type': 'application/json' } }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await expect(dictionariesApi.getChargeServiceTariffSchedule!('token', 'service-1')).resolves.toEqual(periods)
+    const request = { periods, allowGaps: false, changeReason: 'Новая ставка', serviceVersion: 'service-v1' }
+    await expect(dictionariesApi.updateChargeServiceTariffSchedule!('token', 'service-1', request)).resolves.toEqual(response)
+
+    expect(fetchMock).toHaveBeenNthCalledWith(1,
+      '/api/dictionaries/charge-services/service-1/tariff-schedule',
+      expect.objectContaining({ headers: expect.objectContaining({ Authorization: 'Bearer token' }) }),
+    )
+    expect(fetchMock).toHaveBeenNthCalledWith(2,
+      '/api/dictionaries/charge-services/service-1/tariff-schedule',
+      expect.objectContaining({ method: 'PUT', body: JSON.stringify(request) }),
+    )
+  })
+
   it('removes a failed response so the next read can retry', async () => {
     const fetchMock = vi.fn()
       .mockResolvedValueOnce(new Response(JSON.stringify({ detail: 'Ошибка' }), { status: 500 }))

@@ -30,6 +30,7 @@ public sealed class DictionaryService(
 {
     private const string OtherIncomeIncomeTypeCode = "other_income";
     private const string ServiceIncomeTypeCodePrefix = "service_";
+    private static readonly DateOnly OpenTariffScheduleStart = new(1900, 1, 1);
     private static readonly IReadOnlyDictionary<string, string> DictionaryFieldLabels = new Dictionary<string, string>(StringComparer.Ordinal)
     {
         ["lastName"] = "Фамилия",
@@ -2476,6 +2477,201 @@ public sealed class DictionaryService(
         return DictionaryResult<UpdatedChargeServiceWithTariffDto>.Success(
             new UpdatedChargeServiceWithTariffDto(ToChargeServiceSettingDto(setting), ToTariffDto(tariff)));
     }
+
+    public async Task<DictionaryResult<IReadOnlyList<ChargeServiceTariffPeriodDto>>> GetChargeServiceTariffScheduleAsync(
+        Guid id,
+        CancellationToken cancellationToken)
+    {
+        if (await chargeServiceSettingRepository.FindActiveAsync(id, cancellationToken) is null)
+        {
+            return DictionaryResult<IReadOnlyList<ChargeServiceTariffPeriodDto>>.Failure(
+                "charge_service_not_found",
+                "Настройка услуги не найдена.");
+        }
+
+        var periods = await chargeServiceSettingRepository.GetTariffPeriodsAsync(id, false, cancellationToken);
+        return DictionaryResult<IReadOnlyList<ChargeServiceTariffPeriodDto>>.Success(periods.Select(ToChargeServiceTariffPeriodDto).ToList());
+    }
+
+    public async Task<DictionaryResult<UpdatedChargeServiceTariffScheduleDto>> UpdateChargeServiceTariffScheduleAsync(
+        Guid id,
+        UpsertChargeServiceTariffScheduleRequest request,
+        Guid? actorUserId,
+        CancellationToken cancellationToken)
+    {
+        var setting = await chargeServiceSettingRepository.FindActiveAsync(id, cancellationToken);
+        if (setting is null)
+        {
+            return DictionaryResult<UpdatedChargeServiceTariffScheduleDto>.Failure(
+                "charge_service_not_found",
+                "Настройка услуги не найдена.");
+        }
+
+        OptimisticConcurrencyGuard.EnsureCurrent(request.ServiceVersion, setting);
+        if (!setting.IsRegular || !setting.TariffId.HasValue)
+        {
+            return DictionaryResult<UpdatedChargeServiceTariffScheduleDto>.Failure(
+                "charge_service_tariff_regular_required",
+                "Тарифную сетку можно настроить только для регулярной услуги с тарифом.");
+        }
+
+        var validation = ValidateTariffSchedule(request.Periods, request.AllowGaps);
+        if (!validation.Succeeded)
+        {
+            return DictionaryResult<UpdatedChargeServiceTariffScheduleDto>.Failure(validation.ErrorCode!, validation.ErrorMessage!);
+        }
+
+        var allExisting = await chargeServiceSettingRepository.GetTariffPeriodsAsync(id, true, cancellationToken);
+        var existing = allExisting.Where(item => !item.IsArchived).ToList();
+        var existingByTariff = existing.ToDictionary(item => item.TariffId);
+        var fallbackTariff = existing.LastOrDefault()?.Tariff
+            ?? await tariffRepository.FindActiveAsync(setting.TariffId.Value, cancellationToken);
+        if (fallbackTariff is null)
+        {
+            return DictionaryResult<UpdatedChargeServiceTariffScheduleDto>.Failure(
+                "charge_service_tariff_not_found",
+                "Действующий тариф услуги не найден.");
+        }
+
+        var replacements = new List<ChargeServiceTariffVersion>(request.Periods.Count);
+        var usedTariffIds = new HashSet<Guid>();
+        foreach (var period in request.Periods.OrderBy(item => item.EffectiveFrom ?? OpenTariffScheduleStart))
+        {
+            var startsOn = period.EffectiveFrom ?? OpenTariffScheduleStart;
+            var source = period.TariffId.HasValue && existingByTariff.TryGetValue(period.TariffId.Value, out var existingPeriod)
+                ? existingPeriod.Tariff
+                : fallbackTariff;
+            if (period.TariffVersion.HasValue)
+            {
+                OptimisticConcurrencyGuard.EnsureCurrent(period.TariffVersion, source);
+            }
+
+            var roundedRate = MoneyMath.RoundRate(period.Rate);
+            var canReuse = existingByTariff.TryGetValue(source.Id, out var sourcePeriod)
+                && sourcePeriod.EffectiveFrom == startsOn
+                && source.Rate == roundedRate
+                && usedTariffIds.Add(source.Id);
+            var tariff = canReuse ? source : CloneTariffForSchedule(source, setting.Name, startsOn, roundedRate, request.ChangeReason);
+            if (!canReuse)
+            {
+                usedTariffIds.Add(tariff.Id);
+                tariffRepository.Add(tariff);
+            }
+
+            replacements.Add(new ChargeServiceTariffVersion
+            {
+                ChargeServiceSettingId = id,
+                TariffId = tariff.Id,
+                Tariff = tariff,
+                EffectiveFrom = startsOn,
+                EffectiveTo = period.EffectiveTo
+            });
+        }
+
+        chargeServiceSettingRepository.ReplaceTariffPeriods(id, allExisting, replacements);
+        var current = replacements[^1].Tariff;
+        setting.TariffId = current.Id;
+        setting.Tariff = current;
+        setting.IsMetered = current.CalculationBase is TariffCalculationBases.MeterWater or TariffCalculationBases.MeterElectricity;
+        setting.HasTieredTariff = setting.IsMetered &&
+            (!string.IsNullOrWhiteSpace(current.ElectricityTiersJson) ||
+             current.ElectricityFirstRate.HasValue && current.ElectricitySecondRate.HasValue);
+        setting.UpdatedAtUtc = DateTimeOffset.UtcNow;
+
+        AddAudit(
+            actorUserId,
+            "dictionary.charge_service_tariff_schedule_updated",
+            "charge_service",
+            setting.Id,
+            $"Обновлена тарифная сетка услуги {setting.Name}: {replacements.Count} период(ов).",
+            NormalizeOptional(request.ChangeReason));
+        await unitOfWork.SaveChangesAsync(cancellationToken);
+
+        return DictionaryResult<UpdatedChargeServiceTariffScheduleDto>.Success(
+            new UpdatedChargeServiceTariffScheduleDto(
+                ToChargeServiceSettingDto(setting),
+                ToTariffDto(current),
+                replacements.Select(ToChargeServiceTariffPeriodDto).ToList()));
+    }
+
+    private static DictionaryResult<bool> ValidateTariffSchedule(
+        IReadOnlyList<UpsertChargeServiceTariffPeriodRequest> periods,
+        bool allowGaps)
+    {
+        if (periods.Count is < 1 or > 120)
+        {
+            return DictionaryResult<bool>.Failure("tariff_schedule_count_invalid", "Укажите от 1 до 120 периодов тарифа.");
+        }
+
+        var ordered = periods.OrderBy(item => item.EffectiveFrom ?? OpenTariffScheduleStart).ToList();
+        foreach (var period in ordered)
+        {
+            if (period.Rate is < 0.0001m or > 999999999m)
+            {
+                return DictionaryResult<bool>.Failure("tariff_schedule_rate_invalid", "Значение тарифа должно быть больше 0 и не превышать 999999999.");
+            }
+
+            if (period.EffectiveFrom.HasValue && period.EffectiveTo.HasValue && period.EffectiveFrom.Value > period.EffectiveTo.Value)
+            {
+                return DictionaryResult<bool>.Failure("tariff_schedule_range_invalid", "Конечная дата тарифа не может быть раньше начальной.");
+            }
+        }
+
+        var hasGap = ordered[0].EffectiveFrom.HasValue || ordered[^1].EffectiveTo.HasValue;
+        for (var index = 1; index < ordered.Count; index++)
+        {
+            var previousEnd = ordered[index - 1].EffectiveTo;
+            var currentStart = ordered[index].EffectiveFrom ?? OpenTariffScheduleStart;
+            if (!previousEnd.HasValue || currentStart <= previousEnd.Value)
+            {
+                return DictionaryResult<bool>.Failure("tariff_schedule_overlap", "Периоды тарифов пересекаются. Исправьте начальные и конечные даты.");
+            }
+
+            hasGap |= currentStart > previousEnd.Value.AddDays(1);
+        }
+
+        if (hasGap && !allowGaps)
+        {
+            return DictionaryResult<bool>.Failure(
+                "tariff_schedule_gap",
+                "В тарифной сетке есть период без тарифа. Заполните разрыв или явно подтвердите сохранение с разрывами.");
+        }
+
+        return DictionaryResult<bool>.Success(true);
+    }
+
+    private static Tariff CloneTariffForSchedule(
+        Tariff source,
+        string serviceName,
+        DateOnly effectiveFrom,
+        decimal rate,
+        string? changeReason) => new()
+        {
+            Name = CreateServiceTariffVersionName(
+                serviceName,
+                !string.IsNullOrWhiteSpace(source.ElectricityTiersJson) ? "metered_tiered" :
+                    source.CalculationBase is TariffCalculationBases.MeterWater or TariffCalculationBases.MeterElectricity ? "metered" : "regular"),
+            CalculationBase = source.CalculationBase,
+            Rate = rate,
+            EffectiveFrom = effectiveFrom,
+            Comment = NormalizeOptional(changeReason) ?? $"Период тарифной сетки услуги «{serviceName}».",
+            ElectricityFirstThreshold = source.ElectricityFirstThreshold,
+            ElectricitySecondThreshold = source.ElectricitySecondThreshold,
+            ElectricityFirstTierName = source.ElectricityFirstTierName,
+            ElectricitySecondTierName = source.ElectricitySecondTierName,
+            ElectricityThirdTierName = source.ElectricityThirdTierName,
+            ElectricityFirstRate = source.ElectricityFirstRate,
+            ElectricitySecondRate = source.ElectricitySecondRate,
+            ElectricityThirdRate = source.ElectricityThirdRate,
+            ElectricityTiersJson = source.ElectricityTiersJson
+        };
+
+    private static ChargeServiceTariffPeriodDto ToChargeServiceTariffPeriodDto(ChargeServiceTariffVersion period) => new(
+        period.TariffId,
+        period.EffectiveFrom == OpenTariffScheduleStart ? null : period.EffectiveFrom,
+        period.EffectiveTo,
+        period.Tariff.Rate,
+        period.Tariff.Version);
 
     private async Task<DictionaryResult<UpdatedChargeServiceWithTariffDto>> CreateChargeServiceTariffRateVersionAsync(
         ChargeServiceSetting setting,

@@ -1332,6 +1332,24 @@ public sealed class DictionariesControllerTests
     }
 
     [Fact]
+    public async Task GetChargeServiceTariffSchedule_ReturnsPeriodsFromService()
+    {
+        var serviceId = Guid.NewGuid();
+        var period = new ChargeServiceTariffPeriodDto(Guid.NewGuid(), null, null, 100m, Guid.NewGuid());
+        var service = new FakeDictionaryService
+        {
+            ChargeServiceTariffScheduleResult = DictionaryResult<IReadOnlyList<ChargeServiceTariffPeriodDto>>.Success([period])
+        };
+        var controller = CreateController(service, Guid.NewGuid());
+
+        var response = await controller.GetChargeServiceTariffSchedule(serviceId, CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(response.Result);
+        Assert.Same(period, Assert.Single(Assert.IsAssignableFrom<IReadOnlyList<ChargeServiceTariffPeriodDto>>(ok.Value)));
+        Assert.Equal(serviceId, service.LastChargeServiceSettingId);
+    }
+
+    [Fact]
     public async Task ArchiveChargeServiceSetting_ReturnsNoContentAndPassesActorUserId()
     {
         var actorUserId = Guid.NewGuid();
@@ -1973,6 +1991,8 @@ public sealed class DictionariesControllerTests
         public DictionaryResult<TariffDto> TariffMutationResult { get; init; } = DictionaryResult<TariffDto>.Failure("tariff_not_found", "Not found.");
         public DictionaryResult<CreatedChargeServiceWithTariffDto> CreateChargeServiceWithTariffResult { get; init; } = DictionaryResult<CreatedChargeServiceWithTariffDto>.Failure("not_configured", "Not configured.");
         public DictionaryResult<UpdatedChargeServiceWithTariffDto> UpdateChargeServiceWithTariffResult { get; init; } = DictionaryResult<UpdatedChargeServiceWithTariffDto>.Failure("not_configured", "Not configured.");
+        public DictionaryResult<IReadOnlyList<ChargeServiceTariffPeriodDto>> ChargeServiceTariffScheduleResult { get; init; } = DictionaryResult<IReadOnlyList<ChargeServiceTariffPeriodDto>>.Failure("not_configured", "Not configured.");
+        public DictionaryResult<UpdatedChargeServiceTariffScheduleDto> UpdateChargeServiceTariffScheduleResult { get; init; } = DictionaryResult<UpdatedChargeServiceTariffScheduleDto>.Failure("not_configured", "Not configured.");
         public DictionaryResult<ChargeServiceSettingDto> CreateChargeServiceSettingResult { get; init; } = DictionaryResult<ChargeServiceSettingDto>.Failure("not_configured", "Not configured.");
         public DictionaryResult<ChargeServiceSettingDto> UpdateChargeServiceSettingResult { get; init; } = DictionaryResult<ChargeServiceSettingDto>.Failure("not_configured", "Not configured.");
         public DictionaryResult<ChargeServiceSettingDto> ArchiveChargeServiceSettingResult { get; init; } = DictionaryResult<ChargeServiceSettingDto>.Failure("not_configured", "Not configured.");
@@ -2443,6 +2463,19 @@ public sealed class DictionariesControllerTests
             LastActorUserId = actorUserId;
             LastUpdateChargeServiceWithTariffRequest = request;
             return Task.FromResult(UpdateChargeServiceWithTariffResult);
+        }
+
+        public Task<DictionaryResult<IReadOnlyList<ChargeServiceTariffPeriodDto>>> GetChargeServiceTariffScheduleAsync(Guid id, CancellationToken cancellationToken)
+        {
+            LastChargeServiceSettingId = id;
+            return Task.FromResult(ChargeServiceTariffScheduleResult);
+        }
+
+        public Task<DictionaryResult<UpdatedChargeServiceTariffScheduleDto>> UpdateChargeServiceTariffScheduleAsync(Guid id, UpsertChargeServiceTariffScheduleRequest request, Guid? actorUserId, CancellationToken cancellationToken)
+        {
+            LastChargeServiceSettingId = id;
+            LastActorUserId = actorUserId;
+            return Task.FromResult(UpdateChargeServiceTariffScheduleResult);
         }
 
         public Task<DictionaryResult<ChargeServiceSettingDto>> ArchiveChargeServiceSettingAsync(Guid id, string reason, Guid? actorUserId, CancellationToken cancellationToken)

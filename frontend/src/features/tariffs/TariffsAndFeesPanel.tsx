@@ -1,9 +1,9 @@
 import { Fragment, useEffect, useRef, useState } from 'react'
 import type { FormEvent, MouseEvent } from 'react'
-import { CircleCheck, FileSpreadsheet, FileText, Pencil, PowerOff, RotateCcw, Save, Trash2, X } from 'lucide-react'
+import { CalendarPlus, CircleCheck, FileSpreadsheet, FileText, Pencil, PowerOff, RotateCcw, Save, Trash2, X } from 'lucide-react'
 import type { AuthResponse } from '../../services/authApi'
 import { DictionaryApiError } from '../../services/dictionariesApi'
-import type { AccountingTypeDto, ChargeServiceSettingDto, CreateChargeServiceWithTariffRequest, DictionaryClient, FeeCampaignDto, GarageDto, IrregularPaymentDto, MeasurementUnitDto, TariffDto, UpdateChargeServiceWithTariffRequest, UpsertChargeServiceSettingRequest, UpsertFeeCampaignRequest, UpsertIrregularPaymentRequest, UpsertTariffRequest } from '../../services/dictionariesApi'
+import type { AccountingTypeDto, ChargeServiceSettingDto, ChargeServiceTariffPeriodDto, CreateChargeServiceWithTariffRequest, DictionaryClient, FeeCampaignDto, GarageDto, IrregularPaymentDto, MeasurementUnitDto, TariffDto, UpdateChargeServiceWithTariffRequest, UpsertChargeServiceSettingRequest, UpsertChargeServiceTariffScheduleRequest, UpsertFeeCampaignRequest, UpsertIrregularPaymentRequest, UpsertTariffRequest } from '../../services/dictionariesApi'
 import type { FinanceClient } from '../../services/financeApi'
 import type { FundOptionDto, FundsClient } from '../../services/fundsApi'
 import { hasPermission, permissions } from '../../shared/accessControl'
@@ -773,6 +773,8 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
   const [feeCampaignRestoreTarget, setFeeCampaignRestoreTarget] = useState<FeeCampaignDto | null>(null)
   const [feeCampaignActionMessage, setFeeCampaignActionMessage] = useState<string | null>(null)
   const [chargeServiceEditTarget, setChargeServiceEditTarget] = useState<ChargeServiceSettingDto | null>(null)
+  const [chargeServiceTariffSchedule, setChargeServiceTariffSchedule] = useState<ChargeServiceTariffPeriodDto[] | null>(null)
+  const [chargeServiceTariffScheduleLoading, setChargeServiceTariffScheduleLoading] = useState(false)
   const [chargeServiceArchiveTarget, setChargeServiceArchiveTarget] = useState<ChargeServiceSettingDto | null>(null)
   const [chargeServiceArchiveReason, setChargeServiceArchiveReason] = useState('')
   const [chargeServiceRestoreTarget, setChargeServiceRestoreTarget] = useState<ChargeServiceSettingDto | null>(null)
@@ -1846,6 +1848,48 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
     }
   }
 
+  async function openChargeServiceEditor(setting: ChargeServiceSettingDto) {
+    setTariffPersistenceError(null)
+    setChargeServiceEditTarget(setting)
+    const currentTariff = backendTariffs.find((tariff) => tariff.id === setting.tariffId)
+    if (!dictionaryClient.getChargeServiceTariffSchedule) {
+      setChargeServiceTariffSchedule(currentTariff ? [{
+        tariffId: currentTariff.id,
+        effectiveFrom: currentTariff.effectiveFrom,
+        effectiveTo: null,
+        rate: currentTariff.rate,
+        tariffVersion: currentTariff.version,
+      }] : [])
+      return
+    }
+
+    setChargeServiceTariffScheduleLoading(true)
+    setChargeServiceTariffSchedule(null)
+    try {
+      setChargeServiceTariffSchedule(await dictionaryClient.getChargeServiceTariffSchedule(auth.accessToken, setting.id))
+    } catch (caught) {
+      setTariffPersistenceError(caught instanceof Error ? caught.message : 'Не удалось загрузить тарифную сетку.')
+      setChargeServiceTariffSchedule([])
+    } finally {
+      setChargeServiceTariffScheduleLoading(false)
+    }
+  }
+
+  async function updateChargeServiceTariffSchedule(request: UpsertChargeServiceTariffScheduleRequest) {
+    if (!chargeServiceEditTarget || !dictionaryClient.updateChargeServiceTariffSchedule) {
+      throw new Error('Сохранение тарифной сетки недоступно.')
+    }
+
+    const saved = await dictionaryClient.updateChargeServiceTariffSchedule(auth.accessToken, chargeServiceEditTarget.id, {
+      ...request,
+      serviceVersion: chargeServiceEditTarget.version,
+    })
+    applySavedServiceTariff(saved)
+    setChargeServiceEditTarget(saved.service)
+    setChargeServiceTariffSchedule(saved.periods)
+    return saved.periods
+  }
+
   async function createIrregularService(request: UpsertIrregularPaymentRequest) {
     if (!canManageTariffs) {
       return
@@ -2581,8 +2625,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
                             title="Изменить"
                             disabled={!canManageTariffs || isRowDisabled || tariffReferencesLoading}
                             onClick={() => {
-                              setTariffPersistenceError(null)
-                              setChargeServiceEditTarget(serviceSetting)
+                              void openChargeServiceEditor(serviceSetting)
                             }}
                           >
                             <Pencil size={16} aria-hidden="true" />
@@ -3221,13 +3264,17 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
       ) : null}
       {chargeServiceEditTarget ? (
         <AddServicePrototypeDialog
+          key={`${chargeServiceEditTarget.id}-${chargeServiceTariffScheduleLoading ? 'loading' : 'ready'}`}
           initialSetting={chargeServiceEditTarget}
+          tariffSchedule={chargeServiceTariffSchedule}
+          tariffScheduleLoading={chargeServiceTariffScheduleLoading}
           isSaving={tariffSavingRowId === `charge-service-${chargeServiceEditTarget.id}`}
           funds={backendFunds.filter((fund) => fund.allowOperations)}
           incomeTypes={backendIncomeTypes.filter((incomeType) => !incomeType.isArchived)}
           measurementUnits={backendMeasurementUnits.filter((unit) => !unit.isArchived)}
           onClose={() => setChargeServiceEditTarget(null)}
           onUpdateWithTariff={updateServiceSettingWithTariff}
+          onUpdateTariffSchedule={updateChargeServiceTariffSchedule}
           submitLabel="Сохранить изменения"
           tariffs={backendTariffs.filter((tariff) => !tariff.isArchived)}
           title="Изменить услугу"
@@ -3271,9 +3318,12 @@ export function AddServicePrototypeDialog({
   onSaveIrregular,
   onSave,
   onUpdateWithTariff,
+  onUpdateTariffSchedule,
   regularOnly = false,
   submitLabel = 'Сохранить',
   tariffs,
+  tariffSchedule = null,
+  tariffScheduleLoading = false,
   title = 'Добавить услугу',
 }: {
   initialSetting?: ChargeServiceSettingDto
@@ -3286,9 +3336,12 @@ export function AddServicePrototypeDialog({
   onSaveIrregular?: (request: UpsertIrregularPaymentRequest) => Promise<void>
   onSave?: (request: UpsertChargeServiceSettingRequest) => Promise<void>
   onUpdateWithTariff?: (request: UpdateChargeServiceWithTariffRequest) => Promise<void>
+  onUpdateTariffSchedule?: (request: UpsertChargeServiceTariffScheduleRequest) => Promise<ChargeServiceTariffPeriodDto[]>
   regularOnly?: boolean
   submitLabel?: string
   tariffs: TariffDto[]
+  tariffSchedule?: ChargeServiceTariffPeriodDto[] | null
+  tariffScheduleLoading?: boolean
   title?: string
 }) {
   const initialIncomeTypeId = initialSetting?.incomeTypeId ?? ''
@@ -3317,6 +3370,11 @@ export function AddServicePrototypeDialog({
   const [tariffTiers, setTariffTiers] = useState(() => getElectricityTariffTiers(initialTariff))
   const [tariffEffectiveFrom, setTariffEffectiveFrom] = useState(initialTariff?.effectiveFrom ?? getLocalDateInputValue())
   const [error, setError] = useState<string | null>(null)
+  const [scheduleDraft, setScheduleDraft] = useState<Array<ChargeServiceTariffPeriodDto & { key: string; rateText: string }>>(() =>
+    (tariffSchedule ?? []).map((period) => ({ ...period, rateText: formatTariffDecimal(period.rate), key: `${period.tariffId}-${period.effectiveFrom ?? 'all'}-${period.effectiveTo ?? 'all'}` })))
+  const [allowScheduleGaps, setAllowScheduleGaps] = useState(false)
+  const [scheduleMessage, setScheduleMessage] = useState<string | null>(null)
+  const [scheduleSaving, setScheduleSaving] = useState(false)
   const selectedTariff = initialTariff
   const supportedMeterCalculationBase = isMeterTariff(initialTariff ?? undefined)
     ? initialTariff!.calculationBase
@@ -3328,6 +3386,70 @@ export function AddServicePrototypeDialog({
   useRestoreFocusOnClose(true)
   const dialogRef = useFocusTrap<HTMLElement>(true)
   useEscapeKey(true, onClose)
+
+  async function saveTariffSchedule() {
+    if (!onUpdateTariffSchedule || !initialSetting) {
+      return
+    }
+
+    if (scheduleDraft.length === 0) {
+      setScheduleMessage('Добавьте хотя бы один период тарифа.')
+      return
+    }
+
+    const ordered = [...scheduleDraft].sort((left, right) => (left.effectiveFrom ?? '').localeCompare(right.effectiveFrom ?? ''))
+    for (let index = 0; index < ordered.length; index += 1) {
+      const period = ordered[index]
+      const parsedRate = parsePrototypeAmount(period.rateText)
+      if (parsedRate == null || parsedRate <= 0 || parsedRate > 999999999) {
+        setScheduleMessage('Для каждого периода укажите тариф больше нуля.')
+        return
+      }
+      if (period.effectiveFrom && period.effectiveTo && period.effectiveFrom > period.effectiveTo) {
+        setScheduleMessage('Конечная дата тарифа не может быть раньше начальной.')
+        return
+      }
+      if (index > 0) {
+        const previous = ordered[index - 1]
+        if (!previous.effectiveTo || !period.effectiveFrom || period.effectiveFrom <= previous.effectiveTo) {
+          setScheduleMessage('Периоды тарифов пересекаются. Исправьте даты.')
+          return
+        }
+      }
+    }
+
+    const hasGaps = Boolean(ordered[0].effectiveFrom || ordered.at(-1)?.effectiveTo)
+      || ordered.some((period, index) => {
+        if (index === 0) return false
+        const previousEnd = ordered[index - 1].effectiveTo
+        if (!previousEnd || !period.effectiveFrom) return true
+        const expected = new Date(`${previousEnd}T00:00:00`)
+        expected.setDate(expected.getDate() + 1)
+        return period.effectiveFrom !== getLocalDateInputValue(expected)
+      })
+    if (hasGaps && !allowScheduleGaps) {
+      setScheduleMessage('В сетке есть период без тарифа. Заполните его или подтвердите сохранение с разрывами.')
+      return
+    }
+
+    setScheduleSaving(true)
+    setScheduleMessage(null)
+    try {
+      const saved = await onUpdateTariffSchedule({
+        periods: ordered.map(({ tariffId, tariffVersion, effectiveFrom, effectiveTo, rateText }) => ({ tariffId, tariffVersion, effectiveFrom, effectiveTo, rate: parsePrototypeAmount(rateText)! })),
+        allowGaps: allowScheduleGaps,
+        changeReason: 'Изменение тарифной сетки в карточке услуги.',
+        serviceVersion: initialSetting.version,
+      })
+      setScheduleDraft(saved.map((period) => ({ ...period, rateText: formatTariffDecimal(period.rate), key: `${period.tariffId}-${period.effectiveFrom ?? 'all'}-${period.effectiveTo ?? 'all'}` })))
+      setScheduleMessage('Тарифная сетка сохранена.')
+      setAllowScheduleGaps(false)
+    } catch (caught) {
+      setScheduleMessage(caught instanceof Error ? caught.message : 'Не удалось сохранить тарифную сетку.')
+    } finally {
+      setScheduleSaving(false)
+    }
+  }
 
   function changeMeterMode(nextIsMetered: boolean) {
     const nextCalculationBase = nextIsMetered
@@ -3527,7 +3649,7 @@ export function AddServicePrototypeDialog({
                     }}
                   />
                 </FormField>
-                {!isTiered ? <FormField label="Тариф" help="Ставка начисления.">
+                {!isTiered && !initialSetting ? <FormField label="Тариф" help="Ставка начисления.">
                   <MoneyTextInput
                     aria-label="Тариф регулярной услуги"
                     value={regularRate}
@@ -3538,10 +3660,114 @@ export function AddServicePrototypeDialog({
                   />
                 </FormField> : null}
               </div>
+              {initialSetting ? (
+                <section className="tariff-schedule-editor" aria-labelledby="tariff-schedule-title">
+                  <div className="tariff-schedule-heading">
+                    <div>
+                      <h4 id="tariff-schedule-title">Изменение тарифов по периодам</h4>
+                      <p>Пустая дата означает, что тариф действует без ограничения с этой стороны.</p>
+                    </div>
+                    <button
+                      className="secondary-button create-action-button"
+                      type="button"
+                      aria-label="Добавить период тарифа"
+                      disabled={scheduleSaving || scheduleDraft.length === 120}
+                      onClick={() => setScheduleDraft((current) => [...current, {
+                        key: `new-${Date.now()}`,
+                        tariffId: '',
+                        tariffVersion: '',
+                        effectiveFrom: null,
+                        effectiveTo: null,
+                        rate: parsePrototypeAmount(regularRate) ?? 1,
+                        rateText: regularRate || '1',
+                      }])}
+                    >
+                      <CalendarPlus size={16} aria-hidden="true" />
+                      <span>Добавить период</span>
+                    </button>
+                  </div>
+                  {tariffScheduleLoading ? (
+                    <div className="tariff-schedule-loading" role="status" aria-live="polite">Загрузка тарифной сетки…</div>
+                  ) : (
+                    <div className="tariff-schedule-table" role="table" aria-label="Тарифная сетка услуги">
+                      <div className="tariff-schedule-row tariff-schedule-row--header" role="row">
+                        <span role="columnheader">Начальная дата</span>
+                        <span role="columnheader">Конечная дата</span>
+                        <span role="columnheader">Тариф</span>
+                        <span role="columnheader">Действия</span>
+                      </div>
+                      {scheduleDraft.map((period, periodIndex) => (
+                        <div className="tariff-schedule-row" role="row" key={period.key}>
+                          <span role="cell">
+                            <LocalizedDatePicker
+                              ariaLabel={periodIndex === 0 ? 'Ставка с' : 'Начальная дата тарифа'}
+                              mode="date"
+                              value={period.effectiveFrom ?? ''}
+                              onChange={(value) => {
+                                const normalizedValue = value || null
+                                if (periodIndex === 0 && normalizedValue) {
+                                  setTariffEffectiveFrom(normalizedValue)
+                                }
+                                setScheduleDraft((current) => current.map((item) => item.key === period.key
+                                  ? { ...item, effectiveFrom: normalizedValue }
+                                  : item))
+                              }}
+                            />
+                          </span>
+                          <span role="cell">
+                            <LocalizedDatePicker
+                              ariaLabel="Конечная дата тарифа"
+                              mode="date"
+                              value={period.effectiveTo ?? ''}
+                              onChange={(value) => setScheduleDraft((current) => current.map((item) => item.key === period.key
+                                ? { ...item, effectiveTo: value || null }
+                                : item))}
+                            />
+                          </span>
+                          <span role="cell">
+                            {isTiered ? <span className="tariff-schedule-tiered-value">По пороговой сетке</span> : (
+                              <MoneyTextInput
+                                aria-label="Тариф регулярной услуги"
+                                value={period.rateText}
+                                onValueChange={(value) => {
+                                  setRegularRate(value)
+                                  setScheduleDraft((current) => current.map((item) => item.key === period.key
+                                    ? { ...item, rateText: value }
+                                    : item))
+                                }}
+                              />
+                            )}
+                          </span>
+                          <span role="cell" className="tariff-schedule-actions">
+                            <button
+                              className="icon-button danger-icon-button"
+                              type="button"
+                              aria-label="Удалить период тарифа"
+                              disabled={scheduleDraft.length <= 1 || scheduleSaving}
+                              onClick={() => setScheduleDraft((current) => current.filter((item) => item.key !== period.key))}
+                            ><Trash2 size={16} aria-hidden="true" /></button>
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {scheduleMessage ? <p className="tariff-schedule-message" role="status">{scheduleMessage}</p> : null}
+                  <div className="tariff-schedule-footer">
+                    <label className="contractors-check-row">
+                      <input aria-label="Разрешить периоды без тарифа" type="checkbox" checked={allowScheduleGaps} onChange={(event) => setAllowScheduleGaps(event.target.checked)} />
+                      <span>Разрешить периоды без тарифа</span>
+                    </label>
+                    <button className="secondary-button" type="button" disabled={scheduleSaving || tariffScheduleLoading} onClick={() => void saveTariffSchedule()}>
+                      <Save size={16} aria-hidden="true" />
+                      <span>{scheduleSaving ? 'Сохраняем…' : 'Сохранить тарифную сетку'}</span>
+                    </button>
+                  </div>
+                </section>
+              ) : null}
               <div className="contractors-service-period-grid contractors-service-period-grid--single-row">
-                <FormField label="Ставка с">
+                {!initialSetting ? <FormField label="Ставка с">
                   <LocalizedDatePicker ariaLabel="Ставка с" mode="date" value={tariffEffectiveFrom} onChange={setTariffEffectiveFrom} />
-                </FormField>
+                </FormField> : null}
                 <FormField label="Периодичность" help={isMonthly ? 'Начисление создаётся каждый месяц.' : 'Начисление создаётся один раз в год.'}>
                   <SelectControl aria-label="Периодичность регулярной услуги" value={periodicityMonths} options={regularServicePeriodicityOptions} onChange={setPeriodicityMonths} />
                 </FormField>

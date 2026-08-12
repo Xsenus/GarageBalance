@@ -4529,6 +4529,105 @@ public sealed class DictionaryServiceTests
     }
 
     [Fact]
+    public async Task UpdateChargeServiceTariffScheduleAsync_SavesContiguousPeriodsAndSelectsRateByMonth()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fund = CreateFund("Фонд услуг", 10);
+        var incomeType = new IncomeType { Name = "Услуги", Code = "services", DestinationFundId = fund.Id };
+        var tariff = new Tariff { Name = "Охрана", CalculationBase = "fixed", Rate = 100m, EffectiveFrom = new DateOnly(2026, 1, 1) };
+        var setting = new ChargeServiceSetting
+        {
+            Name = "Охрана",
+            IsRegular = true,
+            PeriodicityMonths = 1,
+            AccrualStartMonth = 1,
+            PaymentDueDay = 30,
+            OverdueGraceDays = 30,
+            IncomeTypeId = incomeType.Id,
+            TariffId = tariff.Id,
+            UnitName = "руб."
+        };
+        database.Context.AddRange(fund, incomeType, tariff, setting);
+        await database.Context.SaveChangesAsync();
+
+        var service = DictionaryServiceTestFactory.Create(database.Context);
+        var result = await service.UpdateChargeServiceTariffScheduleAsync(
+            setting.Id,
+            new UpsertChargeServiceTariffScheduleRequest(
+                [
+                    new(null, null, new DateOnly(2026, 8, 31), 100m),
+                    new(null, new DateOnly(2026, 9, 1), null, 125m)
+                ],
+                false,
+                "Новая ставка с сентября",
+                setting.Version),
+            Guid.NewGuid(),
+            CancellationToken.None);
+
+        Assert.True(result.Succeeded, result.ErrorMessage);
+        Assert.Equal(2, result.Value!.Periods.Count);
+        Assert.Null(result.Value.Periods[0].EffectiveFrom);
+        Assert.Null(result.Value.Periods[1].EffectiveTo);
+        Assert.Equal(125m, result.Value.Tariff.Rate);
+
+        var repository = new EfChargeServiceSettingRepository(database.Context);
+        Assert.Equal(100m, (await repository.GetActiveRegularAsync(new DateOnly(2026, 8, 1), CancellationToken.None)).Single().Tariff!.Rate);
+        Assert.Equal(125m, (await repository.GetActiveRegularAsync(new DateOnly(2026, 9, 1), CancellationToken.None)).Single().Tariff!.Rate);
+        Assert.Contains(database.Context.AuditEvents, item => item.Action == "dictionary.charge_service_tariff_schedule_updated");
+    }
+
+    [Fact]
+    public async Task UpdateChargeServiceTariffScheduleAsync_RejectsGapWithoutExplicitConfirmation()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fund = CreateFund("Фонд услуг", 10);
+        var incomeType = new IncomeType { Name = "Услуги", Code = "services", DestinationFundId = fund.Id };
+        var tariff = new Tariff { Name = "Охрана", CalculationBase = "fixed", Rate = 100m, EffectiveFrom = new DateOnly(2026, 1, 1) };
+        var setting = new ChargeServiceSetting
+        {
+            Name = "Охрана",
+            IsRegular = true,
+            PeriodicityMonths = 1,
+            AccrualStartMonth = 1,
+            PaymentDueDay = 30,
+            OverdueGraceDays = 30,
+            IncomeTypeId = incomeType.Id,
+            TariffId = tariff.Id,
+            UnitName = "руб."
+        };
+        database.Context.AddRange(fund, incomeType, tariff, setting);
+        await database.Context.SaveChangesAsync();
+
+        var result = await DictionaryServiceTestFactory.Create(database.Context).UpdateChargeServiceTariffScheduleAsync(
+            setting.Id,
+            new UpsertChargeServiceTariffScheduleRequest(
+                [new(null, new DateOnly(2026, 9, 1), null, 125m)],
+                false,
+                null,
+                setting.Version),
+            null,
+            CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Equal("tariff_schedule_gap", result.ErrorCode);
+        Assert.Empty(database.Context.ChargeServiceTariffVersions);
+
+        var confirmed = await DictionaryServiceTestFactory.Create(database.Context).UpdateChargeServiceTariffScheduleAsync(
+            setting.Id,
+            new UpsertChargeServiceTariffScheduleRequest(
+                [new(null, new DateOnly(2026, 9, 1), null, 125m)],
+                true,
+                "Разрыв подтвержден",
+                setting.Version),
+            null,
+            CancellationToken.None);
+        Assert.True(confirmed.Succeeded, confirmed.ErrorMessage);
+        var repository = new EfChargeServiceSettingRepository(database.Context);
+        Assert.Null((await repository.GetActiveRegularAsync(new DateOnly(2026, 8, 1), CancellationToken.None)).Single().Tariff);
+        Assert.Equal(125m, (await repository.GetActiveRegularAsync(new DateOnly(2026, 9, 1), CancellationToken.None)).Single().Tariff!.Rate);
+    }
+
+    [Fact]
     public async Task MeteredCatalog_SelectsHistoricalModeAndExcludesLegacyDisabledMeterTariff()
     {
         await using var database = await TestDatabase.CreateAsync();
