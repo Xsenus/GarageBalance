@@ -2930,6 +2930,10 @@ h1 {
   font-weight: 700;
 }
 
+.contractors-threshold-row label > span:first-child {
+  text-align: center;
+}
+
 .contractors-threshold-with-unit {
   display: grid;
   grid-template-columns: minmax(0, 1fr) max-content;
@@ -2950,6 +2954,25 @@ h1 {
 
 .contractors-threshold-row label:last-of-type input {
   text-align: right;
+}
+
+.tariff-schedule-editor--initial .tariff-schedule-row--initial {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) minmax(180px, 1fr);
+  gap: 12px;
+  align-items: end;
+  padding: 10px 12px 12px;
+}
+
+.tariff-schedule-editor--initial .tariff-schedule-row--initial input {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+@media (max-width: 680px) {
+  .tariff-schedule-editor--initial .tariff-schedule-row--initial {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
 .contractors-tier-editor {

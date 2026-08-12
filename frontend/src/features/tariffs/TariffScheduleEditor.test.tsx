@@ -5,6 +5,30 @@ import { describe, expect, it, vi } from 'vitest'
 import { AddServicePrototypeDialog } from './TariffsAndFeesPanel'
 
 describe('редактор тарифной сетки услуги', () => {
+  it('uses the two-column tariff layout when a regular service is created', () => {
+    render(<AddServicePrototypeDialog
+      isSaving={false}
+      funds={[{ id: 'fund-1', name: 'Водоснабжение', allowOperations: true }]}
+      incomeTypes={[]}
+      measurementUnits={[{ id: 'unit-1', name: 'м³', isArchived: false, version: 'unit-version' }]}
+      tariffs={[]}
+      onClose={vi.fn()}
+      onCreateWithTariff={vi.fn()}
+    />)
+
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Регулярные платежи' }))
+
+    const form = screen.getByLabelText('Наименование услуги').closest('form')
+    expect(form).toHaveClass('contractors-modal-form--service-edit')
+    expect(screen.getByRole('heading', { name: 'Настройки услуги' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Начальный тариф' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Параметры начисления' })).toBeInTheDocument()
+    expect(screen.getByLabelText('Тариф регулярной услуги')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('combobox', { name: 'Единица измерения' }))
+    expect(screen.getByRole('listbox', { name: 'Единица измерения: варианты' })).toHaveClass('select-control__list--above')
+  })
+
   it('показывает интервалы и сохраняет сетку с разрешённым промежутком без отдельного подтверждения', async () => {
     const onUpdateTariffSchedule = vi.fn().mockResolvedValue([
       { tariffId: 'tariff-1', effectiveFrom: '2026-01-01', effectiveTo: '2026-06-30', rate: 101, tariffVersion: 'tariff-version-1' },

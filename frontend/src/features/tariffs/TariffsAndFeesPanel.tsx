@@ -25,6 +25,7 @@ import { SelectControl } from '../../shared/SelectControl'
 import { TablePagination } from '../../shared/TablePagination'
 import { isMeterTariff } from '../../shared/validation'
 import { formatTariffDecimal } from './tariffFormatting'
+import { getInlineTariffChangeEffectiveFrom, getServiceMeasurementUnit, getServiceTariffDisplayName } from './tariffServicePresentation'
 
 const dictionaryScreenRequestLimit = 100
 
@@ -231,12 +232,6 @@ function parsePrototypeAmount(value: string) {
   return Number.isFinite(parsed) && parsed >= 0 ? parsed : null
 }
 
-function getServiceTariffDisplayName(tariffName: string | null | undefined, serviceName: string) {
-  if (!tariffName) return serviceName
-  const generatedVersionSuffix = /\s+—\s+(?:обычный|по счетчику|по счетчику с порогами),\s+\d{2}\.\d{2}\.\d{4},\s+[0-9a-f]{8}$/iu
-  return generatedVersionSuffix.test(tariffName) ? serviceName : tariffName
-}
-
 function calculateFeeCampaignTargetAmount(contributionAmount: number | null, participantCount: number) {
   if (contributionAmount === null || contributionAmount <= 0 || participantCount <= 0) {
     return 0
@@ -356,7 +351,9 @@ function expandTieredServiceRows(rows: ContractorTariffRow[], tariffs: TariffDto
       title: formatElectricityTierName(index === 0 ? 0 : tiers[index - 1].upperBound ?? 0, tier.upperBound),
       threshold: 'x',
       amount: formatTariffNumber(tier.rate),
-      unit: getTariffCalculationUnitName(tariff.calculationBase),
+      // The service card owns the visible unit. The calculation base is only a
+      // fallback for legacy tariffs that do not have a configured unit yet.
+      unit: row.unit?.trim() || getTariffCalculationUnitName(tariff.calculationBase),
       byMeter: true,
       tiered: true,
       calculationBase: tariff.calculationBase,
@@ -453,8 +450,7 @@ function createChargeServiceRows(setting: ChargeServiceSettingDto, tariffs: Tari
   const periodicityMonths = normalizeRegularServicePeriodicity(setting.periodicityMonths)
   const isMonthly = periodicityMonths === '1'
   const linkedTariff = tariffs.find((tariff) => tariff.id === setting.tariffId)
-  const unitName = setting.unitName?.trim()
-    || (linkedTariff ? getTariffCalculationUnitName(linkedTariff.calculationBase) : 'руб.')
+  const unitName = getServiceMeasurementUnit(setting, linkedTariff)
   const rows: ContractorTariffRow[] = [
     {
       id: `charge-service-${setting.id}-main`,
@@ -1320,7 +1316,11 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
     const backendTariff = targetRow.backendTariffId
       ? backendTariffs.find((tariff) => tariff.id === targetRow.backendTariffId)
       : findTariffForPrototypeRow(backendTariffs, targetRow)
-    const effectiveFrom = targetRow.effectiveFrom ?? backendTariff?.effectiveFrom ?? getLocalDateInputValue()
+    // An inline edit is a correction from today, not a rewrite of the tariff
+    // version whose start date happens to be displayed in the loaded DTO.
+    // The backend inserts/replaces the version at this date and keeps the
+    // preceding and already scheduled future periods intact.
+    const effectiveFrom = getInlineTariffChangeEffectiveFrom(backendTariff?.effectiveFrom)
     const amount = parseTariffAmount(targetRow.amount ?? '')
     if (amount == null) {
       return false
@@ -2419,9 +2419,9 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
                         <span className="tariffs-threshold-range__unit">{row.unit}</span>
                         {thresholdRangeErrors[row.id] ? <small className="contractors-field-error" role="alert">{thresholdRangeErrors[row.id]}</small> : null}
                       </div>
-                    ) : (
+                    ) : row.title !== (row.group ?? row.category) ? (
                       <span>{row.title}</span>
-                    )}
+                    ) : null}
                   </span>
                   <span role="cell" aria-label={`${row.category}: ${row.title}: единица`}>
                     {row.dateDay === undefined && row.serviceSettingKind !== 'periodicity' ? row.unit : null}
@@ -3600,9 +3600,9 @@ export function AddServicePrototypeDialog({
           </button>
         </div>
 
-        <form className={`dictionary-modal-form contractors-modal-form${initialSetting && isRegular ? ` contractors-modal-form--service-edit${isTiered ? ' contractors-modal-form--service-edit-tiered' : ''}` : ''}`} onSubmit={submitService}>
+        <form className={`dictionary-modal-form contractors-modal-form${isRegular ? ` contractors-modal-form--service-edit${isTiered ? ' contractors-modal-form--service-edit-tiered' : ''}` : ''}`} onSubmit={submitService}>
           {error ? <FormError>{error}</FormError> : null}
-          {initialSetting && isRegular ? <h4 className="contractors-service-section-title contractors-service-section-title--settings">Настройки услуги</h4> : null}
+          {isRegular ? <h4 className="contractors-service-section-title contractors-service-section-title--settings">Настройки услуги</h4> : null}
           <div className={`contractors-service-heading-grid${regularOnly || initialSetting ? ' contractors-service-heading-grid--name-only' : ''}`}>
             <FormField label="Наименование услуги">
               <input aria-label="Наименование услуги" value={name} onChange={(event) => setName(event.target.value)} />
@@ -3645,16 +3645,6 @@ export function AddServicePrototypeDialog({
                     }}
                   />
                 </FormField>
-                {!isTiered && !initialSetting ? <FormField label="Тариф" help="Ставка начисления.">
-                  <MoneyTextInput
-                    aria-label="Тариф регулярной услуги"
-                    value={regularRate}
-                    onValueChange={(nextRate) => {
-                      setRegularRate(nextRate)
-                      setError(null)
-                    }}
-                  />
-                </FormField> : null}
               </div>
               {initialSetting && !isTiered ? (
                 <section className="tariff-schedule-editor" aria-labelledby="tariff-schedule-title">
@@ -3756,11 +3746,33 @@ export function AddServicePrototypeDialog({
                   </div>
                 </section>
               ) : null}
-              {initialSetting ? <h4 className="contractors-service-section-title contractors-service-section-title--parameters">Параметры начисления</h4> : null}
+              {!initialSetting && !isTiered ? (
+                <section className="tariff-schedule-editor tariff-schedule-editor--initial" aria-labelledby="initial-tariff-title">
+                  <div className="tariff-schedule-heading">
+                    <div>
+                      <h4 id="initial-tariff-title">Начальный тариф</h4>
+                      <p>После создания следующие значения можно добавлять отдельными периодами.</p>
+                    </div>
+                  </div>
+                  <div className="tariff-schedule-row tariff-schedule-row--initial">
+                    <FormField label="Начальная дата">
+                      <LocalizedDatePicker ariaLabel="Ставка с" mode="date" value={tariffEffectiveFrom} onChange={setTariffEffectiveFrom} />
+                    </FormField>
+                    <FormField label="Тариф" help="Ставка начисления.">
+                      <MoneyTextInput
+                        aria-label="Тариф регулярной услуги"
+                        value={regularRate}
+                        onValueChange={(nextRate) => {
+                          setRegularRate(nextRate)
+                          setError(null)
+                        }}
+                      />
+                    </FormField>
+                  </div>
+                </section>
+              ) : null}
+              {isRegular ? <h4 className="contractors-service-section-title contractors-service-section-title--parameters">Параметры начисления</h4> : null}
               <div className="contractors-service-period-grid contractors-service-period-grid--single-row">
-                {!initialSetting ? <FormField label="Ставка с">
-                  <LocalizedDatePicker ariaLabel="Ставка с" mode="date" value={tariffEffectiveFrom} onChange={setTariffEffectiveFrom} />
-                </FormField> : null}
                 <FormField label="Периодичность" help={isMonthly ? 'Начисление создаётся каждый месяц.' : 'Начисление создаётся один раз в год.'}>
                   <SelectControl aria-label="Периодичность регулярной услуги" value={periodicityMonths} options={regularServicePeriodicityOptions} onChange={setPeriodicityMonths} />
                 </FormField>
@@ -3785,6 +3797,7 @@ export function AddServicePrototypeDialog({
                   <EditableCombobox
                     aria-label="Единица измерения"
                     maxLength={40}
+                    placement="above"
                     value={unitName}
                     options={measurementUnits.map((unit) => ({ value: unit.name, label: unit.name }))}
                     onChange={(nextUnitName) => {

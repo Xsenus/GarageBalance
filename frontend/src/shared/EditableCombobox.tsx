@@ -10,6 +10,7 @@ export function EditableCombobox({
   options,
   disabled = false,
   maxLength,
+  placement = 'below',
   onChange,
 }: {
   'aria-label': string
@@ -17,6 +18,7 @@ export function EditableCombobox({
   options: SelectControlOption[]
   disabled?: boolean
   maxLength?: number
+  placement?: 'above' | 'below'
   onChange: (value: string) => void
 }) {
   const [open, setOpen] = useState(false)
@@ -134,7 +136,12 @@ export function EditableCombobox({
         <ChevronDown size={16} aria-hidden="true" />
       </button>
       {effectiveOpen ? (
-        <div className="select-control__list editable-combobox__list" id={listboxId} role="listbox" aria-label={`${ariaLabel}: варианты`}>
+        <div
+          className={`select-control__list editable-combobox__list${placement === 'above' ? ' select-control__list--above' : ''}`}
+          id={listboxId}
+          role="listbox"
+          aria-label={`${ariaLabel}: варианты`}
+        >
           {options.map((option, index) => (
             <button
               className={index === activeIndex ? 'select-control__option is-active' : 'select-control__option'}

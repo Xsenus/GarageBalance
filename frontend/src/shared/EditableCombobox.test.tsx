@@ -17,9 +17,9 @@ const options = [
   { value: 'чел.', label: 'чел.' },
 ]
 
-function TestCombobox({ initialValue = 'м³', disabled = false }: { initialValue?: string, disabled?: boolean }) {
+function TestCombobox({ initialValue = 'м³', disabled = false, placement = 'below' }: { initialValue?: string, disabled?: boolean, placement?: 'above' | 'below' }) {
   const [value, setValue] = useState(initialValue)
-  return <EditableCombobox aria-label="Единица измерения" value={value} options={options} disabled={disabled} maxLength={40} onChange={setValue} />
+  return <EditableCombobox aria-label="Единица измерения" value={value} options={options} disabled={disabled} maxLength={40} placement={placement} onChange={setValue} />
 }
 
 afterEach(() => {
@@ -60,6 +60,17 @@ describe('EditableCombobox', () => {
     expect(within(listbox).getByRole('option', { name: 'м³' })).toHaveClass('is-active')
     expect(within(listbox).getByRole('option', { name: 'м³' })).toHaveAttribute('aria-selected', 'true')
     expect(scrolledLabels).toContain('м³')
+  })
+
+  it('can open the complete list above a control near the bottom of a dialog', async () => {
+    const user = userEvent.setup()
+    render(<TestCombobox placement="above" />)
+
+    await user.click(screen.getByRole('combobox', { name: 'Единица измерения' }))
+
+    const listbox = screen.getByRole('listbox', { name: 'Единица измерения: варианты' })
+    expect(listbox).toHaveClass('select-control__list--above')
+    expect(within(listbox).getAllByRole('option')).toHaveLength(options.length)
   })
 
   it('keeps all options visible while typing and scrolls to the found unit', async () => {

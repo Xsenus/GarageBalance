@@ -1,6 +1,11 @@
 // @vitest-environment node
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { getInlineTariffChangeEffectiveFrom, getServiceMeasurementUnit, getServiceTariffDisplayName } from './tariffServicePresentation'
 import { formatTariffDecimal } from './tariffFormatting'
+
+afterEach(() => {
+  vi.useRealTimers()
+})
 
 describe('formatTariffDecimal', () => {
   it.each([
@@ -20,5 +25,23 @@ describe('formatTariffDecimal', () => {
   it('keeps an empty or invalid editable value available for correction', () => {
     expect(formatTariffDecimal('')).toBe('')
     expect(formatTariffDecimal('not-a-number')).toBe('not-a-number')
+  })
+})
+
+describe('tariff service presentation', () => {
+  it('prefers the unit configured in the service card and hides generated mode suffixes', () => {
+    expect(getServiceMeasurementUnit({ unitName: 'м³' }, { calculationBase: 'meter_electricity' })).toBe('м³')
+    expect(getServiceMeasurementUnit({ unitName: null }, { calculationBase: 'meter_electricity' })).toBe('кВт·ч')
+    expect(getServiceTariffDisplayName('Вода — по счетчику', 'Вода')).toBe('Вода')
+    expect(getServiceTariffDisplayName('Вода — по счетчику, 12.08.2026, abcdef12', 'Вода')).toBe('Вода')
+    expect(getServiceTariffDisplayName('Льготный тариф', 'Вода')).toBe('Льготный тариф')
+  })
+
+  it('starts an inline tariff correction on the current calendar date', () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-08-12T10:00:00+07:00'))
+
+    expect(getInlineTariffChangeEffectiveFrom('2026-01-01')).toBe('2026-08-12')
+    expect(getInlineTariffChangeEffectiveFrom('2026-09-01')).toBe('2026-09-01')
   })
 })
