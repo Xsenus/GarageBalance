@@ -3964,10 +3964,36 @@ h1 {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-wrap: nowrap;
   gap: 16px;
   padding: 12px 0;
   color: #912018;
   font-weight: 750;
+}
+
+.payments-prototype-overdue-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.payments-prototype-overdue-controls {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  white-space: nowrap;
+}
+
+.payments-prototype-overdue-controls strong {
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+.payments-prototype-overdue-controls .icon-button {
+  flex: 0 0 auto;
 }
 
 .payments-prototype-overdue-details table {

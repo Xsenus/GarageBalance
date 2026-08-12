@@ -198,6 +198,8 @@ describe('responsive layout styles', () => {
     expect(normalizedAppCss).toContain('.payments-prototype-heading {\n  margin-bottom: 2px;')
     expect(normalizedAppCss).toContain('.payments-prototype-workspace-header {\n  display: grid;\n  gap: 10px;\n  min-width: 0;\n  border: 1px solid #dfe4ec;\n  border-radius: 10px;')
     expect(normalizedAppCss).toContain('.payments-prototype-overdue-details {\n  min-width: 0;\n  border: 1px solid #fecdca;')
+    expect(normalizedAppCss).toContain('.payments-prototype-overdue-heading {\n  display: flex;\n  align-items: center;\n  justify-content: space-between;\n  flex-wrap: nowrap;')
+    expect(normalizedAppCss).toContain('.payments-prototype-overdue-controls {\n  display: inline-flex;\n  flex: 0 0 auto;\n  align-items: center;\n  justify-content: flex-end;\n  gap: 8px;\n  white-space: nowrap;')
     expect(normalizedAppCss).toContain('.payments-prototype-garage-summary {\n  display: grid;\n  grid-template-columns: minmax(180px, 0.8fr) minmax(240px, 1.2fr) minmax(280px, 1.25fr);')
     expect(normalizedAppCss).toContain('.payments-prototype-summary-group {\n  display: grid;\n  align-content: start;\n  gap: 9px;')
     expect(normalizedAppCss).toContain('.payments-prototype-summary-group dl > div {\n  display: grid;\n  grid-template-columns: minmax(0, 1fr) auto;')

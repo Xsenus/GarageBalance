@@ -6483,6 +6483,12 @@ describe('App', () => {
     const overdueDebtTable = await within(prototype).findByRole('table', { name: 'Расшифровка просроченной задолженности' })
     const overdueDebtSection = overdueDebtTable.closest('section') as HTMLElement
     const overdueDebtToggle = within(overdueDebtSection).getByRole('button', { name: 'Скрыть расшифровку просроченной задолженности' })
+    const overdueDebtControls = overdueDebtToggle.closest('.payments-prototype-overdue-controls')
+    expect(overdueDebtControls).not.toBeNull()
+    expect(overdueDebtControls).toHaveTextContent('500.00')
+    expect(overdueDebtControls?.children).toHaveLength(2)
+    expect(overdueDebtControls?.children[0]).toHaveTextContent('500.00')
+    expect(overdueDebtControls?.children[1]).toBe(overdueDebtToggle)
     expect(overdueDebtToggle.querySelector('.lucide-x')).not.toBeNull()
     await user.click(overdueDebtToggle)
     expect(within(overdueDebtSection).queryByRole('table', { name: 'Расшифровка просроченной задолженности' })).not.toBeInTheDocument()

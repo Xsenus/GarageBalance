@@ -4670,8 +4670,8 @@ function PaymentsPrototypePanel({
               </p>
               <section className="payments-prototype-overdue-details" aria-label="Расшифровка просроченной задолженности">
                 <div className="payments-prototype-overdue-heading">
-                  <span>Расшифровка просроченной задолженности</span>
-                  <span>
+                  <span className="payments-prototype-overdue-title">Расшифровка просроченной задолженности</span>
+                  <span className="payments-prototype-overdue-controls">
                     <strong>{formatPaymentPrototypeValue(overdueDebtDetails?.total ?? selectedGarage.overdueDebt)}</strong>
                     <button
                       type="button"
