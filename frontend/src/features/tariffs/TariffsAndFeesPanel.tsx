@@ -2360,11 +2360,6 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
               const showsElectricityRange = Boolean(row.threshold && row.backendTariffId && tieredTariffIds.has(row.backendTariffId))
               const electricityLowerBound = showsElectricityRange ? getElectricityTierLowerBound(tariffRows, row.id) : 0
               const showsServiceCalculationFlags = row.serviceSettingKind === 'main' || Boolean(row.group)
-              const meterModeOptions = yesNoOptions
-              const effectiveMeterModeOptions = meterModeOptions.some((option) => option.value === (row.byMeter ? 'Да' : 'Нет'))
-                ? meterModeOptions
-                : [...meterModeOptions, { value: row.byMeter ? 'Да' : 'Нет', label: row.byMeter ? 'Да' : 'Нет' }]
-              const tieredModeOptions = yesNoOptions
               const showsOverdueGracePeriod = row.serviceSettingKind === 'main' || Boolean(row.group && row.calculationBase)
               const overdueRow = showsOverdueGracePeriod
                 ? tariffRows.find((candidate) => (
@@ -2373,17 +2368,18 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
                   ) || (
                     candidate.title === 'Перенос долга в просроченный'
                     && candidate.category === row.category
-                  )) ?? null
+                  ))
                 : null
               const dueDateRow = row.serviceSettingKind === 'main'
-                ? tariffRows.find((candidate) => candidate.backendServiceSettingId === row.backendServiceSettingId && candidate.serviceSettingKind === 'due-date') ?? null
+                ? tariffRows.find((candidate) => candidate.backendServiceSettingId === row.backendServiceSettingId && candidate.serviceSettingKind === 'due-date')
                 : null
               const startDateRow = row.serviceSettingKind === 'main'
-                ? tariffRows.find((candidate) => candidate.backendServiceSettingId === row.backendServiceSettingId && candidate.serviceSettingKind === 'start-date') ?? null
+                ? tariffRows.find((candidate) => candidate.backendServiceSettingId === row.backendServiceSettingId && candidate.serviceSettingKind === 'start-date')
                 : null
               const periodicityRow = row.serviceSettingKind === 'main'
-                ? tariffRows.find((candidate) => candidate.backendServiceSettingId === row.backendServiceSettingId && candidate.serviceSettingKind === 'periodicity') ?? null
+                ? tariffRows.find((candidate) => candidate.backendServiceSettingId === row.backendServiceSettingId && candidate.serviceSettingKind === 'periodicity')
                 : null
+              const incomeFundName = backendIncomeTypes.find((incomeType) => incomeType.id === serviceSetting?.incomeTypeId)?.destinationFundName
 
               return (
                 <Fragment key={row.id}>
@@ -2432,9 +2428,11 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
                         <span className="tariffs-threshold-range__unit">{row.unit}</span>
                         {thresholdRangeErrors[row.id] ? <small className="contractors-field-error" role="alert">{thresholdRangeErrors[row.id]}</small> : null}
                       </div>
-                    ) : row.title !== (row.group ?? row.category) ? (
+                    ) : incomeFundName ? (
+                      <span>{incomeFundName}</span>
+                    ) : row.serviceSettingKind !== 'main' && row.title !== (row.group ?? row.category) && (
                       <span>{row.title}</span>
-                    ) : null}
+                    )}
                   </span>
                   <span role="cell" aria-label={`${row.category}: ${row.title}: единица`}>
                     {row.dateDay === undefined && row.serviceSettingKind !== 'periodicity' ? row.unit : null}
@@ -2612,9 +2610,9 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
                     {showsServiceCalculationFlags ? (
                       <SelectControl
                         aria-label={`${row.category}: пороговая тарификация`}
-                        disabled={!canManageTariffs || isRowDisabled || tieredModeOptions.length <= 1}
+                        disabled={!canManageTariffs || isRowDisabled}
                         value={row.tiered ? 'Да' : 'Нет'}
-                        options={tieredModeOptions}
+                        options={yesNoOptions}
                         onChange={(value) => void commitTariffBooleanChange(row, 'tiered', value === 'Да')}
                       />
                     ) : null}
@@ -2623,9 +2621,9 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
                     {showsServiceCalculationFlags ? (
                       <SelectControl
                         aria-label={`${row.category}: по счетчику`}
-                        disabled={!canManageTariffs || isRowDisabled || effectiveMeterModeOptions.length <= 1}
+                        disabled={!canManageTariffs || isRowDisabled}
                         value={row.byMeter ? 'Да' : 'Нет'}
-                        options={effectiveMeterModeOptions}
+                        options={yesNoOptions}
                         onChange={(value) => void commitTariffBooleanChange(row, 'byMeter', value === 'Да')}
                       />
                     ) : null}

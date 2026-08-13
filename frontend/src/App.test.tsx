@@ -4973,6 +4973,62 @@ describe('App', () => {
     expect(within(tariffsPanel).queryByRole('button', { name: 'Изменить услугу Наружное освещение' })).not.toBeInTheDocument()
   })
 
+  it('shows the configured income fund below a service name instead of the tariff technical name', async () => {
+    const user = userEvent.setup()
+    const waterIncomeType = createAccountingType({
+      id: 'income-water-table-label',
+      name: 'Вода',
+      destinationFundId: 'fund-water-table-label',
+      destinationFundName: 'Водоснабжение',
+    })
+    const wasteIncomeType = createAccountingType({
+      id: 'income-waste-table-label',
+      name: 'Мусор',
+      destinationFundId: 'fund-waste-table-label',
+      destinationFundName: 'Вывоз мусора',
+    })
+    const waterTariff = createTariff({ id: 'tariff-water-table-label', name: 'Тариф на воду', calculationBase: 'meter_water', rate: 100.8 })
+    const wasteTariff = createTariff({ id: 'tariff-waste-table-label', name: 'Ставка за вывоз мусора', calculationBase: 'people', rate: 128.69 })
+    const waterService = createChargeServiceSetting({
+      id: 'service-water-table-label',
+      name: 'Вода',
+      isRegular: true,
+      incomeTypeId: waterIncomeType.id,
+      tariffId: waterTariff.id,
+      isMetered: true,
+      unitName: 'м³',
+      meterKind: 'water',
+    })
+    const wasteService = createChargeServiceSetting({
+      id: 'service-waste-table-label',
+      name: 'Мусор',
+      isRegular: true,
+      incomeTypeId: wasteIncomeType.id,
+      tariffId: wasteTariff.id,
+      unitName: 'чел.',
+    })
+    const dictionaryClient = createDictionaryClient({
+      getIncomeTypes: async () => [waterIncomeType, wasteIncomeType],
+      getTariffs: async () => [waterTariff, wasteTariff],
+      getChargeServiceSettings: async () => [waterService, wasteService],
+    })
+
+    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} fundsClient={createFundsClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Тарифы и сборы')
+    const tariffsPanel = await screen.findByRole('region', { name: 'Тарифы и сборы' })
+    const waterInput = await within(tariffsPanel).findByLabelText('Вода: Тариф на воду: значение')
+    const wasteInput = await within(tariffsPanel).findByLabelText('Мусор: Ставка за вывоз мусора: значение')
+    const waterNameCell = within(waterInput.closest('[role="row"]') as HTMLElement).getAllByRole('cell')[0]
+    const wasteNameCell = within(wasteInput.closest('[role="row"]') as HTMLElement).getAllByRole('cell')[0]
+
+    expect(waterNameCell).toHaveTextContent('ВодаВодоснабжение')
+    expect(wasteNameCell).toHaveTextContent('МусорВывоз мусора')
+    expect(wasteNameCell).not.toHaveTextContent('Ставка за вывоз мусора')
+  })
+
   it('keeps a renamed system metered service in its original table position', async () => {
     const user = userEvent.setup()
     const waterTariff = createTariff({
