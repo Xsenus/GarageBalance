@@ -585,20 +585,23 @@ describe('App', () => {
     const feeDialog = await screen.findByRole('dialog', { name: 'Добавить сбор' })
     expect(within(feeDialog).getByLabelText('Наименование сбора')).toBeInTheDocument()
     expect(feeDialog).toHaveClass('contractors-fee-dialog')
-    expect(within(feeDialog).getByLabelText('Назначение поступления для сбора')).toHaveValue('Прочие доходы')
-    expect(within(feeDialog).getByLabelText('Назначение поступления для сбора')).toHaveAttribute('readonly')
+    expect(within(feeDialog).getByRole('combobox', { name: 'Назначение поступления для сбора' })).toHaveTextContent('Прочие доходы')
+    expect(within(feeDialog).getByRole('combobox', { name: 'Назначение поступления для сбора' })).toBeEnabled()
+    expect(within(feeDialog).getByRole('heading', { name: 'Настройки сбора' })).toBeInTheDocument()
+    expect(within(feeDialog).getByRole('heading', { name: 'Параметры сбора' })).toBeInTheDocument()
     expect(within(feeDialog).getByLabelText('Цель сбора')).toBeInTheDocument()
     const feeContributionInput = within(feeDialog).getByLabelText('Сумма взноса')
     const feeTargetInput = within(feeDialog).getByLabelText('Сумма сбора')
     expect(feeContributionInput.closest('.contractors-fee-money-field')).not.toBeNull()
     expect(feeTargetInput.closest('.contractors-fee-money-field')).not.toBeNull()
+    expect(feeContributionInput.closest('.contractors-fee-two-column-grid')).toContainElement(feeTargetInput)
     expect(feeTargetInput).toHaveAttribute('readonly')
     expect(within(feeDialog).getByLabelText('Все гаражи')).toBeChecked()
     await user.type(feeContributionInput, '1000000')
     await user.click(feeTargetInput)
     expect(feeContributionInput).toHaveValue('1 000 000.00')
     expect(feeTargetInput).toHaveValue('1 000 000.00')
-    expect(within(feeDialog).getByText(/Рассчитано автоматически: 1 участник/)).toBeInTheDocument()
+    expect(within(feeDialog).getByText(/Рассчитано автоматически: 1 участник/)).toHaveClass('contractors-fee-calculation-status')
     const startsOnInput = within(feeDialog).getByLabelText('Дата начала')
     const endsOnInput = within(feeDialog).getByLabelText('Дата окончания сбора')
     expect(startsOnInput.closest('.contractors-fee-date-grid')).toContainElement(endsOnInput)
@@ -625,6 +628,7 @@ describe('App', () => {
   it('creates and edits announced fee campaigns from tariffs page', async () => {
     const user = userEvent.setup()
     const targetIncomeType = createAccountingType({ id: 'income-type-other-income', name: 'Прочие доходы', code: 'other_income', isSystem: true })
+    const alternateIncomeType = createAccountingType({ id: 'income-type-target-income', name: 'Целевые поступления', code: 'target_income' })
     const participantGarage = createGarage({ id: 'garage-target', number: '27', ownerName: 'Сидорова Анна' })
     const otherGarage = createGarage({ id: 'garage-other', number: '12', ownerName: 'Петров Петр' })
     let campaigns = [
@@ -640,14 +644,14 @@ describe('App', () => {
     const dictionaryClient = createDictionaryClient({
       getGarages: async () => [participantGarage, otherGarage],
       getGaragesPage: async () => ({ items: [participantGarage], totalCount: 67, offset: 0, limit: 1 }),
-      getIncomeTypes: async () => [targetIncomeType],
+      getIncomeTypes: async () => [targetIncomeType, alternateIncomeType],
       getFeeCampaigns: async () => campaigns,
       createFeeCampaign: async (_token, request) => {
         const campaign = createFeeCampaign({
           id: 'fee-campaign-new',
           name: request.name,
-          incomeTypeId: targetIncomeType.id,
-          incomeTypeName: targetIncomeType.name,
+          incomeTypeId: request.incomeTypeId,
+          incomeTypeName: request.incomeTypeId === alternateIncomeType.id ? alternateIncomeType.name : targetIncomeType.name,
           goal: request.goal ?? null,
           contributionAmount: request.contributionAmount,
           targetAmount: request.targetAmount,
@@ -665,8 +669,8 @@ describe('App', () => {
         const campaign = createFeeCampaign({
           id,
           name: request.name,
-          incomeTypeId: targetIncomeType.id,
-          incomeTypeName: targetIncomeType.name,
+          incomeTypeId: request.incomeTypeId,
+          incomeTypeName: request.incomeTypeId === alternateIncomeType.id ? alternateIncomeType.name : targetIncomeType.name,
           goal: request.goal ?? null,
           contributionAmount: request.contributionAmount,
           targetAmount: request.targetAmount,
@@ -740,8 +744,11 @@ describe('App', () => {
     await user.click(within(tariffsPanel).getAllByRole('button', { name: 'Объявить сбор' })[0])
     const createDialog = await screen.findByRole('dialog', { name: 'Добавить сбор' })
     await user.type(within(createDialog).getByLabelText('Наименование сбора'), 'Сбор на камеры')
-    expect(within(createDialog).getByLabelText('Назначение поступления для сбора')).toHaveValue(targetIncomeType.name)
-    expect(within(createDialog).getByLabelText('Назначение поступления для сбора')).toHaveAttribute('readonly')
+    const createIncomeTypeControl = within(createDialog).getByRole('combobox', { name: 'Назначение поступления для сбора' })
+    expect(createIncomeTypeControl).toHaveTextContent(targetIncomeType.name)
+    await user.click(createIncomeTypeControl)
+    await user.click(within(createDialog).getByRole('option', { name: alternateIncomeType.name }))
+    expect(createIncomeTypeControl).toHaveTextContent(alternateIncomeType.name)
     await user.type(within(createDialog).getByLabelText('Цель сбора'), 'Видеонаблюдение')
     await user.type(within(createDialog).getByLabelText('Сумма взноса'), '700')
     expect(within(createDialog).getByLabelText('Сумма сбора')).toHaveValue('46 900.00')
@@ -757,7 +764,7 @@ describe('App', () => {
     await waitFor(() => expect(createdRequests).toHaveLength(1))
     expect(JSON.parse(createdRequests[0])).toMatchObject({
       name: 'Сбор на камеры',
-      incomeTypeId: targetIncomeType.id,
+      incomeTypeId: alternateIncomeType.id,
       goal: 'Видеонаблюдение',
       contributionAmount: 700,
       targetAmount: 700,
@@ -774,6 +781,7 @@ describe('App', () => {
     await user.click(editFeeCampaignButton)
     let editDialog = await screen.findByRole('dialog', { name: 'Изменить сбор' })
     expect(within(editDialog).getByLabelText('Наименование сбора')).toHaveValue('Сбор на камеры')
+    expect(within(editDialog).getByRole('combobox', { name: 'Назначение поступления для сбора' })).toHaveTextContent(alternateIncomeType.name)
     expect(within(editDialog).getByLabelText('Сумма взноса')).toHaveValue('700.00')
     expect(within(editDialog).getByLabelText('Сумма сбора')).toHaveValue('700.00')
     expect(within(editDialog).getByLabelText('Сумма сбора')).toHaveAttribute('readonly')
@@ -786,12 +794,16 @@ describe('App', () => {
     editDialog = await screen.findByRole('dialog', { name: 'Изменить сбор' })
     expect(within(editDialog).getByLabelText('Наименование сбора')).toHaveValue('Сбор на камеры')
     expect(within(editDialog).getByLabelText('Гараж 27')).toBeChecked()
+    const editIncomeTypeControl = within(editDialog).getByRole('combobox', { name: 'Назначение поступления для сбора' })
+    await user.click(editIncomeTypeControl)
+    await user.click(within(editDialog).getByRole('option', { name: targetIncomeType.name }))
     await user.click(within(editDialog).getByLabelText('Гараж 12'))
     expect(within(editDialog).getByLabelText('Сумма сбора')).toHaveValue('1 400.00')
     await user.click(within(editDialog).getByRole('button', { name: 'Сохранить' }))
     const editConfirmationDialog = await screen.findByRole('dialog', { name: 'Подтвердите изменения сбора' })
     expect(within(editConfirmationDialog).getByLabelText('Изменяемые поля сбора')).toHaveTextContent('Сумма сбора')
     expect(within(editConfirmationDialog).getByLabelText('Изменяемые поля сбора')).toHaveTextContent('Участники')
+    expect(within(editConfirmationDialog).getByLabelText('Изменяемые поля сбора')).toHaveTextContent('Назначение поступления')
     expect(updatedRequests).toHaveLength(0)
     const editConfirmationCancelButton = within(editConfirmationDialog).getByRole('button', { name: 'Отмена' })
     await waitFor(() => expect(editConfirmationCancelButton).toHaveFocus())
@@ -807,6 +819,7 @@ describe('App', () => {
       id: 'fee-campaign-new',
       request: {
         name: 'Сбор на камеры',
+        incomeTypeId: targetIncomeType.id,
         targetAmount: 1400,
         appliesToAllGarages: false,
         participantGarageIds: [participantGarage.id, otherGarage.id],
@@ -823,6 +836,31 @@ describe('App', () => {
     expect(await within(feeCampaignsSection).findByText(/Закрыт досрочно · Решение правления/)).toBeInTheDocument()
     expect(within(feeCampaignsSection).queryByRole('button', { name: 'Доначислить сбор Сбор на камеры' })).not.toBeInTheDocument()
     expect(within(feeCampaignsSection).queryByRole('button', { name: 'Изменить сбор Сбор на камеры' })).not.toBeInTheDocument()
+  })
+
+  it('requires an available income destination before creating a fee campaign', async () => {
+    const user = userEvent.setup()
+    const dictionaryClient = createDictionaryClient({
+      getGarages: async () => [createGarage({ id: 'garage-fee-without-destination', number: '12' })],
+      getIncomeTypes: async () => [],
+      getFeeCampaigns: async () => [],
+    })
+
+    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} fundsClient={createFundsClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Тарифы и сборы')
+    const tariffsPanel = await screen.findByRole('region', { name: 'Тарифы и сборы' })
+    const createButton = within(tariffsPanel).getAllByRole('button', { name: 'Объявить сбор' })[0]
+    await waitFor(() => expect(createButton).toBeEnabled())
+    await user.click(createButton)
+    const createDialog = await screen.findByRole('dialog', { name: 'Добавить сбор' })
+    await user.type(within(createDialog).getByLabelText('Наименование сбора'), 'Сбор без назначения')
+    await user.type(within(createDialog).getByLabelText('Сумма взноса'), '500')
+    await user.click(within(createDialog).getByRole('button', { name: 'Объявить сбор' }))
+
+    expect(await within(createDialog).findByRole('alert')).toHaveTextContent('Выберите назначение поступления.')
+    expect(createDialog).toBeInTheDocument()
   })
 
   it('shows a fee campaign creation failure inside the open form', async () => {
@@ -6492,11 +6530,13 @@ describe('App', () => {
     expect(overdueDebtToggle.querySelector('.lucide-x')).not.toBeNull()
     await user.click(overdueDebtToggle)
     expect(within(overdueDebtSection).queryByRole('table', { name: 'Расшифровка просроченной задолженности' })).not.toBeInTheDocument()
+    expect(overdueDebtSection).not.toHaveClass('payments-prototype-overdue-details--expanded')
     expect(overdueDebtToggle).toHaveAccessibleName('Показать расшифровку просроченной задолженности')
     expect(overdueDebtToggle.querySelector('.lucide-circle-question-mark')).not.toBeNull()
     expect(window.localStorage.getItem('garagebalance.finance.overdueExpanded.5df20dec-2959-4726-a1cb-0e6ec6b28674')).toBe('false')
     await user.click(overdueDebtToggle)
     expect(window.localStorage.getItem('garagebalance.finance.overdueExpanded.5df20dec-2959-4726-a1cb-0e6ec6b28674')).toBe('true')
+    expect(overdueDebtSection).toHaveClass('payments-prototype-overdue-details--expanded')
     const reopenedOverdueDebtTable = within(overdueDebtSection).getByRole('table', { name: 'Расшифровка просроченной задолженности' })
     expect(within(reopenedOverdueDebtTable).getByRole('columnheader', { name: 'Услуга' })).toBeInTheDocument()
     expect(within(reopenedOverdueDebtTable).getByText('Членский взнос')).toBeInTheDocument()
@@ -6516,6 +6556,16 @@ describe('App', () => {
     const incomeTable = within(prototype).getByRole('table', { name: 'Поступления гаража 1' })
     await within(incomeTable).findByText('Электроэнергия')
     expect(within(prototype).getByText('май.26')).toBeInTheDocument()
+
+    const historicalCalculationButton = within(incomeTable).getByRole('button', { name: 'Показать расчёт суммы Электроэнергия июн.26' })
+    expect(within(historicalCalculationButton.closest('.field-help') as HTMLElement).getByText('Сохранённое начисление: 5 674.00')).toBeInTheDocument()
+    await user.click(historicalCalculationButton)
+    const historicalCalculationDialog = screen.getByRole('dialog', { name: 'Расчёт суммы: Электроэнергия, июн.26' })
+    expect(historicalCalculationDialog).toHaveTextContent('Сумма сохранённого начисления: 5 674.00')
+    expect(historicalCalculationDialog).toHaveTextContent('Зафиксированный расход: 18')
+    expect(historicalCalculationDialog).toHaveTextContent('Сумма показана без пересчёта и не изменяет начисление, оплату или задолженность.')
+    await user.click(within(historicalCalculationDialog).getByRole('button', { name: 'Закрыть расчёт суммы' }))
+    expect(screen.queryByRole('dialog', { name: 'Расчёт суммы: Электроэнергия, июн.26' })).not.toBeInTheDocument()
 
     const electricityPaymentInput = within(prototype).getByLabelText('Платеж Электроэнергия июн.26')
     expect(electricityPaymentInput).toHaveValue('')

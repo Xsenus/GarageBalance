@@ -2020,6 +2020,70 @@ h1 {
   width: min(1120px, calc(100vw - 48px));
 }
 
+.contractors-fee-form {
+  gap: 0;
+}
+
+.contractors-fee-form > .form-error {
+  margin-bottom: 12px;
+}
+
+.contractors-fee-layout {
+  display: grid;
+  grid-template-columns: minmax(360px, 0.85fr) minmax(480px, 1.15fr);
+  gap: 14px;
+  align-items: start;
+}
+
+.contractors-fee-card {
+  display: grid;
+  min-width: 0;
+  gap: 12px;
+  border: 1px solid #dce3ee;
+  border-radius: 12px;
+  background: #f8fafc;
+  padding: 14px;
+}
+
+.contractors-fee-card h4 {
+  margin: 0;
+  color: #101828;
+  font-size: 14px;
+  line-height: 1.35;
+}
+
+.contractors-fee-calculation-status {
+  display: block;
+  min-height: 32px;
+  box-sizing: border-box;
+  border: 1px solid #dce3ee;
+  border-radius: 8px;
+  background: #ffffff;
+  padding: 7px 10px;
+  color: #667085;
+  font-size: 12px;
+  line-height: 16px;
+}
+
+.contractors-fee-participant-switch {
+  justify-content: flex-start;
+}
+
+.contractors-fee-participant-switch .contractors-switch-control {
+  margin-left: auto;
+}
+
+.contractors-fee-participant-label {
+  display: grid;
+  gap: 2px;
+}
+
+.contractors-fee-participant-label small {
+  color: #667085;
+  font-size: 12px;
+  font-weight: 500;
+}
+
 .contractors-tariff-dialog .detail-dialog-header h3 {
   flex: 1;
   text-align: center;
@@ -4006,7 +4070,11 @@ h1 {
   border: 1px solid #fecdca;
   border-radius: 10px;
   background: #fffafa;
-  padding: 0 14px 14px;
+  padding: 0 14px;
+}
+
+.payments-prototype-overdue-details--expanded {
+  padding-bottom: 14px;
 }
 
 .payments-prototype-balance-explanation {
@@ -4449,6 +4517,11 @@ h1 {
   margin: 0;
   color: #667085;
   font-size: 12px;
+}
+
+.payments-prototype-calculation--historical > p {
+  max-width: none;
+  line-height: 1.45;
 }
 
 .payments-prototype-calculation-lines {
@@ -9287,6 +9360,7 @@ button.operation-row:focus-visible {
   .contractors-tariff-dialog .contractors-service-period-grid--single-row,
   .contractors-service-heading-grid,
   .contractors-service-secondary-grid,
+  .contractors-fee-layout,
   .contractors-fee-two-column-grid,
   .contractors-fee-date-grid,
   .contractors-service-period-grid,

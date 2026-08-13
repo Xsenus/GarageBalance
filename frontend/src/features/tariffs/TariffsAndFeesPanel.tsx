@@ -716,7 +716,7 @@ function getFeeCampaignChangePreview(
   const formatIncomeType = (incomeTypeId: string) => incomeTypes.find((incomeType) => incomeType.id === incomeTypeId)?.name ?? incomeTypeId
 
   appendChangePreview(changes, 'Наименование', formatChangeText(campaign.name), formatChangeText(request.name))
-  appendChangePreview(changes, 'Вид поступления', formatIncomeType(campaign.incomeTypeId), formatIncomeType(request.incomeTypeId))
+  appendChangePreview(changes, 'Назначение поступления', formatIncomeType(campaign.incomeTypeId), formatIncomeType(request.incomeTypeId))
   appendChangePreview(changes, 'Цель', formatChangeText(campaign.goal), formatChangeText(request.goal))
   appendChangePreview(changes, 'Сумма взноса', formatTariffDecimal(campaign.contributionAmount), formatTariffDecimal(request.contributionAmount))
   appendChangePreview(changes, 'Сумма сбора', formatTariffDecimal(campaign.targetAmount), formatTariffDecimal(request.targetAmount))
@@ -3287,7 +3287,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
         <AddFeePrototypeDialog
           activeGarageCount={feeCampaignActiveGarageCount}
           garageOptions={feeCampaignGarageOptions}
-          incomeTypes={backendIncomeTypes.filter((incomeType) => !incomeType.isArchived && incomeType.code === 'other_income')}
+          incomeTypes={backendIncomeTypes.filter((incomeType) => !incomeType.isArchived && Boolean(incomeType.destinationFundId))}
           isSaving={feeCampaignSavingId === 'new-fee-campaign'}
           onClose={() => setModal(null)}
           onSave={createFeeCampaign}
@@ -3297,7 +3297,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
         <AddFeePrototypeDialog
           activeGarageCount={feeCampaignActiveGarageCount}
           garageOptions={feeCampaignGarageOptions}
-          incomeTypes={backendIncomeTypes.filter((incomeType) => !incomeType.isArchived && incomeType.code === 'other_income')}
+          incomeTypes={backendIncomeTypes.filter((incomeType) => !incomeType.isArchived && Boolean(incomeType.destinationFundId))}
           initialCampaign={feeCampaignEditTarget}
           isSaving={feeCampaignSavingId === feeCampaignEditTarget.id}
           onClose={closeFeeCampaignEditDialog}
@@ -3995,7 +3995,11 @@ function AddFeePrototypeDialog({
   title?: string
 }) {
   const [name, setName] = useState(initialCampaign?.name ?? '')
-  const [incomeTypeId] = useState(incomeTypes[0]?.id ?? '')
+  const defaultIncomeTypeId = initialCampaign?.incomeTypeId
+    ?? incomeTypes.find((incomeType) => incomeType.code === 'other_income')?.id
+    ?? incomeTypes[0]?.id
+    ?? ''
+  const [incomeTypeId, setIncomeTypeId] = useState(defaultIncomeTypeId)
   const [goal, setGoal] = useState(initialCampaign?.goal ?? '')
   const [contributionAmount, setContributionAmount] = useState(initialCampaign ? formatTariffDecimal(initialCampaign.contributionAmount) : '')
   const [startsOn, setStartsOn] = useState(initialCampaign?.startsOn ?? getLocalDateInputValue())
@@ -4038,7 +4042,7 @@ function AddFeePrototypeDialog({
     }
 
     if (!incomeTypeId) {
-      setError('Системное назначение «Прочие доходы» не настроено.')
+      setError('Выберите назначение поступления.')
       return
     }
 
@@ -4125,78 +4129,91 @@ function AddFeePrototypeDialog({
             </button>
           </div>
 
-          <form className="dictionary-modal-form contractors-modal-form" onSubmit={submitFee}>
+          <form className="dictionary-modal-form contractors-modal-form contractors-fee-form" onSubmit={submitFee}>
             {error ? <FormError>{error}</FormError> : null}
-            <FormField label="Наименование сбора">
-              <input aria-label="Наименование сбора" value={name} onChange={(event) => setName(event.target.value)} />
-            </FormField>
-          <FormField label="Назначение поступления">
-            <input
-              aria-label="Назначение поступления для сбора"
-              value={incomeTypes[0]?.name ?? 'Прочие доходы не настроены'}
-              readOnly
-            />
-          </FormField>
-          <FormField label="Цель">
-            <input aria-label="Цель сбора" value={goal} onChange={(event) => setGoal(event.target.value)} />
-          </FormField>
-          <div className="contractors-fee-two-column-grid">
-            <FormField label="Сумма взноса">
-              <div className="contractors-inline-field contractors-fee-money-field">
-                <MoneyTextInput aria-label="Сумма взноса" value={contributionAmount} onValueChange={setContributionAmount} />
-                <span>руб.</span>
-              </div>
-            </FormField>
-            <FormField label="Сумма сбора">
-              <div className="contractors-inline-field contractors-fee-money-field">
-                <input aria-label="Сумма сбора" value={formatTariffDecimal(targetAmount)} readOnly />
-                <span>руб.</span>
-              </div>
-              <small className="form-hint" role="status" aria-live="polite">
-                Рассчитано автоматически: {formatFeeCampaignParticipantCount(participantCount)} × {formatTariffDecimal(parsedContributionAmount ?? 0)} руб.
-              </small>
-            </FormField>
-          </div>
-          <label className="contractors-switch-row">
-            <span>Участники</span>
-            <span className="contractors-switch-control">
-              <input type="checkbox" aria-label="Все гаражи" checked={appliesToAllGarages} onChange={(event) => setAppliesToAllGarages(event.target.checked)} />
-            </span>
-            <span>все гаражи</span>
-          </label>
-          {!appliesToAllGarages ? (
-            <fieldset className="contractors-participant-list">
-              <legend>Выбранные гаражи</legend>
-              {garageOptions.length > 0 ? garageOptions.map((garage) => (
-                <label key={garage.id} className="contractors-participant-option">
-                  <input
-                    type="checkbox"
-                    aria-label={`Гараж ${garage.number}`}
-                    checked={participantGarageIds.includes(garage.id)}
-                    onChange={(event) => toggleParticipantGarage(garage.id, event.target.checked)}
+            <div className="contractors-fee-layout">
+              <section className="contractors-fee-card" aria-labelledby="fee-settings-title">
+                <h4 id="fee-settings-title">Настройки сбора</h4>
+                <FormField label="Наименование сбора">
+                  <input aria-label="Наименование сбора" value={name} onChange={(event) => setName(event.target.value)} />
+                </FormField>
+                <FormField label="Назначение поступления">
+                  <SelectControl
+                    aria-label="Назначение поступления для сбора"
+                    value={incomeTypeId}
+                    options={incomeTypes.map((incomeType) => ({ value: incomeType.id, label: incomeType.name }))}
+                    maxVisibleOptions={6}
+                    onChange={setIncomeTypeId}
                   />
-                  <span>
-                    <strong>Гараж {garage.number}</strong>
-                    {garage.ownerName ? <small>{garage.ownerName}</small> : null}
+                </FormField>
+                <FormField label="Цель">
+                  <input aria-label="Цель сбора" value={goal} onChange={(event) => setGoal(event.target.value)} />
+                </FormField>
+                <label className="contractors-switch-row contractors-fee-participant-switch">
+                  <span className="contractors-fee-participant-label">
+                    <strong>Участники</strong>
+                    <small>все гаражи</small>
+                  </span>
+                  <span className="contractors-switch-control">
+                    <input type="checkbox" aria-label="Все гаражи" checked={appliesToAllGarages} onChange={(event) => setAppliesToAllGarages(event.target.checked)} />
                   </span>
                 </label>
-              )) : <p className="form-hint">Активные гаражи не найдены.</p>}
-            </fieldset>
-          ) : null}
-          <div className="contractors-fee-date-grid">
-            <FormField label="Дата начала">
-              <LocalizedDatePicker ariaLabel="Дата начала" mode="date" placement="above" value={startsOn} onChange={setStartsOn} />
-            </FormField>
-            <FormField label="Дата окончания сбора">
-              <LocalizedDatePicker ariaLabel="Дата окончания сбора" mode="date" placement="above" value={endsOn} onChange={setEndsOn} />
-            </FormField>
-          </div>
-          <FormField label="Перенос долга по сбору в просроченный">
-            <div className="contractors-inline-field">
-              <input aria-label="Перенос долга по сбору в просроченный" inputMode="numeric" value={overdueGraceDays} onChange={(event) => setOverdueGraceDays(event.target.value)} />
-              <span>дн.</span>
+                {!appliesToAllGarages ? (
+                  <fieldset className="contractors-participant-list">
+                    <legend>Выбранные гаражи</legend>
+                    {garageOptions.length > 0 ? garageOptions.map((garage) => (
+                      <label key={garage.id} className="contractors-participant-option">
+                        <input
+                          type="checkbox"
+                          aria-label={`Гараж ${garage.number}`}
+                          checked={participantGarageIds.includes(garage.id)}
+                          onChange={(event) => toggleParticipantGarage(garage.id, event.target.checked)}
+                        />
+                        <span>
+                          <strong>Гараж {garage.number}</strong>
+                          {garage.ownerName ? <small>{garage.ownerName}</small> : null}
+                        </span>
+                      </label>
+                    )) : <p className="form-hint">Активные гаражи не найдены.</p>}
+                  </fieldset>
+                ) : null}
+              </section>
+
+              <section className="contractors-fee-card" aria-labelledby="fee-parameters-title">
+                <h4 id="fee-parameters-title">Параметры сбора</h4>
+                <div className="contractors-fee-two-column-grid">
+                  <FormField label="Сумма взноса">
+                    <div className="contractors-inline-field contractors-fee-money-field">
+                      <MoneyTextInput aria-label="Сумма взноса" value={contributionAmount} onValueChange={setContributionAmount} />
+                      <span>руб.</span>
+                    </div>
+                  </FormField>
+                  <FormField label="Сумма сбора">
+                    <div className="contractors-inline-field contractors-fee-money-field">
+                      <input aria-label="Сумма сбора" value={formatTariffDecimal(targetAmount)} readOnly />
+                      <span>руб.</span>
+                    </div>
+                  </FormField>
+                </div>
+                <small className="contractors-fee-calculation-status" role="status" aria-live="polite">
+                  Рассчитано автоматически: {formatFeeCampaignParticipantCount(participantCount)} × {formatTariffDecimal(parsedContributionAmount ?? 0)} руб.
+                </small>
+                <div className="contractors-fee-date-grid">
+                  <FormField label="Дата начала">
+                    <LocalizedDatePicker ariaLabel="Дата начала" mode="date" placement="above" value={startsOn} onChange={setStartsOn} />
+                  </FormField>
+                  <FormField label="Дата окончания сбора">
+                    <LocalizedDatePicker ariaLabel="Дата окончания сбора" mode="date" placement="above" value={endsOn} onChange={setEndsOn} />
+                  </FormField>
+                </div>
+                <FormField label="Перенос долга по сбору в просроченный">
+                  <div className="contractors-inline-field">
+                    <input aria-label="Перенос долга по сбору в просроченный" inputMode="numeric" value={overdueGraceDays} onChange={(event) => setOverdueGraceDays(event.target.value)} />
+                    <span>дн.</span>
+                  </div>
+                </FormField>
+              </section>
             </div>
-          </FormField>
 
             <div className="detail-dialog-actions">
               <button className="secondary-button" type="submit" disabled={isSaving || Boolean(pendingConfirmation)}>

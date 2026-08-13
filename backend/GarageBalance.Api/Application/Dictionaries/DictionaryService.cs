@@ -30,7 +30,6 @@ public sealed class DictionaryService(
     IAuditEventWriter auditEventWriter,
     IBusinessDateProvider businessDateProvider) : IDictionaryService
 {
-    private const string OtherIncomeIncomeTypeCode = "other_income";
     private const string ServiceIncomeTypeCodePrefix = "service_";
     private const string SupplierServiceExpenseTypeCodePrefix = "supplier_service_";
     private static readonly DateOnly OpenTariffScheduleStart = new(1900, 1, 1);
@@ -3173,12 +3172,19 @@ public sealed class DictionaryService(
             return DictionaryResult<FeeCampaignDto>.Failure("fee_campaign_duplicate", "Активный сбор с таким наименованием уже существует.");
         }
 
-        var incomeType = await incomeTypeRepository.FindFirstActiveByCodeAsync(OtherIncomeIncomeTypeCode, cancellationToken);
-        if (incomeType is null || !incomeType.IsSystem || !incomeType.DestinationFundId.HasValue)
+        var incomeType = await incomeTypeRepository.FindActiveAsync(request.IncomeTypeId, cancellationToken);
+        if (incomeType is null)
         {
             return DictionaryResult<FeeCampaignDto>.Failure(
-                "other_income_destination_not_configured",
-                "Системное назначение «Прочие доходы» не настроено или не связано с фондом.");
+                "fee_campaign_income_type_not_found",
+                "Выбранное назначение поступления не найдено.");
+        }
+        if (!incomeType.DestinationFundId.HasValue ||
+            !await fundRepository.ActiveFundExistsAsync(incomeType.DestinationFundId.Value, cancellationToken))
+        {
+            return DictionaryResult<FeeCampaignDto>.Failure(
+                "fee_campaign_fund_not_found",
+                "Для выбранного назначения поступления должен быть настроен действующий фонд.");
         }
 
         var participants = await ResolveFeeCampaignParticipantsAsync(request, cancellationToken);
@@ -3224,12 +3230,19 @@ public sealed class DictionaryService(
             return DictionaryResult<FeeCampaignDto>.Failure("fee_campaign_duplicate", "Активный сбор с таким наименованием уже существует.");
         }
 
-        var incomeType = await incomeTypeRepository.FindFirstActiveByCodeAsync(OtherIncomeIncomeTypeCode, cancellationToken);
-        if (incomeType is null || !incomeType.IsSystem || !incomeType.DestinationFundId.HasValue)
+        var incomeType = await incomeTypeRepository.FindActiveAsync(request.IncomeTypeId, cancellationToken);
+        if (incomeType is null)
         {
             return DictionaryResult<FeeCampaignDto>.Failure(
-                "other_income_destination_not_configured",
-                "Системное назначение «Прочие доходы» не настроено или не связано с фондом.");
+                "fee_campaign_income_type_not_found",
+                "Выбранное назначение поступления не найдено.");
+        }
+        if (!incomeType.DestinationFundId.HasValue ||
+            !await fundRepository.ActiveFundExistsAsync(incomeType.DestinationFundId.Value, cancellationToken))
+        {
+            return DictionaryResult<FeeCampaignDto>.Failure(
+                "fee_campaign_fund_not_found",
+                "Для выбранного назначения поступления должен быть настроен действующий фонд.");
         }
 
         var participants = await ResolveFeeCampaignParticipantsAsync(request, cancellationToken);
@@ -3240,12 +3253,21 @@ public sealed class DictionaryService(
 
         var targetAmount = await CalculateFeeCampaignTargetAmountAsync(request, participants.Value!, cancellationToken);
 
-        if (!FeeCampaignParticipantsMatch(campaign, request, participants.Value!) &&
-            await feeCampaignRepository.HasAccrualsAsync(campaign.Id, cancellationToken))
+        var participantsChanged = !FeeCampaignParticipantsMatch(campaign, request, participants.Value!);
+        var incomeTypeChanged = campaign.IncomeTypeId != incomeType.Id;
+        var hasAccruals = (participantsChanged || incomeTypeChanged) &&
+            await feeCampaignRepository.HasAccrualsAsync(campaign.Id, cancellationToken);
+        if (participantsChanged && hasAccruals)
         {
             return DictionaryResult<FeeCampaignDto>.Failure(
                 "fee_campaign_participants_locked",
                 "Нельзя изменить состав участников сбора после создания начислений. Исторический состав должен оставаться неизменным.");
+        }
+        if (incomeTypeChanged && hasAccruals)
+        {
+            return DictionaryResult<FeeCampaignDto>.Failure(
+                "fee_campaign_income_type_locked",
+                "Нельзя изменить назначение поступления после создания начислений по сбору. Исторические проводки должны оставаться в прежнем фонде.");
         }
 
         if (FeeCampaignMatches(campaign, request, participants.Value!, incomeType.Id, targetAmount))

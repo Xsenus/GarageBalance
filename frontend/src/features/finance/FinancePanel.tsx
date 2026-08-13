@@ -4669,7 +4669,7 @@ function PaymentsPrototypePanel({
                     ? <>Весь общий долг <strong>{formatPaymentPrototypeValue(Math.abs(selectedGarageBalance.amount))}</strong> уже просрочен.</>
                     : <>{selectedGarageBalance.label} <strong>{formatPaymentPrototypeValue(selectedGarageBalance.amount)}</strong> и просрочка <strong>{formatPaymentPrototypeValue(selectedGarage.overdueDebt)}</strong> относятся к разным услугам. Ниже показано, по каким услугам остался просроченный долг.</>}
               </p>
-              <section className="payments-prototype-overdue-details" aria-label="Расшифровка просроченной задолженности">
+              <section className={`payments-prototype-overdue-details${overdueDebtDetailsExpanded ? ' payments-prototype-overdue-details--expanded' : ''}`} aria-label="Расшифровка просроченной задолженности">
                 <div className="payments-prototype-overdue-heading">
                   <span className="payments-prototype-overdue-title">Расшифровка просроченной задолженности</span>
                   <span className="payments-prototype-overdue-controls">
@@ -4932,7 +4932,7 @@ function PaymentsPrototypePanel({
                             <td>{formatPaymentMoney(row.difference ?? '')}</td>
                             <td>
                               <div className="payments-prototype-payable">
-                                {row.calculationDetails ? (
+                                {row.calculationDetails || row.payable > 0 ? (
                                   <span className="field-help">
                                     <button
                                       type="button"
@@ -4942,7 +4942,9 @@ function PaymentsPrototypePanel({
                                     >
                                       <CircleHelp size={15} aria-hidden="true" />
                                     </button>
-                                    <span className="field-help__tooltip payments-prototype-calculation-tooltip">{row.calculationDetails.lines[0]?.formula}</span>
+                                    <span className="field-help__tooltip payments-prototype-calculation-tooltip">
+                                      {row.calculationDetails?.lines[0]?.formula ?? `Сохранённое начисление: ${formatPaymentMoney(row.payable)}`}
+                                    </span>
                                   </span>
                                 ) : null}
                                 <span className="payments-prototype-payable-amount">{formatPaymentMoney(row.payable)}</span>
@@ -5186,7 +5188,7 @@ function PaymentsPrototypePanel({
           </div>
         </>
       )}
-      {calculationDialogRow?.calculationDetails ? (
+      {calculationDialogRow ? (
         <div className="modal-backdrop" role="presentation" onMouseDown={() => setCalculationDialogRow(null)}>
           <section
             ref={calculationDialogRef}
@@ -5202,16 +5204,17 @@ function PaymentsPrototypePanel({
                 <X size={18} aria-hidden="true" />
               </button>
             </div>
-            <div className="payments-prototype-calculation">
-              <div className="payments-prototype-calculation-heading">
-                <strong>Как рассчитано {formatPaymentMoney(calculationDialogRow.calculationDetails.totalAmount)}</strong>
-                {calculationDialogRow.calculationDetails.requiresMeter ? (
-                  <span>Показания: {calculationDialogRow.calculationDetails.previousMeterValue?.toLocaleString('ru-RU') ?? '—'} → {calculationDialogRow.calculationDetails.currentMeterValue?.toLocaleString('ru-RU') ?? '—'}; расход {calculationDialogRow.calculationDetails.meterConsumption?.toLocaleString('ru-RU') ?? '—'}</span>
-                ) : null}
-              </div>
-              {calculationDialogRow.calculationDetails.volumeAllocationRule ? <p>{calculationDialogRow.calculationDetails.volumeAllocationRule}</p> : null}
-              <div className="payments-prototype-calculation-lines">
-                {calculationDialogRow.calculationDetails.lines.map((line, lineIndex) => (
+            {calculationDialogRow.calculationDetails ? (
+              <div className="payments-prototype-calculation">
+                <div className="payments-prototype-calculation-heading">
+                  <strong>Как рассчитано {formatPaymentMoney(calculationDialogRow.calculationDetails.totalAmount)}</strong>
+                  {calculationDialogRow.calculationDetails.requiresMeter ? (
+                    <span>Показания: {calculationDialogRow.calculationDetails.previousMeterValue?.toLocaleString('ru-RU') ?? '—'} → {calculationDialogRow.calculationDetails.currentMeterValue?.toLocaleString('ru-RU') ?? '—'}; расход {calculationDialogRow.calculationDetails.meterConsumption?.toLocaleString('ru-RU') ?? '—'}</span>
+                  ) : null}
+                </div>
+                {calculationDialogRow.calculationDetails.volumeAllocationRule ? <p>{calculationDialogRow.calculationDetails.volumeAllocationRule}</p> : null}
+                <div className="payments-prototype-calculation-lines">
+                  {calculationDialogRow.calculationDetails.lines.map((line, lineIndex) => (
                   <div className="payments-prototype-calculation-line" key={`${line.effectiveFrom}-${line.effectiveTo}-${lineIndex}`}>
                     <span>{formatDateOnly(line.effectiveFrom)}–{formatDateOnly(line.effectiveTo)}</span>
                     <span>{line.calculationMode === 'fixed' ? 'Фиксированный' : line.calculationMode === 'people' ? 'По количеству людей' : line.calculationMode === 'metered' ? 'По счётчику' : line.calculationMode === 'metered_tiered' ? 'По счётчику, пороги' : 'Без тарифа'}</span>
@@ -5226,9 +5229,18 @@ function PaymentsPrototypePanel({
                       </ul>
                     ) : null}
                   </div>
-                ))}
+                  ))}
+                </div>
               </div>
-            </div>
+            ) : (
+              <div className="payments-prototype-calculation payments-prototype-calculation--historical" role="note">
+                <div className="payments-prototype-calculation-heading">
+                  <strong>Сумма сохранённого начисления: {formatPaymentMoney(calculationDialogRow.payable)}</strong>
+                  {calculationDialogRow.difference !== null ? <span>Зафиксированный расход: {calculationDialogRow.difference.toLocaleString('ru-RU')}</span> : null}
+                </div>
+                <p>Для этой ранее созданной записи подробная тарифная формула не сохранялась. Сумма показана без пересчёта и не изменяет начисление, оплату или задолженность.</p>
+              </div>
+            )}
           </section>
         </div>
       ) : null}
