@@ -4158,27 +4158,7 @@ function AddFeePrototypeDialog({
                     <input type="checkbox" aria-label="Все гаражи" checked={appliesToAllGarages} onChange={(event) => setAppliesToAllGarages(event.target.checked)} />
                   </span>
                 </label>
-                {!appliesToAllGarages ? (
-                  <fieldset className="contractors-participant-list">
-                    <legend>Выбранные гаражи</legend>
-                    {garageOptions.length > 0 ? garageOptions.map((garage) => (
-                      <label key={garage.id} className="contractors-participant-option">
-                        <input
-                          type="checkbox"
-                          aria-label={`Гараж ${garage.number}`}
-                          checked={participantGarageIds.includes(garage.id)}
-                          onChange={(event) => toggleParticipantGarage(garage.id, event.target.checked)}
-                        />
-                        <span>
-                          <strong>Гараж {garage.number}</strong>
-                          {garage.ownerName ? <small>{garage.ownerName}</small> : null}
-                        </span>
-                      </label>
-                    )) : <p className="form-hint">Активные гаражи не найдены.</p>}
-                  </fieldset>
-                ) : null}
               </section>
-
               <section className="contractors-fee-card" aria-labelledby="fee-parameters-title">
                 <h4 id="fee-parameters-title">Параметры сбора</h4>
                 <div className="contractors-fee-two-column-grid">
@@ -4213,6 +4193,26 @@ function AddFeePrototypeDialog({
                   </div>
                 </FormField>
               </section>
+
+              {!appliesToAllGarages ? (
+                <fieldset className="contractors-participant-list contractors-fee-participant-list">
+                  <legend>Выбранные гаражи</legend>
+                  {garageOptions.length > 0 ? garageOptions.map((garage) => (
+                    <label key={garage.id} className="contractors-participant-option">
+                      <input
+                        type="checkbox"
+                        aria-label={`Гараж ${garage.number}`}
+                        checked={participantGarageIds.includes(garage.id)}
+                        onChange={(event) => toggleParticipantGarage(garage.id, event.target.checked)}
+                      />
+                      <span>
+                        <strong>Гараж {garage.number}</strong>
+                        {garage.ownerName ? <small>{garage.ownerName}</small> : null}
+                      </span>
+                    </label>
+                  )) : <p className="form-hint">Активные гаражи не найдены.</p>}
+                </fieldset>
+              ) : null}
             </div>
 
             <div className="detail-dialog-actions">

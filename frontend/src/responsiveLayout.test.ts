@@ -402,6 +402,8 @@ describe('responsive layout styles', () => {
     expect(normalizedAppCss).toContain('.contractors-fee-layout {\n  display: grid;\n  grid-template-columns: minmax(360px, 0.85fr) minmax(480px, 1.15fr);')
     expect(normalizedAppCss).toContain('.contractors-fee-card {\n  display: grid;\n  min-width: 0;\n  gap: 12px;')
     expect(normalizedAppCss).toContain('.contractors-fee-calculation-status {\n  display: block;\n  min-height: 32px;')
+    expect(normalizedAppCss).toContain('.contractors-fee-participant-list {\n  grid-column: 1 / -1;\n  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));\n  width: 100%;')
+    expect(normalizedAppCss).toContain('.contractors-fee-participant-list legend,\n.contractors-fee-participant-list > .form-hint {\n  grid-column: 1 / -1;')
     expect(normalizedAppCss).toContain('.contractors-fee-two-column-grid,\n.contractors-fee-date-grid {\n  display: grid;\n  grid-template-columns: repeat(2, minmax(0, 1fr));\n  gap: 12px;')
     expect(normalizedAppCss).toContain('.contractors-fee-layout,\n  .contractors-fee-two-column-grid,\n  .contractors-fee-date-grid,\n  .contractors-service-period-grid,\n  .contractors-service-flags,\n  .contractors-service-cost-grid {\n    grid-template-columns: 1fr;')
   })
