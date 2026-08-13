@@ -4,6 +4,7 @@ import { CalendarPlus, CircleCheck, FileSpreadsheet, FileText, Pencil, PowerOff,
 import type { AuthResponse } from '../../services/authApi'
 import { DictionaryApiError } from '../../services/dictionariesApi'
 import type { AccountingTypeDto, ChargeServiceSettingDto, ChargeServiceTariffPeriodDto, CreateChargeServiceWithTariffRequest, DictionaryClient, FeeCampaignDto, GarageDto, IrregularPaymentDto, MeasurementUnitDto, TariffDto, UpdateChargeServiceWithTariffRequest, UpsertChargeServiceSettingRequest, UpsertChargeServiceTariffScheduleRequest, UpsertFeeCampaignRequest, UpsertIrregularPaymentRequest, UpsertTariffRequest } from '../../services/dictionariesApi'
+import { areFeeCampaignAmountsEqual, calculateFeeCampaignContributionAmount, calculateFeeCampaignLastContribution, calculateFeeCampaignTargetAmount } from './feeCampaignAmounts'
 import type { FinanceClient } from '../../services/financeApi'
 import type { FundOptionDto, FundsClient } from '../../services/fundsApi'
 import { hasPermission, permissions } from '../../shared/accessControl'
@@ -230,15 +231,6 @@ function parsePrototypeAmount(value: string) {
 
   const parsed = Number(normalized)
   return Number.isFinite(parsed) && parsed >= 0 ? parsed : null
-}
-
-function calculateFeeCampaignTargetAmount(contributionAmount: number | null, participantCount: number) {
-  if (contributionAmount === null || contributionAmount <= 0 || participantCount <= 0) {
-    return 0
-  }
-
-  const roundedContribution = Math.round((contributionAmount + Number.EPSILON) * 100) / 100
-  return Math.round((roundedContribution * participantCount + Number.EPSILON) * 100) / 100
 }
 
 function formatFeeCampaignParticipantCount(participantCount: number) {
@@ -3994,6 +3986,13 @@ function AddFeePrototypeDialog({
   submitLabel?: string
   title?: string
 }) {
+  const initialParticipantCount = initialCampaign?.appliesToAllGarages
+    ? activeGarageCount
+    : initialCampaign?.participantGarageIds.length ?? 0
+  const initialAmountCalculationMode = initialCampaign
+    && calculateFeeCampaignTargetAmount(initialCampaign.contributionAmount, initialParticipantCount) !== initialCampaign.targetAmount
+    ? 'target'
+    : 'contribution'
   const [name, setName] = useState(initialCampaign?.name ?? '')
   const defaultIncomeTypeId = initialCampaign?.incomeTypeId
     ?? incomeTypes.find((incomeType) => incomeType.code === 'other_income')?.id
@@ -4002,6 +4001,8 @@ function AddFeePrototypeDialog({
   const [incomeTypeId, setIncomeTypeId] = useState(defaultIncomeTypeId)
   const [goal, setGoal] = useState(initialCampaign?.goal ?? '')
   const [contributionAmount, setContributionAmount] = useState(initialCampaign ? formatTariffDecimal(initialCampaign.contributionAmount) : '')
+  const [targetAmountInput, setTargetAmountInput] = useState(initialCampaign ? formatTariffDecimal(initialCampaign.targetAmount) : '')
+  const [amountCalculationMode, setAmountCalculationMode] = useState<'contribution' | 'target'>(initialAmountCalculationMode)
   const [startsOn, setStartsOn] = useState(initialCampaign?.startsOn ?? getLocalDateInputValue())
   const [endsOn, setEndsOn] = useState(initialCampaign?.endsOn ?? '')
   const [appliesToAllGarages, setAppliesToAllGarages] = useState(initialCampaign?.appliesToAllGarages ?? true)
@@ -4017,8 +4018,15 @@ function AddFeePrototypeDialog({
   useEscapeKey(!pendingConfirmation, onClose)
   useEscapeKey(Boolean(pendingConfirmation), () => setPendingConfirmation(null))
   const participantCount = appliesToAllGarages ? activeGarageCount : participantGarageIds.length
-  const parsedContributionAmount = parsePrototypeAmount(contributionAmount)
-  const targetAmount = calculateFeeCampaignTargetAmount(parsedContributionAmount, participantCount)
+  const parsedContributionInput = parsePrototypeAmount(contributionAmount)
+  const parsedTargetAmountInput = parsePrototypeAmount(targetAmountInput)
+  const parsedContributionAmount = amountCalculationMode === 'target'
+    ? calculateFeeCampaignContributionAmount(parsedTargetAmountInput, participantCount)
+    : parsedContributionInput
+  const targetAmount = amountCalculationMode === 'target'
+    ? parsedTargetAmountInput ?? 0
+    : calculateFeeCampaignTargetAmount(parsedContributionInput, participantCount)
+  const lastContributionAmount = calculateFeeCampaignLastContribution(targetAmount, parsedContributionAmount ?? 0, participantCount)
 
   function toggleParticipantGarage(garageId: string, checked: boolean) {
     setParticipantGarageIds((currentIds) => {
@@ -4051,6 +4059,11 @@ function AddFeePrototypeDialog({
       return
     }
 
+    if (targetAmount <= 0) {
+      setError('Сумма сбора должна быть больше нуля.')
+      return
+    }
+
     if (!startsOn) {
       setError('Укажите дату начала сбора.')
       return
@@ -4077,6 +4090,7 @@ function AddFeePrototypeDialog({
       goal: goal.trim() || null,
       contributionAmount: parsedContributionAmount,
       targetAmount,
+      amountCalculationMode,
       startsOn,
       endsOn: endsOn || null,
       appliesToAllGarages,
@@ -4164,19 +4178,41 @@ function AddFeePrototypeDialog({
                 <div className="contractors-fee-two-column-grid">
                   <FormField label="Сумма взноса">
                     <div className="contractors-inline-field contractors-fee-money-field">
-                      <MoneyTextInput aria-label="Сумма взноса" value={contributionAmount} onValueChange={setContributionAmount} />
+                      <MoneyTextInput
+                        aria-label="Сумма взноса"
+                        value={amountCalculationMode === 'target' ? formatTariffDecimal(parsedContributionAmount ?? 0) : contributionAmount}
+                        onValueChange={(value) => {
+                          const nextAmount = parsePrototypeAmount(value)
+                          if (amountCalculationMode !== 'target' || !areFeeCampaignAmountsEqual(nextAmount, parsedContributionAmount)) {
+                            setAmountCalculationMode('contribution')
+                          }
+                          setContributionAmount(value)
+                        }}
+                      />
                       <span>руб.</span>
                     </div>
                   </FormField>
                   <FormField label="Сумма сбора">
                     <div className="contractors-inline-field contractors-fee-money-field">
-                      <input aria-label="Сумма сбора" value={formatTariffDecimal(targetAmount)} readOnly />
+                      <MoneyTextInput
+                        aria-label="Сумма сбора"
+                        value={amountCalculationMode === 'contribution' ? formatTariffDecimal(targetAmount) : targetAmountInput}
+                        onValueChange={(value) => {
+                          const nextAmount = parsePrototypeAmount(value)
+                          if (amountCalculationMode !== 'contribution' || !areFeeCampaignAmountsEqual(nextAmount, targetAmount)) {
+                            setAmountCalculationMode('target')
+                          }
+                          setTargetAmountInput(value)
+                        }}
+                      />
                       <span>руб.</span>
                     </div>
                   </FormField>
                 </div>
                 <small className="contractors-fee-calculation-status" role="status" aria-live="polite">
-                  Рассчитано автоматически: {formatFeeCampaignParticipantCount(participantCount)} × {formatTariffDecimal(parsedContributionAmount ?? 0)} руб.
+                  {amountCalculationMode === 'target'
+                    ? <>Рассчитано автоматически: {formatTariffDecimal(targetAmount)} руб. ÷ {formatFeeCampaignParticipantCount(participantCount)} = до {formatTariffDecimal(parsedContributionAmount ?? 0)} руб.{lastContributionAmount > 0 && lastContributionAmount !== parsedContributionAmount ? ` Последний — ${formatTariffDecimal(lastContributionAmount)} руб.` : ''}</>
+                    : <>Рассчитано автоматически: {formatFeeCampaignParticipantCount(participantCount)} × {formatTariffDecimal(parsedContributionAmount ?? 0)} руб.</>}
                 </small>
                 <div className="contractors-fee-date-grid">
                   <FormField label="Дата начала">

@@ -346,6 +346,12 @@ public sealed record CloseFeeCampaignRequest(
     [MaxLength(1000)] string? Comment,
     Guid? Version = null);
 
+public static class FeeCampaignAmountCalculationModes
+{
+    public const string Contribution = "contribution";
+    public const string Target = "target";
+}
+
 public sealed record UpsertFeeCampaignRequest(
     [Required, MaxLength(200)] string Name,
     Guid IncomeTypeId,
@@ -356,4 +362,5 @@ public sealed record UpsertFeeCampaignRequest(
     DateOnly? EndsOn,
     bool AppliesToAllGarages,
     [Range(0, 366)] int OverdueGraceDays,
-    IReadOnlyList<Guid>? ParticipantGarageIds = null);
+    IReadOnlyList<Guid>? ParticipantGarageIds = null,
+    string? AmountCalculationMode = null);

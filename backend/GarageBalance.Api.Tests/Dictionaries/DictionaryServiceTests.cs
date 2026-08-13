@@ -4081,6 +4081,53 @@ public sealed class DictionaryServiceTests
     }
 
     [Fact]
+    public async Task FeeCampaignAsync_CalculatesContributionFromExplicitTargetAmount()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var otherIncome = await AddOtherIncomeDestinationAsync(database.Context);
+        var service = DictionaryServiceTestFactory.Create(database.Context);
+        database.Context.Garages.AddRange(
+            new Garage { Number = "1", PeopleCount = 1, FloorCount = 1 },
+            new Garage { Number = "2", PeopleCount = 1, FloorCount = 1 },
+            new Garage { Number = "3", PeopleCount = 1, FloorCount = 1 });
+        await database.Context.SaveChangesAsync();
+
+        var created = await service.CreateFeeCampaignAsync(
+            new UpsertFeeCampaignRequest(
+                "Сбор с общей суммой",
+                otherIncome.Id,
+                null,
+                1m,
+                1000m,
+                new DateOnly(2026, 8, 13),
+                null,
+                true,
+                30,
+                null,
+                FeeCampaignAmountCalculationModes.Target),
+            null,
+            CancellationToken.None);
+
+        Assert.True(created.Succeeded, created.ErrorMessage);
+        Assert.Equal(333.34m, created.Value!.ContributionAmount);
+        Assert.Equal(1000m, created.Value.TargetAmount);
+
+        var invalidMode = await service.CreateFeeCampaignAsync(
+            new UpsertFeeCampaignRequest("Неизвестный режим", otherIncome.Id, null, 100m, 300m, new DateOnly(2026, 8, 13), null, true, 30, null, "unknown"),
+            null,
+            CancellationToken.None);
+        var invalidTarget = await service.CreateFeeCampaignAsync(
+            new UpsertFeeCampaignRequest("Пустая сумма", otherIncome.Id, null, 100m, 0m, new DateOnly(2026, 8, 13), null, true, 30, null, FeeCampaignAmountCalculationModes.Target),
+            null,
+            CancellationToken.None);
+
+        Assert.False(invalidMode.Succeeded);
+        Assert.Equal("fee_campaign_amount_mode_invalid", invalidMode.ErrorCode);
+        Assert.False(invalidTarget.Succeeded);
+        Assert.Equal("fee_campaign_target_amount_invalid", invalidTarget.ErrorCode);
+    }
+
+    [Fact]
     public async Task FeeCampaignAsync_SavesSelectedParticipantGaragesAndWritesDiff()
     {
         await using var database = await TestDatabase.CreateAsync();

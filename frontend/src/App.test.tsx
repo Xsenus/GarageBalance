@@ -595,13 +595,14 @@ describe('App', () => {
     expect(feeContributionInput.closest('.contractors-fee-money-field')).not.toBeNull()
     expect(feeTargetInput.closest('.contractors-fee-money-field')).not.toBeNull()
     expect(feeContributionInput.closest('.contractors-fee-two-column-grid')).toContainElement(feeTargetInput)
-    expect(feeTargetInput).toHaveAttribute('readonly')
+    expect(feeTargetInput).not.toHaveAttribute('readonly')
     expect(within(feeDialog).getByLabelText('Все гаражи')).toBeChecked()
     await user.type(feeContributionInput, '1000000')
     await user.click(feeTargetInput)
     expect(feeContributionInput).toHaveValue('1 000 000.00')
     expect(feeTargetInput).toHaveValue('1 000 000.00')
-    expect(within(feeDialog).getByText(/Рассчитано автоматически: 1 участник/)).toHaveClass('contractors-fee-calculation-status')
+    expect(within(feeDialog).getByRole('status')).toHaveTextContent('1 участник')
+    expect(within(feeDialog).getByRole('status')).toHaveClass('contractors-fee-calculation-status')
     const startsOnInput = within(feeDialog).getByLabelText('Дата начала')
     const endsOnInput = within(feeDialog).getByLabelText('Дата окончания сбора')
     expect(startsOnInput.closest('.contractors-fee-date-grid')).toContainElement(endsOnInput)
@@ -750,6 +751,11 @@ describe('App', () => {
     await user.click(within(createDialog).getByRole('option', { name: alternateIncomeType.name }))
     expect(createIncomeTypeControl).toHaveTextContent(alternateIncomeType.name)
     await user.type(within(createDialog).getByLabelText('Цель сбора'), 'Видеонаблюдение')
+    await user.clear(within(createDialog).getByLabelText('Сумма сбора'))
+    await user.type(within(createDialog).getByLabelText('Сумма сбора'), '1000')
+    expect(within(createDialog).getByLabelText('Сумма взноса')).toHaveValue('14.93')
+    expect(within(createDialog).getByText(/Последний — 14\.62 руб\./)).toBeInTheDocument()
+    await user.clear(within(createDialog).getByLabelText('Сумма взноса'))
     await user.type(within(createDialog).getByLabelText('Сумма взноса'), '700')
     expect(within(createDialog).getByLabelText('Сумма сбора')).toHaveValue('46 900.00')
     expect(within(createDialog).getByText(/Рассчитано автоматически: 67 участников/)).toBeInTheDocument()
@@ -771,6 +777,7 @@ describe('App', () => {
       goal: 'Видеонаблюдение',
       contributionAmount: 700,
       targetAmount: 700,
+      amountCalculationMode: 'contribution',
       appliesToAllGarages: false,
       participantGarageIds: [participantGarage.id],
       overdueGraceDays: 45,
@@ -787,7 +794,7 @@ describe('App', () => {
     expect(within(editDialog).getByRole('combobox', { name: 'Назначение поступления для сбора' })).toHaveTextContent(alternateIncomeType.name)
     expect(within(editDialog).getByLabelText('Сумма взноса')).toHaveValue('700.00')
     expect(within(editDialog).getByLabelText('Сумма сбора')).toHaveValue('700.00')
-    expect(within(editDialog).getByLabelText('Сумма сбора')).toHaveAttribute('readonly')
+    expect(within(editDialog).getByLabelText('Сумма сбора')).not.toHaveAttribute('readonly')
     await user.click(within(editDialog).getByRole('button', { name: 'Сохранить' }))
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Изменить сбор' })).not.toBeInTheDocument())
     await waitFor(() => expect(editFeeCampaignButton).toHaveFocus())
@@ -802,6 +809,9 @@ describe('App', () => {
     await user.click(within(editDialog).getByRole('option', { name: targetIncomeType.name }))
     await user.click(within(editDialog).getByLabelText('Гараж 12'))
     expect(within(editDialog).getByLabelText('Сумма сбора')).toHaveValue('1 400.00')
+    await user.clear(within(editDialog).getByLabelText('Сумма сбора'))
+    await user.type(within(editDialog).getByLabelText('Сумма сбора'), '1000')
+    expect(within(editDialog).getByLabelText('Сумма взноса')).toHaveValue('500.00')
     await user.click(within(editDialog).getByRole('button', { name: 'Сохранить' }))
     const editConfirmationDialog = await screen.findByRole('dialog', { name: 'Подтвердите изменения сбора' })
     expect(within(editConfirmationDialog).getByLabelText('Изменяемые поля сбора')).toHaveTextContent('Сумма сбора')
@@ -823,7 +833,9 @@ describe('App', () => {
       request: {
         name: 'Сбор на камеры',
         incomeTypeId: targetIncomeType.id,
-        targetAmount: 1400,
+        contributionAmount: 500,
+        targetAmount: 1000,
+        amountCalculationMode: 'target',
         appliesToAllGarages: false,
         participantGarageIds: [participantGarage.id, otherGarage.id],
       },

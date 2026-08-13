@@ -384,6 +384,7 @@ export type UpsertFeeCampaignRequest = {
   goal?: string | null
   contributionAmount: number
   targetAmount: number
+  amountCalculationMode?: 'contribution' | 'target'
   startsOn: string
   endsOn?: string | null
   appliesToAllGarages: boolean
