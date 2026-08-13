@@ -408,6 +408,10 @@ describe('responsive layout styles', () => {
     expect(normalizedAppCss).toContain('.contractors-fee-layout,\n  .contractors-fee-two-column-grid,\n  .contractors-fee-date-grid,\n  .contractors-service-period-grid,\n  .contractors-service-flags,\n  .contractors-service-cost-grid {\n    grid-template-columns: 1fr;')
   })
 
+  it('centers the announced-fee period heading and every date on one axis', () => {
+    expect(normalizedAppCss).toContain('.fee-period {\n  display: grid;\n  place-content: center;')
+  })
+
   it('keeps the supplier editor wide, compact and responsive', () => {
     expect(normalizedAppCss).toContain('.detail-dialog.contractors-dialog--supplier {\n  width: min(1280px, calc(100vw - 48px));')
     expect(normalizedAppCss).toContain('.contractors-dialog--supplier .contractors-modal-form {\n  gap: 9px;')

@@ -1020,6 +1020,7 @@ describe('App', () => {
     await openSection(user, 'Тарифы и сборы')
     const tariffsPanel = await screen.findByRole('region', { name: 'Тарифы и сборы' })
     const feeCampaignsSection = within(tariffsPanel).getByLabelText('Объявленные сборы')
+    expect(within(feeCampaignsSection).getByText('Период')).toHaveClass('fee-period')
     expect(await within(feeCampaignsSection).findByText(endedCampaign.name)).toBeInTheDocument()
     const activeRow = within(feeCampaignsSection).getByLabelText(`Объявленный сбор ${activeCampaign.name}`)
     const openEndedRow = within(feeCampaignsSection).getByLabelText(`Объявленный сбор ${openEndedCampaign.name}`)
@@ -1032,6 +1033,7 @@ describe('App', () => {
 
     const activePeriod = within(activeRow).getByText('01.08.2026').parentElement
     expect(activePeriod).not.toBeNull()
+    expect(activePeriod).toHaveClass('fee-period')
     const activePeriodDates = (activePeriod as HTMLElement).querySelectorAll('time')
     expect(activePeriodDates).toHaveLength(2)
     expect(activePeriodDates[0]).toHaveClass('money-income')

@@ -1413,7 +1413,7 @@ h1 {
   overflow-wrap: anywhere;
 }
 
-.contractors-fee-period-cell {
+.fee-period {
   display: grid;
   place-content: center;
 }

@@ -2811,7 +2811,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
                   <span>Взнос</span>
                   <span>План</span>
                   <span>Участники</span>
-                  <span>Период</span>
+                  <span className="fee-period">Период</span>
                   <span>Действия</span>
                 </div>
                 {feeCampaignsLoading ? <TableLoadingState className="table-loading-state--compact" label="Загружаем объявленные сборы" /> : null}
@@ -2839,7 +2839,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
                     <span className="contractors-fee-money-cell">{formatTariffDecimal(campaign.contributionAmount)}</span>
                     <span className="contractors-fee-money-cell">{formatTariffDecimal(campaign.targetAmount)}</span>
                     <span className="contractors-fee-participants-cell">{formatFeeCampaignParticipantSummary(campaign)}</span>
-                    <span className="contractors-fee-period-cell">
+                    <span className="fee-period">
                       <time className={isPeriodMuted ? undefined : 'money-income'}>{formatDateOnly(campaign.startsOn)}</time>
                       {campaign.endsOn ? <time className={isPeriodMuted ? undefined : 'money-expense'}>{formatDateOnly(campaign.endsOn)}</time> : null}
                     </span>
