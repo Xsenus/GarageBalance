@@ -745,6 +745,10 @@ function mergeFeeCampaignSnapshots(currentCampaigns: FeeCampaignDto[], loadedCam
   ]
 }
 
+function getFeeCampaignDisplayRank(campaign: FeeCampaignDto, today: string) {
+  return +(campaign.isArchived || campaign.closedAtUtc || campaign.endsOn! < today)
+}
+
 export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClient }: { auth: AuthResponse; dictionaryClient: DictionaryClient; financeClient: FinanceClient; fundsClient: FundsClient }) {
   const [modal, setModal] = useState<'service' | 'fee' | null>(null)
   const [tariffRows, setTariffRows] = useState<ContractorTariffRow[]>([])
@@ -2253,7 +2257,12 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
   const tariffPageSizeLabel = chargeServiceView === 'deleted' ? 'Количество строк удалённых услуг' : 'Количество строк тарифов и услуг'
   const tariffPage = createClientPage(visibleTariffRows, tariffPageNumber, tariffPageSize)
   const oneTimePage = createClientPage(oneTimeRows, oneTimePageNumber, oneTimePageSize)
-  const feeCampaignPage = createClientPage(feeCampaigns, feeCampaignPageNumber, feeCampaignPageSize)
+  const currentBusinessDate = getLocalDateInputValue()
+  const feeCampaignPage = createClientPage(
+    [...feeCampaigns].sort((left, right) => getFeeCampaignDisplayRank(left, currentBusinessDate) - getFeeCampaignDisplayRank(right, currentBusinessDate)),
+    feeCampaignPageNumber,
+    feeCampaignPageSize,
+  )
 
   function formatFeeCampaignParticipantSummary(campaign: FeeCampaignDto) {
     if (campaign.appliesToAllGarages) {
@@ -2806,12 +2815,14 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
                   <span>Действия</span>
                 </div>
                 {feeCampaignsLoading ? <TableLoadingState className="table-loading-state--compact" label="Загружаем объявленные сборы" /> : null}
-                {!feeCampaignsLoading ? feeCampaignPage.items.map((campaign) => (
+                {!feeCampaignsLoading ? feeCampaignPage.items.map((campaign) => {
+                  const isPeriodMuted = getFeeCampaignDisplayRank(campaign, currentBusinessDate) > 0
+                  return (
                   <div
                     aria-label={`Объявленный сбор ${campaign.name}`}
                     className={[
                       'contractors-mini-row contractors-mini-row--fees',
-                      campaign.isArchived ? 'contractors-mini-row--deleted' : '',
+                      isPeriodMuted ? 'contractors-mini-row--deleted' : '',
                     ].filter(Boolean).join(' ')}
                     key={campaign.id}
                   >
@@ -2829,8 +2840,8 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
                     <span className="contractors-fee-money-cell">{formatTariffDecimal(campaign.targetAmount)}</span>
                     <span className="contractors-fee-participants-cell">{formatFeeCampaignParticipantSummary(campaign)}</span>
                     <span className="contractors-fee-period-cell">
-                      <time dateTime={campaign.startsOn}>{formatDateOnly(campaign.startsOn)}</time>
-                      {campaign.endsOn ? <><span aria-hidden="true"> — </span><time dateTime={campaign.endsOn}>{formatDateOnly(campaign.endsOn)}</time></> : null}
+                      <time className={isPeriodMuted ? undefined : 'money-income'}>{formatDateOnly(campaign.startsOn)}</time>
+                      {campaign.endsOn ? <time className={isPeriodMuted ? undefined : 'money-expense'}>{formatDateOnly(campaign.endsOn)}</time> : null}
                     </span>
                     <span className="contractors-mini-actions">
                     {campaign.isArchived ? (
@@ -2850,7 +2861,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
                         <button className="icon-button" type="button" aria-label={`Изменить сбор ${campaign.name}`} disabled={!canManageTariffs || feeCampaignSavingId === campaign.id || feeCampaignGarageOptionsLoading} onClick={() => void openFeeCampaignEditDialog(campaign)}>
                           <Pencil size={16} />
                         </button>
-                        {!campaign.endsOn || campaign.endsOn > getLocalDateInputValue() ? (
+                        {!campaign.endsOn || campaign.endsOn > currentBusinessDate ? (
                           <button className="icon-button" type="button" aria-label={`Закрыть сбор ${campaign.name}`} disabled={!canManageTariffs || feeCampaignSavingId === campaign.id} onClick={() => {
                             setFeeCampaignCloseTarget(campaign)
                             setFeeCampaignClosureComment('')
@@ -2868,7 +2879,8 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
                     )}
                     </span>
                   </div>
-                )) : null}
+                  )
+                }) : null}
                 {feeCampaigns.length === 0 && !feeCampaignsLoading ? <EmptyState>Объявленные сборы пока не настроены.</EmptyState> : null}
               </div>
               <TablePagination

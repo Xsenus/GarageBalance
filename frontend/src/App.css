@@ -1388,9 +1388,7 @@ h1 {
 }
 
 .fee-campaign-table-scroll {
-  min-width: 0;
   overflow-x: auto;
-  scrollbar-gutter: stable;
 }
 
 .contractors-mini-header--fees > span,
@@ -1415,8 +1413,9 @@ h1 {
   overflow-wrap: anywhere;
 }
 
-.contractors-fee-period-cell time {
-  white-space: nowrap;
+.contractors-fee-period-cell {
+  display: grid;
+  place-content: center;
 }
 
 .contractors-mini-header {

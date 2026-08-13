@@ -1004,12 +1004,14 @@ describe('App', () => {
   it('removes manual fee completion and hides closing after the campaign end date', async () => {
     const user = userEvent.setup()
     const targetIncomeType = createAccountingType({ id: 'income-type-other-income', name: 'Прочие доходы', code: 'other_income', isSystem: true })
-    const endedCampaign = createFeeCampaign({ id: 'fee-campaign-ended', name: 'Завершённый сбор', incomeTypeId: targetIncomeType.id, incomeTypeName: targetIncomeType.name, endsOn: '2026-05-31' })
-    const activeCampaign = createFeeCampaign({ id: 'fee-campaign-active', name: 'Действующий сбор', incomeTypeId: targetIncomeType.id, incomeTypeName: targetIncomeType.name, endsOn: '2099-12-31' })
+    const endedCampaign = createFeeCampaign({ id: 'fee-campaign-ended', name: 'Завершённый сбор', incomeTypeId: targetIncomeType.id, incomeTypeName: targetIncomeType.name, startsOn: '2000-05-01', endsOn: '2000-05-31' })
+    const activeCampaign = createFeeCampaign({ id: 'fee-campaign-active', name: 'Действующий сбор', incomeTypeId: targetIncomeType.id, incomeTypeName: targetIncomeType.name, startsOn: '2026-08-01', endsOn: '2099-12-31' })
+    const openEndedCampaign = createFeeCampaign({ id: 'fee-campaign-open-ended', name: 'Бессрочный сбор', incomeTypeId: targetIncomeType.id, incomeTypeName: targetIncomeType.name, startsOn: '2026-08-13', endsOn: null })
+    const endOnlyCampaign = createFeeCampaign({ id: 'fee-campaign-end-only', name: 'Сбор только с окончанием', incomeTypeId: targetIncomeType.id, incomeTypeName: targetIncomeType.name, startsOn: '', endsOn: '2099-11-30' })
     const dictionaryClient = createDictionaryClient({
       getGarages: async () => [],
       getIncomeTypes: async () => [targetIncomeType],
-      getFeeCampaigns: async () => [endedCampaign, activeCampaign],
+      getFeeCampaigns: async () => [endedCampaign, activeCampaign, openEndedCampaign, endOnlyCampaign],
     })
 
     render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
@@ -1019,6 +1021,37 @@ describe('App', () => {
     const tariffsPanel = await screen.findByRole('region', { name: 'Тарифы и сборы' })
     const feeCampaignsSection = within(tariffsPanel).getByLabelText('Объявленные сборы')
     expect(await within(feeCampaignsSection).findByText(endedCampaign.name)).toBeInTheDocument()
+    const activeRow = within(feeCampaignsSection).getByLabelText(`Объявленный сбор ${activeCampaign.name}`)
+    const openEndedRow = within(feeCampaignsSection).getByLabelText(`Объявленный сбор ${openEndedCampaign.name}`)
+    const endOnlyRow = within(feeCampaignsSection).getByLabelText(`Объявленный сбор ${endOnlyCampaign.name}`)
+    const endedRow = within(feeCampaignsSection).getByLabelText(`Объявленный сбор ${endedCampaign.name}`)
+    expect(Boolean(activeRow.compareDocumentPosition(endedRow) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true)
+    expect(Boolean(openEndedRow.compareDocumentPosition(endedRow) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true)
+    expect(endedRow).toHaveClass('contractors-mini-row--deleted')
+    expect(endedRow).not.toHaveStyle({ textDecoration: 'line-through' })
+
+    const activePeriod = within(activeRow).getByText('01.08.2026').parentElement
+    expect(activePeriod).not.toBeNull()
+    const activePeriodDates = (activePeriod as HTMLElement).querySelectorAll('time')
+    expect(activePeriodDates).toHaveLength(2)
+    expect(activePeriodDates[0]).toHaveClass('money-income')
+    expect(activePeriodDates[1]).toHaveClass('money-expense')
+    expect(activePeriod).not.toHaveTextContent('—')
+
+    const openEndedPeriod = within(openEndedRow).getByText('13.08.2026').parentElement
+    expect(openEndedPeriod).not.toBeNull()
+    const openEndedPeriodDates = (openEndedPeriod as HTMLElement).querySelectorAll('time')
+    expect(openEndedPeriodDates).toHaveLength(1)
+    expect(openEndedPeriodDates[0]).toHaveClass('money-income')
+
+    const endOnlyPeriod = within(endOnlyRow).getByText('30.11.2099').parentElement
+    expect(endOnlyPeriod).not.toBeNull()
+    const endOnlyPeriodDates = (endOnlyPeriod as HTMLElement).querySelectorAll('time')
+    expect(Array.from(endOnlyPeriodDates).filter((date) => date.textContent)).toHaveLength(1)
+    expect(endOnlyPeriodDates[1]).toHaveClass('money-expense')
+
+    const endedPeriod = within(endedRow).getByText('31.05.2000').parentElement
+    expect((endedPeriod as HTMLElement).querySelectorAll('.money-income, .money-expense')).toHaveLength(0)
     expect(within(feeCampaignsSection).queryByRole('button', { name: /Доначислить сбор/ })).not.toBeInTheDocument()
     expect(within(feeCampaignsSection).queryByRole('button', { name: `Закрыть сбор ${endedCampaign.name}` })).not.toBeInTheDocument()
     expect(within(feeCampaignsSection).getByRole('button', { name: `Закрыть сбор ${activeCampaign.name}` })).toBeInTheDocument()
