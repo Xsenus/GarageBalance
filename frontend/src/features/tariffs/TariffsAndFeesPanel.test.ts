@@ -34,6 +34,7 @@ describe('tariff service presentation', () => {
     expect(getServiceMeasurementUnit({ unitName: null }, { calculationBase: 'meter_electricity' })).toBe('кВт·ч')
     expect(getServiceTariffDisplayName('Вода — по счетчику', 'Вода')).toBe('Вода')
     expect(getServiceTariffDisplayName('Вода — по счетчику, 12.08.2026, abcdef12', 'Вода')).toBe('Вода')
+    expect(getServiceTariffDisplayName('Вода — по счетчику', 'ВОДАКА')).toBe('ВОДАКА')
     expect(getServiceTariffDisplayName('Льготный тариф', 'Вода')).toBe('Льготный тариф')
   })
 

@@ -4938,6 +4938,68 @@ describe('App', () => {
     expect(within(tariffsPanel).queryByRole('button', { name: 'Изменить услугу Наружное освещение' })).not.toBeInTheDocument()
   })
 
+  it('keeps a renamed system metered service in its original table position', async () => {
+    const user = userEvent.setup()
+    const waterTariff = createTariff({
+      id: 'tariff-water-renamed-service',
+      name: 'Вода — по счетчику',
+      calculationBase: 'meter_water',
+      rate: 100.8,
+    })
+    const customTariff = createTariff({
+      id: 'tariff-custom-fixed-service',
+      name: 'Аренда площадки',
+      calculationBase: 'fixed',
+      rate: 500,
+    })
+    const renamedWaterService = createChargeServiceSetting({
+      id: 'service-water-renamed',
+      name: 'ВОДАКА',
+      isRegular: true,
+      periodicityMonths: 1,
+      paymentDueDay: 1,
+      overdueGraceDays: 30,
+      tariffId: waterTariff.id,
+      isMetered: true,
+      unitName: 'м³',
+      tariffCalculationBase: 'meter_water',
+      meterKind: 'water',
+    })
+    const customService = createChargeServiceSetting({
+      id: 'service-custom-fixed',
+      name: 'Аренда площадки',
+      isRegular: true,
+      periodicityMonths: 1,
+      paymentDueDay: 1,
+      overdueGraceDays: 30,
+      tariffId: customTariff.id,
+      unitName: 'руб.',
+      tariffCalculationBase: 'fixed',
+    })
+    const dictionaryClient = createDictionaryClient({
+      getTariffs: async () => [waterTariff, customTariff],
+      getChargeServiceSettings: async () => [customService, renamedWaterService],
+    })
+
+    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Тарифы и сборы')
+    const tariffsPanel = await screen.findByRole('region', { name: 'Тарифы и сборы' })
+    const tariffTable = within(tariffsPanel).getByRole('table', { name: 'Тарифы и сборы' })
+    expect(await within(tariffTable).findByLabelText('ВОДАКА: ВОДАКА: значение')).toHaveValue('100.80')
+    const tableRows = within(tariffTable).getAllByRole('row')
+    const waterRowIndex = tableRows.findIndex((row) => within(row).queryByText('ВОДАКА'))
+    const customRowIndex = tableRows.findIndex((row) => within(row).queryByText('Аренда площадки'))
+
+    expect(waterRowIndex).toBeGreaterThan(0)
+    expect(waterRowIndex).toBeLessThan(customRowIndex)
+    expect(within(tariffTable).getByRole('cell', { name: 'ВОДАКА: ВОДАКА: единица' })).toHaveTextContent('м³')
+    expect(within(tariffTable).queryByRole('combobox', { name: 'ВОДАКА: периодичность' })).not.toBeInTheDocument()
+    expect(within(tariffTable).queryByText('Вода — по счетчику')).not.toBeInTheDocument()
+  })
+
   it('shows the overdue grace period only in the main row of a matched service group', async () => {
     const user = userEvent.setup()
     const lightingTariff = createTariff({ id: 'tariff-lighting-overdue', name: 'Наружное освещение', calculationBase: 'fixed', rate: 300 })

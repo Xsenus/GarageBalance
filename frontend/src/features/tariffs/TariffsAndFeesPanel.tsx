@@ -308,6 +308,19 @@ function findTariffForPrototypeRow(tariffs: TariffDto[], row: ContractorTariffRo
   return tariffs.find((tariff) => tariff.name.toLocaleLowerCase('ru') === lowerTitle || tariff.name.toLocaleLowerCase('ru').includes(row.category.toLocaleLowerCase('ru'))) ?? null
 }
 
+function isPrototypeServiceMatch(row: ContractorTariffRow, setting: ChargeServiceSettingDto) {
+  const normalizedCategory = row.category.toLocaleLowerCase('ru')
+  const normalizedName = setting.name.toLocaleLowerCase('ru')
+  if (normalizedCategory === normalizedName) return true
+  if (row.category === 'Вода') return setting.meterKind === 'water'
+  if (row.category === 'Электроэнергия') return setting.meterKind === 'electricity'
+  return false
+}
+
+function findPrototypeServiceSetting(row: ContractorTariffRow, settings: ChargeServiceSettingDto[]) {
+  return settings.find((setting) => isPrototypeServiceMatch(row, setting)) ?? null
+}
+
 function mergeTariffsIntoPrototypeRows(rows: ContractorTariffRow[], tariffs: TariffDto[]) {
   return rows
     .filter((row) => row.calculationBase !== 'meter_electricity' || Boolean(row.group))
@@ -357,9 +370,8 @@ function expandTieredServiceRows(rows: ContractorTariffRow[], tariffs: TariffDto
 }
 
 function createTariffRowsFromBackend(tariffs: TariffDto[], settings: ChargeServiceSettingDto[]) {
-  const prototypeCategories = new Set(contractorTariffRows.map((row) => row.category.toLocaleLowerCase('ru')))
   const customSettings = settings
-    .filter((setting) => !prototypeCategories.has(setting.name.toLocaleLowerCase('ru')))
+    .filter((setting) => !contractorTariffRows.some((row) => isPrototypeServiceMatch(row, setting)))
   const customServiceTariffIds = new Set(customSettings
     .map((setting) => setting.tariffId)
     .filter((tariffId): tariffId is string => Boolean(tariffId)))
@@ -522,12 +534,11 @@ function createChargeServiceRows(setting: ChargeServiceSettingDto, tariffs: Tari
 
 function mergeChargeServicesIntoPrototypeRows(rows: ContractorTariffRow[], settings: ChargeServiceSettingDto[], tariffs: TariffDto[]) {
   const rowsWithoutBackendServices = rows.filter((row) => !row.backendServiceSettingId)
-  const normalizedCategories = new Set(rowsWithoutBackendServices.map((row) => row.category.toLocaleLowerCase('ru')))
-  const matchedSettings = new Map(settings
-    .filter((setting) => normalizedCategories.has(setting.name.toLocaleLowerCase('ru')))
-    .map((setting) => [setting.name.toLocaleLowerCase('ru'), setting]))
+  const matchedSettingIds = new Set(rowsWithoutBackendServices
+    .map((row) => findPrototypeServiceSetting(row, settings)?.id)
+    .filter((id): id is string => Boolean(id)))
   const mergedRows = rowsWithoutBackendServices.flatMap((row) => {
-    const setting = matchedSettings.get(row.category.toLocaleLowerCase('ru'))
+    const setting = findPrototypeServiceSetting(row, settings)
     if (!setting) {
       return row
     }
@@ -535,6 +546,7 @@ function mergeChargeServicesIntoPrototypeRows(rows: ContractorTariffRow[], setti
     const linkedTariff = tariffs.find((tariff) => tariff.id === setting.tariffId)
     const common = {
       ...row,
+      category: setting.name,
       unit: (row.serviceSettingKind === 'main' || row.calculationBase)
         ? setting.unitName?.trim() || row.unit
         : row.unit,
@@ -582,7 +594,7 @@ function mergeChargeServicesIntoPrototypeRows(rows: ContractorTariffRow[], setti
     }
     return [common]
   })
-  const unmatchedSettings = settings.filter((setting) => !matchedSettings.has(setting.name.toLocaleLowerCase('ru')))
+  const unmatchedSettings = settings.filter((setting) => !matchedSettingIds.has(setting.id))
   return [
     ...mergedRows,
     ...unmatchedSettings.flatMap((setting) => createChargeServiceRows(setting, tariffs)),
