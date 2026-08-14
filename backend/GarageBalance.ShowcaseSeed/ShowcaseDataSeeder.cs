@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json;
 using GarageBalance.Api.Application.Common;
 using GarageBalance.Api.Application.Finance;
 using GarageBalance.Api.Domain.Dictionaries;
@@ -87,6 +88,7 @@ public sealed class ShowcaseDataSeeder(GarageBalanceDbContext context)
         var suppliers = await context.Suppliers.CountAsync(item => item.Comment == Marker, cancellationToken);
         var fundOperations = await context.FundOperations.CountAsync(item => item.Reason.Contains(Marker), cancellationToken);
         var users = await context.Users.CountAsync(cancellationToken);
+        var hasValidElectricityTiers = await HasValidElectricityTiersAsync(cancellationToken);
 
         var debtRows = await (
                 from garage in context.Garages
@@ -114,7 +116,8 @@ public sealed class ShowcaseDataSeeder(GarageBalanceDbContext context)
             && fundOperations == 2
             && hasNoDebt
             && hasDebt
-            && hasAdvance;
+            && hasAdvance
+            && hasValidElectricityTiers;
 
         return new ShowcaseSeedResult(
             isReady,
@@ -219,7 +222,45 @@ public sealed class ShowcaseDataSeeder(GarageBalanceDbContext context)
         electricity.ElectricityFirstRate = 7.5m;
         electricity.ElectricitySecondRate = 10m;
         electricity.ElectricityThirdRate = 15m;
-        electricity.ElectricityTiersJson = "[{\"upperBound\":1100,\"rate\":7.5},{\"upperBound\":1700,\"rate\":10},{\"upperBound\":null,\"rate\":15}]";
+        electricity.ElectricityTiersJson = CreateRepresentativeElectricityTiersJson();
+    }
+
+    internal static string CreateRepresentativeElectricityTiersJson() => JsonSerializer.Serialize(
+        new ShowcaseElectricityTier[]
+        {
+            new ShowcaseElectricityTier(DeterministicGuid("electricity-tier-1"), "0–1100 кВт·ч", 1100m, 7.5m, false),
+            new ShowcaseElectricityTier(DeterministicGuid("electricity-tier-2"), "1101–1700 кВт·ч", 1700m, 10m, false),
+            new ShowcaseElectricityTier(DeterministicGuid("electricity-tier-3"), "1701+ кВт·ч", null, 15m, false)
+        });
+
+    private async Task<bool> HasValidElectricityTiersAsync(CancellationToken cancellationToken)
+    {
+        var tiersJson = await context.ChargeServiceSettings
+            .AsNoTracking()
+            .Where(item => item.IncomeType != null && item.IncomeType.Code == "electricity")
+            .Select(item => item.Tariff!.ElectricityTiersJson)
+            .SingleAsync(cancellationToken);
+
+        if (string.IsNullOrWhiteSpace(tiersJson))
+        {
+            return false;
+        }
+
+        try
+        {
+            var tiers = JsonSerializer.Deserialize<ShowcaseElectricityTier[]>(tiersJson);
+            return tiers is
+                [
+                { UpperBound: 1100m, Rate: 7.5m },
+                { UpperBound: 1700m, Rate: 10m },
+                { UpperBound: null, Rate: 15m }
+                ]
+            && tiers.All(item => item.Id != Guid.Empty && !string.IsNullOrWhiteSpace(item.Name));
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
     }
 
     private async Task EnsureRepresentativeTariffsAsync(
@@ -807,6 +848,13 @@ public sealed class ShowcaseDataSeeder(GarageBalanceDbContext context)
         IReadOnlyList<Accrual> Accruals,
         IReadOnlyList<FinancialOperation> Operations,
         IReadOnlyList<AccrualPaymentAllocation> Allocations);
+
+    private sealed record ShowcaseElectricityTier(
+        Guid Id,
+        string Name,
+        decimal? UpperBound,
+        decimal Rate,
+        bool IsCustom);
 }
 
 public sealed record ShowcaseSeedResult(

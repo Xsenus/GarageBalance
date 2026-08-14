@@ -1,3 +1,4 @@
+using System.Text.Json;
 using GarageBalance.Api.Domain.Dictionaries;
 using GarageBalance.Api.Domain.Users;
 using GarageBalance.Api.Tests.Common;
@@ -8,6 +9,19 @@ namespace GarageBalance.Api.Tests.Deployment;
 
 public sealed class PostgreSqlShowcaseDataSeederIntegrationTests
 {
+    [Fact]
+    public void RepresentativeElectricityTiers_AreReadableByTheApplicationJsonContract()
+    {
+        var electricityTiers = JsonSerializer.Deserialize<ShowcaseElectricityTier[]>(
+            ShowcaseDataSeeder.CreateRepresentativeElectricityTiersJson());
+
+        Assert.Collection(
+            Assert.IsType<ShowcaseElectricityTier[]>(electricityTiers),
+            tier => AssertTier(tier, 1100m, 7.5m),
+            tier => AssertTier(tier, 1700m, 10m),
+            tier => AssertTier(tier, null, 15m));
+    }
+
     [PostgreSqlFact]
     public async Task Prepare_IsIdempotentPreservesUsersAndCreatesAllDemonstrationStates()
     {
@@ -82,8 +96,31 @@ public sealed class PostgreSqlShowcaseDataSeederIntegrationTests
             .CountAsync(item => item.ElectricityFirstRate != null
                 && item.ElectricitySecondRate != null
                 && item.ElectricityThirdRate != null));
+        var electricityTiers = JsonSerializer.Deserialize<ShowcaseElectricityTier[]>(
+            settings["electricity"].Tariff!.ElectricityTiersJson!);
+        Assert.Collection(
+            Assert.IsType<ShowcaseElectricityTier[]>(electricityTiers),
+            tier => AssertTier(tier, 1100m, 7.5m),
+            tier => AssertTier(tier, 1700m, 10m),
+            tier => AssertTier(tier, null, 15m));
         Assert.All(
             await context.Accruals.Where(item => item.Source == "regular").ToListAsync(),
             item => Assert.False(string.IsNullOrWhiteSpace(item.CalculationDetailsJson)));
     }
+
+    private static void AssertTier(ShowcaseElectricityTier tier, decimal? upperBound, decimal rate)
+    {
+        Assert.NotEqual(Guid.Empty, tier.Id);
+        Assert.False(string.IsNullOrWhiteSpace(tier.Name));
+        Assert.Equal(upperBound, tier.UpperBound);
+        Assert.Equal(rate, tier.Rate);
+        Assert.False(tier.IsCustom);
+    }
+
+    private sealed record ShowcaseElectricityTier(
+        Guid Id,
+        string Name,
+        decimal? UpperBound,
+        decimal Rate,
+        bool IsCustom);
 }
