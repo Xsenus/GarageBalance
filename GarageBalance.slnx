@@ -3,5 +3,6 @@
     <Project Path="backend/GarageBalance.Api.Tests/GarageBalance.Api.Tests.csproj" />
     <Project Path="backend/GarageBalance.Api/GarageBalance.Api.csproj" />
     <Project Path="backend/GarageBalance.PerformanceSeed/GarageBalance.PerformanceSeed.csproj" />
+    <Project Path="backend/GarageBalance.ShowcaseSeed/GarageBalance.ShowcaseSeed.csproj" />
   </Folder>
 </Solution>

@@ -177,11 +177,14 @@ tar -xzf "$OPERATIONS_ARCHIVE" -C "$OPERATIONS_DIR"
   fail "VPS performance installer was not found"
 [[ -f "${OPERATIONS_DIR}/infrastructure/scripts/vps-apply-release.sh" ]] ||
   fail "VPS release script was not found"
+[[ -f "${OPERATIONS_DIR}/infrastructure/scripts/prepare-staging-showcase.sh" ]] ||
+  fail "staging showcase preparation script was not found"
 bash -n \
   "${OPERATIONS_DIR}/infrastructure/scripts/install-vps-performance-configuration.sh" \
   "${OPERATIONS_DIR}/infrastructure/scripts/garagebalance-healthcheck.sh" \
   "${OPERATIONS_DIR}/infrastructure/scripts/garagebalance-performance-check.sh" \
-  "${OPERATIONS_DIR}/infrastructure/scripts/vps-apply-release.sh"
+  "${OPERATIONS_DIR}/infrastructure/scripts/vps-apply-release.sh" \
+  "${OPERATIONS_DIR}/infrastructure/scripts/prepare-staging-showcase.sh"
 
 packaged_apply_script="${OPERATIONS_DIR}/infrastructure/scripts/vps-apply-release.sh"
 if [[ "${GARAGEBALANCE_DEPLOY_REEXECUTED:-0}" != "1" ]] &&
@@ -285,6 +288,9 @@ bash "${OPERATIONS_DIR}/infrastructure/scripts/install-vps-performance-configura
 install -o root -g root -m 0750 \
   "${OPERATIONS_DIR}/infrastructure/scripts/vps-apply-release.sh" \
   /usr/local/bin/garagebalance-deploy-apply
+install -o root -g root -m 0750 \
+  "${OPERATIONS_DIR}/infrastructure/scripts/prepare-staging-showcase.sh" \
+  /usr/local/bin/garagebalance-showcase-prepare
 
 find "/home/${DEPLOY_USER}/uploads" -mindepth 1 -maxdepth 1 -type d -mtime +14 -exec rm -rf {} +
 

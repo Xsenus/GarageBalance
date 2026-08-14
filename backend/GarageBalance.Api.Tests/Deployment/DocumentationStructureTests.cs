@@ -32,6 +32,7 @@ public sealed partial class DocumentationStructureTests
         "roadmaps/full-project-remediation-2026-08-04-roadmap.md",
         "roadmaps/ui-forms-and-dictionaries-audit-2026-08-01-roadmap.md",
         "security-data-protection.md",
+        "staging-showcase-guide.md",
         "testing-guide.md",
         "troubleshooting-guide.md",
         "user-guide.md",
