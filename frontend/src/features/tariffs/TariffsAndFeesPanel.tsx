@@ -746,7 +746,7 @@ function mergeFeeCampaignSnapshots(currentCampaigns: FeeCampaignDto[], loadedCam
 }
 
 function getFeeCampaignDisplayRank(campaign: FeeCampaignDto, today: string) {
-  return +(campaign.isArchived || campaign.closedAtUtc || campaign.endsOn! < today)
+  return Number(Boolean(campaign.isArchived || campaign.closedAtUtc || (campaign.endsOn && campaign.endsOn < today)))
 }
 
 export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClient }: { auth: AuthResponse; dictionaryClient: DictionaryClient; financeClient: FinanceClient; fundsClient: FundsClient }) {
@@ -2848,12 +2848,17 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
                         <span>Вернуть</span>
                       </button>
                     ) : campaign.closedAtUtc ? (
-                      <button className="icon-button danger-icon-button" type="button" aria-label={`Архивировать закрытый сбор ${campaign.name}`} disabled={!canManageTariffs || feeCampaignSavingId === campaign.id} onClick={() => {
-                        setFeeCampaignArchiveTarget(campaign)
-                        setFeeCampaignArchiveReason('')
-                      }}>
-                        <Trash2 size={16} />
-                      </button>
+                      <>
+                        <button className="icon-button" type="button" aria-label={`Изменить закрытый сбор ${campaign.name}`} disabled={!canManageTariffs || feeCampaignSavingId === campaign.id || feeCampaignGarageOptionsLoading} onClick={() => void openFeeCampaignEditDialog(campaign)}>
+                          <Pencil size={16} />
+                        </button>
+                        <button className="icon-button danger-icon-button" type="button" aria-label={`Архивировать закрытый сбор ${campaign.name}`} disabled={!canManageTariffs || feeCampaignSavingId === campaign.id} onClick={() => {
+                          setFeeCampaignArchiveTarget(campaign)
+                          setFeeCampaignArchiveReason('')
+                        }}>
+                          <Trash2 size={16} />
+                        </button>
+                      </>
                     ) : (
                       <>
                         <button className="icon-button" type="button" aria-label={`Изменить сбор ${campaign.name}`} disabled={!canManageTariffs || feeCampaignSavingId === campaign.id || feeCampaignGarageOptionsLoading} onClick={() => void openFeeCampaignEditDialog(campaign)}>

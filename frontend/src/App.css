@@ -4340,7 +4340,7 @@ h1 {
 }
 
 .payments-prototype-sheet {
-  overflow: hidden;
+  overflow: visible;
   border: 1px solid #dfe4ec;
   border-radius: 8px;
   background: #ffffff;

@@ -3223,9 +3223,6 @@ function PaymentsPrototypePanel({
     }
 
     setExpenseWorksheetLoading(true)
-    if (expenseWorksheetMonthFrom === expenseWorksheetMonthTo) {
-      setExpenseWorksheetMonthTo(value)
-    }
     setExpenseWorksheetMonthFrom(value)
   }
 
@@ -3235,9 +3232,6 @@ function PaymentsPrototypePanel({
     }
 
     setExpenseWorksheetLoading(true)
-    if (expenseWorksheetMonthFrom === expenseWorksheetMonthTo) {
-      setExpenseWorksheetMonthFrom(value)
-    }
     setExpenseWorksheetMonthTo(value)
   }
 

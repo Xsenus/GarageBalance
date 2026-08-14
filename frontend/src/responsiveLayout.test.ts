@@ -249,7 +249,7 @@ describe('responsive layout styles', () => {
   })
 
   it('keeps the expense month calendar within the worksheet and narrow viewport', () => {
-    expect(normalizedAppCss).toContain('.payments-prototype-sheet {\n  overflow: hidden;')
+    expect(normalizedAppCss).toContain('.payments-prototype-sheet {\n  overflow: visible;')
     expect(normalizedAppCss).toContain('.payments-prototype-period-row .localized-date-picker__popover {\n  right: auto;\n  left: 0;\n  width: min(292px, calc(100vw - 44px));\n  box-sizing: border-box;')
   })
 

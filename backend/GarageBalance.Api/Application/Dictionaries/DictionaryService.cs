@@ -3223,11 +3223,6 @@ public sealed class DictionaryService(
             return DictionaryResult<FeeCampaignDto>.Failure("fee_campaign_not_found", "Сбор не найден.");
         }
 
-        if (campaign.ClosedAtUtc.HasValue)
-        {
-            return DictionaryResult<FeeCampaignDto>.Failure("fee_campaign_closed", "Закрытый сбор нельзя изменять.");
-        }
-
         var name = request.Name.Trim();
         if (await feeCampaignRepository.ActiveDuplicateExistsAsync(id, name, cancellationToken))
         {

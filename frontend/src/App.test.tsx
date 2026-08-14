@@ -1005,13 +1005,14 @@ describe('App', () => {
     const user = userEvent.setup()
     const targetIncomeType = createAccountingType({ id: 'income-type-other-income', name: 'Прочие доходы', code: 'other_income', isSystem: true })
     const endedCampaign = createFeeCampaign({ id: 'fee-campaign-ended', name: 'Завершённый сбор', incomeTypeId: targetIncomeType.id, incomeTypeName: targetIncomeType.name, startsOn: '2000-05-01', endsOn: '2000-05-31' })
+    const closedCampaign = createFeeCampaign({ id: 'fee-campaign-closed', name: 'Закрытый сбор', incomeTypeId: targetIncomeType.id, incomeTypeName: targetIncomeType.name, startsOn: '2000-04-01', endsOn: '2000-04-30', closedAtUtc: '2000-05-01T00:00:00Z' })
     const activeCampaign = createFeeCampaign({ id: 'fee-campaign-active', name: 'Действующий сбор', incomeTypeId: targetIncomeType.id, incomeTypeName: targetIncomeType.name, startsOn: '2026-08-01', endsOn: '2099-12-31' })
     const openEndedCampaign = createFeeCampaign({ id: 'fee-campaign-open-ended', name: 'Бессрочный сбор', incomeTypeId: targetIncomeType.id, incomeTypeName: targetIncomeType.name, startsOn: '2026-08-13', endsOn: null })
     const endOnlyCampaign = createFeeCampaign({ id: 'fee-campaign-end-only', name: 'Сбор только с окончанием', incomeTypeId: targetIncomeType.id, incomeTypeName: targetIncomeType.name, startsOn: '', endsOn: '2099-11-30' })
     const dictionaryClient = createDictionaryClient({
       getGarages: async () => [],
       getIncomeTypes: async () => [targetIncomeType],
-      getFeeCampaigns: async () => [endedCampaign, activeCampaign, openEndedCampaign, endOnlyCampaign],
+      getFeeCampaigns: async () => [endedCampaign, closedCampaign, activeCampaign, openEndedCampaign, endOnlyCampaign],
     })
 
     render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
@@ -1026,10 +1027,13 @@ describe('App', () => {
     const openEndedRow = within(feeCampaignsSection).getByLabelText(`Объявленный сбор ${openEndedCampaign.name}`)
     const endOnlyRow = within(feeCampaignsSection).getByLabelText(`Объявленный сбор ${endOnlyCampaign.name}`)
     const endedRow = within(feeCampaignsSection).getByLabelText(`Объявленный сбор ${endedCampaign.name}`)
-    expect(Boolean(activeRow.compareDocumentPosition(endedRow) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true)
-    expect(Boolean(openEndedRow.compareDocumentPosition(endedRow) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true)
+    const closedRow = within(feeCampaignsSection).getByLabelText(`Объявленный сбор ${closedCampaign.name}`)
+    const displayedCampaignNames = within(feeCampaignsSection).getAllByLabelText(/^Объявленный сбор /u).map((row) => row.getAttribute('aria-label'))
+    expect(displayedCampaignNames.indexOf(`Объявленный сбор ${activeCampaign.name}`)).toBeLessThan(displayedCampaignNames.indexOf(`Объявленный сбор ${endedCampaign.name}`))
+    expect(displayedCampaignNames.indexOf(`Объявленный сбор ${openEndedCampaign.name}`)).toBeLessThan(displayedCampaignNames.indexOf(`Объявленный сбор ${endedCampaign.name}`))
     expect(endedRow).toHaveClass('contractors-mini-row--deleted')
     expect(endedRow).not.toHaveStyle({ textDecoration: 'line-through' })
+    expect(within(closedRow).getByRole('button', { name: `Изменить закрытый сбор ${closedCampaign.name}` })).toBeInTheDocument()
 
     const activePeriod = within(activeRow).getByText('01.08.2026').parentElement
     expect(activePeriod).not.toBeNull()
@@ -1057,6 +1061,9 @@ describe('App', () => {
     expect(within(feeCampaignsSection).queryByRole('button', { name: /Доначислить сбор/ })).not.toBeInTheDocument()
     expect(within(feeCampaignsSection).queryByRole('button', { name: `Закрыть сбор ${endedCampaign.name}` })).not.toBeInTheDocument()
     expect(within(feeCampaignsSection).getByRole('button', { name: `Закрыть сбор ${activeCampaign.name}` })).toBeInTheDocument()
+    await user.click(within(closedRow).getByRole('button', { name: `Изменить закрытый сбор ${closedCampaign.name}` }))
+    const closedCampaignDialog = await screen.findByRole('dialog', { name: 'Изменить сбор' })
+    expect(within(closedCampaignDialog).getByLabelText('Наименование сбора')).toHaveValue(closedCampaign.name)
   })
 
   it('archives and restores announced fee campaigns from tariffs page', async () => {
@@ -9161,8 +9168,8 @@ describe('App', () => {
   it('opens the expense worksheet on the current month and accepts any localized month across years', async () => {
     vi.setSystemTime(new Date('2027-10-15T10:00:00+07:00'))
     const user = userEvent.setup()
-    const getExpenseWorksheet = vi.fn(async (_token: string, params?: { accountingMonth?: string }) => createExpenseWorksheet({
-      accountingMonth: params?.accountingMonth ?? '2027-10-01',
+    const getExpenseWorksheet = vi.fn(async (_token: string, params?: { accountingMonth?: string; monthFrom?: string; monthTo?: string }) => createExpenseWorksheet({
+      accountingMonth: params?.accountingMonth ?? params?.monthTo ?? '2027-10-01',
       rows: [],
     }))
     render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient({ getExpenseWorksheet })} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
@@ -9200,8 +9207,15 @@ describe('App', () => {
     await user.clear(monthInput)
     await user.type(monthInput, '02.2029')
 
-    await waitFor(() => expect(getExpenseWorksheet).toHaveBeenCalledWith('token', { accountingMonth: '2029-02-01' }))
-    expect(within(prototype).getByRole('table', { name: 'Форма выплат за февраль 2029' })).toBeInTheDocument()
+    expect(await within(prototype).findByRole('alert')).toHaveTextContent('Месяц начала формы выплат не может быть позже месяца окончания.')
+
+    await user.clear(monthToInput)
+    await user.type(monthToInput, '03.2029')
+    await waitFor(() => expect(getExpenseWorksheet).toHaveBeenCalledWith('token', {
+      monthFrom: '2029-02-01',
+      monthTo: '2029-03-01',
+    }))
+    expect(within(prototype).getByRole('table', { name: 'Форма выплат за 02.2029 — 03.2029' })).toBeInTheDocument()
 
     const quickPeriods = within(prototype).getByRole('group', { name: 'Быстрый выбор периода' })
     await user.click(within(quickPeriods).getByRole('button', { name: 'Предыдущий год' }))
@@ -9243,8 +9257,11 @@ describe('App', () => {
     expect(await within(julyTable).findByRole('button', { name: 'Оплатить Водоснабжение' })).toBeInTheDocument()
 
     const monthInput = within(prototype).getByLabelText('Месяц выплат с')
+    const monthToInput = within(prototype).getByLabelText('Месяц выплат по')
     await user.clear(monthInput)
     await user.type(monthInput, '06.2026')
+    await user.clear(monthToInput)
+    await user.type(monthToInput, '06.2026')
     const juneTable = await within(prototype).findByRole('table', { name: 'Форма выплат за июнь 2026' })
     expect(await within(juneTable).findByText('Водоканал')).toBeInTheDocument()
     expect(within(juneTable).getAllByRole('columnheader')).toHaveLength(6)
@@ -9257,10 +9274,14 @@ describe('App', () => {
 
     await user.clear(monthInput)
     await user.type(monthInput, '04.2026')
+    await user.clear(monthToInput)
+    await user.type(monthToInput, '04.2026')
     const aprilTable = await within(prototype).findByRole('table', { name: 'Форма выплат за апрель 2026' })
     const emptyCell = (await within(aprilTable).findByText('Начислений и выплат за выбранный период пока нет.')).closest('td')
     expect(emptyCell).toHaveAttribute('colspan', '6')
 
+    await user.clear(monthToInput)
+    await user.type(monthToInput, '08.2026')
     await user.clear(monthInput)
     await user.type(monthInput, '08.2026')
     const augustTable = await within(prototype).findByRole('table', { name: 'Форма выплат за август 2026' })
@@ -9437,6 +9458,9 @@ describe('App', () => {
     expect(within(juneRow!).getAllByText('9 243.81')).toHaveLength(2)
 
     const monthInput = within(prototype).getByLabelText('Месяц выплат с')
+    const monthToInput = within(prototype).getByLabelText('Месяц выплат по')
+    await user.clear(monthToInput)
+    await user.type(monthToInput, '07.2026')
     await user.clear(monthInput)
     await user.type(monthInput, '07.2026')
     const julyTable = await within(prototype).findByRole('table', { name: 'Форма выплат за июль 2026' })
@@ -9445,6 +9469,8 @@ describe('App', () => {
     expect(within(julyRow!).getByText('10 243.81')).toBeInTheDocument()
     expect(within(julyRow!).getByText('6 243.81')).toBeInTheDocument()
 
+    await user.clear(monthToInput)
+    await user.type(monthToInput, '08.2026')
     await user.clear(monthInput)
     await user.type(monthInput, '08.2026')
     const augustTable = await within(prototype).findByRole('table', { name: 'Форма выплат за август 2026' })

@@ -3979,10 +3979,15 @@ public sealed class DictionaryServiceTests
         Assert.Null(closed.Value.ClosureComment);
         Assert.False(repeated.Succeeded);
         Assert.Equal("fee_campaign_already_closed", repeated.ErrorCode);
-        Assert.False(update.Succeeded);
-        Assert.Equal("fee_campaign_closed", update.ErrorCode);
+        Assert.True(update.Succeeded, update.ErrorMessage);
+        Assert.Equal("Изменённый сбор", update.Value!.Name);
+        Assert.NotNull(update.Value.ClosedAtUtc);
         Assert.Contains(database.Context.AuditEvents, item =>
             item.Action == "dictionary.fee_campaign_closed" &&
+            item.ActorUserId == actorUserId &&
+            item.EntityId == campaign.Id.ToString());
+        Assert.Contains(database.Context.AuditEvents, item =>
+            item.Action == "dictionary.fee_campaign_updated" &&
             item.ActorUserId == actorUserId &&
             item.EntityId == campaign.Id.ToString());
     }
