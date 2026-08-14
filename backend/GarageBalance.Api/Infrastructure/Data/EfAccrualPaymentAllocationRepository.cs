@@ -15,9 +15,28 @@ public sealed class EfAccrualPaymentAllocationRepository(GarageBalanceDbContext 
     private const int AccrualRowKind = 1;
     private const int PaymentRowKind = 2;
     private const int AllocationRowKind = 3;
+    private static readonly byte[] GarageIncomeWorksheetLockNamespace =
+        "garage-income-worksheet"u8.ToArray();
+
+    public Task<IAsyncDisposable> AcquireGarageIncomeWorksheetLockAsync(
+        Guid garageId,
+        CancellationToken cancellationToken) =>
+        AcquireAdvisoryLocksAsync([CreateGarageIncomeWorksheetLockKey(garageId)], cancellationToken);
 
     public async Task<IAsyncDisposable> AcquireRebuildLockAsync(
         IReadOnlyCollection<AccrualPaymentAllocationKey> keys,
+        CancellationToken cancellationToken)
+    {
+        var lockKeys = keys
+            .Distinct()
+            .Select(CreateAdvisoryLockKey)
+            .Order()
+            .ToArray();
+        return await AcquireAdvisoryLocksAsync(lockKeys, cancellationToken);
+    }
+
+    private async Task<IAsyncDisposable> AcquireAdvisoryLocksAsync(
+        IReadOnlyList<long> lockKeys,
         CancellationToken cancellationToken)
     {
         if (!dbContext.Database.IsNpgsql())
@@ -25,12 +44,7 @@ public sealed class EfAccrualPaymentAllocationRepository(GarageBalanceDbContext 
             return NoOpAsyncDisposable.Instance;
         }
 
-        var lockKeys = keys
-            .Distinct()
-            .Select(CreateAdvisoryLockKey)
-            .Order()
-            .ToArray();
-        if (lockKeys.Length == 0)
+        if (lockKeys.Count == 0)
         {
             return NoOpAsyncDisposable.Instance;
         }
@@ -42,7 +56,7 @@ public sealed class EfAccrualPaymentAllocationRepository(GarageBalanceDbContext 
             await connection.OpenAsync(cancellationToken);
         }
 
-        var acquiredKeys = new List<long>(lockKeys.Length);
+        var acquiredKeys = new List<long>(lockKeys.Count);
         try
         {
             foreach (var lockKey in lockKeys)
@@ -292,6 +306,16 @@ public sealed class EfAccrualPaymentAllocationRepository(GarageBalanceDbContext 
         Span<byte> source = stackalloc byte[32];
         key.GarageId.TryWriteBytes(source[..16]);
         key.IncomeTypeId.TryWriteBytes(source[16..]);
+        Span<byte> hash = stackalloc byte[32];
+        SHA256.HashData(source, hash);
+        return BinaryPrimitives.ReadInt64BigEndian(hash);
+    }
+
+    private static long CreateGarageIncomeWorksheetLockKey(Guid garageId)
+    {
+        Span<byte> source = stackalloc byte[16 + GarageIncomeWorksheetLockNamespace.Length];
+        garageId.TryWriteBytes(source[..16]);
+        GarageIncomeWorksheetLockNamespace.CopyTo(source[16..]);
         Span<byte> hash = stackalloc byte[32];
         SHA256.HashData(source, hash);
         return BinaryPrimitives.ReadInt64BigEndian(hash);

@@ -672,6 +672,11 @@ public sealed class FinanceService(
                 "Гараж для расчета поступлений не найден.");
         }
 
+        await using var garageWorksheetLock =
+            await accrualPaymentAllocationRepository.AcquireGarageIncomeWorksheetLockAsync(
+                garage.Id,
+                cancellationToken);
+
         var settings = (await chargeServiceSettingRepository.GetActiveRegularAsync(monthTo, cancellationToken))
             .Where(setting => setting.IncomeTypeId.HasValue)
             .GroupBy(setting => setting.IncomeTypeId!.Value)

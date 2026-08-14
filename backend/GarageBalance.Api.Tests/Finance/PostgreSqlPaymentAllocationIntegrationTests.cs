@@ -12,6 +12,34 @@ namespace GarageBalance.Api.Tests.Finance;
 public sealed class PostgreSqlPaymentAllocationIntegrationTests
 {
     [PostgreSqlFact]
+    public async Task GarageWorksheetLock_SerializesSameGarageWithoutBlockingAnotherGarage()
+    {
+        await using var database = await PostgreSqlTestDatabase.CreateAsync();
+        await using var ownerContext = database.CreateContext();
+        await using var independentContext = database.CreateContext();
+        await using var waiterContext = database.CreateContext();
+        var garageId = Guid.NewGuid();
+        var ownerRepository = new EfAccrualPaymentAllocationRepository(ownerContext);
+        var independentRepository = new EfAccrualPaymentAllocationRepository(independentContext);
+        var waiterRepository = new EfAccrualPaymentAllocationRepository(waiterContext);
+        var ownerLease = await ownerRepository.AcquireGarageIncomeWorksheetLockAsync(
+            garageId,
+            CancellationToken.None);
+
+        await using var independentLease = await independentRepository
+            .AcquireGarageIncomeWorksheetLockAsync(Guid.NewGuid(), CancellationToken.None)
+            .WaitAsync(TimeSpan.FromSeconds(2));
+        var waiterTask = waiterRepository.AcquireGarageIncomeWorksheetLockAsync(
+            garageId,
+            CancellationToken.None);
+        await WaitForAdvisoryLockWaitersAsync(ownerContext, expectedCount: 1);
+        Assert.False(waiterTask.IsCompleted);
+
+        await ownerLease.DisposeAsync();
+        await using var waiterLease = await waiterTask.WaitAsync(TimeSpan.FromSeconds(2));
+    }
+
+    [PostgreSqlFact]
     public async Task AllocationRebuild_ReplacesExistingActivePairWithoutUniqueViolation()
     {
         await using var database = await PostgreSqlTestDatabase.CreateAsync();
@@ -70,6 +98,111 @@ public sealed class PostgreSqlPaymentAllocationIntegrationTests
 
         Assert.True(result.Succeeded, result.ErrorMessage);
         Assert.NotEmpty(result.Value!.Rows);
+    }
+
+    [PostgreSqlFact]
+    public async Task ShowcaseGarage103_ConcurrentWorksheetCalculationsAreSerializedBeforeReadingAccruals()
+    {
+        await using var database = await PostgreSqlTestDatabase.CreateAsync();
+        Guid garageId;
+        AccrualPaymentAllocationKey[] allocationKeys;
+        await using (var seedContext = database.CreateContext())
+        {
+            var seedResult = await new ShowcaseDataSeeder(seedContext).PrepareAsync(CancellationToken.None);
+            Assert.True(seedResult.IsReady);
+            garageId = await seedContext.Garages
+                .Where(item => item.Number == "103-ДОЛЖНИК")
+                .Select(item => item.Id)
+                .SingleAsync();
+            var incomeTypeIds = await seedContext.ChargeServiceSettings
+                .Where(item => !item.IsArchived && item.IsRegular && item.IncomeTypeId.HasValue)
+                .Select(item => item.IncomeTypeId!.Value)
+                .Distinct()
+                .ToArrayAsync();
+            allocationKeys = incomeTypeIds
+                .Select(incomeTypeId => new AccrualPaymentAllocationKey(garageId, incomeTypeId))
+                .ToArray();
+
+            var regularAccrualIds = await seedContext.Accruals
+                .Where(item => item.GarageId == garageId && item.Source == AccrualSources.Regular)
+                .Select(item => item.Id)
+                .ToArrayAsync();
+            await seedContext.AccrualPaymentAllocations
+                .Where(item => regularAccrualIds.Contains(item.AccrualId))
+                .ExecuteDeleteAsync();
+            await seedContext.Accruals
+                .Where(item => regularAccrualIds.Contains(item.Id))
+                .ExecuteDeleteAsync();
+        }
+
+        await using var blockerContext = database.CreateContext();
+        var blockerRepository = new EfAccrualPaymentAllocationRepository(blockerContext);
+        var blockerLease = await blockerRepository.AcquireRebuildLockAsync(allocationKeys, CancellationToken.None);
+        try
+        {
+            await using var firstContext = database.CreateContext();
+            await using var secondContext = database.CreateContext();
+            var request = new GarageIncomeWorksheetRequest(
+                new DateOnly(2026, 7, 1),
+                new DateOnly(2026, 8, 1));
+            var start = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            var first = Task.Run(async () =>
+            {
+                await start.Task;
+                return await FinanceServiceTestFactory.Create(firstContext)
+                    .CalculateGarageIncomeWorksheetAsync(garageId, request, null, CancellationToken.None);
+            });
+            var second = Task.Run(async () =>
+            {
+                await start.Task;
+                return await FinanceServiceTestFactory.Create(secondContext)
+                    .CalculateGarageIncomeWorksheetAsync(garageId, request, null, CancellationToken.None);
+            });
+
+            start.SetResult();
+            await WaitForAdvisoryLockWaitersAsync(blockerContext, expectedCount: 2);
+            await blockerLease.DisposeAsync();
+            blockerLease = null;
+
+            var results = await Task.WhenAll(first, second);
+            Assert.All(results, result => Assert.True(result.Succeeded, result.ErrorMessage));
+            Assert.All(results, result => Assert.NotEmpty(result.Value!.Rows));
+        }
+        finally
+        {
+            if (blockerLease is not null)
+            {
+                await blockerLease.DisposeAsync();
+            }
+        }
+    }
+
+    private static async Task WaitForAdvisoryLockWaitersAsync(
+        GarageBalanceDbContext context,
+        int expectedCount)
+    {
+        var connection = context.Database.GetDbConnection();
+        var deadline = DateTimeOffset.UtcNow.AddSeconds(10);
+        while (DateTimeOffset.UtcNow < deadline)
+        {
+            await using var command = connection.CreateCommand();
+            command.CommandText = """
+                SELECT count(*)::int
+                FROM pg_locks
+                WHERE locktype = 'advisory'
+                  AND database = (SELECT oid FROM pg_database WHERE datname = current_database())
+                  AND NOT granted
+                """;
+            var waitingCount = Convert.ToInt32(await command.ExecuteScalarAsync());
+            if (waitingCount >= expectedCount)
+            {
+                return;
+            }
+
+            await Task.Delay(25);
+        }
+
+        throw new TimeoutException($"Expected {expectedCount} concurrent advisory-lock waiters.");
     }
 
     [PostgreSqlFact]
