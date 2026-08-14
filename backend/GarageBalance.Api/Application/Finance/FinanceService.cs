@@ -748,7 +748,8 @@ public sealed class FinanceService(
 
                 var accountingYear = AnnualAccrualPolicy.ResolveAccountingYear(incomeType.Code, month);
                 var existing = accountingYear.HasValue
-                    ? annualAccruals.GetValueOrDefault((accountingYear.Value, incomeType.Id))
+                    ? annualAccruals.GetValueOrDefault((accountingYear.Value, incomeType.Id)) ??
+                      monthlyAccruals.GetValueOrDefault((month, incomeType.Id))
                     : monthlyAccruals.GetValueOrDefault((month, incomeType.Id));
                 if (existing is not null && paidAccrualIds.Contains(existing.Id))
                 {
@@ -842,7 +843,18 @@ public sealed class FinanceService(
                     continue;
                 }
 
-                if (existing.Amount == calculation.Amount &&
+                var accountingYearChanged = existing.AccountingYear != accountingYear;
+                if (accountingYearChanged)
+                {
+                    existing.AccountingYear = accountingYear;
+                    if (accountingYear.HasValue)
+                    {
+                        annualAccruals[(accountingYear.Value, incomeType.Id)] = existing;
+                    }
+                }
+
+                if (!accountingYearChanged &&
+                    existing.Amount == calculation.Amount &&
                     existing.TariffId == tariff.Id &&
                     existing.DueDate == dueDates.DueDate &&
                     existing.OverdueFromDate == dueDates.OverdueFromDate &&

@@ -101,6 +101,45 @@ public sealed class PostgreSqlPaymentAllocationIntegrationTests
     }
 
     [PostgreSqlFact]
+    public async Task ShowcaseGarage103_AugustWorksheetReusesSeededRegularAccruals()
+    {
+        await using var database = await PostgreSqlTestDatabase.CreateAsync();
+        Guid garageId;
+        await using (var seedContext = database.CreateContext())
+        {
+            var seedResult = await new ShowcaseDataSeeder(seedContext).PrepareAsync(CancellationToken.None);
+            Assert.True(seedResult.IsReady);
+            garageId = await seedContext.Garages
+                .Where(item => item.Number == "103-ДОЛЖНИК")
+                .Select(item => item.Id)
+                .SingleAsync();
+        }
+
+        await using var calculationContext = database.CreateContext();
+        var result = await FinanceServiceTestFactory.Create(calculationContext)
+            .CalculateGarageIncomeWorksheetAsync(
+                garageId,
+                new GarageIncomeWorksheetRequest(new DateOnly(2026, 8, 1), new DateOnly(2026, 8, 1)),
+                null,
+                CancellationToken.None);
+
+        Assert.True(result.Succeeded, result.ErrorMessage);
+        Assert.NotEmpty(result.Value!.Rows);
+
+        await using var assertionContext = database.CreateContext();
+        var annualAccruals = await assertionContext.Accruals
+            .Where(item =>
+                !item.IsCanceled &&
+                item.GarageId == garageId &&
+                item.Source == AccrualSources.Regular &&
+                item.AccountingYear == 2026)
+            .Select(item => item.IncomeType.Code!)
+            .OrderBy(item => item)
+            .ToArrayAsync();
+        Assert.Equal(["membership", "outdoor_lighting", "target"], annualAccruals);
+    }
+
+    [PostgreSqlFact]
     public async Task ShowcaseGarage103_ConcurrentWorksheetCalculationsAreSerializedBeforeReadingAccruals()
     {
         await using var database = await PostgreSqlTestDatabase.CreateAsync();
