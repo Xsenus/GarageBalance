@@ -21,6 +21,9 @@ public sealed class ShowcaseDeploymentTests
         Assert.Contains("reason=archive-path", script, StringComparison.Ordinal);
         Assert.Contains("reason=archive-owner", script, StringComparison.Ordinal);
         Assert.Contains("--no-same-owner --no-same-permissions", script, StringComparison.Ordinal);
+        Assert.Contains("Host=/var/run/postgresql;Database=${database_name};Username=postgres", script, StringComparison.Ordinal);
+        Assert.Contains("sudo -u postgres env", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("sudo -u \"$APP_USER\" env", script, StringComparison.Ordinal);
         Assert.Contains("GarageBalance.ShowcaseSeed\" prepare", script, StringComparison.Ordinal);
         Assert.Contains("GarageBalance.ShowcaseSeed\" audit", script, StringComparison.Ordinal);
         Assert.Contains("/health/ready", script, StringComparison.Ordinal);

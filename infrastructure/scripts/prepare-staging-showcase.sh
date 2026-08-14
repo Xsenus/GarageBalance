@@ -89,6 +89,7 @@ database_name="$(
   log "showcasePrepareStatus=refused; reason=database; database=${database_name:-missing}"
   exit 64
 }
+showcase_connection="Host=/var/run/postgresql;Database=${database_name};Username=postgres"
 
 install -d -o "$APP_USER" -g "$APP_GROUP" -m 750 "${APP_ROOT}/backups"
 mkdir -p "$work_dir"
@@ -119,13 +120,13 @@ systemctl stop "$SERVICE_NAME"
 service_stopped=1
 mutation_started=1
 log "showcasePrepareStatus=running"
-sudo -u "$APP_USER" env \
-  GARAGEBALANCE_SHOWCASE_CONNECTION="$connection_string" \
+sudo -u postgres env \
+  GARAGEBALANCE_SHOWCASE_CONNECTION="$showcase_connection" \
   GARAGEBALANCE_SHOWCASE_CONFIRMATION="$EXPECTED_CONFIRMATION" \
   "${work_dir}/GarageBalance.ShowcaseSeed" prepare
 
-sudo -u "$APP_USER" env \
-  GARAGEBALANCE_SHOWCASE_CONNECTION="$connection_string" \
+sudo -u postgres env \
+  GARAGEBALANCE_SHOWCASE_CONNECTION="$showcase_connection" \
   GARAGEBALANCE_SHOWCASE_CONFIRMATION="$EXPECTED_CONFIRMATION" \
   "${work_dir}/GarageBalance.ShowcaseSeed" audit
 
