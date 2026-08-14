@@ -3,6 +3,7 @@ using GarageBalance.Api.Domain.Dictionaries;
 using GarageBalance.Api.Domain.Finance;
 using GarageBalance.Api.Infrastructure.Data;
 using GarageBalance.Api.Tests.Common;
+using GarageBalance.ShowcaseSeed;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
 
@@ -10,6 +11,67 @@ namespace GarageBalance.Api.Tests.Finance;
 
 public sealed class PostgreSqlPaymentAllocationIntegrationTests
 {
+    [PostgreSqlFact]
+    public async Task AllocationRebuild_ReplacesExistingActivePairWithoutUniqueViolation()
+    {
+        await using var database = await PostgreSqlTestDatabase.CreateAsync();
+        var ledger = await SeedLedgerAsync(database, "PG-REBUILD-EXISTING", [100m]);
+
+        await using (var paymentContext = database.CreateContext())
+        {
+            var payment = await FinanceServiceTestFactory.Create(paymentContext).CreateIncomeAsync(
+                CreateConcurrentPayment(ledger, "PG-REBUILD-EXISTING-1") with { Amount = 50m },
+                null,
+                CancellationToken.None);
+            Assert.True(payment.Succeeded, payment.ErrorMessage);
+        }
+
+        await using (var rebuildContext = database.CreateContext())
+        {
+            var repository = new EfAccrualPaymentAllocationRepository(rebuildContext);
+            await repository.RebuildAsync(
+                [new AccrualPaymentAllocationKey(ledger.GarageId, ledger.IncomeTypeId)],
+                CancellationToken.None);
+            await rebuildContext.SaveChangesAsync();
+        }
+
+        await using var assertionContext = database.CreateContext();
+        var active = await assertionContext.AccrualPaymentAllocations
+            .Where(item => item.IsActive && item.AccrualId == ledger.AccrualIds[0])
+            .ToArrayAsync();
+        Assert.Single(active);
+        Assert.Equal(50m, active[0].Amount);
+        Assert.True(await assertionContext.AccrualPaymentAllocations
+            .AnyAsync(item => !item.IsActive && item.AccrualId == ledger.AccrualIds[0]));
+    }
+
+    [PostgreSqlFact]
+    public async Task ShowcaseGarage103_JulyAugustWorksheetRecalculatesWithoutPersistenceConflict()
+    {
+        await using var database = await PostgreSqlTestDatabase.CreateAsync();
+        Guid garageId;
+        await using (var seedContext = database.CreateContext())
+        {
+            var seedResult = await new ShowcaseDataSeeder(seedContext).PrepareAsync(CancellationToken.None);
+            Assert.True(seedResult.IsReady);
+            garageId = await seedContext.Garages
+                .Where(item => item.Number == "103-ДОЛЖНИК")
+                .Select(item => item.Id)
+                .SingleAsync();
+        }
+
+        await using var calculationContext = database.CreateContext();
+        var result = await FinanceServiceTestFactory.Create(calculationContext)
+            .CalculateGarageIncomeWorksheetAsync(
+                garageId,
+                new GarageIncomeWorksheetRequest(new DateOnly(2026, 7, 1), new DateOnly(2026, 8, 1)),
+                null,
+                CancellationToken.None);
+
+        Assert.True(result.Succeeded, result.ErrorMessage);
+        Assert.NotEmpty(result.Value!.Rows);
+    }
+
     [PostgreSqlFact]
     public async Task AprilTrashPayment_PersistsAndRemovesGarage101OverdueDebtAfterReload()
     {

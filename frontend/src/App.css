@@ -9072,6 +9072,9 @@ button.operation-row:focus-visible {
   }
 
   .dictionary-subnav {
+    min-height: 0;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: start;
     border-right: 0;
     border-bottom: 1px solid #e4e7ec;
     padding-right: 0;
@@ -9103,6 +9106,16 @@ button.operation-row:focus-visible {
 }
 
 @media (max-width: 640px) {
+  .dictionary-panel-v2 {
+    min-height: 0;
+    max-height: none;
+    overflow: visible;
+  }
+
+  .dictionary-subnav {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
   .report-workbook-filter {
     grid-template-columns: minmax(0, 1fr);
   }

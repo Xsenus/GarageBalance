@@ -78,6 +78,9 @@ describe('responsive layout styles', () => {
     expect(normalizedAppCss).toContain('.tariffs-page > * {\n  min-width: 0;')
     expect(normalizedAppCss).toContain('.dictionary-toolbar {\n    grid-template-columns: minmax(0, 1fr);\n    align-items: stretch;')
     expect(normalizedAppCss).toContain('.dictionary-toolbar .dictionary-archive-toggle,\n  .dictionary-toolbar .create-action-button {\n    width: 100%;')
+    expect(normalizedAppCss).toContain('.dictionary-subnav {\n    min-height: 0;\n    grid-template-columns: repeat(2, minmax(0, 1fr));')
+    expect(normalizedAppCss).toContain('.dictionary-panel-v2 {\n    min-height: 0;\n    max-height: none;\n    overflow: visible;')
+    expect(normalizedAppCss).toContain('.dictionary-subnav {\n    grid-template-columns: minmax(0, 1fr);')
   })
 
   it('keeps the service settings beside tariff periods and stacks them on narrower screens', () => {
