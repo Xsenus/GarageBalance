@@ -23,6 +23,22 @@ public sealed class PostgreSqlShowcaseDataSeederIntegrationTests
         context.Owners.Add(new Owner { LastName = "Old", FirstName = "Business data" });
         await context.SaveChangesAsync();
 
+        var existingMembership = await context.ChargeServiceSettings
+            .Include(item => item.IncomeType)
+            .Include(item => item.Tariff)
+            .SingleAsync(item => item.IncomeType!.Code == "membership");
+        existingMembership.Tariff!.EffectiveFrom = new DateOnly(2026, 8, 1);
+        await context.SaveChangesAsync();
+        context.Tariffs.Add(new Tariff
+        {
+            Name = existingMembership.Tariff.Name,
+            CalculationBase = existingMembership.Tariff.CalculationBase,
+            Rate = existingMembership.Tariff.Rate,
+            EffectiveFrom = new DateOnly(2026, 1, 1),
+            Comment = "Existing staging tariff history"
+        });
+        await context.SaveChangesAsync();
+
         var seeder = new ShowcaseDataSeeder(context);
         var first = await seeder.PrepareAsync(CancellationToken.None);
         var second = await seeder.PrepareAsync(CancellationToken.None);

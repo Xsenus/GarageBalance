@@ -35,6 +35,7 @@ public sealed class ShowcaseDataSeeder(GarageBalanceDbContext context)
 
         await ClearBusinessDataAsync(cancellationToken);
         var services = await LoadServicesAsync(cancellationToken);
+        await EnsureRepresentativeTariffsAsync(services, cancellationToken);
         ConfigureRepresentativeTariffs(services);
         await RebuildTariffHistoryAsync(services, cancellationToken);
         await context.SaveChangesAsync(cancellationToken);
@@ -219,6 +220,47 @@ public sealed class ShowcaseDataSeeder(GarageBalanceDbContext context)
         electricity.ElectricitySecondRate = 10m;
         electricity.ElectricityThirdRate = 15m;
         electricity.ElectricityTiersJson = "[{\"upperBound\":1100,\"rate\":7.5},{\"upperBound\":1700,\"rate\":10},{\"upperBound\":null,\"rate\":15}]";
+    }
+
+    private async Task EnsureRepresentativeTariffsAsync(
+        IReadOnlyDictionary<string, ChargeServiceSetting> services,
+        CancellationToken cancellationToken)
+    {
+        var names = new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["water"] = "ДЕМО Вода",
+            ["trash"] = "ДЕМО Мусор",
+            ["outdoor_lighting"] = "ДЕМО Наружное освещение",
+            ["target"] = "ДЕМО Целевой взнос",
+            ["membership"] = "ДЕМО Членский взнос",
+            ["electricity"] = "ДЕМО Электроэнергия"
+        };
+
+        foreach (var (code, name) in names)
+        {
+            var tariffId = DeterministicGuid($"current-tariff-{code}");
+            var tariff = await context.Tariffs
+                .SingleOrDefaultAsync(item => item.Id == tariffId, cancellationToken);
+            if (tariff is null)
+            {
+                tariff = new Tariff
+                {
+                    Id = tariffId,
+                    Name = name,
+                    CalculationBase = TariffCalculationBases.Fixed,
+                    EffectiveFrom = new DateOnly(2026, 1, 1),
+                    CreatedAtUtc = CreatedAtUtc
+                };
+                context.Tariffs.Add(tariff);
+            }
+
+            tariff.Name = name;
+            tariff.EffectiveFrom = new DateOnly(2026, 1, 1);
+            tariff.IsArchived = false;
+            tariff.UpdatedAtUtc = CreatedAtUtc;
+            services[code].Tariff = tariff;
+            services[code].TariffId = tariff.Id;
+        }
     }
 
     private async Task RebuildTariffHistoryAsync(
