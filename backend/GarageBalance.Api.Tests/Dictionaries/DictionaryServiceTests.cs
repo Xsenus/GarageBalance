@@ -2637,6 +2637,36 @@ public sealed class DictionaryServiceTests
     }
 
     [Fact]
+    public async Task GetTariffsAsync_ReadsLegacyCamelCaseElectricityTiers()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        database.Context.Tariffs.Add(new Tariff
+        {
+            Name = "Legacy electricity",
+            CalculationBase = TariffCalculationBases.MeterElectricity,
+            Rate = 7.5m,
+            EffectiveFrom = new DateOnly(2026, 1, 1),
+            ElectricityTiersJson = """
+                [
+                  {"id":"11111111-1111-1111-1111-111111111111","name":"0-1100","upperBound":1100,"rate":7.5,"isCustom":false},
+                  {"id":"22222222-2222-2222-2222-222222222222","name":"1101-1700","upperBound":1700,"rate":10,"isCustom":false},
+                  {"id":"33333333-3333-3333-3333-333333333333","name":"1701+","upperBound":null,"rate":15,"isCustom":false}
+                ]
+                """
+        });
+        await database.Context.SaveChangesAsync();
+        var service = DictionaryServiceTestFactory.Create(database.Context);
+
+        var tariff = Assert.Single(await service.GetTariffsAsync("Legacy electricity", CancellationToken.None));
+
+        Assert.Collection(
+            Assert.IsAssignableFrom<IReadOnlyList<ElectricityTariffTierDto>>(tariff.ElectricityTiers),
+            tier => { Assert.Equal(1100m, tier.UpperBound); Assert.Equal(7.5m, tier.Rate); },
+            tier => { Assert.Equal(1700m, tier.UpperBound); Assert.Equal(10m, tier.Rate); },
+            tier => { Assert.Null(tier.UpperBound); Assert.Equal(15m, tier.Rate); });
+    }
+
+    [Fact]
     public async Task CreateTariffAsync_RejectsIncompleteElectricityTiers()
     {
         await using var database = await TestDatabase.CreateAsync();

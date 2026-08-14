@@ -55,6 +55,20 @@ public sealed class PostgreSqlShowcaseDataSeederIntegrationTests
 
         var seeder = new ShowcaseDataSeeder(context);
         var first = await seeder.PrepareAsync(CancellationToken.None);
+        var seededElectricity = await context.ChargeServiceSettings
+            .Include(item => item.IncomeType)
+            .Include(item => item.Tariff)
+            .SingleAsync(item => item.IncomeType!.Code == "electricity");
+        seededElectricity.Tariff!.ElectricityTiersJson = """
+            [
+              {"id":"11111111-1111-1111-1111-111111111111","name":"0-1100","upperBound":1100,"rate":7.5,"isCustom":false},
+              {"id":"22222222-2222-2222-2222-222222222222","name":"1101-1700","upperBound":1700,"rate":10,"isCustom":false},
+              {"id":"33333333-3333-3333-3333-333333333333","name":"1701+","upperBound":null,"rate":15,"isCustom":false}
+            ]
+            """;
+        await context.SaveChangesAsync();
+        context.ChangeTracker.Clear();
+        Assert.True((await seeder.AuditAsync(CancellationToken.None)).IsReady);
         var second = await seeder.PrepareAsync(CancellationToken.None);
 
         Assert.True(first.IsReady);

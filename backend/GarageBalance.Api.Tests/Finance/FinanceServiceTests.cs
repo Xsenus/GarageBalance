@@ -7448,10 +7448,10 @@ public sealed class FinanceServiceTests
             Rate = 2m,
             ElectricityTiersJson = """
                 [
-                  {"Id":"11111111-1111-1111-1111-111111111111","Name":"До 50","UpperBound":50,"Rate":2,"IsCustom":false},
-                  {"Id":"22222222-2222-2222-2222-222222222222","Name":"До 100","UpperBound":100,"Rate":3,"IsCustom":false},
-                  {"Id":"33333333-3333-3333-3333-333333333333","Name":"До 150","UpperBound":150,"Rate":4,"IsCustom":true},
-                  {"Id":"44444444-4444-4444-4444-444444444444","Name":"Свыше 150","UpperBound":null,"Rate":5,"IsCustom":false}
+                  {"id":"11111111-1111-1111-1111-111111111111","name":"До 50","upperBound":50,"rate":2,"isCustom":false},
+                  {"id":"22222222-2222-2222-2222-222222222222","name":"До 100","upperBound":100,"rate":3,"isCustom":false},
+                  {"id":"33333333-3333-3333-3333-333333333333","name":"До 150","upperBound":150,"rate":4,"isCustom":true},
+                  {"id":"44444444-4444-4444-4444-444444444444","name":"Свыше 150","upperBound":null,"rate":5,"isCustom":false}
                 ]
                 """,
             EffectiveFrom = new DateOnly(2026, 1, 1)

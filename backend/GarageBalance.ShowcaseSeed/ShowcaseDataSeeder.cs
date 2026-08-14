@@ -15,6 +15,7 @@ public sealed class ShowcaseDataSeeder(GarageBalanceDbContext context)
     public const string Marker = "showcase_seed_v1";
     public static readonly DateOnly AccountingMonth = new(2026, 8, 1);
     private static readonly DateTimeOffset CreatedAtUtc = new(2026, 8, 14, 4, 0, 0, TimeSpan.Zero);
+    private static readonly JsonSerializerOptions PersistedJsonOptions = new(JsonSerializerDefaults.Web);
     private static readonly string[] GarageNumbers =
     [
         "101-БЕЗ-ДОЛГА",
@@ -248,7 +249,7 @@ public sealed class ShowcaseDataSeeder(GarageBalanceDbContext context)
 
         try
         {
-            var tiers = JsonSerializer.Deserialize<ShowcaseElectricityTier[]>(tiersJson);
+            var tiers = JsonSerializer.Deserialize<ShowcaseElectricityTier[]>(tiersJson, PersistedJsonOptions);
             return tiers is
                 [
                 { UpperBound: 1100m, Rate: 7.5m },

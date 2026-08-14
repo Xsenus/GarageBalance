@@ -30,6 +30,7 @@ public sealed class DictionaryService(
     IAuditEventWriter auditEventWriter,
     IBusinessDateProvider businessDateProvider) : IDictionaryService
 {
+    private static readonly JsonSerializerOptions PersistedJsonOptions = new(JsonSerializerDefaults.Web);
     private const string ServiceIncomeTypeCodePrefix = "service_";
     private const string SupplierServiceExpenseTypeCodePrefix = "supplier_service_";
     private static readonly DateOnly OpenTariffScheduleStart = new(1900, 1, 1);
@@ -3749,7 +3750,9 @@ public sealed class DictionaryService(
         {
             try
             {
-                var stored = JsonSerializer.Deserialize<List<ElectricityTierConfigItem>>(tariff.ElectricityTiersJson);
+                var stored = JsonSerializer.Deserialize<List<ElectricityTierConfigItem>>(
+                    tariff.ElectricityTiersJson,
+                    PersistedJsonOptions);
                 if (stored is { Count: >= 2 })
                 {
                     return stored;

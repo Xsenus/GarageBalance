@@ -43,6 +43,7 @@ public sealed class FinanceService(
     TimeProvider timeProvider,
     IBusinessDateProvider businessDateProvider) : IFinanceService
 {
+    private static readonly JsonSerializerOptions PersistedJsonOptions = new(JsonSerializerDefaults.Web);
     private const int MaxAutomaticFeeCampaigns = 500;
     private const int MaxAutomaticMeteredServices = 500;
     private const int MaxBalanceHistoryMonths = 600;
@@ -6184,7 +6185,9 @@ public sealed class FinanceService(
         {
             try
             {
-                var stored = JsonSerializer.Deserialize<List<ElectricityTierSnapshot>>(tariff.ElectricityTiersJson);
+                var stored = JsonSerializer.Deserialize<List<ElectricityTierSnapshot>>(
+                    tariff.ElectricityTiersJson,
+                    PersistedJsonOptions);
                 if (stored is { Count: >= 2 })
                 {
                     return stored;
