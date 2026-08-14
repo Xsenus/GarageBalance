@@ -2648,9 +2648,9 @@ public sealed class DictionaryServiceTests
             EffectiveFrom = new DateOnly(2026, 1, 1),
             ElectricityTiersJson = """
                 [
-                  {"id":"11111111-1111-1111-1111-111111111111","name":"0-1100","upperBound":1100,"rate":7.5,"isCustom":false},
-                  {"id":"22222222-2222-2222-2222-222222222222","name":"1101-1700","upperBound":1700,"rate":10,"isCustom":false},
-                  {"id":"33333333-3333-3333-3333-333333333333","name":"1701+","upperBound":null,"rate":15,"isCustom":false}
+                  {"upperBound":1100,"rate":7.5},
+                  {"upperBound":1700,"rate":10},
+                  {"upperBound":null,"rate":15}
                 ]
                 """
         });
@@ -2664,6 +2664,12 @@ public sealed class DictionaryServiceTests
             tier => { Assert.Equal(1100m, tier.UpperBound); Assert.Equal(7.5m, tier.Rate); },
             tier => { Assert.Equal(1700m, tier.UpperBound); Assert.Equal(10m, tier.Rate); },
             tier => { Assert.Null(tier.UpperBound); Assert.Equal(15m, tier.Rate); });
+        Assert.All(tariff.ElectricityTiers!, tier =>
+        {
+            Assert.NotEqual(Guid.Empty, tier.Id);
+            Assert.False(string.IsNullOrWhiteSpace(tier.Name));
+        });
+        Assert.Equal(3, tariff.ElectricityTiers!.Select(tier => tier.Id).Distinct().Count());
     }
 
     [Fact]

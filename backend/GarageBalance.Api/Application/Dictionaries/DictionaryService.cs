@@ -3755,7 +3755,13 @@ public sealed class DictionaryService(
                     PersistedJsonOptions);
                 if (stored is { Count: >= 2 })
                 {
-                    return stored;
+                    return stored
+                        .Select((item, index) => item with
+                        {
+                            Id = item.Id == Guid.Empty ? CreateLegacyTierId(tariff.Id, index + 1) : item.Id,
+                            Name = string.IsNullOrWhiteSpace(item.Name) ? $"Порог {index + 1}" : item.Name
+                        })
+                        .ToArray();
                 }
             }
             catch (JsonException)
