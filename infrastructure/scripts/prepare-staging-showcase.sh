@@ -54,7 +54,25 @@ trap cleanup EXIT
 
 [[ "$(id -u)" == "0" ]] || { log "showcasePrepareStatus=refused; reason=root-required"; exit 64; }
 [[ "$confirmation" == "$EXPECTED_CONFIRMATION" ]] || { log "showcasePrepareStatus=refused; reason=confirmation"; exit 64; }
-[[ -s "$archive_path" ]] || { log "showcasePrepareStatus=refused; reason=archive-missing"; exit 66; }
+[[ -n "${SUDO_USER:-}" && "$SUDO_USER" != "root" ]] || {
+  log "showcasePrepareStatus=refused; reason=sudo-user"
+  exit 64
+}
+expected_archive_directory="/home/${SUDO_USER}"
+archive_directory="$(dirname -- "$archive_path")"
+archive_name="$(basename -- "$archive_path")"
+[[ "$archive_directory" == "$expected_archive_directory" && "$archive_name" =~ ^showcase-[0-9]+\.tar\.gz$ ]] || {
+  log "showcasePrepareStatus=refused; reason=archive-path"
+  exit 64
+}
+[[ -f "$archive_path" && ! -L "$archive_path" && -s "$archive_path" ]] || {
+  log "showcasePrepareStatus=refused; reason=archive-missing"
+  exit 66
+}
+[[ "$(stat -c '%U' "$archive_path")" == "$SUDO_USER" ]] || {
+  log "showcasePrepareStatus=refused; reason=archive-owner"
+  exit 64
+}
 [[ -f "$ENV_FILE" ]] || { log "showcasePrepareStatus=refused; reason=environment-missing"; exit 66; }
 
 connection_string="$(
@@ -74,7 +92,7 @@ database_name="$(
 
 install -d -o "$APP_USER" -g "$APP_GROUP" -m 750 "${APP_ROOT}/backups"
 mkdir -p "$work_dir"
-tar -xzf "$archive_path" -C "$work_dir"
+tar --no-same-owner --no-same-permissions -xzf "$archive_path" -C "$work_dir"
 [[ -x "${work_dir}/GarageBalance.ShowcaseSeed" ]] || {
   log "showcasePrepareStatus=refused; reason=runner-missing"
   exit 66

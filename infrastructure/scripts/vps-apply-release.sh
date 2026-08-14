@@ -10,6 +10,14 @@ APP_GROUP="garagebalance"
 PUBLIC_HOST="sgk.blagodaty.ru"
 FRONTEND_ASSET_RETENTION_DAYS=30
 
+if [[ "${1:-}" == "prepare-showcase" ]]; then
+  [[ "$#" == "3" ]] || {
+    echo "usage: $0 prepare-showcase <archive-path> <confirmation>"
+    exit 64
+  }
+  exec /usr/local/bin/garagebalance-showcase-prepare "$2" "$3"
+fi
+
 release_id="${1:-}"
 
 if [[ -z "$release_id" || ! "$release_id" =~ ^[A-Za-z0-9._-]+$ ]]; then

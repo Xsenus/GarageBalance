@@ -18,6 +18,9 @@ public sealed class ShowcaseDeploymentTests
         Assert.Contains("pg_dump --format=custom", script, StringComparison.Ordinal);
         Assert.Contains("pg_restore --exit-on-error", script, StringComparison.Ordinal);
         Assert.Contains("pg_restore --clean --if-exists --exit-on-error", script, StringComparison.Ordinal);
+        Assert.Contains("reason=archive-path", script, StringComparison.Ordinal);
+        Assert.Contains("reason=archive-owner", script, StringComparison.Ordinal);
+        Assert.Contains("--no-same-owner --no-same-permissions", script, StringComparison.Ordinal);
         Assert.Contains("GarageBalance.ShowcaseSeed\" prepare", script, StringComparison.Ordinal);
         Assert.Contains("GarageBalance.ShowcaseSeed\" audit", script, StringComparison.Ordinal);
         Assert.Contains("/health/ready", script, StringComparison.Ordinal);
@@ -25,7 +28,7 @@ public sealed class ShowcaseDeploymentTests
     }
 
     [Fact]
-    public void ManualWorkflow_RequiresExactConfirmationAndUsesInstalledRootHelper()
+    public void ManualWorkflow_RequiresExactConfirmationAndUsesExistingAuthorizedDeployHelper()
     {
         var workflow = File.ReadAllText(Path.Combine(
             RepositoryRoot,
@@ -35,7 +38,7 @@ public sealed class ShowcaseDeploymentTests
 
         Assert.Contains("workflow_dispatch:", workflow, StringComparison.Ordinal);
         Assert.Contains("inputs.confirmation == 'PREPARE GARAGEBALANCE STAGING'", workflow, StringComparison.Ordinal);
-        Assert.Contains("garagebalance-showcase-prepare", workflow, StringComparison.Ordinal);
+        Assert.Contains("garagebalance-deploy-apply prepare-showcase", workflow, StringComparison.Ordinal);
         Assert.Contains("concurrency:", workflow, StringComparison.Ordinal);
         Assert.Contains("environment: staging", workflow, StringComparison.Ordinal);
         Assert.Contains("https://sgk.blagodaty.ru/health/ready", workflow, StringComparison.Ordinal);
@@ -57,6 +60,7 @@ public sealed class ShowcaseDeploymentTests
 
         Assert.Contains("infrastructure/scripts/prepare-staging-showcase.sh", workflow, StringComparison.Ordinal);
         Assert.Contains("/usr/local/bin/garagebalance-showcase-prepare", script, StringComparison.Ordinal);
+        Assert.Contains("exec /usr/local/bin/garagebalance-showcase-prepare", script, StringComparison.Ordinal);
         Assert.DoesNotContain("GarageBalance.ShowcaseSeed", workflow, StringComparison.Ordinal);
         Assert.DoesNotContain("garagebalance-showcase-prepare", workflow, StringComparison.Ordinal);
     }

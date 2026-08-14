@@ -76,7 +76,7 @@ jobs:
           remote_archive="/home/${{ secrets.VPS_DEPLOY_USER }}/showcase-${RUN_ID}.tar.gz"
           scp artifacts/showcase.tar.gz "garagebalance-staging:${remote_archive}"
           ssh garagebalance-staging \
-            "sudo /usr/local/bin/garagebalance-showcase-prepare '${remote_archive}' '${CONFIRMATION}'"
+            "sudo /usr/local/bin/garagebalance-deploy-apply prepare-showcase '${remote_archive}' '${CONFIRMATION}'"
           ssh garagebalance-staging "rm -f '${remote_archive}'"
 
       - name: Verify public staging
