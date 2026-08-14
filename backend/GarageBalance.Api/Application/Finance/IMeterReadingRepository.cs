@@ -29,6 +29,12 @@ public interface IMeterReadingRepository
         CancellationToken cancellationToken);
 
     Task<IReadOnlyDictionary<Guid, MeterReading>> GetActiveByGarageIdsAsync(IReadOnlyCollection<Guid> garageIds, string meterKind, DateOnly accountingMonth, CancellationToken cancellationToken);
+    Task<IReadOnlyList<MeterReading>> GetActiveForGaragePeriodAsync(
+        Guid garageId,
+        DateOnly monthFrom,
+        DateOnly monthTo,
+        IReadOnlyCollection<string> meterKinds,
+        CancellationToken cancellationToken);
     Task<int> CountActiveAsync(DateOnly? monthFrom, DateOnly? monthTo, string? normalizedSearch, CancellationToken cancellationToken);
     Task<bool> ActiveDuplicateExistsAsync(Guid? ignoredId, Guid garageId, string meterKind, DateOnly accountingMonth, CancellationToken cancellationToken);
     Task<MeterReading?> GetPreviousActiveAsync(Guid? ignoredId, Guid garageId, string meterKind, DateOnly accountingMonth, CancellationToken cancellationToken);

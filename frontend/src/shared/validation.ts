@@ -393,7 +393,11 @@ export function getExpenseValidationErrors(form: CreateExpenseOperationRequest) 
   }
 
   if (!form.expenseTypeId) {
-    errors.push('Для поставщика должна быть настроена услуга или статья расхода.')
+    errors.push('Для поставщика должна быть настроена услуга.')
+  }
+
+  if (!form.expenseFundId) {
+    errors.push('Для услуги поставщика должен быть настроен фонд расходования.')
   }
 
   if (form.expensePaymentType !== 'with_receipt' && form.expensePaymentType !== 'without_receipt') {

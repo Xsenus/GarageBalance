@@ -537,6 +537,68 @@ public sealed class FinanceControllerTests
     }
 
     [Fact]
+    public async Task CalculateGarageIncomeWorksheet_PassesGaragePeriodAndActorToService()
+    {
+        var garageId = Guid.NewGuid();
+        var actorUserId = Guid.NewGuid();
+        var request = new GarageIncomeWorksheetRequest(
+            new DateOnly(2024, 2, 1),
+            new DateOnly(2024, 3, 1));
+        var worksheet = new GarageIncomeWorksheetDto(
+            garageId,
+            "12",
+            "Owner",
+            request.MonthFrom!.Value,
+            request.MonthTo!.Value,
+            0m,
+            0m,
+            0m,
+            100m,
+            0m,
+            0m,
+            100m,
+            100m,
+            100m,
+            []);
+        var service = new FakeFinanceService
+        {
+            GarageIncomeWorksheetResult = FinanceResult<GarageIncomeWorksheetDto>.Success(worksheet)
+        };
+        var controller = CreateController(service, actorUserId);
+
+        var result = await controller.CalculateGarageIncomeWorksheet(
+            garageId,
+            request,
+            CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        Assert.Same(worksheet, ok.Value);
+        Assert.Equal(garageId, service.LastGarageIncomeWorksheetGarageId);
+        Assert.Same(request, service.LastGarageIncomeWorksheetRequest);
+        Assert.Equal(actorUserId, service.LastGarageIncomeWorksheetActorUserId);
+    }
+
+    [Fact]
+    public async Task CalculateGarageIncomeWorksheet_ReturnsNotFoundForMissingGarage()
+    {
+        var controller = CreateController(new FakeFinanceService
+        {
+            GarageIncomeWorksheetResult = FinanceResult<GarageIncomeWorksheetDto>.Failure(
+                "garage_not_found",
+                "Garage was not found.")
+        });
+
+        var result = await controller.CalculateGarageIncomeWorksheet(
+            Guid.NewGuid(),
+            new GarageIncomeWorksheetRequest(new DateOnly(2024, 2, 1), new DateOnly(2024, 2, 1)),
+            CancellationToken.None);
+
+        var notFound = Assert.IsType<NotFoundObjectResult>(result.Result);
+        var problem = Assert.IsType<ProblemDetails>(notFound.Value);
+        Assert.Equal("garage_not_found", problem.Title);
+    }
+
+    [Fact]
     public async Task GetExpenseWorksheet_PassesAccountingMonthToService()
     {
         var worksheet = new ExpenseWorksheetDto(
@@ -2182,6 +2244,7 @@ public sealed class FinanceControllerTests
         public MissingMeterReadingListRequest? LastMissingMeterReadingListRequest { get; private set; }
         public GarageBalanceHistoryRequest? LastGarageBalanceHistoryRequest { get; private set; }
         public GarageIncomeWorksheetRequest? LastGarageIncomeWorksheetRequest { get; private set; }
+        public Guid? LastGarageIncomeWorksheetActorUserId { get; private set; }
         public ExpenseWorksheetRequest? LastExpenseWorksheetRequest { get; private set; }
         public SupplierOpeningBalanceRequest? LastSupplierOpeningBalanceRequest { get; private set; }
         public FinancialReportPeriodRequest? LastFinancialReportPeriodRequest { get; private set; }
@@ -2323,6 +2386,18 @@ public sealed class FinanceControllerTests
         {
             LastGarageIncomeWorksheetGarageId = garageId;
             LastGarageIncomeWorksheetRequest = request;
+            return Task.FromResult(GarageIncomeWorksheetResult);
+        }
+
+        public Task<FinanceResult<GarageIncomeWorksheetDto>> CalculateGarageIncomeWorksheetAsync(
+            Guid garageId,
+            GarageIncomeWorksheetRequest request,
+            Guid? actorUserId,
+            CancellationToken cancellationToken)
+        {
+            LastGarageIncomeWorksheetGarageId = garageId;
+            LastGarageIncomeWorksheetRequest = request;
+            LastGarageIncomeWorksheetActorUserId = actorUserId;
             return Task.FromResult(GarageIncomeWorksheetResult);
         }
 

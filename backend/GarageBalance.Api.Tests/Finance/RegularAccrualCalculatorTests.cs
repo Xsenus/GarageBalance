@@ -83,13 +83,13 @@ public sealed class RegularAccrualCalculatorTests
             ]);
 
         Assert.True(result.Succeeded);
-        Assert.Equal(370m, result.Amount);
+        Assert.Equal(420m, result.Amount);
         Assert.Equal(new[] { "fixed", "metered", "fixed", "metered_tiered" }, result.Details!.Lines.Select(line => line.CalculationMode));
-        Assert.Equal(2, result.Details.Lines[3].Tiers.Count);
+        Assert.Single(result.Details.Lines[3].Tiers);
     }
 
     [Fact]
-    public void Calculate_TieredSegment_AppliesProgressiveRanges()
+    public void Calculate_TieredSegment_SelectsRateByCurrentMeterValueForEntireConsumption()
     {
         var result = RegularAccrualCalculator.Calculate(
             Garage(),
@@ -100,21 +100,33 @@ public sealed class RegularAccrualCalculatorTests
                 new RegularAccrualTariffTier(null, 8m))]);
 
         Assert.True(result.Succeeded);
-        Assert.Equal(106m, result.Amount);
-        Assert.Collection(
-            result.Details!.Lines.Single().Tiers,
-            tier =>
-            {
-                Assert.Equal(0m, tier.From);
-                Assert.Equal(10m, tier.To);
-                Assert.Equal(50m, tier.Amount);
-            },
-            tier =>
-            {
-                Assert.Equal(11m, tier.From);
-                Assert.Null(tier.To);
-                Assert.Equal(56m, tier.Amount);
-            });
+        Assert.Equal(136m, result.Amount);
+        var appliedTier = Assert.Single(result.Details!.Lines.Single().Tiers);
+        Assert.Equal(10m, appliedTier.From);
+        Assert.Null(appliedTier.To);
+        Assert.Equal(17m, appliedTier.Quantity);
+        Assert.Equal(8m, appliedTier.Rate);
+        Assert.Equal(136m, appliedTier.Amount);
+        Assert.Contains("текущее показание 17", result.Details.Lines.Single().Formula, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Calculate_TieredSegment_UsesLowerRateAtInclusiveThreshold()
+    {
+        var result = RegularAccrualCalculator.Calculate(
+            Garage(),
+            August,
+            Reading(previous: 0m, current: 10m),
+            [Segment(1, 31, TariffCalculationBases.MeterWater, 0m,
+                new RegularAccrualTariffTier(10m, 5m),
+                new RegularAccrualTariffTier(null, 8m))]);
+
+        Assert.True(result.Succeeded);
+        Assert.Equal(50m, result.Amount);
+        var appliedTier = Assert.Single(result.Details!.Lines.Single().Tiers);
+        Assert.Equal(0m, appliedTier.From);
+        Assert.Equal(10m, appliedTier.To);
+        Assert.Equal(5m, appliedTier.Rate);
     }
 
     [Fact]
@@ -168,6 +180,33 @@ public sealed class RegularAccrualCalculatorTests
         Assert.Equal(240m, recalculated.Amount);
         Assert.Equal(100m, recalculated.Details!.PreviousMeterValue);
         Assert.Equal(120m, recalculated.Details.CurrentMeterValue);
+    }
+
+    [Fact]
+    public void TieredSnapshot_PreservesWholeGridWhenReadingMovesToAnotherThreshold()
+    {
+        var definitions = new[]
+        {
+            Segment(1, 31, TariffCalculationBases.MeterWater, 0m,
+                new RegularAccrualTariffTier(10m, 5m),
+                new RegularAccrualTariffTier(null, 8m))
+        };
+        var original = RegularAccrualCalculator.Calculate(
+            Garage(),
+            August,
+            Reading(previous: 0m, current: 10m),
+            definitions);
+
+        var restored = RegularAccrualCalculator.Deserialize(RegularAccrualCalculator.Serialize(original.Details!));
+        var recalculated = RegularAccrualCalculator.Calculate(
+            Garage(),
+            August,
+            Reading(previous: 0m, current: 17m),
+            RegularAccrualCalculator.FromSnapshot(restored!));
+
+        Assert.Equal(50m, original.Amount);
+        Assert.Equal(136m, recalculated.Amount);
+        Assert.Equal(2, restored!.Lines.Single().TierDefinitions!.Count);
     }
 
     private static Garage Garage() => new() { Number = "1", PeopleCount = 2 };

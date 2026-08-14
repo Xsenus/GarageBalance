@@ -162,6 +162,12 @@ type EarlyElectricityPaymentConfirmationState = {
   daysSincePreviousPayment: number
 }
 
+type HistoricalMeterReadingSaveState = {
+  row: GarageIncomePrototypeRow
+  reason: string
+  error: string | null
+}
+
 type GaragePaymentIncomeType = {
   id: string
   code: string | null
@@ -361,6 +367,7 @@ export function FinancePanel({
     comment: '',
   })
   const expenseFundOptions = useMemo(() => getExpenseFundOptions(suppliers), [suppliers])
+  const selectedExpenseSupplier = suppliers.find((supplier) => supplier.id === expenseForm.supplierId)
   const [accrualForm, setAccrualForm] = useState({ garageId: '', incomeTypeId: '', accountingMonth: month, amount: 0, source: 'manual' as 'manual' | 'regular', comment: '' })
   const [supplierAccrualForm, setSupplierAccrualForm] = useState({ supplierId: '', expenseTypeId: '', accountingMonth: month, amount: 0, source: 'manual' as 'manual' | 'regular', documentNumber: '', comment: '' })
   const [salaryForm, setSalaryForm] = useState({ supplierGroupId: '', accountingMonth: month, amount: 0, documentNumber: '', comment: '' })
@@ -583,13 +590,17 @@ export function FinancePanel({
         setIncomeForm((value) => ({ ...value, incomeTypeId: value.incomeTypeId || loadedIncomeTypes[0]?.id || '' }))
         setExpenseForm((value) => {
           const requestedSupplier = loadedSuppliers.find((supplier) => supplier.id === value.supplierId)
-          const linkedSupplier = requestedSupplier && getSupplierAccrualExpenseType(requestedSupplier, loadedExpenseTypes)
+          const configuredSuppliers = loadedSuppliers.filter((supplier) => Boolean(
+            getSupplierAccrualExpenseType(supplier, loadedExpenseTypes) && supplier.expenseFundId,
+          ))
+          const linkedSupplier = requestedSupplier && getSupplierAccrualExpenseType(requestedSupplier, loadedExpenseTypes) && requestedSupplier.expenseFundId
             ? requestedSupplier
-            : getFirstLinkedSupplier(loadedSuppliers, loadedExpenseTypes)
+            : getFirstLinkedSupplier(configuredSuppliers, loadedExpenseTypes)
           return {
             ...value,
             supplierId: linkedSupplier?.id ?? requestedSupplier?.id ?? loadedSuppliers[0]?.id ?? '',
             expenseTypeId: getSupplierAccrualExpenseType(linkedSupplier ?? requestedSupplier ?? loadedSuppliers[0], loadedExpenseTypes)?.id ?? '',
+            expenseFundId: (linkedSupplier ?? requestedSupplier ?? loadedSuppliers[0])?.expenseFundId ?? '',
           }
         })
         setAccrualForm((value) => ({ ...value, incomeTypeId: value.incomeTypeId || loadedIncomeTypes[0]?.id || '' }))
@@ -942,7 +953,7 @@ export function FinancePanel({
     }
 
     appendChangePreview(changes, 'Поставщик', formatSupplier(record.supplierId, record.supplierName), formatSupplier(request.supplierId, request.supplierId === record.supplierId ? record.supplierName : null))
-    appendChangePreview(changes, 'Услуга / статья расхода', formatExpenseType(record.expenseTypeId, record.expenseTypeName), formatExpenseType(request.expenseTypeId, request.expenseTypeId === record.expenseTypeId ? record.expenseTypeName : null))
+    appendChangePreview(changes, 'Услуга', formatExpenseType(record.expenseTypeId, record.expenseTypeName), formatExpenseType(request.expenseTypeId, request.expenseTypeId === record.expenseTypeId ? record.expenseTypeName : null))
     appendChangePreview(changes, 'Источник выплаты', record.expensePaymentSource === 'cash' || (!record.expensePaymentSource && record.expensePaymentType === 'without_receipt') ? 'Касса' : 'Банк', request.expensePaymentSource === 'cash' ? 'Касса' : 'Банк')
     appendChangePreview(changes, 'Тип выплаты', formatExpensePaymentType(record.expensePaymentType), formatExpensePaymentType(request.expensePaymentType))
     appendChangePreview(
@@ -1123,7 +1134,7 @@ export function FinancePanel({
       expenseTypeId: expenseForm.expenseTypeId,
       expensePaymentType: expenseForm.expensePaymentType,
       expensePaymentSource: expenseForm.expensePaymentSource,
-      expenseFundId: expenseForm.expensePaymentSource === 'bank' ? expenseForm.expenseFundId || undefined : undefined,
+      expenseFundId: expenseForm.expenseFundId || undefined,
       operationDate: expenseForm.operationDate,
       accountingMonth: expenseForm.accountingMonth,
       amount: expenseForm.amount,
@@ -1586,7 +1597,7 @@ export function FinancePanel({
         expenseTypeId: record.expenseTypeId ?? '',
         expensePaymentType: record.expensePaymentType ?? 'with_receipt',
         expensePaymentSource: record.expensePaymentSource ?? (record.expensePaymentType === 'without_receipt' ? 'cash' : 'bank'),
-        expenseFundId: record.expenseFundId ?? '',
+        expenseFundId: record.expenseFundId ?? suppliers.find((supplier) => supplier.id === record.supplierId)?.expenseFundId ?? '',
         operationDate: record.operationDate,
         accountingMonth: record.accountingMonth,
         amount: record.amount,
@@ -2002,8 +2013,8 @@ export function FinancePanel({
                 setExpenseForm({
                   ...expenseForm,
                   expensePaymentSource: source,
-                  expenseTypeId: source === 'bank' ? getSupplierAccrualExpenseType(supplier, expenseTypes)?.id ?? '' : '',
-                  expenseFundId: source === 'bank' ? supplier?.expenseFundId ?? '' : '',
+                  expenseTypeId: getSupplierAccrualExpenseType(supplier, expenseTypes)?.id ?? '',
+                  expenseFundId: supplier?.expenseFundId ?? '',
                 })
               }} />
           ))}
@@ -2011,32 +2022,28 @@ export function FinancePanel({
             <SelectControl
               aria-label="Поставщик для выплаты"
               value={expenseForm.supplierId}
-              options={suppliers.map((supplier) => ({ value: supplier.id, label: supplier.name }))}
+              options={suppliers
+                .filter((supplier) => Boolean(getSupplierAccrualExpenseType(supplier, expenseTypes) && supplier.expenseFundId))
+                .map((supplier) => ({ value: supplier.id, label: supplier.name }))}
               onChange={(supplierId) => {
                 const supplier = suppliers.find((item) => item.id === supplierId)
                 setExpenseForm({
                   ...expenseForm,
                   supplierId,
-                  expenseTypeId: expenseForm.expensePaymentSource === 'bank'
-                    ? getSupplierAccrualExpenseType(supplier, expenseTypes)?.id ?? ''
-                    : expenseForm.expenseTypeId,
-                  expenseFundId: expenseForm.expensePaymentSource === 'bank'
-                    ? supplier?.expenseFundId ?? ''
-                    : '',
+                  expenseTypeId: getSupplierAccrualExpenseType(supplier, expenseTypes)?.id ?? '',
+                  expenseFundId: supplier?.expenseFundId ?? '',
                 })
               }} />
           ))}
           {financeField('expenseType', (
             <SelectControl
-              aria-label="Услуга или статья расхода"
+              aria-label="Услуга выплаты"
               value={expenseForm.expenseTypeId}
-              options={expenseForm.expensePaymentSource === 'cash'
-                ? expenseTypes.map((item) => ({ value: item.id, label: item.name }))
-                : expenseForm.expenseTypeId
-                  ? [{ value: expenseForm.expenseTypeId, label: expenseTypes.find((item) => item.id === expenseForm.expenseTypeId)?.name ?? 'Настроенная услуга' }]
-                  : [{ value: '', label: 'Услуга не настроена' }]}
-              onChange={(expenseTypeId) => setExpenseForm({ ...expenseForm, expenseTypeId })}
-              disabled={expenseForm.expensePaymentSource === 'bank'} />
+              options={expenseForm.expenseTypeId
+                ? [{ value: expenseForm.expenseTypeId, label: expenseTypes.find((item) => item.id === expenseForm.expenseTypeId)?.name ?? 'Настроенная услуга' }]
+                : [{ value: '', label: 'Услуга не настроена' }]}
+              onChange={() => undefined}
+              disabled />
           ))}
           {financeField('expensePaymentType', (
             <SelectControl
@@ -2045,9 +2052,7 @@ export function FinancePanel({
               options={expensePaymentTypeOptions}
               onChange={(expensePaymentType) => setExpenseForm({ ...expenseForm, expensePaymentType: expensePaymentType as ExpensePaymentType })} />
           ))}
-          {expenseForm.expensePaymentSource === 'cash' ? (
-            <p className="form-hint">Источник выплаты: <strong>касса</strong>. Эта операция уменьшает остаток наличных и не изменяет ни один фонд.</p>
-          ) : null}
+          <p className="form-hint">Фонд расходования: <strong>{selectedExpenseSupplier?.expenseFundName ?? 'не настроен'}</strong>. Источник выплаты: <strong>{expenseForm.expensePaymentSource === 'cash' ? 'касса' : 'банковский счёт'}</strong>.</p>
           <div className="inline-fields">
             {financeField('expenseDate', <LocalizedDatePicker ariaLabel="Дата выплаты" mode="date" value={expenseForm.operationDate} onChange={(operationDate) => setExpenseForm({ ...expenseForm, operationDate })} required />)}
             {financeField('expenseMonth', <LocalizedDatePicker ariaLabel="Месяц выплаты" mode="month" value={expenseForm.accountingMonth.slice(0, 7)} onChange={(accountingMonth) => setExpenseForm({ ...expenseForm, accountingMonth: `${accountingMonth}-01` })} required />)}
@@ -2347,45 +2352,39 @@ export function FinancePanel({
               setExpenseForm({
                 ...expenseForm,
                 expensePaymentSource: source,
-                expenseTypeId: source === 'bank' ? getSupplierAccrualExpenseType(supplier, expenseTypes)?.id ?? '' : '',
-                expenseFundId: source === 'bank' ? supplier?.expenseFundId ?? '' : '',
+                expenseTypeId: getSupplierAccrualExpenseType(supplier, expenseTypes)?.id ?? '',
+                expenseFundId: supplier?.expenseFundId ?? '',
               })
             }} />
           <SelectControl
             aria-label="Поставщик для выплаты"
             value={expenseForm.supplierId}
-            options={suppliers.map((supplier) => ({ value: supplier.id, label: supplier.name }))}
+            options={suppliers
+              .filter((supplier) => Boolean(getSupplierAccrualExpenseType(supplier, expenseTypes) && supplier.expenseFundId))
+              .map((supplier) => ({ value: supplier.id, label: supplier.name }))}
             onChange={(supplierId) => {
               const supplier = suppliers.find((item) => item.id === supplierId)
               setExpenseForm({
                 ...expenseForm,
                 supplierId,
-                expenseTypeId: expenseForm.expensePaymentSource === 'bank'
-                  ? getSupplierAccrualExpenseType(supplier, expenseTypes)?.id ?? ''
-                  : expenseForm.expenseTypeId,
-                expenseFundId: expenseForm.expensePaymentSource === 'bank'
-                  ? supplier?.expenseFundId ?? ''
-                  : '',
+                expenseTypeId: getSupplierAccrualExpenseType(supplier, expenseTypes)?.id ?? '',
+                expenseFundId: supplier?.expenseFundId ?? '',
               })
             }} />
           <SelectControl
-            aria-label="Услуга или статья расхода"
+            aria-label="Услуга выплаты"
             value={expenseForm.expenseTypeId}
-            options={expenseForm.expensePaymentSource === 'cash'
-              ? expenseTypes.map((item) => ({ value: item.id, label: item.name }))
-              : expenseForm.expenseTypeId
-                ? [{ value: expenseForm.expenseTypeId, label: expenseTypes.find((item) => item.id === expenseForm.expenseTypeId)?.name ?? 'Настроенная услуга' }]
-                : [{ value: '', label: 'Услуга не настроена' }]}
-            onChange={(expenseTypeId) => setExpenseForm({ ...expenseForm, expenseTypeId })}
-            disabled={expenseForm.expensePaymentSource === 'bank'} />
+            options={expenseForm.expenseTypeId
+              ? [{ value: expenseForm.expenseTypeId, label: expenseTypes.find((item) => item.id === expenseForm.expenseTypeId)?.name ?? 'Настроенная услуга' }]
+              : [{ value: '', label: 'Услуга не настроена' }]}
+            onChange={() => undefined}
+            disabled />
           <SelectControl
             aria-label="Тип выплаты"
             value={expenseForm.expensePaymentType}
             options={expensePaymentTypeOptions}
             onChange={(expensePaymentType) => setExpenseForm({ ...expenseForm, expensePaymentType: expensePaymentType as ExpensePaymentType })} />
-          {expenseForm.expensePaymentSource === 'cash' ? (
-            <p className="form-hint">Источник выплаты: <strong>касса</strong>. Эта операция уменьшает остаток наличных и не изменяет ни один фонд.</p>
-          ) : null}
+          <p className="form-hint">Фонд расходования: <strong>{selectedExpenseSupplier?.expenseFundName ?? 'не настроен'}</strong>. Источник выплаты: <strong>{expenseForm.expensePaymentSource === 'cash' ? 'касса' : 'банковский счёт'}</strong>.</p>
           <div className="inline-fields">
             <LocalizedDatePicker ariaLabel="Дата выплаты" mode="date" value={expenseForm.operationDate} onChange={(operationDate) => setExpenseForm({ ...expenseForm, operationDate })} required />
             <LocalizedDatePicker ariaLabel="Месяц выплаты" mode="month" value={expenseForm.accountingMonth.slice(0, 7)} onChange={(accountingMonth) => setExpenseForm({ ...expenseForm, accountingMonth: `${accountingMonth}-01` })} required />
@@ -2833,7 +2832,7 @@ export function FinancePanel({
                   <dd>{accrualBreakdown.accrual.supplierName}</dd>
                 </div>
                 <div>
-                  <dt>Услуга / статья расхода</dt>
+                  <dt>Услуга</dt>
                   <dd>{accrualBreakdown.accrual.expenseTypeName}</dd>
                 </div>
                 <div>
@@ -2902,44 +2901,6 @@ function formatPaymentPrototypeMonthLabel(value: string) {
   return `${monthLabel}.${match[1].slice(2)}`
 }
 
-function addPaymentPrototypeMonths(value: string, offset: number) {
-  const match = /^(\d{4})-(\d{2})/.exec(value)
-  if (!match) {
-    return value
-  }
-
-  const date = new Date(Number(match[1]), Number(match[2]) - 1 + offset, 1)
-  const year = date.getFullYear()
-  const month = String(date.getMonth() + 1).padStart(2, '0')
-  return `${year}-${month}`
-}
-
-function createPaymentPrototypeMonthOptions(
-  currentMonth = getCurrentMonthInputValue(),
-  availableMonthFrom = addPaymentPrototypeMonths(currentMonth, -3),
-  availableMonthTo = currentMonth,
-  extraMonths: string[] = [],
-) {
-  const rangeMonthCount = Math.max(
-    1,
-    Math.min(
-      600,
-      ((Number(availableMonthTo.slice(0, 4)) - Number(availableMonthFrom.slice(0, 4))) * 12)
-        + Number(availableMonthTo.slice(5, 7))
-        - Number(availableMonthFrom.slice(5, 7))
-        + 1,
-    ),
-  )
-  const values = [
-    ...Array.from({ length: rangeMonthCount }, (_, index) => addPaymentPrototypeMonths(availableMonthTo, -index)),
-    ...extraMonths,
-  ].filter((value, index, source) => value && source.indexOf(value) === index)
-
-  return values.map((value) => {
-    return { value, label: formatMonth(`${value}-01`) }
-  })
-}
-
 function PaymentsPrototypePanel({
   auth,
   canWritePayments,
@@ -3003,6 +2964,11 @@ function PaymentsPrototypePanel({
   useEscapeKey(Boolean(calculationDialogRow), () => setCalculationDialogRow(null))
   useRestoreFocusOnClose(Boolean(calculationDialogRow))
   const calculationDialogInitialFocusRef = useFocusOnOpen<HTMLButtonElement>(Boolean(calculationDialogRow))
+  const [historicalMeterReadingSave, setHistoricalMeterReadingSave] = useState<HistoricalMeterReadingSaveState | null>(null)
+  const historicalMeterReadingDialogRef = useFocusTrap<HTMLElement>(Boolean(historicalMeterReadingSave))
+  useEscapeKey(Boolean(historicalMeterReadingSave), () => setHistoricalMeterReadingSave(null))
+  useRestoreFocusOnClose(Boolean(historicalMeterReadingSave))
+  const historicalMeterReadingInitialFocusRef = useFocusOnOpen<HTMLTextAreaElement>(Boolean(historicalMeterReadingSave))
   const [overdueDebtDetailsExpanded, setOverdueDebtDetailsExpanded] = useState(() => overdueDebtDetailsPreference(auth.user.id))
   const [garageWorksheetSummary, setGarageWorksheetSummary] = useState<GarageIncomeWorksheetPeriodSummary | null>(null)
   const [expenseRows, setExpenseRows] = useState<PaymentPrototypeRow[]>([])
@@ -3084,16 +3050,6 @@ function PaymentsPrototypePanel({
     .slice(0, 20)
   const shouldShowGarageResults = garageSearchOpen
   const garageSearchListId = useId()
-  const incomeWorksheetMonthOptions = useMemo(
-    () => createPaymentPrototypeMonthOptions(
-      getCurrentMonthInputValue(),
-      incomeWorksheetAvailableMonthFrom,
-      incomeWorksheetAvailableMonthTo,
-      [incomeWorksheetMonthFrom, incomeWorksheetMonthTo],
-    ),
-    [incomeWorksheetAvailableMonthFrom, incomeWorksheetAvailableMonthTo, incomeWorksheetMonthFrom, incomeWorksheetMonthTo],
-  )
-
   useEffect(() => {
     const query = garageSearch.trim()
     const requestSequence = ++garageSearchRequestSequenceRef.current
@@ -3413,10 +3369,13 @@ function PaymentsPrototypePanel({
         resolvedMonthTo = period.defaultMonthTo?.slice(0, 7) ?? resolvedAvailableMonthTo
       }
 
-      const worksheet = await financeClient.getGarageIncomeWorksheet(auth.accessToken, garage.id, {
+      const worksheetRequest = {
         monthFrom: `${resolvedMonthFrom}-01`,
         monthTo: `${resolvedMonthTo}-01`,
-      })
+      }
+      const worksheet = canWritePayments && financeClient.calculateGarageIncomeWorksheet
+        ? await financeClient.calculateGarageIncomeWorksheet(auth.accessToken, garage.id, worksheetRequest)
+        : await financeClient.getGarageIncomeWorksheet(auth.accessToken, garage.id, worksheetRequest)
       if (!incomeWorksheetRequests.isLatest(requestId) || selectedGarageIdRef.current !== garage.id) {
         return
       }
@@ -3742,14 +3701,25 @@ function PaymentsPrototypePanel({
       : row))
   }
 
-  async function commitGarageMeterReading(row: GarageIncomePrototypeRow) {
+  async function commitGarageMeterReading(row: GarageIncomePrototypeRow, periodOverrideReason?: string) {
     if (
       !selectedGarage
       || !realGarageIds.has(selectedGarage.id)
       || !row.meterKind
-      || row.month !== getCurrentMonthInputValue()
       || !financeClient.savePaymentFormMeterReading
     ) {
+      return
+    }
+
+    const isCurrentMonth = row.month === getCurrentMonthInputValue()
+    if (!isCurrentMonth && !hasPermission(auth, permissions.historicalMeterReadingsCorrect)) {
+      setGarageRows((currentRows) => currentRows.map((currentRow) => currentRow.id === row.id
+        ? { ...currentRow, meterError: 'Для показаний вне текущего месяца требуется право исторической корректировки.' }
+        : currentRow))
+      return
+    }
+    if (!isCurrentMonth && !periodOverrideReason?.trim()) {
+      setHistoricalMeterReadingSave({ row, reason: '', error: null })
       return
     }
 
@@ -3781,16 +3751,26 @@ function PaymentsPrototypePanel({
       ? { ...currentRow, meterError: null }
       : currentRow))
     try {
-      const savedReading = await financeClient.savePaymentFormMeterReading(auth.accessToken, {
-        garageId: selectedGarage.id,
-        meterKind: row.meterKind,
-        accountingMonth: `${row.month}-01`,
-        readingDate: row.meterReadingDate ?? getLocalDateInputValue(),
-        currentValue,
-        comment: `Показание из формы поступлений: ${row.service} ${row.monthLabel}`,
-        meterReadingId: row.meterReadingId ?? undefined,
-        expectedVersion: row.meterReadingVersion ?? undefined,
-      })
+      const comment = `Показание из формы поступлений: ${row.service} ${row.monthLabel}`
+      const savedReading = !isCurrentMonth && row.meterReadingId && row.meterReadingVersion && financeClient.correctHistoricalMeterReading
+        ? await financeClient.correctHistoricalMeterReading(auth.accessToken, row.meterReadingId, {
+            readingDate: row.meterReadingDate ?? getLocalDateInputValue(),
+            currentValue,
+            comment,
+            reason: periodOverrideReason!.trim(),
+            expectedVersion: row.meterReadingVersion,
+          })
+        : await financeClient.savePaymentFormMeterReading(auth.accessToken, {
+            garageId: selectedGarage.id,
+            meterKind: row.meterKind,
+            accountingMonth: `${row.month}-01`,
+            readingDate: row.meterReadingDate ?? getLocalDateInputValue(),
+            currentValue,
+            comment,
+            meterReadingId: row.meterReadingId ?? undefined,
+            expectedVersion: row.meterReadingVersion ?? undefined,
+            periodOverrideReason: isCurrentMonth ? undefined : periodOverrideReason!.trim(),
+          })
       if (selectedGarageIdRef.current !== selectedGarage.id) {
         return
       }
@@ -3808,7 +3788,8 @@ function PaymentsPrototypePanel({
             meterError: null,
           }
         : currentRow))
-      await loadGarageIncomeWorksheet(selectedGarage)
+      setHistoricalMeterReadingSave(null)
+      await loadGarageIncomeWorksheet(selectedGarage, incomeWorksheetMonthFrom, incomeWorksheetMonthTo)
     } catch (error) {
       if (selectedGarageIdRef.current !== selectedGarage.id) {
         return
@@ -3829,6 +3810,22 @@ function PaymentsPrototypePanel({
     } finally {
       setSavingMeterRowId((currentRowId) => (currentRowId === row.id ? null : currentRowId))
     }
+  }
+
+  async function confirmHistoricalMeterReadingSave() {
+    if (!historicalMeterReadingSave) {
+      return
+    }
+
+    const reason = historicalMeterReadingSave.reason.trim()
+    if (!reason) {
+      setHistoricalMeterReadingSave((current) => current
+        ? { ...current, error: 'Укажите причину ввода или изменения показания вне текущего месяца.' }
+        : current)
+      return
+    }
+
+    await commitGarageMeterReading(historicalMeterReadingSave.row, reason)
   }
 
   function selectFirstGarageResult() {
@@ -4316,9 +4313,9 @@ function PaymentsPrototypePanel({
 
     const expenseType = expenseTypes.find((item) => item.id === request.expenseTypeId && !item.isArchived) ?? null
     if (!expenseType) {
-      return 'Для поставщика должна быть настроена услуга или статья расхода.'
+      return 'Для поставщика должна быть настроена услуга.'
     }
-    if (request.expensePaymentSource === 'bank' && supplier.expenseTypeId !== expenseType.id) {
+    if (supplier.expenseTypeId !== expenseType.id) {
       return `Поставщику «${supplier.name}» можно провести выплату только по настроенной услуге.`
     }
     await financeClient.createExpense(auth.accessToken, {
@@ -4326,7 +4323,7 @@ function PaymentsPrototypePanel({
       expenseTypeId: expenseType.id,
       expensePaymentType: request.expensePaymentType,
       expensePaymentSource: request.expensePaymentSource,
-      expenseFundId: request.expensePaymentSource === 'bank' ? request.expenseFundId || undefined : undefined,
+      expenseFundId: request.expenseFundId || undefined,
       operationDate: request.operationDate,
       accountingMonth: request.accountingMonth,
       amount: request.amount,
@@ -4816,11 +4813,11 @@ function PaymentsPrototypePanel({
             <div className="payments-prototype-period-row">
               <label>
                 <span>Месяц с</span>
-                <SelectControl aria-label="Месяц поступлений с" value={incomeWorksheetMonthFrom} options={incomeWorksheetMonthOptions} onChange={handleIncomeWorksheetMonthFromChange} />
+                <LocalizedDatePicker ariaLabel="Месяц поступлений с" mode="month" value={incomeWorksheetMonthFrom} onChange={handleIncomeWorksheetMonthFromChange} />
               </label>
               <label>
                 <span>Месяц по</span>
-                <SelectControl aria-label="Месяц поступлений по" value={incomeWorksheetMonthTo} options={incomeWorksheetMonthOptions} onChange={handleIncomeWorksheetMonthToChange} />
+                <LocalizedDatePicker ariaLabel="Месяц поступлений по" mode="month" value={incomeWorksheetMonthTo} onChange={handleIncomeWorksheetMonthToChange} />
               </label>
               <ReportPeriodQuickSelect
                 mode="month"
@@ -4889,7 +4886,10 @@ function PaymentsPrototypePanel({
                             <td />
                             <td>{row.service}</td>
                             <td className={row.meterRequired && row.meter === null ? 'payments-prototype-required-cell' : undefined}>
-                              {row.meterKind && row.month === getCurrentMonthInputValue() && canWritePayments && financeClient.savePaymentFormMeterReading ? (
+                              {row.meterKind && canWritePayments && financeClient.savePaymentFormMeterReading && (
+                                row.month === getCurrentMonthInputValue()
+                                || hasPermission(auth, permissions.historicalMeterReadingsCorrect)
+                              ) ? (
                                 <div className="payments-prototype-meter-editor">
                                   <MeterReadingInput
                                     className="payments-prototype-meter-input"
@@ -5241,6 +5241,70 @@ function PaymentsPrototypePanel({
                 <p>Для этой ранее созданной записи подробная тарифная формула не сохранялась. Сумма показана без пересчёта и не изменяет начисление, оплату или задолженность.</p>
               </div>
             )}
+          </section>
+        </div>
+      ) : null}
+      {historicalMeterReadingSave ? (
+        <div className="modal-backdrop" role="presentation" onMouseDown={() => {
+          if (savingMeterRowId !== historicalMeterReadingSave.row.id) setHistoricalMeterReadingSave(null)
+        }}>
+          <section
+            ref={historicalMeterReadingDialogRef}
+            className="detail-dialog compact-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-label={`Сохранить показание ${historicalMeterReadingSave.row.service} за ${historicalMeterReadingSave.row.monthLabel}`}
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            <div className="detail-dialog-header">
+              <h3>Показание вне текущего месяца</h3>
+              <button
+                className="icon-button"
+                type="button"
+                aria-label="Закрыть ввод причины показания"
+                disabled={savingMeterRowId === historicalMeterReadingSave.row.id}
+                onClick={() => setHistoricalMeterReadingSave(null)}
+              >
+                <X size={18} aria-hidden="true" />
+              </button>
+            </div>
+            <div className="dialog-body">
+              <p className="form-hint">
+                Показание за {historicalMeterReadingSave.row.monthLabel} изменит неоплаченный расчёт. Причина сохранится в истории изменений.
+              </p>
+              <FormField label="Причина">
+                <textarea
+                  ref={historicalMeterReadingInitialFocusRef}
+                  aria-label="Причина ввода показания вне текущего месяца"
+                  rows={4}
+                  value={historicalMeterReadingSave.reason}
+                  disabled={savingMeterRowId === historicalMeterReadingSave.row.id}
+                  onChange={(event) => setHistoricalMeterReadingSave((current) => current
+                    ? { ...current, reason: event.target.value, error: null }
+                    : current)}
+                />
+              </FormField>
+              {historicalMeterReadingSave.error ? <FormError>{historicalMeterReadingSave.error}</FormError> : null}
+            </div>
+            <div className="dialog-actions">
+              <button
+                className="primary-button"
+                type="button"
+                disabled={savingMeterRowId === historicalMeterReadingSave.row.id}
+                onClick={() => void confirmHistoricalMeterReadingSave()}
+              >
+                <Save size={16} aria-hidden="true" />
+                {savingMeterRowId === historicalMeterReadingSave.row.id ? 'Сохраняем…' : 'Сохранить показание'}
+              </button>
+              <button
+                className="secondary-button"
+                type="button"
+                disabled={savingMeterRowId === historicalMeterReadingSave.row.id}
+                onClick={() => setHistoricalMeterReadingSave(null)}
+              >
+                Отмена
+              </button>
+            </div>
           </section>
         </div>
       ) : null}
@@ -5745,16 +5809,14 @@ function NewExpensePrototypeDialog({
     ? expenseTypes.find((expenseType) => expenseType.name.trim().toLocaleLowerCase('ru-RU') === preset.expenseTypeName?.trim().toLocaleLowerCase('ru-RU'))
     : null
   const isCashExpense = preset.expensePaymentSource === 'cash'
-  const availableSuppliers = isCashExpense
-    ? suppliers
-    : suppliers.filter((supplier) => Boolean(getSupplierAccrualExpenseType(supplier, expenseTypes) && supplier.expenseFundId))
+  const availableSuppliers = suppliers.filter((supplier) => Boolean(
+    getSupplierAccrualExpenseType(supplier, expenseTypes) && supplier.expenseFundId,
+  ))
   const initialSupplier = availableSuppliers.find((supplier) => supplier.expenseTypeId === presetExpenseType?.id)
-    ?? (isCashExpense ? availableSuppliers[0] : getFirstLinkedSupplier(availableSuppliers, expenseTypes))
+    ?? getFirstLinkedSupplier(availableSuppliers, expenseTypes)
   const [supplierId, setSupplierId] = useState(initialSupplier?.id ?? '')
   const [expenseTypeId, setExpenseTypeId] = useState(
-    isCashExpense
-      ? presetExpenseType?.id ?? expenseTypes[0]?.id ?? ''
-      : getSupplierAccrualExpenseType(initialSupplier, expenseTypes)?.id ?? '',
+    getSupplierAccrualExpenseType(initialSupplier, expenseTypes)?.id ?? '',
   )
   const [expenseFundId, setExpenseFundId] = useState(initialSupplier?.expenseFundId ?? '')
   const [expensePaymentType, setExpensePaymentType] = useState<ExpensePaymentType>('with_receipt')
@@ -5776,10 +5838,10 @@ function NewExpensePrototypeDialog({
       return
     }
     if (!expenseTypeId) {
-      setError('Для поставщика должна быть настроена услуга или статья расхода.')
+      setError('Для поставщика должна быть настроена услуга.')
       return
     }
-    if (!isCashExpense && !selectedSupplier?.expenseFundId) {
+    if (!selectedSupplier?.expenseFundId) {
       setError('Для услуги поставщика должен быть настроен фонд расходования.')
       return
     }
@@ -5796,7 +5858,7 @@ function NewExpensePrototypeDialog({
       return
     }
     const availableFundBalance = selectedSupplier?.expenseFundBalance ?? 0
-    if (!isCashExpense && parsedAmount > availableFundBalance) {
+    if (parsedAmount > availableFundBalance) {
       setError('В фонде расходования недостаточно средств для этой выплаты.')
       return
     }
@@ -5809,7 +5871,7 @@ function NewExpensePrototypeDialog({
         expenseTypeId,
         expensePaymentType,
         expensePaymentSource: preset.expensePaymentSource,
-        expenseFundId: isCashExpense ? '' : expenseFundId,
+        expenseFundId,
         operationDate,
         accountingMonth: `${accountingMonth}-01`,
         amount: parsedAmount,
@@ -5852,38 +5914,31 @@ function NewExpensePrototypeDialog({
               onChange={(nextSupplierId) => {
                 setSupplierId(nextSupplierId)
                 const nextSupplier = suppliers.find((supplier) => supplier.id === nextSupplierId)
-                if (!isCashExpense) {
-                  setExpenseTypeId(getSupplierAccrualExpenseType(nextSupplier, expenseTypes)?.id ?? '')
-                  setExpenseFundId(nextSupplier?.expenseFundId ?? '')
-                }
+                setExpenseTypeId(getSupplierAccrualExpenseType(nextSupplier, expenseTypes)?.id ?? '')
+                setExpenseFundId(nextSupplier?.expenseFundId ?? '')
                 setError(null)
               }} />
           </FormField>
-          <FormField label="Услуга / статья расхода">
+          <FormField label="Услуга">
             <SelectControl
-              aria-label="Услуга или статья расхода выплаты"
+              aria-label="Услуга выплаты поставщику"
               value={expenseTypeId}
-              options={isCashExpense
-                ? expenseTypes.map((expenseType) => ({ value: expenseType.id, label: expenseType.name }))
-                : expenseTypeId
-                  ? [{ value: expenseTypeId, label: expenseTypes.find((expenseType) => expenseType.id === expenseTypeId)?.name ?? 'Настроенная услуга' }]
-                  : [{ value: '', label: 'Услуга не настроена' }]}
+              options={expenseTypeId
+                ? [{ value: expenseTypeId, label: expenseTypes.find((expenseType) => expenseType.id === expenseTypeId)?.name ?? 'Настроенная услуга' }]
+                : [{ value: '', label: 'Услуга не настроена' }]}
               onChange={(nextExpenseTypeId) => {
                 setExpenseTypeId(nextExpenseTypeId)
                 setError(null)
               }}
-              disabled={!isCashExpense || saving} />
+              disabled />
           </FormField>
-          {!isCashExpense ? (
-            <p className="form-hint">
-              Фонд расходования: {selectedSupplier?.expenseFundName ?? 'не настроен'}
-              {selectedSupplier?.expenseFundId
-                ? ` · доступно ${formatMoney(selectedSupplier.expenseFundBalance ?? 0)}`
-                : ''}
-            </p>
-          ) : null}
+          <p className="form-hint">
+            Фонд расходования: {selectedSupplier?.expenseFundName ?? 'не настроен'}
+            {selectedSupplier?.expenseFundId
+              ? ` · доступно ${formatMoney(selectedSupplier.expenseFundBalance ?? 0)}`
+              : ''}
+          </p>
           <p className="form-hint">Источник выплаты: <strong>{isCashExpense ? 'касса' : 'банковский счёт'}</strong>.</p>
-          {isCashExpense ? <p className="form-hint">Кассовая выплата не использует и не требует фонд расходования.</p> : null}
           {isCashExpense ? (
             <FormField label="Тип выплаты">
               <SelectControl

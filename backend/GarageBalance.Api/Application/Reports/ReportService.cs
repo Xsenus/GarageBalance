@@ -1355,7 +1355,7 @@ public sealed class ReportService(
             [
                 new XlsxSheet(
                     "Поступления",
-                    ["Тип", "Дата", "Месяц учета", "Гараж", "Владелец", "Вид поступления", "Начислено", "Оплачено", "Разница", "Остаток после платежа", "Документ", "Комментарий"],
+                    ["Тип", "Дата", "Месяц учета", "Гараж", "Владелец", "Назначение поступления", "Начислено", "Оплачено", "Разница", "Остаток после платежа", "Документ", "Комментарий"],
                     report.Rows.Select(row => (IReadOnlyList<XlsxCell>)
                     [
                         XlsxCell.Text(FormatIncomeRowType(row.RowType)),
@@ -1423,7 +1423,7 @@ public sealed class ReportService(
                     null,
                     [
                         new("Тип", 0.8f), new("Дата", 0.8f, false, true), new("Месяц", 0.7f, false, true), new("Гараж", 0.6f, false, true),
-                        new("Владелец", 1.4f), new("Вид поступления", 1.3f), new("Начислено", 0.8f, true),
+                        new("Владелец", 1.4f), new("Назначение", 1.3f), new("Начислено", 0.8f, true),
                         new("Оплачено", 0.8f, true), new("Разница", 0.8f, true), new("Долг после оплаты", 0.9f, true),
                         new("Документ", 0.9f), new("Комментарий", 1.3f)
                     ],
@@ -1472,7 +1472,7 @@ public sealed class ReportService(
             [
                 new XlsxSheet(
                     "Выплаты",
-                    ["Тип", "Дата", "Месяц учета", "Поставщик или сотрудник", "Услуга / статья расхода", "Начислено", "Выплачено", "Разница", "Документ", "Комментарий"],
+                    ["Тип", "Дата", "Месяц учета", "Поставщик или сотрудник", "Услуга", "Начислено", "Выплачено", "Разница", "Документ", "Комментарий"],
                     report.Rows.Select(row => (IReadOnlyList<XlsxCell>)
                     [
                         XlsxCell.Text(FormatExpenseRowType(row.RowType)),
@@ -1538,7 +1538,7 @@ public sealed class ReportService(
                     null,
                     [
                         new("Тип", 0.8f), new("Дата", 0.8f, false, true), new("Месяц", 0.7f, false, true), new("Поставщик / сотрудник", 1.7f),
-                        new("Услуга / статья", 1.5f), new("Начислено", 0.9f, true), new("Выплачено", 0.9f, true),
+                        new("Услуга", 1.5f), new("Начислено", 0.9f, true), new("Выплачено", 0.9f, true),
                         new("Разница", 0.9f, true), new("Документ", 1), new("Комментарий", 1.5f)
                     ],
                     report.Rows.Select(row => (IReadOnlyList<string>)[

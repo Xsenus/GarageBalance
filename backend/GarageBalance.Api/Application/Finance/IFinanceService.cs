@@ -30,6 +30,12 @@ public interface IFinanceService
 
     Task<FinanceResult<GarageIncomeWorksheetDto>> GetGarageIncomeWorksheetAsync(Guid garageId, GarageIncomeWorksheetRequest request, CancellationToken cancellationToken);
 
+    Task<FinanceResult<GarageIncomeWorksheetDto>> CalculateGarageIncomeWorksheetAsync(
+        Guid garageId,
+        GarageIncomeWorksheetRequest request,
+        Guid? actorUserId,
+        CancellationToken cancellationToken);
+
     Task<FinanceResult<ExpenseWorksheetDto>> GetExpenseWorksheetAsync(ExpenseWorksheetRequest request, CancellationToken cancellationToken);
 
     Task<FinanceResult<SupplierOpeningBalanceDto>> GetSupplierOpeningBalanceAsync(Guid supplierId, SupplierOpeningBalanceRequest request, CancellationToken cancellationToken);

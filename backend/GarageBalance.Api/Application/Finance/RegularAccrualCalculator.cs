@@ -36,7 +36,8 @@ public sealed record AccrualCalculationLineDto(
     decimal Amount,
     IReadOnlyList<AccrualCalculationTierDto> Tiers,
     string Formula,
-    bool HasTariff);
+    bool HasTariff,
+    IReadOnlyList<RegularAccrualTariffTier>? TierDefinitions = null);
 
 public sealed record AccrualCalculationDetailsDto(
     int Version,
@@ -105,7 +106,7 @@ public static class RegularAccrualCalculator
                 _ => 0m
             };
             var tierLines = IsMetered(definition) && definition.Tiers.Count > 0
-                ? CalculateTierLines(quantity, definition.Tiers)
+                ? CalculateTierLines(quantity, meterReading!.CurrentValue, definition.Tiers)
                 : [];
             var unroundedAmount = tierLines.Count > 0
                 ? tierLines.Sum(tier => tier.Amount)
@@ -119,6 +120,7 @@ public static class RegularAccrualCalculator
                 TariffCalculationBases.MeterWater or TariffCalculationBases.MeterElectricity => "metered",
                 _ => "no_tariff"
             };
+            var effectiveRate = tierLines.Count > 0 ? tierLines[0].Rate : definition.Rate;
             lines.Add(new AccrualCalculationLineDto(
                 definition.EffectiveFrom,
                 definition.EffectiveTo,
@@ -131,13 +133,14 @@ public static class RegularAccrualCalculator
                 quantity,
                 amount,
                 tierLines,
-                BuildFormula(mode, quantity, definition.Rate, days, monthDays, amount),
-                calculationBase is not null));
+                BuildFormula(mode, quantity, effectiveRate, days, monthDays, amount, meterReading?.CurrentValue),
+                calculationBase is not null,
+                definition.Tiers));
         }
 
         var total = MoneyMath.RoundMoney(lines.Sum(line => line.Amount));
         var details = new AccrualCalculationDetailsDto(
-            1,
+            2,
             month,
             meterReading?.PreviousValue,
             meterReading?.CurrentValue,
@@ -177,7 +180,9 @@ public static class RegularAccrualCalculator
             line.HasTariff ? line.CalculationBase : null,
             line.Rate,
             line.UnitName,
-            line.Tiers.Select(tier => new RegularAccrualTariffTier(tier.To, tier.Rate)).ToArray()))
+            line.TierDefinitions is { Count: > 0 }
+                ? line.TierDefinitions
+                : line.Tiers.Select(tier => new RegularAccrualTariffTier(tier.To, tier.Rate)).ToArray()))
             .ToArray();
 
     private static bool IsMetered(RegularAccrualSegmentDefinition definition) =>
@@ -185,41 +190,46 @@ public static class RegularAccrualCalculator
 
     private static IReadOnlyList<AccrualCalculationTierDto> CalculateTierLines(
         decimal consumption,
+        decimal currentMeterValue,
         IReadOnlyList<RegularAccrualTariffTier> tiers)
     {
-        var result = new List<AccrualCalculationTierDto>();
         var lowerBound = 0m;
         foreach (var tier in tiers)
         {
-            var upperBound = tier.UpperBound ?? consumption;
-            var quantity = Math.Max(Math.Min(consumption, upperBound) - lowerBound, 0m);
-            if (quantity > 0m)
+            if (!tier.UpperBound.HasValue || currentMeterValue <= tier.UpperBound.Value)
             {
-                result.Add(new AccrualCalculationTierDto(
-                    lowerBound == 0m ? 0m : lowerBound + 1m,
+                return
+                [
+                    new AccrualCalculationTierDto(
+                    lowerBound,
                     tier.UpperBound,
-                    quantity,
+                    consumption,
                     tier.Rate,
-                    MoneyMath.RoundMoney(quantity * tier.Rate)));
+                    MoneyMath.RoundMoney(consumption * tier.Rate))
+                ];
             }
 
-            if (!tier.UpperBound.HasValue || consumption <= upperBound)
-            {
-                break;
-            }
-
-            lowerBound = upperBound;
+            lowerBound = tier.UpperBound.Value;
         }
 
-        return result;
+        var fallback = tiers[^1];
+        return
+        [
+            new AccrualCalculationTierDto(
+                lowerBound,
+                fallback.UpperBound,
+                consumption,
+                fallback.Rate,
+                MoneyMath.RoundMoney(consumption * fallback.Rate))
+        ];
     }
 
-    private static string BuildFormula(string mode, decimal quantity, decimal rate, int days, int monthDays, decimal amount) => mode switch
+    private static string BuildFormula(string mode, decimal quantity, decimal rate, int days, int monthDays, decimal amount, decimal? currentMeterValue) => mode switch
     {
         "fixed" => $"{rate.ToString("0.####", RussianCulture)} × {days}/{monthDays} = {amount.ToString("0.00", RussianCulture)}",
         "people" => $"{rate.ToString("0.####", RussianCulture)} × {quantity.ToString("0.####", RussianCulture)} чел. = {amount.ToString("0.00", RussianCulture)}",
         "metered" => $"{quantity.ToString("0.###", RussianCulture)} × {rate.ToString("0.####", RussianCulture)} = {amount.ToString("0.00", RussianCulture)}",
-        "metered_tiered" => $"{quantity.ToString("0.###", RussianCulture)} по пороговой сетке = {amount.ToString("0.00", RussianCulture)}",
+        "metered_tiered" => $"{quantity.ToString("0.###", RussianCulture)} × {rate.ToString("0.####", RussianCulture)} (текущее показание {currentMeterValue?.ToString("0.###", RussianCulture) ?? "—"}) = {amount.ToString("0.00", RussianCulture)}",
         _ => "Тариф на этот участок не задан: 0,00"
     };
 }

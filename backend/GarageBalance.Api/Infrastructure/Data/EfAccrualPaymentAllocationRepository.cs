@@ -145,6 +145,24 @@ public sealed class EfAccrualPaymentAllocationRepository(GarageBalanceDbContext 
             cancellationToken);
     }
 
+    public async Task<IReadOnlySet<Guid>> GetActivelyAllocatedAccrualIdsAsync(
+        IReadOnlyCollection<Guid> accrualIds,
+        CancellationToken cancellationToken)
+    {
+        if (accrualIds.Count == 0)
+        {
+            return new HashSet<Guid>();
+        }
+
+        return await dbContext.AccrualPaymentAllocations.AsNoTracking()
+            .Where(allocation =>
+                allocation.IsActive &&
+                accrualIds.Contains(allocation.AccrualId) &&
+                !allocation.FinancialOperation.IsCanceled)
+            .Select(allocation => allocation.AccrualId)
+            .ToHashSetAsync(cancellationToken);
+    }
+
     private IQueryable<AllocationLedgerRow> BuildLedgerQuery(IReadOnlyCollection<AccrualPaymentAllocationKey> keys)
     {
         var garageIds = keys.Select(key => key.GarageId).Distinct().ToArray();

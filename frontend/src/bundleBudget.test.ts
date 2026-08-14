@@ -9,6 +9,7 @@ describe('frontend bundle budget gate', () => {
     scripts: Record<string, string>
   }
   const budgetScript = readFileSync(resolve(process.cwd(), 'scripts', 'check-bundle-budget.mjs'), 'utf8')
+  const viteConfig = readFileSync(resolve(process.cwd(), 'vite.config.ts'), 'utf8')
 
   it('exposes an npm script that can run after production build', () => {
     expect(packageJson.scripts['check:bundle']).toBe('node scripts/check-bundle-budget.mjs')
@@ -20,5 +21,10 @@ describe('frontend bundle budget gate', () => {
     expect(budgetScript).toContain('mainCssGzipBytes: 40 * 1024')
     expect(budgetScript).toContain('totalAssetsGzipBytes: 262 * 1024')
     expect(budgetScript).toContain('gzipSync')
+  })
+
+  it('groups the compact release panel with reporting instead of creating a separate tiny chunk', () => {
+    expect(viteConfig).toContain('releases[/\\\\]ReleasePanel')
+    expect(viteConfig).toContain("return 'reporting'")
   })
 })

@@ -74,7 +74,7 @@ public sealed class FinanceService(
         ["supplier"] = "Поставщик",
         ["staffMember"] = "Сотрудник",
         ["incomeType"] = "Вид поступления",
-        ["expenseType"] = "Услуга / статья расхода",
+        ["expenseType"] = "Услуга",
         ["expensePaymentType"] = "Тип выплаты",
         ["expensePaymentSource"] = "Источник выплаты",
         ["source"] = "Источник",
@@ -637,6 +637,320 @@ public sealed class FinanceService(
             closingBalance,
             closingDebt,
             rows));
+    }
+
+    public async Task<FinanceResult<GarageIncomeWorksheetDto>> CalculateGarageIncomeWorksheetAsync(
+        Guid garageId,
+        GarageIncomeWorksheetRequest request,
+        Guid? actorUserId,
+        CancellationToken cancellationToken)
+    {
+        var defaultMonth = GetCurrentAccountingMonth();
+        var monthTo = MonthPeriod.Normalize(request.MonthTo ?? defaultMonth);
+        var monthFrom = MonthPeriod.Normalize(request.MonthFrom ?? monthTo);
+        if (monthFrom > monthTo)
+        {
+            return FinanceResult<GarageIncomeWorksheetDto>.Failure(
+                "income_worksheet_period_invalid",
+                "Месяц начала формы поступлений не может быть позже месяца окончания.");
+        }
+
+        var monthCount = ((monthTo.Year - monthFrom.Year) * 12) + monthTo.Month - monthFrom.Month + 1;
+        if (monthCount > MaxBalanceHistoryMonths)
+        {
+            return FinanceResult<GarageIncomeWorksheetDto>.Failure(
+                "income_worksheet_period_too_large",
+                $"Форму поступлений можно построить максимум за {MaxBalanceHistoryMonths} месяцев.");
+        }
+
+        var garage = await garageRepository.FindActiveWithOwnerAsync(garageId, cancellationToken);
+        if (garage is null)
+        {
+            return FinanceResult<GarageIncomeWorksheetDto>.Failure(
+                "garage_not_found",
+                "Гараж для расчета поступлений не найден.");
+        }
+
+        var settings = (await chargeServiceSettingRepository.GetActiveRegularAsync(monthTo, cancellationToken))
+            .Where(setting => setting.IncomeTypeId.HasValue)
+            .GroupBy(setting => setting.IncomeTypeId!.Value)
+            .Select(group => group.First())
+            .ToArray();
+        var incomeTypes = (await incomeTypeRepository.GetActiveByIdsAsync(
+                settings.Select(setting => setting.IncomeTypeId!.Value).ToArray(),
+                cancellationToken))
+            .ToDictionary(incomeType => incomeType.Id);
+        var meterKinds = settings
+            .Select(setting => MeterKinds.IsValid(setting.MeterKind) ? setting.MeterKind : null)
+            .Where(meterKind => meterKind is not null)
+            .Select(meterKind => meterKind!)
+            .Append(MeterKinds.Water)
+            .Append(MeterKinds.Electricity)
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+        var meterReadings = (await meterReadingRepository.GetActiveForGaragePeriodAsync(
+                garage.Id,
+                monthFrom,
+                monthTo,
+                meterKinds,
+                cancellationToken))
+            .ToDictionary(reading => (reading.AccountingMonth, reading.MeterKind));
+        var existingAccruals = await accrualRepository.GetActiveRegularForGarageForUpdateAsync(
+            garage.Id,
+            monthFrom,
+            monthTo,
+            cancellationToken);
+        var allocationKeys = settings
+            .Where(setting => incomeTypes.ContainsKey(setting.IncomeTypeId!.Value))
+            .Select(setting => new AccrualPaymentAllocationKey(garage.Id, setting.IncomeTypeId!.Value))
+            .Concat(existingAccruals.Select(accrual => new AccrualPaymentAllocationKey(garage.Id, accrual.IncomeTypeId)))
+            .Distinct()
+            .ToArray();
+        await using var allocationLock = await accrualPaymentAllocationRepository.AcquireRebuildLockAsync(
+            allocationKeys,
+            cancellationToken);
+
+        var paidAccrualIds = await accrualPaymentAllocationRepository.GetActivelyAllocatedAccrualIdsAsync(
+            existingAccruals.Select(accrual => accrual.Id).ToArray(),
+            cancellationToken);
+        var monthlyAccruals = existingAccruals
+            .Where(accrual => !accrual.AccountingYear.HasValue)
+            .GroupBy(accrual => (accrual.AccountingMonth, accrual.IncomeTypeId))
+            .ToDictionary(group => group.Key, group => group.First());
+        var annualAccruals = existingAccruals
+            .Where(accrual => accrual.AccountingYear.HasValue)
+            .GroupBy(accrual => (AccountingYear: accrual.AccountingYear!.Value, accrual.IncomeTypeId))
+            .ToDictionary(group => group.Key, group => group.First());
+        var changedKeys = new HashSet<AccrualPaymentAllocationKey>();
+
+        for (var month = monthFrom; month <= monthTo; month = month.AddMonths(1))
+        {
+            foreach (var setting in settings)
+            {
+                if (!setting.IncomeTypeId.HasValue ||
+                    !incomeTypes.TryGetValue(setting.IncomeTypeId.Value, out var incomeType) ||
+                    !IsChargeServiceDueForMonth(setting, month))
+                {
+                    continue;
+                }
+
+                var tariff = SelectTariffForMonth(setting, month);
+                if (tariff is null)
+                {
+                    continue;
+                }
+
+                var accountingYear = AnnualAccrualPolicy.ResolveAccountingYear(incomeType.Code, month);
+                var existing = accountingYear.HasValue
+                    ? annualAccruals.GetValueOrDefault((accountingYear.Value, incomeType.Id))
+                    : monthlyAccruals.GetValueOrDefault((month, incomeType.Id));
+                if (existing is not null && paidAccrualIds.Contains(existing.Id))
+                {
+                    continue;
+                }
+
+                var segments = BuildRegularAccrualSegments(month, setting, tariff);
+                var meteredBase = segments
+                    .Select(segment => segment.CalculationBase)
+                    .FirstOrDefault(calculationBase =>
+                        calculationBase is TariffCalculationBases.MeterWater or TariffCalculationBases.MeterElectricity);
+                var meterKind = meteredBase is not null && MeterKinds.IsValid(setting.MeterKind)
+                    ? setting.MeterKind
+                    : meteredBase switch
+                    {
+                        TariffCalculationBases.MeterWater => MeterKinds.Water,
+                        TariffCalculationBases.MeterElectricity => MeterKinds.Electricity,
+                        _ => null
+                    };
+                var meterReading = meterKind is null
+                    ? null
+                    : meterReadings.GetValueOrDefault((month, meterKind));
+                var calculation = RegularAccrualCalculator.Calculate(garage, month, meterReading, segments);
+                if (!calculation.Succeeded)
+                {
+                    // Missing calculation inputs (for example, a meter reading) must not erase an
+                    // already issued unpaid obligation. Keep it visible until a successful
+                    // recalculation can replace the amount.
+                    continue;
+                }
+
+                if (calculation.Amount <= 0m)
+                {
+                    if (existing is not null)
+                    {
+                        existing.IsCanceled = true;
+                        existing.UpdatedAtUtc = timeProvider.GetUtcNow();
+                        AddAudit(
+                            actorUserId,
+                            "finance.regular_accrual_excluded_from_worksheet_recalculation",
+                            existing,
+                            $"Неоплаченное начисление исключено при повторном расчете за {month:MM.yyyy}: сумма стала нулевой.");
+                        changedKeys.Add(new AccrualPaymentAllocationKey(garage.Id, incomeType.Id));
+                    }
+
+                    continue;
+                }
+
+                var dueDates = AccrualDueDates.ForIncomeType(month, incomeType.Code, setting);
+                var detailsJson = RegularAccrualCalculator.Serialize(calculation.Details!);
+                var useTieredTariff = segments.Any(segment => segment.Tiers.Count > 0);
+                if (existing is null)
+                {
+                    existing = new Accrual
+                    {
+                        GarageId = garage.Id,
+                        Garage = garage,
+                        IncomeTypeId = incomeType.Id,
+                        IncomeType = incomeType,
+                        TariffId = tariff.Id,
+                        AccountingMonth = month,
+                        AccountingYear = accountingYear,
+                        DueDate = dueDates.DueDate,
+                        OverdueFromDate = dueDates.OverdueFromDate,
+                        Amount = calculation.Amount,
+                        RequiresMeterReading = calculation.Details!.RequiresMeter,
+                        CalculationMeterKind = calculation.Details.RequiresMeter ? meterKind : null,
+                        CalculationDetailsJson = detailsJson,
+                        Source = AccrualSources.Regular,
+                        Comment = BuildRegularAccrualComment(
+                            tariff,
+                            "Расчет из формы платежей гаража",
+                            useTieredTariff)
+                    };
+                    accrualRepository.Add(existing);
+                    if (accountingYear.HasValue)
+                    {
+                        annualAccruals[(accountingYear.Value, incomeType.Id)] = existing;
+                    }
+                    else
+                    {
+                        monthlyAccruals[(month, incomeType.Id)] = existing;
+                    }
+
+                    AddAudit(
+                        actorUserId,
+                        "finance.regular_accrual_calculated_for_garage_worksheet",
+                        existing,
+                        $"Для гаража {garage.Number} рассчитано регулярное начисление «{setting.Name}» за {month:MM.yyyy}: {MoneyFormatting.Format(calculation.Amount)}.");
+                    changedKeys.Add(new AccrualPaymentAllocationKey(garage.Id, incomeType.Id));
+                    continue;
+                }
+
+                if (existing.Amount == calculation.Amount &&
+                    existing.TariffId == tariff.Id &&
+                    existing.DueDate == dueDates.DueDate &&
+                    existing.OverdueFromDate == dueDates.OverdueFromDate &&
+                    string.Equals(existing.CalculationDetailsJson, detailsJson, StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                var oldAmount = existing.Amount;
+                existing.TariffId = tariff.Id;
+                existing.Tariff = null;
+                existing.DueDate = dueDates.DueDate;
+                existing.OverdueFromDate = dueDates.OverdueFromDate;
+                existing.Amount = calculation.Amount;
+                existing.RequiresMeterReading = calculation.Details!.RequiresMeter;
+                existing.CalculationMeterKind = calculation.Details.RequiresMeter ? meterKind : null;
+                existing.CalculationDetailsJson = detailsJson;
+                existing.Comment = BuildRegularAccrualComment(
+                    tariff,
+                    "Повторный расчет из формы платежей гаража",
+                    useTieredTariff);
+                existing.UpdatedAtUtc = timeProvider.GetUtcNow();
+                AddAudit(
+                    actorUserId,
+                    "finance.regular_accrual_recalculated_for_garage_worksheet",
+                    existing,
+                    $"Неоплаченное начисление «{setting.Name}» за {month:MM.yyyy} пересчитано: {MoneyFormatting.Format(oldAmount)} → {MoneyFormatting.Format(calculation.Amount)}.",
+                    new Dictionary<string, object?> { ["amount"] = oldAmount },
+                    new Dictionary<string, object?> { ["amount"] = calculation.Amount });
+                changedKeys.Add(new AccrualPaymentAllocationKey(garage.Id, incomeType.Id));
+            }
+        }
+
+        if (changedKeys.Count > 0)
+        {
+            await RebuildPaymentAllocationsAsync(
+                changedKeys.ToArray(),
+                actorUserId,
+                "Расчет ведомости поступлений гаража",
+                garage.Id,
+                cancellationToken);
+            await unitOfWork.SaveChangesAsync(cancellationToken);
+        }
+
+        var worksheet = await GetGarageIncomeWorksheetAsync(garageId, request, cancellationToken);
+        if (!worksheet.Succeeded || worksheet.Value is null)
+        {
+            return worksheet;
+        }
+
+        var rows = worksheet.Value.Rows.ToList();
+        for (var month = monthFrom; month <= monthTo; month = month.AddMonths(1))
+        {
+            foreach (var setting in settings)
+            {
+                if (!setting.IncomeTypeId.HasValue ||
+                    !incomeTypes.TryGetValue(setting.IncomeTypeId.Value, out var incomeType) ||
+                    !IsChargeServiceDueForMonth(setting, month))
+                {
+                    continue;
+                }
+
+                var tariff = SelectTariffForMonth(setting, month);
+                if (tariff is null)
+                {
+                    continue;
+                }
+
+                var segments = BuildRegularAccrualSegments(month, setting, tariff);
+                var meteredBase = segments
+                    .Select(segment => segment.CalculationBase)
+                    .FirstOrDefault(calculationBase =>
+                        calculationBase is TariffCalculationBases.MeterWater or TariffCalculationBases.MeterElectricity);
+                if (meteredBase is null || rows.Any(row =>
+                        row.AccountingMonth == month &&
+                        row.IncomeTypeId == incomeType.Id))
+                {
+                    continue;
+                }
+
+                var meterKind = MeterKinds.IsValid(setting.MeterKind)
+                    ? setting.MeterKind
+                    : meteredBase switch
+                    {
+                        TariffCalculationBases.MeterWater => MeterKinds.Water,
+                        TariffCalculationBases.MeterElectricity => MeterKinds.Electricity,
+                        _ => null
+                    };
+                rows.Add(new GarageIncomeWorksheetRowDto(
+                    month,
+                    incomeType.Id,
+                    incomeType.Name,
+                    null,
+                    meterKind,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    0m,
+                    0m,
+                    0m,
+                    0m,
+                    0m));
+            }
+        }
+
+        return FinanceResult<GarageIncomeWorksheetDto>.Success(worksheet.Value with
+        {
+            Rows = rows
+                .OrderByDescending(row => row.AccountingMonth)
+                .ThenBy(row => row.IncomeTypeName, StringComparer.OrdinalIgnoreCase)
+                .ToList()
+        });
     }
 
     public async Task<FinanceResult<ExpenseWorksheetDto>> GetExpenseWorksheetAsync(ExpenseWorksheetRequest request, CancellationToken cancellationToken)
@@ -1607,7 +1921,7 @@ public sealed class FinanceService(
         var expenseType = await expenseTypeRepository.FindActiveAsync(request.ExpenseTypeId, cancellationToken);
         if (expenseType is null)
         {
-            return FinanceResult<FinancialOperationDto>.Failure("expense_type_not_found", "Услуга или статья расхода не найдена.");
+            return FinanceResult<FinancialOperationDto>.Failure("expense_type_not_found", "Услуга не найдена.");
         }
 
         var expensePaymentType = NormalizeExpensePaymentType(request.ExpensePaymentType);
@@ -1629,34 +1943,22 @@ public sealed class FinanceService(
         var isCashExpense = expensePaymentSource == ExpensePaymentSources.Cash;
         var configuredExpenseFundId = GetSupplierExpenseFundId(supplier);
         var configuredExpenseFund = GetSupplierExpenseFund(supplier);
-        Guid? expenseFundId;
-        Fund? expenseFund;
-        if (isCashExpense)
+        var supplierExpenseTypeValidation = ValidateSupplierExpenseTypeLinkForPayment(supplier, expenseType);
+        if (supplierExpenseTypeValidation is not null)
         {
-            expenseFundId = null;
-            expenseFund = null;
-        }
-        else
-        {
-            var supplierExpenseTypeValidation = ValidateSupplierExpenseTypeLinkForPayment(supplier, expenseType);
-            if (supplierExpenseTypeValidation is not null)
-            {
-                return supplierExpenseTypeValidation;
-            }
-
-            expenseFundId = configuredExpenseFundId;
-            expenseFund = configuredExpenseFund;
-            if (request.ExpenseFundId.HasValue && request.ExpenseFundId != expenseFundId)
-            {
-                return FinanceResult<FinancialOperationDto>.Failure(
-                    "supplier_expense_fund_mismatch",
-                    "Регулярная выплата должна использовать фонд настроенной услуги поставщика.");
-            }
+            return supplierExpenseTypeValidation;
         }
 
-        await using var fundDisbursementLock = isCashExpense
-            ? null
-            : await expenseFundDisbursementService.AcquireUpdateLockAsync(cancellationToken);
+        var expenseFundId = configuredExpenseFundId;
+        var expenseFund = configuredExpenseFund;
+        if (request.ExpenseFundId.HasValue && request.ExpenseFundId != expenseFundId)
+        {
+            return FinanceResult<FinancialOperationDto>.Failure(
+                "supplier_expense_fund_mismatch",
+                "Выплата должна использовать фонд настроенной услуги поставщика.");
+        }
+
+        await using var fundDisbursementLock = await expenseFundDisbursementService.AcquireUpdateLockAsync(cancellationToken);
         await using var balanceLock = await financeAvailableBalanceQuery.AcquireUpdateLockAsync(
             isCashExpense ? FinanceBalanceAccounts.Cash : FinanceBalanceAccounts.Bank,
             cancellationToken);
@@ -1737,19 +2039,16 @@ public sealed class FinanceService(
             AddAudit(actorUserId, "finance.expense_created", operation, FormatExpenseCreatedAuditSummary(operation));
         }
 
-        if (!isCashExpense)
+        var fundDisbursementResult = await expenseFundDisbursementService.CreateAsync(
+            operation,
+            supplier.Name,
+            actorUserId,
+            cancellationToken);
+        if (!fundDisbursementResult.Succeeded)
         {
-            var fundDisbursementResult = await expenseFundDisbursementService.CreateAsync(
-                operation,
-                supplier.Name,
-                actorUserId,
-                cancellationToken);
-            if (!fundDisbursementResult.Succeeded)
-            {
-                return FinanceResult<FinancialOperationDto>.Failure(
-                    fundDisbursementResult.ErrorCode!,
-                    fundDisbursementResult.ErrorMessage!);
-            }
+            return FinanceResult<FinancialOperationDto>.Failure(
+                fundDisbursementResult.ErrorCode!,
+                fundDisbursementResult.ErrorMessage!);
         }
 
         await unitOfWork.SaveChangesAsync(cancellationToken);
@@ -1767,7 +2066,7 @@ public sealed class FinanceService(
         var salaryExpenseType = await expenseTypeRepository.FindActiveByCodeAsync("salary", cancellationToken);
         if (salaryExpenseType is null)
         {
-            return FinanceResult<FinancialOperationDto>.Failure("salary_expense_type_not_found", "Системная статья расхода «Зарплата» не найдена.");
+            return FinanceResult<FinancialOperationDto>.Failure("salary_expense_type_not_found", "Системная услуга «Зарплата» не найдена.");
         }
 
         await using var balanceLock = await financeAvailableBalanceQuery.AcquireUpdateLockAsync(
@@ -2137,7 +2436,7 @@ public sealed class FinanceService(
         var expenseType = await expenseTypeRepository.FindActiveAsync(request.ExpenseTypeId, cancellationToken);
         if (expenseType is null)
         {
-            return FinanceResult<FinancialOperationDto>.Failure("expense_type_not_found", "Услуга или статья расхода не найдена.");
+            return FinanceResult<FinancialOperationDto>.Failure("expense_type_not_found", "Услуга не найдена.");
         }
 
         var expensePaymentType = NormalizeExpensePaymentType(request.ExpensePaymentType);
@@ -2159,29 +2458,19 @@ public sealed class FinanceService(
         var isCashExpense = expensePaymentSource == ExpensePaymentSources.Cash;
         var configuredExpenseFundId = GetSupplierExpenseFundId(supplier);
         var configuredExpenseFund = GetSupplierExpenseFund(supplier);
-        Guid? expenseFundId;
-        Fund? expenseFund;
-        if (isCashExpense)
+        var supplierExpenseTypeValidation = ValidateSupplierExpenseTypeLinkForPayment(supplier, expenseType);
+        if (supplierExpenseTypeValidation is not null)
         {
-            expenseFundId = null;
-            expenseFund = null;
+            return supplierExpenseTypeValidation;
         }
-        else
-        {
-            var supplierExpenseTypeValidation = ValidateSupplierExpenseTypeLinkForPayment(supplier, expenseType);
-            if (supplierExpenseTypeValidation is not null)
-            {
-                return supplierExpenseTypeValidation;
-            }
 
-            expenseFundId = configuredExpenseFundId;
-            expenseFund = configuredExpenseFund;
-            if (request.ExpenseFundId.HasValue && request.ExpenseFundId != expenseFundId)
-            {
-                return FinanceResult<FinancialOperationDto>.Failure(
-                    "supplier_expense_fund_mismatch",
-                    "Регулярная выплата должна использовать фонд настроенной услуги поставщика.");
-            }
+        var expenseFundId = configuredExpenseFundId;
+        var expenseFund = configuredExpenseFund;
+        if (request.ExpenseFundId.HasValue && request.ExpenseFundId != expenseFundId)
+        {
+            return FinanceResult<FinancialOperationDto>.Failure(
+                "supplier_expense_fund_mismatch",
+                "Выплата должна использовать фонд настроенной услуги поставщика.");
         }
 
         var resolvedExpenseFundId = expenseFundId;
@@ -2211,9 +2500,8 @@ public sealed class FinanceService(
         }
 
         var wasCashExpense = IsCashExpense(operation);
-        await using var fundDisbursementLock = wasCashExpense && isCashExpense
-            ? null
-            : await expenseFundDisbursementService.AcquireUpdateLockAsync(cancellationToken);
+        var hadExpenseFund = operation.ExpenseFundId.HasValue;
+        await using var fundDisbursementLock = await expenseFundDisbursementService.AcquireUpdateLockAsync(cancellationToken);
         var balanceAccounts = (wasCashExpense ? FinanceBalanceAccounts.Cash : FinanceBalanceAccounts.Bank) |
             (isCashExpense ? FinanceBalanceAccounts.Cash : FinanceBalanceAccounts.Bank);
         await using var balanceLock = await financeAvailableBalanceQuery.AcquireUpdateLockAsync(
@@ -2335,33 +2623,19 @@ public sealed class FinanceService(
             linkedAtomicAccrual.UpdatedAtUtc = DateTimeOffset.UtcNow;
         }
 
-        ExpenseFundDisbursementResult? fundDisbursementResult = null;
-        if (!wasCashExpense && isCashExpense)
-        {
-            fundDisbursementResult = await expenseFundDisbursementService.CancelAsync(
-                operation,
-                "Источник выплаты изменен на кассу",
-                actorUserId,
-                cancellationToken);
-        }
-        else if (wasCashExpense && !isCashExpense)
-        {
-            fundDisbursementResult = await expenseFundDisbursementService.CreateAsync(
-                operation,
-                supplier.Name,
-                actorUserId,
-                cancellationToken);
-        }
-        else if (!isCashExpense)
-        {
-            fundDisbursementResult = await expenseFundDisbursementService.UpdateAsync(
+        var fundDisbursementResult = hadExpenseFund
+            ? await expenseFundDisbursementService.UpdateAsync(
                 operation,
                 resolvedExpenseFundId!.Value,
                 supplier.Name,
                 amount,
                 actorUserId,
+                cancellationToken)
+            : await expenseFundDisbursementService.CreateAsync(
+                operation,
+                supplier.Name,
+                actorUserId,
                 cancellationToken);
-        }
 
         if (fundDisbursementResult is { Succeeded: false })
         {
@@ -3885,7 +4159,7 @@ public sealed class FinanceService(
         var salaryExpenseType = await expenseTypeRepository.FindActiveByCodeAsync("salary", cancellationToken);
         if (salaryExpenseType is null)
         {
-            return FinanceResult<SupplierGroupSalaryAccrualGenerationResultDto>.Failure("salary_expense_type_not_found", "Системная статья расхода «Зарплата» не найдена.");
+            return FinanceResult<SupplierGroupSalaryAccrualGenerationResultDto>.Failure("salary_expense_type_not_found", "Системная услуга «Зарплата» не найдена.");
         }
 
         var suppliers = await supplierRepository.GetActiveByGroupAsync(group.Id, cancellationToken);
@@ -5776,22 +6050,9 @@ public sealed class FinanceService(
             return AmountCalculationResult.Success(MoneyMath.RoundMoney(reading.Consumption * tariff.Rate));
         }
 
-        var amount = 0m;
-        var lowerBound = 0m;
-        foreach (var tier in tiers)
-        {
-            var upperBound = tier.UpperBound ?? reading.Consumption;
-            var volume = Math.Max(Math.Min(reading.Consumption, upperBound) - lowerBound, 0m);
-            amount += volume * tier.Rate;
-            if (!tier.UpperBound.HasValue || reading.Consumption <= upperBound)
-            {
-                break;
-            }
-
-            lowerBound = upperBound;
-        }
-
-        return AmountCalculationResult.Success(MoneyMath.RoundMoney(amount));
+        var activeTier = tiers.FirstOrDefault(tier =>
+            !tier.UpperBound.HasValue || reading.CurrentValue <= tier.UpperBound.Value) ?? tiers[^1];
+        return AmountCalculationResult.Success(MoneyMath.RoundMoney(reading.Consumption * activeTier.Rate));
     }
 
     private static string FormatTariffRateSnapshot(Tariff tariff, bool useTieredTariff = true)
@@ -5806,7 +6067,7 @@ public sealed class FinanceService(
         var details = string.Join(", ", tiers.Select(tier => tier.UpperBound.HasValue
             ? $"до {tier.UpperBound.Value.ToString("0.####", RussianCulture)} {unitName} по {MoneyFormatting.Format(tier.Rate)}"
             : $"свыше по {MoneyFormatting.Format(tier.Rate)}"));
-        return $"пороговый тариф {details}";
+        return $"пороговый тариф по текущему показанию: {details}";
     }
 
     private async Task<IReadOnlyList<ChargeServiceSetting>> GetApplicableMeteredSettingsAsync(
@@ -6618,7 +6879,7 @@ public sealed class FinanceService(
         {
             return FinanceResult<SupplierAccrualDto>.Failure(
                 "supplier_service_expense_type_not_configured",
-                $"Для поставщика «{supplier.Name}» не настроена статья расхода.");
+                $"Для поставщика «{supplier.Name}» не настроена учётная услуга.");
         }
 
         if (supplier.ExpenseTypeId.Value != expenseType.Id)
@@ -6652,7 +6913,7 @@ public sealed class FinanceService(
         {
             return FinanceResult<FinancialOperationDto>.Failure(
                 "supplier_service_expense_type_not_configured",
-                $"Для поставщика «{supplier.Name}» не настроена статья расхода.");
+                $"Для поставщика «{supplier.Name}» не настроена учётная услуга.");
         }
 
         if (supplier.ExpenseTypeId.Value != expenseType.Id)

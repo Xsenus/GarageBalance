@@ -128,6 +128,34 @@ describe('financeApi', () => {
     })
   })
 
+  it('posts the selected arbitrary period to garage worksheet calculation', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      garageId: 'garage-77',
+      garageNumber: '77',
+      monthFrom: '2024-02-01',
+      monthTo: '2024-03-01',
+      rows: [],
+    }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await financeApi.calculateGarageIncomeWorksheet('token', 'garage-77', {
+      monthFrom: '2024-02',
+      monthTo: '2024-03',
+    })
+
+    expect(fetchMock).toHaveBeenCalledWith('/api/finance/garages/garage-77/income-worksheet/calculate', {
+      method: 'POST',
+      body: JSON.stringify({
+        monthFrom: '2024-02-01',
+        monthTo: '2024-03-01',
+      }),
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: 'Bearer token',
+      },
+    })
+  })
+
   it('posts a staff salary adjustment with its required reason', async () => {
     const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({
       id: 'adjustment-1',

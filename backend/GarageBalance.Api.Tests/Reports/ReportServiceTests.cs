@@ -2865,7 +2865,8 @@ public sealed class ReportServiceTests
         var pdfText = ReadPdfText(result.Value.Content);
         Assert.Contains("Отчёт по поступлениям", pdfText);
         Assert.Contains("PKO-1", pdfText);
-        Assert.Contains("Вид поступления", pdfText);
+        Assert.Contains("Назначение", pdfText);
+        Assert.DoesNotContain("Вид поступления", pdfText);
         AssertPdfIsLandscape(result.Value.Content);
     }
 
@@ -2889,6 +2890,8 @@ public sealed class ReportServiceTests
         Assert.Contains("Отчёт по выплатам", pdfText);
         Assert.Contains("RKO-1", pdfText);
         Assert.Contains("Поставщик / сотрудник", pdfText);
+        Assert.Contains("Услуга", pdfText);
+        Assert.DoesNotContain("статья", pdfText, StringComparison.OrdinalIgnoreCase);
         AssertPdfIsLandscape(result.Value.Content);
     }
 

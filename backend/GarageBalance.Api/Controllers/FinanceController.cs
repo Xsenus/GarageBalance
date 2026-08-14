@@ -255,6 +255,24 @@ public sealed class FinanceController(
         return result.Succeeded ? Ok(result.Value) : ToError(result);
     }
 
+    [Authorize(Policy = SystemPermissions.PaymentsWrite)]
+    [HttpPost("garages/{garageId:guid}/income-worksheet/calculate")]
+    [ProducesResponseType<GarageIncomeWorksheetDto>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<GarageIncomeWorksheetDto>> CalculateGarageIncomeWorksheet(
+        Guid garageId,
+        GarageIncomeWorksheetRequest request,
+        CancellationToken cancellationToken)
+    {
+        var result = await financeService.CalculateGarageIncomeWorksheetAsync(
+            garageId,
+            request,
+            GetActorUserId(),
+            cancellationToken);
+        return result.Succeeded ? Ok(result.Value) : ToError(result);
+    }
+
     [HttpGet("suppliers/{supplierId:guid}/opening-balance")]
     [ProducesResponseType<SupplierOpeningBalanceDto>(StatusCodes.Status200OK)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]

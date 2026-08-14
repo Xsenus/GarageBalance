@@ -6937,7 +6937,7 @@ describe('App', () => {
     const selectedExpenseSupplier = within(expenseDialog).getByRole('option', { name: 'Водоканал' })
     expect(selectedExpenseSupplier).toHaveAttribute('aria-selected', 'true')
     await user.click(selectedExpenseSupplier)
-    const expenseType = within(expenseDialog).getByRole('combobox', { name: 'Услуга или статья расхода выплаты' })
+    const expenseType = within(expenseDialog).getByRole('combobox', { name: 'Услуга выплаты поставщику' })
     expect(expenseType).toHaveClass('select-control__trigger')
     expect(expenseType).toHaveTextContent('Электроэнергия')
     expect(expenseType).toBeDisabled()
@@ -6982,14 +6982,20 @@ describe('App', () => {
     await user.click(episodicExpenseButton)
     const atomicExpenseDialog = await screen.findByRole('dialog', { name: 'Выплата эпизодическому поставщику' })
     expect(within(atomicExpenseDialog).getByText(/Источник выплаты:/)).toHaveTextContent('касса')
-    expect(within(atomicExpenseDialog).getByText('Кассовая выплата не использует и не требует фонд расходования.')).toBeInTheDocument()
-    const atomicExpenseType = within(atomicExpenseDialog).getByRole('combobox', { name: 'Услуга или статья расхода выплаты' })
-    expect(atomicExpenseType).not.toBeDisabled()
+    expect(within(atomicExpenseDialog).getByText('Фонд расходования: Водоснабжение · доступно 100 000.00')).toBeInTheDocument()
+    const atomicExpenseType = within(atomicExpenseDialog).getByRole('combobox', { name: 'Услуга выплаты поставщику' })
+    expect(atomicExpenseType).toBeDisabled()
     expect(within(atomicExpenseDialog).queryByRole('combobox', { name: 'Фонд расходования эпизодической выплаты' })).not.toBeInTheDocument()
     const atomicExpensePaymentType = within(atomicExpenseDialog).getByRole('combobox', { name: 'Тип выплаты' })
     await user.click(atomicExpensePaymentType)
     await user.click(within(atomicExpenseDialog).getByRole('option', { name: 'Без чека' }))
-    await user.type(within(atomicExpenseDialog).getByLabelText('Сумма выплаты'), '500')
+    const atomicExpenseAmount = within(atomicExpenseDialog).getByLabelText('Сумма выплаты')
+    await user.type(atomicExpenseAmount, '100001')
+    await user.click(within(atomicExpenseDialog).getByRole('button', { name: 'Провести' }))
+    expect(within(atomicExpenseDialog).getByRole('alert')).toHaveTextContent('В фонде расходования недостаточно средств для этой выплаты.')
+    expect(savedExpenseRequests).toHaveLength(1)
+    await user.clear(atomicExpenseAmount)
+    await user.type(atomicExpenseAmount, '500')
     await user.type(within(atomicExpenseDialog).getByLabelText('Документ выплаты'), 'ADVANCE-ATOMIC')
     await user.click(within(atomicExpenseDialog).getByRole('button', { name: 'Провести' }))
     await waitFor(() => expect(savedExpenseRequests).toHaveLength(2))
@@ -6998,7 +7004,7 @@ describe('App', () => {
       expenseTypeId: electricityExpenseType.id,
       expensePaymentType: 'without_receipt',
       expensePaymentSource: 'cash',
-      expenseFundId: undefined,
+      expenseFundId: 'fund-water',
       amount: 500,
       documentNumber: 'ADVANCE-ATOMIC',
     })
@@ -7485,25 +7491,21 @@ describe('App', () => {
     expect(within(prototype).getByLabelText('Выбранный гараж')).toHaveTextContent('+7 900 111-22-33')
 
     const currentMonth = getTestCurrentMonthInputValue()
-    const twoMonthsAgo = addTestMonths(currentMonth, -2)
     await waitFor(() => expect(getFinancialReportPeriod).toHaveBeenCalledWith('token', { garageId: 'garage-77' }))
     await waitFor(() => expect(getGarageIncomeWorksheet).toHaveBeenCalledWith('token', 'garage-77', {
       monthFrom: '2024-05-01',
       monthTo: `${currentMonth}-01`,
     }))
-    const monthFromControl = within(prototype).getByRole('combobox', { name: 'Месяц поступлений с' })
-    expect(monthFromControl).toHaveTextContent('05.2024')
-    await user.click(monthFromControl)
-    expect(within(prototype).getByRole('option', { name: '02.2024' })).toBeInTheDocument()
-    expect(within(prototype).getByRole('option', { name: '03.2024' })).toBeInTheDocument()
-    await user.click(within(prototype).getAllByRole('option')[2])
+    const monthFromControl = within(prototype).getByRole('textbox', { name: 'Месяц поступлений с' })
+    expect(monthFromControl).toHaveValue('05.2024')
+    await user.clear(monthFromControl)
+    await user.type(monthFromControl, '02.2024')
     await waitFor(() => expect(getGarageIncomeWorksheet).toHaveBeenLastCalledWith('token', 'garage-77', {
-      monthFrom: `${twoMonthsAgo}-01`,
+      monthFrom: '2024-02-01',
       monthTo: `${currentMonth}-01`,
     }))
     const incomeTable = within(prototype).getByRole('table', { name: 'Поступления гаража 77' })
     expect(await within(incomeTable).findByText('Серверная электроэнергия')).toBeInTheDocument()
-    expect(within(incomeTable).queryByRole('textbox', { name: /^Показание Серверная электроэнергия/ })).not.toBeInTheDocument()
     expect(within(incomeTable).getByLabelText('Платеж Серверная электроэнергия июн.26')).toHaveValue('')
     expect(within(incomeTable).getByText('86')).toBeInTheDocument()
     expect(within(incomeTable).getByText('18.00')).toBeInTheDocument()
@@ -7544,6 +7546,102 @@ describe('App', () => {
       monthFrom: `${currentMonth.slice(0, 4)}-01-01`,
       monthTo: `${currentMonth.slice(0, 4)}-12-01`,
     }))
+  })
+
+  it('calculates a selected garage worksheet and saves a missing historical meter reading with an audit reason', async () => {
+    const user = userEvent.setup()
+    const historicalMonth = '2024-02'
+    const garage = createGarage({ id: 'garage-historical-meter', number: '74', ownerName: 'Иванов Иван' })
+    let savedValue: number | null = null
+    const worksheet = () => createGarageIncomeWorksheet({
+      garageId: garage.id,
+      garageNumber: garage.number,
+      ownerName: garage.ownerName,
+      monthFrom: `${historicalMonth}-01`,
+      monthTo: `${historicalMonth}-01`,
+      rows: [{
+        accountingMonth: `${historicalMonth}-01`,
+        incomeTypeId: 'income-water-history',
+        incomeTypeName: 'Вода историческая',
+        meterKind: 'water',
+        meterReadingId: savedValue === null ? null : 'reading-history',
+        meterReadingVersion: savedValue === null ? null : 'reading-history-version',
+        meterReadingDate: savedValue === null ? null : `${historicalMonth}-28`,
+        meterValue: savedValue,
+        meterConsumption: savedValue === null ? null : 5,
+        accrualAmount: savedValue === null ? 0 : 50,
+        incomeAmount: 0,
+        debt: savedValue === null ? 0 : 50,
+      }],
+    })
+    const getGarageIncomeWorksheet = vi.fn(async () => worksheet())
+    const calculateGarageIncomeWorksheet = vi.fn(async () => worksheet())
+    const savePaymentFormMeterReading = vi.fn(async (_token: string, request) => {
+      savedValue = request.currentValue
+      return createMeterReading({
+        id: 'reading-history',
+        garageId: garage.id,
+        garageNumber: garage.number,
+        meterKind: 'water',
+        accountingMonth: `${historicalMonth}-01`,
+        readingDate: request.readingDate,
+        currentValue: request.currentValue,
+        previousValue: request.currentValue - 5,
+        consumption: 5,
+        version: 'reading-history-version',
+      })
+    })
+    render(<App
+      authClient={createAuthClient()}
+      dictionaryClient={createDictionaryClient({ getGarages: async () => [garage] })}
+      financeClient={createFinanceClient({
+        getFinancialReportPeriod: async () => ({
+          monthFrom: `${historicalMonth}-01`,
+          monthTo: `${historicalMonth}-01`,
+          defaultMonthFrom: `${historicalMonth}-01`,
+          defaultMonthTo: `${historicalMonth}-01`,
+        }),
+        getGarageIncomeWorksheet,
+        calculateGarageIncomeWorksheet,
+        savePaymentFormMeterReading,
+      })}
+      importClient={createImportClient()}
+      reportClient={createReportClient()}
+      releaseClient={createReleaseClient()}
+      userClient={createUserClient()}
+    />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Платежи')
+    const prototype = within(await screen.findByRole('region', { name: 'Платежи' })).getByRole('region', { name: 'Форма платежей' })
+    await user.type(within(prototype).getByLabelText('Поиск номера гаража или ФИО владельца'), '74')
+    await user.click(await within(prototype).findByRole('option', { name: /Гараж\s*74\s*Иванов Иван/ }))
+
+    await waitFor(() => expect(calculateGarageIncomeWorksheet).toHaveBeenCalledWith('token', garage.id, {
+      monthFrom: `${historicalMonth}-01`,
+      monthTo: `${historicalMonth}-01`,
+    }))
+    expect(getGarageIncomeWorksheet).not.toHaveBeenCalled()
+    const meterInput = await within(prototype).findByRole('textbox', { name: 'Показание Вода историческая фев.24' })
+    await user.type(meterInput, '115')
+    await user.click(within(prototype).getByRole('button', { name: 'Сохранить показание Вода историческая фев.24' }))
+
+    const reasonDialog = screen.getByRole('dialog', { name: 'Сохранить показание Вода историческая за фев.24' })
+    await user.click(within(reasonDialog).getByRole('button', { name: 'Сохранить показание' }))
+    expect(within(reasonDialog).getByRole('alert')).toHaveTextContent('Укажите причину')
+    await user.type(within(reasonDialog).getByLabelText('Причина ввода показания вне текущего месяца'), 'Сверка архивной ведомости')
+    await user.click(within(reasonDialog).getByRole('button', { name: 'Сохранить показание' }))
+
+    await waitFor(() => expect(savePaymentFormMeterReading).toHaveBeenCalledWith('token', expect.objectContaining({
+      garageId: garage.id,
+      meterKind: 'water',
+      accountingMonth: `${historicalMonth}-01`,
+      currentValue: 115,
+      periodOverrideReason: 'Сверка архивной ведомости',
+    })))
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Сохранить показание Вода историческая за фев.24' })).not.toBeInTheDocument())
+    expect(await within(prototype).findByRole('textbox', { name: 'Показание Вода историческая фев.24' })).toHaveValue('115')
   })
 
   it('shows an error when the garage financial period is unavailable without requesting a partial worksheet', async () => {
@@ -7611,16 +7709,16 @@ describe('App', () => {
     await user.click(await within(prototype).findByRole('option', { name: /Гараж\s*761\s*Орлова Ирина/ }))
     await waitFor(() => expect(getGarageIncomeWorksheet).toHaveBeenCalled())
 
-    const monthFrom = within(prototype).getByRole('combobox', { name: 'Месяц поступлений с' })
-    const monthTo = within(prototype).getByRole('combobox', { name: 'Месяц поступлений по' })
-    await user.click(monthFrom)
-    await user.click(within(prototype).getByRole('option', { name: '07.2026' }))
-    await user.click(monthTo)
-    await user.click(within(prototype).getByRole('option', { name: '06.2026' }))
+    const monthFrom = within(prototype).getByRole('textbox', { name: 'Месяц поступлений с' })
+    const monthTo = within(prototype).getByRole('textbox', { name: 'Месяц поступлений по' })
+    await user.clear(monthFrom)
+    await user.type(monthFrom, '07.2026')
+    await user.clear(monthTo)
+    await user.type(monthTo, '06.2026')
     expect(await within(prototype).findByRole('alert')).toHaveTextContent('Дата начала формы поступлений не может быть позже даты окончания.')
 
-    await user.click(monthFrom)
-    await user.click(within(prototype).getByRole('option', { name: '06.2026' }))
+    await user.clear(monthFrom)
+    await user.type(monthFrom, '06.2026')
     await waitFor(() => expect(within(prototype).queryByRole('alert')).not.toBeInTheDocument())
   })
 
@@ -7666,13 +7764,13 @@ describe('App', () => {
       monthFrom: '2025-06-01',
       monthTo: '2026-07-01',
     }))
-    expect(within(prototype).getByRole('combobox', { name: 'Месяц поступлений с' })).toHaveTextContent('06.2025')
+    expect(within(prototype).getByRole('textbox', { name: 'Месяц поступлений с' })).toHaveValue('06.2025')
 
     resolveFirstPeriod({ monthFrom: '2020-01-01', monthTo: '2026-07-01', defaultMonthFrom: '2021-02-01', defaultMonthTo: '2026-07-01' })
     await act(async () => { await firstPeriodRequest })
 
     expect(getGarageIncomeWorksheet).not.toHaveBeenCalledWith('token', firstGarage.id, expect.anything())
-    expect(within(prototype).getByRole('combobox', { name: 'Месяц поступлений с' })).toHaveTextContent('06.2025')
+    expect(within(prototype).getByRole('textbox', { name: 'Месяц поступлений с' })).toHaveValue('06.2025')
     expect(within(prototype).getByLabelText('Выбранный гараж')).toHaveTextContent('Второй владелец')
   })
 
@@ -13376,7 +13474,9 @@ describe('App', () => {
     await user.click(expenseSource)
     await user.click(within(dialog).getByRole('option', { name: 'Касса · эпизодическая выплата' }))
     expect(within(dialog).queryByRole('combobox', { name: /Фонд расходования/ })).not.toBeInTheDocument()
-    expect(within(dialog).getByText(/Эта операция уменьшает остаток наличных и не изменяет ни один фонд/)).toBeInTheDocument()
+    const cashExpenseFundHint = within(dialog).getByText(/Фонд расходования:/)
+    expect(cashExpenseFundHint).toHaveTextContent('Водоснабжение')
+    expect(cashExpenseFundHint).toHaveTextContent('касса')
     await user.click(expenseSource)
     await user.click(within(dialog).getByRole('option', { name: 'Банк · регулярный поставщик' }))
 
@@ -19928,6 +20028,10 @@ function createStatefulFinanceClient(): FinanceClient {
         comment: request.comment ?? null,
         supplierName: 'Водоканал',
         expenseTypeName: 'Вода',
+        expensePaymentType: request.expensePaymentType,
+        expensePaymentSource: request.expensePaymentSource,
+        expenseFundId: request.expenseFundId ?? null,
+        expenseFundName: request.expenseFundId ? 'Водоснабжение' : null,
         supplierDebtBefore,
         supplierDebtAfter: supplierDebtBefore - request.amount,
         paymentAllocations: [{
@@ -19986,6 +20090,10 @@ function createStatefulFinanceClient(): FinanceClient {
         ...operation,
         supplierId: request.supplierId,
         expenseTypeId: request.expenseTypeId,
+        expensePaymentType: request.expensePaymentType,
+        expensePaymentSource: request.expensePaymentSource,
+        expenseFundId: request.expenseFundId ?? null,
+        expenseFundName: request.expenseFundId ? 'Водоснабжение' : null,
         operationDate: request.operationDate,
         accountingMonth: request.accountingMonth,
         amount: request.amount,
