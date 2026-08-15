@@ -15946,6 +15946,69 @@ describe('App', () => {
     expect(await screen.findByRole('region', { name: 'Тарифы и сборы' })).toBeInTheDocument()
   })
 
+  it('opens personnel for staff department audit events instead of tariffs', async () => {
+    const user = userEvent.setup()
+    const departmentEvent = createAuditEvent({
+      id: 'audit-staff-department-archived',
+      action: 'dictionary.staff_department_archived',
+      entityType: 'staff_department',
+      entityId: 'department-1',
+      entityDisplayName: 'Архивирован отдел Бухгалтерия',
+      summary: 'Архивирован отдел Бухгалтерия.',
+      section: 'dictionary',
+      actionKind: 'archive',
+      reason: 'Отдел больше не используется',
+    })
+    const auditClient = createAuditClient({
+      getEvents: async () => [departmentEvent],
+      getEvent: async () => departmentEvent,
+    })
+    render(<App authClient={createAuthClient()} auditClient={auditClient} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'История изменений')
+    const auditPanel = await screen.findByRole('region', { name: 'История изменений' })
+    await user.click(await within(auditPanel).findByRole('button', { name: 'Открыть карточку события Архивирование' }))
+
+    const detailDialog = await screen.findByRole('dialog', { name: 'Архивирование' })
+    expect(within(detailDialog).queryByRole('button', { name: 'Открыть раздел: Тарифы и сборы' })).not.toBeInTheDocument()
+    await user.click(within(detailDialog).getByRole('button', { name: 'Открыть раздел: Контрагенты' }))
+
+    const contractorsPanel = await screen.findByRole('region', { name: 'Контрагенты' })
+    expect(within(contractorsPanel).getByRole('tab', { name: 'Персонал' })).toHaveAttribute('aria-selected', 'true')
+  })
+
+  it('opens ordinary dictionary audit events in dictionaries workspace', async () => {
+    const user = userEvent.setup()
+    const unitEvent = createAuditEvent({
+      id: 'audit-measurement-unit-created',
+      action: 'dictionary.measurement_unit_created',
+      entityType: 'measurement_unit',
+      entityId: 'unit-1',
+      entityDisplayName: 'м³',
+      summary: 'Создана единица измерения м³.',
+      section: 'dictionary',
+      actionKind: 'create',
+    })
+    const auditClient = createAuditClient({
+      getEvents: async () => [unitEvent],
+      getEvent: async () => unitEvent,
+    })
+    render(<App authClient={createAuthClient()} auditClient={auditClient} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'История изменений')
+    const auditPanel = await screen.findByRole('region', { name: 'История изменений' })
+    await user.click(await within(auditPanel).findByRole('button', { name: 'Открыть карточку события Создание' }))
+
+    const detailDialog = await screen.findByRole('dialog', { name: 'Создание' })
+    await user.click(within(detailDialog).getByRole('button', { name: 'Открыть раздел: Справочники' }))
+
+    expect(await screen.findByRole('region', { name: 'Справочники' })).toBeInTheDocument()
+  })
+
   it('filters audit journal by section action kind entity type actor quick filter and date range', async () => {
     const user = userEvent.setup()
     let auditRequest: Parameters<AuditClient['getEvents']>[1] = undefined

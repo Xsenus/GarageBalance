@@ -187,15 +187,50 @@ function getAuditContractorOpenTarget(auditEvent: AuditEventDto): ContractorOpen
     }
   }
 
+  if (auditEvent.entityType === 'staff_department') {
+    return {
+      section: 'staff',
+      entityId: null,
+      displayName: auditEvent.entityDisplayName ?? null,
+      garageNumber: null,
+    }
+  }
+
+  if (auditEvent.entityType === 'supplier_group' || auditEvent.entityType === 'supplier_contact') {
+    return {
+      section: 'suppliers',
+      entityId: null,
+      displayName: auditEvent.entityDisplayName ?? auditEvent.relatedCounterpartyName ?? null,
+      garageNumber: null,
+    }
+  }
+
   return null
 }
 function getAuditWorkspaceTarget(auth: AuthResponse, auditEvent: AuditEventDto): { section: WorkspaceSection; label: string } | null {
-  if (auditEvent.entityType === 'owner' || auditEvent.entityType === 'garage' || auditEvent.entityType === 'supplier' || auditEvent.entityType === 'staff_member') {
+  if (
+    auditEvent.entityType === 'owner'
+    || auditEvent.entityType === 'garage'
+    || auditEvent.entityType === 'supplier'
+    || auditEvent.entityType === 'supplier_group'
+    || auditEvent.entityType === 'supplier_contact'
+    || auditEvent.entityType === 'staff_member'
+    || auditEvent.entityType === 'staff_department'
+  ) {
     return canAccessWorkspaceSection(auth, 'contractors') ? { section: 'contractors', label: 'Контрагенты' } : null
   }
 
-  if (auditEvent.entityType === 'tariff' || auditEvent.section === 'dictionary') {
+  if (
+    auditEvent.entityType === 'tariff'
+    || auditEvent.entityType === 'charge_service'
+    || auditEvent.entityType === 'irregular_payment'
+    || auditEvent.entityType === 'fee_campaign'
+  ) {
     return canAccessWorkspaceSection(auth, 'tariffsAndFees') ? { section: 'tariffsAndFees', label: 'Тарифы и сборы' } : null
+  }
+
+  if (auditEvent.section === 'dictionary') {
+    return canAccessWorkspaceSection(auth, 'dictionaries') ? { section: 'dictionaries', label: 'Справочники' } : null
   }
 
   if (auditEvent.entityType === 'meter_reading') {
