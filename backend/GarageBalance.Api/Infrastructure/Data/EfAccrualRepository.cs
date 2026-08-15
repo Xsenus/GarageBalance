@@ -509,7 +509,8 @@ public sealed class EfAccrualRepository(GarageBalanceDbContext dbContext) : IAcc
                 !accrual.IsCanceled &&
                 !accrual.Garage.IsArchived &&
                 accrual.IncomeTypeId == incomeTypeId &&
-                accrual.AccountingYear == accountingYear &&
+                (accrual.AccountingYear == accountingYear ||
+                 (!accrual.AccountingYear.HasValue && accrual.AccountingMonth.Year == accountingYear)) &&
                 accrual.Source == AccrualSources.Regular)
             .Select(accrual => accrual.GarageId)
             .Distinct()
@@ -523,7 +524,8 @@ public sealed class EfAccrualRepository(GarageBalanceDbContext dbContext) : IAcc
             .Where(accrual =>
                 !accrual.IsCanceled &&
                 accrual.IncomeTypeId == incomeTypeId &&
-                accrual.AccountingYear == accountingYear &&
+                (accrual.AccountingYear == accountingYear ||
+                 (!accrual.AccountingYear.HasValue && accrual.AccountingMonth.Year == accountingYear)) &&
                 accrual.Source == AccrualSources.Regular)
             .Select(accrual => accrual.GarageId)
             .ToHashSetAsync(cancellationToken);
@@ -544,7 +546,10 @@ public sealed class EfAccrualRepository(GarageBalanceDbContext dbContext) : IAcc
             accrual.IncomeTypeId == incomeTypeId &&
             accrual.Source == source);
         return source == AccrualSources.Regular && accountingYear.HasValue
-            ? query.AnyAsync(accrual => accrual.AccountingYear == accountingYear.Value, cancellationToken)
+            ? query.AnyAsync(
+                accrual => accrual.AccountingYear == accountingYear.Value ||
+                    (!accrual.AccountingYear.HasValue && accrual.AccountingMonth.Year == accountingYear.Value),
+                cancellationToken)
             : query.AnyAsync(accrual => accrual.AccountingMonth == accountingMonth, cancellationToken);
     }
 

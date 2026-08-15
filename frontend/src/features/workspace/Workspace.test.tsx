@@ -1,6 +1,7 @@
 import { render, screen, waitFor } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { WorkspaceSectionErrorBoundary } from './Workspace'
+import { NotificationsButton, WorkspaceSectionErrorBoundary } from './Workspace'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 
@@ -86,5 +87,33 @@ describe('WorkspaceSectionErrorBoundary', () => {
     expect(source).toContain('onFocus={() => preloadWorkspaceSection(tile.section)}')
     expect(source).toContain('onPointerEnter={() => preloadWorkspaceSection(tile.section)}')
     expect(source).toContain('fallback={<TableLoadingState label="Загружаем выбранный раздел" />}')
+  })
+})
+
+describe('NotificationsButton', () => {
+  it('opens an accessible empty notification panel and closes it again', async () => {
+    const user = userEvent.setup()
+    render(<NotificationsButton />)
+
+    const trigger = screen.getByRole('button', { name: 'Уведомления' })
+    expect(trigger).toHaveAttribute('aria-expanded', 'false')
+
+    await user.click(trigger)
+    expect(trigger).toHaveAttribute('aria-expanded', 'true')
+    expect(screen.getByRole('dialog', { name: 'Уведомления' })).toHaveTextContent('Новых уведомлений нет.')
+
+    await user.click(screen.getByRole('button', { name: 'Закрыть уведомления' }))
+    expect(screen.queryByRole('dialog', { name: 'Уведомления' })).not.toBeInTheDocument()
+    expect(trigger).toHaveAttribute('aria-expanded', 'false')
+  })
+
+  it('closes the notification panel with Escape', async () => {
+    const user = userEvent.setup()
+    render(<NotificationsButton />)
+
+    await user.click(screen.getByRole('button', { name: 'Уведомления' }))
+    await user.keyboard('{Escape}')
+
+    expect(screen.queryByRole('dialog', { name: 'Уведомления' })).not.toBeInTheDocument()
   })
 })

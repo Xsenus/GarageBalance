@@ -47,7 +47,8 @@ describe('dictionary API interface coverage', () => {
       'irregular-payments',
     ])
     expect(dictionaryPanelSource).toContain('profileCatalogEntries.map((entry) => (')
-    expect(dictionaryPanelSource).toContain('onOpenWorkspaceSection?.(entry.workspaceSection')
+    expect(dictionaryPanelSource).toContain('onOpenWorkspaceSection?.(')
+    expect(dictionaryPanelSource).toContain("contractorTarget: { section: entry.apiRoute.startsWith('staff-') ? 'staff' : 'suppliers' }")
     expect(workspaceSource).toContain('onOpenWorkspaceSection={onOpenSection}')
   })
 

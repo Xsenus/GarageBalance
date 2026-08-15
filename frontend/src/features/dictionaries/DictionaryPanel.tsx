@@ -4,6 +4,7 @@ import { FileText, RotateCcw, Save, Search, Trash2, X } from 'lucide-react'
 import type { AuthResponse } from '../../services/authApi'
 import type { CatalogWorkspaceSection } from '../../shared/catalogCoverage'
 import { profileCatalogEntries } from '../../shared/profileCatalogCoverage'
+import type { WorkspaceOpenContext } from '../../shared/workspaceNavigation'
 import { DictionaryApiError } from '../../services/dictionariesApi'
 import type { AccountingTypeDto, DictionaryClient, GarageDto, MeasurementUnitDto, OwnerDto, PagedResult, UpsertGarageRequest, UpsertOwnerRequest } from '../../services/dictionariesApi'
 import type { FinanceClient, GarageBalanceHistoryDto } from '../../services/financeApi'
@@ -53,7 +54,7 @@ type DictionaryEditorState = { section: DictionarySectionKey; mode: 'create' | '
 
 type DictionaryChangePreview = ChangePreview
 
-export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, integrationClient, initialSection, onOpenWorkspaceSection }: { auth: AuthResponse; dictionaryClient: DictionaryClient; financeClient: FinanceClient; integrationClient: IntegrationClient; initialSection: DictionarySectionKey; onOpenWorkspaceSection?: (section: Exclude<CatalogWorkspaceSection, 'dictionaries'>) => void }) {
+export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, integrationClient, initialSection, onOpenWorkspaceSection }: { auth: AuthResponse; dictionaryClient: DictionaryClient; financeClient: FinanceClient; integrationClient: IntegrationClient; initialSection: DictionarySectionKey; onOpenWorkspaceSection?: (section: Exclude<CatalogWorkspaceSection, 'dictionaries'>, context?: WorkspaceOpenContext | null) => void }) {
   const [activeSection, setActiveSection] = useState<DictionarySectionKey>(initialSection)
   const [owners, setOwners] = useState<OwnerDto[]>([])
   const [garages, setGarages] = useState<GarageDto[]>([])
@@ -1048,7 +1049,12 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, integ
                 className="secondary-button"
                 aria-label={`${entry.label}: открыть ${entry.workspaceLabel}`}
                 disabled={!onOpenWorkspaceSection}
-                onClick={() => onOpenWorkspaceSection?.(entry.workspaceSection as Exclude<CatalogWorkspaceSection, 'dictionaries'>)}
+                onClick={() => onOpenWorkspaceSection?.(
+                  entry.workspaceSection as Exclude<CatalogWorkspaceSection, 'dictionaries'>,
+                  entry.workspaceSection === 'contractors'
+                    ? { contractorTarget: { section: entry.apiRoute.startsWith('staff-') ? 'staff' : 'suppliers' } }
+                    : null,
+                )}
                 key={entry.apiRoute}
               >
                 <strong>{entry.label}</strong>

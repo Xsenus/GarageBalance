@@ -2886,6 +2886,9 @@ public sealed class DictionaryServiceTests
         Assert.Equal(new DateOnly(2026, 7, 23), result.Value.Tariff.EffectiveFrom);
         Assert.Equal(2, await database.Context.Tariffs.CountAsync());
         Assert.Single(database.Context.ChargeServiceSettings);
+        database.Context.ChangeTracker.Clear();
+        var persistedSetting = await database.Context.ChargeServiceSettings.SingleAsync();
+        Assert.Equal(result.Value.Tariff.Id, persistedSetting.TariffId);
         Assert.Equal(3, database.Context.AuditEvents.Count());
         Assert.Contains(database.Context.AuditEvents, audit => audit.Action == "dictionary.measurement_unit_created");
         Assert.All(database.Context.AuditEvents, audit => Assert.Equal(actorUserId, audit.ActorUserId));

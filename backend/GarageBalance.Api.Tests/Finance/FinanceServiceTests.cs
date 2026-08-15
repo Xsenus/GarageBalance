@@ -5710,6 +5710,44 @@ public sealed class FinanceServiceTests
     }
 
     [Fact]
+    public async Task GenerateRegularAccrualsAsync_TreatsLegacyAnnualAccrualWithoutAccountingYearAsExisting()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        fixtures.IncomeType.Code = "membership";
+        var tariff = new Tariff
+        {
+            Name = "Годовой членский тариф",
+            CalculationBase = TariffCalculationBases.Fixed,
+            Rate = 700m,
+            EffectiveFrom = new DateOnly(2026, 1, 1)
+        };
+        database.Context.Tariffs.Add(tariff);
+        database.Context.Accruals.Add(new Accrual
+        {
+            GarageId = fixtures.Garage.Id,
+            IncomeTypeId = fixtures.IncomeType.Id,
+            TariffId = tariff.Id,
+            AccountingMonth = new DateOnly(2026, 1, 1),
+            AccountingYear = null,
+            DueDate = new DateOnly(2026, 6, 30),
+            OverdueFromDate = new DateOnly(2026, 7, 31),
+            Amount = 700m,
+            Source = AccrualSources.Regular
+        });
+        await database.Context.SaveChangesAsync();
+
+        var result = await FinanceServiceTestFactory.Create(database.Context).GenerateRegularAccrualsAsync(
+            new GenerateRegularAccrualsRequest(fixtures.IncomeType.Id, tariff.Id, new DateOnly(2026, 8, 1), null),
+            null,
+            CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Equal("regular_accruals_empty", result.ErrorCode);
+        Assert.Single(database.Context.Accruals);
+    }
+
+    [Fact]
     public async Task GenerateRegularAccrualsAsync_KeepsAnnualDeadlineInAccountingYearWhenGeneratedLate()
     {
         await using var database = await TestDatabase.CreateAsync();

@@ -432,6 +432,46 @@
   gap: 10px;
 }
 
+.notifications-control {
+  position: relative;
+}
+
+.notifications-popover {
+  position: absolute;
+  z-index: 80;
+  top: calc(100% + 8px);
+  right: 0;
+  width: min(320px, calc(100vw - 32px));
+  box-sizing: border-box;
+  border: 1px solid #dce3ee;
+  border-radius: 10px;
+  background: #ffffff;
+  box-shadow: 0 16px 36px rgba(15, 23, 42, 0.16);
+  padding: 12px;
+}
+
+.notifications-popover__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.notifications-popover__header strong {
+  text-align: left;
+}
+
+.notifications-popover p {
+  margin: 10px 0 2px;
+  color: #667085;
+  font-size: 14px;
+}
+
+.icon-button--compact {
+  width: 32px;
+  height: 32px;
+}
+
 .user-panel strong,
 .user-panel span {
   display: block;
@@ -1352,7 +1392,7 @@ h1 {
 
 .contractors-bottom-grid {
   display: grid;
-  grid-template-columns: minmax(320px, 0.8fr) minmax(680px, 1.2fr);
+  grid-template-columns: minmax(320px, 0.8fr) minmax(0, 1.2fr);
   gap: 18px;
   align-items: start;
 }
@@ -2093,6 +2133,12 @@ h1 {
 .contractors-fee-participant-list legend,
 .contractors-fee-participant-list > .form-hint {
   grid-column: 1 / -1;
+}
+
+@media (max-width: 980px) {
+  .contractors-fee-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
 .contractors-tariff-dialog .detail-dialog-header h3 {

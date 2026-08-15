@@ -64,6 +64,42 @@ export function WorkspaceSectionErrorBoundary({ children, onReturn, accessToken 
   )
 }
 
+export function NotificationsButton() {
+  const [open, setOpen] = useState(false)
+  useEscapeKey(open, () => setOpen(false))
+
+  return (
+    <div className="notifications-control">
+      <button
+        className="icon-button"
+        type="button" aria-label="Уведомления" title="Уведомления"
+        aria-expanded={open}
+        aria-controls="workspace-notifications-popover"
+        onClick={() => setOpen((value) => !value)}
+      >
+        <Bell size={19} />
+      </button>
+      {open ? (
+        <section
+          className="notifications-popover"
+          id="workspace-notifications-popover"
+          role="dialog"
+          aria-modal="false"
+          aria-labelledby="workspace-notifications-title"
+        >
+          <div className="notifications-popover__header">
+            <strong id="workspace-notifications-title">Уведомления</strong>
+            <button className="icon-button icon-button--compact" type="button" aria-label="Закрыть уведомления" onClick={() => setOpen(false)}>
+              <X size={16} aria-hidden="true" />
+            </button>
+          </div>
+          <p>Новых уведомлений нет.</p>
+        </section>
+      ) : null}
+    </div>
+  )
+}
+
 const dashboardTiles: { title: string; section: WorkspaceSection }[] = [
   { title: 'Тарифы\nи сборы', section: 'tariffsAndFees' },
   { title: 'Контрагенты', section: 'contractors' },
@@ -244,9 +280,7 @@ export const Workspace = memo(function Workspace({
             <strong>{auth.user.displayName}</strong>
             <span>{auth.user.roles.join(', ')}</span>
           </div>
-          <button className="icon-button" type="button" aria-label="Уведомления" title="Уведомления">
-            <Bell size={19} />
-          </button>
+          <NotificationsButton />
           <button className="icon-button" type="button" aria-label="Выйти" title="Выйти" onClick={() => setLogoutConfirmationOpen(true)}>
             <LogOut size={19} />
           </button>

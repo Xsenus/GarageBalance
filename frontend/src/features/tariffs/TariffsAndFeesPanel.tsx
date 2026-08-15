@@ -29,6 +29,7 @@ import { formatTariffDecimal } from './tariffFormatting'
 import { getInlineTariffChangeEffectiveFrom, getServiceMeasurementUnit, getServiceTariffDisplayName } from './tariffServicePresentation'
 
 const dictionaryScreenRequestLimit = 100
+const persistedGuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 
 type ContractorTariffRow = {
   id: string
@@ -1823,6 +1824,13 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
     try {
       const created = await dictionaryClient.createChargeServiceWithTariff(auth.accessToken, request)
       applySavedServiceTariff(created)
+      // The backend creates an internal income type together with a new service.
+      // Refresh references so the edit dialog resolves the selected fund at once.
+      try {
+        setBackendIncomeTypes(await dictionaryClient.getIncomeTypes(auth.accessToken, undefined, dictionaryScreenRequestLimit))
+      } catch {
+        // The service is already saved; a later panel reload will retry references.
+      }
       setModal(null)
     } catch (caught) {
       setTariffPersistenceError(caught instanceof Error ? caught.message : 'Не удалось добавить услугу.')
@@ -1858,6 +1866,13 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
 
   async function openChargeServiceEditor(setting: ChargeServiceSettingDto) {
     setTariffPersistenceError(null)
+    if (setting.incomeTypeId && !backendIncomeTypes.some((incomeType) => incomeType.id === setting.incomeTypeId)) {
+      try {
+        setBackendIncomeTypes(await dictionaryClient.getIncomeTypes(auth.accessToken, undefined, dictionaryScreenRequestLimit))
+      } catch {
+        // The editor can still open; saving will show the backend validation if the link is no longer available.
+      }
+    }
     setChargeServiceEditTarget(setting)
     const currentTariff = backendTariffs.find((tariff) => tariff.id === setting.tariffId)
     if (!dictionaryClient.getChargeServiceTariffSchedule) {
@@ -3586,7 +3601,12 @@ export function AddServicePrototypeDialog({
           tariffMode: isTiered ? 'metered_tiered' : isByMeter ? 'metered' : 'regular',
           calculationBase: effectiveCalculationBase,
           electricityTiers: isTiered && tariffTiers.length >= 2
-            ? tariffTiers.map(({ id, name, upperBound, rate }) => ({ id, name, upperBound: upperBound ?? undefined, rate }))
+            ? tariffTiers.map(({ id, name, upperBound, rate }) => ({
+              id: persistedGuidPattern.test(id) ? id : undefined,
+              name,
+              upperBound: upperBound ?? undefined,
+              rate,
+            }))
             : null,
         })
       } else if (initialSetting && onUpdateWithTariff) {
@@ -3604,7 +3624,12 @@ export function AddServicePrototypeDialog({
           ...(tariffStructureChanged ? {
             tariffMode,
             electricityTiers: isTiered && tariffTiers.length >= 2
-              ? tariffTiers.map(({ id, name, upperBound, rate }) => ({ id, name, upperBound: upperBound ?? undefined, rate }))
+              ? tariffTiers.map(({ id, name, upperBound, rate }) => ({
+                id: persistedGuidPattern.test(id) ? id : undefined,
+                name,
+                upperBound: upperBound ?? undefined,
+                rate,
+              }))
               : null,
             changeReason: 'Изменение параметров тарифа в карточке услуги.',
             calculationBase: effectiveCalculationBase,

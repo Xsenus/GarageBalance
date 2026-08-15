@@ -316,7 +316,14 @@ describe('App', () => {
     expect(within(dictionaryPanel).getByRole('button', { name: 'Разовые платежи: открыть Тарифы и сборы' })).toBeEnabled()
 
     await user.click(within(dictionaryPanel).getByRole('button', { name: 'Контакты поставщиков: открыть Контрагенты · Поставщики' }))
-    expect(await screen.findByRole('region', { name: 'Контрагенты' })).toBeInTheDocument()
+    const contractorsPanel = await screen.findByRole('region', { name: 'Контрагенты' })
+    expect(within(contractorsPanel).getByRole('tab', { name: 'Поставщики' })).toHaveAttribute('aria-selected', 'true')
+
+    await openSection(user, 'Справочники')
+    const reopenedDictionaryPanel = await screen.findByRole('region', { name: 'Справочники' })
+    await user.click(within(reopenedDictionaryPanel).getByRole('button', { name: 'Сотрудники: открыть Контрагенты · Персонал' }))
+    const staffContractorsPanel = await screen.findByRole('region', { name: 'Контрагенты' })
+    expect(within(staffContractorsPanel).getByRole('tab', { name: 'Персонал' })).toHaveAttribute('aria-selected', 'true')
 
     await openSection(user, 'Платежи')
 
@@ -4403,14 +4410,23 @@ describe('App', () => {
     })
     const serviceTariff = createTariff({ id: 'tariff-security', name: 'Тариф охраны', calculationBase: 'fixed', rate: 1200 })
     const waterTariff = createTariff({ id: 'tariff-water', name: 'Тариф воды', calculationBase: 'meter_water', rate: 48.5 })
+    let incomeTypes = [serviceIncomeType, waterIncomeType]
     const dictionaryClient = createDictionaryClient({
-      getIncomeTypes: async () => [serviceIncomeType, waterIncomeType],
+      getIncomeTypes: async () => incomeTypes,
       getTariffs: async () => [serviceTariff, waterTariff],
       getChargeServiceSettings: async (_token, _search, _limit, includeArchived = false) => (
         serviceSettings.filter((setting) => includeArchived || !setting.isArchived)
       ),
       createChargeServiceWithTariff: async (_token, request) => {
         createdServiceRequest = request
+        const createdIncomeType = createAccountingType({
+          id: 'income-security-created',
+          name: 'Охрана',
+          code: 'service_security',
+          destinationFundId: request.incomeFundId ?? null,
+          destinationFundName: 'Членские взносы',
+        })
+        incomeTypes = [...incomeTypes, createdIncomeType]
         const createdTariff = createTariff({
           id: 'tariff-security-created',
           name: 'Охрана — тариф',
@@ -4428,7 +4444,7 @@ describe('App', () => {
           paymentDueDay: serviceRequest.paymentDueDay ?? null,
           paymentDueMonth: serviceRequest.paymentDueMonth ?? null,
           overdueGraceDays: serviceRequest.overdueGraceDays,
-          incomeTypeId: serviceRequest.incomeTypeId ?? null,
+          incomeTypeId: createdIncomeType.id,
           tariffId: createdTariff.id,
           isMetered: serviceRequest.isMetered,
           hasTieredTariff: serviceRequest.hasTieredTariff,
@@ -4638,7 +4654,7 @@ describe('App', () => {
       paymentDueDay: 28,
       paymentDueMonth: null,
       overdueGraceDays: 30,
-      incomeTypeId: null,
+      incomeTypeId: 'income-security-created',
       tariffId: 'tariff-security-created',
       isMetered: false,
       hasTieredTariff: false,
@@ -4649,6 +4665,11 @@ describe('App', () => {
     expect(monthlyDueDateValue).not.toBeNull()
     expect(within(monthlyDueDateValue as HTMLElement).queryByRole('combobox', { name: 'Охрана: оплата до: месяц' })).not.toBeInTheDocument()
     expect(within(monthlyDueDateValue as HTMLElement).getByText('следующего месяца')).toBeInTheDocument()
+
+    await user.click(within(tariffsPanel).getByRole('button', { name: 'Изменить услугу Охрана' }))
+    const editDialog = await screen.findByRole('dialog', { name: 'Изменить услугу' })
+    expect(within(editDialog).getByRole('combobox', { name: 'Фонд поступления регулярной услуги' })).toHaveTextContent('Членские взносы')
+    await user.click(within(editDialog).getByRole('button', { name: 'Отмена' }))
 
     expect(within(tariffsPanel).getByRole('button', { name: 'Деактивировать услугу Охрана' })).toBeEnabled()
     expect(within(tariffsPanel).queryByRole('button', { name: 'Вернуть услугу Охрана' })).not.toBeInTheDocument()
@@ -5134,6 +5155,7 @@ describe('App', () => {
 
   it('shows configured thresholds immediately when tiered billing is enabled', async () => {
     const user = userEvent.setup()
+    let savedTieredRequest: UpdateChargeServiceWithTariffRequest | null = null
     const electricityIncomeType = createAccountingType({ id: 'income-electricity-preview', name: 'Электроэнергия', code: 'electricity' })
     const electricityTariff = createTariff({
       id: 'tariff-electricity-preview',
@@ -5164,6 +5186,21 @@ describe('App', () => {
       getIncomeTypes: async () => [electricityIncomeType],
       getTariffs: async () => [electricityTariff],
       getChargeServiceSettings: async () => [serviceSetting],
+      updateChargeServiceWithTariff: async (_token, _id, request) => {
+        savedTieredRequest = request
+        return {
+          service: { ...serviceSetting, hasTieredTariff: true },
+          tariff: {
+            ...electricityTariff,
+            electricityTiers: (request.electricityTiers ?? []).map((tier) => ({
+              ...tier,
+              id: crypto.randomUUID(),
+              upperBound: tier.upperBound ?? null,
+              isCustom: true,
+            })),
+          },
+        }
+      },
     })
 
     render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
@@ -5204,9 +5241,11 @@ describe('App', () => {
     expect(within(thresholds).getByLabelText('Ступень 3: нижняя граница')).toHaveValue('251')
     expect(within(thresholds).getByLabelText('Ступень 3: верхняя граница')).toHaveValue('350')
     expect(within(thresholds).getByLabelText('Сверх порога: нижняя граница')).toHaveValue('351')
-
-    await user.click(tieredCheckbox)
-    expect(within(editDialog).queryByRole('group', { name: 'Пороги тарификации выбранного тарифа' })).not.toBeInTheDocument()
+    await user.click(within(editDialog).getByRole('button', { name: 'Сохранить изменения' }))
+    await waitFor(() => expect(savedTieredRequest).not.toBeNull())
+    expect(savedTieredRequest!.tariffMode).toBe('metered_tiered')
+    expect(savedTieredRequest!.electricityTiers).toHaveLength(4)
+    expect(savedTieredRequest!.electricityTiers!.every((tier) => tier.id === undefined)).toBe(true)
   })
 
   it('loads tariff dictionaries from the backend', async () => {
