@@ -26,12 +26,22 @@ public static class AccrualPaymentAllocator
                      .ThenBy(item => item.Id))
         {
             var paymentRemainder = payment.Amount;
-            foreach (var accrual in orderedAccruals.Where(accrual =>
-                         payment.FeeCampaignId.HasValue
-                             ? accrual.FeeCampaignId == payment.FeeCampaignId
-                             : payment.IrregularPaymentId.HasValue
-                                 ? accrual.IrregularPaymentId == payment.IrregularPaymentId
-                                 : true))
+            var matchingAccruals = orderedAccruals
+                .Where(accrual =>
+                    payment.FeeCampaignId.HasValue
+                        ? accrual.FeeCampaignId == payment.FeeCampaignId
+                        : payment.IrregularPaymentId.HasValue
+                            ? accrual.IrregularPaymentId == payment.IrregularPaymentId
+                            : true)
+                .OrderBy(accrual => payment.FeeCampaignId.HasValue || payment.IrregularPaymentId.HasValue
+                    ? 0
+                    : accrual.FeeCampaignId.HasValue || accrual.IrregularPaymentId.HasValue ? 1 : 0)
+                .ThenBy(accrual => accrual.DueDate)
+                .ThenBy(accrual => accrual.AccountingMonth)
+                .ThenBy(accrual => accrual.CreatedAtUtc)
+                .ThenBy(accrual => accrual.Id);
+
+            foreach (var accrual in matchingAccruals)
             {
                 if (paymentRemainder <= 0m)
                 {

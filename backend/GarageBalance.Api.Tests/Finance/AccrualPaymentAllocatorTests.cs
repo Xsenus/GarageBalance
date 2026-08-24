@@ -77,6 +77,34 @@ public sealed class AccrualPaymentAllocatorTests
         Assert.Equal(400m, allocation.Amount);
     }
 
+    [Fact]
+    public void Allocate_UntargetedPeriodPaymentPaysRegularAccrualBeforeOlderTargetedDebt()
+    {
+        var feeCampaign = Accrual(new DateOnly(2026, 7, 31), 300m, 1) with { FeeCampaignId = Guid.NewGuid() };
+        var regularTrash = Accrual(new DateOnly(2026, 8, 31), 300m, 2);
+        var periodPayment = Payment(new DateOnly(2026, 8, 20), 300m, 3);
+
+        var allocation = Assert.Single(AccrualPaymentAllocator.Allocate([feeCampaign, regularTrash], [periodPayment]));
+
+        Assert.Equal(regularTrash.Id, allocation.AccrualId);
+        Assert.Equal(300m, allocation.Amount);
+    }
+
+    [Fact]
+    public void Allocate_LegacyUntargetedPaymentUsesRemainingAmountForIrregularAccrual()
+    {
+        var regular = Accrual(new DateOnly(2026, 8, 31), 500m, 1);
+        var irregular = Accrual(new DateOnly(2026, 7, 31), 3_000m, 2) with { IrregularPaymentId = Guid.NewGuid() };
+        var legacyPayment = Payment(new DateOnly(2026, 8, 20), 3_500m, 3);
+
+        var result = AccrualPaymentAllocator.Allocate([irregular, regular], [legacyPayment]);
+
+        Assert.Collection(
+            result,
+            item => Assert.Equal((regular.Id, 500m), (item.AccrualId, item.Amount)),
+            item => Assert.Equal((irregular.Id, 3_000m), (item.AccrualId, item.Amount)));
+    }
+
     private static AccrualPaymentAllocationAccrual Accrual(DateOnly dueDate, decimal amount, byte id) =>
         new(new Guid(id, 0, 0, new byte[8]), dueDate, new DateOnly(dueDate.Year, dueDate.Month, 1), amount, DateTimeOffset.UnixEpoch);
 

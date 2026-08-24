@@ -31,6 +31,7 @@ import { rankGarageSearchResults } from './garageSearchRanking'
 import { getGarageBalancePresentation, toSignedGarageNetBalance, toSignedGarageSplitBalance } from './garageBalancePresentation'
 import { createGarageIncomeRowsFromWorksheet } from './garageIncomeWorksheetRows'
 import type { GarageIncomePrototypeRow } from './garageIncomeWorksheetRows'
+import { createFullPaymentAllocations, getFullPaymentRows, roundPaymentMoney, sumPaymentDebt, toMoneyMinorUnits } from './fullPaymentPlan'
 import { getFirstLinkedSupplier, getSupplierAccrualExpenseType } from './supplierAccrualLink'
 import { overdueDebtDetailsPreference } from './financeDisplayPreferences'
 
@@ -3918,22 +3919,7 @@ function PaymentsPrototypePanel({
   }
 
   function getRowsForFullPayment(period: string) {
-    const rows = garageRows.filter((row) => !row.feeCampaignId && row.debt > 0 && (period === 'full' || row.month === period))
-    if (period !== 'full') {
-      return rows
-    }
-
-    const seenAnnualAccruals = new Set<string>()
-    return rows.sort((left, right) => left.month > right.month ? 1 : left.month === right.month ? 0 : -1).filter((row) => {
-      if (!row.annualAccrualId) {
-        return true
-      }
-      if (seenAnnualAccruals.has(row.annualAccrualId)) {
-        return false
-      }
-      seenAnnualAccruals.add(row.annualAccrualId)
-      return true
-    })
+    return getFullPaymentRows(garageRows, period)
   }
 
   function getOpeningDebtForFullPayment(period: string) {
@@ -3946,9 +3932,8 @@ function PaymentsPrototypePanel({
     }
 
     const rowsToPay = getRowsForFullPayment(request.period)
-    const rowsDebtToPay = rowsToPay.reduce((sum, row) => sum + row.debt, 0)
     const openingDebtToPay = getOpeningDebtForFullPayment(request.period)
-    const totalDebtToPay = rowsDebtToPay + openingDebtToPay
+    const totalDebtToPay = sumPaymentDebt(rowsToPay, openingDebtToPay)
     if (totalDebtToPay <= 0) {
       return 'По выбранному периоду нет задолженности для оплаты.'
     }
@@ -3956,23 +3941,20 @@ function PaymentsPrototypePanel({
       return `Сумма оплаты должна быть больше нуля и не выше долга ${formatPaymentMoney(totalDebtToPay)}.`
     }
 
-    let remainingAmount = request.amount
-    const openingDebtPaymentAmount = Math.min(openingDebtToPay, remainingAmount)
-    remainingAmount -= openingDebtPaymentAmount
+    const openingDebtPaymentAmount = Math.min(
+      Math.max(toMoneyMinorUnits(openingDebtToPay), 0),
+      Math.max(toMoneyMinorUnits(request.amount), 0),
+    ) / 100
+    const amountAfterOpeningDebt = roundPaymentMoney(request.amount - openingDebtPaymentAmount)
     const paymentPlan: Array<{ row: GarageIncomePrototypeRow; incomeType: GaragePaymentIncomeType; amount: number }> = []
-    for (const row of rowsToPay) {
-      if (remainingAmount <= 0) {
-        break
-      }
-
+    for (const allocation of createFullPaymentAllocations(rowsToPay, amountAfterOpeningDebt)) {
+      const row = allocation.row
       const incomeType = findIncomeTypeForPayment(row.service, row.incomeTypeId, row.meterKind)
       if (!incomeType) {
         return `Не найден вид поступления для услуги "${row.service}". Добавьте его в справочник и повторите сохранение.`
       }
 
-      const rowAmount = Math.min(row.debt, remainingAmount)
-      paymentPlan.push({ row, incomeType, amount: rowAmount })
-      remainingAmount -= rowAmount
+      paymentPlan.push({ row, incomeType, amount: allocation.amount })
     }
 
     if (paymentPlan.length === 0 && openingDebtPaymentAmount <= 0) {
@@ -4021,7 +4003,12 @@ function PaymentsPrototypePanel({
     const paidByRowId = new Map(paymentPlan.map((item) => [item.row.id, item.amount]))
     setGarageRows((currentRows) => currentRows.map((row) => {
       const paidAmount = paidByRowId.get(row.id)
-      return paidAmount ? { ...row, paymentDraft: '', paid: row.paid + paidAmount, debt: Math.max(row.debt - paidAmount, 0) } : row
+      return paidAmount ? {
+        ...row,
+        paymentDraft: '',
+        paid: roundPaymentMoney(row.paid + paidAmount),
+        debt: Math.max(roundPaymentMoney(row.debt - paidAmount), 0),
+      } : row
     }))
 
     const paymentTime = new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })
@@ -4398,10 +4385,10 @@ function PaymentsPrototypePanel({
         garageRows.reduce((sum, row) => sum + row.debt, 0),
         garageRows.reduce((sum, row) => sum + row.advance, 0),
       )
-  const fullPaymentRowsDebt = getRowsForFullPayment('full').reduce((sum, row) => sum + row.debt, 0)
+  const fullPaymentRowsDebt = sumPaymentDebt(getRowsForFullPayment('full'))
   const fullPaymentPeriodOptions = [
-    { value: 'full', label: 'Полный расчет', debt: fullPaymentRowsDebt + getOpeningDebtForFullPayment('full') },
-    ...groupedGarageRows.map((group) => ({ value: group.month, label: group.monthLabel, debt: group.rows.reduce((sum, row) => sum + row.debt, 0) })),
+    { value: 'full', label: 'Полный расчет', debt: roundPaymentMoney(fullPaymentRowsDebt + getOpeningDebtForFullPayment('full')) },
+    ...groupedGarageRows.map((group) => ({ value: group.month, label: group.monthLabel, debt: sumPaymentDebt(getRowsForFullPayment(group.month)) })),
   ].filter((option, index, options) => index === 0 || option.debt > 0 || !options.some((existingOption, existingIndex) => existingIndex < index && existingOption.value === option.value))
   const expenseAccrualTotal = expenseRows.reduce((sum, row) => sum + (typeof row.cost === 'number' ? row.cost : 0), 0)
   const expenseOpeningDebtTotal = expenseRows.reduce((sum, row) => sum + row.openingDebt, 0)

@@ -2772,7 +2772,10 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
                   key={row.id}
                   onContextMenu={(event) => openOneTimeContextMenu(event, row)}
                 >
-                  <span>{row.name}</span>
+                  <span className="contractors-irregular-name-cell">
+                    <span>{row.name}</span>
+                    {!row.isActive && !row.isDeleted ? <small className="dictionary-status-pill dictionary-status-pill-archived">Отключён</small> : null}
+                  </span>
                   <span>
                     {row.isDeleted ? (
                       <span className="contractors-mini-actions">

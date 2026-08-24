@@ -3114,6 +3114,49 @@ describe('App', () => {
     expect(within(contractorsPanel).queryByLabelText('Раздел истории контрагентов')).not.toBeInTheDocument()
   }, 180000)
 
+  it('opens a garage financial report with the default period when period detection fails', async () => {
+    const user = userEvent.setup()
+    const garage = createGarage({
+      id: '11111111-1111-4111-8111-111111111111',
+      number: '105',
+      ownerName: 'Тестовый владелец',
+    })
+    const getFinancialReportPeriod = vi.fn(async () => {
+      throw new Error('Период временно недоступен.')
+    })
+    const getGarageBalanceHistory = vi.fn(async (_token: string, garageId: string, params?: { monthFrom: string; monthTo: string }) => createGarageBalanceHistory({
+      garageId,
+      garageNumber: garage.number,
+      ownerName: garage.ownerName,
+      monthFrom: `${params?.monthFrom}-01`,
+      monthTo: `${params?.monthTo}-01`,
+      rows: [{ accountingMonth: `${params?.monthTo}-01`, openingDebt: 0, accrualAmount: 300, incomeAmount: 0, closingDebt: 300 }],
+    }))
+    render(<App
+      authClient={createAuthClient()}
+      dictionaryClient={createDictionaryClient({ getGarages: async () => [garage] })}
+      financeClient={createFinanceClient({ getFinancialReportPeriod, getGarageBalanceHistory })}
+      importClient={createImportClient()}
+      reportClient={createReportClient()}
+      releaseClient={createReleaseClient()}
+      userClient={createUserClient()}
+    />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Контрагенты')
+    const contractorPanel = await screen.findByRole('region', { name: 'Контрагенты' })
+    const garageTable = await within(contractorPanel).findByRole('table', { name: 'Гаражи' })
+    const garageRow = within(garageTable).getByRole('row', { name: /105/ })
+    await user.click(within(garageRow).getByRole('button', { name: 'Открыть финансовый отчет гаража 105' }))
+
+    const dialog = await screen.findByRole('dialog', { name: 'Гараж 105' })
+    expect(await within(dialog).findByRole('table', { name: 'Финансовый отчет гаража' })).toHaveTextContent('300.00')
+    expect(within(dialog).queryByText('Период временно недоступен.')).not.toBeInTheDocument()
+    expect(getFinancialReportPeriod).toHaveBeenCalledWith('token', { garageId: garage.id })
+    expect(getGarageBalanceHistory).toHaveBeenCalledWith('token', garage.id, expect.objectContaining({ monthFrom: expect.any(String), monthTo: expect.any(String) }))
+  })
+
   it('creates an auditable supplier opening-balance adjustment from the contractor card', async () => {
     const user = userEvent.setup()
     let supplier = createSupplier({ id: 'supplier-opening-adjustment', name: 'Водоканал', startingBalance: 200, debt: 200 })
@@ -4392,6 +4435,30 @@ describe('App', () => {
     expect(within(irregularRegion).getByLabelText('Сумма: Вывоз снега')).toHaveValue('1 500.00')
     expect(within(tariffsPanel).queryByLabelText('Вывоз снега: По счетчику')).not.toBeInTheDocument()
     expect(within(tariffsPanel).queryByLabelText('Вывоз снега: Пороговая тарификация')).not.toBeInTheDocument()
+  })
+
+  it('shows an explicit status instead of crossing out an inactive irregular payment', async () => {
+    const user = userEvent.setup()
+    const dictionaryClient = createDictionaryClient({
+      getIrregularPayments: async () => [createIrregularPayment({
+        id: 'inactive-snow-removal',
+        name: 'Вывоз снега',
+        amount: 1500,
+        isActive: false,
+      })],
+    })
+
+    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Тарифы и сборы')
+    const tariffsPanel = await screen.findByRole('region', { name: 'Тарифы и сборы' })
+    const inactiveRow = await within(tariffsPanel).findByLabelText('Нерегулярный платеж Вывоз снега')
+
+    expect(inactiveRow).toHaveClass('contractors-mini-row--inactive')
+    expect(within(inactiveRow).getByText('Отключён')).toHaveClass('dictionary-status-pill')
+    expect(within(inactiveRow).getByText('Вывоз снега')).not.toHaveStyle({ textDecoration: 'line-through' })
   })
 
   it('creates a charge service setting, renders saved rows and exposes deactivation only for the active service', async () => {
@@ -8768,6 +8835,80 @@ describe('App', () => {
         amount: 200,
       }),
     ])
+  })
+
+  it('includes targeted fees and irregular accruals in a precise full payment', async () => {
+    const user = userEvent.setup()
+    const garage = createGarage({ id: 'garage-full-payment-targets', number: '102', ownerName: 'Тестовый владелец' })
+    const otherIncome = createAccountingType({ id: 'income-other-targets', name: 'Прочие доходы', code: 'other_income' })
+    const createFullGaragePayment = vi.fn(async (_token: string, request: CreateFullGaragePaymentRequest) => ({
+      receiptBatchId: request.receiptBatchId!,
+      totalAmount: request.lines.reduce((sum, line) => sum + line.amount, 0),
+      operations: request.lines.map((line, index) => createFinancialOperation({
+        id: `targeted-full-payment-${index}`,
+        garageId: garage.id,
+        garageNumber: garage.number,
+        ownerName: garage.ownerName,
+        incomeTypeId: line.incomeTypeId,
+        incomeTypeName: otherIncome.name,
+        operationDate: request.operationDate,
+        accountingMonth: line.accountingMonth,
+        amount: line.amount,
+        feeCampaignId: line.feeCampaignId,
+        irregularPaymentId: line.irregularPaymentId,
+      })),
+    }))
+    const getGarageIncomeWorksheet = vi.fn(async () => createGarageIncomeWorksheet({
+      garageId: garage.id,
+      garageNumber: garage.number,
+      ownerName: garage.ownerName,
+      accrualTotal: 4300.31,
+      debtTotal: 4300.31,
+      closingDebt: 4300.31,
+      rows: [
+        {
+          accountingMonth: '2026-08-01', incomeTypeId: otherIncome.id, incomeTypeName: 'Регулярная услуга', meterKind: null, meterValue: null, meterConsumption: null,
+          accrualAmount: 1000.1, incomeAmount: 0, debt: 1000.1,
+        },
+        {
+          accountingMonth: '2026-08-01', incomeTypeId: otherIncome.id, incomeTypeName: 'Вывоз мусора', meterKind: null, meterValue: null, meterConsumption: null,
+          accrualAmount: 300.2, incomeAmount: 0, debt: 300.2, feeCampaignId: 'fee-campaign-trash', feeCampaignRemainingAmount: 300.2,
+        },
+        {
+          accountingMonth: '2026-08-01', incomeTypeId: otherIncome.id, incomeTypeName: 'Внеочередной вывоз мусора', meterKind: null, meterValue: null, meterConsumption: null,
+          accrualAmount: 3000.01, incomeAmount: 0, debt: 3000.01, irregularPaymentId: 'irregular-trash', irregularPaymentRemainingAmount: 3000.01,
+        },
+      ],
+    }))
+    render(<App
+      authClient={createAuthClient()}
+      dictionaryClient={createDictionaryClient({ getGarages: async () => [garage], getIncomeTypes: async () => [otherIncome] })}
+      financeClient={createFinanceClient({ getGarageIncomeWorksheet, createFullGaragePayment })}
+      importClient={createImportClient()}
+      reportClient={createReportClient()}
+      releaseClient={createReleaseClient()}
+      userClient={createUserClient()}
+    />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Платежи')
+    const prototype = within(await screen.findByRole('region', { name: 'Платежи' })).getByRole('region', { name: 'Форма платежей' })
+    await user.type(within(prototype).getByLabelText('Поиск номера гаража или ФИО владельца'), garage.number)
+    await user.click(await within(prototype).findByRole('option', { name: /Гараж\s*102\s*Тестовый владелец/ }))
+    await user.click(within(prototype).getByRole('button', { name: 'Полная оплата' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Полная оплата' })
+
+    expect(within(dialog).getByLabelText('Сумма полной оплаты')).toHaveValue('4 300.31')
+    await user.click(within(dialog).getByRole('button', { name: 'Провести оплату' }))
+
+    await waitFor(() => expect(createFullGaragePayment).toHaveBeenCalledTimes(1))
+    expect(createFullGaragePayment.mock.calls[0][1].lines).toEqual([
+      expect.objectContaining({ amount: 1000.1 }),
+      expect.objectContaining({ amount: 300.2, feeCampaignId: 'fee-campaign-trash' }),
+      expect.objectContaining({ amount: 3000.01, irregularPaymentId: 'irregular-trash' }),
+    ])
+    expect(createFullGaragePayment.mock.calls[0][1].lines.reduce((sum, line) => sum + line.amount, 0)).toBeCloseTo(4300.31, 2)
   })
 
   it('keeps the full payment dialog unchanged when the atomic request fails', async () => {

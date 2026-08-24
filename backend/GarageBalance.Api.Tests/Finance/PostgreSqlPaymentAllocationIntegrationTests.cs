@@ -289,6 +289,72 @@ public sealed class PostgreSqlPaymentAllocationIntegrationTests
     }
 
     [PostgreSqlFact]
+    public async Task PeriodAndLegacyPayments_PersistRegularPriorityAndThenCloseIrregularDebt()
+    {
+        await using var database = await PostgreSqlTestDatabase.CreateAsync();
+        var ledger = await SeedLedgerAsync(database, "PG-TARGET-PRIORITY", [3_000m, 300m]);
+        await using (var setupContext = database.CreateContext())
+        {
+            var irregularPayment = new IrregularPayment
+            {
+                Name = "Внеочередной вывоз мусора",
+                Amount = 3_000m,
+                IsActive = true
+            };
+            setupContext.IrregularPayments.Add(irregularPayment);
+            await setupContext.SaveChangesAsync();
+            var targetedAccrual = await setupContext.Accruals.SingleAsync(item => item.Id == ledger.AccrualIds[0]);
+            targetedAccrual.IrregularPaymentId = irregularPayment.Id;
+            await setupContext.SaveChangesAsync();
+        }
+
+        Guid periodPaymentId;
+        Guid legacyPaymentId;
+        await using (var paymentContext = database.CreateContext())
+        {
+            var service = FinanceServiceTestFactory.Create(paymentContext);
+            var periodPayment = await service.CreateIncomeAsync(
+                new CreateIncomeOperationRequest(
+                    ledger.GarageId,
+                    ledger.IncomeTypeId,
+                    new DateOnly(2026, 2, 20),
+                    new DateOnly(2026, 2, 1),
+                    300m,
+                    "PG-PERIOD-300",
+                    "Оплата регулярной услуги за период"),
+                null,
+                CancellationToken.None);
+            Assert.True(periodPayment.Succeeded, periodPayment.ErrorMessage);
+            periodPaymentId = periodPayment.Value!.Id;
+
+            var legacyPayment = await service.CreateIncomeAsync(
+                new CreateIncomeOperationRequest(
+                    ledger.GarageId,
+                    ledger.IncomeTypeId,
+                    new DateOnly(2026, 2, 21),
+                    new DateOnly(2026, 1, 1),
+                    3_000m,
+                    "PG-LEGACY-IRREGULAR-3000",
+                    "Историческая оплата без явной привязки"),
+                null,
+                CancellationToken.None);
+            Assert.True(legacyPayment.Succeeded, legacyPayment.ErrorMessage);
+            legacyPaymentId = legacyPayment.Value!.Id;
+        }
+
+        await using var assertionContext = database.CreateContext();
+        var allocations = await assertionContext.AccrualPaymentAllocations
+            .AsNoTracking()
+            .Where(item => item.IsActive && (item.FinancialOperationId == periodPaymentId || item.FinancialOperationId == legacyPaymentId))
+            .ToDictionaryAsync(item => item.FinancialOperationId);
+
+        Assert.Equal(ledger.AccrualIds[1], allocations[periodPaymentId].AccrualId);
+        Assert.Equal(300m, allocations[periodPaymentId].Amount);
+        Assert.Equal(ledger.AccrualIds[0], allocations[legacyPaymentId].AccrualId);
+        Assert.Equal(3_000m, allocations[legacyPaymentId].Amount);
+    }
+
+    [PostgreSqlFact]
     public async Task IncomeWorksheet_CapsEveryAccrualAndShowsUnallocatedRemainderAsAdvance()
     {
         await using var database = await PostgreSqlTestDatabase.CreateAsync();

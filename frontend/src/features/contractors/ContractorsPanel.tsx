@@ -1410,6 +1410,7 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
     if (!isBackendDictionaryId(row.id)) {
       setGarageFinancialReport(null)
       setGarageFinancialReportError('Финансовый отчет доступен для гаража, сохраненного в справочнике.')
+      setGarageFinancialReportLoading(false)
       return
     }
 
@@ -1441,9 +1442,10 @@ export function ContractorsPrototypePanel({ auth, dictionaryClient, financeClien
       const filters = createFullFinancialReportFilters(period)
       setGarageFinancialReportFilters(filters)
       await loadGarageFinancialReport(row, filters)
-    } catch (error) {
-      setGarageFinancialReportError(error instanceof Error ? error.message : 'Не удалось определить полный период финансового отчета гаража.')
-      setGarageFinancialReportLoading(false)
+    } catch {
+      // The period endpoint is an optimization. A temporary failure must not block
+      // opening the report itself, so the standard period remains a safe fallback.
+      await loadGarageFinancialReport(row, fallbackFilters)
     }
   }
 
