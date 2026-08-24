@@ -30,6 +30,17 @@ public sealed class PostgreSqlCashPaymentReportQueryIntegrationTests
             seedContext.FinancialOperations.AddRange(
                 CreateExpense(firstSupplier, electricity, month.AddDays(4), 100m, "КО-100", "Оплата июля", expensePaymentType: ExpensePaymentTypes.WithoutReceipt),
                 CreateExpense(secondSupplier, repair, month.AddDays(8), 50m, null, "Текущий ремонт"),
+                new FinancialOperation
+                {
+                    OperationKind = FinancialOperationKinds.Expense,
+                    OperationDate = month.AddDays(9),
+                    AccountingMonth = month,
+                    Amount = 25m,
+                    ExpensePaymentType = ExpensePaymentTypes.WithoutReceipt,
+                    CounterpartyName = $"Разовый исполнитель {suffix}",
+                    ExpenseType = repair,
+                    Comment = "Свободный получатель"
+                },
                 CreateExpense(firstSupplier, electricity, month.AddDays(10), 999m, "CANCELED", "Отменено", true),
                 CreateExpense(firstSupplier, electricity, month.AddMonths(-1), 200m, "OUTSIDE", "Другой месяц"),
                 new FinancialOperation
@@ -61,8 +72,8 @@ public sealed class PostgreSqlCashPaymentReportQueryIntegrationTests
             new ReportSort("amount", true),
             CancellationToken.None);
 
-        Assert.Equal(2, page.RowCount);
-        Assert.Equal(150m, page.Total);
+        Assert.Equal(3, page.RowCount);
+        Assert.Equal(175m, page.Total);
         var operation = Assert.Single(page.Operations);
         Assert.Equal(100m, operation.Amount);
         Assert.Equal(firstSupplierName, operation.SupplierName);
@@ -92,8 +103,20 @@ public sealed class PostgreSqlCashPaymentReportQueryIntegrationTests
         Assert.Equal(firstSupplierName, Assert.Single(searchResult.Operations).SupplierName);
         var searchCommand = Assert.Single(capture.Commands);
         Assert.Equal(1, CountOccurrences(searchCommand, "FROM financial_operations"));
-        Assert.Contains("supplier.\"Name\" ILIKE @search COLLATE \"und-x-icu\" ESCAPE '\\'", searchCommand, StringComparison.Ordinal);
+        Assert.Contains("COALESCE(supplier.\"Name\", operation.\"CounterpartyName\") ILIKE @search", searchCommand, StringComparison.Ordinal);
         Assert.DoesNotContain("LOWER(", searchCommand, StringComparison.Ordinal);
+
+        capture.Commands.Clear();
+        var counterpartySearch = await query.GetCashPaymentsAsync(
+            month,
+            month.AddMonths(1).AddDays(-1),
+            "РАЗОВЫЙ",
+            0,
+            25,
+            new ReportSort("supplierName", false),
+            CancellationToken.None);
+
+        Assert.Equal($"Разовый исполнитель {suffix}", Assert.Single(counterpartySearch.Operations).SupplierName);
     }
 
     private static FinancialOperation CreateExpense(

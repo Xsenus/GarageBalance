@@ -44,7 +44,9 @@ public sealed record FinancialOperationDto(
     string? ExpensePaymentType = null,
     string? ExpensePaymentSource = null,
     Guid? ExpenseFundId = null,
-    string? ExpenseFundName = null);
+    string? ExpenseFundName = null,
+    string? CounterpartyName = null,
+    bool NegativeFundBalanceConfirmed = false);
 
 public sealed record CreateIncomeOperationRequest(
     Guid GarageId,
@@ -91,7 +93,7 @@ public sealed record IncomePaymentWarningDto(
     bool RequiresConfirmation);
 
 public sealed record CreateExpenseOperationRequest(
-    Guid SupplierId,
+    Guid? SupplierId,
     Guid ExpenseTypeId,
     DateOnly OperationDate,
     DateOnly AccountingMonth,
@@ -100,7 +102,9 @@ public sealed record CreateExpenseOperationRequest(
     [MaxLength(1000)] string? Comment,
     string ExpensePaymentType = ExpensePaymentTypes.WithReceipt,
     string? ExpensePaymentSource = null,
-    Guid? ExpenseFundId = null);
+    Guid? ExpenseFundId = null,
+    [MaxLength(200)] string? CounterpartyName = null,
+    bool ConfirmNegativeFundBalance = false);
 
 public sealed record CreateStaffPaymentRequest(
     Guid StaffMemberId,

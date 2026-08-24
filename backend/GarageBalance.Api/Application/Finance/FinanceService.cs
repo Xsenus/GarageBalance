@@ -1930,18 +1930,6 @@ public sealed class FinanceService(
 
     public async Task<FinanceResult<FinancialOperationDto>> CreateExpenseAsync(CreateExpenseOperationRequest request, Guid? actorUserId, CancellationToken cancellationToken)
     {
-        var supplier = await supplierRepository.FindActiveWithGroupAsync(request.SupplierId, cancellationToken);
-        if (supplier is null)
-        {
-            return FinanceResult<FinancialOperationDto>.Failure("supplier_not_found", "Поставщик для выплаты не найден.");
-        }
-
-        var expenseType = await expenseTypeRepository.FindActiveAsync(request.ExpenseTypeId, cancellationToken);
-        if (expenseType is null)
-        {
-            return FinanceResult<FinancialOperationDto>.Failure("expense_type_not_found", "Услуга не найдена.");
-        }
-
         var expensePaymentType = NormalizeExpensePaymentType(request.ExpensePaymentType);
         if (expensePaymentType is null)
         {
@@ -1959,21 +1947,52 @@ public sealed class FinanceService(
         }
 
         var isCashExpense = expensePaymentSource == ExpensePaymentSources.Cash;
-        var configuredExpenseFundId = GetSupplierExpenseFundId(supplier);
-        var configuredExpenseFund = GetSupplierExpenseFund(supplier);
-        var supplierExpenseTypeValidation = ValidateSupplierExpenseTypeLinkForPayment(supplier, expenseType);
-        if (supplierExpenseTypeValidation is not null)
+        var allowNegativeFundBalance = !isCashExpense && request.ConfirmNegativeFundBalance;
+        var expenseType = await expenseTypeRepository.FindActiveAsync(request.ExpenseTypeId, cancellationToken);
+        if (expenseType is null)
         {
-            return supplierExpenseTypeValidation;
+            return FinanceResult<FinancialOperationDto>.Failure("expense_type_not_found", "Услуга не найдена.");
         }
 
-        var expenseFundId = configuredExpenseFundId;
-        var expenseFund = configuredExpenseFund;
-        if (request.ExpenseFundId.HasValue && request.ExpenseFundId != expenseFundId)
+        Supplier? supplier = null;
+        if (request.SupplierId.HasValue)
+        {
+            supplier = await supplierRepository.FindActiveWithGroupAsync(request.SupplierId.Value, cancellationToken);
+            if (supplier is null)
+            {
+                return FinanceResult<FinancialOperationDto>.Failure("supplier_not_found", "Поставщик для выплаты не найден.");
+            }
+        }
+
+        if (!isCashExpense && supplier is null)
+        {
+            return FinanceResult<FinancialOperationDto>.Failure("supplier_required_for_bank_expense", "Для выплаты с банковского счёта выберите поставщика.");
+        }
+
+        Guid? expenseFundId = null;
+        Fund? expenseFund = null;
+        if (supplier is not null)
+        {
+            var supplierExpenseTypeValidation = ValidateSupplierExpenseTypeLinkForPayment(supplier, expenseType);
+            if (supplierExpenseTypeValidation is not null)
+            {
+                return supplierExpenseTypeValidation;
+            }
+
+            expenseFundId = GetSupplierExpenseFundId(supplier);
+            expenseFund = GetSupplierExpenseFund(supplier);
+            if (request.ExpenseFundId.HasValue && request.ExpenseFundId != expenseFundId)
+            {
+                return FinanceResult<FinancialOperationDto>.Failure(
+                    "supplier_expense_fund_mismatch",
+                    "Выплата должна использовать фонд настроенной услуги поставщика.");
+            }
+        }
+        else if (request.ExpenseFundId.HasValue)
         {
             return FinanceResult<FinancialOperationDto>.Failure(
-                "supplier_expense_fund_mismatch",
-                "Выплата должна использовать фонд настроенной услуги поставщика.");
+                "episodic_expense_fund_not_allowed",
+                "Эпизодическая выплата из кассы не списывает средства из фонда.");
         }
 
         await using var fundDisbursementLock = await expenseFundDisbursementService.AcquireUpdateLockAsync(cancellationToken);
@@ -2017,9 +2036,11 @@ public sealed class FinanceService(
             Amount = amount,
             ExpensePaymentType = expensePaymentType,
             ExpensePaymentSource = expensePaymentSource,
+            CounterpartyName = supplier is null ? NormalizeOptional(request.CounterpartyName) : null,
+            NegativeFundBalanceConfirmed = allowNegativeFundBalance,
             DocumentNumber = NormalizeOptional(request.DocumentNumber),
             Comment = NormalizeOptional(request.Comment),
-            SupplierId = supplier.Id,
+            SupplierId = supplier?.Id,
             Supplier = supplier,
             ExpenseTypeId = expenseType.Id,
             ExpenseType = expenseType,
@@ -2028,7 +2049,7 @@ public sealed class FinanceService(
         };
 
         financialOperationRepository.Add(operation);
-        if (isCashExpense)
+        if (isCashExpense && supplier is not null)
         {
             supplierAccrualRepository.Add(new SupplierAccrual
             {
@@ -2057,18 +2078,103 @@ public sealed class FinanceService(
             AddAudit(actorUserId, "finance.expense_created", operation, FormatExpenseCreatedAuditSummary(operation));
         }
 
-        var fundDisbursementResult = await expenseFundDisbursementService.CreateAsync(
-            operation,
-            supplier.Name,
-            actorUserId,
-            cancellationToken);
-        if (!fundDisbursementResult.Succeeded)
+        if (expenseFundId.HasValue)
         {
-            return FinanceResult<FinancialOperationDto>.Failure(
-                fundDisbursementResult.ErrorCode!,
-                fundDisbursementResult.ErrorMessage!);
+            var fundDisbursementResult = await expenseFundDisbursementService.CreateAsync(
+                operation,
+                supplier?.Name ?? operation.CounterpartyName ?? "получатель",
+                actorUserId,
+                operation.NegativeFundBalanceConfirmed,
+                cancellationToken);
+            if (!fundDisbursementResult.Succeeded)
+            {
+                return FinanceResult<FinancialOperationDto>.Failure(
+                    fundDisbursementResult.ErrorCode!,
+                    fundDisbursementResult.ErrorMessage!);
+            }
         }
 
+        await unitOfWork.SaveChangesAsync(cancellationToken);
+        return FinanceResult<FinancialOperationDto>.Success(await ToDtoAsync(operation, cancellationToken));
+    }
+
+    private async Task<FinanceResult<FinancialOperationDto>> UpdateEpisodicExpenseAsync(
+        FinancialOperation operation,
+        CreateExpenseOperationRequest request,
+        Guid? actorUserId,
+        CancellationToken cancellationToken)
+    {
+        if (operation.SupplierId.HasValue || operation.ExpenseFundId.HasValue)
+        {
+            return FinanceResult<FinancialOperationDto>.Failure(
+                "episodic_expense_conversion_not_supported",
+                "Обычную выплату поставщику нельзя преобразовать в эпизодическую. Отмените её и создайте новую.");
+        }
+
+        var expensePaymentType = NormalizeExpensePaymentType(request.ExpensePaymentType);
+        var expensePaymentSource = NormalizeExpensePaymentSource(request.ExpensePaymentSource, expensePaymentType);
+        if (expensePaymentType is null || expensePaymentSource != ExpensePaymentSources.Cash)
+        {
+            return FinanceResult<FinancialOperationDto>.Failure(
+                "episodic_expense_source_invalid",
+                "Эпизодическая выплата без карточки поставщика проводится только из кассы.");
+        }
+
+        var expenseType = await expenseTypeRepository.FindActiveAsync(request.ExpenseTypeId, cancellationToken);
+        if (expenseType is null)
+        {
+            return FinanceResult<FinancialOperationDto>.Failure("expense_type_not_found", "Услуга не найдена.");
+        }
+
+        if (await HasDocumentDuplicateAsync(FinancialOperationKinds.Expense, request.DocumentNumber, request.OperationDate, operation.Id, cancellationToken))
+        {
+            return FinanceResult<FinancialOperationDto>.Failure("operation_duplicate", "Операция с таким документом и датой уже внесена.");
+        }
+
+        await using var balanceLock = await financeAvailableBalanceQuery.AcquireUpdateLockAsync(FinanceBalanceAccounts.Cash, cancellationToken);
+        var amount = MoneyMath.RoundMoney(request.Amount);
+        var availableCashAmount = MoneyMath.RoundMoney(await CalculateAvailableCashAmountAsync(cancellationToken) + operation.Amount);
+        if (amount > availableCashAmount)
+        {
+            return FinanceResult<FinancialOperationDto>.Failure(
+                "cash_amount_insufficient",
+                $"Сумма выплаты превышает доступный остаток в кассе {MoneyFormatting.Format(availableCashAmount)}.");
+        }
+
+        var previousSnapshot = FormatExpenseOperationSnapshot(operation);
+        var oldValues = new Dictionary<string, object?>
+        {
+            ["operationDate"] = operation.OperationDate,
+            ["accountingMonth"] = operation.AccountingMonth,
+            ["amount"] = operation.Amount,
+            ["counterpartyName"] = operation.CounterpartyName,
+            ["expenseType"] = operation.ExpenseType?.Name,
+            ["documentNumber"] = operation.DocumentNumber,
+            ["comment"] = operation.Comment
+        };
+        operation.OperationDate = request.OperationDate;
+        operation.AccountingMonth = MonthPeriod.Normalize(request.AccountingMonth);
+        operation.Amount = amount;
+        operation.ExpensePaymentType = expensePaymentType;
+        operation.ExpensePaymentSource = ExpensePaymentSources.Cash;
+        operation.CounterpartyName = NormalizeOptional(request.CounterpartyName);
+        operation.NegativeFundBalanceConfirmed = false;
+        operation.DocumentNumber = NormalizeOptional(request.DocumentNumber);
+        operation.Comment = NormalizeOptional(request.Comment);
+        operation.ExpenseTypeId = expenseType.Id;
+        operation.ExpenseType = expenseType;
+        operation.UpdatedAtUtc = DateTimeOffset.UtcNow;
+        var newValues = new Dictionary<string, object?>
+        {
+            ["operationDate"] = operation.OperationDate,
+            ["accountingMonth"] = operation.AccountingMonth,
+            ["amount"] = operation.Amount,
+            ["counterpartyName"] = operation.CounterpartyName,
+            ["expenseType"] = expenseType.Name,
+            ["documentNumber"] = operation.DocumentNumber,
+            ["comment"] = operation.Comment
+        };
+        AddAudit(actorUserId, "finance.expense_updated", operation, FormatExpenseUpdatedAuditSummary(previousSnapshot, operation), oldValues, newValues);
         await unitOfWork.SaveChangesAsync(cancellationToken);
         return FinanceResult<FinancialOperationDto>.Success(await ToDtoAsync(operation, cancellationToken));
     }
@@ -2445,7 +2551,12 @@ public sealed class FinanceService(
             return FinanceResult<FinancialOperationDto>.Failure("operation_already_canceled", "Отмененную операцию нельзя изменить.");
         }
 
-        var supplier = await supplierRepository.FindActiveWithGroupAsync(request.SupplierId, cancellationToken);
+        if (!request.SupplierId.HasValue)
+        {
+            return await UpdateEpisodicExpenseAsync(operation, request, actorUserId, cancellationToken);
+        }
+
+        var supplier = await supplierRepository.FindActiveWithGroupAsync(request.SupplierId.Value, cancellationToken);
         if (supplier is null)
         {
             return FinanceResult<FinancialOperationDto>.Failure("supplier_not_found", "Поставщик для выплаты не найден.");
@@ -2474,6 +2585,7 @@ public sealed class FinanceService(
         }
 
         var isCashExpense = expensePaymentSource == ExpensePaymentSources.Cash;
+        var allowNegativeFundBalance = !isCashExpense && request.ConfirmNegativeFundBalance;
         var configuredExpenseFundId = GetSupplierExpenseFundId(supplier);
         var configuredExpenseFund = GetSupplierExpenseFund(supplier);
         var supplierExpenseTypeValidation = ValidateSupplierExpenseTypeLinkForPayment(supplier, expenseType);
@@ -2588,6 +2700,8 @@ public sealed class FinanceService(
         operation.Amount = amount;
         operation.ExpensePaymentType = expensePaymentType;
         operation.ExpensePaymentSource = expensePaymentSource;
+        operation.CounterpartyName = null;
+        operation.NegativeFundBalanceConfirmed = allowNegativeFundBalance;
         operation.DocumentNumber = documentNumber;
         operation.Comment = comment;
         operation.SupplierId = supplier.Id;
@@ -2648,11 +2762,13 @@ public sealed class FinanceService(
                 supplier.Name,
                 amount,
                 actorUserId,
+                allowNegativeFundBalance,
                 cancellationToken)
             : await expenseFundDisbursementService.CreateAsync(
                 operation,
                 supplier.Name,
                 actorUserId,
+                allowNegativeFundBalance,
                 cancellationToken);
 
         if (fundDisbursementResult is { Succeeded: false })
@@ -5881,7 +5997,7 @@ public sealed class FinanceService(
             return FormatStaffPaymentSnapshot(operation);
         }
 
-        return $"{amount} поставщику {operation.Supplier?.Name} от {operation.OperationDate:dd.MM.yyyy} за {operation.AccountingMonth:MM.yyyy}; услуга/статья {operation.ExpenseType?.Name}; источник {FormatExpensePaymentSource(operation)}; тип {FormatExpensePaymentType(operation.ExpensePaymentType)}; документ {document}";
+        return $"{amount} получателю {GetExpenseCounterpartyName(operation)} от {operation.OperationDate:dd.MM.yyyy} за {operation.AccountingMonth:MM.yyyy}; услуга/статья {operation.ExpenseType?.Name}; источник {FormatExpensePaymentSource(operation)}; тип {FormatExpensePaymentType(operation.ExpensePaymentType)}; документ {document}";
     }
 
     private static string FormatStaffPaymentSnapshot(FinancialOperation operation)
@@ -5902,7 +6018,7 @@ public sealed class FinanceService(
 
         return operation.StaffMember is not null
             ? $"Отменена выплата {amount} сотруднику {operation.StaffMember.FullName} от {operation.OperationDate:dd.MM.yyyy} за {operation.AccountingMonth:MM.yyyy}; вид {operation.ExpenseType?.Name}; документ {document}. Причина: {reason}"
-            : $"Отменена выплата {amount} поставщику {operation.Supplier?.Name} от {operation.OperationDate:dd.MM.yyyy} за {operation.AccountingMonth:MM.yyyy}; услуга/статья {operation.ExpenseType?.Name}; источник {FormatExpensePaymentSource(operation)}; тип {FormatExpensePaymentType(operation.ExpensePaymentType)}; документ {document}. Причина: {reason}";
+            : $"Отменена выплата {amount} получателю {GetExpenseCounterpartyName(operation)} от {operation.OperationDate:dd.MM.yyyy} за {operation.AccountingMonth:MM.yyyy}; услуга/статья {operation.ExpenseType?.Name}; источник {FormatExpensePaymentSource(operation)}; тип {FormatExpensePaymentType(operation.ExpensePaymentType)}; документ {document}. Причина: {reason}";
     }
 
     private static string FormatOperationRestoredAuditSummary(FinancialOperation operation)
@@ -5916,7 +6032,7 @@ public sealed class FinanceService(
 
         return operation.StaffMember is not null
             ? $"Восстановлена выплата {amount} сотруднику {operation.StaffMember.FullName} от {operation.OperationDate:dd.MM.yyyy} за {operation.AccountingMonth:MM.yyyy}; вид {operation.ExpenseType?.Name}; документ {document}."
-            : $"Восстановлена выплата {amount} поставщику {operation.Supplier?.Name} от {operation.OperationDate:dd.MM.yyyy} за {operation.AccountingMonth:MM.yyyy}; услуга/статья {operation.ExpenseType?.Name}; источник {FormatExpensePaymentSource(operation)}; тип {FormatExpensePaymentType(operation.ExpensePaymentType)}; документ {document}.";
+            : $"Восстановлена выплата {amount} получателю {GetExpenseCounterpartyName(operation)} от {operation.OperationDate:dd.MM.yyyy} за {operation.AccountingMonth:MM.yyyy}; услуга/статья {operation.ExpenseType?.Name}; источник {FormatExpensePaymentSource(operation)}; тип {FormatExpensePaymentType(operation.ExpensePaymentType)}; документ {document}.";
     }
 
     private static string FormatAccrualCreatedAuditSummary(Accrual accrual)
@@ -6305,6 +6421,9 @@ public sealed class FinanceService(
     private static string FormatExpensePaymentSource(FinancialOperation operation) =>
         IsCashExpense(operation) ? "касса" : "банк";
 
+    private static string GetExpenseCounterpartyName(FinancialOperation operation) =>
+        operation.Supplier?.Name ?? NormalizeOptional(operation.CounterpartyName) ?? "не указан";
+
     private static string FormatHistoricalMeterReadingCorrectedAuditSummary(MeterReading reading)
     {
         return $"Скорректировано показание другого периода {reading.MeterKind} по гаражу {reading.Garage.Number} за {reading.AccountingMonth:MM.yyyy}; дата {reading.ReadingDate:dd.MM.yyyy}; предыдущее {reading.PreviousValue.ToString("0.###", RussianCulture)}, текущее {reading.CurrentValue.ToString("0.###", RussianCulture)}, расход {reading.Consumption.ToString("0.###", RussianCulture)}.";
@@ -6321,13 +6440,15 @@ public sealed class FinanceService(
         var relatedGarageId = operation.GarageId?.ToString();
         var relatedGarageNumber = operation.Garage?.Number;
         var relatedCounterpartyId = operation.SupplierId?.ToString() ?? operation.StaffMemberId?.ToString();
-        var relatedCounterpartyName = operation.Supplier?.Name ?? operation.StaffMember?.FullName;
+        var relatedCounterpartyName = operation.Supplier?.Name ?? operation.StaffMember?.FullName ?? operation.CounterpartyName;
         var metadata = new Dictionary<string, object?>
         {
             ["financeEntityType"] = "financial_operation",
             ["operationKind"] = operation.OperationKind,
             ["operationDate"] = operation.OperationDate,
-            ["amount"] = operation.Amount
+            ["amount"] = operation.Amount,
+            ["counterpartyName"] = operation.CounterpartyName,
+            ["negativeFundBalanceConfirmed"] = operation.NegativeFundBalanceConfirmed
         };
         if (operation.StaffMember is not null)
         {
@@ -6867,7 +6988,9 @@ public sealed class FinanceService(
             operation.ExpensePaymentType,
             operation.ExpensePaymentSource,
             operation.ExpenseFundId,
-            operation.ExpenseFund?.Name);
+            operation.ExpenseFund?.Name,
+            operation.CounterpartyName,
+            operation.NegativeFundBalanceConfirmed);
     }
 
     private static string? InferMeterKind(string incomeTypeName, string? incomeTypeCode)

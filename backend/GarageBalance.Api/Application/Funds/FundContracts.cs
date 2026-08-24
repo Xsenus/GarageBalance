@@ -51,7 +51,7 @@ public sealed record FundOperationPageDto(
 public sealed record CreateFundOperationRequest(
     [Required, MaxLength(20)] string OperationKind,
     [Range(0.01, 999999999)] decimal Amount,
-    [Required, MaxLength(1000)] string Reason);
+    [MaxLength(1000)] string? Reason);
 
 public sealed record UpdateFundOperationRequest(
     [Range(0.01, 999999999)] decimal Amount,

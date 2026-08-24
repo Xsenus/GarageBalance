@@ -2380,7 +2380,7 @@ public sealed class FinanceServiceTests
         var audit = Assert.Single(database.Context.AuditEvents, item => item.Action == "finance.expense_created");
         Assert.Equal(actorUserId, audit.ActorUserId);
         Assert.Contains("Создана выплата 400.75", audit.Summary, StringComparison.Ordinal);
-        Assert.Contains("поставщику Vodokanal", audit.Summary, StringComparison.Ordinal);
+        Assert.Contains("получателю Vodokanal", audit.Summary, StringComparison.Ordinal);
         Assert.Contains("от 20.06.2026", audit.Summary, StringComparison.Ordinal);
         Assert.Contains("за 06.2026", audit.Summary, StringComparison.Ordinal);
         Assert.Contains("услуга/статья Вода", audit.Summary, StringComparison.Ordinal);
@@ -3140,6 +3140,99 @@ public sealed class FinanceServiceTests
     }
 
     [Fact]
+    public async Task CreateExpenseAsync_AllowsConfirmedBankPaymentToMakeExpenseFundNegative()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        var openingFundOperation = await database.Context.FundOperations
+            .SingleAsync(operation => operation.FundId == fixtures.ExpenseFund.Id);
+        fixtures.ExpenseFund.Balance = 50m;
+        openingFundOperation.Amount = 50m;
+        openingFundOperation.BalanceAfter = 50m;
+        database.Context.FinancialOperations.Add(new FinancialOperation
+        {
+            OperationKind = FinancialOperationKinds.Income,
+            OperationDate = new DateOnly(2026, 6, 10),
+            AccountingMonth = new DateOnly(2026, 6, 1),
+            Amount = SeededBankAmount + 500m,
+            GarageId = fixtures.Garage.Id,
+            IncomeTypeId = fixtures.IncomeType.Id
+        });
+        await database.Context.SaveChangesAsync();
+        var service = FinanceServiceTestFactory.Create(database.Context);
+
+        var result = await service.CreateExpenseAsync(
+            new CreateExpenseOperationRequest(
+                fixtures.Supplier.Id,
+                fixtures.ExpenseType.Id,
+                new DateOnly(2026, 6, 20),
+                new DateOnly(2026, 6, 1),
+                100m,
+                "FUND-NEGATIVE-CONFIRMED",
+                null,
+                ExpensePaymentTypes.WithReceipt,
+                ExpensePaymentSources.Bank,
+                fixtures.ExpenseFund.Id,
+                null,
+                true),
+            Guid.NewGuid(),
+            CancellationToken.None);
+
+        Assert.True(result.Succeeded, result.ErrorMessage);
+        Assert.True(result.Value!.NegativeFundBalanceConfirmed);
+        Assert.Equal(-50m, fixtures.ExpenseFund.Balance);
+        var disbursement = Assert.Single(database.Context.FundOperations, operation => operation.SourceFinancialOperationId == result.Value.Id);
+        Assert.Equal(-50m, disbursement.BalanceAfter);
+        var audit = Assert.Single(database.Context.AuditEvents, item => item.Action == "finance.expense_created");
+        Assert.Contains("negativeFundBalanceConfirmed", audit.MetadataJson, StringComparison.Ordinal);
+        Assert.Contains("true", audit.MetadataJson, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task CreateExpenseAsync_AllowsSupplierlessCashExpenseWithOptionalCounterparty()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixtures = await database.SeedAsync();
+        database.Context.Add(OpeningCashBalance(SeededBankAmount + 500m));
+        database.Context.FinancialOperations.Add(new FinancialOperation
+        {
+            OperationKind = FinancialOperationKinds.Income,
+            OperationDate = new DateOnly(2026, 6, 10),
+            AccountingMonth = new DateOnly(2026, 6, 1),
+            Amount = 500m,
+            GarageId = fixtures.Garage.Id,
+            IncomeTypeId = fixtures.IncomeType.Id
+        });
+        await database.Context.SaveChangesAsync();
+        var service = FinanceServiceTestFactory.Create(database.Context);
+
+        var result = await service.CreateExpenseAsync(
+            new CreateExpenseOperationRequest(
+                null,
+                fixtures.ExpenseType.Id,
+                new DateOnly(2026, 6, 20),
+                new DateOnly(2026, 6, 1),
+                300m,
+                "CASH-FREE-RECIPIENT",
+                null,
+                ExpensePaymentTypes.WithoutReceipt,
+                ExpensePaymentSources.Cash,
+                null,
+                "Разовый исполнитель"),
+            Guid.NewGuid(),
+            CancellationToken.None);
+
+        Assert.True(result.Succeeded, result.ErrorMessage);
+        Assert.Null(result.Value!.SupplierId);
+        Assert.Equal("Разовый исполнитель", result.Value.CounterpartyName);
+        Assert.Equal(ExpensePaymentSources.Cash, result.Value.ExpensePaymentSource);
+        Assert.DoesNotContain(database.Context.SupplierAccruals, accrual => accrual.SourceFinancialOperationId == result.Value.Id);
+        Assert.DoesNotContain(database.Context.FundOperations, operation => operation.SourceFinancialOperationId == result.Value.Id);
+        var audit = Assert.Single(database.Context.AuditEvents, item => item.Action == "finance.expense_created");
+        Assert.Equal("Разовый исполнитель", audit.RelatedCounterpartyName);
+    }
+
+    [Fact]
     public async Task SupplierManualExpenseFundOverride_DrivesAccrualPaymentAndWorksheet()
     {
         await using var database = await TestDatabase.CreateAsync();
@@ -3266,9 +3359,9 @@ public sealed class FinanceServiceTests
         Assert.Equal(800m, updated.Value.SupplierDebtAfter);
         var audit = Assert.Single(database.Context.AuditEvents, item => item.Action == "finance.expense_updated");
         Assert.Equal(actorUserId, audit.ActorUserId);
-        Assert.Contains("было 250.00 поставщику Vodokanal от 20.06.2026 за 06.2026", audit.Summary, StringComparison.Ordinal);
+        Assert.Contains("было 250.00 получателю Vodokanal от 20.06.2026 за 06.2026", audit.Summary, StringComparison.Ordinal);
         Assert.Contains("документ RKO-old", audit.Summary, StringComparison.Ordinal);
-        Assert.Contains("стало 400.00 поставщику Vodokanal от 21.06.2026 за 06.2026", audit.Summary, StringComparison.Ordinal);
+        Assert.Contains("стало 400.00 получателю Vodokanal от 21.06.2026 за 06.2026", audit.Summary, StringComparison.Ordinal);
         Assert.Contains("документ RKO-new", audit.Summary, StringComparison.Ordinal);
         Assert.Contains("Комментарий: Исправлена выплата", audit.Summary, StringComparison.Ordinal);
         using var metadata = JsonDocument.Parse(audit.MetadataJson!);

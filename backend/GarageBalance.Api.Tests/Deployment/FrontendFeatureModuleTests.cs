@@ -88,7 +88,7 @@ public sealed class FrontendFeatureModuleTests
         Assert.Contains("function PaymentsPrototypePanel(", featureText, StringComparison.Ordinal);
         Assert.Contains("financeClient.createIncome", featureText, StringComparison.Ordinal);
         Assert.Contains("financeClient.cancelOperation", featureText, StringComparison.Ordinal);
-        Assert.Contains("integrationClient.registerReceiptPrintingAction", featureText, StringComparison.Ordinal);
+        Assert.DoesNotContain("registerReceiptPrintingAction", featureText, StringComparison.Ordinal);
         Assert.Contains("frontend/src/features/finance/FinancePanel.tsx", File.ReadAllText(Path.Combine(repositoryRoot, "docs", "development-guide.md")), StringComparison.Ordinal);
     }
 
@@ -138,7 +138,7 @@ public sealed class FrontendFeatureModuleTests
         Assert.DoesNotContain("Доначислить", featureText, StringComparison.Ordinal);
         Assert.Contains("fee-campaign-table-scroll", featureText, StringComparison.Ordinal);
         Assert.Contains(".fee-campaign-table-scroll", stylesText, StringComparison.Ordinal);
-        Assert.Contains("grid-template-columns: minmax(210px, 1.5fr) minmax(86px, 0.55fr) minmax(86px, 0.55fr) minmax(130px, 0.8fr) minmax(150px, 0.9fr) 150px;", stylesText, StringComparison.Ordinal);
+        Assert.Contains("grid-template-columns: minmax(210px, 1.45fr) minmax(130px, 0.8fr) repeat(3, minmax(86px, 0.55fr)) minmax(130px, 0.8fr) minmax(150px, 0.9fr) 150px;", stylesText, StringComparison.Ordinal);
         Assert.Contains(".contractors-mini-row--fees > span", stylesText, StringComparison.Ordinal);
         Assert.Contains("frontend/src/features/tariffs/TariffsAndFeesPanel.tsx", File.ReadAllText(Path.Combine(repositoryRoot, "docs", "development-guide.md")), StringComparison.Ordinal);
     }

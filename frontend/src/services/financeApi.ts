@@ -31,6 +31,8 @@ export type FinancialOperationDto = {
   expenseTypeName: string | null
   expenseFundId?: string | null
   expenseFundName?: string | null
+  counterpartyName?: string | null
+  negativeFundBalanceConfirmed?: boolean
   garageDebtBefore: number | null
   garageDebtAfter: number | null
   supplierDebtBefore: number | null
@@ -453,11 +455,13 @@ export type IncomePaymentWarningDto = {
 }
 
 export type CreateExpenseOperationRequest = {
-  supplierId: string
+  supplierId?: string | null
   expenseTypeId: string
   expensePaymentType: ExpensePaymentType
   expensePaymentSource: ExpensePaymentSource
   expenseFundId?: string
+  counterpartyName?: string
+  confirmNegativeFundBalance?: boolean
   operationDate: string
   accountingMonth: string
   amount: number

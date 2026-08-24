@@ -1,11 +1,11 @@
 import { Fragment, useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
 import type { FormEvent, KeyboardEvent, MouseEvent, ReactNode } from 'react'
-import { Award, Banknote, Building2, CircleHelp, FileText, Gavel, History, LoaderCircle, Pencil, RotateCcw, Save, Search, Trash2, UserRound, WalletCards, X } from 'lucide-react'
+import { Award, CircleHelp, FileText, Gavel, History, LoaderCircle, Pencil, RotateCcw, Save, Search, Trash2, UserRound, WalletCards, X } from 'lucide-react'
 import type { AuthResponse } from '../../services/authApi'
 import type { AccountingTypeDto, DictionaryClient, GarageDto, IrregularPaymentDto, StaffMemberDto, SupplierDto, SupplierGroupDto } from '../../services/dictionariesApi'
 import type { AccrualDto, CreateAccrualRequest, CreateExpenseOperationRequest, CreateIncomeOperationRequest, CreateMeterReadingRequest, CreateSupplierAccrualRequest, ExpensePaymentSource, ExpensePaymentType, ExpenseWorksheetDto, FinanceClient, FinancePagedResult, FinanceSummaryDto, FinancialOperationDto, GarageOverdueDebtDto, GenerateSupplierGroupSalaryAccrualsRequest, MeterReadingDto, MissingMeterReadingDto, StaffSalaryAdjustmentType, SupplierAccrualDto } from '../../services/financeApi'
 import { FinanceApiError } from '../../services/financeApi'
-import type { IntegrationClient, ReceiptPrintingActionKind } from '../../services/integrationsApi'
+import type { IntegrationClient } from '../../services/integrationsApi'
 import type { ApplicationSettingsClient } from '../../services/settingsApi'
 import { hasPermission, permissions } from '../../shared/accessControl'
 import { AsyncErrorState, LoadingSkeleton, TableLoadingState } from '../../shared/AsyncState'
@@ -15,7 +15,7 @@ import type { ChangePreview } from '../../shared/changePreview'
 import { appendChangePreview, formatChangeDate, formatChangeMoney, formatChangeText } from '../../shared/changePreview'
 import { FormError, FormValidationSummary } from '../../shared/formFeedback'
 import { FormField } from '../../shared/FormField'
-import { formatAccrualSource, formatCount, formatDateOnly, formatDebtAmount, formatDebtLabel, formatMissingMeterReadings, formatMoney, formatMonth, formatOperationTime, formatPaymentAllocations, getDebtClassName, getCurrentMonthInputValue, getLocalDateInputValue, getPreviousMonthInputValue } from '../../shared/formatters'
+import { formatAccrualSource, formatDateOnly, formatDebtAmount, formatDebtLabel, formatMissingMeterReadings, formatMoney, formatMonth, formatOperationTime, formatPaymentAllocations, getDebtClassName, getCurrentMonthInputValue, getLocalDateInputValue, getPreviousMonthInputValue } from '../../shared/formatters'
 import { useEscapeKey, useFocusOnOpen, useFocusTrap, useRestoreFocusOnClose } from '../../shared/focusHooks'
 import { LocalizedDatePicker } from '../../shared/LocalizedDatePicker'
 import { MoneyInput, MoneyTextInput } from '../../shared/MoneyInput'
@@ -25,7 +25,7 @@ import { ReportPeriodQuickSelect } from '../../shared/ReportPeriodQuickSelect'
 import { TablePagination } from '../../shared/TablePagination'
 import { getAccrualValidationErrors, getExpenseValidationErrors, getIncomeValidationErrors, getMeterReadingValidationErrors, getSupplierAccrualValidationErrors, getSupplierGroupSalaryValidationErrors } from '../../shared/validation'
 import { formatPaymentMoney, parsePaymentMoney } from './paymentMoneyFormatting'
-import { calculateCashAndBankTotal, calculateExpenseWorksheetClosingBalance, getExpenseWorksheetCollectedClassName, toSignedExpenseWorksheetBalance } from './expenseWorksheetBalances'
+import { calculateCashAndBankTotal, calculateExpenseWorksheetClosingBalance, toSignedExpenseWorksheetBalance } from './expenseWorksheetBalances'
 import { expensePaymentTypeOptions, formatExpensePaymentSource, formatExpensePaymentType } from './expensePaymentTypes'
 import { rankGarageSearchResults } from './garageSearchRanking'
 import { getGarageBalancePresentation, toSignedGarageNetBalance, toSignedGarageSplitBalance } from './garageBalancePresentation'
@@ -148,14 +148,6 @@ type GaragePaymentHistoryCancelState = {
   error: string | null
 }
 
-type GaragePaymentReceiptActionState = {
-  row: GaragePaymentHistoryPrototypeRow
-  packageRows: GaragePaymentHistoryPrototypeRow[]
-  action: ReceiptPrintingActionKind
-  reason: string
-  error: string | null
-}
-
 type EarlyElectricityPaymentConfirmationState = {
   row: GarageIncomePrototypeRow
   previousPaymentDate: string
@@ -171,27 +163,6 @@ type HistoricalMeterReadingSaveState = {
 type GaragePaymentIncomeType = {
   id: string
   code: string | null
-}
-
-const receiptPrintingActionLabels: Record<ReceiptPrintingActionKind, { title: string; button: string; saving: string; description: string }> = {
-  print: {
-    title: 'Сформировать квитанцию?',
-    button: 'Сформировать квитанцию',
-    saving: 'Формируем...',
-    description: 'Действие будет записано в общую историю. Фактическая отправка на печатающее устройство включится после подключения адаптера.',
-  },
-  cancel: {
-    title: 'Отменить печать квитанции?',
-    button: 'Отменить печать',
-    saving: 'Отменяем...',
-    description: 'Отмена печати сохранится в общей истории изменений. Укажите причину, чтобы бухгалтер мог сверить действие позже.',
-  },
-  reprint: {
-    title: 'Напечатать копию квитанции?',
-    button: 'Напечатать копию',
-    saving: 'Регистрируем...',
-    description: 'Повторная печать будет зафиксирована как копия квитанции с отдельной отметкой в истории изменений. Укажите причину, например потерю квитанции или исправление печати.',
-  },
 }
 
 type FullPaymentPrototypePeriodOption = {
@@ -238,11 +209,13 @@ type StaffSalaryAdjustmentPrototypeDialogPreset = {
 }
 
 type ExpensePrototypeSubmitRequest = {
-  supplierId: string
+  supplierId?: string
+  counterpartyName: string
   expenseTypeId: string
   expensePaymentType: ExpensePaymentType
   expensePaymentSource: ExpensePaymentSource
-  expenseFundId: string
+  expenseFundId?: string
+  confirmNegativeFundBalance: boolean
   operationDate: string
   accountingMonth: string
   amount: number
@@ -328,7 +301,6 @@ export function FinancePanel({
   auth,
   dictionaryClient,
   financeClient,
-  integrationClient,
   settingsClient,
 }: {
   auth: AuthResponse
@@ -1159,7 +1131,7 @@ export function FinancePanel({
       setPendingFinanceEditConfirmation({
         kind: 'expense',
         recordId: financeEditor.record.id,
-        objectName: `${financeEditor.record.expenseTypeName ?? 'Выплата'} · ${financeEditor.record.supplierName ?? 'Поставщик'} · ${formatChangeMoney(financeEditor.record.amount)}`,
+        objectName: `${financeEditor.record.expenseTypeName ?? 'Выплата'} · ${financeEditor.record.supplierName ?? financeEditor.record.counterpartyName ?? 'Получатель не указан'} · ${formatChangeMoney(financeEditor.record.amount)}`,
         request,
         changes,
       })
@@ -1444,14 +1416,15 @@ export function FinancePanel({
     const record = target.record
     if ('operationKind' in record) {
       const name = record.operationKind === 'income' ? record.incomeTypeName : record.expenseTypeName
-      const counterparty = record.operationKind === 'income' ? formatFinanceGarageLabel(record.garageNumber) : record.supplierName
+      const counterparty = record.operationKind === 'income' ? formatFinanceGarageLabel(record.garageNumber) : record.supplierName ?? record.counterpartyName
       return `${name ?? 'Операция'} · ${counterparty ?? 'контрагент не указан'} · ${formatMoney(record.amount)}`
     }
     if ('meterKind' in record) {
       return `${getFinanceMeterKindLabel(record.meterKind)} · ${formatFinanceGarageLabel(record.garageNumber)} · ${formatMonth(record.accountingMonth)}`
     }
     if ('supplierName' in record) {
-      return `${record.expenseTypeName} · ${record.supplierName} · ${formatMoney(record.amount)}`
+      const recipient = record.supplierName ?? ('counterpartyName' in record ? record.counterpartyName : null) ?? 'Получатель не указан'
+      return `${record.expenseTypeName} · ${recipient} · ${formatMoney(record.amount)}`
     }
     return `${record.basis ?? record.incomeTypeName} · ${formatFinanceGarageLabel(record.garageNumber)} · ${formatMoney(record.amount)}`
   }
@@ -1833,7 +1806,7 @@ export function FinancePanel({
               <tr className="finance-table-row--interactive" key={operation.id} tabIndex={0} onContextMenu={(event) => openFinanceContextMenu(event, 'expense', operation)} onClick={(event) => editFinanceRecord('expense', operation, event.currentTarget)} onKeyDown={(event) => handleFinanceRowKeyDown(event, 'expense', operation)}>
                 <td>{formatDateOnly(operation.operationDate)}</td>
                 <td>{formatMonth(operation.accountingMonth)}</td>
-                <td>{getFinanceOptionalText(operation.supplierName)}</td>
+                <td>{getFinanceOptionalText(operation.supplierName ?? operation.counterpartyName)}</td>
                 <td>{operation.expenseTypeName}</td>
                 <td>{formatExpensePaymentSource(operation.expensePaymentSource, operation.expensePaymentType)} · {formatExpensePaymentType(operation.expensePaymentType)}</td>
                 <td>{getFinanceOptionalText(operation.documentNumber)}</td>
@@ -2189,7 +2162,6 @@ export function FinancePanel({
         garages={garages}
         incomeTypes={incomeTypes}
         irregularPayments={irregularPayments}
-        integrationClient={integrationClient}
         loading={paymentsPrototypeLoading}
         suppliers={suppliers}
         staffMembers={staffMembers}
@@ -2481,7 +2453,7 @@ export function FinancePanel({
               <span role="cell">{formatDateOnly(operation.operationDate)}</span>
               <span role="cell">
                 <strong>{operation.operationKind === 'income' ? operation.incomeTypeName : operation.expenseTypeName}</strong>
-                <small>{operation.operationKind === 'income' ? `Гараж ${operation.garageNumber}` : operation.supplierName}</small>
+                <small>{operation.operationKind === 'income' ? `Гараж ${operation.garageNumber}` : operation.supplierName ?? operation.counterpartyName ?? 'Получатель не указан'}</small>
                 {operation.operationKind === 'income' && operation.garageDebtBefore !== null && operation.garageDebtAfter !== null ? (
                   <small className="balance-history">Долг: {formatMoney(operation.garageDebtBefore)} → {formatMoney(operation.garageDebtAfter)}</small>
                 ) : null}
@@ -2910,7 +2882,6 @@ function PaymentsPrototypePanel({
   garages,
   incomeTypes,
   irregularPayments,
-  integrationClient,
   loading,
   suppliers,
   staffMembers,
@@ -2928,7 +2899,6 @@ function PaymentsPrototypePanel({
   garages: GarageDto[]
   incomeTypes: AccountingTypeDto[]
   irregularPayments: IrregularPaymentDto[]
-  integrationClient: IntegrationClient
   loading: boolean
   suppliers: SupplierDto[]
   staffMembers: StaffMemberDto[]
@@ -3005,11 +2975,7 @@ function PaymentsPrototypePanel({
   const historyEditTriggerRef = useRef<HTMLButtonElement | null>(null)
   const [historyCancel, setHistoryCancel] = useState<GaragePaymentHistoryCancelState | null>(null)
   const historyCancelTriggerRef = useRef<HTMLButtonElement | null>(null)
-  const [receiptAction, setReceiptAction] = useState<GaragePaymentReceiptActionState | null>(null)
-  const receiptActionTriggerRef = useRef<HTMLButtonElement | null>(null)
   const [historyActionSaving, setHistoryActionSaving] = useState(false)
-  const [receiptActionSaving, setReceiptActionSaving] = useState(false)
-  const [receiptActionStatus, setReceiptActionStatus] = useState<string | null>(null)
   const [earlyElectricityPaymentConfirmation, setEarlyElectricityPaymentConfirmation] = useState<EarlyElectricityPaymentConfirmationState | null>(null)
   const earlyElectricityPaymentTriggerRef = useRef<HTMLElement | null>(null)
   const availableGarages = useMemo(() => {
@@ -3521,32 +3487,6 @@ function PaymentsPrototypePanel({
     }, 0)
   }
 
-  function openReceiptAction(row: GaragePaymentHistoryPrototypeRow, action: ReceiptPrintingActionKind, trigger?: HTMLButtonElement | null) {
-    if (!row.operation || !canWritePayments || row.operation.isCanceled) {
-      return
-    }
-
-    receiptActionTriggerRef.current = trigger ?? null
-    setPaymentError(null)
-    setReceiptActionStatus(null)
-    const receiptBatchId = row.operation.receiptBatchId
-    const packageRows = receiptBatchId
-      ? historyRows.filter((historyRow) => historyRow.operation?.receiptBatchId === receiptBatchId && !historyRow.operation.isCanceled)
-      : [row]
-    setReceiptAction({ row, packageRows, action, reason: '', error: null })
-  }
-
-  function closeReceiptActionDialog() {
-    const trigger = receiptActionTriggerRef.current
-    setReceiptAction(null)
-    window.setTimeout(() => {
-      if (trigger?.isConnected) {
-        trigger.focus()
-      }
-      receiptActionTriggerRef.current = null
-    }, 0)
-  }
-
   async function saveHistoryEdit() {
     if (!historyEdit?.row.operation || !selectedGarage) {
       return
@@ -3615,37 +3555,6 @@ function PaymentsPrototypePanel({
     }
   }
 
-  async function confirmReceiptAction() {
-    if (!receiptAction?.row.operation) {
-      return
-    }
-
-    const reason = receiptAction.reason.trim()
-    if (receiptAction.action !== 'print' && !reason) {
-      setReceiptAction((state) => state ? { ...state, error: 'Укажите причину для отмены или повторной печати квитанции.' } : state)
-      return
-    }
-
-    setReceiptActionSaving(true)
-    setReceiptAction((state) => state ? { ...state, error: null } : state)
-    try {
-      const result = await integrationClient.registerReceiptPrintingAction(auth.accessToken, receiptAction.row.operation.id, {
-        action: receiptAction.action,
-        reason: reason || undefined,
-      })
-      closeReceiptActionDialog()
-      const copyStatus = result.isCopy && result.copyMark ? ` Отметка: ${result.copyMark}.` : ''
-      const packageStatus = (result.lineCount ?? 1) > 1
-        ? ` Единая квитанция: ${formatCount(result.lineCount ?? 1, 'позиция', 'позиции', 'позиций')} на сумму ${formatPaymentPrototypeValue(result.totalAmount ?? 0)}.`
-        : ''
-      setReceiptActionStatus(`${result.statusMessage}${copyStatus}${packageStatus}`)
-    } catch (error) {
-      setReceiptAction((state) => state ? { ...state, error: error instanceof Error ? error.message : 'Не удалось зарегистрировать действие квитанции.' } : state)
-    } finally {
-      setReceiptActionSaving(false)
-    }
-  }
-
   function activateGarage(garage: PaymentsPrototypeGarage) {
     const currentMonth = getCurrentMonthInputValue()
     const previousMonth = getPreviousMonthInputValue(currentMonth)
@@ -3659,7 +3568,6 @@ function PaymentsPrototypePanel({
     setPaymentHistoryOpen(false)
     setGaragePaymentHistoryLoadingId(null)
     setPaymentError(null)
-    setReceiptActionStatus(null)
     setIncomeWorksheetAvailableMonthFrom(previousMonth)
     setIncomeWorksheetAvailableMonthTo(currentMonth)
     setIncomeWorksheetMonthFrom(previousMonth)
@@ -4300,24 +4208,30 @@ function PaymentsPrototypePanel({
   }
 
   async function commitExpensePayment(request: ExpensePrototypeSubmitRequest) {
-    const supplier = suppliers.find((item) => item.id === request.supplierId && !item.isArchived) ?? null
-    if (!supplier) {
-      return 'Выберите поставщика из справочника.'
-    }
-
     const expenseType = expenseTypes.find((item) => item.id === request.expenseTypeId && !item.isArchived) ?? null
     if (!expenseType) {
-      return 'Для поставщика должна быть настроена услуга.'
+      return 'Выберите услугу или статью выплаты.'
     }
-    if (supplier.expenseTypeId !== expenseType.id) {
-      return `Поставщику «${supplier.name}» можно провести выплату только по настроенной услуге.`
+
+    const supplier = request.supplierId
+      ? suppliers.find((item) => item.id === request.supplierId && !item.isArchived) ?? null
+      : null
+    if (request.expensePaymentSource === 'bank') {
+      if (!supplier) {
+        return 'Для выплаты с банковского счёта выберите поставщика.'
+      }
+      if (supplier.expenseTypeId !== expenseType.id) {
+        return `Поставщику «${supplier.name}» можно провести выплату только по настроенной услуге.`
+      }
     }
     await financeClient.createExpense(auth.accessToken, {
-      supplierId: supplier.id,
+      supplierId: supplier?.id,
+      counterpartyName: request.expensePaymentSource === 'cash' ? request.counterpartyName.trim() || undefined : undefined,
       expenseTypeId: expenseType.id,
       expensePaymentType: request.expensePaymentType,
       expensePaymentSource: request.expensePaymentSource,
       expenseFundId: request.expenseFundId || undefined,
+      confirmNegativeFundBalance: request.confirmNegativeFundBalance,
       operationDate: request.operationDate,
       accountingMonth: request.accountingMonth,
       amount: request.amount,
@@ -4497,7 +4411,6 @@ function PaymentsPrototypePanel({
   const expenseClosingAdvanceTotal = expenseRows.reduce((sum, row) => sum + row.closingAdvance, 0)
   const expenseOpeningBalanceTotal = toSignedExpenseWorksheetBalance(expenseOpeningDebtTotal, expenseOpeningAdvanceTotal)
   const expenseClosingBalanceTotal = toSignedExpenseWorksheetBalance(expenseClosingDebtTotal, expenseClosingAdvanceTotal)
-  const expenseCollectedTotal = expenseRows.reduce((sum, row) => sum + (typeof row.collected === 'number' ? row.collected : 0), 0)
   const expenseDifferenceTotal = expenseRows.reduce((sum, row) => sum + (typeof row.difference === 'number' ? row.difference : 0), 0)
   const expenseCashAndBankTotal = calculateCashAndBankTotal(expenseBankAmount, expenseCashAmount)
   const isEditableExpenseWorksheetPeriod = expenseWorksheetMonthFrom === expenseWorksheetMonthTo
@@ -4579,7 +4492,6 @@ function PaymentsPrototypePanel({
         </div>
       </div> : null}
       {paymentError ? <FormError>{paymentError}</FormError> : null}
-      {receiptActionStatus ? <p className="form-status" role="status">{receiptActionStatus}</p> : null}
       {activeTab === 'income' && garageWorksheetLoadingId ? <TableLoadingState className="table-loading-state--compact" label="Загружаем поступления выбранного гаража" /> : null}
 
       <div className="payments-prototype-toolbar">
@@ -4755,11 +4667,7 @@ function PaymentsPrototypePanel({
                   <tr>
                     <td colSpan={6}><TableLoadingState label="Загружаем историю платежей" /></td>
                   </tr>
-                ) : historyRows.length > 0 ? historyRows.map((row, rowIndex) => {
-                  const receiptBatchId = row.operation?.receiptBatchId
-                  const isReceiptBatchLeader = !receiptBatchId || historyRows.findIndex((candidate) =>
-                    candidate.operation?.receiptBatchId === receiptBatchId &&
-                    !candidate.operation.isCanceled) === rowIndex
+                ) : historyRows.length > 0 ? historyRows.map((row) => {
                   return (
                   <tr key={row.id}>
                     <td>{row.date}</td>
@@ -4776,19 +4684,6 @@ function PaymentsPrototypePanel({
                           <button className="icon-button danger-icon-button" type="button" title="Отменить платеж" aria-label={`Отменить платеж ${row.purpose}`} onClick={(event) => openHistoryCancel(row, event.currentTarget)}>
                             <Trash2 size={16} aria-hidden="true" />
                           </button>
-                          {!row.operation.isCanceled && isReceiptBatchLeader ? (
-                            <>
-                              <button className="icon-button" type="button" title={receiptBatchId ? 'Сформировать единую квитанцию' : 'Сформировать квитанцию'} aria-label={`${receiptBatchId ? 'Сформировать единую квитанцию пакета' : 'Сформировать квитанцию платежа'} ${row.purpose}`} onClick={(event) => openReceiptAction(row, 'print', event.currentTarget)}>
-                                <FileText size={16} aria-hidden="true" />
-                              </button>
-                              <button className="icon-button danger-icon-button" type="button" title={receiptBatchId ? 'Отменить печать единой квитанции' : 'Отменить печать квитанции'} aria-label={`${receiptBatchId ? 'Отменить печать единой квитанции пакета' : 'Отменить печать квитанции платежа'} ${row.purpose}`} onClick={(event) => openReceiptAction(row, 'cancel', event.currentTarget)}>
-                                <Trash2 size={16} aria-hidden="true" />
-                              </button>
-                              <button className="icon-button" type="button" title={receiptBatchId ? 'Напечатать копию единой квитанции' : 'Напечатать копию квитанции'} aria-label={`${receiptBatchId ? 'Напечатать копию единой квитанции пакета' : 'Напечатать копию квитанции платежа'} ${row.purpose}`} onClick={(event) => openReceiptAction(row, 'reprint', event.currentTarget)}>
-                                <RotateCcw size={16} aria-hidden="true" />
-                              </button>
-                            </>
-                          ) : receiptBatchId && !row.operation.isCanceled ? <span className="form-hint">В единой квитанции</span> : null}
                         </div>
                       ) : '—'}
                     </td>
@@ -5017,12 +4912,8 @@ function PaymentsPrototypePanel({
               <span>Добавить начисление</span>
             </button>
             <button className="secondary-button create-action-button" type="button" disabled={!canWritePayments} onClick={(event) => openExpenseDialog(event, { expensePaymentSource: 'bank' })}>
-              <Building2 size={16} aria-hidden="true" />
-              <span>Регулярный поставщик</span>
-            </button>
-            <button className="secondary-button create-action-button" type="button" disabled={!canWritePayments} onClick={(event) => openExpenseDialog(event, { expensePaymentSource: 'cash' })}>
-              <Banknote size={16} aria-hidden="true" />
-              <span>Эпизодический поставщик</span>
+              <WalletCards size={16} aria-hidden="true" />
+              <span>Добавить выплату</span>
             </button>
             <button className="secondary-button create-action-button" type="button" disabled={!canWritePayments} onClick={(event) => openStaffPaymentDialog(event)}>
               <UserRound size={16} aria-hidden="true" />
@@ -5080,8 +4971,7 @@ function PaymentsPrototypePanel({
                     <th scope="col">Исходящий баланс</th>
                     {isEditableExpenseWorksheetPeriod ? (
                       <>
-                        <th scope="col">Средства фонда до выплат</th>
-                        <th scope="col">Остаток фонда после выплат</th>
+                        <th scope="col">Текущий размер фонда</th>
                         <th scope="col">Действие</th>
                       </>
                     ) : null}
@@ -5094,7 +4984,6 @@ function PaymentsPrototypePanel({
                     const suggestedAmount = row.closingDebt > 0 ? row.closingDebt : typeof row.cost === 'number' ? row.cost : undefined
                     const openingBalance = toSignedExpenseWorksheetBalance(row.openingDebt, row.openingAdvance)
                     const closingBalance = toSignedExpenseWorksheetBalance(row.closingDebt, row.closingAdvance)
-                    const collectedClassName = getExpenseWorksheetCollectedClassName(row.collected, row.cost)
                     return (
                       <tr key={`${row.item}-${index}`}>
                         <td>{supplier}</td>
@@ -5117,8 +5006,9 @@ function PaymentsPrototypePanel({
                         <td>{formatPaymentMoney(closingBalance)}</td>
                         {isEditableExpenseWorksheetPeriod ? (
                           <>
-                            <td className={collectedClassName}>{formatPaymentMoney(row.collected)}</td>
-                            <td>{formatPaymentMoney(row.difference)}</td>
+                            <td className={typeof row.difference === 'number' && row.difference < 0 ? 'money-expense' : typeof row.difference === 'number' && row.difference > 0 ? 'money-income' : undefined}>
+                              {formatPaymentMoney(row.difference)}
+                            </td>
                             <td>
                               {row.action ? (
                                 <button className="link-button" type="button" onClick={(event) => {
@@ -5140,7 +5030,7 @@ function PaymentsPrototypePanel({
                   })}
                   {expenseRows.length === 0 ? (
                     <tr>
-                      <td colSpan={isEditableExpenseWorksheetPeriod ? 9 : 6}>{expenseWorksheetLoading ? <TableLoadingState label="Загружаем форму выплат" /> : 'Начислений и выплат за выбранный период пока нет.'}</td>
+                      <td colSpan={isEditableExpenseWorksheetPeriod ? 8 : 6}>{expenseWorksheetLoading ? <TableLoadingState label="Загружаем форму выплат" /> : 'Начислений и выплат за выбранный период пока нет.'}</td>
                     </tr>
                   ) : null}
                   <tr className="payments-prototype-total-row">
@@ -5152,8 +5042,9 @@ function PaymentsPrototypePanel({
                     <td>{formatPaymentMoney(expenseClosingBalanceTotal)}</td>
                     {isEditableExpenseWorksheetPeriod ? (
                       <>
-                        <td className={getExpenseWorksheetCollectedClassName(expenseCollectedTotal, expenseAccrualTotal)}>{formatPaymentMoney(expenseCollectedTotal)}</td>
-                        <td>{formatPaymentMoney(expenseDifferenceTotal)}</td>
+                        <td className={expenseDifferenceTotal < 0 ? 'money-expense' : expenseDifferenceTotal > 0 ? 'money-income' : undefined}>
+                          {formatPaymentMoney(expenseDifferenceTotal)}
+                        </td>
                         <td />
                       </>
                     ) : null}
@@ -5327,6 +5218,7 @@ function PaymentsPrototypePanel({
       ) : null}
       {staffPaymentDialogPreset ? (
         <StaffPaymentPrototypeDialog
+          availableCashAmount={expenseCashAmount}
           preset={staffPaymentDialogPreset}
           staffMembers={staffMembers.filter((staffMember) => !staffMember.isArchived)}
           onClose={closeStaffPaymentDialog}
@@ -5357,15 +5249,6 @@ function PaymentsPrototypePanel({
           onChange={(patch) => setHistoryCancel((value) => value ? { ...value, ...patch, error: null } : value)}
           onClose={closeHistoryCancelDialog}
           onConfirm={confirmHistoryCancel}
-        />
-      ) : null}
-      {receiptAction ? (
-        <GaragePaymentReceiptActionDialog
-          state={receiptAction}
-          saving={receiptActionSaving}
-          onChange={(patch) => setReceiptAction((value) => value ? { ...value, ...patch, error: null } : value)}
-          onClose={closeReceiptActionDialog}
-          onConfirm={confirmReceiptAction}
         />
       ) : null}
       {staffSalaryAdjustmentDialogPreset ? (
@@ -5627,74 +5510,6 @@ function GaragePaymentHistoryCancelDialog({
   )
 }
 
-function GaragePaymentReceiptActionDialog({
-  state,
-  saving,
-  onChange,
-  onClose,
-  onConfirm,
-}: {
-  state: GaragePaymentReceiptActionState
-  saving: boolean
-  onChange: (patch: Partial<Omit<GaragePaymentReceiptActionState, 'row' | 'packageRows' | 'action'>>) => void
-  onClose: () => void
-  onConfirm: () => void
-}) {
-  const dialogRef = useFocusTrap<HTMLElement>(true)
-  const cancelRef = useFocusOnOpen<HTMLButtonElement>(true)
-  const labels = receiptPrintingActionLabels[state.action]
-  const needsReason = state.action !== 'print'
-  const packageAmount = state.packageRows.reduce((sum, row) => sum + row.amount, 0)
-  const isUnifiedReceipt = state.packageRows.length > 1
-  useEscapeKey(!saving, onClose)
-
-  return (
-    <div className="modal-backdrop" role="presentation" onMouseDown={() => {
-      if (!saving) {
-        onClose()
-      }
-    }}>
-      <section ref={dialogRef} className="detail-dialog payments-prototype-dialog payments-prototype-dialog--wide" role="dialog" aria-modal="true" aria-labelledby="garage-payment-receipt-action-title" onMouseDown={(event) => event.stopPropagation()}>
-        <div className="detail-dialog-header">
-          <div>
-            <p className="eyebrow">Квитанция платежа</p>
-            <h3 id="garage-payment-receipt-action-title">{labels.title}</h3>
-            <p>{isUnifiedReceipt ? `Единая квитанция · ${formatCount(state.packageRows.length, 'позиция', 'позиции', 'позиций')} · ${formatPaymentPrototypeValue(packageAmount)}` : `${state.row.purpose} · ${formatPaymentPrototypeValue(state.row.amount)}`}</p>
-          </div>
-          <button className="icon-button" type="button" aria-label="Закрыть действие квитанции" onClick={onClose} disabled={saving}>
-            <X size={18} aria-hidden="true" />
-          </button>
-        </div>
-        <div className="dictionary-modal-form payments-prototype-modal-form">
-          <p className="confirmation-text">{labels.description}</p>
-          {isUnifiedReceipt ? (
-            <div aria-label="Состав единой квитанции">
-              <p className="form-hint">В одну квитанцию войдут все услуги пакета:</p>
-              <ul>
-                {state.packageRows.map((row) => <li key={row.id}>{row.purpose} — {formatPaymentPrototypeValue(row.amount)}</li>)}
-              </ul>
-            </div>
-          ) : null}
-          {state.row.operation?.documentNumber ? <p className="form-hint">Документ: {state.row.operation.documentNumber}</p> : null}
-          {needsReason ? (
-            <FormField label="Причина">
-              <textarea aria-label="Причина действия с квитанцией" rows={4} value={state.reason} onChange={(event) => onChange({ reason: event.target.value })} disabled={saving} />
-            </FormField>
-          ) : null}
-          {state.error ? <FormError>{state.error}</FormError> : null}
-          <div className="detail-dialog-actions">
-            <button ref={cancelRef} className="ghost-button" type="button" onClick={onClose} disabled={saving}>Отмена</button>
-            <button className={`secondary-button${state.action === 'cancel' ? ' danger-button' : ''}`} type="button" onClick={onConfirm} disabled={saving}>
-              {state.action === 'reprint' ? <RotateCcw size={16} aria-hidden="true" /> : state.action === 'cancel' ? <Trash2 size={16} aria-hidden="true" /> : <FileText size={16} aria-hidden="true" />}
-              <span>{saving ? labels.saving : labels.button}</span>
-            </button>
-          </div>
-        </div>
-      </section>
-    </div>
-  )
-}
-
 function BankDepositPrototypeDialog({
   auth,
   financeClient,
@@ -5802,18 +5617,21 @@ function NewExpensePrototypeDialog({
   const presetExpenseType = preset.expenseTypeName
     ? expenseTypes.find((expenseType) => expenseType.name.trim().toLocaleLowerCase('ru-RU') === preset.expenseTypeName?.trim().toLocaleLowerCase('ru-RU'))
     : null
-  const isCashExpense = preset.expensePaymentSource === 'cash'
   const availableSuppliers = suppliers.filter((supplier) => Boolean(
     getSupplierAccrualExpenseType(supplier, expenseTypes) && supplier.expenseFundId,
   ))
   const initialSupplier = availableSuppliers.find((supplier) => supplier.expenseTypeId === presetExpenseType?.id)
     ?? getFirstLinkedSupplier(availableSuppliers, expenseTypes)
+  const [expensePaymentSource, setExpensePaymentSource] = useState<ExpensePaymentSource>(preset.expensePaymentSource)
+  const isCashExpense = expensePaymentSource === 'cash'
   const [supplierId, setSupplierId] = useState(initialSupplier?.id ?? '')
   const [expenseTypeId, setExpenseTypeId] = useState(
     getSupplierAccrualExpenseType(initialSupplier, expenseTypes)?.id ?? '',
   )
   const [expenseFundId, setExpenseFundId] = useState(initialSupplier?.expenseFundId ?? '')
   const [expensePaymentType, setExpensePaymentType] = useState<ExpensePaymentType>('with_receipt')
+  const [counterpartyName, setCounterpartyName] = useState('')
+  const [confirmNegativeFundBalance, setConfirmNegativeFundBalance] = useState(false)
   const [operationDate, setOperationDate] = useState(getLocalDateInputValue())
   const [accountingMonth, setAccountingMonth] = useState(getLocalDateInputValue().slice(0, 7))
   const [amount, setAmount] = useState(preset.amount ? String(preset.amount) : '')
@@ -5827,15 +5645,15 @@ function NewExpensePrototypeDialog({
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     const parsedAmount = parsePaymentMoney(amount)
-    if (!supplierId) {
-      setError('Выберите поставщика из справочника.')
+    if (!isCashExpense && !supplierId) {
+      setError('Для выплаты с банковского счёта выберите поставщика.')
       return
     }
     if (!expenseTypeId) {
-      setError('Для поставщика должна быть настроена услуга.')
+      setError('Выберите услугу или статью выплаты.')
       return
     }
-    if (!selectedSupplier?.expenseFundId) {
+    if (!isCashExpense && !selectedSupplier?.expenseFundId) {
       setError('Для услуги поставщика должен быть настроен фонд расходования.')
       return
     }
@@ -5852,8 +5670,8 @@ function NewExpensePrototypeDialog({
       return
     }
     const availableFundBalance = selectedSupplier?.expenseFundBalance ?? 0
-    if (parsedAmount > availableFundBalance) {
-      setError('В фонде расходования недостаточно средств для этой выплаты.')
+    if (!isCashExpense && parsedAmount > availableFundBalance && !confirmNegativeFundBalance) {
+      setError('Подтвердите выплату с отрицательным остатком фонда.')
       return
     }
 
@@ -5861,11 +5679,13 @@ function NewExpensePrototypeDialog({
     setError(null)
     try {
       const submitError = await onSubmit({
-        supplierId,
+        supplierId: isCashExpense ? undefined : supplierId,
+        counterpartyName,
         expenseTypeId,
         expensePaymentType,
-        expensePaymentSource: preset.expensePaymentSource,
-        expenseFundId,
+        expensePaymentSource,
+        expenseFundId: isCashExpense ? undefined : expenseFundId,
+        confirmNegativeFundBalance: !isCashExpense && parsedAmount > availableFundBalance && confirmNegativeFundBalance,
         operationDate,
         accountingMonth: `${accountingMonth}-01`,
         amount: parsedAmount,
@@ -5890,14 +5710,39 @@ function NewExpensePrototypeDialog({
       <section ref={dialogRef} className="detail-dialog payments-prototype-dialog" role="dialog" aria-modal="true" aria-labelledby="new-expense-title" onMouseDown={(event) => event.stopPropagation()}>
         <div className="detail-dialog-header">
           <div>
-            <h3 id="new-expense-title">{isCashExpense ? 'Выплата эпизодическому поставщику' : 'Выплата регулярному поставщику'}</h3>
+            <h3 id="new-expense-title">Добавить выплату</h3>
           </div>
           <button className="icon-button" type="button" aria-label="Закрыть новую выплату" onClick={onClose}>
             <X size={18} />
           </button>
         </div>
         <form className="dictionary-modal-form payments-prototype-modal-form" onSubmit={handleSubmit}>
-          <FormField label="Поставщик">
+          <FormField label="Источник и вид выплаты">
+            <SelectControl
+              aria-label="Источник выплаты"
+              value={expensePaymentSource}
+              options={[
+                { value: 'bank', label: 'Банк · обычная выплата поставщику' },
+                { value: 'cash', label: 'Касса · эпизодическая выплата' },
+              ]}
+              disabled={saving}
+              onChange={(nextSource) => {
+                const source = nextSource as ExpensePaymentSource
+                setExpensePaymentSource(source)
+                setConfirmNegativeFundBalance(false)
+                if (source === 'bank') {
+                  const nextSupplier = suppliers.find((supplier) => supplier.id === supplierId) ?? initialSupplier
+                  setSupplierId(nextSupplier?.id ?? '')
+                  setExpenseTypeId(getSupplierAccrualExpenseType(nextSupplier, expenseTypes)?.id ?? '')
+                  setExpenseFundId(nextSupplier?.expenseFundId ?? '')
+                } else {
+                  setExpenseTypeId(expenseTypes.find((expenseType) => !expenseType.isArchived)?.id ?? '')
+                  setExpenseFundId('')
+                }
+                setError(null)
+              }} />
+          </FormField>
+          {!isCashExpense ? <FormField label="Поставщик">
             <SelectControl
               aria-label="Поставщик выплаты"
               value={supplierId}
@@ -5910,29 +5755,35 @@ function NewExpensePrototypeDialog({
                 const nextSupplier = suppliers.find((supplier) => supplier.id === nextSupplierId)
                 setExpenseTypeId(getSupplierAccrualExpenseType(nextSupplier, expenseTypes)?.id ?? '')
                 setExpenseFundId(nextSupplier?.expenseFundId ?? '')
+                setConfirmNegativeFundBalance(false)
                 setError(null)
               }} />
-          </FormField>
-          <FormField label="Услуга">
+          </FormField> : (
+            <FormField label="Получатель (необязательно)" help="Можно указать имя или организацию без создания карточки поставщика.">
+              <input aria-label="Получатель эпизодической выплаты" maxLength={200} value={counterpartyName} onChange={(event) => setCounterpartyName(event.target.value)} disabled={saving} />
+            </FormField>
+          )}
+          <FormField label={isCashExpense ? 'Услуга или статья' : 'Услуга'}>
             <SelectControl
               aria-label="Услуга выплаты поставщику"
               value={expenseTypeId}
-              options={expenseTypeId
-                ? [{ value: expenseTypeId, label: expenseTypes.find((expenseType) => expenseType.id === expenseTypeId)?.name ?? 'Настроенная услуга' }]
-                : [{ value: '', label: 'Услуга не настроена' }]}
+              options={isCashExpense
+                ? expenseTypes.filter((expenseType) => !expenseType.isArchived).map((expenseType) => ({ value: expenseType.id, label: expenseType.name }))
+                : expenseTypeId
+                  ? [{ value: expenseTypeId, label: expenseTypes.find((expenseType) => expenseType.id === expenseTypeId)?.name ?? 'Настроенная услуга' }]
+                  : [{ value: '', label: 'Услуга не настроена' }]}
               onChange={(nextExpenseTypeId) => {
                 setExpenseTypeId(nextExpenseTypeId)
                 setError(null)
               }}
-              disabled />
+              disabled={!isCashExpense || saving} />
           </FormField>
-          <p className="form-hint">
+          {!isCashExpense ? <p className="form-hint">
             Фонд расходования: {selectedSupplier?.expenseFundName ?? 'не настроен'}
             {selectedSupplier?.expenseFundId
               ? ` · доступно ${formatMoney(selectedSupplier.expenseFundBalance ?? 0)}`
               : ''}
-          </p>
-          <p className="form-hint">Источник выплаты: <strong>{isCashExpense ? 'касса' : 'банковский счёт'}</strong>.</p>
+          </p> : null}
           {isCashExpense ? (
             <FormField label="Тип выплаты">
               <SelectControl
@@ -5961,9 +5812,28 @@ function NewExpensePrototypeDialog({
           <FormField label="Сумма">
             <MoneyTextInput aria-label="Сумма выплаты" value={amount} onValueChange={(nextAmount) => {
               setAmount(nextAmount)
+              setConfirmNegativeFundBalance(false)
               setError(null)
             }} />
           </FormField>
+          {!isCashExpense && (parsePaymentMoney(amount) ?? 0) > (selectedSupplier?.expenseFundBalance ?? 0) ? (
+            <label className="payments-negative-fund-confirmation">
+              <input
+                type="checkbox"
+                aria-label="Подтвердить отрицательный остаток фонда"
+                checked={confirmNegativeFundBalance}
+                onChange={(event) => {
+                  setConfirmNegativeFundBalance(event.target.checked)
+                  setError(null)
+                }}
+                disabled={saving}
+              />
+              <span>
+                <strong>После выплаты фонд станет отрицательным.</strong>
+                <small>Банк будет проверен отдельно. Подтверждение сохранится в истории изменений.</small>
+              </span>
+            </label>
+          ) : null}
           <FormField label="Документ">
             <input aria-label="Документ выплаты" value={documentNumber} onChange={(event) => setDocumentNumber(event.target.value)} />
           </FormField>
@@ -5982,11 +5852,13 @@ function NewExpensePrototypeDialog({
 }
 
 function StaffPaymentPrototypeDialog({
+  availableCashAmount,
   preset,
   staffMembers,
   onClose,
   onSubmit,
 }: {
+  availableCashAmount: number
   preset: StaffPaymentPrototypeDialogPreset
   staffMembers: StaffMemberDto[]
   onClose: () => void
@@ -6027,6 +5899,10 @@ function StaffPaymentPrototypeDialog({
       setError('Укажите сумму выплаты сотруднику больше нуля.')
       return
     }
+    if (parsedAmount > availableCashAmount) {
+      setError(`В кассе недостаточно средств. Доступно ${formatMoney(availableCashAmount)}.`)
+      return
+    }
 
     setSaving(true)
     setError(null)
@@ -6064,7 +5940,8 @@ function StaffPaymentPrototypeDialog({
           </button>
         </div>
         <form className="dictionary-modal-form payments-prototype-modal-form" onSubmit={handleSubmit}>
-          <p className="form-hint">Источник выплаты: <strong>касса</strong>. Фонд расходования не требуется.</p>
+          <p className="form-hint">Источник выплаты: <strong>касса</strong>. Доступно {formatMoney(availableCashAmount)}. Фонд расходования не требуется.</p>
+          {error ? <FormError>{error}</FormError> : null}
           <FormField label="Сотрудник">
             <SelectControl
               aria-label="Сотрудник выплаты"
@@ -6102,7 +5979,6 @@ function StaffPaymentPrototypeDialog({
           <FormField label="Комментарий">
             <textarea aria-label="Комментарий к выплате сотруднику" rows={4} value={comment} onChange={(event) => setComment(event.target.value)} />
           </FormField>
-          {error ? <FormError>{error}</FormError> : null}
           <div className="detail-dialog-actions">
             <button className="secondary-button" type="submit" disabled={saving}>{saving ? 'Сохраняем...' : 'Провести'}</button>
             <button ref={cancelRef} className="secondary-button" type="button" onClick={onClose} disabled={saving}>Отмена</button>

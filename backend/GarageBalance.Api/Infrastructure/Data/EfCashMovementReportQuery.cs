@@ -36,6 +36,7 @@ public sealed class EfCashMovementReportQuery(GarageBalanceDbContext dbContext) 
             var normalizedSearch = search.Trim();
             fallbackOperations = fallbackOperations.Where(operation =>
                     (operation.Supplier?.Name.Contains(normalizedSearch, StringComparison.OrdinalIgnoreCase) ?? false) ||
+                    (operation.CounterpartyName?.Contains(normalizedSearch, StringComparison.OrdinalIgnoreCase) ?? false) ||
                     (operation.ExpenseType?.Name.Contains(normalizedSearch, StringComparison.OrdinalIgnoreCase) ?? false) ||
                     (operation.DocumentNumber?.Contains(normalizedSearch, StringComparison.OrdinalIgnoreCase) ?? false) ||
                     (operation.Comment?.Contains(normalizedSearch, StringComparison.OrdinalIgnoreCase) ?? false))
@@ -78,7 +79,7 @@ public sealed class EfCashMovementReportQuery(GarageBalanceDbContext dbContext) 
         var searchClause = string.IsNullOrWhiteSpace(search)
             ? string.Empty
             : """
-              AND (supplier."Name" ILIKE @search COLLATE "und-x-icu" ESCAPE '\'
+              AND (COALESCE(supplier."Name", operation."CounterpartyName") ILIKE @search COLLATE "und-x-icu" ESCAPE '\'
                    OR expense_type."Name" ILIKE @search COLLATE "und-x-icu" ESCAPE '\'
                    OR operation."DocumentNumber" ILIKE @search COLLATE "und-x-icu" ESCAPE '\'
                    OR operation."Comment" ILIKE @search COLLATE "und-x-icu" ESCAPE '\')
@@ -89,7 +90,7 @@ public sealed class EfCashMovementReportQuery(GarageBalanceDbContext dbContext) 
                 SELECT operation."Id" AS id,
                        operation."OperationDate" AS operation_date,
                        operation."Amount" AS amount,
-                       supplier."Name" AS supplier_name,
+                       COALESCE(supplier."Name", operation."CounterpartyName") AS supplier_name,
                        expense_type."Name" AS expense_type_name,
                        operation."DocumentNumber" AS document_number,
                        operation."Comment" AS comment,
@@ -97,7 +98,7 @@ public sealed class EfCashMovementReportQuery(GarageBalanceDbContext dbContext) 
                            operation."ExpensePaymentType" = 'with_receipt',
                            operation."DocumentNumber" IS NOT NULL AND operation."DocumentNumber" <> ''
                        ) AS has_receipt,
-                       COALESCE(expense_type."Name", '') || ': ' || COALESCE(supplier."Name", '') AS purpose
+                       COALESCE(expense_type."Name", '') || ': ' || COALESCE(supplier."Name", operation."CounterpartyName", '') AS purpose
                 FROM financial_operations operation
                 LEFT JOIN suppliers supplier ON supplier."Id" = operation."SupplierId"
                 LEFT JOIN expense_types expense_type ON expense_type."Id" = operation."ExpenseTypeId"
@@ -286,11 +287,11 @@ public sealed class EfCashMovementReportQuery(GarageBalanceDbContext dbContext) 
                     operation.ExpensePaymentType == ExpensePaymentTypes.WithReceipt ||
                     (operation.ExpensePaymentType == null && operation.DocumentNumber != null && operation.DocumentNumber != string.Empty)),
             "purpose" => sort.Descending
-                ? query.OrderByDescending(operation => (operation.ExpenseType == null ? string.Empty : operation.ExpenseType.Name) + ": " + (operation.Supplier == null ? string.Empty : operation.Supplier.Name))
-                : query.OrderBy(operation => (operation.ExpenseType == null ? string.Empty : operation.ExpenseType.Name) + ": " + (operation.Supplier == null ? string.Empty : operation.Supplier.Name)),
+                ? query.OrderByDescending(operation => (operation.ExpenseType == null ? string.Empty : operation.ExpenseType.Name) + ": " + (operation.Supplier == null ? operation.CounterpartyName ?? string.Empty : operation.Supplier.Name))
+                : query.OrderBy(operation => (operation.ExpenseType == null ? string.Empty : operation.ExpenseType.Name) + ": " + (operation.Supplier == null ? operation.CounterpartyName ?? string.Empty : operation.Supplier.Name)),
             "supplierName" => sort.Descending
-                ? query.OrderByDescending(operation => operation.Supplier == null ? string.Empty : operation.Supplier.Name)
-                : query.OrderBy(operation => operation.Supplier == null ? string.Empty : operation.Supplier.Name),
+                ? query.OrderByDescending(operation => operation.Supplier == null ? operation.CounterpartyName ?? string.Empty : operation.Supplier.Name)
+                : query.OrderBy(operation => operation.Supplier == null ? operation.CounterpartyName ?? string.Empty : operation.Supplier.Name),
             "expenseTypeName" => sort.Descending
                 ? query.OrderByDescending(operation => operation.ExpenseType == null ? string.Empty : operation.ExpenseType.Name)
                 : query.OrderBy(operation => operation.ExpenseType == null ? string.Empty : operation.ExpenseType.Name),
@@ -304,7 +305,7 @@ public sealed class EfCashMovementReportQuery(GarageBalanceDbContext dbContext) 
             "amount" => sort.Descending ? operations.OrderByDescending(operation => operation.Amount) : operations.OrderBy(operation => operation.Amount),
             "hasReceipt" => sort.Descending ? operations.OrderByDescending(HasReceipt) : operations.OrderBy(HasReceipt),
             "purpose" => sort.Descending ? operations.OrderByDescending(BuildCashPaymentPurpose, StringComparer.Ordinal) : operations.OrderBy(BuildCashPaymentPurpose, StringComparer.Ordinal),
-            "supplierName" => sort.Descending ? operations.OrderByDescending(operation => operation.Supplier?.Name, StringComparer.Ordinal) : operations.OrderBy(operation => operation.Supplier?.Name, StringComparer.Ordinal),
+            "supplierName" => sort.Descending ? operations.OrderByDescending(GetExpenseCounterpartyName, StringComparer.Ordinal) : operations.OrderBy(GetExpenseCounterpartyName, StringComparer.Ordinal),
             "expenseTypeName" => sort.Descending ? operations.OrderByDescending(operation => operation.ExpenseType?.Name, StringComparer.Ordinal) : operations.OrderBy(operation => operation.ExpenseType?.Name, StringComparer.Ordinal),
             "documentNumber" => sort.Descending ? operations.OrderByDescending(operation => operation.DocumentNumber, StringComparer.Ordinal) : operations.OrderBy(operation => operation.DocumentNumber, StringComparer.Ordinal),
             _ => sort.Descending ? operations.OrderByDescending(operation => operation.OperationDate) : operations.OrderBy(operation => operation.OperationDate)
@@ -320,7 +321,7 @@ public sealed class EfCashMovementReportQuery(GarageBalanceDbContext dbContext) 
 
     private static string BuildCashPaymentPurpose(FinancialOperation operation)
     {
-        var parts = new[] { operation.ExpenseType?.Name, operation.Supplier?.Name }
+        var parts = new[] { operation.ExpenseType?.Name, GetExpenseCounterpartyName(operation) }
             .Where(part => !string.IsNullOrWhiteSpace(part));
         var purpose = string.Join(": ", parts);
         return string.IsNullOrWhiteSpace(purpose) ? operation.Comment ?? "Оплата из кассы" : purpose;
@@ -331,7 +332,7 @@ public sealed class EfCashMovementReportQuery(GarageBalanceDbContext dbContext) 
             operation.Id,
             operation.OperationDate,
             operation.Amount,
-            operation.Supplier?.Name,
+            GetExpenseCounterpartyName(operation),
             operation.ExpenseType?.Name,
             HasReceipt(operation),
             operation.DocumentNumber,
@@ -340,6 +341,9 @@ public sealed class EfCashMovementReportQuery(GarageBalanceDbContext dbContext) 
     private static bool HasReceipt(FinancialOperation operation) =>
         operation.ExpensePaymentType == ExpensePaymentTypes.WithReceipt ||
         (operation.ExpensePaymentType is null && !string.IsNullOrWhiteSpace(operation.DocumentNumber));
+
+    private static string? GetExpenseCounterpartyName(FinancialOperation operation) =>
+        operation.Supplier?.Name ?? operation.CounterpartyName;
 
     private static BankDepositQueryRow ToBankDepositQueryRow(CashBankTransfer transfer) =>
         new(transfer.Id, transfer.TransferDate, transfer.Amount, transfer.Comment);

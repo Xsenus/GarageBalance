@@ -3157,7 +3157,10 @@ public sealed class DictionaryService(
     {
         var normalizedSearch = NormalizeSearch(search);
         var campaigns = await feeCampaignRepository.GetListAsync(normalizedSearch, includeArchived, NormalizeListLimit(limit), cancellationToken);
-        return campaigns.Select(ToFeeCampaignDto).ToList();
+        var collectedAmounts = await feeCampaignRepository.GetCollectedAmountsAsync(
+            campaigns.Select(campaign => campaign.Id).ToArray(),
+            cancellationToken);
+        return campaigns.Select(campaign => ToFeeCampaignDto(campaign, collectedAmounts.GetValueOrDefault(campaign.Id))).ToList();
     }
 
     public async Task<DictionaryResult<FeeCampaignDto>> CreateFeeCampaignAsync(UpsertFeeCampaignRequest request, Guid? actorUserId, CancellationToken cancellationToken)
@@ -4809,7 +4812,7 @@ public sealed class DictionaryService(
             await irregularPaymentRepository.IsUsedAsync(payment.Id, cancellationToken));
     }
 
-    private static FeeCampaignDto ToFeeCampaignDto(FeeCampaign campaign)
+    private static FeeCampaignDto ToFeeCampaignDto(FeeCampaign campaign, decimal collectedAmount = 0m)
     {
         return new FeeCampaignDto(
             campaign.Id,
@@ -4830,7 +4833,10 @@ public sealed class DictionaryService(
             campaign.IsArchived,
             campaign.ClosedAtUtc,
             campaign.IsClosedEarly,
-            campaign.ClosureComment);
+            campaign.ClosureComment,
+            collectedAmount,
+            campaign.IncomeType?.DestinationFundId,
+            campaign.IncomeType?.DestinationFund?.Name);
     }
 
     private static TariffDto ToTariffDto(Tariff tariff)

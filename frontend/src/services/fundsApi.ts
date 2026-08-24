@@ -47,7 +47,7 @@ export type FundOperationPageDto = {
 export type CreateFundOperationRequest = {
   operationKind: 'deposit' | 'withdraw'
   amount: number
-  reason: string
+  reason?: string
 }
 
 export type UpdateFundOperationRequest = {

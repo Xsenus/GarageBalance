@@ -224,11 +224,11 @@ public sealed class FundService(
         }
 
         operationKind = FundOperationKinds.Normalize(operationKind);
-        var reason = request.Reason.Trim();
-        if (string.IsNullOrWhiteSpace(reason))
-        {
-            return FundResult<FundOperationDto>.Failure("fund_operation_reason_required", "Укажите причину операции фонда.");
-        }
+        var reason = string.IsNullOrWhiteSpace(request.Reason)
+            ? operationKind == FundOperationKinds.Deposit
+                ? $"Ручное пополнение фонда «{fund.Name}»."
+                : $"Ручное изъятие из фонда «{fund.Name}»."
+            : request.Reason.Trim();
 
         var amount = decimal.Round(request.Amount, 2, MidpointRounding.AwayFromZero);
         var balanceBefore = fund.Balance;

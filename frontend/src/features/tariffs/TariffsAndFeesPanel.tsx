@@ -2821,8 +2821,10 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
               <div className="fee-campaign-table-scroll">
                 <div className="contractors-mini-header contractors-mini-header--fees">
                   <span>Наименование</span>
+                  <span>Фонд</span>
                   <span>Взнос</span>
                   <span>План</span>
+                  <span>Собрано</span>
                   <span>Участники</span>
                   <span className="fee-period">Период</span>
                   <span>Действия</span>
@@ -2849,8 +2851,10 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
                         </small>
                       ) : null}
                     </span>
+                    <span className="contractors-fee-fund-cell">{campaign.destinationFundName ?? 'Не назначен'}</span>
                     <span className="contractors-fee-money-cell">{formatTariffDecimal(campaign.contributionAmount)}</span>
                     <span className="contractors-fee-money-cell">{formatTariffDecimal(campaign.targetAmount)}</span>
+                    <span className="contractors-fee-money-cell money-income">{formatTariffDecimal(campaign.collectedAmount)}</span>
                     <span className="contractors-fee-participants-cell">{formatFeeCampaignParticipantSummary(campaign)}</span>
                     <span className="fee-period">
                       <time className={isPeriodMuted ? undefined : 'money-income'}>{formatDateOnly(campaign.startsOn)}</time>
@@ -3653,22 +3657,9 @@ export function AddServicePrototypeDialog({
         aria-labelledby="contractor-service-title"
         onMouseDown={(event) => event.stopPropagation()}
       >
-        <div className={`detail-dialog-header${canChooseRegularity ? ' contractors-service-dialog-header' : ''}`}>
+        <div className="detail-dialog-header">
           <h3 id="contractor-service-title">{title}</h3>
           <div className="contractors-service-header-actions">
-            {canChooseRegularity ? (
-              <label className="contractors-service-regular-toggle">
-                <span>Регулярные платежи</span>
-                <span className="contractors-switch-control">
-                  <input
-                    type="checkbox"
-                    aria-label="Регулярные платежи"
-                    checked={isRegular}
-                    onChange={(event) => changeRegularity(event.target.checked)}
-                  />
-                </span>
-              </label>
-            ) : null}
             <button className="icon-button" type="button" aria-label="Закрыть форму услуги" onClick={onClose}>
               <X size={18} />
             </button>
@@ -3683,6 +3674,22 @@ export function AddServicePrototypeDialog({
               <input aria-label="Наименование услуги" value={name} onChange={(event) => setName(event.target.value)} />
             </FormField>
           </div>
+          {canChooseRegularity ? (
+            <label className="contractors-switch-row contractors-service-regular-toggle contractors-service-regular-toggle--in-form">
+              <span>
+                <strong>Регулярные платежи</strong>
+                <small>Включите для услуги с повторяющимися начислениями.</small>
+              </span>
+              <span className="contractors-switch-control">
+                <input
+                  type="checkbox"
+                  aria-label="Регулярные платежи"
+                  checked={isRegular}
+                  onChange={(event) => changeRegularity(event.target.checked)}
+                />
+              </span>
+            </label>
+          ) : null}
           {isRegular ? (
             <>
               <div className="contractors-service-period-grid contractors-service-period-grid--catalogs">
@@ -3992,7 +3999,6 @@ export function AddServicePrototypeDialog({
                 <div className="contractors-inline-field">
                   <MoneyTextInput
                     aria-label="Стоимость услуги"
-                    placeholder="1 000 000.00"
                     value={cost}
                     onValueChange={setCost}
                   />
@@ -4207,11 +4213,19 @@ function AddFeePrototypeDialog({
                   <SelectControl
                     aria-label="Назначение поступления для сбора"
                     value={incomeTypeId}
-                    options={incomeTypes.map((incomeType) => ({ value: incomeType.id, label: incomeType.name }))}
+                    options={incomeTypes.map((incomeType) => ({
+                      value: incomeType.id,
+                      label: incomeType.destinationFundName
+                        ? `${incomeType.name} → фонд «${incomeType.destinationFundName}»`
+                        : `${incomeType.name} → фонд не назначен`,
+                    }))}
                     maxVisibleOptions={6}
                     onChange={setIncomeTypeId}
                   />
                 </FormField>
+                <p className="form-hint" role="status">
+                  Фонд назначения: {incomeTypes.find((incomeType) => incomeType.id === incomeTypeId)?.destinationFundName ?? 'не назначен'}
+                </p>
                 <FormField label="Цель">
                   <input aria-label="Цель сбора" value={goal} onChange={(event) => setGoal(event.target.value)} />
                 </FormField>
@@ -4268,10 +4282,10 @@ function AddFeePrototypeDialog({
                 </small>
                 <div className="contractors-fee-date-grid">
                   <FormField label="Дата начала">
-                    <LocalizedDatePicker ariaLabel="Дата начала" mode="date" placement="above" value={startsOn} onChange={setStartsOn} />
+                    <LocalizedDatePicker ariaLabel="Дата начала" mode="date" value={startsOn} onChange={setStartsOn} />
                   </FormField>
                   <FormField label="Дата окончания сбора">
-                    <LocalizedDatePicker ariaLabel="Дата окончания сбора" mode="date" placement="above" value={endsOn} onChange={setEndsOn} />
+                    <LocalizedDatePicker ariaLabel="Дата окончания сбора" mode="date" value={endsOn} onChange={setEndsOn} />
                   </FormField>
                 </div>
                 <FormField label="Перенос долга по сбору в просроченный">

@@ -417,6 +417,7 @@ public sealed class EfFinancialOperationRepository(GarageBalanceDbContext dbCont
             (operation.Comment != null && operation.Comment.ToLower().Contains(normalizedSearch)) ||
             (operation.Garage != null && operation.Garage.Number.ToLower().Contains(normalizedSearch)) ||
             (operation.Supplier != null && operation.Supplier.Name.ToLower().Contains(normalizedSearch)) ||
+            (operation.CounterpartyName != null && operation.CounterpartyName.ToLower().Contains(normalizedSearch)) ||
             (operation.StaffMember != null && operation.StaffMember.FullName.ToLower().Contains(normalizedSearch)));
     }
 

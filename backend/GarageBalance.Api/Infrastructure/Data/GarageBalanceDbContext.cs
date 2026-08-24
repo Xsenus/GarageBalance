@@ -492,6 +492,7 @@ public sealed class GarageBalanceDbContext(DbContextOptions<GarageBalanceDbConte
             entity.Property(operation => operation.OperationKind).HasMaxLength(20).IsRequired();
             entity.Property(operation => operation.ExpensePaymentType).HasMaxLength(30);
             entity.Property(operation => operation.ExpensePaymentSource).HasMaxLength(20);
+            entity.Property(operation => operation.CounterpartyName).HasMaxLength(200);
             entity.Property(operation => operation.Amount).HasPrecision(18, 2);
             entity.Property(operation => operation.DocumentNumber).HasMaxLength(120);
             entity.Property(operation => operation.Comment).HasMaxLength(1000);

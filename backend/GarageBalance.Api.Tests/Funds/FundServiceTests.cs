@@ -557,6 +557,34 @@ public sealed class FundServiceTests
     }
 
     [Fact]
+    public async Task CreateOperationAsync_GeneratesAuditReasonWhenCommentIsBlank()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = CreateService(database.Context);
+        var targetFund = (await service.GetFundsAsync(CancellationToken.None)).Single(fund => fund.Name == "Электроэнергия");
+        await SeedIncomeAsync(database.Context, 500m);
+
+        var deposit = await service.CreateOperationAsync(
+            targetFund.Id,
+            new CreateFundOperationRequest(FundOperationKinds.Deposit, 300m, null),
+            Guid.NewGuid(),
+            CancellationToken.None);
+        var withdraw = await service.CreateOperationAsync(
+            targetFund.Id,
+            new CreateFundOperationRequest(FundOperationKinds.Withdraw, 100m, "   "),
+            Guid.NewGuid(),
+            CancellationToken.None);
+
+        Assert.True(deposit.Succeeded, deposit.ErrorMessage);
+        Assert.True(withdraw.Succeeded, withdraw.ErrorMessage);
+        Assert.Equal("Ручное пополнение фонда «Электроэнергия».", deposit.Value!.Reason);
+        Assert.Equal("Ручное изъятие из фонда «Электроэнергия».", withdraw.Value!.Reason);
+        Assert.All(await service.GetFundsAsync(CancellationToken.None), fund => Assert.Equal(300m, fund.AvailableToDistribute));
+        Assert.Contains(database.Context.AuditEvents, item => item.Action == "fund.operation_deposited" && item.Summary.Contains(deposit.Value.Reason));
+        Assert.Contains(database.Context.AuditEvents, item => item.Action == "fund.operation_withdrawn" && item.Summary.Contains(withdraw.Value.Reason));
+    }
+
+    [Fact]
     public async Task CreateOperationAsync_DoesNotWithdrawMoreThanBalance()
     {
         await using var database = await TestDatabase.CreateAsync();

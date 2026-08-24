@@ -747,7 +747,7 @@ public sealed class BackendPerformanceGuardTests
         Assert.Contains("COUNT(*)::int", method, StringComparison.Ordinal);
         Assert.Contains("OFFSET @offset", method, StringComparison.Ordinal);
         Assert.Contains("LIMIT @limit", method, StringComparison.Ordinal);
-        Assert.Contains("supplier.\"Name\" ILIKE @search", method, StringComparison.Ordinal);
+        Assert.Contains("COALESCE(supplier.\"Name\", operation.\"CounterpartyName\") ILIKE @search", method, StringComparison.Ordinal);
         Assert.Contains("expense_type.\"Name\" ILIKE @search", method, StringComparison.Ordinal);
     }
 

@@ -447,11 +447,6 @@ export function FundsPrototypePanel({ auth, fundsClient }: { auth: AuthResponse;
       return
     }
 
-    if (!reason) {
-      setOperationError('Укажите причину операции.')
-      return
-    }
-
     if (operation.kind === 'deposit' && availableToDistribute !== null && amount > availableToDistribute) {
       setOperationError(`Сумма пополнения не может превышать доступную к распределению сумму ${formatMoney(availableToDistribute)} руб.`)
       return
@@ -462,7 +457,7 @@ export function FundsPrototypePanel({ auth, fundsClient }: { auth: AuthResponse;
       const savedOperation = await fundsClient.createOperation(auth.accessToken, operation.fundId, {
         operationKind: operation.kind,
         amount,
-        reason,
+        reason: reason || undefined,
       })
       await refreshFundsPanel()
       setOperationMessage(`${operation.kind === 'deposit' ? 'Пополнение' : 'Изъятие'} по фонду "${savedOperation.fundName}" сохранено и записано в историю изменений.`)
@@ -621,7 +616,7 @@ export function FundsPrototypePanel({ auth, fundsClient }: { auth: AuthResponse;
           <thead>
             <tr>
               <th scope="col">Фонд</th>
-              <th scope="col">Распределено</th>
+              <th scope="col">Текущее значение</th>
               <th className="funds-table-action-column table-actions-column" scope="col">Действия</th>
             </tr>
           </thead>
@@ -890,7 +885,7 @@ export function FundsPrototypePanel({ auth, fundsClient }: { auth: AuthResponse;
                 <X size={18} />
               </button>
             </div>
-            <p className="confirmation-text" id="fund-operation-description">Проверьте сумму и укажите причину. Операция будет сохранена и записана в историю изменений.</p>
+            <p className="confirmation-text" id="fund-operation-description">Проверьте сумму. Комментарий можно оставить для пояснения; обязательная причина для аудита сформируется автоматически.</p>
             <form className="dictionary-modal-form" onSubmit={submitFundOperation}>
               <FormField label="Сумма">
                 <MoneyTextInput
@@ -907,9 +902,9 @@ export function FundsPrototypePanel({ auth, fundsClient }: { auth: AuthResponse;
               {operation.kind === 'deposit' && availableToDistribute !== null ? (
                 <p className="form-hint">Доступно к пополнению: {formatMoney(availableToDistribute)} руб.</p>
               ) : null}
-              <FormField label="Причина">
+              <FormField label="Комментарий (необязательно)">
                 <textarea
-                  aria-label="Причина операции фонда"
+                  aria-label="Комментарий к операции фонда"
                   rows={3}
                   maxLength={1000}
                   value={operation.reason}

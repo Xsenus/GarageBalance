@@ -13,6 +13,7 @@ public interface IFeeCampaignRepository
     Task<bool> ActiveDuplicateExistsAsync(Guid? ignoredId, string name, CancellationToken cancellationToken);
     Task<bool> HasAccrualsAsync(Guid id, CancellationToken cancellationToken);
     Task<decimal> GetCollectedAmountAsync(Guid id, CancellationToken cancellationToken);
+    Task<IReadOnlyDictionary<Guid, decimal>> GetCollectedAmountsAsync(IReadOnlyCollection<Guid> ids, CancellationToken cancellationToken);
     Task<IReadOnlyList<FeeCampaignPaymentOption>> GetPaymentOptionsForGarageAsync(Guid garageId, DateOnly monthFrom, DateOnly monthTo, CancellationToken cancellationToken);
     Task<IAsyncDisposable> AcquirePaymentLockAsync(Guid id, CancellationToken cancellationToken);
     Task<IReadOnlyList<Accrual>> GetAccrualsForSettlementAsync(Guid id, CancellationToken cancellationToken);

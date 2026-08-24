@@ -10,6 +10,7 @@ public interface IExpenseFundDisbursementService
         FinancialOperation sourceOperation,
         string supplierName,
         Guid? actorUserId,
+        bool allowNegativeBalance,
         CancellationToken cancellationToken);
 
     Task<ExpenseFundDisbursementResult> UpdateAsync(
@@ -18,6 +19,7 @@ public interface IExpenseFundDisbursementService
         string supplierName,
         decimal amount,
         Guid? actorUserId,
+        bool allowNegativeBalance,
         CancellationToken cancellationToken);
 
     Task<ExpenseFundDisbursementResult> CancelAsync(

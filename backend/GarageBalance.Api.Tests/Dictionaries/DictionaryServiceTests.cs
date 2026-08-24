@@ -4195,6 +4195,16 @@ public sealed class DictionaryServiceTests
             actorUserId,
             CancellationToken.None);
         database.Context.AuditEvents.RemoveRange(database.Context.AuditEvents);
+        database.Context.FinancialOperations.Add(new FinancialOperation
+        {
+            OperationKind = FinancialOperationKinds.Income,
+            OperationDate = new DateOnly(2026, 5, 20),
+            AccountingMonth = new DateOnly(2026, 5, 1),
+            Amount = 275m,
+            GarageId = garage2.Id,
+            IncomeTypeId = otherIncome.Id,
+            FeeCampaignId = created.Value!.Id
+        });
         await database.Context.SaveChangesAsync();
 
         var updated = await service.UpdateFeeCampaignAsync(
@@ -4213,7 +4223,11 @@ public sealed class DictionaryServiceTests
         Assert.True(updated.Succeeded, updated.ErrorMessage);
         Assert.Equal(500m, updated.Value!.TargetAmount);
         Assert.Equal([garage2.Id], updated.Value.ParticipantGarageIds);
-        Assert.Equal([garage2.Id], Assert.Single(loaded).ParticipantGarageIds);
+        var loadedCampaign = Assert.Single(loaded);
+        Assert.Equal([garage2.Id], loadedCampaign.ParticipantGarageIds);
+        Assert.Equal(275m, loadedCampaign.CollectedAmount);
+        Assert.Equal(otherIncome.DestinationFundId, loadedCampaign.DestinationFundId);
+        Assert.Equal(otherIncome.DestinationFund!.Name, loadedCampaign.DestinationFundName);
         var audit = Assert.Single(database.Context.AuditEvents, item => item.Action == "dictionary.fee_campaign_updated" && item.ActorUserId == actorUserId);
         Assert.Contains("participantGarageIds", audit.MetadataJson, StringComparison.Ordinal);
         using var auditMetadata = JsonDocument.Parse(audit.MetadataJson!);

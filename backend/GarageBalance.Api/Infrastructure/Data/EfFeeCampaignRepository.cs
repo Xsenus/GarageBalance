@@ -96,6 +96,46 @@ public sealed class EfFeeCampaignRepository(GarageBalanceDbContext dbContext) : 
         return tagged + legacyAllocated;
     }
 
+    public async Task<IReadOnlyDictionary<Guid, decimal>> GetCollectedAmountsAsync(
+        IReadOnlyCollection<Guid> ids,
+        CancellationToken cancellationToken)
+    {
+        if (ids.Count == 0)
+        {
+            return new Dictionary<Guid, decimal>();
+        }
+
+        var tagged = await dbContext.FinancialOperations
+            .AsNoTracking()
+            .Where(item =>
+                !item.IsCanceled &&
+                item.OperationKind == GarageBalance.Api.Domain.Finance.FinancialOperationKinds.Income &&
+                item.FeeCampaignId.HasValue &&
+                ids.Contains(item.FeeCampaignId.Value))
+            .GroupBy(item => item.FeeCampaignId!.Value)
+            .Select(group => new { Id = group.Key, Amount = group.Sum(item => item.Amount) })
+            .ToDictionaryAsync(item => item.Id, item => item.Amount, cancellationToken);
+        var legacy = await dbContext.AccrualPaymentAllocations
+            .AsNoTracking()
+            .Where(item =>
+                item.IsActive &&
+                !item.Accrual.IsCanceled &&
+                item.Accrual.FeeCampaignId.HasValue &&
+                ids.Contains(item.Accrual.FeeCampaignId.Value) &&
+                !item.FinancialOperation.IsCanceled &&
+                item.FinancialOperation.FeeCampaignId == null)
+            .GroupBy(item => item.Accrual.FeeCampaignId!.Value)
+            .Select(group => new { Id = group.Key, Amount = group.Sum(item => item.Amount) })
+            .ToDictionaryAsync(item => item.Id, item => item.Amount, cancellationToken);
+
+        foreach (var item in legacy)
+        {
+            tagged[item.Key] = tagged.GetValueOrDefault(item.Key) + item.Value;
+        }
+
+        return tagged;
+    }
+
     public async Task<IReadOnlyList<FeeCampaignPaymentOption>> GetPaymentOptionsForGarageAsync(
         Guid garageId,
         DateOnly monthFrom,
@@ -199,6 +239,7 @@ public sealed class EfFeeCampaignRepository(GarageBalanceDbContext dbContext) : 
     private static IQueryable<FeeCampaign> WithDetails(IQueryable<FeeCampaign> query) =>
         query
             .Include(item => item.IncomeType)
+                .ThenInclude(item => item.DestinationFund)
             .Include(item => item.ParticipantGarages)
                 .ThenInclude(item => item.Garage);
 

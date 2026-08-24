@@ -340,7 +340,10 @@ public sealed record FeeCampaignDto(
     bool IsArchived,
     DateTimeOffset? ClosedAtUtc = null,
     bool IsClosedEarly = false,
-    string? ClosureComment = null);
+    string? ClosureComment = null,
+    decimal CollectedAmount = 0m,
+    Guid? DestinationFundId = null,
+    string? DestinationFundName = null);
 
 public sealed record CloseFeeCampaignRequest(
     [MaxLength(1000)] string? Comment,

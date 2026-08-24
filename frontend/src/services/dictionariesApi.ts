@@ -190,6 +190,9 @@ export type FeeCampaignDto = {
   closedAtUtc?: string | null
   isClosedEarly?: boolean
   closureComment?: string | null
+  collectedAmount: number
+  destinationFundId: string | null
+  destinationFundName: string | null
 }
 
 export type PagedResult<TItem> = {

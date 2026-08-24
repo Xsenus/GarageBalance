@@ -15,6 +15,7 @@ public sealed class ExpenseFundDisbursementService(
         FinancialOperation sourceOperation,
         string supplierName,
         Guid? actorUserId,
+        bool allowNegativeBalance,
         CancellationToken cancellationToken)
     {
         if (!sourceOperation.ExpenseFundId.HasValue)
@@ -43,7 +44,7 @@ public sealed class ExpenseFundDisbursementService(
         sourceOperation.ExpenseFundId = fund.Id;
         sourceOperation.ExpenseFund = fund;
         var amount = MoneyMath.RoundMoney(sourceOperation.Amount);
-        if (amount > fund.Balance)
+        if (amount > fund.Balance && !allowNegativeBalance)
         {
             return InsufficientBalance(fund.Balance);
         }
@@ -65,7 +66,7 @@ public sealed class ExpenseFundDisbursementService(
         fund.Balance = disbursement.BalanceAfter;
         fund.UpdatedAtUtc = DateTimeOffset.UtcNow;
         repository.AddOperation(disbursement);
-        AddAudit("fund.expense_disbursement_created", "create", disbursement, actorUserId, null);
+        AddAudit("fund.expense_disbursement_created", "create", disbursement, actorUserId, null, negativeBalanceConfirmed: allowNegativeBalance && disbursement.BalanceAfter < 0m);
         return ExpenseFundDisbursementResult.Success();
     }
 
@@ -75,6 +76,7 @@ public sealed class ExpenseFundDisbursementService(
         string supplierName,
         decimal amount,
         Guid? actorUserId,
+        bool allowNegativeBalance,
         CancellationToken cancellationToken)
     {
         var disbursement = await repository.FindIncomeAssignmentForUpdateAsync(sourceOperation.Id, cancellationToken);
@@ -112,7 +114,7 @@ public sealed class ExpenseFundDisbursementService(
         var availableAmount = destinationFund.Id == oldFund.Id
             ? MoneyMath.RoundMoney(destinationFund.Balance + disbursement.Amount)
             : destinationFund.Balance;
-        if (normalizedAmount > availableAmount)
+        if (normalizedAmount > availableAmount && !allowNegativeBalance)
         {
             return InsufficientBalance(availableAmount);
         }
@@ -137,7 +139,7 @@ public sealed class ExpenseFundDisbursementService(
             destinationFund,
             destinationOperations,
             destinationOpeningBalance);
-        AddAudit("fund.expense_disbursement_updated", "update", disbursement, actorUserId, null, oldValues);
+        AddAudit("fund.expense_disbursement_updated", "update", disbursement, actorUserId, null, oldValues, allowNegativeBalance && disbursement.BalanceAfter < 0m);
         return ExpenseFundDisbursementResult.Success();
     }
 
@@ -177,6 +179,7 @@ public sealed class ExpenseFundDisbursementService(
                 sourceOperation,
                 sourceOperation.Supplier?.Name ?? "поставщик",
                 actorUserId,
+                sourceOperation.NegativeFundBalanceConfirmed,
                 cancellationToken);
         }
 
@@ -239,7 +242,8 @@ public sealed class ExpenseFundDisbursementService(
         FundOperation operation,
         Guid? actorUserId,
         string? reason,
-        IReadOnlyDictionary<string, object?>? oldValues = null)
+        IReadOnlyDictionary<string, object?>? oldValues = null,
+        bool negativeBalanceConfirmed = false)
     {
         auditEventWriter.Add(new AuditEventWriteRequest(
             ActorUserId: actorUserId,
@@ -263,7 +267,8 @@ public sealed class ExpenseFundDisbursementService(
             {
                 ["fundId"] = operation.FundId,
                 ["sourceFinancialOperationId"] = operation.SourceFinancialOperationId,
-                ["automatic"] = true
+                ["automatic"] = true,
+                ["negativeBalanceConfirmed"] = negativeBalanceConfirmed
             },
             RelatedDocumentId: operation.SourceFinancialOperationId?.ToString()));
     }

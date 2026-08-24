@@ -12,6 +12,8 @@ public sealed class FinancialOperation
     public Guid? ReceiptBatchId { get; set; }
     public string? ExpensePaymentType { get; set; }
     public string? ExpensePaymentSource { get; set; }
+    public string? CounterpartyName { get; set; }
+    public bool NegativeFundBalanceConfirmed { get; set; }
     public string? DocumentNumber { get; set; }
     public string? Comment { get; set; }
     public Guid? GarageId { get; set; }
