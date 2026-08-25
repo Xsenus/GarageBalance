@@ -8,6 +8,13 @@ export type PaymentDisplaySettingsDto = {
   tariffTableVersion: string
 }
 
+export type TariffPanelsLayoutDto = {
+  irregularPaymentsWidthPercent: number
+  version: string
+}
+
+export type UpdateTariffPanelsLayoutRequest = Pick<TariffPanelsLayoutDto, 'irregularPaymentsWidthPercent'>
+
 export type SalaryAccrualSettingsDto = {
   accrualDay: number
   version: string
@@ -98,6 +105,8 @@ export type DiagnosticLogStatusDto = {
 export type ApplicationSettingsClient = {
   getPaymentDisplaySettings(accessToken: string): Promise<PaymentDisplaySettingsDto>
   updatePaymentDisplaySettings(accessToken: string, request: PaymentDisplaySettingsDto): Promise<PaymentDisplaySettingsDto>
+  getTariffPanelsLayout(accessToken: string): Promise<TariffPanelsLayoutDto>
+  updateTariffPanelsLayout(accessToken: string, request: UpdateTariffPanelsLayoutRequest): Promise<TariffPanelsLayoutDto>
   getSalaryAccrualSettings(accessToken: string): Promise<SalaryAccrualSettingsDto>
   updateSalaryAccrualSettings(accessToken: string, request: SalaryAccrualSettingsDto): Promise<SalaryAccrualSettingsDto>
   getBusinessDateSettings(accessToken: string): Promise<BusinessDateSettingsDto>
@@ -157,6 +166,12 @@ export const settingsApi: ApplicationSettingsClient = {
   },
   updatePaymentDisplaySettings(accessToken, request) {
     return requestJson(accessToken, '/api/settings/payments/display', { method: 'PUT', body: JSON.stringify(request) })
+  },
+  getTariffPanelsLayout(accessToken) {
+    return requestJson(accessToken, '/api/settings/tariffs/layout')
+  },
+  updateTariffPanelsLayout(accessToken, request) {
+    return requestJson(accessToken, '/api/settings/tariffs/layout', { method: 'PUT', body: JSON.stringify(request) })
   },
   getSalaryAccrualSettings(accessToken) {
     return requestJson(accessToken, '/api/settings/salary-accrual')

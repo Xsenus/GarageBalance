@@ -1042,14 +1042,6 @@ h1 {
   justify-content: center;
 }
 
-.settings-card-intro--compact {
-  align-self: start;
-}
-
-.settings-card-intro--compact h3 {
-  margin-top: 2px;
-}
-
 .cash-bank-history-shell {
   min-width: 0;
 }
@@ -1287,10 +1279,6 @@ h1 {
 
 .contractors-editable-input {
   padding: 7px 9px;
-}
-
-.contractors-editable-input--unit {
-  max-width: 88px;
 }
 
 .contractors-editable-input--day {
@@ -2155,21 +2143,9 @@ h1 {
   text-align: center;
 }
 
-.contractors-service-dialog-header {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
-  align-items: center;
-}
-
-.contractors-service-dialog-header h3 {
-  grid-column: 2;
-}
-
 .contractors-service-header-actions {
   display: inline-flex;
-  grid-column: 3;
   align-items: center;
-  justify-self: end;
   gap: 12px;
 }
 
@@ -2200,14 +2176,6 @@ h1 {
 
 .contractors-tariff-dialog .contractors-service-period-grid--catalogs {
   grid-template-columns: repeat(3, minmax(0, 1fr));
-}
-
-.contractors-tariff-dialog .contractors-service-period-grid--schedule {
-  grid-template-columns: minmax(140px, 0.55fr) minmax(220px, 1fr) minmax(300px, 1.25fr);
-}
-
-.contractors-tariff-dialog .contractors-service-period-grid--schedule-monthly {
-  grid-template-columns: minmax(180px, 0.7fr) minmax(360px, 1.3fr);
 }
 
 .contractors-tariff-dialog .contractors-service-period-grid--single-row {
@@ -2555,24 +2523,6 @@ h1 {
 @media (prefers-reduced-motion: reduce) {
   .detail-dialog.contractors-service-dialog {
     transition: none;
-  }
-}
-
-@media (max-width: 680px) {
-  .contractors-service-dialog-header {
-    grid-template-columns: minmax(0, 1fr);
-    gap: 12px;
-  }
-
-  .contractors-service-dialog-header h3 {
-    grid-column: 1;
-    width: 100%;
-    text-align: center;
-  }
-
-  .contractors-service-header-actions {
-    grid-column: 1;
-    justify-self: end;
   }
 }
 
@@ -3734,8 +3684,14 @@ h1 {
 }
 
 .tariffs-page .contractors-bottom-grid {
-  gap: 12px;
-  align-items: stretch;
+  grid-template-columns: minmax(320px, var(--tariffs-irregular-width, 40%)) 12px minmax(0, 1fr);
+  gap: 0;
+}
+
+.tariffs-panels-splitter {
+  cursor: col-resize;
+  touch-action: none;
+  background: linear-gradient(#d0d5dd, #d0d5dd) center / 3px calc(100% - 24px) no-repeat;
 }
 
 .tariffs-summary-card {
@@ -3883,19 +3839,6 @@ h1 {
   justify-content: flex-end;
   flex-wrap: wrap;
   gap: 8px;
-}
-
-.dictionary-grid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 12px;
-}
-
-.finance-settings-grid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 12px;
-  margin-top: 12px;
 }
 
 .finance-grid {
@@ -4286,12 +4229,6 @@ h1 {
   gap: 10px;
 }
 
-.payments-prototype-actions--stacked {
-  flex-direction: column;
-  justify-content: stretch;
-}
-
-.payments-prototype-actions--stacked .secondary-button,
 .payments-prototype-actions--sheet .secondary-button {
   justify-content: center;
 }
@@ -5285,7 +5222,6 @@ h1 {
 }
 
 .funds-action-button {
-  position: relative;
   display: inline-grid;
   width: 34px;
   height: 34px;
@@ -5304,36 +5240,6 @@ h1 {
   color: #1d4ed8;
   outline: 0;
   box-shadow: 0 0 0 3px rgba(46, 144, 250, 0.16);
-}
-
-.funds-action-button::after {
-  position: absolute;
-  z-index: 5;
-  bottom: calc(100% + 8px);
-  left: 50%;
-  width: max-content;
-  max-width: 180px;
-  transform: translateX(-50%) translateY(2px);
-  border-radius: 6px;
-  background: #111827;
-  color: #ffffff;
-  content: attr(data-tooltip);
-  font-size: 12px;
-  font-weight: 700;
-  line-height: 1.2;
-  opacity: 0;
-  padding: 6px 8px;
-  pointer-events: none;
-  transition:
-    opacity 140ms ease,
-    transform 140ms ease;
-  white-space: nowrap;
-}
-
-.funds-action-button:hover::after,
-.funds-action-button:focus-visible::after {
-  opacity: 1;
-  transform: translateX(-50%) translateY(0);
 }
 
 .funds-operation-actions {
@@ -5790,20 +5696,11 @@ h1 {
   font-size: 13px;
 }
 
-.inline-fields,
-.compact-form {
+.inline-fields {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 8px;
   align-items: end;
-}
-
-.tariff-tier-fields {
-  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
-}
-
-.compact-form {
-  grid-template-columns: 1fr 40px;
 }
 
 .audit-filter-grid {
@@ -6082,11 +5979,6 @@ h1 {
   outline: none;
 }
 
-.compact-stack {
-  display: grid;
-  gap: 8px;
-}
-
 .inline-actions {
   display: flex;
   flex-wrap: wrap;
@@ -6182,81 +6074,6 @@ h1 {
   }
 }
 
-.dictionary-list {
-  display: grid;
-  gap: 8px;
-  margin: 4px 0 0;
-  padding: 0;
-  list-style: none;
-}
-
-.dictionary-list li {
-  display: grid;
-  grid-template-columns: 1fr auto;
-  align-items: center;
-  gap: 8px;
-  border-top: 1px solid #e4e7ec;
-  padding-top: 8px;
-}
-
-.dictionary-list li.is-active {
-  border-top-color: #8bc6b8;
-  background: #f3fbf8;
-  border-radius: 8px;
-  padding: 8px;
-}
-
-.dictionary-list li > span {
-  display: grid;
-  gap: 3px;
-  min-width: 0;
-}
-
-.dictionary-list .dictionary-actions {
-  display: flex;
-  gap: 6px;
-}
-
-.dictionary-list strong {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 6px;
-  color: #101828;
-  font-size: 14px;
-}
-
-.dictionary-list .icon-button:disabled {
-  cursor: default;
-  opacity: 0.48;
-}
-
-.dictionary-state {
-  border: 1px solid #8bc6b8;
-  border-radius: 999px;
-  color: #176b5b;
-  font-size: 11px;
-  font-weight: 700;
-  line-height: 1;
-  padding: 4px 7px;
-}
-
-.dictionary-list-footer {
-  align-items: center;
-  border-top: 1px solid #e4e7ec;
-  display: flex;
-  gap: 8px;
-  justify-content: space-between;
-  padding-top: 8px;
-}
-
-.dictionary-list-footer .empty-state {
-  border-top: 0;
-  margin: 0;
-  padding: 0;
-}
-
-.dictionary-list span,
 .empty-state {
   color: #667085;
   font-size: 13px;
@@ -7259,7 +7076,6 @@ h1 {
   margin-inline: auto;
 }
 
-.user-table-row,
 .operation-row {
   display: grid;
   grid-template-columns: minmax(180px, 1.4fr) minmax(160px, 1fr) 110px;
@@ -7402,7 +7218,6 @@ h1 {
   grid-template-columns: 110px minmax(170px, 1fr) 130px;
 }
 
-.user-table-row > *,
 .operation-row > * {
   min-width: 0;
 }
@@ -8146,34 +7961,6 @@ button.operation-row:focus-visible {
   box-shadow: none;
 }
 
-.report-export-button::after {
-  position: absolute;
-  z-index: 8;
-  right: 0;
-  bottom: calc(100% + 8px);
-  width: max-content;
-  max-width: 180px;
-  transform: translateY(2px);
-  border-radius: 6px;
-  background: #111827;
-  color: #ffffff;
-  content: attr(data-tooltip);
-  font-size: 12px;
-  font-weight: 700;
-  line-height: 1.2;
-  opacity: 0;
-  padding: 6px 8px;
-  pointer-events: none;
-  transition: opacity 140ms ease, transform 140ms ease;
-  white-space: nowrap;
-}
-
-.report-export-button:hover::after,
-.report-export-button:focus-visible::after {
-  opacity: 1;
-  transform: translateY(0);
-}
-
 .report-export-button__spinner {
   animation: report-export-spin 0.8s linear infinite;
 }
@@ -8518,7 +8305,6 @@ button.operation-row:focus-visible {
   padding: 10px 12px;
 }
 
-.user-table-row.header,
 .operation-row.header {
   position: sticky;
   z-index: 1;
@@ -8533,15 +8319,12 @@ button.operation-row:focus-visible {
 
 .role-matrix-table strong,
 .role-matrix-table small,
-.user-table-row strong,
-.user-table-row small,
 .operation-row strong,
 .operation-row small {
   display: block;
 }
 
 .role-matrix-table small,
-.user-table-row small,
 .operation-row small {
   margin-top: 3px;
   color: #667085;
@@ -9095,13 +8878,20 @@ button.operation-row:focus-visible {
     grid-column: auto;
   }
 
-  .dictionary-grid,
-  .finance-settings-grid,
   .finance-grid,
   .contractors-bottom-grid,
   .payments-prototype-footer,
   .summary-strip {
     grid-template-columns: 1fr;
+  }
+
+  .tariffs-page .contractors-bottom-grid {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+
+  .tariffs-panels-splitter {
+    display: none;
   }
 
   .payments-prototype-toolbar {
@@ -9197,7 +8987,6 @@ button.operation-row:focus-visible {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .user-table-row,
   .operation-row {
     grid-template-columns: 1fr;
   }
@@ -9493,7 +9282,6 @@ button.operation-row:focus-visible {
   }
 
   .contractors-tariff-dialog .contractors-service-period-grid--catalogs,
-  .contractors-tariff-dialog .contractors-service-period-grid--schedule,
   .contractors-tariff-dialog .contractors-service-period-grid--single-row,
   .contractors-service-heading-grid,
   .contractors-service-secondary-grid,

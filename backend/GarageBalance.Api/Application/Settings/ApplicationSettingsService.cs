@@ -15,6 +15,9 @@ public sealed class ApplicationSettingsService(
 {
     public const string ShowAllGarageOperationsKey = "payments.show_all_garage_operations_by_default";
     public const string TariffTableVisibleColumnsKey = "tariffs.table_visible_columns";
+    public const int DefaultTariffPanelsSplitPercent = 40;
+    public const int MinimumTariffPanelsSplitPercent = 25;
+    public const int MaximumTariffPanelsSplitPercent = 60;
     public const string SalaryAccrualDayKey = "finance.salary_accrual_day";
     public const int DefaultSalaryAccrualDay = 1;
     public const string BusinessDateOverrideKey = "system.business_date_override";
@@ -32,7 +35,7 @@ public sealed class ApplicationSettingsService(
     {
         var setting = await repository.FindForUpdateAsync(ShowAllGarageOperationsKey, cancellationToken);
         var previousValue = setting?.BooleanValue ?? false;
-        if (setting is not null)
+        if (setting is not null && request.Version.HasValue)
         {
             OptimisticConcurrencyGuard.EnsureCurrent(request.Version, setting);
         }
@@ -142,6 +145,54 @@ public sealed class ApplicationSettingsService(
 
         await repository.SaveChangesAsync(cancellationToken);
         return CreateTariffTableDisplaySettingsDto(nextMask, setting.Version);
+    }
+
+    public async Task<TariffPanelsLayoutDto> GetTariffPanelsLayoutAsync(
+        Guid userId,
+        CancellationToken cancellationToken)
+    {
+        var setting = await repository.FindAsync(CreateTariffPanelsLayoutKey(userId), cancellationToken);
+        return CreateTariffPanelsLayoutDto(setting?.IntegerValue, setting?.Version ?? Guid.NewGuid());
+    }
+
+    public async Task<TariffPanelsLayoutDto> UpdateTariffPanelsLayoutAsync(
+        UpdateTariffPanelsLayoutRequest request,
+        Guid userId,
+        CancellationToken cancellationToken)
+    {
+        if (request.IrregularPaymentsWidthPercent is < MinimumTariffPanelsSplitPercent or > MaximumTariffPanelsSplitPercent)
+        {
+            throw new TariffPanelsLayoutValidationException(
+                $"Ширина таблицы нерегулярных платежей должна быть от {MinimumTariffPanelsSplitPercent} до {MaximumTariffPanelsSplitPercent} процентов.");
+        }
+
+        var key = CreateTariffPanelsLayoutKey(userId);
+        var setting = await repository.FindForUpdateAsync(key, cancellationToken);
+        if (setting is not null)
+        {
+            OptimisticConcurrencyGuard.EnsureCurrent(request.Version, setting);
+        }
+
+        if (setting is null && request.IrregularPaymentsWidthPercent == DefaultTariffPanelsSplitPercent)
+        {
+            return new TariffPanelsLayoutDto(DefaultTariffPanelsSplitPercent, request.Version ?? Guid.NewGuid());
+        }
+
+        if (setting is null)
+        {
+            setting = new ApplicationSetting { Key = key };
+            repository.Add(setting);
+        }
+        else if (setting.IntegerValue == request.IrregularPaymentsWidthPercent)
+        {
+            return new TariffPanelsLayoutDto(request.IrregularPaymentsWidthPercent, setting.Version);
+        }
+
+        setting.IntegerValue = request.IrregularPaymentsWidthPercent;
+        setting.UpdatedAtUtc = timeProvider.GetUtcNow();
+        setting.UpdatedByUserId = userId;
+        await repository.SaveChangesAsync(cancellationToken);
+        return new TariffPanelsLayoutDto(request.IrregularPaymentsWidthPercent, setting.Version);
     }
 
     public async Task<SalaryAccrualSettingsDto> GetSalaryAccrualSettingsAsync(CancellationToken cancellationToken)
@@ -335,8 +386,18 @@ public sealed class ApplicationSettingsService(
 
     private static TariffTableDisplaySettingsDto CreateTariffTableDisplaySettingsDto(int mask, Guid version) =>
         new((mask & 1) != 0, (mask & 2) != 0, version);
+
+    private static string CreateTariffPanelsLayoutKey(Guid userId) =>
+        $"users.{userId:N}.tariffs.bottom_panels_split";
+
+    private static TariffPanelsLayoutDto CreateTariffPanelsLayoutDto(int? value, Guid version) =>
+        new(value is >= MinimumTariffPanelsSplitPercent and <= MaximumTariffPanelsSplitPercent
+            ? value.Value
+            : DefaultTariffPanelsSplitPercent, version);
 }
 
 public sealed class BusinessDateValidationException(string message) : Exception(message);
 
 public sealed class SalaryAccrualSettingsValidationException(string message) : Exception(message);
+
+public sealed class TariffPanelsLayoutValidationException(string message) : Exception(message);

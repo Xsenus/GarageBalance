@@ -4,6 +4,25 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { settingsApi } from './settingsApi'
 
 describe('settingsApi', () => {
+  it('loads and saves the authenticated tariff panel layout', async () => {
+    const fetchMock = vi.fn()
+    fetchMock
+      .mockResolvedValueOnce(new Response(JSON.stringify({ irregularPaymentsWidthPercent: 32, version: 'layout-v1' }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ irregularPaymentsWidthPercent: 28, version: 'layout-v2' }), { status: 200 }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await expect(settingsApi.getTariffPanelsLayout('token')).resolves.toEqual({ irregularPaymentsWidthPercent: 32, version: 'layout-v1' })
+    await expect(settingsApi.updateTariffPanelsLayout('token', { irregularPaymentsWidthPercent: 28 })).resolves.toEqual({ irregularPaymentsWidthPercent: 28, version: 'layout-v2' })
+
+    expect(fetchMock).toHaveBeenNthCalledWith(1, '/api/settings/tariffs/layout', expect.objectContaining({
+      headers: expect.objectContaining({ Authorization: 'Bearer token' }),
+    }))
+    expect(fetchMock).toHaveBeenNthCalledWith(2, '/api/settings/tariffs/layout', expect.objectContaining({
+      method: 'PUT',
+      body: JSON.stringify({ irregularPaymentsWidthPercent: 28 }),
+    }))
+  })
+
   afterEach(() => {
     vi.unstubAllGlobals()
   })

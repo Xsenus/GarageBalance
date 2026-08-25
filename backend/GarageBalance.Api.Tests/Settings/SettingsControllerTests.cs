@@ -19,6 +19,8 @@ public sealed class SettingsControllerTests
     {
         var getAction = typeof(SettingsController).GetMethod(nameof(SettingsController.GetPaymentDisplaySettings));
         var updateAction = typeof(SettingsController).GetMethod(nameof(SettingsController.UpdatePaymentDisplaySettings));
+        var getTariffLayoutAction = typeof(SettingsController).GetMethod(nameof(SettingsController.GetTariffPanelsLayout));
+        var updateTariffLayoutAction = typeof(SettingsController).GetMethod(nameof(SettingsController.UpdateTariffPanelsLayout));
         var backupStatusAction = typeof(SettingsController).GetMethod(nameof(SettingsController.GetDatabaseBackups));
         var backupCreateAction = typeof(SettingsController).GetMethod(nameof(SettingsController.CreateDatabaseBackup));
         var backupDownloadAction = typeof(SettingsController).GetMethod(nameof(SettingsController.DownloadDatabaseBackup));
@@ -34,6 +36,8 @@ public sealed class SettingsControllerTests
 
         Assert.Null(Assert.Single(getAction!.GetCustomAttributes<AuthorizeAttribute>()).Policy);
         Assert.Equal(SystemPermissions.UsersManage, Assert.Single(updateAction!.GetCustomAttributes<AuthorizeAttribute>()).Policy);
+        Assert.Null(Assert.Single(getTariffLayoutAction!.GetCustomAttributes<AuthorizeAttribute>()).Policy);
+        Assert.Null(Assert.Single(updateTariffLayoutAction!.GetCustomAttributes<AuthorizeAttribute>()).Policy);
         Assert.Equal(SystemPermissions.UsersManage, Assert.Single(backupStatusAction!.GetCustomAttributes<AuthorizeAttribute>()).Policy);
         Assert.Equal(SystemPermissions.UsersManage, Assert.Single(backupCreateAction!.GetCustomAttributes<AuthorizeAttribute>()).Policy);
         Assert.Equal(SystemPermissions.UsersManage, Assert.Single(backupDownloadAction!.GetCustomAttributes<AuthorizeAttribute>()).Policy);
@@ -61,6 +65,60 @@ public sealed class SettingsControllerTests
         Assert.False(dto.ShowAllGarageOperationsByDefault);
         Assert.False(dto.ShowPeriodicityColumn);
         Assert.False(dto.ShowAccrualMonthColumn);
+    }
+
+    [Fact]
+    public async Task TariffPanelsLayout_UsesAuthenticatedUserForReadAndUpdate()
+    {
+        var actorUserId = Guid.NewGuid();
+        var service = new FakeService();
+        var controller = CreateController(service);
+        controller.ControllerContext = new ControllerContext
+        {
+            HttpContext = new DefaultHttpContext
+            {
+                User = new ClaimsPrincipal(new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, actorUserId.ToString())], "Test"))
+            }
+        };
+
+        var getResult = await controller.GetTariffPanelsLayout(CancellationToken.None);
+        var getDto = Assert.IsType<TariffPanelsLayoutDto>(Assert.IsType<OkObjectResult>(getResult.Result).Value);
+        Assert.Equal(40, getDto.IrregularPaymentsWidthPercent);
+
+        var request = new UpdateTariffPanelsLayoutRequest(27, getDto.Version);
+        var updateResult = await controller.UpdateTariffPanelsLayout(request, CancellationToken.None);
+        var updateDto = Assert.IsType<TariffPanelsLayoutDto>(Assert.IsType<OkObjectResult>(updateResult.Result).Value);
+        Assert.Equal(27, updateDto.IrregularPaymentsWidthPercent);
+        Assert.Same(request, service.ReceivedTariffPanelsLayoutRequest);
+        Assert.Equal(actorUserId, service.ReceivedTariffPanelsLayoutUserId);
+    }
+
+    [Fact]
+    public async Task TariffPanelsLayout_RejectsMissingUserClaim()
+    {
+        var controller = CreateController();
+
+        Assert.IsType<UnauthorizedResult>((await controller.GetTariffPanelsLayout(CancellationToken.None)).Result);
+        Assert.IsType<UnauthorizedResult>((await controller.UpdateTariffPanelsLayout(new UpdateTariffPanelsLayoutRequest(40), CancellationToken.None)).Result);
+    }
+
+    [Fact]
+    public async Task TariffPanelsLayout_MapsInvalidWidthToBadRequest()
+    {
+        var service = new FakeService { RejectTariffPanelsLayoutUpdate = true };
+        var controller = CreateController(service);
+        controller.ControllerContext = new ControllerContext
+        {
+            HttpContext = new DefaultHttpContext
+            {
+                User = new ClaimsPrincipal(new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, Guid.NewGuid().ToString())], "Test"))
+            }
+        };
+
+        var result = await controller.UpdateTariffPanelsLayout(new UpdateTariffPanelsLayoutRequest(24), CancellationToken.None);
+
+        var problem = Assert.IsType<ProblemDetails>(Assert.IsType<ObjectResult>(result.Result).Value);
+        Assert.Equal("tariff_panels_layout_invalid", problem.Title);
     }
 
     [Fact]
@@ -397,11 +455,14 @@ public sealed class SettingsControllerTests
         public PaymentDisplaySettingsDto Current { get; set; } = new(false);
         public UpdatePaymentDisplaySettingsRequest? ReceivedRequest { get; private set; }
         public UpdateTariffTableDisplaySettingsRequest? ReceivedTariffTableDisplayRequest { get; private set; }
+        public UpdateTariffPanelsLayoutRequest? ReceivedTariffPanelsLayoutRequest { get; private set; }
+        public Guid? ReceivedTariffPanelsLayoutUserId { get; private set; }
         public Guid? ReceivedActorUserId { get; private set; }
         public UpdateBusinessDateRequest? ReceivedBusinessDateRequest { get; private set; }
         public PreviewBusinessDateRequest? ReceivedBusinessDatePreviewRequest { get; private set; }
         public UpdateSalaryAccrualSettingsRequest? ReceivedSalaryAccrualRequest { get; private set; }
         public bool RejectSalaryAccrualUpdate { get; set; }
+        public bool RejectTariffPanelsLayoutUpdate { get; set; }
 
         public Task<PaymentDisplaySettingsDto> GetPaymentDisplaySettingsAsync(CancellationToken cancellationToken) => Task.FromResult(Current);
 
@@ -421,6 +482,23 @@ public sealed class SettingsControllerTests
             ReceivedTariffTableDisplayRequest = request;
             ReceivedActorUserId = actorUserId;
             return Task.FromResult(new TariffTableDisplaySettingsDto(request.ShowPeriodicityColumn, request.ShowAccrualMonthColumn));
+        }
+
+        public Task<TariffPanelsLayoutDto> GetTariffPanelsLayoutAsync(Guid userId, CancellationToken cancellationToken)
+        {
+            ReceivedTariffPanelsLayoutUserId = userId;
+            return Task.FromResult(new TariffPanelsLayoutDto(40, Guid.NewGuid()));
+        }
+
+        public Task<TariffPanelsLayoutDto> UpdateTariffPanelsLayoutAsync(UpdateTariffPanelsLayoutRequest request, Guid userId, CancellationToken cancellationToken)
+        {
+            if (RejectTariffPanelsLayoutUpdate)
+            {
+                throw new TariffPanelsLayoutValidationException("Некорректная ширина.");
+            }
+            ReceivedTariffPanelsLayoutRequest = request;
+            ReceivedTariffPanelsLayoutUserId = userId;
+            return Task.FromResult(new TariffPanelsLayoutDto(request.IrregularPaymentsWidthPercent, request.Version ?? Guid.NewGuid()));
         }
 
         public Task<SalaryAccrualSettingsDto> GetSalaryAccrualSettingsAsync(CancellationToken cancellationToken) =>

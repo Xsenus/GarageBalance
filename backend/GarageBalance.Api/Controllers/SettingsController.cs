@@ -56,6 +56,46 @@ public sealed class SettingsController(
             tariffs.Version));
     }
 
+    [HttpGet("tariffs/layout")]
+    [Authorize]
+    [ProducesResponseType<TariffPanelsLayoutDto>(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<ActionResult<TariffPanelsLayoutDto>> GetTariffPanelsLayout(CancellationToken cancellationToken)
+    {
+        var userId = GetActorUserId();
+        return userId.HasValue
+            ? Ok(await applicationSettingsService.GetTariffPanelsLayoutAsync(userId.Value, cancellationToken))
+            : Unauthorized();
+    }
+
+    [HttpPut("tariffs/layout")]
+    [Authorize]
+    [ProducesResponseType<TariffPanelsLayoutDto>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<ActionResult<TariffPanelsLayoutDto>> UpdateTariffPanelsLayout(
+        UpdateTariffPanelsLayoutRequest request,
+        CancellationToken cancellationToken)
+    {
+        var userId = GetActorUserId();
+        if (!userId.HasValue)
+        {
+            return Unauthorized();
+        }
+
+        try
+        {
+            return Ok(await applicationSettingsService.UpdateTariffPanelsLayoutAsync(request, userId.Value, cancellationToken));
+        }
+        catch (TariffPanelsLayoutValidationException exception)
+        {
+            return Problem(
+                statusCode: StatusCodes.Status400BadRequest,
+                title: "tariff_panels_layout_invalid",
+                detail: exception.Message);
+        }
+    }
+
     [HttpGet("salary-accrual")]
     [Authorize(Policy = SystemPermissions.PaymentsRead)]
     [ProducesResponseType<SalaryAccrualSettingsDto>(StatusCodes.Status200OK)]

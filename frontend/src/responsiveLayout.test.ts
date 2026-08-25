@@ -17,6 +17,11 @@ describe('responsive layout styles', () => {
     })
   }
 
+  it('stacks the configurable tariff panels and hides their splitter on narrow screens', () => {
+    expect(normalizedAppCss).toContain('.tariffs-page .contractors-bottom-grid {\n    grid-template-columns: 1fr;\n    gap: 12px;')
+    expect(normalizedAppCss).toContain('.tariffs-panels-splitter {\n    display: none;')
+  })
+
   it('uses shared controls instead of browser-native selects and date pickers', () => {
     const nativeControls = collectFeatureTsxFiles(resolve(process.cwd(), 'src', 'features')).flatMap((path) => {
       const source = readFileSync(path, 'utf8')
@@ -59,7 +64,7 @@ describe('responsive layout styles', () => {
   it('collapses the main shell and data rows on tablet width', () => {
     expect(appCss).toContain('@media (max-width: 1100px)')
     expect(normalizedAppCss).toContain('.app-shell {\n    grid-template-columns: 1fr;')
-    expect(normalizedAppCss).toContain('.user-table-row,\n  .operation-row {\n    grid-template-columns: 1fr;')
+    expect(normalizedAppCss).toContain('.operation-row {\n    grid-template-columns: 1fr;')
   })
 
   it('keeps tablet and mobile navigation compact without stretching the viewport', () => {
@@ -108,7 +113,7 @@ describe('responsive layout styles', () => {
 
   it('allows long table cell text to shrink inside its grid column', () => {
     expect(normalizedAppCss).toContain('.nav-item {\n  display: flex;\n  width: 100%;\n  min-width: 0;')
-    expect(normalizedAppCss).toContain('.user-table-row > *,\n.operation-row > * {\n  min-width: 0;')
+    expect(normalizedAppCss).toContain('.operation-row > * {\n  min-width: 0;')
   })
 
   it('keeps tall dialogs scrollable inside the viewport', () => {
@@ -313,7 +318,6 @@ describe('responsive layout styles', () => {
     expect(normalizedAppCss).toContain('.report-export-button {\n  position: relative;\n  display: inline-grid;\n  width: 40px;\n  min-width: 40px;\n  height: 40px;\n  border: 1px solid transparent;\n  border-radius: 10px;')
     expect(normalizedAppCss).toContain('.report-export-button--xlsx {\n  border-color: #abefc6;\n  background: #ecfdf3;\n  color: #067647;')
     expect(normalizedAppCss).toContain('.report-export-button--pdf {\n  border-color: #fecdca;\n  background: #fff1f3;\n  color: #b42318;')
-    expect(normalizedAppCss).toContain('.report-export-button:hover::after,\n.report-export-button:focus-visible::after {\n  opacity: 1;')
   })
 
   it('keeps contractor pagination visible while the directory table scrolls', () => {
@@ -385,13 +389,11 @@ describe('responsive layout styles', () => {
     expect(normalizedAppCss).toContain('.detail-dialog.contractors-service-dialog {\n  overflow-x: hidden;\n  transition: width 240ms ease, min-height 240ms ease;')
     expect(normalizedAppCss).toContain('.detail-dialog.contractors-service-dialog--compact {\n  width: min(680px, calc(100vw - 48px));\n  min-height: 0;')
     expect(normalizedAppCss).toContain('.detail-dialog.contractors-service-dialog--regular {\n  width: min(1280px, calc(100vw - 48px));\n  min-height: min(640px, calc(100dvh - 48px));')
-    expect(normalizedAppCss).toContain('.contractors-service-dialog-header {\n  display: grid;\n  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);')
-    expect(normalizedAppCss).toContain('.contractors-service-header-actions {\n  display: inline-flex;\n  grid-column: 3;')
+    expect(normalizedAppCss).toContain('.contractors-tariff-dialog .detail-dialog-header h3 {\n  flex: 1;\n  text-align: center;')
+    expect(normalizedAppCss).toContain('.contractors-service-header-actions {\n  display: inline-flex;\n  align-items: center;\n  gap: 12px;')
     expect(normalizedAppCss).toContain('@media (prefers-reduced-motion: reduce) {\n  .detail-dialog.contractors-service-dialog {\n    transition: none;')
-    expect(normalizedAppCss).toContain('@media (max-width: 680px) {\n  .contractors-service-dialog-header {\n    grid-template-columns: minmax(0, 1fr);')
+    expect(normalizedAppCss).toContain('.contractors-service-regular-toggle--in-actions {\n    justify-content: space-between;\n    white-space: normal;')
     expect(normalizedAppCss).toContain('.contractors-tariff-dialog .contractors-service-period-grid--catalogs {\n  grid-template-columns: repeat(3, minmax(0, 1fr));')
-    expect(normalizedAppCss).toContain('.contractors-tariff-dialog .contractors-service-period-grid--schedule {\n  grid-template-columns: minmax(140px, 0.55fr) minmax(220px, 1fr) minmax(300px, 1.25fr);')
-    expect(normalizedAppCss).toContain('.contractors-tariff-dialog .contractors-service-period-grid--schedule-monthly {\n  grid-template-columns: minmax(180px, 0.7fr) minmax(360px, 1.3fr);')
     expect(normalizedAppCss).toContain('.contractors-tariff-dialog .contractors-inline-field--date .select-control {\n  flex: 1 1 auto;')
     expect(normalizedAppCss).toContain('.contractors-service-cost-grid {\n  display: grid;\n  grid-template-columns: repeat(3, minmax(0, 1fr));')
     expect(normalizedAppCss).toContain('.contractors-service-secondary-grid {\n  display: grid;\n  grid-template-columns: repeat(2, minmax(0, 1fr));\n  gap: 12px;\n  align-items: end;')
@@ -399,7 +401,7 @@ describe('responsive layout styles', () => {
     expect(normalizedAppCss).toContain('.editable-combobox .editable-combobox__input {\n  padding-right: 40px;')
     expect(normalizedAppCss).toContain('.editable-combobox__list {\n  width: 100%;\n  max-height: 294px;\n  scrollbar-gutter: stable;\n  overscroll-behavior: contain;')
     expect(normalizedAppCss).toContain('.contractors-service-cost-field {\n  grid-column: 3;')
-    expect(normalizedAppCss).toContain('.contractors-tariff-dialog .contractors-service-period-grid--catalogs,\n  .contractors-tariff-dialog .contractors-service-period-grid--schedule,\n  .contractors-tariff-dialog .contractors-service-period-grid--single-row,\n  .contractors-service-heading-grid,\n  .contractors-service-secondary-grid,\n  .contractors-fee-layout,\n  .contractors-fee-two-column-grid,\n  .contractors-fee-date-grid,\n  .contractors-service-period-grid,\n  .contractors-service-flags,\n  .contractors-service-cost-grid {\n    grid-template-columns: 1fr;')
+    expect(normalizedAppCss).toContain('.contractors-tariff-dialog .contractors-service-period-grid--catalogs,\n  .contractors-tariff-dialog .contractors-service-period-grid--single-row,\n  .contractors-service-heading-grid,\n  .contractors-service-secondary-grid,\n  .contractors-fee-layout,\n  .contractors-fee-two-column-grid,\n  .contractors-fee-date-grid,\n  .contractors-service-period-grid,\n  .contractors-service-flags,\n  .contractors-service-cost-grid {\n    grid-template-columns: 1fr;')
     expect(normalizedAppCss).toContain('.contractors-service-cost-field {\n    grid-column: 1;')
   })
 

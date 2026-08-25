@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useRef, useState } from 'react'
-import type { FormEvent, MouseEvent } from 'react'
+import type { CSSProperties, FormEvent, KeyboardEvent, MouseEvent, PointerEvent } from 'react'
 import { CalendarPlus, CircleCheck, FileSpreadsheet, FileText, Pencil, PowerOff, RotateCcw, Save, Trash2, X } from 'lucide-react'
 import type { AuthResponse } from '../../services/authApi'
 import { DictionaryApiError } from '../../services/dictionariesApi'
@@ -30,6 +30,9 @@ import { getInlineTariffChangeEffectiveFrom, getServiceMeasurementUnit, getServi
 
 const dictionaryScreenRequestLimit = 100
 const persistedGuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+const defaultTariffPanelsSplitPercent = 40
+const minimumTariffPanelsSplitPercent = 25
+const maximumTariffPanelsSplitPercent = 60
 
 type ContractorTariffRow = {
   id: string
@@ -788,6 +791,10 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
   const [feeCampaignGarageOptionsLoading, setFeeCampaignGarageOptionsLoading] = useState(false)
   const [tariffSavingRowId, setTariffSavingRowId] = useState<string | null>(null)
   const [tableColumns, setTableColumns] = useState([false, false])
+  const [tariffPanelsWidth, setTariffPanelsWidthState] = useState(defaultTariffPanelsSplitPercent)
+  const [tariffPanelsLayoutError, setTariffPanelsLayoutError] = useState<string | null>(null)
+  const tariffPanelsGridRef = useRef<HTMLDivElement>(null)
+  const tariffPanelsWidthRef = useRef(defaultTariffPanelsSplitPercent)
   const [oneTimeSavingRowId, setOneTimeSavingRowId] = useState<string | null>(null)
   const [oneTimeDeleteTarget, setOneTimeDeleteTarget] = useState<ContractorOneTimeRow | null>(null)
   const [oneTimeDeleteReason, setOneTimeDeleteReason] = useState('')
@@ -1135,6 +1142,65 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
       .catch(() => undefined)
     return () => { ignore = true }
   }, [auth.accessToken, settingsClient])
+
+  useEffect(() => {
+    let ignore = false
+    settingsClient.getTariffPanelsLayout(auth.accessToken)
+      .then((layout) => {
+        if (ignore) return
+        const width = layout.irregularPaymentsWidthPercent
+        tariffPanelsWidthRef.current = width
+        setTariffPanelsWidthState(width)
+      })
+      .catch(() => undefined)
+    return () => { ignore = true }
+  }, [auth.accessToken, settingsClient])
+
+  function setTariffPanelsWidth(width: number) {
+    const normalizedWidth = Math.min(maximumTariffPanelsSplitPercent, Math.max(minimumTariffPanelsSplitPercent, Math.round(width)))
+    tariffPanelsWidthRef.current = normalizedWidth
+    setTariffPanelsWidthState(normalizedWidth)
+  }
+
+  function setTariffPanelsWidthFromPointer(clientX: number) {
+    const bounds = tariffPanelsGridRef.current?.getBoundingClientRect()
+    if (!bounds?.width) return
+    setTariffPanelsWidth(((clientX - bounds.left) / bounds.width) * 100)
+  }
+
+  async function persistTariffPanelsWidth() {
+    setTariffPanelsLayoutError(null)
+    try {
+      await settingsClient.updateTariffPanelsLayout(auth.accessToken, {
+        irregularPaymentsWidthPercent: tariffPanelsWidthRef.current,
+      })
+    } catch {
+      setTariffPanelsLayoutError('Не удалось сохранить ширину таблиц.')
+    }
+  }
+
+  function startTariffPanelsResize(event: PointerEvent<HTMLDivElement>) {
+    event.currentTarget.setPointerCapture(event.pointerId)
+    setTariffPanelsWidthFromPointer(event.clientX)
+  }
+
+  function moveTariffPanelsResize(event: PointerEvent<HTMLDivElement>) {
+    if (event.buttons !== 1) return
+    setTariffPanelsWidthFromPointer(event.clientX)
+  }
+
+  function finishTariffPanelsResize(event: PointerEvent<HTMLDivElement>) {
+    event.currentTarget.releasePointerCapture(event.pointerId)
+    void persistTariffPanelsWidth()
+  }
+
+  function resizeTariffPanelsWithKeyboard(event: KeyboardEvent<HTMLDivElement>) {
+    const delta = event.key === 'ArrowLeft' ? -1 : event.key === 'ArrowRight' ? 1 : 0
+    if (!delta) return
+    event.preventDefault()
+    setTariffPanelsWidth(tariffPanelsWidthRef.current + delta)
+    void persistTariffPanelsWidth()
+  }
 
   function buildChargeServiceRequest(setting: ChargeServiceSettingDto, nextRows: ContractorTariffRow[]): UpsertChargeServiceSettingRequest {
     const relatedRows = nextRows.filter((item) => item.backendServiceSettingId === setting.id)
@@ -2699,7 +2765,12 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
             }}
           />
 
-          <div className="contractors-bottom-grid">
+          {tariffPanelsLayoutError ? <p className="form-error" role="alert">{tariffPanelsLayoutError}</p> : null}
+          <div
+            className="contractors-bottom-grid"
+            ref={tariffPanelsGridRef}
+            style={{ '--tariffs-irregular-width': `${tariffPanelsWidth}%` } as CSSProperties}
+          >
             <section className="contractors-mini-table tariffs-summary-card" aria-label="Нерегулярные платежи">
               <div className="contractors-mini-title">Нерегулярные платежи</div>
               {oneTimeActionMessage ? <p className="contractors-action-message" role="alert">{oneTimeActionMessage}</p> : null}
@@ -2764,6 +2835,21 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
                 }}
               />
             </section>
+
+            <div
+              className="tariffs-panels-splitter"
+              role="separator"
+              aria-label="Изменить ширину таблиц"
+              aria-orientation="vertical"
+              aria-valuemin={minimumTariffPanelsSplitPercent}
+              aria-valuemax={maximumTariffPanelsSplitPercent}
+              aria-valuenow={tariffPanelsWidth}
+              tabIndex={0}
+              onPointerDown={startTariffPanelsResize}
+              onPointerMove={moveTariffPanelsResize}
+              onPointerUp={finishTariffPanelsResize}
+              onKeyDown={resizeTariffPanelsWithKeyboard}
+            />
 
             <section className="contractors-mini-table tariffs-summary-card" aria-label="Объявленные сборы">
               <div className="contractors-mini-title">Объявленные сборы</div>

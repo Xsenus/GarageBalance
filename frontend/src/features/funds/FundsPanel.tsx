@@ -627,15 +627,15 @@ export function FundsPrototypePanel({ auth, fundsClient }: { auth: AuthResponse;
                 <td>{row.amount === null ? '—' : `${formatMoney(row.amount)} руб.`}</td>
                 <td className="funds-table-action-column table-actions-column">
                   <span className="funds-table-row-actions">
-                    <button className="funds-action-button" type="button" aria-label={`Открыть карточку фонда ${row.name}`} title={`Открыть карточку фонда ${row.name}`} data-tooltip="Карточка" onClick={() => openFundEdit(row)}>
+                    <button className="funds-action-button" type="button" aria-label={`Открыть карточку фонда ${row.name}`} title={`Открыть карточку фонда ${row.name}`} onClick={() => openFundEdit(row)}>
                       <Pencil size={16} aria-hidden="true" />
                     </button>
                     {row.actions === false ? null : (
                       <>
-                        <button className="funds-action-button funds-action-button--withdraw" type="button" aria-label={`Изъять из фонда ${row.name}`} title={`Изъять из фонда ${row.name}`} data-tooltip="Изъять" onClick={() => openFundOperation('withdraw', row)}>
+                        <button className="funds-action-button funds-action-button--withdraw" type="button" aria-label={`Изъять из фонда ${row.name}`} title={`Изъять из фонда ${row.name}`} onClick={() => openFundOperation('withdraw', row)}>
                           <Minus size={16} aria-hidden="true" />
                         </button>
-                        <button className="funds-action-button funds-action-button--deposit" type="button" aria-label={`Пополнить фонд ${row.name}`} title={`Пополнить фонд ${row.name}`} data-tooltip="Пополнить" onClick={() => openFundOperation('deposit', row)}>
+                        <button className="funds-action-button funds-action-button--deposit" type="button" aria-label={`Пополнить фонд ${row.name}`} title={`Пополнить фонд ${row.name}`} onClick={() => openFundOperation('deposit', row)}>
                           <Plus size={16} aria-hidden="true" />
                         </button>
                       </>
@@ -710,18 +710,18 @@ export function FundsPrototypePanel({ auth, fundsClient }: { auth: AuthResponse;
                     {fundOperation.isAutomaticIncomeAssignment ? (
                       <span className="funds-operation-managed-label">Управляется поступлением</span>
                     ) : fundOperation.isCanceled ? (
-                      <button className="funds-action-button" type="button" aria-label={`Вернуть операцию фонда ${fundOperation.fundName}`} title={`Вернуть операцию фонда ${fundOperation.fundName}`} data-tooltip="Вернуть" onClick={() => openFundStatusAction('restore', fundOperation)}>
+                      <button className="funds-action-button" type="button" aria-label={`Вернуть операцию фонда ${fundOperation.fundName}`} title={`Вернуть операцию фонда ${fundOperation.fundName}`} onClick={() => openFundStatusAction('restore', fundOperation)}>
                         <RotateCcw size={16} aria-hidden="true" />
                       </button>
                     ) : (
                       <>
-                        <button className="funds-action-button" type="button" aria-label={`Изменить операцию фонда ${fundOperation.fundName}`} title={`Изменить операцию фонда ${fundOperation.fundName}`} data-tooltip="Изменить" onClick={() => openFundOperationEdit(fundOperation)}>
+                        <button className="funds-action-button" type="button" aria-label={`Изменить операцию фонда ${fundOperation.fundName}`} title={`Изменить операцию фонда ${fundOperation.fundName}`} onClick={() => openFundOperationEdit(fundOperation)}>
                           <Pencil size={16} aria-hidden="true" />
                         </button>
-                        <button className="funds-action-button" type="button" aria-label={`Создать обратную операцию фонда ${fundOperation.fundName}`} title={`Создать обратную операцию фонда ${fundOperation.fundName}`} data-tooltip="Обратная" onClick={() => openFundOperationReverse(fundOperation)}>
+                        <button className="funds-action-button" type="button" aria-label={`Создать обратную операцию фонда ${fundOperation.fundName}`} title={`Создать обратную операцию фонда ${fundOperation.fundName}`} onClick={() => openFundOperationReverse(fundOperation)}>
                           <RefreshCw size={16} aria-hidden="true" />
                         </button>
-                        <button className="funds-action-button danger-icon-button" type="button" aria-label={`Отменить операцию фонда ${fundOperation.fundName}`} title={`Отменить операцию фонда ${fundOperation.fundName}`} data-tooltip="Отменить" onClick={() => openFundStatusAction('cancel', fundOperation)}>
+                        <button className="funds-action-button danger-icon-button" type="button" aria-label={`Отменить операцию фонда ${fundOperation.fundName}`} title={`Отменить операцию фонда ${fundOperation.fundName}`} onClick={() => openFundStatusAction('cancel', fundOperation)}>
                           <Trash2 size={16} aria-hidden="true" />
                         </button>
                       </>

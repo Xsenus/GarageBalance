@@ -26,6 +26,14 @@ public sealed record UpdateTariffTableDisplaySettingsRequest(
     bool ShowAccrualMonthColumn,
     Guid? Version = null);
 
+public sealed record TariffPanelsLayoutDto(
+    int IrregularPaymentsWidthPercent,
+    Guid Version = default);
+
+public sealed record UpdateTariffPanelsLayoutRequest(
+    int IrregularPaymentsWidthPercent,
+    Guid? Version = null);
+
 public sealed record SalaryAccrualSettingsDto(int AccrualDay, Guid Version = default);
 
 public sealed record UpdateSalaryAccrualSettingsRequest(int AccrualDay, Guid? Version = null);

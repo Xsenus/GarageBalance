@@ -11,6 +11,63 @@ namespace GarageBalance.Api.Tests.Settings;
 public sealed class ApplicationSettingsServiceTests
 {
     [Fact]
+    public async Task TariffPanelsLayout_DefaultsToFortyPercentForAUser()
+    {
+        var repository = new FakeRepository();
+        var userId = Guid.NewGuid();
+        var service = CreateService(repository, new CaptureAuditWriter());
+
+        var result = await service.GetTariffPanelsLayoutAsync(userId, CancellationToken.None);
+
+        Assert.Equal(40, result.IrregularPaymentsWidthPercent);
+        Assert.Equal($"users.{userId:N}.tariffs.bottom_panels_split", repository.LastRequestedKey);
+    }
+
+    [Fact]
+    public async Task TariffPanelsLayout_PersistsTheAuthenticatedUsersWidthWithoutAuditNoise()
+    {
+        var repository = new FakeRepository();
+        var auditWriter = new CaptureAuditWriter();
+        var userId = Guid.NewGuid();
+        var service = CreateService(repository, auditWriter);
+
+        var result = await service.UpdateTariffPanelsLayoutAsync(
+            new UpdateTariffPanelsLayoutRequest(28),
+            userId,
+            CancellationToken.None);
+
+        Assert.Equal(28, result.IrregularPaymentsWidthPercent);
+        Assert.Equal(28, repository.Setting!.IntegerValue);
+        Assert.Equal($"users.{userId:N}.tariffs.bottom_panels_split", repository.Setting.Key);
+        Assert.Equal(userId, repository.Setting.UpdatedByUserId);
+        Assert.Equal(1, repository.SaveChangesCount);
+        Assert.Empty(auditWriter.Requests);
+
+        var updated = await service.UpdateTariffPanelsLayoutAsync(
+            new UpdateTariffPanelsLayoutRequest(31),
+            userId,
+            CancellationToken.None);
+
+        Assert.Equal(31, updated.IrregularPaymentsWidthPercent);
+        Assert.Equal(31, repository.Setting.IntegerValue);
+        Assert.Equal(2, repository.SaveChangesCount);
+    }
+
+    [Theory]
+    [InlineData(24)]
+    [InlineData(61)]
+    public async Task TariffPanelsLayout_RejectsWidthsThatCouldHideAPanel(int width)
+    {
+        var service = CreateService(new FakeRepository(), new CaptureAuditWriter());
+
+        await Assert.ThrowsAsync<TariffPanelsLayoutValidationException>(() =>
+            service.UpdateTariffPanelsLayoutAsync(
+                new UpdateTariffPanelsLayoutRequest(width),
+                Guid.NewGuid(),
+                CancellationToken.None));
+    }
+
+    [Fact]
     public async Task GetPaymentDisplaySettings_ReturnsFalseWhenSettingIsMissing()
     {
         var service = CreateService(new FakeRepository(), new CaptureAuditWriter());
@@ -288,9 +345,19 @@ public sealed class ApplicationSettingsServiceTests
     {
         public ApplicationSetting? Setting { get; set; }
         public int SaveChangesCount { get; private set; }
+        public string? LastRequestedKey { get; private set; }
 
-        public Task<ApplicationSetting?> FindAsync(string key, CancellationToken cancellationToken) => Task.FromResult(Setting);
-        public Task<ApplicationSetting?> FindForUpdateAsync(string key, CancellationToken cancellationToken) => Task.FromResult(Setting);
+        public Task<ApplicationSetting?> FindAsync(string key, CancellationToken cancellationToken)
+        {
+            LastRequestedKey = key;
+            return Task.FromResult(Setting);
+        }
+
+        public Task<ApplicationSetting?> FindForUpdateAsync(string key, CancellationToken cancellationToken)
+        {
+            LastRequestedKey = key;
+            return Task.FromResult(Setting);
+        }
         public void Add(ApplicationSetting setting) => Setting = setting;
         public Task SaveChangesAsync(CancellationToken cancellationToken)
         {

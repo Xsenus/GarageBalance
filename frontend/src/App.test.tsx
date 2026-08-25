@@ -6,6 +6,8 @@ vi.mock('./services/settingsApi', () => ({
   settingsApi: {
     getPaymentDisplaySettings: vi.fn(async () => ({ showAllGarageOperationsByDefault: true, version: 'payment-version', showPeriodicityColumn: false, showAccrualMonthColumn: false, tariffTableVersion: 'tariff-table-version' })),
     updatePaymentDisplaySettings: vi.fn(async (_accessToken: string, request: { showAllGarageOperationsByDefault: boolean; version: string; showPeriodicityColumn: boolean; showAccrualMonthColumn: boolean; tariffTableVersion: string }) => request),
+    getTariffPanelsLayout: vi.fn(async () => ({ irregularPaymentsWidthPercent: 40, version: 'tariff-layout-version' })),
+    updateTariffPanelsLayout: vi.fn(async (_accessToken: string, request: { irregularPaymentsWidthPercent: number }) => ({ ...request, version: 'tariff-layout-version' })),
     getSalaryAccrualSettings: vi.fn(async () => ({ accrualDay: 10, version: 'salary-version' })),
     updateSalaryAccrualSettings: vi.fn(async (_accessToken: string, request: { accrualDay: number }) => request),
     getBusinessDateSettings: vi.fn(async () => ({ systemDate: '2026-07-21', effectiveDate: '2026-07-21', overrideDate: null, isOverrideActive: false, updatedAtUtc: null, automation: null, version: 'business-date-version' })),
@@ -888,6 +890,51 @@ describe('App', () => {
 
     expect(await within(createDialog).findByRole('alert')).toHaveTextContent('Выберите назначение поступления.')
     expect(createDialog).toBeInTheDocument()
+  })
+
+  it('resizes the lower tariff tables and saves the width for the authenticated user', async () => {
+    const user = userEvent.setup()
+    const savedLayouts: Array<{ irregularPaymentsWidthPercent: number }> = []
+    const settingsClient = createSettingsClient({
+      getTariffPanelsLayout: async () => ({ irregularPaymentsWidthPercent: 35, version: 'layout-v1' }),
+      updateTariffPanelsLayout: async (_accessToken, request) => {
+        savedLayouts.push(request)
+        if (savedLayouts.length === 3) throw new Error('Настройка временно недоступна.')
+        return { irregularPaymentsWidthPercent: request.irregularPaymentsWidthPercent, version: `layout-v${savedLayouts.length + 1}` }
+      },
+    })
+
+    render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} fundsClient={createFundsClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} settingsClient={settingsClient} userClient={createUserClient()} />)
+
+    await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+    await openSection(user, 'Тарифы и сборы')
+    const tariffsPanel = await screen.findByRole('region', { name: 'Тарифы и сборы' })
+    const splitter = await within(tariffsPanel).findByRole('separator', { name: 'Изменить ширину таблиц' })
+    const bottomGrid = splitter.closest('.contractors-bottom-grid') as HTMLElement
+
+    expect(splitter).toHaveAttribute('aria-valuenow', '35')
+    expect(bottomGrid.style.getPropertyValue('--tariffs-irregular-width')).toBe('35%')
+
+    vi.spyOn(bottomGrid, 'getBoundingClientRect').mockReturnValue({ left: 0, width: 1000 } as DOMRect)
+    Object.defineProperties(splitter, {
+      setPointerCapture: { value: vi.fn() },
+      hasPointerCapture: { value: vi.fn(() => true) },
+      releasePointerCapture: { value: vi.fn() },
+    })
+    fireEvent.pointerDown(splitter, { pointerId: 1, clientX: 280 })
+    fireEvent.pointerUp(splitter, { pointerId: 1, clientX: 280 })
+
+    await waitFor(() => expect(savedLayouts[0]).toEqual({ irregularPaymentsWidthPercent: 28 }))
+    expect(splitter).toHaveAttribute('aria-valuenow', '28')
+
+    splitter.focus()
+    await user.keyboard('{ArrowRight}')
+    await waitFor(() => expect(savedLayouts[1]).toEqual({ irregularPaymentsWidthPercent: 29 }))
+    expect(splitter).toHaveAttribute('aria-valuenow', '29')
+
+    await user.keyboard('{ArrowRight}')
+    expect(await within(tariffsPanel).findByRole('alert')).toHaveTextContent('Не удалось сохранить ширину таблиц.')
   })
 
   it('shows a fee campaign creation failure inside the open form', async () => {
@@ -10146,7 +10193,7 @@ describe('App', () => {
     expect(await within(fundsPanel).findByText('Электроэнергия')).toBeInTheDocument()
     const withdrawElectricityButton = within(fundsPanel).getByRole('button', { name: 'Изъять из фонда Электроэнергия' })
     expect(withdrawElectricityButton.closest('td')).toHaveClass('funds-table-action-column')
-    expect(withdrawElectricityButton).toHaveAttribute('data-tooltip', 'Изъять')
+    expect(withdrawElectricityButton).toHaveAttribute('title', 'Изъять из фонда Электроэнергия')
     expect(withdrawElectricityButton).toHaveAttribute('title', 'Изъять из фонда Электроэнергия')
     await user.click(withdrawElectricityButton)
     const withdrawDialog = await screen.findByRole('dialog', { name: 'Изъять из фонда' })
@@ -10157,7 +10204,7 @@ describe('App', () => {
 
     const depositTargetButton = within(fundsPanel).getByRole('button', { name: 'Пополнить фонд Целевые взносы' })
     expect(depositTargetButton.closest('td')).toHaveClass('funds-table-action-column')
-    expect(depositTargetButton).toHaveAttribute('data-tooltip', 'Пополнить')
+    expect(depositTargetButton).toHaveAttribute('title', 'Пополнить фонд Целевые взносы')
     await user.click(depositTargetButton)
     const depositDialog = await screen.findByRole('dialog', { name: 'Пополнить фонд' })
     const depositCancelButton = within(depositDialog).getByRole('button', { name: 'Отмена' })
@@ -10218,7 +10265,7 @@ describe('App', () => {
     expect(fundOperationsTable).toHaveTextContent('Активна')
 
     const editFundOperationButton = within(fundOperationsTable).getByRole('button', { name: 'Изменить операцию фонда Целевые взносы' })
-    expect(editFundOperationButton).toHaveAttribute('data-tooltip', 'Изменить')
+    expect(editFundOperationButton).toHaveAttribute('title', 'Изменить операцию фонда Целевые взносы')
     await user.click(editFundOperationButton)
     let editFundOperationDialog = await screen.findByRole('dialog', { name: 'Изменить операцию фонда?' })
     let editCancelButton = within(editFundOperationDialog).getByRole('button', { name: 'Отмена' })
@@ -10262,7 +10309,7 @@ describe('App', () => {
     expect(within(fundOperationsTable).getAllByText(/1 750\.00 руб\./).length).toBeGreaterThanOrEqual(1)
 
     const cancelFundOperationButton = within(fundOperationsTable).getByRole('button', { name: 'Отменить операцию фонда Целевые взносы' })
-    expect(cancelFundOperationButton).toHaveAttribute('data-tooltip', 'Отменить')
+    expect(cancelFundOperationButton).toHaveAttribute('title', 'Отменить операцию фонда Целевые взносы')
     await user.click(cancelFundOperationButton)
     const cancelFundOperationDialog = await screen.findByRole('dialog', { name: 'Отменить операцию фонда?' })
     await waitFor(() => expect(within(cancelFundOperationDialog).getByLabelText('Причина отмены операции фонда')).toHaveFocus())
@@ -10274,7 +10321,7 @@ describe('App', () => {
     expect(within(fundsPanel).getByText('Операция отменена и записана в историю изменений.')).toHaveAttribute('role', 'status')
 
     const restoreFundOperationButton = within(fundOperationsTable).getByRole('button', { name: 'Вернуть операцию фонда Целевые взносы' })
-    expect(restoreFundOperationButton).toHaveAttribute('data-tooltip', 'Вернуть')
+    expect(restoreFundOperationButton).toHaveAttribute('title', 'Вернуть операцию фонда Целевые взносы')
     await user.click(restoreFundOperationButton)
     const restoreFundOperationDialog = await screen.findByRole('dialog', { name: 'Вернуть операцию фонда?' })
     const restoreCancelButton = within(restoreFundOperationDialog).getByRole('button', { name: 'Отмена' })
@@ -10286,7 +10333,7 @@ describe('App', () => {
     expect(within(fundOperationsTable).getByText('Активна')).toBeInTheDocument()
 
     const reverseFundOperationButton = within(fundOperationsTable).getByRole('button', { name: 'Создать обратную операцию фонда Целевые взносы' })
-    expect(reverseFundOperationButton).toHaveAttribute('data-tooltip', 'Обратная')
+    expect(reverseFundOperationButton).toHaveAttribute('title', 'Создать обратную операцию фонда Целевые взносы')
     await user.click(reverseFundOperationButton)
     const reverseFundOperationDialog = await screen.findByRole('dialog', { name: 'Создать обратную операцию фонда?' })
     const reverseCancelButton = within(reverseFundOperationDialog).getByRole('button', { name: 'Отмена' })
@@ -17779,7 +17826,7 @@ describe('App', () => {
     expect(within(reportsPanel).queryByRole('navigation', { name: 'Пагинация отчета по оплатам из кассы' })).not.toBeInTheDocument()
     const cashXlsxButton = within(reportsPanel).getByRole('button', { name: 'Скачать XLSX' })
     expect(cashXlsxButton).toHaveAttribute('title', 'Скачать XLSX')
-    expect(cashXlsxButton).toHaveAttribute('data-tooltip', 'Скачать XLSX')
+    expect(cashXlsxButton).toHaveAttribute('title', 'Скачать XLSX')
     expect(cashXlsxButton.querySelector('svg')).toHaveAttribute('aria-hidden', 'true')
     await user.click(cashXlsxButton)
     await waitFor(() => expect(exportCashPaymentReportXlsx).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ dateFrom: todayIso, dateTo: todayIso })))
@@ -17796,7 +17843,7 @@ describe('App', () => {
     expect(within(reportsPanel).queryByRole('navigation', { name: 'Пагинация отчета по сдаче кассы в банк' })).not.toBeInTheDocument()
     const bankPdfButton = within(reportsPanel).getByRole('button', { name: 'Скачать PDF' })
     expect(bankPdfButton).toHaveAttribute('title', 'Скачать PDF')
-    expect(bankPdfButton).toHaveAttribute('data-tooltip', 'Скачать PDF')
+    expect(bankPdfButton).toHaveAttribute('title', 'Скачать PDF')
     expect(bankPdfButton.querySelector('svg')).toHaveAttribute('aria-hidden', 'true')
     await user.click(bankPdfButton)
     await waitFor(() => expect(exportBankDepositReportPdf).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ dateFrom: todayIso, dateTo: todayIso })))
@@ -19032,6 +19079,8 @@ function createSettingsClient(overrides: Partial<ApplicationSettingsClient> = {}
   return {
     getPaymentDisplaySettings: async () => ({ showAllGarageOperationsByDefault: false, version: 'payment-version', showPeriodicityColumn: false, showAccrualMonthColumn: false, tariffTableVersion: 'tariff-table-version' }),
     updatePaymentDisplaySettings: async (_accessToken, request) => request,
+    getTariffPanelsLayout: async () => ({ irregularPaymentsWidthPercent: 40, version: 'tariff-layout-version' }),
+    updateTariffPanelsLayout: async (_accessToken, request) => ({ ...request, version: 'tariff-layout-version' }),
     getSalaryAccrualSettings: async () => ({ accrualDay: 10, version: 'salary-version' }),
     updateSalaryAccrualSettings: async (_accessToken, request) => request,
     getBusinessDateSettings: async () => ({
