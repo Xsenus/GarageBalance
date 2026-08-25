@@ -60,6 +60,23 @@ public sealed class PostgreSqlIrregularAccrualIntegrationTests
             Assert.Contains(
                 worksheet.Value!.Rows,
                 row => row.IncomeTypeName == customResult.Value.Basis && row.AccrualAmount == customResult.Value.Amount);
+
+            var fullPaymentQuote = await service.GetGarageFullPaymentQuoteAsync(
+                garage.Id,
+                CancellationToken.None);
+            Assert.True(fullPaymentQuote.Succeeded, fullPaymentQuote.ErrorMessage);
+            Assert.Equal(1790.39m, fullPaymentQuote.Value!.TotalAmount);
+            Assert.Equal(2, fullPaymentQuote.Value.Lines.Count);
+            Assert.Contains(
+                fullPaymentQuote.Value.Lines,
+                line => line.IncomeTypeId == destinationIncomeTypeId &&
+                    line.IrregularPaymentId == payment.Id &&
+                    line.OutstandingAmount == 875.13m);
+            Assert.Contains(
+                fullPaymentQuote.Value.Lines,
+                line => line.IncomeTypeId == destinationIncomeTypeId &&
+                    !line.IrregularPaymentId.HasValue &&
+                    line.OutstandingAmount == 915.26m);
         }
 
         await using (var verificationContext = database.CreateContext())

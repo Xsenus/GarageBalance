@@ -472,6 +472,28 @@ public sealed class FinanceControllerTests
     }
 
     [Fact]
+    public async Task GetGarageFullPaymentQuote_ReturnsAuthoritativeDebtAndPassesGarageToService()
+    {
+        var garageId = Guid.NewGuid();
+        var quote = new GarageFullPaymentQuoteDto(
+            garageId,
+            "102",
+            "Тестовый владелец",
+            3800m,
+            [new GarageFullPaymentQuoteLineDto(Guid.NewGuid(), "Внеочередной вывоз мусора", new DateOnly(2026, 8, 1), 3000m)]);
+        var service = new FakeFinanceService
+        {
+            GarageFullPaymentQuoteResult = FinanceResult<GarageFullPaymentQuoteDto>.Success(quote)
+        };
+
+        var result = await CreateController(service).GetGarageFullPaymentQuote(garageId, CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        Assert.Same(quote, ok.Value);
+        Assert.Equal(garageId, service.LastGarageFullPaymentQuoteGarageId);
+    }
+
+    [Fact]
     public async Task GetGarageIncomeWorksheet_PassesGarageAndPeriodToService()
     {
         var garageId = Guid.NewGuid();
@@ -2245,6 +2267,7 @@ public sealed class FinanceControllerTests
         public GarageBalanceHistoryRequest? LastGarageBalanceHistoryRequest { get; private set; }
         public GarageIncomeWorksheetRequest? LastGarageIncomeWorksheetRequest { get; private set; }
         public Guid? LastGarageIncomeWorksheetActorUserId { get; private set; }
+        public Guid? LastGarageFullPaymentQuoteGarageId { get; private set; }
         public ExpenseWorksheetRequest? LastExpenseWorksheetRequest { get; private set; }
         public SupplierOpeningBalanceRequest? LastSupplierOpeningBalanceRequest { get; private set; }
         public FinancialReportPeriodRequest? LastFinancialReportPeriodRequest { get; private set; }
@@ -2259,6 +2282,7 @@ public sealed class FinanceControllerTests
         public CreateIrregularAccrualRequest? LastIrregularAccrualRequest { get; private set; }
         public FinanceResult<GarageBalanceHistoryDto> GarageBalanceHistoryResult { get; init; } = FinanceResult<GarageBalanceHistoryDto>.Failure("not_configured", "Not configured.");
         public FinanceResult<GarageOverdueDebtDto> GarageOverdueDebtResult { get; init; } = FinanceResult<GarageOverdueDebtDto>.Failure("not_configured", "Not configured.");
+        public FinanceResult<GarageFullPaymentQuoteDto> GarageFullPaymentQuoteResult { get; init; } = FinanceResult<GarageFullPaymentQuoteDto>.Failure("not_configured", "Not configured.");
         public FinanceResult<GarageIncomeWorksheetDto> GarageIncomeWorksheetResult { get; init; } = FinanceResult<GarageIncomeWorksheetDto>.Failure("not_configured", "Not configured.");
         public FinanceResult<ExpenseWorksheetDto> ExpenseWorksheetResult { get; init; } = FinanceResult<ExpenseWorksheetDto>.Failure("not_configured", "Not configured.");
         public FinanceResult<SupplierOpeningBalanceDto> SupplierOpeningBalanceResult { get; init; } = FinanceResult<SupplierOpeningBalanceDto>.Failure("not_configured", "Not configured.");
@@ -2380,6 +2404,12 @@ public sealed class FinanceControllerTests
         {
             LastGarageOverdueDebtGarageId = garageId;
             return Task.FromResult(GarageOverdueDebtResult);
+        }
+
+        public Task<FinanceResult<GarageFullPaymentQuoteDto>> GetGarageFullPaymentQuoteAsync(Guid garageId, CancellationToken cancellationToken)
+        {
+            LastGarageFullPaymentQuoteGarageId = garageId;
+            return Task.FromResult(GarageFullPaymentQuoteResult);
         }
 
         public Task<FinanceResult<GarageIncomeWorksheetDto>> GetGarageIncomeWorksheetAsync(Guid garageId, GarageIncomeWorksheetRequest request, CancellationToken cancellationToken)

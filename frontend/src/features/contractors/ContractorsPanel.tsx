@@ -236,7 +236,10 @@ type ContractorPageState = {
 }
 
 const createContractorPageState = (): ContractorPageState => ({ totalCount: 0, offset: 0, limit: contractorsDefaultPageSize })
-const guidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+// PostgreSQL imports and deterministic staging records can contain canonical UUIDs
+// whose version/variant nibbles are not limited to RFC 4122 v1-v5. The API accepts
+// every canonical Guid, so the UI must not reject an otherwise valid persisted id.
+const guidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 const contractorGarageColumnDefinitions: Array<ContractorColumnDefinition<ContractorGarageColumnKey>> = [
   { key: 'number', label: 'Номер', defaultWidth: 96, minWidth: 72 },

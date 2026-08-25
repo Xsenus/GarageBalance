@@ -80,6 +80,22 @@ public sealed record FullGaragePaymentDto(
     decimal TotalAmount,
     IReadOnlyList<FinancialOperationDto> Operations);
 
+public sealed record GarageFullPaymentQuoteLineDto(
+    Guid? IncomeTypeId,
+    string IncomeTypeName,
+    DateOnly AccountingMonth,
+    decimal OutstandingAmount,
+    bool IsOpeningDebt = false,
+    Guid? FeeCampaignId = null,
+    Guid? IrregularPaymentId = null);
+
+public sealed record GarageFullPaymentQuoteDto(
+    Guid GarageId,
+    string GarageNumber,
+    string? OwnerName,
+    decimal TotalAmount,
+    IReadOnlyList<GarageFullPaymentQuoteLineDto> Lines);
+
 public sealed record IncomePaymentWarningRequest(
     Guid GarageId,
     Guid IncomeTypeId,

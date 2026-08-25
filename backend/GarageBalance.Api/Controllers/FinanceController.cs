@@ -202,6 +202,17 @@ public sealed class FinanceController(
         return result.Succeeded ? Ok(result.Value) : ToError(result);
     }
 
+    [HttpGet("garages/{garageId:guid}/full-payment-quote")]
+    [ProducesResponseType<GarageFullPaymentQuoteDto>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<GarageFullPaymentQuoteDto>> GetGarageFullPaymentQuote(
+        Guid garageId,
+        CancellationToken cancellationToken)
+    {
+        var result = await financeService.GetGarageFullPaymentQuoteAsync(garageId, cancellationToken);
+        return result.Succeeded ? Ok(result.Value) : ToError(result);
+    }
+
     [HttpGet("garages/{garageId:guid}/income-worksheet")]
     [ProducesResponseType<GarageIncomeWorksheetDto>(StatusCodes.Status200OK)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]

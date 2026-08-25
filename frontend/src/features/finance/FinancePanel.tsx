@@ -3,7 +3,7 @@ import type { FormEvent, KeyboardEvent, MouseEvent, ReactNode } from 'react'
 import { Award, CircleHelp, FileText, Gavel, History, LoaderCircle, Pencil, RotateCcw, Save, Search, Trash2, UserRound, WalletCards, X } from 'lucide-react'
 import type { AuthResponse } from '../../services/authApi'
 import type { AccountingTypeDto, DictionaryClient, GarageDto, IrregularPaymentDto, StaffMemberDto, SupplierDto, SupplierGroupDto } from '../../services/dictionariesApi'
-import type { AccrualDto, CreateAccrualRequest, CreateExpenseOperationRequest, CreateIncomeOperationRequest, CreateMeterReadingRequest, CreateSupplierAccrualRequest, ExpensePaymentSource, ExpensePaymentType, ExpenseWorksheetDto, FinanceClient, FinancePagedResult, FinanceSummaryDto, FinancialOperationDto, GarageOverdueDebtDto, GenerateSupplierGroupSalaryAccrualsRequest, MeterReadingDto, MissingMeterReadingDto, StaffSalaryAdjustmentType, SupplierAccrualDto } from '../../services/financeApi'
+import type { AccrualDto, CreateAccrualRequest, CreateExpenseOperationRequest, CreateIncomeOperationRequest, CreateMeterReadingRequest, CreateSupplierAccrualRequest, ExpensePaymentSource, ExpensePaymentType, ExpenseWorksheetDto, FinanceClient, FinancePagedResult, FinanceSummaryDto, FinancialOperationDto, GarageFullPaymentQuoteDto, GarageOverdueDebtDto, GenerateSupplierGroupSalaryAccrualsRequest, MeterReadingDto, MissingMeterReadingDto, StaffSalaryAdjustmentType, SupplierAccrualDto } from '../../services/financeApi'
 import { FinanceApiError } from '../../services/financeApi'
 import type { IntegrationClient } from '../../services/integrationsApi'
 import type { ApplicationSettingsClient } from '../../services/settingsApi'
@@ -2958,6 +2958,8 @@ function PaymentsPrototypePanel({
   const [savingPaymentRowId, setSavingPaymentRowId] = useState<string | null>(null)
   const [savingMeterRowId, setSavingMeterRowId] = useState<string | null>(null)
   const [fullPaymentDialogOpen, setFullPaymentDialogOpen] = useState(false)
+  const [fullPaymentQuote, setFullPaymentQuote] = useState<GarageFullPaymentQuoteDto | null>(null)
+  const [fullPaymentQuoteLoading, setFullPaymentQuoteLoading] = useState(false)
   const fullPaymentTriggerRef = useRef<HTMLButtonElement | null>(null)
   const fullPaymentReceiptBatchIdRef = useRef<string | null>(null)
   const [garageAccrualDialogOpen, setGarageAccrualDialogOpen] = useState(false)
@@ -3210,15 +3212,30 @@ function PaymentsPrototypePanel({
   async function openFullPaymentDialog(event: MouseEvent<HTMLButtonElement>) {
     fullPaymentTriggerRef.current = event.currentTarget
     setPaymentError(null)
-    if (await onEnsureReferences()) {
+    if (!selectedGarage || !realGarageIds.has(selectedGarage.id) || !(await onEnsureReferences())) {
+      return
+    }
+
+    setFullPaymentQuoteLoading(true)
+    try {
+      const quote = await financeClient.getGarageFullPaymentQuote(auth.accessToken, selectedGarage.id)
+      if (selectedGarageIdRef.current !== selectedGarage.id) {
+        return
+      }
+      setFullPaymentQuote(quote)
       fullPaymentReceiptBatchIdRef.current = crypto.randomUUID()
       setFullPaymentDialogOpen(true)
+    } catch (error) {
+      setPaymentError(error instanceof Error ? error.message : 'Не удалось точно рассчитать полную оплату.')
+    } finally {
+      setFullPaymentQuoteLoading(false)
     }
   }
 
   function closeFullPaymentDialog() {
     const trigger = fullPaymentTriggerRef.current
     setFullPaymentDialogOpen(false)
+    setFullPaymentQuote(null)
     fullPaymentReceiptBatchIdRef.current = null
     window.setTimeout(() => {
       if (trigger?.isConnected) {
@@ -3931,9 +3948,15 @@ function PaymentsPrototypePanel({
       return 'Выберите гараж из справочника, чтобы сохранить полную оплату в истории операций.'
     }
 
-    const rowsToPay = getRowsForFullPayment(request.period)
-    const openingDebtToPay = getOpeningDebtForFullPayment(request.period)
-    const totalDebtToPay = sumPaymentDebt(rowsToPay, openingDebtToPay)
+    const authoritativeQuote = request.period === 'full' && fullPaymentQuote?.garageId === selectedGarage.id
+      ? fullPaymentQuote
+      : null
+    const usesAuthoritativeQuote = authoritativeQuote !== null
+    const rowsToPay = usesAuthoritativeQuote ? [] : getRowsForFullPayment(request.period)
+    const openingDebtToPay = usesAuthoritativeQuote ? 0 : getOpeningDebtForFullPayment(request.period)
+    const totalDebtToPay = usesAuthoritativeQuote
+      ? roundPaymentMoney(authoritativeQuote.totalAmount)
+      : sumPaymentDebt(rowsToPay, openingDebtToPay)
     if (totalDebtToPay <= 0) {
       return 'По выбранному периоду нет задолженности для оплаты.'
     }
@@ -3941,7 +3964,7 @@ function PaymentsPrototypePanel({
       return `Сумма оплаты должна быть больше нуля и не выше долга ${formatPaymentMoney(totalDebtToPay)}.`
     }
 
-    const openingDebtPaymentAmount = Math.min(
+    const openingDebtPaymentAmount = usesAuthoritativeQuote ? 0 : Math.min(
       Math.max(toMoneyMinorUnits(openingDebtToPay), 0),
       Math.max(toMoneyMinorUnits(request.amount), 0),
     ) / 100
@@ -3957,7 +3980,22 @@ function PaymentsPrototypePanel({
       paymentPlan.push({ row, incomeType, amount: allocation.amount })
     }
 
-    if (paymentPlan.length === 0 && openingDebtPaymentAmount <= 0) {
+    const quotedPaymentPlan: Array<{ line: GarageFullPaymentQuoteDto['lines'][number]; amount: number }> = []
+    if (usesAuthoritativeQuote) {
+      let remainingAmount = Math.max(toMoneyMinorUnits(request.amount), 0)
+      for (const line of authoritativeQuote.lines) {
+        if (remainingAmount <= 0) {
+          break
+        }
+        const allocatedAmount = Math.min(toMoneyMinorUnits(line.outstandingAmount), remainingAmount)
+        if (allocatedAmount > 0) {
+          quotedPaymentPlan.push({ line, amount: allocatedAmount / 100 })
+          remainingAmount -= allocatedAmount
+        }
+      }
+    }
+
+    if (paymentPlan.length === 0 && quotedPaymentPlan.length === 0 && openingDebtPaymentAmount <= 0) {
       return 'Укажите сумму полной оплаты больше нуля.'
     }
 
@@ -3965,6 +4003,27 @@ function PaymentsPrototypePanel({
     fullPaymentReceiptBatchIdRef.current = receiptBatchId
     const paymentPurposes: string[] = []
     const lines = []
+    for (const item of quotedPaymentPlan) {
+      const label = item.line.isOpeningDebt ? 'Входящий долг' : item.line.incomeTypeName
+      const datedLabel = item.line.isOpeningDebt
+        ? label
+        : `${label} ${formatPaymentPrototypeMonthLabel(item.line.accountingMonth)}`
+      lines.push({
+        incomeTypeId: item.line.incomeTypeId ?? undefined,
+        accountingMonth: item.line.accountingMonth,
+        amount: item.amount,
+        isOpeningDebt: item.line.isOpeningDebt,
+        feeCampaignId: item.line.feeCampaignId ?? undefined,
+        irregularPaymentId: item.line.irregularPaymentId ?? undefined,
+        comment: item.line.isOpeningDebt
+          ? request.comment.trim() || undefined
+          : request.comment.trim()
+            ? `Полная оплата ${datedLabel}: ${request.comment.trim()}`
+            : `Полная оплата ${datedLabel}`,
+      })
+      paymentPurposes.push(label)
+    }
+
     if (openingDebtPaymentAmount > 0) {
       lines.push({
         accountingMonth: incomeWorksheetMonthFrom.length === 7 ? `${incomeWorksheetMonthFrom}-01` : incomeWorksheetMonthFrom,
@@ -4386,8 +4445,14 @@ function PaymentsPrototypePanel({
         garageRows.reduce((sum, row) => sum + row.advance, 0),
       )
   const fullPaymentRowsDebt = sumPaymentDebt(getRowsForFullPayment('full'))
+  const selectedGarageFullPaymentQuote = fullPaymentQuote && fullPaymentQuote.garageId === selectedGarage?.id
+    ? fullPaymentQuote
+    : null
+  const authoritativeFullPaymentDebt = selectedGarageFullPaymentQuote
+    ? roundPaymentMoney(selectedGarageFullPaymentQuote.totalAmount)
+    : roundPaymentMoney(fullPaymentRowsDebt + getOpeningDebtForFullPayment('full'))
   const fullPaymentPeriodOptions = [
-    { value: 'full', label: 'Полный расчет', debt: roundPaymentMoney(fullPaymentRowsDebt + getOpeningDebtForFullPayment('full')) },
+    { value: 'full', label: 'Полный расчет', debt: authoritativeFullPaymentDebt },
     ...groupedGarageRows.map((group) => ({ value: group.month, label: group.monthLabel, debt: sumPaymentDebt(getRowsForFullPayment(group.month)) })),
   ].filter((option, index, options) => index === 0 || option.debt > 0 || !options.some((existingOption, existingIndex) => existingIndex < index && existingOption.value === option.value))
   const expenseAccrualTotal = expenseRows.reduce((sum, row) => sum + (typeof row.cost === 'number' ? row.cost : 0), 0)
@@ -4535,9 +4600,9 @@ function PaymentsPrototypePanel({
               <Gavel size={16} aria-hidden="true" />
               <span>Начислить штраф</span>
             </button>
-            <button className="secondary-button payments-prototype-action-button" type="button" onClick={openFullPaymentDialog} disabled={garageWorksheetLoadingId === selectedGarage.id}>
-              <WalletCards size={16} aria-hidden="true" />
-              <span>Полная оплата</span>
+            <button className="secondary-button payments-prototype-action-button" type="button" onClick={openFullPaymentDialog} aria-busy={fullPaymentQuoteLoading} disabled={garageWorksheetLoadingId === selectedGarage.id || fullPaymentQuoteLoading}>
+              {fullPaymentQuoteLoading ? <LoaderCircle className="financial-report-button__spinner" size={16} aria-hidden="true" /> : <WalletCards size={16} aria-hidden="true" />}
+              <span>{fullPaymentQuoteLoading ? 'Рассчитываем оплату' : 'Полная оплата'}</span>
             </button>
             <button
               className="secondary-button payments-prototype-action-button"

@@ -640,6 +640,87 @@ public sealed class FinanceService(
             rows));
     }
 
+    public async Task<FinanceResult<GarageFullPaymentQuoteDto>> GetGarageFullPaymentQuoteAsync(
+        Guid garageId,
+        CancellationToken cancellationToken)
+    {
+        var garage = await garageRepository.FindActiveWithOwnerAsync(garageId, cancellationToken);
+        if (garage is null)
+        {
+            return FinanceResult<GarageFullPaymentQuoteDto>.Failure(
+                "garage_not_found",
+                "Гараж для расчёта полной оплаты не найден.");
+        }
+
+        var accruals = await accrualRepository.GetOutstandingDebtDetailsAsync(garageId, cancellationToken);
+        var totals = await garageRepository.GetBalanceTotalsAsync([garageId], cancellationToken);
+        var unallocatedIncome = Math.Max(
+            totals.IncomeTotals.GetValueOrDefault(garageId) - totals.AllocatedIncomeTotals.GetValueOrDefault(garageId),
+            0m);
+        var openingOriginal = Math.Max(garage.StartingBalance, 0m);
+        var openingOutstanding = MoneyMath.RoundMoney(Math.Max(openingOriginal - unallocatedIncome, 0m));
+        var remainingCredit = MoneyMath.RoundMoney(
+            Math.Max(unallocatedIncome - openingOriginal, 0m) + Math.Max(-garage.StartingBalance, 0m));
+        var accountingMonth = accruals.Count > 0
+            ? accruals.Min(accrual => accrual.AccountingMonth)
+            : GetCurrentAccountingMonth();
+        var lines = new List<GarageFullPaymentQuoteLineDto>(accruals.Count + 1);
+
+        if (openingOutstanding > 0m)
+        {
+            lines.Add(new GarageFullPaymentQuoteLineDto(
+                null,
+                "Входящий долг",
+                accountingMonth,
+                openingOutstanding,
+                IsOpeningDebt: true));
+        }
+
+        foreach (var accrual in accruals)
+        {
+            var creditApplied = Math.Min(remainingCredit, accrual.OutstandingAmount);
+            remainingCredit = MoneyMath.RoundMoney(remainingCredit - creditApplied);
+            var outstanding = MoneyMath.RoundMoney(accrual.OutstandingAmount - creditApplied);
+            if (outstanding <= 0m)
+            {
+                continue;
+            }
+
+            lines.Add(new GarageFullPaymentQuoteLineDto(
+                accrual.IncomeTypeId,
+                accrual.IncomeTypeName,
+                accrual.AccountingMonth,
+                outstanding,
+                FeeCampaignId: accrual.FeeCampaignId,
+                IrregularPaymentId: accrual.IrregularPaymentId));
+        }
+
+        var consolidatedLines = lines
+            .GroupBy(line => (
+                line.IsOpeningDebt,
+                line.IncomeTypeId,
+                line.IncomeTypeName,
+                line.AccountingMonth,
+                line.FeeCampaignId,
+                line.IrregularPaymentId))
+            .Select(group => new GarageFullPaymentQuoteLineDto(
+                group.Key.IncomeTypeId,
+                group.Key.IncomeTypeName,
+                group.Key.AccountingMonth,
+                MoneyMath.RoundMoney(group.Sum(line => line.OutstandingAmount)),
+                group.Key.IsOpeningDebt,
+                group.Key.FeeCampaignId,
+                group.Key.IrregularPaymentId))
+            .ToList();
+
+        return FinanceResult<GarageFullPaymentQuoteDto>.Success(new GarageFullPaymentQuoteDto(
+            garage.Id,
+            garage.Number,
+            garage.Owner?.FullName,
+            MoneyMath.RoundMoney(consolidatedLines.Sum(line => line.OutstandingAmount)),
+            consolidatedLines));
+    }
+
     public async Task<FinanceResult<GarageIncomeWorksheetDto>> CalculateGarageIncomeWorksheetAsync(
         Guid garageId,
         GarageIncomeWorksheetRequest request,

@@ -128,6 +128,26 @@ describe('financeApi', () => {
     })
   })
 
+  it('loads the authoritative full payment quote for a garage', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      garageId: 'garage-102',
+      garageNumber: '102',
+      ownerName: 'Тестовый владелец',
+      totalAmount: 13105.36,
+      lines: [],
+    }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await financeApi.getGarageFullPaymentQuote('token', 'garage-102')
+
+    expect(fetchMock).toHaveBeenCalledWith('/api/finance/garages/garage-102/full-payment-quote', {
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: 'Bearer token',
+      },
+    })
+  })
+
   it('posts the selected arbitrary period to garage worksheet calculation', async () => {
     const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({
       garageId: 'garage-77',

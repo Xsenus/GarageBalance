@@ -225,6 +225,24 @@ export type FinancialReportPeriodDto = {
   defaultMonthTo?: string | null
 }
 
+export type GarageFullPaymentQuoteLineDto = {
+  incomeTypeId: string | null
+  incomeTypeName: string
+  accountingMonth: string
+  outstandingAmount: number
+  isOpeningDebt: boolean
+  feeCampaignId?: string | null
+  irregularPaymentId?: string | null
+}
+
+export type GarageFullPaymentQuoteDto = {
+  garageId: string
+  garageNumber: string
+  ownerName: string | null
+  totalAmount: number
+  lines: GarageFullPaymentQuoteLineDto[]
+}
+
 export type MeterReadingYearPageDto = {
   garages: MeterReadingYearGarageDto[]
   readings: MeterReadingYearValueDto[]
@@ -670,6 +688,7 @@ export type FinanceClient = {
   getMissingMeterReadings(accessToken: string, params?: { accountingMonth?: string; meterKind?: string; search?: string; limit?: number }, signal?: AbortSignal): Promise<MissingMeterReadingDto[]>
   getGarageBalanceHistory(accessToken: string, garageId: string, params?: { monthFrom?: string; monthTo?: string }): Promise<GarageBalanceHistoryDto>
   getGarageOverdueDebt(accessToken: string, garageId: string): Promise<GarageOverdueDebtDto>
+  getGarageFullPaymentQuote(accessToken: string, garageId: string): Promise<GarageFullPaymentQuoteDto>
   getGarageIncomeWorksheet(accessToken: string, garageId: string, params?: { monthFrom?: string; monthTo?: string }): Promise<GarageIncomeWorksheetDto>
   calculateGarageIncomeWorksheet?(accessToken: string, garageId: string, request: { monthFrom?: string; monthTo?: string }): Promise<GarageIncomeWorksheetDto>
   getExpenseWorksheet(accessToken: string, params?: { accountingMonth?: string; monthFrom?: string; monthTo?: string }): Promise<ExpenseWorksheetDto>
@@ -846,6 +865,9 @@ export const financeApi: FinanceClient = {
   },
   getGarageOverdueDebt(accessToken, garageId) {
     return requestJson(accessToken, `/api/finance/garages/${garageId}/overdue-debt`)
+  },
+  getGarageFullPaymentQuote(accessToken, garageId) {
+    return requestJson(accessToken, `/api/finance/garages/${garageId}/full-payment-quote`)
   },
   getGarageIncomeWorksheet(accessToken, garageId, params = {}) {
     return requestJson(accessToken, withQuery(`/api/finance/garages/${garageId}/income-worksheet`, {

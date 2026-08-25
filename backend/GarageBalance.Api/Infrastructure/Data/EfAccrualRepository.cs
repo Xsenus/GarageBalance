@@ -299,6 +299,51 @@ public sealed class EfAccrualRepository(GarageBalanceDbContext dbContext) : IAcc
             .ToList();
     }
 
+    public async Task<IReadOnlyList<OutstandingAccrualDebtData>> GetOutstandingDebtDetailsAsync(
+        Guid garageId,
+        CancellationToken cancellationToken)
+    {
+        var rows = await dbContext.Accruals.AsNoTracking()
+            .Where(accrual => !accrual.IsCanceled && accrual.GarageId == garageId)
+            .Select(accrual => new
+            {
+                AccrualId = accrual.Id,
+                accrual.IncomeTypeId,
+                IncomeTypeName = accrual.IncomeType.Name,
+                accrual.AccountingMonth,
+                accrual.DueDate,
+                accrual.Amount,
+                accrual.FeeCampaignId,
+                accrual.IrregularPaymentId,
+                PaidAmount = dbContext.AccrualPaymentAllocations
+                    .Where(allocation =>
+                        allocation.IsActive &&
+                        allocation.AccrualId == accrual.Id &&
+                        !allocation.FinancialOperation.IsCanceled)
+                    .Sum(allocation => (decimal?)allocation.Amount) ?? 0m
+            })
+            .ToListAsync(cancellationToken);
+
+        return rows
+            .Select(row => new OutstandingAccrualDebtData(
+                row.AccrualId,
+                row.IncomeTypeId,
+                row.IncomeTypeName,
+                row.AccountingMonth,
+                row.DueDate,
+                row.Amount,
+                row.PaidAmount,
+                Math.Max(row.Amount - row.PaidAmount, 0m),
+                row.FeeCampaignId,
+                row.IrregularPaymentId))
+            .Where(row => row.OutstandingAmount > 0m)
+            .OrderBy(row => row.AccountingMonth)
+            .ThenBy(row => row.DueDate)
+            .ThenBy(row => row.IncomeTypeName, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(row => row.AccrualId)
+            .ToList();
+    }
+
     public async Task<IReadOnlyList<AccrualBucketData>> GetMonthlyBucketsAsync(
         Guid garageId,
         DateOnly? monthFrom,
