@@ -1,7 +1,9 @@
+using GarageBalance.Api.Infrastructure.Data.Migrations;
 using GarageBalance.Api.Tests.Common;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
+using Microsoft.EntityFrameworkCore.Migrations.Operations;
 using Npgsql;
 
 namespace GarageBalance.Api.Tests.Dictionaries;
@@ -9,6 +11,16 @@ namespace GarageBalance.Api.Tests.Dictionaries;
 public sealed class PostgreSqlGarageStartingOverdueDebtMigrationIntegrationTests
 {
     private const string PreviousMigration = "20260824031258_AddEpisodicExpenseRecipientAndFundConfirmation";
+
+    [Fact]
+    public void RawSqlOperations_AreTerminatedForIdempotentMigrationScripts()
+    {
+        var migration = new AddGarageStartingOverdueDebt();
+        var sqlOperations = migration.UpOperations.OfType<SqlOperation>().ToArray();
+
+        Assert.NotEmpty(sqlOperations);
+        Assert.All(sqlOperations, operation => Assert.EndsWith(";", operation.Sql.TrimEnd(), StringComparison.Ordinal));
+    }
 
     [PostgreSqlFact]
     public async Task MigrationBackfillsLegacyBalancesAndProtectsOverduePart()

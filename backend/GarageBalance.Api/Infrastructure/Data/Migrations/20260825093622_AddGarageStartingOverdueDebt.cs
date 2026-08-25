@@ -21,7 +21,7 @@ namespace GarageBalance.Api.Infrastructure.Data.Migrations
             // Existing positive opening balances were treated as fully overdue before
             // this column existed. Preserve that behavior during the schema upgrade.
             migrationBuilder.Sql(
-                "UPDATE \"garages\" SET \"StartingOverdueDebt\" = CASE WHEN \"StartingBalance\" > 0 THEN \"StartingBalance\" ELSE 0 END");
+                "UPDATE \"garages\" SET \"StartingOverdueDebt\" = CASE WHEN \"StartingBalance\" > 0 THEN \"StartingBalance\" ELSE 0 END;");
 
             migrationBuilder.AddCheckConstraint(
                 name: "CK_garages_StartingOverdueDebt",
