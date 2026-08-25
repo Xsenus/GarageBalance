@@ -3624,22 +3624,6 @@ export function AddServicePrototypeDialog({
               <input aria-label="Наименование услуги" value={name} onChange={(event) => setName(event.target.value)} />
             </FormField>
           </div>
-          {canChooseRegularity ? (
-            <label className="contractors-switch-row contractors-service-regular-toggle contractors-service-regular-toggle--in-form">
-              <span>
-                <strong>Регулярные платежи</strong>
-                <small>Включите для услуги с повторяющимися начислениями.</small>
-              </span>
-              <span className="contractors-switch-control">
-                <input
-                  type="checkbox"
-                  aria-label="Регулярные платежи"
-                  checked={isRegular}
-                  onChange={(event) => changeRegularity(event.target.checked)}
-                />
-              </span>
-            </label>
-          ) : null}
           {isRegular ? (
             <>
               <div className="contractors-service-period-grid contractors-service-period-grid--catalogs">
@@ -3958,7 +3942,20 @@ export function AddServicePrototypeDialog({
             </div>
           )}
 
-          <div className="detail-dialog-actions">
+          <div className="detail-dialog-actions contractors-service-dialog-actions">
+            {canChooseRegularity ? (
+              <label className="contractors-service-regular-toggle contractors-service-regular-toggle--in-actions">
+                <strong>Регулярные платежи</strong>
+                <span className="contractors-switch-control">
+                  <input
+                    type="checkbox"
+                    aria-label="Регулярные платежи"
+                    checked={isRegular}
+                    onChange={(event) => changeRegularity(event.target.checked)}
+                  />
+                </span>
+              </label>
+            ) : <span aria-hidden="true" />}
             <button className="secondary-button" type="submit" disabled={isSaving}>
               <Save size={17} />
               <span>{submitLabel}</span>

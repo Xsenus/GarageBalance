@@ -5,7 +5,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { AddServicePrototypeDialog } from './TariffsAndFeesPanel'
 
 describe('редактор тарифной сетки услуги', () => {
-  it('keeps a new irregular service compact and places the regularity switch in the form body', () => {
+  it('keeps a new irregular service compact and places the regularity switch on the left side of the action row', () => {
     render(<AddServicePrototypeDialog
       isSaving={false}
       funds={[{ id: 'fund-1', name: 'Водоснабжение', allowOperations: true }]}
@@ -21,8 +21,12 @@ describe('редактор тарифной сетки услуги', () => {
     const closeButton = screen.getByRole('button', { name: 'Закрыть форму услуги' })
 
     expect(dialog).toHaveClass('contractors-service-dialog--compact')
+    const actionRow = regularitySwitch.closest('.detail-dialog-actions')
     expect(regularitySwitch.closest('.detail-dialog-header')).toBeNull()
-    expect(regularitySwitch.closest('.contractors-service-regular-toggle--in-form')).not.toBeNull()
+    expect(actionRow).not.toBeNull()
+    expect(actionRow?.firstElementChild).toContainElement(regularitySwitch)
+    expect(actionRow?.children[1]).toBe(screen.getByRole('button', { name: 'Сохранить' }))
+    expect(actionRow?.children[2]).toBe(screen.getByRole('button', { name: 'Отмена' }))
     expect(closeButton.closest('.detail-dialog-header')).not.toBeNull()
 
     fireEvent.click(regularitySwitch)

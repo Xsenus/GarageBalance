@@ -2185,24 +2185,13 @@ h1 {
   white-space: nowrap;
 }
 
-.contractors-service-regular-toggle--in-form {
-  width: 100%;
-  box-sizing: border-box;
-  border: 1px solid #dce3ee;
-  border-radius: 10px;
-  background: #f8fafc;
-  padding: 10px 12px;
+.detail-dialog-actions.contractors-service-dialog-actions {
+  align-items: center;
+  justify-content: flex-start;
 }
 
-.contractors-service-regular-toggle--in-form > span:first-child {
-  display: grid;
-  gap: 2px;
-}
-
-.contractors-service-regular-toggle--in-form small {
-  color: #667085;
-  font-size: 12px;
-  font-weight: 500;
+.contractors-service-dialog-actions > .secondary-button {
+  margin-left: auto;
 }
 
 .contractors-modal-form {
@@ -9316,6 +9305,11 @@ button.operation-row:focus-visible {
 
   .detail-dialog-actions button {
     width: 100%;
+  }
+
+  .contractors-service-regular-toggle--in-actions {
+    justify-content: space-between;
+    white-space: normal;
   }
 
   .payments-prototype-period-summary {
