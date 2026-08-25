@@ -31,12 +31,13 @@ describe('settingsApi', () => {
     }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
     vi.stubGlobal('fetch', fetchMock)
 
-    const result = await settingsApi.updatePaymentDisplaySettings('token', { showAllGarageOperationsByDefault: true })
+    const request = { showAllGarageOperationsByDefault: true, version: 'payment-version', showPeriodicityColumn: true, showAccrualMonthColumn: false, tariffTableVersion: 'tariff-version' }
+    const result = await settingsApi.updatePaymentDisplaySettings('token', request)
 
     expect(result.showAllGarageOperationsByDefault).toBe(true)
     expect(fetchMock).toHaveBeenCalledWith('/api/settings/payments/display', {
       method: 'PUT',
-      body: JSON.stringify({ showAllGarageOperationsByDefault: true }),
+      body: JSON.stringify(request),
       headers: {
         'Content-Type': 'application/json',
         Authorization: 'Bearer token',

@@ -165,7 +165,9 @@ describe('responsive layout styles', () => {
   })
 
   it('reserves separate tariff schedule columns and enough room for all row actions', () => {
-    expect(normalizedAppCss).toContain('minmax(190px, 0.95fr)\n    minmax(92px, 0.48fr)\n    minmax(125px, 0.62fr)\n    minmax(100px, 0.52fr)\n    146px;\n  min-width: 1240px;')
+    expect(normalizedAppCss).toContain('--tariffs-schedule-columns: ;')
+    expect(normalizedAppCss).toContain(':is(.tariffs-show-periodicity, .tariffs-show-month) :is(.contractors-sheet-header, .contractors-sheet-row) {\n  --tariffs-schedule-columns: minmax(130px, 0.65fr);\n  min-width: 1240px;')
+    expect(normalizedAppCss).toContain('.tariffs-show-periodicity.tariffs-show-month :is(.contractors-sheet-header, .contractors-sheet-row) {\n  --tariffs-schedule-columns: repeat(2, minmax(130px, 0.65fr));\n  min-width: 1370px;')
     expect(normalizedAppCss).toContain('.tariffs-row-actions {\n  display: flex;\n  min-height: 34px;')
     expect(normalizedAppCss).toContain('.tariffs-due-date-cell .contractors-date-value {\n  grid-template-columns: minmax(52px, 64px) minmax(112px, 1fr);\n  align-items: center;')
     expect(normalizedAppCss).toContain('height: 36px;\n  min-height: 36px;\n  box-sizing: border-box;')

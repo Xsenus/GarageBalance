@@ -32,7 +32,7 @@ public sealed class SettingsControllerTests
         var updateOpeningBalancesAction = typeof(SettingsController).GetMethod(nameof(SettingsController.UpdateCashBankOpeningBalances));
         var createAdjustmentAction = typeof(SettingsController).GetMethod(nameof(SettingsController.CreateCashBankBalanceAdjustment));
 
-        Assert.Equal(SystemPermissions.PaymentsRead, Assert.Single(getAction!.GetCustomAttributes<AuthorizeAttribute>()).Policy);
+        Assert.Null(Assert.Single(getAction!.GetCustomAttributes<AuthorizeAttribute>()).Policy);
         Assert.Equal(SystemPermissions.UsersManage, Assert.Single(updateAction!.GetCustomAttributes<AuthorizeAttribute>()).Policy);
         Assert.Equal(SystemPermissions.UsersManage, Assert.Single(backupStatusAction!.GetCustomAttributes<AuthorizeAttribute>()).Policy);
         Assert.Equal(SystemPermissions.UsersManage, Assert.Single(backupCreateAction!.GetCustomAttributes<AuthorizeAttribute>()).Policy);
@@ -57,7 +57,10 @@ public sealed class SettingsControllerTests
         var result = await controller.GetPaymentDisplaySettings(CancellationToken.None);
 
         var ok = Assert.IsType<OkObjectResult>(result.Result);
-        Assert.Same(service.Current, ok.Value);
+        var dto = Assert.IsType<PaymentDisplaySettingsDto>(ok.Value);
+        Assert.False(dto.ShowAllGarageOperationsByDefault);
+        Assert.False(dto.ShowPeriodicityColumn);
+        Assert.False(dto.ShowAccrualMonthColumn);
     }
 
     [Fact]
@@ -85,14 +88,17 @@ public sealed class SettingsControllerTests
                 User = new ClaimsPrincipal(new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, actorUserId.ToString())], "Test"))
             }
         };
-        var request = new UpdatePaymentDisplaySettingsRequest(true);
+        var request = new UpdatePaymentDisplaySettingsRequest(true, ShowPeriodicityColumn: true, ShowAccrualMonthColumn: false);
 
         var result = await controller.UpdatePaymentDisplaySettings(request, CancellationToken.None);
 
         var ok = Assert.IsType<OkObjectResult>(result.Result);
         var dto = Assert.IsType<PaymentDisplaySettingsDto>(ok.Value);
         Assert.True(dto.ShowAllGarageOperationsByDefault);
+        Assert.True(dto.ShowPeriodicityColumn);
+        Assert.False(dto.ShowAccrualMonthColumn);
         Assert.Same(request, service.ReceivedRequest);
+        Assert.Equal(new UpdateTariffTableDisplaySettingsRequest(true, false), service.ReceivedTariffTableDisplayRequest);
         Assert.Equal(actorUserId, service.ReceivedActorUserId);
     }
 
@@ -390,6 +396,7 @@ public sealed class SettingsControllerTests
     {
         public PaymentDisplaySettingsDto Current { get; set; } = new(false);
         public UpdatePaymentDisplaySettingsRequest? ReceivedRequest { get; private set; }
+        public UpdateTariffTableDisplaySettingsRequest? ReceivedTariffTableDisplayRequest { get; private set; }
         public Guid? ReceivedActorUserId { get; private set; }
         public UpdateBusinessDateRequest? ReceivedBusinessDateRequest { get; private set; }
         public PreviewBusinessDateRequest? ReceivedBusinessDatePreviewRequest { get; private set; }
@@ -404,6 +411,16 @@ public sealed class SettingsControllerTests
             ReceivedActorUserId = actorUserId;
             Current = new PaymentDisplaySettingsDto(request.ShowAllGarageOperationsByDefault);
             return Task.FromResult(Current);
+        }
+
+        public Task<TariffTableDisplaySettingsDto> GetTariffTableDisplaySettingsAsync(CancellationToken cancellationToken) =>
+            Task.FromResult(new TariffTableDisplaySettingsDto(false, false));
+
+        public Task<TariffTableDisplaySettingsDto> UpdateTariffTableDisplaySettingsAsync(UpdateTariffTableDisplaySettingsRequest request, Guid? actorUserId, CancellationToken cancellationToken)
+        {
+            ReceivedTariffTableDisplayRequest = request;
+            ReceivedActorUserId = actorUserId;
+            return Task.FromResult(new TariffTableDisplaySettingsDto(request.ShowPeriodicityColumn, request.ShowAccrualMonthColumn));
         }
 
         public Task<SalaryAccrualSettingsDto> GetSalaryAccrualSettingsAsync(CancellationToken cancellationToken) =>

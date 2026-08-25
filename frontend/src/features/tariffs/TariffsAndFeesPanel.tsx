@@ -5,8 +5,8 @@ import type { AuthResponse } from '../../services/authApi'
 import { DictionaryApiError } from '../../services/dictionariesApi'
 import type { AccountingTypeDto, ChargeServiceSettingDto, ChargeServiceTariffPeriodDto, CreateChargeServiceWithTariffRequest, DictionaryClient, FeeCampaignDto, GarageDto, IrregularPaymentDto, MeasurementUnitDto, TariffDto, UpdateChargeServiceWithTariffRequest, UpsertChargeServiceSettingRequest, UpsertChargeServiceTariffScheduleRequest, UpsertFeeCampaignRequest, UpsertIrregularPaymentRequest, UpsertTariffRequest } from '../../services/dictionariesApi'
 import { areFeeCampaignAmountsEqual, calculateFeeCampaignContributionAmount, calculateFeeCampaignLastContribution, calculateFeeCampaignTargetAmount } from './feeCampaignAmounts'
-import type { FinanceClient } from '../../services/financeApi'
 import type { FundOptionDto, FundsClient } from '../../services/fundsApi'
+import type { ApplicationSettingsClient } from '../../services/settingsApi'
 import { hasPermission, permissions } from '../../shared/accessControl'
 import { AsyncErrorState, EmptyState, TableLoadingState } from '../../shared/AsyncState'
 import type { ChangePreview } from '../../shared/changePreview'
@@ -127,11 +127,6 @@ const regularServicePeriodicityOptions = [
 
 function normalizeRegularServicePeriodicity(periodicityMonths?: number | string | null) {
   return Number(periodicityMonths) >= 12 ? '12' : '1'
-}
-
-function formatRegularServicePeriodicity(periodicityMonths?: number | string | null) {
-  const value = normalizeRegularServicePeriodicity(periodicityMonths)
-  return regularServicePeriodicityOptions.find((option) => option.value === value)?.label ?? value
 }
 
 function createEditableDrafts(rows: Array<{ id: string; title?: string; amount?: string; unit?: string; dateDay?: string; dateMonth?: string; electricityUpperBound?: number | null }>) {
@@ -673,29 +668,14 @@ type TariffPrototypePendingChange = (
     previousValue: string
     nextValue: string
   }
-) & {
-  previousDisplayValue?: string
-  nextDisplayValue?: string
-}
+)
 
 function getTariffTextFieldLabel(row: ContractorTariffRow, field: 'title' | 'amount') {
-  if (field === 'title') {
-    return 'Наименование порога'
-  }
-
-  if (row.serviceSettingKind === 'main') {
-    return 'Стоимость, руб.'
-  }
-
-  if (row.serviceSettingKind === 'periodicity') {
-    return 'Периодичность'
-  }
-
-  if (row.serviceSettingKind === 'overdue-days') {
-    return 'Перенос долга в просроченный'
-  }
-
-  return 'Значение'
+  return field === 'title'
+    ? 'Наименование порога'
+    : row.serviceSettingKind === 'main'
+      ? 'Стоимость, руб.'
+      : row.serviceSettingKind === 'overdue-days' ? 'Перенос долга в просроченный' : 'Значение'
 }
 
 function formatFeeCampaignParticipantsChange(appliesToAllGarages: boolean, participantGarageIds: string[], garageOptions: GarageDto[]) {
@@ -750,7 +730,7 @@ function getFeeCampaignDisplayRank(campaign: FeeCampaignDto, today: string) {
   return Number(Boolean(campaign.isArchived || campaign.closedAtUtc || (campaign.endsOn && campaign.endsOn < today)))
 }
 
-export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClient }: { auth: AuthResponse; dictionaryClient: DictionaryClient; financeClient: FinanceClient; fundsClient: FundsClient }) {
+export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClient, settingsClient }: { auth: AuthResponse; dictionaryClient: DictionaryClient; fundsClient: FundsClient; settingsClient: ApplicationSettingsClient }) {
   const [modal, setModal] = useState<'service' | 'fee' | null>(null)
   const [tariffRows, setTariffRows] = useState<ContractorTariffRow[]>([])
   const [tariffPageNumber, setTariffPageNumber] = useState(1)
@@ -807,6 +787,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
   const [tariffReferencesLoading, setTariffReferencesLoading] = useState(true)
   const [feeCampaignGarageOptionsLoading, setFeeCampaignGarageOptionsLoading] = useState(false)
   const [tariffSavingRowId, setTariffSavingRowId] = useState<string | null>(null)
+  const [tableColumns, setTableColumns] = useState([false, false])
   const [oneTimeSavingRowId, setOneTimeSavingRowId] = useState<string | null>(null)
   const [oneTimeDeleteTarget, setOneTimeDeleteTarget] = useState<ContractorOneTimeRow | null>(null)
   const [oneTimeDeleteReason, setOneTimeDeleteReason] = useState('')
@@ -1143,6 +1124,17 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
   useEscapeKey(Boolean(thresholdDeleteTarget), () => closeThresholdDeleteDialog())
   useEscapeKey(thresholdCreateOpen, () => closeThresholdCreateDialog())
   useEscapeKey(Boolean(oneTimeContextMenu), () => setOneTimeContextMenu(null))
+
+  useEffect(() => {
+    let ignore = false
+    settingsClient.getPaymentDisplaySettings(auth.accessToken)
+      .then((settings) => {
+        if (ignore) return
+        setTableColumns([settings.showPeriodicityColumn, settings.showAccrualMonthColumn])
+      })
+      .catch(() => undefined)
+    return () => { ignore = true }
+  }, [auth.accessToken, settingsClient])
 
   function buildChargeServiceRequest(setting: ChargeServiceSettingDto, nextRows: ContractorTariffRow[]): UpsertChargeServiceSettingRequest {
     const relatedRows = nextRows.filter((item) => item.backendServiceSettingId === setting.id)
@@ -1543,31 +1535,6 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
       fieldLabel: getTariffTextFieldLabel(row, field),
       previousValue,
       nextValue,
-    })
-  }
-
-  const commitTariffPeriodicityChange = (row: ContractorTariffRow, nextValue: string) => {
-    const normalizedNextValue = normalizeRegularServicePeriodicity(nextValue)
-    const previousValue = normalizeRegularServicePeriodicity(row.amount)
-    setTariffDrafts((drafts) => ({
-      ...drafts,
-      [row.id]: { ...drafts[row.id], amount: normalizedNextValue },
-    }))
-
-    if (normalizedNextValue === previousValue) {
-      return
-    }
-
-    setPendingChange({
-      kind: 'tariff-text',
-      rowId: row.id,
-      field: 'amount',
-      objectName: `${row.category}: ${row.title}`,
-      fieldLabel: 'Периодичность',
-      previousValue,
-      nextValue: normalizedNextValue,
-      previousDisplayValue: formatRegularServicePeriodicity(previousValue),
-      nextDisplayValue: formatRegularServicePeriodicity(normalizedNextValue),
     })
   }
 
@@ -2350,12 +2317,17 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
             Удалённые услуги ({archivedServiceCount})
           </button>
         </div>
-        <div className="contractors-sheet" role="table" aria-label={tariffTableLabel}>
+        <div
+          className={`contractors-sheet${tableColumns[0] ? ' tariffs-show-periodicity' : ''}${tableColumns[1] ? ' tariffs-show-month' : ''}`}
+          role="table"
+          aria-label={tariffTableLabel}
+        >
             <div className="contractors-sheet-header" role="row">
               <span role="columnheader">Основание</span>
               <span role="columnheader" aria-label="Единица измерения">Ед.</span>
               <span role="columnheader">Значение / ставка</span>
-              <span role="columnheader">Месяц начисления</span>
+              {tableColumns[0] ? <span role="columnheader">Периодичность</span> : null}
+              {tableColumns[1] ? <span role="columnheader">Месяц начисления</span> : null}
               <span role="columnheader">Оплата до</span>
               <span role="columnheader" aria-label="Перенос долга в просроченный, дней">Просрочка, дн.</span>
               <span role="columnheader">Пороговая тарификация</span>
@@ -2453,15 +2425,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
                     {row.dateDay === undefined && row.serviceSettingKind !== 'periodicity' ? row.unit : null}
                   </span>
                   <span role="cell" className="contractors-value-cell">
-                    {row.serviceSettingKind === 'periodicity' ? (
-                      <SelectControl
-                        aria-label={`${row.category}: ${row.title}: значение`}
-                        value={normalizeRegularServicePeriodicity(tariffDrafts[row.id]?.amount ?? row.amount)}
-                        options={regularServicePeriodicityOptions}
-                        disabled={!canManageTariffs || isRowDisabled}
-                        onChange={(value) => commitTariffPeriodicityChange(row, value)}
-                      />
-                    ) : row.dateDay !== undefined ? (
+                    {row.dateDay !== undefined ? (
                       <div className="contractors-date-value">
                         <input
                           aria-label={`${row.category}: ${row.title}: день`}
@@ -2530,35 +2494,18 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
                       />
                     )}
                   </span>
-                  <span role="cell" className="tariffs-schedule-cell">
-                    <div className="tariffs-cell-stack">
-                      {periodicityRow ? (
-                        <div className="tariffs-cell-stack">
-                          <small>Периодичность</small>
-                          <SelectControl
-                            aria-label={`${row.category}: периодичность`}
-                            value={normalizeRegularServicePeriodicity(tariffDrafts[periodicityRow.id]?.amount ?? periodicityRow.amount)}
-                            options={regularServicePeriodicityOptions}
-                            disabled={!canManageTariffs || isRowDisabled}
-                            onChange={(value) => commitTariffPeriodicityChange(periodicityRow, value)}
-                          />
-                        </div>
-                      ) : null}
-                      {startDateRow ? (
-                        <SelectControl
-                          aria-label={`${row.category}: месяц начисления`}
-                          className="contractors-editable-select-control--month"
-                          disabled={!canManageTariffs || isRowDisabled}
-                          value={tariffDrafts[startDateRow.id]?.dateMonth ?? startDateRow.dateMonth ?? contractorTariffMonthOptions[0].value}
-                          options={contractorTariffMonthOptions}
-                          onChange={(nextMonth) => {
-                            setTariffDrafts((drafts) => ({ ...drafts, [startDateRow.id]: { ...drafts[startDateRow.id], dateMonth: nextMonth } }))
-                            void commitTariffDateChange(startDateRow, nextMonth)
-                          }}
-                        />
-                      ) : null}
-                    </div>
-                  </span>
+                  {tableColumns[0] ? (
+                    <span role="cell" className="tariffs-schedule-cell">
+                      {periodicityRow ? (Number(periodicityRow.amount) >= 12 ? 'Ежегодно' : 'Ежемесячно') : null}
+                    </span>
+                  ) : null}
+                  {tableColumns[1] ? (
+                    <span role="cell" className="tariffs-schedule-cell">
+                      {startDateRow
+                        ? contractorTariffMonthOptions.find((option) => option.value === startDateRow.dateMonth)?.label ?? startDateRow.dateMonth
+                        : null}
+                    </span>
+                  ) : null}
                   <span role="cell" className="tariffs-due-date-cell">
                     {dueDateRow ? (
                       <div className="tariffs-cell-stack">
@@ -2969,11 +2916,11 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
               <div className="tariff-change-values-row">
                 <div>
                   <span>Было</span>
-                  <strong>{formatPrototypeChangeValue(pendingChange.previousDisplayValue ?? pendingChange.previousValue)}</strong>
+                  <strong>{formatPrototypeChangeValue(pendingChange.previousValue)}</strong>
                 </div>
                 <div>
                   <span>Стало</span>
-                  <strong>{formatPrototypeChangeValue(pendingChange.nextDisplayValue ?? pendingChange.nextValue)}</strong>
+                  <strong>{formatPrototypeChangeValue(pendingChange.nextValue)}</strong>
                 </div>
               </div>
             </div>

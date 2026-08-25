@@ -2,9 +2,29 @@ using GarageBalance.Api.Application.Finance;
 
 namespace GarageBalance.Api.Application.Settings;
 
-public sealed record PaymentDisplaySettingsDto(bool ShowAllGarageOperationsByDefault, Guid Version = default);
+public sealed record PaymentDisplaySettingsDto(
+    bool ShowAllGarageOperationsByDefault,
+    Guid Version = default,
+    bool ShowPeriodicityColumn = false,
+    bool ShowAccrualMonthColumn = false,
+    Guid TariffTableVersion = default);
 
-public sealed record UpdatePaymentDisplaySettingsRequest(bool ShowAllGarageOperationsByDefault, Guid? Version = null);
+public sealed record UpdatePaymentDisplaySettingsRequest(
+    bool ShowAllGarageOperationsByDefault,
+    Guid? Version = null,
+    bool ShowPeriodicityColumn = false,
+    bool ShowAccrualMonthColumn = false,
+    Guid? TariffTableVersion = null);
+
+public sealed record TariffTableDisplaySettingsDto(
+    bool ShowPeriodicityColumn,
+    bool ShowAccrualMonthColumn,
+    Guid Version = default);
+
+public sealed record UpdateTariffTableDisplaySettingsRequest(
+    bool ShowPeriodicityColumn,
+    bool ShowAccrualMonthColumn,
+    Guid? Version = null);
 
 public sealed record SalaryAccrualSettingsDto(int AccrualDay, Guid Version = default);
 

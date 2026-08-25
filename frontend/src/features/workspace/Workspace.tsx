@@ -207,7 +207,7 @@ export const Workspace = memo(function Workspace({
         )
       case 'tariffsAndFees':
         return canReadDictionaries ? (
-          <TariffsAndFeesPrototypePanel auth={auth} dictionaryClient={dictionaryClient} financeClient={financeClient} fundsClient={fundsClient} />
+          <TariffsAndFeesPrototypePanel auth={auth} dictionaryClient={dictionaryClient} fundsClient={fundsClient} settingsClient={settingsClient} />
         ) : (
           <AccessNotice label="Тарифы и сборы недоступны" title="Тарифы и сборы" permission={permissions.dictionariesRead} description="Для просмотра настроек услуг, тарифов и сборов нужно право на чтение справочников." />
         )

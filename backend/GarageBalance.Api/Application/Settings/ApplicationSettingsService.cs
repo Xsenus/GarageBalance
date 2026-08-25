@@ -14,6 +14,7 @@ public sealed class ApplicationSettingsService(
     ILogger<ApplicationSettingsService> logger) : IApplicationSettingsService
 {
     public const string ShowAllGarageOperationsKey = "payments.show_all_garage_operations_by_default";
+    public const string TariffTableVisibleColumnsKey = "tariffs.table_visible_columns";
     public const string SalaryAccrualDayKey = "finance.salary_accrual_day";
     public const int DefaultSalaryAccrualDay = 1;
     public const string BusinessDateOverrideKey = "system.business_date_override";
@@ -72,6 +73,75 @@ public sealed class ApplicationSettingsService(
 
         await repository.SaveChangesAsync(cancellationToken);
         return new PaymentDisplaySettingsDto(setting.BooleanValue, setting.Version);
+    }
+
+    public async Task<TariffTableDisplaySettingsDto> GetTariffTableDisplaySettingsAsync(CancellationToken cancellationToken)
+    {
+        var setting = await repository.FindAsync(TariffTableVisibleColumnsKey, cancellationToken);
+        return CreateTariffTableDisplaySettingsDto(setting?.IntegerValue ?? 0, setting?.Version ?? Guid.NewGuid());
+    }
+
+    public async Task<TariffTableDisplaySettingsDto> UpdateTariffTableDisplaySettingsAsync(
+        UpdateTariffTableDisplaySettingsRequest request,
+        Guid? actorUserId,
+        CancellationToken cancellationToken)
+    {
+        var setting = await repository.FindForUpdateAsync(TariffTableVisibleColumnsKey, cancellationToken);
+        var previousMask = setting?.IntegerValue ?? 0;
+        var nextMask = (request.ShowPeriodicityColumn ? 1 : 0) | (request.ShowAccrualMonthColumn ? 2 : 0);
+        if (setting is not null)
+        {
+            OptimisticConcurrencyGuard.EnsureCurrent(request.Version, setting);
+        }
+
+        if (setting is null && nextMask == 0)
+        {
+            return CreateTariffTableDisplaySettingsDto(0, request.Version ?? Guid.NewGuid());
+        }
+
+        if (setting is null)
+        {
+            setting = new ApplicationSetting { Key = TariffTableVisibleColumnsKey };
+            repository.Add(setting);
+        }
+        else if (previousMask == nextMask)
+        {
+            return CreateTariffTableDisplaySettingsDto(nextMask, setting.Version);
+        }
+
+        setting.IntegerValue = nextMask;
+        setting.UpdatedAtUtc = timeProvider.GetUtcNow();
+        setting.UpdatedByUserId = actorUserId;
+
+        var previous = CreateTariffTableDisplaySettingsDto(previousMask, setting.Version);
+        var next = CreateTariffTableDisplaySettingsDto(nextMask, setting.Version);
+        auditEventWriter.Add(new AuditEventWriteRequest(
+            actorUserId,
+            "application_setting.tariff_table_columns_updated",
+            "application_setting",
+            TariffTableVisibleColumnsKey,
+            Summary: "Изменено отображение колонок периодичности и месяца начисления в таблице тарифов.",
+            Section: "settings",
+            ActionKind: "update",
+            EntityDisplayName: "Колонки таблицы тарифов",
+            OldValues: new Dictionary<string, object?>
+            {
+                ["showPeriodicityColumn"] = previous.ShowPeriodicityColumn,
+                ["showAccrualMonthColumn"] = previous.ShowAccrualMonthColumn
+            },
+            NewValues: new Dictionary<string, object?>
+            {
+                ["showPeriodicityColumn"] = next.ShowPeriodicityColumn,
+                ["showAccrualMonthColumn"] = next.ShowAccrualMonthColumn
+            },
+            FieldLabels: new Dictionary<string, string>
+            {
+                ["showPeriodicityColumn"] = "Показывать периодичность",
+                ["showAccrualMonthColumn"] = "Показывать месяц начисления"
+            }));
+
+        await repository.SaveChangesAsync(cancellationToken);
+        return CreateTariffTableDisplaySettingsDto(nextMask, setting.Version);
     }
 
     public async Task<SalaryAccrualSettingsDto> GetSalaryAccrualSettingsAsync(CancellationToken cancellationToken)
@@ -262,6 +332,9 @@ public sealed class ApplicationSettingsService(
 
     private static int NormalizeSalaryAccrualDay(int? value) =>
         value is >= 1 and <= 28 ? value.Value : DefaultSalaryAccrualDay;
+
+    private static TariffTableDisplaySettingsDto CreateTariffTableDisplaySettingsDto(int mask, Guid version) =>
+        new((mask & 1) != 0, (mask & 2) != 0, version);
 }
 
 public sealed class BusinessDateValidationException(string message) : Exception(message);

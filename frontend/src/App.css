@@ -3620,19 +3620,29 @@ h1 {
   align-items: center;
 }
 
-.tariffs-page .contractors-sheet-header,
-.tariffs-page .contractors-sheet-row {
+.tariffs-page :is(.contractors-sheet-header, .contractors-sheet-row) {
+  --tariffs-schedule-columns: ;
   grid-template-columns:
     minmax(250px, 1.5fr)
     minmax(78px, 0.42fr)
     minmax(130px, 0.75fr)
-    minmax(130px, 0.65fr)
+    var(--tariffs-schedule-columns)
     minmax(190px, 0.95fr)
     minmax(92px, 0.48fr)
     minmax(125px, 0.62fr)
     minmax(100px, 0.52fr)
     146px;
+  min-width: 1110px;
+}
+
+.tariffs-page :is(.tariffs-show-periodicity, .tariffs-show-month) :is(.contractors-sheet-header, .contractors-sheet-row) {
+  --tariffs-schedule-columns: minmax(130px, 0.65fr);
   min-width: 1240px;
+}
+
+.tariffs-page .tariffs-show-periodicity.tariffs-show-month :is(.contractors-sheet-header, .contractors-sheet-row) {
+  --tariffs-schedule-columns: repeat(2, minmax(130px, 0.65fr));
+  min-width: 1370px;
 }
 
 .tariffs-page .contractors-sheet-header span,

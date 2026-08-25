@@ -3,6 +3,9 @@ import { apiFetch } from './apiFetch'
 export type PaymentDisplaySettingsDto = {
   showAllGarageOperationsByDefault: boolean
   version: string
+  showPeriodicityColumn: boolean
+  showAccrualMonthColumn: boolean
+  tariffTableVersion: string
 }
 
 export type SalaryAccrualSettingsDto = {

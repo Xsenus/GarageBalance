@@ -71,6 +71,60 @@ public sealed class ApplicationSettingsServiceTests
     }
 
     [Fact]
+    public async Task GetTariffTableDisplaySettings_DefaultsBothColumnsToHidden()
+    {
+        var service = CreateService(new FakeRepository(), new CaptureAuditWriter());
+
+        var result = await service.GetTariffTableDisplaySettingsAsync(CancellationToken.None);
+
+        Assert.False(result.ShowPeriodicityColumn);
+        Assert.False(result.ShowAccrualMonthColumn);
+        Assert.NotEqual(Guid.Empty, result.Version);
+    }
+
+    [Fact]
+    public async Task UpdateTariffTableDisplaySettings_PersistsIndependentFlagsAndWritesAuditEvent()
+    {
+        var actorUserId = Guid.NewGuid();
+        var repository = new FakeRepository();
+        var auditWriter = new CaptureAuditWriter();
+        var service = CreateService(repository, auditWriter);
+
+        var result = await service.UpdateTariffTableDisplaySettingsAsync(
+            new UpdateTariffTableDisplaySettingsRequest(true, false),
+            actorUserId,
+            CancellationToken.None);
+
+        Assert.True(result.ShowPeriodicityColumn);
+        Assert.False(result.ShowAccrualMonthColumn);
+        Assert.Equal(1, repository.Setting!.IntegerValue);
+        Assert.Equal(ApplicationSettingsService.TariffTableVisibleColumnsKey, repository.Setting.Key);
+        Assert.Equal(actorUserId, repository.Setting.UpdatedByUserId);
+        Assert.Equal(1, repository.SaveChangesCount);
+        var audit = Assert.Single(auditWriter.Requests);
+        Assert.Equal("application_setting.tariff_table_columns_updated", audit.Action);
+    }
+
+    [Fact]
+    public async Task UpdateTariffTableDisplaySettings_DoesNotCreateSettingForDefaultValues()
+    {
+        var repository = new FakeRepository();
+        var auditWriter = new CaptureAuditWriter();
+        var service = CreateService(repository, auditWriter);
+
+        var result = await service.UpdateTariffTableDisplaySettingsAsync(
+            new UpdateTariffTableDisplaySettingsRequest(false, false),
+            Guid.NewGuid(),
+            CancellationToken.None);
+
+        Assert.False(result.ShowPeriodicityColumn);
+        Assert.False(result.ShowAccrualMonthColumn);
+        Assert.Null(repository.Setting);
+        Assert.Equal(0, repository.SaveChangesCount);
+        Assert.Empty(auditWriter.Requests);
+    }
+
+    [Fact]
     public async Task GetSalaryAccrualSettings_ReturnsFirstDayWhenSettingIsMissing()
     {
         var service = CreateService(new FakeRepository(), new CaptureAuditWriter());

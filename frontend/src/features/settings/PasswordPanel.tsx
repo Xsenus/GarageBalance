@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
-import { ArrowDownCircle, ArrowUpCircle, Banknote, CalendarClock, DatabaseBackup, Eye, FileWarning, KeyRound, Landmark, PlugZap, RefreshCw, ShieldCheck, SlidersHorizontal, X } from 'lucide-react'
+import { ArrowDownCircle, ArrowUpCircle, Banknote, CalendarClock, DatabaseBackup, Eye, FileWarning, KeyRound, Landmark, PlugZap, RefreshCw, ShieldCheck, X } from 'lucide-react'
 import type { AuthClient, AuthResponse } from '../../services/authApi'
 import type { IntegrationClient, OneCFreshIntegrationStatusDto, OneCFreshSyncDto, OneCFreshSyncPreviewDto, ReceiptPrintingIntegrationStatusDto } from '../../services/integrationsApi'
 import type { ApplicationSettingsClient, BusinessDateChangePreviewDto, BusinessDateSettingsDto, CashBankBalanceSettingsDto, DatabaseBackupFileDto, DatabaseBackupStatusDto, DiagnosticLogStatusDto, SalaryAccrualSettingsDto } from '../../services/settingsApi'
@@ -18,6 +18,28 @@ import { useEscapeKey, useFocusOnOpen, useFocusTrap, useRestoreFocusOnClose } fr
 import { ToastViewport } from '../../shared/Toast'
 import { useToast } from '../../shared/useToast'
 import { getPasswordChangeValidationErrors } from '../../shared/validation'
+
+function SettingsDisplaySwitch({ title, label, checked, disabled, onChange }: {
+  title: string
+  label: string
+  checked: boolean
+  disabled: boolean
+  onChange: (checked: boolean) => void
+}) {
+  return (
+    <label className="contractors-switch-row settings-display-switch">
+      <strong>{title}</strong>
+      <span className="contractors-switch-control">
+        <input type="checkbox" aria-label={label} checked={checked} disabled={disabled} onChange={(event) => onChange(event.target.checked)} />
+      </span>
+    </label>
+  )
+}
+
+const tariffColumnSwitches = [
+  { key: 'periodicity', title: 'Периодичность', label: 'Колонка «Периодичность»' },
+  { key: 'accrualMonth', title: 'Месяц начисления', label: 'Колонка «Месяц начисления»' },
+] as const
 
 export function PasswordPanel({ auth, authClient, integrationClient, settingsClient, onSessionRevoked }: { auth: AuthResponse; authClient: AuthClient; integrationClient: IntegrationClient; settingsClient: ApplicationSettingsClient; onSessionRevoked: () => void }) {
   const integrationSettingsVisible = import.meta.env.VITE_SHOW_INTEGRATION_SETTINGS === 'true'
@@ -53,7 +75,9 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
   const [protectedSettingMessage, setProtectedSettingMessage] = useState<string | null>(null)
   const [protectedSettingError, setProtectedSettingError] = useState<string | null>(null)
   const [showAllGarageOperationsByDefault, setShowAllGarageOperationsByDefault] = useState(false)
+  const [tariffTableColumns, setTariffTableColumns] = useState({ periodicity: false, accrualMonth: false })
   const [paymentDisplaySettingsVersion, setPaymentDisplaySettingsVersion] = useState<string | null>(null)
+  const [tariffTableDisplaySettingsVersion, setTariffTableDisplaySettingsVersion] = useState<string | null>(null)
   const [paymentDisplaySettingsLoading, setPaymentDisplaySettingsLoading] = useState(false)
   const [paymentDisplaySettingsSaving, setPaymentDisplaySettingsSaving] = useState(false)
   const [paymentDisplaySettingsMessage, setPaymentDisplaySettingsMessage] = useState<string | null>(null)
@@ -174,11 +198,13 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
         if (!ignore) {
           setShowAllGarageOperationsByDefault(settings.showAllGarageOperationsByDefault)
           setPaymentDisplaySettingsVersion(settings.version)
+          setTariffTableColumns({ periodicity: settings.showPeriodicityColumn, accrualMonth: settings.showAccrualMonthColumn })
+          setTariffTableDisplaySettingsVersion(settings.tariffTableVersion)
         }
       })
       .catch((caught: unknown) => {
         if (!ignore) {
-          setPaymentDisplaySettingsError(caught instanceof Error ? caught.message : 'Не удалось загрузить настройки платежей.')
+          setPaymentDisplaySettingsError(caught instanceof Error ? caught.message : 'Не удалось загрузить.')
         }
       })
       .finally(() => {
@@ -313,12 +339,16 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
       const settings = await settingsClient.updatePaymentDisplaySettings(auth.accessToken, {
         showAllGarageOperationsByDefault,
         version: paymentDisplaySettingsVersion ?? '',
+        showPeriodicityColumn: tariffTableColumns.periodicity,
+        showAccrualMonthColumn: tariffTableColumns.accrualMonth,
+        tariffTableVersion: tariffTableDisplaySettingsVersion ?? '',
       })
       setShowAllGarageOperationsByDefault(settings.showAllGarageOperationsByDefault)
       setPaymentDisplaySettingsVersion(settings.version)
-      setPaymentDisplaySettingsMessage('Настройка отображения платежей сохранена.')
+      setTariffTableDisplaySettingsVersion(settings.tariffTableVersion)
+      setPaymentDisplaySettingsMessage('Отображение сохранено.')
     } catch (caught) {
-      setPaymentDisplaySettingsError(caught instanceof Error ? caught.message : 'Не удалось сохранить настройку отображения платежей.')
+      setPaymentDisplaySettingsError(caught instanceof Error ? caught.message : 'Не удалось сохранить.')
     } finally {
       setPaymentDisplaySettingsSaving(false)
     }
@@ -779,7 +809,7 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
                 aria-selected={activeSettingsTab === 'display'}
                 onClick={() => setActiveSettingsTab('display')}
               >
-                <SlidersHorizontal size={17} aria-hidden="true" />
+                <Eye size={17} aria-hidden="true" />
                 <span>Отображение</span>
               </button>
             ) : null}
@@ -1067,39 +1097,35 @@ export function PasswordPanel({ auth, authClient, integrationClient, settingsCli
         </div>
       ) : null}
       {canManageApplicationSettings && activeSettingsTab === 'display' ? (
-      <section className="password-panel settings-card settings-card--display" aria-label="Настройки отображения платежей">
+      <section className="password-panel settings-card settings-card--display" aria-label="Отображение таблиц">
         <div className="settings-card-intro">
-          <p className="eyebrow">Отображение</p>
-          <h2>Платежи при открытии раздела</h2>
-          <p>По умолчанию раздел ожидает поиск гаража. При включении общей ведомости поступления и выплаты показываются сразу, но загружаются постранично.</p>
+          <h2>Рабочие таблицы</h2>
         </div>
         <div className="dictionary-form settings-card-form settings-display-form">
-          <label className="contractors-switch-row settings-display-switch">
-            <span>
-              <strong>Показывать общую ведомость платежей</strong>
-              <small>Поиск по гаражу продолжит работать в любом режиме.</small>
-            </span>
-            <span className="contractors-switch-control">
-              <input
-                type="checkbox"
-                aria-label="Показывать общую ведомость платежей при открытии"
-                checked={showAllGarageOperationsByDefault}
-                disabled={paymentDisplaySettingsLoading || paymentDisplaySettingsSaving}
-                onChange={(event) => {
-                  setShowAllGarageOperationsByDefault(event.target.checked)
-                  setPaymentDisplaySettingsMessage(null)
-                }}
-              />
-            </span>
-          </label>
-          {paymentDisplaySettingsLoading ? <LoadingSkeleton className="loading-skeleton--compact" label="Загружаем настройку отображения платежей" rows={2} columns={2} /> : null}
+          <SettingsDisplaySwitch
+            title="Показывать общую ведомость платежей"
+            label="Показывать общую ведомость платежей при открытии"
+            checked={showAllGarageOperationsByDefault}
+            disabled={paymentDisplaySettingsLoading || paymentDisplaySettingsSaving}
+            onChange={(checked) => { setShowAllGarageOperationsByDefault(checked); setPaymentDisplaySettingsMessage(null) }}
+          />
+          {tariffColumnSwitches.map((item) => (
+            <SettingsDisplaySwitch
+              key={item.key}
+              title={item.title}
+              label={item.label}
+              checked={tariffTableColumns[item.key]}
+              disabled={paymentDisplaySettingsLoading || paymentDisplaySettingsSaving}
+              onChange={(checked) => { setTariffTableColumns({ ...tariffTableColumns, [item.key]: checked }); setPaymentDisplaySettingsMessage(null) }}
+            />
+          ))}
+          {paymentDisplaySettingsLoading ? <LoadingSkeleton label="Загружаем настройки" /> : null}
           {paymentDisplaySettingsError && !paymentDisplaySettingsVersion ? (
             <AsyncErrorState message={paymentDisplaySettingsError} onRetry={() => setSettingsReloadRevision((value) => value + 1)} retrying={paymentDisplaySettingsLoading} />
           ) : paymentDisplaySettingsError ? <FormError>{paymentDisplaySettingsError}</FormError> : null}
           {paymentDisplaySettingsMessage ? <div className="form-success" role="status" aria-live="polite">{paymentDisplaySettingsMessage}</div> : null}
           <button className="secondary-button" type="button" disabled={paymentDisplaySettingsLoading || paymentDisplaySettingsSaving} onClick={() => void savePaymentDisplaySettings()}>
-            <SlidersHorizontal size={16} aria-hidden="true" />
-            <span>{paymentDisplaySettingsSaving ? 'Сохраняем...' : 'Сохранить отображение'}</span>
+            {paymentDisplaySettingsSaving ? 'Сохраняем...' : 'Сохранить отображение'}
           </button>
         </div>
       </section>

@@ -17,11 +17,18 @@ public sealed class SettingsController(
     IDatabaseBackupService databaseBackupService) : ControllerBase
 {
     [HttpGet("payments/display")]
-    [Authorize(Policy = SystemPermissions.PaymentsRead)]
+    [Authorize]
     [ProducesResponseType<PaymentDisplaySettingsDto>(StatusCodes.Status200OK)]
     public async Task<ActionResult<PaymentDisplaySettingsDto>> GetPaymentDisplaySettings(CancellationToken cancellationToken)
     {
-        return Ok(await applicationSettingsService.GetPaymentDisplaySettingsAsync(cancellationToken));
+        var payments = await applicationSettingsService.GetPaymentDisplaySettingsAsync(cancellationToken);
+        var tariffs = await applicationSettingsService.GetTariffTableDisplaySettingsAsync(cancellationToken);
+        return Ok(new PaymentDisplaySettingsDto(
+            payments.ShowAllGarageOperationsByDefault,
+            payments.Version,
+            tariffs.ShowPeriodicityColumn,
+            tariffs.ShowAccrualMonthColumn,
+            tariffs.Version));
     }
 
     [HttpPut("payments/display")]
@@ -32,7 +39,21 @@ public sealed class SettingsController(
         UpdatePaymentDisplaySettingsRequest request,
         CancellationToken cancellationToken)
     {
-        return Ok(await applicationSettingsService.UpdatePaymentDisplaySettingsAsync(request, GetActorUserId(), cancellationToken));
+        var actorUserId = GetActorUserId();
+        var payments = await applicationSettingsService.UpdatePaymentDisplaySettingsAsync(request, actorUserId, cancellationToken);
+        var tariffs = await applicationSettingsService.UpdateTariffTableDisplaySettingsAsync(
+            new UpdateTariffTableDisplaySettingsRequest(
+                request.ShowPeriodicityColumn,
+                request.ShowAccrualMonthColumn,
+                request.TariffTableVersion),
+            actorUserId,
+            cancellationToken);
+        return Ok(new PaymentDisplaySettingsDto(
+            payments.ShowAllGarageOperationsByDefault,
+            payments.Version,
+            tariffs.ShowPeriodicityColumn,
+            tariffs.ShowAccrualMonthColumn,
+            tariffs.Version));
     }
 
     [HttpGet("salary-accrual")]

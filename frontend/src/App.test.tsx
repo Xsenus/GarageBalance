@@ -4,8 +4,8 @@ import { vi } from 'vitest'
 
 vi.mock('./services/settingsApi', () => ({
   settingsApi: {
-    getPaymentDisplaySettings: vi.fn(async () => ({ showAllGarageOperationsByDefault: true, version: 'payment-version' })),
-    updatePaymentDisplaySettings: vi.fn(async (_accessToken: string, request: { showAllGarageOperationsByDefault: boolean }) => request),
+    getPaymentDisplaySettings: vi.fn(async () => ({ showAllGarageOperationsByDefault: true, version: 'payment-version', showPeriodicityColumn: false, showAccrualMonthColumn: false, tariffTableVersion: 'tariff-table-version' })),
+    updatePaymentDisplaySettings: vi.fn(async (_accessToken: string, request: { showAllGarageOperationsByDefault: boolean; version: string; showPeriodicityColumn: boolean; showAccrualMonthColumn: boolean; tariffTableVersion: string }) => request),
     getSalaryAccrualSettings: vi.fn(async () => ({ accrualDay: 10, version: 'salary-version' })),
     updateSalaryAccrualSettings: vi.fn(async (_accessToken: string, request: { accrualDay: number }) => request),
     getBusinessDateSettings: vi.fn(async () => ({ systemDate: '2026-07-21', effectiveDate: '2026-07-21', overrideDate: null, isOverrideActive: false, updatedAtUtc: null, automation: null, version: 'business-date-version' })),
@@ -38,8 +38,8 @@ describe('App', () => {
   beforeEach(() => {
     vi.useFakeTimers({ toFake: ['Date'] })
     vi.setSystemTime(new Date('2026-06-30T10:00:00+07:00'))
-    vi.mocked(settingsApi.getPaymentDisplaySettings).mockImplementation(async () => ({ showAllGarageOperationsByDefault: true, version: 'payment-version' }))
-    vi.mocked(settingsApi.updatePaymentDisplaySettings).mockImplementation(async (_accessToken: string, request: { showAllGarageOperationsByDefault: boolean }) => request)
+    vi.mocked(settingsApi.getPaymentDisplaySettings).mockImplementation(async () => ({ showAllGarageOperationsByDefault: true, version: 'payment-version', showPeriodicityColumn: false, showAccrualMonthColumn: false, tariffTableVersion: 'tariff-table-version' }))
+    vi.mocked(settingsApi.updatePaymentDisplaySettings).mockImplementation(async (_accessToken: string, request: { showAllGarageOperationsByDefault: boolean; version: string; showPeriodicityColumn: boolean; showAccrualMonthColumn: boolean; tariffTableVersion: string }) => request)
     window.sessionStorage.clear()
     window.localStorage.clear()
   })
@@ -464,7 +464,6 @@ describe('App', () => {
       'Основание',
       'Единица измерения',
       'Значение / ставка',
-      'Месяц начисления',
       'Оплата до',
       'Перенос долга в просроченный, дней',
       'Пороговая тарификация',
@@ -1614,7 +1613,6 @@ describe('App', () => {
       'Основание',
       'Ед.',
       'Значение / ставка',
-      'Месяц начисления',
       'Оплата до',
       'Просрочка, дн.',
       'Пороговая тарификация',
@@ -1675,21 +1673,19 @@ describe('App', () => {
 
     const membershipDueDayInput = within(tariffsPanel).getByLabelText('Членский взнос: оплата до: день')
     const membershipDueMonthSelect = within(tariffsPanel).getByLabelText('Членский взнос: оплата до: месяц')
-    const membershipAccrualMonth = within(tariffsPanel).getByLabelText('Членский взнос: месяц начисления')
     const membershipOverdueDays = within(tariffsPanel).getByLabelText('Членский взнос: Перенос долга в просроченный: значение')
     const membershipRow = membershipDueDayInput.closest('[role="row"]')
     expect(membershipRow).not.toBeNull()
     const membershipCells = within(membershipRow!).getAllByRole('cell')
     const membershipUnitValue = within(membershipCells[1]).getByText('руб.')
     const membershipAmountInput = within(membershipCells[2]).getByRole('textbox')
-    expect(membershipCells).toHaveLength(9)
+    expect(membershipCells).toHaveLength(8)
     expect(membershipCells[1]).toContainElement(membershipUnitValue)
     expect(membershipCells[2]).toContainElement(membershipAmountInput)
-    expect(membershipCells[3]).toContainElement(membershipAccrualMonth)
-    expect(membershipCells[4]).toContainElement(membershipDueDayInput)
-    expect(membershipCells[4]).toContainElement(membershipDueMonthSelect)
-    expect(membershipCells[5]).toContainElement(membershipOverdueDays)
-    expect(within(membershipCells[5]).queryByText('Просрочка, дней')).not.toBeInTheDocument()
+    expect(membershipCells[3]).toContainElement(membershipDueDayInput)
+    expect(membershipCells[3]).toContainElement(membershipDueMonthSelect)
+    expect(membershipCells[4]).toContainElement(membershipOverdueDays)
+    expect(within(membershipCells[4]).queryByText('Просрочка, дней')).not.toBeInTheDocument()
     expect(membershipDueDayInput).toHaveValue('30')
     expect(membershipDueMonthSelect).toHaveTextContent('Июнь')
     await user.click(membershipDueMonthSelect)
@@ -4464,7 +4460,6 @@ describe('App', () => {
   it('creates a charge service setting, renders saved rows and exposes deactivation only for the active service', async () => {
     const user = userEvent.setup()
     let createdServiceRequest: unknown = null
-    let updatedServiceRequest: unknown = null
     let updatedServiceTariffRequest: UpdateChargeServiceWithTariffRequest | null = null
     let serviceSettings: ChargeServiceSettingDto[] = []
     const serviceIncomeType = createAccountingType({
@@ -4553,29 +4548,11 @@ describe('App', () => {
         serviceSettings = serviceSettings.map((setting) => (setting.id === id ? savedSetting : setting))
         return { service: savedSetting, tariff: savedTariff }
       },
-      updateChargeServiceSetting: async (_token, id, request) => {
-        updatedServiceRequest = request
-        const savedSetting = createChargeServiceSetting({
-          id,
-          name: request.name,
-          isRegular: request.isRegular,
-          periodicityMonths: request.periodicityMonths ?? null,
-          accrualStartMonth: request.accrualStartMonth ?? null,
-          paymentDueDay: request.paymentDueDay ?? null,
-          paymentDueMonth: request.paymentDueMonth ?? null,
-          overdueGraceDays: request.overdueGraceDays,
-          incomeTypeId: request.incomeTypeId ?? null,
-          tariffId: request.tariffId ?? null,
-          isMetered: request.isMetered,
-          hasTieredTariff: request.hasTieredTariff,
-          unitName: request.unitName ?? null,
-        })
-        serviceSettings = serviceSettings.map((setting) => (setting.id === id ? savedSetting : setting))
-        return savedSetting
-      },
     })
 
-    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} fundsClient={createFundsClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
+    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} fundsClient={createFundsClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} settingsClient={createSettingsClient({
+      getPaymentDisplaySettings: async () => ({ showAllGarageOperationsByDefault: false, showPeriodicityColumn: true, showAccrualMonthColumn: true, version: 'payment-version', tariffTableVersion: 'tariff-table-version' }),
+    })} userClient={createUserClient()} />)
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
     await user.click(screen.getByRole('button', { name: 'Войти' }))
@@ -4681,7 +4658,14 @@ describe('App', () => {
     expect(savedServiceUnitControl).toHaveTextContent('упаковка')
     expect(within(tariffsPanel).queryByRole('combobox', { name: 'Охрана: Охрана — тариф: единица' })).not.toBeInTheDocument()
     expect(within(tariffsPanel).getByRole('combobox', { name: 'Охрана: по счетчику' })).toHaveTextContent('Нет')
-    expect(within(tariffsPanel).getByRole('combobox', { name: 'Охрана: периодичность' })).toHaveTextContent('Ежегодно')
+    const tariffTable = within(tariffsPanel).getByRole('table', { name: 'Тарифы и сборы' })
+    expect(within(tariffTable).getAllByRole('columnheader').map((header) => header.textContent)).toEqual([
+      'Основание', 'Ед.', 'Значение / ставка', 'Периодичность', 'Месяц начисления', 'Оплата до', 'Просрочка, дн.', 'Пороговая тарификация', 'По счетчику', 'Действия',
+    ])
+    expect(within(tariffsPanel).getByText('Ежегодно')).toBeInTheDocument()
+    expect(within(tariffsPanel).getByText('Январь')).toBeInTheDocument()
+    expect(within(tariffsPanel).queryByRole('combobox', { name: 'Охрана: периодичность' })).not.toBeInTheDocument()
+    expect(within(tariffsPanel).queryByRole('combobox', { name: 'Охрана: месяц начисления' })).not.toBeInTheDocument()
     expect(within(tariffsPanel).getByLabelText('Охрана: оплата до: день')).toHaveValue('28')
     const dueDateValue = within(tariffsPanel).getByLabelText('Охрана: оплата до: день').closest('.contractors-date-value')
     expect(dueDateValue).not.toBeNull()
@@ -4699,49 +4683,11 @@ describe('App', () => {
     }))
     expect(savedServiceCostInput).toHaveValue('1 800.00')
 
-    const periodicityControl = within(tariffsPanel).getByRole('combobox', { name: 'Охрана: периодичность' })
-    await user.click(periodicityControl)
-    await user.click(within(tariffsPanel).getByRole('option', { name: 'Ежемесячно' }))
-    let confirmationDialog = await screen.findByRole('dialog', { name: 'Подтвердить изменение?' })
-    expect(within(confirmationDialog).getByText('Периодичность')).toBeInTheDocument()
-    expect(within(confirmationDialog).getByText('Ежегодно')).toBeInTheDocument()
-    expect(within(confirmationDialog).getByText('Ежемесячно')).toBeInTheDocument()
-    const cancelConfirmationButton = within(confirmationDialog).getByRole('button', { name: 'Отмена' })
-    await waitFor(() => expect(cancelConfirmationButton).toHaveFocus())
-    await user.keyboard('{Escape}')
-    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Подтвердить изменение?' })).not.toBeInTheDocument())
-    expect(updatedServiceRequest).toBeNull()
-    expect(periodicityControl).toHaveTextContent('Ежегодно')
-
-    await user.click(periodicityControl)
-    await user.click(within(tariffsPanel).getByRole('option', { name: 'Ежемесячно' }))
-    confirmationDialog = await screen.findByRole('dialog', { name: 'Подтвердить изменение?' })
-    expect(within(confirmationDialog).getByText('Периодичность')).toBeInTheDocument()
-    await user.click(within(confirmationDialog).getByRole('button', { name: 'Сохранить' }))
-
-    await waitFor(() => expect(updatedServiceRequest).toMatchObject({
-      name: 'Охрана',
-      isRegular: true,
-      periodicityMonths: 1,
-      accrualStartMonth: 1,
-      paymentDueDay: 28,
-      paymentDueMonth: null,
-      overdueGraceDays: 30,
-      incomeTypeId: 'income-security-created',
-      tariffId: 'tariff-security-created',
-      isMetered: false,
-      hasTieredTariff: false,
-      unitName: 'упаковка',
-    }))
-    expect(within(tariffsPanel).getByRole('combobox', { name: 'Охрана: периодичность' })).toHaveTextContent('Ежемесячно')
-    const monthlyDueDateValue = within(tariffsPanel).getByLabelText('Охрана: оплата до: день').closest('.contractors-date-value')
-    expect(monthlyDueDateValue).not.toBeNull()
-    expect(within(monthlyDueDateValue as HTMLElement).queryByRole('combobox', { name: 'Охрана: оплата до: месяц' })).not.toBeInTheDocument()
-    expect(within(monthlyDueDateValue as HTMLElement).getByText('следующего месяца')).toBeInTheDocument()
-
     await user.click(within(tariffsPanel).getByRole('button', { name: 'Изменить услугу Охрана' }))
     const editDialog = await screen.findByRole('dialog', { name: 'Изменить услугу' })
     expect(within(editDialog).getByRole('combobox', { name: 'Фонд поступления регулярной услуги' })).toHaveTextContent('Членские взносы')
+    expect(within(editDialog).getByRole('combobox', { name: 'Периодичность регулярной услуги' })).toHaveTextContent('Ежегодно')
+    expect(within(editDialog).getByRole('combobox', { name: 'Месяц начисления ежегодной услуги' })).toHaveTextContent('Январь')
     await user.click(within(editDialog).getByRole('button', { name: 'Отмена' }))
 
     expect(within(tariffsPanel).getByRole('button', { name: 'Деактивировать услугу Охрана' })).toBeEnabled()
@@ -4925,7 +4871,7 @@ describe('App', () => {
       incomeFundId: serviceIncomeType.destinationFundId,
     })
     expect(within(tariffsPanel).getByRole('button', { name: 'Изменить услугу Охрана территории' })).toBeInTheDocument()
-    expect(within(tariffsPanel).getByRole('combobox', { name: 'Охрана территории: периодичность' })).toHaveTextContent('Ежемесячно')
+    expect(within(tariffsPanel).queryByRole('combobox', { name: 'Охрана территории: периодичность' })).not.toBeInTheDocument()
     expect(within(tariffsPanel).getByLabelText('Охрана территории: оплата до: день')).toHaveValue('15')
     expect(within(tariffsPanel).getAllByRole('combobox', { name: 'Охрана территории: по счетчику' })).toHaveLength(1)
     expect(within(tariffsPanel).getAllByRole('combobox', { name: 'Охрана территории: пороговая тарификация' })).toHaveLength(1)
@@ -5367,7 +5313,7 @@ describe('App', () => {
     await waitFor(() => expect(within(tariffsPanel).getByLabelText('Вода: Тариф воды из БД: значение')).toHaveValue('125.00'))
     expect(within(tariffsPanel).queryByText('Старый сбор')).not.toBeInTheDocument()
     expect(within(tariffsPanel).getByLabelText('Сумма: Сбор на ворота из БД')).toHaveValue('777.00')
-    expect(within(tariffsPanel).getByRole('combobox', { name: 'Охрана из БД: периодичность' })).toHaveTextContent('Ежегодно')
+    expect(within(tariffsPanel).queryByRole('combobox', { name: 'Охрана из БД: периодичность' })).not.toBeInTheDocument()
     expect(within(tariffsPanel).getByLabelText('Охрана из БД: оплата до: день')).toHaveValue('25')
     expect(within(tariffsPanel).getByLabelText('Охрана из БД: оплата до: месяц')).toHaveTextContent('Декабрь')
     expect(within(tariffsPanel).getByLabelText('Охрана из БД: Перенос долга в просроченный: значение')).toHaveValue('45')
@@ -8109,7 +8055,7 @@ describe('App', () => {
       reportClient={createReportClient()}
       releaseClient={createReleaseClient()}
       settingsClient={createSettingsClient({
-        getPaymentDisplaySettings: async () => ({ showAllGarageOperationsByDefault: false, version: 'payment-version' }),
+        getPaymentDisplaySettings: async () => ({ showAllGarageOperationsByDefault: false, version: 'payment-version', showPeriodicityColumn: false, showAccrualMonthColumn: false, tariffTableVersion: 'tariff-table-version' }),
       })}
       userClient={createUserClient()}
     />)
@@ -11056,7 +11002,7 @@ describe('App', () => {
 
   it('saves the default payment overview mode from display settings', async () => {
     const user = userEvent.setup()
-    const updatePaymentDisplaySettings = vi.fn(async (_accessToken: string, request: { showAllGarageOperationsByDefault: boolean }) => request)
+    const updatePaymentDisplaySettings = vi.fn(async (_accessToken: string, request: { showAllGarageOperationsByDefault: boolean; version: string; showPeriodicityColumn?: boolean; showAccrualMonthColumn?: boolean; tariffTableVersion?: string }) => request)
     const settingsClient = createSettingsClient({ updatePaymentDisplaySettings })
     render(<App authClient={createAuthClient()} dictionaryClient={createDictionaryClient()} financeClient={createFinanceClient()} importClient={createImportClient()} integrationClient={createIntegrationClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} settingsClient={settingsClient} userClient={createUserClient()} />)
 
@@ -11066,15 +11012,26 @@ describe('App', () => {
     const settings = await screen.findByRole('region', { name: 'Настройки' })
     await user.click(within(settings).getByRole('tab', { name: 'Отображение' }))
 
-    const displayPanel = within(settings).getByRole('region', { name: 'Настройки отображения платежей' })
+    const displayPanel = within(settings).getByRole('region', { name: 'Отображение таблиц' })
     const toggle = within(displayPanel).getByRole('checkbox', { name: 'Показывать общую ведомость платежей при открытии' })
+    const periodicityToggle = within(displayPanel).getByRole('checkbox', { name: 'Колонка «Периодичность»' })
+    const accrualMonthToggle = within(displayPanel).getByRole('checkbox', { name: 'Колонка «Месяц начисления»' })
     await waitFor(() => expect(toggle).toBeEnabled())
     expect(toggle).not.toBeChecked()
+    expect(periodicityToggle).not.toBeChecked()
+    expect(accrualMonthToggle).not.toBeChecked()
     await user.click(toggle)
+    await user.click(periodicityToggle)
     await user.click(within(displayPanel).getByRole('button', { name: 'Сохранить отображение' }))
 
-    await waitFor(() => expect(updatePaymentDisplaySettings).toHaveBeenCalledWith('token', { showAllGarageOperationsByDefault: true, version: 'payment-version' }))
-    expect(await within(displayPanel).findByText('Настройка отображения платежей сохранена.')).toHaveAttribute('role', 'status')
+    await waitFor(() => expect(updatePaymentDisplaySettings).toHaveBeenCalledWith('token', {
+      showAllGarageOperationsByDefault: true,
+      version: 'payment-version',
+      showPeriodicityColumn: true,
+      showAccrualMonthColumn: false,
+      tariffTableVersion: 'tariff-table-version',
+    }))
+    expect(await within(displayPanel).findByText('Отображение сохранено.')).toHaveAttribute('role', 'status')
   })
 
   it('hides opening balance editing and records a cash replenishment in a modal', async () => {
@@ -14719,7 +14676,7 @@ describe('App', () => {
     const getExpenseTypes = vi.fn(baseDictionaryClient.getExpenseTypes)
     const dictionaryClient = createDictionaryClient({ getSupplierGroups, getSuppliers, getStaffMembers, getIncomeTypes, getExpenseTypes })
 
-    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient({ getExpenseWorksheet: async () => createExpenseWorksheet({}) })} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} settingsClient={createSettingsClient({ getPaymentDisplaySettings: async () => ({ showAllGarageOperationsByDefault: false, version: 'payment-version' }) })} userClient={createUserClient()} />)
+    render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient({ getExpenseWorksheet: async () => createExpenseWorksheet({}) })} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} settingsClient={createSettingsClient({ getPaymentDisplaySettings: async () => ({ showAllGarageOperationsByDefault: false, version: 'payment-version', showPeriodicityColumn: false, showAccrualMonthColumn: false, tariffTableVersion: 'tariff-table-version' }) })} userClient={createUserClient()} />)
 
     await user.type(screen.getByLabelText('Пароль'), 'StrongPass123')
     await user.click(screen.getByRole('button', { name: 'Войти' }))
@@ -19073,7 +19030,7 @@ function createReleasePage(
 
 function createSettingsClient(overrides: Partial<ApplicationSettingsClient> = {}): ApplicationSettingsClient {
   return {
-    getPaymentDisplaySettings: async () => ({ showAllGarageOperationsByDefault: false, version: 'payment-version' }),
+    getPaymentDisplaySettings: async () => ({ showAllGarageOperationsByDefault: false, version: 'payment-version', showPeriodicityColumn: false, showAccrualMonthColumn: false, tariffTableVersion: 'tariff-table-version' }),
     updatePaymentDisplaySettings: async (_accessToken, request) => request,
     getSalaryAccrualSettings: async () => ({ accrualDay: 10, version: 'salary-version' }),
     updateSalaryAccrualSettings: async (_accessToken, request) => request,
