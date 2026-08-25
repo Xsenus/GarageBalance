@@ -399,6 +399,13 @@ public sealed class DictionariesController(IDictionaryService dictionaryService)
         return Ok(await dictionaryService.GetStaffDepartmentsAsync(cancellationToken, limit, includeArchived));
     }
 
+    [HttpGet("staff-departments/salary-fund")]
+    [ProducesResponseType<IReadOnlyList<StaffDepartmentSalaryFundDto>>(StatusCodes.Status200OK)]
+    public async Task<ActionResult<IReadOnlyList<StaffDepartmentSalaryFundDto>>> GetStaffDepartmentSalaryFund(CancellationToken cancellationToken)
+    {
+        return Ok(await dictionaryService.GetStaffDepartmentSalaryFundAsync(cancellationToken));
+    }
+
     [Authorize(Policy = SystemPermissions.DictionariesWrite)]
     [HttpPost("staff-departments")]
     [ProducesResponseType<StaffDepartmentDto>(StatusCodes.Status201Created)]

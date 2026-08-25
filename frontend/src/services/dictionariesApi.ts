@@ -21,6 +21,7 @@ export type GarageDto = {
   ownerId: string | null
   ownerName: string | null
   startingBalance: number
+  startingOverdueDebt: number
   initialWaterMeterValue: number | null
   initialElectricityMeterValue: number | null
   comment: string | null
@@ -195,6 +196,13 @@ export type FeeCampaignDto = {
   destinationFundName: string | null
 }
 
+export type StaffDepartmentSalaryFundDto = {
+  departmentId: string
+  departmentName: string
+  staffCount: number
+  totalRate: number
+}
+
 export type PagedResult<TItem> = {
   items: TItem[]
   totalCount: number
@@ -217,6 +225,7 @@ export type UpsertGarageRequest = {
   floorCount: number
   ownerId?: string | null
   startingBalance: number
+  startingOverdueDebt?: number
   initialWaterMeterValue?: number | null
   initialElectricityMeterValue?: number | null
   comment?: string
@@ -410,7 +419,6 @@ export type DictionaryClient = {
   restoreGarage(accessToken: string, id: string): Promise<GarageDto>
   adjustGarageOpeningBalance?(accessToken: string, id: string, request: CreateOpeningBalanceAdjustmentRequest): Promise<unknown>
   getSupplierGroups(accessToken: string, search?: string, limit?: number, includeArchived?: boolean, signal?: AbortSignal): Promise<SupplierGroupDto[]>
-  getSupplierGroupsPage?(accessToken: string, search?: string, offset?: number, limit?: number, includeArchived?: boolean, signal?: AbortSignal): Promise<PagedResult<SupplierGroupDto>>
   createSupplierGroup(accessToken: string, request: UpsertSupplierGroupRequest): Promise<SupplierGroupDto>
   updateSupplierGroup(accessToken: string, id: string, request: UpsertSupplierGroupRequest): Promise<SupplierGroupDto>
   archiveSupplierGroup(accessToken: string, id: string, reason: string): Promise<void>
@@ -428,6 +436,7 @@ export type DictionaryClient = {
   archiveSupplierContact(accessToken: string, id: string, reason: string): Promise<void>
   restoreSupplierContact(accessToken: string, id: string): Promise<SupplierContactDto>
   getStaffDepartments(accessToken: string, limit?: number, includeArchived?: boolean): Promise<StaffDepartmentDto[]>
+  getSalaryFund(accessToken: string): Promise<StaffDepartmentSalaryFundDto[]>
   createStaffDepartment(accessToken: string, request: UpsertStaffDepartmentRequest): Promise<StaffDepartmentDto>
   updateStaffDepartment(accessToken: string, id: string, request: UpsertStaffDepartmentRequest): Promise<StaffDepartmentDto>
   archiveStaffDepartment(accessToken: string, id: string, reason: string): Promise<void>
@@ -459,8 +468,8 @@ export type DictionaryClient = {
   getTariffsPage?(accessToken: string, search?: string, offset?: number, limit?: number, includeArchived?: boolean, signal?: AbortSignal): Promise<PagedResult<TariffDto>>
   createTariff(accessToken: string, request: UpsertTariffRequest): Promise<TariffDto>
   updateTariff(accessToken: string, id: string, request: UpsertTariffRequest): Promise<TariffDto>
-  archiveTariff(accessToken: string, id: string, reason: string): Promise<void>
-  restoreTariff(accessToken: string, id: string): Promise<TariffDto>
+  archiveTariff?(accessToken: string, id: string, reason: string): Promise<void>
+  restoreTariff?(accessToken: string, id: string): Promise<TariffDto>
   getChargeServiceSettings(accessToken: string, search?: string, limit?: number, includeArchived?: boolean): Promise<ChargeServiceSettingDto[]>
   createChargeServiceWithTariff(accessToken: string, request: CreateChargeServiceWithTariffRequest): Promise<CreatedChargeServiceWithTariffDto>
   createChargeServiceSetting(accessToken: string, request: UpsertChargeServiceSettingRequest): Promise<ChargeServiceSettingDto>
@@ -505,7 +514,7 @@ const dictionaryCacheDependencies: Record<string, string[]> = {
   suppliers: ['suppliers', 'supplier-contacts'],
   'supplier-contacts': ['supplier-contacts'],
   'staff-departments': ['staff-departments', 'staff-members'],
-  'staff-members': ['staff-members'],
+  'staff-members': ['staff-members', 'staff-departments'],
   'income-types': ['income-types', 'charge-services', 'fee-campaigns'],
   'expense-types': ['expense-types', 'charge-services', 'suppliers'],
   'measurement-units': ['measurement-units', 'charge-services'],
@@ -674,9 +683,6 @@ export const dictionariesApi: DictionaryClient = {
   getSupplierGroups(accessToken, search, limit = defaultDictionaryListLimit, includeArchived = false, signal) {
     return requestJson(accessToken, withQuery('/api/dictionaries/supplier-groups', { search, limit, includeArchived: includeArchived || undefined }), { signal })
   },
-  getSupplierGroupsPage(accessToken, search, offset = 0, limit = defaultDictionaryListLimit, includeArchived = false, signal) {
-    return requestJson(accessToken, withQuery('/api/dictionaries/supplier-groups/page', { search, offset, limit, includeArchived: includeArchived || undefined }), { signal })
-  },
   createSupplierGroup(accessToken, request) {
     return requestJson(accessToken, '/api/dictionaries/supplier-groups', { method: 'POST', body: JSON.stringify(request) })
   },
@@ -727,6 +733,9 @@ export const dictionariesApi: DictionaryClient = {
   },
   getStaffDepartments(accessToken, limit = defaultDictionaryListLimit, includeArchived = false) {
     return requestJson(accessToken, withQuery('/api/dictionaries/staff-departments', { limit, includeArchived: includeArchived || undefined }))
+  },
+  getSalaryFund(accessToken) {
+    return requestJson(accessToken, '/api/dictionaries/staff-departments/salary-fund')
   },
   createStaffDepartment(accessToken, request) {
     return requestJson(accessToken, '/api/dictionaries/staff-departments', { method: 'POST', body: JSON.stringify(request) })
@@ -812,20 +821,11 @@ export const dictionariesApi: DictionaryClient = {
   getTariffs(accessToken, search, limit = defaultDictionaryListLimit, includeArchived = false, signal) {
     return requestJson(accessToken, withQuery('/api/dictionaries/tariffs', { search, limit, includeArchived: includeArchived || undefined }), { signal })
   },
-  getTariffsPage(accessToken, search, offset = 0, limit = defaultDictionaryListLimit, includeArchived = false, signal) {
-    return requestJson(accessToken, withQuery('/api/dictionaries/tariffs/page', { search, offset, limit, includeArchived: includeArchived || undefined }), { signal })
-  },
   createTariff(accessToken, request) {
     return requestJson(accessToken, '/api/dictionaries/tariffs', { method: 'POST', body: JSON.stringify(request) })
   },
   updateTariff(accessToken, id, request) {
     return requestJson(accessToken, `/api/dictionaries/tariffs/${id}`, { method: 'PUT', body: JSON.stringify(request) })
-  },
-  archiveTariff(accessToken, id, reason) {
-    return requestJson(accessToken, `/api/dictionaries/tariffs/${id}`, { method: 'DELETE', body: JSON.stringify({ reason }) })
-  },
-  restoreTariff(accessToken, id) {
-    return requestJson(accessToken, `/api/dictionaries/tariffs/${id}/restore`, { method: 'POST' })
   },
   getChargeServiceSettings(accessToken, search, limit = defaultDictionaryListLimit, includeArchived = false) {
     return requestJson(accessToken, withQuery('/api/dictionaries/charge-services', { search, limit, includeArchived: includeArchived || undefined }))

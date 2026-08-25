@@ -1922,27 +1922,15 @@ describe('App', () => {
     expect(within(tariffsPanel).queryByRole('table', { name: 'История изменений тарифов и сборов', hidden: true })).not.toBeInTheDocument()
   }, 180000)
 
-  it('edits salary fund tariff rows directly in tariffs and fees', async () => {
+  it('shows salary fund by departments from active staff rates and keeps it read-only', async () => {
     const user = userEvent.setup()
-    const salaryTariffs = [
-      createTariff({ id: 'salary-electricians', name: 'Электрики', calculationBase: 'fixed', rate: 500 }),
-      createTariff({ id: 'salary-accounting', name: 'Бухгалтерия', calculationBase: 'fixed', rate: 700 }),
-      createTariff({ id: 'salary-management', name: 'Руководство', calculationBase: 'fixed', rate: 900 }),
-    ]
-    const updateTariff = vi.fn(async (_token: string, id: string, request: UpsertTariffRequest) => createTariff({
-      id,
-      name: request.name,
-      calculationBase: request.calculationBase,
-      rate: request.rate,
-      effectiveFrom: request.effectiveFrom,
-      comment: request.comment ?? null,
-    }))
-    const archiveTariff = vi.fn()
     const dictionaryClient = createDictionaryClient({
-      getTariffs: async () => salaryTariffs,
+      getTariffs: async () => [],
       getChargeServiceSettings: async () => [],
-      updateTariff,
-      archiveTariff,
+      getSalaryFund: async () => [
+        { departmentId: 'department-electricians', departmentName: 'Электрики', staffCount: 2, totalRate: 1500 },
+        { departmentId: 'department-accounting', departmentName: 'Бухгалтерия', staffCount: 1, totalRate: 700 },
+      ],
     })
 
     render(<App authClient={createAuthClient()} dictionaryClient={dictionaryClient} financeClient={createFinanceClient()} importClient={createImportClient()} reportClient={createReportClient()} releaseClient={createReleaseClient()} userClient={createUserClient()} />)
@@ -1952,27 +1940,12 @@ describe('App', () => {
     const panel = await screen.findByRole('region', { name: 'Тарифы и сборы' })
 
     const electriciansInput = await within(panel).findByLabelText('Зарплатный фонд: Электрики: значение')
-    expect(electriciansInput).toBeEnabled()
-    expect(within(panel).getByLabelText('Зарплатный фонд: Бухгалтерия: значение')).toBeEnabled()
-    expect(within(panel).getByLabelText('Зарплатный фонд: Руководство: значение')).toBeEnabled()
-    expect(within(panel).queryByText('Изменяется в разделе «Справочники → Тарифы»')).not.toBeInTheDocument()
-    expect(within(panel).queryByRole('button', { name: 'Изменить тариф Электрики' })).not.toBeInTheDocument()
-    expect(within(panel).queryByRole('button', { name: 'Убрать тариф Бухгалтерия' })).not.toBeInTheDocument()
-
-    await user.clear(electriciansInput)
-    await user.type(electriciansInput, '550{Enter}')
-    const confirmDialog = await screen.findByRole('dialog', { name: 'Подтвердить изменение?' })
-    expect(within(confirmDialog).getByText('Зарплатный фонд: Электрики')).toBeInTheDocument()
-    expect(within(confirmDialog).getByText('500.00')).toBeInTheDocument()
-    expect(within(confirmDialog).getByText('550.00')).toBeInTheDocument()
-    await user.click(within(confirmDialog).getByRole('button', { name: 'Сохранить' }))
-    await waitFor(() => expect(updateTariff).toHaveBeenCalledWith(
-      expect.any(String),
-      'salary-electricians',
-      expect.objectContaining({ name: 'Электрики', calculationBase: 'fixed', rate: 550 }),
-    ))
-    expect(electriciansInput).toHaveValue('550.00')
-    expect(archiveTariff).not.toHaveBeenCalled()
+    expect(electriciansInput).toBeDisabled()
+    expect(electriciansInput).toHaveValue('1 500.00')
+    expect(within(panel).getByText('Электрики')).toBeInTheDocument()
+    expect(within(panel).getByLabelText('Зарплатный фонд: Бухгалтерия: значение')).toHaveValue('700.00')
+    expect(within(panel).getByText('Бухгалтерия')).toBeInTheDocument()
+    expect(within(panel).queryByRole('button', { name: /Изменить услугу.*Электрики/ })).not.toBeInTheDocument()
   })
 
   it('hides financial report actions until contractor records are saved', async () => {
@@ -1988,12 +1961,17 @@ describe('App', () => {
     await user.click(within(contractorsPanel).getByRole('button', { name: 'Добавить гараж' }))
     const garageDialog = await screen.findByRole('dialog', { name: 'Новый гараж' })
     expect(within(garageDialog).queryByRole('button', { name: 'Открыть фин. отчет' })).not.toBeInTheDocument()
+    expect(within(garageDialog).getByLabelText('Начальный баланс гаража')).toBeEnabled()
+    expect(within(garageDialog).getByLabelText('Начальная просрочка')).toBeEnabled()
+    expect(within(garageDialog).queryByLabelText('Баланс гаража')).not.toBeInTheDocument()
     await user.keyboard('{Escape}')
 
     await user.click(within(contractorsPanel).getByRole('tab', { name: 'Поставщики' }))
     await user.click(within(contractorsPanel).getByRole('button', { name: 'Добавить поставщика' }))
     const supplierDialog = await screen.findByRole('dialog', { name: 'Новый поставщик' })
     expect(within(supplierDialog).queryByRole('button', { name: 'Открыть фин. отчет' })).not.toBeInTheDocument()
+    expect(within(supplierDialog).getByLabelText('Начальная задолженность')).toBeEnabled()
+    expect(within(supplierDialog).queryByLabelText('Задолженность поставщика')).not.toBeInTheDocument()
     await user.keyboard('{Escape}')
 
     await user.click(within(contractorsPanel).getByRole('tab', { name: 'Персонал' }))
@@ -2757,7 +2735,9 @@ describe('App', () => {
     expect(within(supplierDialog).getByLabelText('Телефон поставщика')).toHaveValue('')
     expect(within(supplierDialog).getByLabelText('Почта поставщика')).toHaveValue('')
     expect(within(supplierDialog).getByText('Телефон и почта берутся из первого действующего контакта. Изменение здесь сразу обновляет ту же строку в таблице контактов.')).toBeInTheDocument()
-    expect(within(supplierDialog).getByLabelText('Задолженность поставщика')).toHaveAttribute('readonly')
+    const initialSupplierDebt = within(supplierDialog).getByLabelText('Начальная задолженность')
+    expect(initialSupplierDebt).toBeEnabled()
+    await user.type(initialSupplierDebt, '350')
     await user.type(within(supplierDialog).getByLabelText('Телефон поставщика'), '+7 900 111-22-33')
     await user.type(within(supplierDialog).getByLabelText('Почта поставщика'), 'guard@example.test')
     expect(within(supplierDialog).getByLabelText('Контакт 1: телефон')).toHaveValue('+7 (900) 111-22-33')
@@ -2787,6 +2767,7 @@ describe('App', () => {
       contactPerson: 'Смирнов С.С.',
       phone: '+7 (900) 111-22-33',
       email: 'guard@example.test',
+      startingBalance: 350,
     })
     expect(addSupplierButton).toHaveFocus()
 
@@ -4148,8 +4129,8 @@ describe('App', () => {
 
     await user.click(within(supplierRow as HTMLElement).getByRole('button', { name: 'Изменить поставщика Водоканал' }))
     const supplierDialog = await screen.findByRole('dialog', { name: 'Водоканал' })
-    await user.clear(within(supplierDialog).getByLabelText('Стартовый баланс поставщика'))
-    await user.type(within(supplierDialog).getByLabelText('Стартовый баланс поставщика'), '200')
+    await user.clear(within(supplierDialog).getByLabelText('Начальная задолженность'))
+    await user.type(within(supplierDialog).getByLabelText('Начальная задолженность'), '200')
     await user.click(within(supplierDialog).getByRole('button', { name: 'Сохранить' }))
     expect(screen.queryByRole('dialog', { name: 'Подтвердить изменения поставщика' })).not.toBeInTheDocument()
 
@@ -4162,7 +4143,7 @@ describe('App', () => {
     expect(within(supplierRow as HTMLElement).queryByText('200.00')).not.toBeInTheDocument()
     await user.click(within(supplierRow as HTMLElement).getByRole('button', { name: 'Изменить поставщика Водоканал' }))
     const reopenedSupplierDialog = await screen.findByRole('dialog', { name: 'Водоканал' })
-    expect(within(reopenedSupplierDialog).getByLabelText('Стартовый баланс поставщика')).toHaveValue('200.00')
+    expect(within(reopenedSupplierDialog).getByLabelText('Начальная задолженность')).toHaveValue('200.00')
   })
 
   it('loads contacts only for the selected supplier and reuses them on the next opening', async () => {
@@ -13075,6 +13056,15 @@ describe('App', () => {
     expect(await within(validationDialog).findByText('Проверьте запись')).toBeInTheDocument()
     expect(within(validationDialog).getByText('Укажите номер гаража.')).toBeInTheDocument()
     expect(createGarageCalled).toBe(false)
+    await user.clear(within(validationDialog).getByLabelText('Номер гаража'))
+    await user.type(within(validationDialog).getByLabelText('Номер гаража'), '12')
+    await user.clear(within(validationDialog).getByLabelText('Стартовый баланс гаража'))
+    await user.type(within(validationDialog).getByLabelText('Стартовый баланс гаража'), '500')
+    await user.clear(within(validationDialog).getByLabelText('Начальная просрочка'))
+    await user.type(within(validationDialog).getByLabelText('Начальная просрочка'), '600')
+    await user.click(within(validationDialog).getByRole('button', { name: 'Сохранить' }))
+    expect(within(validationDialog).getByText('Просрочка недопустима')).toBeInTheDocument()
+    expect(createGarageCalled).toBe(false)
     await user.keyboard('{Escape}')
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Гаражи' })).not.toBeInTheDocument())
     await waitFor(() => expect(addGarageButton).toHaveFocus())
@@ -19526,6 +19516,7 @@ function createDictionaryClient(overrides: Partial<DictionaryClient> = {}): Dict
       return { ...contact, isArchived: false }
     },
     getStaffDepartments: async () => staffDepartments,
+    getSalaryFund: async () => [],
     createStaffDepartment: async (_token, request) => {
       const department = createStaffDepartment({ id: `staff-department-${staffDepartments.length + 1}`, name: request.name })
       staffDepartments = [department, ...staffDepartments]
@@ -21229,6 +21220,7 @@ function createGarage(overrides: Partial<GarageDto>): GarageDto {
     ownerName: null,
     ownerPhone: null,
     startingBalance: 0,
+    startingOverdueDebt: 0,
     balance: 0,
     overdueDebt: 0,
     initialWaterMeterValue: null,

@@ -169,7 +169,8 @@ public sealed class FrontendFeatureModuleTests
         Assert.DoesNotContain("dictionaryClient.updateSupplier", dictionaryPanelText, StringComparison.Ordinal);
         Assert.DoesNotContain("dictionaryClient.archiveTariff", dictionaryPanelText, StringComparison.Ordinal);
         Assert.Contains("dictionaryClient.updateSupplier", contractorsPanelText, StringComparison.Ordinal);
-        Assert.Contains("dictionaryClient.archiveTariff", tariffsPanelText, StringComparison.Ordinal);
+        Assert.Contains("dictionaryClient.getSalaryFund", tariffsPanelText, StringComparison.Ordinal);
+        Assert.DoesNotContain("dictionaryClient.archiveTariff", tariffsPanelText, StringComparison.Ordinal);
         Assert.Contains("frontend/src/features/dictionaries/DictionaryPanel.tsx", roadmapLine, StringComparison.Ordinal);
     }
 

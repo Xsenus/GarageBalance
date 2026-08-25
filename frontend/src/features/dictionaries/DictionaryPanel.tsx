@@ -553,6 +553,7 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, integ
       floorCount: garageForm.floorCount,
       ownerId: garageForm.ownerId || null,
       startingBalance: garageForm.startingBalance,
+      startingOverdueDebt: garageForm.startingOverdueDebt,
       initialWaterMeterValue: garageForm.initialWaterMeterValue === '' ? null : Number(garageForm.initialWaterMeterValue),
       initialElectricityMeterValue: garageForm.initialElectricityMeterValue === '' ? null : Number(garageForm.initialElectricityMeterValue),
       comment: garageForm.comment.trim() || undefined,
@@ -619,6 +620,7 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, integ
         floorCount: existingGarage.floorCount,
         ownerId,
         startingBalance: existingGarage.startingBalance,
+        startingOverdueDebt: existingGarage.startingOverdueDebt,
         initialWaterMeterValue: existingGarage.initialWaterMeterValue,
         initialElectricityMeterValue: existingGarage.initialElectricityMeterValue,
         comment: existingGarage.comment ?? undefined,
@@ -985,6 +987,7 @@ export function DictionaryPanelV2({ auth, dictionaryClient, financeClient, integ
             />
           ))}
           {dictionaryField('garageStartingBalance', <MoneyInput aria-label={fieldMeta('garageStartingBalance').ariaLabel} value={garageForm.startingBalance} onValueChange={(startingBalance) => setGarageForm({ ...garageForm, startingBalance })} />, { help: 'Долг на начало учета укажите положительным числом, переплату — отрицательным.' })}
+          {dictionaryField('garageStartingOverdueDebt', <MoneyInput aria-label={fieldMeta('garageStartingOverdueDebt').ariaLabel} value={garageForm.startingOverdueDebt} onValueChange={(startingOverdueDebt) => setGarageForm({ ...garageForm, startingOverdueDebt })} />)}
           <div className="inline-fields">
             {dictionaryField('garageInitialWaterMeterValue', <input aria-label={fieldMeta('garageInitialWaterMeterValue').ariaLabel} type="number" min="0" step="0.001" value={garageForm.initialWaterMeterValue} onChange={(event) => setGarageForm({ ...garageForm, initialWaterMeterValue: event.target.value })} />, { help: 'Последнее показание счетчика воды на момент начала учета. Оставьте поле пустым, если показаний нет.' })}
             {dictionaryField('garageInitialElectricityMeterValue', <input aria-label={fieldMeta('garageInitialElectricityMeterValue').ariaLabel} type="number" min="0" step="0.001" value={garageForm.initialElectricityMeterValue} onChange={(event) => setGarageForm({ ...garageForm, initialElectricityMeterValue: event.target.value })} />, { help: 'Последнее показание счетчика электроэнергии на момент начала учета. Оставьте поле пустым, если показаний нет.' })}

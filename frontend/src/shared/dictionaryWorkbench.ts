@@ -29,6 +29,7 @@ export type DictionaryGarageFormState = {
   floorCount: number
   ownerId: string
   startingBalance: number
+  startingOverdueDebt: number
   initialWaterMeterValue: string
   initialElectricityMeterValue: string
   comment: string
@@ -66,6 +67,7 @@ export type DictionaryEditorFieldKey =
   | 'garageFloorCount'
   | 'garageOwner'
   | 'garageStartingBalance'
+  | 'garageStartingOverdueDebt'
   | 'garageInitialWaterMeterValue'
   | 'garageInitialElectricityMeterValue'
   | 'garageComment'
@@ -128,6 +130,7 @@ const dictionaryEditorFieldMeta: Record<DictionaryEditorFieldKey, DictionaryEdit
   garageFloorCount: { label: 'Этажей', ariaLabel: 'Количество этажей' },
   garageOwner: { label: 'Владелец', ariaLabel: 'Владелец гаража' },
   garageStartingBalance: { label: 'Стартовый баланс', ariaLabel: 'Стартовый баланс гаража', hint: 'Долг положительным числом, переплата отрицательным.' },
+  garageStartingOverdueDebt: { label: 'Начальная просрочка', ariaLabel: 'Начальная просрочка' },
   garageInitialWaterMeterValue: { label: 'Старт воды', ariaLabel: 'Стартовый счетчик воды' },
   garageInitialElectricityMeterValue: { label: 'Старт электричества', ariaLabel: 'Стартовый счетчик электричества' },
   garageComment: { label: 'Комментарий', ariaLabel: 'Комментарий по гаражу', placeholder: 'Особенности гаража, начислений или импорта' },
@@ -181,6 +184,7 @@ export function createEmptyGarageForm(): DictionaryGarageFormState {
     floorCount: 1,
     ownerId: '',
     startingBalance: 0,
+    startingOverdueDebt: 0,
     initialWaterMeterValue: '',
     initialElectricityMeterValue: '',
     comment: '',
@@ -194,6 +198,7 @@ export function createGarageFormFromDto(garage: GarageDto): DictionaryGarageForm
     floorCount: garage.floorCount,
     ownerId: garage.ownerId ?? '',
     startingBalance: garage.startingBalance,
+    startingOverdueDebt: garage.startingOverdueDebt,
     initialWaterMeterValue: garage.initialWaterMeterValue?.toString() ?? '',
     initialElectricityMeterValue: garage.initialElectricityMeterValue?.toString() ?? '',
     comment: garage.comment ?? '',

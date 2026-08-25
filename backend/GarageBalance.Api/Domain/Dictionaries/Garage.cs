@@ -9,6 +9,7 @@ public sealed class Garage : IOptimisticConcurrencyEntity
     public int PeopleCount { get; set; }
     public int FloorCount { get; set; }
     public decimal StartingBalance { get; set; }
+    public decimal? StartingOverdueDebt { get; set; }
     public decimal? InitialWaterMeterValue { get; set; }
     public decimal? InitialElectricityMeterValue { get; set; }
     public string? Comment { get; set; }

@@ -260,6 +260,7 @@ public sealed class EfGarageRepository(GarageBalanceDbContext dbContext, IBusine
                 : (garage.Owner.LastName + " " + garage.Owner.FirstName + " " + (garage.Owner.MiddleName ?? string.Empty)).Trim(),
             garage.Owner == null ? null : garage.Owner.Phone,
             garage.StartingBalance,
+            garage.StartingOverdueDebt,
             garage.InitialWaterMeterValue,
             garage.InitialElectricityMeterValue,
             garage.Comment,
@@ -347,14 +348,14 @@ public sealed class EfGarageRepository(GarageBalanceDbContext dbContext, IBusine
             ("phone", true) => query.OrderByDescending(garage => garage.Owner == null ? null : garage.Owner.Phone),
             ("phone", false) => query.OrderBy(garage => garage.Owner == null ? null : garage.Owner.Phone),
             ("overdueDebt", true) => query.OrderByDescending(garage => Math.Max(
-                garage.StartingBalance +
+                (garage.StartingOverdueDebt ?? (garage.StartingBalance > 0m ? garage.StartingBalance : 0m)) +
                 (dbContext.Accruals.Where(accrual => accrual.GarageId == garage.Id && !accrual.IsCanceled && !accrual.DueDateNeedsReview && accrual.OverdueFromDate <= today).Sum(accrual => (decimal?)accrual.Amount) ?? 0m) -
                 (dbContext.FinancialOperations.Where(operation => operation.GarageId == garage.Id && !operation.IsCanceled && operation.OperationKind == FinancialOperationKinds.Income).Sum(operation => (decimal?)operation.Amount) ?? 0m) +
                 (dbContext.AccrualPaymentAllocations.Where(allocation => allocation.IsActive && allocation.Accrual.GarageId == garage.Id && !allocation.Accrual.IsCanceled && !allocation.FinancialOperation.IsCanceled).Sum(allocation => (decimal?)allocation.Amount) ?? 0m) -
                 (dbContext.AccrualPaymentAllocations.Where(allocation => allocation.IsActive && allocation.Accrual.GarageId == garage.Id && !allocation.Accrual.IsCanceled && !allocation.Accrual.DueDateNeedsReview && allocation.Accrual.OverdueFromDate <= today && !allocation.FinancialOperation.IsCanceled).Sum(allocation => (decimal?)allocation.Amount) ?? 0m),
                 0m)),
             ("overdueDebt", false) => query.OrderBy(garage => Math.Max(
-                garage.StartingBalance +
+                (garage.StartingOverdueDebt ?? (garage.StartingBalance > 0m ? garage.StartingBalance : 0m)) +
                 (dbContext.Accruals.Where(accrual => accrual.GarageId == garage.Id && !accrual.IsCanceled && !accrual.DueDateNeedsReview && accrual.OverdueFromDate <= today).Sum(accrual => (decimal?)accrual.Amount) ?? 0m) -
                 (dbContext.FinancialOperations.Where(operation => operation.GarageId == garage.Id && !operation.IsCanceled && operation.OperationKind == FinancialOperationKinds.Income).Sum(operation => (decimal?)operation.Amount) ?? 0m) +
                 (dbContext.AccrualPaymentAllocations.Where(allocation => allocation.IsActive && allocation.Accrual.GarageId == garage.Id && !allocation.Accrual.IsCanceled && !allocation.FinancialOperation.IsCanceled).Sum(allocation => (decimal?)allocation.Amount) ?? 0m) -
@@ -418,7 +419,7 @@ public sealed class EfGarageRepository(GarageBalanceDbContext dbContext, IBusine
         var today = Today;
         return query.Where(garage =>
             !garage.IsArchived &&
-            garage.StartingBalance +
+            (garage.StartingOverdueDebt ?? (garage.StartingBalance > 0m ? garage.StartingBalance : 0m)) +
             (dbContext.Accruals.Where(accrual => accrual.GarageId == garage.Id && !accrual.IsCanceled && !accrual.DueDateNeedsReview && accrual.OverdueFromDate <= today).Sum(accrual => (decimal?)accrual.Amount) ?? 0m) -
             (dbContext.FinancialOperations.Where(operation => operation.GarageId == garage.Id && !operation.IsCanceled && operation.OperationKind == FinancialOperationKinds.Income).Sum(operation => (decimal?)operation.Amount) ?? 0m) +
             (dbContext.AccrualPaymentAllocations.Where(allocation => allocation.IsActive && allocation.Accrual.GarageId == garage.Id && !allocation.Accrual.IsCanceled && !allocation.FinancialOperation.IsCanceled).Sum(allocation => (decimal?)allocation.Amount) ?? 0m) -
@@ -453,7 +454,7 @@ public sealed class EfGarageRepository(GarageBalanceDbContext dbContext, IBusine
 
     private static decimal CalculateOverdueDebt(GarageListItemData garage, GarageBalanceTotalsData totals) =>
         Math.Max(
-            garage.StartingBalance + totals.OverdueAccrualTotals.GetValueOrDefault(garage.Id) -
+            (garage.StartingOverdueDebt ?? Math.Max(garage.StartingBalance, 0m)) + totals.OverdueAccrualTotals.GetValueOrDefault(garage.Id) -
             (totals.IncomeTotals.GetValueOrDefault(garage.Id) - totals.AllocatedIncomeTotals.GetValueOrDefault(garage.Id)),
             0m);
 

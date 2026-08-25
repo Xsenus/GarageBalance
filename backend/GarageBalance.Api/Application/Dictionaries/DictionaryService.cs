@@ -262,7 +262,7 @@ public sealed class DictionaryService(
         balance = Math.Round(balance, 2, MidpointRounding.AwayFromZero);
         var unallocatedIncome = totals.IncomeTotals.GetValueOrDefault(garage.Id) -
             totals.AllocatedIncomeTotals.GetValueOrDefault(garage.Id);
-        var overdueDebt = garage.StartingBalance +
+        var overdueDebt = GetStartingOverdueDebt(garage.StartingBalance, garage.StartingOverdueDebt) +
             totals.OverdueAccrualTotals.GetValueOrDefault(garage.Id) -
             unallocatedIncome;
         overdueDebt = Math.Round(Math.Max(overdueDebt, 0m), 2, MidpointRounding.AwayFromZero);
@@ -288,7 +288,7 @@ public sealed class DictionaryService(
                 balance = Math.Round(balance, 2, MidpointRounding.AwayFromZero);
                 var unallocatedIncome = totals.IncomeTotals.GetValueOrDefault(garage.Id) -
                     totals.AllocatedIncomeTotals.GetValueOrDefault(garage.Id);
-                var overdueDebt = garage.StartingBalance +
+                var overdueDebt = GetStartingOverdueDebt(garage.StartingBalance, garage.StartingOverdueDebt) +
                     totals.OverdueAccrualTotals.GetValueOrDefault(garage.Id) -
                     unallocatedIncome;
                 overdueDebt = Math.Round(Math.Max(overdueDebt, 0m), 2, MidpointRounding.AwayFromZero);
@@ -324,12 +324,24 @@ public sealed class DictionaryService(
             return DictionaryResult<GarageDto>.Failure("owner_not_found", "Владелец гаража не найден.");
         }
 
+        var startingBalance = MoneyMath.RoundMoney(request.StartingBalance);
+        var startingOverdueDebt = request.StartingOverdueDebt.HasValue
+            ? MoneyMath.RoundMoney(request.StartingOverdueDebt.Value)
+            : Math.Max(startingBalance, 0m);
+        if (startingOverdueDebt > Math.Max(startingBalance, 0m))
+        {
+            return DictionaryResult<GarageDto>.Failure(
+                "garage_starting_overdue_debt_invalid",
+                "Начальная просроченная задолженность не может превышать положительный стартовый баланс.");
+        }
+
         var garage = new Garage
         {
             Number = number,
             PeopleCount = request.PeopleCount,
             FloorCount = request.FloorCount,
-            StartingBalance = MoneyMath.RoundMoney(request.StartingBalance),
+            StartingBalance = startingBalance,
+            StartingOverdueDebt = startingOverdueDebt,
             OwnerId = request.OwnerId,
             Owner = owner,
             InitialWaterMeterValue = MoneyMath.RoundMeterValue(request.InitialWaterMeterValue),
@@ -366,11 +378,20 @@ public sealed class DictionaryService(
         }
 
         var startingBalance = MoneyMath.RoundMoney(request.StartingBalance);
+        var startingOverdueDebt = request.StartingOverdueDebt.HasValue
+            ? MoneyMath.RoundMoney(request.StartingOverdueDebt.Value)
+            : GetStartingOverdueDebt(garage.StartingBalance, garage.StartingOverdueDebt);
+        if (startingOverdueDebt > Math.Max(startingBalance, 0m))
+        {
+            return DictionaryResult<GarageDto>.Failure(
+                "garage_starting_overdue_debt_invalid",
+                "Начальная просроченная задолженность не может превышать положительный стартовый баланс.");
+        }
         var initialWaterMeterValue = MoneyMath.RoundMeterValue(request.InitialWaterMeterValue);
         var initialElectricityMeterValue = MoneyMath.RoundMeterValue(request.InitialElectricityMeterValue);
         var comment = NormalizeOptional(request.Comment);
         var openingDataLock = await garageRepository.GetOpeningDataLockAsync(garage.Id, cancellationToken);
-        if (garage.StartingBalance != startingBalance && openingDataLock.HasFinancialHistory)
+        if ((garage.StartingBalance != startingBalance || GetStartingOverdueDebt(garage.StartingBalance, garage.StartingOverdueDebt) != startingOverdueDebt) && openingDataLock.HasFinancialHistory)
         {
             return DictionaryResult<GarageDto>.Failure(
                 "garage_starting_balance_locked",
@@ -391,7 +412,7 @@ public sealed class DictionaryService(
                 "Стартовое показание электроэнергии нельзя менять после внесения показаний. Для нового прибора оформите замену счетчика.");
         }
 
-        if (GarageMatches(garage, number, request.PeopleCount, request.FloorCount, request.OwnerId, startingBalance, initialWaterMeterValue, initialElectricityMeterValue, comment))
+        if (GarageMatches(garage, number, request.PeopleCount, request.FloorCount, request.OwnerId, startingBalance, startingOverdueDebt, initialWaterMeterValue, initialElectricityMeterValue, comment))
         {
             return DictionaryResult<GarageDto>.Success(await ToGarageDtoWithBalanceAsync(garage, cancellationToken));
         }
@@ -403,6 +424,7 @@ public sealed class DictionaryService(
             ["floorCount"] = garage.FloorCount,
             ["owner"] = garage.Owner?.FullName,
             ["startingBalance"] = garage.StartingBalance,
+            ["startingOverdueDebt"] = garage.StartingOverdueDebt,
             ["initialWaterMeterValue"] = garage.InitialWaterMeterValue,
             ["initialElectricityMeterValue"] = garage.InitialElectricityMeterValue,
             ["comment"] = garage.Comment
@@ -414,6 +436,7 @@ public sealed class DictionaryService(
             ["floorCount"] = request.FloorCount,
             ["owner"] = owner?.FullName,
             ["startingBalance"] = startingBalance,
+            ["startingOverdueDebt"] = startingOverdueDebt,
             ["initialWaterMeterValue"] = initialWaterMeterValue,
             ["initialElectricityMeterValue"] = initialElectricityMeterValue,
             ["comment"] = comment
@@ -423,6 +446,7 @@ public sealed class DictionaryService(
         garage.PeopleCount = request.PeopleCount;
         garage.FloorCount = request.FloorCount;
         garage.StartingBalance = startingBalance;
+        garage.StartingOverdueDebt = startingOverdueDebt;
         garage.OwnerId = request.OwnerId;
         garage.Owner = owner;
         garage.InitialWaterMeterValue = initialWaterMeterValue;
@@ -507,7 +531,11 @@ public sealed class DictionaryService(
             garage.StartingBalance,
             request,
             actorUserId,
-            amount => garage.StartingBalance = amount,
+            amount =>
+            {
+                garage.StartingBalance = amount;
+                garage.StartingOverdueDebt = Math.Max(amount, 0m);
+            },
             () => garage.UpdatedAtUtc = DateTimeOffset.UtcNow,
             cancellationToken);
     }
@@ -1114,6 +1142,9 @@ public sealed class DictionaryService(
         var departments = await staffDepartmentRepository.GetListAsync(includeArchived, NormalizeListLimit(limit), cancellationToken);
         return departments.Select(ToStaffDepartmentDto).ToList();
     }
+
+    public Task<IReadOnlyList<StaffDepartmentSalaryFundDto>> GetStaffDepartmentSalaryFundAsync(CancellationToken cancellationToken) =>
+        staffDepartmentRepository.GetSalaryFundAsync(cancellationToken);
 
     public async Task<DictionaryResult<StaffDepartmentDto>> CreateStaffDepartmentAsync(UpsertStaffDepartmentRequest request, Guid? actorUserId, CancellationToken cancellationToken)
     {
@@ -4474,13 +4505,14 @@ public sealed class DictionaryService(
             StringEquals(owner.MeterNotes, meterNotes);
     }
 
-    private static bool GarageMatches(Garage garage, string number, int peopleCount, int floorCount, Guid? ownerId, decimal startingBalance, decimal? initialWaterMeterValue, decimal? initialElectricityMeterValue, string? comment)
+    private static bool GarageMatches(Garage garage, string number, int peopleCount, int floorCount, Guid? ownerId, decimal startingBalance, decimal startingOverdueDebt, decimal? initialWaterMeterValue, decimal? initialElectricityMeterValue, string? comment)
     {
         return StringEquals(garage.Number, number) &&
             garage.PeopleCount == peopleCount &&
             garage.FloorCount == floorCount &&
             garage.OwnerId == ownerId &&
             garage.StartingBalance == startingBalance &&
+            GetStartingOverdueDebt(garage.StartingBalance, garage.StartingOverdueDebt) == startingOverdueDebt &&
             garage.InitialWaterMeterValue == initialWaterMeterValue &&
             garage.InitialElectricityMeterValue == initialElectricityMeterValue &&
             StringEquals(garage.Comment, comment);
@@ -4668,9 +4700,10 @@ public sealed class DictionaryService(
             garage.Comment,
             garage.IsArchived,
             calculatedBalance,
-            overdueDebt ?? Math.Max(calculatedBalance, 0m),
+            overdueDebt ?? GetStartingOverdueDebt(garage.StartingBalance, garage.StartingOverdueDebt),
             garage.Owner?.Phone,
-            garage.Version);
+            garage.Version,
+            GetStartingOverdueDebt(garage.StartingBalance, garage.StartingOverdueDebt));
     }
 
     private static DictionaryResult<T> InvalidPhone<T>() =>
@@ -4692,7 +4725,11 @@ public sealed class DictionaryService(
             balance,
             overdueDebt,
             garage.OwnerPhone,
-            garage.Version);
+            garage.Version,
+            GetStartingOverdueDebt(garage.StartingBalance, garage.StartingOverdueDebt));
+
+    private static decimal GetStartingOverdueDebt(decimal startingBalance, decimal? startingOverdueDebt) =>
+        startingOverdueDebt ?? Math.Max(startingBalance, 0m);
 
     private static SupplierDto ToSupplierDto(Supplier supplier, decimal? debt = null)
     {

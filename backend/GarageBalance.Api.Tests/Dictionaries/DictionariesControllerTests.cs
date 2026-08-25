@@ -1467,6 +1467,7 @@ public sealed class DictionariesControllerTests
         await controller.GetSupplierContacts(supplierId, "петр", 11, true, CancellationToken.None);
         var contactPageResult = await controller.GetSupplierContactsPage(supplierId, "петр", 20, 10, "status", "desc", true, CancellationToken.None);
         await controller.GetStaffDepartments(12, true, CancellationToken.None);
+        var salaryFundResult = await controller.GetStaffDepartmentSalaryFund(CancellationToken.None);
         await controller.GetStaffMembers(departmentId, "ольга", 13, true, CancellationToken.None);
         var staffPageResult = await controller.GetStaffMembersPage(departmentId, "ольга", 25, 10, "rate", "desc", true, CancellationToken.None);
         var contactResult = await controller.CreateSupplierContact(new UpsertSupplierContactRequest(supplierId, "Петров", "Директор", "+7", "mail@example.com", "Работает", null), CancellationToken.None);
@@ -1478,6 +1479,7 @@ public sealed class DictionariesControllerTests
         var contactPageOk = Assert.IsType<OkObjectResult>(contactPageResult.Result);
         Assert.IsType<PagedResult<SupplierContactDto>>(contactPageOk.Value);
         Assert.Equal((12, true), service.LastStaffDepartmentListRequest);
+        Assert.Equal(service.StaffDepartmentSalaryFund, Assert.IsType<OkObjectResult>(salaryFundResult.Result).Value);
         Assert.Equal((departmentId, "ольга", 13, true), service.LastStaffMemberListRequest);
         Assert.Equal((departmentId, "ольга", 25, 10, "rate", "desc", true), service.LastStaffMemberPageRequest);
         var staffPageOk = Assert.IsType<OkObjectResult>(staffPageResult.Result);
@@ -1931,6 +1933,8 @@ public sealed class DictionariesControllerTests
         public (Guid? SupplierId, string? Search, int? Limit, bool IncludeArchived) LastSupplierContactListRequest { get; private set; }
         public (Guid? SupplierId, string? Search, int? Offset, int? Limit, string? SortBy, string? SortDirection, bool IncludeArchived) LastSupplierContactPageRequest { get; private set; }
         public (int? Limit, bool IncludeArchived) LastStaffDepartmentListRequest { get; private set; }
+        public IReadOnlyList<StaffDepartmentSalaryFundDto> StaffDepartmentSalaryFund { get; init; } =
+            [new(Guid.Parse("10000000-0000-4000-8000-000000000001"), "Бухгалтерия", 2, 1500m)];
         public (Guid? DepartmentId, string? Search, int? Limit, bool IncludeArchived) LastStaffMemberListRequest { get; private set; }
         public (Guid? DepartmentId, string? Search, int? Offset, int? Limit, string? SortBy, string? SortDirection, bool IncludeArchived) LastStaffMemberPageRequest { get; private set; }
         public (string? Search, int? Limit, bool IncludeArchived) LastIncomeTypeListRequest { get; private set; }
@@ -2226,6 +2230,9 @@ public sealed class DictionariesControllerTests
             LastStaffDepartmentListRequest = (limit, includeArchived);
             return Task.FromResult<IReadOnlyList<StaffDepartmentDto>>([]);
         }
+
+        public Task<IReadOnlyList<StaffDepartmentSalaryFundDto>> GetStaffDepartmentSalaryFundAsync(CancellationToken cancellationToken) =>
+            Task.FromResult(StaffDepartmentSalaryFund);
 
         public Task<DictionaryResult<StaffDepartmentDto>> CreateStaffDepartmentAsync(UpsertStaffDepartmentRequest request, Guid? actorUserId, CancellationToken cancellationToken)
         {

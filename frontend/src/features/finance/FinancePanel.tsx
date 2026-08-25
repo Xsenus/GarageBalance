@@ -1542,6 +1542,7 @@ export function FinancePanel({
               peopleCount: 0,
               floorCount: 0,
               startingBalance: 0,
+              startingOverdueDebt: 0,
               balance: 0,
               overdueDebt: 0,
               initialWaterMeterValue: null,

@@ -3,7 +3,7 @@ import type { CSSProperties, FormEvent, KeyboardEvent, MouseEvent, PointerEvent 
 import { CalendarPlus, CircleCheck, FileSpreadsheet, FileText, Pencil, PowerOff, RotateCcw, Save, Trash2, X } from 'lucide-react'
 import type { AuthResponse } from '../../services/authApi'
 import { DictionaryApiError } from '../../services/dictionariesApi'
-import type { AccountingTypeDto, ChargeServiceSettingDto, ChargeServiceTariffPeriodDto, CreateChargeServiceWithTariffRequest, DictionaryClient, FeeCampaignDto, GarageDto, IrregularPaymentDto, MeasurementUnitDto, TariffDto, UpdateChargeServiceWithTariffRequest, UpsertChargeServiceSettingRequest, UpsertChargeServiceTariffScheduleRequest, UpsertFeeCampaignRequest, UpsertIrregularPaymentRequest, UpsertTariffRequest } from '../../services/dictionariesApi'
+import type { AccountingTypeDto, ChargeServiceSettingDto, ChargeServiceTariffPeriodDto, CreateChargeServiceWithTariffRequest, DictionaryClient, FeeCampaignDto, GarageDto, IrregularPaymentDto, MeasurementUnitDto, StaffDepartmentSalaryFundDto, TariffDto, UpdateChargeServiceWithTariffRequest, UpsertChargeServiceSettingRequest, UpsertChargeServiceTariffScheduleRequest, UpsertFeeCampaignRequest, UpsertIrregularPaymentRequest, UpsertTariffRequest } from '../../services/dictionariesApi'
 import { areFeeCampaignAmountsEqual, calculateFeeCampaignContributionAmount, calculateFeeCampaignLastContribution, calculateFeeCampaignTargetAmount } from './feeCampaignAmounts'
 import type { FundOptionDto, FundsClient } from '../../services/fundsApi'
 import type { ApplicationSettingsClient } from '../../services/settingsApi'
@@ -46,8 +46,8 @@ type ContractorTariffRow = {
   monthlyDue?: boolean
   unit?: string
   threshold?: string
-  byMeter: boolean
-  tiered: boolean
+  byMeter?: boolean
+  tiered?: boolean
   group?: string
   category: string
   calculationBase?: string
@@ -81,10 +81,9 @@ const contractorTariffRows: ContractorTariffRow[] = [
   { id: 'lighting-due-date', group: 'Наружное освещение', category: 'Наружное освещение', title: 'Оплата за год до', dateDay: '31', dateMonth: 'дек', byMeter: false, tiered: false },
   { id: 'lighting-start-date', category: 'Наружное освещение', title: 'Учитывать платеж с', dateDay: '01', dateMonth: 'янв', byMeter: false, tiered: false },
   { id: 'lighting-overdue-days', category: 'Наружное освещение', title: 'Перенос долга в просроченный', amount: '0', unit: 'дн.', byMeter: false, tiered: false },
-  { id: 'salary-electricians', group: 'Зарплатный фонд', category: 'Зарплатный фонд', title: 'Электрики', amount: '', unit: 'руб.', byMeter: false, tiered: false, calculationBase: 'fixed' },
-  { id: 'salary-accounting', category: 'Зарплатный фонд', title: 'Бухгалтерия', amount: '', unit: 'руб.', byMeter: false, tiered: false, calculationBase: 'fixed' },
-  { id: 'salary-management', category: 'Зарплатный фонд', title: 'Руководство', amount: '', unit: 'руб.', byMeter: false, tiered: false, calculationBase: 'fixed' },
 ]
+
+const salaryFundCategory = 'Зарплатный фонд'
 
 type ContractorOneTimeRow = {
   id: string
@@ -368,7 +367,18 @@ function expandTieredServiceRows(rows: ContractorTariffRow[], tariffs: TariffDto
   }))
 }
 
-function createTariffRowsFromBackend(tariffs: TariffDto[], settings: ChargeServiceSettingDto[]) {
+function createSalaryFundRows(items: StaffDepartmentSalaryFundDto[]): ContractorTariffRow[] {
+  return items.map((item, index) => ({
+    id: item.departmentId,
+    group: index === 0 ? salaryFundCategory : undefined,
+    category: salaryFundCategory,
+    title: item.departmentName,
+    amount: formatPrototypeAmount(item.totalRate),
+    unit: 'руб.',
+  }))
+}
+
+function createTariffRowsFromBackend(tariffs: TariffDto[], settings: ChargeServiceSettingDto[], salaryFund: StaffDepartmentSalaryFundDto[] = []) {
   const customSettings = settings
     .filter((setting) => !contractorTariffRows.some((row) => isPrototypeServiceMatch(row, setting)))
   const customServiceTariffIds = new Set(customSettings
@@ -417,15 +427,15 @@ function createTariffRowsFromBackend(tariffs: TariffDto[], settings: ChargeServi
       && Boolean(row.calculationBase && findTariffForPrototypeRow(prototypeTariffs, row))
     ))
     .map((row) => row.category))
-  const rowsBackedByTariffs = contractorTariffRows.filter((row) => (
-    backedCategories.has(row.category)
-    && (row.category !== 'Зарплатный фонд' || Boolean(findTariffForPrototypeRow(prototypeTariffs, row)))
-  ))
-  return expandTieredServiceRows(mergeChargeServicesIntoPrototypeRows(
+  const rowsBackedByTariffs = contractorTariffRows.filter((row) => backedCategories.has(row.category))
+  return [
+    ...expandTieredServiceRows(mergeChargeServicesIntoPrototypeRows(
     mergeTariffsIntoPrototypeRows(rowsBackedByTariffs, prototypeTariffs),
     settings.filter((setting) => setting.isRegular),
     tariffs,
-  ), tariffs)
+    ), tariffs),
+    ...createSalaryFundRows(salaryFund),
+  ]
 }
 
 function getContractorTariffMonthNumber(monthValue?: string | null) {
@@ -766,7 +776,6 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
   const [chargeServiceArchiveTarget, setChargeServiceArchiveTarget] = useState<ChargeServiceSettingDto | null>(null)
   const [chargeServiceArchiveReason, setChargeServiceArchiveReason] = useState('')
   const [chargeServiceRestoreTarget, setChargeServiceRestoreTarget] = useState<ChargeServiceSettingDto | null>(null)
-  const [standaloneTariffArchiveTarget, setStandaloneTariffArchiveTarget] = useState<ContractorTariffRow | null>(null)
   const [thresholdDeleteTarget, setThresholdDeleteTarget] = useState<ContractorTariffRow | null>(null)
   const [thresholdDeleteReason, setThresholdDeleteReason] = useState('')
   const [thresholdCreateOpen, setThresholdCreateOpen] = useState(false)
@@ -810,12 +819,13 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
       setTariffPersistenceError(null)
       setTariffsLoading(true)
       try {
-        const [loadedTariffs, loadedChargeServices] = await Promise.all([
+        const [loadedTariffs, loadedChargeServices, loadedSalaryFund] = await Promise.all([
           dictionaryClient.getTariffs(auth.accessToken, undefined, dictionaryScreenRequestLimit),
           dictionaryClient.getChargeServiceSettings(auth.accessToken, undefined, dictionaryScreenRequestLimit, true),
+          dictionaryClient.getSalaryFund(auth.accessToken),
         ])
         if (!ignore) {
-          const mergedRows = createTariffRowsFromBackend(loadedTariffs, loadedChargeServices)
+          const mergedRows = createTariffRowsFromBackend(loadedTariffs, loadedChargeServices, loadedSalaryFund)
           setBackendTariffs(loadedTariffs)
           setBackendChargeServices(loadedChargeServices)
           setTariffRows(mergedRows)
@@ -990,7 +1000,6 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
 
   function closeChargeServiceArchiveDialog() {
     setChargeServiceArchiveTarget(null)
-    setStandaloneTariffArchiveTarget(null)
     setChargeServiceArchiveReason('')
   }
 
@@ -1107,7 +1116,7 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
   useRestoreFocusOnClose(Boolean(feeCampaignRestoreTarget))
   const feeCampaignRestoreDialogRef = useFocusTrap<HTMLElement>(Boolean(feeCampaignRestoreTarget))
   const feeCampaignRestoreCancelRef = useFocusOnOpen<HTMLButtonElement>(Boolean(feeCampaignRestoreTarget))
-  const tariffArchiveDialogOpen = Boolean(chargeServiceArchiveTarget || standaloneTariffArchiveTarget)
+  const tariffArchiveDialogOpen = Boolean(chargeServiceArchiveTarget)
   useRestoreFocusOnClose(tariffArchiveDialogOpen)
   const chargeServiceArchiveDialogRef = useFocusTrap<HTMLElement>(tariffArchiveDialogOpen)
   const chargeServiceArchiveCancelRef = useFocusOnOpen<HTMLButtonElement>(tariffArchiveDialogOpen)
@@ -1245,7 +1254,10 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
   }
 
   function applyTariffRows(nextTariffs: TariffDto[], nextSettings = backendChargeServices) {
-    const nextRows = createTariffRowsFromBackend(nextTariffs, nextSettings)
+    const nextRows = [
+      ...createTariffRowsFromBackend(nextTariffs, nextSettings),
+      ...tariffRows.filter((row) => row.category === salaryFundCategory),
+    ]
     setBackendTariffs(nextTariffs)
     setBackendChargeServices(nextSettings)
     setTariffRows(nextRows)
@@ -1679,8 +1691,8 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
     }
 
     const previousRows = tariffRows
-    const nextMetered = field === 'byMeter' ? nextValue : (nextValue ? true : row.byMeter)
-    const nextTiered = field === 'tiered' ? nextValue : (nextMetered ? row.tiered : false)
+    const nextMetered = field === 'byMeter' ? nextValue : (nextValue ? true : row.byMeter ?? false)
+    const nextTiered = field === 'tiered' ? nextValue : (nextMetered ? row.tiered ?? false : false)
     if (row.backendServiceSettingId) {
       await persistServiceTariffMode(row, nextMetered, nextTiered)
       return
@@ -2133,27 +2145,6 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
     }
   }
 
-  async function archiveStandaloneTariff() {
-    const backendTariffId = standaloneTariffArchiveTarget?.backendTariffId
-    if (!standaloneTariffArchiveTarget || !backendTariffId || !chargeServiceArchiveReason.trim()) {
-      return
-    }
-
-    setTariffSavingRowId(standaloneTariffArchiveTarget.id)
-    setTariffPersistenceError(null)
-    try {
-      await dictionaryClient.archiveTariff(auth.accessToken, backendTariffId, chargeServiceArchiveReason.trim())
-      const nextTariffs = backendTariffs.filter((tariff) => tariff.id !== backendTariffId)
-      applyTariffRows(nextTariffs)
-      setTariffPageNumber(1)
-      closeChargeServiceArchiveDialog()
-    } catch (caught) {
-      setTariffPersistenceError(caught instanceof Error ? caught.message : 'Не удалось убрать тариф из зарплатного фонда.')
-    } finally {
-      setTariffSavingRowId(null)
-    }
-  }
-
   async function commitElectricityThresholdBound(row: ContractorTariffRow) {
     if (row.electricityUpperBound == null) return
 
@@ -2406,14 +2397,15 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
                 ? backendChargeServices.find((setting) => setting.id === row.backendServiceSettingId) ?? null
                 : null
               const isServiceSaving = Boolean(serviceSetting && tariffSavingRowId === `charge-service-${serviceSetting.id}`)
-              const isRowDisabled = row.isDeleted || tariffSavingRowId === row.id || isServiceSaving
+              const isSalaryFundSummary = row.category === salaryFundCategory
+              const isRowDisabled = isSalaryFundSummary || row.isDeleted || tariffSavingRowId === row.id || isServiceSaving
               const thresholdRowsForTariff = getElectricityThresholdRows(tariffRows, row)
               const canDeleteThreshold = Boolean(row.threshold && thresholdRowsForTariff.length > 2)
               const isLastThresholdRow = thresholdRowsForTariff.at(-1)?.id === row.id
               const showsElectricityRange = Boolean(row.threshold && row.backendTariffId && tieredTariffIds.has(row.backendTariffId))
               const electricityLowerBound = showsElectricityRange ? getElectricityTierLowerBound(tariffRows, row.id) : 0
-              const showsServiceCalculationFlags = row.serviceSettingKind === 'main' || Boolean(row.group)
-              const showsOverdueGracePeriod = row.serviceSettingKind === 'main' || Boolean(row.group && row.calculationBase)
+              const showsServiceCalculationFlags = !isSalaryFundSummary && (row.serviceSettingKind === 'main' || Boolean(row.group))
+              const showsOverdueGracePeriod = !isSalaryFundSummary && (row.serviceSettingKind === 'main' || Boolean(row.group && row.calculationBase))
               const overdueRow = showsOverdueGracePeriod
                 ? tariffRows.find((candidate) => (
                     candidate.serviceSettingKind === 'overdue-days'
@@ -3164,41 +3156,35 @@ export function TariffsAndFeesPrototypePanel({ auth, dictionaryClient, fundsClie
           <section ref={chargeServiceArchiveDialogRef} className="detail-dialog contractors-dialog" role="dialog" aria-modal="true" aria-labelledby="charge-service-archive-title" aria-describedby="charge-service-archive-description" onMouseDown={(event) => event.stopPropagation()}>
             <div className="detail-dialog-header">
               <div>
-                <p className="eyebrow">{standaloneTariffArchiveTarget ? 'Зарплатный фонд' : 'Деактивация'}</p>
-                <h3 id="charge-service-archive-title">{standaloneTariffArchiveTarget ? 'Убрать строку тарифа?' : 'Деактивировать услугу?'}</h3>
-                <p>{standaloneTariffArchiveTarget?.title ?? chargeServiceArchiveTarget?.name}</p>
+                <p className="eyebrow">Деактивация</p>
+                <h3 id="charge-service-archive-title">Деактивировать услугу?</h3>
+                <p>{chargeServiceArchiveTarget?.name}</p>
               </div>
-              <button className="icon-button" type="button" aria-label={standaloneTariffArchiveTarget ? 'Закрыть подтверждение удаления тарифа' : 'Закрыть подтверждение деактивации услуги'} onClick={closeChargeServiceArchiveDialog} disabled={Boolean(tariffSavingRowId)}>
+              <button className="icon-button" type="button" aria-label="Закрыть подтверждение деактивации услуги" onClick={closeChargeServiceArchiveDialog} disabled={Boolean(tariffSavingRowId)}>
                 <X size={18} aria-hidden="true" />
               </button>
             </div>
             <div className="confirmation-text" id="charge-service-archive-description">
-              {standaloneTariffArchiveTarget ? (
-                <p>Строка перейдёт в архив. Начисления и выплаты не изменятся, причина сохранится в истории.</p>
-              ) : (
-                <>
-                  <p>Новые регулярные начисления по услуге больше не будут создаваться.</p>
-                  <p>Уже созданные начисления и связанные платежи не удалятся: задолженность можно будет погашать, а операции останутся в отчётах и истории.</p>
-                  <p>Причина и само действие попадут в историю изменений. После восстановления услуга снова будет участвовать только в будущих начислениях — прошлые периоды автоматически не пересчитаются.</p>
-                </>
-              )}
+              <p>Новые регулярные начисления по услуге больше не будут создаваться.</p>
+              <p>Уже созданные начисления и связанные платежи не удалятся: задолженность можно будет погашать, а операции останутся в отчётах и истории.</p>
+              <p>Причина и само действие попадут в историю изменений. После восстановления услуга снова будет участвовать только в будущих начислениях — прошлые периоды автоматически не пересчитаются.</p>
             </div>
-            <label className="field-label" htmlFor="charge-service-archive-reason">{standaloneTariffArchiveTarget ? 'Причина' : 'Причина деактивации'}</label>
+            <label className="field-label" htmlFor="charge-service-archive-reason">Причина деактивации</label>
             <textarea
               id="charge-service-archive-reason"
-              aria-label={standaloneTariffArchiveTarget ? 'Причина удаления тарифа' : 'Причина деактивации услуги'}
+              aria-label="Причина деактивации услуги"
               maxLength={1000}
               value={chargeServiceArchiveReason}
               onChange={(event) => setChargeServiceArchiveReason(event.target.value)}
-              placeholder={standaloneTariffArchiveTarget ? 'Например: должность больше не используется' : 'Например: услуга больше не используется'}
+              placeholder="Например: услуга больше не используется"
               disabled={Boolean(tariffSavingRowId)}
               required
             />
             <div className="detail-dialog-actions contractors-dialog-actions">
               <button ref={chargeServiceArchiveCancelRef} className="ghost-button" type="button" onClick={closeChargeServiceArchiveDialog} disabled={Boolean(tariffSavingRowId)}>Отмена</button>
-              <button className="secondary-button danger-button" type="button" onClick={standaloneTariffArchiveTarget ? archiveStandaloneTariff : archiveChargeServiceSetting} disabled={!chargeServiceArchiveReason.trim() || Boolean(tariffSavingRowId)}>
-                {standaloneTariffArchiveTarget ? <Trash2 size={16} aria-hidden="true" /> : <PowerOff size={16} aria-hidden="true" />}
-                <span>{standaloneTariffArchiveTarget ? 'Убрать строку' : 'Деактивировать'}</span>
+              <button className="secondary-button danger-button" type="button" onClick={archiveChargeServiceSetting} disabled={!chargeServiceArchiveReason.trim() || Boolean(tariffSavingRowId)}>
+                <PowerOff size={16} aria-hidden="true" />
+                <span>Деактивировать</span>
               </button>
             </div>
           </section>

@@ -189,6 +189,11 @@ export function getGarageValidationErrors(form: UpsertGarageRequest) {
     errors.push('Укажите корректный стартовый баланс гаража.')
   }
 
+  const startingOverdueDebt = form.startingOverdueDebt ?? 0
+  if (!Number.isFinite(startingOverdueDebt) || startingOverdueDebt < 0 || startingOverdueDebt > Math.max(form.startingBalance, 0)) {
+    errors.push('Просрочка недопустима')
+  }
+
   if (form.initialWaterMeterValue != null && (!Number.isFinite(form.initialWaterMeterValue) || form.initialWaterMeterValue < 0)) {
     errors.push('Стартовый счетчик воды должен быть 0 или больше.')
   }

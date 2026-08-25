@@ -37,6 +37,7 @@ public sealed record GarageListItemData(
     string? OwnerName,
     string? OwnerPhone,
     decimal StartingBalance,
+    decimal? StartingOverdueDebt,
     decimal? InitialWaterMeterValue,
     decimal? InitialElectricityMeterValue,
     string? Comment,

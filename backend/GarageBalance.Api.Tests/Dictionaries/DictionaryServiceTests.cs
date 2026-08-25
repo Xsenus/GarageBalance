@@ -1434,6 +1434,29 @@ public sealed class DictionaryServiceTests
     }
 
     [Fact]
+    public async Task CreateGarageAsync_StoresDistinctStartingOverdueDebtAndRejectsAmountAboveBalance()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = DictionaryServiceTestFactory.Create(database.Context);
+
+        var created = await service.CreateGarageAsync(
+            new UpsertGarageRequest("OPEN-1", 1, 1, null, 1000m, null, null, null, StartingOverdueDebt: 300.005m),
+            null,
+            CancellationToken.None);
+        var invalid = await service.CreateGarageAsync(
+            new UpsertGarageRequest("OPEN-2", 1, 1, null, 200m, null, null, null, StartingOverdueDebt: 300m),
+            null,
+            CancellationToken.None);
+
+        Assert.True(created.Succeeded);
+        Assert.Equal(300.01m, created.Value!.StartingOverdueDebt);
+        Assert.Equal(300.01m, created.Value.OverdueDebt);
+        Assert.Equal(300.01m, (await database.Context.Garages.FindAsync(created.Value.Id))!.StartingOverdueDebt);
+        Assert.False(invalid.Succeeded);
+        Assert.Equal("garage_starting_overdue_debt_invalid", invalid.ErrorCode);
+    }
+
+    [Fact]
     public async Task CreateSupplierAsync_RequiresExpenseFundForChargeService()
     {
         await using var database = await TestDatabase.CreateAsync();
@@ -2670,6 +2693,28 @@ public sealed class DictionaryServiceTests
             Assert.False(string.IsNullOrWhiteSpace(tier.Name));
         });
         Assert.Equal(3, tariff.ElectricityTiers!.Select(tier => tier.Id).Distinct().Count());
+    }
+
+    [Fact]
+    public async Task GetStaffDepartmentSalaryFundAsync_GroupsOnlyActiveStaffRatesByActiveDepartment()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var service = DictionaryServiceTestFactory.Create(database.Context);
+        var accounting = await service.CreateStaffDepartmentAsync(new UpsertStaffDepartmentRequest("Бухгалтерия"), null, CancellationToken.None);
+        var security = await service.CreateStaffDepartmentAsync(new UpsertStaffDepartmentRequest("Охрана"), null, CancellationToken.None);
+        await service.CreateStaffMemberAsync(new UpsertStaffMemberRequest("Петрова Ольга", accounting.Value!.Id, 40000m), null, CancellationToken.None);
+        await service.CreateStaffMemberAsync(new UpsertStaffMemberRequest("Сидоров Иван", accounting.Value.Id, 10000m), null, CancellationToken.None);
+        var archivedMember = await service.CreateStaffMemberAsync(new UpsertStaffMemberRequest("Архивный сотрудник", security.Value!.Id, 90000m), null, CancellationToken.None);
+        await service.ArchiveStaffMemberAsync(archivedMember.Value!.Id, "Сотрудник уволен", null, CancellationToken.None);
+
+        var result = await service.GetStaffDepartmentSalaryFundAsync(CancellationToken.None);
+
+        var accountingRow = Assert.Single(result, row => row.DepartmentId == accounting.Value.Id);
+        Assert.Equal(2, accountingRow.StaffCount);
+        Assert.Equal(50000m, accountingRow.TotalRate);
+        var securityRow = Assert.Single(result, row => row.DepartmentId == security.Value.Id);
+        Assert.Equal(0, securityRow.StaffCount);
+        Assert.Equal(0m, securityRow.TotalRate);
     }
 
     [Fact]

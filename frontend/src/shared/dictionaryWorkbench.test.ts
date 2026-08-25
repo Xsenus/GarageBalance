@@ -70,6 +70,7 @@ describe('dictionary workbench metadata', () => {
       floorCount: 1,
       ownerId: '',
       startingBalance: 0,
+      startingOverdueDebt: 0,
       initialWaterMeterValue: '',
       initialElectricityMeterValue: '',
       comment: '',

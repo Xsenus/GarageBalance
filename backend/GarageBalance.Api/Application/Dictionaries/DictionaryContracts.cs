@@ -44,7 +44,8 @@ public sealed record GarageDto(
     decimal Balance = 0,
     decimal OverdueDebt = 0,
     string? OwnerPhone = null,
-    Guid Version = default);
+    Guid Version = default,
+    decimal StartingOverdueDebt = 0);
 
 public sealed record UpsertGarageRequest(
     [Required, MaxLength(80)] string Number,
@@ -55,7 +56,8 @@ public sealed record UpsertGarageRequest(
     [Range(0, 999999999)] decimal? InitialWaterMeterValue,
     [Range(0, 999999999)] decimal? InitialElectricityMeterValue,
     [MaxLength(1000)] string? Comment,
-    Guid? Version = null);
+    Guid? Version = null,
+    [Range(0, 999999999)] decimal? StartingOverdueDebt = null);
 
 public sealed record SupplierGroupDto(Guid Id, string Name, bool IsSystem, bool IsArchived);
 
@@ -137,6 +139,12 @@ public sealed record UpsertSupplierContactRequest(
     [MaxLength(1000)] string? Comment);
 
 public sealed record StaffDepartmentDto(Guid Id, string Name, bool IsArchived);
+
+public sealed record StaffDepartmentSalaryFundDto(
+    Guid DepartmentId,
+    string DepartmentName,
+    int StaffCount,
+    decimal TotalRate);
 
 public sealed record UpsertStaffDepartmentRequest([Required, MaxLength(200)] string Name);
 

@@ -106,6 +106,7 @@ type ContractorGarageRow = {
   phone: string
   address: string
   startingBalance?: string
+  startingOverdueDebt?: string
   balance: string
   overdueDebt: string
   initialWater: string
@@ -519,6 +520,7 @@ function createGarageRowFromDto(garage: GarageDto, owners: OwnerDto[]): Contract
     phone: owner?.phone ?? '',
     address: owner?.address ?? '',
     startingBalance: formatPrototypeMoney(garage.startingBalance),
+    startingOverdueDebt: formatPrototypeMoney(garage.startingOverdueDebt),
     balance: formatPrototypeMoney(balance),
     overdueDebt: overdueDebt > 0 ? `${formatMoney(overdueDebt)} руб.` : '',
     initialWater: formatPrototypeNumber(garage.initialWaterMeterValue),
@@ -536,6 +538,7 @@ function createGarageRequestFromRow(row: ContractorGarageRow, ownerId: string | 
     floorCount: parsePrototypeInteger(row.floorCount, 0),
     ownerId,
     startingBalance: parsePrototypeMoney(row.startingBalance ?? row.balance),
+    startingOverdueDebt: parsePrototypeMoney(row.startingOverdueDebt ?? ''),
     initialWaterMeterValue: parsePrototypeNullableNumber(row.initialWater),
     initialElectricityMeterValue: parsePrototypeNullableNumber(row.initialElectricity),
     comment: row.comment.trim(),
@@ -2998,6 +3001,7 @@ function createEmptyGaragePrototype(): ContractorGarageRow {
     phone: '',
     address: '',
     startingBalance: '',
+    startingOverdueDebt: '',
     balance: '',
     overdueDebt: '',
     initialWater: '',
@@ -3449,8 +3453,21 @@ function GaragePrototypeDialog({ accessToken, canAdjustOpeningData, integrationC
                 <FormField label="Этажи"><input aria-label="Этажи гаража" value={form.floorCount} onChange={(event) => setForm({ ...form, floorCount: event.target.value })} /></FormField>
               </div>
               <div className="contractors-garage-form-column contractors-garage-form-column--financial" role="group" aria-label="Финансовые показатели гаража">
-                <FormField label="Баланс"><input aria-label="Баланс гаража" value={form.balance ? formatStaffRate(form.balance) : '0.00'} readOnly /></FormField>
-                <FormField label="Просроченная задолженность"><input aria-label="Просроченная задолженность гаража" value={form.overdueDebt || 'Нет'} readOnly /></FormField>
+                {!item ? (
+                  <>
+                    <FormField label="Начальный баланс">
+                      <MoneyTextInput aria-label="Начальный баланс гаража" value={form.startingBalance ?? ''} onValueChange={(startingBalance) => setForm({ ...form, startingBalance })} />
+                    </FormField>
+                    <FormField label="Начальная просрочка">
+                      <MoneyTextInput aria-label="Начальная просрочка" value={form.startingOverdueDebt ?? ''} onValueChange={(startingOverdueDebt) => setForm({ ...form, startingOverdueDebt })} />
+                    </FormField>
+                  </>
+                ) : (
+                  <>
+                    <FormField label="Баланс"><input aria-label="Баланс гаража" value={form.balance ? formatStaffRate(form.balance) : '0.00'} readOnly /></FormField>
+                    <FormField label="Просроченная задолженность"><input aria-label="Просроченная задолженность гаража" value={form.overdueDebt || 'Нет'} readOnly /></FormField>
+                  </>
+                )}
                 <FormField label="Старт. зн. сч. за воду"><input aria-label="Стартовое значение счетчика воды" value={form.initialWater} onChange={(event) => setForm({ ...form, initialWater: event.target.value })} /></FormField>
                 <FormField label="Старт. зн. сч. за эл-во"><input aria-label="Стартовое значение счетчика электричества" value={form.initialElectricity} onChange={(event) => setForm({ ...form, initialElectricity: event.target.value })} /></FormField>
               </div>
@@ -3740,14 +3757,14 @@ function SupplierPrototypeDialog({ accessToken, canAdjustOpeningData, funds, int
                 </div>
                 <SuggestionStatus id="supplier-party-suggestions-status" message={partySuggestionStatus} />
               </FormField>
-              <FormField label="Стартовый баланс">
+              <FormField label={item ? 'Стартовый баланс' : 'Начальная задолженность'}>
                 <MoneyTextInput
-                  aria-label="Стартовый баланс поставщика"
+                  aria-label="Начальная задолженность"
                   value={form.startingBalance}
                   onValueChange={(startingBalance) => setForm({ ...form, startingBalance })}
                 />
               </FormField>
-              <FormField label="Задолженность"><input aria-label="Задолженность поставщика" value={form.debt && form.debt !== 'Нет' ? formatStaffRate(form.debt) : 'Нет'} readOnly /></FormField>
+              {item ? <FormField label="Задолженность"><input aria-label="Задолженность поставщика" value={form.debt && form.debt !== 'Нет' ? formatStaffRate(form.debt) : 'Нет'} readOnly /></FormField> : null}
               <DadataAddressField accessToken={accessToken} inputLabel="Юридический адрес поставщика" integrationClient={integrationClient} label="Юр. адрес" listboxLabel="Адреса DaData" suggestionsId="supplier-address-suggestions" value={form.legalAddress} onChange={(legalAddress) => setForm((currentForm) => ({ ...currentForm, legalAddress }))} />
             </div>
             <div className="contractors-supplier-contact-summary-grid" aria-describedby="supplier-primary-contact-hint">

@@ -41,12 +41,13 @@ describe('dictionariesApi response cache', () => {
       dictionariesApi.getMeasurementUnitsPage('token'),
       dictionariesApi.getIrregularPayments('token'),
       dictionariesApi.getFeeCampaigns('token'),
+      dictionariesApi.getSalaryFund('token'),
     ])
 
     await Promise.all([loadTariffReferences(), loadTariffReferences()])
     await loadTariffReferences()
 
-    expect(fetchMock).toHaveBeenCalledTimes(7)
+    expect(fetchMock).toHaveBeenCalledTimes(8)
     expect(fetchMock.mock.calls.map(([path]) => path)).toEqual(expect.arrayContaining([
       '/api/dictionaries/tariffs?limit=100',
       '/api/dictionaries/charge-services?limit=100',
@@ -55,6 +56,7 @@ describe('dictionariesApi response cache', () => {
       '/api/dictionaries/measurement-units/page?offset=0&limit=100',
       '/api/dictionaries/irregular-payments?limit=100',
       '/api/dictionaries/fee-campaigns?limit=100',
+      '/api/dictionaries/staff-departments/salary-fund',
     ]))
   })
 
@@ -90,9 +92,9 @@ describe('dictionariesApi response cache', () => {
     }))
     vi.stubGlobal('fetch', fetchMock)
 
-    await dictionariesApi.getTariffsPage('token', undefined, 0, 25)
+    await dictionariesApi.getTariffs('token', undefined, 25)
 
-    expect(fetchMock).toHaveBeenCalledWith('/api/dictionaries/tariffs/page?offset=0&limit=25', expect.any(Object))
+    expect(fetchMock).toHaveBeenCalledWith('/api/dictionaries/tariffs?limit=25', expect.any(Object))
   })
 
   it('does not share responses between authenticated sessions', async () => {

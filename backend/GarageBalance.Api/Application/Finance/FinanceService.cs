@@ -342,7 +342,7 @@ public sealed class FinanceService(
         var unallocatedIncome = Math.Max(
             totals.IncomeTotals.GetValueOrDefault(garageId) - totals.AllocatedIncomeTotals.GetValueOrDefault(garageId),
             0m);
-        var openingOriginal = Math.Max(garage.StartingBalance, 0m);
+        var openingOriginal = garage.StartingOverdueDebt ?? Math.Max(garage.StartingBalance, 0m);
         var openingOutstanding = Math.Max(openingOriginal - unallocatedIncome, 0m);
         var remainingCredit = Math.Max(unallocatedIncome - openingOriginal, 0m) + Math.Max(-garage.StartingBalance, 0m);
         var rows = new List<GarageOverdueDebtRowDto>(accruals.Count + 1);
