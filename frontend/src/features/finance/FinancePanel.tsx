@@ -5759,7 +5759,7 @@ function NewExpensePrototypeDialog({
 
   return (
     <div className="modal-backdrop" role="presentation" onMouseDown={onClose}>
-      <section ref={dialogRef} className="detail-dialog payments-prototype-dialog" role="dialog" aria-modal="true" aria-labelledby="new-expense-title" onMouseDown={(event) => event.stopPropagation()}>
+      <section ref={dialogRef} className="detail-dialog payments-prototype-dialog--wide" role="dialog" aria-modal="true" aria-labelledby="new-expense-title" onMouseDown={(event) => event.stopPropagation()}>
         <div className="detail-dialog-header">
           <div>
             <h3 id="new-expense-title">Добавить выплату</h3>
@@ -5768,14 +5768,14 @@ function NewExpensePrototypeDialog({
             <X size={18} />
           </button>
         </div>
-        <form className="dictionary-modal-form payments-prototype-modal-form" onSubmit={handleSubmit}>
-          <FormField label="Источник и вид выплаты">
+        <form className="dictionary-modal-form payments-prototype-modal-form expense-form" onSubmit={handleSubmit}>
+          <FormField className="full-payment-field" label="Источник и вид выплаты">
             <SelectControl
               aria-label="Источник выплаты"
               value={expensePaymentSource}
               options={[
-                { value: 'bank', label: 'Банк · обычная выплата поставщику' },
-                { value: 'cash', label: 'Касса · эпизодическая выплата' },
+                { value: 'bank', label: 'Банк · поставщику' },
+                { value: 'cash', label: 'Касса · эпизодическая' },
               ]}
               disabled={saving}
               onChange={(nextSource) => {
@@ -5837,7 +5837,7 @@ function NewExpensePrototypeDialog({
               : ''}
           </p> : null}
           {isCashExpense ? (
-            <FormField label="Тип выплаты">
+            <FormField className="full-payment-field" label="Тип выплаты">
               <SelectControl
                 aria-label="Тип выплаты"
                 value={expensePaymentType}
@@ -5889,7 +5889,7 @@ function NewExpensePrototypeDialog({
           <FormField label="Документ">
             <input aria-label="Документ выплаты" value={documentNumber} onChange={(event) => setDocumentNumber(event.target.value)} />
           </FormField>
-          <FormField label="Комментарий">
+          <FormField className="full-payment-field" label="Комментарий">
             <textarea aria-label="Комментарий к выплате" rows={4} value={comment} onChange={(event) => setComment(event.target.value)} />
           </FormField>
           {error ? <FormError>{error}</FormError> : null}

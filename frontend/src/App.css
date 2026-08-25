@@ -4794,12 +4794,8 @@ h1 {
 }
 
 .payments-prototype-modal-form {
-  display: grid;
   grid-template-columns: minmax(130px, 180px) minmax(0, 1fr);
   gap: 12px 16px;
-  border: 0;
-  padding: 0;
-  box-shadow: none;
 }
 
 .payments-prototype-modal-form > .form-field:not(.full-payment-field) {
@@ -4826,16 +4822,6 @@ h1 {
   min-width: 0;
   margin: 0;
   box-sizing: border-box;
-}
-
-.payments-prototype-modal-form input,
-.payments-prototype-modal-form textarea {
-  width: 100%;
-  min-height: 40px;
-}
-
-.payments-prototype-modal-form textarea {
-  resize: vertical;
 }
 
 .payments-negative-fund-confirmation {
@@ -4867,6 +4853,19 @@ h1 {
 }
 
 .payments-prototype-modal-form .detail-dialog-actions {
+  grid-column: 1 / -1;
+}
+
+.expense-form {
+  grid-template-columns: 1fr 1fr;
+}
+
+.expense-form > .form-field {
+  grid-column: auto;
+  grid-template-columns: 1fr;
+}
+
+.expense-form > :is(.full-payment-field, .form-hint, .form-error) {
   grid-column: 1 / -1;
 }
 

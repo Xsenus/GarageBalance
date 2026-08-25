@@ -277,6 +277,14 @@ describe('responsive layout styles', () => {
     expect(normalizedAppCss).toContain('.payments-prototype-modal-form > .form-hint,\n.payments-prototype-modal-form > .form-error {\n  grid-column: 2;\n  min-width: 0;\n  margin: 0;\n  box-sizing: border-box;')
   })
 
+  it('recomposes the add-expense dialog into compact paired fields', () => {
+    expect(normalizedAppCss).toContain('.payments-prototype-dialog--wide {\n  width: min(720px, 100%);')
+    expect(normalizedAppCss).toContain('.expense-form {\n  grid-template-columns: 1fr 1fr;')
+    expect(normalizedAppCss).toContain('.expense-form > :is(.full-payment-field, .form-hint, .form-error) {')
+    expect(normalizedAppCss).toContain('@media (max-width: 640px) {')
+    expect(normalizedAppCss).toContain('.payments-prototype-modal-form {\n    grid-template-columns: 1fr;')
+  })
+
   it('stacks accrual and bonus form feedback without overlap on narrow screens', () => {
     expect(normalizedAppCss).toContain('.payments-prototype-modal-form > .form-field:not(.full-payment-field) {\n    grid-template-columns: minmax(0, 1fr);\n    display: grid;\n    gap: 6px;')
     expect(normalizedAppCss).toContain('.payments-prototype-modal-form > .form-field:not(.full-payment-field) > .form-field-hint,\n  .payments-prototype-modal-form > .form-hint,\n  .payments-prototype-modal-form > .form-error {\n    grid-column: 1;')
