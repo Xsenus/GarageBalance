@@ -10,6 +10,7 @@ internal static class PostgreSqlLegacyModelCompatibility
         ("ALTER TABLE IF EXISTS tariffs ADD COLUMN IF NOT EXISTS \"Version\" uuid NOT NULL DEFAULT gen_random_uuid()", "ALTER TABLE IF EXISTS tariffs DROP COLUMN IF EXISTS \"Version\""),
         ("ALTER TABLE IF EXISTS suppliers ADD COLUMN IF NOT EXISTS \"Version\" uuid NOT NULL DEFAULT gen_random_uuid()", "ALTER TABLE IF EXISTS suppliers DROP COLUMN IF EXISTS \"Version\""),
         ("ALTER TABLE IF EXISTS garages ADD COLUMN IF NOT EXISTS \"Version\" uuid NOT NULL DEFAULT gen_random_uuid()", "ALTER TABLE IF EXISTS garages DROP COLUMN IF EXISTS \"Version\""),
+        ("ALTER TABLE IF EXISTS garages ADD COLUMN IF NOT EXISTS \"StartingOverdueDebt\" numeric NULL", "ALTER TABLE IF EXISTS garages DROP COLUMN IF EXISTS \"StartingOverdueDebt\""),
         ("ALTER TABLE IF EXISTS funds ADD COLUMN IF NOT EXISTS \"Version\" uuid NOT NULL DEFAULT gen_random_uuid()", "ALTER TABLE IF EXISTS funds DROP COLUMN IF EXISTS \"Version\""),
         ("ALTER TABLE IF EXISTS charge_service_settings ADD COLUMN IF NOT EXISTS \"Version\" uuid NOT NULL DEFAULT gen_random_uuid()", "ALTER TABLE IF EXISTS charge_service_settings DROP COLUMN IF EXISTS \"Version\""),
         ("ALTER TABLE IF EXISTS application_settings ADD COLUMN IF NOT EXISTS \"Version\" uuid NOT NULL DEFAULT gen_random_uuid()", "ALTER TABLE IF EXISTS application_settings DROP COLUMN IF EXISTS \"Version\""),
