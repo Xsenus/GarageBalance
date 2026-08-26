@@ -18,6 +18,7 @@ describe('responsive layout styles', () => {
   }
 
   it('stacks the configurable tariff panels and hides their splitter on narrow screens', () => {
+    expect(normalizedAppCss).toContain('.tariffs-panels-splitter {\n  align-self: stretch;\n  min-height: 48px;')
     expect(normalizedAppCss).toContain('.tariffs-page .contractors-bottom-grid {\n    grid-template-columns: 1fr;\n    gap: 12px;')
     expect(normalizedAppCss).toContain('.tariffs-panels-splitter {\n    display: none;')
   })
@@ -278,7 +279,7 @@ describe('responsive layout styles', () => {
   })
 
   it('recomposes the add-expense dialog into compact paired fields', () => {
-    expect(normalizedAppCss).toContain('.payments-prototype-dialog--wide {\n  width: min(720px, 100%);')
+    expect(normalizedAppCss).toContain('.detail-dialog.payments-prototype-dialog--wide {\n  width: min(720px, 100%);')
     expect(normalizedAppCss).toContain('.expense-form {\n  grid-template-columns: 1fr 1fr;')
     expect(normalizedAppCss).toContain('.expense-form > :is(.full-payment-field, .form-hint, .form-error) {')
     expect(normalizedAppCss).toContain('@media (max-width: 640px) {')

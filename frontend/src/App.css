@@ -3689,6 +3689,8 @@ h1 {
 }
 
 .tariffs-panels-splitter {
+  align-self: stretch;
+  min-height: 48px;
   cursor: col-resize;
   touch-action: none;
   background: linear-gradient(#d0d5dd, #d0d5dd) center / 3px calc(100% - 24px) no-repeat;
@@ -4781,7 +4783,7 @@ h1 {
   width: min(560px, 100%);
 }
 
-.payments-prototype-dialog--wide {
+.detail-dialog.payments-prototype-dialog--wide {
   width: min(720px, 100%);
 }
 
