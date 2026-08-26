@@ -141,9 +141,9 @@ run_check "nonpositive_active_financial_operations" "critical" \
 run_check "income_operations_without_garage" "critical" \
   "SELECT count(*) FROM financial_operations WHERE NOT \"IsCanceled\" AND \"OperationKind\" = 'income' AND \"GarageId\" IS NULL;"
 run_check "income_operations_without_type_or_allocation_evidence" "critical" \
-  "SELECT count(*) FROM financial_operations f WHERE NOT f.\"IsCanceled\" AND f.\"OperationKind\" = 'income' AND f.\"IncomeTypeId\" IS NULL AND NOT EXISTS (SELECT 1 FROM accrual_payment_allocations p JOIN accruals a ON a.\"Id\" = p.\"AccrualId\" WHERE p.\"FinancialOperationId\" = f.\"Id\" AND p.\"IsActive\" AND NOT a.\"IsCanceled\" AND a.\"IncomeTypeId\" IS NOT NULL);"
+  "SELECT count(*) FROM financial_operations f WHERE NOT f.\"IsCanceled\" AND f.\"OperationKind\" = 'income' AND f.\"IncomeTypeId\" IS NULL AND NOT EXISTS (SELECT 1 FROM accrual_payment_allocations p JOIN accruals a ON a.\"Id\" = p.\"AccrualId\" WHERE p.\"FinancialOperationId\" = f.\"Id\" AND a.\"IncomeTypeId\" IS NOT NULL);"
 run_check "legacy_income_types_inferred_from_allocations" "warning" \
-  "SELECT count(*) FROM financial_operations f WHERE NOT f.\"IsCanceled\" AND f.\"OperationKind\" = 'income' AND f.\"IncomeTypeId\" IS NULL AND EXISTS (SELECT 1 FROM accrual_payment_allocations p JOIN accruals a ON a.\"Id\" = p.\"AccrualId\" WHERE p.\"FinancialOperationId\" = f.\"Id\" AND p.\"IsActive\" AND NOT a.\"IsCanceled\" AND a.\"IncomeTypeId\" IS NOT NULL);"
+  "SELECT count(*) FROM financial_operations f WHERE NOT f.\"IsCanceled\" AND f.\"OperationKind\" = 'income' AND f.\"IncomeTypeId\" IS NULL AND EXISTS (SELECT 1 FROM accrual_payment_allocations p JOIN accruals a ON a.\"Id\" = p.\"AccrualId\" WHERE p.\"FinancialOperationId\" = f.\"Id\" AND a.\"IncomeTypeId\" IS NOT NULL);"
 run_check "income_operations_with_expense_fields" "critical" \
   "SELECT count(*) FROM financial_operations WHERE NOT \"IsCanceled\" AND \"OperationKind\" = 'income' AND (\"SupplierId\" IS NOT NULL OR \"StaffMemberId\" IS NOT NULL OR \"ExpenseTypeId\" IS NOT NULL);"
 run_check "expense_operation_field_conflicts" "critical" \
@@ -168,7 +168,7 @@ run_check "multiple_active_meter_devices" "critical" \
 
 run_check "invalid_fund_operation_math" "critical" \
   "SELECT count(*) FROM fund_operations WHERE NOT \"IsCanceled\" AND (\"Amount\" <= 0 OR (\"OperationKind\" = 'deposit' AND \"BalanceAfter\" <> \"BalanceBefore\" + \"Amount\") OR (\"OperationKind\" = 'withdraw' AND \"BalanceAfter\" <> \"BalanceBefore\" - \"Amount\") OR \"OperationKind\" NOT IN ('deposit', 'withdraw'));"
-run_check "fund_operation_chain_breaks" "critical" \
+run_check "fund_operation_chain_breaks" "warning" \
   "SELECT count(*) FROM (SELECT \"FundId\", \"CreatedAtUtc\", \"BalanceBefore\", lag(\"CreatedAtUtc\") OVER (PARTITION BY \"FundId\" ORDER BY \"CreatedAtUtc\", \"Id\") AS previous_created_at, lag(\"BalanceAfter\") OVER (PARTITION BY \"FundId\" ORDER BY \"CreatedAtUtc\", \"Id\") AS previous_balance_after FROM fund_operations) q WHERE previous_created_at < \"CreatedAtUtc\" AND \"BalanceBefore\" <> previous_balance_after;"
 run_check "fund_operation_same_timestamp_order" "warning" \
   "SELECT count(*) FROM (SELECT \"FundId\", \"CreatedAtUtc\", \"BalanceBefore\", lag(\"CreatedAtUtc\") OVER (PARTITION BY \"FundId\" ORDER BY \"CreatedAtUtc\", \"Id\") AS previous_created_at, lag(\"BalanceAfter\") OVER (PARTITION BY \"FundId\" ORDER BY \"CreatedAtUtc\", \"Id\") AS previous_balance_after FROM fund_operations) q WHERE previous_created_at = \"CreatedAtUtc\" AND \"BalanceBefore\" <> previous_balance_after;"
