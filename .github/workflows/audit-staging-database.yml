@@ -1,0 +1,48 @@
+name: Audit staging database
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: Type AUDIT GARAGEBALANCE STAGING
+        required: true
+        type: string
+
+concurrency:
+  group: garagebalance-staging-maintenance
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    name: Back up and audit a restored database copy
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: staging
+    steps:
+      - name: Validate confirmation
+        env:
+          CONFIRMATION: ${{ inputs.confirmation }}
+        run: test "$CONFIRMATION" = "AUDIT GARAGEBALANCE STAGING"
+
+      - name: Prepare SSH
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "${{ secrets.VPS_SSH_KEY }}" > ~/.ssh/garagebalance_staging
+          chmod 600 ~/.ssh/garagebalance_staging
+          ssh-keyscan -H "${{ secrets.VPS_HOST }}" >> ~/.ssh/known_hosts
+
+      - name: Audit restored PostgreSQL copy
+        run: |
+          ssh -i ~/.ssh/garagebalance_staging \
+            "${{ secrets.VPS_DEPLOY_USER }}@${{ secrets.VPS_HOST }}" \
+            "sudo /usr/local/bin/garagebalance-deploy-apply audit-database 'AUDIT GARAGEBALANCE STAGING'"
+
+      - name: Verify deployed application
+        run: |
+          curl --fail --silent --show-error --connect-timeout 10 --max-time 20 \
+            https://sgk.blagodaty.ru/health/ready >/dev/null
+          curl --fail --silent --show-error --connect-timeout 10 --max-time 20 \
+            https://sgk.blagodaty.ru/ >/dev/null

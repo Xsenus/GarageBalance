@@ -24,6 +24,7 @@ public sealed class GitHubActionsDeploymentTests
         Assert.Contains("artifacts/api.tar.gz", workflow, StringComparison.Ordinal);
         Assert.Contains("artifacts/frontend.tar.gz", workflow, StringComparison.Ordinal);
         Assert.Contains("artifacts/operations.tar.gz", workflow, StringComparison.Ordinal);
+        Assert.Contains("infrastructure/scripts/audit-staging-database.sh", workflow, StringComparison.Ordinal);
         Assert.Contains("secrets.VPS_SSH_KEY", workflow, StringComparison.Ordinal);
         Assert.Contains("Host garagebalance-staging", workflow, StringComparison.Ordinal);
         Assert.Contains("ControlMaster auto", workflow, StringComparison.Ordinal);
@@ -81,6 +82,46 @@ public sealed class GitHubActionsDeploymentTests
         Assert.Contains("exec bash \"$REEXEC_APPLY_SCRIPT\" \"$release_id\"", script, StringComparison.Ordinal);
         Assert.Contains("bash \"${OPERATIONS_DIR}/infrastructure/scripts/install-vps-performance-configuration.sh\" \"$OPERATIONS_DIR\"", script, StringComparison.Ordinal);
         Assert.Contains("/usr/local/bin/garagebalance-deploy-apply", script, StringComparison.Ordinal);
+        Assert.Contains("audit-database", script, StringComparison.Ordinal);
+        Assert.Contains("/usr/local/bin/garagebalance-audit-database", script, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void StagingDatabaseAuditRunsOnlyThroughProtectedServerCommandAndVerifiesHealth()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var workflow = File.ReadAllText(Path.Combine(repositoryRoot, ".github", "workflows", "audit-staging-database.yml"));
+
+        Assert.Contains("workflow_dispatch:", workflow, StringComparison.Ordinal);
+        Assert.Contains("AUDIT GARAGEBALANCE STAGING", workflow, StringComparison.Ordinal);
+        Assert.Contains("sudo /usr/local/bin/garagebalance-deploy-apply audit-database", workflow, StringComparison.Ordinal);
+        Assert.Contains("https://sgk.blagodaty.ru/health/ready", workflow, StringComparison.Ordinal);
+        Assert.DoesNotContain("psql", workflow, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void StagingDatabaseAuditBacksUpRestoresAndQueriesOnlyReadOnlyCopy()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var script = File.ReadAllText(Path.Combine(repositoryRoot, "infrastructure", "scripts", "audit-staging-database.sh"));
+
+        Assert.Contains("pg_dump --format=custom \"$database_name\"", script, StringComparison.Ordinal);
+        Assert.Contains("before_integrity_audit.pgdump", script, StringComparison.Ordinal);
+        Assert.Contains("garagebalance_integrity_audit_", script, StringComparison.Ordinal);
+        Assert.Contains("pg_restore \\", script, StringComparison.Ordinal);
+        Assert.Contains("--dbname=\"$audit_database\"", script, StringComparison.Ordinal);
+        Assert.Contains("SET default_transaction_read_only = on", script, StringComparison.Ordinal);
+        Assert.Contains("duplicate_active_garage_numbers", script, StringComparison.Ordinal);
+        Assert.Contains("overlapping_tariff_periods", script, StringComparison.Ordinal);
+        Assert.Contains("duplicate_regular_accruals", script, StringComparison.Ordinal);
+        Assert.Contains("allocations_to_invalid_operations", script, StringComparison.Ordinal);
+        Assert.Contains("exact_duplicate_financial_operations", script, StringComparison.Ordinal);
+        Assert.Contains("duplicate_meter_readings", script, StringComparison.Ordinal);
+        Assert.Contains("invalid_fund_operation_math", script, StringComparison.Ordinal);
+        Assert.Contains("fund_operation_chain_breaks", script, StringComparison.Ordinal);
+        Assert.Contains("fund_balance_mismatch", script, StringComparison.Ordinal);
+        Assert.Contains("codex_marked_business_records", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("--dbname=\"$database_name\"", script, StringComparison.Ordinal);
     }
 
     [Fact]

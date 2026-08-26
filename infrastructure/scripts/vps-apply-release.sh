@@ -26,6 +26,14 @@ if [[ "${1:-}" == "cleanup-codex-records" ]]; then
   exec /usr/local/bin/garagebalance-cleanup-codex-records "$2"
 fi
 
+if [[ "${1:-}" == "audit-database" ]]; then
+  [[ "$#" == "2" ]] || {
+    echo "usage: $0 audit-database <confirmation>"
+    exit 64
+  }
+  exec /usr/local/bin/garagebalance-audit-database "$2"
+fi
+
 release_id="${1:-}"
 
 if [[ -z "$release_id" || ! "$release_id" =~ ^[A-Za-z0-9._-]+$ ]]; then
@@ -197,13 +205,16 @@ tar -xzf "$OPERATIONS_ARCHIVE" -C "$OPERATIONS_DIR"
   fail "staging showcase preparation script was not found"
 [[ -f "${OPERATIONS_DIR}/infrastructure/scripts/cleanup-staging-codex-records.sh" ]] ||
   fail "staging Codex cleanup script was not found"
+[[ -f "${OPERATIONS_DIR}/infrastructure/scripts/audit-staging-database.sh" ]] ||
+  fail "staging database audit script was not found"
 bash -n \
   "${OPERATIONS_DIR}/infrastructure/scripts/install-vps-performance-configuration.sh" \
   "${OPERATIONS_DIR}/infrastructure/scripts/garagebalance-healthcheck.sh" \
   "${OPERATIONS_DIR}/infrastructure/scripts/garagebalance-performance-check.sh" \
   "${OPERATIONS_DIR}/infrastructure/scripts/vps-apply-release.sh" \
   "${OPERATIONS_DIR}/infrastructure/scripts/prepare-staging-showcase.sh" \
-  "${OPERATIONS_DIR}/infrastructure/scripts/cleanup-staging-codex-records.sh"
+  "${OPERATIONS_DIR}/infrastructure/scripts/cleanup-staging-codex-records.sh" \
+  "${OPERATIONS_DIR}/infrastructure/scripts/audit-staging-database.sh"
 
 packaged_apply_script="${OPERATIONS_DIR}/infrastructure/scripts/vps-apply-release.sh"
 if [[ "${GARAGEBALANCE_DEPLOY_REEXECUTED:-0}" != "1" ]] &&
@@ -313,6 +324,9 @@ install -o root -g root -m 0750 \
 install -o root -g root -m 0750 \
   "${OPERATIONS_DIR}/infrastructure/scripts/cleanup-staging-codex-records.sh" \
   /usr/local/bin/garagebalance-cleanup-codex-records
+install -o root -g root -m 0750 \
+  "${OPERATIONS_DIR}/infrastructure/scripts/audit-staging-database.sh" \
+  /usr/local/bin/garagebalance-audit-database
 
 find "/home/${DEPLOY_USER}/uploads" -mindepth 1 -maxdepth 1 -type d -mtime +14 -exec rm -rf {} +
 
